@@ -216,7 +216,7 @@ describe('UsersPage', () => {
       return { data: [] } as never;
     });
     await user.type(box, 'x');
-    expect(await screen.findByText('Couldn’t search. Try again.')).toBeInTheDocument();
+    expect(await screen.findByText('Couldn’t search. Check your signal and try again.')).toBeInTheDocument();
   });
 
   it('copes with the lists failing to load', async () => {

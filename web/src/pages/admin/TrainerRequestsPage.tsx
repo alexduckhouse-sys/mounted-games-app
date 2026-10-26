@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api';
+import { Notice } from '../../components/Notice';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { apiErrorMessage } from '../../lib/apiError';
 import type { TrainerRequest } from '../../types';
@@ -21,7 +22,7 @@ export function TrainerRequestsPage() {
     let cancelled = false;
     api.get<TrainerRequest[]>('/admin/trainer-requests')
       .then(({ data }) => { if (!cancelled) setRequests(Array.isArray(data) ? data : []); })
-      .catch(() => { if (!cancelled) { setRequests([]); setError('Couldn’t load the trainer requests. Try again.'); } });
+      .catch(() => { if (!cancelled) { setRequests([]); setError('Couldn’t load the trainer requests. Check your signal and try again.'); } });
     return () => { cancelled = true; };
   }, []);
 
@@ -34,13 +35,13 @@ export function TrainerRequestsPage() {
       window.dispatchEvent(new CustomEvent('mg:trainer-requests-changed', { detail: { userId: request.userId } }));
       return true;
     } catch (caught) {
-      setError(apiErrorMessage(caught, `Couldn’t update ${request.fullName}’s request. Try again.`));
+      setError(apiErrorMessage(caught, `Couldn’t update ${request.fullName}’s request. Check your signal and try again.`));
       return false;
     }
   }
 
   async function one(request: TrainerRequest, action: 'approve' | 'decline') {
-    if (action === 'decline' && !(await confirmDialog({ title: 'Decline this request?', message: `Decline the request from ${request.fullName}? Their account will stay a member.`, confirmLabel: 'Decline request', destructive: true }))) return;
+    if (action === 'decline' && !(await confirmDialog({ title: `Decline ${request.fullName}’s request?`, message: 'Their account stays a member.', confirmLabel: 'Decline', destructive: true }))) return;
     setBusy(true);
     setError(null);
     await review(request, action);
@@ -49,7 +50,7 @@ export function TrainerRequestsPage() {
 
   async function approveAll() {
     if (!requests || requests.length === 0) return;
-    if (!(await confirmDialog({ title: `Approve all ${requests.length}?`, message: `Give ${requests.length === 1 ? 'this person' : `all ${requests.length} people`} the access they asked for?`, confirmLabel: 'Approve all' }))) return;
+    if (!(await confirmDialog({ title: requests.length === 1 ? 'Approve this request?' : `Approve all ${requests.length} requests?`, message: 'They get the access they asked for.', confirmLabel: requests.length === 1 ? 'Approve' : 'Approve all' }))) return;
     setBusy(true);
     setError(null);
     for (const request of requests) {
@@ -63,7 +64,7 @@ export function TrainerRequestsPage() {
     <RefinePage>
       <RefineHeader back="/admin" backLabel="Back to site admin" context="Site admin" title="Trainer requests" />
       <div className="ops-cards ops-tt ops-admin" aria-busy={busy}>
-        {error && <p role="alert" className="mg-notice ops-alert">{error}</p>}
+        {error && <Notice>{error}</Notice>}
         <div className="ops-waiting-head">
           <h2 className="ops-waiting">Waiting</h2>
           {waiting.length > 0 && <button type="button" className="rf-btn rf-btn-primary" disabled={busy} onClick={() => void approveAll()}>Approve all</button>}

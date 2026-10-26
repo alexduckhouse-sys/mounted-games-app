@@ -537,11 +537,11 @@ it('reports pause and shift failures and keeps the entered custom delay for retr
   const post = vi.spyOn(api, 'post').mockRejectedValue(new Error('offline'));
   renderBoard();
   fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('could not be paused');
+  expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t pause the timetable');
   const input = screen.getByRole('spinbutton', { name: 'Custom delay minutes' });
   fireEvent.change(input, { target: { value: '12' } });
   fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
-  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('could not be shifted'));
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t shift the timetable'));
   expect(input).toHaveValue(12);
   fireEvent.change(input, { target: { value: '1.5' } });
   fireEvent.click(screen.getByRole('button', { name: 'Apply' }));

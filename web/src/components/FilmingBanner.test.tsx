@@ -13,6 +13,8 @@ describe('FilmingBanner', () => {
     vi.mocked(api.get).mockResolvedValue({ data: [row, { ...row, heatId: 1, heatFinished: true, riderName: 'Done Already' }] });
     render(<FilmingBanner competitionId={1} />);
     expect(await screen.findByText('Filming opt-out: Heat 2, lane 4 (Oliver Smith)')).toBeTruthy();
+    expect(screen.getByText('Don’t film close up')).toBeTruthy();
+    expect(screen.getByRole('status', { name: 'Riders who should not be filmed close up' })).toBeTruthy();
     expect(screen.queryByText(/Done Already/)).toBeNull();
   });
 

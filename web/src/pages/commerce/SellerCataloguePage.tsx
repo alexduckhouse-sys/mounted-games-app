@@ -4,6 +4,7 @@ import { MoreHorizontal } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { Chevron, RefineDisclosure, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineSheet, RefineStatus, type StatusTone } from '../refine/Refine';
+import { Notice } from '../../components/Notice';
 import { LoadError } from './commerceUi';
 import { CATEGORY_LABEL, errorMessage, pounds } from './commerceFormat';
 import type { CatalogueItem, CommerceItemCategory, CommerceListingStatus, CompetitionChoice, CompetitionChoicePage, CompetitionListing } from './types';
@@ -93,7 +94,7 @@ function SellerCatalogueContent() {
         setCompetitions(competitionChoices);
       })
       .catch((requestError: unknown) => {
-        setError(errorMessage(requestError, 'Couldn’t load your catalogue.'));
+        setError(errorMessage(requestError, 'Couldn’t load your catalogue. Check your signal and try again.'));
       });
   }, [user]);
 
@@ -166,7 +167,7 @@ function SellerCatalogueContent() {
     const result = await run(async () => {
       if (editing) return (await api.put<CatalogueItem>(`/commerce/catalogue/${editing.id}`, body)).data;
       return (await api.post<CatalogueItem>('/commerce/catalogue', body)).data;
-    }, 'Couldn’t save the item.');
+    }, 'Couldn’t save the item. Check your signal and try again.');
     if (!result.ok) return null;
     setSheet(null);
     return result.value ?? editing;
@@ -239,7 +240,7 @@ function SellerCatalogueContent() {
               return (
                 <li key={listing.id} className="rf-row">
                   {row}
-                  {listing.status === 0 && <button type="button" className="rf-btn" disabled={busy} onClick={async () => { if (await confirmDialog({ title: 'Withdraw this listing?', message: 'Withdraw this listing?', confirmLabel: 'Withdraw', destructive: true })) void run(() => api.delete(`/commerce/listings/${listing.id}`), 'Couldn’t withdraw the listing.'); }}>Withdraw</button>}
+                  {listing.status === 0 && <button type="button" className="rf-btn" disabled={busy} onClick={async () => { if (await confirmDialog({ title: 'Withdraw this listing?', message: 'Buyers stop seeing it in the shop.', confirmLabel: 'Withdraw listing', destructive: true })) void run(() => api.delete(`/commerce/listings/${listing.id}`), 'Couldn’t withdraw the listing. Check your signal and try again.'); }}>Withdraw</button>}
                 </li>
               );
             })}
@@ -254,7 +255,7 @@ function SellerCatalogueContent() {
                   {others.map((competition) => (
                     <li key={competition.id} className="rf-row" style={{ borderTop: '1px solid rgb(var(--mg-rule-soft))' }}>
                       <span className="rf-grow"><span className="rf-t1">{competition.name}</span><span className="rf-t2">{eventDate(competition.startDate)}</span></span>
-                      <button type="button" className="rf-btn" disabled={busy} aria-label={`Request ${competition.name}`} onClick={() => void run(() => api.post(`/commerce/competitions/${competition.id}/listings`, { catalogueItemId: active.id }), 'Couldn’t send this item for approval.')}>Request</button>
+                      <button type="button" className="rf-btn" disabled={busy} aria-label={`Request ${competition.name}`} onClick={() => void run(() => api.post(`/commerce/competitions/${competition.id}/listings`, { catalogueItemId: active.id }), 'Couldn’t send this item for approval. Check your signal and try again.')}>Request</button>
                     </li>
                   ))}
                 </ul>
@@ -269,7 +270,7 @@ function SellerCatalogueContent() {
             <div className="flex flex-col gap-2">
               <button type="button" className="rf-btn rf-wide" onClick={() => openEdit(active)}>Edit details</button>
               {active.isActive
-                ? <button type="button" className="rf-btn rf-wide" aria-label={`Archive ${active.title}`} disabled={busy} onClick={async () => { if (!(await confirmDialog({ title: 'Archive this item?', message: `Archive ${active.title}?`, confirmLabel: 'Archive item', destructive: true }))) return; void run(() => api.delete(`/commerce/catalogue/${active.id}`), 'Couldn’t archive the item.').then((result) => { if (result.ok) setSheet(null); }); }}>Archive item</button>
+                ? <button type="button" className="rf-btn rf-wide" aria-label={`Archive ${active.title}`} disabled={busy} onClick={async () => { if (!(await confirmDialog({ title: 'Archive this item?', message: `${active.title} is hidden from your catalogue. You can restore it later.`, confirmLabel: 'Archive item', destructive: true }))) return; void run(() => api.delete(`/commerce/catalogue/${active.id}`), 'Couldn’t archive the item. Check your signal and try again.').then((result) => { if (result.ok) setSheet(null); }); }}>Archive item</button>
                 : <button type="button" className="rf-btn rf-wide" disabled={busy} onClick={() => void run(() => api.put(`/commerce/catalogue/${active.id}`, { title: active.title, description: active.description, priceMinor: active.priceMinor, stockQuantity: active.stockQuantity, category: active.category, imageUrl: active.imageUrl, isActive: true, expectedVersion: active.version }), 'Couldn’t restore the item. Refresh the catalogue and try again.').then((result) => { if (result.ok) setSheet(null); })}>Restore item</button>}
             </div>
           </RefineSheet>
@@ -417,7 +418,7 @@ function ItemSheet({ title, form, setForm, busy, error, onClose, onSubmit, prima
             <label className="rf-fld">Image link <span className="font-normal">Optional HTTPS link</span><input type="url" placeholder="https://…" value={form.imageUrl} onChange={(event) => setForm({ ...form, imageUrl: event.target.value })} /></label>
           </div>
         </details>
-        {error && <p role="alert" className="m-0 text-sm font-semibold text-[rgb(var(--mg-elim))]">{error}</p>}
+        {error && <Notice>{error}</Notice>}
         {onChoose && <p className="rf-note !py-0">You’ll choose events for this item after saving.</p>}
         <div className="rf-actions">
           <button type="submit" className={`rf-btn ${onChoose ? '' : 'rf-btn-primary rf-grow'}`} disabled={busy}>{busy ? 'Saving…' : primaryLabel}</button>

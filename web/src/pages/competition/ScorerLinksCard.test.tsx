@@ -79,7 +79,7 @@ describe('ScorerLinksCard', () => {
 
     await user.click(screen.getByRole('button', { name: 'Copy link' }));
     expect(write).toHaveBeenCalledWith(`${window.location.origin}/score#t=mgs_secret`);
-    expect(await screen.findByText('Link copied.')).toBeInTheDocument();
+    expect(await screen.findByText('Link copied')).toBeInTheDocument();
   });
 
   it('sends an earlier expiry when one is chosen', async () => {
@@ -109,7 +109,7 @@ describe('ScorerLinksCard', () => {
     write.mockRejectedValueOnce(new Error('denied'));
     await user.click(screen.getByRole('button', { name: 'Make scorer link' }));
     await user.click(await screen.findByRole('button', { name: 'Copy link' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t copy automatically');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t copy the link. Press and hold it to copy, or show the QR code.');
   });
 
   it('withdraws a link after confirming', async () => {
@@ -122,7 +122,7 @@ describe('ScorerLinksCard', () => {
 
     await user.click(screen.getByRole('button', { name: 'Withdraw Scorer 1’s link' }));
     expect(api.post).toHaveBeenCalledWith('/competitions/5/scorer-links/1/revoke');
-    expect(await screen.findByText('Scorer 1’s link no longer works.')).toBeInTheDocument();
+    expect(await screen.findByText('Scorer 1’s link no longer works')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Withdraw/ })).not.toBeInTheDocument();
     expect(confirm).toHaveBeenCalledTimes(2);
   });

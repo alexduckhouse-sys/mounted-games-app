@@ -13,6 +13,7 @@ import { formatPoints } from '../../lib/formatPoints';
 import { downloadCsv, safeFilename, toCsv } from '../../lib/csv';
 import { SPONSOR_TIERS, hasPlacement, logoSrc } from '../../lib/sponsors';
 import type { CompetitionDetail, ScorerLink, SponsorAdmin, SponsorTier } from '../../types';
+import { PageProblem } from '../../components/PageProblem';
 import { QrCode } from '../../components/QrCode';
 import { getStoredCards } from '../competition/ScoringParts';
 import { competitionDateText } from '../../lib/competitionDates';
@@ -40,7 +41,7 @@ function time(value: string | null) {
 
 function message(error: unknown) {
   const candidate = error as { response?: { data?: { detail?: string; title?: string } } };
-  return candidate.response?.data?.detail ?? candidate.response?.data?.title ?? 'Couldn’t load this print view.';
+  return candidate.response?.data?.detail ?? candidate.response?.data?.title ?? 'Check your signal and try again.';
 }
 
 export default function PrintEventPage() {
@@ -251,7 +252,7 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
     return () => { cancelled = true; };
   }, [competitionId, sponsorMode]);
 
-  if (error) return <div className="mg-card p-4" role="alert">{error} <button className="mg-btn mg-btn-secondary" onClick={() => { setError(null); setAttempt(attempt + 1); }}>Try again</button></div>;
+  if (error) return <PageProblem title="Couldn’t load the print view" primaryLabel="Try again" onPrimary={() => { setError(null); setAttempt(attempt + 1); }}>{error}</PageProblem>;
   if (!data) return <p className="mg-card p-4" role="status">Preparing the print view…</p>;
   const competition = data.competition;
 

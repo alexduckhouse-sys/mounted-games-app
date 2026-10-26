@@ -62,7 +62,10 @@ describe('FollowingPage', () => {
   it('tells the user about a followed team the event no longer lists', async () => {
     follow([2, 3], [2, 77]);
     mount();
-    expect(await screen.findByText('1 followed team no longer listed at this event. Open it to tidy up.')).toBeInTheDocument();
+    expect(await screen.findByText('A team you follow is no longer at this event.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Remove it' }));
+    expect(JSON.parse(localStorage.getItem(FAVOURITES_KEY) ?? '[]')).toEqual([{ competitionId: 2, teamId: 3 }]);
+    await waitFor(() => expect(screen.queryByText('A team you follow is no longer at this event.')).toBeNull());
   });
 
   it('offers to try again when an event will not load', async () => {

@@ -98,18 +98,18 @@ describe('DeclarationsTab with a set-up dec form', () => {
 
     expect(screen.getByText('Expected 20 to 90 cm')).toBeInTheDocument();
     await user.type(screen.getByLabelText(/Girth/), '95');
-    expect(screen.getByRole('status')).toHaveTextContent('Above the limit — will be flagged');
+    expect(screen.getByRole('status')).toHaveTextContent('is above the limit');
     expect(screen.getByRole('button', { name: 'Add rider' })).toBeEnabled();
     await user.clear(screen.getByLabelText(/Girth/));
     await user.type(screen.getByLabelText(/Girth/), '10');
-    expect(screen.getByRole('status')).toHaveTextContent('Below the minimum — will be flagged');
+    expect(screen.getByRole('status')).toHaveTextContent('is below the minimum');
     await user.clear(screen.getByLabelText(/Girth/));
     await user.type(screen.getByLabelText(/Girth/), '95');
 
     await user.click(screen.getByRole('button', { name: 'Add rider' }));
     const slot = within(screen.getByRole('list', { name: 'Riders' })).getAllByRole('listitem')[0];
     expect(within(slot).getByText('Pickle')).toBeInTheDocument();
-    expect(within(slot).getByText(/This will be flagged for the organisers/)).toBeInTheDocument();
+    expect(within(slot).getByText(/The organisers will see a flag/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('checkbox'));
     expect(screen.getByRole('button', { name: 'Submit dec form' })).toBeDisabled();

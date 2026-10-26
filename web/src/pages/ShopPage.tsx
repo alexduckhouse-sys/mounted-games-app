@@ -12,6 +12,8 @@ import { NumberField } from '../components/NumberField';
 import { priceLabel } from '../lib/money';
 import type { CompetitionSummary, ShopComment, ShopPost } from '../types';
 import { confirmDialog } from '../components/ConfirmDialog';
+import { Notice } from '../components/Notice';
+import { useToast } from '../components/Toast';
 
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -174,7 +176,7 @@ function PostComposer({ onPosted, defaultName }: { onPosted: () => void; default
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [imageErr, setImageErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<{ text: string; retry: boolean } | null>(null);
 
   async function pickImage(file: File) {
     setImageErr(null);
@@ -193,7 +195,7 @@ function PostComposer({ onPosted, defaultName }: { onPosted: () => void; default
 
   async function submit() {
     if (!title.trim() || !body.trim() || !name.trim()) {
-      setErr('Title, description and your name are all required.');
+      setErr({ text: 'Title, description and your name are all required.', retry: false });
       return;
     }
     setErr(null);
@@ -212,7 +214,7 @@ function PostComposer({ onPosted, defaultName }: { onPosted: () => void; default
       onPosted();
     } catch (e) {
       const msg = (e as { response?: { data?: { message?: string } | string } }).response?.data;
-      setErr(typeof msg === 'string' ? msg : msg?.message ?? 'Could not post.');
+      setErr({ text: typeof msg === 'string' ? msg : msg?.message ?? 'Couldn’t post. Check your signal and try again.', retry: true });
     } finally {
       setBusy(false);
     }
@@ -265,9 +267,9 @@ function PostComposer({ onPosted, defaultName }: { onPosted: () => void; default
             </button>
           </div>
         )}
-        {imageErr && <p className="text-xs text-amber-700 dark:text-amber-200 mt-1">{imageErr}</p>}
+        {imageErr && <div className="mt-1"><Notice>{imageErr}</Notice></div>}
       </div>
-      {err && <p className="text-xs text-rose-700 dark:text-rose-300">{err}</p>}
+      {err && <Notice actionLabel={err.retry ? 'Try again' : undefined} onAction={err.retry ? () => { void submit(); } : undefined} actionDisabled={busy}>{err.text}</Notice>}
       <div className="flex justify-end">
         <button onClick={submit} disabled={busy} className="btn-primary !py-1.5 !px-3 text-sm">
           <Check className="w-3.5 h-3.5" /> {busy ? 'Posting…' : 'Post'}
@@ -291,12 +293,13 @@ function PostRow({
   const [reporting, setReporting] = useState(false);
   const [reportReason, setReportReason] = useState('');
   const [reported, setReported] = useState(false);
+  const toast = useToast();
   const [sendingReport, setSendingReport] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const ownPost = currentUserId != null && post.authorUserId === currentUserId;
 
   async function remove() {
-    if (!(await confirmDialog({ title: 'Remove this post?', message: 'Remove this post?', confirmLabel: 'Remove post', destructive: true }))) return;
+    if (!(await confirmDialog({ title: 'Remove this post?', message: 'It disappears from the tack and kit shop.', confirmLabel: 'Remove post', destructive: true }))) return;
     await api.delete(`/shop/posts/${post.id}`);
     onChanged();
   }
@@ -309,8 +312,9 @@ function PostRow({
       setReporting(false);
       setReportReason('');
       setReported(true);
+      toast.show('Reported. An admin will look at it.');
     } catch {
-      setReportError('Could not send the report. Try again.');
+      setReportError('Couldn’t send the report. Check your signal and try again.');
     } finally {
       setSendingReport(false);
     }
@@ -362,10 +366,10 @@ function PostRow({
               />
               <button type="button" disabled={sendingReport} onClick={() => { void submitReport(); }} className="mg-small-btn">{sendingReport ? 'Sending…' : 'Send report'}</button>
               <button type="button" disabled={sendingReport} onClick={() => { setReporting(false); setReportReason(''); setReportError(null); }} className="mg-small-btn">Cancel</button>
-              {reportError && <p role="alert" className="mg-notice w-full">{reportError}</p>}
+              {reportError && <div className="w-full"><Notice actionLabel="Try again" onAction={() => { void submitReport(); }} actionDisabled={sendingReport}>{reportError}</Notice></div>}
             </div>
           )}
-          {reported && <p role="status" className="mg-meta">Reported. An admin will review.</p>}
+          {toast.node}
           {showComments && <CommentThread postId={post.id} postAuthorId={post.authorUserId ?? null} currentUserId={currentUserId} />}
         </div>
       )}
@@ -412,9 +416,9 @@ function CommentThread({ postId, postAuthorId }: {
           <li className="text-[11px] text-slate-500 italic">No comments yet.</li>
         )}
         {comments.map((c) => (
-          <li key={c.id} className={`text-xs ${c.isPrivate ? 'bg-amber-50 dark:bg-amber-900/30 px-2 py-1 rounded-md' : ''}`}>
+          <li key={c.id} className={`text-xs ${c.isPrivate ? 'bg-[rgb(var(--mg-info-bg))] px-2 py-1 rounded-md' : ''}`}>
             <span className="font-semibold">{c.authorName}</span>
-            {c.isPrivate && <Lock className="inline w-2.5 h-2.5 ml-1 text-amber-600" />}
+            {c.isPrivate && <Lock className="inline w-2.5 h-2.5 ml-1 text-[rgb(var(--mg-info-ink))]" />}
             <span className="text-slate-400 text-[9px] ml-1">{timeAgo(c.createdAt)}</span>
             <p className="text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{c.body}</p>
           </li>

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CircleCheck, Plus, X } from 'lucide-react';
+import { Notice } from '../../../components/Notice';
+import { useToast } from '../../../components/Toast';
 import { api } from '../../../api';
 import { useAuth } from '../../../auth/AuthContext';
 import { FLAG_COMPETITION_ICONS } from '../../../competition/icons';
@@ -62,6 +64,9 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
   // Nothing is kept until something has been typed, so just looking at a form leaves no draft behind.
   const [touched, setTouched] = useState(!!draft);
   const [termsOpen, setTermsOpen] = useState(false);
+  // True once this visit has sent the form, so the toast says so and the page doesn't repeat it.
+  const [justSent, setJustSent] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     let cancelled = false;
@@ -148,10 +153,12 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
         buildSubmitBody({ teamId: team.id, teamName, bibs, flag, trainerName, phone, notes }, slots, config));
       try { localStorage.removeItem(decDraftKey(competition.id, team.id)); } catch { /* ignore */ }
       setSubmitted(true);
+      setJustSent(true);
       setActive(null);
+      toast.show('Dec form sent. You can still change it.');
       onSaved(data);
     } catch (err) {
-      setError(apiErrorMessage(err, 'Could not send the dec form. Check your signal and try again.'));
+      setError(apiErrorMessage(err, 'Couldn’t send the dec form. Check your signal and try again.'));
     } finally {
       setBusy(false);
     }
@@ -170,12 +177,7 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
         )}
       </div>
 
-      {submitted && (
-        <div role="status" className="flex items-center gap-3 rounded-[10px] bg-[rgb(var(--mg-tint))] px-4 py-3.5 text-base font-semibold text-[rgb(var(--mg-heading))]">
-          <CircleCheck aria-hidden="true" className="h-5 w-5 shrink-0" />
-          <span>Dec form submitted. You can still change it.</span>
-        </div>
-      )}
+      {submitted && !justSent && <Notice tone="info">Dec form sent. You can still change it.</Notice>}
 
       <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-7">
         <section aria-label="Dec form" className="flex flex-col gap-4">
@@ -216,6 +218,7 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
               return (
                 <li key={index} className={isActive ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_4px_0_0_rgb(var(--mg-heading))]' : ''}>
                   {rider ? (
+                    <>
                     <div className="flex min-h-16 items-center gap-1 pl-4 pr-1 lg:min-h-[72px] lg:pl-[18px]">
                       <button type="button" onClick={() => select(index)} className="flex min-w-0 flex-1 flex-col items-start gap-0.5 py-2.5 text-left">
                         <span className="flex items-center gap-2 text-base font-semibold leading-tight lg:text-[17px]">
@@ -223,12 +226,15 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
                           {isReserve && <span className="mg-badge mg-badge-outline !h-5">Reserve</span>}
                         </span>
                         <span className="max-w-full truncate text-[13px] text-[rgb(var(--mg-muted))] lg:text-sm">{slotMeta(rider, isReserve, config)}</span>
-                        {slotFlagged(rider, config) && <span className="mg-flag mt-1">Above or below the limit. This will be flagged for the organisers.</span>}
                       </button>
                       <button type="button" className="mg-icon-btn !border-0 !bg-transparent text-[rgb(var(--mg-muted))] hover:!text-[rgb(var(--mg-elim))]" aria-label={`Remove ${rider.fullName}`} onClick={() => clear(index)}>
                         <X aria-hidden="true" className="h-[18px] w-[18px]" />
                       </button>
                     </div>
+                    {slotFlagged(rider, config) && (
+                      <Notice role={null} className="mx-4 mb-3">{rider.fullName} has an answer outside the limits. The organisers will see a flag; you can still send the form.</Notice>
+                    )}
+                    </>
                   ) : (
                     <button type="button" onClick={() => select(index)}
                       className="flex min-h-16 w-full items-center gap-3 px-4 text-left lg:min-h-[72px] lg:px-[18px]">
@@ -297,7 +303,8 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
           {statusText(slots, agreed, submitted)}
         </span>
       </div>
-      {error && <p role="alert" className="text-sm font-medium text-[rgb(var(--mg-elim))]">{error}</p>}
+      {error && <Notice actionLabel="Try again" onAction={() => { void submit(); }} actionDisabled={busy}>{error}</Notice>}
+      {toast.node}
       {termsOpen && <TermsDialog termsText={competition.termsText} onClose={() => setTermsOpen(false)} />}
     </div>
   );

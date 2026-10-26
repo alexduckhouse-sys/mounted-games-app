@@ -5,6 +5,8 @@ import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import type { Club, CompetitionSummary } from '../../types';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { Notice } from '../../components/Notice';
+import { useToast } from '../../components/Toast';
 import { competitionDateText } from '../../lib/competitionDates';
 import { STAGE_LABEL, stageAction, stageCounts, stageOf, type Stage } from '../../lib/adminStage';
 import { bibAccent, bibLabel } from '../../lib/bib';
@@ -50,6 +52,7 @@ export function SiteAdmin({ hideTrainerRequests = false }: { hideTrainerRequests
   const [myIp, setMyIp] = useState<string | null>(null);
   const [blockBusy, setBlockBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const toast = useToast();
   const [showAllComps, setShowAllComps] = useState(false);
   const [usersOpen, setUsersOpen] = useState(false);
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
@@ -72,7 +75,7 @@ export function SiteAdmin({ hideTrainerRequests = false }: { hideTrainerRequests
       await api.post(`/admin/users/${encodeURIComponent(userId)}/roles`, { role, grant });
       loadUsers();
     } catch {
-      setNotice('Couldn’t update user role.');
+      setNotice('Couldn’t update that user’s role. Check your signal and try again.');
     }
   }
 
@@ -81,7 +84,7 @@ export function SiteAdmin({ hideTrainerRequests = false }: { hideTrainerRequests
       await api.post(`/admin/users/${encodeURIComponent(userId)}/unlock`);
       loadUsers();
     } catch {
-      setNotice('Couldn’t unlock user.');
+      setNotice('Couldn’t unlock that user. Check your signal and try again.');
     }
   }
 
@@ -94,7 +97,7 @@ export function SiteAdmin({ hideTrainerRequests = false }: { hideTrainerRequests
       setNewClubRegion('');
       load();
     } catch {
-      setNotice('Couldn’t add club.');
+      setNotice('Couldn’t add the club. Check your signal and try again.');
     }
   }
 
@@ -107,7 +110,7 @@ export function SiteAdmin({ hideTrainerRequests = false }: { hideTrainerRequests
       setEditingClubName('');
       load();
     } catch {
-      setNotice('Couldn’t rename club.');
+      setNotice('Couldn’t rename the club. Check your signal and try again.');
     }
   }
 
@@ -116,7 +119,7 @@ export function SiteAdmin({ hideTrainerRequests = false }: { hideTrainerRequests
       await api.delete(`/clubs/${id}`);
       load();
     } catch {
-      setNotice('Club is in use and cannot be deleted.');
+      setNotice('This club is in use, so it can’t be deleted.');
     }
   }
 
@@ -149,25 +152,26 @@ export function SiteAdmin({ hideTrainerRequests = false }: { hideTrainerRequests
   async function setLocked(c: CompetitionSummary, locked: boolean) {
     try {
       await api.post(`/competitions/${c.id}/signups-locked`, { locked });
-      setNotice(`Signups ${locked ? 'locked' : 'opened again'} for ${c.name}.`);
+      setNotice(null);
+      toast.show(`Signups ${locked ? 'locked' : 'opened again'} for ${c.name}.`);
     } catch {
-      setNotice(`Couldn’t ${locked ? 'lock' : 'open'} signups for ${c.name}. Try again.`);
+      setNotice(`Couldn’t ${locked ? 'lock' : 'open'} signups for ${c.name}. Check your signal and try again.`);
     }
   }
 
   async function deleteComp(c: CompetitionSummary) {
-    const message = `This wipes ${c.teamCount} team${c.teamCount === 1 ? '' : 's'}, ` +
+    const message = `This deletes ${c.teamCount} team${c.teamCount === 1 ? '' : 's'}, ` +
       `${c.sectionCount} age group${c.sectionCount === 1 ? '' : 's'}, ` +
       `${c.sessionCount} session${c.sessionCount === 1 ? '' : 's'}, ` +
-      `every heat, race, result, dec form and chat message. There is no undo.`;
-    if (!(await confirmDialog({ title: `Delete “${c.name}” forever?`, message, confirmLabel: 'Delete competition', destructive: true, requireText: c.name }))) return;
+      `every heat, race, result, dec form and chat message. There’s no undo.`;
+    if (!(await confirmDialog({ title: `Delete ${c.name} for good?`, message, confirmLabel: 'Delete competition', destructive: true, requireText: c.name }))) return;
     try {
       await api.delete(`/competitions/${c.id}`);
       // Wipe any local wizard draft for this comp so it doesn't reappear on /admin/competitions/:id.
       try { window.localStorage.removeItem(`competitionEditor:edit:${c.id}`); } catch { /* ignore */ }
       load();
     } catch {
-      setNotice(`Couldn’t delete ${c.name}. Try again.`);
+      setNotice(`Couldn’t delete ${c.name}. Check your signal and try again.`);
     }
   }
 
@@ -211,7 +215,8 @@ export function SiteAdmin({ hideTrainerRequests = false }: { hideTrainerRequests
 
       <section aria-labelledby="ad-comps" className="flex flex-col gap-[18px]">
         <PartHead id="ad-comps" title="Competitions" meta={rows.length ? stageCounts(rows.map((r) => r.stage)) : undefined} />
-        {notice && <p role="status" className="mg-notice">{notice}</p>}
+        {notice && <Notice onDismiss={() => setNotice(null)}>{notice}</Notice>}
+        {toast.node}
         <div className="mg-card overflow-visible">
           <div aria-hidden="true" className={`${ROW_GRID} hidden border-b border-[rgb(var(--mg-rule-soft))] py-2.5 pl-4 pr-3 text-[11px] font-semibold uppercase tracking-[0.06em] text-[rgb(var(--mg-muted))] sm:grid`}>
             <span>Competition</span><span>Stage</span><span className="text-right">Entries</span><span />
@@ -257,15 +262,15 @@ export function SiteAdmin({ hideTrainerRequests = false }: { hideTrainerRequests
       <section aria-labelledby="ad-ips" className="flex flex-col gap-[18px]">
         <PartHead id="ad-ips" title="Blocked addresses" />
         {myIp && (
-          <div className={`flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 text-sm ${iAmBlocked ? 'bg-[rgb(var(--mg-live-row))] text-[rgb(var(--mg-elim))]' : 'bg-[rgb(var(--mg-tint))] text-[rgb(var(--mg-heading))]'}`}>
-            <span className="flex-1">
-              Your IP <span className="font-mono">{myIp}</span> is <strong>{iAmBlocked ? 'BLOCKED' : 'NOT blocked'}</strong>.
-              {iAmBlocked && ' (admins can still post)'}
-            </span>
-            {iAmBlocked && (
-              <button type="button" onClick={() => { const mine = blocks.find((b) => b.ipAddress === myIp); if (mine) removeBlock(mine.id); }} className="mg-small-btn">Unblock me</button>
-            )}
-          </div>
+          <Notice
+            tone={iAmBlocked ? 'problem' : 'info'}
+            role={null}
+            actionLabel={iAmBlocked ? 'Unblock me' : undefined}
+            onAction={iAmBlocked ? () => { const mine = blocks.find((b) => b.ipAddress === myIp); if (mine) void removeBlock(mine.id); } : undefined}
+          >
+            Your IP <span className="font-mono">{myIp}</span> is <strong>{iAmBlocked ? 'BLOCKED' : 'NOT blocked'}</strong>.
+            {iAmBlocked && ' (admins can still post)'}
+          </Notice>
         )}
         <div className="grid items-end gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_132px]">
           <label className="flex flex-col gap-2 text-base font-medium">IP address
@@ -359,7 +364,7 @@ export function SiteAdmin({ hideTrainerRequests = false }: { hideTrainerRequests
                         <button
                           type="button"
                           onClick={() => void unlockUser(u.id)}
-                          className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900"
+                          className="rounded-full bg-[rgb(var(--mg-problem-bg))] px-2.5 py-1 text-xs font-bold text-[rgb(var(--mg-problem-ink))]"
                         >
                           Unlock
                         </button>
@@ -447,7 +452,7 @@ export function SiteAdmin({ hideTrainerRequests = false }: { hideTrainerRequests
                               type="button"
                               aria-label={`Delete ${c.name}`}
                               onClick={() => void deleteClub(c.id)}
-                              className="mg-small-btn text-xs text-rose-700"
+                              className="mg-small-btn text-xs !text-[rgb(var(--mg-elim))]"
                             >
                               Delete
                             </button>

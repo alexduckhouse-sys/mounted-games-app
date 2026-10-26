@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import type { Placing, QueuedScore } from '../offline/scoreOutbox';
 import { heat } from '../test/factories';
-import { ScoreOutboxPanel, SENT_SHOWN_MS } from './ScoreOutboxPanel';
+import { ScoreOutboxPanel } from './ScoreOutboxPanel';
+import { TOAST_MS } from './Toast';
 
 import { autoConfirm } from '../test/confirm';
 vi.mock('../api', () => ({ api: { post: vi.fn() } }));
@@ -57,10 +58,10 @@ describe('ScoreOutboxPanel', () => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
     await userEvent.click(screen.getByRole('button', { name: 'Send now' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/races/1/results', expect.anything(), expect.anything()));
-    // The sent result ticks off for a moment, then the panel empties.
+    // The toast says it was sent for a moment, then the panel empties.
     expect(await screen.findByText('Heat 1 · Barrel Race sent')).toBeInTheDocument();
     expect(screen.queryByText(/saved on this phone/)).toBeNull();
-    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument(), { timeout: SENT_SHOWN_MS + 1000 });
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument(), { timeout: TOAST_MS + 1000 });
   });
 
   describe('when another phone scored the race differently', () => {
@@ -69,7 +70,8 @@ describe('ScoreOutboxPanel', () => {
     it('shows both sets of results side by side', () => {
       conflict();
       render(<ScoreOutboxPanel competitionId={1} />);
-      expect(screen.getByRole('alert')).toHaveTextContent('Heat 1 · Barrel Race: scored differently on another phone');
+      expect(screen.getByRole('dialog')).toHaveAccessibleName('Heat 1 · Barrel Race was scored on another phone too');
+      expect(screen.getByRole('dialog')).toHaveAccessibleDescription('The results don’t match. Choose which to keep.');
       expect(screen.getByText('Theirs').nextSibling).toHaveTextContent('1st Shergar · 2nd Red Rum');
       expect(screen.getByText('Yours').nextSibling).toHaveTextContent('1st Red Rum · 2nd Shergar');
     });
@@ -79,7 +81,7 @@ describe('ScoreOutboxPanel', () => {
       render(<ScoreOutboxPanel competitionId={1} />);
       await userEvent.click(screen.getByRole('button', { name: 'Keep theirs' }));
       expect(stored()).toEqual([]);
-      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
     it('requires a reason before replacing the other phone’s results', async () => {
@@ -120,7 +122,7 @@ describe('ScoreOutboxPanel', () => {
       const confirm = autoConfirm([false, true]);
       render(<ScoreOutboxPanel competitionId={1} />);
       await userEvent.click(screen.getByRole('button', { name: 'Delete mine' }));
-      await waitFor(() => expect(confirm).toHaveBeenCalledWith('Delete your results for Heat 1 · Barrel Race?'));
+      await waitFor(() => expect(confirm).toHaveBeenCalledWith('Your results for Heat 1 · Barrel Race on this phone go for good.'));
       expect(stored()).toHaveLength(1);
       await userEvent.click(screen.getByRole('button', { name: 'Delete mine' }));
       await waitFor(() => expect(stored()).toEqual([]));
@@ -145,7 +147,8 @@ describe('ScoreOutboxPanel', () => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
     seed(item(1, { state: 'conflict', theirs }), item(2, { state: 'failed', error: 'x' }), item(3));
     render(<ScoreOutboxPanel competitionId={1} />);
-    expect(screen.getAllByRole('alert')).toHaveLength(2);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
     expect(screen.getByRole('status')).toBeInTheDocument();
   });
 });

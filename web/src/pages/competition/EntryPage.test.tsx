@@ -76,7 +76,7 @@ describe('the entry page', () => {
 
   it('says entries are closed instead of offering them', async () => {
     mount(['Member'], { signupsLocked: true });
-    expect(await screen.findByRole('status')).toHaveTextContent('Entries for this event are closed.');
+    expect(await screen.findByRole('status')).toHaveTextContent('Entries are closed for this competition.');
     expect(screen.queryByRole('link', { name: /^Pair/ })).not.toBeInTheDocument();
   });
 
@@ -127,6 +127,6 @@ describe('entryFeeText', () => {
 it('shows a passed server closing date on the entry page', async () => {
   vi.mocked(api.get).mockImplementation(async (url) => ({ data: url === '/auth/me' ? { roles: ['Member'] } : url.endsWith('/entry-settings') ? { competitionId: 1, entriesCloseAt: '2020-01-01T00:00:00Z', entriesClosed: true } : [] }));
   mount(['Member']);
-  expect(await screen.findByText('Entries for this event are closed.')).toBeInTheDocument();
+  expect(await screen.findByText('Entries are closed for this competition.')).toBeInTheDocument();
   expect(screen.queryByRole('link', { name: /^Pair/ })).not.toBeInTheDocument();
 });

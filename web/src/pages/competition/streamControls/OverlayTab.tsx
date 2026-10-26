@@ -4,6 +4,7 @@ import type { useOverlayTiles } from '../../../hooks/useOverlayTiles';
 import { displaySectionName } from '../../../lib/section';
 import { OVERLAY_TILES, bannerMessage, type LiveOptions, type OverlayTileId } from '../../../lib/streamOverlayTiles';
 import type { CompetitionDetail, StreamOverlay } from '../../../types';
+import { Notice } from '../../../components/Notice';
 import { RefineSection } from '../../refine/Refine';
 
 type Tiles = ReturnType<typeof useOverlayTiles>;
@@ -30,6 +31,21 @@ function finishedRaceChoices(competition: Pick<CompetitionDetail, 'sessions'>) {
     }
   }
   return list.reverse().slice(0, 8);
+}
+
+/**
+ * The problem strip under the overlay tiles. When the overlay was changed on another phone the action takes you to
+ * the tile that is on now ("Show me"); any other failure that can be repeated gets "Try again".
+ */
+export function OverlayProblem({ tiles }: { tiles: Tiles }) {
+  if (!tiles.error) return null;
+  function show() {
+    const current = document.querySelector<HTMLElement>('.sx-tiles [aria-checked="true"], .sx-desk-grid [aria-checked="true"]');
+    current?.scrollIntoView?.({ block: 'center' });
+    current?.focus();
+  }
+  const action = tiles.conflict ? { actionLabel: 'Show me', onAction: show } : tiles.retryable ? { actionLabel: 'Try again', onAction: () => void tiles.retry() } : {};
+  return <Notice className="sx-status" {...action}>{tiles.error}</Notice>;
 }
 
 function Settings({ id, competition, tiles }: { id: OverlayTileId; competition: Pick<CompetitionDetail, 'sections' | 'sessions'>; tiles: Tiles }) {
@@ -110,7 +126,7 @@ export function OverlayTab({ competition, overlay, tiles, canChange }: {
       </div>
       {active && !active.drawn && <p className="rf-note" role="status">Viewers don’t see {active.label.toLowerCase()} yet.</p>}
       {open && <Settings id={open} competition={competition} tiles={tiles} />}
-      {tiles.error && <p className="mg-notice sx-status" role="alert">{tiles.error}</p>}
+      <OverlayProblem tiles={tiles} />
       {!canChange && <p className="rf-note">You can’t change the overlay from this device.</p>}
 
       <RefineSection title="Stream banner" />

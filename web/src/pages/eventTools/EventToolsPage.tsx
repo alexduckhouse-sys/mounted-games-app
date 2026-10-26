@@ -1,7 +1,9 @@
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { CheckCircle2, Upload } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { api } from '../../api';
+import { Notice } from '../../components/Notice';
+import { useToast } from '../../components/Toast';
 import { Chevron, RefineFoot, RefineList, RefineNote, RefineSection, RefineStatus } from '../refine/Refine';
 import type { CloneCompetitionResult, CsvTeamImportPreview } from './eventToolsTypes';
 import './eventTools.css';
@@ -37,10 +39,11 @@ export function TeamImportPanel({ competitionId, onImported }: { competitionId: 
   const [preview, setPreview] = useState<CsvTeamImportPreview | null>(null);
   const [busy, setBusy] = useState<'preview' | 'apply' | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [retryPreview, setRetryPreview] = useState(false);
+  const toast = useToast();
 
   function changeCsv(value: string) {
-    setCsv(value); setPreview(null); setSuccess(null);
+    setCsv(value); setPreview(null);
   }
 
   async function loadFile(event: ChangeEvent<HTMLInputElement>) {
@@ -51,22 +54,22 @@ export function TeamImportPanel({ competitionId, onImported }: { competitionId: 
   }
 
   async function previewImport() {
-    setBusy('preview'); setError(null); setSuccess(null);
+    setBusy('preview'); setError(null); setRetryPreview(false);
     try {
       const { data } = await api.post<CsvTeamImportPreview>(`/event-tools/competitions/${competitionId}/team-import/preview`, { csv });
       setPreview(data);
-    } catch (caught) { setError(message(caught, 'Couldn’t preview this import.')); }
+    } catch (caught) { setError(message(caught, 'Couldn’t preview this import. Check your signal and try again.')); setRetryPreview(true); }
     finally { setBusy(null); }
   }
 
   async function applyImport() {
     if (!preview) return;
-    setBusy('apply'); setError(null); setSuccess(null);
+    setBusy('apply'); setError(null); setRetryPreview(false);
     try {
       const { data } = await api.post<{ createdCount: number }>(`/event-tools/competitions/${competitionId}/team-import/apply`, {
         csv, fingerprint: preview.fingerprint, previewVersion: preview.previewVersion,
       });
-      setSuccess(`${data.createdCount} ${data.createdCount === 1 ? 'team' : 'teams'} added.`);
+      toast.show(`${data.createdCount} ${data.createdCount === 1 ? 'team' : 'teams'} added`);
       setPreview(null);
       onImported?.();
     } catch (caught) {
@@ -79,8 +82,8 @@ export function TeamImportPanel({ competitionId, onImported }: { competitionId: 
 
   return (
     <section aria-labelledby="import-title">
-      {error && <div role="alert" className="mg-notice tools-msg">{error}</div>}
-      {success && <div role="status" className="tools-success"><CheckCircle2 className="h-5 w-5" aria-hidden="true" />{success}</div>}
+      {error && <Notice className="tools-msg" actionLabel={retryPreview ? 'Try again' : undefined} onAction={() => void previewImport()}>{error}</Notice>}
+      {toast.node}
       <RefineSection title="Import teams from CSV" />
       <h2 id="import-title" className="sr-only">Import teams from CSV</h2>
       <RefineNote>Columns: <strong>club</strong>, <strong>suffix</strong>, <strong>section</strong>.</RefineNote>
@@ -121,25 +124,25 @@ export function DuplicateEventPanel({ competition }: { competition: CompetitionF
   const [cloneResult, setCloneResult] = useState<CloneCompetitionResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const toast = useToast();
 
   async function cloneCompetition(event: FormEvent) {
     event.preventDefault();
-    setBusy(true); setError(null); setSuccess(null); setCloneResult(null);
+    setBusy(true); setError(null); setCloneResult(null);
     try {
       const startIso = cloneStart ? new Date(cloneStart).toISOString() : new Date().toISOString();
       const { data } = await api.post<CloneCompetitionResult>(`/event-tools/competitions/${competition.id}/clone`, {
         name: cloneName, startDate: startIso, endDate: cloneEnd ? new Date(cloneEnd).toISOString() : null,
       });
-      setCloneResult(data); setSuccess(`${data.name} is ready to edit.`);
-    } catch (caught) { setError(message(caught, 'Couldn’t duplicate this competition.')); }
+      setCloneResult(data); toast.show(`${data.name} is ready to edit`);
+    } catch (caught) { setError(message(caught, 'Couldn’t duplicate this competition. Check your signal and try again.')); }
     finally { setBusy(false); }
   }
 
   return (
     <section aria-labelledby="duplicate-title">
-      {error && <div role="alert" className="mg-notice tools-msg">{error}</div>}
-      {success && <div role="status" className="tools-success"><CheckCircle2 className="h-5 w-5" aria-hidden="true" />{success}</div>}
+      {error && <Notice className="tools-msg">{error}</Notice>}
+      {toast.node}
       <RefineSection title="Duplicate event setup" />
       <h2 id="duplicate-title" className="sr-only">Duplicate event setup</h2>
       <RefineNote>Copies the set-up: age groups, scoring settings, race lists, timetable, hatbands, dec form and payment details. Teams, heats, results, entries and payments are left behind.</RefineNote>

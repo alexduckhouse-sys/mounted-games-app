@@ -56,7 +56,7 @@ describe('tack check tab', () => {
       isEnabled: true, mode: 2, maxPoints: 5,
       sectors: [{ id: null, name: 'Saddle/Girth' }, { id: null, name: 'Bridle/Bit' }, { id: null, name: 'Rider Hat/Boots' }, { id: null, name: 'Turnout' }, { id: null, name: 'Plaits' }],
     }));
-    expect(await screen.findByText('Tack check saved.')).toBeInTheDocument();
+    expect(await screen.findByText('Tack check saved')).toBeInTheDocument();
     // The saved section now shows the stewards' results.
     expect(screen.getByText('Points out of 5 per rider in each sector')).toBeInTheDocument();
   });

@@ -63,7 +63,7 @@ describe('TeamsTab trainers', () => {
     render(<MemoryRouter><TeamsTab /></MemoryRouter>);
     await waitFor(() => expect(optionLabels(screen.getByLabelText('Trainer for Oak A'))).toContain('Pat Trainer'), { timeout: 5000 });
     chooseOption(screen.getByLabelText('Trainer for Oak A'), 'tr-1');
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not change the trainer.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t change the trainer. Check your signal and try again.');
   });
 
   it('flags a team whose dec form broke an organiser’s limit', async () => {

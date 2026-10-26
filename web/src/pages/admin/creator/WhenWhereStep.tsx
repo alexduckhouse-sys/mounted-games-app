@@ -74,7 +74,7 @@ export function WhenWhereStep({ draft, change, problems, clear }: StepProps<Crea
         <div className="cw-panel cw-panel-roomy">
           <TextBox label="Venue" value={draft.location} onChange={(location) => change({ location })} />
           <div className="cw-line">
-            <Field label="Postcode" error={geoNow === 'none' ? 'No location found for that.' : geoNow === 'failed' ? 'Could not look that up.' : null} className="sm:max-w-[200px]">
+            <Field label="Postcode" error={geoNow === 'none' ? 'No location found for that.' : geoNow === 'failed' ? 'Couldn’t look that up. Check your signal and try again.' : null} className="sm:max-w-[200px]">
               {({ id, invalid, describedBy }) => (
                 <div className={fieldClass} data-invalid={invalid}>
                   <input id={id} value={draft.postcode} autoComplete="postal-code" aria-invalid={invalid} aria-describedby={describedBy}

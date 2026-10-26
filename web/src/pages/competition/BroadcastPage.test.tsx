@@ -102,6 +102,16 @@ it('can confirm End while initial publishing is still pending', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'End stream' })); await settle(); expect(publisher.stop).toHaveBeenCalled();
   await act(async () => { pending.resolve(); await flush(); }); expect(setBroadcasting).toHaveBeenCalledWith(false);
 });
+it('asks before ending the stream and carries on when told to keep going', async () => {
+  show(); fireEvent.click(screen.getByRole('button', { name: 'Allow camera' })); await settle();
+  fireEvent.click(screen.getByRole('button', { name: 'Go live' })); await settle();
+  fireEvent.click(screen.getByRole('button', { name: 'End' })); await settle();
+  const dialog = screen.getByRole('alertdialog', { name: 'End the stream?' });
+  expect(dialog).toHaveTextContent('Viewers will see that it has finished.');
+  fireEvent.click(screen.getByRole('button', { name: 'Keep going' })); await settle();
+  expect(screen.queryByRole('alertdialog')).toBeNull();
+  expect(publisher.stop).not.toHaveBeenCalled();
+});
 it('offers mute, pause/resume and a caption that can be cleared', async () => {
   show(); fireEvent.click(screen.getByRole('button', { name: 'Allow camera' })); await settle();
   fireEvent.click(screen.getByRole('button', { name: 'Go live' })); await settle();
@@ -289,7 +299,8 @@ it('supports microphone selection, wind filter, quality presets, camera zoom, tr
   // Tripod Lock & Dim screen saver
   fireEvent.click(screen.getByRole('button', { name: 'Lock and dim screen' }));
   expect(screen.getByRole('dialog', { name: 'Screen dimmed for tripod battery saving' })).toBeVisible();
-  fireEvent.click(screen.getByRole('button', { name: /unlock screen/i }));
+  expect(screen.getByRole('heading', { name: 'Screen locked' })).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Double-tap to unlock.' }));
   expect(screen.queryByRole('dialog', { name: 'Screen dimmed for tripod battery saving' })).toBeNull();
 
   state.lastStreamCommand = { streamId: 99, arenaName: 'Main Arena', command: 'flipCamera', issuedAt: '2026-10-24T12:04:00Z' };

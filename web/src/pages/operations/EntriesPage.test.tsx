@@ -95,7 +95,7 @@ describe('EntriesPage', () => {
     await user.click(await screen.findByRole('button', { name: /Oak A/ }));
     await user.click(screen.getByRole('button', { name: 'Withdraw this entry' }));
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/teams/1/entry-status', { status: 1, reason: null }));
-    expect(asked.titles).toEqual(['Withdraw this entry?']);
+    expect(asked.titles).toEqual(['Withdraw Oak A?']);
 
     await user.click(screen.getByRole('button', { name: /Ash C/ }));
     await user.click(screen.getByRole('button', { name: 'Reinstate' }));

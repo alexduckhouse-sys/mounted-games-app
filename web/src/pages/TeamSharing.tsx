@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { CalendarPlus, Copy } from 'lucide-react';
-import { CopiedTick } from '../components/CopiedTick';
 import { api } from '../api';
 import { QrCode } from '../components/QrCode';
 import { feedLinks, joinTeamLink, type FeedLinks } from '../lib/sharing';
 import type { Team } from '../types';
 import { confirmDialog } from '../components/ConfirmDialog';
+import { Notice } from '../components/Notice';
+import { useToast } from '../components/Toast';
 
 /** A QR code for a team's join key, so supporters can scan it instead of typing the key. */
 export function JoinQr({ team }: { team: Pick<Team, 'displayName' | 'supporterJoinKey'> }) {
@@ -40,7 +41,7 @@ export function TeamCalendarFeed({ team }: { team: Pick<Team, 'id' | 'displayNam
   const [status, setStatus] = useState<FeedStatus | null>(null);
   const [links, setLinks] = useState<FeedLinks | null>(null);
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const toast = useToast();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -52,14 +53,13 @@ export function TeamCalendarFeed({ team }: { team: Pick<Team, 'id' | 'displayNam
   }, [team.id]);
 
   async function make() {
-    if (status?.enabled && !(await confirmDialog({ title: 'Make a new link?', message: 'Make a new link? The old one will stop working, so anyone using it will need the new one.', confirmLabel: 'Make new link', destructive: true }))) return;
+    if (status?.enabled && !(await confirmDialog({ title: 'Make a new calendar link?', message: 'The old link stops working, so anyone using it needs the new one.', confirmLabel: 'Make new link' }))) return;
     setBusy(true);
     setError(null);
     try {
       const { data } = await api.post<FeedCreated>(`/teams/${team.id}/calendar-feed`);
       setLinks(feedLinks(data.path, window.location.origin));
       setStatus({ enabled: true, createdAt: data.createdAt });
-      setCopied(false);
     } catch (caught) {
       setError(apiMessage(caught, 'Couldn’t make the link. Try again in a moment.'));
     } finally {
@@ -68,7 +68,7 @@ export function TeamCalendarFeed({ team }: { team: Pick<Team, 'id' | 'displayNam
   }
 
   async function turnOff() {
-    if (!(await confirmDialog({ title: 'Turn the link off?', message: 'Turn the calendar link off? It will stop working for everyone using it.', confirmLabel: 'Turn link off', destructive: true }))) return;
+    if (!(await confirmDialog({ title: 'Turn the calendar link off?', message: 'It stops working for everyone using it.', confirmLabel: 'Turn link off', destructive: true }))) return;
     setBusy(true);
     setError(null);
     try {
@@ -85,8 +85,8 @@ export function TeamCalendarFeed({ team }: { team: Pick<Team, 'id' | 'displayNam
   function copy() {
     if (!links) return;
     navigator.clipboard?.writeText(links.https)
-      .then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })
-      .catch(() => {});
+      .then(() => toast.show('Link copied'))
+      .catch(() => setError('Couldn’t copy the link. Press and hold it to copy.'));
   }
 
   return (
@@ -105,7 +105,7 @@ export function TeamCalendarFeed({ team }: { team: Pick<Team, 'id' | 'displayNam
           <div className="flex flex-wrap gap-1.5">
             <a className="mg-btn mg-btn-primary !min-h-8 !px-2.5 !py-1 text-xs" href={links.webcal}><CalendarPlus className="h-3.5 w-3.5" /> Add to calendar</a>
             <button type="button" onClick={copy} className="mg-small-btn gap-1.5 !min-h-8 !px-2.5 !py-1 text-xs">
-              {copied ? <CopiedTick className="h-3.5 w-3.5 text-[rgb(var(--mg-ok))]" /> : <Copy className="h-3.5 w-3.5" />} {copied ? 'Copied' : 'Copy link'}
+              <Copy className="h-3.5 w-3.5" /> Copy link
             </button>
           </div>
         </div>
@@ -123,7 +123,8 @@ export function TeamCalendarFeed({ team }: { team: Pick<Team, 'id' | 'displayNam
           <button type="button" onClick={turnOff} disabled={busy} className="mg-small-btn !min-h-8 !px-2.5 !py-1 text-xs !text-[rgb(var(--mg-elim))]">Turn off</button>
         )}
       </div>
-      {error && <p role="alert" className="text-[11px] text-[rgb(var(--mg-elim))]">{error}</p>}
+      {error && <Notice>{error}</Notice>}
+      {toast.node}
     </div>
   );
 }

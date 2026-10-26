@@ -1,7 +1,8 @@
 /* Organiser tools (readiness, equipment, draw preview). Unified with the mg-* scoreboard and timetable design tokens. */
 
-.ops-alert { margin: 12px 0 0; }
-.ops-alert .rf-btn { min-height: 44px; }
+/* Left for admin pages that still use the old class. */
+/* Problem and information strips (the kit's Notice) sit a little below what is above them. */
+.rf-page > .kit-strip, .ops-cards > .kit-strip, .ops-prep > .kit-strip, section > .kit-strip { margin-top: 12px; }
 .ops-gap { margin-top: 12px; }
 .ops-warn { color: rgb(var(--mg-late-ink)); font-weight: 600; }
 .ops-num-bad { color: rgb(var(--mg-elim)); }
@@ -31,8 +32,6 @@
 .ops-seg { margin-top: 12px; }
 .ops-seg > button { min-height: 44px; }
 .ops-session { margin: 14px 0 0; font: 700 15px/1.1 var(--mg-font-display); letter-spacing: .04em; text-transform: uppercase; color: rgb(var(--mg-heading)); }
-.ops-toast { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; padding: 4px 0 4px 12px; font-size: 14px; font-weight: 600; color: rgb(var(--mg-ok)); background: rgb(var(--mg-subtle)); border: 1px solid rgb(var(--mg-line)); border-radius: 10px; }
-.ops-toast .rf-btn { flex: none; }
 
 .rf-page.ops-wide { max-width: none; }
 
@@ -56,7 +55,6 @@
 .ops-panel { padding: 12px 16px; background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); border-radius: var(--mg-radius-card); box-shadow: var(--mg-shadow-sm); }
 .rf-list .ops-panel { border: 0; border-top: 1px solid rgb(var(--mg-rule-soft)); border-radius: 0; box-shadow: none; }
 .rf-fld .ops-note-input { min-height: 5rem; height: auto; padding: 10px; font-weight: 400; }
-.ops-ok { color: rgb(var(--mg-ok)); font-weight: 600; }
 .ops-places { margin: 0; padding: 0; list-style: none; }
 .ops-place { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 6px 0; border-top: 1px solid rgb(var(--mg-rule-soft)); }
 .ops-place-field { flex: none; width: 5.5rem; }
@@ -177,7 +175,6 @@
 .ops-line { display: flex; align-items: center; gap: 12px; min-height: 44px; }
 .ops-line-end { justify-content: flex-end; }
 .ops-form { display: flex; flex-direction: column; gap: 8px; }
-.ops-flag { margin: 0; padding: 10px 12px; border-radius: 10px; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); font: 600 14px/1.4 var(--mg-font); }
 .ops-riders { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .ops-riders li { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 .ops-facts { white-space: nowrap; }

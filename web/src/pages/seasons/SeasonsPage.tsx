@@ -4,6 +4,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { usePageHeader } from '../../components/CompactPageBarContext';
+import { Notice } from '../../components/Notice';
+import { PageProblem } from '../../components/PageProblem';
 import { SectionFormatLabel } from '../../types';
 import { RefineHeader, RefinePage } from '../refine/Refine';
 import { AddBar } from '../admin/creator/controls';
@@ -28,7 +30,7 @@ export function SeasonsPage() {
     api.get<SeasonView[]>('/seasons', { signal: controller.signal }).then(({ data }) => {
       if (!controller.signal.aborted) { setSeasons(data); setError(''); }
     }).catch((reason) => {
-      if (!controller.signal.aborted) setError(seasonError(reason, 'Seasons couldn’t be loaded. Try again.'));
+      if (!controller.signal.aborted) setError(seasonError(reason, 'Seasons couldn’t be loaded. Check your signal and try again.'));
     });
     return () => controller.abort();
   }, [attempt, user?.id]);
@@ -46,7 +48,8 @@ export function SeasonsPage() {
   const years = seasons ? [...new Set(seasons.map((season) => season.year))].sort((a, b) => b - a) : [];
   return <RefinePage>
     <h1 className="sr-only">Seasons</h1>
-    {error && <div role="alert" className="mg-notice sv-msg">{error} <button className="mg-text-link min-h-11" onClick={() => setAttempt((value) => value + 1)}>Try again</button></div>}
+    {error && !seasons && <PageProblem title="Couldn’t load the seasons" primaryLabel="Try again" onPrimary={() => setAttempt((value) => value + 1)}>{error}</PageProblem>}
+    {error && seasons && <Notice className="sv-msg" actionLabel="Try again" onAction={() => setAttempt((value) => value + 1)}>{error}</Notice>}
     {!seasons && !error && <p role="status" className="sp-note">Loading seasons…</p>}
     {seasons?.length === 0 && <div className="sv-empty"><h2>No seasons yet</h2><p>Published season tables will appear here.</p></div>}
     {years.map((year, index) => {

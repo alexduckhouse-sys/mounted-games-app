@@ -7,6 +7,7 @@ import { seasonError, type SeasonSettings } from './seasonViewTypes';
 import './seasonViews.css';
 import { SelectField } from '../../components/SelectField';
 import { NumberField } from '../../components/NumberField';
+import { Notice } from '../../components/Notice';
 
 const initial: SeasonSettings = {
   title: '', year: new Date().getFullYear(), format: 2, ageGroup: 'All age groups',
@@ -98,7 +99,7 @@ export function SeasonSettingsForm({ value = initial, onSave, onCancel, label = 
         ...(create && selectedCompetitionIds.length > 0 ? { competitionIds: selectedCompetitionIds } : {}),
       };
       await onSave(payload);
-    } catch (reason) { setError(seasonError(reason, 'The season couldn’t be saved. Check your connection and try again.')); }
+    } catch (reason) { setError(seasonError(reason, 'The season couldn’t be saved. Check your signal and try again.')); }
     finally { setBusy(false); }
   }
 
@@ -107,7 +108,7 @@ export function SeasonSettingsForm({ value = initial, onSave, onCancel, label = 
   const bestSummary = draft.best.trim() && Number.isInteger(bestNumber) && bestNumber > 0 ? `Best ${bestNumber} ${bestNumber === 1 ? 'round' : 'rounds'} per team` : 'Every round counts';
 
   return <form onSubmit={submit} noValidate className="sv-form">
-    {error && <p role="alert" className="mg-notice mt-3">{error}</p>}
+    {error && <Notice className="mt-3">{error}</Notice>}
     <RefineSection title="How standings are worked out" meta={create ? undefined : 'Organisers only'} />
     <RefineList as="div">
       <RefineDisclosure title="Sections" sub={`${draft.ageGroup.trim() || 'All age groups'} · ${SectionFormatLabel[draft.format]}`} defaultOpen={create}>
@@ -125,7 +126,7 @@ export function SeasonSettingsForm({ value = initial, onSave, onCancel, label = 
       {create && <RefineDisclosure title="Competitions" sub={selectedCompetitionIds.length ? `${selectedCompetitionIds.length} selected` : 'Optional. You can add rounds later'} defaultOpen>
         <fieldset disabled={busy} className="sv-fieldset sv-body">
           <legend className="sr-only">Include competitions</legend>
-          {competitionError && <p role="alert" className="rf-note sv-flush">Competitions couldn’t be loaded. <button type="button" className="rf-btn rf-btn-text" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Try again</button></p>}
+          {competitionError && <Notice actionLabel="Try again" onAction={() => setLoadAttempt((attempt) => attempt + 1)}>Competitions couldn’t be loaded. Check your signal and try again.</Notice>}
           {competitions.length === 0 ? (
             <p className="rf-note sv-flush">You can also add competition rounds after creating the season.</p>
           ) : (

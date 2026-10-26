@@ -58,7 +58,7 @@ function CommerceOrdersContent() {
         setSales(salesResponse.data);
       })
       .catch((requestError: unknown) => {
-        setError(errorMessage(requestError, 'Couldn’t load your orders.'));
+        setError(errorMessage(requestError, 'Couldn’t load your orders. Check your signal and try again.'));
       });
   }, [user]);
 
@@ -79,7 +79,7 @@ function CommerceOrdersContent() {
       await api.post(`/commerce/orders/${order.id}/cancel`);
       await load();
     } catch (requestError) {
-      setError(errorMessage(requestError, 'Couldn’t cancel the order.'));
+      setError(errorMessage(requestError, 'Couldn’t cancel the order. Check your signal and try again.'));
     } finally {
       setBusyId(null);
     }
@@ -96,7 +96,7 @@ function CommerceOrdersContent() {
       replaceOrder(data.order);
       setRefundOpen(false);
     } catch (requestError) {
-      setError(errorMessage(requestError, 'Couldn’t run the test refund.'));
+      setError(errorMessage(requestError, 'Couldn’t run the test refund. Check your signal and try again.'));
       setRefundOpen(false);
     } finally {
       setBusyId(null);

@@ -64,6 +64,6 @@ describe('ScoreCardQueue', () => {
     const onError = vi.fn();
     render(<ScoreCardQueue competitionId={1} cards={[card(1)]} onError={onError} />);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Skip' })); });
-    expect(onError).toHaveBeenCalledWith('Couldn’t reach the score card. Check your connection and try again.');
+    expect(onError).toHaveBeenCalledWith('Couldn’t reach the score card. Check your signal and try again.');
   });
 });

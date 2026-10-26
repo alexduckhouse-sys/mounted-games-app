@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { api } from '../../api';
+import { Notice } from '../../components/Notice';
 import { apiErrorMessage } from '../../lib/apiError';
 import { competitionDateText } from '../../lib/competitionDates';
 import { STAGE_LABEL, stageOf } from '../../lib/adminStage';
@@ -20,7 +21,7 @@ export function AdminCompetitionsPage() {
 
   const load = useCallback(() => api.get<CompetitionSummary[]>('/competitions', { params: { includeArchived: true } })
     .then(({ data }) => { setComps(Array.isArray(data) ? data : []); setError(null); })
-    .catch(() => { setComps((current) => current ?? []); setError('Couldn’t load the competitions. Try again.'); }), []);
+    .catch(() => { setComps((current) => current ?? []); setError('Couldn’t load the competitions. Check your signal and try again.'); }), []);
   useEffect(() => { void load(); }, [load]);
 
   async function remove(c: CompetitionSummary) {
@@ -33,7 +34,7 @@ export function AdminCompetitionsPage() {
       setAsking(null);
       await load();
     } catch (caught) {
-      setError(apiErrorMessage(caught, `Couldn’t delete ${c.name}. Try again.`));
+      setError(apiErrorMessage(caught, `Couldn’t delete ${c.name}. Check your signal and try again.`));
     } finally {
       setBusy(false);
     }
@@ -49,7 +50,7 @@ export function AdminCompetitionsPage() {
     <RefinePage>
       <RefineHeader back="/admin" backLabel="Back to site admin" context="Site admin" title="Competitions" />
       <div className="ops-cards ops-tt ops-admin" aria-busy={busy}>
-        {error && <p role="alert" className="mg-notice ops-alert">{error}</p>}
+        {error && <Notice>{error}</Notice>}
         {comps === null && <p role="status" className="rf-note">Loading…</p>}
         {comps !== null && rows.length === 0 && !error && <RefineList as="div"><div className="rf-row"><span className="rf-t2">No competitions yet</span></div></RefineList>}
         {groups.map((group) => (

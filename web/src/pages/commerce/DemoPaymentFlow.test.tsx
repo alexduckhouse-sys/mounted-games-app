@@ -84,7 +84,7 @@ describe('DemoPaymentFlow', () => {
     render(<DemoPaymentFlow targetKey="order-31" title="Order #31" amountMinor={2500} onPay={onPay} />);
     await enterSuccessDetails();
     await userEvent.click(screen.getByRole('button', { name: 'Run demo payment for £25.00' }));
-    expect(await screen.findByText('The demo payment could not be checked. Try again.')).toBeInTheDocument();
+    expect(await screen.findByText('Couldn’t check the demo payment. Check your signal and try again.')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Run demo payment for £25.00' }));
     await screen.findByRole('heading', { name: 'Demo payment approved' });
     expect(onPay.mock.calls[1][1]).toBe(onPay.mock.calls[0][1]);

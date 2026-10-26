@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowUp, Lock, Shield, Trash2, X } from 'lucide-react';
+import { ArrowUp, Lock, Shield, Trash2 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
@@ -9,6 +9,7 @@ import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { usePageWidth } from '../../components/pageWidthState';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { Notice } from '../../components/Notice';
 import type { ChatMessage } from '../../types';
 import './chat.css';
 import '../../components/sitePages.css';
@@ -60,7 +61,7 @@ function ContactOrganisersSession() {
   const [body, setBody] = useState('');
   const [replyTo, setReplyTo] = useState<{ userId: string; name: string } | null>(null);
   const [sending, setSending] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ text: string; retrySend?: boolean } | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const loadController = useRef<AbortController | null>(null);
   const sendingRef = useRef(false);
@@ -68,7 +69,7 @@ function ContactOrganisersSession() {
   const requestMessages = useCallback((controller: AbortController) => {
     void api.get<ChatMessage[]>(`/competitions/${competition.id}/chat`, { signal: controller.signal })
       .then((response) => { if (!controller.signal.aborted) setMessages(response.data); })
-      .catch(() => { if (!controller.signal.aborted) setMessagesError('Couldn’t load messages. Check your connection and try again.'); })
+      .catch(() => { if (!controller.signal.aborted) setMessagesError('Couldn’t load messages. Check your signal and try again.'); })
       .finally(() => { if (!controller.signal.aborted) setMessagesLoading(false); });
   }, [competition.id]);
 
@@ -111,13 +112,13 @@ function ContactOrganisersSession() {
 
   async function removeMessage(id: number) {
     if (!canModerate) return;
-    if (!(await confirmDialog({ title: 'Delete this message?', message: 'Delete this message?', confirmLabel: 'Delete message', destructive: true }))) return;
+    if (!(await confirmDialog({ title: 'Delete this message?', message: 'It disappears for everyone.', confirmLabel: 'Delete message', destructive: true }))) return;
     setActionError(null);
     try {
       await api.delete(`/competitions/${competition.id}/chat/${id}`);
       setMessages((current) => current.filter((message) => message.id !== id));
     } catch {
-      setActionError('Couldn’t delete that message. Check your connection and try again.');
+      setActionError({ text: 'Couldn’t delete that message. Check your signal and try again.' });
     } finally {
       reload();
     }
@@ -125,7 +126,7 @@ function ContactOrganisersSession() {
 
   async function blockMessageAuthor(id: number) {
     if (!canModerate) return;
-    if (!(await confirmDialog({ title: 'Block this sender?', message: "Block this sender's IP from posting?", confirmLabel: 'Block sender', destructive: true }))) return;
+    if (!(await confirmDialog({ title: 'Block this sender?', message: 'They can’t post in chat from this phone or network.', confirmLabel: 'Block sender', destructive: true }))) return;
     setActionError(null);
     setActionNotice(null);
     try {
@@ -134,7 +135,7 @@ function ContactOrganisersSession() {
     } catch (error) {
       const message = (error as { response?: { data?: { message?: string } } }).response?.data?.message
         ?? 'Could not block this sender. The post may be too old to have an IP recorded.';
-      setActionError(message);
+      setActionError({ text: message });
     }
   }
 
@@ -155,8 +156,8 @@ function ContactOrganisersSession() {
       setBody((current) => current.trim() === text ? '' : current);
     } catch (error) {
       setActionError((error as { response?: { status?: number } }).response?.status === 403
-        ? 'Posting is blocked from this network. Contact an organiser.'
-        : 'Couldn’t send that message. Check your connection and try again.');
+        ? { text: 'Posting is blocked from this network. Contact an organiser.' }
+        : { text: 'Couldn’t send that message. Check your signal and try again.', retrySend: true });
     } finally {
       sendingRef.current = false;
       setSending(false);
@@ -197,17 +198,14 @@ function ContactOrganisersSession() {
   const notices = (
     <>
       {actionError && (
-        <div className="live-action-error" role="alert">
-          <span>{actionError}</span>
-          <button type="button" aria-label="Dismiss error" onClick={() => setActionError(null)}><X aria-hidden="true" /></button>
-        </div>
+        <Notice
+          onDismiss={() => setActionError(null)}
+          dismissLabel="Dismiss error"
+          actionLabel={actionError.retrySend ? 'Try again' : undefined}
+          onAction={actionError.retrySend ? () => void send() : undefined}
+        >{actionError.text}</Notice>
       )}
-      {actionNotice && (
-        <div className="live-banner" role="status">
-          <span>{actionNotice}</span>
-          <button type="button" aria-label="Dismiss notice" onClick={() => setActionNotice(null)}><X aria-hidden="true" /></button>
-        </div>
-      )}
+      {actionNotice && <Notice tone="info" onDismiss={() => setActionNotice(null)} dismissLabel="Dismiss notice">{actionNotice}</Notice>}
     </>
   );
 
@@ -236,12 +234,7 @@ function ContactOrganisersSession() {
           <div className="mg-section-head">
             <h2 id="organiser-messages-title">Incoming messages</h2>
           </div>
-          {messagesError && (
-            <div className="live-feed-error" role="alert">
-              <span>{messagesError}</span>
-              <button type="button" onClick={loadMessages}>Try again</button>
-            </div>
-          )}
+          {messagesError && <Notice actionLabel="Try again" onAction={loadMessages}>{messagesError}</Notice>}
           {messagesLoading && messages.length === 0 ? (
             <div className="live-feed-state mg-card" role="status">Loading messages…</div>
           ) : (
@@ -303,13 +296,8 @@ function ContactOrganisersSession() {
     <div className="ev-thread rf-page mx-auto flex w-full max-w-xl flex-col gap-2 pb-3 pt-4">
       <h1 className="sr-only">Message the organisers</h1>
       {notices}
-      {!privateMessagingAvailable && <p role="status" className="ev-body">Messaging the organisers isn’t available for this event yet.</p>}
-      {messagesError && (
-        <div className="live-feed-error" role="alert">
-          <span>{messagesError}</span>
-          <button type="button" onClick={loadMessages}>Try again</button>
-        </div>
-      )}
+      {!privateMessagingAvailable && <Notice tone="info">Messaging the organisers isn’t available for this event yet.</Notice>}
+      {messagesError && <Notice actionLabel="Try again" onAction={loadMessages}>{messagesError}</Notice>}
       {messagesLoading && messages.length === 0 && <p role="status" className="sp-note text-center">Loading messages…</p>}
       {!messagesLoading && privateMessages.length === 0 && privateMessagingAvailable && !messagesError && (
         <p className="sp-note text-center">No messages yet. Write to the organisers below.</p>

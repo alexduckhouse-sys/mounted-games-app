@@ -89,7 +89,7 @@ describe('MessageThreadPage', () => {
     mount();
     await user.click(await screen.findByRole('button', { name: 'Block' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/admin/users/u1/block', { reason: null }));
-    expect(await screen.findByRole('status')).toHaveTextContent('You’ve blocked Pat Rider. Their account can’t message, post in chat or enter.');
+    expect(await screen.findByRole('status')).toHaveTextContent('You’ve blocked Pat Rider. They can’t message, post in chat or enter.');
     expect(screen.queryByRole('button', { name: 'Block' })).toBeNull();
     expect(screen.queryByRole('textbox', { name: 'Message' })).toBeNull();
 

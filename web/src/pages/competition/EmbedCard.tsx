@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { CopiedTick } from '../../components/CopiedTick';
-import { Check, Copy } from 'lucide-react';
+import { Copy } from 'lucide-react';
+import { Notice } from '../../components/Notice';
+import { useToast } from '../../components/Toast';
 import {
   clampEmbedHeight, EMBED_VIEWS, embedPath, embedSearch, embedUrl, iframeSnippet, MAX_EMBED_HEIGHT, MIN_EMBED_HEIGHT, SEASON_EMBED_HEIGHT,
   type EmbedTarget, type EmbedTheme, type EmbedView,
@@ -30,7 +31,8 @@ export function EmbedCard(props: Props) {
   const [colour, setColour] = useState(DEFAULT_ACCENT);
   const [height, setHeight] = useState(competition ? EMBED_VIEWS[0].height : SEASON_EMBED_HEIGHT);
   const [heightEdited, setHeightEdited] = useState(false);
-  const [copied, setCopied] = useState<'yes' | 'manual' | null>(null);
+  const [copyFailed, setCopyFailed] = useState(false);
+  const toast = useToast();
   const snippetRef = useRef<HTMLTextAreaElement>(null);
 
   const target: EmbedTarget = props.kind === 'season' ? { kind: 'season', id: props.seasonId } : { kind: 'competition', id: props.competitionId };
@@ -54,10 +56,11 @@ export function EmbedCard(props: Props) {
   async function copy() {
     try {
       await navigator.clipboard.writeText(snippet);
-      setCopied('yes');
+      setCopyFailed(false);
+      toast.show('Code copied');
     } catch {
       snippetRef.current?.select();
-      setCopied('manual');
+      setCopyFailed(true);
     }
   }
 
@@ -133,13 +136,12 @@ export function EmbedCard(props: Props) {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <button type="button" className="rf-btn rf-btn-primary" onClick={copy}>
-            {copied === 'yes' ? <Check className="h-4 w-4" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
+            <Copy className="h-4 w-4" aria-hidden="true" />
             Copy code
           </button>
-          <span role="status" className="text-sm text-[rgb(var(--mg-muted))]">
-            {copied === 'yes' ? <><CopiedTick className="mr-1 inline h-4 w-4 align-[-2px] text-[rgb(var(--mg-ok))]" />Copied.</> : copied === 'manual' ? 'Select the code above and copy it.' : ''}
-          </span>
         </div>
+        {copyFailed && <Notice>Couldn’t copy the code. Select it above and copy it by hand.</Notice>}
+        {toast.node}
         <RefineNote>
           Paste into an Embed or Custom HTML block on your site.
         </RefineNote>

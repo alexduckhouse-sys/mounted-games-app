@@ -46,10 +46,10 @@ export function CurrentCompetitionProvider({ children }: { children: ReactNode }
       if (rememberChoice === 'visit' && current) sessionStorage.setItem('mg.competitionVisit', JSON.stringify(current));
       else sessionStorage.removeItem('mg.competitionVisit');
       if (rememberChoice === 'remember' && current && readCompetitionCookie(document.cookie)?.id !== current.id) {
-        error = 'Your browser could not save this competition. You can still use it for this visit.';
+        error = 'Your browser couldn’t save this competition. It still works for this visit.';
       }
     } catch {
-      error = 'Your browser could not save this choice. You can still use the competition.';
+      error = 'Your browser couldn’t save this choice. The competition still works.';
     }
     // The outcome of writing to the browser's storage is only known after the write, so it is reported here.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- result of syncing with cookie/sessionStorage

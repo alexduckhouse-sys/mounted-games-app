@@ -466,7 +466,7 @@ describe('SessionPage', () => {
       await opened('Bending');
       const sheet = await openTools();
       await userEvent.click(within(await teamMenu(sheet, 'Rider 2')).getByRole('menuitem', { name: 'Make HC' }));
-      expect(await screen.findByText('Couldn’t change hors concours. Try again.')).toBeInTheDocument();
+      expect(await screen.findByText('Couldn’t change hors concours. Check your signal and try again.')).toBeInTheDocument();
     });
   });
 
@@ -504,7 +504,7 @@ describe('SessionPage', () => {
       expect(within(row('Rider 1')).getByRole('img', { name: 'Red card' })).toBeInTheDocument();
       const sheet = await openTools();
       await userEvent.click(within(await teamMenu(sheet, 'Rider 1')).getByRole('menuitem', { name: 'Remove red card' }));
-      expect(await screen.findByText('Couldn’t change the card. Try again.')).toBeInTheDocument();
+      expect(await screen.findByText('Couldn’t change the card. Check your signal and try again.')).toBeInTheDocument();
       expect(within(row('Rider 1')).getByRole('img', { name: 'Red card' })).toBeInTheDocument();
     });
   });
@@ -871,7 +871,7 @@ describe('SessionPage', () => {
       await screen.findByText('Organiser tools');
 
       await userEvent.click(screen.getByRole('button', { name: 'Record run-off winner' }));
-      expect(await screen.findByText('Couldn’t save the run-off result. Try again.')).toBeInTheDocument();
+      expect(await screen.findByText('Couldn’t save the run-off result. Check your signal and try again.')).toBeInTheDocument();
 
       const customPts = screen.getByLabelText('Custom points');
       await userEvent.clear(customPts);
@@ -969,8 +969,8 @@ describe('SessionPage', () => {
       await tapRider('Rider 2', 2);
       await completeRace();
 
-      const recapModal = await screen.findByRole('dialog', { name: 'Post-race commentator summary' });
-      expect(within(recapModal).getByText(/Race complete: Bending/)).toBeInTheDocument();
+      const recapModal = await screen.findByRole('dialog', { name: 'Bending complete' });
+      expect(recapModal).toHaveAccessibleDescription(/Rider 1/);
       expect(within(recapModal).getByRole('region', { name: 'Updated heat table' })).toHaveTextContent('1st Rider 1: 2 pts');
       expect(within(recapModal).getByRole('region', { name: 'Updated section toplist' })).toHaveTextContent('Oak A');
 
@@ -978,9 +978,34 @@ describe('SessionPage', () => {
       expect(await within(recapModal).findByRole('status')).toHaveTextContent('Showing: Show Toplist');
       expect(saveOverlay).toHaveBeenCalled();
 
-      await userEvent.click(within(recapModal).getByRole('button', { name: 'Next race →' }));
-      expect(screen.queryByRole('dialog', { name: 'Post-race commentator summary' })).toBeNull();
+      await userEvent.click(within(recapModal).getByRole('button', { name: 'Close' }));
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Bending complete' })).toBeNull());
       await opened('Flag');
+    });
+
+    describe('calling a missing team to the ring', () => {
+      const late = () => competition({
+        teams,
+        sessions: [session(1, { status: 1, scheduledStart: '2026-06-01T10:00:00Z', heats: [heat(1, { entries: entries(2), races: [race(1, { name: 'Bending' })] })] })],
+      });
+
+      it('says "Ring call sent" in a toast rather than a green box', async () => {
+        vi.mocked(api.post).mockResolvedValue({ data: {} });
+        mount(late());
+        await userEvent.click(await screen.findByRole('button', { name: /^Call Rider 1/ }));
+        expect(api.post).toHaveBeenCalledWith('/competitions/1/chat', expect.objectContaining({ type: 1 }));
+        expect(await screen.findByText('Ring call sent')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Dismiss ring call notice' })).toBeNull();
+      });
+
+      it('shows a problem strip when the call did not go', async () => {
+        vi.mocked(api.post).mockRejectedValue(new Error('offline'));
+        mount(late());
+        await userEvent.click(await screen.findByRole('button', { name: /^Call Rider 1/ }));
+        const strip = await screen.findByRole('alert');
+        expect(strip).toHaveClass('kit-strip-problem');
+        expect(strip).toHaveTextContent('Couldn’t send ring call. Check your signal and try again.');
+      });
     });
 
     it('opens the QR Code Access Hub from race tools, and comes back to scoring when it closes', async () => {
@@ -988,10 +1013,10 @@ describe('SessionPage', () => {
       await opened('Bending');
       const sheet = await openTools();
       await userEvent.click(within(sheet).getByRole('button', { name: /QR access/ }));
-      const modal = await screen.findByRole('dialog', { name: 'QR Code Access Hub' });
+      const modal = await screen.findByRole('dialog', { name: 'Share with QR codes' });
       expect(modal).toBeInTheDocument();
       await userEvent.click(within(modal).getByRole('button', { name: 'Close QR access modal' }));
-      expect(screen.queryByRole('dialog', { name: 'QR Code Access Hub' })).toBeNull();
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Share with QR codes' })).toBeNull());
       expect(screen.getByRole('region', { name: 'Scoring Bending' })).toBeInTheDocument();
     });
   });

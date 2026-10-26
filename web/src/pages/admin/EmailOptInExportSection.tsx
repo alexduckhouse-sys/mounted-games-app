@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Download, Send } from 'lucide-react';
 import { api } from '../../api';
+import { Notice } from '../../components/Notice';
+import { useToast } from '../../components/Toast';
 import { downloadCsv } from '../../lib/csv';
 
 interface EmailStatus {
@@ -17,6 +19,7 @@ export function EmailOptInExportSection() {
   const [statusUnavailable, setStatusUnavailable] = useState(false);
   const [testNotice, setTestNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
 
   useEffect(() => {
     let cancelled = false;
@@ -40,7 +43,7 @@ export function EmailOptInExportSection() {
       const { data } = await api.get<string>('/admin/email-opt-ins.csv', { responseType: 'text' });
       downloadCsv(`email-opt-ins-${new Date().toISOString().slice(0, 10)}.csv`, data);
     } catch {
-      setError('Could not download the list. Try again.');
+      setError('Couldn’t download the list. Check your signal and try again.');
     } finally {
       setBusy(false);
     }
@@ -53,14 +56,14 @@ export function EmailOptInExportSection() {
     try {
       const { data } = await api.post<{ status: string; recipientMasked: string }>('/admin/email-test');
       if (data.status === 'Sent') {
-        setTestNotice(`Test email sent to ${data.recipientMasked}.`);
+        toast.show(`Test email sent to ${data.recipientMasked}.`);
       } else if (data.status === 'NotSent') {
         setTestNotice('Email sending is currently off in settings.');
       } else {
-        setError('Could not send the test email. Check your Resend settings and try again.');
+        setError('Couldn’t send the test email. Check your Resend settings and try again.');
       }
     } catch {
-      setError('Could not send the test email. Try again.');
+      setError('Couldn’t send the test email. Check your signal and try again.');
     } finally {
       setTestBusy(false);
     }
@@ -87,7 +90,7 @@ export function EmailOptInExportSection() {
           </span>
         )}
       </div>
-      {statusUnavailable && <p role="status" className="m-0 text-sm">Could not check email settings. Reload the page to try again.</p>}
+      {statusUnavailable && <Notice role="status">Couldn’t check the email settings. Reload the page to try again.</Notice>}
       <p className="m-0 text-sm text-[rgb(var(--mg-body))]">
         Active subscribers for new-competition emails. Contains personal data — delete the file after use.
       </p>
@@ -99,8 +102,9 @@ export function EmailOptInExportSection() {
           <Send className="h-4 w-4" aria-hidden="true" /> {testBusy ? 'Sending…' : 'Send test email'}
         </button>
       </div>
-      {testNotice && <p className="m-0 text-sm font-medium text-[rgb(var(--mg-ok))]">{testNotice}</p>}
-      {error && <p role="alert" className="m-0 text-sm font-semibold text-[rgb(var(--mg-elim))]">{error}</p>}
+      {testNotice && <Notice tone="info">{testNotice}</Notice>}
+      {error && <Notice>{error}</Notice>}
+      {toast.node}
     </section>
   );
 }

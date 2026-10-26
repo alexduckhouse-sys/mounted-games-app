@@ -79,7 +79,7 @@ function useConnectionPill(): ReactNode {
   return (
     <button type="button" className="mg-conn-pill mg-conn-offline" onClick={status.retry}
       aria-label={updated ? `Offline, last updated ${updated}. Tap to retry` : 'Offline. Tap to retry'}>
-      <WifiOff aria-hidden="true" />{updated ? `Offline · updated ${updated}` : 'Offline'}<RefreshCw aria-hidden="true" />
+      <WifiOff aria-hidden="true" />{updated ? `Offline · updated ${updated}` : 'Offline'}
     </button>
   );
 }

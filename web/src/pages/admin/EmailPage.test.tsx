@@ -224,15 +224,15 @@ describe('EmailPage', () => {
     expect(screen.getByRole('button', { name: 'Send me a test' })).toBeEnabled();
     await user.click(screen.getByRole('button', { name: 'Send to 3 people' }));
     const dialog = screen.getByRole('dialog', { name: 'Send this email?' });
-    expect(within(dialog).getByText(/To the news list, 3 people\. It can’t be unsent\./)).toBeInTheDocument();
+    expect(within(dialog).getByText(/To the news list, 3 people\. You can’t unsend it\./)).toBeInTheDocument();
     expect(within(dialog).getByText('Entries are open.')).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: 'Not yet' }));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(api.post).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: 'Send to 3 people' }));
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Send to 3 people' }));
-    expect(await screen.findByText('Sent. 1 didn’t go through.')).toBeInTheDocument();
+    expect(await screen.findByText('Sent to 2 people. 1 didn’t go through.')).toBeInTheDocument();
     expect(api.post).toHaveBeenCalledWith('/admin/custom-emails', {
       subject: 'Spring news', audience: 0, confirm: true, expectedRecipients: 3,
       blocks: [{ type: 0, text: 'Entries are open.', links: [] }],
@@ -241,10 +241,10 @@ describe('EmailPage', () => {
     // The form is clear for the next email.
     expect(screen.getByLabelText('Subject')).toHaveValue('');
 
-    await user.click(screen.getByRole('button', { name: 'Try those again' }));
-    expect(await screen.findByText('Sent.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Send those again' }));
+    expect(await screen.findByText(/^Sent to 3 people$/)).toBeInTheDocument();
     expect(api.post).toHaveBeenCalledWith('/admin/custom-emails/7/retry-failed');
-    expect(screen.queryByRole('button', { name: 'Try those again' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Send those again' })).not.toBeInTheDocument();
   });
 
   it('shows Sending… X of N with a bar, and Stop sending cancels', async () => {
@@ -290,7 +290,7 @@ describe('EmailPage', () => {
     expect(await screen.findByText('Paused. 0 of 3')).toBeInTheDocument();
     expect(screen.getByRole('alert')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Carry on' }));
-    expect(await screen.findByText('Sent.')).toBeInTheDocument();
+    expect(await screen.findByText(/^Sent to 3 people$/)).toBeInTheDocument();
   });
 
   it('picks up a send that was left part-way when the page is opened again', async () => {
@@ -301,7 +301,7 @@ describe('EmailPage', () => {
     expect(await screen.findByText('Paused. 4 of 10')).toBeInTheDocument();
     expect(screen.getByText(/sending, 4 of 10/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Carry on' }));
-    expect(await screen.findByText('Sent.')).toBeInTheDocument();
+    expect(await screen.findByText(/^Sent to 10 people$/)).toBeInTheDocument();
   });
 
   it('shows what the API says when it will not send, and nothing was sent', async () => {

@@ -55,7 +55,7 @@ describe('DetailsTab matchmaker', () => {
     mount([section({ format: 1 })]);
     await userEvent.click(await screen.findByRole('button', { name: 'Request pair-up with Synthetic Partner' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/my/signups/10/pair-request', { targetSignupId: 20 }));
-    expect(await screen.findByRole('status')).toHaveTextContent('Pair-up request sent.');
+    expect(await screen.findByRole('status')).toHaveTextContent('Pair-up request sent');
   });
 
   it('lists a team with a guest rider spot, and a rider waiting for one', async () => {
@@ -75,6 +75,6 @@ describe('DetailsTab matchmaker', () => {
     vi.mocked(api.post).mockRejectedValue(new Error('no'));
     mount([section({ format: 1 })]);
     await userEvent.click(await screen.findByRole('button', { name: 'Request pair-up with Synthetic Partner' }));
-    expect(await screen.findByRole('status')).toHaveTextContent('Could not send the pair-up request');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t send the pair-up request');
   });
 });

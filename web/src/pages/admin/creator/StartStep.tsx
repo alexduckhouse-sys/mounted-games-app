@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Check } from 'lucide-react';
 import { api } from '../../../api';
+import { Notice } from '../../../components/Notice';
 import { competitionDateText } from '../../../lib/competitionDates';
 import { copyOfCompetition } from '../../../lib/creatorLoad';
 import { defaultDraft, type CreatorDraft } from '../../../lib/creatorDraft';
@@ -68,7 +69,7 @@ export function StartStep({ draft, replace }: {
           <>
             <div className="cw-card" role="group" aria-label="Copy from" aria-busy={list === null}>
               {list === null && <div className="cw-row"><span className="cw-t2" role="status">Loading…</span></div>}
-              {list?.length === 0 && <div className="cw-row"><span className="cw-t2">{failed ? 'Couldn’t load your competitions.' : 'No past competitions yet.'}</span></div>}
+              {list?.length === 0 && <div className="cw-row"><span className="cw-t2">{failed ? 'Couldn’t load your competitions. Check your signal and try again.' : 'No past competitions yet.'}</span></div>}
               {list?.map((c) => {
                 const on = copying && draft.copiedFrom === c.name;
                 return (
@@ -83,7 +84,7 @@ export function StartStep({ draft, replace }: {
                 );
               })}
             </div>
-            {failed && list !== null && list.length > 0 && <p role="alert" className="cw-note" style={{ color: 'rgb(var(--mg-elim))' }}>Couldn’t copy that one. Try again.</p>}
+            {failed && list !== null && list.length > 0 && <Notice>Couldn’t copy that one. Check your signal and try again.</Notice>}
             <p className="cw-note">Dates are left empty. Entries and results aren’t copied.</p>
           </>
         )}

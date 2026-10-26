@@ -352,7 +352,7 @@ describe('CompetitionPicker: problems', () => {
   it('offers to try again when loading fails', async () => {
     get.mockRejectedValueOnce(new Error('offline'));
     renderPicker();
-    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load competitions. Check your connection and try again.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load the competitions');
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await loaded('Autumn Open');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();

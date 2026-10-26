@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Notice } from '../../components/Notice';
 import type { TestPayment } from './types';
 
 export function PageHeader({ title, children }: { title: string; children: ReactNode }) {
@@ -12,28 +13,25 @@ export function PageHeader({ title, children }: { title: string; children: React
 
 export function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div role="alert" className="mg-card flex flex-col items-start gap-3 p-4">
-      <p>{message}</p>
-      <button type="button" className="mg-btn mg-btn-secondary" onClick={onRetry}>Try again</button>
-    </div>
+    <Notice actionLabel="Try again" onAction={onRetry}>{message}</Notice>
   );
 }
 
 export function StatusPill({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'good' | 'warn' | 'test' }) {
   const colour = {
     neutral: 'border-[rgb(var(--mg-control))] text-[rgb(var(--mg-body))]',
-    good: 'border-emerald-500 bg-emerald-50 text-emerald-800',
-    warn: 'border-amber-400 bg-amber-50 text-amber-900',
-    test: 'border-violet-400 bg-violet-50 text-violet-900',
+    good: 'border-[rgb(var(--mg-ok))] bg-[rgb(var(--mg-ok)/0.14)] text-[rgb(var(--mg-ok))]',
+    warn: 'border-[rgb(var(--mg-problem-ink)/0.4)] bg-[rgb(var(--mg-problem-bg))] text-[rgb(var(--mg-problem-ink))]',
+    test: 'border-[rgb(var(--mg-info-ink)/0.4)] bg-[rgb(var(--mg-info-bg))] text-[rgb(var(--mg-info-ink))]',
   }[tone];
   return <span className={`inline-flex min-h-6 items-center rounded-md border px-2 text-xs font-bold ${colour}`}>{children}</span>;
 }
 
 export function TestReceipt({ payment }: { payment: TestPayment }) {
   return (
-    <div className="mg-rise rounded-lg border-2 border-violet-400 bg-violet-50 p-3 text-violet-950" role="status">
-      <p className="text-sm font-extrabold">{payment.receiptLabel}</p>
-      <p className="mt-1 break-all text-xs">Test receipt: {payment.receiptReference}</p>
-    </div>
+    <Notice tone="info" className="mg-rise w-full text-left">
+      <span className="block font-extrabold">{payment.receiptLabel}</span>
+      <span className="mt-1 block break-all text-xs">Test receipt: {payment.receiptReference}</span>
+    </Notice>
   );
 }

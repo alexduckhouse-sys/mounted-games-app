@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Camera, KeyRound, QrCode, ShieldAlert, Upload, X } from 'lucide-react';
+import { Camera, KeyRound, Upload } from 'lucide-react';
 import {
   parseScorerSession,
   scorerApi,
@@ -9,8 +9,12 @@ import {
   writeScorerToken,
 } from '../offline/scorerLink';
 import type { ScorerSession } from '../types';
+import { Notice } from './Notice';
+import { Sheet } from './Sheet';
 
 type ParsedPermissionTarget = { kind: 'scorer'; token: string };
+
+const NOT_ACCEPTED = 'That QR code isn’t a scoring or camera code, or it has stopped working. Ask the organiser for a new one.';
 
 const SAFE_TOKEN_RE = /^mgs_[A-Za-z0-9_-]{1,60}$/;
 
@@ -101,15 +105,15 @@ function QrPermissionScannerDialog({
   onNavigate?: (to: string) => void;
   onScorerVerified?: (token: string, session: ScorerSession) => void;
 }) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [manualValue, setManualValue] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
+  const pasteRef = useRef<HTMLInputElement>(null);
   const [cameraError, setCameraError] = useState<string | null>(() =>
     typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia
-      ? 'Camera access is not available in this browser. Paste your permission link or upload a QR image below.'
+      ? 'This browser can’t use the camera. Paste the link or upload a photo of the QR code instead.'
       : null,
   );
   const verifyingRef = useRef(false);
@@ -117,12 +121,6 @@ function QrPermissionScannerDialog({
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
-  }, []);
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    dialog?.showModal();
-    return () => { dialog?.close(); };
   }, []);
 
   const navigateTo = useCallback((to: string) => {
@@ -138,7 +136,7 @@ function QrPermissionScannerDialog({
     setError(null);
     const parsed = parsePermissionTarget(raw);
     if (!parsed) {
-      setError('Invalid permission QR code. A valid organiser-issued permission key is required.');
+      setError(NOT_ACCEPTED);
       return;
     }
 
@@ -151,7 +149,7 @@ function QrPermissionScannerDialog({
       if (!mountedRef.current) return;
       const session = parseScorerSession(response.data);
       if (!session) {
-        setError('Invalid or expired permission key. Ask the organiser for a fresh QR code.');
+        setError(NOT_ACCEPTED);
         return;
       }
       writeScorerToken(parsed.token);
@@ -161,7 +159,7 @@ function QrPermissionScannerDialog({
       navigateTo(`/score#t=${encodeURIComponent(parsed.token)}`);
     } catch {
       if (!mountedRef.current) return;
-      setError('Invalid or expired permission key. Ask the organiser for a fresh QR code.');
+      setError(NOT_ACCEPTED);
     } finally {
       verifyingRef.current = false;
       if (mountedRef.current) setVerifying(false);
@@ -209,7 +207,7 @@ function QrPermissionScannerDialog({
       .catch(() => {
         if (!cancelled) {
           setCameraActive(false);
-          setCameraError('Camera permission was declined or unavailable. Paste your permission link or upload a QR photo below.');
+          setCameraError('The camera is blocked. Paste the link or upload a photo of the QR code instead.');
         }
       });
 
@@ -225,7 +223,7 @@ function QrPermissionScannerDialog({
     setError(null);
     const detector = createQrDetector();
     if (!detector || typeof createImageBitmap === 'undefined') {
-      setError('QR image decoding is not supported by this browser. Paste the permission link or key instead.');
+      setError('This browser can’t read QR photos. Paste the link instead.');
       return;
     }
     let bitmap: ImageBitmap | undefined;
@@ -235,121 +233,92 @@ function QrPermissionScannerDialog({
       if (!mountedRef.current) return;
       const rawValue = codes.find((c) => c.rawValue?.trim())?.rawValue;
       if (!rawValue) {
-        setError('No QR code was found in that image. Try another photo or paste the permission link.');
+        setError('There’s no QR code in that photo. Try another photo or paste the link.');
         return;
       }
       await handleCandidate(rawValue);
     } catch {
-      if (mountedRef.current) setError('Could not read that QR image. Paste the permission link or key instead.');
+      if (mountedRef.current) setError('Couldn’t read that photo. Try another photo or paste the link.');
     } finally {
       bitmap?.close();
     }
   }
 
   return createPortal(
-    <dialog
-      ref={dialogRef}
-      aria-modal="true"
-      aria-label="Scan permission QR code"
-      className="mg-font fixed inset-0 z-[110] m-0 flex h-dvh max-h-none w-screen max-w-none items-center justify-center border-0 bg-[rgb(var(--mg-overlay)/0.65)] p-4 backdrop-blur-xs"
-      onCancel={(event) => { event.preventDefault(); onClose(); }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div
-        className="mg-card flex w-full max-w-md flex-col gap-4 p-4 text-[rgb(var(--mg-ink))] shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <QrCode className="h-5 w-5 shrink-0 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
-            <div>
-              <h2 className="mg-display text-lg font-bold leading-tight text-[rgb(var(--mg-heading))]">
-                Scan permission QR code
-              </h2>
-              <p className="text-xs text-[rgb(var(--mg-muted))]">
-                Scan the scoring or camera permission link from your organiser.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close QR scanner"
-            className="mg-icon-btn !h-9 !w-9"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="relative aspect-square max-h-60 w-full overflow-hidden rounded-xl bg-black/90 flex items-center justify-center">
-          <video
-            ref={videoRef}
-            muted
-            playsInline
-            autoPlay
-            aria-label="QR code camera scanner"
-            className={`h-full w-full object-cover ${cameraActive ? 'block' : 'hidden'}`}
-          />
-          {!cameraActive && (
-            <div className="flex flex-col items-center gap-2 p-4 text-center text-xs text-white/80">
-              <Camera className="h-7 w-7 text-white/60" aria-hidden="true" />
-              <span>{cameraError ?? 'Starting camera…'}</span>
+    <Sheet title="Scan the QR code" description="Point the camera at the scoring or camera QR code from your organiser." onClose={onClose}>
+      {({ close }) => (
+        <>
+          {cameraError && !cameraActive ? (
+            <Notice role="status" actionLabel="Paste the link" onAction={() => pasteRef.current?.focus()}>{cameraError}</Notice>
+          ) : (
+            <div className="relative flex aspect-square max-h-60 w-full items-center justify-center overflow-hidden rounded-xl bg-black/90">
+              <video
+                ref={videoRef}
+                muted
+                playsInline
+                autoPlay
+                aria-label="QR code camera scanner"
+                className={`h-full w-full object-cover ${cameraActive ? 'block' : 'hidden'}`}
+              />
+              {!cameraActive && (
+                <div className="flex flex-col items-center gap-2 p-4 text-center text-xs text-white/80">
+                  <Camera className="h-7 w-7 text-white/60" aria-hidden="true" />
+                  <span>Starting camera…</span>
+                </div>
+              )}
             </div>
           )}
-        </div>
 
-        {error && (
-          <div role="alert" className="flex items-start gap-2 rounded-lg bg-red-50 p-3 text-xs font-medium text-red-900">
-            <ShieldAlert className="h-4 w-4 shrink-0 text-red-700" aria-hidden="true" />
-            <span>{error}</span>
+          {error && <Notice>{error}</Notice>}
+
+          <div className="kit-acts">
+            <label className="kit-pill kit-pill-fill cursor-pointer">
+              <Upload className="h-4 w-4" aria-hidden="true" />
+              <span>Upload a photo</span>
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                aria-label="Upload QR code image"
+                onChange={(e) => void handleImageUpload(e.target.files?.[0])}
+              />
+            </label>
+            {!(cameraError && !cameraActive) && <button type="button" className="kit-pill" onClick={() => pasteRef.current?.focus()}>Paste the link</button>}
+            <button type="button" className="kit-pill" aria-label="Close QR scanner" onClick={() => close()}>Close</button>
           </div>
-        )}
 
-        <div className="flex items-center justify-between gap-2">
-          <label className="mg-btn mg-btn-secondary !min-h-10 flex-1 cursor-pointer !text-xs">
-            <Upload className="h-4 w-4" aria-hidden="true" />
-            <span>Scan QR photo</span>
-            <input
-              type="file"
-              accept="image/*"
-              className="sr-only"
-              aria-label="Upload QR code image"
-              onChange={(e) => void handleImageUpload(e.target.files?.[0])}
-            />
-          </label>
-        </div>
-
-        <form
-          className="flex flex-col gap-2 border-t border-[rgb(var(--mg-rule-soft))] pt-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void handleCandidate(manualValue);
-          }}
-        >
-          <label className="flex flex-col gap-1 text-xs font-semibold text-[rgb(var(--mg-muted))]">
-            <span className="flex items-center gap-1.5">
-              <KeyRound className="h-3.5 w-3.5" aria-hidden="true" />
-              Or enter permission link / secret key
-            </span>
-            <input
-              type="text"
-              aria-label="Permission link or key"
-              placeholder="Paste /score#t=… link or mgs_… key"
-              value={manualValue}
-              onChange={(e) => setManualValue(e.target.value)}
-              className="input !min-h-10 text-sm"
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={verifying || !manualValue.trim()}
-            className="mg-btn mg-btn-primary !min-h-11 text-sm"
+          <form
+            className="flex flex-col gap-2 border-t border-[rgb(var(--mg-rule-soft))] pt-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleCandidate(manualValue);
+            }}
           >
-            {verifying ? 'Verifying key…' : 'Verify permission key'}
-          </button>
-        </form>
-      </div>
-    </dialog>,
+            <label className="kit-sheet-field">
+              <span className="flex items-center gap-1.5">
+                <KeyRound className="h-3.5 w-3.5" aria-hidden="true" />
+                Or enter permission link / secret key
+              </span>
+              <input
+                ref={pasteRef}
+                type="text"
+                aria-label="Permission link or key"
+                placeholder="Paste /score#t=… link or mgs_… key"
+                value={manualValue}
+                onChange={(e) => setManualValue(e.target.value)}
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={verifying || !manualValue.trim()}
+              className="kit-pill kit-pill-fill"
+            >
+              {verifying ? 'Verifying key…' : 'Verify permission key'}
+            </button>
+          </form>
+        </>
+      )}
+    </Sheet>,
     document.body,
   );
 }

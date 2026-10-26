@@ -188,7 +188,7 @@ describe('SectionsPage', () => {
     const card = screen.getByRole('region', { name: 'Under 12' });
     await user.click(within(card).getByRole('button', { name: 'Remove this section' }));
     await waitFor(() => expect(saveCreator).toHaveBeenCalled());
-    expect(asked.titles).toEqual(['Remove this section?']);
+    expect(asked.titles).toEqual(['Remove Under 12 and its sessions?']);
     expect(lastDraft().sections.map((s) => s.ageGroup)).toEqual(['Under 15']);
   });
 

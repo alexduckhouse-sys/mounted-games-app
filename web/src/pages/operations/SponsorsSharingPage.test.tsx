@@ -236,7 +236,7 @@ describe('SponsorsSharingPage', () => {
     show();
     await user.click(await screen.findByRole('button', { name: 'Share' }));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/competitions/5'));
-    expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
+    expect(await screen.findByText('Link copied')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Get code' }));
     expect(screen.getByText('embed settings')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Website embed' })).toBeInTheDocument();

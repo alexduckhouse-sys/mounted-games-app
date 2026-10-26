@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
+import { Notice } from '../components/Notice';
 import { PasswordChecklist } from '../components/PasswordChecklist';
 import { friendlyPasswordErrors, passwordMeetsRules } from '../lib/passwordRules';
 import { tokenFromHash } from '../offline/scorerLink';
@@ -67,7 +68,7 @@ export function InvitePage() {
       {lookup.state === 'invalid' && (
         <div className="flex flex-col gap-4">
           <h1 className="mg-h1 !text-[34px] !leading-none">Invitation</h1>
-          <p role="alert" className="m-0 text-[15px] font-medium">{lookup.message}</p>
+          <Notice>{lookup.message}</Notice>
         </div>
       )}
       {lookup.state === 'ready' && (

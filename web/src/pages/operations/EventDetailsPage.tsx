@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Notice } from '../../components/Notice';
 import { useSavedToast } from '../../components/SavedTick';
 import { Link } from 'react-router-dom';
 import { Plus } from 'lucide-react';
@@ -54,7 +55,7 @@ export function EventDetailsPage() {
       api.get<{ config?: { useRefereeCards?: boolean } }>(`/competitions/${competition.id}/dec-form-config`),
     ])
       .then(([p, t, d]) => { if (cancelled) return; setPassport(p.data.enabled); setTack(t.data.sections); setCards(Boolean(d.data?.config?.useRefereeCards)); })
-      .catch((caught) => { if (!cancelled) setLoadError(apiMessage(caught, 'Couldn’t load the checks.')); });
+      .catch((caught) => { if (!cancelled) setLoadError(apiMessage(caught, 'Couldn’t load the checks. Check your signal and try again.')); });
     return () => { cancelled = true; };
   }, [competition.id]);
 
@@ -72,7 +73,7 @@ export function EventDetailsPage() {
       showSaved(name.charAt(0).toUpperCase() + name.slice(1));
       return true;
     }
-    catch (caught) { setError(apiMessage(caught, `Couldn’t save ${what}. Try again.`)); return false; }
+    catch (caught) { setError(apiMessage(caught, `Couldn’t save ${what}. Check your signal and try again.`)); return false; }
     finally { setSaving((n) => n - 1); }
   }, [showSaved]);
 
@@ -114,7 +115,7 @@ export function EventDetailsPage() {
     <RefinePage>
       <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel="Back to preparations" context={competition.name} title="Event details" />
       <div className="ops-cards">
-        {error && <p role="alert" className="mg-notice ops-alert">{error}</p>}
+        {error && <Notice>{error}</Notice>}
         {saving > 0 && <p role="status" className="rf-note">Saving…</p>}
         {savedToast.node}
 
@@ -145,7 +146,7 @@ export function EventDetailsPage() {
         </div>
 
         <RefineSection title="Checks and cards" />
-        {loadError && <p role="alert" className="mg-notice ops-alert">{loadError}</p>}
+        {loadError && <Notice>{loadError}</Notice>}
         {passport !== null && (
           <RefineList as="div">
             <div className="rf-row">
@@ -309,7 +310,7 @@ function DuplicateSetUp({ competition, onError }: { competition: CompetitionDeta
       });
       setMade({ id: data.competitionId, name: data.name });
       setOpen(false);
-    } catch (caught) { onError(apiMessage(caught, 'Couldn’t duplicate this event. Try again.')); }
+    } catch (caught) { onError(apiMessage(caught, 'Couldn’t duplicate this event. Check your signal and try again.')); }
     finally { setBusy(false); }
   }
 

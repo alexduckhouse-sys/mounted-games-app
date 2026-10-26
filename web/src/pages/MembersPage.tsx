@@ -12,6 +12,7 @@ import { Field } from './auth/Field';
 import { useNeedsYou } from './profile/needsYou';
 import { SelectField } from '../components/SelectField';
 import { confirmDialog } from '../components/ConfirmDialog';
+import { Notice } from '../components/Notice';
 
 /**
  * The club's people, for its team manager (their own club) or an admin (any club): who is waiting to join,
@@ -62,7 +63,7 @@ export function MembersPage() {
   async function decide(request: TrainerRequest, action: 'approve' | 'decline') {
     setNotice(null);
     if (!(await review(request, action))) {
-      setNotice('Could not update this request. Try again.');
+      setNotice('Couldn’t update this request. Check your signal and try again.');
       return;
     }
     // An approved person joins a group, so fetch the list again rather than guess which one.
@@ -77,7 +78,7 @@ export function MembersPage() {
       const { data: change } = await api.put<ClubRoleChange>(`/clubs/${clubId}/members/${encodeURIComponent(userId)}/role`, { role });
       edit((cur) => ({ ...cur, members: applyRoleChange(cur.members, userId, change) }));
     } catch (err) {
-      setNotice(apiErrorMessage(err, 'Could not change the role. Try again.'));
+      setNotice(apiErrorMessage(err, 'Couldn’t change the role. Check your signal and try again.'));
     } finally {
       setBusy(false);
     }
@@ -85,7 +86,7 @@ export function MembersPage() {
 
   async function remove(userId: string, name: string) {
     if (clubId == null || busy) return;
-    if (!(await confirmDialog({ title: 'Remove from club?', message: `Remove ${name} from ${data?.clubName ?? 'the club'}?`, confirmLabel: 'Remove from club', destructive: true }))) return;
+    if (!(await confirmDialog({ title: 'Remove from club?', message: `${name} stops being a member of ${data?.clubName ?? 'the club'}.`, confirmLabel: 'Remove from club', destructive: true }))) return;
     setBusy(true);
     setNotice(null);
     try {
@@ -93,7 +94,7 @@ export function MembersPage() {
       edit((cur) => ({ ...cur, members: withoutMember(cur.members, userId) }));
       setOpen(null);
     } catch (err) {
-      setNotice(apiErrorMessage(err, 'Could not remove them. Try again.'));
+      setNotice(apiErrorMessage(err, 'Couldn’t remove them. Check your signal and try again.'));
     } finally {
       setBusy(false);
     }
@@ -124,9 +125,9 @@ export function MembersPage() {
         </Field>
       )}
 
-      {notice && <p role="alert" className="text-sm font-medium text-[rgb(var(--mg-elim))]">{notice}</p>}
+      {notice && <Notice>{notice}</Notice>}
       {clubId != null && !data && (loadFailed === clubId
-        ? <p role="alert" className="text-sm font-medium text-[rgb(var(--mg-elim))]">Could not load the members. Try again.</p>
+        ? <Notice actionLabel="Try again" onAction={() => { setLoadFailed(null); setVersion((v) => v + 1); }}>Couldn’t load the members. Check your signal and try again.</Notice>
         : <PageSkeleton />)}
 
       {data && data.pending.length > 0 && (

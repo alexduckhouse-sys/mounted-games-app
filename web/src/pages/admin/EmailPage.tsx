@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api';
+import { Notice } from '../../components/Notice';
+import { Sheet } from '../../components/Sheet';
+import { useToast } from '../../components/Toast';
 import { problemMessage } from '../../lib/apiError';
 import type { CompetitionSummary } from '../../types';
-import { RefineHeader, RefineChoiceRow, RefineList, RefinePage, RefineSection, RefineSheet } from '../refine/Refine';
+import { RefineHeader, RefineChoiceRow, RefineList, RefinePage, RefineSection } from '../refine/Refine';
 import type { CustomEmailAudienceCount, CustomEmailSummary } from './customEmailTypes';
 import {
   AUDIENCES, LINK_TO_OPTIONS, MAX_LINKS, audienceLabel, buildBlocks, defaultFooter, describeTarget, emptyTarget, isHttps, linkedParagraphs, loadDraft, saveDraft,
@@ -25,7 +28,7 @@ function sendProblem(caught: unknown, fallback: string): string {
 }
 
 type Sending = { id: number; total: number; done: number; paused: boolean };
-type Note = { kind: 'sent'; id: number; failed: number } | { kind: 'stopped'; done: number };
+type Note = { kind: 'sent'; id: number; sent: number; failed: number } | { kind: 'stopped'; done: number };
 
 /** "Links to", then the event when a site page is chosen, or the web address. Used for linked words and for a picture. */
 function TargetFields({ target, onChange, comps, withNothing = false }: {
@@ -76,6 +79,7 @@ export function EmailPage() {
   const [note, setNote] = useState<Note | null>(null);
   const [test, setTest] = useState<'idle' | 'sending' | 'sent'>('idle');
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
   const stop = useRef(false);
   const alive = useRef(true);
 
@@ -92,7 +96,7 @@ export function EmailPage() {
     let cancelled = false;
     api.get<CustomEmailAudienceCount[]>('/admin/custom-emails/audiences')
       .then(({ data }) => { if (!cancelled) setCounts(Array.isArray(data) ? data : []); })
-      .catch(() => { if (!cancelled) { setCounts([]); setError('Couldn’t count who is on each list. Try again.'); } });
+      .catch(() => { if (!cancelled) { setCounts([]); setError('Couldn’t count who is on each list. Check your signal and try again.'); } });
     api.get<CompetitionSummary[]>('/competitions')
       .then(({ data }) => { if (!cancelled) setComps(Array.isArray(data) ? data : []); }).catch(() => undefined);
     api.get<CustomEmailSummary[]>('/admin/custom-emails')
@@ -159,7 +163,9 @@ export function EmailPage() {
         if (!alive.current || stop.current) return;
         if (data.remaining === 0 || data.status !== 0) {
           setSending(null);
-          setNote(data.status === 2 ? { kind: 'stopped', done: data.sent + data.failed + data.skipped } : { kind: 'sent', id, failed: data.failed });
+          if (data.status === 2) setNote({ kind: 'stopped', done: data.sent + data.failed + data.skipped });
+          else if (data.failed > 0) setNote({ kind: 'sent', id, sent: data.sent, failed: data.failed });
+          else toast.show(`Sent to ${people(data.sent)}`);
           void loadSent();
           return;
         }
@@ -204,7 +210,7 @@ export function EmailPage() {
       void loadSent();
     } catch (caught) {
       stop.current = false;
-      setError(problemMessage(caught, 'Couldn’t stop the send. Try again.'));
+      setError(problemMessage(caught, 'Couldn’t stop the send. Check your signal and try again.'));
     }
   }
 
@@ -215,7 +221,7 @@ export function EmailPage() {
       setBusy(false);
       await drive(id, { id, total: data.total, done: data.total - data.remaining, paused: false });
     } catch (caught) {
-      setError(problemMessage(caught, 'Couldn’t try those again. Try again.'));
+      setError(problemMessage(caught, 'Couldn’t try those again. Check your signal and try again.'));
     } finally {
       setBusy(false);
     }
@@ -231,7 +237,7 @@ export function EmailPage() {
       else { setTest('idle'); setError('The test email wasn’t sent. Email may be switched off on this server.'); }
     } catch (caught) {
       setTest('idle');
-      setError(sendProblem(caught, 'Couldn’t send the test. Try again.'));
+      setError(sendProblem(caught, 'Couldn’t send the test. Check your signal and try again.'));
     }
   }
 
@@ -242,15 +248,14 @@ export function EmailPage() {
     <RefinePage wide>
       <RefineHeader back="/admin" backLabel="Back to site admin" context="Site admin" title="Email" />
       <div className="ops-cards ops-tt ops-admin em-page" aria-busy={busy}>
-        {error && <p role="alert" className="mg-notice ops-alert">{error}</p>}
-        {note && (
-          <div role="status" className="em-note em-note-ok">
-            <span className="rf-t1">
-              {note.kind === 'stopped' ? `Stopped after ${people(note.done)}.` : note.failed > 0 ? `Sent. ${note.failed} didn’t go through.` : 'Sent.'}
-            </span>
-            {note.kind === 'sent' && note.failed > 0 && <button type="button" className="rf-btn" disabled={busy} onClick={() => void retry(note.id)}>Try those again</button>}
-          </div>
+        {error && <Notice>{error}</Notice>}
+        {note?.kind === 'stopped' && <Notice tone="info">Stopped after {people(note.done)}.</Notice>}
+        {note?.kind === 'sent' && (
+          <Notice actionLabel="Send those again" onAction={() => void retry(note.id)} actionDisabled={busy}>
+            Sent to {people(note.sent)}. {note.failed} didn’t go through.
+          </Notice>
         )}
+        {toast.node}
 
         <div className="em-tabs" role="tablist" aria-label="Email">
           {(['write', 'preview'] as const).map((id) => (
@@ -385,16 +390,17 @@ export function EmailPage() {
       </div>
 
       {confirming && (
-        <RefineSheet title="Send this email?" onClose={() => setConfirming(false)}>
-          <div className="em-confirm">
-            <p className="rf-t2">To {AUDIENCES.find((a) => a.audience === draft.audience)?.list}, {people(recipients ?? 0)}. It can{'’'}t be unsent.</p>
-            <div className="em-confirm-prev"><EmailPreview draft={draft} to={toText} /></div>
-            <span className="em-acts">
-              <button type="button" className="rf-btn rf-btn-primary" onClick={() => void send()}>{sendLabel}</button>
-              <button type="button" className="rf-btn" onClick={() => setConfirming(false)}>Not yet</button>
-            </span>
-          </div>
-        </RefineSheet>
+        <Sheet title="Send this email?" description={`To ${AUDIENCES.find((a) => a.audience === draft.audience)?.list}, ${people(recipients ?? 0)}. You can’t unsend it.`} onClose={() => setConfirming(false)}>
+          {({ close }) => (
+            <div className="em-confirm">
+              <div className="em-confirm-prev"><EmailPreview draft={draft} to={toText} /></div>
+              <div className="kit-acts">
+                <button type="button" className="kit-pill kit-pill-fill" onClick={() => close(() => void send())}>{sendLabel}</button>
+                <button type="button" className="kit-pill" onClick={() => close()}>Not yet</button>
+              </div>
+            </div>
+          )}
+        </Sheet>
       )}
     </RefinePage>
   );

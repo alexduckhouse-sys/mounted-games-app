@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { apiErrorMessage } from '../lib/apiError';
+import { PageProblem } from '../components/PageProblem';
 import '../components/sitePages.css';
 
 type Phase = 'working' | 'done' | 'failed' | 'incomplete';
@@ -26,7 +27,7 @@ export function ConfirmEmailPage() {
       setPhase('done');
       await refreshUser();
     } catch (err) {
-      setMessage(apiErrorMessage(err, "We couldn't confirm your email address. Check your connection and try again."));
+      setMessage(apiErrorMessage(err, 'We couldn’t confirm your email address. Check your signal and try again.'));
       setPhase('failed');
     }
   }, [userId, token, refreshUser]);
@@ -38,6 +39,21 @@ export function ConfirmEmailPage() {
     void run();
   }, [userId, token, run]);
 
+  if (phase === 'failed') {
+    return (
+      <PageProblem title="Couldn’t confirm your email" primaryLabel="Try again" onPrimary={() => void run()} secondaryLabel="Back to the app" secondaryTo="/">
+        {message} If the link has expired, sign in and use the “Send it again” button on your profile.
+      </PageProblem>
+    );
+  }
+  if (phase === 'incomplete') {
+    return (
+      <PageProblem title="This link looks incomplete" secondaryLabel="Back to the app" secondaryTo="/">
+        Use the link in the email we sent you.
+      </PageProblem>
+    );
+  }
+
   return (
     <div className="skin mx-auto w-full max-w-[560px]">
       <div className="sp-small">
@@ -47,22 +63,6 @@ export function ConfirmEmailPage() {
           <>
             <p role="status">Thanks, your email address is confirmed.</p>
             <Link to={user ? '/me' : '/login'} className="sp-pill sp-pill-fill">{user ? 'Go to my profile' : 'Sign in'}</Link>
-          </>
-        )}
-        {phase === 'failed' && (
-          <>
-            <p role="alert">{message}</p>
-            <p>If the link has expired, sign in and use the "Resend email" button on your profile.</p>
-            <div className="sp-acts">
-              <button type="button" className="sp-pill sp-pill-fill" onClick={() => void run()}>Try again</button>
-              <Link to="/" className="sp-pill">Back to the app</Link>
-            </div>
-          </>
-        )}
-        {phase === 'incomplete' && (
-          <>
-            <p role="alert">This link looks incomplete. Please use the link in the email we sent you.</p>
-            <Link to="/" className="sp-pill">Back to the app</Link>
           </>
         )}
       </div>

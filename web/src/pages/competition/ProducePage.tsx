@@ -1,7 +1,9 @@
 import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Camera, Layers, Megaphone, QrCode, Radio, Sliders, Sparkles, Video } from 'lucide-react';
+import { Notice } from '../../components/Notice';
 import { QrCode as QrCodeImage } from '../../components/QrCode';
+import { useToast } from '../../components/Toast';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { displaySectionName } from '../../lib/section';
@@ -29,7 +31,10 @@ export function ProducePage() {
   const busyRef = useRef(false);
 
   const [announceText, setAnnounceText] = useState('');
-  const [statusNote, setStatusNote] = useState<string | null>(null);
+  // Quick confirmations are toasts; anything that went wrong is a strip with a way to try again.
+  const toast = useToast();
+  const [problem, setProblem] = useState<{ text: string; retry?: () => void; show?: boolean } | null>(null);
+  const overlaysRef = useRef<HTMLDivElement>(null);
   const [showDualCamQr, setShowDualCamQr] = useState(false);
   const [secondAngle, setSecondAngle] = useState('Finish line');
 
@@ -64,12 +69,14 @@ export function ProducePage() {
     if (busyRef.current) return false;
     busyRef.current = true;
     setBusy(true);
-    setStatusNote(null);
+    setProblem(null);
     try {
       if (saveOverlay) {
         const result = await saveOverlay((o) => ({ ...o, ...patch }));
         if (result !== 'saved') {
-          setStatusNote(result === 'conflict' ? 'The overlay changed on another device. Check it and try again.' : 'Could not update the overlay. Try again.');
+          setProblem(result === 'conflict'
+            ? { text: 'The overlay changed on another phone. Check it and try again.', show: true }
+            : { text: 'Couldn’t update the overlay. Check your signal and try again.', retry: () => void pushOverlay(patch, note) });
           return false;
         }
       } else {
@@ -78,10 +85,10 @@ export function ProducePage() {
         if (!parsed) throw new Error('Invalid overlay response');
         setLocalOverlay(parsed);
       }
-      if (note) setStatusNote(note);
+      if (note) toast.show(note);
       return true;
     } catch {
-      setStatusNote('Could not update the overlay. Try again.');
+      setProblem({ text: 'Couldn’t update the overlay. Check your signal and try again.', retry: () => void pushOverlay(patch, note) });
       return false;
     } finally {
       busyRef.current = false;
@@ -104,11 +111,12 @@ export function ProducePage() {
   };
 
   const sendCommand = async (streamId: number, command: StreamCommand['command'], value?: string, note?: string) => {
+    setProblem(null);
     try {
       await api.post(`/competitions/${competition.id}/streams/${streamId}/command`, { command, value });
-      if (note) setStatusNote(note);
+      if (note) toast.show(note);
     } catch {
-      setStatusNote('Could not send command to camera.');
+      setProblem({ text: 'Couldn’t reach the camera phone. Check your signal and try again.', retry: () => void sendCommand(streamId, command, value, note) });
     }
   };
 
@@ -123,7 +131,7 @@ export function ProducePage() {
       });
       setAnnounceText((current) => current.trim() === text ? '' : current);
     } catch {
-      setStatusNote('The stream banner was saved, but the announcement was not sent. Try again.');
+      setProblem({ text: 'The stream banner was saved, but the announcement was not sent. Try again.', retry: () => void postAnnouncement() });
     }
   };
 
@@ -159,11 +167,15 @@ export function ProducePage() {
         </div>
       </div>
 
-      {statusNote && (
-        <div role="status" className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-          {statusNote}
-        </div>
+      {problem && (
+        <Notice
+          actionLabel={problem.show ? 'Show me' : problem.retry ? 'Try again' : undefined}
+          onAction={problem.show ? () => overlaysRef.current?.querySelector<HTMLElement>('[aria-pressed="true"]')?.focus() : problem.retry}
+        >
+          {problem.text}
+        </Notice>
       )}
+      {toast.node}
 
       {/* Dual-camera QR modal / card */}
       {showDualCamQr && (
@@ -299,7 +311,7 @@ export function ProducePage() {
       </div>
 
       {/* Centred Live Stream Overlays */}
-      <div className="mg-card flex flex-col gap-3 p-4">
+      <div ref={overlaysRef} className="mg-card flex flex-col gap-3 p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Layers className="h-4 w-4 text-[rgb(var(--mg-accent))]" aria-hidden="true" />

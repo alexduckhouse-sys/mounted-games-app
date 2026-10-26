@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ChangePop } from '../../components/ChangePop';
 import { api } from '../../api';
+import { Notice } from '../../components/Notice';
+import { useToast } from '../../components/Toast';
 import { priceLabel } from '../../lib/money';
 import type { CompetitionDetail, SectionSignup } from '../../types';
 
@@ -27,16 +29,16 @@ export function EntryManagement({ competition, signups, entriesCloseAt, onChange
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const toast = useToast();
   const [error, setError] = useState<string | null>(null);
   async function saveDate() {
-    setBusy(true); setError(null); setNotice(null);
+    setBusy(true); setError(null);
     const value = draft ?? localDateInput(entriesCloseAt);
     try {
       await api.put(`/competitions/${competition.id}/entry-settings`, { entriesCloseAt: value ? new Date(value).toISOString() : null });
       window.dispatchEvent(new Event('mg:entry-settings'));
-      setNotice('Entry closing date saved.'); onChanged?.();
-    } catch { setError('Could not save the closing date. Check it and try again.'); }
+      toast.show('Entry closing date saved'); onChanged?.();
+    } catch { setError('Couldn’t save the closing date. Check it and your signal, then try again.'); }
     finally { setBusy(false); }
   }
   const bookings = signups.filter((s) => (s.stablesCount ?? 0) > 0 && s.status < 2 && !s.isWithdrawn && !s.isWaitlist);
@@ -45,7 +47,7 @@ export function EntryManagement({ competition, signups, entriesCloseAt, onChange
     <label className="rf-fld">Entry closing date and time<input type="datetime-local" value={draft ?? localDateInput(entriesCloseAt)} onChange={(e) => setDraft(e.target.value)} /></label>
     <p className="rf-note !p-0">Leave blank to keep entries open until you close them. Times use your device’s time zone.</p>
     <button type="button" disabled={busy} onClick={() => void saveDate()} className="mg-btn mg-btn-secondary">Save closing date</button>
-    {error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
+    {error && <Notice actionLabel="Try again" onAction={() => void saveDate()} actionDisabled={busy}>{error}</Notice>}{toast.node}
     <details><summary className="min-h-11 cursor-pointer font-semibold">Stabling list · {bookings.reduce((sum, s) => sum + (s.stablesCount ?? 0), 0)} stables</summary>
       {bookings.length === 0 ? <p>No stables booked yet.</p> : <ul>{bookings.map((s) => <li key={s.id}>{s.fullName} · {s.stablingClubOrTeam || s.ponyClubName || s.teamName || 'Unaffiliated'} · {s.stablesCount} {s.stablesCount === 1 ? 'stable' : 'stables'}</li>)}</ul>}
     </details>
@@ -58,8 +60,10 @@ export function EntryManagement({ competition, signups, entriesCloseAt, onChange
 function ManagedSignup({ signup: s, competition, onChanged }: { signup: ExtendedSectionSignup; competition: CompetitionDetail; onChanged?: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const retryPaid = useRef(true);
   async function update(paid: boolean) {
     if (busy) return;
+    retryPaid.current = paid;
     setBusy(true); setError(null);
     try {
       if (paid) await api.post(`/competitions/${competition.id}/signups/${s.id}/mark-paid`, {});
@@ -67,7 +71,7 @@ function ManagedSignup({ signup: s, competition, onChanged }: { signup: Extended
       onChanged?.();
     } catch (e) {
       const message = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
-      setError(message || 'Could not update this entry. Try again.');
+      setError(message || 'Couldn’t update this entry. Check your signal and try again.');
     } finally { setBusy(false); }
   }
   const label = s.status === 2 ? 'Refunded' : s.refundPending ? 'Withdrawn — refund pending' : s.isWithdrawn ? 'Withdrawn' : s.isWaitlist ? 'Waiting list' : ['Awaiting payment', 'Paid', 'Refunded', 'Cancelled'][s.status];
@@ -76,6 +80,6 @@ function ManagedSignup({ signup: s, competition, onChanged }: { signup: Extended
     <span>{s.sectionName} · <ChangePop value={label} tick={label === 'Paid'}>{label}</ChangePop> · {priceLabel(s.amountMinor)}</span>
     {!competition.isDemo && s.status === 0 && !s.isWithdrawn && <button type="button" disabled={busy} onClick={() => void update(true)} className="mg-btn mg-btn-secondary">Mark {s.fullName} as Paid</button>}
     {!competition.isDemo && s.status !== 2 && (s.status === 1 || s.refundPending) && <button type="button" disabled={busy} onClick={() => void update(false)} className="mg-btn mg-btn-secondary">Mark {s.fullName} refunded</button>}
-    {error && <p role="alert">{error}</p>}
+    {error && <Notice actionLabel="Try again" onAction={() => void update(retryPaid.current)} actionDisabled={busy}>{error}</Notice>}
   </li>;
 }

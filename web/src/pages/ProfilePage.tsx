@@ -5,6 +5,7 @@ import { api } from '../api';
 import { signOutDestination } from '../auth/signOutDestination';
 import { useAuth } from '../auth/AuthContext';
 import { EmailConfirmBanner } from '../components/EmailConfirmBanner';
+import { Notice } from '../components/Notice';
 import { usePageWidth } from '../components/pageWidthState';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { useMyTeams } from '../hooks/useMyTeams';
@@ -152,7 +153,7 @@ export function ProfilePage() {
   const accountSection = (
     <Section title="Account">
         <div className="mg-card mg-list">
-          <button type="button" role="switch" aria-checked={notify.enabled} disabled={notify.permission === 'denied' || notify.permission === 'unsupported'}
+          <button type="button" role="switch" aria-checked={notify.enabled} disabled={notify.permission === 'denied'}
             onClick={() => { void notify.setEnabled(!notify.enabled); }}
             className="mg-row !min-h-14 disabled:opacity-50">
             <Bell aria-hidden="true" className="h-6 w-6 shrink-0 text-[rgb(var(--mg-heading))]" />
@@ -161,6 +162,7 @@ export function ProfilePage() {
               <span className={`h-5 w-5 rounded-full bg-white transition-transform ${notify.enabled ? 'translate-x-5' : ''}`} />
             </span>
           </button>
+          {notify.problem && <div className="px-3.5 pb-3"><Notice>{notify.problem}</Notice></div>}
           <ListRow to="/me/account" icon={UserRound} label="My account" />
           {!isAdmin && <ListRow to="/me/signups" icon={CreditCard} label="My signups" />}
           <ListRow to="/me/catalogue" icon={Package} label="My items for sale" />

@@ -137,7 +137,7 @@ describe('DetailsTab', () => {
     } as unknown as ReturnType<typeof useCompetition>);
     renderTab();
     expect(screen.getByRole('list', { name: 'Age groups and fees' })).toHaveTextContent('Full · Waiting list · Guest rider Free');
-    expect(screen.getByText('Entries are closed.')).toBeInTheDocument();
+    expect(screen.getByText('Entries are closed for this competition.')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Enter a team' })).not.toBeInTheDocument();
   });
 
@@ -170,7 +170,21 @@ describe('DetailsTab', () => {
     vi.mocked(api.get).mockImplementation(async (url) => { if (String(url).endsWith('/equipment')) throw new Error('offline'); return { data: [] } as never; });
     renderTab();
     await userEvent.click(screen.getByRole('button', { name: 'Equipment required' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load equipment.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load the equipment. Check your signal and try again.');
+  });
+
+  it('retries the equipment list from the problem strip', async () => {
+    let attempts = 0;
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (!String(url).endsWith('/equipment')) return { data: [] } as never;
+      attempts += 1;
+      if (attempts === 1) throw new Error('offline');
+      return { data: { sessions: 1, racesCounted: 1, lines: [{ bucket: 'Lane', kind: 'Pole', count: 5 }] } } as never;
+    });
+    renderTab();
+    await userEvent.click(screen.getByRole('button', { name: 'Equipment required' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+    expect(await screen.findByText('Pole')).toBeInTheDocument();
   });
 
   it('says there is nothing to count when no races are set up', async () => {

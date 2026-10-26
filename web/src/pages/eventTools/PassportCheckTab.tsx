@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Search } from 'lucide-react';
 import { api } from '../../api';
+import { Notice } from '../../components/Notice';
 import { RefineNote, RefineSection } from '../refine/Refine';
 import type { PassportCheckBoard, PassportCheckPony } from '../../types';
 
@@ -71,14 +72,14 @@ export function PassportCheckTab({ competitionId }: { competitionId: string }) {
     let cancelled = false;
     api.get<PassportCheckBoard>(base)
       .then(({ data }) => { if (!cancelled) { setBoard(data); setError(null); } })
-      .catch((caught) => { if (!cancelled) setError(message(caught, 'Couldn’t load the passport check.')); });
+      .catch((caught) => { if (!cancelled) setError(message(caught, 'Couldn’t load the passport check. Check your signal and try again.')); });
     return () => { cancelled = true; };
   }, [base, attempt]);
 
   async function toggle(enabled: boolean) {
     setBusy('settings'); setError(null);
     try { setBoard((await api.put<PassportCheckBoard>(`${base}/settings`, { enabled })).data); }
-    catch (caught) { setError(message(caught, 'Couldn’t change the passport check.')); }
+    catch (caught) { setError(message(caught, 'Couldn’t change the passport check. Check your signal and try again.')); }
     finally { setBusy(null); }
   }
 
@@ -100,7 +101,7 @@ export function PassportCheckTab({ competitionId }: { competitionId: string }) {
     try {
       const { data } = await api.put<PassportCheckPony>(`${base}/teams/${teamId}`, { ponyName: pony.ponyName, checked });
       applyUpdatedPony(teamId, pony.ponyName, data);
-    } catch (caught) { setError(message(caught, 'Couldn’t save that tick.')); }
+    } catch (caught) { setError(message(caught, 'Couldn’t save that tick. Check your signal and try again.')); }
     finally { setBusy(null); }
   }
 
@@ -137,7 +138,7 @@ export function PassportCheckTab({ competitionId }: { competitionId: string }) {
       applyUpdatedPony(teamId, pony.ponyName, data);
       setDrafts((prev) => ({ ...prev, [key]: draftFromPony(data) }));
       setOpenKey(null);
-    } catch (caught) { setError(message(caught, 'Couldn’t save that inspection.')); }
+    } catch (caught) { setError(message(caught, 'Couldn’t save that inspection. Check your signal and try again.')); }
     finally { setBusy(null); }
   }
 
@@ -153,7 +154,7 @@ export function PassportCheckTab({ competitionId }: { competitionId: string }) {
     <RefineSection title="Passport check" />
     <h2 id="passport-title" className="sr-only">Passport check</h2>
     <RefineNote>For events that check each pony’s passport and vaccinations on arrival. Only the event’s staff see this.</RefineNote>
-    {error && <div role="alert" className="mg-notice tools-msg">{error} {!board && <button type="button" className="rf-btn rf-btn-text" onClick={() => setAttempt((n) => n + 1)}>Try again</button>}</div>}
+    {error && <Notice className="tools-msg" actionLabel={!board ? 'Try again' : undefined} onAction={() => setAttempt((n) => n + 1)}>{error}</Notice>}
     {!board && !error && <p role="status" className="rf-note">Loading the passport check…</p>}
     {board && <div className="tools-form">
       <label className="tools-check"><input type="checkbox" checked={board.enabled} disabled={busy !== null} onChange={(event) => toggle(event.target.checked)} />Check passports at this event</label>

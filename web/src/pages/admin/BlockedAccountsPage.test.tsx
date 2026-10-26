@@ -124,7 +124,7 @@ describe('BlockedAccountsPage', () => {
     expect(await screen.findByText('No account matches that')).toBeInTheDocument();
     vi.mocked(api.get).mockRejectedValue(new Error('offline'));
     await user.type(screen.getByRole('searchbox', { name: 'Find an account' }), 'x');
-    expect(await screen.findByText('Couldn’t search. Try again.')).toBeInTheDocument();
+    expect(await screen.findByText('Couldn’t search. Check your signal and try again.')).toBeInTheDocument();
   });
 
   it('shows an error when the blocked list will not load', async () => {

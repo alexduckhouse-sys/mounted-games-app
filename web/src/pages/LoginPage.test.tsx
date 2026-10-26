@@ -88,7 +88,7 @@ describe('LoginPage', () => {
     mount();
     await userEvent.type(screen.getByLabelText('Email'), 'sam@example.com');
     await userEvent.type(screen.getByLabelText('Password'), 'secret{Enter}');
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not sign in. Try again.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t sign in. Check your signal and try again.');
   });
 
   it('links to sign up and closes back to the public view', async () => {
@@ -186,7 +186,7 @@ describe('LoginPage', () => {
       await userEvent.type(screen.getByLabelText('Email'), 'steward@example.com');
       await userEvent.type(screen.getByLabelText('Password'), 'Passw0rd!x');
       await userEvent.type(screen.getByLabelText('Organiser key'), 'wrong{Enter}');
-      expect(await screen.findByRole('alert')).toHaveTextContent('That key or password did not work.');
+      expect(await screen.findByRole('alert')).toHaveTextContent('That key or password didn’t work.');
       expect(screen.getByLabelText('Organiser key')).toHaveAttribute('aria-invalid', 'true');
       // A 401 anti-impersonation error shows the specific server message.
       vi.mocked(api.post).mockRejectedValue({ response: { status: 401, data: { message: 'That email already has an account — enter its password to sign in.' } } });

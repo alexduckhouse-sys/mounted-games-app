@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { api } from '../../../api';
+import { Notice } from '../../../components/Notice';
 import { QrCode } from '../../../components/QrCode';
 import { CAMERA_ANGLES, QUALITY_CHOICES, cameraPhoneLink, cameraSettings, cameraStatus } from '../../../lib/streamControls';
 import type { LiveStream, StreamCommand, StreamTelemetry } from '../../../types';
@@ -32,7 +33,7 @@ export function CameraTab({ competitionId, streams, onAir, telemetry, defaultAre
       await api.post(`/competitions/${competitionId}/streams/${stream.id}/command`, { command, value });
       return true;
     } catch {
-      setError('Couldn’t reach the camera phone. Check your connection and try again.');
+      setError('Couldn’t reach the camera phone. Check your signal and try again.');
       return false;
     }
   }
@@ -83,7 +84,7 @@ export function CameraTab({ competitionId, streams, onAir, telemetry, defaultAre
         </div>
       )}
 
-      {error && <p className="mg-notice sx-status" role="alert">{error}</p>}
+      {error && <Notice className="sx-status">{error}</Notice>}
 
       {onAir && settings && (
         <>

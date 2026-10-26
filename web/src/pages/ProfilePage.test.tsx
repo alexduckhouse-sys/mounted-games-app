@@ -71,7 +71,7 @@ beforeEach(() => {
     throw new Error(`unexpected ${url}`);
   });
   vi.mocked(api.post).mockResolvedValue({ data: {} });
-  vi.mocked(useTeamNotifications).mockReturnValue({ enabled: false, setEnabled, permission: 'default' });
+  vi.mocked(useTeamNotifications).mockReturnValue({ enabled: false, setEnabled, permission: 'default', problem: null });
 });
 
 const section = (name: string) => within(screen.getByRole('region', { name }));
@@ -208,7 +208,7 @@ describe('ProfilePage: account', () => {
   });
 
   it('turns them off again when they are on', async () => {
-    vi.mocked(useTeamNotifications).mockReturnValue({ enabled: true, setEnabled, permission: 'granted' });
+    vi.mocked(useTeamNotifications).mockReturnValue({ enabled: true, setEnabled, permission: 'granted', problem: null });
     mount();
     const toggle = section('Account').getByRole('switch', { name: 'Notifications' });
     expect(toggle).toHaveAttribute('aria-checked', 'true');
@@ -216,10 +216,17 @@ describe('ProfilePage: account', () => {
     expect(setEnabled).toHaveBeenCalledWith(false);
   });
 
-  it.each(['denied', 'unsupported'] as const)('disables the switch when the browser says %s', (permission) => {
-    vi.mocked(useTeamNotifications).mockReturnValue({ enabled: false, setEnabled, permission });
+  it('disables the switch when the browser has blocked notifications', () => {
+    vi.mocked(useTeamNotifications).mockReturnValue({ enabled: false, setEnabled, permission: 'denied', problem: null });
     mount();
     expect(section('Account').getByRole('switch', { name: 'Notifications' })).toBeDisabled();
+  });
+
+  it('keeps the switch usable when the browser has no notifications, and shows the problem strip', () => {
+    vi.mocked(useTeamNotifications).mockReturnValue({ enabled: false, setEnabled, permission: 'unsupported', problem: 'This browser can’t show notifications. Try Chrome or Safari.' });
+    mount();
+    expect(section('Account').getByRole('switch', { name: 'Notifications' })).toBeEnabled();
+    expect(section('Account').getByRole('alert')).toHaveTextContent('This browser can’t show notifications. Try Chrome or Safari.');
   });
 
   it('keeps the account pages that used to be in the menu', () => {
@@ -276,7 +283,7 @@ describe('ProfilePage: needs you', () => {
     const confirm = autoConfirm(true);
     mount({ roles: ['Admin'] });
     await userEvent.click((await needsSection()).getByRole('button', { name: 'Decline' }));
-    expect(confirm).toHaveBeenCalledWith('Decline the request from Priya Shah? Their account will stay a member.');
+    expect(confirm).toHaveBeenCalledWith('Their account stays a member.');
     expect(api.post).toHaveBeenCalledWith('/admin/trainer-requests/r2/decline');
     await vi.waitFor(() => expect(screen.queryByRole('region', { name: 'Needs you' })).not.toBeInTheDocument());
   });

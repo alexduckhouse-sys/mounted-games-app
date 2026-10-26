@@ -95,7 +95,7 @@ describe('RiderPanel on a set-up dec form', () => {
     expect(screen.getByText('No more than 90 cm')).toBeInTheDocument();
     expect(screen.getByText('Still needed: Girth.')).toBeInTheDocument();
     await user.type(screen.getByLabelText('Girth'), '120');
-    expect(screen.getByRole('status')).toHaveTextContent('Above the limit — will be flagged');
+    expect(screen.getByRole('status')).toHaveTextContent('Girth is above the limit');
     expect(screen.getByRole('button', { name: 'Add rider' })).toBeEnabled();
     await user.clear(screen.getByLabelText('Girth'));
     await user.type(screen.getByLabelText('Girth'), '60');

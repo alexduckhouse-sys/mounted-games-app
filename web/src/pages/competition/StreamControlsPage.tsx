@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { Notice } from '../../components/Notice';
 import { LiveVideo } from '../../components/stream/LiveVideo';
 import { useControllerReplay } from '../../hooks/useControllerReplay';
 import { useOverlayTiles } from '../../hooks/useOverlayTiles';
@@ -63,12 +64,12 @@ export function StreamControlsPage() {
     );
   }
 
-  async function endStream() {
-    if (!(await confirmDialog({ title: 'End the stream?', message: 'Viewers will see that it has finished.', confirmLabel: 'End stream', destructive: true }))) return;
+  async function endStream(confirmFirst = true) {
+    if (confirmFirst && !(await confirmDialog({ title: 'End the stream?', message: 'Viewers will see that it has finished.', cancelLabel: 'Keep going', confirmLabel: 'End stream', destructive: true }))) return;
     setEnding(true);
     setError(null);
     const results = await Promise.allSettled(liveStreams.map((stream) => api.post(`/competitions/${competition.id}/streams/${stream.id}/end`)));
-    if (results.some((result) => result.status === 'rejected')) setError('Couldn’t end the stream. Check your connection and try again.');
+    if (results.some((result) => result.status === 'rejected')) setError('Couldn’t end the stream. Check your signal and try again.');
     setEnding(false);
   }
 
@@ -89,7 +90,7 @@ export function StreamControlsPage() {
         tabsLabel="Stream controls"
       />
       <div className="sx-body">
-        {error && <p className="mg-notice" role="alert">{error}</p>}
+        {error && <Notice actionLabel="Try again" onAction={() => void endStream(false)} actionDisabled={ending}>{error}</Notice>}
         {onAir ? (
           <div className="sx-video">
             <LiveVideo competitionId={competition.id} streams={liveStreams} sessions={competition.sessions} invoke={invoke} ready={ready}

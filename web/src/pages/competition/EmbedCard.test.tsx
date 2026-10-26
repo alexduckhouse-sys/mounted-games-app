@@ -60,10 +60,10 @@ describe('EmbedCard for a competition', () => {
     render(<EmbedCard kind="competition" competitionId={7} name="Spring Games" sections={sections} />);
     await userEvent.click(screen.getByRole('button', { name: 'Copy code' }));
     expect(writeText).toHaveBeenCalledWith(snippet());
-    expect(screen.getByText('Copied.')).toBeInTheDocument();
+    expect(screen.getByText('Code copied')).toBeInTheDocument();
     writeText.mockRejectedValue(new Error('blocked'));
     await userEvent.click(screen.getByRole('button', { name: 'Copy code' }));
-    expect(screen.getByText('Select the code above and copy it.')).toBeInTheDocument();
+    expect(screen.getByText('Couldn’t copy the code. Select it above and copy it by hand.')).toBeInTheDocument();
   });
 });
 

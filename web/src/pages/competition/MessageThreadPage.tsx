@@ -6,6 +6,7 @@ import { useChatFeed } from './useChatFeed';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { Notice } from '../../components/Notice';
 import { problemMessage } from '../../lib/apiError';
 import { clockTime, markSeen, messageThreads, threadMessages } from '../../lib/announcements';
 import { accountKind, type AdminUser, type BlockedAccount } from '../admin/accountAccessTypes';
@@ -23,10 +24,10 @@ export function MessageThreadPage() {
 
 function ThreadSession({ userId }: { userId: string }) {
   const { competition } = useCompetition();
-  const feed = useChatFeed(competition.id, 'Couldn’t load the messages. Check your connection and try again.');
+  const feed = useChatFeed(competition.id, 'Couldn’t load the messages. Check your signal and try again.');
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ text: string; retry?: () => void } | null>(null);
   const [blocked, setBlocked] = useState<boolean | null>(null);
   const [kind, setKind] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
@@ -71,7 +72,7 @@ function ThreadSession({ userId }: { userId: string }) {
     try {
       await api.post(`/admin/users/${encodeURIComponent(userId)}/block`, { reason: null });
       setBlocked(true);
-    } catch (caught) { setError(problemMessage(caught, `Couldn’t block ${name}. Try again.`)); }
+    } catch (caught) { setError({ text: problemMessage(caught, `Couldn’t block ${name}. Check your signal and try again.`) }); }
     finally { setWorking(false); }
   }
 
@@ -81,7 +82,7 @@ function ThreadSession({ userId }: { userId: string }) {
     try {
       await api.delete(`/admin/users/${encodeURIComponent(userId)}/block`);
       setBlocked(false);
-    } catch (caught) { setError(problemMessage(caught, `Couldn’t unblock ${name}. Try again.`)); }
+    } catch (caught) { setError({ text: problemMessage(caught, `Couldn’t unblock ${name}. Check your signal and try again.`), retry: () => void unblock() }); }
     finally { setWorking(false); }
   }
 
@@ -96,7 +97,7 @@ function ThreadSession({ userId }: { userId: string }) {
       if (data) feed.add(data);
       setBody((current) => current.trim() === text ? '' : current);
     } catch {
-      setError('Couldn’t send that message. Check your connection and try again.');
+      setError({ text: 'Couldn’t send that message. Check your signal and try again.', retry: () => void send() });
     } finally {
       busy.current = false;
       setSending(false);
@@ -118,13 +119,13 @@ function ThreadSession({ userId }: { userId: string }) {
 
       <div className="ann-body ann-thread-body">
         {chip && <span className="ann-chip">{chip}</span>}
-        {(error || feed.error) && <p className="mg-notice" role="alert">{error ?? feed.error}</p>}
+        {error && <Notice actionLabel={error.retry ? 'Try again' : undefined} onAction={error.retry}>{error.text}</Notice>}
+        {!error && feed.error && <Notice actionLabel="Try again" onAction={feed.load}>{feed.error}</Notice>}
 
         {blocked && (
-          <div className="ann-blocked" role="status">
-            <span>You’ve blocked {name}. Their account can’t message, post in chat or enter.</span>
-            <button type="button" className="ann-pill" disabled={working} onClick={() => void unblock()}>Unblock</button>
-          </div>
+          <Notice tone="info" actionLabel="Unblock" onAction={() => void unblock()} actionDisabled={working}>
+            You’ve blocked {name}. They can’t message, post in chat or enter.
+          </Notice>
         )}
 
         <ol className="ann-messages" aria-label={`Messages with ${name}`}>

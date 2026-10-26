@@ -6,6 +6,8 @@ import { dotColour } from '../../lib/teamColours';
 import { hatbandColour } from '../../lib/hatbands';
 import { RaceRulesButton } from '../../components/RaceRulesButton';
 import { RaceSelect } from '../../components/RacePicker';
+import { Notice } from '../../components/Notice';
+import { Sheet } from '../../components/Sheet';
 import { ELIM_REASONS, OTHER_REASON, noteFor, reasonKeyOf, statusFor } from '../../lib/elimReasons';
 import { hatbandFor, inLaneOrder } from '../../lib/laneOrder';
 import type { NextLanes } from '../../lib/nextRoundLanes';
@@ -512,7 +514,7 @@ export function NextLanesCard({ lanes }: { lanes: NextLanes }) {
   return (
     <section className="sc-card sc-pad" aria-label={lanes.title}>
       <h3 className="sc-title">{lanes.title}</h3>
-      {lanes.note && <p className={lanes.provisional ? 'mg-notice mt-2' : 'sc-sub'}>{lanes.note}</p>}
+      {lanes.note && (lanes.provisional ? <Notice tone="info" className="mt-2">{lanes.note}</Notice> : <p className="sc-sub">{lanes.note}</p>)}
       <ol className="sc-rows mt-1">
         {lanes.rows.map((r) => (
           <li key={`${r.lane}-${r.teamId}`} className="sc-lane-item">
@@ -733,83 +735,43 @@ export function ScoreClashBanner({
     }
   }
 
+  const clash = clashes[0];
+  const busy = busyRaceId === clash.raceId;
+  const sideA = sortClashPlaces(clash.existingPlaces);
+  const sideB = sortClashPlaces(clash.incomingPlaces);
+  const sides = [
+    { key: 'A', heading: 'Result A (Saved)', places: sideA, useIncoming: false },
+    { key: 'B', heading: 'Result B (Submitted)', places: sideB, useIncoming: true },
+  ];
   return (
-    <div className="space-y-2.5" role="alert" aria-label="Score clash">
-      {clashes.map((clash) => {
-        const busy = busyRaceId === clash.raceId;
-        const sideA = sortClashPlaces(clash.existingPlaces);
-        const sideB = sortClashPlaces(clash.incomingPlaces);
-        return (
-          <section
-            key={clash.raceId}
-            className="rounded-xl border-2 border-amber-500 bg-amber-50/95 p-3 text-amber-950 shadow-sm"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-bold">
-                Score clash · {clash.raceOrder ? `Race ${clash.raceOrder}: ` : ''}{clash.raceName}
-              </h3>
-              <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-900">
-                Choose result
-              </span>
+    <Sheet
+      key={clash.raceId}
+      title={`Two results for ${clash.raceOrder ? `Race ${clash.raceOrder}` : clash.raceName}`}
+      description="Two scorers sent different placings. Tap the right one."
+      dismissible={false}
+      onClose={() => undefined}
+    >
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {sides.map((side) => (
+          <div key={side.key} className="flex flex-col justify-between gap-3 rounded-xl border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] p-3">
+            <div>
+              <div className="text-xs font-bold uppercase tracking-wide text-[rgb(var(--mg-muted))]">{side.heading}</div>
+              <ol className="m-0 mt-2 list-none space-y-1 p-0 text-sm">
+                {side.places.map((p) => (
+                  <li key={p.teamId} className="flex items-center justify-between gap-2">
+                    <span className="truncate font-semibold text-[rgb(var(--mg-ink))]">{teamNamesById[p.teamId] ?? `Team ${p.teamId}`}</span>
+                    <span className="shrink-0 font-bold text-[rgb(var(--mg-heading))]">{formatClashPlace(p)}</span>
+                  </li>
+                ))}
+              </ol>
             </div>
-            <p className="mt-0.5 text-xs text-amber-900">
-              Two scorers submitted different placings. Tap the right result to apply it.
-            </p>
-            <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <div className="flex flex-col justify-between rounded-lg border border-amber-300 bg-white p-2.5">
-                <div>
-                  <div className="text-xs font-bold uppercase tracking-wide text-stone-600">
-                    Result A (Saved)
-                  </div>
-                  <ol className="mt-1.5 space-y-1 text-xs">
-                    {sideA.map((p) => (
-                      <li key={p.teamId} className="flex items-center justify-between gap-2">
-                        <span className="truncate font-semibold text-stone-900">
-                          {teamNamesById[p.teamId] ?? `Team ${p.teamId}`}
-                        </span>
-                        <span className="shrink-0 font-bold text-stone-700">{formatClashPlace(p)}</span>
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void handlePick(clash, false)}
-                  className="mg-btn mg-btn-secondary mt-2.5 min-h-10 w-full text-xs font-bold"
-                >
-                  Keep Result A
-                </button>
-              </div>
-              <div className="flex flex-col justify-between rounded-lg border border-amber-400 bg-white p-2.5">
-                <div>
-                  <div className="text-xs font-bold uppercase tracking-wide text-amber-800">
-                    Result B (Submitted)
-                  </div>
-                  <ol className="mt-1.5 space-y-1 text-xs">
-                    {sideB.map((p) => (
-                      <li key={p.teamId} className="flex items-center justify-between gap-2">
-                        <span className="truncate font-semibold text-stone-900">
-                          {teamNamesById[p.teamId] ?? `Team ${p.teamId}`}
-                        </span>
-                        <span className="shrink-0 font-bold text-amber-900">{formatClashPlace(p)}</span>
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void handlePick(clash, true)}
-                  className="mg-btn mg-btn-primary mt-2.5 min-h-10 w-full text-xs font-bold"
-                >
-                  Use Result B
-                </button>
-              </div>
-            </div>
-          </section>
-        );
-      })}
-    </div>
+            <button type="button" disabled={busy} onClick={() => void handlePick(clash, side.useIncoming)} className="kit-pill w-full">
+              Keep result {side.key}
+            </button>
+          </div>
+        ))}
+      </div>
+      {clashes.length > 1 && <p className="kit-sheet-text">{clashes.length - 1} more {clashes.length === 2 ? 'race is' : 'races are'} waiting after this one.</p>}
+    </Sheet>
   );
 }

@@ -47,7 +47,7 @@ describe('TeamCalendarFeed', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /Copy link/ }));
     expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/api/calendar/teams/5/tok.ics`);
-    expect(await screen.findByRole('button', { name: /Copied/ })).toBeInTheDocument();
+    expect(await screen.findByText('Link copied')).toHaveClass('kit-toast-text');
     expect(screen.getByRole('button', { name: 'Make a new link' })).toBeInTheDocument();
   });
 

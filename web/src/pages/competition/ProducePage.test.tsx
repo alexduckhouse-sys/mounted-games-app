@@ -40,8 +40,9 @@ it.each(['failed', 'conflict'])('does not claim or display an overlay saved afte
   fireEvent.click(screen.getByRole('button', { name: 'Toplist' }));
   await act(async () => {});
   expect(screen.getByRole('button', { name: 'Off' })).toHaveAttribute('aria-pressed', 'true');
-  expect(screen.getByRole('status')).toHaveTextContent(/try again/i);
-  expect(screen.getByRole('status')).not.toHaveTextContent('Showing toplist');
+  expect(screen.getByRole('alert')).toHaveTextContent(outcome === 'conflict' ? 'The overlay changed on another phone. Check it and try again.' : 'Couldn’t update the overlay. Check your signal and try again.');
+  expect(screen.getByRole('button', { name: outcome === 'conflict' ? 'Show me' : 'Try again' })).toBeVisible();
+  expect(screen.queryByText('Showing toplist centred on stream')).toBeNull();
 });
 
 it('serialises overlay saves and accepts subsequent changes from another device', async () => {
@@ -69,4 +70,21 @@ it('lets an organiser post a stream banner without calling the admin-only announ
   expect(state.overlay.bannerText).toBe('Example event starts soon');
   expect(screen.getByLabelText('Banner message')).toHaveValue('');
   expect(api.post).not.toHaveBeenCalled();
+});
+
+it('says a change worked with a toast, and offers Try again when a camera command fails', async () => {
+  show();
+  fireEvent.click(screen.getByRole('button', { name: 'Toplist' }));
+  await act(async () => {});
+  expect(screen.getByRole('status')).toHaveTextContent('Showing toplist centred on stream');
+  expect(screen.queryByRole('alert')).toBeNull();
+
+  vi.mocked(api.post).mockRejectedValueOnce(new Error('offline'));
+  fireEvent.click(screen.getByRole('button', { name: '2x Zoom' }));
+  await act(async () => {});
+  expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t reach the camera phone. Check your signal and try again.');
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+  await act(async () => {});
+  expect(api.post).toHaveBeenCalledTimes(2);
+  expect(screen.queryByRole('alert')).toBeNull();
 });

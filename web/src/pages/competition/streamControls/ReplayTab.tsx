@@ -1,3 +1,4 @@
+import { Notice } from '../../../components/Notice';
 import { ReplayPreparation } from '../../../components/stream/ReplayPreparation';
 import { INSTANT_LENGTHS, lengthLabel, type InstantLength } from '../../../lib/instantReplay';
 import type { SavedReplayClip } from '../../../live/replayBuffer';
@@ -55,7 +56,7 @@ export function ReplayTab({ clips, openId, onOpen, controller, instantLength, on
           ? `Recording the video on this page. ${minutes > 0 ? `The last ${minutes} min is` : 'The last few seconds are'} kept on this device.`
           : 'Replays are recorded from the video on this page. They start when a camera is live.'}
       </RefineNote>
-      {controller.warning && <p className="mg-notice" role="status">{controller.warning}</p>}
+      {controller.warning && <Notice role="status">{controller.warning}</Notice>}
 
       <RefineSection title="Race recordings" />
       <RefineList as="div" label="Race recordings">

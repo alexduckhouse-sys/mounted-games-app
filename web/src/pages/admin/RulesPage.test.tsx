@@ -90,7 +90,7 @@ describe('RulesPage', () => {
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Flag Race/ }));
     await user.click(screen.getByRole('button', { name: 'Delete' }));
-    await waitFor(() => expect(confirm).toHaveBeenCalledWith('Delete "Flag Race" from the library? This can’t be undone.'));
+    await waitFor(() => expect(confirm).toHaveBeenCalledWith('“Flag Race” goes from the library for good.'));
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/race-templates/2'));
   });
 
@@ -116,7 +116,7 @@ describe('RulesPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Name taken.');
     vi.mocked(api.post).mockRejectedValueOnce({});
     await user.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not save.'));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t save the race.'));
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(api.post).toHaveBeenLastCalledWith('/race-templates', expect.objectContaining({ name: 'Bucket Race', category: null, summary: null, rules: null })));
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument());

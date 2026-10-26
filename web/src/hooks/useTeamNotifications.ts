@@ -10,6 +10,9 @@ import { formatNotifyLeadReminder, getNotifyMinutesBefore } from '../lib/userPre
 const ENABLED_KEY = 'mg.notify.enabled';
 const FIRED_PREFIX = 'mg.notify.fired:';
 
+/** What the page says when someone turns alerts on in a browser that can't show them. */
+export const NOT_SUPPORTED = 'This browser can’t show notifications. Try Chrome or Safari.';
+
 export type NotificationPermissionState = 'default' | 'granted' | 'denied' | 'unsupported';
 
 function permState(): NotificationPermissionState {
@@ -49,6 +52,7 @@ function fireOnce(key: string, title: string, body: string): void {
 export function useTeamNotifications(teams: Team[]) {
   const [enabled, setEnabledState] = useState<boolean>(() => readEnabled());
   const [permission, setPermission] = useState<NotificationPermissionState>(permState());
+  const [problem, setProblem] = useState<string | null>(null);
   const [comps, setComps] = useState<Map<number, CompetitionDetail>>(new Map());
 
   useEffect(() => writeEnabled(enabled), [enabled]);
@@ -110,13 +114,14 @@ export function useTeamNotifications(teams: Team[]) {
   async function setEnabled(v: boolean) {
     if (v && permission !== 'granted') {
       if (permission === 'unsupported') {
-        alert('Browser notifications are not supported here. Try a different browser.');
+        setProblem(NOT_SUPPORTED);
         return;
       }
       const res = await Notification.requestPermission();
       setPermission(res as NotificationPermissionState);
       if (res !== 'granted') return;
     }
+    setProblem(null);
     setEnabledState(v);
     // Sync the browser's web-push subscription with the backend. The
     // foreground hook continues to fire while the tab is open; this gives us
@@ -125,7 +130,7 @@ export function useTeamNotifications(teams: Team[]) {
     else await unsubscribeFromPush();
   }
 
-  return { enabled, setEnabled, permission };
+  return { enabled, setEnabled, permission, problem };
 }
 
 function maybeFire(
@@ -207,11 +212,11 @@ function maybeFire(
     const absSlip = Math.abs(slipMs) / 60_000;
     if (absSlip >= 15) {
       const bucket = Math.floor((absSlip - 15) / 10) * 10 + 15; // 15, 25, 35…
-      const dir = slipMs >= 0 ? 'behind' : 'ahead';
+      const how = slipMs >= 0 ? 'late' : 'early';
       fireOnce(
         `shift:${sess.id}:${bucket}:${team.id}`,
-        `${compName} running ${dir}`,
-        `${sess.name} now expected at ${fmt(timing.effective)} (${bucket}+ min ${dir}). ${teamLabel}.`,
+        `${compName} is running ${Math.round(absSlip)} minutes ${how}`,
+        `${sess.name} is now about ${fmt(timing.effective)}. ${teamLabel}.`,
       );
     }
   }

@@ -7,6 +7,8 @@ import { RefineList, RefineNote, RefineSection } from '../refine/Refine';
 import { apiMessage } from '../operations/types';
 import { SelectField } from '../../components/SelectField';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { Notice } from '../../components/Notice';
+import { useToast } from '../../components/Toast';
 
 /** Keeps a wrong or partial response from reaching the screen. */
 function parseList(data: unknown): ScorerLinkList | null {
@@ -49,7 +51,8 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
   const [scope, setScope] = useState<ScorerLinkScope>(0);
   const [expires, setExpires] = useState('');
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const toast = useToast();
   const [created, setCreated] = useState<{ label: string; url: string } | null>(null);
   const [now] = useState(() => Date.now());
 
@@ -78,7 +81,7 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
     event.preventDefault();
     if (!list || busy || !label.trim() || !chosenArena) return;
     setBusy(true);
-    setNotice(null);
+    setProblem(null);
     setCreated(null);
     try {
       const { data } = await api.post<CreatedScorerLink>(`/competitions/${competitionId}/scorer-links`, {
@@ -92,7 +95,7 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
       setLabel('');
       setExpires('');
     } catch (error) {
-      setNotice({ kind: 'error', text: apiMessage(error, 'Couldn’t make that link. Check your connection and try again.') });
+      setProblem(apiMessage(error, 'Couldn’t make that link. Check your signal and try again.'));
     } finally {
       setBusy(false);
     }
@@ -101,23 +104,23 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
   async function copy(url: string) {
     try {
       await navigator.clipboard.writeText(url);
-      setNotice({ kind: 'ok', text: 'Link copied.' });
+      toast.show('Link copied');
     } catch {
-      setNotice({ kind: 'error', text: 'Couldn’t copy automatically. Press and hold the link to copy it.' });
+      setProblem('Couldn’t copy the link. Press and hold it to copy, or show the QR code.');
     }
   }
 
   async function revoke(link: ScorerLink) {
     if (busy) return;
-    if (!(await confirmDialog({ title: 'Withdraw this link?', message: `Withdraw ${link.label}’s link? It stops working straight away.`, confirmLabel: 'Withdraw link', destructive: true }))) return;
+    if (!(await confirmDialog({ title: `Withdraw ${link.label}’s scorer link?`, message: 'It stops working straight away.', confirmLabel: 'Withdraw link', destructive: true }))) return;
     setBusy(true);
-    setNotice(null);
+    setProblem(null);
     try {
       const { data } = await api.post<ScorerLink>(`/competitions/${competitionId}/scorer-links/${link.id}/revoke`);
       changeLinks((links) => links.map((item) => item.id === data.id ? data : item));
-      setNotice({ kind: 'ok', text: `${link.label}’s link no longer works.` });
+      toast.show(`${link.label}’s link no longer works`);
     } catch (error) {
-      setNotice({ kind: 'error', text: apiMessage(error, `Couldn’t withdraw ${link.label}’s link. Try again.`) });
+      setProblem(apiMessage(error, `Couldn’t withdraw ${link.label}’s link. Check your signal and try again.`));
     } finally {
       setBusy(false);
     }
@@ -127,10 +130,7 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
     <section id="scorer-links" aria-label="Scorer links" className="scroll-mt-20">
       <RefineSection title="Scorer links" />
       {state === 'error' && (
-        <div role="alert" className="rf-list flex flex-col items-start gap-2 p-3">
-          <p>Couldn’t load the scorer links. Check your connection and try again.</p>
-          <button type="button" className="mg-btn mg-btn-secondary" onClick={() => { setState(null); setRetry((n) => n + 1); }}>Try again</button>
-        </div>
+        <Notice className="mt-2" actionLabel="Try again" onAction={() => { setState(null); setRetry((n) => n + 1); }}>Couldn’t load the scorer links. Check your signal and try again.</Notice>
       )}
       {state === null && <p role="status" className="rf-note">Loading scorer links…</p>}
       {list && (
@@ -214,7 +214,8 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
           </div>
         </>
       )}
-      {notice && <p role={notice.kind === 'error' ? 'alert' : 'status'} className="mg-notice">{notice.text}</p>}
+      {problem && <Notice className="mt-2" onDismiss={() => setProblem(null)}>{problem}</Notice>}
+      {toast.node}
     </section>
   );
 }

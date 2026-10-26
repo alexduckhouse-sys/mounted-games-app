@@ -201,7 +201,7 @@ describe('CompetitionEditor: starting', () => {
     });
     mount();
     await userEvent.click(screen.getByRole('button', { name: /^Copy a past competition/ }));
-    expect(await screen.findByText('Couldn’t load your competitions.')).toBeInTheDocument();
+    expect(await screen.findByText('Couldn’t load your competitions. Check your signal and try again.')).toBeInTheDocument();
   });
 
   it('says so when one competition cannot be copied', async () => {
@@ -215,7 +215,7 @@ describe('CompetitionEditor: starting', () => {
     const pick = await screen.findByRole('button', { name: /Spring Open 2026/ });
     expect(pick).toHaveTextContent('Upcoming');
     await userEvent.click(pick);
-    expect(await screen.findByText('Couldn’t copy that one. Try again.')).toBeInTheDocument();
+    expect(await screen.findByText('Couldn’t copy that one. Check your signal and try again.')).toBeInTheDocument();
     expect(nextButton()).toBeDisabled();
   });
 
@@ -406,7 +406,7 @@ describe('CompetitionEditor: when and where', () => {
     expect(screen.queryByText('No location found for that.')).not.toBeInTheDocument();
     geocodeWith(async () => { throw new Error('down'); });
     await userEvent.tab();
-    expect(await screen.findByText('Could not look that up.')).toBeInTheDocument();
+    expect(await screen.findByText('Couldn’t look that up. Check your signal and try again.')).toBeInTheDocument();
   });
 });
 
@@ -1275,7 +1275,7 @@ describe('CompetitionEditor: editing', () => {
       return { data: {} } as never;
     });
     mount('/admin/competitions/7');
-    expect(await screen.findByText('Could not load competition.')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Couldn’t load this competition' })).toBeInTheDocument();
   });
 
   it('reports a failed save', async () => {

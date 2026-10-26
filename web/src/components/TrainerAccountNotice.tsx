@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { Notice } from './Notice';
 
 export function TrainerAccountNotice() {
   const { trainerNotice, logout } = useAuth();
@@ -7,16 +8,13 @@ export function TrainerAccountNotice() {
   if (!trainerNotice) return null;
 
   return (
-    <div role="status" className="mb-3 mt-4 flex flex-wrap items-center gap-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-900/30 dark:text-amber-100">
+    <div className="mb-3 mt-4">
       {trainerNotice === 'requested' ? (
-        <p>Thanks. Your request needs approving before you can organise. You can use the app as a member in the meantime.</p>
+        <Notice tone="info">Your trainer request is waiting for approval. You can use the app as a member until then.</Notice>
       ) : (
-        <>
-          <p>Your account was approved. Sign in again to start organising.</p>
-          <button type="button" className="btn-ghost" onClick={() => { logout(); navigate('/login', { replace: true }); }}>
-            Sign in again
-          </button>
-        </>
+        <Notice tone="info" actionLabel="Sign in again" onAction={() => { logout(); navigate('/login', { replace: true }); }}>
+          You’re approved as a trainer. Sign in again to start organising.
+        </Notice>
       )}
     </div>
   );

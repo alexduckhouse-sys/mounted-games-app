@@ -82,7 +82,7 @@ describe('admin trainer requests', () => {
     const confirm = autoConfirm(true);
     mount();
     await userEvent.click(await screen.findByRole('button', { name: 'Decline' }));
-    expect(confirm).toHaveBeenCalledWith(`Decline the request from ${request.fullName}? Their account will stay a member.`);
+    expect(confirm).toHaveBeenCalledWith('Their account stays a member.');
     expect(api.post).toHaveBeenCalledWith(`${path}/${request.userId}/decline`);
     expect(await screen.findByText('No trainer requests.')).toBeInTheDocument();
     expect(vi.mocked(api.get).mock.calls.filter(([url]) => url === path)).toHaveLength(2);
@@ -99,10 +99,10 @@ describe('admin trainer requests', () => {
   it('shows load errors inline and lets the admin retry', async () => {
     failLoad = true;
     mount();
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load trainer requests. Try again.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load the trainer requests. Check your signal and try again.');
     expect(screen.queryByText('No trainer requests.')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Refresh list' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load trainer requests.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load the trainer requests.');
     failLoad = false;
     await userEvent.click(screen.getByRole('button', { name: 'Refresh list' }));
     expect(await screen.findByText(request.fullName)).toBeInTheDocument();
@@ -114,7 +114,7 @@ describe('admin trainer requests', () => {
     vi.mocked(api.post).mockRejectedValue(new Error('conflict'));
     mount();
     await userEvent.click(await screen.findByRole('button', { name: action }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not update trainer requests. Refresh the list and try again.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t update the trainer requests. Refresh the list and try again.');
     expect(screen.getByText(request.fullName)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
   });
@@ -274,7 +274,7 @@ describe('admin competitions', () => {
     mount();
     await userEvent.click(await screen.findByRole('button', { name: 'More for Christmas Cracker Teams' }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Delete competition' }));
-    const dialog = await screen.findByRole('alertdialog', { name: /Delete “Christmas Cracker Teams” forever\?/ });
+    const dialog = await screen.findByRole('alertdialog', { name: /Delete Christmas Cracker Teams for good\?/ });
     expect(dialog).toHaveClass('mg-confirm-danger');
     const confirm = within(dialog).getByRole('button', { name: 'Delete competition' });
     expect(confirm).toBeDisabled();

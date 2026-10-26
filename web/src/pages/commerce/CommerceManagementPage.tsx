@@ -42,7 +42,7 @@ function CommerceManagementContent() {
       setSettings(settingsResponse.data);
       })
       .catch((requestError: unknown) => {
-      setError(errorMessage(requestError, 'Couldn’t load the shop controls.'));
+      setError(errorMessage(requestError, 'Couldn’t load the shop controls. Check your signal and try again.'));
       });
   }, [canOrganise, competition]);
 
@@ -55,7 +55,7 @@ function CommerceManagementContent() {
       await api.put(`/commerce/listings/${id}/approval`, { status, reviewNote: null });
       await load();
     } catch (requestError) {
-      setError(errorMessage(requestError, 'Couldn’t update the listing.'));
+      setError(errorMessage(requestError, 'Couldn’t update the listing. Check your signal and try again.'));
     } finally {
       setBusy(false);
     }
@@ -68,7 +68,7 @@ function CommerceManagementContent() {
       const { data } = await api.put<EventCommerceSettings>(`/commerce/competitions/${competition.id}/settings`, { isDemo });
       setSettings(data);
     } catch (requestError) {
-      setError(errorMessage(requestError, 'Couldn’t change the payment mode.'));
+      setError(errorMessage(requestError, 'Couldn’t change the payment mode. Check your signal and try again.'));
     } finally {
       setBusy(false);
     }
@@ -81,7 +81,7 @@ function CommerceManagementContent() {
       await api.post(`/commerce/orders/${order.id}/${action}`, { confirmedExternally: true });
       await load();
     } catch (requestError) {
-      setError(errorMessage(requestError, action === 'manual-payment' ? 'Couldn’t mark the order paid.' : 'Couldn’t mark the refund.'));
+      setError(errorMessage(requestError, action === 'manual-payment' ? 'Couldn’t mark the order paid. Check your signal and try again.' : 'Couldn’t mark the refund. Check your signal and try again.'));
     } finally {
       setBusy(false);
     }

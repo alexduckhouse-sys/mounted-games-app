@@ -109,7 +109,7 @@ describe('AnnouncementsPage', () => {
     vi.mocked(api.post).mockResolvedValueOnce({ data: chat(10, { body: 'Lunch at one', tag: 'banner', createdAt: at(11) }) });
     vi.mocked(api.delete).mockRejectedValueOnce(new Error('offline'));
     await user.click(screen.getByRole('button', { name: 'Pin: Lunch at one' }));
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('old one could not be cleared'));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('old one couldn’t be cleared'));
 
     vi.mocked(api.post).mockResolvedValueOnce({ data: { nope: true } });
     await user.click(screen.getByRole('button', { name: 'Pin: Finals at four' }));

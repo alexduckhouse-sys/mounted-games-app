@@ -54,13 +54,20 @@ export function syncVideoLiveEdge(
   return 'in-sync';
 }
 export const streamErrors = {
-  STREAM_NOT_FOUND: 'This stream has finished.',
-  STREAM_FULL: 'This stream is full. Try again shortly.',
+  STREAM_NOT_FOUND: 'The stream has finished. Thanks for watching.',
+  STREAM_FULL: 'The stream is full. Try again in a minute.',
   RATE_LIMITED: 'Please wait a moment. Trying again.',
   WATCH_EXPIRED: 'The connection expired. Trying again.',
   UPSTREAM_UNAVAILABLE: 'The video is unavailable. Trying again.',
   INVALID_REQUEST: 'Could not open this stream.',
 };
+/** The viewer messages that read as a heading plus a next step ("The stream is full" / "Try again in a minute."). */
+const HEADED_MESSAGES = [streamErrors.STREAM_NOT_FOUND, streamErrors.STREAM_FULL];
+export function splitStreamMessage(message: string): { title?: string; body: string } {
+  if (!HEADED_MESSAGES.includes(message)) return { body: message };
+  const stop = message.indexOf('. ');
+  return { title: message.slice(0, stop), body: message.slice(stop + 2) };
+}
 export function streamErrorCode(error: unknown): keyof typeof streamErrors | null {
   const match = String(error).match(/\b(STREAM_NOT_FOUND|STREAM_FULL|RATE_LIMITED|WATCH_EXPIRED|UPSTREAM_UNAVAILABLE|INVALID_REQUEST):/);
   return match ? match[1] as keyof typeof streamErrors : null;

@@ -371,7 +371,7 @@ describe('WeatherPage', () => {
 
     expect(api.get).not.toHaveBeenCalled();
     const summary = screen.getByRole('region', { name: 'Day weather summary' });
-    expect(within(summary).getByText('Weather is unavailable because this venue has no map location.')).toBeInTheDocument();
+    expect(within(summary).getByText('There’s no weather here because the venue has no map location.')).toBeInTheDocument();
     expect(within(summary).queryByText(/°|chance of rain/)).toBeNull();
     expect(screen.getByText('Nothing scheduled for this day.')).toBeInTheDocument();
   });
@@ -412,7 +412,7 @@ describe('WeatherPage', () => {
 
     const summary = screen.getByRole('region', { name: 'Day weather summary' });
     await waitFor(() => {
-      expect(within(summary).getByText('Weather is unavailable for this day. Try refreshing.')).toBeInTheDocument();
+      expect(within(summary).getByText('Couldn’t load the weather for this day. Check your signal and try again.')).toBeInTheDocument();
     });
     expect(within(summary).queryByText(/°|chance of rain/)).toBeNull();
   });
@@ -437,7 +437,7 @@ describe('WeatherPage', () => {
     state.value = { competition: competition({ startDate: day1, latitude: 51, longitude: 0, sessions: [] }), reload };
     renderWeatherPage();
     expect(screen.getByRole('status')).toHaveTextContent('Loading weather');
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Weather is unavailable for this day'));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t load the weather for this day'));
     vi.mocked(api.get).mockResolvedValue({ data: { utc_offset_seconds: localOffset, daily: {
       temperature_2m_max: [12], temperature_2m_min: [4], weather_code: [3],
     } } });
@@ -446,6 +446,15 @@ describe('WeatherPage', () => {
     expect(reload).toHaveBeenCalledOnce();
     expect(api.get).toHaveBeenCalledTimes(2);
     expect(screen.getByText('Rain and wind forecast unavailable')).toBeInTheDocument();
+  });
+
+  it('offers Try again in the problem strip, which retries like the header refresh', async () => {
+    vi.mocked(api.get).mockRejectedValue(new Error('offline'));
+    state.value = { competition: competition({ startDate: day1, latitude: 51, longitude: 0, sessions: [] }), reload };
+    renderWeatherPage();
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t load the weather for this day'));
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(reload).toHaveBeenCalledOnce();
   });
 
   it('matches venue hours to real instants and excludes samples outside the selected device day', async () => {
@@ -489,7 +498,7 @@ describe('WeatherPage', () => {
     state.value = { competition: competition({ startDate: day1, latitude: 51, longitude: 0,
       sessions: [session(1, { scheduledStart: `${day1}T09:00:00`, heats: [heat(1)] })] }), reload };
     renderWeatherPage();
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Weather is unavailable for this day'));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t load the weather for this day'));
     expect(screen.queryByText('22°')).toBeNull();
     expect(screen.getByRole('region', { name: 'Timetable with weather' })).toHaveTextContent('Weather unavailable');
   });

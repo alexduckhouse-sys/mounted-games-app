@@ -436,7 +436,7 @@ describe('SellerCataloguePage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'More actions for this item' }));
     const asked = autoConfirm([false, true]);
     await userEvent.click(screen.getByRole('button', { name: 'Archive Event mug' }));
-    await waitFor(() => expect(asked).toHaveBeenCalledWith('Archive Event mug?'));
+    await waitFor(() => expect(asked).toHaveBeenCalledWith('Event mug is hidden from your catalogue. You can restore it later.'));
     expect(api.delete).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'Archive Event mug' }));
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/commerce/catalogue/20'));

@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Notice } from '../../components/Notice';
 import { TickerNumber } from '../../components/TickerNumber';
 import { api } from '../../api';
 import { useCompetition } from '../competition/context';
@@ -13,15 +14,19 @@ export function EquipmentPage() {
   const { competition } = useCompetition();
   const [readiness, setReadiness] = useState<CompetitionReadiness | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [refreshed, setRefreshed] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
+    setLoadFailed(false);
     try {
       const { data } = await api.get<CompetitionReadiness>(`/competitions/${competition.id}/operations/readiness`);
       setReadiness(data);
     } catch (caught) {
-      setError(apiMessage(caught, 'Couldn’t load the equipment list. Try again.'));
+      setError(apiMessage(caught, 'Couldn’t load the equipment list. Check your signal and try again.'));
+      setLoadFailed(true);
     }
   }, [competition.id]);
   useEffect(() => {
@@ -38,14 +43,19 @@ export function EquipmentPage() {
     for (const key of keys) { if (on) next.add(key); else next.delete(key); }
     setBusy(true);
     setError(null);
+    setRefreshed(null);
     try {
       const { data } = await api.put<CompetitionReadiness>(`/competitions/${competition.id}/operations/equipment-acknowledgements`,
         { acknowledgedKeys: [...next], expectedFingerprint: readiness.equipmentFingerprint });
       setReadiness(data);
     } catch (caught) {
       const status = (caught as { response?: { status?: number } })?.response?.status;
-      if (status === 409) await load();
-      setError(apiMessage(caught, status === 409 ? 'The list changed on another device, so it has been refreshed.' : 'Couldn’t save that tick. Try again.'));
+      if (status === 409) {
+        await load();
+        setRefreshed(apiMessage(caught, 'The list changed on another phone, so it has been refreshed.'));
+      } else {
+        setError(apiMessage(caught, 'Couldn’t save that tick. Check your signal and try again.'));
+      }
     } finally {
       setBusy(false);
     }
@@ -61,7 +71,8 @@ export function EquipmentPage() {
     <RefinePage>
       <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel="Back to preparations" context={competition.name} title="Equipment" />
       <div className="ops-cards ops-tt ops-equip" aria-busy={busy}>
-        {error && <p role="alert" className="mg-notice ops-alert">{error}</p>}
+        {error && <Notice actionLabel={loadFailed ? 'Try again' : undefined} onAction={() => void load()}>{error}</Notice>}
+        {refreshed && <Notice tone="info">{refreshed}</Notice>}
         {!readiness && !error && <p role="status" className="rf-note">Loading…</p>}
         {readiness && lines.length === 0 && <RefineNote>No equipment items were found for the current race list.</RefineNote>}
         {groups.map((group) => (

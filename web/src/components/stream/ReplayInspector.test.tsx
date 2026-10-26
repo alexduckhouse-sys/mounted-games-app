@@ -952,7 +952,7 @@ describe('ReplayInspector component', () => {
   it('reports a browser canvas failure while taking a photo finish', () => {
     render(<ReplayInspector clip={createMockClip()} onClose={vi.fn()} />);
     HTMLCanvasElement.prototype.toDataURL = vi.fn(() => { throw 'Browser failed'; });
-    fireEvent.click(screen.getByRole('button', { name: 'Photo finish snapshot' })); expect(screen.getByText('The photo could not be saved. Try again.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Photo finish snapshot' })); expect(screen.getByText('Couldn’t save the photo. Try again.')).toBeInTheDocument(); expect(screen.getByRole('alert')).toContainElement(screen.getByRole('button', { name: 'Try again' }));
   });
 
 });

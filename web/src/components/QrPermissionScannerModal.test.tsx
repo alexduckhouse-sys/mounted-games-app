@@ -22,15 +22,20 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 describe('permission QR verification', () => {
-  it('opens above the app in a full-screen modal and dismisses on Escape', () => {
+  it('opens above the app as a sheet and dismisses on Escape', async () => {
     const view = mount();
-    const dialog = screen.getByRole('dialog', { name: 'Scan permission QR code' });
+    const dialog = screen.getByRole('dialog', { name: 'Scan the QR code' });
     expect(dialog.tagName).toBe('DIALOG');
     expect(dialog.parentElement).toBe(document.body);
     expect(dialog).toHaveAttribute('open');
-    expect(dialog).toHaveClass('w-screen', 'h-dvh');
+    expect(dialog).toHaveClass('kit-sheet');
+    expect(dialog).toHaveAccessibleDescription('Point the camera at the scoring or camera QR code from your organiser.');
+    expect(screen.getByText('Upload a photo')).toBeInTheDocument();
+    // With no camera the notice carries the Paste the link action instead.
+    expect(screen.getByRole('status')).toHaveTextContent('This browser can’t use the camera');
+    expect(screen.getAllByRole('button', { name: 'Paste the link' })).toHaveLength(1);
     fireEvent(dialog, new Event('cancel', { bubbles: true, cancelable: true }));
-    expect(close).toHaveBeenCalledOnce();
+    await waitFor(() => expect(close).toHaveBeenCalledOnce());
     view.unmount();
     expect(document.body).not.toContainElement(dialog);
   });
@@ -47,17 +52,17 @@ describe('permission QR verification', () => {
   });
   it.each(['#t=', 'unknown', '/score', '/score?t=bad', '/competitions/4/broadcast?pair=abcdefghijklmnop', 'javascript:alert(1)', 'ftp://example.test/score#t=mgs_bad', 'https://user:pass@example.test/score#t=mgs_bad', 'http://[invalid', '/elsewhere#t=mgs_bad', `mgs_${'a'.repeat(61)}`])('rejects unsupported or malformed permission %s', async (value) => {
     mount(); submit(value);
-    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid permission QR code');
+    expect(await screen.findByRole('alert')).toHaveTextContent('That QR code isn’t a scoring or camera code');
     expect(scorerApi.get).not.toHaveBeenCalled(); expect(navigate).not.toHaveBeenCalled();
   });
   it.each([null, '<html>bad gateway</html>', { competitionId: 4 }])('refuses an invalid server response', async (data) => {
     vi.mocked(scorerApi.get).mockResolvedValue({ data }); mount(); submit(token);
-    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid or expired'); expect(readScorerToken()).toBeNull();
+    expect(await screen.findByRole('alert')).toHaveTextContent('That QR code isn’t a scoring or camera code, or it has stopped working. Ask the organiser for a new one.'); expect(readScorerToken()).toBeNull();
   });
   it('keeps the signed-in account and previous permission after a rejected token', async () => {
     localStorage.setItem('mg.auth', 'existing-account'); writeScorerToken('mgs_existing');
     vi.mocked(scorerApi.get).mockRejectedValue({ response: { status: 401 } }); mount(); submit(token);
-    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid or expired');
+    expect(await screen.findByRole('alert')).toHaveTextContent('That QR code isn’t a scoring or camera code, or it has stopped working. Ask the organiser for a new one.');
     expect(localStorage.getItem('mg.auth')).toBe('existing-account'); expect(readScorerToken()).toBe('mgs_existing');
   });
   it('ignores verification completed after closing', async () => {
@@ -78,7 +83,7 @@ describe('permission QR verification', () => {
   });
   it('rejects an empty form submission without making a request', () => {
     mount(); fireEvent.submit(screen.getByLabelText('Permission link or key').closest('form')!);
-    expect(screen.getByRole('alert')).toHaveTextContent('Invalid permission QR code');
+    expect(screen.getByRole('alert')).toHaveTextContent('That QR code isn’t a scoring or camera code');
     expect(scorerApi.get).not.toHaveBeenCalled();
   });
   it('uses browser navigation when the host does not provide a router callback', async () => {
@@ -90,16 +95,29 @@ describe('permission QR verification', () => {
     await waitFor(() => expect(assign).toHaveBeenCalledWith(`/score#t=${token}`));
     expect(close).toHaveBeenCalled();
   });
-  it('closes only on the close button or backdrop', () => {
-    mount(); fireEvent.click(screen.getByRole('heading')); expect(close).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Close QR scanner' })); fireEvent.click(screen.getByRole('dialog'));
-    expect(close).toHaveBeenCalledTimes(2);
+  it('closes only on the close button or backdrop', async () => {
+    const view = mount(); fireEvent.click(screen.getByRole('heading')); expect(close).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Close QR scanner' }));
+    await waitFor(() => expect(close).toHaveBeenCalledTimes(1));
+    view.unmount();
+    mount();
+    fireEvent.click(screen.getByRole('dialog'));
+    await waitFor(() => expect(close).toHaveBeenCalledTimes(2));
   });
 });
 describe('camera and photo scanning', () => {
   it('shows camera errors and leaves manual entry available', async () => {
     camera(vi.fn().mockRejectedValue(new Error('denied'))); mount();
-    expect(await screen.findByText(/Camera permission was declined/)).toBeInTheDocument(); expect(screen.getByLabelText('Permission link or key')).toBeEnabled();
+    expect(await screen.findByText(/The camera is blocked/)).toBeInTheDocument(); expect(screen.getByLabelText('Permission link or key')).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Paste the link' }));
+    expect(screen.getByLabelText('Permission link or key')).toHaveFocus();
+  });
+  it('lets the Paste the link pill jump to the field while the camera is running', async () => {
+    camera(vi.fn().mockResolvedValue({ getTracks: () => [] }));
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Paste the link' }));
+    expect(screen.getByLabelText('Permission link or key')).toHaveFocus();
   });
   it('stops a camera that arrives after closing', async () => {
     const stop = vi.fn(); let resolve!: (stream: unknown) => void;
@@ -139,18 +157,18 @@ describe('camera and photo scanning', () => {
     await act(async () => resolve([{ rawValue: token }])); expect(scorerApi.get).not.toHaveBeenCalled();
   });
   it('explains when photo decoding is unsupported', () => {
-    mount(); upload(); expect(screen.getByRole('alert')).toHaveTextContent('not supported');
+    mount(); upload(); expect(screen.getByRole('alert')).toHaveTextContent('can’t read QR photos');
   });
   it.each([{ codes: [] }, { codes: [{ rawValue: '   ' }] }, { codes: [{ rawValue: `/score#t=${token}` }] }])('decodes a photo and releases its bitmap', async ({ codes }) => {
     const release = vi.fn(); vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue({ close: release }));
     detector(vi.fn().mockResolvedValue(codes)); mount(); upload(); await waitFor(() => expect(release).toHaveBeenCalled());
-    if (codes[0]?.rawValue.trim()) expect(navigate).toHaveBeenCalled(); else expect(screen.getByRole('alert')).toHaveTextContent('No QR code');
+    if (codes[0]?.rawValue.trim()) expect(navigate).toHaveBeenCalled(); else expect(screen.getByRole('alert')).toHaveTextContent('no QR code in that photo');
   });
   it('ignores a cancelled file chooser and handles a detector that cannot start', () => {
     vi.stubGlobal('BarcodeDetector', class { constructor() { throw new Error('unsupported'); } });
     mount(); fireEvent.change(screen.getByLabelText('Upload QR code image'), { target: { files: [] } });
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    upload(); expect(screen.getByRole('alert')).toHaveTextContent('not supported');
+    upload(); expect(screen.getByRole('alert')).toHaveTextContent('can’t read QR photos');
   });
   it('releases a photo decoded after the dialog closes without saving permission', async () => {
     let resolve!: (codes: { rawValue: string }[]) => void;
@@ -162,6 +180,6 @@ describe('camera and photo scanning', () => {
   });
   it('reports unreadable photos', async () => {
     detector(vi.fn()); vi.stubGlobal('createImageBitmap', vi.fn().mockRejectedValue(new Error('bad image'))); mount(); upload();
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not read');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t read that photo');
   });
 });

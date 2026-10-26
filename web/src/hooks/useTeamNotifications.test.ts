@@ -104,8 +104,10 @@ describe('useTeamNotifications: switching on and off', () => {
     Reflect.deleteProperty(globalThis, 'Notification');
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     const { result } = renderHook(() => useTeamNotifications([]));
+    expect(result.current.problem).toBeNull();
     await act(async () => { await result.current.setEnabled(true); });
-    expect(alertSpy).toHaveBeenCalledWith('Browser notifications are not supported here. Try a different browser.');
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(result.current.problem).toBe('This browser can’t show notifications. Try Chrome or Safari.');
     expect(result.current.enabled).toBe(false);
   });
 
@@ -368,7 +370,7 @@ describe('useTeamNotifications: what it announces', () => {
   it('says the schedule is running behind, in ten minute steps from fifteen', async () => {
     const slipped = (minutes: number) => session(1, { status: 1, scheduledStart: at(-60), startedAt: at(-60 + minutes), heats: [heat(1)] });
     await ready([slipped(20)]);
-    expect(shown).toEqual([{ title: 'Spring Games running behind', options: { body: `Session 1 now expected at ${clock(-40)} (15+ min behind). Ashdown A.`, tag: 'shift:1:15:1' } }]);
+    expect(shown).toEqual([{ title: 'Spring Games is running 20 minutes late', options: { body: `Session 1 is now about ${clock(-40)}. Ashdown A.`, tag: 'shift:1:15:1' } }]);
   });
 
   it.each([[14, 0], [15, 15], [24, 15], [25, 25], [37, 35]])('slipping %i minutes announces bucket %i', async (minutes, bucket) => {
@@ -379,8 +381,8 @@ describe('useTeamNotifications: what it announces', () => {
 
   it('says the schedule is running ahead when a session started early', async () => {
     await ready([session(1, { status: 1, scheduledStart: at(-30), startedAt: at(-50) })]);
-    expect(shown[0].title).toBe('Spring Games running ahead');
-    expect(shown[0].options!.body).toContain('(15+ min ahead)');
+    expect(shown[0].title).toBe('Spring Games is running 20 minutes early');
+    expect(shown[0].options!.body).toContain('Session 1 is now about');
   });
 
   it('announces each thing once, however many times it checks', async () => {

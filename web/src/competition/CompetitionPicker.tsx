@@ -1,7 +1,9 @@
 import { usePageWidth } from '../components/pageWidthState';
 import { useEffect, useId, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronRight, PinOff } from 'lucide-react';
+import { ChevronRight, Clock, PinOff } from 'lucide-react';
+import { Notice } from '../components/Notice';
+import { PageProblem } from '../components/PageProblem';
 import { api } from '../api';
 import type { CompetitionPickerItem, CompetitionPickerPage } from '../types';
 import { useCurrentCompetition } from './CurrentCompetitionContext';
@@ -138,7 +140,7 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
           <PinOff className="h-4 w-4" aria-hidden="true" />Forget this competition<span className="sr-only">: {current.name}</span>
         </button>
       )}
-      {!mineOnly && state.savedCopy && !loading && shouldNoticeSavedCopy(state.savedAt, true, now) && <p role="status" className="mg-notice">{lastUpdatedText(state.savedAt, now)}. We’ll refresh when you’re back online.</p>}
+      {!mineOnly && state.savedCopy && !loading && shouldNoticeSavedCopy(state.savedAt, true, now) && <Notice tone="info" icon={Clock}>{lastUpdatedText(state.savedAt, now)}. We’ll refresh when you’re back online.</Notice>}
       <div className="flex flex-col gap-3.5" aria-busy={loading}>
         {onToday.length > 0 && (
           <section aria-label="On today">
@@ -157,7 +159,7 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
           </section>
         ))}
         {loading && state.items.length === 0 && <CompetitionListSkeleton />}
-        {!loading && state.error && <div className="mg-card flex flex-col items-start gap-3 p-4" role="alert"><p>Couldn’t load competitions. Check your connection and try again.</p><button className="mg-btn mg-btn-primary" onClick={onRetry}>Try again</button></div>}
+        {!loading && state.error && <PageProblem title="Couldn’t load the competitions" primaryLabel="Try again" onPrimary={onRetry}>Check your signal and try again.</PageProblem>}
         {!loading && !state.error && state.items.length === 0 && <p className="mg-card p-4">{!unfiltered ? 'No competitions match those filters.' : past ? 'No past competitions yet.' : 'No competitions available yet.'}</p>}
         {!loading && !state.error && state.items.length > 0 && matches.length === 0 && <p className="mg-card p-4">No competitions match that search.{state.hasMore ? ' Load more to search further back.' : ''}</p>}
         {!loading && !state.error && state.hasMore && <button className="mg-btn mg-btn-secondary w-full" onClick={() => setPage((value) => value + 1)}>Load more competitions</button>}

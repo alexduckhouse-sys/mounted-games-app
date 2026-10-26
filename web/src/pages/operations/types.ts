@@ -212,6 +212,9 @@ export function isOffline(error: unknown): boolean {
   return (error as { response?: unknown })?.response === undefined;
 }
 
+/** The one sentence for a request that never reached the server (kit copy: Offline, nothing changed). */
+export const OFFLINE_MESSAGE = 'You’re offline, so nothing was changed. Try again when you have signal.';
+
 export function apiMessage(error: unknown, fallback: string): string {
   const data = (error as { response?: { data?: { message?: string; title?: string } | string } })?.response?.data;
   if (typeof data === 'string' && data.trim()) return data;

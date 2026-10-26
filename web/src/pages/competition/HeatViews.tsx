@@ -63,7 +63,7 @@ export function HeatTableView({ title, status, heat, races, rules, hcTeamIds, ca
   async function ask() {
     const yes = await confirmDialog({
       title: `Score ${heat.label?.trim() || 'this heat'} in ${arena}?`,
-      message: 'Another scorer may be on it. Anything you save replaces what is there for the same race.',
+      message: 'Another scorer may be on it. Anything you save replaces theirs for the same race.',
       confirmLabel: 'Score it',
     });
     if (yes) onScoreIt();

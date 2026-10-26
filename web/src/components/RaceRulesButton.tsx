@@ -1,9 +1,10 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Info, X } from 'lucide-react';
+import { Info } from 'lucide-react';
 import { equipmentFromDiagram } from '../lib/raceEquipment';
 import { loadRaceTemplates, raceNameKey } from '../lib/raceTemplates';
 import type { RaceTemplate } from '../types';
+import { Notice } from './Notice';
 import { RaceDiagram } from './RaceDiagram';
 import './race-rules.css';
 
@@ -79,11 +80,10 @@ export function RaceRulesButton({ raceName, className = '', label }: { raceName:
           <span className="race-rules-handle" aria-hidden="true" />
           <div className="race-rules-head">
             <h2 id={titleId}>{raceName}</h2>
-            <button type="button" className="mg-icon-btn" aria-label="Close rules" onClick={close}><X aria-hidden="true" className="h-5 w-5" /></button>
           </div>
-          {!current && <p role="status" className="mg-meta">Loading rules…</p>}
-          {current && 'failed' in current && <p role="alert">Couldn’t load the rules. <button type="button" className="mg-text-link" onClick={() => setAttempt(attempt + 1)}>Try again</button></p>}
-          {current && 'template' in current && !template && <p>No rules have been added for this race yet.</p>}
+          {!current && <Notice tone="info">Loading rules…</Notice>}
+          {current && 'failed' in current && <Notice actionLabel="Try again" onAction={() => setAttempt(attempt + 1)}>Couldn’t load the rules. Check your signal and try again.</Notice>}
+          {current && 'template' in current && !template && <Notice tone="info" role={null}>No rules have been added for this race yet.</Notice>}
           {template && <div className="race-rules-body">
             {template.summary && <p>{template.summary}</p>}
             {template.diagramJson && <div className="race-rules-diagram"><RaceDiagram diagramJson={template.diagramJson} height={160} /></div>}
@@ -99,8 +99,9 @@ export function RaceRulesButton({ raceName, className = '', label }: { raceName:
                 </ul>
               </section>
             )}
-            {!template.summary && !template.rules && equipment.length === 0 && <p>No rules have been added for this race yet.</p>}
+            {!template.summary && !template.rules && equipment.length === 0 && <Notice tone="info" role={null}>No rules have been added for this race yet.</Notice>}
           </div>}
+          <div className="kit-acts race-rules-acts"><button type="button" className="kit-pill kit-pill-fill" aria-label="Close rules" onClick={close}>Close</button></div>
         </div>
       </div>,
       document.body,

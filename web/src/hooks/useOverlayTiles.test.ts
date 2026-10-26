@@ -68,13 +68,25 @@ describe('useOverlayTiles', () => {
 
     const conflict = setup({ save: vi.fn().mockResolvedValue('conflict') });
     await act(() => conflict.hook.result.current.pick('heat'));
-    expect(conflict.hook.result.current.error).toContain('changed on another device');
+    expect(conflict.hook.result.current.error).toContain('changed on another phone');
+    expect(conflict.hook.result.current.conflict).toBe(true);
     const failed = setup({ save: vi.fn().mockRejectedValue(new Error('x')) });
     await act(() => failed.hook.result.current.pick('heat'));
     expect(failed.hook.result.current.error).toContain('Couldn’t change the overlay');
     const readOnly = renderHook(() => useOverlayTiles({ competitionId: 1, overlay: DEFAULT_OVERLAY, onAir: null }));
     await act(() => readOnly.result.current.pick('heat'));
     expect(readOnly.result.current.error).toBe('You can’t change the overlay from here.');
+  });
+
+  it('runs the last change again on retry and clears the conflict flag', async () => {
+    const save = vi.fn().mockResolvedValueOnce('conflict').mockResolvedValue('saved');
+    const t = setup({ save });
+    await act(() => t.hook.result.current.pick('heat'));
+    expect(t.hook.result.current.error).not.toBeNull();
+    await act(() => t.hook.result.current.retry());
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(t.hook.result.current.error).toBeNull();
+    expect(t.hook.result.current.conflict).toBe(false);
   });
 
   it('does not resume a paused camera that cannot be reached, and leaves the card alone', async () => {

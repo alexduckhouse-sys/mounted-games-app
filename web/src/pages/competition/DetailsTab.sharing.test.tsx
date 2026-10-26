@@ -75,7 +75,7 @@ describe('Details tab sharing links', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Share event link' }));
     expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/competitions/12`);
-    expect(await screen.findByRole('button', { name: 'Link copied' })).toBeInTheDocument();
+    expect(await screen.findByRole('status')).toHaveTextContent('Link copied');
   });
 
   it('toggles an inline QR code for the competition link', async () => {
@@ -98,7 +98,7 @@ describe('Details tab sharing links', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t copy the link');
     expect(screen.getByRole('link', { name: 'the event link' })).toHaveAttribute('href', `${window.location.origin}/competitions/12`);
-    expect(screen.queryByRole('button', { name: 'Link copied' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Link copied')).not.toBeInTheDocument();
   });
 
   it('leaves the clipboard unchanged when the native share sheet is cancelled', async () => {

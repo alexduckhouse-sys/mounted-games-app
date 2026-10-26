@@ -158,7 +158,7 @@ describe('SignUpPage', () => {
     mount();
     await fill(user);
     await user.click(screen.getByRole('button', { name: 'Create account' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('An account with that email already exists.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('There’s already an account with that email. Sign in instead?');
     const email = screen.getByLabelText('Email');
     expect(email).toHaveAttribute('aria-invalid', 'true');
     await user.type(email, 'm');
@@ -191,7 +191,7 @@ describe('SignUpPage', () => {
     mount();
     await fill(user);
     await user.click(screen.getByRole('button', { name: 'Create account' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not create the account. Try again.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t create the account. Check your signal and try again.');
     expect(screen.getByLabelText('Your name')).toHaveValue('Sam Lee');
   });
 
@@ -292,8 +292,8 @@ describe('SignUpPage', () => {
       await user.type(email, 'sam@gmial.com');
       expect(screen.queryByText(/Did you mean/)).not.toBeInTheDocument();
       await user.tab();
-      expect(await screen.findByText(/Did you mean/)).toHaveTextContent('Did you mean gmail.com?');
-      await user.click(screen.getByRole('button', { name: 'Use sam@gmail.com' }));
+      expect(await screen.findByText(/Did you mean/)).toHaveTextContent('Did you mean sam@gmail.com?');
+      await user.click(screen.getByRole('button', { name: 'Use that' }));
       expect(email).toHaveValue('sam@gmail.com');
       expect(screen.queryByText(/Did you mean/)).not.toBeInTheDocument();
     });
@@ -305,7 +305,7 @@ describe('SignUpPage', () => {
       await user.type(email, 'sam@gmail');
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       await user.tab();
-      expect(await screen.findByRole('alert')).toHaveTextContent("That doesn't look like a valid email address.");
+      expect(await screen.findByRole('alert')).toHaveTextContent('That doesn’t look like a valid email address.');
       expect(email).toHaveAttribute('aria-invalid', 'true');
       await user.type(email, '.com');
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();

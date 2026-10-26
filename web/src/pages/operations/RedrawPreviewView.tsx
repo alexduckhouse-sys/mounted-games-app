@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api';
 import { RefineList, RefineNote, RefineSection } from '../refine/Refine';
 import type { DrawHeat, RedrawPreview, RedrawSession } from './types';
-import { apiMessage, isOffline, newRequestId, statusOf } from './types';
+import { OFFLINE_MESSAGE, apiMessage, isOffline, newRequestId, statusOf } from './types';
+import { Notice } from '../../components/Notice';
 import './operations.css';
 
 function heatName(heat: DrawHeat): string {
@@ -79,8 +80,8 @@ export function RedrawPreviewView({ competitionId, sectionId, sectionName, canWr
     } catch (failure) {
       setPreview(null);
       setError(isOffline(failure)
-        ? 'You appear to be offline. The preview needs a connection. Try again when you have signal.'
-        : apiMessage(failure, 'Couldn’t prepare the preview. Try again.'));
+        ? OFFLINE_MESSAGE
+        : apiMessage(failure, 'Couldn’t prepare the preview. Check your signal and try again.'));
     } finally {
       setLoading(false);
     }
@@ -108,7 +109,7 @@ export function RedrawPreviewView({ competitionId, sectionId, sectionName, canWr
         await load();
         setError(`${message} Showing a fresh preview.`);
       } else {
-        setError(apiMessage(failure, 'Couldn’t apply the re-draw. Try again.'));
+        setError(apiMessage(failure, 'Couldn’t apply the re-draw. Check your signal and try again.'));
       }
     } finally {
       setApplying(false);
@@ -122,8 +123,8 @@ export function RedrawPreviewView({ competitionId, sectionId, sectionName, canWr
         <button type="button" className="rf-btn" onClick={onClose}>Back to entries</button>
       </div>
       {loading && <p role="status" className="rf-note">Preparing the preview…</p>}
-      {error && <p role="alert" className="mg-notice ops-alert">{error}{!preview && !loading && <> <button type="button" className="rf-btn rf-btn-text" onClick={() => void load()}>Try again</button></>}</p>}
-      {done && <p role="status" className="ops-toast"><span>Re-draw applied. Phones following this event will update.</span></p>}
+      {error && <Notice actionLabel={!preview && !loading ? 'Try again' : undefined} onAction={() => void load()}>{error}</Notice>}
+      {done && <Notice tone="info">Re-draw applied. Phones following this event will update.</Notice>}
 
       {preview && !done && (
         <>

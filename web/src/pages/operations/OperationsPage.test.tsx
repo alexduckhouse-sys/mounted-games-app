@@ -140,7 +140,7 @@ describe('OperationsPage', () => {
     expect(screen.queryByRole('heading', { name: 'Blocking publish' })).not.toBeInTheDocument();
   });
 
-  it('keeps the last known checks and shows Retry when a refresh fails', async () => {
+  it('keeps the last known checks and shows Try again when a refresh fails', async () => {
     const user = userEvent.setup();
     render(<MemoryRouter><OperationsPage /></MemoryRouter>);
     await screen.findByText('Dec forms missing');
@@ -151,7 +151,7 @@ describe('OperationsPage', () => {
     expect(await screen.findByText(/Couldn’t refresh · last known/)).toBeInTheDocument();
     expect(screen.getByText('Dec forms missing')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() => expect(screen.queryByText(/Couldn’t refresh · last known/)).not.toBeInTheDocument());
     expect(api.get).toHaveBeenCalledTimes(3);
   });
@@ -234,7 +234,7 @@ describe('OperationsPage', () => {
     await user.click(screen.getByRole('button', { name: 'Preview draw' }));
     await user.click(await screen.findByRole('button', { name: 'Apply draw' }));
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Draw applied.');
+    expect(await screen.findByRole('status')).toHaveTextContent('Draw applied');
     expect(screen.queryByRole('button', { name: /Undo/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Discard' }));
     expect(screen.queryByRole('button', { name: 'Apply draw' })).not.toBeInTheDocument();

@@ -2,6 +2,8 @@ import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } f
 import { usePageWidth } from '../../components/pageWidthState';
 import { MoreHorizontal, RefreshCw } from 'lucide-react';
 import { TickerNumber } from '../../components/TickerNumber';
+import { Notice } from '../../components/Notice';
+import { useToast } from '../../components/Toast';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
@@ -41,7 +43,7 @@ export function OperationsPage() {
   const { competition } = useCompetition();
   const { user, canOrganise } = useAuth();
   if (!user || !canOrganise(competition)) {
-    return <div className="mx-auto w-full max-w-4xl py-4 mg-font"><p role="alert" className="mg-card p-4">You don’t have access to competition operations.</p></div>;
+    return <div className="mx-auto w-full max-w-4xl py-4 mg-font"><Notice>You don’t have access to competition operations.</Notice></div>;
   }
   return <OperationsPageContent key={`${competition.id}:${user.id}`} />;
 }
@@ -73,7 +75,7 @@ function OperationsPageContent() {
   const [preview, setPreview] = useState<DrawPreview | null>(null);
   const [round, setRound] = useState(0);
   const [drawError, setDrawError] = useState<string | null>(null);
-  const [drawMessage, setDrawMessage] = useState<string | null>(null);
+  const toast = useToast();
   const [previewing, setPreviewing] = useState(false);
   const [applying, setApplying] = useState(false);
 
@@ -87,7 +89,7 @@ function OperationsPageContent() {
       setReadiness(data);
       setCheckedAt(new Date());
     } catch (error) {
-      setLoadError(apiMessage(error, 'Couldn’t refresh the readiness checks. Try again.'));
+      setLoadError(apiMessage(error, 'Couldn’t refresh the readiness checks. Check your signal and try again.'));
     } finally {
       setLoadingReadiness(false);
     }
@@ -106,7 +108,6 @@ function OperationsPageContent() {
     }
     setPreviewing(true);
     setDrawError(null);
-    setDrawMessage(null);
     try {
       const { data } = await api.post<DrawPreview>(
         `/competitions/${competition.id}/sections/${sectionId}/draw/preview`,
@@ -132,20 +133,19 @@ function OperationsPageContent() {
     if (!preview || applying || !canWrite) return;
     setApplying(true);
     setDrawError(null);
-    setDrawMessage(null);
     try {
       await api.post(
         `/competitions/${competition.id}/sections/${preview.sectionId}/draw/apply`,
         { seed: preview.seed, fingerprint: preview.fingerprint },
       );
-      setDrawMessage('Draw applied. The timetable now has these lane assignments.');
+      toast.show('Draw applied');
       reloadCompetition();
       void loadReadiness();
     } catch (error) {
       const status = (error as { response?: { status?: number } })?.response?.status;
       setDrawError(apiMessage(error, status === 409
         ? 'The competition changed after this preview. Preview the draw again.'
-        : 'Couldn’t apply the draw. Try again.'));
+        : 'Couldn’t apply the draw. Check your signal and try again.'));
       if (status === 409) setPreview(null);
     } finally {
       setApplying(false);
@@ -153,8 +153,8 @@ function OperationsPageContent() {
   }
 
   // Changing the section or draw number makes any preview stale, so it is dropped until the next preview.
-  function changeSection(id: number) { setSectionId(id); setPreview(null); setDrawMessage(null); }
-  function changeSeed(value: string) { setSeed(value); setPreview(null); setDrawMessage(null); }
+  function changeSection(id: number) { setSectionId(id); setPreview(null); }
+  function changeSeed(value: string) { setSeed(value); setPreview(null); }
 
   const groups = useMemo(() => (readiness ? buildIssueGroups(readiness, competition.id) : []), [readiness, competition.id]);
   const shownView: View = view;
@@ -230,9 +230,10 @@ function OperationsPageContent() {
 
   return (
     <RefinePage className={wide ? 'ops-wide' : ''}>
+      {toast.node}
       <RefineHeader back={back} backLabel="Back to event" context={context} actions={actions} title={title} subtitle={subtitle} tabs={tabs} tabsLabel="Event tools" tabsKind="tablist" />
 
-      {loadError && (!readiness || shownView !== 'checks') && <p role="alert" className="mg-notice ops-alert">{loadError} <button type="button" className="rf-btn rf-btn-text" onClick={() => void loadReadiness()}>Try again</button></p>}
+      {loadError && (!readiness || shownView !== 'checks') && <Notice actionLabel="Try again" onAction={() => void loadReadiness()}>{loadError}</Notice>}
       {loadingReadiness && !readiness && <p role="status" className="rf-note">Checking competition details…</p>}
 
       {shownView === 'checks' && readiness && (
@@ -261,17 +262,16 @@ function OperationsPageContent() {
           {!preview && sheet !== 'draw' && (
             <DrawSettingsForm sections={competition.sections} sectionId={sectionId} seed={seed} previewing={previewing} onSection={changeSection} onSeed={changeSeed} onPreview={() => void previewDraw()} />
           )}
-          {drawError && <p role="alert" className="mg-notice ops-alert">{drawError}</p>}
+          {drawError && <Notice>{drawError}</Notice>}
           {preview && <DrawResult preview={preview} round={round} onRound={setRound} onNewSeed={newSeed} busy={previewing} />}
         </section>
       )}
 
       {showDrawFoot && preview && (
         <RefineFoot aboveTabs column label="Apply draw">
-          {drawMessage && <p role="status" className="ops-toast"><span>{drawMessage}</span><button type="button" className="rf-btn rf-btn-text" onClick={() => setDrawMessage(null)}>Dismiss</button></p>}
           <span className="rf-t2">Replaces lane assignments in unscored sessions. Publishing is a separate step.</span>
           <div className="rf-actions">
-            <button type="button" className="rf-btn" onClick={() => { setPreview(null); setDrawMessage(null); setDrawError(null); }}>Discard</button>
+            <button type="button" className="rf-btn" onClick={() => { setPreview(null); setDrawError(null); }}>Discard</button>
             <button type="button" className="rf-btn rf-btn-primary rf-grow" onClick={() => void applyDraw()} disabled={applying || previewing || !canWrite || !preview.fairness.everyTeamAppearsOncePerSession}>
               {applying ? 'Applying…' : 'Apply draw'}
             </button>
@@ -332,10 +332,9 @@ function Preparations({ readiness, groups, competitionId, refreshFailed, checked
   return (
     <div className="ops-prep">
       {refreshFailed && (
-        <p role="status" className="rf-note ops-warn">
-          Couldn’t refresh{checkedAt ? ` · last known ${clock(checkedAt)}` : ''}{' '}
-          <button type="button" className="rf-btn rf-btn-text" onClick={onRetry} disabled={retrying}>Retry</button>
-        </p>
+        <Notice actionLabel="Try again" onAction={onRetry} actionDisabled={retrying} role="status">
+          Couldn’t refresh{checkedAt ? ` · last known ${clock(checkedAt)}` : ''}. Check your signal and try again.
+        </Notice>
       )}
       {clashes.length > 0 && <>
         <RefineSection title="Blocking publish" />

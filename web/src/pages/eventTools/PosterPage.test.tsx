@@ -63,7 +63,7 @@ describe('venue poster', () => {
   it('offers another try when the event will not load', async () => {
     get.mockRejectedValueOnce(new Error('offline'));
     renderPoster();
-    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load this event.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load this event');
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByRole('heading', { name: 'Spring Games' })).toBeInTheDocument();
   });

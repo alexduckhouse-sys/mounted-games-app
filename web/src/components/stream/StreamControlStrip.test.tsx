@@ -26,8 +26,12 @@ it('saves overlay changes through the versioned overlay API instead of unsupport
 it('does not report a failed camera command as sent or change its pressed state', async () => {
   vi.mocked(api.post).mockRejectedValue(new Error('offline')); await show();
   fireEvent.click(screen.getByRole('button', { name: 'Remote zoom 2x' })); await act(async () => {});
-  expect(screen.getByRole('status')).toHaveTextContent('Could not send');
+  expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t reach the camera phone. Check your signal and try again.');
   expect(screen.getByRole('button', { name: 'Remote zoom 2x' })).toHaveAttribute('aria-pressed', 'false');
+  vi.mocked(api.post).mockResolvedValue({ data: {} });
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' })); await act(async () => {});
+  expect(screen.getByRole('status')).toHaveTextContent('Requested: Zoom 2x');
+  expect(screen.queryByRole('alert')).toBeNull();
 });
 
 it('retains a banner draft when the server rejects the overlay save', async () => {
@@ -35,7 +39,7 @@ it('retains a banner draft when the server rejects the overlay save', async () =
   fireEvent.change(screen.getByLabelText('Quick stream announcement'), { target: { value: 'Example announcement' } });
   fireEvent.click(screen.getByRole('button', { name: 'Post to stream' })); await act(async () => {});
   expect(screen.getByLabelText('Quick stream announcement')).toHaveValue('Example announcement');
-  expect(screen.getByRole('status')).toHaveTextContent('Could not save');
+  expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t save the stream banner. Check your signal and try again.');
 });
 
 it('updates mute, pause and zoom controls only after the camera command succeeds', async () => {
@@ -85,7 +89,9 @@ it('keeps the current overlay after a conflicting save and translates Up next to
   save.mockResolvedValueOnce('conflict'); await show();
   fireEvent.click(screen.getByRole('button', { name: 'Show Heat Table on Stream' })); await act(async () => {});
   expect(screen.getByRole('button', { name: 'Hide Stream Overlay' })).toHaveAttribute('aria-pressed', 'true');
-  expect(screen.getByRole('status')).toHaveTextContent('Could not save');
+  expect(screen.getByRole('alert')).toHaveTextContent('The overlay changed on another phone. Check it and try again.');
+  fireEvent.click(screen.getByRole('button', { name: 'Show me' }));
+  expect(screen.getByRole('button', { name: 'Hide Stream Overlay' })).toHaveFocus();
   fireEvent.click(screen.getByRole('button', { name: 'Show Up Next on Stream' })); await act(async () => {});
   expect(save.mock.calls.at(-1)![0](DEFAULT_OVERLAY).look).toMatchObject({ liveCard: 'next', liveSectionId: 5 });
   expect(screen.getByRole('button', { name: 'Show Up Next on Stream' })).toHaveAttribute('aria-pressed', 'true');

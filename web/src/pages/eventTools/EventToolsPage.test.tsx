@@ -120,7 +120,7 @@ describe('EventToolsPage merged into OperationsPage', () => {
     await waitFor(() => expect(post).toHaveBeenLastCalledWith('/event-tools/competitions/12/team-import/apply', {
       csv: 'club,suffix,section\nNorth Club,A,Under 12', fingerprint: 'ABC', previewVersion: 1,
     }));
-    expect(await screen.findByText('1 team added.')).toBeInTheDocument();
+    expect(await screen.findByText('1 team added')).toBeInTheDocument();
     expect(compState.reload).toHaveBeenCalled();
   });
 
@@ -178,6 +178,6 @@ describe('EventToolsPage merged into OperationsPage', () => {
 
     expect(await screen.findByText('2 age groups and 3 timetable sessions copied.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Spring event copy/ })).toHaveAttribute('href', '/admin/competitions/99');
-    expect(screen.getByRole('status')).toHaveTextContent('Spring event copy is ready to edit.');
+    expect(screen.getByRole('status')).toHaveTextContent('Spring event copy is ready to edit');
   });
 });

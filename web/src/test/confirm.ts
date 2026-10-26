@@ -22,9 +22,7 @@ export function autoConfirm(answers: boolean | boolean[] = true): Asked {
       const yes = queue ? queue.shift() ?? true : answers === true;
       asked.titles.push(dialog.querySelector('h2')?.textContent ?? '');
       asked(dialog.querySelector('.mg-confirm-body')?.textContent ?? '');
-      const buttons = dialog.querySelectorAll('button');
-      const button = yes ? buttons[buttons.length - 1] : buttons[0];
-      button.click();
+      dialog.querySelector<HTMLButtonElement>(yes ? '[data-confirm-yes]' : '[data-confirm-cancel]')?.click();
     }
   });
   observer.observe(document.body, { childList: true, subtree: true });

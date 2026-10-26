@@ -4,6 +4,7 @@ import { api } from '../../api';
 import type { CompetitionSection, TieBreakRule } from '../../types';
 import { cutLabel, move, TIE_BREAK_RULES, tieStatus, TieSettlement, type BoundaryTie, type FinalsBoundary } from '../../lib/tieBreak';
 import { SelectField } from '../../components/SelectField';
+import { Notice } from '../../components/Notice';
 
 function message(error: unknown, fallback: string) {
   const data = (error as { response?: { data?: string | { message?: string } } })?.response?.data;
@@ -40,7 +41,7 @@ export function FinalsTiePanel({ competitionId, section, rule, onRuleChange, bou
       onRuleChange(section.id, next);
       onChanged();
     } catch (caught) {
-      setError(message(caught, 'Couldn’t change how ties are settled.'));
+      setError(message(caught, 'Couldn’t change how ties are settled. Check your signal and try again.'));
     } finally { setBusy(false); }
   }
 
@@ -59,7 +60,7 @@ export function FinalsTiePanel({ competitionId, section, rule, onRuleChange, bou
     {ties.map((tie) => <TieCard key={`${tie.cutoff}:${tie.settledBy}:${tie.teams.map((t) => t.id).join(',')}`} tie={tie} competitionId={competitionId} canOrder={section !== null}
       runoffRaceName={boundary?.runoffRaceName} onChanged={onChanged} />)}
     {!section && ties.length > 0 && <p className="text-[11px] text-[rgb(var(--mg-muted))]">Pick an age group to settle these ties.</p>}
-    {error && <div role="alert" className="text-xs text-[rgb(var(--mg-elim))]">{error}</div>}
+    {error && <Notice>{error}</Notice>}
   </div>;
 }
 
@@ -79,7 +80,7 @@ function TieCard({ tie, competitionId, canOrder, runoffRaceName, onChanged }: {
     try {
       await api.put(`/competitions/${competitionId}/finals/tie-order`, { teamIds: order.map((t) => t.id) });
       onChanged();
-    } catch (caught) { setError(message(caught, 'Couldn’t save the order.')); }
+    } catch (caught) { setError(message(caught, 'Couldn’t save the order. Check your signal and try again.')); }
     finally { setBusy(false); }
   }
 
@@ -88,7 +89,7 @@ function TieCard({ tie, competitionId, canOrder, runoffRaceName, onChanged }: {
     try {
       await api.delete(`/competitions/${competitionId}/finals/tie-order`, { params: { teamIds: tie.teams.map((t) => t.id) }, paramsSerializer: { indexes: null } });
       onChanged();
-    } catch (caught) { setError(message(caught, 'Couldn’t clear the order.')); }
+    } catch (caught) { setError(message(caught, 'Couldn’t clear the order. Check your signal and try again.')); }
     finally { setBusy(false); }
   }
 
@@ -118,6 +119,6 @@ function TieCard({ tie, competitionId, canOrder, runoffRaceName, onChanged }: {
       {!showOrder && tie.settledBy === TieSettlement.Rule && <button type="button" className="mg-small-btn !min-h-8 !px-2.5 !py-1 text-xs" onClick={() => setEditing(true)}>Change the order</button>}
       {tie.settledBy === TieSettlement.Organiser && <button type="button" className="mg-small-btn !min-h-8 !px-2.5 !py-1 text-xs" disabled={busy} onClick={clear}>Clear my order</button>}
     </div>}
-    {error && <div role="alert" className="text-[rgb(var(--mg-elim))]">{error}</div>}
+    {error && <Notice>{error}</Notice>}
   </section>;
 }

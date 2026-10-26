@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Search } from 'lucide-react';
 import { api } from '../../api';
+import { Notice } from '../../components/Notice';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { problemMessage } from '../../lib/apiError';
 import { RefineHeader, RefineList, RefinePage } from '../refine/Refine';
@@ -22,7 +23,7 @@ export function BlockedAccountsPage() {
 
   const load = () => api.get<BlockedAccount[]>('/admin/blocked-users')
     .then(({ data }) => setBlocked(Array.isArray(data) ? data : []))
-    .catch(() => { setBlocked((current) => current ?? []); setError('Couldn’t load the blocked accounts. Try again.'); });
+    .catch(() => { setBlocked((current) => current ?? []); setError('Couldn’t load the blocked accounts. Check your signal and try again.'); });
   useEffect(() => {
     void load();
   }, []);
@@ -41,7 +42,7 @@ export function BlockedAccountsPage() {
       setPicked(null);
       setReason('');
       await load();
-    }, `Couldn’t block ${person.fullName}. Try again.`);
+    }, `Couldn’t block ${person.fullName}. Check your signal and try again.`);
   }
 
   async function unblock(account: BlockedAccount) {
@@ -49,7 +50,7 @@ export function BlockedAccountsPage() {
       await api.delete(`/admin/users/${encodeURIComponent(account.id)}/block`);
       search.patch(account.id, { isBlocked: false });
       setBlocked((current) => (current ?? []).filter((b) => b.id !== account.id));
-    }, `Couldn’t unblock ${account.fullName}. Try again.`);
+    }, `Couldn’t unblock ${account.fullName}. Check your signal and try again.`);
   }
 
   const typed = query.trim().length > 0;
@@ -59,7 +60,7 @@ export function BlockedAccountsPage() {
     <RefinePage>
       <RefineHeader back="/admin" backLabel="Back to site admin" context="Site admin" title="Blocked accounts" />
       <div className="ops-cards ops-tt ops-admin ops-people" aria-busy={busy}>
-        {error && <p role="alert" className="mg-notice ops-alert">{error}</p>}
+        {error && <Notice>{error}</Notice>}
 
         <label className="ops-search">
           <Search className="h-[18px] w-[18px]" aria-hidden="true" />
@@ -91,7 +92,7 @@ export function BlockedAccountsPage() {
                 </div>
               );
             })}
-            {!search.searching && search.failed && <div className="rf-row"><span className="rf-t2">Couldn’t search. Try again.</span></div>}
+            {!search.searching && search.failed && <div className="rf-row"><span className="rf-t2">Couldn’t search. Check your signal and try again.</span></div>}
             {!search.searching && !search.failed && hits.length === 0 && <div className="rf-row"><span className="rf-t2">No account matches that</span></div>}
           </RefineList>
         )}

@@ -36,25 +36,25 @@ describe('EmailConfirmBanner', () => {
   it('asks gently, and resends on request', async () => {
     signedInAs(false);
     render(<EmailConfirmBanner />);
-    expect(screen.getByText(/Please confirm your email address/)).toHaveTextContent('sam@example.com');
-    await userEvent.click(screen.getByRole('button', { name: 'Resend email' }));
+    expect(screen.getByText(/Confirm your email address/)).toHaveTextContent('sam@example.com');
+    await userEvent.click(screen.getByRole('button', { name: 'Send it again' }));
     expect(api.post).toHaveBeenCalledWith('/auth/resend-confirmation');
-    expect(await screen.findByRole('status')).toHaveTextContent("We've sent a new link to sam@example.com");
+    expect(await screen.findByText('New link sent. Check your spam too.')).toHaveClass('kit-toast-text');
   });
 
   it('says plainly when the email could not be sent because sending is off', async () => {
     signedInAs(false);
     vi.mocked(api.post).mockResolvedValue({ data: { status: 'NotSent' } });
     render(<EmailConfirmBanner />);
-    await userEvent.click(screen.getByRole('button', { name: 'Resend email' }));
-    expect(await screen.findByRole('status')).toHaveTextContent("couldn't send the email just now, because email isn't switched on");
+    await userEvent.click(screen.getByRole('button', { name: 'Send it again' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('couldn’t send the email just now, because email isn’t switched on');
   });
 
   it('says when the provider failed, and when asked too often', async () => {
     signedInAs(false);
     vi.mocked(api.post).mockResolvedValueOnce({ data: { status: 'Failed' } }).mockRejectedValueOnce({ response: { status: 429 } }).mockRejectedValueOnce(new Error('offline'));
     render(<EmailConfirmBanner />);
-    const button = screen.getByRole('button', { name: 'Resend email' });
+    const button = screen.getByRole('button', { name: 'Send it again' });
     await userEvent.click(button);
     expect(await screen.findByText(/in a few minutes/)).toBeInTheDocument();
     await userEvent.click(button);
@@ -67,7 +67,7 @@ describe('EmailConfirmBanner', () => {
     signedInAs(false);
     vi.mocked(api.post).mockResolvedValue({ data: { status: 'AlreadyConfirmed' } });
     render(<EmailConfirmBanner />);
-    await userEvent.click(screen.getByRole('button', { name: 'Resend email' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Send it again' }));
     await vi.waitFor(() => expect(refreshUser).toHaveBeenCalled());
   });
 
@@ -75,7 +75,7 @@ describe('EmailConfirmBanner', () => {
     signedInAs(false);
     vi.mocked(api.post).mockResolvedValue({ data: undefined });
     render(<EmailConfirmBanner />);
-    await userEvent.click(screen.getByRole('button', { name: 'Resend email' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Send it again' }));
     expect(await screen.findByText(/in a few minutes/)).toBeInTheDocument();
   });
 });

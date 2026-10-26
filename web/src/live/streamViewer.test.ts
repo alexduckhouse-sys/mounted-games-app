@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { browserViewerDependencies, configureLowLatencyReceiver, createStreamViewer, streamErrorCode, streamErrors, syncVideoLiveEdge } from './streamViewer';
+import { browserViewerDependencies, configureLowLatencyReceiver, createStreamViewer, splitStreamMessage, streamErrorCode, streamErrors, syncVideoLiveEdge } from './streamViewer';
 import { streamClock, type StreamInvoke } from './streamRuntime';
 import { deferred, FakeMediaStream, FakePeer, fakePeerConstructor, fakeStreamConstructor, FakeTrack, flush, resetMedia } from '../test/streamFakes';
 
@@ -301,4 +301,9 @@ it('configures low-latency receiver hints, catches up live edge, supports audio-
 
   configureLowLatencyReceiver(null);
   viewer.dispose();
+});
+it('words a finished or full stream as a heading and a next step', () => {
+  expect(splitStreamMessage(streamErrors.STREAM_NOT_FOUND)).toEqual({ title: 'The stream has finished', body: 'Thanks for watching.' });
+  expect(splitStreamMessage(streamErrors.STREAM_FULL)).toEqual({ title: 'The stream is full', body: 'Try again in a minute.' });
+  expect(splitStreamMessage(streamErrors.RATE_LIMITED)).toEqual({ body: streamErrors.RATE_LIMITED });
 });

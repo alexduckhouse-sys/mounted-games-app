@@ -173,7 +173,7 @@ describe('FormatPage', () => {
   it('shows the error when the competition cannot be loaded', async () => {
     serve(() => { throw new Error('nope'); });
     mount();
-    expect(await screen.findByText('Could not load organiser details. Please try again.')).toBeInTheDocument();
+    expect(await screen.findByText('Couldn’t load the organiser details. Check your signal and try again.')).toBeInTheDocument();
   });
 
   it('reloads after the lock is toggled', async () => {

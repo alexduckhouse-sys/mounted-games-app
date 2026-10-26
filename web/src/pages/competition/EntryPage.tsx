@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
+import { Notice } from '../../components/Notice';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { EntryStepper } from '../../components/EntryStepper';
 import { usePageWidth } from '../../components/pageWidthState';
@@ -86,12 +87,12 @@ export function EntryPage() {
   } else if (section) {
     body = <EntryForm key={`${section.id}:${kind}`} competition={competition} section={section} kind={kind} step={stepPart === 'pay' ? 'pay' : 'details'} onSent={setSent} />;
   } else if (sectionPart) {
-    body = <p role="alert" className="mg-notice">Section not found.</p>;
+    body = <Notice actionLabel="Choose an age group" actionTo={base}>Section not found.</Notice>;
   } else {
     body = (
       <>
         <h2 className="ev-step-title">What are you entering?</h2>
-        {closed && <p role="status" className="mg-notice mb-3">Entries for this event are closed.</p>}
+        {closed && <Notice tone="info" className="mb-3">Entries are closed for this competition.</Notice>}
         {competition.sections.length === 0 && <p className="sp-note">There are no age groups to enter yet.</p>}
         {competition.sections.map((s) => (
           <section key={s.id} aria-label={s.displayName}>

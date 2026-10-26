@@ -10,6 +10,7 @@ import { provisionalTimetable } from '../../../lib/creatorPlan';
 import type { FixedItem } from '../../../lib/formatPlan';
 import { formatTime } from '../../../lib/time';
 import { hatbandColour, hatbandName } from '../../../lib/hatbands';
+import { Notice } from '../../../components/Notice';
 import { BreakForm } from './BreakForm';
 import { SmallHead, StepHeading } from './controls';
 import type { StepProps } from './parts';
@@ -121,9 +122,11 @@ export function ReviewStep({ draft, change, problems, teamCounts, real, onEdit, 
 
       <SmallHead>Breaks and briefings</SmallHead>
       {plan.overrun && plan.finishes && (
-        <p role="alert" className="mg-notice !bg-[rgb(var(--mg-live-row))] !text-[rgb(var(--mg-elim))]" style={{ marginBottom: 8 }}>
-          The timetable runs until {formatTime(plan.finishes)}, after the end time you gave. Shorten the races, add an arena or move the end time.
-        </p>
+        <div style={{ marginBottom: 8 }}>
+          <Notice>
+            The timetable runs until {formatTime(plan.finishes)}, after your end time of {draft.endTime || '17:00'}. Shorten the races, add an arena or move the end time.
+          </Notice>
+        </div>
       )}
       {unchosen > 0 && <p className="cw-note" style={{ marginTop: 0 }}>Races aren’t chosen for {plural(unchosen, 'session')}. That’s fine: the times use the standard list, and you can set them any time before the day.</p>}
       <div className="cw-card">

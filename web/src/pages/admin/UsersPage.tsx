@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Search } from 'lucide-react';
 import { api } from '../../api';
+import { Notice } from '../../components/Notice';
 import { useAuth } from '../../auth/AuthContext';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { problemMessage } from '../../lib/apiError';
@@ -46,7 +47,7 @@ export function UsersPage() {
 
   const loadStaff = useCallback(() => api.get<StaffAccount[]>('/admin/staff-accounts')
     .then(({ data }) => setStaff(Array.isArray(data) ? data : []))
-    .catch(() => { setStaff((current) => current ?? []); setError('Couldn’t load the admins. Try again.'); }), []);
+    .catch(() => { setStaff((current) => current ?? []); setError('Couldn’t load the admins. Check your signal and try again.'); }), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,29 +69,29 @@ export function UsersPage() {
     const { data } = await api.post<AccountInvite>('/admin/invites', { email: email.trim(), access: (access === 'admin' ? 1 : 0) satisfies InviteAccess });
     setInvites((current) => [data, ...(current ?? []).filter((i) => i.id !== data.id)]);
     setEmail('');
-  }, 'Couldn’t send that invite. Try again.');
+  }, 'Couldn’t send that invite. Check your signal and try again.');
 
   const resend = (invite: AccountInvite) => run(async () => {
     const { data } = await api.post<AccountInvite>(`/admin/invites/${invite.id}/resend`);
     setInvites((current) => (current ?? []).map((i) => (i.id === data.id ? data : i)));
-  }, 'Couldn’t send that invite again. Try again.');
+  }, 'Couldn’t send that invite again. Check your signal and try again.');
 
   async function cancel(invite: AccountInvite) {
-    if (!(await confirmDialog({ title: 'Cancel this invite?', message: `${invite.email} will no longer be able to use the link they were sent.`, confirmLabel: 'Cancel invite', destructive: true }))) return;
+    if (!(await confirmDialog({ title: 'Cancel this invite?', message: `The link sent to ${invite.email} stops working.`, cancelLabel: 'Keep invite', confirmLabel: 'Cancel invite', destructive: true }))) return;
     await run(async () => {
       await api.delete(`/admin/invites/${invite.id}`);
       setInvites((current) => (current ?? []).filter((i) => i.id !== invite.id));
-    }, 'Couldn’t cancel that invite. Try again.');
+    }, 'Couldn’t cancel that invite. Check your signal and try again.');
   }
 
   const setLock = (account: StaffAccount, lock: boolean) => run(async () => {
     if (lock) await api.post(`/admin/users/${encodeURIComponent(account.id)}/account-lock`);
     else await api.delete(`/admin/users/${encodeURIComponent(account.id)}/account-lock`);
     setStaff((current) => (current ?? []).map((a) => (a.id === account.id ? { ...a, lockedAt: lock ? new Date().toISOString() : null } : a)));
-  }, lock ? `Couldn’t lock ${account.fullName}. Try again.` : `Couldn’t unlock ${account.fullName}. Try again.`);
+  }, lock ? `Couldn’t lock ${account.fullName}. Check your signal and try again.` : `Couldn’t unlock ${account.fullName}. Check your signal and try again.`);
 
   async function lock(account: StaffAccount) {
-    if (!(await confirmDialog({ title: `Lock ${account.fullName}?`, message: 'They are signed out at once and can’t sign in until the account is unlocked.', confirmLabel: 'Lock account', destructive: true }))) return;
+    if (!(await confirmDialog({ title: `Lock ${account.fullName}?`, message: 'They’re signed out now and can’t sign in until you unlock them.', confirmLabel: 'Lock account', destructive: true }))) return;
     await setLock(account, true);
   }
 
@@ -98,20 +99,20 @@ export function UsersPage() {
     await api.post(`/admin/users/${encodeURIComponent(person.id)}/roles`, { role, grant: true });
     search.patch(person.id, { roles: [...person.roles, role] });
     await loadStaff();
-  }, `Couldn’t change ${person.fullName}. Try again.`);
+  }, `Couldn’t change ${person.fullName}. Check your signal and try again.`);
 
   async function block(person: AdminUser) {
     if (!(await confirmDialog({ title: `Block ${person.fullName}?`, message: 'They can’t sign in, enter competitions or post in chat.', confirmLabel: 'Block account', destructive: true }))) return;
     await run(async () => {
       await api.post(`/admin/users/${encodeURIComponent(person.id)}/block`, {});
       search.patch(person.id, { isBlocked: true });
-    }, `Couldn’t block ${person.fullName}. Try again.`);
+    }, `Couldn’t block ${person.fullName}. Check your signal and try again.`);
   }
 
   const unblock = (person: AdminUser) => run(async () => {
     await api.delete(`/admin/users/${encodeURIComponent(person.id)}/block`);
     search.patch(person.id, { isBlocked: false });
-  }, `Couldn’t unblock ${person.fullName}. Try again.`);
+  }, `Couldn’t unblock ${person.fullName}. Check your signal and try again.`);
 
   // Admins and organisers are listed above; the search is for everyone else.
   const others = (search.results ?? []).filter((u) => !u.roles.some((r) => r === 'Admin' || r === 'MasterAdmin' || r === 'Trainer'));
@@ -121,7 +122,7 @@ export function UsersPage() {
     <RefinePage>
       <RefineHeader back="/admin" backLabel="Back to site admin" context="Site admin" title="Users" />
       <div className="ops-cards ops-tt ops-admin ops-people" aria-busy={busy}>
-        {error && <p role="alert" className="mg-notice ops-alert">{error}</p>}
+        {error && <Notice>{error}</Notice>}
 
         <h2 className="rf-sec ops-tt-head"><span>Invite an admin</span></h2>
         <RefineList as="div" label="Invite an admin">
@@ -202,7 +203,7 @@ export function UsersPage() {
                 </span>
               </div>
             ))}
-            {!search.searching && search.failed && <div className="rf-row"><span className="rf-t2">Couldn’t search. Try again.</span></div>}
+            {!search.searching && search.failed && <div className="rf-row"><span className="rf-t2">Couldn’t search. Check your signal and try again.</span></div>}
             {!search.searching && !search.failed && others.length === 0 && <div className="rf-row"><span className="rf-t2">No account matches that</span></div>}
           </RefineList>
         )}

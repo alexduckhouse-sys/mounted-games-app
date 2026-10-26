@@ -4,6 +4,7 @@ import { Plus, Star } from 'lucide-react';
 import { api } from '../api';
 import { usePageWidth } from '../components/pageWidthState';
 import { usePageHeader } from '../components/CompactPageBarContext';
+import { Notice } from '../components/Notice';
 import { useFavourites } from '../hooks/useFavourites';
 import { competitionDateText, isOnToday } from '../lib/competitionDates';
 import { arenaNames, nextHeats, summariseNext } from '../lib/following';
@@ -32,7 +33,7 @@ export function FollowingTeamsSection({ plain = false }: { plain?: boolean }) {
   const ids = [...new Set(favourites.map((item) => item.competitionId))];
   const [limit, setLimit] = useState(12);
   return <div className="flex flex-col gap-4">
-    {error && <p role="alert" className="mg-notice">{error}</p>}
+    {error && <Notice>{error}</Notice>}
     {!ids.length && (plain
       ? <p className="m-0 px-0.5 text-[15.5px] leading-relaxed text-[rgb(var(--mg-body))]">Star teams at a competition and they show up here with their next heats. Stars are saved on this phone.</p>
       : <div className="mg-card space-y-3 p-5"><h2 className="font-bold">No starred teams yet</h2><p>Open a competition and star the teams you want to follow. Stars are saved on this device.</p></div>)}
@@ -53,6 +54,7 @@ function FollowingEvent({ id, teamIds }: { id: number; teamIds: number[] }) {
   const [data, setData] = useState(() => readSavedCopy<CompetitionDetail>(key)?.data ?? null);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const { setMany } = useFavourites();
   useEffect(() => {
     const controller = new AbortController();
     api.get<CompetitionDetail>(`/competitions/${id}`, { signal: controller.signal, timeout: 15_000 })
@@ -72,7 +74,8 @@ function FollowingEvent({ id, teamIds }: { id: number; teamIds: number[] }) {
   const live = !!data && today && data.sessions.some((session) => session.status === 1);
   const rows = data ? data.teams.filter((team) => ids.has(team.id)) : [];
   // Followed teams that the event no longer lists still count; they are cleaned up on the event's own page.
-  const missing = data ? teamIds.length - rows.length : 0;
+  const gone = data ? teamIds.filter((teamId) => !data.teams.some((team) => team.id === teamId)) : [];
+  const missing = gone.length;
   return <section className="mg-sec" aria-label={data?.name ?? `Competition ${id}`}>
     <div className="mg-sec-head">
       <h2>{data?.name ?? `Competition ${id}`}</h2>
@@ -80,7 +83,7 @@ function FollowingEvent({ id, teamIds }: { id: number; teamIds: number[] }) {
       {data && <span>{today ? 'Today' : competitionDateText(data.startDate, data.endDate)}</span>}
     </div>
     {!data && !error && <p role="status" className="mg-meta px-1">Loading event…</p>}
-    {error && <p role="alert" className="mg-notice">Couldn’t refresh this event. <button className="mg-text-link !min-h-11 !inline-flex" onClick={() => setAttempt(attempt + 1)}>Try again</button></p>}
+    {error && <Notice actionLabel="Try again" onAction={() => setAttempt(attempt + 1)}>Couldn’t refresh this event. Check your signal and try again.</Notice>}
     {data && <div className="mg-lines">
       {rows.map((team) => {
         const summary = summariseNext(team, next?.get(team.id), arenas);
@@ -90,9 +93,9 @@ function FollowingEvent({ id, teamIds }: { id: number; teamIds: number[] }) {
           <span className="flex flex-col items-end gap-0.5"><span className={`mg-line-time ${TIME_COLOUR[summary.tone]}`}>{summary.time}</span><span className="text-[10px] font-semibold uppercase leading-none tracking-[0.06em] text-[rgb(var(--mg-muted))]">{summary.label}</span></span>
         </Link>;
       })}
-      {missing > 0 && <Link to={`/competitions/${id}/following`} className="mg-line !grid-cols-[minmax(0,1fr)] text-sm">
-        <span className="mg-meta">{plural(missing, 'followed team')} no longer listed at this event. Open it to tidy up.</span>
-      </Link>}
     </div>}
+    {missing > 0 && <Notice tone="info" actionLabel={missing === 1 ? 'Remove it' : 'Remove them'} onAction={() => setMany(gone.map((teamId) => ({ competitionId: id, teamId })), false)}>
+      {missing === 1 ? 'A team you follow is no longer at this event.' : `${missing} teams you follow are no longer at this event.`}
+    </Notice>}
   </section>;
 }
