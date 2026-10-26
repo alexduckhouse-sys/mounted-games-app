@@ -11,8 +11,9 @@ using MountedGames.Api.Services.Stats;
 namespace MountedGames.Api.Controllers;
 
 /// <summary>
-/// The statistics hub (<c>/stats</c> on the web). Anyone may search, browse and see a profile's headline numbers; the
-/// per-game breakdown, the list of entries and the rider and pony partnerships are for signed-in viewers only.
+/// The statistics hub (<c>/stats</c> on the web). Anyone may search, browse and see a profile's headline numbers, and a
+/// team profile's per-game breakdown too. For riders and ponies the per-game breakdown, and for every kind the list of
+/// entries and the rider and pony partnerships, are for signed-in viewers only.
 /// The service decides that from the caller, so the detail never leaves the API for an anonymous request.
 /// Every call is limited per user or address by the <c>stats</c> policy (<c>RateLimits:StatsPerMinute</c>).
 /// </summary>

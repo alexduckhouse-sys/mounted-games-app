@@ -10,30 +10,34 @@ import { installConnection, liteWrapper, removeConnection } from '../test/lite';
 afterEach(removeConnection);
 
 describe('LiteModeSetting', () => {
-  it('shows Auto / On / Off with the saved choice pressed, and Off as the status', () => {
+  it('is a dropdown row showing the saved choice, with what lite mode is for', () => {
     const Wrapper = liteWrapper();
     render(<Wrapper><LiteModeSetting /></Wrapper>);
-    expect(screen.getByRole('button', { name: 'Auto' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'On' })).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByRole('status')).toHaveTextContent('Off');
+    const row = screen.getByRole('combobox', { name: /Lite mode/ });
+    expect(row).toHaveTextContent('Auto');
+    expect(row).toHaveTextContent('Saves battery and data on busy showgrounds');
+    fireEvent.click(row);
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Auto', 'On', 'Off']);
+    expect(screen.getByRole('option', { name: 'Auto' })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('explains Auto on a slow connection', () => {
     installConnection({ effectiveType: '2g' });
     const Wrapper = liteWrapper();
     render(<Wrapper><LiteModeSetting /></Wrapper>);
-    expect(screen.getByRole('status')).toHaveTextContent('On because your connection is slow');
+    expect(screen.getByRole('combobox', { name: /Lite mode/ })).toHaveTextContent('On because your connection is slow');
   });
 
   it('changes and saves the choice', () => {
     const Wrapper = liteWrapper();
     render(<Wrapper><LiteModeSetting /></Wrapper>);
-    fireEvent.click(screen.getByRole('button', { name: 'On' }));
-    expect(screen.getByRole('button', { name: 'On' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('status')).toHaveTextContent('On because you chose it');
+    fireEvent.click(screen.getByRole('combobox', { name: /Lite mode/ }));
+    fireEvent.click(screen.getByRole('option', { name: 'On' }));
+    expect(screen.getByRole('combobox', { name: /Lite mode/ })).toHaveTextContent('On');
     expect(localStorage.getItem('mg.liteMode')).toBe('on');
-    fireEvent.click(screen.getByRole('button', { name: 'Off' }));
-    expect(screen.getByRole('status')).toHaveTextContent('Off');
+    fireEvent.click(screen.getByRole('combobox', { name: /Lite mode/ }));
+    fireEvent.click(screen.getByRole('option', { name: 'Off' }));
+    expect(localStorage.getItem('mg.liteMode')).toBe('off');
   });
 });
 

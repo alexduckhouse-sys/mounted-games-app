@@ -1,28 +1,37 @@
-import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
-import { StatsGamesView } from '../../components/stats/StatsGamesView';
-import { StatsSummaryView } from '../../components/stats/StatsSummaryView';
 import { useStatsProfile } from '../../hooks/useStats';
-import { RefineNote, RefineSection } from '../refine/Refine';
+import { formatPercent, gameLine, statsFacts } from '../../lib/stats';
+import '../../components/sitePages.css';
 
 /**
- * Race and game figures over the event teams linked to a team profile. Everyone sees the summary; the
- * per-game table needs a signed-in viewer (the API leaves it out otherwise). Hidden while there's nothing linked.
+ * Race figures over the event teams linked to a team profile: the headline numbers as a plain list, then each game
+ * with its races, wins and averages and the point quota on the right. The API sends both to everyone for a team
+ * profile, so nothing here depends on signing in. Hidden while there's nothing linked.
  */
 export function TeamGameStats({ profileId, linked }: { profileId: string; linked: number }) {
   const { user } = useAuth();
-  const location = useLocation();
   const load = useStatsProfile(linked > 0 ? `/stats/team-profiles/${profileId}` : null, user?.id ?? 'public');
   if (linked === 0 || load.status === 'idle' || load.status === 'missing') return null;
+  if (load.status === 'loading') return <p role="status" className="sp-note">Loading race statistics…</p>;
+  if (load.status === 'error') return <p role="alert" className="sp-note">{load.message}</p>;
+  const games = load.data.games ?? [];
   return <>
-    <RefineSection title="Race statistics" />
-    {load.status === 'loading' && <p role="status" className="rf-note">Loading race statistics…</p>}
-    {load.status === 'error' && <p role="alert" className="rf-note">{load.message}</p>}
-    {load.status === 'ready' && <>
-      <StatsSummaryView summary={load.data.summary} raceFiguresAllFormats />
-      {load.data.detailed
-        ? <div className="pt-3"><StatsGamesView games={load.data.games ?? []} best={load.data.bestGames ?? []} worst={load.data.worstGames ?? []} /></div>
-        : <RefineNote><Link to="/login" state={{ from: location.pathname + location.search }}>Sign in</Link> to see the figures for each game.</RefineNote>}
+    <h2 className="sp-sec">Race statistics</h2>
+    <dl className="sp-card sp-facts" aria-label="Race statistics">
+      {statsFacts(load.data.summary).map((fact) => (
+        <div key={fact.label} className="sp-fact"><dt>{fact.label}</dt><dd>{fact.value}</dd></div>
+      ))}
+    </dl>
+    {games.length > 0 && <>
+      <h2 className="sp-sec">By game</h2>
+      <ul className="sp-card m-0 list-none p-0" aria-label="By game">
+        {games.map((game) => (
+          <li key={game.name} className="sp-row">
+            <span className="sp-grow"><span className="sp-t1">{game.name}</span><span className="sp-t2">{gameLine(game)}</span></span>
+            <span className="sp-quota" title="Point quota">{formatPercent(game.pointQuotaPercent)}</span>
+          </li>
+        ))}
+      </ul>
     </>}
   </>;
 }

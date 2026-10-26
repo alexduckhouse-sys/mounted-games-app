@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
+import '../components/sitePages.css';
 
 type Phase = 'working' | 'done' | 'failed' | 'incomplete';
 
@@ -31,25 +32,33 @@ export function UnsubscribePage() {
   }, [token, run]);
 
   return (
-    <div className="mx-auto max-w-lg space-y-4 p-4 text-sm leading-relaxed">
-      <h1 className="text-2xl font-bold">Competition emails</h1>
-      {phase === 'working' && <p role="status">One moment…</p>}
-      {phase === 'done' && (
-        <>
-          <p role="status" className="font-semibold">That's done. We won't email you when new competitions open.</p>
-          <p>If you change your mind, tick the box next time you enter a competition.</p>
-        </>
-      )}
-      {phase === 'failed' && (
-        <>
-          <p role="alert" className="font-semibold">Something went wrong, and we couldn't update your choice.</p>
-          <button type="button" className="mg-btn mg-btn-primary" onClick={() => void run()}>Try again</button>
-        </>
-      )}
-      {phase === 'incomplete' && (
-        <p role="alert">This link looks incomplete. Please use the link in the email we sent you.</p>
-      )}
-      <p><Link to="/" className="underline">Back to Mounted Games</Link></p>
+    <div className="skin mx-auto w-full max-w-[560px]">
+      <div className="sp-small">
+        <h1>Competition emails</h1>
+        {phase === 'working' && <p role="status">One moment…</p>}
+        {phase === 'done' && (
+          <>
+            <p role="status">That's done. We won't email you when new competitions open.</p>
+            <p>If you change your mind, tick the box next time you enter a competition.</p>
+            <Link to="/" className="sp-pill">Back to the app</Link>
+          </>
+        )}
+        {phase === 'failed' && (
+          <>
+            <p role="alert">Something went wrong, and we couldn't update your choice.</p>
+            <div className="sp-acts">
+              <button type="button" className="sp-pill sp-pill-fill" onClick={() => void run()}>Try again</button>
+              <Link to="/" className="sp-pill">Back to the app</Link>
+            </div>
+          </>
+        )}
+        {phase === 'incomplete' && (
+          <>
+            <p role="alert">This link looks incomplete. Please use the link in the email we sent you.</p>
+            <Link to="/" className="sp-pill">Back to the app</Link>
+          </>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,0 +1,121 @@
+/* The public site pages outside a competition: Competitions, Past competitions, Seasons, Team profiles, Stats, Shop,
+   Following, Settings, Policies and the small pages. Everything reads --mg-* tokens, so every theme works. */
+
+/* A page that opens with the navy band under the app header has no gap above it. */
+main:has(.sp-top) { padding-top: 0; }
+
+/* Cards of rows. Unlike .rf-list this one doesn't clip, so a dropdown list can open past its edge. */
+.sp-card { background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); border-radius: var(--mg-radius-card); box-shadow: var(--mg-shadow-sm); }
+.sp-card > * + * { border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.sp-card > :first-child, .sp-card > :first-child > :first-child { border-top-left-radius: 11px; border-top-right-radius: 11px; }
+.sp-card > :last-child, .sp-card > :last-child > :last-child { border-bottom-left-radius: 11px; border-bottom-right-radius: 11px; }
+.sp-gap { margin-top: 12px; }
+
+/* Rows */
+.sp-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 10px 14px 10px 16px; box-sizing: border-box; border: 0; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)) !important; text-align: left; text-decoration: none !important; font: inherit; }
+a.sp-row, button.sp-row { cursor: pointer; }
+button.sp-row:disabled { cursor: default; background: rgb(var(--mg-surface)); }
+a.sp-row:hover, button.sp-row:hover { background: rgb(var(--mg-subtle)); }
+.sp-row:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
+.sp-grow { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.sp-t1 { font: 600 16px/1.25 var(--mg-font); color: rgb(var(--mg-ink)); overflow-wrap: anywhere; }
+.sp-t2 { font: 500 13.5px/1.3 var(--mg-font); color: rgb(var(--mg-muted)); }
+.sp-big { font-size: 17px; }
+.sp-val { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: rgb(var(--mg-heading)); font: 600 15px/1.2 var(--mg-font); white-space: nowrap; }
+.sp-chev { flex: none; color: rgb(var(--mg-muted)); }
+.sp-swatch { flex: none; width: 18px; height: 18px; border-radius: 5px; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .15); }
+.mg-dropdown-menu.sp-menu { left: auto; right: 8px; min-width: min(240px, calc(100% - 16px)); width: max-content; max-width: calc(100% - 16px); }
+
+/* Section headings: small, no line under them */
+.sp-sec { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 22px 2px 8px; font: 700 15px/1.1 var(--mg-font-display); letter-spacing: .05em; text-transform: uppercase; color: rgb(var(--mg-heading)); }
+.sp-sec small { font: 500 12.5px/1 var(--mg-font); letter-spacing: 0; text-transform: none; color: rgb(var(--mg-muted)); }
+.sp-first { margin-top: 4px; }
+.sp-note { margin: 10px 2px; font: 500 13.5px/1.45 var(--mg-font); color: rgb(var(--mg-muted)); }
+.sp-warn { color: rgb(var(--mg-late-ink)); }
+
+/* A round search bar. In the navy band it is white with no border; on the page it has a grey one. */
+.sp-search { display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 16px; border: 1.5px solid rgb(var(--mg-control)); border-radius: 23px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-muted)); }
+.sp-search input { flex: 1 1 auto; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; box-shadow: none; padding: 0; color: rgb(var(--mg-ink)); font: 500 16px/1 var(--mg-font); }
+.sp-search input::placeholder { color: rgb(var(--mg-faint)); }
+.sp-search:focus-within { border-color: rgb(var(--mg-heading)); }
+.sp-search-band { border-color: transparent; }
+.sp-search-band:focus-within { border-color: transparent; outline: 2px solid #fff; outline-offset: 2px; }
+
+/* A full-width grey bar for adding something: "+ Choose a competition" */
+.sp-add { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 52px; border: 0; border-radius: 12px; background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)) !important; font: 700 16px/1 var(--mg-font); text-decoration: none !important; cursor: pointer; }
+.sp-add:hover { background: rgb(var(--mg-tint) / .75); }
+.sp-add:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
+
+/* Pills: filled for the main action, outlined for the rest */
+.sp-pill { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 18px; border: 1.5px solid rgb(var(--mg-button)); border-radius: 999px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)) !important; font: 700 15px/1 var(--mg-font); text-decoration: none !important; white-space: nowrap; cursor: pointer; }
+.sp-pill:hover { background: rgb(var(--mg-subtle)); }
+.sp-pill-fill { background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)) !important; }
+.sp-pill-fill:hover { background: rgb(var(--mg-button)); filter: brightness(1.12); }
+.sp-pill:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
+.sp-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.sp-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; border: 0; background: transparent; color: rgb(var(--mg-heading)) !important; font: 700 15px/1 var(--mg-font); text-decoration: none !important; cursor: pointer; }
+.sp-link:hover { text-decoration: underline !important; }
+
+/* Pages that are only a message and a button or two */
+.sp-small { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding-top: 24px; }
+.sp-small h1 { margin: 0; font: 800 30px/1.05 var(--mg-font-display); color: rgb(var(--mg-heading)); }
+.sp-small p { margin: 0; font: 500 16px/1.45 var(--mg-font); color: rgb(var(--mg-ink)); }
+
+/* Segmented tabs (Standings / Rounds) */
+.sp-seg { display: flex; gap: 4px; padding: 3px; border-radius: 10px; background: rgb(var(--mg-tint)); }
+.sp-seg > * { flex: 1 1 0; display: flex; align-items: center; justify-content: center; min-height: 38px; border: 0; border-radius: 8px; background: transparent; color: rgb(var(--mg-body)) !important; font: 600 14px/1 var(--mg-font); text-decoration: none !important; cursor: pointer; }
+.sp-seg > [aria-current="page"], .sp-seg > [aria-selected="true"] { background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)) !important; font-weight: 700; box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+.sp-seg > :focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
+
+/* Season table */
+.sp-st { display: grid; align-items: center; column-gap: 4px; min-height: 58px; padding: 6px 12px 6px 10px; }
+.sp-st-head { min-height: 34px; background: rgb(var(--mg-subtle)); font: 700 11px/1 var(--mg-font); color: rgb(var(--mg-body)); }
+.sp-pos { font: 800 22px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); text-align: center; }
+.sp-team { min-width: 0; font: 600 17px/1.2 var(--mg-font); color: rgb(var(--mg-ink)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-n { text-align: center; font: 500 14px/1 var(--mg-font); color: rgb(var(--mg-body)); font-variant-numeric: tabular-nums; }
+.sp-n[data-drop="true"] { color: rgb(var(--mg-faint)); text-decoration: line-through; }
+.sp-pts { text-align: right; font: 800 22px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); font-variant-numeric: tabular-nums; }
+
+/* A plain two-column list of figures */
+.sp-facts { margin: 0; }
+.sp-fact { display: flex; gap: 12px; align-items: baseline; padding: 11px 16px; font: 500 15.5px/1.35 var(--mg-font); }
+.sp-fact dt { flex: none; width: 150px; color: rgb(var(--mg-muted)); }
+.sp-fact dd { margin: 0; flex: 1 1 auto; min-width: 0; color: rgb(var(--mg-ink)); }
+.sp-place { flex: none; width: 44px; text-align: right; font: 700 17px/1 var(--mg-font-display); color: rgb(var(--mg-body)); }
+.sp-rpts { flex: none; width: 40px; text-align: right; font: 800 20px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); font-variant-numeric: tabular-nums; }
+.sp-rpts[data-drop] { color: rgb(var(--mg-faint)); }
+.sp-quota { flex: none; font: 800 20px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
+
+/* Shop listings: each is its own card */
+.sp-listings { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.sp-listing { overflow: hidden; border: 1px solid rgb(var(--mg-line)); border-radius: var(--mg-radius-card); background: rgb(var(--mg-surface)); box-shadow: var(--mg-shadow-sm); }
+.sp-listing-head { display: flex; align-items: flex-start; gap: 14px; width: 100%; padding: 14px; border: 0; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)) !important; text-align: left; cursor: pointer; }
+.sp-listing-head:hover { background: rgb(var(--mg-subtle)); }
+.sp-listing-head:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
+.sp-thumb { flex: none; width: 68px; height: 68px; border-radius: 10px; background: rgb(var(--mg-tint)); color: rgb(var(--mg-faint)); display: flex; align-items: center; justify-content: center; object-fit: cover; }
+.sp-price { flex: none; font: 800 23px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
+.sp-sell-bar { position: sticky; bottom: 78px; z-index: 20; display: flex; justify-content: flex-end; pointer-events: none; }
+.sp-sell-bar > * { pointer-events: auto; box-shadow: 0 6px 18px rgb(var(--mg-overlay) / .3); }
+
+/* Settings: grip, bottom bar rows and the reminder stepper */
+.sp-grip { flex: none; width: 32px; height: 40px; margin-left: -8px; border: 0; border-radius: 8px; background: transparent; color: rgb(var(--mg-faint)); display: flex; align-items: center; justify-content: center; cursor: grab; touch-action: none; }
+.sp-grip:active { cursor: grabbing; }
+.sp-grip:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
+.sp-tab-row { min-height: 52px; padding-top: 4px; padding-bottom: 4px; }
+.sp-tab-row[data-over="true"] { box-shadow: inset 0 2px 0 rgb(var(--mg-heading)); }
+.sp-tab-row[data-dragging="true"] { opacity: .5; }
+.sp-tab-row[data-off="true"] .sp-t1 { color: rgb(var(--mg-faint)); }
+.sp-stepper { display: inline-flex; align-items: center; gap: 10px; flex: none; }
+.sp-stepper button { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; border: 1.5px solid rgb(var(--mg-heading)); border-radius: 17px; background: transparent; color: rgb(var(--mg-heading)); cursor: pointer; }
+.sp-stepper button:disabled { opacity: .35; cursor: default; }
+.sp-stepper button:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
+.sp-stepper output { min-width: 56px; text-align: center; font: 700 20px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
+
+/* Policies */
+.sp-legal { padding: 16px 16px 6px; }
+.sp-legal h3 { margin: 0 0 8px; font: 700 17px/1.25 var(--mg-font); color: rgb(var(--mg-heading)); }
+.sp-legal p, .sp-legal li { margin: 0 0 10px; font: 400 15px/1.5 var(--mg-font); color: rgb(var(--mg-ink)); }
+.sp-legal ul { margin: 0 0 6px; padding-left: 20px; }
+.sp-legal li::marker { color: rgb(var(--mg-muted)); }
+.sp-legal code { font-size: 13.5px; }
+.sp-policy-title { margin: 18px 2px 12px; font: 800 28px/1.05 var(--mg-font-display); color: rgb(var(--mg-heading)); }

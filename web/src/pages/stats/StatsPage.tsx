@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { Dropdown } from '../../components/Dropdown';
-import { PageGrid } from '../../components/PageGrid';
+import { CardDropdownRow } from '../../components/CardDropdownRow';
 import { usePageWidth } from '../../components/pageWidthState';
-import { ResultsStatsNav } from '../../components/ResultsStatsNav';
-import { useIsDesktop } from '../../hooks/useMediaQuery';
-import { ChevronDown, Search } from 'lucide-react';
+import { usePageHeader } from '../../components/CompactPageBarContext';
+import { RoundSearch } from '../../components/RoundSearch';
+import { ChevronRight } from 'lucide-react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { StatsGamesView } from '../../components/stats/StatsGamesView';
@@ -17,6 +16,7 @@ import {
 import { SectionFormatLabel, StatsSubjectKind, type StatsEntry, type StatsHit, type StatsProfile } from '../../types';
 import { Chevron, RefineDisclosure, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection } from '../refine/Refine';
 import { formatPoints } from '../../lib/formatPoints';
+import '../../components/sitePages.css';
 
 /** `/stats` browses and searches; `/stats/:kind?name=` shows one rider, pony, team or club. */
 export function StatsPage() {
@@ -27,6 +27,7 @@ export function StatsPage() {
 
 function StatsBrowseView() {
   usePageWidth('wide');
+  usePageHeader({ title: 'Rider and team stats', plain: true });
   const [params, setParams] = useSearchParams();
   const kind = statsKindFromPath(params.get('kind') ?? undefined) ?? StatsSubjectKind.Rider;
   const [text, setText] = useState(() => params.get('q') ?? '');
@@ -41,70 +42,22 @@ function StatsBrowseView() {
     setParams(next, { replace: true });
   }
 
-  const desktop = useIsDesktop();
   const kindOptions = STATS_TABS.map((entry) => ({ value: String(entry.kind), label: entry.label }));
-  const kindSelect = (
-    <div className="mt-2.5 pl-3 pr-1">
-      <Dropdown
-        label="Browse by"
-        value={String(kind)}
-        options={kindOptions}
-        onChange={(value) => remember(Number(value) as StatsSubjectKind, text)}
-        buttonClassName="flex min-h-10 w-full items-stretch overflow-hidden rounded-lg border border-[rgb(var(--mg-header-line))] bg-transparent text-left text-[rgb(var(--mg-header-ink))] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-      >
-        <span className="mg-display flex min-w-0 flex-1 items-baseline gap-2 self-center px-3 text-base font-bold uppercase leading-none tracking-[0.04em]">
-          <span className="truncate">{tab.label}</span>
-        </span>
-        <span aria-hidden="true" className="flex w-11 shrink-0 items-center justify-center border-l border-[rgb(var(--mg-header-line))] bg-white/10">
-          <ChevronDown className="h-[18px] w-[18px]" />
-        </span>
-      </Dropdown>
+  return <RefinePage wide>
+    <h1 className="sr-only">Rider and team stats</h1>
+    <div className="mg-band mg-band-header sp-top pb-3 pt-0">
+      <RoundSearch band label={`Search ${tab.plural}`} placeholder={`Name of a ${STATS_KIND_LABELS[kind].toLowerCase()}`} value={text} maxLength={STATS_MAX_QUERY}
+        onChange={(next) => { setText(next); remember(kind, next); }} />
     </div>
-  );
-  const searchForm = (
-    <form role="search" className={desktop ? '' : 'pt-2.5'} onSubmit={(event) => event.preventDefault()}>
-      <label className="rf-fld">
-        <span>Search {tab.plural}</span>
-        <span className="relative flex items-center">
-          <Search aria-hidden="true" className="pointer-events-none absolute left-3 h-4 w-4 text-[rgb(var(--mg-muted))]" />
-          <input type="search" value={text} onChange={(event) => { setText(event.target.value); remember(kind, event.target.value); }} maxLength={STATS_MAX_QUERY}
-            placeholder={`Name of a ${STATS_KIND_LABELS[kind].toLowerCase()}`} autoComplete="off" enterKeyHint="search" className="!pl-9" />
-        </span>
-      </label>
-    </form>
-  );
-  const results = (
+    <div className="sp-card sp-gap">
+      <CardDropdownRow label="Show" value={String(kind)} options={kindOptions} onChange={(value) => remember(Number(value) as StatsSubjectKind, text)} />
+    </div>
     <div>
       {text.trim().length === 1 && <RefineNote>Type at least two letters to narrow the list.</RefineNote>}
       {list.status === 'loading' && <p role="status" className="rf-note">Loading…</p>}
       {list.status === 'error' && <div role="alert" className="mg-notice mt-3">{list.message}</div>}
       {list.status === 'ready' && <BrowseResults list={list} plural={tab.plural} label={tab.label} words={isSearchableQuery(text) ? tidyStatsQuery(text) : ''} />}
     </div>
-  );
-  const rail = (
-    <div className="flex flex-col gap-3">
-      <nav aria-label="Browse by" className="mg-card overflow-hidden">
-        <ul className="m-0 list-none p-0">
-          {STATS_TABS.map((entry) => (
-            <li key={entry.kind} className="border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0">
-              <button type="button" aria-current={entry.kind === kind ? 'page' : undefined} onClick={() => remember(entry.kind, text)}
-                className={`flex min-h-11 w-full items-center px-3 text-left text-[15px] ${entry.kind === kind ? 'bg-[rgb(var(--mg-tint))] font-bold text-[rgb(var(--mg-heading))]' : 'font-medium text-[rgb(var(--mg-ink))] hover:bg-[rgb(var(--mg-subtle))]'}`}>
-                {entry.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </nav>
-      {searchForm}
-    </div>
-  );
-
-  return <RefinePage wide>
-    <RefineHeader context="Across every competition" title="Rider and team stats" subtitle="Browse riders, ponies, teams and clubs, or search by name.">
-      {!desktop && kindSelect}
-    </RefineHeader>
-    <ResultsStatsNav />
-    {desktop ? <div className="pt-2.5"><PageGrid variant="left" aside={rail} asideLabel="Filters">{results}</PageGrid></div> : <>{searchForm}{results}</>}
   </RefinePage>;
 }
 
@@ -117,8 +70,7 @@ function BrowseResults({ list, plural: noun, label, words }: { list: Extract<Sta
   </div>;
   const remaining = list.total - list.items.length;
   return <>
-    <RefineSection title={label} meta={words ? `${list.total} found` : list.total} />
-    <RefineList label={label}>{list.items.map((hit) => <HitRow key={hit.key} hit={hit} />)}</RefineList>
+    <ul className="sp-card sp-gap m-0 list-none p-0" aria-label={label}>{list.items.map((hit) => <HitRow key={hit.key} hit={hit} />)}</ul>
     {list.moreError && <div role="alert" className="mg-notice mt-3">{list.moreError}</div>}
     {remaining > 0 && <button type="button" className="rf-btn rf-wide mt-3" disabled={list.loadingMore} onClick={list.loadMore}>
       {list.loadingMore ? 'Loading…' : `Show more (${remaining} left)`}
@@ -128,9 +80,9 @@ function BrowseResults({ list, plural: noun, label, words }: { list: Extract<Sta
 }
 
 function HitRow({ hit }: { hit: StatsHit }) {
-  return <li><Link to={statsProfileHref(hit.kind, hit.key)} className="rf-row">
-    <span className="rf-grow"><span className="rf-t1">{hit.name}</span><span className="rf-t2">{plural(hit.competitions, 'competition')}</span></span>
-    <Chevron />
+  return <li><Link to={statsProfileHref(hit.kind, hit.key)} className="sp-row">
+    <span className="sp-t1 sp-big sp-grow">{hit.name}</span>
+    <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
   </Link></li>;
 }
 
@@ -159,15 +111,22 @@ const PARTNER_TITLES: Record<StatsSubjectKind, string> = { 0: 'Ponies ridden', 1
 function ProfileBody({ profile }: { profile: StatsProfile }) {
   const location = useLocation();
   const { summary } = profile;
+  // A team's per-game figures are public; the API leaves them out for riders and ponies until you sign in.
+  const games = profile.detailed || profile.games != null ? <>
+    <RefineSection title={profile.raceFiguresAllFormats ? 'Games' : 'Games in individual and pairs'} meta={profile.games?.length ?? 0} />
+    <StatsGamesView games={profile.games ?? []} best={profile.bestGames ?? []} worst={profile.worstGames ?? []}
+      emptyText={profile.raceFiguresAllFormats ? 'No races to show yet.' : 'No individual or pairs races yet. Team competitions are listed below.'} />
+  </> : null;
   return <>
     <StatsSummaryView summary={summary} raceFiguresAllFormats={profile.raceFiguresAllFormats} />
-    {!profile.detailed ? <div className="mt-3 rounded-[10px] border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-subtle))] p-3">
-      <p className="m-0 text-sm">Sign in to see each game, every competition and the rider and pony partnerships.</p>
-      <Link to="/login" state={{ from: location.pathname + location.search }} className="rf-btn rf-btn-primary mt-2">Sign in</Link>
-    </div> : <>
-      <RefineSection title={profile.raceFiguresAllFormats ? 'Games' : 'Games in individual and pairs'} meta={profile.games?.length ?? 0} />
-      <StatsGamesView games={profile.games ?? []} best={profile.bestGames ?? []} worst={profile.worstGames ?? []}
-        emptyText={profile.raceFiguresAllFormats ? 'No races to show yet.' : 'No individual or pairs races yet. Team competitions are listed below.'} />
+    {!profile.detailed ? <>
+      {games}
+      <div className="mt-3 rounded-[10px] border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-subtle))] p-3">
+        <p className="m-0 text-sm">{games ? 'Sign in to see every competition and the rider and pony partnerships.' : 'Sign in to see each game, every competition and the rider and pony partnerships.'}</p>
+        <Link to="/login" state={{ from: location.pathname + location.search }} className="rf-btn rf-btn-primary mt-2">Sign in</Link>
+      </div>
+    </> : <>
+      {games}
       <RefineSection title="Competitions" meta={profile.entries?.length ?? 0} />
       {profile.entries?.length ? <RefineList as="div" label="Competitions">{profile.entries.map((entry) => <EntryRow key={`${entry.teamId}`} entry={entry} />)}</RefineList>
         : <RefineNote>No finished competitions yet.</RefineNote>}

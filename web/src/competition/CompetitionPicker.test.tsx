@@ -36,6 +36,11 @@ function renderPicker(props: Parameters<typeof CompetitionPicker>[0] = {}) {
   );
 }
 const loaded = (name: string | RegExp) => screen.findByText(name);
+/** Opens a dropdown row such as "Year" and picks one of its options. */
+async function choose(row: RegExp, option: string) {
+  await userEvent.click(screen.getByRole('combobox', { name: row }));
+  await userEvent.click(screen.getByRole('option', { name: option }));
+}
 
 beforeEach(() => {
   authState.user = { id: 'example-member' };
@@ -119,27 +124,38 @@ describe('CompetitionPicker: the list', () => {
     expect(get).toHaveBeenCalledWith('/competitions/picker', expect.objectContaining({ params: { past: true, page: 1 } }));
     expect(screen.getByRole('heading', { level: 1, name: 'Past competitions' })).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'On today' })).not.toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Finished' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '2026' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Finished' })).not.toBeInTheDocument();
     expect(screen.getByText('Sat 7 Nov 2026 · Hillside')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Back to upcoming competitions/ })).toHaveAttribute('href', '/events');
-    expect(screen.queryByRole('link', { name: 'See past competitions' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Back to upcoming competitions/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Past competitions' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Year|Location/ })).not.toBeInTheDocument();
   });
 
-  it('has no Upcoming/Past switch at the top, and puts "See past competitions" at the bottom of the list', async () => {
+  it('groups the archive under a heading for each year', async () => {
+    reply(page([autumn, { ...festival, startDate: '2025-11-14T09:00:00', endDate: null }]));
+    renderPicker({ past: true });
+    await loaded('Autumn Open');
+    expect(screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)).toEqual(['2026', '2025']);
+  });
+
+  it('shows a plain "Past competitions" link at the bottom of the list, not a bar, and no Upcoming/Past switch', async () => {
     renderPicker();
     await loaded('Autumn Open');
     expect(screen.queryByRole('link', { name: 'Upcoming' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Past' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Back to upcoming competitions/ })).not.toBeInTheDocument();
-    const seePast = screen.getByRole('link', { name: 'See past competitions' });
+    const seePast = screen.getByRole('link', { name: 'Past competitions' });
     expect(seePast).toHaveAttribute('href', '/competitions/past');
+    expect(seePast).toHaveClass('sp-link');
+    expect(seePast).not.toHaveClass('mg-btn');
     expect(screen.getByRole('button', { name: /Weekend Fest/ }).compareDocumentPosition(seePast) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('goes to the past list from the link, and back from there', async () => {
     renderPicker();
     await loaded('Autumn Open');
-    await userEvent.click(screen.getByRole('link', { name: 'See past competitions' }));
+    await userEvent.click(screen.getByRole('link', { name: 'Past competitions' }));
     expect(screen.getByTestId('probe')).toHaveTextContent('/competitions/past');
   });
 
@@ -235,7 +251,7 @@ describe('CompetitionPicker: search and tags', () => {
     expect(within(later).getByRole('button', { name: /Weekend Fest/ })).not.toHaveTextContent('Demo event');
     expect(within(later).getByRole('button', { name: /Weekend Fest/ })).not.toHaveTextContent('Entries open');
     const onToday = screen.getByRole('region', { name: 'On today' });
-    expect(onToday).toHaveTextContent('Entries open');
+    expect(onToday).not.toHaveTextContent('Entries open');
     expect(onToday).not.toHaveTextContent('Demo event');
   });
 
@@ -249,14 +265,19 @@ describe('CompetitionPicker: search and tags', () => {
     renderPicker({ past: true });
     await loaded('Autumn Open');
     expect(screen.queryByText('Summer Classic')).not.toBeInTheDocument();
-    expect(screen.getByRole('option', { name: '2025' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('combobox', { name: /Year/ }));
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['All years', '2026', '2025']);
+    await userEvent.click(screen.getByRole('option', { name: '2025' }));
+    await loaded('Summer Classic');
+    await choose(/Year/, 'All years');
+    await loaded('Autumn Open');
     await userEvent.click(screen.getByRole('button', { name: 'Load more competitions' }));
     await waitFor(() => expect(get).toHaveBeenLastCalledWith('/competitions/picker', expect.objectContaining({ params: { past: true, page: 2 } })));
-    await userEvent.selectOptions(screen.getByLabelText('Filter by year'), '2025');
+    await choose(/Year/, '2025');
     await loaded('Summer Classic');
     expect(get).toHaveBeenLastCalledWith('/competitions/picker', expect.objectContaining({ params: { past: true, page: 1, year: 2025 } }));
     expect(screen.queryByText('Autumn Open')).not.toBeInTheDocument();
-    await userEvent.selectOptions(screen.getByLabelText('Filter by location'), 'York');
+    await choose(/Location/, 'York');
     await waitFor(() => expect(get).toHaveBeenLastCalledWith('/competitions/picker', expect.objectContaining({ params: { past: true, page: 1, year: 2025, location: 'York' } })));
     await userEvent.type(screen.getByRole('searchbox'), 'Summer');
     await waitFor(() => expect(get).toHaveBeenLastCalledWith('/competitions/picker', expect.objectContaining({ params: { past: true, page: 1, year: 2025, location: 'York', search: 'Summer' } })));
@@ -267,7 +288,7 @@ describe('CompetitionPicker: search and tags', () => {
     get.mockImplementation(async (url) => ({ data: page(url.endsWith('/mine') ? [mine] : [autumn]), headers: {} }));
     const { rerender } = renderPicker({ past: true });
     await loaded('Autumn Open');
-    await userEvent.click(screen.getByRole('button', { name: 'My club / competitions I rode in' }));
+    await userEvent.click(screen.getByRole('switch', { name: 'My club / competitions I rode in' }));
     await loaded('Example member event');
     expect(get).toHaveBeenLastCalledWith('/competitions/picker/mine', expect.objectContaining({ params: { past: true, page: 1 } }));
     expect(readSavedCopy<CompetitionPickerPage>(savedCopyKeys.picker(true))?.data.items).toEqual([autumn]);
@@ -276,14 +297,15 @@ describe('CompetitionPicker: search and tags', () => {
     get.mockReturnValue(new Promise(() => {}));
     rerender(<MemoryRouter><CurrentCompetitionProvider><CompetitionPicker past /></CurrentCompetitionProvider></MemoryRouter>);
     expect(screen.queryByText('Example member event')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'My club / competitions I rode in' })).toBeDisabled();
+    expect(screen.getByRole('switch', { name: 'My club / competitions I rode in' })).toBeDisabled();
+    expect(screen.getByText('Sign in to see your club’s competitions.')).toBeInTheDocument();
   });
 
   it('does not show or save another filter’s page when a filtered request fails', async () => {
     reply({ ...page([autumn]), years: [2026, 2025], locations: ['Hillside'] });
     renderPicker({ past: true }); await loaded('Autumn Open');
     get.mockRejectedValue(new Error('offline'));
-    await userEvent.selectOptions(screen.getByLabelText('Filter by year'), '2025');
+    await choose(/Year/, '2025');
     await screen.findByRole('alert');
     expect(screen.queryByText('Autumn Open')).not.toBeInTheDocument();
     expect(readSavedCopy<CompetitionPickerPage>(savedCopyKeys.picker(true))?.data.items).toEqual([autumn]);
@@ -304,12 +326,12 @@ describe('CompetitionPicker: more pages', () => {
     expect(screen.queryByRole('button', { name: 'Load more competitions' })).not.toBeInTheDocument();
   });
 
-  it('keeps the list and shows "Checking for changes…" while the next page loads', async () => {
+  it('keeps the list, and says nothing about checking for changes, while the next page loads', async () => {
     get.mockResolvedValueOnce({ data: page([autumn], true), headers: {} } as never).mockReturnValueOnce(new Promise(() => {}));
     renderPicker();
     await loaded('Autumn Open');
     await userEvent.click(screen.getByRole('button', { name: 'Load more competitions' }));
-    expect(screen.getByText('Checking for changes…')).toBeInTheDocument();
+    expect(screen.queryByText('Checking for changes…')).not.toBeInTheDocument();
     expect(screen.getByText('Autumn Open')).toBeInTheDocument();
   });
 
@@ -392,12 +414,12 @@ describe('CompetitionPicker: saved copies', () => {
     expect(readSavedCopy<CompetitionPickerPage>(savedCopyKeys.picker(false))?.data.items.map((i) => i.id)).toEqual([2]);
   });
 
-  it('shows last time’s list straight away while it checks for changes', async () => {
+  it('shows last time’s list straight away, with no "checking" line, while it checks for changes', async () => {
     writeSavedCopy(savedCopyKeys.picker(false), page([festival]), savedAt(60));
     get.mockReturnValue(new Promise(() => {}));
     renderPicker();
     expect(screen.getByText('Weekend Fest')).toBeInTheDocument();
-    expect(screen.getByText('Checking for changes…')).toBeInTheDocument();
+    expect(screen.queryByText('Checking for changes…')).not.toBeInTheDocument();
     expect(screen.queryByText('Showing a saved list. It will refresh when your connection returns.')).not.toBeInTheDocument();
   });
 

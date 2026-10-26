@@ -146,19 +146,20 @@ describe('navigation drawer and settings page', () => {
 
   it('links to Settings from the drawer and keeps the Lite mode control on the Settings page', async () => {
     const { unmount } = drawer(undefined);
-    expect(screen.queryByRole('group', { name: 'Lite mode' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: /Lite mode/ })).toBeNull();
     expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
     unmount();
 
     settingsPage(undefined);
-    await userEvent.click(screen.getByRole('button', { name: 'On' }));
-    expect(screen.getByRole('status')).toHaveTextContent('On because you chose it');
+    await userEvent.click(screen.getByRole('combobox', { name: /Lite mode/ }));
+    await userEvent.click(screen.getByRole('option', { name: 'On' }));
+    expect(screen.getByRole('combobox', { name: /Lite mode/ })).toHaveTextContent('On');
     expect(localStorage.getItem('mg.liteMode')).toBe('on');
   });
 
   it('shows the Lite mode section on the Settings page for the header chip anchor', () => {
     settingsPage(undefined);
-    expect(screen.getByRole('group', { name: 'Lite mode' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: /Lite mode/ })).toBeInTheDocument();
   });
 
   it('hides the weather row in lite mode even when weather is switched on', async () => {

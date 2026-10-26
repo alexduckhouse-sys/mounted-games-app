@@ -347,10 +347,51 @@ public class StatsEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal((StatsSubjectKind.Club, 2, 3, 2), (club.Kind, club.Summary.Competitions, club.Summary.Entries, club.Summary.PlacedEntries));
         Assert.Contains(club.Partnerships!, p => p.RiderName == $"Hc{s.U} Rider");
 
+        // A team's per-game figures are public. The entries and the partnerships, which name riders, are not.
         var anon = await (await _f.CreateClient().GetAsync(Url("teams", s.ClubA))).ReadAsync<StatsProfileDto>();
-        Assert.Null(anon.Games);
+        Assert.False(anon.Detailed);
+        Assert.Equal(team.Games!.Select(g => g.Name), anon.Games!.Select(g => g.Name));
+        Assert.Equal(team.BestGames, anon.BestGames);
+        Assert.Equal(team.WorstGames, anon.WorstGames);
+        Assert.Null(anon.Entries);
         Assert.Null(anon.Partnerships);
         Assert.Equal(2, anon.Summary.Entries);
+
+        // A club is not a team profile: its games still need a sign-in.
+        var anonClub = await (await _f.CreateClient().GetAsync(Url("clubs", s.Club))).ReadAsync<StatsProfileDto>();
+        Assert.Null(anonClub.Games);
+        Assert.Null(anonClub.BestGames);
+        Assert.Null(anonClub.WorstGames);
+    }
+
+    [Fact]
+    public async Task TeamGames_ArePublic_ButRiderAndPonyGamesAndEveryKindsRiderNamesAreNot()
+    {
+        var s = await SeedScenarioAsync();
+        var anon = _f.CreateClient();
+
+        var team = await anon.GetAsync(Url("teams", s.ClubA));
+        var raw = await team.Content.ReadAsStringAsync();
+        var profile = await team.ReadAsync<StatsProfileDto>();
+        Assert.Equal(["Bending", "Mug Race", "Flag Race"], profile.Games!.Select(g => g.Name));
+        var bending = profile.Games![0];
+        Assert.Equal((1, 1, 100.0), (bending.Races, bending.Wins, bending.PointQuotaPercent));
+        Assert.NotNull(bending.AveragePoints);
+        Assert.NotNull(bending.AveragePlace);
+        // Nothing that names a rider or a pony, and no referee's note, comes with the games.
+        Assert.DoesNotContain(s.Pony, raw);
+        Assert.DoesNotContain($"Smith{s.U}", raw, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(s.Secret, raw);
+
+        foreach (var (path, name) in new[] { ("riders", s.OllyShown), ("ponies", s.Pony), ("clubs", s.Club) })
+        {
+            var other = await (await anon.GetAsync(Url(path, name))).ReadAsync<StatsProfileDto>();
+            Assert.Null(other.Games);
+            Assert.Null(other.BestGames);
+            Assert.Null(other.WorstGames);
+            Assert.Null(other.Entries);
+            Assert.Null(other.Partnerships);
+        }
     }
 
     [Fact]
@@ -414,11 +455,17 @@ public class StatsEndpointsTests : IClassFixture<ApiFactory>
         var anon = await (await _f.CreateClient().GetAsync($"/api/stats/team-profiles/{profileId}")).ReadAsync<StatsProfileDto>();
         Assert.Equal((StatsSubjectKind.Team, s.ClubA, profileId.ToString(), false), (anon.Kind, anon.Name, anon.Key, anon.Detailed));
         Assert.Equal((2, 3), (anon.Summary.Entries, anon.Summary.Races));
-        Assert.Null(anon.Games);
+        // The per-game figures are public for a team profile; the entries and partnerships are not.
+        Assert.Equal(3, anon.Games!.Count);
+        Assert.NotEmpty(anon.BestGames!);
+        Assert.Null(anon.Entries);
+        Assert.Null(anon.Partnerships);
 
         var (member, _) = await _f.SignupAsync("Member");
         var detailed = await (await member.GetAsync($"/api/stats/team-profiles/{profileId}")).ReadAsync<StatsProfileDto>();
         Assert.Equal(3, detailed.Games!.Count);
+        Assert.Equal(detailed.Games.Select(g => g.Name), anon.Games.Select(g => g.Name));
+        Assert.NotNull(detailed.Entries);
     }
 
     [Fact]

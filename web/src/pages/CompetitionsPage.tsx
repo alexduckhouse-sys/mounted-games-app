@@ -1,15 +1,6 @@
 import { CompetitionPicker } from '../competition/CompetitionPicker';
-import { ResultsStatsNav } from '../components/ResultsStatsNav';
 
+/** `/events` and `/competitions` list what is coming up; `/competitions/past` is the archive. */
 export function CompetitionsPage({ past = false }: { past?: boolean }) {
-  return (
-    <>
-      {past && (
-        <div className="mg-band mg-band-header pb-2 pt-0.5 [&_[aria-current=page]]:!border-white/70">
-          <ResultsStatsNav />
-        </div>
-      )}
-      <CompetitionPicker past={past} />
-    </>
-  );
+  return <CompetitionPicker past={past} />;
 }

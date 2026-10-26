@@ -1,7 +1,7 @@
 import { usePageWidth } from '../components/pageWidthState';
 import { useEffect, useId, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, History, PinOff, Search } from 'lucide-react';
+import { ChevronRight, PinOff } from 'lucide-react';
 import { api } from '../api';
 import type { CompetitionPickerItem, CompetitionPickerPage } from '../types';
 import { useCurrentCompetition } from './CurrentCompetitionContext';
@@ -13,6 +13,10 @@ import { lastUpdatedText, readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, sh
 import { CompetitionListSkeleton } from '../components/Skeletons';
 import { usePageHeader } from '../components/CompactPageBarContext';
 import { useAuth } from '../auth/AuthContext';
+import { CardDropdownRow } from '../components/CardDropdownRow';
+import { RoundSearch } from '../components/RoundSearch';
+import { RefineSwitchRow } from '../pages/refine/Refine';
+import '../components/sitePages.css';
 
 /** The events page: upcoming competitions, with the past ones a link away at the bottom. */
 export function CompetitionPicker({ past = false }: { past?: boolean }) {
@@ -92,6 +96,16 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
   const now = new Date();
   const onToday = past ? [] : matches.filter((item) => isOnToday(item.startDate, item.endDate, now));
   const later = matches.filter((item) => !onToday.includes(item));
+  // The archive is grouped by year, newest first as the server sends it; upcoming events are one "Coming up" list.
+  const groups = past
+    ? later.reduce<{ heading: string; items: CompetitionPickerItem[] }[]>((all, item) => {
+      const year = new Date(item.startDate).getFullYear();
+      const heading = Number.isNaN(year) ? 'Earlier' : String(year);
+      const last = all[all.length - 1];
+      if (last?.heading === heading) last.items.push(item); else all.push({ heading, items: [item] });
+      return all;
+    }, [])
+    : [{ heading: 'Coming up', items: later }];
   const choose = (competition: CompetitionPickerItem) => {
     setCurrent({ id: competition.id, name: competition.name });
     navigate(`/competitions/${competition.id}`);
@@ -104,35 +118,21 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
     <section className="mg-font mx-auto flex w-full max-w-xl flex-col gap-3.5 pb-5 lg:max-w-none" aria-labelledby={headingId}>
       <PlainHeader past={past} />
       <h1 id={headingId} className="sr-only">{past ? 'Past competitions' : 'Competitions'}</h1>
-      <div className="mg-band mg-band-header flex flex-col gap-2 pb-3 pt-0">
-        <label className="mg-navy-field">
-          <Search className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
-          <span className="sr-only">Search competitions</span>
-          <input type="search" placeholder="Name or venue" value={search} onChange={(event) => { setSearch(event.target.value); if (past) setPage(1); }} />
-        </label>
-        {past && (
-          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Archive filters">
-            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-white">
-              <span>Year</span>
-              <select aria-label="Filter by year" value={yearFilter} onChange={(e) => { setYearFilter(e.target.value); setPage(1); }} className="rounded bg-white/15 px-2 py-1 text-xs text-white">
-                <option value="all">All years</option>
-                {years.map((y) => <option key={y} value={String(y)}>{y}</option>)}
-              </select>
-            </label>
-            <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-white">
-              <span>Location</span>
-              <select aria-label="Filter by location" value={locationFilter} onChange={(e) => { setLocationFilter(e.target.value); setPage(1); }} className="rounded bg-white/15 px-2 py-1 text-xs text-white">
-                <option value="all">All locations</option>
-                {locations.map((r) => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </label>
-            <button type="button" disabled={!user} aria-pressed={mineOnly} onClick={() => { setMineOnly((v) => !v); setPage(1); }} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${mineOnly ? 'bg-white text-[rgb(var(--mg-heading))]' : 'bg-white/15 text-white'}`}>
-              My club / competitions I rode in
-            </button>
-          </div>
-        )}
-        {past && <Link to="/events" className="inline-flex min-h-11 items-center gap-1 self-start text-[13px] font-semibold !text-white !no-underline"><ChevronLeft className="h-4 w-4" aria-hidden="true" />Back to upcoming competitions</Link>}
+      <div className="mg-band mg-band-header pb-3 pt-0">
+        <RoundSearch band label="Search competitions" placeholder="Name or venue" value={search} onChange={(text) => { setSearch(text); if (past) setPage(1); }} />
       </div>
+      {past && (
+        <div role="group" aria-label="Archive filters">
+          <div className="sp-card">
+            <CardDropdownRow label="Year" value={yearFilter} onChange={(value) => { setYearFilter(value); setPage(1); }}
+              options={[{ value: 'all', label: 'All years' }, ...years.map((y) => ({ value: String(y), label: String(y) }))]} />
+            <CardDropdownRow label="Location" value={locationFilter} onChange={(value) => { setLocationFilter(value); setPage(1); }}
+              options={[{ value: 'all', label: 'All locations' }, ...locations.map((r) => ({ value: r, label: r }))]} />
+            <RefineSwitchRow label="My club / competitions I rode in" on={mineOnly} disabled={!user} onChange={(next) => { setMineOnly(next); setPage(1); }} />
+          </div>
+          {!user && <p className="sp-note">Sign in to see your club’s competitions.</p>}
+        </div>
+      )}
       {current && (
         <button type="button" onClick={forgetCurrent} className="mg-btn mg-btn-secondary w-full">
           <PinOff className="h-4 w-4" aria-hidden="true" />Forget this competition<span className="sr-only">: {current.name}</span>
@@ -141,27 +141,27 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
       {!mineOnly && state.savedCopy && !loading && shouldNoticeSavedCopy(state.savedAt, true, now) && <p role="status" className="mg-notice">{lastUpdatedText(state.savedAt, now)}. We’ll refresh when you’re back online.</p>}
       <div className="flex flex-col gap-3.5" aria-busy={loading}>
         {onToday.length > 0 && (
-          <section className="mg-sec" aria-label="On today">
-            <div className="mg-sec-head"><h2>On today</h2></div>
+          <section aria-label="On today">
+            <h2 className="sp-sec sp-first">On today</h2>
             <div className="mg-cards-grid flex flex-col gap-1.5">
               {onToday.map((competition) => <TodayCard key={competition.id} competition={competition} selected={current?.id === competition.id} onChoose={() => choose(competition)} />)}
             </div>
           </section>
         )}
-        {later.length > 0 && (
-          <section className="mg-sec" aria-label={past ? 'Finished' : 'Coming up'}>
-            <div className="mg-sec-head"><h2>{past ? 'Finished' : 'Coming up'}</h2></div>
+        {later.length > 0 && groups.map((group) => (
+          <section key={group.heading} aria-label={group.heading}>
+            <h2 className="sp-sec sp-first">{group.heading}</h2>
             <div className="mg-lines mg-lines-grid">
-              {later.map((competition) => <CompetitionRow key={competition.id} competition={competition} past={past} selected={current?.id === competition.id} onChoose={() => choose(competition)} />)}
+              {group.items.map((competition) => <CompetitionRow key={competition.id} competition={competition} past={past} selected={current?.id === competition.id} onChoose={() => choose(competition)} />)}
             </div>
           </section>
-        )}
-        {loading && (state.items.length === 0 ? <CompetitionListSkeleton /> : <p role="status" className="mg-meta py-3 text-center">Checking for changes…</p>)}
+        ))}
+        {loading && state.items.length === 0 && <CompetitionListSkeleton />}
         {!loading && state.error && <div className="mg-card flex flex-col items-start gap-3 p-4" role="alert"><p>Couldn’t load competitions. Check your connection and try again.</p><button className="mg-btn mg-btn-primary" onClick={onRetry}>Try again</button></div>}
         {!loading && !state.error && state.items.length === 0 && <p className="mg-card p-4">{!unfiltered ? 'No competitions match those filters.' : past ? 'No past competitions yet.' : 'No competitions available yet.'}</p>}
         {!loading && !state.error && state.items.length > 0 && matches.length === 0 && <p className="mg-card p-4">No competitions match that search.{state.hasMore ? ' Load more to search further back.' : ''}</p>}
         {!loading && !state.error && state.hasMore && <button className="mg-btn mg-btn-secondary w-full" onClick={() => setPage((value) => value + 1)}>Load more competitions</button>}
-        {!past && <Link to="/competitions/past" className="mg-btn mg-btn-secondary w-full"><History className="h-4 w-4" aria-hidden="true" />See past competitions</Link>}
+        {!past && <p className="m-0 text-center"><Link to="/competitions/past" className="sp-link">Past competitions</Link></p>}
       </div>
     </section>
   );
@@ -181,17 +181,15 @@ function Tags({ competition }: { competition: CompetitionPickerItem }) {
 function TodayCard({ competition, selected, onChoose }: { competition: CompetitionPickerItem; selected: boolean; onChoose: () => void }) {
   const details = [competition.location?.trim(), competitionDateText(competition.startDate, competition.endDate)].filter(Boolean).join(' · ');
   return (
-    <div className={`mg-card flex flex-col gap-1.5 !rounded-[10px] py-3 pl-3.5 pr-3 ${competition.live ? 'shadow-[inset_3px_0_0_rgb(var(--mg-red))]' : ''}`}>
+    <div className={`mg-card flex flex-col gap-1.5 !rounded-[10px] py-3.5 pl-3.5 pr-3 ${competition.live ? 'shadow-[inset_3px_0_0_rgb(var(--mg-red))]' : ''}`}>
       <span className="flex min-w-0 items-center gap-2">
         {competition.live && <span className="mg-badge mg-badge-live !h-5 !rounded-[4px] !px-[7px] text-[11px] font-bold tracking-[0.06em]">LIVE</span>}
-        <strong className="min-w-0 flex-1 break-words text-base font-bold leading-tight">{competition.name}</strong>
+        <strong className="min-w-0 flex-1 break-words text-lg font-bold leading-tight">{competition.name}</strong>
       </span>
       {details && <span className="mg-meta">{details}</span>}
-      {competition.live && <span className="text-[13px]">{liveLine(competition.live)}</span>}
-      {competition.entriesOpen && <span className="flex flex-wrap gap-1.5"><Tags competition={competition} /></span>}
-      <button aria-pressed={selected} onClick={onChoose} className="mg-btn mg-btn-primary mt-1 !min-h-11 w-full !rounded-lg !text-[15px]">
+      {competition.live && <span className="text-[15px]">{liveLine(competition.live)}</span>}
+      <button aria-pressed={selected} onClick={onChoose} className="sp-pill sp-pill-fill mt-1.5 self-start">
         Open competition<span className="sr-only">: {competition.name}</span>
-        <ChevronRight className="h-4 w-4" strokeWidth={2.5} aria-hidden="true" />
       </button>
     </div>
   );

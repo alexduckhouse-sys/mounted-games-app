@@ -211,3 +211,9 @@
 - A test send goes only to the signed-in admin's own address, marked `[Test]`; a preview and a test touch no list.
 - Locked and blocked accounts, the shared `admin@mg.local` account and any `@mg.local` or `.mg.local` address are left out of every audience.
 - Files: `api/Services/Email/CustomEmailService.cs`, `CustomEmailRenderer.cs`, `api/Controllers/CustomEmailsController.cs`, `api/Entities/CustomEmail.cs`, migration `AddCustomEmails`.
+
+## 2026-10-26: A team profile's per-game figures are public
+- Why: the redesigned team profile (`/team-profiles/:id`) shows a "By game" list (races, wins, average points and place, point quota) to everyone. Before this, `StatsService` sent every per-game figure only to signed-in viewers. No privacy reason for that is recorded in the code or these notes; it was a "sign in for more detail" split.
+- Rule: for a **team** profile (`StatsSubjectKind.Team`, which covers both `/api/stats/teams` and `/api/stats/team-profiles/{id}`) an anonymous caller now gets `Games`, `BestGames` and `WorstGames`. These are totals over the team's own race results, which public results pages already show; no rider or pony is named in them and no referee's note is read.
+- Unchanged: riders, ponies and clubs still need a sign-in for their games, and every kind still needs one for `Entries`, `Partnerships`, `Clubs` and `Seasons` (partnerships name riders and ponies). `Detailed` still means "signed in".
+- Files: `api/Services/Stats/StatsService.cs`, tests in `tests/MountedGames.Api.Tests/Stats/StatsEndpointsTests.cs`.
