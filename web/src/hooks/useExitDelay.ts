@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStillMotion } from '../lite/useStillMotion';
 
-/** How long a sheet, drawer or dialog takes to leave. Its CSS leave animation matches. */
-export const EXIT_MS = 200;
+/** How long a sheet, drawer or dialog takes to leave: long enough for the dim behind it to fade out (skin.css). */
+export const EXIT_MS = 380;
 
 /**
  * Lets something that its parent removes on close play a leave animation first. `close()` marks it `closing`
