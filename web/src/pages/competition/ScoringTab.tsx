@@ -142,7 +142,8 @@ function AgeGroupRail({ sections, teams, value, onChange }: {
 
 /**
  * One page per age group: the navy age group bar, then three tabs. Heats is the draw, Scores holds the heat tables
- * and Toplist the standings. The menu opens it on Heats and the Toplists bottom tab on Toplist (`startOn`).
+ * and Toplist the standings. The menu opens it on Heats and the Toplists bottom tab on Toplist (`startOn`), with Toplist
+ * the first tab there.
  */
 export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   const { competition, reload } = useCompetition();
@@ -317,11 +318,10 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
     return rail ? <PageGrid variant="left" aside={rail} asideLabel="Age groups" className="pt-3">{empty}</PageGrid> : empty;
   }
 
-  const subTabs: [SectionSubTab, string][] = [
-    ['draw', 'Heats'],
-    ['scores', 'Scores'],
-    ['toplist', 'Toplist'],
-  ];
+  // The Toplists page leads with Toplist; from the menu Heats comes first.
+  const subTabs: [SectionSubTab, string][] = startOn === 'toplist'
+    ? [['toplist', 'Toplist'], ['draw', 'Heats'], ['scores', 'Scores']]
+    : [['draw', 'Heats'], ['scores', 'Scores'], ['toplist', 'Toplist']];
   // The tabs sit in the navy bar under the age group on phones; beside the age group rail on a laptop they are plain.
   const tabBar = (
     <div className={rail ? 'pb-3' : 'mg-band-header pb-2.5 pt-1'}>
