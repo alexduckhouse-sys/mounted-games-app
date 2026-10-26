@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Seasons;
+using MountedGames.Api.Services.DecForms;
 using MountedGames.Api.Tests.Infrastructure;
 
 namespace MountedGames.Api.Tests.EventTools;
@@ -163,7 +164,7 @@ public class EventToolsEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task CloneCopiesOnlySetupAndShiftsDates()
+    public async Task CloneCopiesTheSetupWithoutTeamsResultsEntriesOrPayments()
     {
         var source = await ArrangeCloneSourceAsync();
         var trainer = await _f.TrainerAsync();
@@ -174,31 +175,67 @@ public class EventToolsEndpointsTests : IClassFixture<ApiFactory>
         var clone = await response.ReadAsync<CloneCompetitionResultDto>();
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        Assert.Equal((1, 1, 1, 1, 1), (clone.Sections, clone.Teams, clone.Sessions, clone.Heats, clone.Races));
+        Assert.Equal((1, 0, 2, 0, 0), (clone.Sections, clone.Teams, clone.Sessions, clone.Heats, clone.Races));
         await _f.WithDbAsync(async db =>
         {
             var copied = await db.Competitions.AsSplitQuery()
                 .Include(x => x.Sections).ThenInclude(x => x.Signups)
-                .Include(x => x.Teams).ThenInclude(x => x.DeclarationForms)
-                .Include(x => x.Sessions).ThenInclude(x => x.Heats).ThenInclude(x => x.Races).ThenInclude(x => x.Results)
+                .Include(x => x.Sessions).ThenInclude(x => x.Heats)
                 .SingleAsync(x => x.Id == clone.CompetitionId);
             Assert.Equal(start, copied.StartDate);
-            Assert.Null(copied.PaymentDestination);
-            Assert.Null(copied.OrganiserName);
-            Assert.Null(Assert.Single(copied.Teams).TrainerUserId);
-            Assert.Null(Assert.Single(copied.Teams).SupporterJoinKey);
-            Assert.Empty(copied.Sections.Single().Signups);
-            Assert.Empty(copied.Teams.Single().DeclarationForms);
-            var session = Assert.Single(copied.Sessions);
-            Assert.Equal(6, session.LanesPerHeat);
-            Assert.Equal(start.AddHours(1), session.ScheduledStart);
-            Assert.Equal(SessionStatus.Upcoming, session.Status);
-            var heat = Assert.Single(session.Heats);
-            Assert.Equal(start.AddHours(1), heat.ScheduledStart);
-            Assert.Empty(Assert.Single(heat.Races).Results);
-            Assert.False(heat.Races.Single().IsComplete);
-            Assert.Single(await db.Set<EventTeamProfileLink>().Where(x => x.CompetitionId == clone.CompetitionId).ToListAsync());
+            // Set-up: hatbands, payment details, terms and the dec form setup come across.
+            Assert.Equal("Private destination", copied.PaymentDestination);
+            Assert.Equal("[\"Red\",\"Blue\"]", copied.LaneHatbands);
+            Assert.Equal("Our terms", copied.TermsText);
+            Assert.NotNull(copied.DecFormConfigJson);
+            var section = Assert.Single(copied.Sections);
+            Assert.Equal((TieBreakRule.LastRace, 4, 1500), (section.TieBreakRule, section.FinalistCount, section.PriceMinor));
+            // Nothing that belongs to last year's entrants.
+            Assert.Empty(section.Signups);
+            Assert.Empty(await db.Teams.Where(t => t.CompetitionId == clone.CompetitionId).ToListAsync());
+            Assert.Empty(await db.Results.Where(r => r.Race!.Heat!.Session!.CompetitionId == clone.CompetitionId).ToListAsync());
+            Assert.Empty(await db.Set<EventTeamProfileLink>().Where(x => x.CompetitionId == clone.CompetitionId).ToListAsync());
+            // Timetable plan: sessions keep their shape and move with the dates; heats stay behind.
+            var sessions = copied.Sessions.OrderBy(x => x.OrderIndex).ToList();
+            Assert.Empty(sessions[0].Heats); // an ordinary session's heats are drawn again for the new event
+            var race = sessions[0];
+            Assert.Equal(6, race.LanesPerHeat);
+            Assert.Equal(start.AddHours(1), race.ScheduledStart);
+            Assert.Equal(SessionStatus.Upcoming, race.Status);
+            Assert.Equal("[\"Bending\",\"Mug\"]", race.PlannedRaces);
+            Assert.Equal(copied.Sections.Single().Id, race.CompetitionSectionId);
+            var lunch = sessions[1];
+            Assert.Equal((SessionKind.Break, "Lunch for all"), (lunch.Kind, lunch.Notes));
+            Assert.Null(lunch.CompetitionSectionId);
         });
+    }
+
+    [Fact]
+    public async Task CloneTakesTheRaceListFromTheFirstHeatWhenNoneWasPlanned()
+    {
+        var source = await ArrangeCloneSourceAsync(plannedRaces: false);
+        var trainer = await _f.TrainerAsync();
+        var start = new DateTime(2035, 9, 12, 9, 0, 0, DateTimeKind.Utc);
+        var clone = await (await trainer.PostAsJsonAsync($"/api/event-tools/competitions/{source.CompetitionId}/clone",
+            new CloneCompetitionRequest("From heats", start, null))).ReadAsync<CloneCompetitionResultDto>();
+
+        var planned = await _f.WithDbAsync(db => db.Sessions
+            .Where(x => x.CompetitionId == clone.CompetitionId && x.Kind == SessionKind.Race).Select(x => x.PlannedRaces).SingleAsync());
+        Assert.Equal("[\"Race 1\"]", planned);
+    }
+
+    [Fact]
+    public async Task CloneRequiresAnOrganiserWhoCanManageTheSource()
+    {
+        var source = await ArrangeCloneSourceAsync();
+        var start = new DateTime(2035, 7, 12, 9, 0, 0, DateTimeKind.Utc);
+        var request = new CloneCompetitionRequest("Not yours", start, null);
+        var url = $"/api/event-tools/competitions/{source.CompetitionId}/clone";
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _f.CreateClient().PostAsJsonAsync(url, request)).StatusCode);
+        var (member, _) = await _f.SignupAsync("Member");
+        Assert.Equal(HttpStatusCode.Forbidden, (await member.PostAsJsonAsync(url, request)).StatusCode);
+        var (other, _) = await _f.ApprovedTrainerAsync();
+        Assert.Equal(HttpStatusCode.NotFound, (await other.PostAsJsonAsync(url, request)).StatusCode);
     }
 
     [Fact]
@@ -283,20 +320,7 @@ public class EventToolsEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task CloneLeavesResultDerivedRaceFinalLanesEmpty()
-    {
-        var source = await ArrangeCloneSourceAsync(derivedFinal: true);
-        var trainer = await _f.TrainerAsync();
-        var start = new DateTime(2036, 7, 12, 9, 0, 0, DateTimeKind.Utc);
-        var clone = await (await trainer.PostAsJsonAsync($"/api/event-tools/competitions/{source.CompetitionId}/clone",
-            new CloneCompetitionRequest("Fresh qualifiers", start, null))).ReadAsync<CloneCompetitionResultDto>();
-
-        var entryCount = await _f.WithDbAsync(db => db.HeatEntries.CountAsync(x => x.Heat!.Session!.CompetitionId == clone.CompetitionId));
-        Assert.Equal(0, entryCount);
-    }
-
-    [Fact]
-    public async Task CloneLeavesStandardFinalLanesEmptyButKeepsTheirScaffold()
+    public async Task CloneKeepsTheFinalsSessionWithEmptyLetteredFinalHeats()
     {
         var source = await ArrangeCloneSourceAsync(standardFinal: true);
         var trainer = await _f.TrainerAsync();
@@ -306,15 +330,40 @@ public class EventToolsEndpointsTests : IClassFixture<ApiFactory>
 
         await _f.WithDbAsync(async db =>
         {
-            var heat = await db.Heats.Include(x => x.Entries).Include(x => x.Races)
-                .SingleAsync(x => x.Session!.CompetitionId == clone.CompetitionId);
+            var session = await db.Sessions.Include(x => x.Heats).ThenInclude(h => h.Races)
+                .SingleAsync(x => x.CompetitionId == clone.CompetitionId && x.Name == "Finals · U12");
+            // The heat is there to be populated from the new event's standings, with its race, and no teams.
+            var heat = Assert.Single(session.Heats);
             Assert.Equal("A Final", heat.Label);
-            Assert.Empty(heat.Entries);
-            Assert.Single(heat.Races);
+            Assert.Equal("Race 1", Assert.Single(heat.Races).Name);
+            Assert.False(heat.Races.Single().IsComplete);
+            Assert.Equal(start.AddHours(1), heat.ScheduledStart);
+            Assert.Equal(0, await db.HeatEntries.CountAsync(x => x.Heat!.Session!.CompetitionId == clone.CompetitionId));
+            Assert.Equal(0, await db.Results.CountAsync(x => x.Race!.Heat!.Session!.CompetitionId == clone.CompetitionId));
         });
     }
 
-    private async Task<(int CompetitionId, int TeamId)> ArrangeCloneSourceAsync(bool derivedFinal = false, bool standardFinal = false)
+    [Fact]
+    public async Task CloneLeavesThePayoutClubEmptyWhenTheCreatorHasNone()
+    {
+        var source = await ArrangeCloneSourceAsync();
+        await _f.InDbAsync(async db =>
+        {
+            var c = await db.Competitions.SingleAsync(x => x.Id == source.CompetitionId);
+            c.DecFormConfigJson = (DecFormConfig.Basic with { PayoutClubId = 4242 }).ToJson();
+            await db.SaveChangesAsync();
+            var ownerId = c.CreatedByUserId;
+            (await db.Users.SingleAsync(u => u.Id == ownerId)).ClubId = null;
+            await db.SaveChangesAsync();
+        });
+        var trainer = await _f.TrainerAsync();
+        var clone = await (await trainer.PostAsJsonAsync($"/api/event-tools/competitions/{source.CompetitionId}/clone",
+            new CloneCompetitionRequest("No club", new DateTime(2036, 9, 1, 9, 0, 0, DateTimeKind.Utc), null))).ReadAsync<CloneCompetitionResultDto>();
+        var config = await _f.WithDbAsync(db => db.Competitions.Where(c => c.Id == clone.CompetitionId).Select(c => c.DecFormConfigJson).SingleAsync());
+        Assert.Null(DecFormConfig.Parse(config)!.PayoutClubId);
+    }
+
+    private async Task<(int CompetitionId, int TeamId)> ArrangeCloneSourceAsync(bool derivedFinal = false, bool standardFinal = false, bool plannedRaces = true)
     {
         var ownerId = await _f.TrainerIdAsync();
         return await _f.WithDbAsync(async db =>
@@ -324,13 +373,17 @@ public class EventToolsEndpointsTests : IClassFixture<ApiFactory>
             {
                 Name = $"Clone source {Guid.NewGuid():N}", StartDate = start, EndDate = start.AddDays(1),
                 CreatedByUserId = ownerId, OrganiserName = "Private organiser", PaymentDestination = "Private destination",
+                LaneHatbands = "[\"Red\",\"Blue\"]", TermsText = "Our terms",
+                DecFormConfigJson = DecFormConfig.Basic.ToJson(),
             };
             var club = new Club { Name = $"Clone Club {Guid.NewGuid():N}" };
             db.AddRange(competition, club);
             await db.SaveChangesAsync();
-            var section = new CompetitionSection { CompetitionId = competition.Id, Format = SectionFormat.Teams, AgeGroup = "Under 12", DisplayName = "U12" };
+            var section = new CompetitionSection { CompetitionId = competition.Id, Format = SectionFormat.Teams, AgeGroup = "Under 12", DisplayName = "U12",
+                TieBreakRule = TieBreakRule.LastRace, FinalistCount = 4, PriceMinor = 1500 };
             db.Add(section);
             await db.SaveChangesAsync();
+            db.Add(new SectionSignup { CompetitionSectionId = section.Id, FullName = "Paid Entrant", AmountMinor = 1500, Status = SignupPaymentStatus.Paid });
             var team = new Team
             {
                 CompetitionId = competition.Id, CompetitionSectionId = section.Id, ClubId = club.Id,
@@ -350,8 +403,12 @@ public class EventToolsEndpointsTests : IClassFixture<ApiFactory>
                 Name = standardFinal ? "Finals · U12" : "Session 1",
                 ScheduledStart = start.AddHours(1), OrderIndex = 1, Status = SessionStatus.Finished,
                 LanesPerHeat = 6, MinutesPerHeat = 12,
+                PlannedRaces = plannedRaces && !standardFinal ? "[\"Bending\",\"Mug\"]" : null,
             };
             db.Add(session);
+            if (!standardFinal)
+                db.Add(new Session { CompetitionId = competition.Id, Name = "Lunch", OrderIndex = 2, Kind = SessionKind.Break, IsBreak = true,
+                    Notes = "Lunch for all [paused:1700000000000] [shift:+10]" });
             await db.SaveChangesAsync();
             var heat = new Heat
             {

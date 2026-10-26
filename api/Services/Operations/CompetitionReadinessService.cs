@@ -67,11 +67,59 @@ public class CompetitionReadinessService(AppDbContext db, EquipmentCalculator eq
 
         var equipment = await GetEquipmentStateAsync(competitionId, cancellationToken);
 
+        var flagged = teams
+            .Select(t => new
+            {
+                Team = t,
+                Flagged = t.DeclarationForms.OrderByDescending(d => d.SubmittedAt).FirstOrDefault()?
+                    .Riders.Count(r => !string.IsNullOrEmpty(r.FlagsJson) && r.FlagsJson != "[]") ?? 0,
+            })
+            .Where(x => x.Flagged > 0)
+            .Select(x => new FlaggedDecFormDto(x.Team.Id, x.Team.DisplayName, x.Team.CompetitionSectionId,
+                x.Team.Section?.DisplayName ?? string.Empty, x.Flagged)).ToList();
+        var raceLists = await GetRaceListsToChooseAsync(competitionId, cancellationToken);
+
         var ready = missing.Count == 0 && unpaid.Count == 0 && incomplete.Count == 0
             && overlaps.Count == 0 && equipment.Issues.Count == 0
             && equipment.Checklist.All(x => x.Acknowledged);
         return new CompetitionReadinessDto(competitionId, ready, equipment.Fingerprint,
-            missing, unpaid, incomplete, overlaps, equipment.Checklist, equipment.Issues);
+            missing, unpaid, incomplete, overlaps, equipment.Checklist, equipment.Issues, flagged, raceLists);
+    }
+
+    /// <summary>
+    /// Race sessions that have no races chosen: no planned list and no races in any heat (heats' races are the truth once
+    /// they exist). An age group with no race session at all is listed too, so it isn't forgotten. Informational: it does
+    /// not change <c>IsReady</c>.
+    /// </summary>
+    private async Task<List<RaceListToChooseDto>> GetRaceListsToChooseAsync(
+        int competitionId, CancellationToken cancellationToken)
+    {
+        var sections = await db.CompetitionSections.AsNoTracking()
+            .Where(s => s.CompetitionId == competitionId).OrderBy(s => s.Id)
+            .Select(s => new { s.Id, s.DisplayName }).ToListAsync(cancellationToken);
+        var raceSessions = await db.Sessions.AsNoTracking()
+            .Where(s => s.CompetitionId == competitionId && s.Kind == SessionKind.Race && s.CompetitionSectionId != null)
+            .OrderBy(s => s.OrderIndex).ThenBy(s => s.Id)
+            .Select(s => new
+            {
+                s.Id, s.Name, SectionId = s.CompetitionSectionId!.Value, s.PlannedRaces,
+                HasRaces = s.Heats.Any(h => h.Races.Any()),
+            })
+            .ToListAsync(cancellationToken);
+        var result = new List<RaceListToChooseDto>();
+        foreach (var section in sections)
+        {
+            var own = raceSessions.Where(s => s.SectionId == section.Id).ToList();
+            if (own.Count == 0)
+            {
+                result.Add(new RaceListToChooseDto(null, section.DisplayName, section.Id, section.DisplayName));
+                continue;
+            }
+            result.AddRange(own
+                .Where(s => !s.HasRaces && PlannedRaceList.Read(s.PlannedRaces) is not { Count: > 0 })
+                .Select(s => new RaceListToChooseDto(s.Id, s.Name, section.Id, section.DisplayName)));
+        }
+        return result;
     }
 
     public async Task<CompetitionReadinessDto> UpdateEquipmentAsync(

@@ -165,3 +165,12 @@
 - Declarations: a team has one declaration and resubmitting updates it. One bib description per team replaces per-rider bib colours (old colours stay in the data but are no longer asked for).
 - Lane rotation: stored as move up = 0, so existing sessions need no default. One team over the lane count is allowed (it sits out in turn); more would leave teams that never race.
 - Files: `api/Controllers/AuthController.cs`, `TrainerRequestsController.cs`, `TeamsController.cs`, `DeclarationFormsController.cs`, `api/Services/ClubAccess.cs`, `LaneRotation.cs`, `RaceFinalService.cs`.
+
+## 2026-10-25: Duplicate and starting points copy the set-up, never the entrants
+- Why: "Duplicate for next year" used to copy teams, heats and lanes, so an organiser had to delete last year's entrants before starting. The new-competition wizard also needs "Copy a past competition" without needing the old event to still exist.
+- Rule: one `CompetitionSetup` (`Services/EventTools/CompetitionSetup.cs`) is read from a competition and applied to a new one, by both the clone and saved starting points. It holds sections (format, scoring settings, finalists, price, cap), sessions (the timetable plan with start times relative to the event start, lanes, minutes, rotation, planned race lists), hatbands, terms, the dec form setup and payment details. A session with no planned list takes its race list from its first heat. A finals session keeps its empty lettered final heats (label, order, timing, race names, no teams) so "Populate from standings" still works in the new event. It holds no teams, heats, results, entries, signups or payments, and no personal data. The live `[paused:…]` and `[shift:…]` notes are dropped.
+- A starting point (`StartingPoint`) is that set-up under a name, private to the organiser who saved it (admins see and manage all; anyone else gets 404). Up to 50 each. Deleting an account deletes its starting points.
+- The new event is owned by whoever creates it. The dec form's payout club is pinned to the creator's club, or cleared when they have none, as for any new competition; the source event's club is never kept.
+- Starting dates: a new competition needs a start date, so creating from a starting point requires one (the end date is optional). Session times are shifted from it.
+- Not copied: organiser name, stream URL, sponsors, scorer links, the entries-close dates, commerce settings.
+- Files: `api/Services/EventTools/`, `api/Controllers/StartingPointsController.cs`, `api/Entities/StartingPoint.cs`, migration `AddStartingPoints`.

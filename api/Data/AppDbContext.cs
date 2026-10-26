@@ -29,6 +29,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<OverlayLook> OverlayLooks => Set<OverlayLook>();
     public DbSet<CompetitionCollaborator> CompetitionCollaborators => Set<CompetitionCollaborator>();
     public DbSet<ScorerLink> ScorerLinks => Set<ScorerLink>();
+    public DbSet<StartingPoint> StartingPoints => Set<StartingPoint>();
     public DbSet<TrainerNote> TrainerNotes => Set<TrainerNote>();
     public DbSet<IpBlock> IpBlocks => Set<IpBlock>();
     public DbSet<RaceTemplate> RaceTemplates => Set<RaceTemplate>();
