@@ -1,6 +1,6 @@
 import type { CompetitionDetail, Session } from '../types';
 import {
-  defaultSection, DEFAULT_MINUTES, lanesFor, MAIN_ARENA, type BreakDraft, type CreatorDraft, type Format, type SectionDraft,
+  arenasFromSections, defaultSection, DEFAULT_MINUTES, lanesFor, MAIN_ARENA, type BreakDraft, type CreatorDraft, type Format, type SectionDraft,
 } from './creatorDraft';
 
 import type { FixedItem } from './formatPlan';
@@ -50,7 +50,11 @@ export function draftFromCompetition(c: CompetitionDetail): CreatorDraft {
       hasFinal: s.hasFinal ?? true,
       carryPointsIntoFinal: s.carryPointsIntoFinal ?? false,
       doublePointsInFinal: s.doublePointsInFinal ?? false,
+      ...(s.tieBreakRule != null ? { tieBreak: s.tieBreakRule } : {}),
+      ...(first?.laneRotationMode != null ? { laneRotation: first.laneRotationMode } : {}),
       finalRaces: finalsSession?.plannedRaces && finalsSession.plannedRaces.length > 0 ? finalsSession.plannedRaces : null,
+      ...(finalsSession?.plannedFinalRaces?.B?.length ? { finalRacesB: finalsSession.plannedFinalRaces.B } : {}),
+      ...(finalsSession?.plannedFinalRaces?.C?.length ? { finalRacesC: finalsSession.plannedFinalRaces.C } : {}),
       ...(finalsSession ? {
         finalSessionId: finalsSession.id,
         ...(finalsSession.heats.length > 0 ? { finalHasHeats: true } : {}),
@@ -69,6 +73,7 @@ export function draftFromCompetition(c: CompetitionDetail): CreatorDraft {
         minutes: String(s.durationMinutes ?? 30), arena: s.arenaName?.trim() ?? '',
       };
     });
+  const finished = sections.length > 0 ? sections : [defaultSection()];
   return {
     step: 0,
     name: c.name, icon: c.icon ?? 'flag', organiserName: c.organiserName ?? '',
@@ -77,7 +82,8 @@ export function draftFromCompetition(c: CompetitionDetail): CreatorDraft {
     location: c.location ?? '', postcode: '', what3Words: c.what3Words ?? '', appleMapsUrl: c.appleMapsUrl ?? '',
     lat: c.latitude != null ? String(c.latitude) : '', lon: c.longitude != null ? String(c.longitude) : '',
     description: c.description ?? '', paymentDestination: c.paymentDestination ?? '', termsText: c.termsText ?? '',
-    sections: sections.length > 0 ? sections : [defaultSection()],
+    sections: finished,
+    arenas: arenasFromSections(finished),
     breaks,
     laneHatbands: c.laneHatbands ?? [],
     cardsEnabled: (() => {
@@ -102,4 +108,33 @@ export function teamCountsOf(c: CompetitionDetail | null): Record<number, number
   const out: Record<number, number> = {};
   for (const t of c?.teams ?? []) if (!t.isWithdrawn) out[t.competitionSectionId] = (out[t.competitionSectionId] ?? 0) + 1;
   return out;
+}
+
+/**
+ * A past competition as the start of a new one: every step filled in, the dates left empty, and nothing that belongs to the
+ * old event (its saved ids, heats, scores, entries or breaks).
+ */
+export function copyOfCompetition(c: CompetitionDetail): CreatorDraft {
+  const old = draftFromCompetition(c);
+  return {
+    ...old,
+    startDate: '', endDate: '',
+    startFrom: 'copy', copiedFrom: c.name,
+    breaks: [],
+    sections: old.sections.map((s): SectionDraft => ({
+      ...withoutSavedIds(s),
+      sessions: s.sessions.map((x) => ({ races: x.races })),
+    })),
+  };
+}
+
+/** An age group with everything that ties it to a saved one taken off. */
+function withoutSavedIds(s: SectionDraft): SectionDraft {
+  const copy: SectionDraft = { ...s };
+  delete copy.existingId;
+  delete copy.finalSessionId;
+  delete copy.finalHasHeats;
+  delete copy.finalScored;
+  delete copy.hasEntries;
+  return copy;
 }

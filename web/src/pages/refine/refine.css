@@ -174,6 +174,7 @@ details[open] > summary ~ * { animation: rf-reveal 220ms var(--mg-ease-out); }
 .rf-cal-day:hover { background: rgb(var(--mg-subtle)); }
 .rf-cal-event { border-color: rgb(var(--mg-elim)); }
 .rf-cal-day[aria-selected="true"] { background: rgb(var(--mg-heading)); border-color: rgb(var(--mg-heading)); color: #fff; }
+.rf-cal-event[aria-selected="true"] { border-color: rgb(var(--mg-elim)); }
 .rf-cal-time { display: flex; align-items: center; justify-content: space-between; gap: 12px; font: 600 15px/1.2 var(--mg-font); color: rgb(var(--mg-ink)); }
 .rf-cal-time input { min-height: 44px; padding: 0 10px; border: 1.5px solid rgb(var(--mg-border)); border-radius: 10px; font: 600 16px/1 var(--mg-font); background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); }
 .rf-cal-actions { display: flex; align-items: center; justify-content: space-between; }

@@ -81,16 +81,6 @@ export function SelectBox({ label, value, onChange, children, error, disabled, c
   );
 }
 
-/** A step's heading and the one line that says what it is for. */
-export function StepIntro({ title, children }: { title: string; children?: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <h2 className="mg-display text-[28px] font-bold leading-none text-[rgb(var(--mg-heading))]">{title}</h2>
-      {children && <p className="text-[15px] text-[rgb(var(--mg-muted))]">{children}</p>}
-    </div>
-  );
-}
-
 export function Pill({ children, tone = 'plain' }: { children: ReactNode; tone?: 'plain' | 'provisional' }) {
   return (
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.05em] ${tone === 'provisional'

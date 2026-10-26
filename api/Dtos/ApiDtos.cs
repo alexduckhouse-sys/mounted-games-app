@@ -25,9 +25,10 @@ public static class CompetitionTerms
     public const int MaxLength = 20000;
 }
 
+/// <summary>Icon ids a competition may use: three symbols, the UK and its nations, and every country's ISO 3166-1 alpha-2 code (plus Kosovo, xk). Must match <c>web/src/competition/countries.ts</c>.</summary>
 public static class CompetitionIcons
 {
-    public const string Pattern = "^(flag|world|trophy|gb|gb-eng|gb-sct|gb-wls|gb-nir|ie|fr|de|nl|be|es|pt|it|ch|at|se|no|dk|fi|pl|cz|us|ca|au|nz|za)\\z";
+    public const string Pattern = "^(flag|world|trophy|gb|gb-eng|gb-sct|gb-wls|gb-nir|ad|ae|af|ag|ai|al|am|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bl|bm|bn|bo|bq|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cu|cv|cw|cx|cy|cz|de|dj|dk|dm|do|dz|ec|ee|eg|eh|er|es|et|fi|fj|fk|fm|fo|fr|ga|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mf|mg|mh|mk|ml|mm|mn|mo|mp|mq|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|om|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ro|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|sk|sl|sm|sn|so|sr|ss|st|sv|sx|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tr|tt|tv|tw|tz|ua|ug|um|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|xk|ye|yt|za|zm|zw)\\z";
 }
 
 public record CompetitionDetail(
@@ -252,7 +253,8 @@ public record SessionDto(
     IReadOnlyList<HeatDto> Heats,
     LaneRotationMode LaneRotationMode = LaneRotationMode.MoveUp,
     int? QualifiersPerHeat = null,
-    IReadOnlyList<string>? PlannedRaces = null);
+    IReadOnlyList<string>? PlannedRaces = null,
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? PlannedFinalRaces = null);
 
 public record UpdateSessionSettingsRequest(int? MinutesPerHeat, bool? RaceOrderAlternating,
     LaneRotationMode? LaneRotationMode = null, [Range(1, 20)] int? QualifiersPerHeat = null);
@@ -266,16 +268,18 @@ public record CreateSessionRequest(
     bool IsBreak, int? DurationMinutes,
     SessionKind? Kind, string? Location,
     [Range(1, 20)] int? LanesPerHeat = null, [Range(1, 180)] int? MinutesPerHeat = null,
-    IReadOnlyList<string>? PlannedRaces = null);
+    IReadOnlyList<string>? PlannedRaces = null,
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? PlannedFinalRaces = null);
 
 /// <summary>
 /// Null leaves a field as it is; an empty arena name clears the arena. <c>PlannedRaces</c> replaces the planned list
 /// (an empty list clears it). Heat size and the planned races are structure: they are refused once the session has
-/// started or any race in it is scored.
+/// started or any race in it is scored. <c>PlannedFinalRaces</c> (keys B to Z) does the same for the B, C... finals' own lists.
 /// </summary>
 public record UpdateSessionRequest([StringLength(120)] string? Name = null, [StringLength(80)] string? ArenaName = null, DateTime? ScheduledStart = null,
     [Range(1, 20)] int? LanesPerHeat = null, [Range(1, 180)] int? MinutesPerHeat = null, [Range(1, 1440)] int? DurationMinutes = null,
-    IReadOnlyList<string>? PlannedRaces = null);
+    IReadOnlyList<string>? PlannedRaces = null,
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? PlannedFinalRaces = null);
 
 public record UpdateSessionStatusRequest(SessionStatus Status);
 

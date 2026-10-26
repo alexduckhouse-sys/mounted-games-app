@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import { createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
-import { NetworkFirst, NetworkOnly } from 'workbox-strategies';
+import { CacheFirst, NetworkFirst, NetworkOnly } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 import { canCachePublicApi, isEmbedRequest, markSavedResponse, NAVIGATION_DENYLIST, stampPublicResponse } from './offline/cachePolicy';
 
@@ -30,6 +30,12 @@ registerRoute(
       new ExpirationPlugin({ maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 }),
     ],
   }),
+);
+
+// The SVG country flags (about 2.4 MB in all) are not precached; each one is kept the first time it is shown.
+registerRoute(
+  ({ url }) => url.origin === self.location.origin && /^\/flags\/[a-z-]+\.svg$/.test(url.pathname),
+  new CacheFirst({ cacheName: 'mg-flags-v1', plugins: [new ExpirationPlugin({ maxEntries: 260, maxAgeSeconds: 60 * 60 * 24 * 180 })] }),
 );
 
 // Account data, forms and writes always go to the server.

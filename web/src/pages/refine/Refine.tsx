@@ -284,6 +284,27 @@ export function RefineChoiceRow<T extends string>({ label, value, options, onCha
   );
 }
 
+/**
+ * A settings row that opens a floating panel of your own (a searchable list, say). `children` gets a function that closes it.
+ * Same look and behaviour as the choice rows: Escape and a click outside close it.
+ */
+export function RefinePanelRow({ label, ariaLabel, value, children }: { label: string; ariaLabel: string; value: ReactNode; children: (close: () => void) => ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const [place, setPlace] = useState<Place | null>(null);
+  const rowRef = useRef<HTMLButtonElement>(null);
+  return (
+    <div className="rf-choice-wrap">
+      <button ref={rowRef} type="button" className="rf-row rf-choice-row" aria-haspopup="listbox" aria-expanded={open} aria-label={ariaLabel}
+        onClick={() => { if (open) { setOpen(false); return; } setPlace(placeUnder(rowRef.current)); setOpen(true); }}>
+        <span className="rf-grow rf-t1">{label}</span>
+        <span className="rf-choice-val" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{value}</span>
+        <ChevronRight className="rf-chev h-4 w-4" aria-hidden="true" />
+      </button>
+      {open && place && <FloatingPanel anchor={rowRef} place={place} onClose={() => setOpen(false)}>{children(() => setOpen(false))}</FloatingPanel>}
+    </div>
+  );
+}
+
 const MONTH_FORMAT = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' });
 const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());

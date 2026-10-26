@@ -162,7 +162,8 @@ public static class Mappings
         s.StreamUrl, s.LanesPerHeat,
         s.MinutesPerHeat, s.RaceOrderAlternating,
         s.Heats.OrderBy(h => h.OrderIndex).Select(h => h.ToDto()).ToList(),
-        s.LaneRotationMode, s.QualifiersPerHeat, PlannedRaceList.Read(s.PlannedRaces));
+        s.LaneRotationMode, s.QualifiersPerHeat, PlannedRaceList.Read(s.PlannedRaces),
+        PlannedFinalRaceLists.Read(s.PlannedFinalRaces));
 
     public static RiderEntryDto ToDto(this RiderEntry r) => new(
         r.Id, r.SavedRiderId, r.FullName, r.DateOfBirth, r.HorseName, r.BibColour,

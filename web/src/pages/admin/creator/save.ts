@@ -1,7 +1,7 @@
 import { api } from '../../../api';
 import { setCardsEnabled } from '../../competition/ScoringParts';
 import {
-  finalSessionName, hatbandsFor, heatSizeOf, minutesOf, parseFinalistCount, parseMaxParticipants, priceGbpToMinor, sectionLocked, sectionName, type CreatorDraft, type SectionDraft,
+  finalCountOf, finalSessionName, hatbandsFor, heatSizeOf, minutesOf, parseFinalistCount, parseMaxParticipants, priceGbpToMinor, sectionLocked, sectionName, type CreatorDraft, type SectionDraft,
 } from '../../../lib/creatorDraft';
 import { realFixedItems } from '../../../lib/creatorLoad';
 import { breakWindow, plannedSessions, provisionalTimetable } from '../../../lib/creatorPlan';
@@ -47,6 +47,15 @@ export function basicsPayload(draft: CreatorDraft) {
   };
 }
 
+/** The B and C finals' own race lists, for the finals the age group has. An empty object clears what was saved. */
+export function finalListsOf(section: SectionDraft): Record<string, string[]> {
+  const finals = finalCountOf(section);
+  const out: Record<string, string[]> = {};
+  if (finals >= 2 && section.finalRacesB?.length) out.B = section.finalRacesB;
+  if (finals >= 3 && section.finalRacesC?.length) out.C = section.finalRacesC;
+  return out;
+}
+
 /**
  * Saves the draft: the competition, its age groups, their sessions (with the estimated start times that make the
  * provisional timetable) and its breaks. Never touches teams, entries, heats or results. Sessions that have heats are
@@ -76,6 +85,9 @@ export async function saveCreator(draft: CreatorDraft, opts: {
     setCardsEnabled(id, draft.cardsEnabled);
   }
   const base = `/competitions/${id}`;
+  if (editingId === null && draft.passportCheck) {
+    await step('Turning on the passport check…', () => api.put(`/event-tools/competitions/${id}/passport-check/settings`, { enabled: true }));
+  }
 
   // Age groups taken out of the draft.
   const keptSections = new Set(draft.sections.flatMap((s) => (s.existingId ? [s.existingId] : [])));
@@ -93,6 +105,7 @@ export async function saveCreator(draft: CreatorDraft, opts: {
       // On an update, zero is how a cap is cleared (an omitted value leaves it as it is).
       maxParticipants: parseMaxParticipants(s.maxParticipants),
       finalistCount: parseFinalistCount(s.finalistCount),
+      ...(s.tieBreak !== undefined ? { tieBreakRule: s.tieBreak } : {}),
       // Heat, heat, final has no separate final, and the API refuses these for it.
       ...(s.usesRaceFinals ? {} : { hasFinal: s.hasFinal !== false, carryPointsIntoFinal: s.carryPointsIntoFinal ?? true, doublePointsInFinal: s.doublePointsInFinal ?? false }),
     };
@@ -105,6 +118,9 @@ export async function saveCreator(draft: CreatorDraft, opts: {
     }
   }
 
+  const setLaneRotation = (sessionId: number, laneRotationMode: number, name: string) =>
+    step(`Saving lane order for ${name}…`, () => api.put(`${base}/sessions/${sessionId}/settings`, { laneRotationMode }));
+
   // Sessions and breaks, with the estimated times.
   const real = realFixedItems(competition);
   const plan = plannedSessions(draft, teamCounts);
@@ -115,7 +131,7 @@ export async function saveCreator(draft: CreatorDraft, opts: {
   const orderOf = (key: string) => topOrder + (rank.get(key) ?? 0) + 1;
 
   const wantsFinals = (s: SectionDraft) =>
-    !s.usesRaceFinals && s.hasFinal !== false && (Boolean(s.finalRaces && s.finalRaces.length > 0) || parseFinalistCount(s.finalistCount) !== null || Boolean(s.finalHasHeats) || Boolean(s.finalScored));
+    !s.usesRaceFinals && s.hasFinal !== false && (Boolean(s.finalRaces && s.finalRaces.length > 0) || Object.keys(finalListsOf(s)).length > 0 || parseFinalistCount(s.finalistCount) !== null || Boolean(s.finalHasHeats) || Boolean(s.finalScored));
   const keptSessions = new Set(draft.sections.flatMap((s) => [
     ...s.sessions.flatMap((x) => (x.existingId ? [x.existingId] : [])),
     ...(s.finalSessionId && wantsFinals(s) ? [s.finalSessionId] : []),
@@ -140,19 +156,23 @@ export async function saveCreator(draft: CreatorDraft, opts: {
         ? { minutesPerHeat: minutes, arenaName: arena }
         : { arenaName: arena, minutesPerHeat: minutes, lanesPerHeat: heatSizeOf(section), plannedRaces: session.races ?? [], scheduledStart: row?.start.toISOString(), durationMinutes: row && row.minutes > 0 ? row.minutes : undefined, orderIndex: orderOf(`s${p.key}`) };
       await step(`Saving ${p.name}…`, () => api.put(`${base}/sessions/${session.existingId}`, body));
+      if (section.laneRotation !== undefined && !session.hasHeats) await setLaneRotation(session.existingId, section.laneRotation, p.name);
     } else {
-      await step(`Adding ${p.name}…`, () => api.post(`${base}/sessions`, {
+      const made = await step(`Adding ${p.name}…`, () => api.post<{ id?: number }>(`${base}/sessions`, {
         competitionSectionId: sectionIds[p.sectionIndex], name: p.name, arenaName: arena, scheduledStart: row?.start.toISOString() ?? null,
         orderIndex: orderOf(`s${p.key}`), notes: null, isBreak: false, durationMinutes: row && row.minutes > 0 ? row.minutes : null,
         kind: SessionKind.Race, location: null, lanesPerHeat: heatSizeOf(section), minutesPerHeat: minutes, plannedRaces: session.races ?? [],
       }));
+      // Move up is what every new session does already, so only another choice needs saying.
+      if (section.laneRotation && made.data?.id) await setLaneRotation(made.data.id, section.laneRotation, p.name);
     }
   }
 
   let nextFinalOrder = topOrder + rows.length + 1;
   for (const [sectionIndex, section] of draft.sections.entries()) {
     if (section.usesRaceFinals || section.hasFinal === false) continue;
-    const hasFinalRaces = Boolean(section.finalRaces && section.finalRaces.length > 0);
+    const hasFinalRaces = Boolean(section.finalRaces && section.finalRaces.length > 0) || Object.keys(finalListsOf(section)).length > 0;
+    const plannedFinalRaces = finalListsOf(section);
     const hasFinalists = parseFinalistCount(section.finalistCount) !== null;
     const fName = finalSessionName(section);
     const minutes = minutesOf(section);
@@ -161,13 +181,13 @@ export async function saveCreator(draft: CreatorDraft, opts: {
       if (section.finalScored || !wantsFinals(section)) continue;
       const body = section.finalHasHeats
         ? { minutesPerHeat: minutes, arenaName: arena }
-        : { arenaName: arena, minutesPerHeat: minutes, lanesPerHeat: heatSizeOf(section), plannedRaces: section.finalRaces ?? [] };
+        : { arenaName: arena, minutesPerHeat: minutes, lanesPerHeat: heatSizeOf(section), plannedRaces: section.finalRaces ?? [], plannedFinalRaces };
       await step(`Saving ${fName}…`, () => api.put(`${base}/sessions/${section.finalSessionId}`, body));
     } else if (hasFinalRaces || (!sectionLocked(section) && hasFinalists)) {
       await step(`Adding ${fName}…`, () => api.post(`${base}/sessions`, {
         competitionSectionId: sectionIds[sectionIndex], name: fName, arenaName: arena, scheduledStart: null,
         orderIndex: nextFinalOrder++, notes: null, isBreak: false, durationMinutes: null,
-        kind: SessionKind.Race, location: null, lanesPerHeat: heatSizeOf(section), minutesPerHeat: minutes, plannedRaces: section.finalRaces ?? [],
+        kind: SessionKind.Race, location: null, lanesPerHeat: heatSizeOf(section), minutesPerHeat: minutes, plannedRaces: section.finalRaces ?? [], plannedFinalRaces,
       }));
     }
   }

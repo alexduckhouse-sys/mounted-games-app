@@ -203,6 +203,7 @@ public class EventToolsEndpointsTests : IClassFixture<ApiFactory>
             Assert.Equal(start.AddHours(1), race.ScheduledStart);
             Assert.Equal(SessionStatus.Upcoming, race.Status);
             Assert.Equal("[\"Bending\",\"Mug\"]", race.PlannedRaces);
+            Assert.Equal("{\"B\":[\"Flag\"]}", race.PlannedFinalRaces);
             Assert.Equal(copied.Sections.Single().Id, race.CompetitionSectionId);
             var lunch = sessions[1];
             Assert.Equal((SessionKind.Break, "Lunch for all"), (lunch.Kind, lunch.Notes));
@@ -404,6 +405,7 @@ public class EventToolsEndpointsTests : IClassFixture<ApiFactory>
                 ScheduledStart = start.AddHours(1), OrderIndex = 1, Status = SessionStatus.Finished,
                 LanesPerHeat = 6, MinutesPerHeat = 12,
                 PlannedRaces = plannedRaces && !standardFinal ? "[\"Bending\",\"Mug\"]" : null,
+                PlannedFinalRaces = plannedRaces && !standardFinal ? "{\"B\":[\"Flag\"]}" : null,
             };
             db.Add(session);
             if (!standardFinal)

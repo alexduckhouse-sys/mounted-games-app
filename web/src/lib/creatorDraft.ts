@@ -4,7 +4,7 @@ import { sectionDisplayName } from './section';
 
 export type Format = 1 | 2 | 3;
 export const FORMAT_LABEL: Record<Format, string> = { 1: 'Pairs', 2: 'Teams', 3: 'Individual' };
-export const AGE_GROUP_PRESETS = ['Under 10', 'Under 12', 'Under 14', 'Under 15', 'Under 17', 'Open', 'Juniors', 'Seniors', 'Novices'];
+export const AGE_GROUP_PRESETS = ['Under 8', 'Under 10', 'Under 12', 'Under 14', 'Under 15', 'Under 17', 'Under 21', 'Open', 'Juniors', 'Seniors', 'Novices', 'Veterans'];
 
 export const MAIN_ARENA = 'Main arena';
 /** Minutes a whole heat takes in the arena, including every race in its list. */
@@ -12,11 +12,19 @@ export const DEFAULT_MINUTES = 10;
 export const lanesFor = (format: number) => (format === 1 ? 4 : 6);
 export const MAX_SESSIONS = 6;
 
-export const STEP_IDS = ['about', 'when', 'sections', 'structure', 'races', 'dec', 'payment', 'review'] as const;
+export const STEP_IDS = ['start', 'about', 'when', 'arenas', 'sections', 'structure', 'races', 'dec', 'payment', 'review'] as const;
 export type StepId = typeof STEP_IDS[number];
 export const STEP_LABEL: Record<StepId, string> = {
-  about: 'About', when: 'When & where', sections: 'Sections', structure: 'Structure & timing', races: 'Races', dec: 'Dec form', payment: 'Payment & notes', review: 'Review',
+  start: 'Start', about: 'About', when: 'When and where', arenas: 'Arenas', sections: 'Sections', structure: 'Structure and timing', races: 'Races',
+  dec: 'Dec form', payment: 'Payment and rules', review: 'Review',
 };
+/** How many arenas a competition can have, and how many lanes one arena can have. */
+export const MAX_ARENAS = 4;
+export const MIN_ARENA_LANES = 2;
+export const MAX_ARENA_LANES = 12;
+/** An age group's finals: one for each heat's worth of entries, at most this many (A, B and C). */
+export const MAX_FINALS = 3;
+export const FINAL_LETTERS = ['A', 'B', 'C'] as const;
 
 export interface SessionDraft {
   /** The saved session this is, when editing. */
@@ -25,6 +33,8 @@ export interface SessionDraft {
   name?: string;
   /** The races chosen for each heat; null means "decide later". */
   races: string[] | null;
+  /** Session 2 onwards: the races follow Session 1's, so changing that list changes this one too. */
+  sameAsFirst?: boolean;
   /** Heats have been made for it: its structure now comes from them. */
   hasHeats?: boolean;
   /** It has started or been scored. */
@@ -54,6 +64,16 @@ export interface SectionDraft {
   carryPointsIntoFinal?: boolean;
   /** Standard format only: final race points count double. Missing means off. */
   doublePointsInFinal?: boolean;
+  /** How teams level on points are split: the API's `TieBreakRule` (0 countback, 1 last race, 2 run-off, 3 decided on the day). Missing leaves it as saved. */
+  tieBreak?: number;
+  /** How teams change lane after each race: the API's `LaneRotationMode` (0 move up, 1 stay, 2 move down). Missing leaves it as saved. */
+  laneRotation?: number;
+  /**
+   * Races for the B and C finals, when the age group has more than one final. Saved on the finals session as
+   * `plannedFinalRaces` ({ B: [...], C: [...] }); the A final's list is `finalRaces`.
+   */
+  finalRacesB?: string[] | null;
+  finalRacesC?: string[] | null;
   /** The saved finals session id, when editing a competition that already has one. */
   finalSessionId?: number;
   /** Heats have been made for the finals session. */
@@ -78,8 +98,18 @@ export interface BreakDraft {
   arena: string;
 }
 
+/** An arena: its name and how many lanes it has. Each age group runs in one of these. */
+export interface ArenaDraft {
+  name: string;
+  /** As typed or stepped: 2 to 12. */
+  lanes: string;
+}
+
 export interface CreatorDraft {
   step: number;
+  /** How this draft began: from scratch, or copied from `copiedFrom`. */
+  startFrom?: 'scratch' | 'copy';
+  copiedFrom?: string;
   savedAt?: string;
   name: string;
   icon: string;
@@ -98,11 +128,17 @@ export interface CreatorDraft {
   paymentDestination: string;
   termsText: string;
   sections: SectionDraft[];
+  /** Arenas the age groups can run in. Edited on the Arenas step; each age group names one in `arena`. */
+  arenas: ArenaDraft[];
   breaks: BreakDraft[];
   /** Hatband colour per lane, index 0 being lane 1. Lanes the person hasn't set take the default order. */
   laneHatbands: string[];
   /** Whether yellow & red disciplinary cards are enabled for this competition. */
   cardsEnabled?: boolean;
+  /** No hatbands at all, rather than the usual colours. */
+  noHatbands?: boolean;
+  /** Stewards tick off each pony's passport and vaccinations on arrival. Switched on after a new competition is created. */
+  passportCheck?: boolean;
 }
 
 export const HATBAND_COLOURS = ['Red', 'White', 'Blue', 'Yellow', 'Green', 'Black', 'Orange', 'Pink'];
@@ -113,9 +149,14 @@ export function laneCount(sections: readonly SectionDraft[]): number {
   return Math.max(1, Math.min(MAX_LANES, Math.max(0, ...sections.map((s) => wholeNumber(s.maxTeamsPerHeat) ?? lanesFor(s.format)))));
 }
 
-/** The hatband for each lane: what was chosen, else the next colour in the default order. */
-export function hatbandsFor(draft: Pick<CreatorDraft, 'sections' | 'laneHatbands'>): string[] {
-  return Array.from({ length: laneCount(draft.sections) }, (_, i) => draft.laneHatbands[i]?.trim() || HATBAND_COLOURS[i % HATBAND_COLOURS.length]);
+/**
+ * The hatbands, in lane order: the list the person made (a blank one takes the usual colour for its lane), else none when
+ * they removed them all, else the usual colours for as many lanes as the biggest heat has.
+ */
+export function hatbandsFor(draft: Pick<CreatorDraft, 'sections' | 'laneHatbands'> & { noHatbands?: boolean }): string[] {
+  if (draft.noHatbands) return [];
+  if (draft.laneHatbands.length > 0) return draft.laneHatbands.slice(0, MAX_LANES).map((h, i) => h.trim() || HATBAND_COLOURS[i % HATBAND_COLOURS.length]);
+  return Array.from({ length: laneCount(draft.sections) }, (_, i) => HATBAND_COLOURS[i % HATBAND_COLOURS.length]);
 }
 
 export function defaultSection(format: Format = 2): SectionDraft {
@@ -134,8 +175,37 @@ export function defaultDraft(today: Date = new Date()): CreatorDraft {
     step: 0, name: '', icon: 'flag', organiserName: '',
     startDate: today.toISOString().slice(0, 10), startTime: '09:00', endDate: '', endTime: '17:00',
     location: '', postcode: '', what3Words: '', appleMapsUrl: '', lat: '', lon: '', description: '', paymentDestination: '', termsText: '',
-    sections: [defaultSection()], breaks: [], laneHatbands: [],
+    sections: [defaultSection()], arenas: [defaultArena()], breaks: [], laneHatbands: [],
   };
+}
+
+export const defaultArena = (index = 0): ArenaDraft => ({ name: index === 0 ? MAIN_ARENA : `Arena ${index + 1}`, lanes: '6' });
+
+/** Arena names that the sections use but the arena list lacks, so a loaded competition shows what it really has. */
+export function arenasFromSections(sections: readonly SectionDraft[]): ArenaDraft[] {
+  const found: ArenaDraft[] = [];
+  for (const s of sections) {
+    const name = s.arena.trim() || MAIN_ARENA;
+    const lanes = String(Math.min(MAX_ARENA_LANES, Math.max(MIN_ARENA_LANES, heatSizeOf(s))));
+    const seen = found.find((a) => a.name === name);
+    if (!seen) found.push({ name, lanes });
+    else if (parseInt(lanes, 10) > parseInt(seen.lanes, 10)) seen.lanes = lanes;
+  }
+  return found.length > 0 ? found : [defaultArena()];
+}
+
+/** The arena an age group runs in. Falls back to the first arena when its own name isn't in the list. */
+export const arenaOf = (draft: Pick<CreatorDraft, 'arenas'>, section: Pick<SectionDraft, 'arena'>): ArenaDraft =>
+  draft.arenas.find((a) => a.name === section.arena) ?? draft.arenas[0] ?? defaultArena();
+
+/** Lanes in an arena, as a number. */
+export const lanesOfArena = (a: ArenaDraft): number => Math.min(MAX_ARENA_LANES, Math.max(MIN_ARENA_LANES, parseInt(a.lanes, 10) || 6));
+
+/** How many finals an age group has: one for each heat's worth of entries, from 1 to 3. Zero when it has no final. */
+export function finalCountOf(s: SectionDraft, lanes: number = heatSizeOf(s)): number {
+  if (!sectionHasFinal(s)) return 0;
+  const entries = parseMaxParticipants(s.maxParticipants);
+  return Math.min(MAX_FINALS, Math.max(1, entries ? Math.ceil(entries / Math.max(1, lanes)) : 1));
 }
 
 export const sectionName = (s: Pick<SectionDraft, 'format' | 'ageGroup'>) => sectionDisplayName(s.format, s.ageGroup);
@@ -154,7 +224,7 @@ export const sectionLocked = (s: SectionDraft) => s.sessions.some(isLocked);
 export function resizeSessions(section: SectionDraft, count: number): SectionDraft {
   const wanted = Math.max(1, Math.min(MAX_SESSIONS, Math.round(count) || 1));
   const sessions = [...section.sessions];
-  while (sessions.length < wanted) sessions.push({ races: null });
+  while (sessions.length < wanted) sessions.push({ races: sessions[0]?.races ?? null, sameAsFirst: true });
   while (sessions.length > wanted && !isLocked(sessions[sessions.length - 1])) sessions.pop();
   return { ...section, sessions };
 }
@@ -206,7 +276,15 @@ export type Problems = Record<string, string>;
 
 export function validateStep(draft: CreatorDraft, step: StepId): Problems {
   const found: Problems = {};
-  if (step === 'about') {
+  if (step === 'arenas') {
+    const seen = new Set<string>();
+    draft.arenas.forEach((a, i) => {
+      const name = a.name.trim();
+      if (!name) found[`arena.${i}.name`] = 'Give the arena a name.';
+      else if (seen.has(name.toLowerCase())) found[`arena.${i}.name`] = 'Two arenas have the same name.';
+      seen.add(name.toLowerCase());
+    });
+  } else if (step === 'about') {
     if (!draft.name.trim()) found.name = 'Enter a name.';
   } else if (step === 'when') {
     if (!draft.startDate) found.startDate = 'Choose a start date.';
@@ -260,6 +338,7 @@ function readSession(raw: unknown): SessionDraft {
     ...(typeof r.existingId === 'number' ? { existingId: r.existingId } : {}),
     ...(typeof r.name === 'string' ? { name: r.name } : {}),
     races: races && races.length > 0 ? races : null,
+    ...(r.sameAsFirst === true ? { sameAsFirst: true } : {}),
     ...(r.hasHeats ? { hasHeats: true } : {}),
     ...(r.scored ? { scored: true } : {}),
   };
@@ -294,7 +373,21 @@ function readSection(raw: unknown): SectionDraft {
     ...(r.finalHasHeats ? { finalHasHeats: true } : {}),
     ...(r.finalScored ? { finalScored: true } : {}),
     ...(r.hasEntries ? { hasEntries: true } : {}),
+    ...(typeof r.tieBreak === 'number' && r.tieBreak >= 0 && r.tieBreak <= 3 ? { tieBreak: r.tieBreak } : {}),
+    ...(typeof r.laneRotation === 'number' && r.laneRotation >= 0 && r.laneRotation <= 2 ? { laneRotation: r.laneRotation } : {}),
+    ...(raceList(r.finalRacesB) ? { finalRacesB: raceList(r.finalRacesB) } : {}),
+    ...(raceList(r.finalRacesC) ? { finalRacesC: raceList(r.finalRacesC) } : {}),
   };
+}
+
+function raceList(raw: unknown): string[] | null {
+  return Array.isArray(raw) && raw.length > 0 && raw.every((x) => typeof x === 'string') ? (raw as string[]) : null;
+}
+
+function readArena(raw: unknown, index: number): ArenaDraft {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const base = defaultArena(index);
+  return { name: text(r.name, base.name), lanes: text(r.lanes, base.lanes) };
 }
 
 function readBreak(raw: unknown): BreakDraft {
@@ -314,8 +407,11 @@ export function readDraft(raw: unknown, today: Date = new Date()): CreatorDraft 
   const base = defaultDraft(today);
   const step = typeof r.step === 'number' && Number.isInteger(r.step) && r.step >= 0 && r.step < STEP_IDS.length ? r.step : 0;
   const sections = r.sections.length > 0 ? r.sections.map(readSection) : base.sections;
+  const arenas = Array.isArray(r.arenas) && r.arenas.length > 0 ? r.arenas.slice(0, MAX_ARENAS).map(readArena) : arenasFromSections(sections);
   return {
     step,
+    ...(r.startFrom === 'scratch' || r.startFrom === 'copy' ? { startFrom: r.startFrom } : {}),
+    ...(typeof r.copiedFrom === 'string' ? { copiedFrom: r.copiedFrom } : {}),
     ...(typeof r.savedAt === 'string' ? { savedAt: r.savedAt } : {}),
     name: r.name,
     icon: text(r.icon, base.icon),
@@ -326,8 +422,11 @@ export function readDraft(raw: unknown, today: Date = new Date()): CreatorDraft 
     appleMapsUrl: text(r.appleMapsUrl), lat: text(r.lat), lon: text(r.lon),
     description: text(r.description), paymentDestination: text(r.paymentDestination), termsText: text(r.termsText),
     sections,
+    arenas,
     breaks: Array.isArray(r.breaks) ? r.breaks.map(readBreak) : [],
     laneHatbands: Array.isArray(r.laneHatbands) ? r.laneHatbands.filter((x): x is string => typeof x === 'string') : [],
     ...(typeof r.cardsEnabled === 'boolean' ? { cardsEnabled: r.cardsEnabled } : {}),
+    ...(r.noHatbands === true ? { noHatbands: true } : {}),
+    ...(r.passportCheck === true ? { passportCheck: true } : {}),
   };
 }

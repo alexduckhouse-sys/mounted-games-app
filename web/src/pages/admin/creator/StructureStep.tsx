@@ -1,9 +1,22 @@
+import { useMemo } from 'react';
 import { describeHeats } from '../../../lib/formatPlan';
-import { lanesFor, MAX_SESSIONS, resizeSessions, sectionHasFinal, sectionLocked, sectionName, setRaceFinals, type CreatorDraft, type SectionDraft } from '../../../lib/creatorDraft';
+import {
+  MAX_SESSIONS, resizeSessions, sectionHasFinal, sectionLocked, sectionName, setRaceFinals, type CreatorDraft, type SectionDraft,
+} from '../../../lib/creatorDraft';
+import { setSectionArena } from '../../../lib/creatorArenas';
 import { durationText, estimateText, sectionEstimate } from '../../../lib/creatorPlan';
+import { RefineChoiceRow, RefineSwitchRow } from '../../refine/Refine';
+import { SecHead, StepHeading, Stepper } from './controls';
 import { HatbandEditor } from './Hatbands';
-import { NumberBox, SelectBox, StepIntro, TextBox, type StepProps } from './parts';
+import type { StepProps } from './parts';
 
+const FORMATS = [{ value: 'std', label: 'Standard' }, { value: 'hhf', label: 'Heat, heat, final' }];
+const TIES = [
+  { value: '0', label: 'Countback' }, { value: '1', label: 'Last race' }, { value: '2', label: 'Run-off' }, { value: '3', label: 'Decide on the day' },
+];
+const LANES = [{ value: '0', label: 'Move up one' }, { value: '1', label: 'Stay in lane' }, { value: '2', label: 'Move down one' }];
+
+/** How each age group runs, how long it takes, what breaks a tie, and the hatbands. This is what the timetable is built from. */
 export function StructureStep({ draft, change, problems, clear, templates, teamCounts }: StepProps<CreatorDraft> & {
   /** Names of the races in the library, for the run-off race. */
   templates: string[];
@@ -12,87 +25,69 @@ export function StructureStep({ draft, change, problems, clear, templates, teamC
   const update = (i: number, next: (s: SectionDraft) => SectionDraft) =>
     change({ sections: draft.sections.map((s, idx) => (idx === i ? next(s) : s)) });
   const patch = (i: number, p: Partial<SectionDraft>) => update(i, (s) => ({ ...s, ...p }));
+  const arenaOptions = useMemo(() => draft.arenas.map((a) => ({ value: a.name, label: a.name })), [draft.arenas]);
+  const raceOptions = useMemo(() => templates.map((t) => ({ value: t, label: t })), [templates]);
 
   return (
-    <section aria-labelledby="cw-structure" className="flex flex-col gap-[18px]">
-      <StepIntro title="Structure and timing">How each age group runs, and how long it takes. This is what the timetable is built from.</StepIntro>
-      <div className="flex flex-col gap-4">
-        {draft.sections.map((s, i) => {
-          const locked = sectionLocked(s);
-          const est = sectionEstimate(s, s.existingId ? teamCounts[s.existingId] ?? 0 : 0);
-          const runoff = s.runoffRaceName;
-          return (
-            <div key={s.existingId ?? `new-${i}`} role="group" aria-label={`Structure for ${sectionName(s)}`} className="mg-card flex flex-col gap-4 p-4">
-              <strong className="text-[17px] text-[rgb(var(--mg-heading))]">{sectionName(s)}</strong>
-              {locked && <p className="mg-notice">Heats have been made or scores entered for this age group, so its structure is fixed. You can still change the minutes and the arena.</p>}
-
-              <div className="flex flex-col gap-2 text-[15px] font-medium">
-                <span id={`cw-struct-${i}`}>Structure</span>
-                <div role="radiogroup" aria-labelledby={`cw-struct-${i}`} className="flex min-h-12 gap-0.5 rounded-[10px] bg-[rgb(var(--mg-done-bg))] p-[3px]">
-                  {([['Standard', false, 'Standard, several sessions'], ['Heat, heat, final', true, 'Heat, heat, final (HHF)']] as const).map(([label, value, aria]) => (
-                    <button key={label} type="button" role="radio" aria-checked={s.usesRaceFinals === value} aria-label={aria} disabled={locked}
-                      onClick={() => update(i, (cur) => setRaceFinals(cur, value))}
-                      className={`flex-1 rounded-lg px-2 text-sm font-semibold disabled:opacity-60 ${s.usesRaceFinals === value ? 'bg-[rgb(var(--mg-button))] text-white' : 'text-[rgb(var(--mg-body))]'}`}>{label}</button>
-                  ))}
+    <section aria-label="Structure and timing" className="flex flex-col">
+      <StepHeading>Structure and timing</StepHeading>
+      {draft.sections.map((s, i) => {
+        const locked = sectionLocked(s);
+        const name = sectionName(s);
+        const est = sectionEstimate(s, s.existingId ? teamCounts[s.existingId] ?? 0 : 0);
+        const tie = String(s.tieBreak ?? 0);
+        const minutesError = problems[`section.${i}.minutes`];
+        return (
+          <div key={s.existingId ?? `new-${i}`} role="group" aria-label={`Structure for ${name}`}>
+            <SecHead name={name} first={i === 0} />
+            <div className="cw-card">
+              <RefineChoiceRow label="Format" value={s.usesRaceFinals ? 'hhf' : 'std'} options={FORMATS} disabled={locked}
+                onChange={(v) => update(i, (cur) => setRaceFinals(cur, v === 'hhf'))} />
+              <div className="cw-panel" style={{ paddingBlock: 12 }}>
+                <div className="cw-line" style={{ alignItems: 'flex-end' }}>
+                  <div className="cw-stp-field" style={{ flex: '0 0 auto' }}>
+                    <span>Sessions</span>
+                    <Stepper name={`Sessions, ${name}`} value={String(s.sessions.length)} min={1} max={s.usesRaceFinals || locked ? s.sessions.length : MAX_SESSIONS}
+                      onChange={(n) => update(i, (cur) => resizeSessions(cur, n))} />
+                  </div>
+                  <div className="cw-stp-field" style={{ flex: '0 0 auto' }}>
+                    <span>Minutes per heat</span>
+                    <Stepper name={`Minutes per heat, ${name}`} value={s.minutesPerRace} min={1} max={180} step={5}
+                      onChange={(n) => { patch(i, { minutesPerRace: String(n) }); clear(`section.${i}.minutes`); }} />
+                  </div>
                 </div>
-                <span className="text-xs font-normal text-[rgb(var(--mg-muted))]">
-                  {s.usesRaceFinals ? 'Every race is two qualifier heats and then a final. It runs as one session.' : 'Teams race in heats, and points add up across the races.'}
-                </span>
+                {minutesError && <p role="alert" className="cw-note" style={{ color: 'rgb(var(--mg-elim))', margin: 0 }}>{minutesError}</p>}
+                {s.usesRaceFinals && <p className="cw-t2">Heat, heat, final runs as one session. Every race is two qualifier heats and then a final.</p>}
               </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <SelectBox label="Sessions" value={s.sessions.length} disabled={locked || s.usesRaceFinals} onChange={(v) => update(i, (cur) => resizeSessions(cur, parseInt(v, 10)))}
-                  hint={s.usesRaceFinals ? 'Heat, heat, final uses one session.' : 'Each session is a block of heats on the timetable.'}>
-                  {Array.from({ length: MAX_SESSIONS }, (_, n) => <option key={n} value={n + 1}>{n + 1}</option>)}
-                </SelectBox>
-                <NumberBox label="Teams through to the final" placeholder={s.maxTeamsPerHeat || String(lanesFor(s.format))} value={s.finalistCount} error={problems[`section.${i}.finalists`]} disabled={locked}
-                  hint={`Defaults to heat size (${s.maxTeamsPerHeat || lanesFor(s.format)}).`}
-                  onChange={(finalistCount) => { patch(i, { finalistCount }); clear(`section.${i}.finalists`); }} />
-              </div>
-
-              {!s.usesRaceFinals && (
-                <div role="group" aria-label={`Final for ${sectionName(s)}`} className="flex flex-col gap-2 text-[15px] font-medium">
-                  {sectionHasFinal(s) ? (
-                    <>
-                      {([['Carry points into the final', 'carryPointsIntoFinal', s.carryPointsIntoFinal === true, false], ['Double points in the final', 'doublePointsInFinal', s.doublePointsInFinal === true, !!s.finalScored]] as const).map(([label, key, on, off]) => (
-                        <label key={key} className="flex min-h-11 cursor-pointer items-center gap-3">
-                          <input type="checkbox" className="h-4 w-4 accent-[rgb(var(--mg-heading))]" checked={on} disabled={off} onChange={(e) => patch(i, { [key]: e.target.checked })} />
-                          <span>{label}</span>
-                        </label>
-                      ))}
-                      <button type="button" className="min-h-11 self-start text-sm font-semibold text-[rgb(var(--mg-elim))] underline" onClick={() => patch(i, { hasFinal: false })}>Remove the final</button>
-                    </>
-                  ) : (
-                    <button type="button" className="flex min-h-12 w-full items-center justify-center rounded-xl bg-[rgb(var(--mg-tint))] text-base font-bold text-[rgb(var(--mg-heading))]" onClick={() => patch(i, { hasFinal: true })}>+ Add a final</button>
-                  )}
-                </div>
+              {draft.arenas.length > 1 && (
+                <RefineChoiceRow label="Arena" value={s.arena} options={arenaOptions}
+                  onChange={(arena) => { change({ sections: setSectionArena(draft, i, arena) }); clear(`section.${i}.arena`); }} />
               )}
-
-              <SelectBox label="Run-off race" value={runoff} disabled={locked} onChange={(runoffRaceName) => patch(i, { runoffRaceName })} hint="Used to split teams that tie.">
-                <option value="">None</option>
-                {runoff && !templates.includes(runoff) && <option value={runoff}>{runoff}</option>}
-                {templates.map((name) => <option key={name} value={name}>{name}</option>)}
-              </SelectBox>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <NumberBox label="Minutes per heat" suffix="min" value={s.minutesPerRace} error={problems[`section.${i}.minutes`]}
-                  hint="How many minutes a single heat takes in the arena."
-                  onChange={(minutesPerRace) => { patch(i, { minutesPerRace }); clear(`section.${i}.minutes`); }} />
-                <NumberBox label="Max teams per heat" value={s.maxTeamsPerHeat} error={problems[`section.${i}.heat`]} disabled={locked}
-                  hint="Max lanes per heat in the arena."
-                  onChange={(maxTeamsPerHeat) => { patch(i, { maxTeamsPerHeat }); clear(`section.${i}.heat`); }} />
-                <TextBox label="Arena" value={s.arena} error={problems[`section.${i}.arena`]} hint="Same arena: one after another. Different arenas run side by side."
-                  onChange={(arena) => { patch(i, { arena }); clear(`section.${i}.arena`); }} />
-              </div>
-
-              <p className="rounded-lg bg-[rgb(var(--mg-subtle))] px-3 py-2 text-sm text-[rgb(var(--mg-body))]" aria-live="polite">
-                Estimate: {estimateText(est.teams)}, {s.usesRaceFinals ? 'qualifier heats and a final for each race' : describeHeats(est.sizes)}, about {durationText(est.minutesPerSession)} a session.
-              </p>
+              <span className="cw-subhead">Scoring extras</span>
+              <RefineChoiceRow label="Tie-break" value={tie} options={TIES} onChange={(v) => patch(i, { tieBreak: parseInt(v, 10) })} />
+              {tie === '2' && (
+                <RefineChoiceRow label="Run-off race" value={s.runoffRaceName} options={raceOptions} allowOther placeholder="Choose"
+                  onChange={(runoffRaceName) => patch(i, { runoffRaceName })} />
+              )}
+              {!s.usesRaceFinals && (
+                <RefineChoiceRow label="Lane after each race" value={String(s.laneRotation ?? 0)} options={LANES} disabled={locked}
+                  onChange={(v) => patch(i, { laneRotation: parseInt(v, 10) })} />
+              )}
+              {sectionHasFinal(s) && (
+                <>
+                  <RefineSwitchRow label="Carry points into the final" on={s.carryPointsIntoFinal === true} onChange={(on) => patch(i, { carryPointsIntoFinal: on })} />
+                  <RefineSwitchRow label="Double points in the final" on={s.doublePointsInFinal === true} disabled={!!s.finalScored} onChange={(on) => patch(i, { doublePointsInFinal: on })} />
+                </>
+              )}
             </div>
-          );
-        })}
-        <HatbandEditor draft={draft} change={change} />
-      </div>
+            {locked && <p className="cw-note">Heats have been made or scores entered for this age group, so its structure is fixed. You can still change the minutes and the tie-break.</p>}
+            <p className="cw-note" aria-live="polite">
+              Estimate: {estimateText(est.teams)}, {s.usesRaceFinals ? 'qualifier heats and a final for each race' : describeHeats(est.sizes)}, about {durationText(est.minutesPerSession)} a session.
+            </p>
+          </div>
+        );
+      })}
+      <HatbandEditor draft={draft} change={change} />
     </section>
   );
 }
