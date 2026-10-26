@@ -224,7 +224,7 @@ public class EntryExtensionsSchemaTests
             INSERT INTO "CompetitionEntrySettings" VALUES (-999, NULL);
             """);
         await Assert.ThrowsAsync<SqliteException>(() => EntryExtensionsSqliteSchema.EnsureAsync(db));
-        Assert.Equal(-999, (await db.Set<CompetitionEntrySettings>().SingleAsync()).CompetitionId);
+        Assert.Equal(-999, await db.Set<CompetitionEntrySettings>().Select(x => x.CompetitionId).SingleAsync());
         Assert.Equal(0, await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM pragma_foreign_key_list('CompetitionEntrySettings')").SingleAsync());
         Assert.Equal(0, await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM sqlite_master WHERE name = 'CompetitionEntrySettings_ef_upgrade'").SingleAsync());
     }

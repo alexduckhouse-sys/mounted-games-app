@@ -255,8 +255,8 @@ public sealed class CommerceOrderService(AppDbContext db)
         if (requestedStables > 0 || requestedHookups > 0)
         {
             var capacity = await VenueCapacity.GetCapacityAsync(db, order.CompetitionId, excludeOrderId: order.Id, ct: cancellationToken);
-            if (VenueCapacity.CheckCapacityError(capacity, requestedStables, requestedHookups) is not null)
-                return false;
+            if (VenueCapacity.CheckCapacityError(capacity, requestedStables, requestedHookups) is { } capErr)
+                return capErr;
         }
         foreach (var line in order.Lines)
         {
@@ -314,8 +314,8 @@ public sealed class CommerceOrderService(AppDbContext db)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(x => x.StockQuantity,
                     x => x.StockQuantity == null ? null : x.StockQuantity - quantity)
-                .SetProperty(x => x.Version, x => x.Version + 1)
-                .SetProperty(x => x.UpdatedAt, DateTime.UtcNow), cancellationToken);
+                .SetProperty(x => x.Version, x => x.StockQuantity == null ? x.Version : x.Version + 1)
+                .SetProperty(x => x.UpdatedAt, x => x.StockQuantity == null ? x.UpdatedAt : DateTime.UtcNow), cancellationToken);
         if (reserved != 1) return new Reservation(false, 0, 0, "An item no longer has enough stock.");
         var itemStock = await db.Set<CatalogueItem>()
             .Where(x => x.Id == itemId)

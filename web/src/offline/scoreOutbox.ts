@@ -176,7 +176,7 @@ function isValidPlacing(value: unknown): value is Placing {
 /** Parses and validates an exported outbox backup JSON string, resetting imported items to 'waiting'. */
 export function parseOutboxBackup(
   raw: string,
-  fallbackCompetitionId: number,
+  fallbackCompetitionId?: number,
   viaLinkOverride?: boolean,
 ): QueuedScore[] | null {
   let parsed: unknown;
@@ -185,6 +185,9 @@ export function parseOutboxBackup(
   } catch {
     return null;
   }
+  const topCompId = parsed && typeof parsed === 'object' && typeof (parsed as { competitionId?: unknown }).competitionId === 'number'
+    ? (parsed as { competitionId: number }).competitionId
+    : undefined;
   const items = Array.isArray(parsed)
     ? parsed
     : (parsed && typeof parsed === 'object' && Array.isArray((parsed as { scores?: unknown }).scores))
@@ -214,7 +217,8 @@ export function parseOutboxBackup(
     }
     const compId = typeof item.competitionId === 'number' && Number.isFinite(item.competitionId) && item.competitionId > 0
       ? item.competitionId
-      : fallbackCompetitionId;
+      : (topCompId ?? fallbackCompetitionId ?? 0);
+    if (!compId || compId <= 0) return null;
     const viaLink = viaLinkOverride !== undefined ? viaLinkOverride : item.viaLink === true;
     out.push({
       ...(typeof item.saveId === 'string' && item.saveId ? { saveId: item.saveId } : {}),

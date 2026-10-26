@@ -1105,7 +1105,6 @@ public class SignupController : ControllerBase
         if (req.Status == SignupPaymentStatus.Paid && extras?.IsWaitlist == true)
             return Conflict(new { message = "Use Mark paid to promote a waitlist entry when space is available." });
         if (req.Status is SignupPaymentStatus.Paid or SignupPaymentStatus.Pending
-        if (req.Status is SignupPaymentStatus.Paid or SignupPaymentStatus.Pending
             && signup.Status is SignupPaymentStatus.Cancelled or SignupPaymentStatus.Refunded)
         {
             var isGuestWait = await _db.Set<SignupMatchmaking>().AnyAsync(m => m.SignupId == signup.Id && m.WaitingForGuestSpot);

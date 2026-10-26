@@ -170,7 +170,7 @@ export function buildEventArchiveFiles(input: BuildEventArchiveInput): Record<st
         team.clubName,
         team.suffix,
         team.bibDescription ?? team.bibColour ?? '',
-        team.withdrawnAt ? 'Withdrawn' : 'Active',
+        team.isWithdrawn ? 'Withdrawn' : 'Active',
         team.isHorsConcours ? 'Yes' : 'No',
         riders.length,
         form?.trainerName ?? '',
@@ -247,7 +247,7 @@ export function buildEventArchiveFiles(input: BuildEventArchiveInput): Record<st
         sectionId: t.competitionSectionId,
         sectionName: t.sectionName,
         isHorsConcours: t.isHorsConcours,
-        withdrawnAt: t.withdrawnAt ?? null,
+        isWithdrawn: Boolean(t.isWithdrawn),
       })),
       resultsBook: {
         ...resultsBook,
@@ -376,5 +376,6 @@ export function eventArchiveFileName(competitionName: string): string {
 }
 
 export async function fetchEventArchive(competitionId: number): Promise<EventArchiveDto> {
-  return api.get<EventArchiveDto>(`/competitions/${competitionId}/archive`);
+  const res = await api.get<EventArchiveDto>(`/competitions/${competitionId}/archive`);
+  return ((res as { data?: EventArchiveDto })?.data ?? res) as EventArchiveDto;
 }

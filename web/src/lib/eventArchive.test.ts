@@ -18,9 +18,10 @@ function sampleCompetition(): CompetitionDetail {
     location: 'Showground Arena',
     startDate: '2031-06-14T09:00:00Z',
     endDate: '2031-06-15T17:00:00Z',
-    status: 1,
+    isActive: true,
+    isArchived: false,
     sections: [
-      { id: 5, name: 'U12', ageGroup: 1, format: 2, displayName: 'Under 12 Teams' },
+      { id: 5, competitionId: 42, ageGroup: 'U12', format: 2, displayName: 'Under 12 Teams', priceMinor: 0 },
     ],
     teams: [
       {
@@ -47,7 +48,7 @@ function sampleCompetition(): CompetitionDetail {
         displayName: 'Beech B',
         bibColour: 'Blue',
         isHorsConcours: true,
-        withdrawnAt: '2031-06-14T12:00:00Z',
+        isWithdrawn: true,
       },
     ],
     sessions: [
@@ -125,6 +126,8 @@ describe('eventArchive (#100)', () => {
     const declarations: Record<number, DeclarationForm> = {
       1: {
         id: 90,
+        competitionId: 42,
+        competitionName: 'County Championship 2031',
         teamId: 1,
         teamName: 'Oak A',
         submittedAt: '2031-06-13T18:00:00Z',

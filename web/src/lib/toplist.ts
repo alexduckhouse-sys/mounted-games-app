@@ -615,6 +615,7 @@ function compareTieBreak(
         if (fa.finalRecentPoints[i] !== fb.finalRecentPoints[i]) return fb.finalRecentPoints[i] - fa.finalRecentPoints[i];
       }
     }
+    return 0;
   }
   if (a.wins !== b.wins) return b.wins - a.wins;
   if (fa && fb) {

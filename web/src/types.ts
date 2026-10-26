@@ -492,7 +492,7 @@ export interface MySignup {
   refundPending?: boolean;
   teamsCount?: number;
   drawComplete?: boolean;
-  linkedTeams?: { id: number; name: string }[] | null;
+  linkedTeams?: { id: number; name: string }[];
   /** Assigned barn / stable boxes, e.g. "Barn B, Boxes 14–18". */
   stableAssignment?: string | null;
   /** Assigned electric hook-up pitch, e.g. "Hook-up Post 4". */

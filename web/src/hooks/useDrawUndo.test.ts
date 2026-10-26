@@ -43,7 +43,7 @@ describe('useDrawUndo', () => {
     });
     expect(result.current.undoStatus.label).toBe('Deleted Heat 2 in Session 1');
 
-    let undoRes: Awaited<ReturnType<typeof result.current.undo>> = null;
+    let undoRes = null as Awaited<ReturnType<typeof result.current.undo>>;
     await act(async () => {
       undoRes = await result.current.undo();
     });

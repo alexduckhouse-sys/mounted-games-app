@@ -18,6 +18,8 @@ describe('useArenaAssistance', () => {
       competitionId: 3,
       authorName: 'Chief Steward',
       body: 'Farrier needed at Arena 1',
+      type: 1,
+      adminOnly: true,
       createdAt: '2026-06-01T10:00:00Z',
     };
     postMock.mockResolvedValueOnce({ data: msg });

@@ -205,23 +205,6 @@ export function useAudioLevel(
     const activeTrack = audioTracks.find((t) => t.readyState !== 'ended') ?? audioTracks[0] ?? null;
 
     if (!stream || !activeTrack) {
-      const warning = evaluateAudioSilenceWarning({
-        isLive,
-        isMuted: muted || Boolean(stream),
-        silentDurationMs: isLive && Boolean(stream) ? silenceWarningMs + 1 : 0,
-        silenceWarningMs,
-      });
-      setState({
-        level: 0,
-        peakLevel: 0,
-        db: -60,
-        hasAudioTrack: false,
-        isMuted: muted || Boolean(stream),
-        silentDurationMs: 0,
-        silentWarning: warning.silentWarning,
-        warningMessage: warning.warningMessage,
-        segments: buildAudioMeterSegments(0, 0, segmentCount),
-      });
       return undefined;
     }
 
@@ -315,6 +298,31 @@ export function useAudioLevel(
       }
     };
   }, [stream, isLive, muted, sampleIntervalMs, silenceWarningMs, silenceThreshold, segmentCount]);
+
+  const audioTracks = stream && typeof stream.getAudioTracks === 'function'
+    ? stream.getAudioTracks()
+    : [];
+  const activeTrack = audioTracks.find((t) => t.readyState !== 'ended') ?? audioTracks[0] ?? null;
+
+  if (!stream || !activeTrack) {
+    const warning = evaluateAudioSilenceWarning({
+      isLive,
+      isMuted: muted || Boolean(stream),
+      silentDurationMs: isLive && Boolean(stream) ? silenceWarningMs + 1 : 0,
+      silenceWarningMs,
+    });
+    return {
+      level: 0,
+      peakLevel: 0,
+      db: -60,
+      hasAudioTrack: false,
+      isMuted: muted || Boolean(stream),
+      silentDurationMs: 0,
+      silentWarning: warning.silentWarning,
+      warningMessage: warning.warningMessage,
+      segments: buildAudioMeterSegments(0, 0, segmentCount),
+    };
+  }
 
   return state;
 }

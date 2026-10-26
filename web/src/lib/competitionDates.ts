@@ -5,8 +5,10 @@ const ukDateParts = new Intl.DateTimeFormat('en-GB', {
   day: '2-digit',
 });
 
-const dayOf = (iso: string) => {
+const dayOf = (iso: string | null | undefined) => {
+  if (typeof iso !== 'string') return null;
   const trimmed = iso.trim();
+  if (!trimmed) return null;
   const midnightMatch = /^(\d{4})-(\d{2})-(\d{2})(?:T00:00(?::00(?:\.0+)?)?Z?)?$/i.exec(trimmed);
   if (midnightMatch) {
     const y = Number(midnightMatch[1]);
