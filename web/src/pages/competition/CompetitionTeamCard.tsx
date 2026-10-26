@@ -69,7 +69,7 @@ export function CompetitionTeamCard({ competitionId, canWrite = true }: { compet
 
   async function remove(helper: CompetitionHelper) {
     if (busy) return;
-    if (!(await confirmDialog({ title: 'Remove from the team?', message: `Remove ${helper.name} from the team? They lose access to this competition.`, confirmLabel: 'Remove from team', destructive: true }))) return;
+    if (!(await confirmDialog({ title: `Remove ${helper.name} from the team?`, message: 'They lose access to this competition.', confirmLabel: 'Remove from team', destructive: true }))) return;
     setBusy(true);
     setNotice(null);
     try {
@@ -85,7 +85,7 @@ export function CompetitionTeamCard({ competitionId, canWrite = true }: { compet
 
   async function leave(helper: CompetitionHelper) {
     if (busy) return;
-    if (!(await confirmDialog({ title: 'Leave this team?', message: 'Leave this team? You will lose access to this competition.', confirmLabel: 'Leave team', destructive: true }))) return;
+    if (!(await confirmDialog({ title: 'Leave this team?', message: 'You’ll lose access to this competition for this team.', confirmLabel: 'Leave team', destructive: true }))) return;
     setBusy(true);
     setNotice(null);
     try {

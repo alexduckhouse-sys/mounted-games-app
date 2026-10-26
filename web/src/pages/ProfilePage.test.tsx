@@ -276,7 +276,7 @@ describe('ProfilePage: needs you', () => {
     const confirm = autoConfirm(true);
     mount({ roles: ['Admin'] });
     await userEvent.click((await needsSection()).getByRole('button', { name: 'Decline' }));
-    expect(confirm).toHaveBeenCalledWith('Decline the request from Priya Shah? Their account will stay a member.');
+    expect(confirm).toHaveBeenCalledWith('Their account stays a member.');
     expect(api.post).toHaveBeenCalledWith('/admin/trainer-requests/r2/decline');
     await vi.waitFor(() => expect(screen.queryByRole('region', { name: 'Needs you' })).not.toBeInTheDocument());
   });

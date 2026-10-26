@@ -151,7 +151,7 @@ export function TimetablePage() {
   });
 
   async function removeBreak(list: Item[], item: Item) {
-    if (!(await confirmDialog({ title: 'Remove this break?', message: `Remove ${item.session.name}?`, confirmLabel: 'Remove', destructive: true }))) return;
+    if (!(await confirmDialog({ title: `Remove ${item.session.name}?`, message: 'Later sessions move up to fill the gap.', confirmLabel: 'Remove break', destructive: true }))) return;
     await run('Couldn’t remove the break.', async () => {
       await api.delete(`/competitions/${competition.id}/sessions/${item.session.id}`);
       await shiftLater(list, item, -item.minutes);

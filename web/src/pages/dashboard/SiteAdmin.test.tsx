@@ -82,7 +82,7 @@ describe('admin trainer requests', () => {
     const confirm = autoConfirm(true);
     mount();
     await userEvent.click(await screen.findByRole('button', { name: 'Decline' }));
-    expect(confirm).toHaveBeenCalledWith(`Decline the request from ${request.fullName}? Their account will stay a member.`);
+    expect(confirm).toHaveBeenCalledWith('Their account stays a member.');
     expect(api.post).toHaveBeenCalledWith(`${path}/${request.userId}/decline`);
     expect(await screen.findByText('No trainer requests.')).toBeInTheDocument();
     expect(vi.mocked(api.get).mock.calls.filter(([url]) => url === path)).toHaveLength(2);
@@ -274,7 +274,7 @@ describe('admin competitions', () => {
     mount();
     await userEvent.click(await screen.findByRole('button', { name: 'More for Christmas Cracker Teams' }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Delete competition' }));
-    const dialog = await screen.findByRole('alertdialog', { name: /Delete “Christmas Cracker Teams” forever\?/ });
+    const dialog = await screen.findByRole('alertdialog', { name: /Delete Christmas Cracker Teams for good\?/ });
     expect(dialog).toHaveClass('mg-confirm-danger');
     const confirm = within(dialog).getByRole('button', { name: 'Delete competition' });
     expect(confirm).toBeDisabled();

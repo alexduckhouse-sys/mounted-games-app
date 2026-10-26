@@ -65,7 +65,7 @@ export function RulesLibraryPage() {
   }, 'Couldn’t add that race. Try again.');
 
   async function remove(race: RaceTemplate) {
-    if (!(await confirmDialog({ title: 'Delete this race?', message: `Delete “${race.name}” from the library? This can’t be undone.`, confirmLabel: 'Delete race', destructive: true }))) return;
+    if (!(await confirmDialog({ title: 'Delete this race?', message: `“${race.name}” goes from the library for good.`, confirmLabel: 'Delete race', destructive: true }))) return;
     const ok = await run(async () => {
       await api.delete(`/race-templates/${race.id}`);
       setRaces((current) => (current ?? []).filter((r) => r.id !== race.id));

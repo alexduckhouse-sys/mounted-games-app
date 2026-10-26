@@ -121,7 +121,7 @@ describe('CompetitionTeamCard', () => {
     await screen.findByText('Hana Helper');
     const asked = autoConfirm([false, true]);
     await user.click(screen.getByRole('button', { name: 'Remove Hana Helper' }));
-    await waitFor(() => expect(asked).toHaveBeenCalledWith('Remove Hana Helper from the team? They lose access to this competition.'));
+    await waitFor(() => expect(asked).toHaveBeenCalledWith('They lose access to this competition.'));
     expect(api.delete).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Remove Hana Helper' }));
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/competitions/5/team/h1'));
@@ -160,7 +160,7 @@ describe('CompetitionTeamCard', () => {
       render(<CompetitionTeamCard competitionId={5} />);
       const asked = autoConfirm([false, true]);
       await user.click(await screen.findByRole('button', { name: 'Leave this team' }));
-      await waitFor(() => expect(asked).toHaveBeenCalledWith('Leave this team? You will lose access to this competition.'));
+      await waitFor(() => expect(asked).toHaveBeenCalledWith('You’ll lose access to this competition for this team.'));
       expect(api.delete).not.toHaveBeenCalled();
       await user.click(screen.getByRole('button', { name: 'Leave this team' }));
       await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/competitions/5/team/h1'));

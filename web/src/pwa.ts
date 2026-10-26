@@ -14,7 +14,7 @@ export function registerPwa(): void {
     onNeedRefresh() {
       if (broadcasting) return;
       // A new build is waiting in the worker. Ask once; reload on accept.
-      void confirmDialog({ title: 'Update ready', message: 'A new version of the app is ready. Reload now?', confirmLabel: 'Reload now' }).then((reload) => {
+      void confirmDialog({ title: 'Update ready', message: 'A new version of the app is ready.', confirmLabel: 'Reload now', cancelLabel: 'Not now' }).then((reload) => {
         if (reload) updateSW(true);
       });
     },

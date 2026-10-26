@@ -109,7 +109,7 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
 
   async function revoke(link: ScorerLink) {
     if (busy) return;
-    if (!(await confirmDialog({ title: 'Withdraw this link?', message: `Withdraw ${link.label}’s link? It stops working straight away.`, confirmLabel: 'Withdraw link', destructive: true }))) return;
+    if (!(await confirmDialog({ title: `Withdraw ${link.label}’s scorer link?`, message: 'It stops working straight away.', confirmLabel: 'Withdraw link', destructive: true }))) return;
     setBusy(true);
     setNotice(null);
     try {

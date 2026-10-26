@@ -101,7 +101,7 @@ export function SponsorsSharingPage() {
 
   async function removeSponsor(sponsor: SponsorAdmin) {
     if (!items) return;
-    if (!(await confirmDialog({ title: 'Remove this sponsor?', message: `Remove ${sponsor.name}?`, confirmLabel: 'Remove', destructive: true }))) return;
+    if (!(await confirmDialog({ title: `Remove ${sponsor.name}?`, message: 'They come off this event’s sponsor list.', confirmLabel: 'Remove sponsor', destructive: true }))) return;
     const ok = await run(async () => {
       await api.delete(`${base}/${sponsor.id}`);
       changed(items.filter((item) => item.id !== sponsor.id));

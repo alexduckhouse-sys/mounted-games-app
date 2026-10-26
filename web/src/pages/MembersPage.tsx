@@ -85,7 +85,7 @@ export function MembersPage() {
 
   async function remove(userId: string, name: string) {
     if (clubId == null || busy) return;
-    if (!(await confirmDialog({ title: 'Remove from club?', message: `Remove ${name} from ${data?.clubName ?? 'the club'}?`, confirmLabel: 'Remove from club', destructive: true }))) return;
+    if (!(await confirmDialog({ title: 'Remove from club?', message: `${name} stops being a member of ${data?.clubName ?? 'the club'}.`, confirmLabel: 'Remove from club', destructive: true }))) return;
     setBusy(true);
     setNotice(null);
     try {

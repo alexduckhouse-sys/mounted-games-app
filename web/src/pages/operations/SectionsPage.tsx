@@ -160,7 +160,7 @@ export function SectionsPage() {
 
   async function remove(index: number) {
     const section = latest.current.sections[index];
-    if (section.existingId && !(await confirmDialog({ title: 'Remove this section?', message: `Remove ${sectionName(section)} and its sessions? This can’t be undone.`, confirmLabel: 'Remove', destructive: true }))) return;
+    if (section.existingId && !(await confirmDialog({ title: `Remove ${sectionName(section)} and its sessions?`, message: 'You can’t undo this.', confirmLabel: 'Remove section', destructive: true }))) return;
     commit({ ...latest.current, sections: latest.current.sections.filter((_, i) => i !== index) });
   }
 

@@ -101,7 +101,7 @@ describe('TimetablePage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/competitions/7/sessions/2'));
-    expect(asked.titles).toEqual(['Remove this break?']);
+    expect(asked.titles).toEqual(['Remove Lunch?']);
   });
 
   it('moves an item above its neighbour', async () => {

@@ -138,7 +138,7 @@ function ChatTabSession() {
 
   async function removeMessage(id: number, confirmFirst = true) {
     if (!canModerate) return;
-    if (confirmFirst && !(await confirmDialog({ title: 'Delete this announcement?', message: 'Delete this announcement?', confirmLabel: 'Delete announcement', destructive: true }))) return;
+    if (confirmFirst && !(await confirmDialog({ title: 'Delete this announcement?', message: 'It disappears for everyone.', confirmLabel: 'Delete announcement', destructive: true }))) return;
     setActionError(null);
     try {
       await api.delete(`/competitions/${competition.id}/chat/${id}`);
@@ -152,7 +152,7 @@ function ChatTabSession() {
 
   async function blockMessageAuthor(id: number) {
     if (!canModerate) return;
-    if (!(await confirmDialog({ title: 'Block this sender?', message: "Block this sender's IP from posting?", confirmLabel: 'Block sender', destructive: true }))) return;
+    if (!(await confirmDialog({ title: 'Block this sender?', message: 'They can’t post in chat from this phone or network.', confirmLabel: 'Block sender', destructive: true }))) return;
     setActionError(null);
     setActionNotice(null);
     try {

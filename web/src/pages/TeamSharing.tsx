@@ -52,7 +52,7 @@ export function TeamCalendarFeed({ team }: { team: Pick<Team, 'id' | 'displayNam
   }, [team.id]);
 
   async function make() {
-    if (status?.enabled && !(await confirmDialog({ title: 'Make a new link?', message: 'Make a new link? The old one will stop working, so anyone using it will need the new one.', confirmLabel: 'Make new link', destructive: true }))) return;
+    if (status?.enabled && !(await confirmDialog({ title: 'Make a new calendar link?', message: 'The old link stops working, so anyone using it needs the new one.', confirmLabel: 'Make new link' }))) return;
     setBusy(true);
     setError(null);
     try {
@@ -68,7 +68,7 @@ export function TeamCalendarFeed({ team }: { team: Pick<Team, 'id' | 'displayNam
   }
 
   async function turnOff() {
-    if (!(await confirmDialog({ title: 'Turn the link off?', message: 'Turn the calendar link off? It will stop working for everyone using it.', confirmLabel: 'Turn link off', destructive: true }))) return;
+    if (!(await confirmDialog({ title: 'Turn the calendar link off?', message: 'It stops working for everyone using it.', confirmLabel: 'Turn link off', destructive: true }))) return;
     setBusy(true);
     setError(null);
     try {

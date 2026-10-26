@@ -40,7 +40,7 @@ export function TrainerRequestsSection() {
   }, []);
 
   async function review(request: TrainerRequest, action: 'approve' | 'decline') {
-    if (action === 'decline' && !(await confirmDialog({ title: 'Decline this request?', message: `Decline the request from ${request.fullName}? Their account will stay a member.`, confirmLabel: 'Decline request', destructive: true }))) return;
+    if (action === 'decline' && !(await confirmDialog({ title: `Decline ${request.fullName}’s request?`, message: 'Their account stays a member.', confirmLabel: 'Decline', destructive: true }))) return;
     setBusy(true);
     setError(null);
     try {

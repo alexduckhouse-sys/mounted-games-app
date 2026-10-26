@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -38,31 +38,44 @@ describe('deletionErrorMessage', () => {
   });
 });
 
+const openSheet = async () => {
+  await userEvent.click(screen.getByRole('button', { name: 'Delete my account' }));
+  return within(screen.getByRole('dialog', { name: 'Delete your account?' }));
+};
+
 describe('DeleteAccountPanel', () => {
-  it('shows only the first button until asked, and cancel puts it back', async () => {
+  it('shows only the first button until asked, and keeping the account closes the sheet', async () => {
     mount();
-    expect(screen.queryByLabelText('Enter your password to confirm')).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Delete my account' }));
-    await userEvent.type(screen.getByLabelText('Enter your password to confirm'), 'secret');
-    await userEvent.click(screen.getByRole('button', { name: 'Keep my account' }));
-    expect(screen.queryByLabelText('Enter your password to confirm')).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Delete my account' }));
-    expect(screen.getByLabelText('Enter your password to confirm')).toHaveValue('');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    const sheet = await openSheet();
+    expect(screen.getByRole('dialog')).toHaveAccessibleDescription(/Your sign-in, notes, saved riders and notifications go\./);
+    await userEvent.type(sheet.getByLabelText('Your password'), 'secret');
+    await userEvent.click(sheet.getByRole('button', { name: 'Keep my account' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    const again = await openSheet();
+    expect(again.getByLabelText('Your password')).toHaveValue('');
+  });
+
+  it('is a delete-type sheet: Keep my account, then a filled red button', async () => {
+    mount();
+    const sheet = await openSheet();
+    expect(sheet.getByRole('button', { name: 'Keep my account' }).parentElement).toHaveClass('kit-acts-del');
+    expect(sheet.getByRole('button', { name: 'Delete my account' })).toHaveClass('kit-pill-del');
   });
 
   it('will not submit without a password', async () => {
     mount();
-    await userEvent.click(screen.getByRole('button', { name: 'Delete my account' }));
-    expect(screen.getByRole('button', { name: 'Permanently delete my account' })).toBeDisabled();
+    const sheet = await openSheet();
+    expect(sheet.getByRole('button', { name: 'Delete my account' })).toBeDisabled();
     expect(api.delete).not.toHaveBeenCalled();
   });
 
   it('deletes with the password, signs out and goes home', async () => {
     vi.mocked(api.delete).mockResolvedValue({ status: 204 });
     mount();
-    await userEvent.click(screen.getByRole('button', { name: 'Delete my account' }));
-    await userEvent.type(screen.getByLabelText('Enter your password to confirm'), 'secret');
-    await userEvent.click(screen.getByRole('button', { name: 'Permanently delete my account' }));
+    const sheet = await openSheet();
+    await userEvent.type(sheet.getByLabelText('Your password'), 'secret');
+    await userEvent.click(sheet.getByRole('button', { name: 'Delete my account' }));
     expect(await screen.findByText('Home page')).toBeInTheDocument();
     expect(api.delete).toHaveBeenCalledWith('/auth/me', { data: { password: 'secret' } });
     expect(localStorage.getItem('mg.auth')).toBeNull();
@@ -71,12 +84,12 @@ describe('DeleteAccountPanel', () => {
   it('keeps the person signed in and shows the reason when the API refuses', async () => {
     vi.mocked(api.delete).mockRejectedValue({ response: { data: { message: "That password isn't right." } } });
     mount();
-    await userEvent.click(screen.getByRole('button', { name: 'Delete my account' }));
-    await userEvent.type(screen.getByLabelText('Enter your password to confirm'), 'wrong');
-    await userEvent.click(screen.getByRole('button', { name: 'Permanently delete my account' }));
+    const sheet = await openSheet();
+    await userEvent.type(sheet.getByLabelText('Your password'), 'wrong');
+    await userEvent.click(sheet.getByRole('button', { name: 'Delete my account' }));
     expect(await screen.findByRole('alert')).toHaveTextContent("That password isn't right.");
     expect(screen.queryByText('Home page')).not.toBeInTheDocument();
     expect(localStorage.getItem('mg.auth')).not.toBeNull();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Permanently delete my account' })).toBeEnabled());
+    await waitFor(() => expect(sheet.getByRole('button', { name: 'Delete my account' })).toBeEnabled());
   });
 });

@@ -64,7 +64,7 @@ export function StreamControlsPage() {
   }
 
   async function endStream() {
-    if (!(await confirmDialog({ title: 'End the stream?', message: 'Viewers will see that it has finished.', confirmLabel: 'End stream', destructive: true }))) return;
+    if (!(await confirmDialog({ title: 'End the stream?', message: 'Viewers will see that it has finished.', cancelLabel: 'Keep going', confirmLabel: 'End stream', destructive: true }))) return;
     setEnding(true);
     setError(null);
     const results = await Promise.allSettled(liveStreams.map((stream) => api.post(`/competitions/${competition.id}/streams/${stream.id}/end`)));

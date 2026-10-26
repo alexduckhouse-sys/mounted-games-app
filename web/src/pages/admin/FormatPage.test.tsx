@@ -154,7 +154,7 @@ describe('On the day: breaks and briefings', () => {
     expect(api.delete).not.toHaveBeenCalled();
     await userEvent.click(within(breaks).getByRole('button', { name: 'Remove Lunch' }));
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/competitions/5/sessions/12'));
-    expect(confirm).toHaveBeenCalledWith('Remove Lunch?');
+    expect(confirm).toHaveBeenCalledWith('Later sessions move up to fill the gap.');
   });
 
   it('shows a refusal when adding fails', async () => {

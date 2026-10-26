@@ -31,6 +31,15 @@
   --mg-elim: 200 32 47;
   --mg-ok: 31 107 67;
   --mg-overlay: 15 42 74;
+  /* Pop-up kit: two message colours (information, problems), the toast pill, and the delete button. */
+  --mg-info-bg: 234 240 247;
+  --mg-info-ink: 23 56 95;
+  --mg-problem-bg: 251 238 208;
+  --mg-problem-ink: 94 64 0;
+  --mg-toast-bg: var(--mg-header-deep);
+  --mg-toast-ink: 255 255 255;
+  --mg-toast-tick: 31 107 67;
+  --mg-danger: 200 32 47;
   --mg-font: 'Barlow', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --mg-font-display: 'Barlow Condensed', 'Arial Narrow', system-ui, -apple-system, sans-serif;
   --mg-radius-card: 12px;
@@ -110,6 +119,11 @@
   --mg-elim: 248 113 113;
   --mg-ok: 110 200 150;
   --mg-overlay: 0 0 0;
+  --mg-info-bg: 30 46 72;
+  --mg-info-ink: 191 210 235;
+  --mg-problem-bg: 74 56 10;
+  --mg-problem-ink: 253 224 150;
+  --mg-toast-bg: 40 58 90;
 }
 
 .mg-font, .skin { font-family: var(--mg-font); }
@@ -224,7 +238,8 @@ body, body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-i
 .mg-conn-pill:disabled { cursor: default; }
 .mg-conn-reconnecting { background: rgb(var(--mg-late-bg)); border-color: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); }
 .mg-conn-polling { background: rgb(var(--mg-surface)); border-color: rgb(var(--mg-control)); color: rgb(var(--mg-heading)); }
-.mg-conn-offline { background: rgb(var(--mg-surface)); border-color: rgb(var(--mg-elim)); color: rgb(var(--mg-elim)); }
+/* Offline is grey, not red: losing signal isn't something the visitor did wrong. */
+.mg-conn-offline { background: rgb(var(--mg-surface)); border-color: rgb(var(--mg-dash)); color: rgb(var(--mg-body)); }
 .mg-conn-back { cursor: default; background: rgb(var(--mg-ok)); border-color: rgb(var(--mg-ok)); color: #fff; animation: mg-conn-back 2.6s var(--mg-ease-out) both; }
 @keyframes mg-conn-back { 0% { transform: scale(.7); opacity: 0; } 12% { transform: scale(1.06); opacity: 1; } 20% { transform: scale(1); } 85% { opacity: 1; } 100% { opacity: 0; transform: translateY(-4px); } }
 .mg-conn-spin { animation: mg-conn-spin 1s linear infinite; }
@@ -343,7 +358,8 @@ a.mg-row:active, button.mg-row:active { background: rgb(var(--mg-tint) / .65); }
 .mg-dropdown-option + .mg-dropdown-option { border-top: 1px solid rgb(var(--mg-rule-soft)); }
 .mg-dropdown-option[data-active] { background: rgb(var(--mg-subtle)); }
 .mg-dropdown-option[aria-selected="true"] { font-weight: 700; color: rgb(var(--mg-heading)); }
-.mg-notice { border-radius: 10px; padding: 12px 14px; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); font: 500 14px/1.35 var(--mg-font); }
+/* Left over from before the pop-up kit; new code uses <Notice> (components/Notice.tsx). Looks like the problem strip. */
+.mg-notice { border-radius: 12px; padding: 11px 12px; background: rgb(var(--mg-problem-bg)); color: rgb(var(--mg-problem-ink)); font: 600 13.5px/1.4 var(--mg-font); }
 
 /* Skeleton placeholders shown while a page's first copy is on its way. */
 .mg-skel { display: block; border-radius: 6px; background: rgb(var(--mg-tint)); background-image: linear-gradient(90deg, transparent, rgb(var(--mg-surface) / .55), transparent); background-size: 200% 100%; background-repeat: no-repeat; animation: mg-skel 1.4s ease-in-out infinite; }
@@ -493,12 +509,6 @@ span[data-grow] { display: inline-block; }
 }
 @media (prefers-reduced-motion: reduce) { .mg-follow-burst { display: none; } }
 
-/* The saved tick: a green disc pops up mid-screen, its tick draws in, and it fades. Taps go straight through. */
-.mg-saved-tick { position: fixed; z-index: 120; left: 50%; top: 42%; translate: -50% -50%; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px 22px 14px; border-radius: 20px; background: rgb(var(--mg-surface) / .94); box-shadow: 0 12px 40px rgb(0 0 0 / .22); pointer-events: none; }
-.mg-saved-tick-disc { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; background: rgb(var(--mg-ok)); }
-.mg-saved-tick-disc path { fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
-.mg-saved-tick-label { max-width: 70vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 16px/1.2 var(--mg-font); color: rgb(var(--mg-heading)); }
-
 /* Sheets and the side menu slide in and leave the same way (see hooks/useExitDelay); confirm boxes settle in. */
 @keyframes mg-fade-in { from { opacity: 0; } }
 @keyframes mg-fade-out { to { opacity: 0; } }
@@ -524,15 +534,15 @@ html[data-lite="true"] dialog::backdrop { animation: none !important; }
 /* Content fades in over its loading placeholder. */
 .mg-settle { animation: mg-fade-in .26s ease-out; }
 /* A new announcement drops in under the header on any page. */
-.mg-announce-pop { position: fixed; z-index: 45; top: calc(var(--mg-shell-h, 64px) + 8px); left: max(12px, env(safe-area-inset-left, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); margin: 0 auto; max-width: 30rem; display: flex; align-items: stretch; border-radius: 14px; background: rgb(var(--mg-header-deep)); color: #fff; box-shadow: 0 14px 34px rgb(0 0 0 / .28), inset 4px 0 0 #F5B82E; overflow: hidden; }
-.mg-announce-pop-link { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 10px 6px 10px 16px; color: #fff !important; text-decoration: none !important; }
-.mg-announce-pop-icon { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 50%; background: rgb(245 184 46 / .18); color: #F5B82E; }
+.mg-announce-pop { position: fixed; z-index: 45; top: calc(var(--mg-shell-h, 64px) + 8px); left: max(12px, env(safe-area-inset-left, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); margin: 0 auto; max-width: 30rem; display: flex; align-items: stretch; border-radius: 16px; background: rgb(var(--mg-header-deep)); color: #fff; box-shadow: 0 12px 28px rgb(0 0 0 / .3); overflow: hidden; }
+.mg-announce-pop-link { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 54px; padding: 11px 6px 11px 12px; color: #fff !important; text-decoration: none !important; }
+.mg-announce-pop-icon { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 50%; background: rgb(245 184 46 / .18); color: #F5B82E; }
 .mg-announce-pop-icon svg { width: 18px; height: 18px; }
-.mg-announce-pop-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font: 500 14px/1.3 var(--mg-font); }
-.mg-announce-pop-text b { font: 700 12px/1 var(--mg-font); letter-spacing: .06em; text-transform: uppercase; color: rgb(var(--mg-header-sub)); }
+.mg-announce-pop-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; font: 500 13.5px/1.35 var(--mg-font); }
+.mg-announce-pop-text b { font: 700 12.5px/1 var(--mg-font); color: rgb(var(--mg-header-sub)); }
 .mg-announce-pop-text span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .mg-announce-pop-go { flex: none; width: 18px; height: 18px; opacity: .7; }
-.mg-announce-pop-close { flex: none; width: 44px; display: grid; place-items: center; border: 0; border-left: 1px solid rgb(255 255 255 / .12); background: transparent; color: rgb(255 255 255 / .8); cursor: pointer; }
+.mg-announce-pop-close { flex: none; width: 44px; display: grid; place-items: center; border: 0; background: transparent; color: rgb(255 255 255 / .8); cursor: pointer; }
 .mg-announce-pop-close svg { width: 18px; height: 18px; }
 .mg-announce-pop-link:focus-visible, .mg-announce-pop-close:focus-visible { outline: 3px solid #fff; outline-offset: -3px; }
 
@@ -598,10 +608,6 @@ html[data-lite="true"] .mg-conn-back, html[data-lite="true"] .mg-sent-row { anim
 .mg-lazy-img[data-state="loaded"] { animation: mg-photo-in 480ms var(--mg-ease-out); }
 @keyframes mg-photo-in { from { opacity: .3; filter: blur(6px); transform: scale(1.03); } }
 
-/* The small "saved" pill for pages that save as you go. */
-.mg-saved-toast { position: fixed; z-index: 90; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); translate: -50% 0; display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 999px; background: rgb(var(--mg-header-deep)); color: #fff; font: 600 14px/1 var(--mg-font); white-space: nowrap; box-shadow: 0 8px 24px rgb(0 0 0 / .25); pointer-events: none; }
-.mg-saved-toast svg { flex: none; padding: 2px; border-radius: 50%; background: rgb(var(--mg-ok)); }
-.mg-saved-toast path { fill: none; stroke: #fff; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; }
 
 /* Sponsors: a strip under a page, the full page, and the cards over the live video. */
 .mg-sponsors { padding: 12px; border-radius: var(--mg-radius-card); background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); box-shadow: var(--mg-shadow-sm); }
@@ -703,16 +709,7 @@ html[data-lite="true"] .mg-seg > button[aria-pressed="true"] {
 .mg-select-caret { flex: none; opacity: .7; }
 .mg-field .mg-select { border: 0; background: transparent; padding: 0; }
 
-/* Confirmation dialog: covers the whole screen, blurred and dimmed. Destructive ones are red in every theme. */
-.mg-confirm-backdrop { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgb(0 0 0 / 0.5); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
-.mg-confirm { width: min(100%, 440px); overflow: hidden; border-radius: 16px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); box-shadow: 0 24px 64px rgb(0 0 0 / 0.4); }
-.mg-confirm-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px; background: rgb(var(--mg-header)); color: #fff; }
-.mg-confirm-head h2 { margin: 0; font-size: 19px; font-weight: 700; line-height: 1.2; }
-.mg-confirm-danger .mg-confirm-head { background: rgb(var(--mg-elim)); }
-.mg-confirm-body { margin: 0; padding: 16px 18px 4px; font-size: 16px; line-height: 1.45; }
-.mg-confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; padding: 16px 18px 18px; }
-.mg-confirm-actions .mg-btn { min-height: 46px; flex: 1 1 140px; }
+/* Confirmation sheet: see theme/kit.css. */
 .mg-btn-danger { background: rgb(var(--mg-elim)); border-color: rgb(var(--mg-elim)); color: #fff !important; }
 .mg-btn-danger:hover:not(:disabled) { filter: brightness(1.1); }
-.mg-confirm-type { display: flex; flex-direction: column; gap: 6px; padding: 12px 18px 0; font-size: 14px; }
-.mg-confirm-type input { min-height: 44px; padding: 0 12px; border: 1.5px solid rgb(var(--mg-control)); border-radius: 10px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); font-size: 16px; }
+

@@ -188,7 +188,7 @@ export function FormatPage() {
   };
 
   const removeBreak = async (s: Session) => {
-    if (!(await confirmDialog({ title: 'Remove this break?', message: `Remove ${s.name}?`, confirmLabel: 'Remove', destructive: true }))) return;
+    if (!(await confirmDialog({ title: `Remove ${s.name}?`, message: 'Later sessions move up to fill the gap.', confirmLabel: 'Remove break', destructive: true }))) return;
     void run(() => api.delete(`/competitions/${competition.id}/sessions/${s.id}`), 'Could not remove that.');
   };
 
@@ -198,7 +198,7 @@ export function FormatPage() {
     const withTeams = targets.filter((s) => { const section = sectionOf(s); return section && activeTeams(section).length > 0; });
     if (withTeams.length === 0) { setError('There are no teams to put in heats yet. Form teams first.'); return; }
     const replacing = withTeams.filter((s) => s.heats.length > 0).length;
-    if (!(await confirmDialog({ title: 'Generate heats and start times?', confirmLabel: 'Generate', message: `Generate heats and start times for ${withTeams.length} ${withTeams.length === 1 ? 'session' : 'sessions'}?${replacing ? ` The ${replacing} that already have heats will get new ones.` : ''}${skipped.length ? ` ${skipped.length} already started or scored and will be left alone.` : ''}` }))) return;
+    if (!(await confirmDialog({ title: 'Make heats and start times?', confirmLabel: 'Make heats', message: `For ${withTeams.length} ${withTeams.length === 1 ? 'session' : 'sessions'}.${replacing ? ` The ${replacing} that already ${replacing === 1 ? 'has' : 'have'} heats ${replacing === 1 ? 'gets' : 'get'} new ones.` : ''}${skipped.length ? ' Sessions already started are left alone.' : ''}` }))) return;
     const ok = await run(async () => {
       for (const s of withTeams) {
         const section = sectionOf(s)!;

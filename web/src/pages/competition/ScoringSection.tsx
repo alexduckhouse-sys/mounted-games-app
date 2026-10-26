@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSavedTick } from '../../components/SavedTick';
+import { useSavedToast } from '../../components/SavedTick';
 import { ChevronLeft, ChevronRight, CloudOff, MoreHorizontal, Printer, Trash2, Undo2 } from 'lucide-react';
 import { hatbandFor, inLaneOrder } from '../../lib/laneOrder';
 import { describePlacings, type QueuedScore } from '../../offline/scoreOutbox';
@@ -147,8 +147,8 @@ export function ScoringSection({
     ? summariseRace({ heat, races, raceIndex: summaryIdx, hcTeamIds, rule: tieRule, qualifiers, notes })
     : null;
 
-  // A green tick pops up over the page as a race is saved; the page has already moved on to the next race.
-  const savedTick = useSavedTick();
+  // A toast says the race is saved; the page has already moved on to the next race.
+  const savedTick = useSavedToast();
   function save(places?: PendingPlace[]) {
     const name = activeRace?.name;
     const saved = places ? onSubmit(places) : onSubmit();

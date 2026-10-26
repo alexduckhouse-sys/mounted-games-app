@@ -252,7 +252,7 @@ describe('MembersPage: a person\'s row', () => {
     await screen.findByText('Kerry Hall');
     await user.click(row('Kerry Hall'));
     await user.click(screen.getByRole('button', { name: 'Remove from club' }));
-    await waitFor(() => expect(asked).toHaveBeenCalledWith('Remove Kerry Hall from Stockport PC?'));
+    await waitFor(() => expect(asked).toHaveBeenCalledWith('Kerry Hall stops being a member of Stockport PC.'));
     expect(api.delete).toHaveBeenCalledWith('/clubs/7/members/kh');
     await waitFor(() => expect(screen.queryByText('Kerry Hall')).not.toBeInTheDocument());
     expect(group('Members').getByText('Mel Dunn')).toBeInTheDocument();

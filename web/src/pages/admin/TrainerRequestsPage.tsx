@@ -40,7 +40,7 @@ export function TrainerRequestsPage() {
   }
 
   async function one(request: TrainerRequest, action: 'approve' | 'decline') {
-    if (action === 'decline' && !(await confirmDialog({ title: 'Decline this request?', message: `Decline the request from ${request.fullName}? Their account will stay a member.`, confirmLabel: 'Decline request', destructive: true }))) return;
+    if (action === 'decline' && !(await confirmDialog({ title: `Decline ${request.fullName}’s request?`, message: 'Their account stays a member.', confirmLabel: 'Decline', destructive: true }))) return;
     setBusy(true);
     setError(null);
     await review(request, action);
@@ -49,7 +49,7 @@ export function TrainerRequestsPage() {
 
   async function approveAll() {
     if (!requests || requests.length === 0) return;
-    if (!(await confirmDialog({ title: `Approve all ${requests.length}?`, message: `Give ${requests.length === 1 ? 'this person' : `all ${requests.length} people`} the access they asked for?`, confirmLabel: 'Approve all' }))) return;
+    if (!(await confirmDialog({ title: requests.length === 1 ? 'Approve this request?' : `Approve all ${requests.length} requests?`, message: 'They get the access they asked for.', confirmLabel: requests.length === 1 ? 'Approve' : 'Approve all' }))) return;
     setBusy(true);
     setError(null);
     for (const request of requests) {

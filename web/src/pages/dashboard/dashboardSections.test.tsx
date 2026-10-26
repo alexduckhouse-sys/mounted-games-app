@@ -64,11 +64,11 @@ describe('Needs you', () => {
     const asked = autoConfirm([false, true]);
     mountNeeds(needs({ requests: [request], review }));
     await userEvent.click(screen.getByRole('button', { name: 'Decline' }));
-    await waitFor(() => expect(asked).toHaveBeenCalledWith('Decline the request from Sam Lee? Their account will stay a member.'));
+    await waitFor(() => expect(asked).toHaveBeenCalledWith('Their account stays a member.'));
     expect(review).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'Decline' }));
     await waitFor(() => expect(review).toHaveBeenCalledWith(request, 'decline'));
-    expect(asked.titles).toEqual(['Decline this request?', 'Decline this request?']);
+    expect(asked.titles).toEqual(['Decline Sam Lee’s request?', 'Decline Sam Lee’s request?']);
   });
 
   it('says so when the server refuses', async () => {

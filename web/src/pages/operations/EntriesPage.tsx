@@ -122,7 +122,7 @@ export function EntriesPage() {
   });
 
   async function withdraw(team: TeamEntry) {
-    if (!(await confirmDialog({ title: 'Withdraw this entry?', message: `Take ${team.teamName} out of the draw. You can bring it back until a draw depends on it.`, confirmLabel: 'Withdraw', destructive: true }))) return;
+    if (!(await confirmDialog({ title: `Withdraw ${team.teamName}?`, message: 'They come out of the draw. You can bring them back until a draw depends on it.', confirmLabel: 'Withdraw', destructive: true }))) return;
     await run('Couldn’t withdraw the entry.', () => api.put(`/competitions/${competition.id}/teams/${team.teamId}/entry-status`, { status: 1, reason: null }));
     reload();
   }

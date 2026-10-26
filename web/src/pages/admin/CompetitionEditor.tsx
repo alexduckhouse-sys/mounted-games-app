@@ -179,7 +179,7 @@ export function CompetitionEditor() {
   }
 
   async function discardDraft() {
-    if (!(await confirmDialog({ title: 'Discard this draft?', message: 'Discard this saved draft and start over?', confirmLabel: 'Discard draft', destructive: true }))) return;
+    if (!(await confirmDialog({ title: 'Discard this draft?', message: 'You’ll start again from a blank form.', cancelLabel: 'Keep editing', confirmLabel: 'Discard draft', destructive: true }))) return;
     try { window.localStorage.removeItem(storageKey); } catch { /* ignore */ }
     window.location.reload();
   }

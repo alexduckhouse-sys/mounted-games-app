@@ -156,11 +156,11 @@ export function SiteAdmin({ hideTrainerRequests = false }: { hideTrainerRequests
   }
 
   async function deleteComp(c: CompetitionSummary) {
-    const message = `This wipes ${c.teamCount} team${c.teamCount === 1 ? '' : 's'}, ` +
+    const message = `This deletes ${c.teamCount} team${c.teamCount === 1 ? '' : 's'}, ` +
       `${c.sectionCount} age group${c.sectionCount === 1 ? '' : 's'}, ` +
       `${c.sessionCount} session${c.sessionCount === 1 ? '' : 's'}, ` +
-      `every heat, race, result, dec form and chat message. There is no undo.`;
-    if (!(await confirmDialog({ title: `Delete “${c.name}” forever?`, message, confirmLabel: 'Delete competition', destructive: true, requireText: c.name }))) return;
+      `every heat, race, result, dec form and chat message. There’s no undo.`;
+    if (!(await confirmDialog({ title: `Delete ${c.name} for good?`, message, confirmLabel: 'Delete competition', destructive: true, requireText: c.name }))) return;
     try {
       await api.delete(`/competitions/${c.id}`);
       // Wipe any local wizard draft for this comp so it doesn't reappear on /admin/competitions/:id.

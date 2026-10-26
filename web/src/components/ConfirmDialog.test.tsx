@@ -4,22 +4,38 @@ import { describe, expect, it, vi } from 'vitest';
 import { ConfirmDialog, confirmDialog, useConfirm } from './ConfirmDialog';
 
 describe('ConfirmDialog', () => {
-  it('says what will happen and puts focus on Cancel', () => {
-    render(<ConfirmDialog title="Delete this race?" message="It goes for good." confirmLabel="Delete race" onAnswer={vi.fn()} />);
+  it('says what will happen and puts focus on Cancel for a delete', () => {
+    render(<ConfirmDialog title="Delete this race?" message="It goes for good." confirmLabel="Delete race" destructive onAnswer={vi.fn()} />);
     const dialog = screen.getByRole('alertdialog', { name: 'Delete this race?' });
     expect(dialog).toHaveAccessibleDescription('It goes for good.');
     expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
     expect(screen.getByRole('button', { name: 'Delete race' })).toBeInTheDocument();
   });
 
-  it('is red when destructive and neutral otherwise', () => {
-    const { rerender } = render(<ConfirmDialog title="Delete?" message="m" destructive onAnswer={vi.fn()} />);
+  it('is a delete-type sheet when destructive: Cancel first, then a filled red button', () => {
+    render(<ConfirmDialog title="Delete?" message="m" destructive confirmLabel="Delete it" onAnswer={vi.fn()} />);
     expect(screen.getByRole('alertdialog')).toHaveClass('mg-confirm-danger');
-    expect(screen.getByRole('button', { name: 'Confirm' })).toHaveClass('mg-btn-danger');
-    rerender(<ConfirmDialog title="Reload?" message="m" cancelLabel="Not now" onAnswer={vi.fn()} />);
+    const buttons = screen.getAllByRole('button');
+    expect(buttons.map((button) => button.textContent)).toEqual(['Cancel', 'Delete it']);
+    expect(buttons[0]).toHaveClass('kit-pill');
+    expect(buttons[0]).not.toHaveClass('kit-pill-fill');
+    expect(buttons[1]).toHaveClass('kit-pill-del');
+    expect(buttons[0].parentElement).toHaveClass('kit-acts-del');
+    expect(screen.getByRole('alertdialog').querySelector('.mg-confirm-head')).toBeNull();
+  });
+
+  it('is a go-ahead sheet otherwise: the filled navy action first, then "Not now"', () => {
+    render(<ConfirmDialog title="Reload?" message="m" confirmLabel="Reload now" onAnswer={vi.fn()} />);
     expect(screen.getByRole('alertdialog')).not.toHaveClass('mg-confirm-danger');
-    expect(screen.getByRole('button', { name: 'Confirm' })).toHaveClass('mg-btn-primary');
-    expect(screen.getByRole('button', { name: 'Not now' })).toBeInTheDocument();
+    const buttons = screen.getAllByRole('button');
+    expect(buttons.map((button) => button.textContent)).toEqual(['Reload now', 'Not now']);
+    expect(buttons[0]).toHaveClass('kit-pill-fill');
+    expect(buttons[0]).toHaveFocus();
+  });
+
+  it('lets the caller name the safe choice', () => {
+    render(<ConfirmDialog title="Cancel this invite?" message="m" destructive cancelLabel="Keep invite" confirmLabel="Cancel invite" onAnswer={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Keep invite' })).toBeInTheDocument();
   });
 
   it('answers yes, no, Escape and a tap on the backdrop', async () => {
@@ -27,7 +43,7 @@ describe('ConfirmDialog', () => {
     const { container } = render(<ConfirmDialog title="t" message="m" onAnswer={onAnswer} />);
     await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     expect(onAnswer).toHaveBeenLastCalledWith(true);
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Not now' }));
     expect(onAnswer).toHaveBeenLastCalledWith(false);
     onAnswer.mockClear();
     await userEvent.keyboard('{Escape}');
@@ -40,7 +56,7 @@ describe('ConfirmDialog', () => {
   });
 
   it('keeps Tab inside the dialog', async () => {
-    render(<ConfirmDialog title="t" message="m" onAnswer={vi.fn()} />);
+    render(<ConfirmDialog title="t" message="m" destructive onAnswer={vi.fn()} />);
     expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
     await userEvent.tab();
     expect(screen.getByRole('button', { name: 'Confirm' })).toHaveFocus();

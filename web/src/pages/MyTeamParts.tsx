@@ -96,7 +96,7 @@ export function CodeRow({ team, onTeamUpdated }: { team: Team; onTeamUpdated: ()
   };
   const random = () => run(() => api.post(`/teams/${team.id}/supporter-key`), () => setEditing(false));
   const revoke = async () => {
-    if (!(await confirmDialog({ title: 'Turn this code off?', message: 'Turn this code off? Existing supporters stay, but no one new can join until you set a new code.', confirmLabel: 'Turn code off', destructive: true }))) return;
+    if (!(await confirmDialog({ title: 'Turn this code off?', message: 'Existing supporters stay, but no one new can join until you set a new code.', confirmLabel: 'Turn code off', destructive: true }))) return;
     return run(() => api.delete(`/teams/${team.id}/supporter-key`), () => setEditing(false));
   };
 
@@ -151,7 +151,7 @@ export function SupportersBlock({ team }: { team: Team }) {
     load();
   }
   async function kick(s: TeamSupporter) {
-    if (!(await confirmDialog({ title: 'Remove supporter?', message: `Remove ${s.userName} as supporter?`, confirmLabel: 'Remove supporter', destructive: true }))) return;
+    if (!(await confirmDialog({ title: `Remove ${s.userName} as a supporter?`, message: 'They stop seeing this team’s heats and dec forms.', confirmLabel: 'Remove supporter', destructive: true }))) return;
     await api.delete(`/team-supporters/${s.id}`);
     load();
   }

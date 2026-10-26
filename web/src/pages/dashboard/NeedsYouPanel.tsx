@@ -65,7 +65,7 @@ export function NeedsYouPanel({ events = [] }: { events?: CompetitionPickerItem[
 
   async function decide(request: TrainerRequest, action: 'approve' | 'decline') {
     setFailed(null);
-    if (action === 'decline' && !(await confirmDialog({ title: 'Decline this request?', message: `Decline the request from ${request.fullName}? Their account will stay a member.`, confirmLabel: 'Decline request', destructive: true }))) return;
+    if (action === 'decline' && !(await confirmDialog({ title: `Decline ${request.fullName}’s request?`, message: 'Their account stays a member.', confirmLabel: 'Decline', destructive: true }))) return;
     if (!(await review(request, action))) setFailed(request.userId);
   }
 

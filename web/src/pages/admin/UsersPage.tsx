@@ -76,7 +76,7 @@ export function UsersPage() {
   }, 'Couldn’t send that invite again. Try again.');
 
   async function cancel(invite: AccountInvite) {
-    if (!(await confirmDialog({ title: 'Cancel this invite?', message: `${invite.email} will no longer be able to use the link they were sent.`, confirmLabel: 'Cancel invite', destructive: true }))) return;
+    if (!(await confirmDialog({ title: 'Cancel this invite?', message: `The link sent to ${invite.email} stops working.`, cancelLabel: 'Keep invite', confirmLabel: 'Cancel invite', destructive: true }))) return;
     await run(async () => {
       await api.delete(`/admin/invites/${invite.id}`);
       setInvites((current) => (current ?? []).filter((i) => i.id !== invite.id));
@@ -90,7 +90,7 @@ export function UsersPage() {
   }, lock ? `Couldn’t lock ${account.fullName}. Try again.` : `Couldn’t unlock ${account.fullName}. Try again.`);
 
   async function lock(account: StaffAccount) {
-    if (!(await confirmDialog({ title: `Lock ${account.fullName}?`, message: 'They are signed out at once and can’t sign in until the account is unlocked.', confirmLabel: 'Lock account', destructive: true }))) return;
+    if (!(await confirmDialog({ title: `Lock ${account.fullName}?`, message: 'They’re signed out now and can’t sign in until you unlock them.', confirmLabel: 'Lock account', destructive: true }))) return;
     await setLock(account, true);
   }
 

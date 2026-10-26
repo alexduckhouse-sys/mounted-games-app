@@ -24,14 +24,14 @@ describe('registerPwa', () => {
   it('reloads into the new version when the user accepts the prompt', async () => {
     options.onNeedRefresh();
     const dialog = await screen.findByRole('alertdialog', { name: 'Update ready' });
-    expect(dialog).toHaveTextContent('A new version of the app is ready. Reload now?');
+    expect(dialog).toHaveTextContent('A new version of the app is ready.');
     await userEvent.click(screen.getByRole('button', { name: 'Reload now' }));
     await waitFor(() => expect(updateSW).toHaveBeenCalledWith(true));
   });
 
   it('leaves the new version waiting when the user declines', async () => {
     options.onNeedRefresh();
-    await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Not now' }));
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
     expect(updateSW).not.toHaveBeenCalled();
   });

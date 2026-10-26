@@ -90,7 +90,7 @@ describe('RulesPage', () => {
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Flag Race/ }));
     await user.click(screen.getByRole('button', { name: 'Delete' }));
-    await waitFor(() => expect(confirm).toHaveBeenCalledWith('Delete "Flag Race" from the library? This can’t be undone.'));
+    await waitFor(() => expect(confirm).toHaveBeenCalledWith('“Flag Race” goes from the library for good.'));
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/race-templates/2'));
   });
 

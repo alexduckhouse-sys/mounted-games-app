@@ -30,7 +30,7 @@ describe('RememberCompetitionDialog', () => {
     mount();
     const dialog = screen.getByRole('dialog', { name: 'Remember this competition?' });
     expect(dialog).toHaveAttribute('open');
-    expect(dialog).toHaveAccessibleDescription(/We'll save a cookie on this device for six months, so it opens straight away next time\./);
+    expect(dialog).toHaveAccessibleDescription(/We’ll save a cookie on this phone for six months, so it opens straight away next time\./);
   });
 
   it('names the competition in the explanation', async () => {

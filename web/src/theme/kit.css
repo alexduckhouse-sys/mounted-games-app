@@ -1,0 +1,78 @@
+/* The pop-up kit: every notice, warning, sheet and toast in one set of eight kinds. Colours come from the
+   --mg-* tokens (info, problem, toast, danger in skin.css), so every theme works. Imported after skin.css.
+   Motion lives in skin.css and the components; this file is looks only. */
+
+/* Pills: filled for the main action, outlined for the rest, red-filled for deleting. */
+.kit-pill { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 18px; border: 1.5px solid rgb(var(--mg-button)); border-radius: 999px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)) !important; font: 700 15px/1 var(--mg-font); text-decoration: none !important; white-space: nowrap; cursor: pointer; }
+.kit-pill:hover:not(:disabled) { background: rgb(var(--mg-subtle)); }
+.kit-pill:disabled { opacity: .5; cursor: not-allowed; }
+.kit-pill:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
+.kit-pill-fill { background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)) !important; }
+.kit-pill-fill:hover:not(:disabled) { background: rgb(var(--mg-button)); filter: brightness(1.12); }
+.kit-pill-del { background: rgb(var(--mg-danger)); border-color: rgb(var(--mg-danger)); color: #fff !important; }
+.kit-pill-del:hover:not(:disabled) { background: rgb(var(--mg-danger)); filter: brightness(1.1); }
+/* A red text button for the odd destructive choice beside a go-ahead ("Delete mine"). */
+.kit-redtext { min-height: 44px; padding: 0 4px; border: 0; background: transparent; color: rgb(var(--mg-elim)); font: 700 15px/1 var(--mg-font); text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 4px; cursor: pointer; }
+.kit-redtext:disabled { opacity: .5; cursor: not-allowed; }
+.kit-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* Delete-type answers: Cancel sized to its text, the delete filling the rest of the row. */
+.kit-acts-del { display: grid; grid-template-columns: auto 1fr; gap: 10px; }
+.kit-acts-del .kit-pill { white-space: nowrap; }
+
+/* Kinds 4 and 5: the information strip (blue-grey) and the problem strip (amber). */
+.kit-strip { display: flex; align-items: flex-start; gap: 9px; padding: 11px 12px; border-radius: 12px; font: 600 13.5px/1.4 var(--mg-font); overflow-wrap: anywhere; }
+.kit-strip > svg { flex: none; width: 16px; height: 16px; margin-top: 2px; }
+.kit-strip-info { background: rgb(var(--mg-info-bg)); color: rgb(var(--mg-info-ink)); }
+.kit-strip-problem { background: rgb(var(--mg-problem-bg)); color: rgb(var(--mg-problem-ink)); }
+.kit-strip-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.kit-strip-body > p { margin: 0; }
+.kit-strip-act { position: relative; min-height: 32px; padding: 0 12px; border: 1.5px solid currentColor; border-radius: 999px; background: transparent; color: inherit !important; font: 700 13px/1 var(--mg-font); text-decoration: none !important; display: inline-flex; align-items: center; cursor: pointer; }
+.kit-strip-act::after { content: ''; position: absolute; inset: -6px -4px; } /* 44 px tap target */
+.kit-strip-act:disabled { opacity: .5; cursor: default; }
+.kit-strip-act:focus-visible, .kit-strip-x:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.kit-strip-x { position: relative; flex: none; width: 28px; height: 28px; margin: -4px -4px -4px 0; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
+.kit-strip-x::after { content: ''; position: absolute; inset: -8px; }
+.kit-strip-x svg { width: 16px; height: 16px; }
+.kit-strip + .kit-strip { margin-top: 8px; }
+
+/* Anything you must answer: a squircle bottom sheet on phones, a centred card on wider screens. */
+.kit-sheet-grip { align-self: center; width: 36px; height: 5px; border-radius: 3px; background: rgb(var(--mg-control)); flex: none; }
+.kit-sheet-title { margin: 4px 0 0; font: 800 22px/1.05 var(--mg-font-display); color: rgb(var(--mg-heading)); }
+.kit-sheet-text { margin: 0; font: 500 15px/1.45 var(--mg-font); color: rgb(var(--mg-ink)); }
+.kit-sheet-text + .kit-sheet-text { margin-top: -4px; }
+dialog.kit-sheet { margin: auto auto 0; width: 100%; max-width: 36rem; max-height: 92dvh; overflow-y: auto; box-sizing: border-box; border: 0; padding: 8px 20px calc(20px + env(safe-area-inset-bottom, 0px)); border-radius: 26px 26px 0 0; corner-shape: squircle; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); box-shadow: 0 -8px 32px rgb(0 0 0 / .18); font-family: var(--mg-font); }
+dialog.kit-sheet::backdrop { background: rgb(var(--mg-overlay) / .45); }
+.kit-sheet-inner { display: flex; flex-direction: column; gap: 12px; }
+.kit-sheet-field { display: flex; flex-direction: column; gap: 6px; font: 600 14px/1.3 var(--mg-font); color: rgb(var(--mg-body)); }
+.kit-sheet-field input { min-height: 46px; padding: 0 12px; border: 1.5px solid rgb(var(--mg-control)); border-radius: 10px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); font: 500 16px/1 var(--mg-font); }
+.kit-sheet-field input:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 1px; }
+@media (min-width: 640px) {
+  dialog.kit-sheet { margin: auto; border-radius: 20px; padding-bottom: 20px; }
+  .kit-sheet-grip { display: none; }
+}
+
+/* The confirm sheet (ConfirmDialog): the same sheet, opened over the page by confirmDialog(). */
+.mg-confirm-backdrop { position: fixed; inset: 0; z-index: 200; display: flex; align-items: flex-end; justify-content: center; padding: 0; background: rgb(var(--mg-overlay) / .45); -webkit-backdrop-filter: none; backdrop-filter: none; }
+.mg-confirm { display: flex; flex-direction: column; gap: 12px; box-sizing: border-box; width: 100%; max-width: 36rem; max-height: 92dvh; overflow-y: auto; padding: 8px 20px calc(20px + env(safe-area-inset-bottom, 0px)); border-radius: 26px 26px 0 0; corner-shape: squircle; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); box-shadow: 0 -8px 32px rgb(0 0 0 / .18); font-family: var(--mg-font); }
+.mg-confirm-title { margin: 4px 0 0; font: 800 22px/1.05 var(--mg-font-display); color: rgb(var(--mg-heading)); }
+.mg-confirm-body { margin: 0; font: 500 15px/1.45 var(--mg-font); }
+.mg-confirm-type { display: flex; flex-direction: column; gap: 6px; font: 600 14px/1.3 var(--mg-font); color: rgb(var(--mg-body)); }
+.mg-confirm-type input { min-height: 46px; padding: 0 12px; border: 1.5px solid rgb(var(--mg-control)); border-radius: 10px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); font: 500 16px/1 var(--mg-font); }
+/* On a phone it rises like every other sheet (the keyframes are in skin.css). */
+@media (max-width: 639px) { .mg-confirm { animation: mg-sheet-in .34s var(--mg-ease-out); } }
+@media (min-width: 640px) {
+  .mg-confirm-backdrop { align-items: center; padding: 16px; }
+  .mg-confirm { width: min(100%, 440px); border-radius: 20px; padding-bottom: 20px; }
+  .mg-confirm .kit-sheet-grip { display: none; }
+}
+
+/* Kind 3: one navy toast pill just above the bottom tabs, with a small green tick. Taps go straight through. */
+.kit-toast { position: fixed; z-index: 90; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); translate: -50% 0; display: inline-flex; align-items: center; gap: 8px; max-width: calc(100vw - 32px); min-height: 40px; padding: 0 16px 0 10px; border-radius: 999px; background: rgb(var(--mg-toast-bg)); color: rgb(var(--mg-toast-ink)); font: 600 14px/1.2 var(--mg-font); box-shadow: 0 8px 20px rgb(var(--mg-overlay) / .3); pointer-events: none; }
+body:has(.mg-tabs) .kit-toast { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+.kit-toast-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kit-toast svg { flex: none; width: 22px; height: 22px; padding: 4px; border-radius: 50%; background: rgb(var(--mg-toast-tick)); }
+.kit-toast path { fill: none; stroke: #fff; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Kind 8: field errors stay red, with a small icon. */
+.mg-field-msg { display: flex; align-items: flex-start; gap: 5px; }
+.mg-field-msg > svg { flex: none; width: 14px; height: 14px; margin-top: 2px; }

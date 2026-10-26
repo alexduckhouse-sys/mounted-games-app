@@ -296,7 +296,7 @@ function PostRow({
   const ownPost = currentUserId != null && post.authorUserId === currentUserId;
 
   async function remove() {
-    if (!(await confirmDialog({ title: 'Remove this post?', message: 'Remove this post?', confirmLabel: 'Remove post', destructive: true }))) return;
+    if (!(await confirmDialog({ title: 'Remove this post?', message: 'It disappears from the tack and kit shop.', confirmLabel: 'Remove post', destructive: true }))) return;
     await api.delete(`/shop/posts/${post.id}`);
     onChanged();
   }
