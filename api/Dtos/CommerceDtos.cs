@@ -72,7 +72,17 @@ public record PublicCompetitionListingDto(
     string? DetailPrompt = null,
     string? DetailHint = null);
 
-public record EventCommerceSettingsDto(int CompetitionId, bool IsDemo, bool IsLocked, DateTime? UpdatedAt);
+public record EventCommerceSettingsDto(
+    int CompetitionId,
+    bool IsDemo,
+    bool IsLocked,
+    DateTime? UpdatedAt,
+    int? MaxStables = null,
+    int? MaxHookups = null,
+    int StablesBooked = 0,
+    int HookupsBooked = 0,
+    int? StablesRemaining = null,
+    int? HookupsRemaining = null);
 
 public record UpdateEventCommerceSettingsRequest(bool IsDemo);
 

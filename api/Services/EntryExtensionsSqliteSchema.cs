@@ -28,9 +28,10 @@ public static class EntryExtensionsSqliteSchema
             FOREIGN KEY ("SignupId") REFERENCES "SectionSignups" ("Id") ON DELETE CASCADE,
             FOREIGN KEY ("TeamId") REFERENCES "Teams" ("Id") ON DELETE CASCADE
             """, 2),
-        ("SignupExtras", "\"SignupId\", \"StablesCount\", \"StablingClubOrTeam\", \"PaymentMethod\", \"IsWaitlist\", \"IsWithdrawn\", \"RefundPending\", \"TeamsCount\", \"StableAssignment\", \"HookupAssignment\", \"VehicleRegistration\", \"ArrivalNotes\"", """
+        ("SignupExtras", "\"SignupId\", \"StablesCount\", \"HookupsCount\", \"StablingClubOrTeam\", \"PaymentMethod\", \"IsWaitlist\", \"IsWithdrawn\", \"RefundPending\", \"TeamsCount\", \"StableAssignment\", \"HookupAssignment\", \"VehicleRegistration\", \"ArrivalNotes\"", """
             "SignupId" INTEGER NOT NULL PRIMARY KEY,
             "StablesCount" INTEGER NOT NULL DEFAULT 0,
+            "HookupsCount" INTEGER NOT NULL DEFAULT 0,
             "StablingClubOrTeam" TEXT NULL,
             "PaymentMethod" TEXT NULL,
             "IsWaitlist" INTEGER NOT NULL DEFAULT 0,
@@ -43,9 +44,11 @@ public static class EntryExtensionsSqliteSchema
             "ArrivalNotes" TEXT NULL,
             FOREIGN KEY ("SignupId") REFERENCES "SectionSignups" ("Id") ON DELETE CASCADE
             """, 1),
-        ("CompetitionEntrySettings", "\"CompetitionId\", \"EntriesCloseAt\"", """
+        ("CompetitionEntrySettings", "\"CompetitionId\", \"EntriesCloseAt\", \"MaxStables\", \"MaxHookups\"", """
             "CompetitionId" INTEGER NOT NULL PRIMARY KEY,
             "EntriesCloseAt" TEXT NULL,
+            "MaxStables" INTEGER NULL,
+            "MaxHookups" INTEGER NULL,
             FOREIGN KEY ("CompetitionId") REFERENCES "Competitions" ("Id") ON DELETE CASCADE
             """, 1),
         ("CompetitionDeclarationLocks", "\"CompetitionId\", \"DeclarationsCloseAt\"", """
@@ -70,6 +73,8 @@ public static class EntryExtensionsSqliteSchema
                 await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"SignupMatchmaking\" ADD COLUMN \"DeclarationAccessGranted\" INTEGER NOT NULL DEFAULT 0;");
             if (table == "SignupExtras")
             {
+                if (await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM pragma_table_info('SignupExtras') WHERE name = 'HookupsCount'").SingleAsync() == 0)
+                    await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"SignupExtras\" ADD COLUMN \"HookupsCount\" INTEGER NOT NULL DEFAULT 0;");
                 foreach (var col in new[] { "StableAssignment", "HookupAssignment", "VehicleRegistration", "ArrivalNotes" })
                 {
                     var checkSql = $"SELECT COUNT(*) AS Value FROM pragma_table_info('SignupExtras') WHERE name = '{col}'";
@@ -77,6 +82,13 @@ public static class EntryExtensionsSqliteSchema
                     if (await db.Database.SqlQueryRaw<int>(checkSql).SingleAsync() == 0)
                         await db.Database.ExecuteSqlRawAsync(alterSql);
                 }
+            }
+            if (table == "CompetitionEntrySettings")
+            {
+                if (await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM pragma_table_info('CompetitionEntrySettings') WHERE name = 'MaxStables'").SingleAsync() == 0)
+                    await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"CompetitionEntrySettings\" ADD COLUMN \"MaxStables\" INTEGER NULL;");
+                if (await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM pragma_table_info('CompetitionEntrySettings') WHERE name = 'MaxHookups'").SingleAsync() == 0)
+                    await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"CompetitionEntrySettings\" ADD COLUMN \"MaxHookups\" INTEGER NULL;");
             }
             var count = await db.Database.SqlQuery<int>($"SELECT COUNT(*) AS \"Value\" FROM pragma_foreign_key_list({table})").SingleAsync();
             if (count == foreignKeys) continue;

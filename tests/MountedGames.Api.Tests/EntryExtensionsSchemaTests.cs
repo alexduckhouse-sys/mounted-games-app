@@ -103,6 +103,7 @@ public class EntryExtensionsSchemaTests
         var extras = await db.Set<SignupExtras>().SingleAsync();
         Assert.Equal(owner.Id, extras.SignupId);
         Assert.Equal(3, extras.StablesCount);
+        Assert.Equal(0, extras.HookupsCount);
         Assert.Equal("Synthetic club", extras.StablingClubOrTeam);
         Assert.Equal("bacs", extras.PaymentMethod);
         Assert.True(extras.IsWaitlist && extras.IsWithdrawn && extras.RefundPending);
@@ -124,12 +125,21 @@ public class EntryExtensionsSchemaTests
         Assert.Equal("Friday 18:00", savedExtras.ArrivalNotes);
         var settings = await db.Set<CompetitionEntrySettings>().SingleAsync();
         Assert.Equal(CloseAt, settings.EntriesCloseAt);
+        Assert.Null(settings.MaxStables);
+        Assert.Null(settings.MaxHookups);
         Assert.Equal(DateTimeKind.Utc, settings.EntriesCloseAt!.Value.Kind);
         Assert.Equal(CloseAt, (await db.Set<CompetitionDeclarationLock>().SingleAsync()).DeclarationsCloseAt);
         settings.EntriesCloseAt = CloseAt.AddHours(1);
+        settings.MaxStables = 80;
+        settings.MaxHookups = 20;
+        extras.HookupsCount = 2;
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
-        Assert.Equal(CloseAt.AddHours(1), (await db.Set<CompetitionEntrySettings>().SingleAsync()).EntriesCloseAt);
+        var updatedSettings = await db.Set<CompetitionEntrySettings>().SingleAsync();
+        Assert.Equal(CloseAt.AddHours(1), updatedSettings.EntriesCloseAt);
+        Assert.Equal(80, updatedSettings.MaxStables);
+        Assert.Equal(20, updatedSettings.MaxHookups);
+        Assert.Equal(2, (await db.Set<SignupExtras>().SingleAsync()).HookupsCount);
 
         // SET NULL and CASCADE must work for adopted tables, not only brand-new ones.
         await db.SectionSignups.Where(x => x.Id == partner.Id).ExecuteDeleteAsync();

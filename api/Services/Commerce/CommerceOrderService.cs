@@ -117,6 +117,25 @@ public sealed class CommerceOrderService(AppDbContext db)
                     return Invalid("The order total cannot exceed £1,000,000.");
                 }
 
+                var requestedStables = 0;
+                var requestedHookups = 0;
+                foreach (var requested in grouped)
+                {
+                    var title = listings[requested.ListingId].CatalogueItem!.Title;
+                    if (VenueCapacity.IsStableTitle(title)) requestedStables += requested.Quantity;
+                    if (VenueCapacity.IsHookupTitle(title)) requestedHookups += requested.Quantity;
+                }
+                if (requestedStables > 0 || requestedHookups > 0)
+                {
+                    var capacity = await VenueCapacity.GetCapacityAsync(db, competitionId, ct: cancellationToken);
+                    var capErr = VenueCapacity.CheckCapacityError(capacity, requestedStables, requestedHookups);
+                    if (capErr is not null)
+                    {
+                        await transaction.RollbackAsync(cancellationToken);
+                        return new CreateOrderResult(null, CreateOrderError.OutOfStock, capErr);
+                    }
+                }
+
                 var reservedStockByListing = new Dictionary<int, int>();
                 foreach (var requested in grouped)
                 {
@@ -209,6 +228,19 @@ public sealed class CommerceOrderService(AppDbContext db)
 
     public async Task<bool> ReserveExistingLinesAsync(EventOrder order, CancellationToken cancellationToken)
     {
+        var requestedStables = 0;
+        var requestedHookups = 0;
+        foreach (var line in order.Lines)
+        {
+            if (VenueCapacity.IsStableTitle(line.TitleSnapshot)) requestedStables += line.Quantity;
+            if (VenueCapacity.IsHookupTitle(line.TitleSnapshot)) requestedHookups += line.Quantity;
+        }
+        if (requestedStables > 0 || requestedHookups > 0)
+        {
+            var capacity = await VenueCapacity.GetCapacityAsync(db, order.CompetitionId, excludeOrderId: order.Id, ct: cancellationToken);
+            if (VenueCapacity.CheckCapacityError(capacity, requestedStables, requestedHookups) is not null)
+                return false;
+        }
         foreach (var line in order.Lines)
         {
             var reserved = await db.Set<CatalogueItem>()

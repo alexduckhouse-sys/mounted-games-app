@@ -120,7 +120,11 @@ public record CompetitionDetail(
     double? LorryLatitude = null,
     double? LorryLongitude = null,
     string? LorryDirectionsNote = null,
-    string? PaymentLinkUrl = null);
+    string? PaymentLinkUrl = null,
+    int? MaxStables = null,
+    int? MaxHookups = null,
+    int? StablesRemaining = null,
+    int? HookupsRemaining = null);
 
 public record CreateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -141,7 +145,9 @@ public record CreateCompetitionRequest(
     [Range(-90, 90)] double? LorryLatitude = null,
     [Range(-180, 180)] double? LorryLongitude = null,
     [MaxLength(CompetitionFields.LorryDirectionsNoteMax)] string? LorryDirectionsNote = null,
-    [MaxLength(CompetitionFields.PaymentLinkUrlMax)] string? PaymentLinkUrl = null);
+    [MaxLength(CompetitionFields.PaymentLinkUrlMax)] string? PaymentLinkUrl = null,
+    [Range(0, 2000)] int? MaxStables = null,
+    [Range(0, 2000)] int? MaxHookups = null);
 
 public record UpdateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -165,7 +171,9 @@ public record UpdateCompetitionRequest(
     [Range(-90, 90)] double? LorryLatitude = null,
     [Range(-180, 180)] double? LorryLongitude = null,
     [MaxLength(CompetitionFields.LorryDirectionsNoteMax)] string? LorryDirectionsNote = null,
-    [MaxLength(CompetitionFields.PaymentLinkUrlMax)] string? PaymentLinkUrl = null);
+    [MaxLength(CompetitionFields.PaymentLinkUrlMax)] string? PaymentLinkUrl = null,
+    [Range(0, 2000)] int? MaxStables = null,
+    [Range(0, 2000)] int? MaxHookups = null);
 
 public record SetSignupsLockedRequest(bool Locked);
 
@@ -259,7 +267,8 @@ public record CreateSectionSignupRequest(
     IReadOnlyList<string>? TeamMembers = null,
     [Range(0, 100)] int StablesCount = 0, [StringLength(200)] string? StablingClubOrTeam = null,
     [StringLength(20)] string? PaymentMethod = null, bool IsWaitlist = false, [Range(1, 20)] int TeamsCount = 1,
-    [StringLength(40)] string? VehicleRegistration = null, [StringLength(500)] string? ArrivalNotes = null);
+    [StringLength(40)] string? VehicleRegistration = null, [StringLength(500)] string? ArrivalNotes = null,
+    [Range(0, 100)] int HookupsCount = 0);
 
 public record UpdateSignupStatusRequest(SignupPaymentStatus Status);
 

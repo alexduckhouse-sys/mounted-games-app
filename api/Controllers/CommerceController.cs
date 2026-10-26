@@ -8,6 +8,7 @@ using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Commerce;
+using MountedGames.Api.Services;
 using MountedGames.Api.Services.Commerce;
 
 namespace MountedGames.Api.Controllers;
@@ -334,7 +335,18 @@ public class CommerceController(AppDbContext db) : ControllerBase
         var settings = await db.Set<EventCommerceSettings>().AsNoTracking()
             .SingleOrDefaultAsync(x => x.CompetitionId == competitionId, cancellationToken);
         var locked = await IsDemoClassificationLockedAsync(competitionId, cancellationToken);
-        return new EventCommerceSettingsDto(competitionId, settings?.IsDemo ?? false, locked, settings?.UpdatedAt);
+        var capacity = await VenueCapacity.GetCapacityAsync(db, competitionId, ct: cancellationToken);
+        return new EventCommerceSettingsDto(
+            competitionId,
+            settings?.IsDemo ?? false,
+            locked,
+            settings?.UpdatedAt,
+            capacity.MaxStables,
+            capacity.MaxHookups,
+            capacity.StablesBooked,
+            capacity.HookupsBooked,
+            capacity.StablesRemaining,
+            capacity.HookupsRemaining);
     }
 
     [HttpPut("competitions/{competitionId:int}/settings")]
@@ -366,7 +378,18 @@ public class CommerceController(AppDbContext db) : ControllerBase
             settings.UpdatedByUserId = CurrentUserId();
             settings.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync(cancellationToken);
-            return new EventCommerceSettingsDto(competitionId, settings.IsDemo, locked, settings.UpdatedAt);
+            var capacity = await VenueCapacity.GetCapacityAsync(db, competitionId, ct: cancellationToken);
+            return new EventCommerceSettingsDto(
+                competitionId,
+                settings.IsDemo,
+                locked,
+                settings.UpdatedAt,
+                capacity.MaxStables,
+                capacity.MaxHookups,
+                capacity.StablesBooked,
+                capacity.HookupsBooked,
+                capacity.StablesRemaining,
+                capacity.HookupsRemaining);
         }, cancellationToken);
     }
 

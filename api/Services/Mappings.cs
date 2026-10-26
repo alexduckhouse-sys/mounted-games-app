@@ -27,7 +27,11 @@ public static class Mappings
         IReadOnlyList<SessionDto> sessions,
         bool isDemo = false,
         PayoutsToDto? payoutsTo = null,
-        bool includePaymentDetails = true) => new(
+        bool includePaymentDetails = true,
+        int? maxStables = null,
+        int? maxHookups = null,
+        int? stablesRemaining = null,
+        int? hookupsRemaining = null) => new(
         c.Id, c.Name, c.Location, c.Description,
         c.Latitude, c.Longitude,
         c.What3Words, c.AppleMapsUrl,
@@ -43,7 +47,9 @@ public static class Mappings
         Postcode: c.Postcode, CompetitionNumber: c.CompetitionNumber, ContactEmail: c.ContactEmail,
         LorryWhat3Words: c.LorryWhat3Words, LorryLatitude: c.LorryLatitude,
         LorryLongitude: c.LorryLongitude, LorryDirectionsNote: c.LorryDirectionsNote,
-        PaymentLinkUrl: includePaymentDetails ? CompetitionFields.ResolvePaymentLinkUrl(c.PaymentLinkUrl, c.PaymentDestination) : null);
+        PaymentLinkUrl: includePaymentDetails ? CompetitionFields.ResolvePaymentLinkUrl(c.PaymentLinkUrl, c.PaymentDestination) : null,
+        MaxStables: maxStables, MaxHookups: maxHookups,
+        StablesRemaining: stablesRemaining, HookupsRemaining: hookupsRemaining);
 
     /// <param name="activeSignups">Paid and pending entries: the ones that count towards <c>MaxParticipants</c>.</param>
     public static CompetitionSectionDto ToDto(this CompetitionSection s, int activeSignups = 0) =>

@@ -378,6 +378,26 @@ export interface CompetitionDetail {
   laneHatbands?: string[] | null;
   /** Where entry fees are paid out: the organiser's club and its masked account. Public, no personal data. */
   payoutsTo?: PayoutsTo | null;
+  /** Venue capacity limit for stables across entries and shop orders. Null when unlimited. */
+  maxStables?: number | null;
+  /** Venue capacity limit for electric hook-ups across entries and shop orders. Null when unlimited. */
+  maxHookups?: number | null;
+  /** Remaining stables available at this venue when `maxStables` is set. */
+  stablesRemaining?: number | null;
+  /** Remaining electric hook-ups available at this venue when `maxHookups` is set. */
+  hookupsRemaining?: number | null;
+}
+
+export interface CompetitionEntrySettings {
+  competitionId: number;
+  entriesCloseAt?: string | null;
+  entriesClosed: boolean;
+  maxStables?: number | null;
+  maxHookups?: number | null;
+  stablesBooked?: number;
+  hookupsBooked?: number;
+  stablesRemaining?: number | null;
+  hookupsRemaining?: number | null;
 }
 
 /** The public summary of a club's payouts. `maskedAccount` is like "••••1234" and only appears once `ready`. */
@@ -461,6 +481,7 @@ export interface MySignup {
   pairRequestStatus?: string | null;
   declarationAccessGranted?: boolean;
   stablesCount?: number;
+  hookupsCount?: number;
   stablingClubOrTeam?: string | null;
   paymentMethod?: string | null;
   isWaitlist?: boolean;
@@ -536,6 +557,7 @@ export interface SectionSignup {
   pairRequestToSignupId?: number | null;
   pairRequestStatus?: string | null;
   stablesCount?: number;
+  hookupsCount?: number;
   stablingClubOrTeam?: string | null;
   paymentMethod?: string | null;
   isWaitlist?: boolean;
@@ -566,6 +588,7 @@ export interface StablingBooking {
   fullName: string;
   ponyClubOrTeam: string;
   stablesCount: number;
+  hookupsCount?: number;
   status: SignupPaymentStatus;
   stableAssignment?: string | null;
   hookupAssignment?: string | null;
@@ -575,6 +598,11 @@ export interface StablingBooking {
 
 export interface StablingSummary {
   totalStables: number;
+  totalHookups?: number;
+  maxStables?: number | null;
+  maxHookups?: number | null;
+  stablesRemaining?: number | null;
+  hookupsRemaining?: number | null;
   bookings: StablingBooking[];
 }
 

@@ -148,6 +148,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
             e.HasKey(x => x.SignupId);
             e.Property(x => x.SignupId).ValueGeneratedNever();
             e.Property(x => x.StablesCount).HasDefaultValue(0);
+            e.Property(x => x.HookupsCount).HasDefaultValue(0);
             e.Property(x => x.TeamsCount).HasDefaultValue(1);
             e.Property(x => x.IsWaitlist).HasConversion<int>().HasDefaultValue(false);
             e.Property(x => x.IsWithdrawn).HasConversion<int>().HasDefaultValue(false);
