@@ -49,7 +49,8 @@ public record CompetitionListingDto(
     DateTime? ReviewedAt,
     CatalogueItemDto Item,
     DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    string? SellerName = null);
 
 public record PublicCompetitionListingDto(
     int Id,
@@ -96,7 +97,9 @@ public record EventOrderDto(
     IReadOnlyList<EventOrderLineDto> Lines,
     IReadOnlyList<TestPaymentDto> TestPayments,
     DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    string? BuyerName = null,
+    string? CompetitionName = null);
 
 public record SellerSaleDto(
     int OrderId,
@@ -106,7 +109,8 @@ public record SellerSaleDto(
     string Currency,
     bool IsTestOrder,
     IReadOnlyList<EventOrderLineDto> Lines,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string? CompetitionName = null);
 
 public record FakeCheckoutRequest(string? IdempotencyKey, FakePaymentOutcome Outcome);
 
