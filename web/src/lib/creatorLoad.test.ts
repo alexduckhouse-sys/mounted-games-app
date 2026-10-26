@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { competition, heat, race, session, team } from '../test/factories';
 import type { CompetitionSection } from '../types';
-import { draftFromCompetition, hasScores, realFixedItems, teamCountsOf } from './creatorLoad';
+import { copyOfCompetition, draftFromCompetition, hasScores, realFixedItems, teamCountsOf } from './creatorLoad';
 
 const sec = (id: number, extra: Partial<CompetitionSection> = {}): CompetitionSection => ({
   id, competitionId: 1, format: 2, ageGroup: 'Seniors', displayName: 'Senior Teams', ...extra,
@@ -31,6 +31,20 @@ describe('draftFromCompetition', () => {
       minutesPerRace: '10', maxTeamsPerHeat: '6', arena: 'Main arena', sessions: [{ races: null }],
     });
     expect(d.sections[0].hasEntries).toBeUndefined();
+  });
+
+  it('loads the tie-break and lane order, and the arenas the age groups run in', () => {
+    const d = draftFromCompetition(competition({
+      sections: [sec(5, { tieBreakRule: 2 }), sec(6, { ageGroup: 'Open', displayName: 'Open' })],
+      sessions: [
+        session(1, { competitionSectionId: 5, orderIndex: 1, arenaName: 'Ring A', lanesPerHeat: 8, laneRotationMode: 1 }),
+        session(2, { competitionSectionId: 6, orderIndex: 2, arenaName: 'Ring B', lanesPerHeat: 4 }),
+      ],
+    }));
+    expect(d.sections[0]).toMatchObject({ tieBreak: 2, laneRotation: 1 });
+    expect(d.sections[1].tieBreak).toBeUndefined();
+    expect(d.sections[1].laneRotation).toBeUndefined();
+    expect(d.arenas).toEqual([{ name: 'Ring A', lanes: '8' }, { name: 'Ring B', lanes: '4' }]);
   });
 
   it('loads the final options, treating missing ones as a final that carries no points and does not double', () => {
@@ -111,5 +125,28 @@ describe('realFixedItems', () => {
     }));
     expect(items).toEqual([{ start: new Date('2026-06-01T09:00:00'), end: new Date('2026-06-01T09:50:00'), arena: 'Arena 2' }]);
     expect(realFixedItems(null)).toEqual([]);
+  });
+});
+
+describe('copyOfCompetition', () => {
+  it('keeps every step and drops what belongs to the old event: dates, saved ids, breaks and heats', () => {
+    const c = competition({
+      name: 'Spring 2026', startDate: '2026-04-25T09:00:00', endDate: '2026-04-26T17:00:00', location: 'Stoneleigh', laneHatbands: ['Red', 'Blue'],
+      sections: [sec(5, { priceMinor: 4500, maxParticipants: 12, activeSignupsCount: 3, tieBreakRule: 1 })],
+      teams: [team(1, { competitionSectionId: 5 })],
+      sessions: [
+        session(1, { competitionSectionId: 5, orderIndex: 1, plannedRaces: ['Bending'], heats: [heat(1, { races: [race(1, { isComplete: true })] })], status: 2 }),
+        session(2, { competitionSectionId: 5, orderIndex: 2, plannedRaces: ['Bending'] }),
+        session(3, { name: 'Finals · Senior Teams', competitionSectionId: 5, orderIndex: 3, plannedRaces: ['Flag'], heats: [heat(2)] }),
+        session(4, { competitionSectionId: null, kind: 1, isBreak: true, name: 'Lunch', orderIndex: 4 }),
+      ],
+    });
+    const d = copyOfCompetition(c);
+    expect(d).toMatchObject({ name: 'Spring 2026', startDate: '', endDate: '', location: 'Stoneleigh', laneHatbands: ['Red', 'Blue'], startFrom: 'copy', copiedFrom: 'Spring 2026', breaks: [], step: 0 });
+    const s = d.sections[0];
+    expect(s).toMatchObject({ ageGroup: 'Seniors', priceGbp: '45.00', maxParticipants: '12', tieBreak: 1, finalRaces: ['Flag'] });
+    expect(s.sessions).toEqual([{ races: ['Bending'] }, { races: ['Bending'] }]);
+    for (const key of ['existingId', 'finalSessionId', 'finalHasHeats', 'finalScored', 'hasEntries'] as const) expect(s).not.toHaveProperty(key);
+    expect(s.sessions.every((x) => x.hasHeats === undefined && x.scored === undefined && x.existingId === undefined)).toBe(true);
   });
 });

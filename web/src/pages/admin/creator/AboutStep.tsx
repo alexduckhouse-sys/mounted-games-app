@@ -1,44 +1,57 @@
-import { ChevronDown } from 'lucide-react';
-import { CompetitionIcon } from '../../../competition/CompetitionIcon';
-import { EMOJI_COMPETITION_ICONS, FLAG_COMPETITION_ICONS } from '../../../competition/icons';
+import { useMemo, useState } from 'react';
+import { Check } from 'lucide-react';
+import { COMPETITION_ICONS, competitionIcon } from '../../../competition/icons';
 import type { CreatorDraft } from '../../../lib/creatorDraft';
-import { Field } from '../../auth/Field';
-import { fieldClass, StepIntro, TextBox, type StepProps } from './parts';
+import { RefinePanelRow } from '../../refine/Refine';
+import { StepHeading } from './controls';
+import { TextBox, type StepProps } from './parts';
+
+/** One icon's picture: an emoji, or its flag image. */
+export function IconGlyph({ id }: { id: string }) {
+  const icon = competitionIcon(id);
+  return <span className="cw-flag" aria-hidden="true">{icon.src ? <img src={icon.src} alt="" loading="lazy" draggable={false} /> : icon.symbol}</span>;
+}
+
+/**
+ * The icon: three symbols, the four nations and the UK, then every country A to Z. A settings row that opens a list with
+ * a search box; typing narrows it.
+ */
+export function IconPicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+  const [query, setQuery] = useState('');
+  const current = competitionIcon(value);
+  const q = query.trim().toLowerCase();
+  const list = useMemo(() => COMPETITION_ICONS.filter((icon) => !q || icon.label.toLowerCase().includes(q)), [q]);
+
+  return (
+    <RefinePanelRow label="Icon" ariaLabel={`Icon: ${current.label}`} value={<><IconGlyph id={current.id} />{current.label}</>}>
+      {(close) => (
+        <div className="cw-icons">
+          <input type="search" autoFocus aria-label="Search icons" placeholder="Search" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <div role="listbox" aria-label="Icon" className="cw-icons-list">
+            {list.map((icon) => (
+              <button key={icon.id} type="button" role="option" aria-selected={icon.id === current.id} className="rf-choice" onClick={() => { close(); setQuery(''); onChange(icon.id); }}>
+                <IconGlyph id={icon.id} /><span>{icon.label}</span>{icon.id === current.id && <Check className="h-4 w-4" aria-hidden="true" />}
+              </button>
+            ))}
+            {list.length === 0 && <p className="rf-note" style={{ padding: '14px 16px' }}>No match.</p>}
+          </div>
+        </div>
+      )}
+    </RefinePanelRow>
+  );
+}
 
 export function AboutStep({ draft, change, problems, clear }: StepProps<CreatorDraft>) {
   return (
-    <section aria-labelledby="cw-about" className="flex flex-col gap-[18px]">
-      <StepIntro title="About the competition" />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <TextBox label="Name" value={draft.name} error={problems.name} onChange={(name) => { change({ name }); clear('name'); }} />
-        <Field label="Icon">
-          {({ id }) => (
-            <div className={`${fieldClass} relative`}>
-              <span className="text-lg text-[rgb(var(--mg-heading))]" data-testid="competition-icon-preview"><CompetitionIcon id={draft.icon} /></span>
-              <select id={id} value={draft.icon} onChange={(e) => change({ icon: e.target.value })} className="appearance-none pr-6 font-medium">
-                {EMOJI_COMPETITION_ICONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-                <optgroup label="Flags">
-                  {FLAG_COMPETITION_ICONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-                </optgroup>
-              </select>
-              <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 h-4 w-4 text-[rgb(var(--mg-heading))]" />
-            </div>
-          )}
-        </Field>
+    <section aria-label="About" className="flex flex-col gap-3">
+      <StepHeading>About</StepHeading>
+      <div className="cw-card">
+        <div className="cw-panel">
+          <TextBox label="Name" value={draft.name} error={problems.name} onChange={(name) => { change({ name }); clear('name'); }} />
+          <TextBox label="Organiser" value={draft.organiserName} onChange={(organiserName) => change({ organiserName })} />
+        </div>
+        <IconPicker value={draft.icon} onChange={(icon) => change({ icon })} />
       </div>
-      <TextBox label="Organiser" value={draft.organiserName} onChange={(organiserName) => change({ organiserName })} />
-      <label className="mg-card flex min-h-12 cursor-pointer items-center gap-3 px-4 py-3 text-[15px] font-medium text-[rgb(var(--mg-heading))]">
-        <input
-          type="checkbox"
-          className="h-4 w-4 accent-[rgb(var(--mg-heading))]"
-          checked={!!draft.cardsEnabled}
-          onChange={(e) => change({ cardsEnabled: e.target.checked })}
-        />
-        <span className="flex flex-col gap-0.5">
-          <span className="font-semibold">Use yellow &amp; red cards in this competition</span>
-          <span className="text-xs font-normal text-[rgb(var(--mg-muted))]">Shows card controls inside score overrides for this competition on this device.</span>
-        </span>
-      </label>
     </section>
   );
 }

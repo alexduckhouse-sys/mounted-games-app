@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   defaultDraft, defaultSection, finalistCountOf, finalSessionName, firstProblemStep, hatbandsFor, laneCount, isLocked, MAX_SESSIONS, minutesOf, heatSizeOf, newSessionName, parseFinalistCount, parseMaxParticipants,
-  priceGbpToMinor, readDraft, resizeSessions, sectionLocked, sectionName, setFormat, setRaceFinals, STEP_IDS, validateStep, wholeNumber,
+  priceGbpToMinor, readDraft, resizeSessions, sectionLocked, sectionName, setFormat, setRaceFinals, STEP_IDS, STEP_LABEL, validateStep, wholeNumber,
   type CreatorDraft,
 } from './creatorDraft';
 
@@ -169,7 +169,8 @@ describe('readDraft', () => {
   });
 
   it('has a step id for every step', () => {
-    expect(STEP_IDS).toHaveLength(8);
+    expect(STEP_IDS).toHaveLength(10);
+    expect(STEP_IDS.map((id) => STEP_LABEL[id])).toEqual(['Start', 'About', 'When and where', 'Arenas', 'Sections', 'Structure and timing', 'Races', 'Dec form', 'Payment and rules', 'Review']);
   });
 });
 
@@ -182,9 +183,12 @@ describe('hatbands', () => {
     expect(laneCount([])).toBe(1);
   });
 
-  it('uses the default order for lanes with no choice, and keeps what was chosen', () => {
+  it('uses the usual colours with no list, keeps the list that was made, and has none when they were all removed', () => {
     const d = draft({ laneHatbands: ['Pink', ' ', 'Teal'] });
-    expect(hatbandsFor(d)).toEqual(['Pink', 'White', 'Teal', 'Yellow', 'Green', 'Black']);
+    expect(hatbandsFor(d)).toEqual(['Pink', 'White', 'Teal']);
+    expect(hatbandsFor(draft())).toEqual(['Red', 'White', 'Blue', 'Yellow', 'Green', 'Black']);
+    expect(hatbandsFor(draft({ noHatbands: true, laneHatbands: ['Pink'] }))).toEqual([]);
+    expect(hatbandsFor(draft({ laneHatbands: Array.from({ length: 25 }, () => 'Red') }))).toHaveLength(20);
     expect(hatbandsFor(draft({ sections: [{ ...defaultSection(), maxTeamsPerHeat: '10' }] }))).toHaveLength(10);
     expect(hatbandsFor(draft({ sections: [{ ...defaultSection(), maxTeamsPerHeat: '10' }] }))[8]).toBe('Red');
   });
