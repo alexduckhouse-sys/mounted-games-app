@@ -77,6 +77,7 @@ public static class DbInitializer
     private static async Task EnsureSqliteSchemaAsync(AppDbContext db)
     {
         await db.Database.EnsureCreatedAsync();
+        await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=5000;");
 
         await db.Database.ExecuteSqlRawAsync("""
             CREATE TABLE IF NOT EXISTS "LiveStreams" (

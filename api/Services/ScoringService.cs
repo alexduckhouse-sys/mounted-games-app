@@ -669,6 +669,12 @@ public class ScoringService
         race.FinishedAt ??= now;
         if (fresh.Count > 0)
         {
+            var nextRace = heat.Races
+                .OrderBy(r => r.OrderIndex)
+                .ThenBy(r => r.Id)
+                .FirstOrDefault(r => r.Id != raceId && !r.IsComplete && (r.OrderIndex > race.OrderIndex || (r.OrderIndex == race.OrderIndex && r.Id > race.Id)));
+            if (nextRace is not null)
+                nextRace.StartedAt ??= now;
             heat.StartedAt ??= now;
             if (heat.Races.Count > 0 && heat.Races.All(r => r.Id == raceId || r.IsComplete))
                 heat.FinishedAt ??= now;

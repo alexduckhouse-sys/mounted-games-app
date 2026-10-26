@@ -37,6 +37,14 @@ export interface SavedReplayClip {
   hasFilmingOptOut?: boolean;
   /** Where the clip came from: a race recording made when a race was scored, or an instant replay. Absent for other clips. */
   source?: 'race' | 'instant';
+  races?: ReadonlyArray<{
+    id: number;
+    name: string;
+    orderIndex: number;
+    startedAt?: string | null;
+    finishedAt?: string | null;
+    isComplete?: boolean;
+  }>;
 }
 
 export interface ReplayBufferOptions {

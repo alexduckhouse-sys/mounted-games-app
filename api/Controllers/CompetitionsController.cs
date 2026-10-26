@@ -749,6 +749,7 @@ public class CompetitionsController : ControllerBase
     public async Task<IActionResult> ClearTieOrder(int id, [FromQuery] int[] teamIds)
     {
         await _db.FinalsTieOrders.Where(o => o.CompetitionId == id && teamIds.Contains(o.TeamId)).ExecuteDeleteAsync();
+        StandingsService.Invalidate(id);
         return NoContent();
     }
 
