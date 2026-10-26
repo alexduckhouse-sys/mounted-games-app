@@ -1,26 +1,21 @@
 /* Public timetable (TimetableBoard). Colours come from the theme tokens in theme/skin.css. */
 .timetable-board { width: 100%; max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; font-family: var(--mg-font); }
 
-/* Day and arena choices: one navy strip under the app header, full width and sticky below it. */
+/* Day, arena and age group: three small dropdowns on one slim navy strip, full width and sticky below the header. */
 .tt-strip {
-  position: sticky; top: var(--mg-shell-h, 0px); z-index: 20; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 0;
+  position: sticky; top: var(--mg-shell-h, 0px); z-index: 20; display: flex; align-items: center; gap: 6px; padding: 2px 0 10px;
   border-image: conic-gradient(rgb(var(--mg-header)) 0 0) fill 0 // 0 100vmax; color: #fff;
 }
 /* Under the age-group band the two navy bars read as one: no second gap between the dropdowns. */
 .mg-band-header + .tt-strip { padding-top: 0; }
 .tt-strip :focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-.tt-days { display: flex; flex: none; gap: 2px; padding: 3px; border-radius: 8px; background: rgb(255 255 255 / .1); }
-.tt-strip-stacked .tt-days { width: 100%; }
-.tt-day { flex: 1; display: inline-flex; align-items: center; justify-content: center; min-height: 30px; padding: 0 12px; border-radius: 6px; color: #fff; font: 600 13px/1 var(--mg-font); text-align: center; }
-.tt-day[aria-pressed="true"] { background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); }
 .tt-arena {
-  display: flex; width: 100%; min-width: 0; align-items: center; gap: 6px; min-height: 36px; padding: 0 30px 0 10px; text-align: left;
-  border: 1px solid rgb(var(--mg-header-line)); border-radius: 8px; color: #fff; font: 600 13px/1 var(--mg-font);
+  display: flex; width: 100%; min-width: 0; align-items: center; gap: 6px; min-height: 36px; padding: 0 28px 0 10px; text-align: left;
+  border: 1px solid rgb(var(--mg-header-line)); border-radius: 10px; color: #fff; font: 600 13px/1 var(--mg-font);
 }
-.tt-arena-wrap { flex: 1 1 140px; min-width: 0; }
+.tt-arena-wrap { flex: 1 1 0; min-width: 0; }
 .tt-arena { position: relative; }
 .tt-arena:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-.tt-arena-pin { flex: none; color: rgb(var(--mg-header-sub)); }
 .tt-arena-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tt-arena-live { flex: none; width: 8px; height: 8px; border-radius: 50%; background: rgb(var(--mg-red)); }
 .tt-arena-chevron { position: absolute; right: 10px; top: 50%; margin-top: -7px; }
@@ -32,20 +27,11 @@
 }
 .tt-group-title h2 { flex: 1; margin: 0; color: rgb(var(--mg-heading)); font: 700 15px/1.1 var(--mg-font-display); letter-spacing: .05em; text-transform: uppercase; }
 .tt-group-title > span { color: rgb(var(--mg-muted)); font: 500 12px/1 var(--mg-font); }
-.tt-group-title > .tt-summary-late { color: rgb(var(--mg-late-time)); }
-button.tt-group-title:focus-visible, .tt-collapsed:focus-visible, a.tt-row:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
+a.tt-row:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
 
-/* A finished group folds into one dashed line below the active ones. */
-.tt-divider { display: flex; align-items: center; gap: 10px; margin: 8px 0 0; color: rgb(var(--mg-muted)); font: 700 12px/1 var(--mg-font); letter-spacing: .08em; text-transform: uppercase; }
-.tt-divider > span { flex: 1; height: 1px; background: rgb(var(--mg-rule)); }
-.tt-collapsed {
-  display: flex; width: 100%; min-height: 36px; align-items: center; gap: 8px; padding: 0 10px; border: 1px dashed rgb(var(--mg-dash)); border-radius: 8px;
-  color: rgb(var(--mg-faint)); font: 500 13px/1 var(--mg-font); text-align: left;
-}
-.tt-collapsed-copy { flex: 1; min-width: 0; }
-.tt-collapsed-copy strong { color: rgb(var(--mg-body)); font-weight: 600; }
-.tt-collapsed-range { font: 600 14px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; }
-.tt-collapsed-chevron { flex: none; }
+/* One amber line when an arena is running late. */
+.tt-late-line { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); font: 600 14px/1.3 var(--mg-font); }
+.tt-late-line > svg { flex: none; }
 
 .tt-card { overflow: hidden; border: 1px solid rgb(var(--mg-line)); border-radius: var(--mg-radius-card); background: rgb(var(--mg-surface)); box-shadow: var(--mg-shadow-sm); }
 .tt-card > * + * { border-top: 1px solid rgb(var(--mg-rule-soft)); }

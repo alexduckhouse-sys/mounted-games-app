@@ -52,7 +52,7 @@ function Probe() {
   </>;
 }
 
-function renderTab(path = '/?section=9', props: { toplistOnly?: boolean } = { toplistOnly: true }) {
+function renderTab(path = '/?section=9', props: { startOn?: 'draw' | 'scores' | 'toplist' } = { startOn: 'toplist' }) {
   return render(<MemoryRouter initialEntries={[path]}><CompactPageBarProvider><Probe /><ScoringTab {...props} /></CompactPageBarProvider></MemoryRouter>);
 }
 
@@ -65,13 +65,20 @@ beforeEach(() => {
   setCompetition([qualifier, finalSession()]);
 });
 
+/** The "Show  Totals ›" row inside Toplist, and picking a view from the list it opens. */
+const showRow = () => screen.findByRole('combobox', { name: 'Show' });
+async function pickView(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(await showRow());
+  await user.click(within(screen.getByRole('listbox', { name: 'Show' })).getByRole('option', { name }));
+}
+
 const rowNames = (list: HTMLElement) => within(list).getAllByRole('listitem').map((li) => li.textContent);
 
 describe('the toplist page header', () => {
   it('publishes the title, competition and progress, and refreshes the standings', async () => {
     const user = userEvent.setup();
     const { container } = renderTab();
-    await screen.findByRole('group', { name: 'Toplist view' });
+    await showRow();
     expect(JSON.parse(screen.getByTestId('header').textContent!)).toEqual({ title: 'Toplist', subtitle: 'Hartpury Festival · After session 1', label: 'Refresh toplist' });
     expect(state.get).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole('button', { name: 'probe refresh' }));
@@ -83,12 +90,12 @@ describe('the toplist page header', () => {
   it('leaves the competition name alone before any session is done', async () => {
     setCompetition([session(1, { competitionSectionId: 9, heats: [heat(1, { entries: entries([1]), races: [race(1)] })] })]);
     renderTab();
-    await screen.findByRole('group', { name: 'Toplist view' });
+    await showRow();
     expect(JSON.parse(screen.getByTestId('header').textContent!).subtitle).toBe('Hartpury Festival');
   });
 
   it('does not publish a header when embedded in the timetable', async () => {
-    renderTab('/?section=9', { toplistOnly: false });
+    renderTab('/?section=9', {});
     expect(screen.getByTestId('header').textContent).toBe(JSON.stringify({}));
   });
 });
@@ -125,7 +132,7 @@ describe('the age group select', () => {
 
   it('shows no age groups message without sections', () => {
     setCompetition([], { sections: [] });
-    renderTab('/', { toplistOnly: true });
+    renderTab('/', { startOn: 'toplist' });
     expect(screen.getByText('No age groups yet.')).toBeVisible();
   });
 });
@@ -147,50 +154,52 @@ describe('the age group rail on a laptop', () => {
 
   it('wraps the timetable board too when it is not the toplist page', async () => {
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
-    renderTab('/?section=9', { toplistOnly: false });
+    renderTab('/?section=9', {});
     expect(await screen.findByRole('navigation', { name: 'Age groups' })).toBeInTheDocument();
   });
 });
 
-describe('the view tabs', () => {
+describe('the Show row inside Toplist', () => {
   it('opens on Finals when the age group has finals with results', async () => {
+    const user = userEvent.setup();
     renderTab();
     await screen.findByRole('region', { name: 'Finals' });
-    const tabs = screen.getByRole('group', { name: 'Toplist view' });
-    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Finals', 'Totals', 'By session', 'By game', 'Heat tables']);
-    expect(within(tabs).getByRole('button', { name: 'Finals' })).toHaveAttribute('aria-pressed', 'true');
+    expect(await showRow()).toHaveTextContent('Finals');
+    await user.click(await showRow());
+    expect(within(screen.getByRole('listbox', { name: 'Show' })).getAllByRole('option').map((o) => o.textContent)).toEqual(['Finals', 'Totals', 'By session', 'By game']);
+    // The heat tables live under the Scores tab now, not here.
+    expect(screen.queryByRole('option', { name: 'Heat tables' })).toBeNull();
   });
 
-  it('offers Totals, By session, By game and Heat tables without finals, and opens on Totals', async () => {
+  it('offers Totals, By session and By game without finals, and opens on Totals', async () => {
+    const user = userEvent.setup();
     setCompetition([qualifier]);
     renderTab();
     await screen.findByRole('region', { name: 'Totals' });
-    const tabs = screen.getByRole('group', { name: 'Toplist view' });
-    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Totals', 'By session', 'By game', 'Heat tables']);
-    expect(screen.queryByRole('button', { name: 'Finals' })).toBeNull();
+    expect(await showRow()).toHaveTextContent('Totals');
+    await user.click(await showRow());
+    expect(within(screen.getByRole('listbox', { name: 'Show' })).getAllByRole('option').map((o) => o.textContent)).toEqual(['Totals', 'By session', 'By game']);
   });
 
   it('ignores a final nobody has a result in yet', async () => {
     setCompetition([qualifier, finalSession({ races: [race(2)] })]);
     renderTab();
     await screen.findByRole('region', { name: 'Totals' });
-    expect(screen.queryByRole('button', { name: 'Finals' })).toBeNull();
+    expect(await showRow()).toHaveTextContent('Totals');
   });
 
-  it('switches between finals, totals, points by session and heat tables', async () => {
+  it('switches between finals, totals and points by session', async () => {
     const user = userEvent.setup();
     renderTab();
     await screen.findByRole('region', { name: 'Finals' });
-    await user.click(screen.getByRole('button', { name: 'Totals' }));
+    await pickView(user, 'Totals');
     const totals = screen.getByRole('region', { name: 'Totals' });
     expect(screen.getByText('Top 2 make the final')).toBeVisible();
     expect(within(totals).getByRole('separator', { name: 'Final cut-off' })).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'By session' }));
+    await pickView(user, 'By session');
     const table = screen.getByRole('region', { name: 'Points by session' });
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['#', 'Team', 'S1', 'F', 'Pts', 'Open']);
-    await user.click(screen.getByRole('button', { name: 'Heat tables' }));
-    expect(screen.getByRole('region', { name: 'Heat tables' })).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Finals' }));
+    await pickView(user, 'Finals');
     expect(screen.getByRole('region', { name: 'Finals' })).toBeVisible();
   });
 
@@ -203,12 +212,12 @@ describe('the view tabs', () => {
     const user = userEvent.setup();
     renderTab();
     await screen.findByRole('region', { name: 'Finals' });
-    await user.click(screen.getByRole('button', { name: 'By session' }));
+    await pickView(user, 'By session');
     expect(screen.getByRole('region', { name: 'Points by session' })).toBeVisible();
     await user.click(screen.getByRole('combobox', { name: 'Age group' }));
     await user.click(screen.getByRole('option', { name: 'Under 14' }));
     await screen.findByText('Team 8');
-    expect(screen.getByRole('button', { name: 'By session' })).toHaveAttribute('aria-pressed', 'true');
+    expect(await showRow()).toHaveTextContent('By session');
     expect(screen.getByRole('region', { name: 'Points by session' })).toBeVisible();
   });
 });
@@ -257,7 +266,7 @@ describe('navigating to a team page from the toplist', () => {
     await screen.findByRole('region', { name: 'Totals' });
     await user.click(within(screen.getByRole('region', { name: 'Totals' })).getByRole('link', { name: /Team 1/ }));
     expect(screen.getByTestId('path').textContent).toBe('/competitions/1/teams/1');
-    await user.click(screen.getByRole('button', { name: 'By session' }));
+    await pickView(user, 'By session');
     await user.click(within(screen.getByRole('region', { name: 'Points by session' })).getByRole('link', { name: 'Team 2' }));
     expect(screen.getByTestId('path').textContent).toBe('/competitions/1/teams/2');
   });
@@ -290,7 +299,7 @@ describe('loading and failure states', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Couldn’t load results');
     await user.click(within(alert).getByRole('button', { name: 'Try again' }));
-    await screen.findByRole('group', { name: 'Toplist view' });
+    await showRow();
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
@@ -302,24 +311,52 @@ describe('loading and failure states', () => {
   });
 });
 
-describe('embedded in the timetable', () => {
-  it('keeps the age group menu, 3-way sub-tabs (Draw / Heats, Heat Scores, Toplist) and the collapsible toplist, with the create finals button for organisers', async () => {
+describe('the age group page', () => {
+  it('has the age group bar over three tabs: Heats, Scores and Toplist, opening on Heats from the menu', async () => {
     state.manage = true;
     const user = userEvent.setup();
-    renderTab('/?section=9', { toplistOnly: false });
+    renderTab('/?section=9', {});
     expect(screen.getByRole('heading', { level: 1, name: 'Under 12' })).toBeVisible();
     expect(screen.getByRole('combobox', { name: 'Age group' })).toBeVisible();
     expect(screen.getByRole('button', { name: /Create finals/ })).toBeVisible();
-    const sectionTabs = screen.getByRole('group', { name: 'Section view' });
-    expect(within(sectionTabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Draw / Heats', 'Heat Scores', 'Toplist']);
-    await user.click(within(sectionTabs).getByRole('button', { name: 'Heat Scores' }));
+    const tabs = screen.getByRole('group', { name: 'Age group view' });
+    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Heats', 'Scores', 'Toplist']);
+    expect(within(tabs).getByRole('button', { name: 'Heats' })).toHaveAttribute('aria-pressed', 'true');
+    // "Show <age group> toplist" is gone: the Toplist tab replaces it.
+    expect(screen.queryByRole('button', { name: /Show Under 12 toplist/ })).toBeNull();
+    await user.click(within(tabs).getByRole('button', { name: 'Scores' }));
     expect(screen.getByRole('region', { name: 'Section heat scores' })).toBeVisible();
-    await user.click(within(screen.getByRole('group', { name: 'Section view' })).getByRole('button', { name: 'Draw / Heats' }));
-    await user.click(screen.getByRole('button', { name: /Show Under 12 toplist/ }));
+    await user.click(within(screen.getByRole('group', { name: 'Age group view' })).getByRole('button', { name: 'Toplist' }));
     await screen.findByRole('region', { name: 'Finals' });
     await user.click(screen.getByRole('combobox', { name: 'Age group' }));
     await user.click(screen.getByRole('option', { name: 'Under 14' }));
     expect(screen.getByTestId('search')).toHaveTextContent('?section=10');
+  });
+
+  it('opens on Toplist from the Toplists tab, with the same three tabs and the toplist header', async () => {
+    renderTab();
+    const tabs = screen.getByRole('group', { name: 'Age group view' });
+    expect(within(tabs).getByRole('button', { name: 'Toplist' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Heats', 'Scores', 'Toplist']);
+    await showRow();
+    expect(JSON.parse(screen.getByTestId('header').textContent!)).toMatchObject({ title: 'Toplist' });
+  });
+
+  it('puts the tabs straight under the age group bar', () => {
+    renderTab();
+    const bar = screen.getByRole('combobox', { name: 'Age group' });
+    const tabs = screen.getByRole('group', { name: 'Age group view' });
+    expect(bar.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('keeps the heat tables under Scores, not in the toplist', async () => {
+    const user = userEvent.setup();
+    renderTab();
+    await showRow();
+    expect(screen.queryByRole('region', { name: 'Heat tables' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Scores' }));
+    expect(screen.getByRole('region', { name: 'Section heat scores' })).toBeVisible();
+    expect(JSON.parse(screen.getByTestId('header').textContent!)).toMatchObject({ title: 'Under 12', subtitle: 'Hartpury Festival', label: 'Refresh scores' });
   });
 
   it('creates finals in the planned finals session, with its races filled in', async () => {
@@ -328,7 +365,7 @@ describe('embedded in the timetable', () => {
     setCompetition([qualifier, session(7, { competitionSectionId: 9, name: 'Finals · Under 12', status: 0, plannedRaces: ['Bending', 'Flag'], heats: [] })]);
     vi.mocked(api.post).mockResolvedValue({ data: {} });
     state.get.mockImplementation((url: string) => Promise.resolve({ data: url.includes('standings') ? standings : [], headers: {} }));
-    renderTab('/?section=9', { toplistOnly: false });
+    renderTab('/?section=9', {});
     await user.click(screen.getByRole('button', { name: /Create finals/ }));
     const dialogButton = (await screen.findAllByRole('button', { name: /Create finals/ })).at(-1)!;
     await user.click(dialogButton);
@@ -336,35 +373,18 @@ describe('embedded in the timetable', () => {
       raceNames: ['Bending', 'Flag'], existingSessionId: 7,
     })));
   });
-
-  it('switches to heat scores without rendering the timetable underneath, and back again', async () => {
-    const user = userEvent.setup();
-    renderTab('/?section=9', { toplistOnly: false });
-    expect(screen.getByRole('heading', { level: 1, name: 'Under 12' })).toBeVisible();
-    const toggle = screen.getByRole('button', { name: 'Heat Scores' });
-    expect(toggle).toHaveAttribute('aria-pressed', 'false');
-
-    await user.click(toggle);
-    expect(screen.queryByRole('heading', { level: 1, name: 'Under 12' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Heat Scores' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('region', { name: 'Section heat scores' })).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: 'Draw / Heats' }));
-    expect(screen.getByRole('heading', { level: 1, name: 'Under 12' })).toBeVisible();
-    expect(screen.queryByRole('heading', { level: 1, name: /Heat 1 scores/ })).toBeNull();
-  });
 });
 
 describe('personalisation, instant optimistic standings and section score fingerprint', () => {
   it('defaults to the followed team age group or mg.prefs.defaultAgeGroup when ?section is omitted', async () => {
     localStorage.setItem('mg.favourites.v1', JSON.stringify([{ competitionId: 1, teamId: 8 }]));
-    const { unmount } = renderTab('/', { toplistOnly: true });
+    const { unmount } = renderTab('/', { startOn: 'toplist' });
     expect(screen.getByRole('combobox', { name: 'Age group' })).toHaveTextContent('Under 14');
     unmount();
 
     localStorage.removeItem('mg.favourites.v1');
     localStorage.setItem('mg.prefs.defaultAgeGroup', 'Under 14');
-    renderTab('/', { toplistOnly: true });
+    renderTab('/', { startOn: 'toplist' });
     expect(screen.getByRole('combobox', { name: 'Age group' })).toHaveTextContent('Under 14');
   });
 
@@ -372,22 +392,22 @@ describe('personalisation, instant optimistic standings and section score finger
     const user = userEvent.setup();
     const { unmount } = renderTab();
     await screen.findByRole('region', { name: 'Finals' });
-    await user.click(screen.getByRole('button', { name: 'By session' }));
+    await pickView(user, 'By session');
     expect(localStorage.getItem('mg.prefs.toplistView')).toBe('sessions');
     unmount();
 
     renderTab();
     expect(await screen.findByRole('region', { name: 'Points by session' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'By session' })).toHaveAttribute('aria-pressed', 'true');
+    expect(await showRow()).toHaveTextContent('By session');
   });
 
   it('keeps official standings during live refresh and invalidates combined-session and HC changes', async () => {
     setCompetition([qualifier]);
-    const view = renderTab('/?section=9', { toplistOnly: true });
+    const view = renderTab('/?section=9', { startOn: 'toplist' });
     await screen.findByRole('region', { name: 'Totals' });
     expect(state.get).toHaveBeenCalledTimes(1);
     const original = state.value as { competition: CompetitionDetail; reload: typeof reload };
-    const redraw = () => view.rerender(<MemoryRouter initialEntries={['/?section=9']}><CompactPageBarProvider><Probe /><ScoringTab toplistOnly /></CompactPageBarProvider></MemoryRouter>);
+    const redraw = () => view.rerender(<MemoryRouter initialEntries={['/?section=9']}><CompactPageBarProvider><Probe /><ScoringTab startOn="toplist" /></CompactPageBarProvider></MemoryRouter>);
     state.value = { ...original, competition: { ...original.competition, sessions: [{ ...qualifier, startedAt: '2026-06-01T10:05:00Z' }] } };
     redraw();
     expect(state.get).toHaveBeenCalledTimes(1);
@@ -424,14 +444,14 @@ it('defaults to a populated age group when an earlier section is empty', async (
 
 it('links organiser screen actions to the selected age group and hides them from spectators', async () => {
   state.manage = true;
-  const view = renderTab('/?section=10', { toplistOnly: false });
+  const view = renderTab('/?section=10', {});
   await waitFor(() => expect(state.get).toHaveBeenCalled());
   expect(screen.getByRole('link', { name: 'PA Commentator' })).toHaveAttribute('href', '/competitions/1/commentary?section=10');
   expect(screen.getByRole('link', { name: 'TV Kiosk' })).toHaveAttribute('href', '/competitions/1/tv?section=10');
   expect(screen.getByRole('button', { name: 'QR Access' })).toBeVisible();
   view.unmount();
   state.manage = false;
-  renderTab('/?section=10', { toplistOnly: false });
+  renderTab('/?section=10', {});
   expect(screen.queryByRole('region', { name: 'Organiser quick actions' })).toBeNull();
 });
 
@@ -446,7 +466,7 @@ it('links organiser screen actions to the selected age group and hides them from
       return Promise.resolve({ data: config?.params?.sectionId === 9 ? standings : otherStandings, headers: {} });
     });
     const user = userEvent.setup();
-    renderTab('/?section=9', { toplistOnly: true });
+    renderTab('/?section=9', { startOn: 'toplist' });
     await screen.findByRole('region', { name: 'Finals' });
 
     const quickBar = screen.getByRole('region', { name: 'Organiser quick actions' });

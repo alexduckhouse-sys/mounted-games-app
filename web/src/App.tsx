@@ -125,7 +125,7 @@ export default function App() {
                 <Route path="enter" element={<EntryPage />} />
                 <Route path="enter/:sectionId" element={<SectionEntryPage />} />
                 <Route path="scoring" element={<AfterDrawOnly><ScoringTab /></AfterDrawOnly>} />
-                <Route path="toplists" element={<AfterDrawOnly><ScoringTab key="toplists" toplistOnly /></AfterDrawOnly>} />
+                <Route path="toplists" element={<AfterDrawOnly><ScoringTab key="toplists" startOn="toplist" /></AfterDrawOnly>} />
                 <Route path="tv" element={<TvKioskPage />} />
                 <Route path="commentary" element={<CommentaryDeskPage />} />
                 <Route path="session/:sessionId" element={<AfterDrawOnly><SessionPage /></AfterDrawOnly>} />

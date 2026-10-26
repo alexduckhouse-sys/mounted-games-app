@@ -1,31 +1,29 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FollowStar } from '../../components/FollowStar';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Ban, Calendar, ChevronRight, ClipboardList, Shield } from 'lucide-react';
+import { ArrowLeft, Ban, ChevronRight, ClipboardList, Shield } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompactPageBar, usePageHeader } from '../../components/CompactPageBarContext';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useFavourites } from '../../hooks/useFavourites';
-import { bibAccent, bibLabel, parseBibAndFlag } from '../../lib/bib';
+import { bibLabel, parseBibAndFlag } from '../../lib/bib';
 import { heightText } from '../../lib/decForm';
 import { formatPoints } from '../../lib/formatPoints';
 import { statusLabel, statusLetter } from '../../lib/resultStatus';
 import { displaySectionName } from '../../lib/section';
-import { computeTimings, formatTime } from '../../lib/time';
-import { timetableRows, sessionOrdinals } from '../../lib/timetableRows';
-import { buildToplist, ordinal, toplistNote, type TeamBlock } from '../../lib/toplist';
+import { computeTimings } from '../../lib/time';
+import { timetableRows, statusLabel as timetableStatusLabel, TIMETABLE_COLOURS, type TimetableStatus } from '../../lib/timetableRows';
+import { buildToplist, ordinal, type TeamBlock } from '../../lib/toplist';
 import type { DeclarationForm, Heat, Session, StandingRow } from '../../types';
 import { useCompetition } from './context';
-import { HeatScores } from './HeatScores';
-import { arenaNames, arenaToShow, heatName, nextHeats } from '../../lib/following';
+import { nextHeats } from '../../lib/following';
 import { publicRiderName } from '../../lib/riderNames';
 import { statsProfileHref } from '../../lib/stats';
 import { StatsSubjectKind } from '../../types';
 import type { TeamProfile, TeamProfileHistory } from '../seasons/teamProfileTypes';
 import { byDrawnLane } from './laneRules';
 
-const eyebrow = 'text-[10px] font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]';
 const isRaceSession = (session: Session) => (session.kind ?? (session.isBreak ? 1 : 0)) === 0;
 const isHeatDone = (heat: Heat) => !!heat.finishedAt || (heat.races.length > 0 && heat.races.every((r) => r.isComplete));
 
@@ -129,6 +127,10 @@ export function CompetitionTeamPage() {
       done: boolean;
       scoredAny: boolean;
       timeText: string | null;
+      /** Final lanes come from the rankings, so a final shows no lane. */
+      final: boolean;
+      status: TimetableStatus;
+      delayMinutes: number;
     }[] = [];
     const orderedSessions = [...competition.sessions].filter(isRaceSession).sort((a, b) => a.orderIndex - b.orderIndex);
     for (const session of orderedSessions) {
@@ -163,6 +165,9 @@ export function CompetitionTeamPage() {
           done: isHeatDone(heat),
           scoredAny,
           timeText,
+          final: tRow?.group === 'Finals' || heat.raceRoundStage === 2,
+          status: tRow?.status ?? (isHeatDone(heat) ? 'finished' : 'on-time'),
+          delayMinutes: tRow?.delayMinutes ?? 0,
         });
       });
     }
@@ -174,32 +179,6 @@ export function CompetitionTeamPage() {
     [competition, team],
   );
   const nextState = team ? nextMap.get(team.id) : undefined;
-  const ordinals = useMemo(() => sessionOrdinals(competition.sessions), [competition.sessions]);
-  const arenas = useMemo(() => arenaNames(competition.sessions), [competition.sessions]);
-
-  const teamHeats = useMemo(() => {
-    if (!team) return [];
-    const items: { key: string; session: Session; heats: Heat[]; activeHeatId: number }[] = [];
-    const orderedSessions = competition.sessions
-      .filter((s) => (s.kind ?? (s.isBreak ? 1 : 0)) === 0)
-      .sort((a, b) => a.orderIndex - b.orderIndex);
-    for (const s of orderedSessions) {
-      const orderedHeats = s.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
-      const matching = orderedHeats.filter(
-        (h) => h.entries.some((e) => e.teamId === team.id) || h.races.some((r) => r.results.some((res) => res.teamId === team.id)),
-      );
-      if (matching.length === 0) continue;
-      const isRaceFinals = orderedHeats.some((h) => Boolean(h.raceRoundStage) && h.raceRoundId != null);
-      if (isRaceFinals) {
-        items.push({ key: `session-${s.id}`, session: s, heats: orderedHeats, activeHeatId: matching[0].id });
-      } else {
-        for (const h of matching) {
-          items.push({ key: `heat-${h.id}`, session: s, heats: orderedHeats, activeHeatId: h.id });
-        }
-      }
-    }
-    return items;
-  }, [competition.sessions, team]);
 
   const teamStats = useMemo(() => {
     if (!team) return null;
@@ -285,13 +264,21 @@ export function CompetitionTeamPage() {
   const parsedBib = parseBibAndFlag(rawBib);
   const detail = list?.detail.get(team.id) ?? null;
   const toplistRow = list?.rows.find((r) => r.teamId === team.id) ?? null;
-  const qualifying = [...(list?.detail.values() ?? [])];
-  const leaderPoints = Math.max(0, ...qualifying.map((item) => item.qualifyingPoints));
-  const teamPoints = detail?.qualifyingPoints ?? 0;
-  const qualifyingJoint = detail != null && qualifying.filter((item) => item.qualifyingPoints === detail.qualifyingPoints).length > 1;
-  const gap = list?.started && toplistRow && leaderPoints > teamPoints ? leaderPoints - teamPoints : 0;
+  const hcRow = list?.hc.find((r) => r.teamId === team.id) ?? null;
+  const placeText = team.isHorsConcours ? 'Hors concours'
+    : toplistRow && list?.started ? `${toplistRow.joint ? '=' : ''}${ordinal(toplistRow.position)}` : 'Not placed yet';
+  const pointsText = formatPoints(toplistRow?.points ?? hcRow?.points ?? detail?.qualifyingPoints ?? 0);
+  const racesLeft = toplistRow?.racesLeft ?? hcRow?.racesLeft ?? 0;
   const orderedRiders = decForm ? [...decForm.riders].sort((a, b) => a.orderIndex - b.orderIndex) : [];
   const trainerDisplay = decForm?.trainerName ?? decForm?.submittedByName ?? team.trainerName ?? null;
+  const row = 'flex items-baseline gap-3 border-t border-[rgb(var(--mg-rule-soft))] px-4 py-2.5 text-[15.5px] leading-snug first:border-t-0';
+  const heading = 'mg-display px-0.5 text-[15px] font-bold uppercase leading-tight tracking-[0.05em] text-[rgb(var(--mg-heading))]';
+  const decLink = canDeclare && (
+    <Link to={`/competitions/${competition.id}/declarations?team=${team.id}`} className="mg-btn mg-btn-secondary !min-h-10 !px-3 !text-sm">
+      <ClipboardList aria-hidden="true" className="h-4 w-4" />
+      {decForm ? 'Edit dec form' : 'Submit dec form'}
+    </Link>
+  );
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 pt-3">
@@ -299,170 +286,125 @@ export function CompetitionTeamPage() {
         <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back
       </button>
 
-      {/* Header card */}
-      <section aria-label="Team summary" className="mg-card flex flex-col gap-3 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-[rgb(var(--mg-muted))]">
-            {sectionLabel && <span className="mg-tag">{sectionLabel}</span>}
-            {team.clubName && <span>{team.clubName}</span>}
-            {team.isHorsConcours && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
-                <Ban aria-hidden="true" className="h-3 w-3" /> Hors Concours
-              </span>
-            )}
-            {team.isWithdrawn && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
-                Withdrawn
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {canDeclare && (
-              <Link to={`/competitions/${competition.id}/declarations?team=${team.id}`} className="mg-btn mg-btn-secondary !min-h-10 !px-3 !text-sm">
-                <ClipboardList aria-hidden="true" className="h-4 w-4" />
-                {decForm ? 'Edit dec form' : 'Submit dec form'}
-              </Link>
-            )}
-            <button
-              type="button"
-              className="mg-icon-btn !h-10 !w-10"
-              aria-pressed={isFollowed}
-              aria-label={`${isFollowed ? 'Unfollow' : 'Follow'} ${team.displayName}`}
-              onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}
-            >
-              <FollowStar on={isFollowed} />
-            </button>
-          </div>
-        </div>
-
-        <h1 className="mg-h1 flex items-center gap-2.5">
-          {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="h-6 w-9 shrink-0 rounded-sm object-cover" />}
-          <span>{team.displayName}</span>
-        </h1>
-
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-[rgb(var(--mg-body))]">
-          <span className="inline-flex items-center gap-2 font-medium">
-            <span
-              aria-hidden="true"
-              className="inline-block h-3.5 w-3.5 shrink-0 rounded-full border border-black/15"
-              style={{ background: bibAccent(rawBib) }}
-            />
-            <span>Bibs: {bibLabel(rawBib)}</span>
-          </span>
-          {trainerDisplay && (
-            <span className="text-[rgb(var(--mg-muted))]">
-              Trainer: <strong className="font-semibold text-[rgb(var(--mg-ink))]">{trainerDisplay}</strong>
-            </span>
-          )}
-        </div>
-
-        {toplistRow && list?.started && <p className="text-sm text-[rgb(var(--mg-muted))]">
-          Current standing: <span className="font-semibold text-[rgb(var(--mg-heading))]">{toplistRow.joint ? '=' : ''}{ordinal(toplistRow.position)} · {formatPoints(toplistRow.points)} pts</span>
-        </p>}
-
-        {/* At-a-glance strip */}
-        <div className="grid grid-cols-1 gap-2 pt-1 sm:grid-cols-3">
-          <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-tint))] px-3 py-2.5">
-            <span className={eyebrow}>Qualifying</span>
-            <span className="mg-display text-xl font-bold leading-none text-[rgb(var(--mg-heading))]">
-              {team.isHorsConcours ? 'HC' : list?.started && detail?.qualifyingPosition != null ? `${qualifyingJoint ? '=' : ''}${ordinal(detail.qualifyingPosition)}` : '—'}
-              {' · '}
-              {formatPoints(teamPoints)} pts
-            </span>
-            {gap > 0 && <span className="text-xs font-medium text-[rgb(var(--mg-muted))]">−{formatPoints(gap)} behind leader</span>}
-          </div>
-
-          <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2.5">
-            <span className={eyebrow}>{detail?.final ? detail.final.label : 'Status'}</span>
-            <span className="mg-display text-xl font-bold leading-none text-[rgb(var(--mg-heading))]">
-              {detail?.final
-                ? `${detail.final.place != null ? ordinal(detail.final.place) : 'In final'} · ${formatPoints(detail.final.points ?? 0)} pts`
-                : (toplistRow ? toplistNote(toplistRow) : null) ?? (list?.started ? 'In contention' : 'Not started')}
-            </span>
-          </div>
-
-          <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2.5">
-            <span className={eyebrow}>Next on track</span>
-            {nextState?.kind === 'heat' ? (
-              <Link
-                to={`/competitions/${competition.id}/session/${nextState.row.session.id}?heat=${nextState.row.heat!.id}`}
-                className="group flex flex-col gap-0.5 text-[rgb(var(--mg-heading))] hover:underline"
-              >
-                <span className="mg-display text-lg font-bold leading-tight">
-                  {heatName(nextState.row)} · Lane {nextState.lane}
+      {/* The team: name with the follow star, then the plain facts */}
+      <section aria-label="Team summary" className="flex flex-col gap-3">
+        <div className="mg-card flex items-start gap-2 py-3.5 pl-4 pr-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <h1 className="mg-h1 flex items-center gap-2.5">
+              {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="h-6 w-9 shrink-0 rounded-sm object-cover" />}
+              <span>{team.displayName}</span>
+            </h1>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-[rgb(var(--mg-muted))]">
+              <span>{[sectionLabel, team.clubName].filter(Boolean).join(' · ')}</span>
+              {team.isHorsConcours && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                  <Ban aria-hidden="true" className="h-3 w-3" /> Hors Concours
                 </span>
-                <span className="text-xs font-medium text-[rgb(var(--mg-muted))]">
-                  {[nextState.row.session.name, nextState.row.session.arenaName?.trim(), formatTime(nextState.row.effective)].filter(Boolean).join(' · ')}
+              )}
+              {team.isWithdrawn && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                  Withdrawn
                 </span>
-              </Link>
-            ) : (
-              <span className="text-sm font-semibold text-[rgb(var(--mg-muted))]">
-                {drawnHeats.length > 0 ? 'All drawn heats completed' : 'No heats drawn yet'}
-              </span>
-            )}
+              )}
+            </div>
           </div>
+          <button
+            type="button"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[rgb(var(--mg-heading))] hover:bg-[rgb(var(--mg-subtle))]"
+            aria-pressed={isFollowed}
+            aria-label={`${isFollowed ? 'Unfollow' : 'Follow'} ${team.displayName}`}
+            onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}
+          >
+            <FollowStar on={isFollowed} className="h-[26px] w-[26px]" />
+          </button>
         </div>
+        <dl className="mg-card m-0 overflow-hidden">
+          <div className={row}><dt className="w-24 shrink-0 text-[rgb(var(--mg-muted))]">Bibs</dt><dd className="m-0 min-w-0 flex-1">{bibLabel(rawBib)}</dd></div>
+          <div className={row}><dt className="w-24 shrink-0 text-[rgb(var(--mg-muted))]">Place</dt><dd className="m-0 min-w-0 flex-1">{placeText}</dd></div>
+          <div className={row}><dt className="w-24 shrink-0 text-[rgb(var(--mg-muted))]">Points</dt><dd className="m-0 min-w-0 flex-1">{pointsText}</dd></div>
+          <div className={row}><dt className="w-24 shrink-0 text-[rgb(var(--mg-muted))]">Races left</dt><dd className="m-0 min-w-0 flex-1">{racesLeft}</dd></div>
+        </dl>
       </section>
 
-      <section aria-label="Next heat" className="mg-card overflow-hidden">
-        {nextState?.kind === 'heat' ? (
-          <Link
-            to={`/competitions/${competition.id}/session/${nextState.row.session.id}?heat=${nextState.row.heat!.id}`}
-            className="flex items-center justify-between gap-3 p-3.5 hover:bg-[rgb(var(--mg-subtle))]"
-          >
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold uppercase tracking-[0.06em] text-[rgb(var(--mg-muted))]">
-                  {nextState.row.status === 'live' ? 'In arena now' : 'Next heat'}
-                </span>
-                {nextState.row.status === 'live' && (
-                  <span className="text-[10px] font-bold uppercase tracking-[0.06em] text-[rgb(var(--mg-red))]">
-                    ON NOW
-                  </span>
-                )}
-              </div>
-              <div className="mt-0.5 text-base font-semibold text-[rgb(var(--mg-ink))]">
-                {[
-                  ordinals.get(nextState.row.session.id) ? `Session ${ordinals.get(nextState.row.session.id)}` : nextState.row.session.name,
-                  heatName(nextState.row),
-                  `Lane ${nextState.lane}`,
-                  arenaToShow(nextState.row.session, arenas),
-                ].filter(Boolean).join(' · ')}
-              </div>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="mg-display text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]">
-                {formatTime(nextState.row.effective)}
-              </span>
-              <ChevronRight aria-hidden="true" className="h-4 w-4 text-[rgb(var(--mg-faint))]" />
-            </div>
-          </Link>
+      {/* One Heats list: a heat shows its lane, a final doesn't (final lanes come from the rankings) */}
+      <section aria-labelledby="team-heats-title" className="flex flex-col gap-2">
+        <h2 id="team-heats-title" className={heading}>Heats</h2>
+        {drawnHeats.length === 0 ? (
+          <p className="mg-card p-4 text-[15px] text-[rgb(var(--mg-muted))]">{nextState?.kind === 'done' ? 'All heats completed for this team.' : 'Not drawn into any heats yet.'}</p>
         ) : (
-          <div className="flex items-center gap-2.5 p-3.5 text-sm text-[rgb(var(--mg-muted))]">
-            <Calendar aria-hidden="true" className="h-4 w-4 shrink-0" />
-            <span>{nextState?.kind === 'done' ? 'All heats completed for this team.' : 'Not drawn into any heats yet.'}</span>
-          </div>
+          <ul className="mg-card divide-y divide-[rgb(var(--mg-rule-soft))] overflow-hidden">
+            {drawnHeats.map(({ session, heat, heatLabel, lane, points, scoredAny, timeText, final, status, delayMinutes }) => (
+              <li key={heat.id}>
+                <Link
+                  to={`/competitions/${competition.id}/session/${session.id}?heat=${heat.id}`}
+                  className="flex min-h-14 items-center gap-3 px-4 py-2.5 hover:bg-[rgb(var(--mg-subtle))]"
+                >
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="text-base font-semibold leading-tight text-[rgb(var(--mg-ink))]">
+                      {session.name} · {heatLabel}{final ? '' : ` · Lane ${lane}`}
+                    </span>
+                    <span className="text-[13.5px] leading-tight text-[rgb(var(--mg-muted))]">
+                      {[session.arenaName?.trim(), timeText].filter(Boolean).join(' · ') || 'Timetable'}
+                    </span>
+                  </div>
+                  {scoredAny && <span className="mg-display shrink-0 text-lg font-bold tabular-nums text-[rgb(var(--mg-heading))]">{formatPoints(points)} pts</span>}
+                  <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />
+                  <span className="sr-only">{timetableStatusLabel(status, delayMinutes)}</span>
+                  <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-[rgb(var(--mg-dash))]" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* Stats, worked out from the races scored so far */}
+      <section aria-labelledby="team-stats-title" className="flex flex-col gap-2">
+        <h2 id="team-stats-title" className={heading}>Stats</h2>
+        {teamStats ? (
+          <>
+            <dl className="mg-card m-0 overflow-hidden">
+              <div className={row}><dt className="w-40 shrink-0 text-[rgb(var(--mg-muted))]">Average per race</dt><dd className="m-0 min-w-0 flex-1">{teamStats.avgPointsPerRace.toFixed(1)} pts</dd></div>
+              <div className={row}><dt className="w-40 shrink-0 text-[rgb(var(--mg-muted))]">Average place</dt><dd className="m-0 min-w-0 flex-1">{teamStats.avgPlace != null ? teamStats.avgPlace.toFixed(1) : '—'}</dd></div>
+              <div className={row}><dt className="w-40 shrink-0 text-[rgb(var(--mg-muted))]">Races won</dt><dd className="m-0 min-w-0 flex-1">{teamStats.racesWon} of {teamStats.scoredRaces}</dd></div>
+              <div className={row}><dt className="w-40 shrink-0 text-[rgb(var(--mg-muted))]">Point quota</dt><dd className="m-0 min-w-0 flex-1">{teamStats.pointQuota}%</dd></div>
+            </dl>
+            {teamStats.races.length > 0 && (
+              <>
+                <h3 className={`${heading} pt-3`}>By race</h3>
+                <ul className="mg-card divide-y divide-[rgb(var(--mg-rule-soft))] overflow-hidden">
+                  {teamStats.races.map((r) => (
+                    <li key={r.name} className="flex min-h-[52px] items-center gap-3 px-4 py-2">
+                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="text-[15px] font-semibold leading-tight text-[rgb(var(--mg-ink))]">{r.name}</span>
+                        <span className="text-[13.5px] leading-tight text-[rgb(var(--mg-muted))]">
+                          {r.runs} {r.runs === 1 ? 'run' : 'runs'} · best {r.bestPlace != null ? ordinal(r.bestPlace) : '—'} · average {(r.totalPoints / r.runs).toFixed(1)} pts
+                        </span>
+                      </div>
+                      <span className="mg-display shrink-0 text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]">{formatPoints(r.totalPoints)} pts</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </>
+        ) : (
+          <p className="mg-card p-4 text-[15px] leading-snug text-[rgb(var(--mg-body))]">Stats show once {team.displayName} has raced.</p>
         )}
       </section>
 
       {/* Declared Riders & Ponies */}
       <section aria-label="Declared riders and ponies" className="mg-card overflow-hidden">
-        <div className="flex items-center justify-between border-b border-[rgb(var(--mg-rule))] px-4 py-2.5">
-          <h2 className="mg-display text-base font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-            Declared riders &amp; ponies
-          </h2>
-          {decForm && <span className="text-xs font-medium text-[rgb(var(--mg-muted))]">{orderedRiders.length} declared</span>}
+        <div className="flex items-center justify-between gap-2 border-b border-[rgb(var(--mg-rule))] px-4 py-2.5">
+          <h2 className={`${heading} !px-0`}>Dec form</h2>
+          {decLink || (decForm && <span className="text-xs font-medium text-[rgb(var(--mg-muted))]">{orderedRiders.length} declared</span>)}
         </div>
+        {trainerDisplay && <p className="border-b border-[rgb(var(--mg-rule-soft))] px-4 py-2 text-sm text-[rgb(var(--mg-muted))]">Trainer: <strong className="font-semibold text-[rgb(var(--mg-ink))]">{trainerDisplay}</strong></p>}
         {!decLoaded ? (
           <p className="p-4 text-sm text-[rgb(var(--mg-muted))]">Loading declaration…</p>
         ) : orderedRiders.length === 0 ? (
           <div className="flex flex-wrap items-center justify-between gap-2 p-4 text-sm text-[rgb(var(--mg-muted))]">
-            <span>No declaration form submitted for this team yet.</span>
-            {canDeclare && (
-              <Link to={`/competitions/${competition.id}/declarations?team=${team.id}`} className="font-semibold text-[rgb(var(--mg-heading))] underline">
-                Submit declaration form
-              </Link>
-            )}
+            <span>No dec form yet.</span>
           </div>
         ) : (
           <ol className="divide-y divide-[rgb(var(--mg-rule-soft))]">
@@ -491,111 +433,6 @@ export function CompetitionTeamPage() {
           </ol>
         )}
       </section>
-
-      {/* Drawn Heats & Starting Lanes */}
-      {drawnHeats.length > 0 && (
-        <section aria-label="Drawn heats and starting lanes" className="mg-card overflow-hidden">
-          <div className="border-b border-[rgb(var(--mg-rule))] px-4 py-2.5">
-            <h2 className="mg-display text-base font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-              Drawn heats &amp; starting lanes
-            </h2>
-          </div>
-          <ul className="divide-y divide-[rgb(var(--mg-rule-soft))]">
-            {drawnHeats.map(({ session, heat, heatLabel, lane, points, scoredAny, timeText }) => (
-              <li key={heat.id}>
-                <Link
-                  to={`/competitions/${competition.id}/session/${session.id}?heat=${heat.id}`}
-                  className="flex min-h-12 items-center gap-3 px-4 py-2.5 hover:bg-[rgb(var(--mg-subtle))]"
-                >
-                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="truncate text-[15px] font-semibold text-[rgb(var(--mg-ink))]">
-                      {session.name} · {heatLabel}
-                    </span>
-                    <span className="text-xs font-medium text-[rgb(var(--mg-muted))]">
-                      {[session.arenaName?.trim(), timeText].filter(Boolean).join(' · ') || 'Timetable'}
-                    </span>
-                  </div>
-                  <span className="mg-tag shrink-0">Lane {lane}</span>
-                  <span className="mg-display w-14 shrink-0 text-right text-lg font-bold tabular-nums text-[rgb(var(--mg-heading))]">
-                    {scoredAny ? `${formatPoints(points)} pts` : '–'}
-                  </span>
-                  <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-[rgb(var(--mg-dash))]" />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {/* Full Heat Tables */}
-      {drawnHeats.length > 0 && (
-        <section aria-label="Heat tables" className="flex flex-col gap-3">
-          <h2 className="mg-display px-1 text-base font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-            Heat tables
-          </h2>
-          {teamHeats.map((item) => (
-            <HeatScores key={item.key} session={item.session} heats={item.heats} activeHeatId={item.activeHeatId} embedded />
-          ))}
-        </section>
-      )}
-
-      {/* Team Stats */}
-      {teamStats && (
-        <section aria-label="Team stats" className="mg-card flex flex-col gap-3 p-4">
-          <h3 className="mg-display text-base font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-            Team stats
-          </h3>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2.5">
-              <span className={eyebrow}>Average per race</span>
-              <span className="mg-display text-xl font-bold leading-none text-[rgb(var(--mg-heading))]">
-                {teamStats.avgPointsPerRace.toFixed(1)} pts
-              </span>
-            </div>
-            <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2.5">
-              <span className={eyebrow}>Average place</span>
-              <span className="mg-display text-xl font-bold leading-none text-[rgb(var(--mg-heading))]">
-                {teamStats.avgPlace != null ? teamStats.avgPlace.toFixed(1) : '—'}
-              </span>
-            </div>
-            <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2.5">
-              <span className={eyebrow}>Races won</span>
-              <span className="mg-display text-xl font-bold leading-none text-[rgb(var(--mg-heading))]">
-                {teamStats.racesWon} / {teamStats.scoredRaces}
-              </span>
-            </div>
-            <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-subtle))] px-3 py-2.5">
-              <span className={eyebrow}>Point quota</span>
-              <span className="mg-display text-xl font-bold leading-none text-[rgb(var(--mg-heading))]">
-                {teamStats.pointQuota}%
-              </span>
-            </div>
-          </div>
-
-          {teamStats.races.length > 0 && (
-            <div className="flex flex-col gap-1.5 pt-1">
-              <span className={eyebrow}>Per-race averages</span>
-              <ul className="overflow-hidden rounded-[10px] border border-[rgb(var(--mg-rule))]">
-                {teamStats.races.map((r) => (
-                  <li key={r.name} className="flex min-h-10 items-center gap-3 border-b border-[rgb(var(--mg-rule-soft))] px-3 text-sm last:border-b-0">
-                    <span className="min-w-0 flex-1 truncate font-semibold text-[rgb(var(--mg-ink))]">{r.name}</span>
-                    <span className="shrink-0 text-xs text-[rgb(var(--mg-muted))]">{r.runs} {r.runs === 1 ? 'run' : 'runs'}</span>
-                    <span className="shrink-0 text-xs font-medium text-[rgb(var(--mg-body))]">
-                      Best {r.bestPlace != null ? ordinal(r.bestPlace) : '—'}
-                    </span>
-                    <span className="shrink-0 text-xs font-medium text-[rgb(var(--mg-muted))]">
-                      Avg {(r.totalPoints / r.runs).toFixed(1)} pts
-                    </span>
-                    <span className="mg-display w-12 shrink-0 text-right text-base font-bold tabular-nums text-[rgb(var(--mg-heading))]">
-                      {formatPoints(r.totalPoints)} pts
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </section>
-      )}
 
       {/* Full Race-by-Race Breakdown */}
       {detail && detail.blocks.length > 0 && (

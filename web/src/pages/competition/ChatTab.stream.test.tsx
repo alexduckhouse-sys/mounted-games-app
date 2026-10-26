@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { ChatTab } from './ChatTab';
@@ -61,7 +61,16 @@ it('shows a read-only latest-three feed, pinned banner and all-announcements she
     chat(5, { body: 'Parking is by the east gate', tag: 'banner' }),
   ];
   render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
-  expect(screen.getByText('Stream hasn’t started')).toBeVisible();
+  // With no stream the card just says so, with no icon.
+  const placeholder = screen.getByText('The stream hasn’t started');
+  expect(placeholder).toBeVisible();
+  expect(placeholder.closest('.live-stream-placeholder')!.querySelector('svg')).toBeNull();
+  // The pin sits in its own box marked Pinned, inside the announcements, and the rest follow.
+  const pinned = screen.getByRole('status', { name: 'Pinned announcement' });
+  expect(pinned).toHaveTextContent('Pinned');
+  expect(pinned).toHaveTextContent('Parking is by the east gate');
+  expect(screen.queryByRole('button', { name: 'Unpin' })).toBeNull();
+  expect(screen.getByRole('region', { name: 'Announcements' }).contains(pinned)).toBe(true);
   expect(screen.getByText('Parking is by the east gate')).toBeVisible();
   expect(screen.getByText('Latest update')).toBeInTheDocument();
   expect(screen.queryByText(/Oldest update with enough detail/)).toBeNull();
@@ -108,7 +117,7 @@ it('links non-admin trainers to the dedicated Message organisers page instead of
   expect(screen.getByRole('link', { name: /Message organisers/i })).toHaveAttribute('href', '/competitions/1/contact');
 });
 
-it('shows announcements at the top first, pins any announcement after the fact, and lets a more recent announcement replace the pin', async () => {
+it('lists announcements newest first, pins any announcement after the fact, and keeps the pin when a newer announcement is posted', async () => {
   context.messages = [
     chat(8, { body: 'Morning briefing at 9am', createdAt: '2026-06-01T09:00:00Z' }),
     chat(9, { body: 'Lunch break now', createdAt: '2026-06-01T12:00:00Z' }),
@@ -118,21 +127,41 @@ it('shows announcements at the top first, pins any announcement after the fact, 
   });
   render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
 
-  // Latest announcement appears in the top banner first
-  expect(screen.getByRole('status', { name: 'Top announcement' })).toHaveTextContent('Lunch break now');
+  // Nothing is pinned yet, so there is no Pinned box.
+  expect(screen.queryByRole('status', { name: 'Pinned announcement' })).toBeNull();
+  const copies = () => screen.getAllByRole('button', { name: /^(Pin as banner|Unpin): / }).map((b) => b.getAttribute('aria-label'));
+  expect(copies()).toEqual(['Pin as banner: Lunch break now', 'Pin as banner: Morning briefing at 9am']);
 
-  // Pinning the older announcement after the fact replaces the top banner
+  // Pinning the older announcement puts it in the Pinned box.
   fireEvent.click(screen.getByRole('button', { name: 'Pin as banner: Morning briefing at 9am' })); await act(flush);
   expect(api.post).toHaveBeenCalledWith('/competitions/1/chat/announcement', { body: 'Morning briefing at 9am', tag: 'banner' });
-  expect(screen.getByRole('status', { name: 'Top announcement' })).toHaveTextContent('Morning briefing at 9am');
+  expect(screen.getByRole('status', { name: 'Pinned announcement' })).toHaveTextContent('Morning briefing at 9am');
 
-  // Posting a more recent announcement replaces the pinned banner at the top
+  // A newer announcement joins the list; the pin stays where it is.
   vi.mocked(api.post).mockResolvedValueOnce({
     data: chat(11, { body: 'Finals starting in Arena 1', tag: 'general', type: 2, createdAt: '2026-06-01T14:00:00Z' }),
   });
   fireEvent.change(screen.getByPlaceholderText('Write an announcement…'), { target: { value: 'Finals starting in Arena 1' } });
   fireEvent.click(screen.getByRole('button', { name: 'Send' })); await act(flush);
-  expect(screen.getByRole('status', { name: 'Top announcement' })).toHaveTextContent('Finals starting in Arena 1');
+  expect(screen.getByRole('status', { name: 'Pinned announcement' })).toHaveTextContent('Morning briefing at 9am');
+  expect(copies()[0]).toBe('Pin as banner: Finals starting in Arena 1');
+});
+
+it('lets an organiser unpin from the Pinned box', async () => {
+  context.messages = [chat(7, { body: 'Parking is by the east gate' }), chat(8, { body: 'Parking is by the east gate', tag: 'banner' })];
+  vi.mocked(api.delete).mockResolvedValue({ data: {} });
+  render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
+  fireEvent.click(within(screen.getByRole('status', { name: 'Pinned announcement' })).getByRole('button', { name: 'Unpin' })); await act(flush);
+  expect(api.delete).toHaveBeenCalledWith('/competitions/1/chat/8');
+  expect(screen.queryByRole('status', { name: 'Pinned announcement' })).toBeNull();
+});
+
+it('does not repeat the pinned announcement in the public list', async () => {
+  context.roles = [];
+  context.messages = [chat(1, { body: 'Parking is by the east gate' }), chat(2, { body: 'Latest news' }), chat(3, { body: 'Parking is by the east gate', tag: 'banner' })];
+  render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
+  expect(screen.getAllByText('Parking is by the east gate')).toHaveLength(1);
+  expect(screen.getByText('Latest news')).toBeVisible();
 });
 
 it('keeps the existing banner when its replacement fails and serialises duplicate pin clicks', async () => {
@@ -146,7 +175,7 @@ it('keeps the existing banner when its replacement fails and serialises duplicat
   expect(api.delete).not.toHaveBeenCalled();
   await act(async () => { pending.reject(new Error('Synthetic offline failure')); await flush(); });
   expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t pin');
-  expect(screen.getByRole('status', { name: 'Top announcement' })).toHaveTextContent('Existing banner');
+  expect(screen.getByRole('status', { name: 'Pinned announcement' })).toHaveTextContent('Existing banner');
   expect(api.delete).not.toHaveBeenCalled();
 });
 
@@ -157,7 +186,7 @@ it('retains the saved replacement and reports a failure to delete the old banner
   render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
   fireEvent.click(screen.getByRole('button', { name: 'Pin as banner: Example replacement' })); await act(flush);
   expect(vi.mocked(api.post).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(api.delete).mock.invocationCallOrder[0]);
-  expect(screen.getByRole('status', { name: 'Top announcement' })).toHaveTextContent('Example replacement');
+  expect(screen.getByRole('status', { name: 'Pinned announcement' })).toHaveTextContent('Example replacement');
   expect(screen.getByRole('alert')).toHaveTextContent('old banner could not be cleared');
 });
 
@@ -169,11 +198,10 @@ it('orders out-of-order messages and uses IDs to break equal timestamp ties', as
     chat(10, { body: 'Old announcement', createdAt: '2026-06-01T11:00:00Z' }),
   ];
   render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
-  expect(screen.getByRole('status', { name: 'Top announcement' })).toHaveTextContent('New announcement');
+  expect(screen.getByRole('status', { name: 'Pinned announcement' })).toHaveTextContent('Earlier pin');
   expect(screen.getByRole('button', { name: 'Pin as banner: New announcement' })).toHaveAttribute('aria-pressed', 'false');
-  fireEvent.click(screen.getByRole('button', { name: 'Hide on this device' }));
-  expect(screen.queryByRole('status', { name: 'Top announcement' })).toBeNull();
-  expect(screen.getByText('New announcement')).toBeVisible();
+  const rows = screen.getAllByRole('button', { name: /^Pin as banner: / }).map((b) => b.getAttribute('aria-label'));
+  expect(rows).toEqual(['Pin as banner: New announcement', 'Pin as banner: Old announcement']);
   expect(api.delete).not.toHaveBeenCalled();
 });
 
@@ -182,7 +210,8 @@ it('never promotes a private message tagged as a banner into the public announce
   context.messages = [chat(1, { body: 'Public example' }), chat(2, { body: 'Private example', adminOnly: true, tag: 'banner' })];
   render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
   expect(screen.queryByText('Private example')).toBeNull();
-  expect(screen.getByRole('status', { name: 'Top announcement' })).toHaveTextContent('Public example');
+  expect(screen.queryByRole('status', { name: 'Pinned announcement' })).toBeNull();
+  expect(screen.getByText('Public example')).toBeVisible();
 });
 
 it('marks only the selected announcement as pinned when two announcements have the same text', async () => {

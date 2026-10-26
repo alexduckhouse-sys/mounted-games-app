@@ -91,11 +91,20 @@ describe('NavigationDrawer: when no competition is followed', () => {
     expect(document.body.style.overflow).toBe('auto');
   });
 
-  it('sends the extra competition links to general pages when no competition is followed', () => {
+  it('shows the same General section as a competition menu, without the competition part', () => {
     mount();
-    expect(links('Main navigation')).toEqual([
-      ['Following', '/following'], ['Event shop', '/shop'],
+    expect(screen.queryByRole('navigation', { name: 'This competition' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Age groups' })).not.toBeInTheDocument();
+    const heading = screen.getByRole('heading', { name: 'General' });
+    expect(heading).toHaveClass('text-lg', 'font-bold');
+    expect(links('General')).toEqual([
+      ['Competitions', '/events'], ['Following', '/following'], ['Past competitions', '/competitions/past'], ['Seasons', '/seasons'],
+      ['Rider and team stats', '/stats'], ['Team profiles', '/team-profiles'], ['Tack and kit shop', '/shop'], ['Settings', '/settings'],
     ]);
+    // Every row, the QR scanner included, has an icon.
+    const rows = [...within(screen.getByRole('navigation', { name: 'General' })).getAllByRole('link'), screen.getByRole('button', { name: 'Scan a QR code' })];
+    expect(rows).toHaveLength(9);
+    for (const row of rows) expect(row.querySelector('svg')).not.toBeNull();
   });
 
   it('invites a visitor to sign in at the bottom of the menu without a role caption', () => {
@@ -104,7 +113,7 @@ describe('NavigationDrawer: when no competition is followed', () => {
     expect(signIn).toHaveAttribute('href', '/login');
     expect(signIn).toHaveClass('mg-btn-primary');
     // Sign-in stays at the bottom, after the navigation links.
-    expect(screen.getByRole('navigation', { name: 'Main navigation' }).compareDocumentPosition(signIn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'General' }).compareDocumentPosition(signIn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole('navigation', { name: 'Account and management' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Notifications/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
@@ -123,7 +132,7 @@ describe('NavigationDrawer: when no competition is followed', () => {
 
   it('offers to browse events and see past ones', async () => {
     mount();
-    await userEvent.click(screen.getByRole('link', { name: 'Events' }));
+    await userEvent.click(screen.getByRole('link', { name: 'Competitions' }));
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('probe')).toHaveTextContent('/events');
     await userEvent.click(screen.getByRole('link', { name: 'Past competitions' }));
@@ -176,10 +185,11 @@ describe('NavigationDrawer: following a competition', () => {
 
   it('links to the competition’s extra pages (omitting duplicate bottom-tab links)', async () => {
     mount({ competition: true });
-    expect(links('Main navigation')).toEqual([
+    expect(links('This competition')).toEqual([
+      ['Weather', '/competitions/4/weather'], ['Teams', '/competitions/4/teams'],
       ['Following', '/competitions/4/following'], ['Event shop', '/competitions/4/shop'],
     ]);
-    const communityShop = screen.getByRole('link', { name: 'Tack & kit shop' });
+    const communityShop = screen.getByRole('link', { name: 'Tack and kit shop' });
     expect(communityShop).toHaveAttribute('href', '/shop');
     await userEvent.click(communityShop);
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -188,55 +198,103 @@ describe('NavigationDrawer: following a competition', () => {
 
   it('highlights the page being viewed', () => {
     mount({ competition: true, path: '/competitions/4/shop' });
-    const nav = within(screen.getByRole('navigation', { name: 'Main navigation' }));
+    const nav = within(screen.getByRole('navigation', { name: 'This competition' }));
     expect(nav.getByRole('link', { name: 'Event shop' })).toHaveAttribute('aria-current', 'page');
     expect(nav.getByRole('link', { name: 'Following' })).not.toHaveAttribute('aria-current');
   });
 
-  it('does not highlight anything when no competition is followed', () => {
+  it('highlights only the site page being viewed when no competition is followed', () => {
     mount({ path: '/events' });
-    const nav = within(screen.getByRole('navigation', { name: 'Main navigation' }));
-    expect(nav.getAllByRole('link').some((link) => link.hasAttribute('aria-current'))).toBe(false);
+    const nav = within(screen.getByRole('navigation', { name: 'General' }));
+    expect(nav.getAllByRole('link').filter((link) => link.hasAttribute('aria-current')).map((link) => link.textContent)).toEqual(['Competitions']);
     expect(screen.queryByRole('link', { name: 'Rulebooks' })).not.toBeInTheDocument();
   });
 });
 
 describe('NavigationDrawer: age groups', () => {
-  const groups = [{ id: 11, name: 'Seniors' }, { id: 12, name: 'Juniors' }];
+  const groups = [{ id: 11, name: 'Seniors', live: true }, { id: 12, name: 'Juniors', next: '09:05' }, { id: 13, name: 'Novices' }];
+  const openGroups = () => userEvent.click(screen.getByRole('button', { name: /Age group/ }));
 
-  it('lists the age groups of the followed competition, closing the menu on choice', async () => {
+  it('is a closed row under the header, labelled Age group over the current group', () => {
     mount({ competition: true, groups });
-    expect(links('Age groups')).toEqual([['Seniors', '/competitions/4/scoring?section=11'], ['Juniors', '/competitions/4/scoring?section=12']]);
-    await userEvent.click(screen.getByRole('link', { name: 'Juniors' }));
+    const row = screen.getByRole('button', { name: /Age group/ });
+    expect(row).toHaveAttribute('aria-expanded', 'false');
+    expect(row).toHaveTextContent('Age groupSeniors');
+    expect(screen.queryByRole('navigation', { name: 'Age groups' })).not.toBeInTheDocument();
+    // It sits straight after the header, before the menu sections.
+    expect(screen.getByRole('heading', { name: 'Spring Games' }).compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(row.compareDocumentPosition(screen.getByRole('heading', { name: 'This competition' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('opens downwards listing each group with LIVE or its next time, and closes the menu on choice', async () => {
+    mount({ competition: true, groups });
+    await openGroups();
+    expect(screen.getByRole('button', { name: /Age group/ })).toHaveAttribute('aria-expanded', 'true');
+    expect(links('Age groups')).toEqual([['SeniorsLive', '/competitions/4/scoring?section=11'], ['JuniorsNext 09:05', '/competitions/4/scoring?section=12'], ['Novices', '/competitions/4/scoring?section=13']]);
+    await userEvent.click(screen.getByRole('link', { name: /Juniors/ }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('shows no age groups when there are none, or they belong to another competition', () => {
     mount({ competition: true, groups: [] });
-    expect(screen.queryByRole('navigation', { name: 'Age groups' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Age group/ })).not.toBeInTheDocument();
   });
 
   it('shows no age groups without a followed competition', () => {
     mount({ groups });
-    expect(screen.queryByRole('navigation', { name: 'Age groups' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Age group/ })).not.toBeInTheDocument();
   });
 
-  it('marks only the selected age group on the scoring page', () => {
+  it('shows the selected age group on the age group page and marks it', async () => {
     mount({ competition: true, groups, path: '/competitions/4/scoring?section=12' });
+    expect(screen.getByRole('button', { name: /Age group/ })).toHaveTextContent('Juniors');
+    await openGroups();
     const nav = within(screen.getByRole('navigation', { name: 'Age groups' }));
-    expect(nav.getByRole('link', { name: 'Juniors' })).toHaveAttribute('aria-current', 'page');
-    expect(nav.getByRole('link', { name: 'Seniors' })).not.toHaveAttribute('aria-current');
+    expect(nav.getByRole('link', { name: /Juniors/ })).toHaveAttribute('aria-current', 'page');
+    expect(nav.getByRole('link', { name: /Seniors/ })).not.toHaveAttribute('aria-current');
   });
 
-  it('marks only the first age group on the scoring page when none is chosen', () => {
-    mount({ competition: true, groups, path: '/competitions/4/scoring' });
-    expect(screen.getByRole('link', { name: 'Seniors' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('link', { name: 'Juniors' })).not.toHaveAttribute('aria-current');
+  it('also follows the age group on the toplists route', () => {
+    mount({ competition: true, groups, path: '/competitions/4/toplists?section=13' });
+    expect(screen.getByRole('button', { name: /Age group/ })).toHaveTextContent('Novices');
   });
 
-  it('marks no age group away from the scoring page', () => {
+  it('starts on the first age group when none is chosen', () => {
     mount({ competition: true, groups, path: '/competitions/4' });
-    expect(within(screen.getByRole('navigation', { name: 'Age groups' })).queryAllByRole('link').some((l) => l.hasAttribute('aria-current'))).toBe(false);
+    expect(screen.getByRole('button', { name: /Age group/ })).toHaveTextContent('Seniors');
+  });
+});
+
+describe('NavigationDrawer: sections', () => {
+  it('has no FOLLOWING label above the competition name', () => {
+    mount({ competition: true });
+    expect(screen.queryByText('Following', { selector: 'span' })).not.toBeInTheDocument();
+  });
+
+  it('puts the competition section before General, under sentence-case headings', () => {
+    mount({ competition: true });
+    const competitionHeading = screen.getByRole('heading', { name: 'This competition' });
+    const generalHeading = screen.getByRole('heading', { name: 'General' });
+    expect(competitionHeading.compareDocumentPosition(generalHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(competitionHeading).toHaveClass('text-lg', 'font-bold');
+    expect(competitionHeading.className).not.toMatch(/uppercase/);
+    expect(links('General').map(([label]) => label)).toEqual([
+      'Competitions', 'Seasons', 'Past competitions', 'Rider and team stats', 'Tack and kit shop', 'Settings',
+    ]);
+    expect(screen.getByRole('button', { name: 'Scan a QR code' })).toBeInTheDocument();
+  });
+
+  it('no longer lists Dec forms, Rules and arena setup, or Details and entries', () => {
+    mount({ competition: true });
+    for (const name of ['Dec forms', 'Rules and arena setup', 'Details and entries']) {
+      expect(screen.queryByRole('link', { name })).not.toBeInTheDocument();
+    }
+  });
+
+  it('keeps the account block last: a Sign in pill when signed out', () => {
+    mount({ competition: true });
+    const signIn = screen.getByRole('link', { name: 'Sign in' });
+    expect(screen.getByRole('navigation', { name: 'General' }).compareDocumentPosition(signIn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
 
@@ -294,7 +352,7 @@ describe('NavigationDrawer: settings, QR scanner and weather', () => {
 
   it('opens the QR permission scanner above Settings and rejects unsupported pairing links', async () => {
     mount();
-    const scanBtn = screen.getByRole('button', { name: 'Scan QR code' });
+    const scanBtn = screen.getByRole('button', { name: 'Scan a QR code' });
     const settingsLink = screen.getByRole('link', { name: 'Settings' });
     expect(scanBtn.compareDocumentPosition(settingsLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
@@ -322,6 +380,8 @@ describe('NavigationDrawer: settings, QR scanner and weather', () => {
     localStorage.setItem('mg.showWeather', '1');
     const first = mount();
     expect(screen.getByText('Weather', { selector: 'span.font-medium' })).toBeInTheDocument();
+    // Away from a competition it sits under General, above the other rows.
+    expect(screen.getByRole('heading', { name: 'General' }).compareDocumentPosition(screen.getByRole('link', { name: /Weather/ })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     first.unmount();
 
     localStorage.removeItem('mg.showWeather');
@@ -382,7 +442,7 @@ describe('NavigationDrawer: the Seasons link', () => {
 describe('NavigationDrawer: permission scanner', () => {
   it('opens and closes the scanner without dismissing or navigating the menu', async () => {
     mount();
-    await userEvent.click(screen.getByRole('button', { name: 'Scan QR code' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Scan a QR code' }));
     expect(screen.getByRole('dialog', { name: 'Scan permission QR code' })).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'Close QR scanner' }));
@@ -397,7 +457,7 @@ describe('NavigationDrawer: permission scanner', () => {
     const session = { competitionId: 4, competitionName: 'Fake event', label: 'Fake camera', arenaName: 'Main', scope: 1, sessions: [] };
     const verify = vi.spyOn(scorerApi, 'get').mockResolvedValue({ data: session });
     mount();
-    await userEvent.click(screen.getByRole('button', { name: 'Scan QR code' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Scan a QR code' }));
     fireEvent.change(screen.getByLabelText('Permission link or key'), { target: { value: `/score#t=${token}` } });
     fireEvent.click(screen.getByRole('button', { name: 'Verify permission key' }));
     await waitFor(() => expect(screen.getByTestId('probe')).toHaveTextContent(`/score#t=${token}`));
@@ -411,7 +471,7 @@ describe('NavigationDrawer: permission scanner', () => {
   it('keeps the drawer and scanner open when verification fails', async () => {
     vi.spyOn(scorerApi, 'get').mockRejectedValue({ response: { status: 410 } });
     mount();
-    await userEvent.click(screen.getByRole('button', { name: 'Scan QR code' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Scan a QR code' }));
     fireEvent.change(screen.getByLabelText('Permission link or key'), { target: { value: 'mgs_fake_expired_permission' } });
     fireEvent.click(screen.getByRole('button', { name: 'Verify permission key' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Invalid or expired permission key');

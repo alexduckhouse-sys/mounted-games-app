@@ -4,7 +4,7 @@ import { TimetableBoard } from './TimetableBoard';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, ChevronRight, Trophy, Sparkles, X, AlertTriangle, Mic, Monitor, QrCode as QrCodeIcon } from 'lucide-react';
+import { ChevronDown, Sparkles, X, AlertTriangle, Mic, Monitor, QrCode as QrCodeIcon } from 'lucide-react';
 import { QrAccessModal } from '../../components/QrAccessModal';
 import { RaceListPicker } from '../../components/RacePicker';
 import { useCompetition } from './context';
@@ -26,12 +26,13 @@ import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { formatPoints } from '../../lib/formatPoints';
 
-type SectionSubTab = 'draw' | 'scores' | 'toplist';
+/** The three tabs of the age group page: the draw (Heats), the heat tables (Scores) and the Toplist. */
+export type SectionSubTab = 'draw' | 'scores' | 'toplist';
 
 const NO_ROWS: StandingRow[] = [];
 const TOPLIST_VIEW_PREF_KEY = 'mg.prefs.toplistView';
 const DEFAULT_AGE_GROUP_PREF_KEY = 'mg.prefs.defaultAgeGroup';
-const VALID_TOPLIST_VIEWS = new Set<ToplistViewTab>(['finals', 'totals', 'sessions', 'games', 'heats']);
+const VALID_TOPLIST_VIEWS = new Set<ToplistViewTab>(['finals', 'totals', 'sessions', 'games']);
 
 function readPreferredToplistView(): ToplistViewTab | null {
   try {
@@ -86,9 +87,9 @@ function defaultSectionId(competition: CompetitionDetail): number | null {
   return populatedSection?.id ?? competition.sections[0]?.id ?? null;
 }
 
-/** Puts the toplist's title and refresh button in the app header while the standalone page is showing. */
-function ToplistHeader({ subtitle, onRefresh }: { subtitle: string; onRefresh: () => void }) {
-  usePageHeader({ title: 'Toplist', subtitle, onRefresh, refreshLabel: 'Refresh toplist' });
+/** Puts the page's title and refresh button in the app header while the Scores or Toplist tab is showing. (The Heats tab's timetable sets its own.) */
+function TabHeader({ title, subtitle, refreshLabel, onRefresh }: { title: string; subtitle: string; refreshLabel: string; onRefresh: () => void }) {
+  usePageHeader({ title, subtitle, onRefresh, refreshLabel });
   return null;
 }
 
@@ -138,7 +139,11 @@ function AgeGroupRail({ sections, teams, value, onChange }: {
   );
 }
 
-export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
+/**
+ * One page per age group: the navy age group bar, then three tabs. Heats is the draw, Scores holds the heat tables
+ * and Toplist the standings. The menu opens it on Heats and the Toplists bottom tab on Toplist (`startOn`).
+ */
+export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   const { competition, reload } = useCompetition();
   const { canManage } = useAuth();
   usePageWidth('wide');
@@ -147,8 +152,7 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedSection = Number(searchParams.get('section'));
   const sectionId = competition.sections.find((s) => s.id === requestedSection)?.id ?? defaultSectionId(competition);
-  const [subTab, setSubTab] = useState<SectionSubTab>('draw');
-  const [showToplist, setShowToplist] = useState(toplistOnly);
+  const [subTab, setSubTab] = useState<SectionSubTab>(startOn);
   const [showFinals, setShowFinals] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
   const [chosenView, setChosenView] = useState<ToplistViewTab | null>(readPreferredToplistView);
@@ -233,38 +237,11 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
   const teamCount = competition.teams.filter((t) => t.competitionSectionId === sectionId && !t.isHorsConcours).length;
   const rail = desktop && competition.sections.length > 1
     ? <AgeGroupRail sections={competition.sections} teams={competition.teams} value={sectionId} onChange={chooseSection} /> : null;
-  const sectionHeats = useMemo(() => {
-    if (sectionId == null) return [];
-    const out: { session: typeof competition.sessions[number]; orderedHeats: typeof competition.sessions[number]['heats']; heat: typeof competition.sessions[number]['heats'][number] }[] = [];
-    const sessions = competition.sessions
-      .filter((s) => s.competitionSectionId === sectionId && (s.kind ?? (s.isBreak ? 1 : 0)) === 0)
-      .slice()
-      .sort((a, b) => a.orderIndex - b.orderIndex);
-    for (const s of sessions) {
-      const orderedHeats = s.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
-      const seenRounds = new Set<number>();
-      for (const h of orderedHeats) {
-        if (h.raceRoundStage && h.raceRoundId != null) {
-          if (seenRounds.has(h.raceRoundId)) continue;
-          seenRounds.add(h.raceRoundId);
-        }
-        out.push({ session: s, orderedHeats, heat: h });
-      }
-    }
-    return out;
-  }, [competition, sectionId]);
-  // The page version draws its own tab band edge to edge on phones, so its notices sit in their own column above it.
-  const toplist = toplistOnly ? (
+  const toplist = (
     <section aria-label={sectionLabel} className="flex flex-col">
       <div className="flex flex-col gap-2.5 pt-3 empty:hidden">{notices}</div>
-      {standings.length > 0 && <ToplistView list={list} section={section} standalone={!rail} competitionId={competition.id} teams={competition.teams} heats={sectionHeats} chosenView={chosenView} onChooseView={chooseView} />}
+      {standings.length > 0 && <ToplistView list={list} section={section} competitionId={competition.id} teams={competition.teams} chosenView={chosenView} onChooseView={chooseView} />}
       {sectionId != null && <div className="pt-3"><TackLeaderboard competitionId={competition.id} sectionId={sectionId} refresh={retry} /></div>}
-    </section>
-  ) : (
-    <section aria-label={sectionLabel} className="flex flex-col gap-2.5">
-      {notices}
-      {standings.length > 0 && <ToplistView list={list} section={section} competitionId={competition.id} teams={competition.teams} heats={sectionHeats} chosenView={chosenView} onChooseView={chooseView} />}
-      {sectionId != null && <TackLeaderboard competitionId={competition.id} sectionId={sectionId} refresh={retry} />}
     </section>
   );
   const sectionQuery = sectionId != null ? `?section=${sectionId}` : '';
@@ -318,7 +295,7 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
     </>
   );
 
-  const ageGroups = !rail && competition.sections.length > 1 && <AgeGroupSelect sections={competition.sections} value={sectionId} teamCount={teamCount} seamless={toplistOnly && standings.length > 0} onChange={chooseSection} />;
+  const ageGroups = !rail && competition.sections.length > 1 && <AgeGroupSelect sections={competition.sections} value={sectionId} teamCount={teamCount} seamless onChange={chooseSection} />;
   const sectionSessions = useMemo(
     () => competition.sessions
       .filter((s) => s.competitionSectionId === sectionId && (s.kind ?? (s.isBreak ? 1 : 0)) === 0)
@@ -326,92 +303,76 @@ export function ScoringTab({ toplistOnly = false }: { toplistOnly?: boolean }) {
     [competition.sessions, sectionId],
   );
 
-  if (toplistOnly || sectionId == null) {
-    const page = (
+  if (sectionId == null) {
+    const empty = (
       <div className={`mx-auto flex w-full flex-col ${rail ? '' : 'max-w-[560px] lg:max-w-3xl'}`}>
-        {toplistOnly && <ToplistHeader subtitle={[competition.name, progress].filter(Boolean).join(' · ')} onRefresh={() => setRetry((n) => n + 1)} />}
-        {!toplistOnly && <h1 className="mg-h1 mg-h1-sm py-3">Age groups</h1>}
+        <h1 className="mg-h1 mg-h1-sm py-3">Age groups</h1>
         {ageGroups}
-        <div className="flex flex-col gap-3">
-          {sectionId == null ? <p className="mg-card mt-3 p-4 text-[rgb(var(--mg-muted))]">No age groups yet.</p> : toplist}
-          {sectionId != null && <SponsorStrip placement="Results" />}
-          {finalsButton && <div className="pt-1">{finalsButton}</div>}
-        </div>
+        <p className="mg-card mt-3 p-4 text-[rgb(var(--mg-muted))]">No age groups yet.</p>
+        {finalsButton && <div className="pt-4">{finalsButton}</div>}
         {finalsModal}
       </div>
     );
-    return rail ? <PageGrid variant="left" aside={rail} asideLabel="Age groups" className="pt-3">{page}</PageGrid> : page;
+    return rail ? <PageGrid variant="left" aside={rail} asideLabel="Age groups" className="pt-3">{empty}</PageGrid> : empty;
   }
 
   const subTabs: [SectionSubTab, string][] = [
-    ['draw', 'Draw / Heats'],
-    ['scores', 'Heat Scores'],
+    ['draw', 'Heats'],
+    ['scores', 'Scores'],
     ['toplist', 'Toplist'],
   ];
-
-  const leadControls = (
-          <div className="flex flex-col gap-3">
-            <div className="mg-seg" role="group" aria-label="Section view">
-              {subTabs.map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  aria-pressed={subTab === id}
-                  onClick={() => {
-                    setSubTab(id);
-                    if (id === 'toplist') setShowToplist(true);
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {subTab === 'draw' && (
-              <>
-                <button type="button" className="mg-tint-link" aria-expanded={showToplist} onClick={() => setShowToplist((v) => !v)}>
-                  <Trophy aria-hidden="true" className="h-[18px] w-[18px] shrink-0" />
-                  <span className="flex-1">{showToplist ? 'Hide toplist' : `Show ${sectionName ? `${sectionName} ` : ''}toplist`}</span>
-                  <ChevronRight aria-hidden="true" className={`h-4 w-4 shrink-0 transition-transform motion-reduce:transition-none ${showToplist ? 'rotate-90' : ''}`} />
-                </button>
-                <AnimatePresence initial={false}>
-                  {showToplist && (
-                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                      {toplist}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </>
-            )}
-
-            {subTab === 'scores' && (
-              <div className="flex flex-col gap-4" role="region" aria-label="Section heat scores">
-                {sectionSessions.flatMap((s) => {
-                  const heats = s.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
-                  if (heats.length === 0) return [];
-                  const isRaceFinals = heats.some((h) => Boolean(h.raceRoundStage) && h.raceRoundId != null);
-                  if (isRaceFinals) {
-                    return [<HeatScores key={`session-${s.id}`} session={s} heats={heats} activeHeatId={heats[0].id} embedded />];
-                  }
-                  return heats.map((h) => (
-                    <HeatScores key={`heat-${h.id}`} session={s} heats={heats} activeHeatId={h.id} embedded />
-                  ));
-                })}
-                {sectionSessions.every((s) => s.heats.length === 0) && (
-                  <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">No heats drawn for this section yet.</p>
-                )}
-              </div>
-            )}
-
-            {subTab === 'toplist' && toplist}
-
-            {finalsButton}
-          </div>
+  // The tabs sit in the navy bar under the age group on phones; beside the age group rail on a laptop they are plain.
+  const tabBar = (
+    <div className={rail ? 'pb-3' : 'mg-band-header pb-2.5 pt-1'}>
+      <div className="mg-seg" role="group" aria-label="Age group view">
+        {subTabs.map(([id, label]) => (
+          <button key={id} type="button" aria-pressed={subTab === id} onClick={() => setSubTab(id)}>{label}</button>
+        ))}
+      </div>
+    </div>
   );
+  const band = <>{ageGroups}{tabBar}</>;
+
+  const scores = (
+    <div className="flex flex-col gap-4 pt-3" role="region" aria-label="Section heat scores">
+      {sectionSessions.flatMap((s) => {
+        const heats = s.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+        if (heats.length === 0) return [];
+        const isRaceFinals = heats.some((h) => Boolean(h.raceRoundStage) && h.raceRoundId != null);
+        if (isRaceFinals) {
+          return [<HeatScores key={`session-${s.id}`} session={s} heats={heats} activeHeatId={heats[0].id} embedded />];
+        }
+        return heats.map((h) => (
+          <HeatScores key={`heat-${h.id}`} session={s} heats={heats} activeHeatId={h.id} embedded />
+        ));
+      })}
+      {sectionSessions.every((s) => s.heats.length === 0) && (
+        <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">No heats drawn for this section yet.</p>
+      )}
+    </div>
+  );
+
   const board = subTab === 'draw' ? (
-    <TimetableBoard sectionId={sectionId} title={sectionName || 'Age group'} bandExtra={ageGroups} lead={leadControls} />
+    <TimetableBoard sectionId={sectionId} title={sectionName || 'Age group'} bandExtra={band} lead={finalsButton || undefined} />
   ) : (
-    <div className="mx-auto flex w-full flex-col gap-3">{ageGroups}{leadControls}</div>
+    <div className={`mx-auto flex w-full flex-col ${rail ? '' : 'max-w-[560px] lg:max-w-3xl'}`}>
+      {subTab === 'toplist'
+        ? <TabHeader title="Toplist" subtitle={[competition.name, progress].filter(Boolean).join(' · ')} refreshLabel="Refresh toplist" onRefresh={() => setRetry((n) => n + 1)} />
+        : <TabHeader title={sectionName || 'Age group'} subtitle={competition.name} refreshLabel="Refresh scores" onRefresh={reload} />}
+      {band}
+      {subTab === 'toplist' ? (
+        <div className="flex flex-col gap-3">
+          {toplist}
+          <SponsorStrip placement="Results" />
+          {finalsButton && <div className="pt-1">{finalsButton}</div>}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {scores}
+          {finalsButton}
+        </div>
+      )}
+    </div>
   );
 
   return (

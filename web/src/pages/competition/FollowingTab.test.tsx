@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
@@ -18,7 +18,9 @@ function mount(extra: Partial<CompetitionCtx> = {}, comp = data) {
 describe('FollowingTab', () => {
   it('lets a signed-out visitor search, star and unstar a team', async () => {
     mount();
-    expect(screen.getByText(/no sign-in is needed/)).toBeInTheDocument();
+    // No sentence at the top, and nothing followed yet means no Teams you follow section.
+    expect(screen.queryByText(/no sign-in is needed/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Teams you follow' })).not.toBeInTheDocument();
     await userEvent.type(screen.getByRole('searchbox'), 'Blue');
     expect(screen.queryByRole('button', { name: 'Follow Example Red' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Follow Example Blue' }));
@@ -27,38 +29,33 @@ describe('FollowingTab', () => {
     expect(screen.getByText('4 pts')).toBeInTheDocument();
     expect(screen.getByText('1 race')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Lane 2/ })).toHaveAttribute('href', '/competitions/1/session/1?heat=1');
-    await userEvent.click(screen.getByRole('button', { name: /Following 1 team/ }));
+    expect(screen.getByRole('heading', { name: 'Teams you follow' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Example Blue' })).toHaveAttribute('href', '/competitions/1/teams/1');
     await userEvent.click(screen.getByRole('button', { name: 'Unfollow Example Blue' }));
     expect(localStorage.getItem(FAVOURITES_KEY)).toBeNull();
   });
-  it('lists the followed teams in a drop-down with their next heat, and adds more from it', async () => {
+  it('lists the teams you follow first, each with its next heat, with no navy dropdown', () => {
     localStorage.setItem(FAVOURITES_KEY, '[{"competitionId":1,"teamId":1},{"competitionId":1,"teamId":2}]');
     mount();
-    const toggle = screen.getByRole('button', { name: /Following 2 teams/ });
-    expect(toggle).toHaveTextContent('Example Blue, Example Red');
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: /Following \d+ teams?/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add teams' })).not.toBeInTheDocument();
-    await userEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText(/^Seniors · next /)).toBeInTheDocument();
-    expect(screen.getByText('Seniors · not drawn yet')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Add teams' }));
-    expect(screen.queryByRole('button', { name: 'Add teams' })).not.toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Choose teams' })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Close team picker' }));
-    expect(screen.queryByRole('region', { name: 'Choose teams' })).not.toBeInTheDocument();
+    const followed = screen.getByRole('heading', { name: 'Teams you follow' });
+    const rows = within(followed.closest('section')!).getAllByRole('listitem');
+    expect(rows.map((row) => row.textContent)).toEqual(['Example BlueNext: Heat 1 · Lane 2 · on now', 'Example RedNot drawn yet']);
+    // They come before the heats, the results and the finder.
+    for (const later of ['Next heats', 'Latest results', 'Find a team']) {
+      expect(followed.compareDocumentPosition(screen.getByRole('heading', { name: later })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
   });
-  it('closes the drop-down on Escape and on a tap outside it', async () => {
-    localStorage.setItem(FAVOURITES_KEY, '[{"competitionId":1,"teamId":1}]');
-    mount();
-    const toggle = screen.getByRole('button', { name: /Following 1 team/ });
-    await userEvent.click(toggle);
-    await userEvent.keyboard('{Escape}');
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    await userEvent.click(toggle);
-    await userEvent.click(document.body);
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  it('has a round search bar and an outlined Follow club pill', () => {
+    const club = (id: number, displayName: string) => team(id, { clubId: 7, clubName: 'Hill Pony Club', displayName });
+    mount({}, competition({ teams: [club(1, 'Hill A'), club(2, 'Hill B')] }));
+    const bar = screen.getByRole('searchbox').closest('label')!;
+    expect(bar.className).toContain('rounded-full');
+    const pill = screen.getByRole('button', { name: 'Follow club Hill Pony Club' });
+    expect(pill).toHaveTextContent('Follow club');
+    expect(pill.className).toMatch(/rounded-full.*border/);
+    expect(pill.className).not.toContain('mg-btn-primary');
   });
   it('shows a late heat in amber with its delay and planned time', () => {
     localStorage.setItem(FAVOURITES_KEY, '[{"competitionId":1,"teamId":1}]');
@@ -68,7 +65,7 @@ describe('FollowingTab', () => {
       heat(2, { entries }),
     ] })] });
     mount({}, slow);
-    const link = screen.getByRole('link', { name: /Example Blue/ });
+    const link = screen.getByRole('link', { name: /Lane 2/ });
     expect(link).toHaveAttribute('href', '/competitions/1/session/1?heat=2');
     expect(link).toHaveTextContent('+8 ·');
     expect(link.querySelector('s')).not.toBeNull();
@@ -123,9 +120,7 @@ describe('FollowingTab', () => {
     expect(screen.getByRole('list', { name: 'Clubs' }).querySelectorAll('li')).toHaveLength(2);
     await userEvent.click(screen.getByRole('button', { name: 'Follow club Hill Pony Club' }));
     expect(JSON.parse(localStorage.getItem(FAVOURITES_KEY)!)).toEqual([1, 2, 3].map((teamId) => ({ competitionId: 1, teamId })));
-    await userEvent.click(screen.getByRole('button', { name: /Following 3 teams/ }));
     expect(screen.getByRole('button', { name: 'Unfollow Hill Pair' })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Add teams' }));
     expect(screen.getByRole('button', { name: 'Follow club Vale Pony Club' })).toHaveAttribute('aria-pressed', 'false');
     await userEvent.click(screen.getByRole('button', { name: 'Unfollow club Hill Pony Club' }));
     expect(localStorage.getItem(FAVOURITES_KEY)).toBeNull();

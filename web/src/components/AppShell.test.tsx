@@ -66,7 +66,7 @@ describe('AppShell: choosing a competition', () => {
     remembered();
     mount('/competitions/4');
     await userEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-    await userEvent.click(screen.getByRole('link', { name: 'Events' }));
+    await userEvent.click(screen.getByRole('link', { name: 'Competitions' }));
     expect(screen.getByTestId('probe')).toHaveTextContent('/events');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });

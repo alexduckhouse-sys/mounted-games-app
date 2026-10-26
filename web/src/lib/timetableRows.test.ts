@@ -3,7 +3,7 @@ import type { Session } from '../types';
 import { heat, race, session } from '../test/factories';
 import { computeTimings, type SessionTiming } from './time';
 import {
-  groupMaxDelay, groupRowsBySession, isGroupFinished, sessionOrdinals, sessionTitle, statusLabel, timetableRows, timetableStatus,
+  arenaDelays, delayInWords, lastFinishedRow, groupMaxDelay, groupRowsBySession, isGroupFinished, sessionOrdinals, sessionTitle, statusLabel, timetableRows, timetableStatus,
   type TimetableStatus,
 } from './timetableRows';
 
@@ -205,5 +205,36 @@ describe('sessionTitle', () => {
 
   it('uses the session name when there is no age group, and session 1 when unnumbered', () => {
     expect(sessionTitle(session(1, { sectionName: null, name: 'Open' }), new Map())).toBe('Open Session 1');
+  });
+});
+
+describe('delayInWords', () => {
+  it('spells out minutes, then switches to hours', () => {
+    expect(delayInWords(10)).toBe('10 minutes');
+    expect(delayInWords(1)).toBe('1 minute');
+    expect(delayInWords(94)).toBe('1h 34m');
+    expect(delayInWords(-3)).toBe('0 minutes');
+  });
+});
+
+describe('arenaDelays', () => {
+  const row = (arenaName: string | null, status: TimetableStatus, delayMinutes: number) => ({ session: session(1, { arenaName }), status, delayMinutes });
+  it('gives the longest delay per arena, counting only heats that are running late', () => {
+    expect(arenaDelays([
+      row('Main', 'late', 10), row('Main', 'late', 25), row(' Main ', 'late', 5), row('Second', 'on-time', 0),
+      row('Second', 'live', 40), row('Third', 'finished', 30), row(null, 'late', 8),
+    ])).toEqual([{ arena: 'Main', minutes: 25 }, { arena: '', minutes: 8 }]);
+  });
+
+  it('has nothing when everything is on time', () => {
+    expect(arenaDelays([row('Main', 'on-time', 0)])).toEqual([]);
+  });
+});
+
+describe('lastFinishedRow', () => {
+  it('picks the latest finished row, or null', () => {
+    const rows = [{ id: 1, status: 'finished' as const }, { id: 2, status: 'finished' as const }, { id: 3, status: 'on-time' as const }];
+    expect(lastFinishedRow(rows)).toBe(rows[1]);
+    expect(lastFinishedRow([rows[2]])).toBeNull();
   });
 });

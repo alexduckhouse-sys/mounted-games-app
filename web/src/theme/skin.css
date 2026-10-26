@@ -339,10 +339,11 @@ a.mg-row:active, button.mg-row:active { background: rgb(var(--mg-tint) / .65); }
 .mg-toggle > button + button { border-left: 1px solid rgb(var(--mg-control)); }
 .mg-toggle > button[aria-pressed="true"] { background: rgb(var(--mg-button)); color: #fff; }
 .mg-seg > button:focus-visible, .mg-toggle > button:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
-.mg-dropdown-menu { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 40; max-height: min(60vh, 22rem); overflow-y: auto; margin: 0; padding: 4px; list-style: none; border: 1px solid rgb(var(--mg-rule)); border-radius: 10px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); box-shadow: 0 8px 24px rgb(0 0 0 / .22); animation: mg-pop-in 160ms var(--mg-ease-out); transform-origin: top center; }
-.mg-dropdown-option { display: flex; min-height: 44px; cursor: pointer; align-items: center; gap: 8px; border-radius: 7px; padding: 0 10px; font: 600 15px/1.2 var(--mg-font); }
+.mg-dropdown-menu { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 40; max-height: min(60vh, 22rem); overflow-y: auto; margin: 0; padding: 0; list-style: none; border: 1px solid rgb(var(--mg-control)); border-radius: 14px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); box-shadow: 0 8px 24px rgb(0 0 0 / .14); animation: mg-pop-in 160ms var(--mg-ease-out); transform-origin: top center; }
+.mg-dropdown-option { display: flex; min-height: 46px; cursor: pointer; align-items: center; gap: 8px; padding: 0 14px; font: 500 15px/1.2 var(--mg-font); }
+.mg-dropdown-option + .mg-dropdown-option { border-top: 1px solid rgb(var(--mg-rule-soft)); }
 .mg-dropdown-option[data-active] { background: rgb(var(--mg-subtle)); }
-.mg-dropdown-option[aria-selected="true"] { color: rgb(var(--mg-heading)); }
+.mg-dropdown-option[aria-selected="true"] { font-weight: 700; color: rgb(var(--mg-heading)); }
 .mg-notice { border-radius: 10px; padding: 12px 14px; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); font: 500 14px/1.35 var(--mg-font); }
 
 /* Skeleton placeholders shown while a page's first copy is on its way. */

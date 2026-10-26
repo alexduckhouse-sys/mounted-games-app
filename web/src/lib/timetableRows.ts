@@ -95,6 +95,29 @@ export function groupMaxDelay(rows: { status: TimetableStatus; delayMinutes: num
   return Math.max(0, ...rows.filter((row) => row.status !== 'finished' && row.status !== 'live').map((row) => row.delayMinutes));
 }
 
+/** "10 minutes", "1 minute", or "1h 34m" from an hour up: the delay as it reads in a sentence. */
+export function delayInWords(minutes: number): string {
+  const m = Math.max(0, Math.round(minutes));
+  if (m >= 60) return formatDelayDuration(m);
+  return `${m} ${m === 1 ? 'minute' : 'minutes'}`;
+}
+
+/** The longest delay among each arena's upcoming heats that are running late, in first-seen order. An unnamed arena has an empty name. */
+export function arenaDelays(rows: { session: Session; status: TimetableStatus; delayMinutes: number }[]): { arena: string; minutes: number }[] {
+  const late = new Map<string, number>();
+  for (const row of rows) {
+    if (row.status !== 'late') continue;
+    const arena = row.session.arenaName?.trim() ?? '';
+    late.set(arena, Math.max(late.get(arena) ?? 0, row.delayMinutes));
+  }
+  return [...late].map(([arena, minutes]) => ({ arena, minutes }));
+}
+
+/** The latest finished row of a time-ordered list, or null when nothing has finished. */
+export function lastFinishedRow<T extends { status: TimetableStatus }>(rows: T[]): T | null {
+  return rows.findLast((row) => row.status === 'finished') ?? null;
+}
+
 /** "Seniors Session 1": the age group (without "Teams") plus its session number. */
 export function sessionTitle(session: Session, ordinals: Map<number, number>): string {
   return `${displaySectionName(session.sectionName || session.name)} Session ${ordinals.get(session.id) ?? 1}`;

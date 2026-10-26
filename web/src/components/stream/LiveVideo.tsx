@@ -67,7 +67,7 @@ export function LiveVideo({ competitionId, streams, sessions, invoke, ready, mes
         : <ConnectedPlayer key={selected.id} stream={selected} invoke={invoke} ready={ready} onMedia={onMedia} announcement={messages.filter((item) => item.message.type === 2).at(-1)} captionBar={publicLayout} label={label} />}
       <p className={`m-0 text-xs text-[rgb(var(--mg-muted))] ${publicLayout ? 'px-4 pt-2' : ''}`}>{SPECTATOR_NOTICE}</p>
     </> : fallback ? <CompStreamCard key={fallback} streamUrl={fallback} compName={competitionName} publicLayout={publicLayout} />
-      : showPlaceholder ? <div className="live-stream-placeholder mg-card" role="status"><Video aria-hidden="true" /><strong>Stream hasn’t started</strong></div> : null}
+      : showPlaceholder ? <div className="live-stream-placeholder mg-card" role="status"><strong>The stream hasn’t started</strong></div> : null}
   </section>;
 }
 /** Lite mode: no connection is made until the viewer asks for the video. */

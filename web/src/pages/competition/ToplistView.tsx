@@ -3,14 +3,14 @@ import { Link, useInRouterContext } from 'react-router-dom';
 import { ChevronRight, Star, Trophy } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { api } from '../../api';
-import type { CompetitionSection, DeclarationForm, Heat, Session, Team } from '../../types';
+import type { CompetitionSection, DeclarationForm, Team } from '../../types';
 import { ordinal, toplistNote, type FinalGroup, type GameStandingGroup, type Toplist } from '../../lib/toplist';
 import { useFavourites } from '../../hooks/useFavourites';
 import { CompetitionContext } from './context';
 import { parseBibAndFlag } from '../../lib/bib';
 import { statusLabel, statusLetter } from '../../lib/resultStatus';
-import { HeatScores } from './HeatScores';
 import { TeamSheet } from './TeamSheet';
+import { DropdownRow } from '../../components/DropdownRow';
 import { Rosette } from '../../components/Rosette';
 import { ScoreFlash } from '../../components/ScoreFlash';
 import { TickerNumber } from '../../components/TickerNumber';
@@ -23,7 +23,7 @@ import { formatPoints } from '../../lib/formatPoints';
 import { publicRiderName } from '../../lib/riderNames';
 
 
-export type ToplistViewTab = 'finals' | 'totals' | 'sessions' | 'games' | 'heats';
+export type ToplistViewTab = 'finals' | 'totals' | 'sessions' | 'games';
 type View = ToplistViewTab;
 
 const separatorLabel = 'flex items-center gap-2 border-b border-[rgb(var(--mg-rule-soft))] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-red))]';
@@ -31,25 +31,21 @@ const dashes = <span aria-hidden="true" className="flex-1 border-t-2 border-dash
 
 /**
  * The age group's toplist: finals once they have results, totals with the final cut-off and any run-off,
- * points per session, or per-game breakdown across heats. Tapping a team opens its breakdown. `standalone` draws the view tabs as a full-width
- * band under the page header (the toplist page); embedded in the timetable they stay in the column.
+ * points per session, or per-game breakdown across heats. A "Show" row above the list switches between them
+ * (only when there is more than one). Tapping a team opens its breakdown.
  */
 export function ToplistView({
   list,
   section,
-  standalone = false,
   competitionId: suppliedCompetitionId,
   teams: suppliedTeams,
-  heats,
   chosenView,
   onChooseView,
 }: {
   list: Toplist;
   section: CompetitionSection | null;
-  standalone?: boolean;
   competitionId?: number;
   teams?: Team[];
-  heats?: { session: Session; orderedHeats: Heat[]; heat: Heat }[];
   chosenView?: View | null;
   onChooseView?: (view: View) => void;
 }) {
@@ -104,7 +100,6 @@ export function ToplistView({
   const hasSessions = list.bySession.sessions.length > 0;
   const games = list.byGame ?? [];
   const hasGames = games.length > 0;
-  const hasHeats = (heats?.length ?? 0) > 0;
   // null until the viewer picks one, so finals become the default the moment they have results.
   const [internalChosen, setInternalChosen] = useState<View | null>(null);
   const chosen = chosenView !== undefined ? chosenView : internalChosen;
@@ -122,7 +117,6 @@ export function ToplistView({
     ['totals', 'Totals'],
     ...(hasSessions ? ([['sessions', 'By session']] as [View, string][]) : []),
     ...(hasGames ? ([['games', 'By game']] as [View, string][]) : []),
-    ...(hasHeats ? ([['heats', 'Heat tables']] as [View, string][]) : []),
   ];
   const view: View = tabs.some(([id]) => id === chosen) ? chosen! : tabs[0][0];
   const places = section?.finalistCount ?? null;
@@ -137,18 +131,15 @@ export function ToplistView({
     return flag ? <img src={`/flags/${flag}.png`} alt="" className="mr-1.5 inline-block h-3.5 w-5 shrink-0 rounded-[2px] object-cover align-middle" /> : null;
   };
 
-  const tabBar = tabs.length > 1 && (
-    <div className={standalone ? 'mg-band-header pb-2.5 pt-1' : undefined}>
-      <div className="mg-seg" role="group" aria-label="Toplist view">
-        {tabs.map(([id, label]) => <button key={id} type="button" aria-pressed={view === id} onClick={() => setChosen(id)}>{label}</button>)}
-      </div>
-    </div>
+  // "Show  Totals ›": one settings row that opens the list of views.
+  const viewRow = tabs.length > 1 && (
+    <DropdownRow label="Show" value={view} options={tabs.map(([value, label]) => ({ value, label }))} onChange={(next) => setChosen(next as View)} />
   );
 
   return (
     <>
-      {tabBar}
-      <div className={`flex flex-col gap-3 ${tabs.length > 1 || standalone ? 'pt-3' : ''}`}>
+      <div className="flex flex-col gap-3 pt-3">
+        {viewRow}
         {view === 'finals' && (
           <FinalsList
             groups={list.finals}
@@ -275,14 +266,6 @@ export function ToplistView({
             onOpen={open}
             renderTeamName={(id, name) => renderTeamName(id, name, isFav(id), true)}
           />
-        )}
-
-        {view === 'heats' && heats && hasHeats && (
-          <section aria-label="Heat tables" className="flex flex-col gap-3">
-            {heats.map(({ session: s, orderedHeats, heat: h }) => (
-              <HeatScores key={h.id} session={s} heats={orderedHeats} activeHeatId={h.id} />
-            ))}
-          </section>
         )}
 
         {list.runoff && view === 'totals' && (
