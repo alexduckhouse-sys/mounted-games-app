@@ -101,6 +101,12 @@ describe('the toplist page header', () => {
 });
 
 describe('the age group select', () => {
+  it('keeps Heats first when opened from the menu', () => {
+    renderTab('/?section=9', { startOn: 'draw' });
+    const tabs = screen.getByRole('group', { name: 'Age group view' });
+    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Heats', 'Scores', 'Toplist']);
+  });
+
   it('lists the age groups with the current one and its team count', async () => {
     renderTab();
     const select = screen.getByRole('combobox', { name: 'Age group' });
@@ -333,11 +339,11 @@ describe('the age group page', () => {
     expect(screen.getByTestId('search')).toHaveTextContent('?section=10');
   });
 
-  it('opens on Toplist from the Toplists tab, with the same three tabs and the toplist header', async () => {
+  it('opens on Toplist from the Toplists tab, with Toplist first and the toplist header', async () => {
     renderTab();
     const tabs = screen.getByRole('group', { name: 'Age group view' });
     expect(within(tabs).getByRole('button', { name: 'Toplist' })).toHaveAttribute('aria-pressed', 'true');
-    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Heats', 'Scores', 'Toplist']);
+    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Toplist', 'Heats', 'Scores']);
     await showRow();
     expect(JSON.parse(screen.getByTestId('header').textContent!)).toMatchObject({ title: 'Toplist' });
   });
