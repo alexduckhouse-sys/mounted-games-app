@@ -129,11 +129,12 @@ public static class Mappings
     public static HeatEntryDto ToDto(this HeatEntry he) => new(
         he.Id, he.TeamId,
         he.Team?.DisplayName ?? string.Empty,
-        he.Team?.BibColour,
+        string.IsNullOrWhiteSpace(he.BibColourOverride) ? he.Team?.BibColour : he.BibColourOverride,
         he.LaneIndex,
         ResultStatuses.TeamCardOf(he.Team),
         ResultStatuses.TeamFlagOf(he.Team?.BibDescription),
-        ResultStatuses.PublicBibDescription(he.Team?.BibDescription));
+        ResultStatuses.PublicBibDescription(he.Team?.BibDescription),
+        he.BibColourOverride);
 
     public static ResultDto ToDto(this Result r) => new(
         r.Id, r.TeamId,

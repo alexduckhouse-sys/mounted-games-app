@@ -234,6 +234,10 @@ export interface HeatEntry {
   laneIndex: number;
   /** The team's current disciplinary card ('yellow' or 'red'), or none. Set by staff on the scoring screen. */
   refereeCard?: 'yellow' | 'red' | null;
+  flag?: string | null;
+  bibDescription?: string | null;
+  /** Heat-specific spare bib colour when two teams in the heat share the same usual bib colour. */
+  bibColourOverride?: string | null;
 }
 
 export interface ResultRow {

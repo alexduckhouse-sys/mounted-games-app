@@ -526,6 +526,10 @@ public class SessionsController : ControllerBase
 
         foreach (var (heat, teamIds) in changed)
         {
+            var existingOverrides = heat.Entries
+                .Where(e => !string.IsNullOrWhiteSpace(e.BibColourOverride))
+                .GroupBy(e => e.TeamId)
+                .ToDictionary(g => g.Key, g => g.First().BibColourOverride);
             _db.HeatEntries.RemoveRange(heat.Entries);
             foreach (var race in heat.Races)
             {
@@ -543,7 +547,8 @@ public class SessionsController : ControllerBase
             var lane = 1;
             foreach (var tid in teamIds)
             {
-                _db.HeatEntries.Add(new HeatEntry { HeatId = heat.Id, TeamId = tid, LaneIndex = lane++ });
+                existingOverrides.TryGetValue(tid, out var bibOverride);
+                _db.HeatEntries.Add(new HeatEntry { HeatId = heat.Id, TeamId = tid, LaneIndex = lane++, BibColourOverride = bibOverride });
             }
         }
         await _db.SaveChangesAsync();
@@ -1508,6 +1513,160 @@ public class SessionsController : ControllerBase
             "first-aid" or "firstaid" or "first aid" => ("first-aid", "First Aid"),
             _ => (null, null),
         };
+    }
+
+    public static readonly IReadOnlyList<string> SpareBibColours =
+        ["red", "blue", "yellow", "green", "white", "orange", "purple", "pink"];
+
+    [HttpPut("/api/heats/{heatId:int}/entries/{teamId:int}/bib-override")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("heatId", CompetitionResource.Heat)]
+    public Task<ActionResult<HeatDto>> SetHeatEntryBibOverrideByHeat(
+        int heatId, int teamId, [FromBody] SetBibOverrideRequest? req)
+        => SetBibOverrideCoreAsync(heatId, teamId, req);
+
+    [HttpPut("/api/competitions/{competitionId:int}/heats/{heatId:int}/entries/{teamId:int}/bib-override")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public Task<ActionResult<HeatDto>> SetHeatEntryBibOverrideByCompetition(
+        int competitionId, int heatId, int teamId, [FromBody] SetBibOverrideRequest? req)
+        => SetBibOverrideCoreAsync(heatId, teamId, req, competitionId);
+
+    [HttpPut("{id:int}/heats/{heatId:int}/entries/{teamId:int}/bib-override")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public Task<ActionResult<HeatDto>> SetHeatEntryBibOverrideBySession(
+        int competitionId, int id, int heatId, int teamId, [FromBody] SetBibOverrideRequest? req)
+        => SetBibOverrideCoreAsync(heatId, teamId, req, competitionId, id);
+
+    private async Task<ActionResult<HeatDto>> SetBibOverrideCoreAsync(
+        int heatId, int teamId, SetBibOverrideRequest? req, int? competitionId = null, int? sessionId = null)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(req?.BibColourOverride) ? null : req!.BibColourOverride.Trim();
+        if (trimmed is not null && trimmed.Length > 80)
+            return BadRequest(new { message = "Bib colour must be 80 characters or fewer." });
+
+        var heat = await _db.Heats
+            .Include(h => h.Session)
+            .Include(h => h.Entries).ThenInclude(e => e.Team)
+            .Include(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
+            .FirstOrDefaultAsync(h => h.Id == heatId);
+        if (heat is null || heat.Session is null) return NotFound();
+        if (competitionId.HasValue && heat.Session.CompetitionId != competitionId.Value) return NotFound();
+        if (sessionId.HasValue && heat.SessionId != sessionId.Value) return NotFound();
+
+        var entry = heat.Entries.FirstOrDefault(e => e.TeamId == teamId);
+        if (entry is null) return NotFound(new { message = "That team is not in this heat." });
+
+        entry.BibColourOverride = trimmed;
+        await _db.SaveChangesAsync();
+
+        var sessionDto = await SessionsWithDetail().FirstAsync(s => s.Id == heat.SessionId);
+        await _live.SessionUpdated(heat.Session.CompetitionId, sessionDto.ToDto());
+        return heat.ToDto();
+    }
+
+    [HttpPost("/api/competitions/{competitionId:int}/heats/{heatId:int}/resolve-bib-clashes")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public Task<ActionResult<HeatDto>> ResolveHeatBibClashesByCompetition(int competitionId, int heatId)
+        => ResolveBibClashesCoreAsync(heatId, competitionId);
+
+    [HttpPost("/api/heats/{heatId:int}/resolve-bib-clashes")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("heatId", CompetitionResource.Heat)]
+    public Task<ActionResult<HeatDto>> ResolveHeatBibClashesByHeat(int heatId)
+        => ResolveBibClashesCoreAsync(heatId);
+
+    [HttpPost("{id:int}/heats/{heatId:int}/resolve-bib-clashes")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public Task<ActionResult<HeatDto>> ResolveHeatBibClashesBySession(int competitionId, int id, int heatId)
+        => ResolveBibClashesCoreAsync(heatId, competitionId, id);
+
+    private async Task<ActionResult<HeatDto>> ResolveBibClashesCoreAsync(
+        int heatId, int? competitionId = null, int? sessionId = null)
+    {
+        var heat = await _db.Heats
+            .Include(h => h.Session)
+            .Include(h => h.Entries).ThenInclude(e => e.Team)
+            .Include(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
+            .FirstOrDefaultAsync(h => h.Id == heatId);
+        if (heat is null || heat.Session is null) return NotFound();
+        if (competitionId.HasValue && heat.Session.CompetitionId != competitionId.Value) return NotFound();
+        if (sessionId.HasValue && heat.SessionId != sessionId.Value) return NotFound();
+
+        var orderedEntries = heat.Entries
+            .OrderBy(e => e.LaneIndex)
+            .ThenBy(e => e.Id)
+            .Select(e => new
+            {
+                Entry = e,
+                EffectiveKey = NormaliseBibColourKey(string.IsNullOrWhiteSpace(e.BibColourOverride) ? e.Team?.BibColour : e.BibColourOverride),
+                BaseKey = NormaliseBibColourKey(e.Team?.BibColour),
+            })
+            .Where(x => x.EffectiveKey is not null)
+            .ToList();
+
+        var groups = orderedEntries
+            .GroupBy(x => x.EffectiveKey!, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var usedColours = groups.Select(g => g.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var changed = false;
+
+        foreach (var g in groups.Where(g => g.Count() > 1))
+        {
+            var prioritised = g
+                .OrderBy(x => string.IsNullOrWhiteSpace(x.Entry.BibColourOverride) ? 0 : 1)
+                .ThenBy(x => x.Entry.LaneIndex)
+                .ThenBy(x => x.Entry.Id)
+                .ToList();
+
+            foreach (var item in prioritised.Skip(1))
+            {
+                string? chosen;
+                if (item.BaseKey is not null && !usedColours.Contains(item.BaseKey))
+                {
+                    chosen = item.BaseKey;
+                }
+                else
+                {
+                    chosen = SpareBibColours.FirstOrDefault(c => !usedColours.Contains(c));
+                }
+
+                if (chosen is null) continue;
+                usedColours.Add(chosen);
+                var nextOverride = string.Equals(chosen, item.BaseKey, StringComparison.OrdinalIgnoreCase) ? null : chosen;
+                if (!string.Equals(item.Entry.BibColourOverride, nextOverride, StringComparison.Ordinal))
+                {
+                    item.Entry.BibColourOverride = nextOverride;
+                    changed = true;
+                }
+            }
+        }
+
+        if (changed)
+        {
+            await _db.SaveChangesAsync();
+            var sessionDto = await SessionsWithDetail().FirstAsync(s => s.Id == heat.SessionId);
+            await _live.SessionUpdated(heat.Session.CompetitionId, sessionDto.ToDto());
+        }
+
+        return heat.ToDto();
+    }
+
+    public static string? NormaliseBibColourKey(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var stripped = System.Text.RegularExpressions.Regex.Replace(raw, @"^\[flag:[a-z0-9-]+\]\s*", string.Empty, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var collapsed = System.Text.RegularExpressions.Regex.Replace(stripped, @"\s+", " ").Trim().ToLowerInvariant();
+        if (collapsed.EndsWith(" bibs", StringComparison.Ordinal))
+            collapsed = collapsed[..^5].TrimEnd();
+        else if (collapsed.EndsWith(" bib", StringComparison.Ordinal))
+            collapsed = collapsed[..^4].TrimEnd();
+        collapsed = System.Text.RegularExpressions.Regex.Replace(collapsed, @"\bgray\b", "grey");
+        return string.IsNullOrEmpty(collapsed) ? null : collapsed;
     }
 
     private static string ApplyPauseNote(string? notes, long timestampMs)

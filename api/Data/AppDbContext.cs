@@ -301,6 +301,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
 
         b.Entity<HeatEntry>(e =>
         {
+            e.Property(he => he.BibColourOverride).HasMaxLength(80);
             e.HasOne(he => he.Heat)
                 .WithMany(h => h.Entries)
                 .HasForeignKey(he => he.HeatId)

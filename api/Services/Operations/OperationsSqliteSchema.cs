@@ -8,7 +8,17 @@ public static class OperationsSqliteSchema
     public static async Task EnsureAsync(AppDbContext db)
     {
         await MakeRulebooksGlobalAsync(db);
+        await EnsureHeatEntryColumnsAsync(db);
         await CreateAsync(db);
+    }
+
+    private static async Task EnsureHeatEntryColumnsAsync(AppDbContext db)
+    {
+        var tableExists = await db.Database.SqlQueryRaw<int>("""SELECT COUNT(*) AS "Value" FROM sqlite_master WHERE type = 'table' AND name = 'HeatEntries'""").SingleAsync();
+        if (tableExists == 0) return;
+        var hasColumn = await db.Database.SqlQueryRaw<int>("""SELECT COUNT(*) AS "Value" FROM pragma_table_info('HeatEntries') WHERE name = 'BibColourOverride'""").SingleAsync();
+        if (hasColumn == 0)
+            await db.Database.ExecuteSqlRawAsync("""ALTER TABLE "HeatEntries" ADD COLUMN "BibColourOverride" TEXT NULL;""");
     }
 
     /// <summary>Rulebooks used to belong to one competition. Keep the newest copy of each title and edition as a shared rulebook.</summary>
