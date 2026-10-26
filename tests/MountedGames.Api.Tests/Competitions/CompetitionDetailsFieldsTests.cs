@@ -18,15 +18,15 @@ public class CompetitionDetailsFieldsTests : IClassFixture<ApiFactory>
 
     private static readonly DateTime Start = new(2031, 6, 1, 9, 0, 0, DateTimeKind.Utc);
 
-    private static object Create(string? postcode = null, string? number = null, string? email = null) => new
+    private static object Create(string? postcode = null, string? number = null, string? email = null, string? paymentLinkUrl = null, string? paymentDestination = null) => new
     {
-        name = $"Fields {Guid.NewGuid():N}", startDate = Start, postcode, competitionNumber = number, contactEmail = email,
+        name = $"Fields {Guid.NewGuid():N}", startDate = Start, postcode, competitionNumber = number, contactEmail = email, paymentLinkUrl, paymentDestination,
     };
 
-    private static Dictionary<string, object?> Update(string? postcode = null, string? number = null, string? email = null) => new()
+    private static Dictionary<string, object?> Update(string? postcode = null, string? number = null, string? email = null, string? paymentLinkUrl = null, string? paymentDestination = null) => new()
     {
         ["name"] = "Fields updated", ["startDate"] = Start, ["isActive"] = true, ["isArchived"] = false,
-        ["postcode"] = postcode, ["competitionNumber"] = number, ["contactEmail"] = email,
+        ["postcode"] = postcode, ["competitionNumber"] = number, ["contactEmail"] = email, ["paymentLinkUrl"] = paymentLinkUrl, ["paymentDestination"] = paymentDestination,
     };
 
     private async Task<int> CreateAsync(HttpClient admin, object body)
@@ -123,7 +123,7 @@ public class CompetitionDetailsFieldsTests : IClassFixture<ApiFactory>
         using var scope = _f.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var name = await db.Competitions.AsNoTracking().Where(c => c.Id == id).Select(c => c.Name).SingleAsync();
-        foreach (var column in new[] { "Postcode", "CompetitionNumber", "ContactEmail" })
+        foreach (var column in new[] { "Postcode", "CompetitionNumber", "ContactEmail", "PaymentLinkUrl" })
             await db.Database.ExecuteSqlRawAsync($"ALTER TABLE Competitions DROP COLUMN {column};");
 
         await DbInitializer.SeedAsync(_f.Services);
@@ -135,8 +135,45 @@ public class CompetitionDetailsFieldsTests : IClassFixture<ApiFactory>
         c.Postcode = "AB1 2CD";
         c.CompetitionNumber = "N1";
         c.ContactEmail = "x@example.org";
+        c.PaymentLinkUrl = "https://buy.stripe.com/test_123";
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
-        Assert.Equal("AB1 2CD", (await db.Competitions.SingleAsync(x => x.Id == id)).Postcode);
+        var reloaded = await db.Competitions.SingleAsync(x => x.Id == id);
+        Assert.Equal("AB1 2CD", reloaded.Postcode);
+        Assert.Equal("https://buy.stripe.com/test_123", reloaded.PaymentLinkUrl);
+    }
+
+    [Fact]
+    public async Task PaymentLinkUrl_IsStoredValidatedExtractedAndRedactedForAnonymousCallers()
+    {
+        var admin = await _f.AdminAsync();
+        var id = await CreateAsync(admin, Create(
+            paymentLinkUrl: "  https://buy.stripe.com/test_abc123  ",
+            paymentDestination: "Sort code 12-34-56 Acc 12345678"));
+
+        var stored = await LoadAsync(id);
+        Assert.Equal("https://buy.stripe.com/test_abc123", stored.PaymentLinkUrl);
+
+        // Anonymous caller gets null for both PaymentDestination and PaymentLinkUrl.
+        var anonDetail = await (await _f.CreateClient().GetAsync($"/api/competitions/{id}")).ReadAsync<CompetitionDetail>();
+        Assert.Null(anonDetail!.PaymentDestination);
+        Assert.Null(anonDetail.PaymentLinkUrl);
+
+        // Authenticated caller sees PaymentLinkUrl.
+        var authDetail = await (await admin.GetAsync($"/api/competitions/{id}")).ReadAsync<CompetitionDetail>();
+        Assert.Equal("https://buy.stripe.com/test_abc123", authDetail!.PaymentLinkUrl);
+
+        // Null on update leaves PaymentLinkUrl untouched; blank clears it, falling back to https:// URL in PaymentDestination.
+        (await admin.PutAsJsonAsync($"/api/competitions/{id}", Update(paymentDestination: "Pay at https://pay.sumup.com/b2c/Q123."))).EnsureSuccessStatusCode();
+        Assert.Equal("https://buy.stripe.com/test_abc123", (await LoadAsync(id)).PaymentLinkUrl);
+
+        (await admin.PutAsJsonAsync($"/api/competitions/{id}", Update(paymentLinkUrl: "   ", paymentDestination: "Pay at https://pay.sumup.com/b2c/Q123."))).EnsureSuccessStatusCode();
+        Assert.Null((await LoadAsync(id)).PaymentLinkUrl);
+        var fallbackDetail = await (await admin.GetAsync($"/api/competitions/{id}")).ReadAsync<CompetitionDetail>();
+        Assert.Equal("https://pay.sumup.com/b2c/Q123", fallbackDetail!.PaymentLinkUrl);
+
+        // Non-https links are refused on create and update.
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsJsonAsync("/api/competitions", Create(paymentLinkUrl: "http://buy.stripe.com/insecure"))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync($"/api/competitions/{id}", Update(paymentLinkUrl: "javascript:alert(1)"))).StatusCode);
     }
 }

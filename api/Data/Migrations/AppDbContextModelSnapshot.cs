@@ -1090,6 +1090,10 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<string>("PaymentDestination")
                         .HasColumnType("text");
 
+                    b.Property<string>("PaymentLinkUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<string>("Postcode")
                         .HasMaxLength(12)
                         .HasColumnType("character varying(12)");
@@ -3109,6 +3113,12 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<int>("SignupId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ArrivalNotes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("HookupAssignment")
+                        .HasColumnType("text");
+
                     b.Property<int>("IsWaitlist")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -3127,6 +3137,9 @@ namespace MountedGames.Api.Data.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(0);
 
+                    b.Property<string>("StableAssignment")
+                        .HasColumnType("text");
+
                     b.Property<int>("StablesCount")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -3139,6 +3152,9 @@ namespace MountedGames.Api.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(1);
+
+                    b.Property<string>("VehicleRegistration")
+                        .HasColumnType("text");
 
                     b.HasKey("SignupId");
 

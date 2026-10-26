@@ -46,6 +46,12 @@ public class Competition
     public string? PaymentDestination { get; set; }
 
     /// <summary>
+    /// Optional external payment link (Stripe Payment Link, SumUp, PayPal, etc., at most 500 characters, must be https://).
+    /// Shown alongside BACS details so entrants can pay online by card or Apple Pay.
+    /// </summary>
+    public string? PaymentLinkUrl { get; set; }
+
+    /// <summary>
     /// When true, the public signup form is hidden on the comp Details tab
     /// and the API rejects new signups. Flip this on once entries close so
     /// the organiser can run the format-after-signups wizard against a

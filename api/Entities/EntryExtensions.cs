@@ -19,6 +19,10 @@ public class SignupExtras
     public int SignupId { get; set; }
     public int StablesCount { get; set; }
     public string? StablingClubOrTeam { get; set; }
+    public string? StableAssignment { get; set; }
+    public string? HookupAssignment { get; set; }
+    public string? VehicleRegistration { get; set; }
+    public string? ArrivalNotes { get; set; }
     public string? PaymentMethod { get; set; }
     public bool IsWaitlist { get; set; }
     public bool IsWithdrawn { get; set; }

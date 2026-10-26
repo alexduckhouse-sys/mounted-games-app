@@ -240,4 +240,70 @@ public class EntryLifecycleTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.BadRequest, (await entrant.PostAsJsonAsync(EntryUrl(section), Entry(true, teams))).StatusCode);
         Assert.False(await _f.InDbAsync(db => db.SectionSignups.AnyAsync(s => s.CompetitionSectionId == section.Id)));
     }
+
+    [Fact]
+    public async Task StablingAllocator_StoresBarnHookupVehicleRegAndExposesThemOnSignupsAndMySignups()
+    {
+        var section = await _f.NewSectionAsync(SectionFormat.Teams, priceMinor: 10000);
+        await _f.InDbAsync(async db =>
+        {
+            var comp = await db.Competitions.SingleAsync(c => c.Id == section.CompetitionId);
+            comp.Location = "Newark Showground";
+            comp.Postcode = "NG24 2NY";
+            comp.What3Words = "filled.count.soap";
+            comp.PaymentDestination = "Sort code 12-34-56 Acc 12345678";
+            comp.PaymentLinkUrl = "https://buy.stripe.com/test_stabling";
+            await db.SaveChangesAsync();
+        });
+
+        var entrant = await _f.TrainerAsync();
+        var createReq = Entry(true, 1) with
+        {
+            StablesCount = 5,
+            StablingClubOrTeam = "Warwickshire Hunt A",
+            VehicleRegistration = "  ab12 cde ",
+            ArrivalNotes = "  Arriving Friday 19:00  ",
+        };
+        var created = await (await entrant.PostAsJsonAsync(EntryUrl(section), createReq)).ReadAsync<SectionSignupExtendedDto>();
+        Assert.Equal(5, created.StablesCount);
+        Assert.Equal("AB12 CDE", created.VehicleRegistration);
+        Assert.Equal("Arriving Friday 19:00", created.ArrivalNotes);
+        Assert.Null(created.StableAssignment);
+        Assert.Null(created.HookupAssignment);
+
+        var admin = await _f.AdminAsync();
+        var stablingUrl = $"/api/competitions/{section.CompetitionId}/signups/{created.Id}/stabling";
+        var allocated = await (await admin.PutAsJsonAsync(stablingUrl, new UpdateSignupStablingInput(
+            StableAssignment: "  Barn B, Boxes 14–18 ",
+            HookupAssignment: "  Hook-up Post 4 "
+        ))).ReadAsync<SectionSignupExtendedDto>();
+        Assert.Equal("Barn B, Boxes 14–18", allocated.StableAssignment);
+        Assert.Equal("Hook-up Post 4", allocated.HookupAssignment);
+        Assert.Equal("AB12 CDE", allocated.VehicleRegistration);
+        Assert.Equal("Arriving Friday 19:00", allocated.ArrivalNotes);
+
+        // Null leaves fields untouched; blank clears HookupAssignment.
+        var updated = await (await admin.PutAsJsonAsync(stablingUrl, new UpdateSignupStablingInput(
+            StableAssignment: null,
+            HookupAssignment: "   "
+        ))).ReadAsync<SectionSignupExtendedDto>();
+        Assert.Equal("Barn B, Boxes 14–18", updated.StableAssignment);
+        Assert.Null(updated.HookupAssignment);
+
+        var summary = await (await admin.GetAsync($"/api/competitions/{section.CompetitionId}/stabling")).ReadAsync<StablingSummaryDto>();
+        var booking = Assert.Single(summary.Bookings, b => b.SignupId == created.Id);
+        Assert.Equal("Barn B, Boxes 14–18", booking.StableAssignment);
+        Assert.Equal("AB12 CDE", booking.VehicleRegistration);
+
+        var mySignups = await (await entrant.GetAsync("/api/me/signups")).ReadAsync<List<MySignupExtendedDto>>();
+        var mine = Assert.Single(mySignups, s => s.Id == created.Id);
+        Assert.Equal("Barn B, Boxes 14–18", mine.StableAssignment);
+        Assert.Equal("AB12 CDE", mine.VehicleRegistration);
+        Assert.Equal("Arriving Friday 19:00", mine.ArrivalNotes);
+        Assert.Equal("Sort code 12-34-56 Acc 12345678", mine.PaymentDestination);
+        Assert.Equal("https://buy.stripe.com/test_stabling", mine.PaymentLinkUrl);
+        Assert.Equal("Newark Showground", mine.CompetitionLocation);
+        Assert.Equal("NG24 2NY", mine.CompetitionPostcode);
+        Assert.Equal("filled.count.soap", mine.CompetitionWhat3Words);
+    }
 }

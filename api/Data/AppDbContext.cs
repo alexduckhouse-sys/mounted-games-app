@@ -240,6 +240,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
             e.Property(c => c.ContactEmail).HasMaxLength(254);
             e.Property(c => c.LorryWhat3Words).HasMaxLength(120);
             e.Property(c => c.LorryDirectionsNote).HasMaxLength(1000);
+            e.Property(c => c.PaymentLinkUrl).HasMaxLength(500);
             e.HasOne(c => c.CreatedBy)
                 .WithMany()
                 .HasForeignKey(c => c.CreatedByUserId)

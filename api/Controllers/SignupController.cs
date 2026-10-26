@@ -45,7 +45,9 @@ public record CreateSectionSignupInput(
     [Range(1, 30)] int? StablingNights = null,
     [StringLength(120)] string? RiderName = null,
     [StringLength(32)] string? RiderDateOfBirth = null,
-    [StringLength(120)] string? PonyName = null
+    [StringLength(120)] string? PonyName = null,
+    [StringLength(40)] string? VehicleRegistration = null,
+    [StringLength(500)] string? ArrivalNotes = null
 );
 
 public record SectionSignupExtendedDto(
@@ -63,7 +65,9 @@ public record SectionSignupExtendedDto(
     int StablesCount = 0, string? StablingClubOrTeam = null,
     string? PaymentMethod = null,
     bool IsWaitlist = false, bool IsWithdrawn = false, bool RefundPending = false,
-    int TeamsCount = 1
+    int TeamsCount = 1,
+    string? StableAssignment = null, string? HookupAssignment = null,
+    string? VehicleRegistration = null, string? ArrivalNotes = null
 ) : SectionSignupDto(
     Id, CompetitionSectionId, SectionName, FullName, PonyClubName, ContactInfo,
     AmountMinor, Status, PaidAt, TeamId, CreatedAt,
@@ -87,7 +91,12 @@ public record MySignupExtendedDto(
     int StablesCount = 0, string? StablingClubOrTeam = null,
     string? PaymentMethod = null,
     bool IsWaitlist = false, bool IsWithdrawn = false, bool RefundPending = false,
-    int TeamsCount = 1, bool DrawComplete = false, IReadOnlyList<SignupLinkedTeamDto>? LinkedTeams = null
+    int TeamsCount = 1, bool DrawComplete = false, IReadOnlyList<SignupLinkedTeamDto>? LinkedTeams = null,
+    string? StableAssignment = null, string? HookupAssignment = null,
+    string? VehicleRegistration = null, string? ArrivalNotes = null,
+    string? PaymentDestination = null, string? PaymentLinkUrl = null,
+    DateTime? CompetitionEnd = null, string? CompetitionLocation = null,
+    string? CompetitionPostcode = null, string? CompetitionWhat3Words = null
 ) : MySignupDto(
     Id, CompetitionId, CompetitionName, CompetitionStart, CompetitionSectionId, SectionName,
     FullName, PonyClubName, ContactInfo, AmountMinor, Status, PaidAt, TeamId, TeamName, CreatedAt
@@ -101,6 +110,13 @@ public record CompetitionEntrySettingsDto(
 
 public record UpdateEntrySettingsInput(DateTime? EntriesCloseAt);
 
+public record UpdateSignupStablingInput(
+    [StringLength(120)] string? StableAssignment = null,
+    [StringLength(120)] string? HookupAssignment = null,
+    [StringLength(40)] string? VehicleRegistration = null,
+    [StringLength(500)] string? ArrivalNotes = null
+);
+
 public record StablingBookingDto(
     int SignupId,
     int SectionId,
@@ -108,7 +124,11 @@ public record StablingBookingDto(
     string FullName,
     string PonyClubOrTeam,
     int StablesCount,
-    SignupPaymentStatus Status
+    SignupPaymentStatus Status,
+    string? StableAssignment = null,
+    string? HookupAssignment = null,
+    string? VehicleRegistration = null,
+    string? ArrivalNotes = null
 );
 
 public record StablingSummaryDto(
@@ -245,7 +265,9 @@ public class SignupController : ControllerBase
             ex?.StablesCount ?? 0, ex?.StablingClubOrTeam,
             ex?.PaymentMethod,
             ex?.IsWaitlist == true, ex?.IsWithdrawn == true, ex?.RefundPending == true,
-            ex?.TeamsCount > 0 ? ex.TeamsCount : 1
+            ex?.TeamsCount > 0 ? ex.TeamsCount : 1,
+            ex?.StableAssignment, ex?.HookupAssignment,
+            ex?.VehicleRegistration, ex?.ArrivalNotes
         );
     }
 
@@ -292,7 +314,10 @@ public class SignupController : ControllerBase
         var bookings = new List<StablingBookingDto>();
         foreach (var r in rows)
         {
-            if (!extras.TryGetValue(r.Id, out var ex) || ex.StablesCount <= 0 || ex.IsWithdrawn || ex.IsWaitlist) continue;
+            if (!extras.TryGetValue(r.Id, out var ex) || ex.IsWithdrawn || ex.IsWaitlist) continue;
+            if (ex.StablesCount <= 0
+                && string.IsNullOrWhiteSpace(ex.StableAssignment)
+                && string.IsNullOrWhiteSpace(ex.HookupAssignment)) continue;
             var clubOrTeam = (ex.StablingClubOrTeam ?? r.PonyClubName ?? r.TeamName ?? "Unaffiliated").Trim();
             if (string.IsNullOrEmpty(clubOrTeam)) clubOrTeam = "Unaffiliated";
             bookings.Add(new StablingBookingDto(
@@ -302,10 +327,42 @@ public class SignupController : ControllerBase
                 r.FullName,
                 clubOrTeam,
                 ex.StablesCount,
-                r.Status
+                r.Status,
+                ex.StableAssignment,
+                ex.HookupAssignment,
+                ex.VehicleRegistration,
+                ex.ArrivalNotes
             ));
         }
         return new StablingSummaryDto(bookings.Sum(b => b.StablesCount), bookings);
+    }
+
+    [HttpPut("api/competitions/{competitionId:int}/signups/{signupId:int}/stabling")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<SectionSignupExtendedDto>> UpdateSignupStabling(
+        int competitionId, int signupId, UpdateSignupStablingInput req)
+    {
+        var signup = await _db.SectionSignups
+            .Include(s => s.Section)
+            .FirstOrDefaultAsync(s => s.Id == signupId && s.Section!.CompetitionId == competitionId);
+        if (signup is null) return NotFound();
+
+        var ex = await _db.Set<SignupExtras>().FindAsync(signup.Id);
+        if (ex is null)
+        {
+            ex = new SignupExtras { SignupId = signup.Id };
+            _db.Add(ex);
+        }
+
+        if (req.StableAssignment is not null) ex.StableAssignment = CompetitionFields.Trimmed(req.StableAssignment);
+        if (req.HookupAssignment is not null) ex.HookupAssignment = CompetitionFields.Trimmed(req.HookupAssignment);
+        if (req.VehicleRegistration is not null) ex.VehicleRegistration = CompetitionFields.Postcode(req.VehicleRegistration);
+        if (req.ArrivalNotes is not null) ex.ArrivalNotes = CompetitionFields.Trimmed(req.ArrivalNotes);
+
+        await _db.SaveChangesAsync();
+        var meta = await _db.Set<SignupMatchmaking>().FindAsync(signup.Id);
+        return ToExtendedDto(signup, meta, ex);
     }
 
     /// <summary>
@@ -527,6 +584,8 @@ public class SignupController : ControllerBase
             StablingClubOrTeam = string.IsNullOrEmpty(stablingClub) && req.StablesCount > 0
                 ? req.PonyClubName?.Trim() ?? teamName : stablingClub,
             PaymentMethod = req.PaymentMethod?.Trim(), IsWaitlist = req.IsWaitlist, TeamsCount = teamsCount,
+            VehicleRegistration = CompetitionFields.Postcode(req.VehicleRegistration),
+            ArrivalNotes = CompetitionFields.Trimmed(req.ArrivalNotes),
         });
         await _db.SaveChangesAsync();
         await transaction.CommitAsync();
@@ -797,7 +856,13 @@ public class SignupController : ControllerBase
                 links.Where(x => x.SignupId == r.Id).Select(x => x.TeamId)
                     .Concat(r.TeamId is int primary ? new[] { primary } : Array.Empty<int>()).Distinct()
                     .Where(id => teams.TryGetValue(id, out var linked) && linked.CompetitionSectionId == r.CompetitionSectionId)
-                    .Select(id => new SignupLinkedTeamDto(id, teams[id].DisplayName)).ToList()
+                    .Select(id => new SignupLinkedTeamDto(id, teams[id].DisplayName)).ToList(),
+                ex?.StableAssignment, ex?.HookupAssignment,
+                ex?.VehicleRegistration, ex?.ArrivalNotes,
+                r.Section?.Competition?.PaymentDestination,
+                CompetitionFields.ResolvePaymentLinkUrl(r.Section?.Competition?.PaymentLinkUrl, r.Section?.Competition?.PaymentDestination),
+                r.Section?.Competition?.EndDate, r.Section?.Competition?.Location,
+                r.Section?.Competition?.Postcode, r.Section?.Competition?.What3Words
             );
         }).ToList();
     }

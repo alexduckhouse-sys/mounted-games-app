@@ -380,6 +380,7 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "Competitions", "LorryLatitude", "REAL NULL");
         await EnsureColumnAsync(db, "Competitions", "LorryLongitude", "REAL NULL");
         await EnsureColumnAsync(db, "Competitions", "LorryDirectionsNote", "TEXT NULL");
+        await EnsureColumnAsync(db, "Competitions", "PaymentLinkUrl", "TEXT NULL");
         await EnsureColumnAsync(db, "SectionSignups", "TermsAccepted", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "SectionSignups", "TermsAcceptedAt", "TEXT NULL");
         await EnsureColumnAsync(db, "SectionSignups", "TermsAcceptedByUserId", "TEXT NULL");

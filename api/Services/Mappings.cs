@@ -42,7 +42,8 @@ public static class Mappings
         UseRefereeCards: DecFormConfig.For(c).UseRefereeCards,
         Postcode: c.Postcode, CompetitionNumber: c.CompetitionNumber, ContactEmail: c.ContactEmail,
         LorryWhat3Words: c.LorryWhat3Words, LorryLatitude: c.LorryLatitude,
-        LorryLongitude: c.LorryLongitude, LorryDirectionsNote: c.LorryDirectionsNote);
+        LorryLongitude: c.LorryLongitude, LorryDirectionsNote: c.LorryDirectionsNote,
+        PaymentLinkUrl: includePaymentDetails ? CompetitionFields.ResolvePaymentLinkUrl(c.PaymentLinkUrl, c.PaymentDestination) : null);
 
     /// <param name="activeSignups">Paid and pending entries: the ones that count towards <c>MaxParticipants</c>.</param>
     public static CompetitionSectionDto ToDto(this CompetitionSection s, int activeSignups = 0) =>
