@@ -735,6 +735,147 @@ public class CustomEmailTests : IClassFixture<EmailApiFactory>
         var started = await StartAsync(admin, Content());
         Assert.Equal(1, started.Total);
     }
+
+    // ---- links, picture links and the footer ----
+
+    private async Task<CustomEmailPreviewDto> PreviewOkAsync(HttpClient admin, CustomEmailContentRequest request)
+    {
+        var response = await admin.PostAsJsonAsync("/api/admin/custom-emails/preview", request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return await response.ReadAsync<CustomEmailPreviewDto>();
+    }
+
+    private async Task<List<string>> PreviewProblemsAsync(HttpClient admin, CustomEmailContentRequest request)
+    {
+        var response = await admin.PostAsJsonAsync("/api/admin/custom-emails/preview", request);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        return (await response.ReadAsync<ProblemList>()).Problems;
+    }
+
+    [Fact]
+    public async Task LinkedWordsBecomeLinksOnTheFirstPlaceTheyAppear_AndTheMessageStaysPlain()
+    {
+        var admin = await AdminAsync();
+        var competitionId = await _f.SeedCompetitionAsync(name: "Links Show");
+        var text = new EmailBlockDto(EmailBlockType.Text, Text: "Enter now & win.\n\nNo, enter now <b>today</b>. Results are up.", Links:
+        [
+            new EmailLinkDto("enter now", CompetitionId: competitionId, Page: EmailPage.Entry),
+            new EmailLinkDto("Results", CompetitionId: competitionId, Page: EmailPage.Results),
+            new EmailLinkDto("today", Url: "https://example.org/a?x=1&y=2"),
+        ]);
+        var preview = await PreviewOkAsync(admin, Content(CustomEmailAudience.Trainers, text));
+        var entry = $"{EmailApiFactory.SiteUrl}/competitions/{competitionId}/enter";
+        Assert.Contains($"<a href=\"{entry}\" style=\"color:#1f5fbf;text-decoration:underline;\">Enter now</a> &amp; win.", preview.Html);
+        // Only the first "enter now" is linked; markup typed into the message stays text.
+        Assert.Single(Regex.Matches(preview.Html, Regex.Escape(entry)));
+        Assert.Contains("No, enter now &lt;b&gt;", preview.Html);
+        Assert.Contains(">Results</a> are up", preview.Html);
+        Assert.Contains($"{EmailApiFactory.SiteUrl}/competitions/{competitionId}/toplists", preview.Html);
+        Assert.Contains("href=\"https://example.org/a?x=1&amp;y=2\"", preview.Html);
+        Assert.Contains($"Enter now ({entry}) & win.", preview.Text);
+        Assert.DoesNotContain("Mounted Games</div>", preview.Html);
+        Assert.DoesNotContain("<b>", preview.Html);
+
+        foreach (var (page, path) in new[] { (EmailPage.Competition, ""), (EmailPage.Timetable, "/timetable") })
+        {
+            var p = await PreviewOkAsync(admin, Content(CustomEmailAudience.Trainers, new EmailBlockDto(EmailBlockType.Text, Text: "See it", Links: [new EmailLinkDto("it", CompetitionId: competitionId, Page: page)])));
+            Assert.Contains($"href=\"{EmailApiFactory.SiteUrl}/competitions/{competitionId}{path}\"", p.Html);
+        }
+    }
+
+    [Fact]
+    public async Task BadLinksAreRefused()
+    {
+        var admin = await AdminAsync();
+        EmailBlockDto With(params EmailLinkDto[] links) => new(EmailBlockType.Text, Text: "Hello there", Links: links);
+        Assert.Contains(await PreviewProblemsAsync(admin, Content(blocks: With(new EmailLinkDto("Hello", Url: "http://example.org")))), p => p.Contains("https://"));
+        Assert.Contains(await PreviewProblemsAsync(admin, Content(blocks: With(new EmailLinkDto("Hello", Url: "javascript:alert(1)")))), p => p.Contains("https://"));
+        Assert.Contains(await PreviewProblemsAsync(admin, Content(blocks: With(new EmailLinkDto("missing", Url: "https://example.org")))), p => p.Contains("aren't in the message"));
+        Assert.Contains(await PreviewProblemsAsync(admin, Content(blocks: With(new EmailLinkDto("  ", Url: "https://example.org")))), p => p.Contains("words to link"));
+        Assert.Contains(await PreviewProblemsAsync(admin, Content(blocks: With(new EmailLinkDto("Hello")))), p => p.Contains("links to"));
+        Assert.Contains(await PreviewProblemsAsync(admin, Content(blocks: With(new EmailLinkDto("Hello", CompetitionId: 999999, Page: EmailPage.Entry)))), p => p.Contains("event and page"));
+        Assert.Contains(await PreviewProblemsAsync(admin, Content(blocks: With(new EmailLinkDto("Hello", CompetitionId: 1)))), p => p.Contains("event and page"));
+        Assert.Contains(await PreviewProblemsAsync(admin, Content(blocks: With(new EmailLinkDto("Hello", CompetitionId: 1, Page: (EmailPage)9)))), p => p.Contains("event and page"));
+        var many = Enumerable.Range(0, CustomEmailService.MaxLinksPerText + 1).Select(_ => new EmailLinkDto("Hello", Url: "https://example.org")).ToArray();
+        Assert.Contains(await PreviewProblemsAsync(admin, Content(blocks: With(many))), p => p.Contains("links or fewer"));
+    }
+
+    [Fact]
+    public async Task APictureCanBeTheWholeEmail_AndLinkAnywhere()
+    {
+        var admin = await AdminAsync();
+        var imageId = await UploadAsync(admin);
+        var competitionId = await _f.SeedCompetitionAsync(name: "Poster Show");
+        var plain = await PreviewOkAsync(admin, Content(CustomEmailAudience.Trainers, new EmailBlockDto(EmailBlockType.Picture, ImageId: imageId, Alt: "Poster")));
+        Assert.Contains("<img ", plain.Html);
+        Assert.DoesNotContain("<a href=\"https://", plain.Html.Split("<img ")[0]);
+        var site = await PreviewOkAsync(admin, Content(CustomEmailAudience.Trainers, new EmailBlockDto(EmailBlockType.Picture, ImageId: imageId, CompetitionId: competitionId, Page: EmailPage.Entry)));
+        Assert.Contains($"<a href=\"{EmailApiFactory.SiteUrl}/competitions/{competitionId}/enter\"><img ", site.Html);
+        Assert.Contains($"{EmailApiFactory.SiteUrl}/competitions/{competitionId}/enter", site.Text);
+        var web = await PreviewOkAsync(admin, Content(CustomEmailAudience.Trainers, new EmailBlockDto(EmailBlockType.Picture, ImageId: imageId, Url: "https://example.org/poster")));
+        Assert.Contains("<a href=\"https://example.org/poster\"><img ", web.Html);
+        Assert.Contains(await PreviewProblemsAsync(admin, Content(blocks: new EmailBlockDto(EmailBlockType.Picture, ImageId: imageId, Url: "http://example.org"))), p => p.Contains("https://"));
+    }
+
+    [Fact]
+    public async Task TheFooterCanHaveItsOwnTextAndPicture_AndTheUnsubscribeLinkStaysForTheNewsList()
+    {
+        var admin = await AdminAsync();
+        var imageId = await UploadAsync(admin);
+        var footer = new EmailBlockDto(EmailBlockType.Footer, Text: "From the <team> at the club.", ImageId: imageId, Alt: "Club logo");
+        var news = await PreviewOkAsync(admin, Content(CustomEmailAudience.News, Text("Hi"), footer));
+        Assert.Contains("From the &lt;team&gt; at the club. <a href=\"", news.Html);
+        Assert.Contains("/unsubscribe?token=preview", news.Html);
+        Assert.Contains($"/api/email-images/{imageId:D}\" alt=\"Club logo\"", news.Html);
+        Assert.DoesNotContain("asked to hear about new competitions", news.Html);
+        Assert.Contains("Unsubscribe:", news.Text);
+
+        var admins = await PreviewOkAsync(admin, Content(CustomEmailAudience.Admins, Text("Hi"), footer));
+        Assert.Contains("From the &lt;team&gt; at the club.", admins.Html);
+        Assert.DoesNotContain("nsubscribe", admins.Html + admins.Text);
+
+        // A footer with only a picture keeps the usual line.
+        var pictureOnly = await PreviewOkAsync(admin, Content(CustomEmailAudience.Trainers, Text("Hi"), new EmailBlockDto(EmailBlockType.Footer, ImageId: imageId)));
+        Assert.Contains("you run or help run competitions", pictureOnly.Html);
+        Assert.Contains("<img ", pictureOnly.Html);
+    }
+
+    [Fact]
+    public async Task BadFootersAreRefused()
+    {
+        var admin = await AdminAsync();
+        var imageId = await UploadAsync(admin);
+        Assert.Contains(await PreviewProblemsAsync(admin, Content(blocks: [Text("Hi"), new EmailBlockDto(EmailBlockType.Footer, Text: new string('f', 1001))])), p => p.Contains("footer"));
+        Assert.Contains(await PreviewProblemsAsync(admin, Content(blocks: [Text("Hi"), new EmailBlockDto(EmailBlockType.Footer, Text: "bad \u0001")])), p => p.Contains("footer"));
+        Assert.Contains(await PreviewProblemsAsync(admin, Content(blocks: [Text("Hi"), new EmailBlockDto(EmailBlockType.Footer, ImageId: Guid.NewGuid())])), p => p.Contains("footer picture"));
+        Assert.Contains(await PreviewProblemsAsync(admin, Content(blocks: [Text("Hi"), new EmailBlockDto(EmailBlockType.Footer, ImageId: imageId, Alt: new string('a', 201))])), p => p.Contains("description"));
+        Assert.Contains(await PreviewProblemsAsync(admin, Content(blocks: [Text("Hi"), new EmailBlockDto(EmailBlockType.Footer), new EmailBlockDto(EmailBlockType.Footer)])), p => p.Contains("one footer"));
+    }
+
+    [Fact]
+    public async Task AdminsAreTheirOwnAudience_AndASentEmailKeepsItsLinksAndFooter()
+    {
+        var admin = await AdminAsync();
+        var labels = (await (await admin.GetAsync("/api/admin/custom-emails/audiences")).ReadAsync<List<CustomEmailAudienceDto>>()).Select(a => a.Label);
+        Assert.Contains("Admins", labels);
+        Assert.True(await CountAsync(admin, CustomEmailAudience.Admins) <= await CountAsync(admin, CustomEmailAudience.OrganisersAndAdmins));
+
+        var imageId = await UploadAsync(admin);
+        var organiser = await MailableOrganiserAsync();
+        var blocks = new[]
+        {
+            new EmailBlockDto(EmailBlockType.Text, Text: "Read the rules please", Links: [new EmailLinkDto("rules", Url: "https://example.org/rules")]),
+            new EmailBlockDto(EmailBlockType.Footer, Text: "Sent by the club", ImageId: imageId),
+        };
+        var started = await StartAsync(admin, Content(CustomEmailAudience.Trainers, blocks));
+        await FinishAsync(admin, started.Id);
+        var message = SentTo([organiser]).Single();
+        Assert.Contains("href=\"https://example.org/rules\"", message.Html);
+        Assert.Contains("Sent by the club", message.Html);
+        var detail = await (await admin.GetAsync($"/api/admin/custom-emails/{started.Id}")).ReadAsync<CustomEmailDetailDto>();
+        Assert.Equal("rules", detail.Blocks[0].Links![0].Words);
+        Assert.Equal(EmailBlockType.Footer, detail.Blocks[1].Type);
+    }
 }
 
 /// <summary>With sending switched off a send can't be started, and a test just reports that nothing went.</summary>
