@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
@@ -42,24 +42,35 @@ describe('SettingsPage', () => {
     expect(screen.getByTestId('probe')).toHaveTextContent('/settings|ask|Settings');
   });
 
-  it('switches the colour theme', async () => {
+  it('switches the colour theme from a dropdown row that shows a swatch', async () => {
     mount();
-    const themes = within(screen.getByRole('group', { name: 'Colour theme' }));
-    expect(themes.getByRole('button', { name: 'EGUK Navy' })).toHaveAttribute('aria-pressed', 'true');
-    await userEvent.click(themes.getByRole('button', { name: 'Stable Night' }));
-    expect(themes.getByRole('button', { name: 'Stable Night' })).toHaveAttribute('aria-pressed', 'true');
+    const row = screen.getByRole('combobox', { name: /Colour theme/ });
+    expect(row).toHaveTextContent('EGUK Navy');
+    expect(row.querySelector('.sp-swatch')).not.toBeNull();
+    await userEvent.click(row);
+    await userEvent.click(screen.getByRole('option', { name: 'Stable Night' }));
+    expect(screen.getByRole('combobox', { name: /Colour theme/ })).toHaveTextContent('Stable Night');
     expect(document.documentElement.dataset.theme).toBe('dark');
   });
 
-  it('renders the Lite mode section and scrolls to #lite-mode when linked with the hash', async () => {
+  it('changes the text size from a dropdown row', async () => {
+    mount();
+    expect(screen.getByRole('combobox', { name: /Text size/ })).toHaveTextContent('Normal');
+    await userEvent.click(screen.getByRole('combobox', { name: /Text size/ }));
+    await userEvent.click(screen.getByRole('option', { name: 'Large' }));
+    expect(localStorage.getItem('mg.prefs.textSize')).toBe('large');
+  });
+
+  it('has the Lite mode row, and scrolls to it when linked with the hash', async () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
     mount({ path: '/settings#lite-mode' });
     expect(scrollIntoView).toHaveBeenCalledOnce();
-    const liteGroup = within(screen.getByRole('group', { name: 'Lite mode' }));
-    expect(liteGroup.getByRole('button', { name: 'Auto' })).toHaveAttribute('aria-pressed', 'true');
-    await userEvent.click(liteGroup.getByRole('button', { name: 'On' }));
-    expect(liteGroup.getByRole('button', { name: 'On' })).toHaveAttribute('aria-pressed', 'true');
+    const row = screen.getByRole('combobox', { name: /Lite mode/ });
+    expect(row).toHaveTextContent('Auto');
+    expect(row).toHaveTextContent('Saves battery and data on busy showgrounds');
+    await userEvent.click(row);
+    await userEvent.click(screen.getByRole('option', { name: 'On' }));
     expect(localStorage.getItem('mg.liteMode')).toBe('on');
   });
 
@@ -103,13 +114,13 @@ describe('SettingsPage', () => {
 
   it('offers to remember or forget a competition only when one is followed', () => {
     mount();
-    expect(screen.queryByRole('switch', { name: /Remember this competition/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: /Remember the competition/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Forget this competition' })).not.toBeInTheDocument();
   });
 
   it('remembers or forgets the followed competition on this device', async () => {
     mount({ competition: true });
-    const toggle = screen.getByRole('switch', { name: 'Remember this competition on this device' });
+    const toggle = screen.getByRole('switch', { name: 'Remember the competition I open' });
     expect(toggle).toHaveAttribute('aria-checked', 'true');
     await userEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-checked', 'false');
@@ -124,39 +135,137 @@ describe('SettingsPage', () => {
     expect(document.cookie).not.toContain('mg.competition');
     expect(sessionStorage.getItem('mg.competitionVisit')).toBeNull();
     expect(screen.getByTestId('probe')).toHaveTextContent('/events|ask|');
-    expect(screen.queryByRole('switch', { name: /Remember this competition/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: /Remember the competition/ })).not.toBeInTheDocument();
   });
 
-  it('links to the privacy, terms, refunds, cookies, and safeguarding policies', async () => {
+  it('links each policy to its own page', async () => {
     mount();
     const privacy = screen.getByRole('link', { name: 'Privacy' });
     expect(privacy).toHaveAttribute('href', '/privacy');
-    expect(screen.getByRole('link', { name: 'Terms of service' })).toHaveAttribute('href', '/privacy#terms');
-    expect(screen.getByRole('link', { name: 'Refunds & cancellations' })).toHaveAttribute('href', '/privacy#refunds');
-    expect(screen.getByRole('link', { name: 'Cookies & offline storage' })).toHaveAttribute('href', '/privacy#cookies');
-    expect(screen.getByRole('link', { name: 'Safeguarding & equine welfare' })).toHaveAttribute('href', '/privacy#safeguarding');
+    expect(screen.getByRole('link', { name: 'Terms of service' })).toHaveAttribute('href', '/terms');
+    expect(screen.getByRole('link', { name: 'Refunds and payments' })).toHaveAttribute('href', '/refunds');
+    expect(screen.getByRole('link', { name: 'Cookies and storage' })).toHaveAttribute('href', '/cookies');
+    expect(screen.getByRole('link', { name: 'Safeguarding and welfare' })).toHaveAttribute('href', '/safeguarding');
     await userEvent.click(privacy);
     expect(screen.getByTestId('probe')).toHaveTextContent('/privacy|ask|');
   });
 
-  it('does not show role presets, explains Lite mode, and allows custom heat reminder timings with notification explanation', async () => {
+  it('has switches for the options on competition days, with no capital-letter card labels', async () => {
     mount();
-    expect(screen.queryByRole('group', { name: 'Bottom bar role presets' })).not.toBeInTheDocument();
-    expect(screen.getByText(/Saves battery and mobile data on busy showgrounds/)).toBeInTheDocument();
-    expect(screen.getByText(/This timing applies to in-app reminders/)).toBeInTheDocument();
-
-    const customInput = screen.getByRole('spinbutton', { name: 'Custom heat reminder minutes' });
-    expect(customInput).toHaveValue(60);
-    await userEvent.clear(customInput);
-    await userEvent.type(customInput, '45');
-    expect(localStorage.getItem('mg.prefs.notifyLeadMins')).toBe('45');
-    for (const value of ['0', '241', '1.5']) {
-      fireEvent.change(customInput, { target: { value } });
-      expect(localStorage.getItem('mg.prefs.notifyLeadMins')).toBe('45');
+    for (const name of ['Show weather', 'Vibrate when I tap a score', 'Order scoring teams by lane']) {
+      expect(screen.getByRole('switch', { name })).toBeInTheDocument();
     }
-    fireEvent.blur(customInput);
-    expect(customInput).toHaveValue(45);
-    fireEvent.change(customInput, { target: { value: '1e2' } });
-    expect(localStorage.getItem('mg.prefs.notifyLeadMins')).toBe('100');
+    await userEvent.click(screen.getByRole('switch', { name: 'Vibrate when I tap a score' }));
+    expect(localStorage.getItem('mg.prefs.scorerHaptics')).toBe('false');
+    await userEvent.click(screen.getByRole('switch', { name: 'Order scoring teams by lane' }));
+    expect(localStorage.getItem('mg.prefs.sortByLaneOrder')).toBe('false');
+    expect(screen.queryByText('Options')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Policies & legal$/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Bottom bar shortcuts')).not.toBeInTheDocument();
+  });
+});
+
+describe('SettingsPage: heat reminder', () => {
+  it('is a round minus and plus stepper in 5 minute steps from 5 to 120, with one short note', async () => {
+    mount();
+    expect(screen.getByText('While the app is open')).toBeInTheDocument();
+    expect(screen.queryByText(/This timing applies to in-app reminders/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+    const stepper = screen.getByRole('group', { name: 'Heat reminder' });
+    expect(within(stepper).getByText('60 min')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '5 minutes more' }));
+    expect(localStorage.getItem('mg.prefs.notifyLeadMins')).toBe('65');
+    await userEvent.click(screen.getByRole('button', { name: '5 minutes less' }));
+    await userEvent.click(screen.getByRole('button', { name: '5 minutes less' }));
+    expect(localStorage.getItem('mg.prefs.notifyLeadMins')).toBe('55');
+    expect(within(stepper).getByText('55 min')).toBeInTheDocument();
+  });
+
+  it('stops at 5 and 120 minutes', () => {
+    localStorage.setItem('mg.prefs.notifyLeadMins', '5');
+    const first = mount();
+    expect(screen.getByRole('button', { name: '5 minutes less' })).toBeDisabled();
+    first.unmount();
+    localStorage.setItem('mg.prefs.notifyLeadMins', '120');
+    mount();
+    expect(screen.getByRole('button', { name: '5 minutes more' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '5 minutes less' })).toBeEnabled();
+  });
+
+  it('moves an older value that is not a multiple of 5 to the next step', async () => {
+    localStorage.setItem('mg.prefs.notifyLeadMins', '47');
+    mount();
+    await userEvent.click(screen.getByRole('button', { name: '5 minutes more' }));
+    expect(localStorage.getItem('mg.prefs.notifyLeadMins')).toBe('50');
+  });
+});
+
+describe('SettingsPage: bottom bar', () => {
+  const rows = () => within(screen.getByRole('list', { name: 'Bottom bar tabs' })).getAllByRole('listitem');
+  const names = () => rows().map((row) => row.querySelector('.sp-t1')?.textContent);
+  const saved = () => JSON.parse(localStorage.getItem('mg.prefs.bottomTabs') ?? 'null');
+
+  it('lists the tabs that are on first, each with a six-dot grip and a switch, and no arrows or tick boxes', () => {
+    mount();
+    expect(names().slice(0, 4)).toEqual(['Timetable', 'Toplists', 'Live stream', 'Details']);
+    expect(names()).toHaveLength(10);
+    expect(screen.getByText('2 to 6 tabs')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Move Timetable/ })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Show Timetable in the bottom bar' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('switch', { name: 'Show Shop in the bottom bar' })).toHaveAttribute('aria-checked', 'false');
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /earlier|later/ })).not.toBeInTheDocument();
+    expect(within(rows()[9]).getByText('Organisers')).toBeInTheDocument();
+  });
+
+  it('reorders with ArrowUp and ArrowDown on the focused grip, and saves the order', async () => {
+    mount();
+    const grip = screen.getByRole('button', { name: /Move Toplists/ });
+    grip.focus();
+    await userEvent.keyboard('{ArrowUp}');
+    expect(names().slice(0, 3)).toEqual(['Toplists', 'Timetable', 'Live stream']);
+    expect(saved()).toEqual(['toplists', 'timetable', 'chat', 'details']);
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}');
+    expect(names().slice(0, 3)).toEqual(['Timetable', 'Live stream', 'Toplists']);
+    expect(saved()).toEqual(['timetable', 'chat', 'toplists', 'details']);
+    // The top row can't go further up.
+    screen.getByRole('button', { name: /Move Timetable/ }).focus();
+    await userEvent.keyboard('{ArrowUp}');
+    expect(names()[0]).toBe('Timetable');
+  });
+
+  it('turns a tab on or off with its switch', async () => {
+    mount();
+    await userEvent.click(screen.getByRole('switch', { name: 'Show Shop in the bottom bar' }));
+    expect(screen.getByRole('switch', { name: 'Show Shop in the bottom bar' })).toHaveAttribute('aria-checked', 'true');
+    expect(saved()).toEqual(['timetable', 'toplists', 'chat', 'details', 'shop']);
+    await userEvent.click(screen.getByRole('switch', { name: 'Show Toplists in the bottom bar' }));
+    expect(saved()).toEqual(['timetable', 'chat', 'details', 'shop']);
+  });
+
+  it('flags fewer than 2 tabs and more than 6 without blocking either', async () => {
+    mount();
+    expect(screen.queryByText(/Pick at least 2 tabs/)).not.toBeInTheDocument();
+    for (const name of ['Toplists', 'Live stream', 'Details']) await userEvent.click(screen.getByRole('switch', { name: `Show ${name} in the bottom bar` }));
+    // One tab is left on, which is allowed; the flag says what the bar will show instead.
+    expect(screen.getByRole('switch', { name: 'Show Timetable in the bottom bar' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText(/^Pick at least 2 tabs/)).toHaveTextContent('Pick at least 2 tabs. With fewer, the bottom bar shows Timetable, Toplists, Live stream and Details.');
+    await userEvent.click(screen.getByRole('switch', { name: 'Show Shop in the bottom bar' }));
+    expect(screen.queryByText(/Pick at least 2 tabs/)).not.toBeInTheDocument();
+
+    for (const name of ['Following', 'Teams', 'Arena', 'Dec forms', 'Details', 'Toplists']) await userEvent.click(screen.getByRole('switch', { name: `Show ${name} in the bottom bar` }));
+    expect(screen.getByText(/^Only the first 6 tabs/)).toHaveTextContent('Only the first 6 tabs that are on will fit.');
+    expect(screen.getByRole('switch', { name: 'Show Toplists in the bottom bar' })).toHaveAttribute('aria-checked', 'true');
+    expect(saved()).toHaveLength(6);
+  });
+
+  it('puts the usual tabs back with Reset to default', async () => {
+    mount();
+    expect(screen.queryByRole('button', { name: 'Reset to default' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('switch', { name: 'Show Shop in the bottom bar' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Reset to default' }));
+    expect(names().slice(0, 4)).toEqual(['Timetable', 'Toplists', 'Live stream', 'Details']);
+    expect(screen.getByRole('switch', { name: 'Show Shop in the bottom bar' })).toHaveAttribute('aria-checked', 'false');
+    expect(localStorage.getItem('mg.prefs.bottomTabs')).toBeNull();
   });
 });

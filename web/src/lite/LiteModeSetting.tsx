@@ -1,27 +1,19 @@
+import { CardDropdownRow } from '../components/CardDropdownRow';
 import { liteStatusText, type LiteSetting } from './liteMode';
 import { useLiteMode } from './LiteModeContext';
 
-const OPTIONS: { id: LiteSetting; label: string }[] = [
-  { id: 'auto', label: 'Auto' },
-  { id: 'on', label: 'On' },
-  { id: 'off', label: 'Off' },
+const OPTIONS: { value: LiteSetting; label: string }[] = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'on', label: 'On' },
+  { value: 'off', label: 'Off' },
 ];
 
-/** Auto / On / Off for lite mode, with one line saying where it stands. */
+/**
+ * Auto / On / Off for lite mode, as a settings row for a `.sp-card`. Under the label it says why lite mode is on
+ * when Auto has turned it on, and otherwise what it is for.
+ */
 export function LiteModeSetting() {
   const { lite, reason, setting, setSetting } = useLiteMode();
-  return (
-    <div role="group" aria-label="Lite mode" className="flex flex-col gap-2">
-      <h3 className="px-1 text-xs font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-muted))]">Lite mode</h3>
-      <p className="px-1 text-xs leading-snug text-[rgb(var(--mg-muted))]">
-        Saves battery and mobile data on busy showgrounds by turning off animations, stream previews and background weather checks.
-      </p>
-      <div className="mg-seg">
-        {OPTIONS.map((option) => (
-          <button key={option.id} type="button" aria-pressed={setting === option.id} onClick={() => setSetting(option.id)}>{option.label}</button>
-        ))}
-      </div>
-      <p role="status" className="px-1 text-[13px] leading-snug text-[rgb(var(--mg-muted))]">{liteStatusText(lite, reason)}</p>
-    </div>
-  );
+  const hint = setting === 'auto' && lite ? liteStatusText(lite, reason) : 'Saves battery and data on busy showgrounds';
+  return <CardDropdownRow label="Lite mode" hint={hint} value={setting} options={OPTIONS} onChange={(value) => setSetting(value as LiteSetting)} />;
 }
