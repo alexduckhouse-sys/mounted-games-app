@@ -15,6 +15,12 @@ public class Competition
     public string? Description { get; set; }
     public string? What3Words { get; set; }
     public string? AppleMapsUrl { get; set; }
+    /// <summary>The venue's postcode, trimmed and upper-cased (at most 12 characters). Null when not given.</summary>
+    public string? Postcode { get; set; }
+    /// <summary>The governing body's number for the event (at most 40 characters). Null when not given.</summary>
+    public string? CompetitionNumber { get; set; }
+    /// <summary>Where entrants write to the organiser (a plain address, at most 254 characters). Shown on the public Details tab.</summary>
+    public string? ContactEmail { get; set; }
     /// <summary>One live-stream URL for the whole competition (YouTube, Twitch, etc).</summary>
     public string? StreamUrl { get; set; }
 
