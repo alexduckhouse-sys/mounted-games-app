@@ -9,6 +9,7 @@ using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Commerce;
 using MountedGames.Api.Hubs;
 using MountedGames.Api.Services;
+using MountedGames.Api.Services.Email;
 using MountedGames.Api.Services.Payouts;
 using MountedGames.Api.Services.Streaming;
 
@@ -239,10 +240,15 @@ public class CompetitionsController : ControllerBase
         return new { signupsLocked = c.SignupsLocked };
     }
 
+    private const string ContactEmailProblem = "That contact email doesn't look right. Check it, or leave it blank.";
+
     [HttpPost]
     [Authorize(Roles = Roles.Organiser)]
     public async Task<ActionResult<CompetitionSummary>> Create(CreateCompetitionRequest req)
     {
+        string? contactEmail = null;
+        if (!string.IsNullOrWhiteSpace(req.ContactEmail) && !EmailAddresses.TryNormalise(req.ContactEmail, out contactEmail))
+            return BadRequest(new { message = ContactEmailProblem });
         var appleUrl = string.IsNullOrWhiteSpace(req.AppleMapsUrl) ? null : req.AppleMapsUrl.Trim();
         var lat = req.Latitude;
         var lon = req.Longitude;
@@ -269,6 +275,9 @@ public class CompetitionsController : ControllerBase
             Longitude = lon,
             What3Words = string.IsNullOrWhiteSpace(req.What3Words) ? null : req.What3Words.Trim(),
             AppleMapsUrl = appleUrl,
+            Postcode = CompetitionFields.Postcode(req.Postcode),
+            CompetitionNumber = CompetitionFields.Trimmed(req.CompetitionNumber),
+            ContactEmail = contactEmail,
             StreamUrl = string.IsNullOrWhiteSpace(req.StreamUrl) ? null : req.StreamUrl.Trim(),
             OrganiserName = string.IsNullOrWhiteSpace(req.OrganiserName) ? null : req.OrganiserName.Trim(),
             PaymentDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim(),
@@ -294,6 +303,9 @@ public class CompetitionsController : ControllerBase
     [CompetitionAccess("id")]
     public async Task<ActionResult<CompetitionSummary>> Update(int id, UpdateCompetitionRequest req)
     {
+        string? contactEmail = null;
+        if (!string.IsNullOrWhiteSpace(req.ContactEmail) && !EmailAddresses.TryNormalise(req.ContactEmail, out contactEmail))
+            return BadRequest(new { message = ContactEmailProblem });
         var c = await _db.Competitions
             .Include(c => c.Sections).Include(c => c.Teams).Include(c => c.Sessions)
             .FirstOrDefaultAsync(c => c.Id == id);
@@ -322,6 +334,10 @@ public class CompetitionsController : ControllerBase
         c.StreamUrl = string.IsNullOrWhiteSpace(req.StreamUrl) ? null : req.StreamUrl.Trim();
         c.What3Words = string.IsNullOrWhiteSpace(req.What3Words) ? null : req.What3Words.Trim();
         c.AppleMapsUrl = appleUrl;
+        // Null leaves these three as they are (older clients don't send them); a blank value clears them.
+        if (req.Postcode is not null) c.Postcode = CompetitionFields.Postcode(req.Postcode);
+        if (req.CompetitionNumber is not null) c.CompetitionNumber = CompetitionFields.Trimmed(req.CompetitionNumber);
+        if (req.ContactEmail is not null) c.ContactEmail = contactEmail;
         c.OrganiserName = string.IsNullOrWhiteSpace(req.OrganiserName) ? null : req.OrganiserName.Trim();
         c.PaymentDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim();
         c.TermsText = string.IsNullOrWhiteSpace(req.TermsText) ? null : req.TermsText.Trim();
