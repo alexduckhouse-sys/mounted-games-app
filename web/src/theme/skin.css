@@ -734,3 +734,24 @@ a.sp-row, button.sp-row, .sp-listing-head, .sp-seg > * { transition: background-
   .kit-pill, .kit-strip-act, .sp-pill, .sp-add, .sp-stepper button, .ev-bar, .ev-send, .ev-arrow, .ev-text-btn, a.sp-row, button.sp-row, .sp-listing-head, .sp-seg > *, .mg-progress > span { transition: none; }
   .kit-strip, .mg-reveal, .mg-num-pop, .mg-arrive { animation: none; }
 }
+
+/* Race diagrams (RaceDiagram drop): each pole and piece of kit drops onto the lane with a little bounce, in order from
+   the start line. The fill is backwards only, so nothing is left transformed once it has landed. */
+.mg-kit-drop { animation: mg-kit-drop .5s cubic-bezier(.34, 1.4, .64, 1) backwards; }
+@keyframes mg-kit-drop { 0% { opacity: 0; transform: translateY(-34px); } 55% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .mg-kit-drop { animation: none; } }
+html[data-lite="true"] .mg-kit-drop { animation: none !important; }
+
+/* The countdown ring on a followed team's next heat (HeatRing): navy, amber in the last five minutes, red and gently
+   pulsing while the heat is on. */
+.mg-heat-ring { position: relative; flex: none; display: inline-grid; place-items: center; width: 30px; height: 30px; color: rgb(var(--mg-heading)); }
+.mg-heat-ring[data-tone="soon"], .mg-heat-ring[data-tone="due"] { color: rgb(var(--mg-late-time)); }
+.mg-heat-ring[data-tone="live"] { color: rgb(var(--mg-red)); }
+.mg-heat-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.mg-heat-ring-track { fill: none; stroke: currentColor; stroke-width: 3; opacity: .16; }
+.mg-heat-ring-fill { fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; transition: stroke .3s; }
+.mg-heat-ring-text { position: relative; font: 800 11px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.mg-heat-ring[data-tone="live"] svg { animation: mg-heat-live 1.6s ease-in-out infinite; }
+@keyframes mg-heat-live { 0%, 100% { filter: none; scale: 1; } 50% { filter: drop-shadow(0 0 4px rgb(var(--mg-red) / .55)); scale: 1.08; } }
+@media (prefers-reduced-motion: reduce) { .mg-heat-ring[data-tone="live"] svg { animation: none; } }
+html[data-lite="true"] .mg-heat-ring[data-tone="live"] svg { animation: none !important; }

@@ -18,6 +18,8 @@ interface Props {
   diagramJson?: string | null;
   height?: number;
   className?: string;
+  /** Set up the arena in front of the viewer: each pole and piece of kit drops in, from the start line to the top. */
+  drop?: boolean;
 }
 
 /** Handlers the editor passes in; the read-only diagram leaves them out. */
@@ -36,10 +38,15 @@ export interface LaneEditing {
  * Renders an arena lane as SVG from the pole-based slot model (see
  * diagramSlots.ts). Old diagrams are mapped to the nearest slot on read.
  */
-export function RaceDiagram({ diagramJson, height = 140, className }: Props) {
+export function RaceDiagram({ diagramJson, height = 140, className, drop = false }: Props) {
   const model = toLaneModel(parseDiagram(diagramJson));
-  return <LaneCanvas model={model} height={height} className={className} ariaLabel="Arena setup diagram" />;
+  // Keyed on the race, so moving to another race sets its arena up afresh.
+  return <LaneCanvas key={drop ? diagramJson ?? '' : undefined} model={model} height={height} className={className} ariaLabel="Arena setup diagram" drop={drop} />;
 }
+
+/** Seconds before the first piece of kit lands, and between one piece and the next. */
+const DROP_START_S = 0.15;
+const DROP_STEP_S = 0.09;
 
 const MAX_STACK = 3;
 const CHILD_GAP = 22;
@@ -71,13 +78,14 @@ function resolveRenderX(p: PlacedElement, model: LaneModel): number {
 }
 
 export function LaneCanvas({
-  model, height, className, ariaLabel, editing,
+  model, height, className, ariaLabel, editing, drop = false,
 }: {
   model: LaneModel;
   height: number;
   className?: string;
   ariaLabel: string;
   editing?: LaneEditing;
+  drop?: boolean;
 }) {
   const { slots, placed } = placeElements(model);
   const laneWidth = LANE.topLineX - LANE.left;
@@ -89,6 +97,9 @@ export function LaneCanvas({
   // Elements sharing a slot spread across the lane's height so none hides another.
   const bySlot = new Map<string, PlacedElement[]>();
   for (const p of placed) bySlot.set(p.slot.id, [...(bySlot.get(p.slot.id) ?? []), p]);
+
+  // Kit lands in order down the lane, the way a steward walks it out from the start.
+  const dropOrder = new Map([...placed].sort((a, b) => resolveRenderX(a, model) - resolveRenderX(b, model)).map((p, rank) => [p.index, rank]));
 
   return (
     <svg
@@ -160,6 +171,7 @@ export function LaneCanvas({
             index={p.index}
             selected={editing?.selectedIndex === p.index}
             onDown={editing?.onElementDown}
+            dropDelay={drop && !editing ? DROP_START_S + (dropOrder.get(p.index) ?? 0) * DROP_STEP_S : undefined}
           />
         );
       })}
@@ -198,8 +210,8 @@ interface NodeProps { el: DiagramElement; x: number; y: number }
  * as "2 mugs" under the element.
  */
 function DiagramNode({
-  el, x, y, index, selected, onDown,
-}: NodeProps & { index: number; selected: boolean; onDown?: LaneEditing['onElementDown'] }) {
+  el, x, y, index, selected, onDown, dropDelay,
+}: NodeProps & { index: number; selected: boolean; onDown?: LaneEditing['onElementDown']; dropDelay?: number }) {
   if (el.t === 'midline' || el.t === 'lane') return null;
   const label = (el as DiagramPos).label;
   const labelY = y + 28;
@@ -210,7 +222,8 @@ function DiagramNode({
   return (
     <g
       data-testid={`element-${index}`}
-      style={onDown ? { cursor: 'grab' } : undefined}
+      className={dropDelay === undefined ? undefined : 'mg-kit-drop'}
+      style={onDown ? { cursor: 'grab' } : dropDelay === undefined ? undefined : { animationDelay: `${dropDelay.toFixed(2)}s` }}
       onPointerDown={onDown ? (e) => onDown(index, e) : undefined}
     >
       {onDown && <rect x={x - 26} y={y - 34 - shown.length * CHILD_GAP} width="52" height={72 + shown.length * CHILD_GAP} fill="transparent" />}

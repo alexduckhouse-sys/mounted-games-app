@@ -86,7 +86,7 @@ export function RaceRulesButton({ raceName, className = '', label }: { raceName:
           {current && 'template' in current && !template && <Notice tone="info" role={null}>No rules have been added for this race yet.</Notice>}
           {template && <div className="race-rules-body">
             {template.summary && <p>{template.summary}</p>}
-            {template.diagramJson && <div className="race-rules-diagram"><RaceDiagram diagramJson={template.diagramJson} height={160} /></div>}
+            {template.diagramJson && <div className="race-rules-diagram"><RaceDiagram drop diagramJson={template.diagramJson} height={160} /></div>}
             {template.rules && <section aria-label="Rules"><h3>Rules</h3><p className="whitespace-pre-wrap">{template.rules}</p></section>}
             {equipment.length > 0 && <section aria-label="Equipment"><h3>Equipment</h3>
               <ul>{equipment.map((item) => <li key={item.label}>{item.count > 1 ? `${item.count} × ` : ''}{item.label}</li>)}</ul>
