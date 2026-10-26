@@ -28,32 +28,22 @@ public sealed class PrintableEventService(AppDbContext db)
     {
         var competition = await LoadAsync(competitionId, ct);
         if (competition is null) return null;
-        var heats = competition.Sessions.Where(IsRace)
-            .OrderBy(x => x.OrderIndex).ThenBy(x => x.Id)
-            .SelectMany(x => OrderedHeats(x).Select(h => new { Session = x, Heat = h }))
-            .Select(x => new PrintableScoreHeatDto(
-                x.Heat.Id, x.Heat.Label ?? $"Heat {x.Heat.OrderIndex}", x.Session.Section?.DisplayName ?? string.Empty,
-                x.Session.Name, HeatStart(x.Session, x.Heat),
-                x.Heat.Races.OrderBy(r => r.OrderIndex).Select(r => new PrintableScoreRaceDto(
-                    r.Id, r.Name,
-                    x.Heat.Entries.OrderBy(e => e.LaneIndex).Select(e =>
-                    {
-                        var result = r.Results.SingleOrDefault(y => y.TeamId == e.TeamId);
-                        return new PrintableScoreCellDto(e.TeamId, e.Team!.DisplayName, result?.Placing, result?.Eliminated ?? false, result?.Points,
-                            e.LaneIndex, e.Team.BibDescription ?? e.Team.BibColour, result?.IsSitOut ?? false,
-                            result is null ? ResultStatus.Finished : ResultStatuses.Of(result));
-                    }).ToArray())).ToArray()))
-            .ToArray();
+        var heats = BuildScoreHeats(competition.Sessions.Where(IsRace));
         return new PrintableScoreSheetsDto(ToCompetition(competition), heats);
     }
 
-    public async Task<PrintableResultsDto?> ResultsAsync(int competitionId, CancellationToken ct)
+    public async Task<PrintableResultsDto?> ResultsAsync(int competitionId, CancellationToken ct, int? sessionId = null)
     {
         var competition = await LoadAsync(competitionId, ct);
         if (competition is null) return null;
+        var raceSessions = competition.Sessions.Where(IsRace).OrderBy(x => x.OrderIndex).ThenBy(x => x.Id).ToArray();
+        var selectedSession = sessionId.HasValue ? raceSessions.FirstOrDefault(s => s.Id == sessionId.Value) : null;
         var tiers = FinalsTiers.From(competition.Sessions);
         var bonus = await TackCheck.TackCheckBonus.ForCompetitionAsync(db, competitionId, ct);
-        var sections = competition.Sections.OrderBy(x => x.DisplayName).Select(section =>
+        var relevantSections = selectedSession?.CompetitionSectionId is { } targetSectionId
+            ? competition.Sections.Where(s => s.Id == targetSectionId)
+            : competition.Sections;
+        var sections = relevantSections.OrderBy(x => x.DisplayName).Select(section =>
         {
             var rows = section.Teams.Where(x => !x.IsHorsConcours).Select(team =>
             {
@@ -84,11 +74,45 @@ public sealed class PrintableEventService(AppDbContext db)
             }
             return new PrintableSectionResultsDto(section.Id, section.DisplayName, result);
         }).ToArray();
-        var races = competition.Sessions.Where(IsRace)
-            .SelectMany(x => x.Heats).SelectMany(x => x.Races).ToArray();
+        var filteredSessions = selectedSession is not null ? [selectedSession] : raceSessions;
+        var heats = BuildScoreHeats(filteredSessions);
+        var sessionSummaries = raceSessions.Select(s =>
+        {
+            var totalHeats = s.Heats.Count;
+            var completedHeats = s.Heats.Count(h => h.Races.Count > 0 && h.Races.All(r => r.IsComplete || r.Results.Count > 0));
+            var isCompleted = totalHeats > 0 && completedHeats == totalHeats;
+            return new PrintableSessionSummaryDto(
+                s.Id,
+                s.Name,
+                s.Section?.DisplayName ?? string.Empty,
+                s.OrderIndex,
+                totalHeats,
+                completedHeats,
+                isCompleted);
+        }).ToArray();
+        var races = filteredSessions.SelectMany(x => x.Heats).SelectMany(x => x.Races).ToArray();
         var provisional = races.Length == 0 || races.Any(x => !x.IsComplete);
-        return new PrintableResultsDto(ToCompetition(competition), provisional, sections);
+        return new PrintableResultsDto(ToCompetition(competition), provisional, sections, heats, sessionSummaries);
     }
+
+    private static PrintableScoreHeatDto[] BuildScoreHeats(IEnumerable<Session> sessions)
+        => sessions
+            .OrderBy(x => x.OrderIndex).ThenBy(x => x.Id)
+            .SelectMany(x => OrderedHeats(x).Select(h => new { Session = x, Heat = h }))
+            .Select(x => new PrintableScoreHeatDto(
+                x.Heat.Id, x.Heat.Label ?? $"Heat {x.Heat.OrderIndex}", x.Session.Section?.DisplayName ?? string.Empty,
+                x.Session.Name, HeatStart(x.Session, x.Heat),
+                x.Heat.Races.OrderBy(r => r.OrderIndex).Select(r => new PrintableScoreRaceDto(
+                    r.Id, r.Name,
+                    x.Heat.Entries.OrderBy(e => e.LaneIndex).Select(e =>
+                    {
+                        var result = r.Results.SingleOrDefault(y => y.TeamId == e.TeamId);
+                        return new PrintableScoreCellDto(e.TeamId, e.Team!.DisplayName, result?.Placing, result?.Eliminated ?? false, result?.Points,
+                            e.LaneIndex, e.Team.BibDescription ?? e.Team.BibColour, result?.IsSitOut ?? false,
+                            result is null ? ResultStatus.Finished : ResultStatuses.Of(result));
+                    }).ToArray())).ToArray(),
+                x.Session.Id))
+            .ToArray();
 
     /// <summary>
     /// Every team of every section with its declared riders and ponies, so the organiser can check the entries

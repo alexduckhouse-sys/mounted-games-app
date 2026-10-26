@@ -962,6 +962,87 @@ export interface SponsorAdmin extends Sponsor {
   seconds: number;
 }
 
+/** Impressions and live stream on-screen time for one human-friendly sponsor placement. */
+export interface SponsorPlacementStat {
+  key: 'overview' | 'standings' | 'timetable' | 'liveStreamOverlay' | 'sponsorPage' | string;
+  label: 'Overview' | 'Standings' | 'Timetable' | 'Live Stream Overlay' | 'Sponsor Page' | string;
+  views: number;
+  seconds: number;
+  formattedOnScreenTime: string;
+}
+
+/** Proof-of-value impact summary for one sponsor across all placements. */
+export interface SponsorValueReportItem {
+  sponsorId: number;
+  sponsorName: string;
+  linkUrl: string | null;
+  logoUrl: string | null;
+  tier: SponsorTier;
+  tierLabel: string;
+  showOn: number;
+  placementLabels: string[];
+  isEnabled: boolean;
+  totalViews: number;
+  totalSeconds: number;
+  formattedOnScreenTime: string;
+  placements: SponsorPlacementStat[];
+}
+
+/** Competition-wide sponsor proof-of-value report (`GET /competitions/:id/sponsor-stats`). */
+export interface SponsorValueReport {
+  competitionId: number;
+  totalViews: number;
+  totalSeconds: number;
+  formattedTotalOnScreenTime: string;
+  sponsors: SponsorValueReportItem[];
+}
+
+/** Status of the 30-minute undo snapshot for the last section draw, heat deletion, or heat regeneration (`GET /competitions/:id/draw-undo`). */
+export interface DrawUndoStatus {
+  available: boolean;
+  undoId: number | null;
+  kind: string | null;
+  label: string | null;
+  sectionId: number | null;
+  sessionId: number | null;
+  createdAt: string | null;
+  expiresAt: string | null;
+  affectedHeats: number;
+  affectedSessions: number;
+}
+
+/** Result of restoring the latest draw or heat snapshot (`POST /competitions/:id/draw-undo`). */
+export interface DrawUndoResult {
+  restored: boolean;
+  label: string;
+  restoredSessions: number;
+  restoredHeats: number;
+  undoStatus: DrawUndoStatus;
+}
+
+/** Role assigned to a rider for a single race in the 5-rider Race Line-Up & Sit-Out Planner. */
+export type RiderRaceRole = '1' | '2' | '3' | '4' | 'sit-out';
+
+/** Shared race line-up and sit-out assignments for a team (`GET/PUT /competitions/:id/teams/:teamId/race-lineup`). */
+export interface TeamRaceLineupPlan {
+  competitionId: number;
+  teamId: number;
+  /** Keyed by race key (e.g. `String(race.id)` or `${heat.id}:${race.orderIndex}`), inner map keyed by rider key (`String(rider.id)` or rider name). */
+  assignments: Record<string, Record<string, RiderRaceRole | string>>;
+  updatedAt?: string | null;
+}
+
+/** Summary of a printable race session for the single-session noticeboard filter. */
+export interface PrintableSessionSummary {
+  sessionId: number;
+  sessionName: string;
+  sectionName: string;
+  orderIndex: number;
+  totalHeats: number;
+  completedHeats: number;
+  isCompleted: boolean;
+}
+
 /** What a statistics profile is about: 0 rider, 1 pony, 2 team, 3 club (`StatsSubjectKind` in the API). */
 export type StatsSubjectKind = 0 | 1 | 2 | 3;
 export const StatsSubjectKind = {

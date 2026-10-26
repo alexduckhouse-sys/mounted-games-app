@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -239,13 +240,84 @@ public class SessionsController : ControllerBase
         return loaded.ToDto();
     }
 
+    [HttpDelete("{id:int}/heats/{heatId:int}")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<SessionDto>> DeleteHeat(int competitionId, int id, int heatId)
+    {
+        var s = await _db.Sessions
+            .Include(s => s.Heats).ThenInclude(h => h.Entries)
+            .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results)
+            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+        if (s is null) return NotFound();
+
+        var heat = s.Heats.FirstOrDefault(h => h.Id == heatId);
+        if (heat is null) return NotFound();
+        if (heat.Races.Any(r => r.IsComplete || r.Results.Count > 0))
+            return Conflict(new { message = "This heat already has race results, so it can't be deleted." });
+
+        var heatLabel = !string.IsNullOrWhiteSpace(heat.Label) ? heat.Label!.Trim() : $"Heat {heat.OrderIndex}";
+        DrawUndoService.RecordSessionSnapshot(
+            _db,
+            competitionId,
+            s,
+            "DeleteHeat",
+            $"Deleted {heatLabel} in {s.Name}",
+            User.FindFirstValue(ClaimTypes.NameIdentifier));
+
+        _db.Heats.Remove(heat);
+        s.Heats.Remove(heat);
+        var remaining = s.Heats.OrderBy(h => h.OrderIndex).ThenBy(h => h.Id).ToList();
+        for (var i = 0; i < remaining.Count; i++)
+            remaining[i].OrderIndex = i + 1;
+
+        await _db.SaveChangesAsync();
+        var reloaded = await SessionsWithDetail().FirstAsync(x => x.Id == id);
+        var dto = reloaded.ToDto();
+        await _live.SessionUpdated(competitionId, dto);
+        return dto;
+    }
+
+    [HttpDelete("{id:int}/heats")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<SessionDto>> ClearHeats(int competitionId, int id)
+    {
+        var s = await _db.Sessions
+            .Include(s => s.Heats).ThenInclude(h => h.Entries)
+            .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results)
+            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+        if (s is null) return NotFound();
+        if (s.Heats.Any(h => h.Races.Any(r => r.IsComplete || r.Results.Count > 0)))
+            return Conflict(new { message = "This session already has race results, so its heats can't be cleared." });
+
+        if (s.Heats.Count > 0)
+        {
+            DrawUndoService.RecordSessionSnapshot(
+                _db,
+                competitionId,
+                s,
+                "ClearHeats",
+                $"Cleared {s.Heats.Count} {(s.Heats.Count == 1 ? "heat" : "heats")} in {s.Name}",
+                User.FindFirstValue(ClaimTypes.NameIdentifier));
+            _db.Heats.RemoveRange(s.Heats);
+            await _db.SaveChangesAsync();
+        }
+
+        var reloaded = await SessionsWithDetail().FirstAsync(x => x.Id == id);
+        var dto = reloaded.ToDto();
+        await _live.SessionUpdated(competitionId, dto);
+        return dto;
+    }
+
     [HttpPost("{id:int}/generate-race-finals")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<ActionResult<SessionDto>> GenerateRaceFinals(int competitionId, int id, GenerateRaceFinalsRequest req)
     {
         var s = await _db.Sessions
-            .Include(s => s.Heats)
+            .Include(s => s.Heats).ThenInclude(h => h.Entries)
+            .Include(s => s.Heats).ThenInclude(h => h.Races)
             .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
         if (s is null) return NotFound();
         if (!await TeamsBelongAsync(competitionId, req.TeamIds)) return BadRequest(new { message = "Some of those teams aren't in this competition." });
@@ -264,6 +336,16 @@ public class SessionsController : ControllerBase
 
         if (req.ReplaceExisting)
         {
+            if (s.Heats.Count > 0)
+            {
+                DrawUndoService.RecordSessionSnapshot(
+                    _db,
+                    competitionId,
+                    s,
+                    "GenerateRaceFinals",
+                    $"Regenerated race finals in {s.Name}",
+                    User.FindFirstValue(ClaimTypes.NameIdentifier));
+            }
             _db.Heats.RemoveRange(s.Heats);
             await _db.SaveChangesAsync();
         }
@@ -432,6 +514,14 @@ public class SessionsController : ControllerBase
                 .ToList();
             if (locked.Count > 0)
                 return Conflict(new { message = $"Results are signed off for {string.Join(", ", locked)}, so the teams there can't be changed. Nothing was saved." });
+
+            DrawUndoService.RecordSessionSnapshot(
+                _db,
+                competitionId,
+                s,
+                "UpdateHeatAssignments",
+                $"Updated heat lanes in {s.Name}",
+                User.FindFirstValue(ClaimTypes.NameIdentifier));
         }
 
         foreach (var (heat, teamIds) in changed)
@@ -516,7 +606,8 @@ public class SessionsController : ControllerBase
     public async Task<ActionResult<SessionDto>> GenerateHeats(int competitionId, int id, GenerateHeatsRequest req)
     {
         var s = await _db.Sessions
-            .Include(s => s.Heats)
+            .Include(s => s.Heats).ThenInclude(h => h.Entries)
+            .Include(s => s.Heats).ThenInclude(h => h.Races)
             .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
         if (s is null) return NotFound();
         if (!await TeamsBelongAsync(competitionId, req.TeamIds)) return BadRequest(new { message = "Some of those teams aren't in this competition." });
@@ -532,6 +623,16 @@ public class SessionsController : ControllerBase
 
         if (req.ReplaceExisting)
         {
+            if (s.Heats.Count > 0)
+            {
+                DrawUndoService.RecordSessionSnapshot(
+                    _db,
+                    competitionId,
+                    s,
+                    "GenerateHeats",
+                    $"Regenerated heats in {s.Name}",
+                    User.FindFirstValue(ClaimTypes.NameIdentifier));
+            }
             _db.Heats.RemoveRange(s.Heats);
             await _db.SaveChangesAsync();
         }

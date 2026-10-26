@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -8,6 +9,7 @@ using MountedGames.Api.Security;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Entities.Operations;
 using MountedGames.Api.Services;
 
 namespace MountedGames.Api.Controllers;
@@ -334,6 +336,98 @@ public class TeamsController : ControllerBase
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync();
         return Ok(rows.Select(s => s.ToDto()));
+    }
+
+    private static readonly JsonSerializerOptions LineupJsonOptions = new(JsonSerializerDefaults.Web);
+
+    [HttpGet("{teamId:int}/race-lineup")]
+    [AllowAnonymous]
+    public async Task<ActionResult<TeamRaceLineupPlanDto>> GetRaceLineup(int competitionId, int teamId)
+    {
+        var exists = await _db.Teams.AsNoTracking()
+            .AnyAsync(t => t.Id == teamId && t.CompetitionId == competitionId);
+        if (!exists) return NotFound();
+
+        var record = await _db.Set<DrawChange>().AsNoTracking()
+            .FirstOrDefaultAsync(d => d.CompetitionId == competitionId
+                && d.Kind == DrawChangeKind.TeamRaceLineup
+                && d.SectionId == -teamId);
+
+        if (record is null || string.IsNullOrWhiteSpace(record.ResultJson))
+            return new TeamRaceLineupPlanDto(competitionId, teamId, new Dictionary<string, Dictionary<string, string>>(), null);
+
+        var assignments = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(record.ResultJson, LineupJsonOptions)
+            ?? new Dictionary<string, Dictionary<string, string>>();
+        return new TeamRaceLineupPlanDto(competitionId, teamId, assignments, record.CreatedAt);
+    }
+
+    [HttpPut("{teamId:int}/race-lineup")]
+    [Authorize]
+    public async Task<ActionResult<TeamRaceLineupPlanDto>> SaveRaceLineup(
+        int competitionId, int teamId, SaveTeamRaceLineupRequest req)
+    {
+        var team = await _db.Teams.AsNoTracking()
+            .Include(t => t.Supporters)
+            .FirstOrDefaultAsync(t => t.Id == teamId && t.CompetitionId == competitionId);
+        if (team is null) return NotFound();
+
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+        var canEdit = User.IsInRole(Roles.Admin)
+            || team.TrainerUserId == userId
+            || await _db.IsClubManagerAsync(User, team.ClubId)
+            || await _db.ClubIdOfAsync(User) == team.ClubId
+            || team.Supporters.Any(s => s.UserId == userId && s.Status == TeamSupporterStatus.Accepted)
+            || await _db.Competitions.AsNoTracking().AnyAsync(c => c.Id == competitionId && c.CreatedByUserId == userId);
+        if (!canEdit) return Forbid();
+
+        var sanitized = new Dictionary<string, Dictionary<string, string>>();
+        if (req.Assignments is not null)
+        {
+            foreach (var (raceKey, riderMap) in req.Assignments.Take(200))
+            {
+                if (string.IsNullOrWhiteSpace(raceKey) || riderMap is null) continue;
+                var inner = new Dictionary<string, string>();
+                foreach (var (riderKey, role) in riderMap.Take(20))
+                {
+                    if (string.IsNullOrWhiteSpace(riderKey) || string.IsNullOrWhiteSpace(role)) continue;
+                    inner[riderKey.Trim()] = role.Trim();
+                }
+                sanitized[raceKey.Trim()] = inner;
+            }
+        }
+
+        var json = JsonSerializer.Serialize(sanitized, LineupJsonOptions);
+        var now = DateTime.UtcNow;
+        var existing = await _db.Set<DrawChange>()
+            .FirstOrDefaultAsync(d => d.CompetitionId == competitionId
+                && d.Kind == DrawChangeKind.TeamRaceLineup
+                && d.SectionId == -teamId);
+
+        if (existing is null)
+        {
+            _db.Set<DrawChange>().Add(new DrawChange
+            {
+                CompetitionId = competitionId,
+                SectionId = -teamId,
+                Kind = DrawChangeKind.TeamRaceLineup,
+                RequestId = $"team-lineup-{teamId}",
+                Fingerprint = $"team-{teamId}",
+                ActorUserId = userId,
+                ResultJson = json,
+                CreatedAt = now,
+            });
+        }
+        else
+        {
+            existing.ActorUserId = userId;
+            existing.ResultJson = json;
+            existing.CreatedAt = now;
+        }
+
+        await _db.SaveChangesAsync();
+        return new TeamRaceLineupPlanDto(competitionId, teamId, sanitized, now);
     }
 
     [EnableRateLimiting(RequestLimits.TeamJoinPolicy)]
