@@ -798,9 +798,10 @@ public class CompetitionsController : ControllerBase
             {
                 _db.HeatEntries.Add(new HeatEntry { HeatId = heat.Id, TeamId = teamId, LaneIndex = lane++ });
             }
-            for (var ri = 0; ri < raceNames.Count; ri++)
+            var heatRaces = PlannedFinalRaceLists.For(letter, session.PlannedFinalRaces, raceNames);
+            for (var ri = 0; ri < heatRaces.Count; ri++)
             {
-                _db.Races.Add(new Race { HeatId = heat.Id, Name = raceNames[ri], OrderIndex = ri + 1 });
+                _db.Races.Add(new Race { HeatId = heat.Id, Name = heatRaces[ri], OrderIndex = ri + 1 });
             }
         }
         await _db.SaveChangesAsync();
@@ -922,9 +923,10 @@ public class CompetitionsController : ControllerBase
             };
             _db.Heats.Add(heat);
             await _db.SaveChangesAsync();
-            for (var ri = 0; ri < raceNames.Count; ri++)
+            var heatRaces = PlannedFinalRaceLists.For(letter, session.PlannedFinalRaces, raceNames);
+            for (var ri = 0; ri < heatRaces.Count; ri++)
             {
-                _db.Races.Add(new Race { HeatId = heat.Id, Name = raceNames[ri], OrderIndex = ri + 1 });
+                _db.Races.Add(new Race { HeatId = heat.Id, Name = heatRaces[ri], OrderIndex = ri + 1 });
             }
         }
         await _db.SaveChangesAsync();

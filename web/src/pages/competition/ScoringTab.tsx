@@ -429,7 +429,10 @@ function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
   const [topN, setTopN] = useState(6);
   const [lanes, setLanes] = useState(6);
   const [name, setName] = useState('');
-  const [races, setRaces] = useState('Litter Lifter\nFlag\nBottle\nMug\nBall and Cone');
+  // The finals session planned for this age group (made in the creator), if heats haven't been made in it yet: reusing it keeps its B and C race lists.
+  const planned = competition.sessions.find((x) => x.competitionSectionId === sectionId && (x.kind ?? 0) === 0 && x.status === 0
+    && x.heats.length === 0 && /^finals\s*·/i.test(x.name.trim()));
+  const [races, setRaces] = useState(planned?.plannedRaces?.length ? planned.plannedRaces.join('\n') : 'Litter Lifter\nFlag\nBottle\nMug\nBall and Cone');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [standings, setStandings] = useState<StandingRow[]>([]);
@@ -459,6 +462,7 @@ function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
       await api.post(`/competitions/${competition.id}/finals`, {
         competitionSectionId: sectionId,
         topN, raceNames, lanesPerHeat: lanes, name: name.trim() || null,
+        ...(planned ? { existingSessionId: planned.id } : {}),
       });
       onCreated();
     } catch (e) {

@@ -69,8 +69,8 @@ export interface SectionDraft {
   /** How teams change lane after each race: the API's `LaneRotationMode` (0 move up, 1 stay, 2 move down). Missing leaves it as saved. */
   laneRotation?: number;
   /**
-   * Races for the B and C finals, when the age group has more than one final. Kept in the draft only: the API has one finals
-   * session for each age group, so these lists are not saved yet.
+   * Races for the B and C finals, when the age group has more than one final. Saved on the finals session as
+   * `plannedFinalRaces` ({ B: [...], C: [...] }); the A final's list is `finalRaces`.
    */
   finalRacesB?: string[] | null;
   finalRacesC?: string[] | null;

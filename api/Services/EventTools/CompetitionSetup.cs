@@ -31,7 +31,7 @@ public sealed record CompetitionSetup(
         int? SectionIndex, string Name, string? ArenaName, double? StartOffsetMinutes, int OrderIndex, string? Notes,
         bool IsBreak, int? DurationMinutes, SessionKind Kind, string? Location, int? LanesPerHeat, int? MinutesPerHeat,
         bool RaceOrderAlternating, LaneRotationMode LaneRotationMode, int? QualifiersPerHeat, string? PlannedRaces,
-        IReadOnlyList<FinalHeatSetup>? FinalHeats = null);
+        IReadOnlyList<FinalHeatSetup>? FinalHeats = null, string? PlannedFinalRaces = null);
 
     /// <summary>
     /// An empty lettered final ("A Final") of a finals session: its label, order, timing and race names, with no teams. Kept so
@@ -69,7 +69,7 @@ public sealed record CompetitionSetup(
                 s.ScheduledStart.HasValue ? (s.ScheduledStart.Value - source.StartDate).TotalMinutes : null,
                 s.OrderIndex, CleanNotes(s.Notes), s.IsBreak, s.DurationMinutes, s.Kind, s.Location, s.LanesPerHeat,
                 s.MinutesPerHeat, s.RaceOrderAlternating, s.LaneRotationMode, s.QualifiersPerHeat, RaceList(s),
-                FinalHeatsOf(s, source.StartDate));
+                FinalHeatsOf(s, source.StartDate), s.PlannedFinalRaces);
         }).ToList();
         return new CompetitionSetup(
             source.Icon, source.Location, source.Latitude, source.Longitude, source.Description, source.What3Words,
@@ -195,7 +195,7 @@ public sealed class CompetitionSetupService(AppDbContext db)
                     Status = SessionStatus.Upcoming, OrderIndex = s.OrderIndex, Notes = s.Notes, IsBreak = s.IsBreak,
                     DurationMinutes = s.DurationMinutes, Kind = s.Kind, Location = s.Location, LanesPerHeat = s.LanesPerHeat,
                     MinutesPerHeat = s.MinutesPerHeat, RaceOrderAlternating = s.RaceOrderAlternating,
-                    LaneRotationMode = s.LaneRotationMode, QualifiersPerHeat = s.QualifiersPerHeat, PlannedRaces = s.PlannedRaces,
+                    LaneRotationMode = s.LaneRotationMode, QualifiersPerHeat = s.QualifiersPerHeat, PlannedRaces = s.PlannedRaces, PlannedFinalRaces = s.PlannedFinalRaces,
                 };
                 foreach (var h in s.FinalHeats ?? [])
                 {

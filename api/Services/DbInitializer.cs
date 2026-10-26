@@ -221,6 +221,7 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "Sessions", "LaneRotationMode", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "Sessions", "QualifiersPerHeat", "INTEGER NULL");
         await EnsureColumnAsync(db, "Sessions", "PlannedRaces", "TEXT NULL");
+        await EnsureColumnAsync(db, "Sessions", "PlannedFinalRaces", "TEXT NULL");
         await EnsureColumnAsync(db, "Competitions", "LaneHatbands", "TEXT NULL");
         await EnsureColumnAsync(db, "Results", "IsSitOut", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "Results", "Status", "INTEGER NOT NULL DEFAULT 0");

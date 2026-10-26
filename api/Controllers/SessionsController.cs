@@ -64,6 +64,8 @@ public class SessionsController : ControllerBase
         if (req.CompetitionSectionId.HasValue &&
             !await _db.CompetitionSections.AnyAsync(cs => cs.Id == req.CompetitionSectionId.Value && cs.CompetitionId == competitionId))
             return BadRequest(new { message = "Section not found in this competition." });
+        if (PlannedFinalRaceLists.FirstInvalidKey(req.PlannedFinalRaces) is { } badKey)
+            return BadRequest(new { message = $"'{badKey}' isn't a final. Use a single letter from B to Z." });
         var kind = req.Kind ?? (req.IsBreak ? SessionKind.Break : SessionKind.Race);
         var s = new Session
         {
@@ -80,7 +82,8 @@ public class SessionsController : ControllerBase
             Location = req.Location,
             LanesPerHeat = req.LanesPerHeat,
             MinutesPerHeat = req.MinutesPerHeat,
-            PlannedRaces = kind == SessionKind.Race ? PlannedRaceList.Write(req.PlannedRaces) : null
+            PlannedRaces = kind == SessionKind.Race ? PlannedRaceList.Write(req.PlannedRaces) : null,
+            PlannedFinalRaces = kind == SessionKind.Race ? PlannedFinalRaceLists.Write(req.PlannedFinalRaces) : null
         };
         _db.Sessions.Add(s);
         await _db.SaveChangesAsync();
@@ -108,14 +111,18 @@ public class SessionsController : ControllerBase
         if (req.ScheduledStart.HasValue) s.ScheduledStart = req.ScheduledStart.Value;
         if (req.MinutesPerHeat.HasValue) s.MinutesPerHeat = req.MinutesPerHeat.Value;
         if (req.DurationMinutes.HasValue && s.Heats.Count == 0) s.DurationMinutes = req.DurationMinutes.Value;
-        if (req.LanesPerHeat.HasValue || req.PlannedRaces is not null)
+        if (PlannedFinalRaceLists.FirstInvalidKey(req.PlannedFinalRaces) is { } badKey)
+            return BadRequest(new { message = $"'{badKey}' isn't a final. Use a single letter from B to Z." });
+        if (req.LanesPerHeat.HasValue || req.PlannedRaces is not null || req.PlannedFinalRaces is not null)
         {
             // Heat size and the race list are structure: they can't change once the session has started or been scored.
             if (HasScores(s) && ((req.LanesPerHeat.HasValue && req.LanesPerHeat != s.LanesPerHeat)
-                || (req.PlannedRaces is not null && PlannedRaceList.Write(req.PlannedRaces) != s.PlannedRaces)))
+                || (req.PlannedRaces is not null && PlannedRaceList.Write(req.PlannedRaces) != s.PlannedRaces)
+                || (req.PlannedFinalRaces is not null && PlannedFinalRaceLists.Write(req.PlannedFinalRaces) != s.PlannedFinalRaces)))
                 return Conflict(new { message = "This session has started or has scores, so its structure can't change." });
             if (req.LanesPerHeat.HasValue) s.LanesPerHeat = req.LanesPerHeat.Value;
             if (req.PlannedRaces is not null) s.PlannedRaces = PlannedRaceList.Write(req.PlannedRaces);
+            if (req.PlannedFinalRaces is not null) s.PlannedFinalRaces = PlannedFinalRaceLists.Write(req.PlannedFinalRaces);
         }
         await _db.SaveChangesAsync();
 

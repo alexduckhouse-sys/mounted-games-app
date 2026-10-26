@@ -901,6 +901,25 @@ describe('CompetitionEditor: review', () => {
 });
 
 describe('CompetitionEditor: creating', () => {
+  it('saves the B and C finals own race lists on the finals session, only for finals the age group has', async () => {
+    seed('review', {
+      sections: [
+        { ...defaultSection(), ageGroup: 'Juniors', format: 3, maxParticipants: '16', maxTeamsPerHeat: '8', sessions: [{ races: ['Bending'] }], finalRaces: ['Bending', 'Flag'], finalRacesB: ['Mug'], finalRacesC: ['Relay'] },
+      ],
+      arenas: [{ name: 'Main arena', lanes: '6' }],
+      breaks: [],
+    });
+    mount();
+    await userEvent.click(createButton());
+    expect(await screen.findByRole('heading', { level: 2, name: 'Competition created' })).toBeInTheDocument();
+    const finals = vi.mocked(api.post).mock.calls
+      .filter(([url]) => url === '/competitions/41/sessions').map(([, body]) => body as Record<string, unknown>)
+      .find((s) => s.name === 'Finals · Junior Individuals');
+    // 16 entries on 8 lanes make two finals, so the C list is not sent.
+    expect(finals).toMatchObject({ plannedRaces: ['Bending', 'Flag'], plannedFinalRaces: { B: ['Mug'] } });
+    expect(finals?.plannedFinalRaces as Record<string, string[]>).not.toHaveProperty('C');
+  });
+
   it('creates the competition, its age groups, sessions with estimated starts, and breaks, then offers a timetable', async () => {
     seed('review', {
       organiserName: 'Cheshire PC', location: 'Tatton', description: 'Notes', paymentDestination: 'Bank', termsText: 'T', passportCheck: true,
