@@ -347,6 +347,9 @@ public static class ReviewCompetitionSeeder
     await db.Set<EventCommerceSettings>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
 
     // Timetable and scoring, deepest first.
+    var shiftIds = db.Set<VolunteerShift>().Where(x => ids.Contains(x.CompetitionId)).Select(x => x.Id);
+    await db.Set<VolunteerClaim>().Where(x => shiftIds.Contains(x.ShiftId)).ExecuteDeleteAsync();
+    await db.Set<VolunteerShift>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
     await db.Set<RaceScoreEvent>().Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();
     await db.Set<RaceScoreState>().Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();
     await db.Results.Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();
