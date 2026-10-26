@@ -22,6 +22,9 @@ public sealed record CreateOrderResult(EventOrder? Order, CreateOrderError Error
 
 public sealed class CommerceOrderService(AppDbContext db)
 {
+    /// <summary>The longest detail a buyer can give for an item's prompt (matches the column).</summary>
+    public const int MaxDetailLength = 80;
+
     public async Task<CreateOrderResult> CreateAsync(
         int competitionId,
         string buyerUserId,
@@ -38,10 +41,22 @@ public sealed class CommerceOrderService(AppDbContext db)
         if (request.Items.Any(x => x.ListingId <= 0 || x.Quantity is < 1 or > 99))
             return Invalid("Each item needs a valid listing and a quantity from 1 to 99.");
 
-        var grouped = request.Items
+        if (request.Items.Any(x => x.Detail?.Trim().Length > MaxDetailLength))
+            return Invalid($"Details can be at most {MaxDetailLength} characters.");
+        var byListing = request.Items
             .GroupBy(x => x.ListingId)
-            .Select(g => new CreateEventOrderLineRequest(g.Key, g.Sum(x => x.Quantity)))
+            .Select(g => new
+            {
+                ListingId = g.Key,
+                Quantity = g.Sum(x => x.Quantity),
+                Details = g.Select(x => x.Detail?.Trim()).Where(d => !string.IsNullOrEmpty(d)).Distinct().ToList(),
+            })
             .OrderBy(x => x.ListingId)
+            .ToList();
+        if (byListing.Any(x => x.Details.Count > 1))
+            return Invalid("Send each item once, with a single detail.");
+        var grouped = byListing
+            .Select(x => new CreateEventOrderLineRequest(x.ListingId, x.Quantity, x.Details.SingleOrDefault()))
             .ToList();
         if (grouped.Any(x => x.Quantity > 99))
             return Invalid("The total quantity for one listing cannot exceed 99.");
@@ -85,6 +100,14 @@ public sealed class CommerceOrderService(AppDbContext db)
                 {
                     await transaction.RollbackAsync(cancellationToken);
                     return new CreateOrderResult(null, CreateOrderError.ListingUnavailable, "One or more listings are no longer available.");
+                }
+                // An item that asks the buyer for something (a stable number, a number plate) needs an answer.
+                foreach (var requested in grouped)
+                {
+                    var asked = listings[requested.ListingId].CatalogueItem!;
+                    if (string.IsNullOrWhiteSpace(asked.DetailPrompt) || !string.IsNullOrWhiteSpace(requested.Detail)) continue;
+                    await transaction.RollbackAsync(cancellationToken);
+                    return Invalid($"Enter the {Lower(asked.DetailPrompt)} for {asked.Title}.");
                 }
                 var totalMinor = grouped.Sum(x =>
                     (long)listings[x.ListingId].CatalogueItem!.PriceMinor * x.Quantity);
@@ -147,6 +170,8 @@ public sealed class CommerceOrderService(AppDbContext db)
                         TitleSnapshot = item.Title,
                         UnitPriceMinorSnapshot = item.PriceMinor,
                         Quantity = requested.Quantity,
+                        // Only an item that asks for a detail keeps one.
+                        Detail = string.IsNullOrWhiteSpace(item.DetailPrompt) ? null : requested.Detail?.Trim(),
                         ReservedStockQuantity = reservedStockByListing[listing.Id],
                         LineTotalMinor = checked((int)((long)item.PriceMinor * requested.Quantity)),
                     });
@@ -230,9 +255,17 @@ public sealed class CommerceOrderService(AppDbContext db)
     private static CreateOrderResult Invalid(string message) =>
         new(null, CreateOrderError.InvalidRequest, message);
 
+    /// <summary>"Stable number" becomes "stable number" for the middle of a sentence; "FEI number" stays as it is.</summary>
+    private static string Lower(string prompt)
+    {
+        var text = prompt.Trim();
+        return text.Length > 1 && char.IsUpper(text[0]) && !char.IsUpper(text[1]) ? char.ToLowerInvariant(text[0]) + text[1..] : text;
+    }
+
     private static string Hash(int competitionId, IReadOnlyList<CreateEventOrderLineRequest> items)
     {
-        var input = $"{competitionId}|{string.Join('|', items.Select(x => $"{x.ListingId}:{x.Quantity}"))}";
+        // The detail joins the hash only when there is one, so orders made before details existed still replay.
+        var input = $"{competitionId}|{string.Join('|', items.Select(x => $"{x.ListingId}:{x.Quantity}{(string.IsNullOrEmpty(x.Detail) ? "" : ":" + x.Detail)}"))}";
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(input)));
     }
 }
