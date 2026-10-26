@@ -42,8 +42,8 @@ describe('passport check tab', () => {
     await userEvent.click(toggle);
 
     await waitFor(() => expect(put).toHaveBeenCalledWith('/event-tools/competitions/12/passport-check/settings', { enabled: true }));
-    expect(await screen.findByText('1 of 3 ponies checked')).toBeInTheDocument();
-    expect(screen.getByText('No declaration yet, so no ponies to check.')).toBeInTheDocument();
+    expect(await screen.findByText('No declaration yet, so no ponies to check.')).toBeInTheDocument();
+    expect(screen.queryByText(/ponies checked/)).not.toBeInTheDocument();
     expect(screen.getByText('The declaration has no pony names.')).toBeInTheDocument();
     expect(screen.getByText(/checked \d\d:\d\d by Sue Steward/)).toBeInTheDocument();
     expect(screen.getByText('Ash (withdrawn)')).toBeInTheDocument();
@@ -59,7 +59,7 @@ describe('passport check tab', () => {
     await userEvent.click(brambles[0]);
 
     await waitFor(() => expect(put).toHaveBeenCalledWith('/event-tools/competitions/12/passport-check/teams/1', { ponyName: 'Bramble', checked: true }));
-    expect(await screen.findByText('2 of 3 ponies checked')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByLabelText(/^Bramble/)[0]).toBeChecked());
     const after = screen.getAllByLabelText(/^Bramble/);
     expect(after[0]).toBeChecked();
     expect(after[1]).not.toBeChecked();
@@ -92,7 +92,7 @@ describe('passport check tab', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load the passport check.');
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByText('No ponies have been declared yet.')).toBeInTheDocument();
-    expect(screen.getByText('0 of 0 ponies checked')).toBeInTheDocument();
+    expect(screen.getByLabelText('Find a team or pony')).toBeInTheDocument();
   });
 
   it('saves a vet or official inspection, searches by passport or owner, and shows vaccine expired status', async () => {

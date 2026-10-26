@@ -244,3 +244,7 @@
 /* The final in the race editor */
 .ops-addbar-flat { margin-top: 0; }
 .ops-final-end { display: flex; justify-content: flex-end; }
+
+/* On the day tools (tack, passport, print, people and QR codes, results): tight headings with no line under them. Tack, passport, print and results also run their lists edge to edge like the event's Details page, with no line above or below; people and QR codes keep cards. */
+.ops-tools .rf-sec { border-bottom: 0; margin-top: 4px; }
+.ops-flat .rf-list { margin-inline: -16px; border: 0; border-radius: 0; box-shadow: none; }
