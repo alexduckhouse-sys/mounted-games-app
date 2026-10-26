@@ -450,6 +450,7 @@ public static class DbInitializer
 
         await TackCheck.TackCheckSqliteSchema.EnsureAsync(db);
         await EntryExtensionsSqliteSchema.EnsureAsync(db);
+        await Accounts.AccountAccessSqliteSchema.EnsureAsync(db);
 
     }
 
@@ -574,6 +575,9 @@ public static class DbInitializer
             await users.CreateAsync(admin, "Admin!234");
             await users.AddToRoleAsync(admin, Roles.Admin);
         }
+        // The demo admin is also the master admin, so the lock feature can be tried locally. Never seeded in production.
+        if (!await users.IsInRoleAsync(admin, Roles.MasterAdmin))
+            await users.AddToRoleAsync(admin, Roles.MasterAdmin);
 
         // Demo data references real clubs from the preset list above.
         var warwickshire = await db.Clubs.FirstAsync(c => c.Name == "Warwickshire Hunt");

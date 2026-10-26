@@ -13,6 +13,7 @@ using MountedGames.Api.Data;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Security;
 using MountedGames.Api.Services;
+using MountedGames.Api.Services.Accounts;
 using MountedGames.Api.Services.Email;
 
 namespace MountedGames.Api.Controllers;
@@ -43,7 +44,7 @@ public class AuthController : ControllerBase
     [EnableRateLimiting("auth")]
     [HttpPost("login")]
     [AllowAnonymous]
-    public async Task<ActionResult<AuthResponse>> Login(LoginRequest req)
+    public async Task<ActionResult<AuthResponse>> Login(LoginRequest req, [FromServices] AccountIpRecorder ipRecorder)
     {
         var user = await _users.FindByEmailAsync(req.Email);
         // The shared organiser account uses the admin key. Old demo databases
@@ -55,22 +56,33 @@ public class AuthController : ControllerBase
         var check = await _signIn.CheckPasswordSignInAsync(user, req.Password, lockoutOnFailure: true);
         if (!check.Succeeded)
             return Unauthorized(new { message = "Invalid email or password." });
+        // Only someone who knows the password hears that the account is stopped, and not why: a lock or a block gives the same answer.
+        if (user.IsAccessStopped)
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = AccessStoppedMessage, code = "account_stopped" });
 
+        await ipRecorder.RecordAsync(user.Id, HttpContext.Connection.RemoteIpAddress?.ToString(), HttpContext.RequestAborted);
         var (token, expiresAt, roles) = await _tokens.CreateTokenAsync(user);
         var club = user.ClubId.HasValue ? await _db.Clubs.FindAsync(user.ClubId.Value) : null;
         return new AuthResponse(token, expiresAt,
             new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club?.Name, roles.ToList(), user.EmailConfirmed));
     }
 
+    private const string AccessStoppedMessage = "This account can't sign in right now. Contact an organiser or administrator.";
+
     [EnableRateLimiting("auth")]
     [HttpPost("admin-key")]
     [AllowAnonymous]
-    public async Task<ActionResult<AuthResponse>> AdminKey([FromServices] IConfiguration config, AdminKeyRequest req, [FromServices] AccountEmailService accountEmail)
+    public async Task<ActionResult<AuthResponse>> AdminKey([FromServices] IConfiguration config, AdminKeyRequest req, [FromServices] AccountEmailService accountEmail,
+        [FromServices] AccountIpRecorder ipRecorder)
     {
         var expected = config["Admin:Key"];
         if (string.IsNullOrWhiteSpace(expected) || string.IsNullOrEmpty(req.Key) || !CryptographicOperations.FixedTimeEquals(
                 SHA256.HashData(Encoding.UTF8.GetBytes(req.Key)), SHA256.HashData(Encoding.UTF8.GetBytes(expected))))
             return Unauthorized(new { message = "Invalid admin key." });
+
+        // The key is not a way round a block on the network.
+        if (await _db.IsIpBlockedAsync(HttpContext, HttpContext.RequestAborted))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Sign-in from this network is blocked." });
 
         string? titleOverride = null;
         if (!string.IsNullOrWhiteSpace(req.Title))
@@ -98,12 +110,18 @@ public class AuthController : ControllerBase
             var existing = await _users.FindByEmailAsync(emailOverride);
             if (existing is not null)
             {
+                // Nor a way round a lock or block on the account.
+                if (existing.IsAccessStopped)
+                    return StatusCode(StatusCodes.Status403Forbidden, new { message = AccessStoppedMessage, code = "account_stopped" });
                 // A shared organiser key does not prove ownership of an existing passwordless identity.
                 if (await _users.IsLockedOutAsync(existing) || !await _users.HasPasswordAsync(existing))
                     return Unauthorized(new { message = "This account cannot use organiser-key sign-in. Use your account recovery process or a different address." });
                 var check = await _signIn.CheckPasswordSignInAsync(existing, req.Password, lockoutOnFailure: true);
                 if (!check.Succeeded)
                     return Unauthorized(new { message = "That email already has an account — enter its password to sign in." });
+                if (existing.IsAccessStopped)
+                    return StatusCode(StatusCodes.Status403Forbidden, new { message = AccessStoppedMessage, code = "account_stopped" });
+                await ipRecorder.RecordAsync(existing.Id, HttpContext.Connection.RemoteIpAddress?.ToString(), HttpContext.RequestAborted);
                 return await _db.Database.CreateExecutionStrategy().ExecuteAsync<ActionResult<AuthResponse>>(async () =>
                 {
                     _db.ChangeTracker.Clear();
@@ -150,7 +168,10 @@ public class AuthController : ControllerBase
                     new UserProfile(adminUser.Id, adminUser.Email!, adminUser.FullName, null, null, adminRoles.ToList(), adminUser.EmailConfirmed));
             });
             if (createdAccount.Value is { } createdProfile)
+            {
+                await ipRecorder.RecordAsync(createdProfile.User.Id, HttpContext.Connection.RemoteIpAddress?.ToString(), HttpContext.RequestAborted);
                 await accountEmail.SendConfirmationAsync((await _users.FindByIdAsync(createdProfile.User.Id))!);
+            }
             return createdAccount;
         }
 
@@ -162,6 +183,40 @@ public class AuthController : ControllerBase
             new UserProfile(user.Id, emailOverride ?? user.Email!, titleOverride ?? user.FullName, user.ClubId, null, roles.ToList(), user.EmailConfirmed));
     }
 
+    /// <summary>
+    /// Becomes master admin by giving the master admin key. A signed-in Admin only. The key itself is never stored: the host holds
+    /// its SHA-256 (<c>MasterAdmin:KeyHash</c>). Without that setting this answers 404, as if it didn't exist. The shared
+    /// admin-key account can't take the role (everyone who signs in with the admin key would get it). Returns a fresh token,
+    /// because roles travel in the token. Logs only the account id.
+    /// </summary>
+    [EnableRateLimiting("auth")]
+    [HttpPost("master-admin")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<ActionResult<AuthResponse>> BecomeMasterAdmin(
+        MasterAdminKeyRequest req, [FromServices] IConfiguration config, [FromServices] ILogger<AuthController> log)
+    {
+        var hash = config["MasterAdmin:KeyHash"];
+        if (!MasterAdminKey.IsValidHash(hash)) return NotFound();
+        var user = await _users.GetUserAsync(User);
+        if (user is null) return Unauthorized();
+        if (string.Equals(user.Email, "admin@mg.local", StringComparison.OrdinalIgnoreCase))
+            return Conflict(new { message = "Sign in with your own account to become master admin." });
+        if (!MasterAdminKey.Matches(req?.Key, hash!))
+        {
+            log.LogWarning("Wrong master admin key from account {UserId}.", user.Id);
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "That key isn't right." });
+        }
+        if (!await _users.IsInRoleAsync(user, Roles.MasterAdmin))
+        {
+            var granted = await _users.AddToRoleAsync(user, Roles.MasterAdmin);
+            if (!granted.Succeeded) return StatusCode(500, new { message = "Could not grant the role." });
+            log.LogInformation("Account {UserId} became master admin.", user.Id);
+        }
+        var (token, expiresAt, roles) = await _tokens.CreateTokenAsync(user);
+        return new AuthResponse(token, expiresAt,
+            new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, null, roles.ToList(), user.EmailConfirmed));
+    }
+
     [EnableRateLimiting("auth")]
     [HttpPost("signup-trainer")]
     [AllowAnonymous]
@@ -169,7 +224,8 @@ public class AuthController : ControllerBase
         SignupTrainerRequest req,
         [FromServices] IEmailDomainChecker domains,
         [FromServices] AccountEmailService accountEmail,
-        [FromServices] IConfiguration config)
+        [FromServices] IConfiguration config,
+        [FromServices] AccountIpRecorder ipRecorder)
     {
         var raw = (req.Username ?? string.Empty).Trim();
         if (raw.Length == 0)
@@ -253,6 +309,8 @@ public class AuthController : ControllerBase
                 new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club.Name, rolesOut.ToList(), user.EmailConfirmed));
         });
         // Send once, after the retryable database transaction has committed.
+        if (createdAccount.Value is { } signedUp)
+            await ipRecorder.RecordAsync(signedUp.User.Id, HttpContext.Connection.RemoteIpAddress?.ToString(), HttpContext.RequestAborted);
         if (realEmail && createdAccount.Value is { } createdProfile)
             await accountEmail.SendConfirmationAsync((await _users.FindByIdAsync(createdProfile.User.Id))!);
         return createdAccount;
@@ -338,7 +396,10 @@ public class AuthController : ControllerBase
             return PasswordProblems(result);
 
         var role = string.IsNullOrWhiteSpace(req.Role) ? Roles.Trainer : req.Role;
-        if (!Roles.All.Contains(role))
+        if (role == Roles.Admin && !User.IsInRole(Roles.MasterAdmin))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Only a master admin can make an admin account." });
+        // MasterAdmin is never handed out here, so no admin can make a master admin.
+        if (!Roles.Assignable.Contains(role))
             role = Roles.Trainer;
         await _users.AddToRoleAsync(user, role);
 

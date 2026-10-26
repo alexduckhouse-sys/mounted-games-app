@@ -2,6 +2,8 @@ namespace MountedGames.Api.Auth;
 
 public record LoginRequest(string Email, string Password);
 
+public record MasterAdminKeyRequest(string Key);
+
 public record AdminKeyRequest(string Key, string? Title = null, string? Email = null, string? Password = null);
 
 public record RegisterRequest(

@@ -1,3 +1,4 @@
+using MountedGames.Api.Services.Accounts;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
@@ -14,15 +15,11 @@ public sealed class PublicReadAttribute : Attribute, IAsyncActionFilter
 {
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
-        var ip = context.HttpContext.Connection.RemoteIpAddress?.ToString();
-        if (!string.IsNullOrEmpty(ip))
+        var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+        if (await db.IsIpBlockedAsync(context.HttpContext, context.HttpContext.RequestAborted, includeAccountBlocks: false))
         {
-            var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
-            if (await db.IpBlocks.AnyAsync(b => b.IpAddress == ip, context.HttpContext.RequestAborted))
-            {
-                context.Result = new ObjectResult(new { message = "This address has been blocked." }) { StatusCode = StatusCodes.Status403Forbidden };
-                return;
-            }
+            context.Result = new ObjectResult(new { message = "This address has been blocked." }) { StatusCode = StatusCodes.Status403Forbidden };
+            return;
         }
         await next();
     }

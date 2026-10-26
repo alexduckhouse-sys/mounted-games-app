@@ -32,6 +32,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<StartingPoint> StartingPoints => Set<StartingPoint>();
     public DbSet<TrainerNote> TrainerNotes => Set<TrainerNote>();
     public DbSet<IpBlock> IpBlocks => Set<IpBlock>();
+    public DbSet<AccountIp> AccountIps => Set<AccountIp>();
+    public DbSet<AccountInvite> AccountInvites => Set<AccountInvite>();
     public DbSet<RaceTemplate> RaceTemplates => Set<RaceTemplate>();
     public DbSet<TeamSupporter> TeamSupporters => Set<TeamSupporter>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
@@ -173,6 +175,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
         b.Entity<AppUser>(e =>
         {
             e.Property(u => u.FullName).HasMaxLength(200).IsRequired();
+            e.Property(u => u.BlockReason).HasMaxLength(500);
             e.HasOne(u => u.Club)
                 .WithMany()
                 .HasForeignKey(u => u.ClubId)
@@ -395,6 +398,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
         {
             e.Property(i => i.IpAddress).HasMaxLength(64).IsRequired();
             e.HasIndex(i => i.IpAddress).IsUnique();
+            e.HasIndex(i => i.BlockedAccountUserId);
         });
 
         b.Entity<RaceTemplate>(e =>

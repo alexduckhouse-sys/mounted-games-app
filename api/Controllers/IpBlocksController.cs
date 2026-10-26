@@ -18,7 +18,8 @@ public class IpBlocksController : ControllerBase
 
     [HttpGet]
     public async Task<IEnumerable<IpBlockDto>> List() =>
-        (await _db.IpBlocks.OrderByDescending(i => i.CreatedAt).ToListAsync())
+        // Networks added by blocking an account are managed with that account (unblock it to lift them), so they aren't listed.
+        (await _db.IpBlocks.Where(i => i.BlockedAccountUserId == null).OrderByDescending(i => i.CreatedAt).ToListAsync())
             .Select(i => new IpBlockDto(i.Id, i.IpAddress, i.Reason, i.CreatedByUserId, i.CreatedAt));
 
     [HttpPost]
@@ -40,7 +41,7 @@ public class IpBlocksController : ControllerBase
     public async Task<IActionResult> Delete(int id)
     {
         var block = await _db.IpBlocks.FindAsync(id);
-        if (block is null) return NotFound();
+        if (block is null || block.BlockedAccountUserId is not null) return NotFound();
         _db.IpBlocks.Remove(block);
         await _db.SaveChangesAsync();
         return NoContent();
