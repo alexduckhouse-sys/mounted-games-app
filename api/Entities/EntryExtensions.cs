@@ -18,6 +18,7 @@ public class SignupExtras
 {
     public int SignupId { get; set; }
     public int StablesCount { get; set; }
+    public int HookupsCount { get; set; }
     public string? StablingClubOrTeam { get; set; }
     public string? PaymentMethod { get; set; }
     public bool IsWaitlist { get; set; }
@@ -30,6 +31,8 @@ public class CompetitionEntrySettings
 {
     public int CompetitionId { get; set; }
     public DateTime? EntriesCloseAt { get; set; }
+    public int? MaxStables { get; set; }
+    public int? MaxHookups { get; set; }
 }
 
 public class CompetitionDeclarationLock

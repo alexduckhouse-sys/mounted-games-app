@@ -346,6 +346,26 @@ export interface CompetitionDetail {
   laneHatbands?: string[] | null;
   /** Where entry fees are paid out: the organiser's club and its masked account. Public, no personal data. */
   payoutsTo?: PayoutsTo | null;
+  /** Venue capacity limit for stables across entries and shop orders. Null when unlimited. */
+  maxStables?: number | null;
+  /** Venue capacity limit for electric hook-ups across entries and shop orders. Null when unlimited. */
+  maxHookups?: number | null;
+  /** Remaining stables available at this venue when `maxStables` is set. */
+  stablesRemaining?: number | null;
+  /** Remaining electric hook-ups available at this venue when `maxHookups` is set. */
+  hookupsRemaining?: number | null;
+}
+
+export interface CompetitionEntrySettings {
+  competitionId: number;
+  entriesCloseAt?: string | null;
+  entriesClosed: boolean;
+  maxStables?: number | null;
+  maxHookups?: number | null;
+  stablesBooked?: number;
+  hookupsBooked?: number;
+  stablesRemaining?: number | null;
+  hookupsRemaining?: number | null;
 }
 
 /** The public summary of a club's payouts. `maskedAccount` is like "••••1234" and only appears once `ready`. */
@@ -418,6 +438,14 @@ export interface MySignup {
   teamId?: number | null;
   teamName?: string | null;
   createdAt: string;
+  stablesCount?: number;
+  hookupsCount?: number;
+  stablingClubOrTeam?: string | null;
+  paymentMethod?: string | null;
+  isWaitlist?: boolean;
+  isWithdrawn?: boolean;
+  refundPending?: boolean;
+  teamsCount?: number;
 }
 
 export interface FormedTeamPreview {
@@ -462,6 +490,14 @@ export interface SectionSignup {
   teamName?: string | null;
   /** A team manager or trainer entering a whole team in one go. */
   isWholeTeam?: boolean;
+  stablesCount?: number;
+  hookupsCount?: number;
+  stablingClubOrTeam?: string | null;
+  paymentMethod?: string | null;
+  isWaitlist?: boolean;
+  isWithdrawn?: boolean;
+  refundPending?: boolean;
+  teamsCount?: number;
 }
 
 export interface ShopPost {

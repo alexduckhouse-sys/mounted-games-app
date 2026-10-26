@@ -160,6 +160,7 @@ public class CompetitionsController : ControllerBase
             .FirstOrDefaultAsync(x => x.Id == id);
         if (c is null) return NotFound();
         var signupCounts = await ActiveSignupCountsAsync(id);
+        var capacity = await VenueCapacity.GetCapacityAsync(_db, id);
 
         return c.ToDto(
             c.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto(signupCounts.GetValueOrDefault(s.Id))).ToList(),
@@ -167,7 +168,11 @@ public class CompetitionsController : ControllerBase
             c.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
             isDemo: await IsDemoCompetitionAsync(c.Id),
             payoutsTo: await _db.PayoutsToAsync(c.CreatedByUserId, c.DecFormConfigJson),
-            includePaymentDetails: User.Identity?.IsAuthenticated == true);
+            includePaymentDetails: User.Identity?.IsAuthenticated == true,
+            maxStables: capacity.MaxStables,
+            maxHookups: capacity.MaxHookups,
+            stablesRemaining: capacity.StablesRemaining,
+            hookupsRemaining: capacity.HookupsRemaining);
     }
 
     /// <summary>
@@ -198,6 +203,7 @@ public class CompetitionsController : ControllerBase
             .Include(t => t.Club).Include(t => t.Section).Include(t => t.Trainer).Include(t => t.Results)
             .ToListAsync();
         var signupCounts = await ActiveSignupCountsAsync(id);
+        var capacity = await VenueCapacity.GetCapacityAsync(_db, id);
 
         return c.ToDto(
             c.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto(signupCounts.GetValueOrDefault(s.Id))).ToList(),
@@ -205,7 +211,11 @@ public class CompetitionsController : ControllerBase
             sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
             isDemo: await IsDemoCompetitionAsync(c.Id),
             payoutsTo: await _db.PayoutsToAsync(c.CreatedByUserId, c.DecFormConfigJson),
-            includePaymentDetails: User.Identity?.IsAuthenticated == true);
+            includePaymentDetails: User.Identity?.IsAuthenticated == true,
+            maxStables: capacity.MaxStables,
+            maxHookups: capacity.MaxHookups,
+            stablesRemaining: capacity.StablesRemaining,
+            hookupsRemaining: capacity.HookupsRemaining);
     }
 
     internal sealed record SessionOutline(int Id, string? ArenaName, SessionStatus Status, int OrderIndex);
@@ -295,6 +305,16 @@ public class CompetitionsController : ControllerBase
         };
         _db.Competitions.Add(c);
         await _db.SaveChangesAsync();
+        if (req.MaxStables is > 0 || req.MaxHookups is > 0)
+        {
+            _db.Add(new CompetitionEntrySettings
+            {
+                CompetitionId = c.Id,
+                MaxStables = req.MaxStables is > 0 ? req.MaxStables : null,
+                MaxHookups = req.MaxHookups is > 0 ? req.MaxHookups : null,
+            });
+            await _db.SaveChangesAsync();
+        }
         return CreatedAtAction(nameof(Get), new { id = c.Id }, c.ToSummary());
     }
 
@@ -353,6 +373,19 @@ public class CompetitionsController : ControllerBase
         c.EndDate = req.EndDate;
         c.IsActive = req.IsActive;
         c.IsArchived = req.IsArchived;
+        if (req.MaxStables.HasValue || req.MaxHookups.HasValue)
+        {
+            var settings = await _db.Set<CompetitionEntrySettings>().FindAsync(c.Id);
+            if (settings is null)
+            {
+                settings = new CompetitionEntrySettings { CompetitionId = c.Id };
+                _db.Add(settings);
+            }
+            if (req.MaxStables.HasValue)
+                settings.MaxStables = req.MaxStables.Value > 0 ? req.MaxStables.Value : null;
+            if (req.MaxHookups.HasValue)
+                settings.MaxHookups = req.MaxHookups.Value > 0 ? req.MaxHookups.Value : null;
+        }
         await _db.SaveChangesAsync();
         return c.ToSummary();
     }

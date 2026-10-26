@@ -1172,6 +1172,12 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<string>("EntriesCloseAt")
                         .HasColumnType("text");
 
+                    b.Property<int?>("MaxHookups")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MaxStables")
+                        .HasColumnType("integer");
+
                     b.HasKey("CompetitionId");
 
                     b.ToTable("CompetitionEntrySettings", (string)null);
@@ -3108,6 +3114,11 @@ namespace MountedGames.Api.Data.Migrations
                 {
                     b.Property<int>("SignupId")
                         .HasColumnType("integer");
+
+                    b.Property<int>("HookupsCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.Property<int>("IsWaitlist")
                         .ValueGeneratedOnAdd()

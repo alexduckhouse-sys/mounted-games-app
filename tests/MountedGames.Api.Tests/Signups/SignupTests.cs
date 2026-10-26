@@ -956,6 +956,104 @@ public class SignupTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task SharedVenueCapacity_EnforcesMaxStablesAndMaxHookupsAcrossEntriesAndShopOrders()
+    {
+        var section = await _f.NewSectionAsync();
+        var admin = await _f.AdminAsync();
+
+        var setCapRes = await admin.PutAsJsonAsync(
+            $"/api/competitions/{section.CompetitionId}/entry-settings",
+            new { maxStables = 4, maxHookups = 2 });
+        Assert.Equal(HttpStatusCode.OK, setCapRes.StatusCode);
+        var initialSettings = await setCapRes.Content.ReadFromJsonAsync<MountedGames.Api.Controllers.CompetitionEntrySettingsDto>();
+        Assert.Equal(4, initialSettings!.MaxStables);
+        Assert.Equal(2, initialSettings.MaxHookups);
+        Assert.Equal(4, initialSettings.StablesRemaining);
+        Assert.Equal(2, initialSettings.HookupsRemaining);
+
+        // 1. Entry books 2 stables and 1 electric hook-up
+        var (c1, _) = await _f.SignupAsync();
+        var entry1 = await c1.PostAsJsonAsync(
+            Url(section),
+            Entry("Rider One") with { StablesCount = 2, HookupsCount = 1, StablingClubOrTeam = "Cheshire PC" });
+        Assert.Equal(HttpStatusCode.OK, entry1.StatusCode);
+
+        // 2. Organiser lists stabling and electric hook-up in the Event Shop, and a buyer orders 1 stable and 1 hook-up
+        var stableCatRes = await admin.PostAsJsonAsync("/api/commerce/catalogue", new
+        {
+            title = "Weekend stabling",
+            description = "On-site box",
+            priceMinor = 3000,
+            stockQuantity = (int?)null,
+            category = 2, // Camping
+        });
+        Assert.Equal(HttpStatusCode.OK, stableCatRes.StatusCode);
+        var stableCat = await stableCatRes.Content.ReadFromJsonAsync<CatalogueItemDto>();
+
+        var hookupCatRes = await admin.PostAsJsonAsync("/api/commerce/catalogue", new
+        {
+            title = "Electric hook-up",
+            description = "16A pitch",
+            priceMinor = 2000,
+            stockQuantity = (int?)null,
+            category = 2, // Camping
+        });
+        Assert.Equal(HttpStatusCode.OK, hookupCatRes.StatusCode);
+        var hookupCat = await hookupCatRes.Content.ReadFromJsonAsync<CatalogueItemDto>();
+
+        var stableListRes = await admin.PostAsJsonAsync(
+            $"/api/commerce/competitions/{section.CompetitionId}/listings",
+            new { catalogueItemId = stableCat!.Id });
+        var stableListing = await stableListRes.Content.ReadFromJsonAsync<CompetitionListingDto>();
+
+        var hookupListRes = await admin.PostAsJsonAsync(
+            $"/api/commerce/competitions/{section.CompetitionId}/listings",
+            new { catalogueItemId = hookupCat!.Id });
+        var hookupListing = await hookupListRes.Content.ReadFromJsonAsync<CompetitionListingDto>();
+
+        var (buyer, _) = await _f.SignupAsync();
+        var shopOrderOk = await buyer.PostAsJsonAsync(
+            $"/api/commerce/competitions/{section.CompetitionId}/orders",
+            new
+            {
+                idempotencyKey = Guid.NewGuid().ToString("N"),
+                items = new[]
+                {
+                    new { listingId = stableListing!.Id, quantity = 1 },
+                    new { listingId = hookupListing!.Id, quantity = 1 },
+                },
+            });
+        Assert.Equal(HttpStatusCode.OK, shopOrderOk.StatusCode);
+
+        // Now 3 of 4 stables and 2 of 2 hook-ups are booked across both routes (1 stable left, 0 hook-ups left)
+        var midSettings = await admin.GetFromJsonAsync<MountedGames.Api.Controllers.CompetitionEntrySettingsDto>(
+            $"/api/competitions/{section.CompetitionId}/entry-settings");
+        Assert.Equal(3, midSettings!.StablesBooked);
+        Assert.Equal(1, midSettings.StablesRemaining);
+        Assert.Equal(2, midSettings.HookupsBooked);
+        Assert.Equal(0, midSettings.HookupsRemaining);
+
+        // 3. Another entry asking for 2 stables is rejected with "Only 1 stable remaining at this venue."
+        var (c2, _) = await _f.SignupAsync();
+        var tooManyStables = await c2.PostAsJsonAsync(
+            Url(section),
+            Entry("Rider Two") with { StablesCount = 2 });
+        Assert.Equal(HttpStatusCode.Conflict, tooManyStables.StatusCode);
+        Assert.Contains("Only 1 stable remaining at this venue.", await tooManyStables.Content.ReadAsStringAsync());
+
+        // 4. Shop order asking for another electric hook-up is rejected with "All electric hook-ups are booked."
+        var tooManyHookups = await buyer.PostAsJsonAsync(
+            $"/api/commerce/competitions/{section.CompetitionId}/orders",
+            new
+            {
+                idempotencyKey = Guid.NewGuid().ToString("N"),
+                items = new[] { new { listingId = hookupListing.Id, quantity = 1 } },
+            });
+        Assert.Equal(HttpStatusCode.Conflict, tooManyHookups.StatusCode);
+        Assert.Contains("All electric hook-ups are booked.", await tooManyHookups.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task MarkPaid_MarksBacsSignupPaidAndTriggersFormTeams()
     {
         var section = await _f.NewSectionAsync(priceMinor: 2500);

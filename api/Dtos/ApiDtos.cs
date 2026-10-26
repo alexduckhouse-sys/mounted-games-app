@@ -74,7 +74,11 @@ public record CompetitionDetail(
     bool UseRefereeCards = false,
     string? Postcode = null,
     string? CompetitionNumber = null,
-    string? ContactEmail = null);
+    string? ContactEmail = null,
+    int? MaxStables = null,
+    int? MaxHookups = null,
+    int? StablesRemaining = null,
+    int? HookupsRemaining = null);
 
 public record CreateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -90,7 +94,9 @@ public record CreateCompetitionRequest(
     IReadOnlyList<string>? LaneHatbands = null,
     bool UseRefereeCards = false,
     [MaxLength(CompetitionFields.CompetitionNumberMax)] string? CompetitionNumber = null,
-    [MaxLength(EmailAddresses.MaxLength)] string? ContactEmail = null);
+    [MaxLength(EmailAddresses.MaxLength)] string? ContactEmail = null,
+    [Range(0, 2000)] int? MaxStables = null,
+    [Range(0, 2000)] int? MaxHookups = null);
 
 public record UpdateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -109,7 +115,9 @@ public record UpdateCompetitionRequest(
     bool? UseRefereeCards = null,
     /// <summary>On an update, null leaves these three as they are and a blank value clears them.</summary>
     [MaxLength(CompetitionFields.CompetitionNumberMax)] string? CompetitionNumber = null,
-    [MaxLength(EmailAddresses.MaxLength)] string? ContactEmail = null);
+    [MaxLength(EmailAddresses.MaxLength)] string? ContactEmail = null,
+    [Range(0, 2000)] int? MaxStables = null,
+    [Range(0, 2000)] int? MaxHookups = null);
 
 public record SetSignupsLockedRequest(bool Locked);
 
@@ -202,7 +210,8 @@ public record CreateSectionSignupRequest(
     string? TeamName = null, bool WholeTeam = false,
     IReadOnlyList<string>? TeamMembers = null,
     [Range(0, 100)] int StablesCount = 0, [StringLength(200)] string? StablingClubOrTeam = null,
-    [StringLength(20)] string? PaymentMethod = null, bool IsWaitlist = false, [Range(1, 20)] int TeamsCount = 1);
+    [StringLength(20)] string? PaymentMethod = null, bool IsWaitlist = false, [Range(1, 20)] int TeamsCount = 1,
+    [Range(0, 100)] int HookupsCount = 0);
 
 public record UpdateSignupStatusRequest(SignupPaymentStatus Status);
 

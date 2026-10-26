@@ -40,7 +40,8 @@ public record CreateSectionSignupInput(
     [StringLength(200)] string? StablingClubOrTeam = null,
     [StringLength(20)] string? PaymentMethod = null,
     bool IsWaitlist = false,
-    [Range(1, 20)] int TeamsCount = 1
+    [Range(1, 20)] int TeamsCount = 1,
+    [Range(0, 100)] int HookupsCount = 0
 );
 
 public record SectionSignupExtendedDto(
@@ -58,7 +59,8 @@ public record SectionSignupExtendedDto(
     int StablesCount = 0, string? StablingClubOrTeam = null,
     string? PaymentMethod = null,
     bool IsWaitlist = false, bool IsWithdrawn = false, bool RefundPending = false,
-    int TeamsCount = 1
+    int TeamsCount = 1,
+    int HookupsCount = 0
 ) : SectionSignupDto(
     Id, CompetitionSectionId, SectionName, FullName, PonyClubName, ContactInfo,
     AmountMinor, Status, PaidAt, TeamId, CreatedAt,
@@ -82,7 +84,8 @@ public record MySignupExtendedDto(
     int StablesCount = 0, string? StablingClubOrTeam = null,
     string? PaymentMethod = null,
     bool IsWaitlist = false, bool IsWithdrawn = false, bool RefundPending = false,
-    int TeamsCount = 1, bool DrawComplete = false, IReadOnlyList<SignupLinkedTeamDto>? LinkedTeams = null
+    int TeamsCount = 1, bool DrawComplete = false, IReadOnlyList<SignupLinkedTeamDto>? LinkedTeams = null,
+    int HookupsCount = 0
 ) : MySignupDto(
     Id, CompetitionId, CompetitionName, CompetitionStart, CompetitionSectionId, SectionName,
     FullName, PonyClubName, ContactInfo, AmountMinor, Status, PaidAt, TeamId, TeamName, CreatedAt
@@ -91,10 +94,22 @@ public record MySignupExtendedDto(
 public record CompetitionEntrySettingsDto(
     int CompetitionId,
     DateTime? EntriesCloseAt,
-    bool EntriesClosed
+    bool EntriesClosed,
+    int? MaxStables = null,
+    int? MaxHookups = null,
+    int StablesBooked = 0,
+    int HookupsBooked = 0,
+    int? StablesRemaining = null,
+    int? HookupsRemaining = null
 );
 
-public record UpdateEntrySettingsInput(DateTime? EntriesCloseAt);
+public record UpdateEntrySettingsInput(
+    DateTime? EntriesCloseAt = null,
+    [Range(0, 2000)] int? MaxStables = null,
+    [Range(0, 2000)] int? MaxHookups = null,
+    bool ClearMaxStables = false,
+    bool ClearMaxHookups = false
+);
 
 public record StablingBookingDto(
     int SignupId,
@@ -103,12 +118,18 @@ public record StablingBookingDto(
     string FullName,
     string PonyClubOrTeam,
     int StablesCount,
-    SignupPaymentStatus Status
+    SignupPaymentStatus Status,
+    int HookupsCount = 0
 );
 
 public record StablingSummaryDto(
     int TotalStables,
-    IReadOnlyList<StablingBookingDto> Bookings
+    IReadOnlyList<StablingBookingDto> Bookings,
+    int TotalHookups = 0,
+    int? MaxStables = null,
+    int? MaxHookups = null,
+    int? StablesRemaining = null,
+    int? HookupsRemaining = null
 );
 
 public record MatchmakingEntryDto(
@@ -152,12 +173,24 @@ public class SignupController : ControllerBase
     private Task<DateTime?> GetEntriesCloseAtAsync(int competitionId) => _db.Set<CompetitionEntrySettings>()
         .Where(x => x.CompetitionId == competitionId).Select(x => x.EntriesCloseAt).SingleOrDefaultAsync();
 
-    private async Task SetEntriesCloseAtAsync(int competitionId, DateTime? closeAt)
+    private async Task UpdateEntrySettingsRowAsync(int competitionId, UpdateEntrySettingsInput req)
     {
         var settings = await _db.Set<CompetitionEntrySettings>().FindAsync(competitionId);
         if (settings is null) { settings = new() { CompetitionId = competitionId }; _db.Add(settings); }
-        settings.EntriesCloseAt = closeAt is { Kind: DateTimeKind.Unspecified } value
-            ? DateTime.SpecifyKind(value, DateTimeKind.Utc) : closeAt?.ToUniversalTime();
+        var hasCapacityFields = req.MaxStables.HasValue || req.MaxHookups.HasValue || req.ClearMaxStables || req.ClearMaxHookups;
+        if (req.EntriesCloseAt.HasValue || !hasCapacityFields)
+        {
+            settings.EntriesCloseAt = req.EntriesCloseAt is { Kind: DateTimeKind.Unspecified } value
+                ? DateTime.SpecifyKind(value, DateTimeKind.Utc) : req.EntriesCloseAt?.ToUniversalTime();
+        }
+        if (req.MaxStables.HasValue || req.ClearMaxStables)
+        {
+            settings.MaxStables = req.ClearMaxStables || req.MaxStables <= 0 ? null : req.MaxStables;
+        }
+        if (req.MaxHookups.HasValue || req.ClearMaxHookups)
+        {
+            settings.MaxHookups = req.ClearMaxHookups || req.MaxHookups <= 0 ? null : req.MaxHookups;
+        }
         await _db.SaveChangesAsync();
     }
 
@@ -233,7 +266,8 @@ public class SignupController : ControllerBase
             ex?.StablesCount ?? 0, ex?.StablingClubOrTeam,
             ex?.PaymentMethod,
             ex?.IsWaitlist == true, ex?.IsWithdrawn == true, ex?.RefundPending == true,
-            ex?.TeamsCount > 0 ? ex.TeamsCount : 1
+            ex?.TeamsCount > 0 ? ex.TeamsCount : 1,
+            ex?.HookupsCount ?? 0
         );
     }
 
@@ -244,9 +278,19 @@ public class SignupController : ControllerBase
         var comp = await _db.Competitions.AsNoTracking().FirstOrDefaultAsync(c => c.Id == competitionId);
         if (comp is null) return NotFound();
         var closeAt = await GetEntriesCloseAtAsync(competitionId);
+        var capacity = await VenueCapacity.GetCapacityAsync(_db, competitionId);
         var now = clock.GetUtcNow().UtcDateTime;
         var closed = comp.SignupsLocked || (closeAt.HasValue && closeAt.Value <= now);
-        return new CompetitionEntrySettingsDto(competitionId, closeAt, closed);
+        return new CompetitionEntrySettingsDto(
+            competitionId,
+            closeAt,
+            closed,
+            capacity.MaxStables,
+            capacity.MaxHookups,
+            capacity.StablesBooked,
+            capacity.HookupsBooked,
+            capacity.StablesRemaining,
+            capacity.HookupsRemaining);
     }
 
     [HttpPut("api/competitions/{competitionId:int}/entry-settings")]
@@ -257,11 +301,21 @@ public class SignupController : ControllerBase
     {
         var comp = await _db.Competitions.AsNoTracking().FirstOrDefaultAsync(c => c.Id == competitionId);
         if (comp is null) return NotFound();
-        await SetEntriesCloseAtAsync(competitionId, req.EntriesCloseAt);
+        await UpdateEntrySettingsRowAsync(competitionId, req);
         var closeAt = await GetEntriesCloseAtAsync(competitionId);
+        var capacity = await VenueCapacity.GetCapacityAsync(_db, competitionId);
         var now = clock.GetUtcNow().UtcDateTime;
         var closed = comp.SignupsLocked || (closeAt.HasValue && closeAt.Value <= now);
-        return new CompetitionEntrySettingsDto(competitionId, closeAt, closed);
+        return new CompetitionEntrySettingsDto(
+            competitionId,
+            closeAt,
+            closed,
+            capacity.MaxStables,
+            capacity.MaxHookups,
+            capacity.StablesBooked,
+            capacity.HookupsBooked,
+            capacity.StablesRemaining,
+            capacity.HookupsRemaining);
     }
 
     [HttpGet("api/competitions/{competitionId:int}/stabling")]
@@ -280,7 +334,7 @@ public class SignupController : ControllerBase
         var bookings = new List<StablingBookingDto>();
         foreach (var r in rows)
         {
-            if (!extras.TryGetValue(r.Id, out var ex) || ex.StablesCount <= 0 || ex.IsWithdrawn || ex.IsWaitlist) continue;
+            if (!extras.TryGetValue(r.Id, out var ex) || (ex.StablesCount <= 0 && ex.HookupsCount <= 0) || ex.IsWithdrawn || ex.IsWaitlist) continue;
             var clubOrTeam = (ex.StablingClubOrTeam ?? r.PonyClubName ?? r.TeamName ?? "Unaffiliated").Trim();
             if (string.IsNullOrEmpty(clubOrTeam)) clubOrTeam = "Unaffiliated";
             bookings.Add(new StablingBookingDto(
@@ -290,10 +344,19 @@ public class SignupController : ControllerBase
                 r.FullName,
                 clubOrTeam,
                 ex.StablesCount,
-                r.Status
+                r.Status,
+                ex.HookupsCount
             ));
         }
-        return new StablingSummaryDto(bookings.Sum(b => b.StablesCount), bookings);
+        var capacity = await VenueCapacity.GetCapacityAsync(_db, competitionId);
+        return new StablingSummaryDto(
+            bookings.Sum(b => b.StablesCount),
+            bookings,
+            bookings.Sum(b => b.HookupsCount),
+            capacity.MaxStables,
+            capacity.MaxHookups,
+            capacity.StablesRemaining,
+            capacity.HookupsRemaining);
     }
 
     /// <summary>
@@ -414,6 +477,14 @@ public class SignupController : ControllerBase
             && (long)await ActivePlacesAsync(sectionId) + teamsCount > section.MaxParticipants.Value)
             return StatusCode(403, new { message = $"Section is full ({section.MaxParticipants} max)." });
 
+        if (!req.WaitingForGuestSpot && !req.IsWaitlist && (req.StablesCount > 0 || req.HookupsCount > 0))
+        {
+            var capacity = await VenueCapacity.GetCapacityAsync(_db, competitionId);
+            var capErr = VenueCapacity.CheckCapacityError(capacity, req.StablesCount, req.HookupsCount);
+            if (capErr is not null)
+                return Conflict(new { message = capErr });
+        }
+
         if (await _db.IsIpBlockedAsync(HttpContext))
             return StatusCode(403, new { message = "Signups from this network are blocked." });
 
@@ -508,8 +579,10 @@ public class SignupController : ControllerBase
         var stablingClub = req.StablingClubOrTeam?.Trim();
         _db.Add(new SignupExtras
         {
-            SignupId = signup.Id, StablesCount = req.StablesCount,
-            StablingClubOrTeam = string.IsNullOrEmpty(stablingClub) && req.StablesCount > 0
+            SignupId = signup.Id,
+            StablesCount = req.StablesCount,
+            HookupsCount = req.HookupsCount,
+            StablingClubOrTeam = string.IsNullOrEmpty(stablingClub) && (req.StablesCount > 0 || req.HookupsCount > 0)
                 ? req.PonyClubName?.Trim() ?? teamName : stablingClub,
             PaymentMethod = req.PaymentMethod?.Trim(), IsWaitlist = req.IsWaitlist, TeamsCount = teamsCount,
         });
@@ -585,6 +658,13 @@ public class SignupController : ControllerBase
             if (signup.Section!.MaxParticipants is int cap && meta?.WaitingForGuestSpot != true
                 && (long)await ActivePlacesAsync(signup.CompetitionSectionId, signup.Id) + ex.TeamsCount > cap)
                 return Conflict(new { message = "There is no space to promote this waitlist entry yet." });
+            if (meta?.WaitingForGuestSpot != true && (ex.StablesCount > 0 || ex.HookupsCount > 0))
+            {
+                var capacity = await VenueCapacity.GetCapacityAsync(_db, competitionId, excludeSignupId: signup.Id);
+                var capErr = VenueCapacity.CheckCapacityError(capacity, ex.StablesCount, ex.HookupsCount);
+                if (capErr is not null)
+                    return Conflict(new { message = capErr });
+            }
             var amount = meta?.WaitingForGuestSpot == true ? 0L : meta?.LookingForPair == true
                 ? signup.Section!.PriceMinor / 2 : (long)signup.Section!.PriceMinor * ex.TeamsCount;
             if (amount > int.MaxValue) return BadRequest(new { message = "The total entry fee is too large." });
@@ -669,11 +749,21 @@ public class SignupController : ControllerBase
         if (req.Status == SignupPaymentStatus.Paid && extras?.IsWaitlist == true)
             return Conflict(new { message = "Use Mark paid to promote a waitlist entry when space is available." });
         if (req.Status is SignupPaymentStatus.Paid or SignupPaymentStatus.Pending
-            && signup.Status is SignupPaymentStatus.Cancelled or SignupPaymentStatus.Refunded
-            && signup.Section!.MaxParticipants is int cap
-            && !await _db.Set<SignupMatchmaking>().AnyAsync(m => m.SignupId == signup.Id && m.WaitingForGuestSpot)
-            && (long)await ActivePlacesAsync(signup.CompetitionSectionId, signup.Id) + (extras?.TeamsCount ?? 1) > cap)
-            return Conflict(new { message = "There is no space to reopen this entry yet." });
+            && signup.Status is SignupPaymentStatus.Cancelled or SignupPaymentStatus.Refunded)
+        {
+            var isGuestWait = await _db.Set<SignupMatchmaking>().AnyAsync(m => m.SignupId == signup.Id && m.WaitingForGuestSpot);
+            if (signup.Section!.MaxParticipants is int cap
+                && !isGuestWait
+                && (long)await ActivePlacesAsync(signup.CompetitionSectionId, signup.Id) + (extras?.TeamsCount ?? 1) > cap)
+                return Conflict(new { message = "There is no space to reopen this entry yet." });
+            if (!isGuestWait && extras is { IsWaitlist: false } && (extras.StablesCount > 0 || extras.HookupsCount > 0))
+            {
+                var capacity = await VenueCapacity.GetCapacityAsync(_db, signup.Section!.CompetitionId, excludeSignupId: signup.Id);
+                var capErr = VenueCapacity.CheckCapacityError(capacity, extras.StablesCount, extras.HookupsCount);
+                if (capErr is not null)
+                    return Conflict(new { message = capErr });
+            }
+        }
         if (req.Status == SignupPaymentStatus.Refunded && extras is not null) extras.RefundPending = false;
         signup.Status = req.Status;
         if (req.Status is SignupPaymentStatus.Cancelled or SignupPaymentStatus.Refunded)
@@ -782,7 +872,8 @@ public class SignupController : ControllerBase
                 links.Where(x => x.SignupId == r.Id).Select(x => x.TeamId)
                     .Concat(r.TeamId is int primary ? new[] { primary } : Array.Empty<int>()).Distinct()
                     .Where(id => teams.TryGetValue(id, out var linked) && linked.CompetitionSectionId == r.CompetitionSectionId)
-                    .Select(id => new SignupLinkedTeamDto(id, teams[id].DisplayName)).ToList()
+                    .Select(id => new SignupLinkedTeamDto(id, teams[id].DisplayName)).ToList(),
+                ex?.HookupsCount ?? 0
             );
         }).ToList();
     }
