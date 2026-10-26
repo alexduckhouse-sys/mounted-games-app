@@ -41,7 +41,10 @@ describe('FollowingTab', () => {
     expect(screen.queryByRole('button', { name: 'Add teams' })).not.toBeInTheDocument();
     const followed = screen.getByRole('heading', { name: 'Teams you follow' });
     const rows = within(followed.closest('section')!).getAllByRole('listitem');
-    expect(rows.map((row) => row.textContent)).toEqual(['Example BlueNext: Heat 1 · Lane 2 · on now', 'Example RedNot drawn yet']);
+    // A team whose heat is on gets the red countdown ring ("On"); one not drawn yet gets none.
+    expect(rows.map((row) => row.textContent)).toEqual(['Example BlueNext: Heat 1 · Lane 2 · on nowOn', 'Example RedNot drawn yet']);
+    expect(within(rows[0]).getByRole('img', { name: 'On now' })).toHaveAttribute('data-tone', 'live');
+    expect(within(rows[1]).queryByRole('img')).toBeNull();
     // They come before the heats, the results and the finder.
     for (const later of ['Next heats', 'Latest results', 'Find a team']) {
       expect(followed.compareDocumentPosition(screen.getByRole('heading', { name: later })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

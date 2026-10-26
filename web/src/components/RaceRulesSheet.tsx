@@ -158,7 +158,7 @@ export function RaceRulebookSection({
 
       {showDiagram && template.diagramJson && (
         <div className="overflow-hidden rounded-lg border border-[rgb(var(--mg-rule))]">
-          <RaceDiagram diagramJson={template.diagramJson} height={diagramHeight} />
+          <RaceDiagram drop diagramJson={template.diagramJson} height={diagramHeight} />
         </div>
       )}
 

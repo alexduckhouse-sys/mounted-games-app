@@ -66,6 +66,27 @@ describe('RaceDiagram', () => {
     expect(poleRect?.getAttribute('y')).toBe('98');
   });
 
+  it('drops the kit in from the start line to the top when asked, and sets the arena up again for another race', () => {
+    const json = JSON.stringify([
+      { t: 'item', kind: 'bin', anchor: 'top', x: 108 },
+      { t: 'pole', anchor: 'pole1', x: 22 },
+      { t: 'cone', kind: 'flag', anchor: 'pole3', x: 50 },
+    ]);
+    const { rerender } = render(<RaceDiagram diagramJson={json} drop />);
+    const delay = (index: number) => parseFloat(screen.getByTestId(`element-${index}`).style.animationDelay);
+    expect(screen.getByTestId('element-1')).toHaveClass('mg-kit-drop');
+    expect(delay(1)).toBeLessThan(delay(2));
+    expect(delay(2)).toBeLessThan(delay(0));
+    const first = screen.getByTestId('element-1');
+    rerender(<RaceDiagram diagramJson={json} drop />);
+    expect(screen.getByTestId('element-1')).toBe(first);
+    rerender(<RaceDiagram diagramJson={JSON.stringify([{ t: 'pole', anchor: 'pole2', x: 44 }])} drop />);
+    expect(screen.getByTestId('element-0')).toHaveClass('mg-kit-drop');
+    rerender(<RaceDiagram diagramJson={json} />);
+    expect(screen.getByTestId('element-1')).not.toHaveClass('mg-kit-drop');
+    expect(screen.getByTestId('element-1').style.animationDelay).toBe('');
+  });
+
   it('draws an old free-x diagram and labels its elements', () => {
     const json = JSON.stringify([{ t: 'pole', x: 17, label: '1' }, { t: 'item', x: 88, label: 'Cartons' }, { t: 'midline' }]);
     render(<RaceDiagram diagramJson={json} height={110} />);

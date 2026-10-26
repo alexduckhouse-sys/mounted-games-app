@@ -36,7 +36,7 @@ a.tt-row:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offs
 .tt-card { overflow: hidden; border: 1px solid rgb(var(--mg-line)); border-radius: var(--mg-radius-card); background: rgb(var(--mg-surface)); box-shadow: var(--mg-shadow-sm); }
 .tt-card > * + * { border-top: 1px solid rgb(var(--mg-rule-soft)); }
 .tt-row {
-  display: grid; grid-template-columns: 52px minmax(0, 1fr) 8px 14px; align-items: center; column-gap: 10px;
+  display: grid; grid-template-columns: 52px minmax(0, 1fr) minmax(8px, auto) 14px; align-items: center; column-gap: 10px;
   min-height: 50px; padding: 0 10px 0 12px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)) !important;
   text-decoration: none !important; transition: background .15s;
 }

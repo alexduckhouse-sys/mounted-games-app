@@ -15,6 +15,7 @@ import { sessionOrdinals } from '../../lib/timetableRows';
 import { useCompetition } from './context';
 import { LIVE_SAVED_COPY_NOTICE_AFTER_MS, lastUpdatedText, shouldNoticeSavedCopy } from '../../offline/savedCopies';
 import { formatPoints } from '../../lib/formatPoints';
+import { HeatRing } from '../../components/HeatRing';
 
 const dayText = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 
@@ -89,6 +90,10 @@ export function FollowingTab() {
             <Link to={`/competitions/${competition.id}/teams/${team.id}`} className="truncate text-base font-semibold leading-tight text-[rgb(var(--mg-ink))] hover:underline">{team.displayName}</Link>
             <span className="truncate text-[13.5px] leading-tight text-[rgb(var(--mg-muted))]">{nextLine(team.id)}</span>
           </div>
+          {(() => {
+            const state = next.get(team.id);
+            return state?.kind === 'heat' && !isStale ? <HeatRing at={state.row.effective} live={state.row.status === 'live'} /> : null;
+          })()}
           <button type="button" className={star} aria-pressed="true" aria-label={`Unfollow ${team.displayName}`} onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}><FollowStar on className="h-[22px] w-[22px]" /></button>
         </li>)}
       </ul>

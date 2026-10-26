@@ -15,6 +15,7 @@ import { computeTimings, formatShiftDelta, formatTime, parsePausedAtMs, predictM
 import { displaySectionName } from '../../lib/section';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
 import { arenaDelays, delayInWords, lastFinishedRow, sessionOrdinals, statusLabel, TIMETABLE_COLOURS, timetableRows, type TimetableRow, type TimetableStatus } from '../../lib/timetableRows';
+import { HeatRing } from '../../components/HeatRing';
 import './timetable.css';
 
 const STATUS_KEY: ReadonlyArray<[TimetableStatus, string]> = [['on-time', 'On time'], ['late', 'Late'], ['live', 'On now'], ['finished', 'Finished']];
@@ -433,6 +434,7 @@ function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false
   const currentRaceNum = runningRaceIndex >= 0 ? runningRaceIndex + 1 : orderedRaces.length;
   const onNowText = orderedRaces.length > 0 ? `ON NOW · Race ${currentRaceNum} of ${orderedRaces.length}` : 'ON NOW';
   const timeColourClass = showShift ? (shiftMinutes > 0 ? ' tt-time-late' : ' tt-time-early') : '';
+  const dot = <span className="tt-dot" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />;
   const content = <>
     <span className={`tt-time${timeColourClass}`}>{showShift && <span className="sr-only">Planned {formatTime(row.scheduled)}, now </span>}{formatTime(row.effective)}</span>
     <span className="tt-event">
@@ -446,7 +448,10 @@ function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false
       )}
       {status === 'live' && <motion.span layoutId={`tt-onnow-${session.arenaName?.trim() ?? ''}`} layout="position" className="tt-onnow" aria-hidden="true">{onNowText}</motion.span>}
     </span>
-    <span className="tt-dot" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />
+    {/* A followed team's heat within the hour counts down in a ring where the status dot would be. */}
+    {hasFollowedTeam && race && heat && status !== 'finished'
+      ? <HeatRing at={row.effective} live={live} fallback={dot} />
+      : dot}
     <span className="sr-only">{statusLabel(status, delayMinutes)}</span>
     {race ? <ChevronRight className="tt-chevron" size={14} aria-hidden="true" /> : <span className="tt-chevron" aria-hidden="true" />}
     {live && lit > 0 && <span key={lit} className="tt-lit" aria-hidden="true" />}
