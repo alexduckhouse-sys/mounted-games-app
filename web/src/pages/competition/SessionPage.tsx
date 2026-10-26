@@ -28,7 +28,7 @@ import { commentatorFacts } from '../../lib/commentatorFacts';
 import type { CardMark } from '../../lib/refereeCards';
 import { BetweenHeats, HeatPickerBar, HeatTableView } from './HeatViews';
 import {
-  overridePoints, nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey as draftKeyFor, tapTeam, toggleEliminated,
+  clearDeadHeat, markDeadHeat, overridePoints, nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey as draftKeyFor, tapTeam, toggleEliminated,
   writeScoringDraft, type PendingPlace,
 } from '../../lib/raceScoring';
 import { OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../../offline/useScoreOutbox';
@@ -779,6 +779,8 @@ function SessionScoring() {
                   setCorrectionReasons((cur) => (cur[activeRace.id]?.trim() ? cur : { ...cur, [activeRace.id]: reason.trim() }));
                 }
               }}
+              onDeadHeat={(teamIds) => changePending((current) => markDeadHeat(current, teamIds))}
+              onClearDeadHeat={(teamId) => changePending((current) => clearDeadHeat(current, teamId))}
               onUndo={canUndo ? undo : undefined}
               undoLabel={lastUndo?.kind === 'save' ? 'Undo last save' : 'Undo'}
               allowReasons

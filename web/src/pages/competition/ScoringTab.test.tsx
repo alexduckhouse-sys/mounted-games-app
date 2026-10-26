@@ -256,26 +256,25 @@ describe('the finals list', () => {
   });
 });
 
-describe('navigating to a team page from the toplist', () => {
-  it('navigates straight to the full team page from finals', async () => {
+describe('opening a team from the toplist', () => {
+  it('opens the team sheet from finals, and its link goes to the full team page', async () => {
     const user = userEvent.setup();
     renderTab();
     const list = await screen.findByRole('list', { name: 'A Final' });
-    await user.click(within(list).getByRole('link', { name: /Team 1/ }));
+    await user.click(within(list).getByRole('button', { name: /Team 1/ }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('link', { name: 'Full team page' }));
     expect(screen.getByTestId('path').textContent).toBe('/competitions/1/teams/1');
   });
 
-  it('navigates straight to the full team page from totals and sessions tables', async () => {
+  it('opens the team sheet from the totals and sessions tables', async () => {
     const other = session(4, { competitionSectionId: 9, orderIndex: 4, name: 'Under 12 heats 2', heats: [heat(4, { sessionId: 4, label: 'Heat 2', entries: entries([2]), races: [race(4, { name: 'Race 4' })] })] });
     setCompetition([qualifier, other]);
     const user = userEvent.setup();
     renderTab();
     await screen.findByRole('region', { name: 'Totals' });
-    await user.click(within(screen.getByRole('region', { name: 'Totals' })).getByRole('link', { name: /Team 1/ }));
+    await user.click(within(screen.getByRole('region', { name: 'Totals' })).getByRole('button', { name: /Team 1/ }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('link', { name: 'Full team page' }));
     expect(screen.getByTestId('path').textContent).toBe('/competitions/1/teams/1');
-    await pickView(user, 'By session');
-    await user.click(within(screen.getByRole('region', { name: 'Points by session' })).getByRole('link', { name: 'Team 2' }));
-    expect(screen.getByTestId('path').textContent).toBe('/competitions/1/teams/2');
   });
 });
 

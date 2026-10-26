@@ -313,9 +313,19 @@ describe('CompetitionTeamPage detailed view', () => {
     expect(within(heatsSection).getByText('Session 1 · Heat 1 · Lane 1')).toBeInTheDocument();
     expect(within(heatsSection).getByText('Main Arena')).toBeInTheDocument();
     expect(within(heatsSection).getByText('5 pts')).toBeInTheDocument();
-    // The full heat tables live on the heat page, which each heat links to.
-    expect(screen.queryByRole('region', { name: 'Heat tables' })).toBeNull();
-    expect(within(heatsSection).getByRole('link')).toHaveAttribute('href', '/competitions/1/session/1?heat=11');
+    // Each heat opens in place; the session page is one link further on.
+    const toggle = within(heatsSection).getByRole('button', { name: /Session 1 · Heat 1/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(within(heatsSection).queryByRole('link', { name: /Open full session view/ })).toBeNull();
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const panel = document.getElementById(toggle.getAttribute('aria-controls') ?? '');
+    expect(panel).not.toBeNull();
+    expect(within(panel as HTMLElement).getByRole('table')).toBeInTheDocument();
+    expect(within(panel as HTMLElement).getByRole('link', { name: /Open full session view/ })).toHaveAttribute('href', '/competitions/1/session/1?heat=11');
+    expect((panel as HTMLElement).querySelector('tr.heat-row-me')).not.toBeNull();
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
 
     // Stats: a plain list, then each race with its runs, best place and average
     const stats = screen.getByRole('region', { name: 'Stats' });

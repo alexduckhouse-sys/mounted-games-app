@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Heat } from '../types';
 import { heat, race, result } from '../test/factories';
 import {
-  overridePoints, manualPoints, nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey, setNote, setStatus, tapTeam, toggleEliminated, writeScoringDraft, type PendingPlace,
+  clearDeadHeat, deadHeatPoints, deadHeatSize, isDeadHeat, markDeadHeat, overridePoints, manualPoints, nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey, setNote, setStatus, tapTeam, toggleEliminated, writeScoringDraft, type PendingPlace,
 } from './raceScoring';
 
 const places = (list: PendingPlace[]) => list.map((p) => (p.eliminated ? `${p.teamId}:out` : `${p.teamId}:${p.place}`));
@@ -308,4 +308,71 @@ it('clears manual score directives when a scorer eliminates the team', () => {
   const manual = overridePoints([], 1, 2.5, 'Synthetic reason');
   expect(toggleEliminated(manual, 1)).toEqual([{ teamId: 1, place: 0, eliminated: true, refereeNote: 'Synthetic reason' }]);
   expect(setStatus(manual, 1, 2)).toEqual([{ teamId: 1, place: 0, eliminated: true, status: 2, refereeNote: 'Synthetic reason' }]);
+});
+
+describe('dead heats', () => {
+  const noteOf = (list: PendingPlace[], id: number) => list.find((p) => p.teamId === id)?.refereeNote;
+
+  it('puts the chosen teams on the best place any of them held and tags their notes', () => {
+    const list = markDeadHeat(tapAll(1, 2, 3, 4), [2, 3]);
+    expect(places(list)).toEqual(['1:1', '2:2', '3:2', '4:4']);
+    expect(noteOf(list, 2)).toBe('[dead-heat]');
+    expect(noteOf(list, 3)).toBe('[dead-heat]');
+    expect(noteOf(list, 1)).toBeUndefined();
+    expect(deadHeatSize(list, 3)).toBe(2);
+    expect(deadHeatSize(list, 1)).toBe(1);
+    expect(isDeadHeat(list[1])).toBe(true);
+    expect(isDeadHeat(undefined)).toBe(false);
+  });
+
+  it('pulls teams that were apart next to each other', () => {
+    const list = markDeadHeat(tapAll(1, 2, 3, 4), [1, 3]);
+    expect(places(list)).toEqual(['1:1', '3:1', '2:3', '4:4']);
+  });
+
+  it('brings in teams that are not placed yet or were eliminated', () => {
+    const list = markDeadHeat(toggleEliminated(tapAll(1, 2), 2), [2, 5]);
+    expect(places(list)).toEqual(['1:1', '2:2', '5:2']);
+    expect(list.find((p) => p.teamId === 2)?.eliminated).toBe(false);
+  });
+
+  it('keeps other notes and the points directives, and does not tag twice', () => {
+    const base = setNote(setNote(tapAll(1, 2), 1, '[adj:+1] Bonus'), 2, '[dead-heat] Photo finish');
+    const list = markDeadHeat(base, [1, 2]);
+    expect(noteOf(list, 1)).toBe('[adj:+1] Bonus [dead-heat]');
+    expect(noteOf(list, 2)).toBe('Photo finish [dead-heat]');
+  });
+
+  it('needs two different teams', () => {
+    const base = tapAll(1, 2);
+    expect(markDeadHeat(base, [1])).toBe(base);
+    expect(markDeadHeat(base, [2, 2])).toBe(base);
+  });
+
+  it('keeps the tie when another team is taken out of the order, and drops the tag from an eliminated team', () => {
+    const tied = markDeadHeat(tapAll(1, 2, 3, 4), [2, 3]);
+    expect(places(tapTeam(tied, 1))).toEqual(['2:1', '3:1', '4:3']);
+    const out = toggleEliminated(setNote(tied, 2, '[dead-heat] Late'), 2);
+    expect(noteOf(out, 2)).toBe('Late');
+    expect(places(out)).toEqual(['1:1', '2:out', '3:2', '4:3']);
+    expect(deadHeatSize(out, 3)).toBe(1);
+  });
+
+  it('splits a dead heat back into separate places', () => {
+    const tied = markDeadHeat(setNote(tapAll(1, 2, 3), 2, 'Close'), [2, 3]);
+    const split = clearDeadHeat(tied, 3);
+    expect(places(split)).toEqual(['1:1', '2:2', '3:3']);
+    expect(noteOf(split, 2)).toBe('Close');
+    expect(noteOf(split, 3)).toBe('');
+    expect(clearDeadHeat(split, 3)).toBe(split);
+    expect(clearDeadHeat(split, 99)).toBe(split);
+  });
+
+  it('shares the points of the places covered, to the nearest half point', () => {
+    const forPlace = (place: number) => Math.max(0, 6 - place);
+    expect(deadHeatPoints(forPlace, 1, 1)).toBe(5);
+    expect(deadHeatPoints(forPlace, 1, 2)).toBe(4.5);
+    expect(deadHeatPoints(forPlace, 2, 3)).toBe(3);
+    expect(deadHeatPoints(forPlace, 1, 4)).toBe(3.5);
+  });
 });

@@ -52,8 +52,8 @@ describe('EntriesPage', () => {
     expect(first).toHaveTextContent('Paid');
     expect(first).toHaveTextContent('Form in');
     expect(first).toHaveTextContent('Flagged');
-    expect(screen.getByRole('button', { name: /Elm B/ })).toHaveTextContent('Not paid');
-    expect(screen.getByRole('button', { name: /Elm B/ })).toHaveTextContent('Missing');
+    expect(screen.getByText('Pending payment')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Elm B/ })).toHaveTextContent('Missing');
     expect(screen.getByRole('button', { name: /Ash C/ })).toHaveTextContent('Withdrawn');
     expect(screen.getByText('Entries open')).toBeInTheDocument();
     expect(screen.getByText('1 paid · 1 not paid')).toBeInTheDocument();
@@ -70,16 +70,26 @@ describe('EntriesPage', () => {
     expect(screen.getByText('Ada')).toBeInTheDocument();
     expect(screen.getByText('Late arrival')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /Elm B/ }));
+    await user.click(screen.getByRole('button', { name: /^Elm B/ }));
     expect(screen.getByText('Not received yet')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Copy form link' }));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('/competitions/7/declarations'));
   });
 
+  it('shows unpaid entries as pending payment with a quick Mark paid on the row', async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByRole('button', { name: /^Elm B/ });
+    expect(screen.getAllByText('Pending payment')).toHaveLength(1);
+    expect(screen.getByText('£10 by bank transfer')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Mark Elm B paid' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/7/signups/102/mark-paid'));
+  });
+
   it('marks a team paid and not paid', async () => {
     const user = userEvent.setup();
     show();
-    await user.click(await screen.findByRole('button', { name: /Elm B/ }));
+    await user.click(await screen.findByRole('button', { name: /^Elm B/ }));
     await user.click(screen.getByRole('button', { name: 'Mark paid' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/7/signups/102/mark-paid'));
 

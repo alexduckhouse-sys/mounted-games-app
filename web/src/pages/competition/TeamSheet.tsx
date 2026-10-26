@@ -1,4 +1,5 @@
 import { Link, useInRouterContext } from 'react-router-dom';
+import { ChevronRight } from 'lucide-react';
 import { Sheet } from '../../components/Sheet';
 import type { Team } from '../../types';
 import { bibAccent, bibLabel, parseBibAndFlag } from '../../lib/bib';
@@ -59,13 +60,6 @@ export function TeamSheet({
             </p>
           )}
 
-          <div className="kit-acts">
-            {teamPage && (inRouter
-              ? <Link to={teamPage} onClick={onClose} className="kit-pill kit-pill-fill">Team page</Link>
-              : <a href={teamPage} className="kit-pill kit-pill-fill">Team page</a>)}
-            <button type="button" className={teamPage ? 'kit-pill' : 'kit-pill kit-pill-fill'} onClick={() => close()}>Close</button>
-          </div>
-
           <div className={`grid gap-2 ${detail.final ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-tint))] px-3 py-2.5">
               <span className={`${eyebrow} text-[rgb(var(--mg-muted))]`}>Qualifying</span>
@@ -85,19 +79,33 @@ export function TeamSheet({
 
           {riders && riders.length > 0 && (
             <section aria-label="Riders and ponies" className="flex flex-col gap-1">
-              <span className={`${eyebrow} text-[rgb(var(--mg-muted))]`}>Riders & ponies</span>
-              <ul className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+              <span className={`${eyebrow} text-[rgb(var(--mg-muted))]`}>Riders &amp; ponies</span>
+              <ul className="overflow-hidden rounded-[10px] border border-[rgb(var(--mg-rule))]">
                 {riders.map((r, i) => (
-                  <li key={`${r.fullName}-${i}`}>
-                    <a href={statsProfileHref(StatsSubjectKind.Rider, r.fullName.trim().toLowerCase())} className="font-semibold text-[rgb(var(--mg-heading))]">{r.fullName}</a>
-                    {r.horseName && <> on <a href={statsProfileHref(StatsSubjectKind.Pony, r.horseName.trim().toLowerCase())} className="text-[rgb(var(--mg-body))]">{r.horseName}</a></>}
+                  <li key={`${r.fullName}-${i}`} className="flex min-h-10 items-baseline justify-between gap-3 border-b border-[rgb(var(--mg-rule-soft))] px-3 py-2 text-sm last:border-b-0">
+                    <a href={statsProfileHref(StatsSubjectKind.Rider, r.fullName.trim().toLowerCase())} className="min-w-0 font-semibold text-[rgb(var(--mg-heading))]">{r.fullName}</a>
+                    {r.horseName
+                      ? <a href={statsProfileHref(StatsSubjectKind.Pony, r.horseName.trim().toLowerCase())} className="min-w-0 text-right text-[rgb(var(--mg-body))]">{r.horseName}</a>
+                      : <span className="text-[rgb(var(--mg-faint))]">–</span>}
                   </li>
                 ))}
               </ul>
             </section>
           )}
 
+          {detail.blocks.length > 0 && <span className={`${eyebrow} -mb-1 text-[rgb(var(--mg-muted))]`}>Scores, heat by heat</span>}
           {detail.blocks.map((block) => <Block key={block.key} block={block} />)}
+
+          {teamPage && (
+            <div className="flex justify-center">
+              {inRouter
+                ? <Link to={teamPage} onClick={onClose} className="mg-text-link !min-h-11 inline-flex items-center gap-1 text-sm font-semibold">Full team page<ChevronRight aria-hidden="true" className="h-4 w-4" /></Link>
+                : <a href={teamPage} className="mg-text-link !min-h-11 inline-flex items-center gap-1 text-sm font-semibold">Full team page<ChevronRight aria-hidden="true" className="h-4 w-4" /></a>}
+            </div>
+          )}
+          <div className="kit-acts">
+            <button type="button" className="kit-pill kit-pill-fill" onClick={() => close()}>Close</button>
+          </div>
         </>
       )}
     </Sheet>

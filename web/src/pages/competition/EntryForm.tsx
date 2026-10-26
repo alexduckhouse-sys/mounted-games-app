@@ -14,6 +14,7 @@ import { displaySectionName } from '../../lib/section';
 import { CONSENT_VERSION } from '../../lib/termsTick';
 import type { CompetitionDetail, CompetitionSection, SectionSignup } from '../../types';
 import { useEntrySettings } from './entrySettings';
+import { bankDetailsText, type BankDetails } from '../../lib/bankDetails';
 import '../../components/sitePages.css';
 import '../../components/eventPages.css';
 
@@ -23,6 +24,8 @@ export interface EntrySent {
   enteredAs: string | null;
   /** The confirmation, as one short paragraph. */
   text: string;
+  /** Set when money is still owed by bank transfer, so the confirmation can keep showing where to send it. */
+  bank?: BankDetails;
 }
 
 /** Steps 2 and 3 of an entry: your details, then pay. Everything typed stays while you move between them. */
@@ -124,7 +127,12 @@ export function EntryForm({ competition, section, kind, step, onSent }: {
               : priceMinor > 0 ? 'The organiser marks it paid once your transfer arrives.' : '',
       ];
       requestId.current = null;
-      onSent({ enteredAs: isWaitlist ? null : teamName.trim() || club.trim() || fullName.trim() || null, text: lines.filter(Boolean).join(' ') });
+      const owesByBank = priceMinor > 0 && !isDemo && signup.status !== 1;
+      onSent({
+        enteredAs: isWaitlist ? null : teamName.trim() || club.trim() || fullName.trim() || null,
+        text: lines.filter(Boolean).join(' '),
+        ...(owesByBank ? { bank: { payTo: competition.paymentDestination?.trim() || null, reference, amount: feeText(priceMinor) } } : {}),
+      });
       // Demo events only: straight on to the clearly labelled test payment page.
       if (isDemo && signup.status === 0 && signup.amountMinor > 0) navigate(`/me/signups/${signup.id}/test-payment`);
     } catch (e) {
@@ -136,7 +144,7 @@ export function EntryForm({ competition, section, kind, step, onSent }: {
   }
 
   async function copyBankDetails() {
-    const text = [competition.paymentDestination && `Pay to: ${competition.paymentDestination}`, `Reference: ${reference}`, `Amount: ${feeText(priceMinor)}`].filter(Boolean).join('\n');
+    const text = bankDetailsText({ payTo: competition.paymentDestination ?? null, reference, amount: feeText(priceMinor) });
     try { await navigator.clipboard.writeText(text); toast.show('Bank details copied'); } catch { /* the details are on screen to copy by hand */ }
   }
 

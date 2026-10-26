@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { FollowStar } from '../../components/FollowStar';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Ban, ChevronRight, ClipboardList, Shield } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useStillMotion } from '../../lite/useStillMotion';
+import { HeatScores } from './HeatScores';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompactPageBar, usePageHeader } from '../../components/CompactPageBarContext';
@@ -59,6 +62,9 @@ export function CompetitionTeamPage() {
   const [declarationState, setDeclarationState] = useState<{ key: string; form: DeclarationForm | null } | null>(null);
   const decLoaded = declarationState?.key === declarationKey;
   const decForm = decLoaded ? declarationState.form : null;
+  // One heat at a time opens in place to show its full table.
+  const [openHeatId, setOpenHeatId] = useState<number | null>(null);
+  const still = useStillMotion();
   const [matchedProfile, setMatchedProfile] = useState<TeamProfile | null>(null);
   const [profileHistory, setProfileHistory] = useState<TeamProfileHistory | null>(null);
 
@@ -333,27 +339,62 @@ export function CompetitionTeamPage() {
           <p className="mg-card p-4 text-[15px] text-[rgb(var(--mg-muted))]">{nextState?.kind === 'done' ? 'All heats completed for this team.' : 'Not drawn into any heats yet.'}</p>
         ) : (
           <ul className="mg-card divide-y divide-[rgb(var(--mg-rule-soft))] overflow-hidden">
-            {drawnHeats.map(({ session, heat, heatLabel, lane, points, scoredAny, timeText, final, status, delayMinutes }) => (
-              <li key={heat.id}>
-                <Link
-                  to={`/competitions/${competition.id}/session/${session.id}?heat=${heat.id}`}
-                  className="flex min-h-14 items-center gap-3 px-4 py-2.5 hover:bg-[rgb(var(--mg-subtle))]"
-                >
-                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="text-base font-semibold leading-tight text-[rgb(var(--mg-ink))]">
-                      {session.name} · {heatLabel}{final ? '' : ` · Lane ${lane}`}
-                    </span>
-                    <span className="text-[13.5px] leading-tight text-[rgb(var(--mg-muted))]">
-                      {[session.arenaName?.trim(), timeText].filter(Boolean).join(' · ') || 'Timetable'}
-                    </span>
-                  </div>
-                  {scoredAny && <span className="mg-display shrink-0 text-lg font-bold tabular-nums text-[rgb(var(--mg-heading))]">{formatPoints(points)} pts</span>}
-                  <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />
-                  <span className="sr-only">{timetableStatusLabel(status, delayMinutes)}</span>
-                  <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-[rgb(var(--mg-dash))]" />
-                </Link>
-              </li>
-            ))}
+            {drawnHeats.map(({ session, orderedHeats, heat, heatLabel, lane, points, scoredAny, timeText, final, status, delayMinutes }) => {
+              const open = openHeatId === heat.id;
+              const panelId = `team-heat-${heat.id}`;
+              return (
+                <li key={heat.id}>
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    aria-controls={panelId}
+                    onClick={() => setOpenHeatId(open ? null : heat.id)}
+                    className="flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-[rgb(var(--mg-subtle))]"
+                  >
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="text-base font-semibold leading-tight text-[rgb(var(--mg-ink))]">
+                        {session.name} · {heatLabel}{final ? '' : ` · Lane ${lane}`}
+                      </span>
+                      <span className="text-[13.5px] leading-tight text-[rgb(var(--mg-muted))]">
+                        {[session.arenaName?.trim(), timeText].filter(Boolean).join(' · ') || 'Timetable'}
+                      </span>
+                    </div>
+                    {scoredAny && <span className="mg-display shrink-0 text-lg font-bold tabular-nums text-[rgb(var(--mg-heading))]">{formatPoints(points)} pts</span>}
+                    <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />
+                    <span className="sr-only">{timetableStatusLabel(status, delayMinutes)}</span>
+                    <ChevronRight aria-hidden="true" className={`h-4 w-4 shrink-0 text-[rgb(var(--mg-dash))] transition-transform duration-200 motion-reduce:transition-none [html[data-lite=true]_&]:transition-none ${open ? 'rotate-90' : ''}`} />
+                  </button>
+                  <AnimatePresence initial={false}>
+                    {open && (
+                      <motion.div
+                        key="panel"
+                        id={panelId}
+                        role="region"
+                        aria-label={`${session.name} ${heatLabel} scores`}
+                        initial={still ? false : { height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={still ? undefined : { height: 0, opacity: 0 }}
+                        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                        className="overflow-hidden"
+                      >
+                        <div className="border-t border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))]">
+                          <HeatScores session={session} heats={orderedHeats} activeHeatId={heat.id} embedded bare ignoreUrlHeat highlightTeamId={team.id} />
+                          <div className="flex justify-end px-4 pb-3 pt-1">
+                            <Link
+                              to={`/competitions/${competition.id}/session/${session.id}?heat=${heat.id}`}
+                              className="mg-text-link inline-flex min-h-11 items-center gap-1 text-sm font-semibold"
+                            >
+                              Open full session view
+                              <ChevronRight aria-hidden="true" className="h-4 w-4" />
+                            </Link>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
