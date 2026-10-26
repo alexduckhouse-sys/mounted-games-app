@@ -36,7 +36,10 @@ export function basicsPayload(draft: CreatorDraft) {
     latitude: draft.lat ? parseFloat(draft.lat) : null,
     longitude: draft.lon ? parseFloat(draft.lon) : null,
     what3Words: draft.what3Words.trim() || null,
-    postcode: draft.postcode.trim() || null,
+    // Blank is sent as blank, not null: on an update, null means leave it as it is.
+    postcode: draft.postcode.trim(),
+    competitionNumber: draft.competitionNumber.trim(),
+    contactEmail: draft.contactEmail.trim(),
     appleMapsUrl: draft.appleMapsUrl.trim() || null,
     organiserName: draft.organiserName.trim() || null,
     paymentDestination: draft.paymentDestination.trim() || null,

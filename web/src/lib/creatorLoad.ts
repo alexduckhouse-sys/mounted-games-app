@@ -79,7 +79,7 @@ export function draftFromCompetition(c: CompetitionDetail): CreatorDraft {
     name: c.name, icon: c.icon ?? 'flag', organiserName: c.organiserName ?? '',
     startDate: localDate(start), startTime: localTime(start),
     endDate: end ? localDate(end) : '', endTime: end ? localTime(end) : '17:00',
-    location: c.location ?? '', postcode: '', what3Words: c.what3Words ?? '', appleMapsUrl: c.appleMapsUrl ?? '',
+    location: c.location ?? '', postcode: c.postcode ?? '', competitionNumber: c.competitionNumber ?? '', contactEmail: c.contactEmail ?? '', what3Words: c.what3Words ?? '', appleMapsUrl: c.appleMapsUrl ?? '',
     lat: c.latitude != null ? String(c.latitude) : '', lon: c.longitude != null ? String(c.longitude) : '',
     description: c.description ?? '', paymentDestination: c.paymentDestination ?? '', termsText: c.termsText ?? '',
     sections: finished,
@@ -119,6 +119,8 @@ export function copyOfCompetition(c: CompetitionDetail): CreatorDraft {
   return {
     ...old,
     startDate: '', endDate: '',
+    // The governing body gives each event its own number; the venue and contact carry over.
+    competitionNumber: '',
     startFrom: 'copy', copiedFrom: c.name,
     breaks: [],
     sections: old.sections.map((s): SectionDraft => ({
