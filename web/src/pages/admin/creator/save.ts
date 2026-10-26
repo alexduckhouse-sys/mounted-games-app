@@ -76,6 +76,9 @@ export async function saveCreator(draft: CreatorDraft, opts: {
     setCardsEnabled(id, draft.cardsEnabled);
   }
   const base = `/competitions/${id}`;
+  if (editingId === null && draft.passportCheck) {
+    await step('Turning on the passport check…', () => api.put(`/event-tools/competitions/${id}/passport-check/settings`, { enabled: true }));
+  }
 
   // Age groups taken out of the draft.
   const keptSections = new Set(draft.sections.flatMap((s) => (s.existingId ? [s.existingId] : [])));
@@ -93,6 +96,7 @@ export async function saveCreator(draft: CreatorDraft, opts: {
       // On an update, zero is how a cap is cleared (an omitted value leaves it as it is).
       maxParticipants: parseMaxParticipants(s.maxParticipants),
       finalistCount: parseFinalistCount(s.finalistCount),
+      ...(s.tieBreak !== undefined ? { tieBreakRule: s.tieBreak } : {}),
       // Heat, heat, final has no separate final, and the API refuses these for it.
       ...(s.usesRaceFinals ? {} : { hasFinal: s.hasFinal !== false, carryPointsIntoFinal: s.carryPointsIntoFinal ?? true, doublePointsInFinal: s.doublePointsInFinal ?? false }),
     };
@@ -104,6 +108,9 @@ export async function saveCreator(draft: CreatorDraft, opts: {
       sectionIds.push(made.data.id);
     }
   }
+
+  const setLaneRotation = (sessionId: number, laneRotationMode: number, name: string) =>
+    step(`Saving lane order for ${name}…`, () => api.put(`${base}/sessions/${sessionId}/settings`, { laneRotationMode }));
 
   // Sessions and breaks, with the estimated times.
   const real = realFixedItems(competition);
@@ -140,12 +147,15 @@ export async function saveCreator(draft: CreatorDraft, opts: {
         ? { minutesPerHeat: minutes, arenaName: arena }
         : { arenaName: arena, minutesPerHeat: minutes, lanesPerHeat: heatSizeOf(section), plannedRaces: session.races ?? [], scheduledStart: row?.start.toISOString(), durationMinutes: row && row.minutes > 0 ? row.minutes : undefined, orderIndex: orderOf(`s${p.key}`) };
       await step(`Saving ${p.name}…`, () => api.put(`${base}/sessions/${session.existingId}`, body));
+      if (section.laneRotation !== undefined && !session.hasHeats) await setLaneRotation(session.existingId, section.laneRotation, p.name);
     } else {
-      await step(`Adding ${p.name}…`, () => api.post(`${base}/sessions`, {
+      const made = await step(`Adding ${p.name}…`, () => api.post<{ id?: number }>(`${base}/sessions`, {
         competitionSectionId: sectionIds[p.sectionIndex], name: p.name, arenaName: arena, scheduledStart: row?.start.toISOString() ?? null,
         orderIndex: orderOf(`s${p.key}`), notes: null, isBreak: false, durationMinutes: row && row.minutes > 0 ? row.minutes : null,
         kind: SessionKind.Race, location: null, lanesPerHeat: heatSizeOf(section), minutesPerHeat: minutes, plannedRaces: session.races ?? [],
       }));
+      // Move up is what every new session does already, so only another choice needs saying.
+      if (section.laneRotation && made.data?.id) await setLaneRotation(made.data.id, section.laneRotation, p.name);
     }
   }
 

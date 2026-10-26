@@ -1,5 +1,5 @@
 import { DecFormConfigEditor } from '../DecFormConfig';
-import { StepIntro } from './parts';
+import { StepHeading } from './controls';
 
 /**
  * What the dec form asks. An existing competition shows the setup editor, which saves on its own. A new one
@@ -7,15 +7,22 @@ import { StepIntro } from './parts';
  */
 export function DecFormStep({ competitionId, canChange }: { competitionId: number | null; canChange: boolean }) {
   return (
-    <section aria-labelledby="cw-dec" className="flex flex-col gap-[18px]">
-      <StepIntro title="Dec form">What trainers fill in for each team. You can change it at any time; changes apply to forms sent after that.</StepIntro>
+    <section aria-label="Dec form" className="flex flex-col">
+      <StepHeading>Dec form</StepHeading>
       {competitionId != null
-        ? <DecFormConfigEditor competitionId={competitionId} readOnly={!canChange} />
+        ? <div className="mt-3"><DecFormConfigEditor competitionId={competitionId} readOnly={!canChange} /></div>
         : (
-          <p className="text-[15px] text-[rgb(var(--mg-body))]">
-            A new competition starts with the basics: the rider’s name and the pony’s name for each rider, and the trainer’s name and phone number for the team.
-            Once it’s published, go to Dec form setup on the competition page to add things like weight, a passport number, medical notes or your own questions.
-          </p>
+          <div className="cw-card mt-3">
+            <div className="cw-panel">
+              <p className="cw-t1" style={{ fontWeight: 500 }}>
+                A new competition starts with the basics: the rider’s name and the pony’s name for each rider, and the trainer’s name and phone number for the team.
+              </p>
+              <p className="cw-t2">
+                Once it’s created, go to Dec form setup on the competition page to add things like weight, a passport number, medical notes or your own questions,
+                and flags for forms that need a look. What trainers fill in can change at any time; changes apply to forms sent after that.
+              </p>
+            </div>
+          </div>
         )}
     </section>
   );

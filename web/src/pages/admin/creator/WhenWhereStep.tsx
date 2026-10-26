@@ -1,9 +1,39 @@
 import { useState } from 'react';
-import { CalendarDays, MapPinCheck } from 'lucide-react';
+import { MapPinCheck } from 'lucide-react';
 import { api } from '../../../api';
 import type { CreatorDraft } from '../../../lib/creatorDraft';
 import { Field } from '../../auth/Field';
-import { fieldClass, StepIntro, TextBox, type StepProps } from './parts';
+import { RefineDateTimeRow } from '../../refine/Refine';
+import { StepHeading } from './controls';
+import { fieldClass, TextBox, type StepProps } from './parts';
+
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/** A local date and time typed as "2027-04-24" and "09:00" as the ISO time the calendar row wants; null when either is missing. */
+function toIso(date: string, time: string): string | null {
+  if (!date) return null;
+  const [y, m, d] = date.split('-').map(Number);
+  const [h, min] = (time || '00:00').split(':').map(Number);
+  const out = new Date(y, m - 1, d, h || 0, min || 0);
+  return Number.isNaN(out.getTime()) ? null : out.toISOString();
+}
+
+function fromIso(iso: string): { date: string; time: string } {
+  const d = new Date(iso);
+  return { date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, time: `${pad(d.getHours())}:${pad(d.getMinutes())}` };
+}
+
+/** The days the event runs, for the calendar to ring (at most two weeks). */
+function eventDays(draft: CreatorDraft): Date[] {
+  if (!draft.startDate) return [];
+  const [y, m, d] = draft.startDate.split('-').map(Number);
+  const start = new Date(y, m - 1, d);
+  const [ey, em, ed] = (draft.endDate || draft.startDate).split('-').map(Number);
+  const end = new Date(ey, em - 1, ed);
+  const days: Date[] = [];
+  for (let day = start; day <= end && days.length < 14; day = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1)) days.push(day);
+  return days;
+}
 
 export function WhenWhereStep({ draft, change, problems, clear }: StepProps<CreatorDraft>) {
   // The last postcode / what3words pair that was looked up, and how that went.
@@ -27,62 +57,42 @@ export function WhenWhereStep({ draft, change, problems, clear }: StepProps<Crea
   }
 
   return (
-    <section aria-labelledby="cw-when" className="flex flex-col gap-[18px]">
-      <StepIntro title="When and where" />
-      <div className="grid grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)] gap-2.5 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1fr)] sm:gap-4">
-        <Field label="Starts" error={problems.startDate}>
-          {({ id, invalid, describedBy }) => (
-            <div className={fieldClass} data-invalid={invalid}>
-              <CalendarDays aria-hidden="true" className="h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-heading))]" />
-              <input id={id} type="date" value={draft.startDate} aria-invalid={invalid} aria-describedby={describedBy}
-                onChange={(e) => { change({ startDate: e.target.value }); clear('startDate'); }} />
-            </div>
-          )}
-        </Field>
-        <Field label="at" error={problems.startTime}>
-          {({ id, invalid, describedBy }) => (
-            <div className={fieldClass} data-invalid={invalid}>
-              <input id={id} type="time" value={draft.startTime} aria-label="Start time" aria-invalid={invalid} aria-describedby={describedBy}
-                onChange={(e) => { change({ startTime: e.target.value }); clear('startTime'); }} />
-            </div>
-          )}
-        </Field>
-        <Field label="Ends" error={problems.endDate}>
-          {({ id, invalid, describedBy }) => (
-            <div className={`${fieldClass} relative`} data-invalid={invalid}>
-              <CalendarDays aria-hidden="true" className="h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-heading))]" />
-              <input id={id} type="date" value={draft.endDate} aria-invalid={invalid} aria-describedby={describedBy}
-                onChange={(e) => { change({ endDate: e.target.value }); clear('endDate'); }}
-                className={`peer ${draft.endDate ? '' : '[&::-webkit-datetime-edit]:opacity-0 focus:[&::-webkit-datetime-edit]:opacity-100'}`} />
-              {!draft.endDate && <span aria-hidden="true" className="pointer-events-none absolute left-[42px] text-base text-[rgb(var(--mg-faint))] peer-focus:hidden">Same day</span>}
-            </div>
-          )}
-        </Field>
-        <Field label="at">
-          {({ id }) => (
-            <div className={fieldClass}><input id={id} type="time" value={draft.endTime} aria-label="End time" onChange={(e) => change({ endTime: e.target.value })} /></div>
-          )}
-        </Field>
+    <section aria-label="When and where" className="flex flex-col">
+      <StepHeading>When and where</StepHeading>
+      <div className="cw-card mt-3">
+        <RefineDateTimeRow label="Starts" value={toIso(draft.startDate, draft.startTime)} removable={false} eventDays={eventDays(draft)}
+          onChange={(iso) => { if (!iso) return; const { date, time } = fromIso(iso); change({ startDate: date, startTime: time }); clear('startDate'); clear('startTime'); }} />
+        <RefineDateTimeRow label="Ends" value={toIso(draft.endDate, draft.endTime)} eventDays={eventDays(draft)}
+          onChange={(iso) => { if (!iso) { change({ endDate: '' }); clear('endDate'); return; } const { date, time } = fromIso(iso); change({ endDate: date, endTime: time }); clear('endDate'); }} />
       </div>
-      <TextBox label="Venue" value={draft.location} onChange={(location) => change({ location })} />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Postcode" error={geoNow === 'none' ? 'No location found for that.' : geoNow === 'failed' ? 'Could not look that up.' : null}>
-          {({ id, invalid, describedBy }) => (
-            <div className={fieldClass} data-invalid={invalid}>
-              <input id={id} value={draft.postcode} autoComplete="postal-code" aria-invalid={invalid} aria-describedby={describedBy}
-                className="uppercase" onChange={(e) => change({ postcode: e.target.value })} onBlur={() => void lookUp()} />
-              {geoNow === 'ok' && <MapPinCheck aria-label="Location found" role="img" className="h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-heading))]" />}
-            </div>
-          )}
-        </Field>
-        <Field label={<>what3words <span className="font-normal text-[rgb(var(--mg-muted))]">(optional)</span></>}>
-          {({ id }) => (
-            <div className={fieldClass}>
-              <input id={id} value={draft.what3Words} placeholder="///filled.count.soap" autoComplete="off"
-                onChange={(e) => change({ what3Words: e.target.value })} onBlur={() => void lookUp()} />
-            </div>
-          )}
-        </Field>
+      {(problems.startDate || problems.startTime || problems.endDate) && (
+        <p role="alert" aria-invalid="true" tabIndex={-1} className="cw-note" style={{ color: 'rgb(var(--mg-elim))' }}>{problems.startDate || problems.startTime || problems.endDate}</p>
+      )}
+      {!draft.endDate && <p className="cw-note">No end set: it finishes the same day.</p>}
+
+      <div className="cw-card mt-4">
+        <div className="cw-panel cw-panel-roomy">
+          <TextBox label="Venue" value={draft.location} onChange={(location) => change({ location })} />
+          <div className="cw-line">
+            <Field label="Postcode" error={geoNow === 'none' ? 'No location found for that.' : geoNow === 'failed' ? 'Could not look that up.' : null} className="sm:max-w-[200px]">
+              {({ id, invalid, describedBy }) => (
+                <div className={fieldClass} data-invalid={invalid}>
+                  <input id={id} value={draft.postcode} autoComplete="postal-code" aria-invalid={invalid} aria-describedby={describedBy}
+                    className="uppercase" onChange={(e) => change({ postcode: e.target.value })} onBlur={() => void lookUp()} />
+                  {geoNow === 'ok' && <MapPinCheck aria-label="Location found" role="img" className="h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-heading))]" />}
+                </div>
+              )}
+            </Field>
+            <Field label={<>what3words <span className="font-normal text-[rgb(var(--mg-muted))]">(optional)</span></>}>
+              {({ id }) => (
+                <div className={fieldClass}>
+                  <input id={id} value={draft.what3Words} placeholder="///word.word.word" autoComplete="off"
+                    onChange={(e) => change({ what3Words: e.target.value })} onBlur={() => void lookUp()} />
+                </div>
+              )}
+            </Field>
+          </div>
+        </div>
       </div>
     </section>
   );
