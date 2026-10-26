@@ -1,17 +1,20 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Plus } from 'lucide-react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { SectionFormatLabel, type CompetitionDetail, type CompetitionSummary } from '../../types';
-import { Chevron, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineStatus, type RefineTab } from '../refine/Refine';
-import { filterStandingsByDivision, lastPublishedRound, positionLabels, roundDivision, roundStatus, seasonDivisions, shortDate } from './seasonModel';
+import { Chevron, RefineList, RefineNote, RefinePage, RefineSection, RefineStatus } from '../refine/Refine';
+import { filterStandingsByDivision, positionLabels, roundDivision, roundStatus, seasonDivisions, shortDate } from './seasonModel';
 import { SeasonSettingsForm } from './SeasonSettingsForm';
 import { EmbedCard } from '../competition/EmbedCard';
 import { seasonError, type PublicationView, type SeasonRoundView, type SeasonView, type StandingsView } from './seasonViewTypes';
 import './seasonViews.css';
 import { SelectField } from '../../components/SelectField';
 import { NumberField } from '../../components/NumberField';
+import { CardDropdownRow } from '../../components/CardDropdownRow';
+import { usePageHeader } from '../../components/CompactPageBarContext';
+import { AddBar } from '../admin/creator/controls';
+import '../../components/sitePages.css';
 
 type SeasonTab = 'standings' | 'rounds' | 'settings';
 
@@ -28,6 +31,7 @@ function SeasonDetail({ id }: { id: string }) {
   const [attempt, setAttempt] = useState(0);
   const [addingRound, setAddingRound] = useState(false);
   const [openRoundId, setOpenRoundId] = useState<string | null>(null);
+  usePageHeader({ title: data?.season.title ?? 'Season', subtitle: data ? `Season ${data.season.year}` : undefined, plain: true, backTo: '/seasons', backLabel: 'All seasons' });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -45,8 +49,7 @@ function SeasonDetail({ id }: { id: string }) {
   const reload = () => setAttempt((value) => value + 1);
   const pageCanManage = !!data?.season.canManage;
   if (!data) return <RefinePage>
-    <RefineHeader back="/seasons" backLabel="All seasons" context="Seasons" title="Season" />
-    {error ? <p role="alert" className="mg-notice sv-msg">{error} <button className="mg-text-link min-h-11" onClick={reload}>Try again</button></p> : <p role="status" className="rf-note">Loading season…</p>}
+    {error ? <p role="alert" className="mg-notice sv-msg">{error} <button className="mg-text-link min-h-11" onClick={reload}>Try again</button></p> : <p role="status" className="sp-note">Loading season…</p>}
   </RefinePage>;
 
   const { season, table } = data;
@@ -54,18 +57,17 @@ function SeasonDetail({ id }: { id: string }) {
   const requested = params.get('tab');
   const tab: SeasonTab = requested === 'rounds' ? 'rounds' : requested === 'settings' && canManage ? 'settings' : 'standings';
   const tabLink = (next: SeasonTab) => next === 'standings' ? '?' : `?tab=${next}`;
-  const tabs: RefineTab[] = ([['standings', 'Standings'], ['rounds', 'Rounds'], ...(canManage ? [['settings', 'Settings']] : [])] as [SeasonTab, string][])
-    .map(([key, label]) => ({ label, to: tabLink(key), active: tab === key }));
+  const tabs = ([['standings', 'Standings'], ['rounds', 'Rounds'], ...(canManage ? [['settings', 'Settings']] : [])] as [SeasonTab, string][]);
 
   return <RefinePage>
-    <RefineHeader
-      back="/seasons" backLabel="All seasons" context={`Season ${season.year}`} title={season.title}
-      tabs={tabs} tabsLabel="Season sections"
-      actions={tab === 'rounds' && canManage ? <button type="button" className="rf-btn" aria-expanded={addingRound} onClick={() => setAddingRound((open) => !open)}><Plus className="h-4 w-4" aria-hidden="true" />{addingRound ? 'Close add round' : 'Add round'}</button> : undefined}
-    />
+    <h1 className="sr-only">{season.title}</h1>
+    <nav className="sp-seg" aria-label="Season sections">
+      {tabs.map(([key, label]) => <Link key={key} to={tabLink(key)} aria-current={tab === key ? 'page' : undefined}>{label}</Link>)}
+    </nav>
     {error && <p role="alert" className="mg-notice sv-msg">{error} <button className="mg-text-link min-h-11" onClick={reload}>Try again</button></p>}
     {tab === 'standings' && <Standings season={season} table={table} />}
     {tab === 'rounds' && <>
+      {canManage && <div className="sp-gap"><AddBar onClick={() => setAddingRound((open) => !open)}>{addingRound ? 'Close add round' : 'Add a round'}</AddBar></div>}
       {addingRound && canManage && <AddRound season={season} onChanged={() => { setAddingRound(false); reload(); }} />}
       <RoundsList season={season} id={id} canManage={canManage} openRoundId={openRoundId} setOpenRoundId={setOpenRoundId} onChanged={reload} />
     </>}
@@ -92,63 +94,20 @@ function Standings({ season, table }: { season: SeasonView; table: StandingsView
   const visibleStandings = filterStandingsByDivision(season, table.standings, activeDivision, activeFormat);
   const stale = season.rounds.some((round) => round.publishedVersion && !round.publicationIsCurrent);
   const labels = positionLabels(visibleStandings);
-  const latest = lastPublishedRound(divisionRounds);
-  const best = season.bestResultsToCount;
-  const notes = [
-    best ? `Best ${best} of ${included.length} ${included.length === 1 ? 'round' : 'rounds'}` : `All ${included.length} included ${included.length === 1 ? 'round counts' : 'rounds count'}`,
-    '= shared place',
-    latest ? `after R${latest.orderIndex}, ${shortDate(latest.competitionDate, false)}` : null,
-  ].filter(Boolean).join(' · ');
+  const ageOptions = hasMultipleDivisions
+    ? [{ value: 'all', label: 'All age groups' }, ...divisions.map((div) => ({ value: div, label: div }))]
+    : [{ value: 'all', label: season.ageGroup }];
+  const formatOptions = (formats.length ? formats : [activeFormat]).map((format) => ({ value: String(format), label: SectionFormatLabel[format] }));
   return <>
-    {hasMultipleDivisions && (
-      <div role="tablist" aria-label="Age groups" className="flex flex-wrap gap-2 pt-3">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeDivision === 'all'}
-          className={`rf-btn ${activeDivision === 'all' ? 'rf-btn-primary' : ''}`.trim()}
-          onClick={() => setSelectedDivision('all')}
-        >
-          All
-        </button>
-        {divisions.map((div) => (
-          <button
-            key={div}
-            type="button"
-            role="tab"
-            aria-selected={activeDivision === div}
-            className={`rf-btn ${activeDivision === div ? 'rf-btn-primary' : ''}`.trim()}
-            onClick={() => setSelectedDivision(div)}
-          >
-            {div}
-          </button>
-        ))}
-      </div>
-    )}
-    <div className="sv-filters">
-      <label className="rf-fld">
-        <span className="sr-only">Age section</span>
-        {hasMultipleDivisions ? (
-          <SelectField
-            aria-label="Age section"
-            value={activeDivision}
-            onChange={(e) => setSelectedDivision(e.target.value)}
-          >
-            <option value="all">All age groups</option>
-            {divisions.map((div) => <option key={div} value={div}>{div}</option>)}
-          </SelectField>
-        ) : (
-          <SelectField disabled aria-label="Age section" title="Season age section" value={season.ageGroup}>
-            <option>{season.ageGroup}</option>
-          </SelectField>
-        )}
-      </label>
-      <label className="rf-fld"><span className="sr-only">Format</span><SelectField disabled={formats.length < 2} aria-label="Format" title="Season format" value={activeFormat} onChange={(event) => { setSelectedFormat(Number(event.target.value) as typeof activeFormat); setSelectedDivision('all'); }}>{(formats.length ? formats : [activeFormat]).map((format) => <option key={format} value={format}>{SectionFormatLabel[format]}</option>)}</SelectField></label>
+    <div className="sp-card sp-gap">
+      <CardDropdownRow label="Age group" value={activeDivision} options={ageOptions} onChange={setSelectedDivision} disabled={!hasMultipleDivisions} />
+      <CardDropdownRow label="Show" value={String(activeFormat)} options={formatOptions} disabled={formats.length < 2}
+        onChange={(value) => { setSelectedFormat(Number(value) as typeof activeFormat); setSelectedDivision('all'); }} />
     </div>
     {stale && <p className="mg-notice sv-msg">Results or rules changed since publication. Republish to update the table.</p>}
     {!visibleStandings.length ? <div className="sv-empty"><h2>No standings yet</h2><p>Results will appear after the first round is published.</p></div> : <>
-      <div className="rf-table-wrap"><table className="rf-table sv-table">
-        <caption className="sr-only">Season standings</caption>
+      <div className="rf-table-wrap sp-gap"><table className="rf-table sv-table">
+        <caption className="sr-only">Season standings. Struck-through points fall outside the best results that count.</caption>
         <thead>
           <tr>
             <th scope="col" className="sv-pos">Pos</th>
@@ -156,13 +115,12 @@ function Standings({ season, table }: { season: SeasonView; table: StandingsView
             {publishedRounds.map((round) => (
               <th key={round.id} scope="col" className="sv-mid" title={round.competitionName}>R{round.orderIndex}</th>
             ))}
-            <th scope="col" className="sv-mid">Rds</th>
             <th scope="col">Pts</th>
           </tr>
         </thead>
         <tbody>{visibleStandings.map((row) => <tr key={row.teamProfileId}>
           <td className="rf-num">{labels.get(row.teamProfileId)}</td>
-          <td><Link to={`/team-profiles/${row.teamProfileId}`}>{row.teamName}</Link>{row.clubName && !row.teamName.toLowerCase().includes(row.clubName.toLowerCase()) && <span className="sv-club">{row.clubName}</span>}</td>
+          <td><Link to={`/team-profiles/${row.teamProfileId}`} className="sv-team">{row.teamName}</Link></td>
           {publishedRounds.map((round) => {
             const cell = row.rounds.find((r) => r.roundId === round.id);
             if (!cell) return <td key={round.id} className="sv-mid sv-dim">–</td>;
@@ -171,11 +129,9 @@ function Standings({ season, table }: { season: SeasonView; table: StandingsView
             }
             return <td key={round.id} className="sv-mid">{cell.seasonPoints}</td>;
           })}
-          <td className="sv-mid">{row.rounds.length}</td>
           <td className="rf-num sv-end">{row.totalPoints}</td>
         </tr>)}</tbody>
       </table></div>
-      <RefineNote>{notes}. Worked out from published results; not an official ranking unless the league says so.</RefineNote>
     </>}
   </>;
 }
