@@ -20,6 +20,13 @@ const h: Heat = heat(1, { label: 'Heat 1', entries, races: [done, race(2, { name
 const rules = { lanesPerHeat: null, mode: LaneRotationMode.MoveUp };
 
 describe('HeatPrintSheet', () => {
+  it('names a custom hatband without its colour code', () => {
+    render(<HeatPrintSheet heat={h} races={h.races} rules={rules} hcTeamIds={new Set()} tieRule={TieBreakRule.Countback} hatbands={['Lilac #B79CED', 'Blue', 'Green']} />);
+    const bravo = within(screen.getByLabelText('Printable heat table')).getByRole('row', { name: /Bravo/ });
+    expect(bravo).toHaveTextContent('Lane 1: 1st (3) · Lilac hatband');
+    expect(bravo).not.toHaveTextContent('#B79CED');
+  });
+
   it('lists lanes, bib colours, each race’s result, totals and position', () => {
     render(<HeatPrintSheet heat={h} races={h.races} rules={rules} hcTeamIds={new Set([3])} tieRule={TieBreakRule.Countback} hatbands={['Red', 'Blue', 'Green']} />);
     const sheet = screen.getByLabelText('Printable heat table');

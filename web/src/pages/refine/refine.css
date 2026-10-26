@@ -178,3 +178,5 @@ details[open] > summary ~ * { animation: rf-reveal 220ms var(--mg-ease-out); }
 .rf-link-danger { min-height: 44px; padding: 0 4px; border: 0; background: transparent; color: rgb(var(--mg-elim)); font: 600 14px/1 var(--mg-font); text-decoration: underline; cursor: pointer; }
 .rf-row .rf-btn { border-radius: 999px; }
 @keyframes rf-pop-in { from { opacity: 0; transform: scale(.95) translateY(-4px); } }
+.rf-menu-danger { color: rgb(var(--mg-elim)); text-decoration: underline; }
+.rf-menu-danger:hover { color: rgb(var(--mg-elim)); }

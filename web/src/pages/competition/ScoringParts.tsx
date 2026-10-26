@@ -3,7 +3,8 @@ import { motion, type PanInfo } from 'framer-motion';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { BibSwatch, HatbandSwatch } from '../../components/BibSwatch';
-import { dotColour, teamBoxStyle } from '../../lib/teamColours';
+import { dotColour } from '../../lib/teamColours';
+import { hatbandBoxStyle } from '../../lib/hatbands';
 import { RaceRulesButton } from '../../components/RaceRulesButton';
 import { RaceSelect } from '../../components/RacePicker';
 import { ELIM_REASONS, OTHER_REASON, noteFor, reasonKeyOf, statusFor } from '../../lib/elimReasons';
@@ -278,7 +279,7 @@ export function ScoreRow({
   ) : null;
 
   const rowStyle = {
-    ...(hatband ? teamBoxStyle(hatband) : {}),
+    ...(hatband ? hatbandBoxStyle(hatband) : {}),
     ...(eliminated ? { borderColor: '#E8B4BA' } : {}),
   };
 
