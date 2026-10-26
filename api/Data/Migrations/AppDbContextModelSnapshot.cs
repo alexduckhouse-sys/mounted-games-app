@@ -688,6 +688,14 @@ namespace MountedGames.Api.Data.Migrations
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");
 
+                    b.Property<string>("DetailHint")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("DetailPrompt")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
                     b.Property<string>("ImageUrl")
                         .HasMaxLength(2048)
                         .HasColumnType("character varying(2048)");
@@ -882,6 +890,10 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<int>("CompetitionListingId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Detail")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
                     b.Property<int>("EventOrderId")
                         .HasColumnType("integer");
 
@@ -1016,6 +1028,14 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<string>("AppleMapsUrl")
                         .HasColumnType("text");
 
+                    b.Property<string>("CompetitionNumber")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("ContactEmail")
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1069,6 +1089,10 @@ namespace MountedGames.Api.Data.Migrations
 
                     b.Property<string>("PaymentDestination")
                         .HasColumnType("text");
+
+                    b.Property<string>("Postcode")
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
 
                     b.Property<bool>("SignupsLocked")
                         .HasColumnType("boolean");

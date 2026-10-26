@@ -9,7 +9,9 @@ public record CreateCatalogueItemRequest(
     int PriceMinor,
     int? StockQuantity,
     CommerceItemCategory Category,
-    string? ImageUrl);
+    string? ImageUrl,
+    string? DetailPrompt = null,
+    string? DetailHint = null);
 
 public record UpdateCatalogueItemRequest(
     string? Title,
@@ -19,7 +21,9 @@ public record UpdateCatalogueItemRequest(
     CommerceItemCategory Category,
     string? ImageUrl,
     bool IsActive,
-    long ExpectedVersion);
+    long ExpectedVersion,
+    string? DetailPrompt = null,
+    string? DetailHint = null);
 
 public record CatalogueItemDto(
     int Id,
@@ -33,7 +37,9 @@ public record CatalogueItemDto(
     bool IsActive,
     long Version,
     DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    string? DetailPrompt = null,
+    string? DetailHint = null);
 
 public record CreateCompetitionListingRequest(int CatalogueItemId);
 
@@ -61,13 +67,16 @@ public record PublicCompetitionListingDto(
     string Currency,
     int? StockQuantity,
     CommerceItemCategory Category,
-    string? ImageUrl);
+    string? ImageUrl,
+    string? DetailPrompt = null,
+    string? DetailHint = null);
 
 public record EventCommerceSettingsDto(int CompetitionId, bool IsDemo, bool IsLocked, DateTime? UpdatedAt);
 
 public record UpdateEventCommerceSettingsRequest(bool IsDemo);
 
-public record CreateEventOrderLineRequest(int ListingId, int Quantity);
+/// <param name="Detail">What the buyer typed for the item's <c>DetailPrompt</c>, at most 80 characters.</param>
+public record CreateEventOrderLineRequest(int ListingId, int Quantity, string? Detail = null);
 
 public record CreateEventOrderRequest(string? IdempotencyKey, IReadOnlyList<CreateEventOrderLineRequest>? Items);
 
@@ -79,7 +88,8 @@ public record EventOrderLineDto(
     string Title,
     int UnitPriceMinor,
     int Quantity,
-    int LineTotalMinor);
+    int LineTotalMinor,
+    string? Detail = null);
 
 public record EventOrderDto(
     int Id,
@@ -150,7 +160,9 @@ internal static class CommerceDtoMappings
         item.IsActive,
         item.Version,
         item.CreatedAt,
-        item.UpdatedAt);
+        item.UpdatedAt,
+        item.DetailPrompt,
+        item.DetailHint);
 
     public static CompetitionListingDto ToDto(this CompetitionListing listing) => new(
         listing.Id,
@@ -174,7 +186,9 @@ internal static class CommerceDtoMappings
         listing.CatalogueItem.Currency,
         listing.CatalogueItem.StockQuantity,
         listing.CatalogueItem.Category,
-        listing.CatalogueItem.ImageUrl);
+        listing.CatalogueItem.ImageUrl,
+        listing.CatalogueItem.DetailPrompt,
+        listing.CatalogueItem.DetailHint);
 
     public static EventOrderLineDto ToDto(this EventOrderLine line) => new(
         line.Id,
@@ -184,7 +198,8 @@ internal static class CommerceDtoMappings
         line.TitleSnapshot,
         line.UnitPriceMinorSnapshot,
         line.Quantity,
-        line.LineTotalMinor);
+        line.LineTotalMinor,
+        line.Detail);
 
     public static TestPaymentDto ToDto(this TestPaymentRecord payment) => new(
         payment.Id,

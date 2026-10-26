@@ -92,6 +92,12 @@ export function WhenWhereStep({ draft, change, problems, clear }: StepProps<Crea
               )}
             </Field>
           </div>
+          <div className="cw-line">
+            <TextBox label={<>Competition number <span className="font-normal text-[rgb(var(--mg-muted))]">(optional)</span></>} value={draft.competitionNumber}
+              onChange={(competitionNumber) => change({ competitionNumber })} hint="The number your governing body gave the event." />
+            <TextBox label={<>Contact email <span className="font-normal text-[rgb(var(--mg-muted))]">(optional)</span></>} value={draft.contactEmail} autoComplete="email"
+              error={problems.contactEmail} onChange={(contactEmail) => { change({ contactEmail }); clear('contactEmail'); }} hint="Where entrants write to you. It shows on the event page." />
+          </div>
         </div>
       </div>
     </section>

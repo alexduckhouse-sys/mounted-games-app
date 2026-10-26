@@ -1034,6 +1034,10 @@ public class SignupTests : IClassFixture<ApiFactory>
 
         var withdrawRes = await entrant.PostAsJsonAsync($"/api/my/signups/{created.Id}/withdraw", new { });
         Assert.Equal(HttpStatusCode.Conflict, withdrawRes.StatusCode);
+        // The web matches on the code, so it must stay as it is.
+        using var body = System.Text.Json.JsonDocument.Parse(await withdrawRes.Content.ReadAsStringAsync());
+        Assert.Equal("draw-happened", body.RootElement.GetProperty("code").GetString());
+        Assert.Equal("You can’t withdraw once the draw has happened.", body.RootElement.GetProperty("message").GetString());
     }
 
     [Fact]

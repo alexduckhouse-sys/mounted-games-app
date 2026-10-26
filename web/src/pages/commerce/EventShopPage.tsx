@@ -10,7 +10,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { useCompetition } from '../competition/context';
 import { RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineStatus } from '../refine/Refine';
 import { LoadError } from './commerceUi';
-import { CATEGORY_LABEL, errorMessage, newIdempotencyKey, pounds } from './commerceFormat';
+import { CATEGORY_LABEL, errorMessage, newIdempotencyKey, orderLineText, pounds } from './commerceFormat';
 import { DemoPaymentFlow, OutcomeState } from './DemoPaymentFlow';
 import type { CommerceItemCategory, DemoOrderPaymentResult, EventCommerceSettings, EventOrder, FakePaymentOutcome, PublicCompetitionListing, TestPayment } from './types';
 import './commerce.css';
@@ -232,7 +232,7 @@ function OrderLines({ order }: { order: EventOrder }) {
       <RefineList label="Order summary">
         {order.lines.map((line) => (
           <li key={line.id} className="rf-row" style={{ minHeight: 48 }}>
-            <span className="rf-grow">{line.title} × {line.quantity}</span>
+            <span className="rf-grow">{orderLineText(line)}</span>
             <span className="rf-price">{pounds(line.lineTotalMinor)}</span>
           </li>
         ))}

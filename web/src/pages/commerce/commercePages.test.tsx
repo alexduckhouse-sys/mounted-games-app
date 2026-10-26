@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -406,6 +406,56 @@ describe('SellerCataloguePage', () => {
       expect.objectContaining({ stockQuantity: 12, expectedVersion: 7 })));
   });
 
+  it('asks what to ask the buyer for, and sends the question and its hint with the item', async () => {
+    catalogueGet([]);
+    post.mockResolvedValue({ data: {} } as never);
+    render(<MemoryRouter><SellerCataloguePage /></MemoryRouter>);
+    await userEvent.click(await screen.findByRole('button', { name: /Add item/ }));
+    await userEvent.type(screen.getByLabelText('Name'), 'Shavings');
+    await userEvent.type(screen.getByLabelText('Description'), 'Delivered to your stable.');
+    await userEvent.type(screen.getByLabelText('Price (£)'), '10');
+    await userEvent.type(screen.getByLabelText(/Ask the buyer for/), ' Stable number ');
+    await userEvent.type(screen.getByLabelText(/Hint/), 'e.g. B12');
+    await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/commerce/catalogue', expect.objectContaining({ detailPrompt: 'Stable number', detailHint: 'e.g. B12' })));
+  });
+
+  it('sends nothing for the question when it is left empty, even if a hint was typed', async () => {
+    catalogueGet([]);
+    post.mockResolvedValue({ data: {} } as never);
+    render(<MemoryRouter><SellerCataloguePage /></MemoryRouter>);
+    await userEvent.click(await screen.findByRole('button', { name: /Add item/ }));
+    await userEvent.type(screen.getByLabelText('Name'), 'Programme');
+    await userEvent.type(screen.getByLabelText('Description'), 'Collect at the gate.');
+    await userEvent.type(screen.getByLabelText('Price (£)'), '5');
+    await userEvent.type(screen.getByLabelText(/Hint/), 'e.g. B12');
+    await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/commerce/catalogue', expect.objectContaining({ detailPrompt: null, detailHint: null })));
+  });
+
+  it('opens an item with its question filled in, and keeps it when the item is edited or restored', async () => {
+    const asking = { ...mug, detailPrompt: 'Number plate', detailHint: 'e.g. AB12 CDE' };
+    catalogueGet([asking]);
+    put.mockResolvedValue({ data: { ...asking, version: 8 } } as never);
+    render(<MemoryRouter><SellerCataloguePage /></MemoryRouter>);
+    await userEvent.click(await screen.findByRole('button', { name: 'Event mug' }));
+    await userEvent.click(screen.getByRole('button', { name: /£8\.50/ }));
+    expect(screen.getByLabelText(/Ask the buyer for/)).toHaveValue('Number plate');
+    expect(screen.getByLabelText(/Hint/)).toHaveValue('e.g. AB12 CDE');
+    await userEvent.clear(screen.getByLabelText(/Hint/));
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(put).toHaveBeenCalledWith('/commerce/catalogue/20', expect.objectContaining({ detailPrompt: 'Number plate', detailHint: null })));
+
+    // Restoring an archived item sends the question back too, so it isn't wiped.
+    catalogueGet([{ ...asking, isActive: false }]);
+    cleanup();
+    render(<MemoryRouter><SellerCataloguePage /></MemoryRouter>);
+    await userEvent.click(await screen.findByRole('button', { name: 'Event mug' }));
+    await userEvent.click(screen.getByRole('button', { name: 'More actions for this item' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Restore item' }));
+    await waitFor(() => expect(put).toHaveBeenLastCalledWith('/commerce/catalogue/20', expect.objectContaining({ isActive: true, detailPrompt: 'Number plate', detailHint: 'e.g. AB12 CDE' })));
+  });
+
   it('keeps the item sheet open while its save request is pending', async () => {
     catalogueGet([], [], []);
     const pendingSave = deferred<{ data: Record<string, never> }>();
@@ -499,6 +549,32 @@ describe('ownership and demo states', () => {
     expect(screen.getByRole('button', { name: 'Manual' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Demo' })).toBeEnabled();
     expect(screen.queryByText(/edit mode/i)).not.toBeInTheDocument();
+  });
+
+  it('shows what the buyer answered next to each line in the organiser’s orders, the seller’s sales and the receipt', async () => {
+    auth.mockReturnValue({ ...viewer, user: { ...viewer.user, id: 'admin', roles: ['Admin'] }, canOrganise: vi.fn(() => true), hasRole: vi.fn((role: string) => role === 'Admin'), canEdit: vi.fn(() => true) } as unknown as ReturnType<typeof useAuth>);
+    const withDetail = orderOf({ lines: [
+      { id: 1, listingId: 10, catalogueItemId: 20, sellerUserId: 'seller', title: 'Shavings', unitPriceMinor: 1000, quantity: 2, lineTotalMinor: 2000, detail: 'B12' },
+      { id: 2, listingId: 11, catalogueItemId: 21, sellerUserId: 'seller', title: 'Programme', unitPriceMinor: 500, quantity: 1, lineTotalMinor: 500, detail: null },
+    ] });
+    get.mockImplementation(async (url) => {
+      if (String(url).endsWith('/listings/manage')) return { data: [] } as never;
+      if (String(url).endsWith('/orders')) return { data: [withDetail] } as never;
+      return { data: { competitionId: 5, isDemo: false, isLocked: false, updatedAt: null } } as never;
+    });
+    render(<CommerceManagementPage />);
+    await userEvent.click(await screen.findByRole('button', { name: /Orders/ }));
+    expect(await screen.findByText('Shavings × 2 (B12), Programme × 1')).toBeInTheDocument();
+    cleanup();
+
+    const sales = [{ ...withDetail, orderId: 33, sellerTotalMinor: 2500, status: 0 }];
+    get.mockImplementation(async (url) => ({ data: url === '/commerce/sales/mine' ? sales : url === '/commerce/orders/mine' ? [withDetail] : [] }) as never);
+    render(<MemoryRouter><CommerceOrdersPage /></MemoryRouter>);
+    await userEvent.click(await screen.findByRole('button', { name: /Order #33/ }));
+    expect(screen.getByText('Shavings × 2 (B12)')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Back to orders' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'Sales' }));
+    expect(await screen.findByText('Shavings × 2 (B12), Programme × 1')).toBeInTheDocument();
   });
 
   it('excludes demo and declined orders from paid reconciliation totals', async () => {

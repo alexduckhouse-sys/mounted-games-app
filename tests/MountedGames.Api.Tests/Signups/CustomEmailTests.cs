@@ -453,6 +453,24 @@ public class CustomEmailTests : IClassFixture<EmailApiFactory>
     }
 
     [Fact]
+    public async Task TheSentCountIsForThisEmailAlone_NotARunningTotalAcrossEmails()
+    {
+        // The admin page's "Sent to N people" toast reads `sent` from the last batch, so a second email must start from zero.
+        var admin = await AdminAsync();
+        await OptInsAsync(Addresses(3, "first"));
+        var first = await FinishAsync(admin, (await StartAsync(admin, Content())).Id);
+        Assert.Equal((3, 3), (first.Sent, first.Total));
+
+        await OptInsAsync(Addresses(2, "second"));
+        var count = await CountAsync(admin, CustomEmailAudience.News);
+        var response = await admin.PostAsJsonAsync("/api/admin/custom-emails",
+            new SendCustomEmailRequest("Second news", CustomEmailAudience.News, [Text("Another one.")], true, count));
+        var second = await FinishAsync(admin, (await response.ReadAsync<CustomEmailDto>()).Id);
+
+        Assert.Equal((2, 2, 0), (second.Sent, second.Total, second.Failed));
+    }
+
+    [Fact]
     public async Task TrainersAreMailedAtTheirAccountAddress_WithNoUnsubscribeLink()
     {
         var admin = await AdminAsync();

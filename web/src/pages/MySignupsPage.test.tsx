@@ -150,6 +150,27 @@ describe('MySignupsPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t withdraw this entry. Check your signal and try again.');
   });
 
+  it('shows the API’s draw-happened message when the draw was made after the page loaded', async () => {
+    const entry: ExtendedMySignup = { ...signup(8, { status: 1, amountMinor: 4000, teamName: 'Cheshire A' }), drawComplete: false };
+    vi.mocked(api.get).mockResolvedValue({ data: [entry] });
+    vi.mocked(api.post).mockRejectedValue({ response: { status: 409, data: { code: 'draw-happened', message: 'You can’t withdraw once the draw has happened.' } } });
+    mount();
+    autoConfirm(true);
+    await userEvent.click(await screen.findByRole('button', { name: 'Withdraw Entry' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('You can’t withdraw once the draw has happened.');
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Check your signal');
+  });
+
+  it('keeps the signal advice for a 409 that is not about the draw', async () => {
+    const entry: ExtendedMySignup = { ...signup(8, { status: 1, amountMinor: 4000, teamName: 'Cheshire A' }), drawComplete: false };
+    vi.mocked(api.get).mockResolvedValue({ data: [entry] });
+    vi.mocked(api.post).mockRejectedValue({ response: { status: 409, data: { message: 'This entry is no longer active.' } } });
+    mount();
+    autoConfirm(true);
+    await userEvent.click(await screen.findByRole('button', { name: 'Withdraw Entry' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t withdraw this entry. Check your signal and try again.');
+  });
+
   it('hides Withdraw Entry once the draw has taken place', async () => {
     const drawnEntry: ExtendedMySignup = {
       ...signup(9, { status: 1, amountMinor: 4000 }),

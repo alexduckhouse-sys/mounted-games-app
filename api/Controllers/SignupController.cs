@@ -787,6 +787,9 @@ public class SignupController : ControllerBase
         }).ToList();
     }
 
+    /// <summary>The 409 for a withdrawal after the draw. The web matches on <c>code</c>, so keep it as it is.</summary>
+    internal static readonly object DrawHappened = new { code = "draw-happened", message = "You can’t withdraw once the draw has happened." };
+
     /// <summary>
     /// Allows an entrant to withdraw their own signup before the draw is made, freeing up their spot in
     /// MaxParticipants, detaching/removing any un-drawn team, and flagging the signup as "Withdrawn — refund pending".
@@ -813,7 +816,7 @@ public class SignupController : ControllerBase
             && (h.Session.CompetitionSectionId == null || h.Session.CompetitionSectionId == mySignup.CompetitionSectionId)
             && h.Entries.Count > 0);
         if (drawAlreadyMade)
-            return Conflict(new { message = "Cannot withdraw automatically after the draw has been made. Please contact the organiser." });
+            return Conflict(DrawHappened);
 
         var ex = await _db.Set<SignupExtras>().FindAsync(mySignup.Id);
         if (ex?.IsWithdrawn == true)
@@ -829,7 +832,7 @@ public class SignupController : ControllerBase
         var teams = await _db.Teams.Include(t => t.HeatEntries).Include(t => t.DeclarationForms)
             .Where(t => teamIds.Contains(t.Id) && t.CompetitionSectionId == mySignup.CompetitionSectionId).ToListAsync();
         if (teams.Any(t => t.HeatEntries.Count > 0))
-            return Conflict(new { message = "Cannot withdraw automatically after the draw has been made. Please contact the organiser." });
+            return Conflict(DrawHappened);
         var needsRefund = mySignup.Status == SignupPaymentStatus.Paid && mySignup.AmountMinor > 0;
         mySignup.TeamId = null;
         _db.RemoveRange(links);

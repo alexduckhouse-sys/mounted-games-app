@@ -318,11 +318,11 @@ export interface CompetitionDetail {
   longitude?: number | null;
   what3Words?: string | null;
   appleMapsUrl?: string | null;
-  /** The venue's postcode. Not sent by the API yet; the Details page leaves the row out while it is missing. */
+  /** The venue's postcode, upper-cased. Null when the organiser hasn't given one. */
   postcode?: string | null;
-  /** The governing body's number for the competition. Not sent by the API yet; hidden while missing. */
+  /** The governing body's number for the competition. */
   competitionNumber?: string | null;
-  /** Where entrants write to the organiser. Not sent by the API yet; hidden while missing. */
+  /** Where entrants write to the organiser. Shown on the public Details tab. */
   contactEmail?: string | null;
   startDate: string;
   endDate?: string | null;
@@ -842,6 +842,8 @@ export interface LiveStream {
   viewerCount: number;
   generation: number;
 }
+/** Who started a running stream (`GET /competitions/{id}/streams/publishers`, staff only). The name is null when the API doesn't know it. */
+export interface StreamPublisher { streamId: number; startedByName: string | null }
 export interface IceServer { urls: string | string[]; username?: string; credential?: string }
 export interface LiveStreamsResponse { enabled: boolean; streams: LiveStream[] }
 export interface PublishRequest { sdpOffer: string; videoMid: string; audioMid?: string | null }
