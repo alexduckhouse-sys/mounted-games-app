@@ -109,6 +109,22 @@ describe('signing in', () => {
     expect(post).toHaveBeenCalledWith('/auth/admin-key', { key: 'the-key', title: 'Chief Steward', email: 'steward@example.com', password: 'Passw0rd!x' });
   });
 
+  it('accepts an invitation and signs the person in', async () => {
+    post.mockResolvedValue({ data: stored(['Trainer']) });
+    const { result } = mount();
+    await act(async () => { await result.current.acceptInvite('tok', 'Ann Smith', 'Passw0rd!x'); });
+    expect(post).toHaveBeenCalledWith('/auth/invites/accept', { token: 'tok', fullName: 'Ann Smith', password: 'Passw0rd!x' });
+    expect(result.current.hasRole('Trainer')).toBe(true);
+    expect(JSON.parse(localStorage.getItem('mg.auth') ?? '{}').token).toBe('tok-1');
+  });
+
+  it('clears loading when an invitation is refused', async () => {
+    post.mockRejectedValue(new Error('gone'));
+    const { result } = mount();
+    await act(async () => { await expect(result.current.acceptInvite('tok', 'A', 'bad')).rejects.toThrow('gone'); });
+    expect(result.current).toMatchObject({ user: null, loading: false });
+  });
+
   it('clears loading when the admin key is wrong', async () => {
     post.mockRejectedValue(new Error('nope'));
     const { result } = mount();

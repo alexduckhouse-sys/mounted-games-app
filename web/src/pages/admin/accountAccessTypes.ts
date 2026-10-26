@@ -47,3 +47,29 @@ export interface StaffAccount {
   lockedAt: string | null;
   createdAt: string;
 }
+
+/** `GET /api/admin/users?q=`: an account found by name, email or club. */
+export interface AdminUser {
+  id: string;
+  fullName: string;
+  email: string | null;
+  clubId: number | null;
+  clubName: string | null;
+  roles: string[];
+  isLockedOut: boolean;
+  createdAt: string;
+  isLocked: boolean;
+  isBlocked: boolean;
+}
+
+/** What an account is called on the Users page. */
+export function accountKind(roles: readonly string[]): string {
+  if (roles.includes('MasterAdmin')) return 'Master admin';
+  if (roles.includes('Admin')) return 'Site admin';
+  if (roles.includes('Trainer')) return 'Organiser';
+  if (roles.includes('TrainerRequest')) return 'Wants to organise';
+  if (roles.includes('Manager')) return 'Team manager';
+  if (roles.includes('ManagerRequest')) return 'Wants to manage a team';
+  if (roles.includes('Rider')) return 'Rider';
+  return 'Supporter';
+}
