@@ -1,13 +1,12 @@
-import { Component, useEffect, useState, useContext, type ReactNode } from 'react';
+import { useEffect, useState, useContext, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Megaphone, VolumeX } from 'lucide-react';
 import { BibSwatch as BaseBibSwatch } from '../BibSwatch';
-import { LiveDataCardOverlay, OverlayChips, ProducerBanner, ScoreCardOverlay, activeArenaHeat, readLiveOverlayCard, redactTeamDisplayName, useDueCard } from './OverlayExtras';
+import { LiveDataCardOverlay, OverlayChips, ProducerBanner, ScoreCardOverlay, activeArenaHeat, readLiveOverlayCard, useDueCard } from './OverlayExtras';
 import { SponsorOverlay } from './SponsorOverlay';
 import { useOverlay } from '../../hooks/useOverlay';
 import { CompetitionContext } from '../../pages/competition/context';
 import { lookStyle } from '../../lib/overlays';
-import { readLiveOptions } from '../../lib/streamOverlayTiles';
 import type { ChatMessage, Heat, LiveStream } from '../../types';
 import { ENTER, LEAVE, ROW_STAGGER_S, SPRING, WIPE_HIDDEN_LEFT, WIPE_SHOWN } from '../../lib/motion';
 import { useStillMotion } from '../../lite/useStillMotion';
@@ -35,32 +34,10 @@ export function BibSwatch({
   );
 }
 
-class OverlayErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
-  state = { hasError: false };
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-  componentDidCatch() {
-    // Isolate malformed overlay payloads so the live video player underneath keeps playing.
-  }
-  render() {
-    if (this.state.hasError) return null;
-    return this.props.children;
-  }
-}
-
-function OverlayLayerInner({ children }: { children: ReactNode }) {
-  const { look } = useOverlay();
-  return <div className={`mg-font mg-ov-${look.size} pointer-events-none absolute inset-0 text-white`} style={lookStyle(look)}>{children}</div>;
-}
-
 /** New score cards or producer banners can be supplied as additional overlay items. */
 export function OverlayLayer({ children }: { children: ReactNode }) {
-  return (
-    <OverlayErrorBoundary>
-      <OverlayLayerInner>{children}</OverlayLayerInner>
-    </OverlayErrorBoundary>
-  );
+  const { look } = useOverlay();
+  return <div className={`mg-font mg-ov-${look.size} pointer-events-none absolute inset-0 text-white`} style={lookStyle(look)}>{children}</div>;
 }
 export function StreamNotice({ message, receivedAt, duration = 8000 }: { message: ChatMessage; receivedAt: number; duration?: number }) {
   const still = useStillMotion();
@@ -91,7 +68,6 @@ interface HeatLaneLike {
   teamId?: number;
   teamName?: string;
   riderName?: string;
-  useInitialOnly?: boolean;
   bibColour?: string | null;
   bibColor?: string | null;
 }
@@ -113,7 +89,6 @@ export function StreamOverlays({ stream, label, reconnecting, muted, onSound, an
   const compCtx = useContext(CompetitionContext);
   const competition = compCtx?.competition;
   const { overlay, look, scoreCards } = useOverlay();
-  const liveOptions = readLiveOptions(overlay);
   const dueCard = useDueCard(scoreCards, stream.arenaName, overlay.scoreCardDelaySeconds * 1000, overlay.scoreCardSeconds * 1000);
   const liveCardMode = readLiveOverlayCard(overlay).mode;
   const overlayPopupActive =
@@ -145,8 +120,7 @@ export function StreamOverlays({ stream, label, reconnecting, muted, onSound, an
                    (lane.teamName && t.displayName === lane.teamName),
           );
           const bibColor = team?.bibColour ?? (team as { bibColor?: string | null } | undefined)?.bibColor ?? lane.bibColour ?? lane.bibColor;
-          const rawDisplay = lane.teamName || lane.riderName || '';
-          const displayName = redactTeamDisplayName(rawDisplay, team, competition, lane.useInitialOnly);
+          const displayName = lane.teamName || lane.riderName || '';
           return {
             key: lane.id ?? `${laneNumber}-${idx}`,
             laneNumber,
@@ -220,9 +194,7 @@ export function StreamOverlays({ stream, label, reconnecting, muted, onSound, an
     <ProducerBanner stream={stream} overlay={overlay} look={look} />
     <ScoreCardOverlay stream={stream} overlay={overlay} look={look} cards={scoreCards} teams={competition?.teams} />
     <LiveDataCardOverlay arenaName={stream.arenaName} overlay={overlay} />
-    <div data-sponsor-size={liveOptions.sponsorSize} className={liveOptions.sponsorSize === 'full' ? 'mg-ov-sponsor-full' : 'mg-ov-sponsor-corner'}>
-      <SponsorOverlay arenaName={stream.arenaName} track={stream.id !== 0} />
-    </div>
+    <SponsorOverlay arenaName={stream.arenaName} track={stream.id !== 0} />
     {announcement && <div className="absolute left-3 right-3 top-14 flex justify-center"><StreamNotice key={`${announcement.message.id}-${announcement.receivedAt}`} {...announcement} /></div>}
     <AnimatePresence>
       {reconnecting && stream.status !== 1 && <motion.div key="reconnecting" role="status" {...fadeCover(still)} className="absolute inset-0 flex flex-col items-center justify-center bg-[rgb(var(--mg-header-deep)/0.7)]"><h3 className="text-2xl font-bold">Reconnecting…</h3><p className="text-sm">The signal dropped. Trying again.</p></motion.div>}

@@ -12,6 +12,7 @@ import { entryOptions, feeText, parseEntryKind, sectionFull, type EntryKind } fr
 import { displaySectionName } from '../../lib/section';
 import { useCompetition } from './context';
 import { EntryForm, type EntrySent } from './EntryForm';
+import { BankDetailsCard } from './BankDetailsCard';
 import { useEntrySettings } from './entrySettings';
 import '../../components/sitePages.css';
 import '../../components/eventPages.css';
@@ -71,6 +72,7 @@ export function EntryPage() {
       <div className="ev-card flex flex-col gap-2.5 p-5">
         <h2 className="ev-title">Entry submitted</h2>
         <p className="ev-body">{sent.text}</p>
+        {sent.bank && <BankDetailsCard details={sent.bank} />}
         {sent.enteredAs && (
           <EntryRosette team={sent.enteredAs} section={displaySectionName(section.displayName)} year={new Date(competition.startDate).getFullYear()} />
         )}

@@ -955,7 +955,7 @@ describe('SessionPage', () => {
       expect(document.querySelector('.sc-fact')).toBeNull();
 
       const sheet = await openTools();
-      await userEvent.click(within(sheet).getByRole('switch'));
+      await userEvent.click(within(sheet).getByRole('switch', { name: /Commentator facts/ }));
       expect(localStorage.getItem('mg.commentatorScoring.1')).toBe('yes');
       await userEvent.click(screen.getByRole('button', { name: 'Close race tools' }));
 

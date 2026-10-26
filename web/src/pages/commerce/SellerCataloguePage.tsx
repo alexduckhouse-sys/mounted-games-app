@@ -349,29 +349,11 @@ function ItemSheet({ item, onSave, onClose }: { item: CatalogueItem | null; onSa
       <div className="cs-sheet-row">
         <span id="stock-label">Stock</span>
         <span className="sp-stepper" role="group" aria-labelledby="stock-label">
-          <button
-            type="button"
-            aria-label="Less stock"
-            disabled={form.stock === 0}
-            onClick={() => {
-              const nextStock = Math.max(0, form.stock - 1);
-              change({ stock: nextStock, soldOut: nextStock === 0 });
-            }}
-          >
-            <Minus aria-hidden="true" className="h-4 w-4" />
-          </button>
+          <button type="button" aria-label="Less stock" disabled={!form.soldOut && form.stock === 0} onClick={() => change({ stock: Math.max(0, form.stock - 1), soldOut: false })}><Minus aria-hidden="true" className="h-4 w-4" /></button>
           <output aria-live="polite">{stockLabel}</output>
           <button type="button" aria-label="More stock" onClick={() => change({ stock: form.soldOut ? 1 : form.stock + 1, soldOut: false })}><Plus aria-hidden="true" className="h-4 w-4" /></button>
         </span>
       </div>
-      <label className="cs-sheet-row cursor-pointer text-sm">
-        <span>Unlimited stock</span>
-        <input
-          type="checkbox"
-          checked={!form.soldOut && form.stock === 0}
-          onChange={(event) => change(event.target.checked ? { stock: 0, soldOut: false } : { stock: 0, soldOut: true })}
-        />
-      </label>
       <div className="sp-card">
         <CardDropdownRow label="Category" value={String(form.category)} options={CATEGORY_CHOICES.map((c) => ({ value: String(c.value), label: c.label }))}
           onChange={(value) => change({ category: Number(value) as CommerceItemCategory })} />

@@ -3,7 +3,6 @@ import { ChevronDown, Flag, Shield } from 'lucide-react';
 import { RoundSearch } from '../../components/RoundSearch';
 import type { CompetitionSection, DeclarationForm, RiderEntry, Team } from '../../types';
 import { parseBibAndFlag } from '../../lib/bib';
-import { flagSrc } from './TeamSheet';
 import { heightText } from '../../lib/decForm';
 import type { DecFormConfig } from '../../lib/decFormConfig';
 import { displaySectionName } from '../../lib/section';
@@ -92,7 +91,7 @@ export function DecFormList({ forms, teams, sections, config, canDelete, onDelet
                   <button type="button" className="sp-row" aria-expanded={isOpen} aria-controls={panelId} onClick={() => toggle(form.id)}>
                     <span className="sp-grow">
                       <span className="sp-t1 flex items-center gap-1.5">
-                        {parsedBib.flag && <img src={flagSrc(parsedBib.flag)} alt="" className="h-3.5 w-5 shrink-0 rounded-[2px] object-cover" />}
+                        {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="h-3.5 w-5 shrink-0 rounded-[2px] object-cover" />}
                         <span className="min-w-0 truncate">{form.teamName}</span>
                         {(form.flagCount ?? 0) > 0 && (
                           <span className="mg-flag inline-flex shrink-0 items-center gap-1 !px-1.5 !py-0.5 !text-[11px]" title="Someone's answer is outside the limits set for this event">

@@ -47,9 +47,11 @@ interface Extra {
   onAddRace?: (name: string) => void;
   onRerunRace?: () => void;
   correctionReason?: string;
+  onDeadHeat?: (teamIds: number[]) => void;
+  onClearDeadHeat?: (teamId: number) => void;
 }
 
-function Harness({ allowAudit = false, activeIdx = 1, heatOverride = h, queued = [], onSelectRace = vi.fn(), onSubmit = () => {}, allowReasons, onSetHc, hcTeamIds, onUndo, initial = [], lanes = null, hatbands, cards, onSetCard, teamFacts, factsOn, onToggleFacts, toolLinks, onAddRace, onRerunRace, correctionReason = '' }: Extra) {
+function Harness({ allowAudit = false, activeIdx = 1, heatOverride = h, queued = [], onSelectRace = vi.fn(), onSubmit = () => {}, allowReasons, onSetHc, hcTeamIds, onUndo, initial = [], lanes = null, hatbands, cards, onSetCard, teamFacts, factsOn, onToggleFacts, toolLinks, onAddRace, onRerunRace, correctionReason = '', onDeadHeat, onClearDeadHeat }: Extra) {
   const rules = { lanesPerHeat: lanes, mode: LaneRotationMode.MoveUp };
   const [pending, setPending] = useState<PendingPlace[]>(initial);
   return (
@@ -61,7 +63,7 @@ function Harness({ allowAudit = false, activeIdx = 1, heatOverride = h, queued =
       onOverridePoints={(id, points, reason) => setPending((current) => overridePoints(current, id, points, reason))}
       onReset={() => setPending([])} onSubmit={onSubmit} onUndo={onUndo} allowReasons={allowReasons} onSetHc={onSetHc} hcTeamIds={hcTeamIds} laneHatbands={hatbands}
       cards={cards} onSetCard={onSetCard} teamFacts={teamFacts} factsOn={factsOn} onToggleFacts={onToggleFacts} toolLinks={toolLinks}
-      onAddRace={onAddRace} onRerunRace={onRerunRace}
+      onAddRace={onAddRace} onRerunRace={onRerunRace} onDeadHeat={onDeadHeat} onClearDeadHeat={onClearDeadHeat}
       correctionReason={correctionReason} onCorrectionReason={() => {}}
     />
   );
@@ -637,4 +639,56 @@ it('keeps a manual score, and raises nothing, when an HC change fails', async ()
   await waitFor(() => expect(onSetHc).toHaveBeenCalledWith(2, true));
   await user.click(screen.getByRole('button', { name: 'Close race tools' }));
   expect(screen.getByRole('button', { name: /^Bravo, lane/ })).toHaveTextContent('7 pts by hand');
+});
+
+describe('eliminating and dead heats from race tools', () => {
+  it('says how to eliminate from a lane card', () => {
+    render(<Harness />);
+    expect(screen.getByText('Hold a lane for 0.6 s to eliminate')).toBeInTheDocument();
+  });
+
+  it('eliminates a team from its menu, the same as holding its lane card', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    const sheet = await openTools(user);
+    const menu = await openTeamMenu(user, sheet, 'Bravo');
+    await user.click(within(menu).getByRole('menuitem', { name: 'Eliminate (E)' }));
+    expect(within(sheet).queryByRole('menu')).toBeNull();
+    expect(within(screen.getByRole('region', { name: /^Scoring/ })).getByLabelText('Eliminated')).toBeInTheDocument();
+    const again = await openTeamMenu(user, sheet, 'Bravo');
+    expect(within(again).getByRole('menuitem', { name: 'Undo elimination' })).toBeInTheDocument();
+  });
+
+  it('marks the ticked teams as a dead heat, and needs two', async () => {
+    const user = userEvent.setup();
+    const onDeadHeat = vi.fn();
+    render(<Harness onDeadHeat={onDeadHeat} initial={allPlaced} />);
+    const sheet = await openTools(user);
+    await user.click(within(sheet).getByRole('switch', { name: /Dead heat/ }));
+    const apply = within(sheet).getByRole('button', { name: 'Mark dead heat' });
+    expect(apply).toBeDisabled();
+    await user.click(within(sheet).getByRole('checkbox', { name: 'Tied: Bravo' }));
+    expect(apply).toBeDisabled();
+    await user.click(within(sheet).getByRole('checkbox', { name: 'Tied: Charlie' }));
+    expect(within(sheet).getByText('2 ticked')).toBeInTheDocument();
+    await user.click(apply);
+    expect(onDeadHeat).toHaveBeenCalledWith([2, 3]);
+    expect(within(sheet).queryByRole('checkbox')).toBeNull();
+  });
+
+  it('shows a dead-heat team as such and splits it from its menu', async () => {
+    const user = userEvent.setup();
+    const onClearDeadHeat = vi.fn();
+    const tied: PendingPlace[] = [
+      { teamId: 2, place: 1, eliminated: false, refereeNote: '[dead-heat]' },
+      { teamId: 3, place: 1, eliminated: false, refereeNote: '[dead-heat]' },
+      { teamId: 1, place: 3, eliminated: false },
+    ];
+    render(<Harness onClearDeadHeat={onClearDeadHeat} onDeadHeat={vi.fn()} initial={tied} />);
+    const sheet = await openTools(user);
+    expect(within(sheet).getAllByText('Dead heat').length).toBeGreaterThan(0);
+    const menu = await openTeamMenu(user, sheet, 'Bravo');
+    await user.click(within(menu).getByRole('menuitem', { name: 'Split dead heat' }));
+    expect(onClearDeadHeat).toHaveBeenCalledWith(2);
+  });
 });

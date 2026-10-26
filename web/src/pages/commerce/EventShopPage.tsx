@@ -30,46 +30,6 @@ export function EventShopPage() {
 
 type View = 'shop' | 'payment' | 'placed';
 
-export const APPAREL_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'] as const;
-export type ApparelSize = (typeof APPAREL_SIZES)[number];
-
-const APPAREL_PATTERN = /\b(hoodie|shirt|t-shirt|tee|jacket|jumper|fleece|polo|vest|coat|top|sweatshirt|jodhpurs|breeches|leggings|gilet|apparel|clothing|jersey)\b/i;
-
-export function isApparelListing(listing: Pick<PublicCompetitionListing, 'title' | 'description' | 'detailPrompt' | 'category'>): boolean {
-  return listing.category === 0 && APPAREL_PATTERN.test(`${listing.title} ${listing.description ?? ''} ${listing.detailPrompt ?? ''}`);
-}
-
-interface ShopDraft {
-  basket: Record<number, number>;
-  details: Record<number, string>;
-  sizes: Record<number, ApparelSize>;
-  _testWrite?: boolean;
-}
-
-let lastShopDraftMockCalls: unknown = undefined;
-const currentShopMockCalls = () => (api.post as unknown as { mock?: { calls?: unknown } })?.mock?.calls;
-
-export const shopDraftKey = (competitionId: number): string => `mg.draft.shop.v1:${competitionId}`;
-
-function loadShopDraft(competitionId: number): Partial<ShopDraft> | null {
-  const key = shopDraftKey(competitionId);
-  try {
-    const raw = sessionStorage.getItem(key) ?? localStorage.getItem(key);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<ShopDraft> | null;
-    if (!parsed || typeof parsed !== 'object') return null;
-    const mockCalls = currentShopMockCalls();
-    if (parsed._testWrite && mockCalls !== undefined && mockCalls !== lastShopDraftMockCalls) {
-      try { sessionStorage.removeItem(key); } catch { /* ignore */ }
-      try { localStorage.removeItem(key); } catch { /* ignore */ }
-      return null;
-    }
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
 const itemsText = (count: number) => `${count} ${count === 1 ? 'item' : 'items'}`;
 const clock = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
@@ -77,42 +37,20 @@ function EventShopContent() {
   usePageWidth('narrow');
   const { competition } = useCompetition();
   const { user } = useAuth();
-  const initialDraft = useRef<Partial<ShopDraft> | null>(loadShopDraft(competition.id)).current;
   const [listings, setListings] = useState<PublicCompetitionListing[] | null>(null);
   const [settings, setSettings] = useState<EventCommerceSettings | null>(null);
-  const [basket, setBasket] = useState<Record<number, number>>(initialDraft?.basket ?? {});
+  const [basket, setBasket] = useState<Record<number, number>>({});
   // What an item asks for once it is in the order (a stable number, a number plate), by listing.
-  const [details, setDetails] = useState<Record<number, string>>(initialDraft?.details ?? {});
-  const [sizes, setSizes] = useState<Record<number, ApparelSize>>(initialDraft?.sizes ?? {});
-  const [draftTouched, setDraftTouched] = useState(Boolean(initialDraft));
+  const [details, setDetails] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [order, setOrder] = useState<EventOrder | null>(null);
   const [view, setView] = useState<View>('shop');
   const orderAttempt = useRef<{ basketSignature: string; idempotencyKey: string } | null>(null);
-
-  useEffect(() => {
-    if (!draftTouched) return;
-    const key = shopDraftKey(competition.id);
-    const hasItems = Object.values(basket).some((qty) => qty > 0);
-    if (!hasItems) {
-      try { sessionStorage.removeItem(key); } catch { /* ignore */ }
-      try { localStorage.removeItem(key); } catch { /* ignore */ }
-      return;
-    }
-    const mockCalls = currentShopMockCalls();
-    if (mockCalls !== undefined) lastShopDraftMockCalls = mockCalls;
-    const payload: ShopDraft = {
-      basket,
-      details,
-      sizes,
-      ...(mockCalls !== undefined ? { _testWrite: true } : {}),
-    };
-    const json = JSON.stringify(payload);
-    try { sessionStorage.setItem(key, json); } catch { /* ignore */ }
-    try { localStorage.setItem(key, json); } catch { /* ignore */ }
-  }, [draftTouched, competition.id, basket, details, sizes]);
+  // The order button at the foot of the list; the sticky basket bar scrolls to it and steps aside while it is on screen.
+  const orderButton = useRef<HTMLElement | null>(null);
+  const [orderVisible, setOrderVisible] = useState(false);
 
   const load = useCallback(() =>
     Promise.all([
@@ -136,48 +74,40 @@ function EventShopContent() {
   const estimatedTotal = basketLines.reduce((total, line) => total + line.listing.priceMinor * line.quantity, 0);
   const basketCount = basketLines.reduce((total, line) => total + line.quantity, 0);
   const isDemo = settings?.isDemo ?? false;
+  const hasBasket = basketLines.length > 0;
+
+  useEffect(() => {
+    const target = orderButton.current;
+    if (!hasBasket || !target || typeof IntersectionObserver === 'undefined') return;
+    const watcher = new IntersectionObserver(([entry]) => setOrderVisible(entry.isIntersecting));
+    watcher.observe(target);
+    return () => { watcher.disconnect(); setOrderVisible(false); };
+  }, [hasBasket, view]);
+
+  function showOrderButton() {
+    const target = orderButton.current;
+    if (!target) return;
+    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches || document.documentElement.dataset.lite === 'true';
+    target.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'center' });
+    target.focus({ preventScroll: true });
+  }
 
   function changeQuantity(listing: PublicCompetitionListing, next: number) {
     if (busy) return;
     orderAttempt.current = null;
-    setDraftTouched(true);
     const clamped = Math.max(0, Math.min(listing.stockQuantity ?? 99, next));
     setBasket({ ...basket, [listing.id]: clamped });
   }
 
   function changeDetail(listingId: number, value: string) {
     orderAttempt.current = null;
-    setDraftTouched(true);
     setDetails((current) => ({ ...current, [listingId]: value }));
-  }
-
-  function selectSize(listing: PublicCompetitionListing, size: ApparelSize) {
-    if (busy) return;
-    orderAttempt.current = null;
-    setDraftTouched(true);
-    setSizes((current) => ({ ...current, [listing.id]: size }));
-    if ((basket[listing.id] ?? 0) === 0 && listing.stockQuantity !== 0) {
-      setBasket((current) => ({ ...current, [listing.id]: 1 }));
-    }
-  }
-
-  function clearDraftStorage() {
-    const key = shopDraftKey(competition.id);
-    try { sessionStorage.removeItem(key); } catch { /* ignore */ }
-    try { localStorage.removeItem(key); } catch { /* ignore */ }
   }
 
   /** Places the order. A repeat of the same basket reuses its key, so the server returns the same order. */
   async function checkout() {
     if (!user || basketLines.length === 0) return;
-    const detailFor = (listing: PublicCompetitionListing) => {
-      const promptAns = listing.detailPrompt ? details[listing.id]?.trim() ?? '' : '';
-      const pickedSize = isApparelListing(listing) ? sizes[listing.id] : undefined;
-      if (promptAns && pickedSize) return `${promptAns} · Size ${pickedSize}`;
-      if (promptAns) return promptAns;
-      if (pickedSize) return `Size ${pickedSize}`;
-      return '';
-    };
+    const detailFor = (listing: PublicCompetitionListing) => (listing.detailPrompt ? details[listing.id]?.trim() ?? '' : '');
     const basketSignature = `${competition.id}|${basketLines
       .map(({ listing, quantity }) => `${listing.id}:${quantity}:${detailFor(listing)}`)
       .sort()
@@ -197,7 +127,6 @@ function EventShopContent() {
         setView('payment');
       } else {
         orderAttempt.current = null;
-        clearDraftStorage();
         setBasket({});
         setView('placed');
         void load();
@@ -236,7 +165,7 @@ function EventShopContent() {
           setOrder(next);
           // A cancelled order can't be paid or replayed, so the next attempt must start a fresh order.
           if (next.status === 4) orderAttempt.current = null;
-          if (next.status === 2) { orderAttempt.current = null; clearDraftStorage(); setBasket({}); void load(); }
+          if (next.status === 2) { orderAttempt.current = null; setBasket({}); void load(); }
         }}
         variant="page"
         context={`${itemsText(order.lines.reduce((total, line) => total + line.quantity, 0) || basketCount)} · ${pounds(order.totalMinor)}`}
@@ -254,7 +183,7 @@ function EventShopContent() {
     .filter((group) => group.items.length > 0);
   const orderLabel = `Order: ${feeText(estimatedTotal)}`;
   return (
-    <div className="rf-page mx-auto flex w-full max-w-xl flex-col pb-2 pt-3">
+    <div className={`rf-page mx-auto flex w-full max-w-xl flex-col pt-3 ${hasBasket ? 'pb-24' : 'pb-2'}`}>
       <ShopHeader />
       <div className="sp-seg" role="navigation" aria-label="Shop switcher">
         <Link to={`/competitions/${competition.id}/shop`} aria-current="page">Event shop</Link>
@@ -281,26 +210,6 @@ function EventShopContent() {
                     {soldOut ? <RefineStatus tone="warn">Sold out</RefineStatus>
                       : <RoundStepper name={listing.title} value={quantity} max={listing.stockQuantity ?? 99} disabled={busy} onChange={(next) => changeQuantity(listing, next)} />}
                   </div>
-                  {quantity > 0 && isApparelListing(listing) && (
-                    <div className="flex flex-wrap items-center gap-1.5 px-4 pb-3" role="group" aria-label={`Size for ${listing.title}`}>
-                      {APPAREL_SIZES.map((size) => {
-                        const selected = sizes[listing.id] === size;
-                        return (
-                          <button
-                            key={size}
-                            type="button"
-                            disabled={busy}
-                            aria-pressed={selected}
-                            aria-label={`${listing.title} size ${size}`}
-                            className={`kit-chip ${selected ? 'font-bold ring-2 ring-current' : ''}`}
-                            onClick={() => selectSize(listing, size)}
-                          >
-                            {size}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
                   {quantity > 0 && listing.detailPrompt && (
                     <div className="px-4 pb-3.5">
                       <label className="rf-fld">{listing.detailPrompt}
@@ -315,15 +224,24 @@ function EventShopContent() {
           </ul>
         </section>
       ))}
-      {basketLines.length > 0 && (user ? (
-        <button type="button" className="ev-bar" disabled={busy} onClick={() => void checkout()}>{busy ? 'Placing order…' : orderLabel}</button>
+      {hasBasket && (user ? (
+        <button type="button" ref={(node) => { orderButton.current = node; }} className="ev-bar" disabled={busy} onClick={() => void checkout()}>{busy ? 'Placing order…' : orderLabel}</button>
       ) : (
-        <Link className="ev-bar" to="/login" state={{ from: `/competitions/${competition.id}/shop` }}>Sign in to order</Link>
+        <Link ref={(node) => { orderButton.current = node; }} className="ev-bar" to="/login" state={{ from: `/competitions/${competition.id}/shop` }}>Sign in to order</Link>
       ))}
       {orderError && <div className="mt-3"><Notice actionLabel="Try again" onAction={() => void checkout()} actionDisabled={busy}>{orderError}</Notice></div>}
       {isDemo && basketLines.length > 0 && <p className="sp-note">This is a demo event. Next you will see a test payment page, and no money is taken.</p>}
       {user && <div className="pt-1"><Link className="ev-text-btn" to="/me/orders">Your orders</Link></div>}
       <p className="sp-note">MG App connects buyers with independent sellers; your purchase contract is directly with the seller listed on each item.</p>
+      {hasBasket && !orderVisible && (
+        <div className="shop-basket-bar" role="region" aria-label="Your basket">
+          <span className="shop-basket-text">
+            <span className="shop-basket-count">{itemsText(basketCount)}</span>
+            <span className="shop-basket-total">{feeText(estimatedTotal)}</span>
+          </span>
+          <button type="button" className="kit-pill kit-pill-fill" onClick={showOrderButton}>Checkout</button>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { api } from '../../api';
 import { FAVOURITES_KEY } from '../../lib/favourites';
 import { standing } from '../../test/factories';
 import { buildToplist } from '../../lib/toplist';
@@ -68,14 +69,30 @@ describe('ToplistView positions', () => {
     expect(items[1]).not.toHaveTextContent('24.01');
     expect(items[1]).toHaveAttribute('data-followed', 'true');
     expect(items[2]).toHaveTextContent('Team 1');
-    expect(screen.getByRole('link', { name: /Team 2/ })).toHaveAttribute('href', '/competitions/1/teams/2');
+    expect(screen.getByRole('button', { name: /Team 2/ })).toHaveAttribute('aria-haspopup', 'dialog');
   });
 
-  it('makes the whole team row a link to the team page inside the app', () => {
+  it('opens a team\'s sheet from its row inside the app, with a link on to the full team page', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [] } as never);
     render(<MemoryRouter><ToplistView list={list([6, 4])} section={null} competitionId={3} /></MemoryRouter>);
-    const rows = within(screen.getByRole('region', { name: 'Totals' })).getAllByRole('link');
-    expect(rows[0]).toHaveAttribute('href', '/competitions/3/teams/1');
-    expect(rows[0]).toHaveTextContent('6');
+    const rows = within(screen.getByRole('region', { name: 'Totals' })).getAllByRole('button');
     expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent('6');
+    await userEvent.click(rows[0]);
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('link', { name: 'Full team page' })).toHaveAttribute('href', '/competitions/3/teams/1');
+  });
+
+  it('lists the declared riders and ponies in the sheet', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [{ teamId: 1, riders: [
+      { id: 1, fullName: 'Ella Hughes', horseName: 'Pickle', orderIndex: 0, isReserve: false },
+      { id: 2, fullName: 'Rita Reserve', horseName: null, orderIndex: 1, isReserve: true },
+    ] }] } as never);
+    render(<MemoryRouter><ToplistView list={list([6, 4])} section={null} competitionId={3} /></MemoryRouter>);
+    await userEvent.click(within(screen.getByRole('region', { name: 'Totals' })).getAllByRole('button')[0]);
+    const riders = await screen.findByRole('region', { name: 'Riders and ponies' });
+    expect(riders).toHaveTextContent('Ella Hughes');
+    expect(riders).toHaveTextContent('Pickle');
+    expect(riders).not.toHaveTextContent('Rita Reserve');
   });
 });

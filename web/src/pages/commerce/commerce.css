@@ -417,3 +417,22 @@
     transition: none;
   }
 }
+
+/* The sticky basket bar on the event shop: sits above the bottom tabs when there are any. */
+.shop-basket-bar {
+  position: fixed; z-index: 24;
+  left: max(16px, calc((100vw - 36rem) / 2)); right: max(16px, calc((100vw - 36rem) / 2));
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 60px; padding: 8px 8px 8px 16px; box-sizing: border-box;
+  border: 1px solid rgb(var(--mg-line)); border-radius: 16px;
+  background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); box-shadow: 0 10px 28px rgb(var(--mg-overlay) / .22);
+  animation: shop-bar-in 220ms var(--mg-ease-out, cubic-bezier(.22, 1, .36, 1));
+}
+body:has(.mg-tabs) .shop-basket-bar { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+.shop-basket-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.shop-basket-count { font: 500 13px/1 var(--mg-font); color: rgb(var(--mg-muted)); }
+.shop-basket-total { font: 700 21px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); font-variant-numeric: tabular-nums; }
+@keyframes shop-bar-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .shop-basket-bar { animation: none; } }
+html[data-lite="true"] .shop-basket-bar { animation: none; }

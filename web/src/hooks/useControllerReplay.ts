@@ -31,7 +31,9 @@ export function useControllerReplay({ competitionId, arena, streamId, media, sco
 }) {
   const buffer = useRef<ReplayBufferHandle | null>(null);
   const streamIdRef = useRef<number | null>(streamId);
-  streamIdRef.current = streamId;
+  useEffect(() => {
+    streamIdRef.current = streamId;
+  }, [streamId]);
   const [status, setStatus] = useState<ReplayBufferStatus>({ retainedSeconds: 0 });
   const [noVideo, setNoVideo] = useState(false);
   const [justMadeId, setJustMadeId] = useState<string | null>(null);

@@ -709,7 +709,10 @@ public class CompetitionsWriteTests : IClassFixture<ApiFactory>
         var (comp, section, team, session, form) = await BuildFullGraphAsync();
         var admin = await _f.AdminAsync();
 
-        var r = await admin.DeleteAsync($"/api/competitions/{comp}/sections/{section}");
+        var withoutForce = await admin.DeleteAsync($"/api/competitions/{comp}/sections/{section}");
+        Assert.Equal(HttpStatusCode.BadRequest, withoutForce.StatusCode);
+
+        var r = await admin.DeleteAsync($"/api/competitions/{comp}/sections/{section}?force=true");
 
         Assert.Equal(HttpStatusCode.NoContent, r.StatusCode);
         await _f.WithDbAsync(async db =>

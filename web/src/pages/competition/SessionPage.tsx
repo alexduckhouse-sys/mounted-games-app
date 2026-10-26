@@ -2,7 +2,6 @@ import { usePageWidth } from '../../components/pageWidthState';
 import { NumberField } from '../../components/NumberField';
 import { Notice } from '../../components/Notice';
 import { Sheet } from '../../components/Sheet';
-import { useSavedToast } from '../../components/SavedTick';
 import { useToast } from '../../components/Toast';
 import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -29,7 +28,7 @@ import { commentatorFacts } from '../../lib/commentatorFacts';
 import type { CardMark } from '../../lib/refereeCards';
 import { BetweenHeats, HeatPickerBar, HeatTableView } from './HeatViews';
 import {
-  overridePoints, nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey as draftKeyFor, tapTeam, toggleEliminated,
+  clearDeadHeat, markDeadHeat, overridePoints, nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey as draftKeyFor, tapTeam, toggleEliminated,
   writeScoringDraft, type PendingPlace,
 } from '../../lib/raceScoring';
 import { OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../../offline/useScoreOutbox';
@@ -91,7 +90,8 @@ function heatStartTime(session: Session, heat: Heat, heatIndex: number): Date | 
   const baseStr = session.scheduledStart;
   if (!baseStr) return null;
   const base = new Date(baseStr);
-  const heatMinutes = heat.durationMinutes ?? session.minutesPerHeat ?? null;
+  const heatMinutes = heat.durationMinutes
+    ?? (session.minutesPerHeat ? session.minutesPerHeat * heat.races.length : null);
   if (!heatMinutes) return new Date(base.getTime() + heatIndex * 30 * 60_000);
   return new Date(base.getTime() + heatIndex * heatMinutes * 60_000);
 }
@@ -169,7 +169,6 @@ function SessionScoring() {
   const mayManage = canManage(competition);
   const [callingTeamId, setCallingTeamId] = useState<number | null>(null);
   const ringToast = useToast();
-  const savedTick = useSavedToast();
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
 
   useEffect(() => {
@@ -193,8 +192,12 @@ function SessionScoring() {
     const lane = laneLabel(drawnLane, raceIndex, activeHeat.entries.length, session.lanesPerHeat, session.laneRotationMode ?? LaneRotationMode.MoveUp);
     if (lane === 'S') return;
     setCallingTeamId(entry.teamId);
+    const heatIndex = orderedHeats.findIndex((h) => h.id === activeHeat.id);
+    const heatLabel = activeHeat.label ?? `Heat ${heatIndex + 1}`;
+    const arena = session.arenaName?.trim() || 'Main Arena';
+    const body = `🔔 Ring call (${arena}): ${entry.teamName} (Lane ${lane}) needed at the collecting ring now for ${heatLabel}.`;
     try {
-      await api.post(`/heats/${activeHeat.id}/call-missing-team`, { teamId: entry.teamId });
+      await api.post(`/competitions/${competition.id}/chat`, { body, type: 1 });
       playAlertChime();
       ringToast.show('Ring call sent');
     } catch {
@@ -230,11 +233,6 @@ function SessionScoring() {
     [activeHeat?.races]
   );
 
-  // Saves still waiting on this phone are shown as if sent, so the summary, table and next lanes don't wait for signal.
-  const viewHeats = useMemo(() => orderedHeats.map((h) => withQueuedResults(h, outbox, sessionBase)), [orderedHeats, outbox, sessionBase]);
-  const viewHeat = viewHeats.find((h) => h.id === activeHeatId) ?? null;
-  const viewRaces = useMemo(() => (viewHeat?.races ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex), [viewHeat]);
-
   const preferredRaceRef = useRef<number | null>(null);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the race selection when the heat's races change
@@ -242,24 +240,19 @@ function SessionScoring() {
     // Keep the last completed race open when the heat finishes so corrections stay accessible.
     const preferred = preferredRaceRef.current;
     preferredRaceRef.current = null;
-    setActiveRaceId((prev) => {
-      if (preferred != null && viewRaces.some((r) => r.id === preferred)) return preferred;
-      if (prev != null && viewRaces.some((r) => r.id === prev)) return prev;
-      const nextRace = viewRaces.find((r) => !r.isComplete) ?? viewRaces[viewRaces.length - 1] ?? null;
-      return nextRace?.id ?? null;
-    });
-  }, [activeHeat, viewRaces]);
+    const nextRace = orderedRaces.find((r) => r.id === preferred) ?? orderedRaces.find((r) => !r.isComplete) ?? orderedRaces[orderedRaces.length - 1] ?? null;
+    setActiveRaceId(nextRace?.id ?? null);
+  }, [activeHeat, orderedRaces]);
 
   // The placings being entered belong to one race, so they are stored with that race's draft key.
   // Switching race swaps them, in the same render, for that race's saved draft (a draft always wins)
   // or else nothing. Until the scorer changes something, a finished race simply shows its saved results.
   const scoringDraftKey = activeHeatId && activeRaceId ? draftKeyFor(activeHeatId, activeRaceId) : null;
-  const draftRace = viewRaces.find((r) => r.id === activeRaceId) ?? null;
-  const serverDraftRace = orderedRaces.find((r) => r.id === activeRaceId) ?? null;
+  const draftRace = orderedRaces.find((r) => r.id === activeRaceId) ?? null;
   // Referee notes aren't in the public results, so staff read them separately when correcting a scored race.
   const savedNotes = useRaceNotes(
-    draftRace?.id ?? null, canManage(competition) && serverDraftRace?.isComplete === true,
-    serverDraftRace?.results.map((r) => `${r.teamId}:${r.placing}:${r.status ?? 0}`).join(',') ?? '');
+    draftRace?.id ?? null, canManage(competition) && draftRace?.isComplete === true,
+    draftRace?.results.map((r) => `${r.teamId}:${r.placing}:${r.status ?? 0}`).join(',') ?? '');
   const savedPlaces = useMemo(() => (draftRace?.isComplete ? placesFromResults(draftRace, savedNotes) : []), [draftRace, savedNotes]);
   const [pendingState, setPendingState] = useState<{ key: string | null; places: PendingPlace[]; edited: boolean }>(
     { key: null, places: [], edited: false },
@@ -292,6 +285,10 @@ function SessionScoring() {
     }
   }
 
+  // Saves still waiting on this phone are shown as if sent, so the summary, table and next lanes don't wait for signal.
+  const viewHeats = useMemo(() => orderedHeats.map((h) => withQueuedResults(h, outbox, sessionBase)), [orderedHeats, outbox, sessionBase]);
+  const viewHeat = viewHeats.find((h) => h.id === activeHeatId) ?? null;
+  const viewRaces = useMemo(() => (viewHeat?.races ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex), [viewHeat]);
   const hcTeamIds = useMemo(() => new Set(competition.teams.filter((t) => t.isHorsConcours).map((t) => t.id)), [competition.teams]);
   // The private reasons for the race the announcer card is about: saved ones from the server, then any still waiting on this phone.
   const summaryRace = [...viewRaces].reverse().find((r) => r.isComplete && r.id !== activeRaceId) ?? null;
@@ -356,8 +353,7 @@ function SessionScoring() {
     );
   }
 
-  const activeRace = viewRaces.find((r) => r.id === activeRaceId) ?? null;
-  const serverActiveRace = orderedRaces.find((r) => r.id === activeRaceId) ?? null;
+  const activeRace = orderedRaces.find((r) => r.id === activeRaceId) ?? null;
 
   // In a qualifier only the teams that go through to the final need placing. The rest finish on 1 point each,
   // and tapping one of those marks it eliminated instead (0 points).
@@ -435,7 +431,6 @@ function SessionScoring() {
       navigate(urlFor(ref));
       return;
     }
-    if (ref.heat.id !== activeHeatId) setActiveRaceId(null);
     setActiveHeatId(ref.heat.id);
     setView(canScoreHeat(heatRefs, mine, ref) ? 'score' : 'table');
   }
@@ -445,7 +440,6 @@ function SessionScoring() {
       navigate(urlFor(ref, '&score=1'));
       return;
     }
-    if (ref.heat.id !== activeHeatId) setActiveRaceId(null);
     setActiveHeatId(ref.heat.id);
     setView('score');
   }
@@ -469,7 +463,7 @@ function SessionScoring() {
       sessionId: session.id,
       label: `${activeHeat.label ?? `Heat ${heatIndex + 1}`} · ${activeRace.name}`,
       places: [...places, ...restOfQualifier(activeHeat, places), ...sitOutPlaces(activeHeat, orderedRaces.findIndex((r) => r.id === activeRace.id), lanesOf(session))],
-      expected: placingsOf(serverActiveRace?.results ?? []),
+      expected: placingsOf(activeRace.results),
       teamNames: Object.fromEntries(activeHeat.entries.map((e) => [e.teamId, e.teamName])),
       queuedAt: new Date().toISOString(),
       state: 'waiting',
@@ -511,11 +505,11 @@ function SessionScoring() {
 
     const queuedIds = new Set([...outbox.map((q) => q.raceId), activeRace.id]);
     // The last race of the heat: stay on it and show the page for the next heat, with its lanes and dec forms.
-    if (nextRef && !session.raceOrderAlternating && (viewHeat ?? activeHeat).races.every((r) => r.isComplete || queuedIds.has(r.id))) {
+    if (nextRef && !session.raceOrderAlternating && activeHeat.races.every((r) => r.isComplete || queuedIds.has(r.id))) {
       setView('between');
       return true;
     }
-    const next = nextRaceToScore(viewHeats, session.raceOrderAlternating === true, { heatId: activeHeat.id, raceId: activeRace.id }, queuedIds);
+    const next = nextRaceToScore(orderedHeats, session.raceOrderAlternating === true, { heatId: activeHeat.id, raceId: activeRace.id }, queuedIds);
     if (next) {
       if (next.heatId !== activeHeat.id) {
         // Changing heat resets the race selection (effect above); it should land on this race.
@@ -785,6 +779,8 @@ function SessionScoring() {
                   setCorrectionReasons((cur) => (cur[activeRace.id]?.trim() ? cur : { ...cur, [activeRace.id]: reason.trim() }));
                 }
               }}
+              onDeadHeat={(teamIds) => changePending((current) => markDeadHeat(current, teamIds))}
+              onClearDeadHeat={(teamId) => changePending((current) => clearDeadHeat(current, teamId))}
               onUndo={canUndo ? undo : undefined}
               undoLabel={lastUndo?.kind === 'save' ? 'Undo last save' : 'Undo'}
               allowReasons
@@ -839,12 +835,10 @@ function SessionScoring() {
                   setSaveError('Couldn’t clear race for re-run. Check your signal and try again.');
                 }
               } : undefined}
-              onSaved={navigator.onLine ? savedTick.show : undefined}
             />
           ) : (
             <div className="card p-3 text-slate-500 dark:text-slate-300 text-sm">No heats in this session yet.</div>
           ))}
-          {savedTick.node}
 
           <details className="mg-card p-3">
             <summary className="cursor-pointer font-semibold">Organiser tools</summary>
@@ -857,7 +851,6 @@ function SessionScoring() {
             </div>
             {viewHeat && (
               <ScoreAdjustmentsPanel
-                key={viewHeat.id}
                 session={session}
                 heat={viewHeat}
                 activeRaceId={activeRaceId}

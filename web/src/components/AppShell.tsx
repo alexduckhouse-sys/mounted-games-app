@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronLeft, Menu, RotateCw } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
+import { RememberCompetitionDialog } from '../competition/RememberCompetitionDialog';
 import { competitionDateText } from '../lib/competitionDates';
 import { competitionIdFromPath, hasGlobalTabs } from '../lib/routes';
 import { PageWidthProvider } from './PageWidth';
@@ -31,7 +32,7 @@ export function AppShell() {
 function Shell({ width }: { width: PageWidth }) {
   const cap = PAGE_WIDTH_CLASS[width];
   const { user, canOrganise, hasRole } = useAuth();
-  const { current, storageError } = useCurrentCompetition();
+  const { current, rememberChoice, storageError } = useCurrentCompetition();
   const { meta } = useCompetitionMeta();
   const { config: compactBar, header: pageHeader } = useCompactPageBarState();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -39,13 +40,6 @@ function Shell({ width }: { width: PageWidth }) {
   const openMenu = () => setMenuOpen(true);
   const openLiteSettings = () => navigate('/settings#lite-mode');
   const location = useLocation();
-  const handleBack = (event: React.MouseEvent<HTMLAnchorElement>) => {
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
-    if (typeof window !== 'undefined' && window.history.length > 1 && location.key !== 'default') {
-      event.preventDefault();
-      navigate(-1);
-    }
-  };
   const { count: needsYou } = useNeedsYou();
   // On the site admin pages an admin's MG logo goes to the site admin dashboard rather than the events list.
   const inAdminArea = hasRole('Admin') && /^\/admin(\/(competitions|trainer-requests|rules))?\/?$/.test(location.pathname);
@@ -86,7 +80,7 @@ function Shell({ width }: { width: PageWidth }) {
         <header className="mg-header">
           {compactBar ? (
             <div className={`mg-compact-bar mx-auto ${cap}`}>
-              <Link to={compactBar.backTo} onClick={handleBack} className="mg-nav-btn !px-0" aria-label="Back to timetable"><ChevronLeft className="h-5 w-5" /></Link>
+              <Link to={compactBar.backTo} className="mg-nav-btn !px-0" aria-label="Back to timetable"><ChevronLeft className="h-5 w-5" /></Link>
               <div className="mg-compact-copy">
                 <span className="mg-compact-title">{compactBar.title}</span>
                 <span className="mg-compact-subtitle">{compactBar.subtitle}</span>
@@ -102,7 +96,7 @@ function Shell({ width }: { width: PageWidth }) {
           ) : (
             <div className={`mx-auto flex ${cap} items-center gap-2.5 py-1.5 pl-4 pr-3 sm:py-3`}>
               {pageHeader?.backTo
-                ? <Link to={pageHeader.backTo} onClick={handleBack} className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center text-white" aria-label={pageHeader.backLabel ?? 'Back'}><ChevronLeft className="h-[22px] w-[22px]" strokeWidth={2.25} /></Link>
+                ? <Link to={pageHeader.backTo} className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center text-white" aria-label={pageHeader.backLabel ?? 'Back'}><ChevronLeft className="h-[22px] w-[22px]" strokeWidth={2.25} /></Link>
                 : <Link to={inAdminArea ? '/admin' : '/events'} className="mg-logo" aria-label={inAdminArea ? 'Site admin home' : 'Mounted Games home'}>MG</Link>}
               {pageHeader?.plain ? (
                 <div className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5">
@@ -150,6 +144,7 @@ function Shell({ width }: { width: PageWidth }) {
       {!filmingMode && globalTabs && <GlobalTabs meCount={user ? needsYou : 0} />}
       {!filmingMode && tabsCompetitionId != null && <BottomTabs competitionId={tabsCompetitionId} entryOnly={meta?.id === tabsCompetitionId && !!meta.entryPhase && !canOrganise({ id: meta.id, createdByUserId: meta.createdByUserId })} me={user ? { initials: initialsOf(user.fullName, user.email), count: needsYou } : undefined} />}
       {menuOpen && <NavigationDrawer onClose={() => setMenuOpen(false)} />}
+      {current && !choosingCompetition && rememberChoice === 'ask' && !menuOpen && <RememberCompetitionDialog />}
     </div>
   );
 }

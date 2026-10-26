@@ -52,6 +52,7 @@
 
 .heat-grid tbody th, .heat-grid tbody td { height: 52px; border-bottom: 1px solid rgb(var(--mg-ink)); }
 .heat-grid tbody tr.heat-row-fav { background: rgb(var(--mg-tint)); box-shadow: inset 3px 0 0 #C08308; }
+.heat-grid tbody tr.heat-row-me { background: rgb(var(--mg-tint)); box-shadow: inset 4px 0 0 rgb(var(--mg-button)); }
 .heat-grid tbody td.heat-rank-cell { padding-left: 12px; text-align: left; font: 700 17px/1 var(--mg-font-display); color: rgb(var(--mg-muted)); }
 .heat-team {
   overflow: hidden; padding: 2px 4px 2px 2px; text-align: left;

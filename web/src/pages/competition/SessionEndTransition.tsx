@@ -5,7 +5,6 @@ import { CheckCircle2, ArrowRight, Coffee, X, Users, Phone } from 'lucide-react'
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import type { CompetitionDetail, DeclarationForm, Heat, Session } from '../../types';
-import { publicRiderName } from '../../lib/riderNames';
 import { displaySectionName } from '../../lib/section';
 import { ordinal } from '../../lib/toplist';
 
@@ -31,17 +30,7 @@ function bibSwatch(name?: string | null): string {
   }
 }
 
-function isHhfRoundFinal(session: Session, heat: Heat): boolean {
-  return heat.raceRoundStage === 2 && (heat.raceRoundId != null || session.heats.some((h) => h.raceRoundStage === 1));
-}
-
-function finalTierOf(heat: Heat): number {
-  const m = /^\s*([A-Z])\s+Final\b/i.exec(heat.label ?? '');
-  return m ? m[1].toUpperCase().charCodeAt(0) - 65 : -1;
-}
-
 function isFinalHeat(session: Session, heat: Heat): boolean {
-  if (isHhfRoundFinal(session, heat)) return false;
   const s = session as Session & { isFinal?: boolean };
   const h = heat as Heat & { isFinal?: boolean };
   return (
@@ -62,69 +51,38 @@ function isCompletedFinalHeat(session: Session, heat: Heat): boolean {
   );
 }
 
-function buildPrizeGivingOrder(heat: Heat, competition: CompetitionDetail, finishedSession: Session) {
-  const hcTeamIds = new Set(competition.teams.filter((t) => t.isHorsConcours).map((t) => t.id));
-  const section = competition.sections?.find((s) => s.id === finishedSession.competitionSectionId);
-  const carries = !section || section.usesRaceFinals || section.carryPointsIntoFinal !== false;
-
-  const carriedPoints = new Map<number, number>();
-  if (carries) {
-    for (const s of competition.sessions) {
-      if (s.isBreak || (s.kind ?? 0) !== 0) continue;
-      for (const h of s.heats) {
-        if (h.id === heat.id || isFinalHeat(s, h)) continue;
-        for (const r of h.races) {
-          for (const res of r.results) {
-            if (hcTeamIds.has(res.teamId)) continue;
-            carriedPoints.set(res.teamId, (carriedPoints.get(res.teamId) ?? 0) + res.points);
-          }
-        }
-      }
-    }
-    for (const t of competition.teams) {
-      const bonus = (t as { bonusPoints?: number }).bonusPoints ?? 0;
-      if (bonus > 0 && !hcTeamIds.has(t.id)) {
-        carriedPoints.set(t.id, (carriedPoints.get(t.id) ?? 0) + bonus);
-      }
-    }
-  }
-
-  const teamMap = new Map<number, { teamId: number; teamName: string; points: number; finalPoints: number; laneIndex: number }>();
+function buildPrizeGivingOrder(heat: Heat) {
+  const teamMap = new Map<number, { teamId: number; teamName: string; points: number; laneIndex: number }>();
   for (const entry of heat.entries) {
-    if (hcTeamIds.has(entry.teamId)) continue;
     teamMap.set(entry.teamId, {
       teamId: entry.teamId,
       teamName: entry.teamName,
-      points: carriedPoints.get(entry.teamId) ?? 0,
-      finalPoints: 0,
+      points: 0,
       laneIndex: entry.laneIndex,
     });
   }
   for (const race of heat.races) {
     for (const res of race.results) {
-      if (hcTeamIds.has(res.teamId)) continue;
       const existing = teamMap.get(res.teamId);
       if (existing) {
         existing.points += res.points;
-        existing.finalPoints += res.points;
         if (!existing.teamName && res.teamName) existing.teamName = res.teamName;
       } else {
         teamMap.set(res.teamId, {
           teamId: res.teamId,
           teamName: res.teamName,
-          points: (carriedPoints.get(res.teamId) ?? 0) + res.points,
-          finalPoints: res.points,
+          points: res.points,
           laneIndex: Number.MAX_SAFE_INTEGER,
         });
       }
     }
   }
   const firstToLast = [...teamMap.values()].sort(
-    (a, b) => b.points - a.points || b.finalPoints - a.finalPoints || a.laneIndex - b.laneIndex || a.teamName.localeCompare(b.teamName),
+    (a, b) => b.points - a.points || a.laneIndex - b.laneIndex || a.teamName.localeCompare(b.teamName),
   );
   const withPlaces = firstToLast.map((item) => ({
     ...item,
-    place: firstToLast.findIndex((other) => other.points === item.points && other.finalPoints === item.finalPoints) + 1,
+    place: firstToLast.findIndex((other) => other.points === item.points) + 1,
   }));
   return [...withPlaces].reverse();
 }
@@ -146,12 +104,7 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
 
   const completedFinalHeats = [...finishedSession.heats]
     .filter((h) => isCompletedFinalHeat(finishedSession, h))
-    .sort((a, b) => {
-      const ta = finalTierOf(a);
-      const tb = finalTierOf(b);
-      if (ta >= 0 && tb >= 0 && ta !== tb) return tb - ta;
-      return a.orderIndex - b.orderIndex;
-    });
+    .sort((a, b) => a.orderIndex - b.orderIndex);
   const hasFinalHeats = completedFinalHeats.length > 0;
 
   const nextRealSessionId = nextRealSession?.id;
@@ -230,7 +183,7 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
                 const finalLabel = /\bfinals?\b/i.test(heat.label?.trim() ?? '')
                   ? heat.label!.trim()
                   : [finishedSession.name, heat.label?.trim()].filter(Boolean).join(' · ');
-                const rows = buildPrizeGivingOrder(heat, competition, finishedSession);
+                const rows = buildPrizeGivingOrder(heat);
                 return (
                   <section
                     key={heat.id}
@@ -249,7 +202,6 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
                           team?.trainerName?.trim() ||
                           form?.submittedByName?.trim() ||
                           null;
-                        const activeRiders = form?.riders.filter((r) => !r.isReserve) ?? [];
                         return (
                           <li
                             key={row.teamId}
@@ -278,11 +230,11 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
                                 Trained by {trainerName}
                               </p>
                             )}
-                            {activeRiders.length > 0 && (
+                            {form && form.riders.length > 0 && (
                               <ul className="grid grid-cols-1 gap-1 pt-0.5 sm:grid-cols-2">
-                                {activeRiders.map((r) => (
+                                {form.riders.map((r) => (
                                   <li key={r.id} className="text-xs text-[rgb(var(--mg-body))]">
-                                    {publicRiderName(r)}
+                                    {r.fullName}
                                     {r.horseName?.trim() ? ` — ${r.horseName.trim()}` : ''}
                                   </li>
                                 ))}
@@ -364,7 +316,7 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
                             >
                               {(r.bibColour ?? '—').slice(0, 2)}
                             </span>
-                            <span className="truncate font-medium text-[rgb(var(--mg-ink))]">{publicRiderName(r)}</span>
+                            <span className="truncate font-medium text-[rgb(var(--mg-ink))]">{r.fullName}</span>
                             <span className="truncate text-[rgb(var(--mg-muted))]">{r.horseName ?? ''}</span>
                           </li>
                         ))}

@@ -1,4 +1,4 @@
-import { Fragment, useContext, useState, type ReactNode } from 'react';
+import { Fragment, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Link, useInRouterContext } from 'react-router-dom';
 import { ChevronRight, Star, Trophy } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -7,7 +7,10 @@ import { ordinal, toplistNote, type FinalGroup, type Toplist } from '../../lib/t
 import { useFavourites } from '../../hooks/useFavourites';
 import { CompetitionContext } from './context';
 import { parseBibAndFlag } from '../../lib/bib';
-import { TeamSheet, flagSrc } from './TeamSheet';
+import { TeamSheet, type TeamSheetRider } from './TeamSheet';
+import { api } from '../../api';
+import { publicRiderName } from '../../lib/riderNames';
+import type { DeclarationForm } from '../../types';
 import { DropdownRow } from '../../components/DropdownRow';
 import { Rosette } from '../../components/Rosette';
 import { ScoreFlash } from '../../components/ScoreFlash';
@@ -74,7 +77,6 @@ export function ToplistView({
       return (
         <Link
           to={`/competitions/${competitionId}/teams/${teamId}`}
-          state={{ from: `/competitions/${competitionId}/toplists`, fromLabel: 'Standings' }}
           className="hover:underline"
         >
           {inner}
@@ -105,16 +107,17 @@ export function ToplistView({
   const view: View = tabs.some(([id]) => id === chosen) ? chosen! : tabs[0][0];
   const places = section?.finalistCount ?? null;
   const sheet = activeOpenTeam == null ? null : list.detail.get(activeOpenTeam) ?? null;
+  // A team's row opens its sheet (riders, ponies and heat-by-heat scores) so a spectator stays on Standings; the sheet links on to the team page.
   const open = (teamId: number) => {
-    if (inRouter && competitionId != null) return undefined;
     return list.detail.has(teamId) ? () => setOpenTeam({ sectionId: currentSectionId, teamId }) : undefined;
   };
-  // Inside the app every row is a link to the team page, so the whole box is tappable, not just the name.
+  // Rows with no breakdown to show (hors concours) still link to the team page inside the app.
   const teamHref = (teamId: number) => (inRouter && competitionId != null ? `/competitions/${competitionId}/teams/${teamId}` : null);
+  const sheetRiders = useSheetRiders(sheet ? competitionId : null, sheet?.teamId ?? null);
   const flagFor = (teamId: number) => parseBibAndFlag(teams?.find((t) => t.id === teamId)?.bibDescription).flag;
   const flagBadge = (teamId: number) => {
     const flag = flagFor(teamId);
-    return flag ? <img src={flagSrc(flag)} alt="" className="mr-1.5 inline-block h-3.5 w-5 shrink-0 rounded-[2px] object-cover align-middle" /> : null;
+    return flag ? <img src={`/flags/${flag}.png`} alt="" className="mr-1.5 inline-block h-3.5 w-5 shrink-0 rounded-[2px] object-cover align-middle" /> : null;
   };
 
   // "Show  Totals ›": one settings row that opens the list of views.
@@ -140,7 +143,7 @@ export function ToplistView({
           {places != null && places > 0 && <p className="text-sm font-medium leading-snug text-[rgb(var(--mg-body))]">Top {places} make the final</p>}
           <section aria-label="Totals" className="mg-card overflow-hidden">
             <ol ref={totalsRef}>
-              {list.rows.flatMap((row, index) => {
+              {list.rows.map((row, index) => {
                 const note = toplistNote(row);
                 const lastInRunoff = row.runoff && list.rows[index + 1]?.runoff;
                 const openRow = open(row.teamId);
@@ -160,26 +163,24 @@ export function ToplistView({
                     {gap > 0 && <span className="text-[11px] font-semibold leading-none tabular-nums text-[rgb(var(--mg-muted))]" title={`${formatPoints(gap)} behind leader`}>−{formatPoints(gap)}</span>}
                   </span>
                 </>;
-                const items = [
-                  <motion.li
-                    key={row.teamId}
-                    layout="position"
-                    transition={RESORT}
-                    data-rank-id={row.teamId}
-                    data-followed={fav ? 'true' : undefined}
-                    className={`flex min-h-11 items-center pr-1 ${lastInRunoff ? 'border-b border-dashed border-[rgb(var(--mg-rule))]' : 'border-b border-[rgb(var(--mg-rule-soft))]'} ${row.runoff ? 'shadow-[inset_6px_0_0_rgb(var(--mg-ink))]' : fav ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_3px_0_0_#C08308]' : ''}`}
-                  >
-                    <RowBox open={openRow} href={teamHref(row.teamId)}>{content}</RowBox>
-                  </motion.li>,
-                ];
-                if (list.cutAfter === index && index < list.rows.length - 1) {
-                  items.push(
-                    <motion.li key="cutoff-line" layout="position" transition={RESORT} role="separator" aria-label="Final cut-off" className={`${separatorLabel} !py-1.5 !text-[rgb(var(--mg-muted))]`}>
-                      {dashes}Final cut-off{dashes}
-                    </motion.li>,
-                  );
-                }
-                return items;
+                return (
+                  <Fragment key={row.teamId}>
+                    <motion.li
+                      layout="position"
+                      transition={RESORT}
+                      data-rank-id={row.teamId}
+                      data-followed={fav ? 'true' : undefined}
+                      className={`flex min-h-11 items-center pr-1 ${lastInRunoff ? 'border-b border-dashed border-[rgb(var(--mg-rule))]' : 'border-b border-[rgb(var(--mg-rule-soft))]'} ${row.runoff ? 'shadow-[inset_6px_0_0_rgb(var(--mg-ink))]' : fav ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_3px_0_0_#C08308]' : ''}`}
+                    >
+                      <RowBox open={openRow} href={teamHref(row.teamId)}>{content}</RowBox>
+                    </motion.li>
+                    {list.cutAfter === index && index < list.rows.length - 1 && (
+                      <motion.li layout="position" transition={RESORT} role="separator" aria-label="Final cut-off" className={`${separatorLabel} !py-1.5 !text-[rgb(var(--mg-muted))]`}>
+                        {dashes}Final cut-off{dashes}
+                      </motion.li>
+                    )}
+                  </Fragment>
+                );
               })}
             </ol>
             {list.hc.length > 0 && <>
@@ -229,7 +230,7 @@ export function ToplistView({
                         {openRow
                           ? <button type="button" onClick={openRow} aria-haspopup="dialog" className="block min-h-11 w-full text-left font-semibold after:absolute after:inset-0">{renderTeamName(row.teamId, row.teamName, fav, false)}</button>
                           : teamHref(row.teamId)
-                            ? <Link to={teamHref(row.teamId)!} state={{ from: `/competitions/${competitionId}/toplists`, fromLabel: 'Standings' }} className="after:absolute after:inset-0 hover:underline">{renderTeamName(row.teamId, row.teamName, fav, false)}</Link>
+                            ? <Link to={teamHref(row.teamId)!} className="after:absolute after:inset-0 hover:underline">{renderTeamName(row.teamId, row.teamName, fav, false)}</Link>
                             : renderTeamName(row.teamId, row.teamName, fav, false)}
                       </th>
                       {list.bySession.sessions.map((s, i) => (
@@ -276,6 +277,7 @@ export function ToplistView({
           sectionName={section?.displayName ?? null}
           competitionId={competitionId ?? undefined}
           team={teams?.find((t) => t.id === sheet.teamId) ?? null}
+          riders={sheetRiders}
           onClose={() => setOpenTeam(null)}
         />
       )}
@@ -291,7 +293,7 @@ function RowBox({ open, href, children }: { open?: () => void; href: string | nu
   const box = 'flex min-h-11 min-w-0 flex-1 items-center gap-2.5 pl-3 pr-1 text-left';
   const chevron = <ChevronRight aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-[rgb(var(--mg-dash))]" />;
   if (open) return <button type="button" onClick={open} aria-haspopup="dialog" className={box}>{children}{chevron}</button>;
-  if (href) return <Link to={href} state={{ from: href.replace(/\/teams\/\d+$/, '/toplists'), fromLabel: 'Standings' }} className={box}>{children}{chevron}</Link>;
+  if (href) return <Link to={href} className={box}>{children}{chevron}</Link>;
   return <div className={box}>{children}</div>;
 }
 
@@ -334,4 +336,28 @@ function FinalsList({ groups, onOpen, teamHref, isFav, renderTeamName }: {
       ))}
     </section>
   );
+}
+
+/** The declared riders and ponies of the team whose sheet is open (the same public dec form the team page reads). */
+function useSheetRiders(competitionId: number | null, teamId: number | null): TeamSheetRider[] {
+  const [loaded, setLoaded] = useState<{ key: string; riders: TeamSheetRider[] } | null>(null);
+  const key = competitionId != null && teamId != null ? `${competitionId}:${teamId}` : null;
+  useEffect(() => {
+    if (key == null || competitionId == null || teamId == null) return;
+    let cancelled = false;
+    api.get<DeclarationForm[]>('/declaration-forms', { params: { competitionId, teamId } })
+      .then((r) => {
+        if (cancelled) return;
+        const form = (Array.isArray(r.data) ? r.data : []).find((f) => f.teamId === teamId);
+        const riders = (form?.riders ?? [])
+          .filter((rider) => !(rider.isReserve && !rider.horseName))
+          .slice()
+          .sort((a, b) => a.orderIndex - b.orderIndex)
+          .map((rider) => ({ fullName: publicRiderName(rider), horseName: rider.horseName }));
+        setLoaded({ key, riders });
+      })
+      .catch(() => { if (!cancelled) setLoaded({ key, riders: [] }); });
+    return () => { cancelled = true; };
+  }, [key, competitionId, teamId]);
+  return loaded?.key === key ? loaded.riders : [];
 }

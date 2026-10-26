@@ -2,14 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { FollowStar } from '../../components/FollowStar';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Ban, ChevronRight, ClipboardList, Shield } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useStillMotion } from '../../lite/useStillMotion';
+import { HeatScores } from './HeatScores';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompactPageBar, usePageHeader } from '../../components/CompactPageBarContext';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useFavourites } from '../../hooks/useFavourites';
 import { bibLabel, parseBibAndFlag } from '../../lib/bib';
-import { flagSrc } from './TeamSheet';
-import { HeatScores } from './HeatScores';
 import { heightText } from '../../lib/decForm';
 import { formatPoints } from '../../lib/formatPoints';
 import { statusLabel, statusLetter } from '../../lib/resultStatus';
@@ -42,22 +43,13 @@ export function CompetitionTeamPage() {
   const team = competition.teams.find((t) => t.id === id) ?? null;
   const section = team ? competition.sections.find((s) => s.id === team.competitionSectionId) ?? null : null;
   const sectionLabel = displaySectionName(section?.displayName ?? team?.sectionName);
-  const stateFrom = (location.state as { from?: string; fromLabel?: string } | null) ?? null;
-  const fallbackBackPath = stateFrom?.from || (team
+  const fallbackBackPath = team
     ? `/competitions/${competition.id}/toplists?section=${team.competitionSectionId}`
-    : `/competitions/${competition.id}/teams`);
-  const backLabel = stateFrom?.fromLabel || (
-    stateFrom?.from?.includes('/following') ? 'Following'
-    : stateFrom?.from?.includes('/teams') ? 'Teams'
-    : stateFrom?.from?.includes('/session/') || stateFrom?.from?.includes('/scores') ? 'Heat'
-    : team ? 'Standings' : 'Teams'
-  );
-  const [expandedHeatId, setExpandedHeatId] = useState<number | null>(null);
+    : `/competitions/${competition.id}/teams`;
+
 
   function goBack() {
-    if (typeof window !== 'undefined' && window.history.length > 1 && location.key !== 'default') {
-      navigate(-1);
-    } else if (location.key !== 'default') {
+    if (location.key !== 'default') {
       navigate(-1);
     } else {
       navigate(fallbackBackPath);
@@ -70,6 +62,9 @@ export function CompetitionTeamPage() {
   const [declarationState, setDeclarationState] = useState<{ key: string; form: DeclarationForm | null } | null>(null);
   const decLoaded = declarationState?.key === declarationKey;
   const decForm = decLoaded ? declarationState.form : null;
+  // One heat at a time opens in place to show its full table.
+  const [openHeatId, setOpenHeatId] = useState<number | null>(null);
+  const still = useStillMotion();
   const [matchedProfile, setMatchedProfile] = useState<TeamProfile | null>(null);
   const [profileHistory, setProfileHistory] = useState<TeamProfileHistory | null>(null);
 
@@ -251,8 +246,8 @@ export function CompetitionTeamPage() {
   usePageHeader({
     title: team?.displayName ?? 'Team',
     subtitle: [sectionLabel, competition.name].filter(Boolean).join(' · '),
-    backTo: fallbackBackPath,
-    backLabel,
+    backTo: `/competitions/${competition.id}/teams`,
+    backLabel: 'Teams',
   });
 
   if (!team) {
@@ -302,7 +297,7 @@ export function CompetitionTeamPage() {
         <div className="mg-card flex items-start gap-2 py-3.5 pl-4 pr-2">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <h1 className="mg-h1 flex items-center gap-2.5">
-              {parsedBib.flag && <img src={flagSrc(parsedBib.flag)} alt="" className="h-6 w-9 shrink-0 rounded-sm object-cover" />}
+              {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="h-6 w-9 shrink-0 rounded-sm object-cover" />}
               <span>{team.displayName}</span>
             </h1>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-[rgb(var(--mg-muted))]">
@@ -345,19 +340,16 @@ export function CompetitionTeamPage() {
         ) : (
           <ul className="mg-card divide-y divide-[rgb(var(--mg-rule-soft))] overflow-hidden">
             {drawnHeats.map(({ session, orderedHeats, heat, heatLabel, lane, points, scoredAny, timeText, final, status, delayMinutes }) => {
-              const sessionHref = `/competitions/${competition.id}/session/${session.id}?heat=${heat.id}`;
-              const isExpanded = expandedHeatId === heat.id;
+              const open = openHeatId === heat.id;
+              const panelId = `team-heat-${heat.id}`;
               return (
                 <li key={heat.id}>
-                  <Link
-                    to={sessionHref}
-                    aria-expanded={isExpanded}
-                    onClick={(event) => {
-                      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
-                      event.preventDefault();
-                      setExpandedHeatId((prev) => (prev === heat.id ? null : heat.id));
-                    }}
-                    className="flex min-h-14 items-center gap-3 px-4 py-2.5 hover:bg-[rgb(var(--mg-subtle))]"
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    aria-controls={panelId}
+                    onClick={() => setOpenHeatId(open ? null : heat.id)}
+                    className="flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-[rgb(var(--mg-subtle))]"
                   >
                     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span className="text-base font-semibold leading-tight text-[rgb(var(--mg-ink))]">
@@ -370,18 +362,36 @@ export function CompetitionTeamPage() {
                     {scoredAny && <span className="mg-display shrink-0 text-lg font-bold tabular-nums text-[rgb(var(--mg-heading))]">{formatPoints(points)} pts</span>}
                     <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />
                     <span className="sr-only">{timetableStatusLabel(status, delayMinutes)}</span>
-                    <ChevronRight aria-hidden="true" className={`h-4 w-4 shrink-0 text-[rgb(var(--mg-dash))] transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-                  </Link>
-                  {isExpanded && (
-                    <div className="flex flex-col gap-2 border-t border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] p-3">
-                      <HeatScores embedded session={session} heats={orderedHeats} activeHeatId={heat.id} />
-                      <div className="flex justify-end">
-                        <Link to={sessionHref} className="text-xs font-semibold text-[rgb(var(--mg-heading))] hover:underline">
-                          Open full session view →
-                        </Link>
-                      </div>
-                    </div>
-                  )}
+                    <ChevronRight aria-hidden="true" className={`h-4 w-4 shrink-0 text-[rgb(var(--mg-dash))] transition-transform duration-200 motion-reduce:transition-none [html[data-lite=true]_&]:transition-none ${open ? 'rotate-90' : ''}`} />
+                  </button>
+                  <AnimatePresence initial={false}>
+                    {open && (
+                      <motion.div
+                        key="panel"
+                        id={panelId}
+                        role="region"
+                        aria-label={`${session.name} ${heatLabel} scores`}
+                        initial={still ? false : { height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={still ? undefined : { height: 0, opacity: 0 }}
+                        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                        className="overflow-hidden"
+                      >
+                        <div className="border-t border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))]">
+                          <HeatScores session={session} heats={orderedHeats} activeHeatId={heat.id} embedded bare ignoreUrlHeat highlightTeamId={team.id} />
+                          <div className="flex justify-end px-4 pb-3 pt-1">
+                            <Link
+                              to={`/competitions/${competition.id}/session/${session.id}?heat=${heat.id}`}
+                              className="mg-text-link inline-flex min-h-11 items-center gap-1 text-sm font-semibold"
+                            >
+                              Open full session view
+                              <ChevronRight aria-hidden="true" className="h-4 w-4" />
+                            </Link>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </li>
               );
             })}

@@ -135,6 +135,11 @@ describe('steps 2 and 3: details, then pay', () => {
     expect(await screen.findByRole('heading', { name: 'Entry submitted' })).toBeInTheDocument();
     expect(screen.getByText(/Under 12 team at Spring Games\./)).toBeInTheDocument();
     expect(screen.getByText(/The organiser marks it paid once your transfer arrives/)).toBeInTheDocument();
+    const bank = screen.getByRole('region', { name: 'Bank transfer details' });
+    expect(bank).toHaveTextContent('Club 12-34-56');
+    expect(bank).toHaveTextContent('Alice Rider');
+    expect(bank).toHaveTextContent('£10');
+    expect(within(bank).getByRole('button', { name: 'Copy bank details' })).toBeInTheDocument();
     expect(api.post).toHaveBeenCalledWith('/competitions/1/sections/5/signups', expect.objectContaining({
       fullName: 'Alice Rider', teamCode: null, paymentMethod: 'bacs', acceptTerms: true, waitingForGuestSpot: false, isWaitlist: false,
     }));

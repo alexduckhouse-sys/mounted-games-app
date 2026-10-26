@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, CloudOff, Eye, Film, Lock, Mic, MicOff, Pause, Play, RefreshCw, Square, Table2, Trophy, Video } from 'lucide-react';
 import { Notice } from '../components/Notice';
 import { PageProblem } from '../components/PageProblem';
-import { useSavedToast } from '../components/SavedTick';
 import { Sheet } from '../components/Sheet';
 import { QrPermissionScannerModal } from '../components/QrPermissionScannerModal';
 import { ScoreOutboxPanel } from '../components/ScoreOutboxPanel';
@@ -21,7 +20,7 @@ import { enqueue, placingsOf, type QueuedScore } from '../offline/scoreOutbox';
 import { nextRoundLanes } from '../lib/nextRoundLanes';
 import { sessionPointsBase, withQueuedResults } from '../lib/queuedView';
 import { dropDrafts, pushUndo, undoSave, type UndoEntry } from '../lib/scoreUndo';
-import { overridePoints, nextRaceToScore, placesFromResults, tapTeam, toggleEliminated } from '../lib/raceScoring';
+import { clearDeadHeat, markDeadHeat, overridePoints, nextRaceToScore, placesFromResults, tapTeam, toggleEliminated } from '../lib/raceScoring';
 import { displayLaneFor, lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './competition/laneRules';
 import { HEAT_SAVED, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
 import { browserPublisherDependencies, createStreamPublisher, type PublisherSnapshot } from '../live/streamPublisher';
@@ -124,14 +123,7 @@ export function ScorerPage() {
   }, [token, load]);
 
   const raceSessions = useMemo(
-    () => (session?.sessions ?? []).filter((s) => {
-      if ((s.kind ?? 0) !== 0) return false;
-      const linkArena = session?.arenaName?.trim().toLowerCase();
-      if (linkArena && linkArena !== 'all arenas' && linkArena !== 'all' && s.arenaName?.trim()) {
-        return s.arenaName.trim().toLowerCase() === linkArena;
-      }
-      return true;
-    }).slice().sort((a, b) => {
+    () => (session?.sessions ?? []).filter((s) => (s.kind ?? 0) === 0).slice().sort((a, b) => {
       const ta = a.scheduledStart ? Date.parse(a.scheduledStart) : Number.MAX_SAFE_INTEGER;
       const tb = b.scheduledStart ? Date.parse(b.scheduledStart) : Number.MAX_SAFE_INTEGER;
       return (ta - tb) || (a.orderIndex - b.orderIndex);
@@ -641,34 +633,20 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
   }
 
   const heats = session.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+  const heat = heats.find((h) => h.id === chosenHeatId) ?? heats.find((h) => !heatIsComplete(h)) ?? heats[0] ?? null;
+  const races = (heat?.races ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex);
+  const activeRace = races.find((r) => r.id === chosenRaceId) ?? races.find((r) => !r.isComplete) ?? races[races.length - 1] ?? null;
   // A heat with more teams than lanes races only the lanes, so points are out of the lanes, not the teams.
   const sessionBase = sessionPointsBase(session.heats, session.lanesPerHeat);
   const laneRules = lanesOf(session);
   // Saves still waiting on this phone are shown as if sent.
   const viewHeats = heats.map((h) => withQueuedResults(h, outbox, sessionBase));
-  const viewHeat = viewHeats.find((h) => h.id === chosenHeatId) ?? viewHeats.find((h) => !heatIsComplete(h)) ?? viewHeats[0] ?? null;
-  const heat = (viewHeat ? heats.find((h) => h.id === viewHeat.id) : null) ?? null;
-  const races = (heat?.races ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex);
+  const viewHeat = heat ? viewHeats.find((h) => h.id === heat.id) ?? heat : null;
   const viewRaces = (viewHeat?.races ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex);
-  const activeRace = viewRaces.find((r) => r.id === chosenRaceId) ?? viewRaces.find((r) => !r.isComplete) ?? viewRaces[viewRaces.length - 1] ?? null;
-  const serverRace = (activeRace ? races.find((r) => r.id === activeRace.id) : null) ?? null;
   const heatIndex = heat ? heats.findIndex((h) => h.id === heat.id) : -1;
   const nextLanes = viewHeat ? nextRoundLanes({ ...session, heats: viewHeats }, viewHeat, viewHeats[heatIndex + 1] ?? null, qualifiersOf(session)) : null;
   // In a qualifier only the teams that go through to the final are placed; the rest score 1 point each.
   const qualifierCap = heat?.raceRoundStage === 1 ? qualifiersOf(session) : null;
-  const savedTick = useSavedToast();
-  const restoredDraftRef = useRef<{ raceId: number; places: PendingPlace[] | null } | null>(null);
-
-  useEffect(() => {
-    const restored = restoredDraftRef.current;
-    if (restored && restored.raceId === activeRace?.id) {
-      restoredDraftRef.current = null;
-      setPending(restored.places);
-      return;
-    }
-    setPending(null);
-    setSaveError(null);
-  }, [activeRace?.id]);
 
   function choose(change: { session?: number; heat?: number; race?: number }) {
     setPostRaceRecap(null);
@@ -713,7 +691,7 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
       sessionId: session.id,
       label: `${heat.label ?? `Heat ${heatIndex + 1}`} · ${activeRace.name}`,
       places: [...places, ...restOfQualifier(heat, places), ...sitOutPlaces(heat, races.findIndex((r) => r.id === activeRace.id), laneRules)],
-      expected: placingsOf(serverRace?.results ?? []),
+      expected: placingsOf(activeRace.results),
       teamNames: Object.fromEntries(heat.entries.map((e) => [e.teamId, e.teamName])),
       queuedAt: new Date().toISOString(),
       state: 'waiting',
@@ -750,7 +728,7 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
     }
 
     const queuedIds = new Set([...outbox.map((q) => q.raceId), activeRace.id]);
-    const next = nextRaceToScore(viewHeats, session.raceOrderAlternating === true, { heatId: heat.id, raceId: activeRace.id }, queuedIds);
+    const next = nextRaceToScore(heats, session.raceOrderAlternating === true, { heatId: heat.id, raceId: activeRace.id }, queuedIds);
     if (next) { setChosenHeatId(next.heatId); setChosenRaceId(next.raceId); }
     return true;
   }
@@ -770,10 +748,8 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
       return result.outbox;
     });
     const owner = heats.find((h) => h.races.some((r) => r.id === lastUndo.raceId));
-    const nextPlaces = restore.length > 0 ? restore : null;
-    restoredDraftRef.current = { raceId: lastUndo.raceId, places: nextPlaces };
     if (owner) { setChosenHeatId(owner.id); setChosenRaceId(lastUndo.raceId); }
-    setPending(nextPlaces);
+    setPending(restore.length > 0 ? restore : null);
   }
 
   const teamNamesById: Record<number, string> = {};
@@ -966,16 +942,16 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
           onReset={() => change([])}
           onSubmit={submit}
               onOverridePoints={(teamId, points, reason) => change(overridePoints(shown, teamId, points, reason))}
+              onDeadHeat={(teamIds) => change(markDeadHeat(shown, teamIds))}
+              onClearDeadHeat={(teamId) => change(clearDeadHeat(shown, teamId))}
           onUndo={canUndo ? undo : undefined}
           undoLabel={lastUndo?.kind === 'save' ? 'Undo last save' : 'Undo'}
           allowReasons
           nextLanes={nextLanes}
           correctionReason={activeRace ? reasons[activeRace.id] ?? '' : ''}
           onCorrectionReason={(reason) => { if (activeRace) setReasons((current) => ({ ...current, [activeRace.id]: reason })); }}
-          onSaved={navigator.onLine ? savedTick.show : undefined}
         />
       )}
-      {savedTick.node}
 
       {postRaceRecap && (
         <Sheet title={`${postRaceRecap.raceName} complete`} description={postRaceRecap.summaryText} onClose={() => setPostRaceRecap(null)} className="sc-recap-sheet">

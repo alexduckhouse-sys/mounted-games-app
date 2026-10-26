@@ -18,56 +18,10 @@ import { useStillMotion } from '../../lite/useStillMotion';
 import { CountUp } from './CountUp';
 import { TickerNumber } from '../TickerNumber';
 import { playRankMoves, useRankMotion } from '../../hooks/useRankMotion';
-import { readLiveOptions } from '../../lib/streamOverlayTiles';
-import { publicRiderName } from '../../lib/riderNames';
 
 interface BibColourHolder {
   bibColour?: string | null;
   bibColor?: string | null;
-}
-
-interface RiderPrivacyHolder {
-  useInitialOnly?: boolean;
-  riders?: Array<{ fullName: string; useInitialOnly?: boolean }>;
-}
-
-/** Redacts rider surnames using `publicRiderName` when an Individual/Pairs team or rider has `useInitialOnly: true`. */
-// eslint-disable-next-line react-refresh/only-export-components
-export function redactTeamDisplayName(
-  rawName: string,
-  team?: (Team & RiderPrivacyHolder) | null,
-  competition?: CompetitionDetail | null,
-  explicitInitialOnly?: boolean,
-): string {
-  if (!rawName) return rawName;
-  const riders = team?.riders ?? [];
-  const optedOutRiders = riders.filter((r) => r.useInitialOnly && r.fullName?.trim());
-  if (optedOutRiders.length > 0) {
-    let next = rawName;
-    for (const r of optedOutRiders) {
-      const full = r.fullName.trim();
-      if (full && next.includes(full)) {
-        next = next.split(full).join(publicRiderName({ fullName: full, useInitialOnly: true }));
-      }
-    }
-    if (next !== rawName) return next;
-  }
-
-  const section = team && competition?.sections?.find((s) => s.id === team.competitionSectionId);
-  const isIndOrPairs = !section || section.format === 1 || section.format === 3;
-  const shouldRedact = Boolean(
-    explicitInitialOnly ||
-    (isIndOrPairs && (team?.useInitialOnly || optedOutRiders.length > 0)),
-  );
-  if (!shouldRedact) return rawName;
-
-  if (/\s+(?:&|\/)\s+/.test(rawName)) {
-    return rawName
-      .split(/(\s+(?:&|\/)\s+)/)
-      .map((part) => (/^\s+(?:&|\/)\s+$/.test(part) ? part : publicRiderName({ fullName: part, useInitialOnly: true })))
-      .join('');
-  }
-  return publicRiderName({ fullName: rawName, useInitialOnly: true });
 }
 
 /** A broadcast bib swatch accepting colour/color and optional size, rendering nothing when no bib color exists. */
@@ -93,24 +47,15 @@ export function BibSwatch({
   );
 }
 
-export type LiveOverlayCardMode = 'none' | 'toplist' | 'heat' | 'lanes' | 'next' | 'podium' | 'result' | 'title';
+export type LiveOverlayCardMode = 'none' | 'toplist' | 'heat' | 'lanes' | 'next';
 
-const DATA_CARD_MODES = new Set<string>(['toplist', 'heat', 'lanes', 'next', 'podium', 'result', 'title']);
+const DATA_CARD_MODES = new Set<string>(['toplist', 'heat', 'lanes', 'next']);
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function readLiveOverlayCard(overlay: StreamOverlay): { mode: LiveOverlayCardMode; sectionId: number | null } {
   const look = (overlay.look ?? {}) as Record<string, unknown>;
   const rawMode = typeof look.liveCard === 'string' ? look.liveCard : overlay.bannerText;
-  const mode: LiveOverlayCardMode =
-    rawMode === 'toplist' ||
-    rawMode === 'heat' ||
-    rawMode === 'lanes' ||
-    rawMode === 'next' ||
-    rawMode === 'podium' ||
-    rawMode === 'result' ||
-    rawMode === 'title'
-      ? rawMode
-      : 'none';
+  const mode: LiveOverlayCardMode = rawMode === 'toplist' || rawMode === 'heat' || rawMode === 'lanes' || rawMode === 'next' ? rawMode : 'none';
   const sectionId = typeof look.liveSectionId === 'number' ? look.liveSectionId : null;
   return { mode, sectionId };
 }
@@ -312,7 +257,7 @@ function ScoreCardPanel({ due, teams, where }: { due: QueuedScoreCard; teams?: T
             >
               <span className="mg-ov-card-place">{row.place}</span>
               <span className="mg-ov-card-team" data-grow="start">
-                {redactTeamDisplayName(due.names?.[row.teamId] ?? row.teamName, team, undefined, (row as RiderPrivacyHolder).useInitialOnly)}
+                {due.names?.[row.teamId] ?? row.teamName}
                 {bibColor && <BibSwatch color={bibColor} size={10} />}
               </span>
               {row.change === 'up' && <motion.span initial={still ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ ...ENTER, delay: settled }}><ArrowUp className="mg-ov-card-up" aria-label="moved up" /></motion.span>}
@@ -375,15 +320,8 @@ function useOptionalCompetition(): CompetitionDetail | null {
 // eslint-disable-next-line react-refresh/only-export-components
 export function activeArenaHeat(competition: CompetitionDetail, arenaName: string, mode: 'current' | 'next'): { session: Session; heat: Heat } | null {
   const arena = arenaName.trim().toLowerCase();
-  const raceSessions = competition.sessions.filter((session) => (session.kind ?? (session.isBreak ? 1 : 0)) === 0);
-  const hasNamedArenas = raceSessions.some((session) => Boolean(session.arenaName?.trim()));
-  const sessions = raceSessions.filter((session) => {
-    const sessionArena = (session.arenaName ?? '').trim().toLowerCase();
-    if (!hasNamedArenas) {
-      return !arena || !sessionArena || sessionArena === arena;
-    }
-    return sessionArena === arena;
-  });
+  const sessions = competition.sessions.filter((session) =>
+    (session.kind ?? (session.isBreak ? 1 : 0)) === 0 && (session.arenaName ?? '').trim().toLowerCase() === arena);
   const rows = timetableRows(sessions, computeTimings(sessions), true).filter((row) => row.heat !== null);
   const liveIndex = rows.findIndex((row) => row.status === 'live');
   const row = mode === 'next'
@@ -396,22 +334,18 @@ export function ToplistBody({
   competition,
   rows,
   started,
-  maxRows = 8,
 }: {
   competition: CompetitionDetail;
   rows: Array<{ teamId: number; teamName: string; position: number; points: number }>;
   started: boolean;
-  maxRows?: number;
 }) {
   const still = useStillMotion();
-  const visibleRows = rows.slice(0, maxRows);
-  const listRef = useRankMotion<HTMLOListElement>(visibleRows.map((row) => row.teamId));
+  const listRef = useRankMotion<HTMLOListElement>(rows.slice(0, 8).map((row) => row.teamId));
   return (
     <ol ref={listRef}>
-      {visibleRows.map((row, idx) => {
+      {rows.slice(0, 8).map((row, idx) => {
         const team = competition.teams.find((t) => t.id === row.teamId || t.displayName === row.teamName);
         const bibColor = team?.bibColour ?? (team as BibColourHolder | undefined)?.bibColor;
-        const displayName = redactTeamDisplayName(row.teamName, team, competition);
         return (
           <motion.li
             key={row.teamId}
@@ -423,7 +357,7 @@ export function ToplistBody({
           >
             <span className="mg-ov-card-place">{started ? row.position : '—'}</span>
             <span className="mg-ov-card-team" data-grow="start">
-              {displayName}
+              {row.teamName}
               {bibColor && <BibSwatch color={bibColor} size={10} />}
             </span>
             <span />
@@ -436,17 +370,7 @@ export function ToplistBody({
   );
 }
 
-function LiveToplistCard({
-  competition,
-  sectionId,
-  maxRows = 8,
-  isPodium = false,
-}: {
-  competition: CompetitionDetail;
-  sectionId: number;
-  maxRows?: number;
-  isPodium?: boolean;
-}) {
+function LiveToplistCard({ competition, sectionId }: { competition: CompetitionDetail; sectionId: number }) {
   const { ready } = useCompetition();
   const [result, setResult] = useState<{ rows: StandingRow[]; failed: boolean } | null>(null);
   useEffect(() => {
@@ -469,13 +393,10 @@ function LiveToplistCard({
   const list = buildToplist((result?.rows ?? []).filter((row) => !hc.has(row.teamId)), competition.sessions, competition.teams, sectionId, null);
   const subtitle = result === null ? 'Loading standings…'
     : result.failed ? (list.rows.length > 0 ? 'Last received standings' : 'Standings unavailable')
-      : isPodium ? 'Podium'
-        : list.started ? 'Current standings' : 'Before Race 1';
-  const kindLabel = isPodium ? 'Podium' : 'Live toplist';
-  const kindHeading = isPodium ? 'Podium' : 'Toplist';
+      : list.started ? 'Current standings' : 'Before Race 1';
   return (
-    <CentreCard label={`${kindLabel}: ${displaySectionName(section.displayName)}`} heading={`${displaySectionName(section.displayName)} · ${kindHeading}`} subtitle={subtitle}>
-      <ToplistBody competition={competition} rows={list.rows} started={list.started} maxRows={maxRows} />
+    <CentreCard label={`Live toplist: ${displaySectionName(section.displayName)}`} heading={`${displaySectionName(section.displayName)} · Toplist`} subtitle={subtitle}>
+      <ToplistBody competition={competition} rows={list.rows} started={list.started} />
     </CentreCard>
   );
 }
@@ -493,7 +414,6 @@ export function LanesBody({
       {entries.map((entry, idx) => {
         const team = competition.teams.find((t) => t.id === entry.teamId || t.displayName === entry.teamName);
         const bibColor = team?.bibColour ?? (team as BibColourHolder | undefined)?.bibColor ?? entry.bibColour;
-        const displayName = redactTeamDisplayName(entry.teamName, team, competition, (entry as RiderPrivacyHolder).useInitialOnly);
         return (
           <motion.li
             key={entry.id}
@@ -503,7 +423,7 @@ export function LanesBody({
           >
             <span className="mg-ov-card-place">L{entry.laneIndex}</span>
             <span className="mg-ov-card-team">
-              {displayName}
+              {entry.teamName}
               {bibColor && <BibSwatch color={bibColor} size={10} />}
             </span>
             <span />
@@ -529,7 +449,6 @@ export function NextBody({
       {entries.map((entry, idx) => {
         const team = competition.teams.find((t) => t.id === entry.teamId || t.displayName === entry.teamName);
         const bibColor = team?.bibColour ?? (team as BibColourHolder | undefined)?.bibColor ?? entry.bibColour;
-        const displayName = redactTeamDisplayName(entry.teamName, team, competition, (entry as RiderPrivacyHolder).useInitialOnly);
         return (
           <motion.li
             key={entry.id}
@@ -539,7 +458,7 @@ export function NextBody({
           >
             <span className="mg-ov-card-place">L{entry.laneIndex}</span>
             <span className="mg-ov-card-team">
-              {displayName}
+              {entry.teamName}
               {bibColor && <BibSwatch color={bibColor} size={10} />}
             </span>
             <span />
@@ -565,12 +484,10 @@ export function HeatBody({
   rows,
   scored,
   competition,
-  heatShow = 'races',
 }: {
   rows: HeatRowData[];
   scored: boolean;
   competition: CompetitionDetail;
-  heatShow?: 'total' | 'races' | 'each';
 }) {
   const still = useStillMotion();
   return (
@@ -578,7 +495,6 @@ export function HeatBody({
       {rows.map((row, idx) => {
         const team = competition.teams.find((t) => t.id === row.teamId || t.displayName === row.teamName);
         const bibColor = team?.bibColour ?? (team as BibColourHolder | undefined)?.bibColor;
-        const displayName = redactTeamDisplayName(row.teamName, team, competition);
         return (
           <motion.li
             key={row.teamId}
@@ -589,11 +505,11 @@ export function HeatBody({
           >
             <span className="mg-ov-card-place">{scored ? idx + 1 : `L${row.lane}`}</span>
             <span className="mg-ov-card-team">
-              {displayName}
+              {row.teamName}
               {bibColor && <BibSwatch color={bibColor} size={10} />}
             </span>
             <span />
-            {heatShow !== 'total' && row.last != null ? <span className={`mg-ov-card-added ${row.elim ? 'is-out' : ''}`}>{row.elim ? 'E' : `+${row.last}`}</span> : <span />}
+            {row.last != null ? <span className={`mg-ov-card-added ${row.elim ? 'is-out' : ''}`}>{row.elim ? 'E' : `+${row.last}`}</span> : <span />}
             <span className="mg-ov-card-total">{formatPoints(row.pts)}</span>
           </motion.li>
         );
@@ -603,7 +519,7 @@ export function HeatBody({
 }
 
 /**
- * Live producer-selected overlay card (Toplist, Heat table, Starting lanes, Up next, Podium, Race result, or Race title).
+ * Live producer-selected overlay card (Toplist, Heat table, Starting lanes, or Up next).
  * Stored inside `overlay.look` (or `overlay.bannerText`) so all viewers and the broadcaster see it immediately.
  * Switching card, section or heat lets the old card leave before the new one arrives.
  */
@@ -615,67 +531,13 @@ export function LiveDataCardOverlay({ arenaName, overlay }: { arenaName: string;
 function liveDataCard(competition: CompetitionDetail, arenaName: string, overlay: StreamOverlay): ReactElement | null {
   const { mode, sectionId } = readLiveOverlayCard(overlay);
   if (mode === 'none') return null;
-  const options = readLiveOptions(overlay);
 
-  if (mode === 'toplist' || mode === 'podium') {
+  if (mode === 'toplist') {
     const active = activeArenaHeat(competition, arenaName, 'current');
-    const secId = mode === 'podium'
-      ? (options.podiumSectionId ?? sectionId ?? active?.session.competitionSectionId ?? competition.sections[0]?.id)
-      : (sectionId ?? active?.session.competitionSectionId);
+    const secId = sectionId ?? active?.session.competitionSectionId;
     const section = competition.sections.find((s) => s.id === secId);
     if (!section) return null;
-    const maxRows = mode === 'podium'
-      ? (options.podiumReveal === 'one' ? options.podiumShown : 3)
-      : options.toplistRows;
-    return (
-      <LiveToplistCard
-        key={`${mode}-${competition.id}-${section.id}-${maxRows}`}
-        competition={competition}
-        sectionId={section.id}
-        maxRows={maxRows}
-        isPodium={mode === 'podium'}
-      />
-    );
-  }
-
-  if (mode === 'result') {
-    let targetSession: Session | undefined;
-    let targetHeat: Heat | undefined;
-    let targetRace = undefined;
-    for (const s of competition.sessions) {
-      for (const h of s.heats) {
-        for (const r of h.races) {
-          if (options.resultRaceId != null ? r.id === options.resultRaceId : r.isComplete || r.results.length > 0) {
-            targetSession = s;
-            targetHeat = h;
-            targetRace = r;
-          }
-        }
-      }
-    }
-    if (!targetSession || !targetHeat || !targetRace) return null;
-    const secName = displaySectionName(targetSession.sectionName || targetSession.name);
-    const heading = [secName, targetHeat.label].filter(Boolean).join(' · ');
-    const rows: HeatRowData[] = [...targetRace.results]
-      .sort((a, b) => (a.placing ?? 99) - (b.placing ?? 99) || b.points - a.points)
-      .map((res, idx) => ({
-        teamId: res.teamId,
-        teamName: res.teamName,
-        lane: idx + 1,
-        pts: res.points,
-        last: res.points,
-        elim: res.eliminated,
-      }));
-    return (
-      <CentreCard
-        key={`result-${targetRace.id}`}
-        label={`Race result: ${targetRace.name}`}
-        heading={heading}
-        subtitle={targetRace.name}
-      >
-        <HeatBody rows={rows} scored={true} competition={competition} heatShow="total" />
-      </CentreCard>
-    );
+    return <LiveToplistCard key={`toplist-${competition.id}-${section.id}`} competition={competition} sectionId={section.id} />;
   }
 
   const pair = activeArenaHeat(competition, arenaName, mode === 'next' ? 'next' : 'current');
@@ -684,32 +546,14 @@ function liveDataCard(competition: CompetitionDetail, arenaName: string, overlay
   const secName = displaySectionName(session.sectionName || session.name);
   const heading = [secName, heat.label].filter(Boolean).join(' · ');
 
-  if (mode === 'title') {
-    const activeRace = heat.races.find((r) => !r.isComplete) ?? heat.races.at(-1);
-    const entries = [...heat.entries].sort((a, b) => a.laneIndex - b.laneIndex);
-    return (
-      <CentreCard
-        key={`title-${heat.id}-${activeRace?.id ?? 0}`}
-        label={`Race title: ${activeRace?.name ?? heading}`}
-        heading={activeRace?.name ?? heading}
-        subtitle={heading}
-      >
-        <LanesBody entries={entries} competition={competition} />
-      </CentreCard>
-    );
-  }
-
   if (mode === 'lanes' || mode === 'next') {
     const entries = [...heat.entries].sort((a, b) => a.laneIndex - b.laneIndex);
-    const subtitle = mode === 'next'
-      ? (options.nextCount === 3 ? 'Up next in collecting ring (next 3)' : 'Up next in collecting ring')
-      : 'Starting lanes';
     return (
       <CentreCard
         key={`${mode}-${heat.id}`}
         label={`${mode === 'next' ? 'Up next' : 'Starting lanes'}: ${heading}`}
         heading={heading}
-        subtitle={subtitle}
+        subtitle={mode === 'next' ? 'Up next in collecting ring' : 'Starting lanes'}
       >
         {mode === 'next' ? (
           <NextBody entries={entries} competition={competition} />
@@ -741,7 +585,7 @@ function liveDataCard(competition: CompetitionDetail, arenaName: string, overlay
       heading={heading}
       subtitle={scoredRaces.length > 0 ? `After race ${scoredRaces.length} of ${heat.races.length}` : `${heat.races.length} races`}
     >
-      <HeatBody rows={rows} scored={scoredRaces.length > 0} competition={competition} heatShow={options.heatShow} />
+      <HeatBody rows={rows} scored={scoredRaces.length > 0} competition={competition} />
     </CentreCard>
   );
 }

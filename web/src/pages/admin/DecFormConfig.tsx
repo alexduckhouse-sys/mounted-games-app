@@ -73,9 +73,6 @@ export function DecFormConfigEditor({ competitionId, readOnly = false }: Props) 
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
-  const [activeKeystroke1Field, setActiveKeystroke1Field] = useState<string | null>(null);
-  const [submitted, setSubmitted] = useState(false);
   const toast = useToast();
 
   useEffect(() => {
@@ -88,7 +85,6 @@ export function DecFormConfigEditor({ competitionId, readOnly = false }: Props) 
         if (!parsed) { setLoadFailed(true); return; }
         setSaved(parsed);
         setDraft(parsed.config);
-        setTouchedFields(Object.fromEntries(parsed.config.customFields.map((f) => [f.id, true])));
       } catch {
         if (!cancelled) setLoadFailed(true);
       }
@@ -101,21 +97,10 @@ export function DecFormConfigEditor({ competitionId, readOnly = false }: Props) 
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved.config);
   const problem = configProblem(draft);
-  const visibleProblem = (() => {
-    if (!problem) return null;
-    if (submitted) return problem;
-    if (activeKeystroke1Field !== null) return null;
-    const hasUntouchedBlankQuestion = draft.customFields.some((f) => !f.label.trim() && !touchedFields[f.id]);
-    if (hasUntouchedBlankQuestion && problem === 'Give every extra field a name.') return null;
-    return problem;
-  })();
   const change = (patch: Partial<DecFormConfig>) => { setDraft((cur) => ({ ...cur, ...patch })); setSaveError(null); };
   const setPart = (key: PartKey, value: Requirement) => change({ [key]: value } as Partial<DecFormConfig>);
 
   function setField(id: string, patch: Partial<CustomField>) {
-    if (patch.label !== undefined && patch.label.trim().length > 1) {
-      setTouchedFields((cur) => ({ ...cur, [id]: true }));
-    }
     change({ customFields: draft.customFields.map((f) => (f.id === id ? { ...f, ...patch } : f)) });
   }
 
@@ -124,7 +109,6 @@ export function DecFormConfigEditor({ competitionId, readOnly = false }: Props) 
   }
 
   async function save() {
-    setSubmitted(true);
     if (readOnly || busy || problem) return;
     setBusy(true);
     setSaveError(null);
@@ -205,8 +189,6 @@ export function DecFormConfigEditor({ competitionId, readOnly = false }: Props) 
         {draft.customFields.map((field, index) => (
           <CustomFieldCard key={field.id} field={field} index={index} readOnly={readOnly}
             onChange={(patch) => setField(field.id, patch)}
-            onTouch={() => setTouchedFields((cur) => ({ ...cur, [field.id]: true }))}
-            onKeystroke1Change={(key, active) => setActiveKeystroke1Field((cur) => (active ? key : cur === key ? null : cur))}
             onRemove={() => change({ customFields: draft.customFields.filter((f) => f.id !== field.id) })} />
         ))}
         <button type="button" className="mg-btn mg-btn-secondary !min-h-11 self-start" disabled={readOnly || draft.customFields.length >= MAX_CUSTOM_FIELDS} onClick={addField}>
@@ -219,7 +201,7 @@ export function DecFormConfigEditor({ competitionId, readOnly = false }: Props) 
           Changes apply to dec forms sent from now on.
           {saved.formsSubmitted > 0 && ` The ${saved.formsSubmitted} already in keep the answers they have.`}
         </Notice>
-        {visibleProblem && <Notice>{visibleProblem}</Notice>}
+        {problem && <Notice>{problem}</Notice>}
         {saveError && <Notice actionLabel="Try again" onAction={() => { void save(); }} actionDisabled={busy}>{saveError}</Notice>}
         <div className="flex flex-wrap items-center gap-3">
           <button type="button" className="mg-btn mg-btn-primary !min-h-12" disabled={readOnly || busy || !!problem || (!dirty && !saved.isStandard)} onClick={() => { void save(); }}>
@@ -237,12 +219,10 @@ interface CardProps {
   index: number;
   readOnly: boolean;
   onChange: (patch: Partial<CustomField>) => void;
-  onTouch: () => void;
-  onKeystroke1Change: (key: string, active: boolean) => void;
   onRemove: () => void;
 }
 
-function CustomFieldCard({ field, index, readOnly, onChange, onTouch, onKeystroke1Change, onRemove }: CardProps) {
+function CustomFieldCard({ field, index, readOnly, onChange, onRemove }: CardProps) {
   const name = field.label.trim() || `question ${index + 1}`;
   const number = field.type === NUMBER_FIELD;
   return (
@@ -251,7 +231,7 @@ function CustomFieldCard({ field, index, readOnly, onChange, onTouch, onKeystrok
         <Field label="Question" className="min-w-0 flex-1">
           {({ id }) => (
             <div className="mg-field">
-              <input id={id} value={field.label} maxLength={80} placeholder="e.g. Saddle size" disabled={readOnly} onBlur={onTouch} onChange={(e) => onChange({ label: e.target.value })} />
+              <input id={id} value={field.label} maxLength={80} placeholder="e.g. Saddle size" disabled={readOnly} onChange={(e) => onChange({ label: e.target.value })} />
             </div>
           )}
         </Field>
@@ -279,10 +259,10 @@ function CustomFieldCard({ field, index, readOnly, onChange, onTouch, onKeystrok
             )}
           </Field>
           <Field label="Can’t be below">
-            {({ id }) => <LimitInput id={id} value={field.min} disabled={readOnly} onKeystroke1={(active) => onKeystroke1Change(`${field.id}:min`, active)} onValue={(min) => onChange({ min })} />}
+            {({ id }) => <LimitInput id={id} value={field.min} disabled={readOnly} onValue={(min) => onChange({ min })} />}
           </Field>
           <Field label="Can’t be above">
-            {({ id }) => <LimitInput id={id} value={field.max} disabled={readOnly} onKeystroke1={(active) => onKeystroke1Change(`${field.id}:max`, active)} onValue={(max) => onChange({ max })} />}
+            {({ id }) => <LimitInput id={id} value={field.max} disabled={readOnly} onValue={(max) => onChange({ max })} />}
           </Field>
         </div>
       )}
@@ -292,16 +272,14 @@ function CustomFieldCard({ field, index, readOnly, onChange, onTouch, onKeystrok
 }
 
 /** A number box that keeps what is being typed ("1." on its way to "1.5") and tells the parent the number, or null when empty. */
-function LimitInput({ id, value, disabled, onValue, onKeystroke1 }: { id: string; value: number | null | undefined; disabled: boolean; onValue: (value: number | null) => void; onKeystroke1?: (active: boolean) => void }) {
+function LimitInput({ id, value, disabled, onValue }: { id: string; value: number | null | undefined; disabled: boolean; onValue: (value: number | null) => void }) {
   const [text, setText] = useState(value == null ? '' : String(value));
   return (
     <div className="mg-field">
       <NumberField id={id} decimal allowNegative value={text} disabled={disabled} placeholder="No limit"
-        onBlur={() => onKeystroke1?.(false)}
         onChange={(e) => {
           const next = e.target.value;
           setText(next);
-          onKeystroke1?.(next.trim().length === 1);
           const parsed = next.trim() === '' ? null : Number(next);
           if (parsed === null || Number.isFinite(parsed)) onValue(parsed);
         }} />

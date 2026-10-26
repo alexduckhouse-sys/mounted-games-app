@@ -179,16 +179,7 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   // Official totals include cross-section results, tack bonuses and organiser tie decisions.
   // Keep the last official response while refreshing; session sums cannot reproduce those rules.
   const standings = !standingsError && currentResult ? currentResult.rows : savedStandings?.data ?? NO_ROWS;
-  const [initialGrace, setInitialGrace] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine));
-  useEffect(() => {
-    if (!initialGrace) return;
-    const timer = window.setTimeout(() => setInitialGrace(false), 2500);
-    return () => window.clearTimeout(timer);
-  }, [initialGrace]);
-  const isOnline = typeof navigator === 'undefined' ? true : navigator.onLine;
-  const standingsStale = currentResult
-    ? currentResult.savedCopy || currentResult.source !== refreshSource
-    : savedStandings != null && (!initialGrace || !isOnline);
+  const standingsStale = currentResult ? currentResult.savedCopy || currentResult.source !== refreshSource : savedStandings != null;
   const standingsLoading = sectionId != null && !currentResult && !savedStandings && standings.length === 0;
   useEffect(() => {
     if (sectionId == null) return;
@@ -397,11 +388,8 @@ interface FinalsModalProps { sectionId: number; onClose: () => void; onCreated: 
 
 function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
   const { competition } = useCompetition();
-  const section = competition.sections.find((s) => s.id === sectionId) ?? null;
   const [topN, setTopN] = useState(6);
-  const [topNDraft, setTopNDraft] = useState<string | null>(null);
   const [lanes, setLanes] = useState(6);
-  const [lanesDraft, setLanesDraft] = useState<string | null>(null);
   const [name, setName] = useState('');
   // The finals session planned for this age group (made in the creator), if heats haven't been made in it yet: reusing it keeps its B and C race lists.
   const planned = competition.sessions.find((x) => x.competitionSectionId === sectionId && (x.kind ?? 0) === 0 && x.status === 0
@@ -466,54 +454,14 @@ function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
         <div className="p-3 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="text-xs font-semibold">{section?.format === 1 || section?.format === 3 ? 'Top N' : 'Top N teams'}</span>
-              <NumberField
-                min={1}
-                max={50}
-                className="input mt-1 text-sm"
-                value={topNDraft !== null ? topNDraft : topN}
-                onFocus={() => setTopNDraft(String(topN))}
-                onChange={(e) => {
-                  const text = e.target.value;
-                  if (topNDraft !== null) setTopNDraft(text);
-                  if (text.trim() !== '') {
-                    const n = parseInt(text, 10);
-                    if (Number.isFinite(n) && n >= 1) setTopN(Math.min(50, n));
-                  }
-                }}
-                onBlur={() => {
-                  if (topNDraft !== null) {
-                    const n = parseInt(topNDraft, 10);
-                    setTopN(Math.min(50, Math.max(1, Number.isFinite(n) ? n : topN)));
-                    setTopNDraft(null);
-                  }
-                }}
-              />
+              <span className="text-xs font-semibold">Top N teams</span>
+              <NumberField  min={1} max={50} className="input mt-1 text-sm"
+                value={topN} onChange={(e) => setTopN(Math.max(1, parseInt(e.target.value, 10) || 1))} />
             </label>
             <label className="block">
               <span className="text-xs font-semibold">Lanes per heat</span>
-              <NumberField
-                min={1}
-                max={20}
-                className="input mt-1 text-sm"
-                value={lanesDraft !== null ? lanesDraft : lanes}
-                onFocus={() => setLanesDraft(String(lanes))}
-                onChange={(e) => {
-                  const text = e.target.value;
-                  if (lanesDraft !== null) setLanesDraft(text);
-                  if (text.trim() !== '') {
-                    const n = parseInt(text, 10);
-                    if (Number.isFinite(n) && n >= 1) setLanes(Math.min(20, n));
-                  }
-                }}
-                onBlur={() => {
-                  if (lanesDraft !== null) {
-                    const n = parseInt(lanesDraft, 10);
-                    setLanes(Math.min(20, Math.max(1, Number.isFinite(n) ? n : lanes)));
-                    setLanesDraft(null);
-                  }
-                }}
-              />
+              <NumberField  min={1} max={20} className="input mt-1 text-sm"
+                value={lanes} onChange={(e) => setLanes(Math.max(1, parseInt(e.target.value, 10) || 1))} />
             </label>
           </div>
           <label className="block">

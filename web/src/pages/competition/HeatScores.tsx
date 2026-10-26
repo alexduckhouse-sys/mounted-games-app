@@ -14,7 +14,6 @@ import { timetableRows } from '../../lib/timetableRows';
 import { useCompactPageBar } from '../../components/CompactPageBarContext';
 import { RaceRulesButton } from '../../components/RaceRulesButton';
 import { parseBibAndFlag } from '../../lib/bib';
-import { flagSrc } from './TeamSheet';
 import { statusLabel, statusLetter } from '../../lib/resultStatus';
 import { useFavourites } from '../../hooks/useFavourites';
 import { displayLaneFor, lanesOf, sitsOutOf, type LaneRules } from './laneRules';
@@ -49,11 +48,17 @@ function HeatScoresPageBar({ backTo, title, subtitle, badge }: {
 }
 
 /** The public heat page: who is racing, the score for every race so far and the running total. */
-export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
+export function HeatScores({ session, heats, activeHeatId, embedded = false, bare = false, ignoreUrlHeat = false, highlightTeamId = null }: {
   session: Session;
   heats: Heat[];
   activeHeatId: number | null;
   embedded?: boolean;
+  /** Drop the card around the table, for use inside another card (the team page's heat accordion). */
+  bare?: boolean;
+  /** Show `activeHeatId` whatever `?heat=` says in the address. */
+  ignoreUrlHeat?: boolean;
+  /** Tint this team's row and mark it with a bar on the left. */
+  highlightTeamId?: number | null;
 }) {
   const { competition, streams } = useCompetition();
   const [showRules, setShowRules] = useState(false);
@@ -79,7 +84,7 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
   // The page can be reached with ?heat=<id> while already mounted (next-heat link), so the URL wins over the parent's initial pick.
   const [searchParams] = useSearchParams();
   const requestedHeat = Number(searchParams.get('heat'));
-  const shownHeatId = heats.some((item) => item.id === requestedHeat) ? requestedHeat : activeHeatId;
+  const shownHeatId = !ignoreUrlHeat && heats.some((item) => item.id === requestedHeat) ? requestedHeat : activeHeatId;
   const index = Math.max(0, heats.findIndex((item) => item.id === shownHeatId));
   const heat = heats[index] ?? heats[0] ?? null;
   const isRaceFinals = useMemo(
@@ -338,7 +343,7 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
       {!embedded && <h1 className="sr-only">{section ? `${section} ${heatLabel} scores` : `${heatLabel} scores`}</h1>}
 
       {!heat ? <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">No heats in this session yet.</p> : (
-        <section aria-label="Scores" className="mg-card overflow-hidden">
+        <section aria-label="Scores" className={bare ? 'overflow-hidden' : 'mg-card overflow-hidden'}>
           {grid.teams.length === 0 ? <p className="p-4 text-[rgb(var(--mg-muted))]">No teams in this heat yet.</p> : (
             <div className="overflow-x-auto">
               <table className={`heat-grid${manyRaces ? ' heat-grid-many' : ''}`} style={{ minWidth }}>
@@ -375,17 +380,13 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
                     const flag = parseBibAndFlag(competition.teams.find((item) => item.id === team.id)?.bibDescription).flag;
                     return (
                       // Rows slide to their new places when a race result re-ranks the heat.
-                      <motion.tr key={team.id} layout="position" transition={{ layout: { duration: 0.5, ease: EASE_OUT } }} data-rank-id={team.id} className={team.isFav ? 'heat-row-fav' : undefined} data-followed={team.isFav ? 'true' : undefined}>
+                      <motion.tr key={team.id} layout="position" transition={{ layout: { duration: 0.5, ease: EASE_OUT } }} data-rank-id={team.id} className={[team.isFav ? 'heat-row-fav' : '', team.id === highlightTeamId ? 'heat-row-me' : ''].filter(Boolean).join(' ') || undefined} data-followed={team.isFav ? 'true' : undefined} aria-current={team.id === highlightTeamId ? 'true' : undefined}>
                         {finished && <td className="heat-rank-cell"><span className="sr-only">Position </span>{team.position}</td>}
                         <th scope="row" className="heat-team" title={team.name}>
-                          <Link
-                            to={`/competitions/${competition.id}/teams/${team.id}`}
-                            state={{ from: `/competitions/${competition.id}/session/${session.id}?heat=${heat.id}`, fromLabel: 'Heat' }}
-                            className="heat-team-link"
-                          >
+                          <Link to={`/competitions/${competition.id}/teams/${team.id}`} className="heat-team-link">
                             <span data-grow="start" className={`heat-team-name${team.name.length > 16 || manyRaces ? ' heat-team-name-long' : ''}`}>
                               {team.isFav && <Star aria-hidden="true" className="mr-1 inline h-3 w-3 fill-[#C08308] text-[#C08308]" />}
-                              {flag && <img src={flagSrc(flag)} alt="" className="mr-1 inline h-3.5 w-5 rounded-[2px] object-cover" />}
+                              {flag && <img src={`/flags/${flag}.png`} alt="" className="mr-1 inline h-3.5 w-5 rounded-[2px] object-cover" />}
                               {team.name}
                               {cardsEnabled && <TeamCardBadge card={team.card} />}
                             </span>

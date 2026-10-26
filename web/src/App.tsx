@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { PageLoadBoundary } from './components/PageLoadBoundary';
-import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import { NeedsYouProvider } from './pages/profile/NeedsYouProvider';
 import { ThemeProvider } from './theme/ThemeContext';
@@ -38,6 +38,8 @@ const BroadcastPage = lazy(() => import('./pages/competition/BroadcastPage').the
 const StreamControlsPage = lazy(() => import('./pages/competition/StreamControlsPage').then((module) => ({ default: module.StreamControlsPage })));
 const ProducePage = lazy(() => import('./pages/competition/ProducePage').then((module) => ({ default: module.ProducePage })));
 const ChatTab = lazy(() => import('./pages/competition/ChatTab').then((module) => ({ default: module.ChatTab })));
+const AnnouncementsPage = lazy(() => import('./pages/competition/AnnouncementsPage').then((module) => ({ default: module.AnnouncementsPage })));
+const MessageThreadPage = lazy(() => import('./pages/competition/MessageThreadPage').then((module) => ({ default: module.MessageThreadPage })));
 const ContactOrganisersPage = lazy(() => import('./pages/competition/ContactOrganisersPage').then((module) => ({ default: module.ContactOrganisersPage })));
 const EntryPage = lazy(() => import('./pages/competition/EntryPage').then((module) => ({ default: module.EntryPage })));
 const DetailsTab = lazy(() => import('./pages/competition/DetailsTab').then((module) => ({ default: module.DetailsTab })));
@@ -86,32 +88,6 @@ const AccountPage = lazy(() => import('./pages/AccountPage').then((module) => ({
 const TestEntryPaymentPage = lazy(() => import('./pages/commerce/TestEntryPaymentPage').then((module) => ({ default: module.TestEntryPaymentPage })));
 const MySignupsPage = lazy(() => import('./pages/MySignupsPage').then((module) => ({ default: module.MySignupsPage })));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then((module) => ({ default: module.NotFoundPage })));
-
-const PRELOAD_RELOAD_KEY = 'mg:preload-reloaded';
-
-if (typeof window !== 'undefined') {
-  window.addEventListener('vite:preloadError', (event) => {
-    try {
-      if (!sessionStorage.getItem(PRELOAD_RELOAD_KEY)) {
-        event.preventDefault();
-        sessionStorage.setItem(PRELOAD_RELOAD_KEY, '1');
-        window.location.reload();
-      }
-    } catch {
-      // Ignore storage errors in restricted contexts
-    }
-  });
-}
-
-function LegacyEventRedirect({ to }: { to: (id: string) => string }) {
-  const { id } = useParams<{ id: string }>();
-  return <Navigate to={to(id ?? '')} replace />;
-}
-
-function LegacyMessageThreadRedirect() {
-  const { id, threadId } = useParams<{ id: string; threadId: string }>();
-  return <Navigate to={`/competitions/${id ?? ''}/contact?thread=${encodeURIComponent(threadId ?? '')}`} replace />;
-}
 
 export default function App() {
   return (
@@ -174,8 +150,8 @@ export default function App() {
                 <Route path="produce" element={<ProtectedRoute roles={['Admin', 'Trainer']}><ProducePage /></ProtectedRoute>} />
                 <Route path="chat" element={<AfterDrawOnly><ChatTab /></AfterDrawOnly>} />
                 <Route path="contact" element={<ContactOrganisersPage />} />
-                <Route path="announcements" element={<LegacyEventRedirect to={(id) => `/competitions/${id}?tab=broadcasts`} />} />
-                <Route path="messages/:threadId" element={<LegacyMessageThreadRedirect />} />
+                <Route path="announcements" element={<ProtectedRoute roles={['Admin']}><AnnouncementsPage /></ProtectedRoute>} />
+                <Route path="messages/:userId" element={<ProtectedRoute roles={['Admin']}><MessageThreadPage /></ProtectedRoute>} />
                 <Route path="details" element={<DetailsTab />} />
                 <Route path="sponsors" element={<SponsorsPage />} />
                 <Route path="live" element={<Navigate to="../chat" replace />} />
@@ -191,8 +167,6 @@ export default function App() {
               <Route path="stats" element={<StatsPage />} />
               <Route path="stats/:kind" element={<StatsPage />} />
               <Route path="event-tools/:competitionId" element={<ProtectedRoute roles={['Admin', 'Trainer']}><EventToolsPage /></ProtectedRoute>} />
-              <Route path="event-tools/:id/format" element={<LegacyEventRedirect to={(id) => `/event-tools/${id}/sections`} />} />
-              <Route path="event-tools/:id/produce" element={<LegacyEventRedirect to={(id) => `/event-tools/${id}/print`} />} />
               <Route path="declarations" element={<DeclarationsIndexPage />} />
               <Route path="chat" element={<Navigate to="/events" replace />} />
               <Route path="shop" element={<ShopPage />} />
@@ -228,8 +202,9 @@ export default function App() {
               <Route path="admin/competitions/:id/format" element={
                 <ProtectedRoute roles={['Admin', 'Trainer']}><FormatPage /></ProtectedRoute>
               } />
-              <Route path="admin/rules" element={<Navigate to="/rules" replace />} />
-              <Route path="rules" element={<RulesLibraryPage />} />
+              <Route path="admin/rules" element={
+                <ProtectedRoute roles={['Admin']}><RulesLibraryPage /></ProtectedRoute>
+              } />
               <Route path="privacy" element={<PrivacyPage />} />
               <Route path="terms" element={<PrivacyPage />} />
               <Route path="refunds" element={<PrivacyPage />} />

@@ -1,6 +1,9 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { ChangePop } from '../../components/ChangePop';
 import { ChevronDown } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
+import { LeavingRow } from '../../components/LeavingRow';
+import { feeText } from '../../lib/entryOptions';
 import { api } from '../../api';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
@@ -59,7 +62,6 @@ export function EntriesPage() {
   const [lock, setLock] = useState<string | null>(null);
   const [config, setConfig] = useState<DecFormConfig | null>(null);
   const [open, setOpen] = useState<number | null>(null);
-  const [withdrawReasons, setWithdrawReasons] = useState<Record<number, string>>({});
   const [setup, setSetup] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
@@ -102,22 +104,14 @@ export function EntriesPage() {
   const closed = Boolean(competition.signupsLocked);
 
   const groups = useMemo(() => {
-    const map = new Map<number, { name: string; teams: TeamEntry[]; pendingSignups: SectionSignup[] }>();
+    const map = new Map<number, { name: string; teams: TeamEntry[] }>();
     for (const entry of entries ?? []) {
-      const group = map.get(entry.sectionId) ?? { name: displaySectionName(entry.sectionName), teams: [], pendingSignups: [] };
+      const group = map.get(entry.sectionId) ?? { name: displaySectionName(entry.sectionName), teams: [] };
       group.teams.push(entry);
       map.set(entry.sectionId, group);
     }
-    for (const signup of live) {
-      const ext = signup as SectionSignup & { isWithdrawn?: boolean };
-      if (signup.status === 0 && !signup.teamId && !ext.isWithdrawn) {
-        const group = map.get(signup.competitionSectionId) ?? { name: displaySectionName(signup.sectionName), teams: [], pendingSignups: [] };
-        group.pendingSignups.push(signup);
-        map.set(signup.competitionSectionId, group);
-      }
-    }
     return [...map.entries()];
-  }, [entries, live]);
+  }, [entries]);
 
   const toggleEntries = () => run('Couldn’t change entries.', async () => {
     await api.post(`/competitions/${competition.id}/signups-locked`, { locked: !closed });
@@ -131,15 +125,9 @@ export function EntriesPage() {
     }
   });
 
-  const markSignupPaid = (signup: SectionSignup) => run('Couldn’t change the payment.', async () => {
-    await api.post(`/competitions/${competition.id}/signups/${signup.id}/mark-paid`);
-    reload();
-  });
-
   async function withdraw(team: TeamEntry) {
     if (!(await confirmDialog({ title: `Withdraw ${team.teamName}?`, message: 'They come out of the draw. You can bring them back until a draw depends on it.', confirmLabel: 'Withdraw', destructive: true }))) return;
-    const customReason = (withdrawReasons[team.teamId] ?? '').trim();
-    await run('Couldn’t withdraw the entry.', () => api.put(`/competitions/${competition.id}/teams/${team.teamId}/entry-status`, { status: 1, reason: customReason || null }));
+    await run('Couldn’t withdraw the entry.', () => api.put(`/competitions/${competition.id}/teams/${team.teamId}/entry-status`, { status: 1, reason: null }));
     reload();
   }
   async function reinstate(team: TeamEntry) {
@@ -175,27 +163,12 @@ export function EntriesPage() {
           </div>
         </RefineList>
 
-        {entries !== null && entries.length === 0 && groups.length === 0 && <p className="rf-note">No entries yet.</p>}
+        {entries !== null && entries.length === 0 && <p className="rf-note">No entries yet.</p>}
         {groups.map(([sectionId, group]) => (
           <Fragment key={sectionId}>
             <RefineSection title={group.name} />
             <RefineList as="div" label={group.name}>
-              {group.pendingSignups.map((signup) => {
-                const displayLabel = signup.teamName?.trim() || signup.ponyClubName?.trim() || signup.fullName;
-                return (
-                  <div key={`signup-${signup.id}`} className="rf-row ops-entry-row">
-                    <span className="rf-grow">
-                      <span className="rf-t1">{displayLabel}</span>
-                      <span className="rf-t2">
-                        <span className="ops-unpaid">Not paid</span>
-                        {signup.fullName && signup.fullName !== displayLabel ? ` · ${signup.fullName}` : ''}
-                      </span>
-                    </span>
-                    <span className="rf-st rf-warn">Pending payment</span>
-                    <button type="button" className="rf-btn" disabled={busy} onClick={() => void markSignupPaid(signup)}>Mark paid</button>
-                  </div>
-                );
-              })}
+              <AnimatePresence initial={false}>
               {group.teams.map((team) => {
                 const mine = live.filter((s) => s.teamId === team.teamId);
                 const paid = mine.length > 0 && mine.every((s) => s.status === 1);
@@ -204,19 +177,28 @@ export function EntriesPage() {
                 const out = team.status !== 0;
                 const tag = out ? { text: 'Withdrawn', tone: 'mut' } : !form ? { text: 'Missing', tone: 'mut' } : flags.length > 0 ? { text: 'Flagged', tone: 'warn' } : { text: 'Received', tone: 'ok' };
                 const isOpen = open === team.teamId;
+                const pending = !out && mine.length > 0 && !paid;
+                const owed = mine.filter((s) => s.status === 0).reduce((sum, s) => sum + s.amountMinor, 0);
                 return (
-                  <div key={team.teamId}>
+                  <LeavingRow as="div" key={team.teamId}>
                     <button type="button" className="rf-row ops-entry-row" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : team.teamId)}>
                       <span className="rf-grow">
                         <span className="rf-t1">{team.teamName}</span>
                         <span className="rf-t2">
-                          {mine.length > 0 && <span className={paid ? 'ops-paid' : 'ops-unpaid'}><ChangePop value={paid ? 'Paid' : 'Not paid'} tick={paid}>{paid ? 'Paid' : 'Not paid'}</ChangePop></span>}
-                          {mine.length > 0 && form ? ' · ' : ''}{form ? `Form in ${whenText(form.submittedAt)}` : ''}
+                          {mine.length > 0 && !pending && <span className={paid ? 'ops-paid' : 'ops-unpaid'}><ChangePop value={paid ? 'Paid' : 'Not paid'} tick={paid}>{paid ? 'Paid' : 'Not paid'}</ChangePop></span>}
+                          {mine.length > 0 && !pending && form ? ' · ' : ''}{form ? `Form in ${whenText(form.submittedAt)}` : ''}
                         </span>
                       </span>
                       <span className={`rf-st rf-${tag.tone}`}>{tag.text}</span>
                       <ChevronDown className={`rf-chev rf-chev-down h-4 w-4 ${isOpen ? 'ops-flip' : ''}`} aria-hidden="true" />
                     </button>
+                    {pending && (
+                      <div className="ops-pending">
+                        <span className="ops-badge-pending">Pending payment</span>
+                        {owed > 0 && <span className="rf-t2">{feeText(owed)} by bank transfer</span>}
+                        <button type="button" className="rf-btn rf-btn-primary ops-markpaid" disabled={busy} aria-label={`Mark ${team.teamName} paid`} onClick={() => void setPaid(team, true)}>Mark paid</button>
+                      </div>
+                    )}
                     {isOpen && (
                       <div className="ops-entry-body">
                         {mine.length > 0 && (
@@ -234,24 +216,14 @@ export function EntriesPage() {
                         <div className="ops-line ops-line-end">
                           {out
                             ? (team.canReinstate ? <button type="button" className="rf-btn" disabled={busy} onClick={() => void reinstate(team)}>Reinstate</button> : <span className="rf-t2">This entry is out of the draw.</span>)
-                            : (
-                              <div className="flex flex-wrap items-center gap-2">
-                                <input
-                                  aria-label={`Withdrawal reason for ${team.teamName}`}
-                                  placeholder="Reason for withdrawal (optional)"
-                                  value={withdrawReasons[team.teamId] ?? ''}
-                                  onChange={(e) => setWithdrawReasons((cur) => ({ ...cur, [team.teamId]: e.target.value }))}
-                                  className="min-h-9 rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))] px-2.5 text-sm"
-                                />
-                                <button type="button" className="ops-danger-link" disabled={busy} onClick={() => void withdraw(team)}>Withdraw this entry</button>
-                              </div>
-                            )}
+                            : <button type="button" className="ops-danger-link" disabled={busy} onClick={() => void withdraw(team)}>Withdraw this entry</button>}
                         </div>
                       </div>
                     )}
-                  </div>
+                  </LeavingRow>
                 );
               })}
+              </AnimatePresence>
             </RefineList>
           </Fragment>
         ))}
@@ -286,13 +258,15 @@ function FormView({ form, flags }: { form: DeclarationForm; flags: string[] }) {
       {flags.map((text) => <Notice key={text} role="status">{text}</Notice>)}
       <p className="rf-t1">Trainer: {form.trainerName ?? form.submittedByName ?? 'not given'}</p>
       <ol className="ops-riders">
-        {riders.map((rider, i) => (
-          <li key={rider.id}>
-            <span className="ops-race-n">{i + 1}</span>
-            <span className="rf-grow"><span className="rf-t1">{rider.fullName}</span><span className="rf-t2">{rider.horseName ?? ''}</span></span>
-            <span className="rf-t2 ops-facts">{[rider.ponyHeightHands != null ? `${heightText(rider.ponyHeightHands)} hh` : '', ageOf(rider)].filter(Boolean).join(' · ')}</span>
-          </li>
-        ))}
+        <AnimatePresence initial={false}>
+          {riders.map((rider, i) => (
+            <LeavingRow key={rider.id}>
+              <span className="ops-race-n">{i + 1}</span>
+              <span className="rf-grow"><span className="rf-t1">{rider.fullName}</span><span className="rf-t2">{rider.horseName ?? ''}</span></span>
+              <span className="rf-t2 ops-facts">{[rider.ponyHeightHands != null ? `${heightText(rider.ponyHeightHands)} hh` : '', ageOf(rider)].filter(Boolean).join(' · ')}</span>
+            </LeavingRow>
+          ))}
+        </AnimatePresence>
       </ol>
       {form.notes && <p className="rf-t2">{form.notes}</p>}
     </div>

@@ -83,26 +83,6 @@ export function EventDetailsPage() {
       reload();
     });
 
-  const saveSectionFee = (section: CompetitionDetail['sections'][number], gbpText: string) =>
-    track('the entry fee', async () => {
-      const parsed = gbpText.trim() === '' ? 0 : Number(gbpText);
-      const priceMinor = Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) : (section.priceMinor ?? 0);
-      await api.put(`/competitions/${competition.id}/sections/${section.id}`, {
-        runoffRaceName: section.runoffRaceName ?? null,
-        usesRaceFinals: section.usesRaceFinals ?? false,
-        priceMinor,
-        maxParticipants: section.maxParticipants ?? 0,
-        finalistCount: section.finalistCount ?? null,
-        tieBreakRule: section.tieBreakRule ?? 0,
-        ...(section.usesRaceFinals ? {} : {
-          hasFinal: section.hasFinal ?? true,
-          carryPointsIntoFinal: section.carryPointsIntoFinal ?? false,
-          doublePointsInFinal: section.doublePointsInFinal ?? false,
-        }),
-      });
-      reload();
-    });
-
   async function setPassportCheck(next: boolean) {
     const before = passport;
     setPassport(next);
@@ -171,24 +151,6 @@ export function EventDetailsPage() {
           </div>
         </RefineList>
         <div className="ops-fields ops-gap">
-          <TextField
-            key={`pay-${competition.paymentDestination ?? ''}`}
-            label="Bank details and payment instructions (BACS)"
-            value={competition.paymentDestination ?? ''}
-            multiline
-            onSave={(value) => saveBasics('the payment details', { paymentDestination: value || null })}
-          />
-          {(competition.sections ?? []).map((sec) => {
-            const feeGbp = sec.priceMinor ? (sec.priceMinor / 100).toFixed(2) : '';
-            return (
-              <TextField
-                key={`fee-${sec.id}-${sec.priceMinor ?? 0}`}
-                label={`Entry fee · ${sec.displayName} (£)`}
-                value={feeGbp}
-                onSave={(value) => saveSectionFee(sec, value)}
-              />
-            );
-          })}
           <TextField key={competition.description ?? ''} label="Notes for riders (optional)" value={competition.description ?? ''} multiline onSave={(value) => saveBasics('the notes', { description: value || null })} />
         </div>
 
