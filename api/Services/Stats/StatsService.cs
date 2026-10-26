@@ -8,7 +8,7 @@ using MountedGames.Api.Entities.Seasons;
 
 namespace MountedGames.Api.Services.Stats;
 
-/// <param name="SignedIn">Signed-in viewers get the detail lists; everyone else gets the summary only.</param>
+/// <param name="SignedIn">Signed-in viewers get the detail lists; everyone else gets the summary, plus a team's per-game figures.</param>
 /// <param name="SeesFullNames">Site admins see riders' full names even when a rider asked for initials only.</param>
 public readonly record struct StatsViewer(bool SignedIn, bool SeesFullNames);
 
@@ -266,9 +266,6 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
             points, maxPoints, StatsNames.Percent(points, maxPoints),
             bFinals, cFinals);
 
-        if (!viewer.SignedIn)
-            return new StatsProfileDto(kind, name, key, false, allFormats, summary, null, null, null, null, null);
-
         var games = raceScope
             .GroupBy(r => StatsNames.Normalise(r.RaceName))
             .Select(g =>
@@ -289,6 +286,16 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
         var bestCount = Math.Min(3, (games.Count + 1) / 2);
         var best = games.Take(bestCount).Select(g => g.Name).ToList();
         var worst = games.Skip(bestCount).Reverse().Take(3).Select(g => g.Name).ToList();
+
+        // Per-game figures are totals over a team's own race results, which the public results pages already show, so a
+        // team profile gives them to everyone. Riders and ponies keep them behind sign-in, with the entries and the
+        // rider and pony partnerships (which name people) for every kind.
+        if (!viewer.SignedIn)
+            return new StatsProfileDto(kind, name, key, false, allFormats, summary,
+                kind == StatsSubjectKind.Team ? games : null,
+                kind == StatsSubjectKind.Team ? best : null,
+                kind == StatsSubjectKind.Team ? worst : null,
+                null, null);
 
         var sessionTables = await SessionTablesAsync(sessionIds, ct);
         var resultsByTeam = results.ToLookup(r => r.TeamId);

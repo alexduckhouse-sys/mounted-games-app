@@ -25,7 +25,8 @@ public record StatsHitDto(StatsSubjectKind Kind, string Name, string Key, int Co
 
 /// <summary>
 /// A cross-competition profile. Everyone gets <c>Summary</c>; the lists are filled only for a signed-in viewer
-/// (<c>Detailed</c>) and are null otherwise. <c>RaceFiguresAllFormats</c> is false for riders and ponies, whose
+/// (<c>Detailed</c>) and are null otherwise, except that a team profile gives everyone <c>Games</c>,
+/// <c>BestGames</c> and <c>WorstGames</c>. <c>RaceFiguresAllFormats</c> is false for riders and ponies, whose
 /// race and game figures come from individual and pairs competitions only.
 /// </summary>
 public record StatsProfileDto(
