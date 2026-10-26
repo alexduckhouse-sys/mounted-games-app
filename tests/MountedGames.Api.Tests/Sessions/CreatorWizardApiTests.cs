@@ -80,6 +80,92 @@ public class CreatorWizardApiTests : IClassFixture<ApiFactory>
         Assert.Null(cleared.PlannedRaces);
     }
 
+    private static Dictionary<string, IReadOnlyList<string>> FinalLists(params (string Key, string[] Races)[] lists)
+        => lists.ToDictionary(l => l.Key, l => (IReadOnlyList<string>)l.Races);
+
+    [Fact]
+    public async Task Create_KeepsTheBAndCFinalLists_CleanedLikeAPlannedList()
+    {
+        var a = await _f.CreateArenaAsync(0);
+        var admin = await _f.AdminAsync();
+        var req = Planned(a.SectionId, "Bending") with
+        {
+            PlannedFinalRaces = FinalLists(("b", [" Flag ", "", "Mug"]), ("C", ["Relay"]), ("D", [" "])),
+        };
+
+        var s = await (await admin.PostAsJsonAsync(Url(a), req)).ReadAsync<SessionDto>();
+
+        Assert.Equal(new[] { "Flag", "Mug" }, s.PlannedFinalRaces!["B"]);
+        Assert.Equal(new[] { "Relay" }, s.PlannedFinalRaces["C"]);
+        Assert.False(s.PlannedFinalRaces.ContainsKey("D"));
+        Assert.Equal(new[] { "Bending" }, s.PlannedRaces);
+    }
+
+    [Fact]
+    public async Task Create_WithNoFinalLists_LeavesThemNull()
+    {
+        var a = await _f.CreateArenaAsync(0);
+        var admin = await _f.AdminAsync();
+
+        var s = await (await admin.PostAsJsonAsync(Url(a), Planned(a.SectionId, "Bending"))).ReadAsync<SessionDto>();
+
+        Assert.Null(s.PlannedFinalRaces);
+    }
+
+    [Theory]
+    [InlineData("A")]
+    [InlineData("BB")]
+    [InlineData("1")]
+    [InlineData("")]
+    public async Task Create_AndUpdate_RefuseAFinalKeyThatIsNotALetterBToZ(string key)
+    {
+        var a = await _f.CreateArenaAsync(0);
+        var admin = await _f.AdminAsync();
+        var lists = FinalLists((key, ["Flag"]));
+
+        var created = await admin.PostAsJsonAsync(Url(a), Planned(a.SectionId, "Bending") with { PlannedFinalRaces = lists });
+        var updated = await admin.PutAsJsonAsync(Url(a, $"/{a.SessionId}"), new UpdateSessionRequest(PlannedFinalRaces: lists));
+
+        Assert.Equal(HttpStatusCode.BadRequest, created.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, updated.StatusCode);
+    }
+
+    [Fact]
+    public async Task Update_ReplacesLeavesAndClearsTheFinalLists()
+    {
+        var a = await _f.CreateArenaAsync(0);
+        var admin = await _f.AdminAsync();
+        var s = await (await admin.PostAsJsonAsync(Url(a), Planned(a.SectionId, "Bending"))).ReadAsync<SessionDto>();
+
+        var set = await (await admin.PutAsJsonAsync(Url(a, $"/{s.Id}"), new UpdateSessionRequest(PlannedFinalRaces: FinalLists(("B", ["Flag"]))))).ReadAsync<SessionDto>();
+        var untouched = await (await admin.PutAsJsonAsync(Url(a, $"/{s.Id}"), new UpdateSessionRequest(MinutesPerHeat: 9))).ReadAsync<SessionDto>();
+        var cleared = await (await admin.PutAsJsonAsync(Url(a, $"/{s.Id}"), new UpdateSessionRequest(PlannedFinalRaces: new Dictionary<string, IReadOnlyList<string>>()))).ReadAsync<SessionDto>();
+
+        Assert.Equal(new[] { "Flag" }, set.PlannedFinalRaces!["B"]);
+        Assert.Equal(new[] { "Flag" }, untouched.PlannedFinalRaces!["B"]);
+        Assert.Null(cleared.PlannedFinalRaces);
+    }
+
+    [Fact]
+    public async Task Update_RefusesChangingTheFinalLists_OnceAFinalIsScored()
+    {
+        var a = await _f.CreateArenaAsync(2);
+        var admin = await _f.AdminAsync();
+        await _f.InDbAsync(async db =>
+        {
+            var s = await db.Sessions.FirstAsync(x => x.Id == a.SessionId);
+            s.Status = SessionStatus.InArena;
+            s.PlannedFinalRaces = PlannedFinalRaceLists.Write(FinalLists(("B", ["Flag"])));
+            await db.SaveChangesAsync();
+        });
+
+        var changed = await admin.PutAsJsonAsync(Url(a, $"/{a.SessionId}"), new UpdateSessionRequest(PlannedFinalRaces: FinalLists(("B", ["Mug"]))));
+        var same = await admin.PutAsJsonAsync(Url(a, $"/{a.SessionId}"), new UpdateSessionRequest(PlannedFinalRaces: FinalLists(("B", ["Flag"]))));
+
+        Assert.Equal(HttpStatusCode.Conflict, changed.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, same.StatusCode);
+    }
+
     [Fact]
     public async Task Update_RefusesStructureChanges_OnceARaceIsScored_ButStillAllowsRenamingAndMinutes()
     {

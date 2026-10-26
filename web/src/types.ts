@@ -302,6 +302,8 @@ export interface Session {
   qualifiersPerHeat?: number | null;
   /** The races chosen for each heat before any heat exists (the competition creator); null when not chosen. */
   plannedRaces?: string[] | null;
+  /** Finals sessions: the B, C... finals' own race lists, keyed by final letter; a final without one uses `plannedRaces`. */
+  plannedFinalRaces?: Record<string, string[]> | null;
   heats: Heat[];
 }
 

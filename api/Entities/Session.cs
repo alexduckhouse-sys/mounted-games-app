@@ -40,5 +40,12 @@ public class Session
     /// </summary>
     public string? PlannedRaces { get; set; }
 
+    /// <summary>
+    /// Finals sessions: the race lists of the B, C... finals when they differ from the A Final's (a JSON object keyed by
+    /// letter, for example <c>{"B":["Bending"]}</c>). A final without its own list uses <see cref="PlannedRaces"/>. Null
+    /// means none have their own. See <c>PlannedFinalRaceLists</c>.
+    /// </summary>
+    public string? PlannedFinalRaces { get; set; }
+
     public ICollection<Heat> Heats { get; set; } = new List<Heat>();
 }
