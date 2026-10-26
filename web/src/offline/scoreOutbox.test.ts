@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { heat, race, result } from '../test/factories';
 import {
-  describePlacings, discard, enqueue, nextToSend, outcomeOfError, overrule, placingsOf, retry, settle,
+  describePlacings, discard, enqueue, mergeOutboxBackup, nextToSend, outcomeOfError, overrule,
+  parseOutboxBackup, placingsOf, retry, serializeOutboxBackup, settle,
   type Placing, type QueuedScore,
 } from './scoreOutbox';
 
@@ -222,5 +223,66 @@ describe('describePlacings', () => {
     const places = [{ teamId: 2, place: 2, eliminated: false }, { teamId: 1, place: 1, eliminated: false }];
     describePlacings(places, {});
     expect(places.map((p) => p.teamId)).toEqual([2, 1]);
+  });
+});
+
+describe('serializeOutboxBackup, parseOutboxBackup and mergeOutboxBackup', () => {
+  it('serialises only the target competition’s queued scores and parses them back as waiting', () => {
+    const list = [
+      queued(1, { saveId: 's1', reason: '  Photo finish ', teamNames: { 1: 'Red Rum', 2: 'Shergar' }, state: 'failed', error: 'Offline' }),
+      queued(2, { competitionId: 99 }),
+    ];
+    const json = serializeOutboxBackup(list, 1, '2026-06-01T12:00:00Z');
+    const parsed = parseOutboxBackup(json, 1);
+    expect(parsed).toHaveLength(1);
+    expect(parsed![0]).toMatchObject({
+      saveId: 's1',
+      raceId: 1,
+      competitionId: 1,
+      sessionId: 1,
+      label: 'Race 1',
+      reason: 'Photo finish',
+      teamNames: { 1: 'Red Rum', 2: 'Shergar' },
+      state: 'waiting',
+    });
+    expect(parsed![0].error).toBeUndefined();
+  });
+
+  it('accepts a raw array, applies fallback competitionId and viaLink overrides, and merges into existing outbox', () => {
+    const raw = JSON.stringify([
+      {
+        raceId: 3,
+        sessionId: 2,
+        label: '  Heat 1 · Flag ',
+        places: mine,
+        expected: 'not-an-array',
+        teamNames: { 1: 'Oak A', bad: 123 },
+        queuedAt: '',
+        viaLink: true,
+      },
+    ]);
+    const parsedKeepLink = parseOutboxBackup(raw, 7);
+    expect(parsedKeepLink![0].competitionId).toBe(7);
+    expect(parsedKeepLink![0].viaLink).toBe(true);
+    expect(parsedKeepLink![0].expected).toEqual([]);
+    expect(parsedKeepLink![0].teamNames).toEqual({ 1: 'Oak A' });
+    expect(parsedKeepLink![0].queuedAt).toBeTruthy();
+
+    const parsedStripLink = parseOutboxBackup(raw, 7, false);
+    expect(parsedStripLink![0].viaLink).toBeUndefined();
+
+    const merged = mergeOutboxBackup([queued(1), queued(3, { label: 'Old' })], parsedStripLink!);
+    expect(merged.map((q) => q.raceId)).toEqual([1, 3]);
+    expect(merged[1].label).toBe('Heat 1 · Flag');
+  });
+
+  it('rejects invalid JSON or malformed backup entries', () => {
+    expect(parseOutboxBackup('not-json', 1)).toBeNull();
+    expect(parseOutboxBackup('{}', 1)).toBeNull();
+    expect(parseOutboxBackup('[]', 1)).toBeNull();
+    expect(parseOutboxBackup('[null]', 1)).toBeNull();
+    expect(parseOutboxBackup('[{"raceId":0,"sessionId":1,"label":"x","places":[]}]', 1)).toBeNull();
+    expect(parseOutboxBackup('[{"raceId":1,"sessionId":1,"label":"x","places":[null]}]', 1)).toBeNull();
+    expect(parseOutboxBackup('[{"raceId":1,"sessionId":1,"label":"x","places":[{"teamId":1,"place":1,"eliminated":"no"}]}]', 1)).toBeNull();
   });
 });

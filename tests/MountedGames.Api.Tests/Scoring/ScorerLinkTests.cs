@@ -784,6 +784,16 @@ public class ScorerLinkTests : IClassFixture<ApiFactory>
         // ScoreAndStream link can both score races and update overlays
         Assert.Equal(HttpStatusCode.OK, (await bothClient.PutAsJsonAsync(Score(race), Put(w, 0, "both-save"))).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await bothClient.GetAsync($"/api/competitions/{w.Arena.CompetitionId}/overlays")).StatusCode);
+
+        // Score/ScoreAndStream link can update collecting-ring gate check-in, while Camera-only link cannot
+        var heatId = camSession.Sessions[0].Heats[0].Id;
+        var teamId = w.Arena.TeamIds[0];
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await camClient.PutAsJsonAsync($"/api/scorer/heats/{heatId}/gate-check", new { teamId, status = "at-gate" })).StatusCode);
+        var gateResp = await bothClient.PutAsJsonAsync($"/api/scorer/heats/{heatId}/gate-check", new { teamId, status = "at-gate" });
+        Assert.Equal(HttpStatusCode.OK, gateResp.StatusCode);
+        var updatedSession = await gateResp.ReadAsync<SessionDto>();
+        Assert.Contains($"[gate:{heatId}:{teamId}=at-gate]", updatedSession.Notes);
     }
 
     [Fact]

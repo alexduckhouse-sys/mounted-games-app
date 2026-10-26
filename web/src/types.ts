@@ -307,6 +307,22 @@ export interface Session {
   heats: Heat[];
 }
 
+export type GateCheckStatus = 'at-gate' | 'warming-up' | 'missing' | null;
+
+export interface UpdateGateCheckRequest {
+  teamId: number;
+  status: GateCheckStatus;
+}
+
+export type ArenaAssistanceService = 'farrier' | 'vet' | 'first-aid';
+
+export interface RequestArenaAssistanceRequest {
+  service: ArenaAssistanceService;
+  arenaName?: string | null;
+  note?: string | null;
+  holdArena?: boolean;
+}
+
 export interface CompetitionDetail {
   id: number;
   createdByUserId?: string | null;

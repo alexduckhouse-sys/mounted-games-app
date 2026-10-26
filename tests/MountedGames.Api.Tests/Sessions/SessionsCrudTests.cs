@@ -993,4 +993,75 @@ public class SessionsCrudTests : IClassFixture<ApiFactory>
         Assert.Equal(start.AddMinutes(82), sessionStarts[ids.Id]);
         Assert.InRange(sessionStarts[ids.UntimedId]!.Value, start.AddMinutes(112), start.AddMinutes(112).AddSeconds(10));
     }
+
+    [Fact]
+    public async Task UpdateGateCheck_SetsUpdatesAndClearsLaneStatus_AndRejectsInvalidRequests()
+    {
+        var a = await _f.CreateArenaAsync();
+        var admin = await _f.AdminAsync();
+        var heat = await _f.AddHeatAsync(a.SessionId, a.TeamIds.Take(2), "Heat 1");
+        var gateUrl = Url(a, $"/{a.SessionId}/heats/{heat.HeatId}/gate-check");
+
+        var atGate = await admin.PutAsJsonAsync(gateUrl, new { teamId = a.TeamIds[0], status = "at-gate" });
+        Assert.Equal(HttpStatusCode.OK, atGate.StatusCode);
+        var dto1 = await atGate.ReadAsync<SessionDto>();
+        Assert.Contains($"[gate:{heat.HeatId}:{a.TeamIds[0]}=at-gate]", dto1.Notes);
+
+        var warming = await admin.PutAsJsonAsync(gateUrl, new { teamId = a.TeamIds[0], status = "warming-up" });
+        Assert.Equal(HttpStatusCode.OK, warming.StatusCode);
+        var dto2 = await warming.ReadAsync<SessionDto>();
+        Assert.Contains($"[gate:{heat.HeatId}:{a.TeamIds[0]}=warming-up]", dto2.Notes);
+        Assert.DoesNotContain("at-gate", dto2.Notes);
+
+        var cleared = await admin.PutAsJsonAsync(gateUrl, new { teamId = a.TeamIds[0], status = (string?)null });
+        Assert.Equal(HttpStatusCode.OK, cleared.StatusCode);
+        var dto3 = await cleared.ReadAsync<SessionDto>();
+        Assert.DoesNotContain($"[gate:{heat.HeatId}:{a.TeamIds[0]}=", dto3.Notes ?? string.Empty);
+
+        var badStatus = await admin.PutAsJsonAsync(gateUrl, new { teamId = a.TeamIds[0], status = "gone-home" });
+        Assert.Equal(HttpStatusCode.BadRequest, badStatus.StatusCode);
+
+        var wrongTeam = await admin.PutAsJsonAsync(gateUrl, new { teamId = a.TeamIds[2], status = "at-gate" });
+        Assert.Equal(HttpStatusCode.BadRequest, wrongTeam.StatusCode);
+
+        var missingHeat = await admin.PutAsJsonAsync(Url(a, $"/{a.SessionId}/heats/999999/gate-check"), new { teamId = a.TeamIds[0], status = "at-gate" });
+        Assert.Equal(HttpStatusCode.NotFound, missingHeat.StatusCode);
+    }
+
+    [Fact]
+    public async Task RequestArenaAssistance_PostsAnnouncementAndOptionallyHoldsArena()
+    {
+        var a = await _f.CreateArenaAsync();
+        var admin = await _f.AdminAsync();
+        var assistUrl = Url(a, $"/{a.SessionId}/assistance");
+
+        var farrierResp = await admin.PostAsJsonAsync(assistUrl, new
+        {
+            service = "farrier",
+            arenaName = "Arena 1",
+            note = "Lane 2 pony lost front shoe",
+            holdArena = true,
+        });
+        Assert.Equal(HttpStatusCode.OK, farrierResp.StatusCode);
+        var msg = await farrierResp.ReadAsync<ChatMessageDto>();
+        Assert.Equal("Farrier needed at Arena 1 — Lane 2 pony lost front shoe", msg.Body);
+
+        var storedSession = await _f.WithDbAsync(db => db.Sessions.SingleAsync(s => s.Id == a.SessionId));
+        Assert.Contains("[paused:", storedSession.Notes);
+
+        var firstAidResp = await admin.PostAsJsonAsync(assistUrl, new
+        {
+            service = "first-aid",
+            holdArena = false,
+        });
+        Assert.Equal(HttpStatusCode.OK, firstAidResp.StatusCode);
+        var firstAidMsg = await firstAidResp.ReadAsync<ChatMessageDto>();
+        Assert.Contains("First Aid needed at", firstAidMsg.Body);
+
+        var badService = await admin.PostAsJsonAsync(assistUrl, new { service = "mechanic" });
+        Assert.Equal(HttpStatusCode.BadRequest, badService.StatusCode);
+
+        var longNote = await admin.PostAsJsonAsync(assistUrl, new { service = "vet", note = new string('x', 301) });
+        Assert.Equal(HttpStatusCode.BadRequest, longNote.StatusCode);
+    }
 }

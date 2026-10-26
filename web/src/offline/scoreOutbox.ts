@@ -144,3 +144,97 @@ function ordinal(n: number): string {
   if (tens >= 11 && tens <= 13) return `${n}th`;
   return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
 }
+
+export interface OutboxBackupPayload {
+  version: 1;
+  competitionId: number;
+  exportedAt: string;
+  scores: QueuedScore[];
+}
+
+/** Serialises unsynced scores for a competition into a portable JSON backup string. */
+export function serializeOutboxBackup(
+  list: QueuedScore[],
+  competitionId: number,
+  exportedAt = new Date().toISOString(),
+): string {
+  const scores = list.filter((q) => q.competitionId === competitionId);
+  const payload: OutboxBackupPayload = { version: 1, competitionId, exportedAt, scores };
+  return JSON.stringify(payload);
+}
+
+function isValidPlacing(value: unknown): value is Placing {
+  if (!value || typeof value !== 'object') return false;
+  const p = value as Record<string, unknown>;
+  return (
+    typeof p.teamId === 'number' && Number.isFinite(p.teamId) &&
+    typeof p.place === 'number' && Number.isFinite(p.place) &&
+    typeof p.eliminated === 'boolean'
+  );
+}
+
+/** Parses and validates an exported outbox backup JSON string, resetting imported items to 'waiting'. */
+export function parseOutboxBackup(
+  raw: string,
+  fallbackCompetitionId: number,
+  viaLinkOverride?: boolean,
+): QueuedScore[] | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const items = Array.isArray(parsed)
+    ? parsed
+    : (parsed && typeof parsed === 'object' && Array.isArray((parsed as { scores?: unknown }).scores))
+      ? (parsed as { scores: unknown[] }).scores
+      : null;
+  if (!items || items.length === 0) return null;
+
+  const out: QueuedScore[] = [];
+  for (const entry of items) {
+    if (!entry || typeof entry !== 'object') return null;
+    const item = entry as Record<string, unknown>;
+    if (
+      typeof item.raceId !== 'number' || !Number.isFinite(item.raceId) || item.raceId <= 0 ||
+      typeof item.sessionId !== 'number' || !Number.isFinite(item.sessionId) || item.sessionId <= 0 ||
+      typeof item.label !== 'string' || !item.label.trim() ||
+      !Array.isArray(item.places) || item.places.length === 0 || !item.places.every(isValidPlacing)
+    ) {
+      return null;
+    }
+    const expected = Array.isArray(item.expected) && item.expected.every(isValidPlacing) ? item.expected : [];
+    const teamNames: Record<number, string> = {};
+    if (item.teamNames && typeof item.teamNames === 'object') {
+      for (const [k, v] of Object.entries(item.teamNames as Record<string, unknown>)) {
+        const id = Number(k);
+        if (Number.isFinite(id) && typeof v === 'string') teamNames[id] = v;
+      }
+    }
+    const compId = typeof item.competitionId === 'number' && Number.isFinite(item.competitionId) && item.competitionId > 0
+      ? item.competitionId
+      : fallbackCompetitionId;
+    const viaLink = viaLinkOverride !== undefined ? viaLinkOverride : item.viaLink === true;
+    out.push({
+      ...(typeof item.saveId === 'string' && item.saveId ? { saveId: item.saveId } : {}),
+      raceId: item.raceId,
+      competitionId: compId,
+      sessionId: item.sessionId,
+      label: item.label.trim(),
+      places: item.places,
+      expected,
+      teamNames,
+      queuedAt: typeof item.queuedAt === 'string' && item.queuedAt ? item.queuedAt : new Date().toISOString(),
+      ...(typeof item.reason === 'string' && item.reason.trim() ? { reason: item.reason.trim() } : {}),
+      ...(viaLink ? { viaLink: true } : {}),
+      state: 'waiting',
+    });
+  }
+  return out;
+}
+
+/** Merges imported backup scores into the current outbox, replacing older entries for the same race. */
+export function mergeOutboxBackup(existing: QueuedScore[], imported: QueuedScore[]): QueuedScore[] {
+  return imported.reduce((acc, item) => enqueue(acc, item), existing);
+}

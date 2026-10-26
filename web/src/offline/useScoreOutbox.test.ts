@@ -4,7 +4,17 @@ import { api } from '../api';
 import { scorerApi } from './scorerLink';
 import { axiosError, heat, race, result } from '../test/factories';
 import type { QueuedScore } from './scoreOutbox';
-import { flushOutbox, HEAT_SAVED, readOutbox, updateOutbox, useScoreOutbox } from './useScoreOutbox';
+import {
+  exportCompetitionOutbox,
+  flushOutbox,
+  HEAT_SAVED,
+  importCompetitionOutbox,
+  OUTBOX_STORAGE_ERROR,
+  readOutbox,
+  shareOrCopyOutboxBackup,
+  updateOutbox,
+  useScoreOutbox,
+} from './useScoreOutbox';
 
 vi.mock('../api', () => ({ api: { post: vi.fn() } }));
 vi.mock('./scorerLink', () => ({ scorerApi: { post: vi.fn() } }));
@@ -259,5 +269,54 @@ describe('useScoreOutbox', () => {
     seed(queued(4, { state: 'failed' }));
     window.dispatchEvent(new CustomEvent('mg:outbox'));
     expect(result.current).toEqual([]);
+  });
+});
+
+describe('exportCompetitionOutbox, importCompetitionOutbox and shareOrCopyOutboxBackup', () => {
+  it('exports and imports a competition’s queued scores and triggers flush', async () => {
+    seed(queued(1, { competitionId: 10, state: 'failed', error: 'Dead battery' }), queued(2, { competitionId: 99 }));
+    const backup = exportCompetitionOutbox(10, '2026-06-01T12:00:00Z');
+    localStorage.removeItem(KEY);
+    post.mockResolvedValue(saved());
+
+    const res = importCompetitionOutbox(backup, { viaLink: false });
+    expect(res).toEqual({ ok: true, count: 1 });
+    await vi.waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+  });
+
+  it('returns the validation error when importing invalid JSON or storage error when full', () => {
+    expect(importCompetitionOutbox('not-json')).toEqual({
+      ok: false,
+      error: 'That backup could not be read. Check that the whole JSON backup was copied.',
+    });
+
+    const backup = JSON.stringify([queued(1)]);
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('full'); });
+    expect(importCompetitionOutbox(backup)).toEqual({
+      ok: false,
+      error: OUTBOX_STORAGE_ERROR,
+    });
+  });
+
+  it('shares via navigator.share when available, falls back to clipboard, and handles unavailable', async () => {
+    seed(queued(1));
+    const shareMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'share', { value: shareMock, configurable: true, writable: true });
+
+    await expect(shareOrCopyOutboxBackup(1, 'Spring Opener')).resolves.toBe('shared');
+    expect(shareMock).toHaveBeenCalledWith(expect.objectContaining({ title: 'Spring Opener — offline score backup' }));
+
+    shareMock.mockRejectedValueOnce(new Error('dismissed'));
+    const writeTextMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: writeTextMock }, configurable: true, writable: true });
+    await expect(shareOrCopyOutboxBackup(1)).resolves.toBe('copied');
+    expect(writeTextMock).toHaveBeenCalledTimes(1);
+
+    writeTextMock.mockRejectedValueOnce(new Error('denied'));
+    Object.defineProperty(navigator, 'share', { value: undefined, configurable: true, writable: true });
+    await expect(shareOrCopyOutboxBackup(1)).resolves.toBe('unavailable');
+
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true, writable: true });
+    await expect(shareOrCopyOutboxBackup(1)).resolves.toBe('unavailable');
   });
 });
