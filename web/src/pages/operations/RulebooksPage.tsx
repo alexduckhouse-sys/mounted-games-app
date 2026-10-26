@@ -1,15 +1,19 @@
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ExternalLink, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { ChevronRight, ExternalLink, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompetition } from '../competition/context';
-import { RaceRulesLibrary } from '../admin/RulesPage';
+import { RaceRulesSheet } from '../../components/RaceRulesSheet';
+import { RoundSearch } from '../../components/RoundSearch';
+import type { RaceTemplate } from '../../types';
 import { RulebooksPage as RaceByRaceRulebooksPage } from '../RulebooksPage';
 import { RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineStatus } from '../refine/Refine';
 import type { Rulebook, RulebookSummary } from './types';
 import { apiMessage } from './types';
 import './operations.css';
+import '../../components/sitePages.css';
+import '../../components/eventPages.css';
 import { confirmDialog } from '../../components/ConfirmDialog';
 
 interface RulebookDraft {
@@ -44,6 +48,13 @@ function GlobalRulebooks() {
   const { canEdit } = useAuth();
   const canWrite = canEdit();
 
+  const tabsRow = (
+    <div className="sp-seg mt-3" role="tablist" aria-label="Rules and rulebooks">
+      <button type="button" role="tab" aria-selected={tab === 'rulebooks'} onClick={() => setTab('rulebooks')}>Rulebooks</button>
+      <button type="button" role="tab" aria-selected={tab === 'races'} onClick={() => setTab('races')}>Game rules</button>
+    </div>
+  );
+
   const headerFor = (draft: RulebookDraft | null, busy: boolean, onAdd: () => void, onClose: () => void) => {
     const editing = draft !== null;
     const actions = tab === 'rulebooks'
@@ -53,42 +64,84 @@ function GlobalRulebooks() {
       : null;
 
     return (
-      <RefineHeader
-        back={competition ? `/competitions/${competition.id}` : '/events'}
-        backLabel={competition ? 'Back to event' : 'Back to events'}
-        context={competition?.name ?? 'Rules & rulebooks'}
-        actions={actions}
-        title={tab === 'races' ? 'Game rules' : draft ? (draft.id == null ? 'New rulebook' : 'Edit rulebook') : 'Rulebooks'}
-        tabsKind="tablist"
-        tabsLabel="Rules and rulebooks"
-        tabs={[
-          { label: 'Rulebooks', active: tab === 'rulebooks', onSelect: () => setTab('rulebooks') },
-          { label: 'Game rules', active: tab === 'races', onSelect: () => setTab('races') },
-        ]}
-      />
+      <>
+        <RefineHeader
+          back={competition ? `/competitions/${competition.id}` : '/events'}
+          backLabel={competition ? 'Back to event' : 'Back to events'}
+          context={competition?.name ?? 'Rules & rulebooks'}
+          actions={actions}
+          title={tab === 'rulebooks' && draft ? (draft.id == null ? 'New rulebook' : 'Edit rulebook') : 'Rules'}
+        />
+        {!editing && tabsRow}
+      </>
     );
   };
 
   return (
     <RefinePage wide>
       {tab === 'rulebooks' ? (
-        <RulebooksPanel renderHeader={({ draft, busy, onAdd, onClose }) => headerFor(draft, busy, onAdd, onClose)} />
+        <RulebooksPanel renderHeader={({ draft, busy, onAdd, onClose }) => headerFor(draft, busy, onAdd, onClose)} onShowGameRules={() => setTab('races')} />
       ) : (
         <>
           {headerFor(null, false, () => {}, () => {})}
-          <div className="mt-3">
-            <RaceRulesLibrary />
-          </div>
+          <GameRulesList />
         </>
       )}
     </RefinePage>
   );
 }
 
+/** Every race with its rules: search for one, tap it, and its rules open in a sheet. */
+function GameRulesList() {
+  const [races, setRaces] = useState<RaceTemplate[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [search, setSearch] = useState('');
+  const [open, setOpen] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get<RaceTemplate[]>('/race-templates')
+      .then((r) => { if (!cancelled) setRaces(Array.isArray(r.data) ? r.data : []); })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const shown = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return (races ?? []).filter((r) => !q || r.name.toLowerCase().includes(q) || (r.category ?? '').toLowerCase().includes(q))
+      .slice().sort((a, b) => a.name.localeCompare(b.name));
+  }, [races, search]);
+
+  return (
+    <div className="mt-3 flex flex-col gap-2.5">
+      <RoundSearch label="Find a race" placeholder="Find a race" value={search} onChange={setSearch} />
+      {failed ? <p role="alert" className="mg-notice">Couldn’t load the game rules. Check your connection and try again.</p>
+        : races === null ? <p role="status" className="sp-note">Loading the game rules…</p>
+          : shown.length === 0 ? <p className="sp-note">{search.trim() ? `No race matches “${search.trim()}”.` : 'No game rules have been added yet.'}</p>
+            : (
+              <div className="sp-card" role="list" aria-label="Races">
+                {shown.map((race) => (
+                  <div key={race.id} role="listitem">
+                    <button type="button" className="sp-row" onClick={() => setOpen(race.name)}>
+                      <span className="sp-grow"><span className="sp-t1 !font-medium">{race.name}</span></span>
+                      <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+      <RaceRulesSheet raceName={open} open={open != null} onClose={() => setOpen(null)} />
+    </div>
+  );
+}
+
 export function RulebooksPanel({
   renderHeader,
+  onShowGameRules,
 }: {
   renderHeader?: (controls: { draft: RulebookDraft | null; busy: boolean; onAdd: () => void; onClose: () => void }) => ReactNode;
+  /** Lets the empty-list line take you to the Game rules tab. */
+  onShowGameRules?: () => void;
 } = {}) {
   const { canEdit } = useAuth();
   const canWrite = canEdit();
@@ -217,7 +270,13 @@ export function RulebooksPanel({
       {error && <p role="alert" className="mg-notice ops-alert">{error} {!draft && <button type="button" className="rf-btn rf-btn-text" onClick={() => (selectedId != null && !selected ? void open(selectedId) : void load())}>Try again</button>}</p>}
       {saved && <p role="status" className="rf-note">Rulebook saved.</p>}
       {loading && rulebooks.length === 0 && <p role="status" className="rf-note">Loading rulebooks…</p>}
-      {!loading && rulebooks.length === 0 && !draft && !error && <RefineNote>No rulebooks have been published yet.</RefineNote>}
+      {!loading && rulebooks.length === 0 && !draft && !error && (
+        <RefineNote>
+          No rulebook has been added yet.{' '}
+          {onShowGameRules ? <>See <button type="button" className="ev-link underline" onClick={onShowGameRules}>Game rules</button> for how each race is ridden.</> : 'Game rules has how each race is ridden.'}
+          {canWrite && ' Use Add rulebook to publish one.'}
+        </RefineNote>
+      )}
 
       {draft && <RulebookEditor draft={draft} setDraft={setDraft} busy={busy} onSave={save} onCancel={() => setDraft(null)} />}
 
