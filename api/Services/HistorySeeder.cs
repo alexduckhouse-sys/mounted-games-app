@@ -283,9 +283,9 @@ public static class HistorySeeder
                 {
                     var hands = age switch
                     {
-                        0 => 11.2m + rng.Next(0, 3) / 10m,
-                        1 => 12.2m + rng.Next(0, 3) / 10m,
-                        _ => 13.2m + rng.Next(0, 3) / 10m,
+                        0 => 11.1m + rng.Next(0, 3) / 10m,
+                        1 => 12.1m + rng.Next(0, 3) / 10m,
+                        _ => 13.1m + rng.Next(0, 3) / 10m,
                     };
                     riders.Add(new RiderDef
                     {

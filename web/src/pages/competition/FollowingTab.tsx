@@ -87,7 +87,7 @@ export function FollowingTab() {
       <ul className="mg-card divide-y divide-[rgb(var(--mg-rule-soft))] overflow-hidden">
         {teams.map((team) => <li key={team.id} className="flex min-h-14 items-center gap-1 py-1.5 pl-4 pr-1.5">
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <Link to={`/competitions/${competition.id}/teams/${team.id}`} className="truncate text-base font-semibold leading-tight text-[rgb(var(--mg-ink))] hover:underline">{team.displayName}</Link>
+            <Link to={`/competitions/${competition.id}/teams/${team.id}`} state={{ from: `/competitions/${competition.id}/following`, fromLabel: 'Following' }} className="truncate text-base font-semibold leading-tight text-[rgb(var(--mg-ink))] hover:underline">{team.displayName}</Link>
             <span className="truncate text-[13.5px] leading-tight text-[rgb(var(--mg-muted))]">{nextLine(team.id)}</span>
           </div>
           {(() => {
@@ -166,7 +166,7 @@ export function FollowingTab() {
         </ul>}
         {findable.length > 0 && <ul className="divide-y divide-[rgb(var(--mg-rule-soft))]">
           {findable.map((team) => <li key={team.id} className="flex min-h-14 items-center gap-1 py-1.5 pl-4 pr-1.5">
-            <div className="min-w-0 flex-1"><Link to={`/competitions/${competition.id}/teams/${team.id}`} className="break-words text-base font-semibold leading-tight text-[rgb(var(--mg-ink))] hover:underline">{team.displayName}</Link><p className="mg-meta">{displaySectionName(team.sectionName)}</p></div>
+            <div className="min-w-0 flex-1"><Link to={`/competitions/${competition.id}/teams/${team.id}`} state={{ from: `/competitions/${competition.id}/following`, fromLabel: 'Following' }} className="break-words text-base font-semibold leading-tight text-[rgb(var(--mg-ink))] hover:underline">{team.displayName}</Link><p className="mg-meta">{displaySectionName(team.sectionName)}</p></div>
             <button type="button" className={star} aria-pressed={ids.has(team.id)} aria-label={`${ids.has(team.id) ? 'Unfollow' : 'Follow'} ${team.displayName}`} onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}><FollowStar on={ids.has(team.id)} className="h-[22px] w-[22px]" /></button>
           </li>)}
         </ul>}

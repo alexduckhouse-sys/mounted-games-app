@@ -14,6 +14,7 @@ import { timetableRows } from '../../lib/timetableRows';
 import { useCompactPageBar } from '../../components/CompactPageBarContext';
 import { RaceRulesButton } from '../../components/RaceRulesButton';
 import { parseBibAndFlag } from '../../lib/bib';
+import { flagSrc } from './TeamSheet';
 import { statusLabel, statusLetter } from '../../lib/resultStatus';
 import { useFavourites } from '../../hooks/useFavourites';
 import { displayLaneFor, lanesOf, sitsOutOf, type LaneRules } from './laneRules';
@@ -377,10 +378,14 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false }: {
                       <motion.tr key={team.id} layout="position" transition={{ layout: { duration: 0.5, ease: EASE_OUT } }} data-rank-id={team.id} className={team.isFav ? 'heat-row-fav' : undefined} data-followed={team.isFav ? 'true' : undefined}>
                         {finished && <td className="heat-rank-cell"><span className="sr-only">Position </span>{team.position}</td>}
                         <th scope="row" className="heat-team" title={team.name}>
-                          <Link to={`/competitions/${competition.id}/teams/${team.id}`} className="heat-team-link">
+                          <Link
+                            to={`/competitions/${competition.id}/teams/${team.id}`}
+                            state={{ from: `/competitions/${competition.id}/session/${session.id}?heat=${heat.id}`, fromLabel: 'Heat' }}
+                            className="heat-team-link"
+                          >
                             <span data-grow="start" className={`heat-team-name${team.name.length > 16 || manyRaces ? ' heat-team-name-long' : ''}`}>
                               {team.isFav && <Star aria-hidden="true" className="mr-1 inline h-3 w-3 fill-[#C08308] text-[#C08308]" />}
-                              {flag && <img src={`/flags/${flag}.png`} alt="" className="mr-1 inline h-3.5 w-5 rounded-[2px] object-cover" />}
+                              {flag && <img src={flagSrc(flag)} alt="" className="mr-1 inline h-3.5 w-5 rounded-[2px] object-cover" />}
                               {team.name}
                               {cardsEnabled && <TeamCardBadge card={team.card} />}
                             </span>

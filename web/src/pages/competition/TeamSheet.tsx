@@ -8,6 +8,20 @@ import { formatPoints } from '../../lib/formatPoints';
 import { statsProfileHref } from '../../lib/stats';
 import { StatsSubjectKind } from '../../types';
 
+const PNG_FLAGS = new Set([
+  'at', 'au', 'be', 'ca', 'ch', 'cz', 'de', 'dk', 'es', 'fi', 'fr',
+  'ie', 'it', 'nl', 'no', 'nz', 'pl', 'pt', 'se', 'us', 'za',
+  'gb', 'gb-eng', 'gb-sct', 'gb-wls', 'gb-nir',
+]);
+
+/** Resolves the public flag asset path (.png for the 26 bundled PNG flags, .svg for all other ISO codes). */
+// eslint-disable-next-line react-refresh/only-export-components
+export function flagSrc(code: string): string {
+  const lower = code.trim().toLowerCase();
+  const ext = PNG_FLAGS.has(lower) || lower.startsWith('us-') || lower.startsWith('au-') ? 'png' : 'svg';
+  return `/flags/${lower}.${ext}`;
+}
+
 const eyebrow = 'text-[10px] font-bold uppercase tracking-[0.08em]';
 
 export interface TeamSheetRider {
@@ -44,7 +58,7 @@ export function TeamSheet({
   return (
     <Sheet
       title={<>
-        {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="mr-1.5 inline-block h-4 w-6 rounded-[2px] object-cover align-middle" />}
+        {parsedBib.flag && <img src={flagSrc(parsedBib.flag)} alt="" className="mr-1.5 inline-block h-4 w-6 rounded-[2px] object-cover align-middle" />}
         <a href={statsProfileHref(StatsSubjectKind.Team, detail.teamName.trim().toLowerCase())} className="!text-inherit !no-underline hover:!underline">{detail.teamName}</a>
       </>}
       description={sub || undefined}

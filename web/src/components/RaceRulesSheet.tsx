@@ -251,7 +251,7 @@ export function RaceRulesSheet({
             <RaceRulebookSection template={template} showDiagram diagramHeight={180} />
             <div className="flex justify-end pt-1">
               <Link
-                to={`/rulebooks?race=${encodeURIComponent(template.name)}`}
+                to={`/rules?race=${encodeURIComponent(template.name)}`}
                 onClick={onClose}
                 className="mg-text-link text-xs"
               >

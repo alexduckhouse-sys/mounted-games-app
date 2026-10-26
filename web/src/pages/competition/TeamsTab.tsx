@@ -8,6 +8,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import type { Club, DeclarationForm, Team } from '../../types';
 import { parseBibAndFlag } from '../../lib/bib';
+import { flagSrc } from './TeamSheet';
 import { displaySectionName } from '../../lib/section';
 import { Notice } from '../../components/Notice';
 import { SelectField } from '../../components/SelectField';
@@ -224,8 +225,12 @@ export function TeamsTab() {
                 <li key={t.id} className={`flex min-h-14 items-center gap-1 py-1.5 pl-4 pr-1.5 text-[rgb(var(--mg-ink))] ${t.isHorsConcours || t.isWithdrawn ? 'opacity-70' : ''}`}>
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-base font-semibold leading-tight">
-                      {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="h-3.5 w-5 shrink-0 rounded-[2px] object-cover" />}
-                      <Link to={`/competitions/${competition.id}/teams/${t.id}`} className="min-w-0 text-[rgb(var(--mg-ink))] hover:underline">
+                      {parsedBib.flag && <img src={flagSrc(parsedBib.flag)} alt="" className="h-3.5 w-5 shrink-0 rounded-[2px] object-cover" />}
+                      <Link
+                        to={`/competitions/${competition.id}/teams/${t.id}`}
+                        state={{ from: `/competitions/${competition.id}/teams`, fromLabel: 'Teams' }}
+                        className="min-w-0 text-[rgb(var(--mg-ink))] hover:underline"
+                      >
                         {t.displayName}
                       </Link>
                       {hasDec && (

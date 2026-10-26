@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Check, ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Minus, Plus, X } from 'lucide-react';
 import { TickerNumber } from '../../components/TickerNumber';
 import { usePageWidth } from '../../components/pageWidthState';
@@ -50,6 +50,27 @@ function moveTabFocus(event: ReactKeyboardEvent<HTMLElement>) {
   tabs[next].click();
 }
 
+function RefineBackLink({ to, label }: { to: string; label: string }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  return (
+    <Link
+      className="rf-ib"
+      to={to}
+      aria-label={label}
+      onClick={(event) => {
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+        if (typeof window !== 'undefined' && window.history.length > 1 && location.key !== 'default') {
+          event.preventDefault();
+          navigate(-1);
+        }
+      }}
+    >
+      <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+    </Link>
+  );
+}
+
 export function RefineHeader({ back, onBack, backLabel = 'Back', context, actions, title, titleAction, demo, subtitle, tabs, tabsLabel = 'Sections', tabsKind = 'nav', children }: HeaderProps) {
   const tabsRef = useRef<HTMLElement>(null);
   const [moreTabs, setMoreTabs] = useState(false);
@@ -71,7 +92,7 @@ export function RefineHeader({ back, onBack, backLabel = 'Back', context, action
   return (
     <header className="rf-hd">
       <div className="rf-hd-top">
-        {back && <Link className="rf-ib" to={back} aria-label={backLabel}><ChevronLeft className="h-5 w-5" aria-hidden="true" /></Link>}
+        {back && <RefineBackLink to={back} label={backLabel} />}
         {!back && onBack && <button type="button" className="rf-ib" aria-label={backLabel} onClick={onBack}><ChevronLeft className="h-5 w-5" aria-hidden="true" /></button>}
         <span className="rf-ctx">{context}</span>
         {actions}

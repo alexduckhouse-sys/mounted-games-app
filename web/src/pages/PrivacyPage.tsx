@@ -4,8 +4,7 @@ import { usePageHeader } from '../components/CompactPageBarContext';
 import { POLICIES, policyForLocation } from '../lib/policies';
 import '../components/sitePages.css';
 
-// Keep the published placeholder until the operator confirms a monitored address.
-const CONTACT_EMAIL = '[contact email to be added]';
+const CONTACT_EMAIL = 'privacy@mountedgames.app';
 
 /** One policy at a time, picked from the "Showing" row. Each policy has its own address (`/privacy`, `/terms`, `/refunds`, `/cookies`, `/safeguarding`). */
 export function PrivacyPage() {

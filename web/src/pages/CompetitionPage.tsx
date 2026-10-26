@@ -72,7 +72,11 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const dataAt = useRef(initial ? Date.parse(initial.savedAt) : 0);
   const hasConnectedOnce = useRef(false);
   const fetchFailed = useRef(false);
-  const { setCurrent, setVenue } = useCurrentCompetition();
+  const { setCurrent, setVenue, rememberChoice, setRememberChoice } = useCurrentCompetition();
+  const rememberDismissedKey = `mg:remember-dismissed:${competitionId}`;
+  const [rememberDismissed, setRememberDismissed] = useState(() => {
+    try { return localStorage.getItem(rememberDismissedKey) === '1'; } catch { return false; }
+  });
   const { pathname } = useLocation();
 
   const load = useCallback(() => setAttempt((n) => n + 1), []);
@@ -324,6 +328,12 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const retry = useCallback(() => { setRetrying(true); load(); reconnect(); }, [load, reconnect]);
   const { setStatus } = useConnectionStatus();
   const { downSince, everConnected } = useDownSince(connected);
+  const [initialGrace, setInitialGrace] = useState(true);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setInitialGrace(false), 2500);
+    return () => window.clearTimeout(timer);
+  }, []);
+  const hubDisconnected = !connected && (!online || everConnected || !initialGrace);
   useEffect(() => {
     setStatus({ connected, online, failures, downSince, everConnected, updatedAt, intervalMs, retrying, retry });
   }, [connected, online, failures, downSince, everConnected, updatedAt, intervalMs, retrying, retry, setStatus]);
@@ -343,11 +353,47 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const showSavedNotice = savedAt !== null && (slowAttempt === attempt || !refreshing) && shouldNoticeSavedCopy(savedAt, !refreshing || savedAt === '', new Date(), LIVE_SAVED_COPY_NOTICE_AFTER_MS);
 
   return (
-    <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamTelemetry, lastStreamCommand, streamingEnabled: streamState.streamingEnabled, streamingChecked: streamState.streamingChecked, invoke, ready, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save, scoreCards, sponsors: sponsorFeed.sponsors, reloadSponsors: sponsorFeed.reloadSponsors, sponsorSkip: sponsorFeed.sponsorSkip }}>
+    <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || hubDisconnected, streams: streamState.streams, streamTelemetry, lastStreamCommand, streamingEnabled: streamState.streamingEnabled, streamingChecked: streamState.streamingChecked, invoke, ready, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save, scoreCards, sponsors: sponsorFeed.sponsors, reloadSponsors: sponsorFeed.reloadSponsors, sponsorSkip: sponsorFeed.sponsorSkip }}>
       {/* The page fades in over its loading placeholder rather than snapping into place. */}
       <div className="mg-settle flex flex-col gap-4">
         <AnnouncementPop message={onLiveTab ? null : popped} to={`/competitions/${data.id}/chat`} onDismiss={dismissPopped} />
         <div className="pt-4 empty:hidden -mb-4 has-[+.rf-page]:mb-0"><ScoreOutboxPanel competitionId={data.id} /></div>
+        {rememberChoice === 'ask' && !rememberDismissed && (
+          <section
+            role="region"
+            aria-label="Remember this competition?"
+            className="mx-auto w-full max-w-xl rounded-xl border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] p-3.5 shadow-sm"
+          >
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-0.5">
+                <h2 className="text-sm font-bold text-[rgb(var(--mg-heading))]">Remember this competition?</h2>
+                <p className="text-xs text-[rgb(var(--mg-body))]">
+                  We’ll save a cookie on this device for six months, so {data.name} opens straight away next time. You can change this in Settings.
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  className="kit-pill kit-pill-fill !min-h-9 !px-3.5 !text-xs"
+                  onClick={() => setRememberChoice('remember')}
+                >
+                  Remember
+                </button>
+                <button
+                  type="button"
+                  className="kit-pill !min-h-9 !px-3.5 !text-xs"
+                  onClick={() => {
+                    try { localStorage.setItem(rememberDismissedKey, '1'); } catch { /* storage unavailable */ }
+                    setRememberDismissed(true);
+                    setRememberChoice('visit');
+                  }}
+                >
+                  No thanks
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
         <Outlet />
         {partial && <Notice tone="info" className="mx-auto w-full max-w-xl">Loading the rest of the timetable…</Notice>}
         {/* Connection trouble is shown by the pill in the header; this only explains a saved copy. */}

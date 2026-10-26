@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useDialogFocus } from './useDialogFocus';
 
@@ -23,16 +23,28 @@ export interface ConfirmOptions {
  * focus first. A go-ahead has the filled navy action first and the outlined choice beside it. Escape cancels.
  */
 export function ConfirmDialog({ title, message, confirmLabel = 'Confirm', cancelLabel, destructive = false, requireText, onAnswer }: ConfirmOptions & { onAnswer: (confirmed: boolean) => void }) {
+  const modalRef = useRef<HTMLDialogElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const bodyId = useId();
+  useEffect(() => {
+    const modal = modalRef.current;
+    modal?.showModal();
+    return () => modal?.close();
+  }, []);
   useDialogFocus(dialogRef, () => onAnswer(false), destructive ? '[data-confirm-cancel]' : '[data-confirm-yes]');
   const [typed, setTyped] = useState('');
   const blocked = requireText != null && typed.trim() !== requireText;
   const no = <button type="button" data-confirm-cancel className="kit-pill" onClick={() => onAnswer(false)}>{cancelLabel ?? (destructive ? 'Cancel' : 'Not now')}</button>;
   const yes = <button type="button" data-confirm-yes className={`kit-pill ${destructive ? 'kit-pill-del' : 'kit-pill-fill'}`} disabled={blocked} onClick={() => onAnswer(true)}>{confirmLabel}</button>;
   return (
-    <div className="mg-confirm-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) onAnswer(false); }}>
+    <dialog
+      ref={modalRef}
+      style={{ margin: 0, maxWidth: 'none', maxHeight: 'none', width: '100%', height: '100%', border: 0 }}
+      className="mg-confirm-backdrop"
+      onCancel={(event) => { event.preventDefault(); onAnswer(false); }}
+      onPointerDown={(event) => { if (event.target === event.currentTarget) onAnswer(false); }}
+    >
       <div ref={dialogRef} role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={bodyId} className={`mg-confirm ${destructive ? 'mg-confirm-danger' : ''}`}>
         <span aria-hidden="true" className="kit-sheet-grip" />
         <h2 id={titleId} className="mg-confirm-title">{title}</h2>
@@ -47,7 +59,7 @@ export function ConfirmDialog({ title, message, confirmLabel = 'Confirm', cancel
           ? <div className="kit-acts-del">{no}{yes}</div>
           : <div className="kit-acts">{yes}{no}</div>}
       </div>
-    </div>
+    </dialog>
   );
 }
 

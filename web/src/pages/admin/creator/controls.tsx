@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Minus, Plus } from 'lucide-react';
 import './wizard.css';
 
@@ -54,19 +54,46 @@ export function Stepper({ name, value, min, max, step = 1, onChange, empty = 'â€
   const parsed = parseFloat(value);
   const has = Number.isFinite(parsed);
   const now = has ? parsed : null;
+  const formatted = has ? String(Math.round(parsed * 100) / 100) : '';
+  const [draft, setDraft] = useState<string | null>(null);
   return (
     <span className="cw-stp" role="group" aria-label={name}>
-      <button type="button" aria-label={`Less: ${name}`} disabled={now === null || now <= min} onClick={() => onChange(clamp(Math.round((now ?? min) - step), min, max))}>
+      <button type="button" aria-label={`Less: ${name}`} disabled={now === null || now <= min} onClick={() => { setDraft(null); onChange(clamp(Math.round((now ?? min) - step), min, max)); }}>
         <Minus className="h-[18px] w-[18px]" aria-hidden="true" />
       </button>
-      <input type="number" inputMode="numeric" min={min} max={max} aria-label={name} placeholder={empty} value={has ? String(Math.round(parsed * 100) / 100) : ''}
+      <input
+        type="number"
+        inputMode="numeric"
+        min={min}
+        max={max}
+        aria-label={name}
+        placeholder={empty}
+        value={draft !== null ? draft : formatted}
+        onFocus={() => setDraft(formatted)}
         onChange={(e) => {
           const text = e.target.value;
+          if (draft !== null) {
+            setDraft(text);
+            if (text.trim() !== '') {
+              const n = Math.round(Number(text));
+              if (Number.isFinite(n) && n >= min && n <= max) onChange(n);
+            }
+            return;
+          }
           if (text === '') return;
           const n = Math.round(Number(text));
           if (Number.isFinite(n)) onChange(clamp(n, min, max));
-        }} />
-      <button type="button" aria-label={`More: ${name}`} disabled={now !== null && now >= max} onClick={() => onChange(clamp(now === null ? (start ?? min) : Math.round(now + step), min, max))}>
+        }}
+        onBlur={() => {
+          if (draft === null) return;
+          const text = draft.trim();
+          setDraft(null);
+          if (text === '') return;
+          const n = Math.round(Number(text));
+          if (Number.isFinite(n)) onChange(clamp(n, min, max));
+        }}
+      />
+      <button type="button" aria-label={`More: ${name}`} disabled={now !== null && now >= max} onClick={() => { setDraft(null); onChange(clamp(now === null ? (start ?? min) : Math.round(now + step), min, max)); }}>
         <Plus className="h-[18px] w-[18px]" aria-hidden="true" />
       </button>
     </span>
