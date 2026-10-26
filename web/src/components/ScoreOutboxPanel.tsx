@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CloudOff } from 'lucide-react';
 import { describePlacings, discard, overrule, retry, type QueuedScore } from '../offline/scoreOutbox';
-import { flushOutbox, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
+import { flushOutbox, inFlightGraceRemainingMs, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
 import { confirmDialog } from './ConfirmDialog';
 import { Notice } from './Notice';
 import { Sheet } from './Sheet';
@@ -15,6 +15,14 @@ export function ScoreOutboxPanel({ competitionId }: { competitionId: number }) {
   const [storageError, setStorageError] = useState(false);
   const update = (change: (list: QueuedScore[]) => QueuedScore[]) => setStorageError(!updateOutbox(change));
   const waiting = queued.filter((q) => q.state === 'waiting');
+  const [, setGraceTick] = useState(0);
+  const graceMs = Math.max(0, ...waiting.map((q) => inFlightGraceRemainingMs(q)));
+  useEffect(() => {
+    if (graceMs <= 0) return;
+    const timer = setTimeout(() => setGraceTick((n) => n + 1), graceMs + 10);
+    return () => clearTimeout(timer);
+  }, [graceMs]);
+  const visibleWaiting = waiting.filter((q) => inFlightGraceRemainingMs(q) === 0);
   const conflict = queued.find((q) => q.state === 'conflict');
   const toast = useToast();
   const showToast = toast.show;
@@ -79,9 +87,9 @@ export function ScoreOutboxPanel({ competitionId }: { competitionId: number }) {
           {q.label} wasn’t saved. {q.error} ({describePlacings(q.places, q.teamNames)})
         </Notice>
       ))}
-      {waiting.length > 0 && (
+      {visibleWaiting.length > 0 && (
         <Notice tone="info" icon={CloudOff} actionLabel="Send now" onAction={() => void flushOutbox()}>
-          {waiting.length === 1 ? `${waiting[0].label} is` : <><TickerNumber value={waiting.length} format={String} /> races are</>} saved on this phone and will send when you have signal.
+          {visibleWaiting.length === 1 ? `${visibleWaiting[0].label} is` : <><TickerNumber value={visibleWaiting.length} format={String} /> races are</>} saved on this phone and will send when you have signal.
         </Notice>
       )}
       {toast.node}

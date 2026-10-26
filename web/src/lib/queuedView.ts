@@ -27,7 +27,7 @@ export function withQueuedResults(heat: Heat, queued: readonly QueuedScore[], se
       if (!q) return race;
       const results = q.places.map((p): ResultRow => {
         const sitOut = !p.eliminated && p.place === 0;
-        const tied = !p.eliminated && p.refereeNote?.toLowerCase().includes('[dead-heat]')
+        const tied = !p.eliminated && p.place > 0
           ? q.places.filter((other) => !other.eliminated && other.place === p.place).length : 1;
         const placingPoints = tied > 1
           ? Math.round(Array.from({ length: tied }, (_, index) => pointsForPlace(heat, sessionBase, p.place + index, false)).reduce((sum, value) => sum + value, 0) / tied * 2) / 2
@@ -45,6 +45,7 @@ export function withQueuedResults(heat: Heat, queued: readonly QueuedScore[], se
           points: sitOut ? 0 : points,
           ...(sitOut ? { isSitOut: true } : {}),
           ...(p.eliminated ? { status: p.status } : {}),
+          ...(p.refereeNote ? { refereeNote: p.refereeNote } : {}),
         };
       });
       return { ...race, isComplete: true, results };

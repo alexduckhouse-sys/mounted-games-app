@@ -29,9 +29,31 @@ export default defineConfig({
       },
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
-        // Admin tools need a connection; don't download them for every spectator.
+        // Admin tools, studio/broadcast views, print views and static country flags are excluded from eager precaching.
         // The link-preview image is only for crawlers; the embed widget's chunk only loads inside a club's page.
-        globIgnores: ['og/**', 'flags/*.svg', '**/BroadcastPage-*.js', '**/CompetitionEditor-*.js', '**/FormatPage-*.js', '**/RulesPage-*.js', '**/AdminPage-*.js', '**/EmailPage-*.{js,css}', '**/EmbedApp-*.{js,css}'],
+        globIgnores: [
+          'og/**',
+          'flags/*.svg',
+          'flags/**/*.svg',
+          '**/BroadcastPage-*.{js,css}',
+          '**/StreamControlsPage-*.{js,css}',
+          '**/ProducePage-*.{js,css}',
+          '**/CompetitionEditor-*.{js,css}',
+          '**/FormatPage-*.{js,css}',
+          '**/RulesPage-*.{js,css}',
+          '**/RulesLibraryPage-*.{js,css}',
+          '**/DiagramEditor-*.{js,css}',
+          '**/AdminPage-*.{js,css}',
+          '**/SiteAdminDashboard-*.{js,css}',
+          '**/AdminCompetitionsPage-*.{js,css}',
+          '**/TrainerRequestsPage-*.{js,css}',
+          '**/UsersPage-*.{js,css}',
+          '**/BlockedAccountsPage-*.{js,css}',
+          '**/EmailPage-*.{js,css}',
+          '**/PrintEventPage-*.{js,css}',
+          '**/EventToolsPage-*.{js,css}',
+          '**/EmbedApp-*.{js,css}',
+        ],
       },
       devOptions: {
         enabled: true,

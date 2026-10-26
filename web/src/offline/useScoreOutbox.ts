@@ -8,6 +8,19 @@ const KEY = 'mg.outbox.scores';
 const CHANGED = 'mg:outbox';
 /** Fired with `{ sessionId, heat }` when the server answers with a heat, so open pages can show it. */
 export const HEAT_SAVED = 'mg:heat-saved';
+export const IN_FLIGHT_GRACE_MS = 1500;
+
+const failedAttemptIds = new Set<string>();
+const itemKey = (item: Pick<QueuedScore, 'raceId' | 'saveId' | 'queuedAt'>) => `${item.raceId}@${item.saveId ?? item.queuedAt}`;
+
+/** Remaining ms to suppress the offline-waiting banner while an initial online save is in flight. */
+export function inFlightGraceRemainingMs(q: QueuedScore, now = Date.now()): number {
+  if (!navigator.onLine || failedAttemptIds.has(itemKey(q))) return 0;
+  const queuedAtMs = Date.parse(q.queuedAt);
+  if (!Number.isFinite(queuedAtMs)) return 0;
+  const ageMs = now - queuedAtMs;
+  return ageMs >= 0 && ageMs < IN_FLIGHT_GRACE_MS ? IN_FLIGHT_GRACE_MS - ageMs : 0;
+}
 
 export function readOutbox(): QueuedScore[] {
   try {
@@ -30,7 +43,7 @@ function writeOutbox(next: QueuedScore[]): boolean {
 }
 
 export function updateOutbox(change: (list: QueuedScore[]) => QueuedScore[]): boolean {
-  const next = change(readOutbox());
+  const next = change(readOutbox()).map((q) => (q.saveId ? q : { ...q, saveId: crypto.randomUUID() }));
   if (!writeOutbox(next)) return false;
   if (nextToSend(next)) void flushOutbox();
   return true;
@@ -63,13 +76,15 @@ async function sendWaiting() {
   // Each save is sent at most once per flush, even if storage can't record the result.
   const sent = new Set<string>();
   for (let item = nextToSend(readOutbox()); item && navigator.onLine; item = nextToSend(readOutbox())) {
-    const id = `${item.raceId}@${item.saveId ?? item.queuedAt}`;
+    const id = itemKey(item);
     if (sent.has(id)) return;
     sent.add(id);
     const outcome = await send(item);
     if (outcome.kind === 'saved' || outcome.kind === 'conflict') {
+      failedAttemptIds.delete(id);
       window.dispatchEvent(new CustomEvent(HEAT_SAVED, { detail: { sessionId: outcome.sessionId, heat: outcome.heat } }));
     }
+    if (outcome.kind === 'offline') failedAttemptIds.add(id);
     if (!writeOutbox(settle(readOutbox(), item, outcome))) return;
     if (outcome.kind === 'offline') return;
   }

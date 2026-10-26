@@ -15,6 +15,7 @@ export interface ToolTeam {
   byHand?: number;
   card: CardMark;
   hc: boolean;
+  eliminated?: boolean;
 }
 
 /** A row below the teams that opens another screen. */
@@ -33,6 +34,10 @@ interface RaceToolsSheetProps {
   onRed: (teamId: number) => void;
   /** Move the team's points for this race up or down by one. */
   onStepPoints: (teamId: number, by: 1 | -1) => void;
+  /** Explicitly toggle Eliminated (E) on a team without the 600ms hold. */
+  onToggleElim?: (teamId: number) => void;
+  /** Assign a dead-heat tie (same place and split points) to the chosen teams. */
+  onDeadHeat?: (teamIds: number[], place: number) => void;
   /** When given, the commentator facts switch shows. */
   factsOn?: boolean;
   onToggleFacts?: () => void;
@@ -42,10 +47,13 @@ interface RaceToolsSheetProps {
 
 /** The ⋯ sheet on the scoring screen: every team with its own menu (HC, cards, points), then the other tools. */
 export function RaceToolsSheet({
-  teams, canHc, canCards, canChangePoints, onHc, onYellow, onRed, onStepPoints, factsOn, onToggleFacts, links, onClose,
+  teams, canHc, canCards, canChangePoints, onHc, onYellow, onRed, onStepPoints, onToggleElim, onDeadHeat, factsOn, onToggleFacts, links, onClose,
 }: RaceToolsSheetProps) {
   const [menuFor, setMenuFor] = useState<number | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
+  const [toolMode, setToolMode] = useState<'eliminate' | 'tie' | null>(null);
+  const [tiePlace, setTiePlace] = useState<number>(1);
+  const [tiedTeamIds, setTiedTeamIds] = useState<number[]>([]);
 
   function pick(action: () => void) {
     setMenuFor(null);
@@ -99,6 +107,11 @@ export function RaceToolsSheet({
                       {canChangePoints && (
                         <button type="button" role="menuitem" onClick={() => { setMenuFor(null); setEditing(t.teamId); }}>Change points</button>
                       )}
+                      {canChangePoints && onToggleElim && (
+                        <button type="button" role="menuitem" onClick={() => pick(() => onToggleElim(t.teamId))}>
+                          {t.eliminated ? 'Restore from Eliminated (E)' : 'Eliminate (E)'}
+                        </button>
+                      )}
                     </span>
                   )}
                 </span>
@@ -117,6 +130,103 @@ export function RaceToolsSheet({
           })}
         </div>
         <div className="rt-links">
+          {canChangePoints && onToggleElim && (
+            <div className="space-y-2">
+              <button
+                type="button"
+                className="rt-link"
+                aria-expanded={toolMode === 'eliminate'}
+                onClick={() => setToolMode(toolMode === 'eliminate' ? null : 'eliminate')}
+              >
+                <span className="rt-link-text">
+                  <span className="rt-link-name">Eliminate (E)</span>
+                  <span className="rt-link-sub">Mark a lane or team Eliminated without holding</span>
+                </span>
+                <ChevronRight className="h-5 w-5" aria-hidden="true" />
+              </button>
+              {toolMode === 'eliminate' && (
+                <div className="flex flex-wrap gap-1.5 px-3 pb-2" role="group" aria-label="Pick team to eliminate">
+                  {teams.map((t) => (
+                    <button
+                      key={t.teamId}
+                      type="button"
+                      aria-pressed={Boolean(t.eliminated)}
+                      onClick={() => onToggleElim(t.teamId)}
+                      className={`mg-btn !min-h-9 !px-2.5 text-xs font-semibold ${t.eliminated ? 'mg-btn-primary' : 'mg-btn-secondary'}`}
+                    >
+                      {t.name}{t.eliminated ? ' (E)' : ''}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {canChangePoints && onDeadHeat && (
+            <div className="space-y-2">
+              <button
+                type="button"
+                className="rt-link"
+                aria-expanded={toolMode === 'tie'}
+                onClick={() => setToolMode(toolMode === 'tie' ? null : 'tie')}
+              >
+                <span className="rt-link-text">
+                  <span className="rt-link-name">Dead-heat / Tie</span>
+                  <span className="rt-link-sub">Assign identical placing and split points to tied lanes</span>
+                </span>
+                <ChevronRight className="h-5 w-5" aria-hidden="true" />
+              </button>
+              {toolMode === 'tie' && (
+                <div className="space-y-2 px-3 pb-2" role="group" aria-label="Dead-heat tie helper">
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                    <span className="font-semibold">Tied place:</span>
+                    {teams.map((_, idx) => {
+                      const place = idx + 1;
+                      return (
+                        <button
+                          key={place}
+                          type="button"
+                          aria-pressed={tiePlace === place}
+                          onClick={() => setTiePlace(place)}
+                          className={`mg-btn !min-h-8 !px-2.5 text-xs font-semibold ${tiePlace === place ? 'mg-btn-primary' : 'mg-btn-secondary'}`}
+                        >
+                          Place {place}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                    <span className="font-semibold">Tied teams:</span>
+                    {teams.map((t) => {
+                      const selected = tiedTeamIds.includes(t.teamId);
+                      return (
+                        <button
+                          key={t.teamId}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => setTiedTeamIds((cur) => (selected ? cur.filter((id) => id !== t.teamId) : [...cur, t.teamId]))}
+                          className={`mg-btn !min-h-8 !px-2.5 text-xs font-semibold ${selected ? 'mg-btn-primary' : 'mg-btn-secondary'}`}
+                        >
+                          {t.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={tiedTeamIds.length < 2}
+                    onClick={() => {
+                      onDeadHeat(tiedTeamIds, tiePlace);
+                      setTiedTeamIds([]);
+                      setToolMode(null);
+                    }}
+                    className="mg-btn mg-btn-primary !min-h-9 !px-3 text-xs font-semibold"
+                  >
+                    Apply dead-heat tie
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           {onToggleFacts && (
             <label className="rt-link">
               <span className="rt-link-text"><span className="rt-link-name">Commentator facts</span></span>
@@ -130,6 +240,7 @@ export function RaceToolsSheet({
             </button>
           ))}
         </div>
+        <p className="sc-sub px-4 py-2 text-xs">Tip: Hold any lane tile for 0.6s to mark Eliminated</p>
       </div>
     </div>
   );

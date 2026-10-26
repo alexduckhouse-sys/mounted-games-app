@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { RefreshCw, Save } from 'lucide-react';
 import { api } from '../../api';
 import { Notice } from '../../components/Notice';
@@ -33,6 +33,39 @@ function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: (
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
+
+  const teamNames = useMemo(() => {
+    const map: Record<number, string> = {};
+    for (const team of competition.teams ?? []) {
+      if (team.displayName) map[team.id] = team.displayName;
+    }
+    for (const session of competition.sessions ?? []) {
+      for (const heat of session.heats ?? []) {
+        for (const entry of heat.entries ?? []) {
+          if (entry.teamName) map[entry.teamId] = entry.teamName;
+        }
+        for (const race of heat.races ?? []) {
+          for (const res of race.results ?? []) {
+            if (res.teamName) map[res.teamId] = res.teamName;
+          }
+        }
+      }
+    }
+    return map;
+  }, [competition]);
+
+  const raceName = useMemo(() => {
+    for (const session of competition.sessions ?? []) {
+      for (const heat of session.heats ?? []) {
+        const found = (heat.races ?? []).find((r) => r.id === raceId);
+        if (found) return heat.label ? `${heat.label} · ${found.name}` : found.name;
+      }
+    }
+    return null;
+  }, [competition, raceId]);
+
+  const teamLabel = (teamId: number) => teamNames[teamId] ?? `Team ${teamId}`;
+  const teamFieldTarget = (teamId: number) => teamNames[teamId] ?? `team ${teamId}`;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -112,7 +145,7 @@ function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: (
         <RefineList as="div">
           <div className="rf-row">
             <span className="rf-grow">
-              <span className="rf-t1">Revision {score.revision}</span>
+              <span className="rf-t1">{raceName ? `${raceName} · Revision ${score.revision}` : `Revision ${score.revision}`}</span>
             </span>
             <button type="button" className="rf-btn rf-btn-text" aria-label="Refresh score record" onClick={() => void load()} disabled={loading || busy}><RefreshCw aria-hidden="true" className={`h-4 w-4 ${loading ? 'animate-spin motion-reduce:animate-none' : ''}`} />Refresh</button>
           </div>
@@ -125,18 +158,18 @@ function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: (
               <form className="ops-form ops-panel" onSubmit={updateScore}>
                 <ul className="ops-places">{draft.map((result, index) => (
                   <li key={result.teamId} className="ops-place">
-                    <span className="rf-grow"><span className="rf-t1">Team {result.teamId}</span><span className="rf-t2">Points now {formatPoints(result.points)}</span></span>
-                    <label className="rf-fld ops-place-field">Place<NumberField aria-label={`Place for team ${result.teamId}`}  min="1" disabled={result.eliminated} value={result.place || 1} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, place: Number(event.target.value) } : item))} /></label>
-                    <label className="rf-fld ops-place-field">Points<NumberField decimal aria-label={`Points for team ${result.teamId}`} min="0" step="0.5" disabled={result.eliminated} value={result.eliminated ? 0 : (result.pointsText ?? String(result.points))} onChange={(event) => {
+                    <span className="rf-grow"><span className="rf-t1">{teamLabel(result.teamId)}</span><span className="rf-t2">Points now {formatPoints(result.points)}</span></span>
+                    <label className="rf-fld ops-place-field">Place<NumberField aria-label={`Place for ${teamFieldTarget(result.teamId)}`}  min="1" disabled={result.eliminated} value={result.place || 1} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, place: Number(event.target.value) } : item))} /></label>
+                    <label className="rf-fld ops-place-field">Points<NumberField decimal aria-label={`Points for ${teamFieldTarget(result.teamId)}`} min="0" step="0.5" disabled={result.eliminated} value={result.eliminated ? 0 : (result.pointsText ?? String(result.points))} onChange={(event) => {
                       const raw = event.target.value;
                       const parsed = Number(raw);
                       setDraft((current) => current.map((item, itemIndex) => itemIndex === index
                         ? { ...item, pointsText: raw, points: raw.trim() === '' || Number.isNaN(parsed) ? item.points : parsed, pointsEdited: true }
                         : item));
                     }} /></label>
-                    <label className="ops-elim"><input aria-label={`Eliminated team ${result.teamId}`} type="checkbox" checked={result.eliminated} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, eliminated: event.target.checked, status: event.target.checked ? effectiveStatus(true, item.status) : 0 } : item))} />Did not finish</label>
-                    {result.eliminated && <label className="rf-fld ops-place-field">Why<SelectField aria-label={`Reason for team ${result.teamId}`} value={effectiveStatus(true, result.status)} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, status: Number(event.target.value) } : item))}>{STATUS_CHOICES.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</SelectField></label>}
-                    <label className="rf-fld ops-place-field">Referee note<input aria-label={`Referee note for team ${result.teamId}`} type="text" maxLength={500} value={result.refereeNote ?? ''} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, refereeNote: event.target.value } : item))} /></label>
+                    <label className="ops-elim"><input aria-label={`Eliminated ${teamFieldTarget(result.teamId)}`} type="checkbox" checked={result.eliminated} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, eliminated: event.target.checked, status: event.target.checked ? effectiveStatus(true, item.status) : 0 } : item))} />Did not finish</label>
+                    {result.eliminated && <label className="rf-fld ops-place-field">Why<SelectField aria-label={`Reason for ${teamFieldTarget(result.teamId)}`} value={effectiveStatus(true, result.status)} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, status: Number(event.target.value) } : item))}>{STATUS_CHOICES.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</SelectField></label>}
+                    <label className="rf-fld ops-place-field">Referee note<input aria-label={`Referee note for ${teamFieldTarget(result.teamId)}`} type="text" maxLength={500} value={result.refereeNote ?? ''} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, refereeNote: event.target.value } : item))} /></label>
                   </li>
                 ))}</ul>
                 <label className="rf-fld">Correction reason<textarea className="ops-note-input" required maxLength={1000} value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} /></label>
@@ -156,7 +189,7 @@ function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: (
                 <span className="rf-t2">Revision {entry.revision} · {new Date(entry.createdAt).toLocaleString('en-GB')}</span>
                 <span className="ops-reason">{entry.reason}</span>
                 {entry.actorUserId && <span className="rf-t2">By <code className="break-all">{entry.actorUserId}</code></span>}
-                <span className="rf-t2">{scoreSummary(entry.before)} → {scoreSummary(entry.after)}</span>
+                <span className="rf-t2">{scoreSummary(entry.before, teamNames)} → {scoreSummary(entry.after, teamNames)}</span>
               </span>
             </li>
           ))}</RefineList>}
@@ -174,7 +207,10 @@ function eventLabel(kind: RaceScoreEventKind): string {
   return ({ 1: 'Results recorded', 2: 'Results corrected', 3: 'Signed off', 4: 'Reopened' } as const)[kind];
 }
 
-function scoreSummary(results: ScorePlace[]): string {
+function scoreSummary(results: ScorePlace[], teamNames: Record<number, string> = {}): string {
   if (results.length === 0) return 'No results';
-  return results.map((result) => result.eliminated ? `Team ${result.teamId}: ${statusLetter(true, result.status)}` : `Team ${result.teamId}: ${result.place}`).join(', ');
+  return results.map((result) => {
+    const label = teamNames[result.teamId] ?? `Team ${result.teamId}`;
+    return result.eliminated ? `${label}: ${statusLetter(true, result.status)}` : `${label}: ${result.place}`;
+  }).join(', ');
 }
