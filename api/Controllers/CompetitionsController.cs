@@ -265,6 +265,15 @@ public class CompetitionsController : ControllerBase
             lon ??= gLon;
         }
         var creatorClubId = await _db.ClubIdOfAsync(User);
+        var lorryW3w = CompetitionFields.Trimmed(req.LorryWhat3Words?.Trim().TrimStart('/'));
+        var lorryLat = req.LorryLatitude;
+        var lorryLon = req.LorryLongitude;
+        if ((lorryLat is null || lorryLon is null) && lorryW3w is not null)
+        {
+            var (lLat, lLon, _) = await _geocode.ResolveAsync(null, lorryW3w);
+            lorryLat ??= lLat;
+            lorryLon ??= lLon;
+        }
         var c = new Competition
         {
             Name = req.Name,
@@ -278,6 +287,10 @@ public class CompetitionsController : ControllerBase
             Postcode = CompetitionFields.Postcode(req.Postcode),
             CompetitionNumber = CompetitionFields.Trimmed(req.CompetitionNumber),
             ContactEmail = contactEmail,
+            LorryWhat3Words = lorryW3w,
+            LorryLatitude = lorryLat,
+            LorryLongitude = lorryLon,
+            LorryDirectionsNote = CompetitionFields.Trimmed(req.LorryDirectionsNote),
             StreamUrl = string.IsNullOrWhiteSpace(req.StreamUrl) ? null : req.StreamUrl.Trim(),
             OrganiserName = string.IsNullOrWhiteSpace(req.OrganiserName) ? null : req.OrganiserName.Trim(),
             PaymentDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim(),
@@ -338,6 +351,24 @@ public class CompetitionsController : ControllerBase
         if (req.Postcode is not null) c.Postcode = CompetitionFields.Postcode(req.Postcode);
         if (req.CompetitionNumber is not null) c.CompetitionNumber = CompetitionFields.Trimmed(req.CompetitionNumber);
         if (req.ContactEmail is not null) c.ContactEmail = contactEmail;
+        if (req.LorryWhat3Words is not null)
+        {
+            c.LorryWhat3Words = CompetitionFields.Trimmed(req.LorryWhat3Words.Trim().TrimStart('/'));
+            if (c.LorryWhat3Words is null && req.LorryLatitude is null && req.LorryLongitude is null)
+            {
+                c.LorryLatitude = null;
+                c.LorryLongitude = null;
+            }
+        }
+        if (req.LorryDirectionsNote is not null) c.LorryDirectionsNote = CompetitionFields.Trimmed(req.LorryDirectionsNote);
+        if (req.LorryLatitude.HasValue) c.LorryLatitude = req.LorryLatitude;
+        if (req.LorryLongitude.HasValue) c.LorryLongitude = req.LorryLongitude;
+        if ((c.LorryLatitude is null || c.LorryLongitude is null) && c.LorryWhat3Words is not null && req.LorryWhat3Words is not null)
+        {
+            var (lLat, lLon, _) = await _geocode.ResolveAsync(null, c.LorryWhat3Words);
+            c.LorryLatitude ??= lLat;
+            c.LorryLongitude ??= lLon;
+        }
         c.OrganiserName = string.IsNullOrWhiteSpace(req.OrganiserName) ? null : req.OrganiserName.Trim();
         c.PaymentDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim();
         c.TermsText = string.IsNullOrWhiteSpace(req.TermsText) ? null : req.TermsText.Trim();
@@ -419,6 +450,12 @@ public class CompetitionsController : ControllerBase
             _db.HeatEntries.RemoveRange(heat.Entries);
         }
         foreach (var session in c.Sessions) _db.Heats.RemoveRange(session.Heats);
+        var shiftIds = await _db.VolunteerShifts.Where(s => s.CompetitionId == id).Select(s => s.Id).ToListAsync();
+        if (shiftIds.Count > 0)
+        {
+            await _db.VolunteerClaims.Where(cl => shiftIds.Contains(cl.ShiftId)).ExecuteDeleteAsync();
+            await _db.VolunteerShifts.Where(s => s.CompetitionId == id).ExecuteDeleteAsync();
+        }
         _db.Sessions.RemoveRange(c.Sessions);
 
         var teamIds = c.Teams.Select(t => t.Id).ToList();
@@ -584,6 +621,13 @@ public class CompetitionsController : ControllerBase
             _db.HeatEntries.RemoveRange(heat.Entries);
         }
         foreach (var ss in section.Sessions) _db.Heats.RemoveRange(ss.Heats);
+        var sectionSessionIds = section.Sessions.Select(ss => ss.Id).ToList();
+        if (sectionSessionIds.Count > 0)
+        {
+            await _db.VolunteerShifts
+                .Where(s => s.SessionId != null && sectionSessionIds.Contains(s.SessionId.Value))
+                .ExecuteUpdateAsync(set => set.SetProperty(s => s.SessionId, (int?)null));
+        }
         _db.Sessions.RemoveRange(section.Sessions);
 
         var teamIds = section.Teams.Select(t => t.Id).ToList();

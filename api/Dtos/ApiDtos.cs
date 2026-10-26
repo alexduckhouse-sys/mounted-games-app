@@ -23,6 +23,8 @@ public static class CompetitionFields
 {
     public const int PostcodeMax = 12;
     public const int CompetitionNumberMax = 40;
+    public const int LorryWhat3WordsMax = 120;
+    public const int LorryDirectionsNoteMax = 1000;
 
     /// <summary>Trimmed and upper-cased; blank becomes null.</summary>
     public static string? Postcode(string? value)
@@ -74,7 +76,11 @@ public record CompetitionDetail(
     bool UseRefereeCards = false,
     string? Postcode = null,
     string? CompetitionNumber = null,
-    string? ContactEmail = null);
+    string? ContactEmail = null,
+    string? LorryWhat3Words = null,
+    double? LorryLatitude = null,
+    double? LorryLongitude = null,
+    string? LorryDirectionsNote = null);
 
 public record CreateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -90,7 +96,11 @@ public record CreateCompetitionRequest(
     IReadOnlyList<string>? LaneHatbands = null,
     bool UseRefereeCards = false,
     [MaxLength(CompetitionFields.CompetitionNumberMax)] string? CompetitionNumber = null,
-    [MaxLength(EmailAddresses.MaxLength)] string? ContactEmail = null);
+    [MaxLength(EmailAddresses.MaxLength)] string? ContactEmail = null,
+    [MaxLength(CompetitionFields.LorryWhat3WordsMax)] string? LorryWhat3Words = null,
+    [Range(-90, 90)] double? LorryLatitude = null,
+    [Range(-180, 180)] double? LorryLongitude = null,
+    [MaxLength(CompetitionFields.LorryDirectionsNoteMax)] string? LorryDirectionsNote = null);
 
 public record UpdateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -109,7 +119,11 @@ public record UpdateCompetitionRequest(
     bool? UseRefereeCards = null,
     /// <summary>On an update, null leaves these three as they are and a blank value clears them.</summary>
     [MaxLength(CompetitionFields.CompetitionNumberMax)] string? CompetitionNumber = null,
-    [MaxLength(EmailAddresses.MaxLength)] string? ContactEmail = null);
+    [MaxLength(EmailAddresses.MaxLength)] string? ContactEmail = null,
+    [MaxLength(CompetitionFields.LorryWhat3WordsMax)] string? LorryWhat3Words = null,
+    [Range(-90, 90)] double? LorryLatitude = null,
+    [Range(-180, 180)] double? LorryLongitude = null,
+    [MaxLength(CompetitionFields.LorryDirectionsNoteMax)] string? LorryDirectionsNote = null);
 
 public record SetSignupsLockedRequest(bool Locked);
 

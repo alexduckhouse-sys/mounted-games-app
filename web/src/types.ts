@@ -346,6 +346,14 @@ export interface CompetitionDetail {
   competitionNumber?: string | null;
   /** Where entrants write to the organiser. Shown on the public Details tab. */
   contactEmail?: string | null;
+  /** Optional what3words address for the horsebox / lorry entrance gate. */
+  lorryWhat3Words?: string | null;
+  /** Optional latitude of the horsebox / lorry entrance gate. */
+  lorryLatitude?: number | null;
+  /** Optional longitude of the horsebox / lorry entrance gate. */
+  lorryLongitude?: number | null;
+  /** Optional approach notes and low-bridge/narrow-lane warnings for horseboxes and lorries. */
+  lorryDirectionsNote?: string | null;
   startDate: string;
   endDate?: string | null;
   isActive: boolean;
@@ -1207,4 +1215,70 @@ export interface StatsProfile {
   partnerships: StatsPartnership[] | null;
   clubs?: StatsClub[] | null;
   seasons?: StatsSeasonStanding[] | null;
+}
+
+// ---- Volunteer shifts and claims (#16) ----
+
+export interface VolunteerClaim {
+  id: number;
+  shiftId: number;
+  userId: string;
+  volunteerName: string;
+  clubName?: string | null;
+  /** Visible to competition staff only; null for public and ordinary signed-in viewers. */
+  contactPhone?: string | null;
+  claimedAt: string;
+  isMine?: boolean;
+}
+
+export interface VolunteerShift {
+  id: number;
+  competitionId: number;
+  sessionId?: number | null;
+  sessionName?: string | null;
+  arenaName?: string | null;
+  role: string;
+  startTimeLabel?: string | null;
+  notes?: string | null;
+  requiredCount: number;
+  claimedCount: number;
+  remainingCount: number;
+  isFilled: boolean;
+  claims: VolunteerClaim[];
+}
+
+export interface CreateVolunteerShiftInput {
+  role: string;
+  sessionId?: number | null;
+  arenaName?: string | null;
+  startTimeLabel?: string | null;
+  notes?: string | null;
+  requiredCount?: number;
+}
+
+export interface ClaimVolunteerShiftInput {
+  volunteerName?: string | null;
+  clubName?: string | null;
+  contactPhone?: string | null;
+}
+
+// ---- Emergency contact quick search (#151, staff only) ----
+
+export interface EmergencyContactEntry {
+  riderEntryId: number;
+  riderName: string;
+  ponyName?: string | null;
+  teamId: number;
+  teamName: string;
+  sectionId: number;
+  sectionName: string;
+  clubName: string;
+  bibColour?: string | null;
+  bibDescription?: string | null;
+  isReserve: boolean;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  medicalNotes?: string | null;
+  trainerName?: string | null;
+  trainerPhone?: string | null;
 }

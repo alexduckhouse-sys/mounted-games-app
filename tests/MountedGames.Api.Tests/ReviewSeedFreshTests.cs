@@ -292,7 +292,10 @@ public class ReviewSeedFreshTests
             tack.Sectors.Add(new TackCheckSector { Name = "Bit", Marks = { new TackCheckMark { Team = team, Points = 4 } } });
             db.Add(tack);
             db.Add(new PassportCheck { Competition = competition, Team = team, PonyName = "Bramble", PonyKey = "bramble" });
+            var vShift = new VolunteerShift { Competition = competition, Role = "Arena Party", RequiredCount = 2 };
+            db.VolunteerShifts.Add(vShift);
             await db.SaveChangesAsync();
+            db.VolunteerClaims.Add(new VolunteerClaim { ShiftId = vShift.Id, UserId = user.Id, VolunteerName = "Sam Volunteer" });
             db.Add(new SignupMatchmaking { SignupId = signup.Id, LookingForPair = true });
             db.Add(new SignupExtras { SignupId = signup.Id, StablesCount = 2 });
             db.Add(new CompetitionEntrySettings { CompetitionId = competition.Id, EntriesCloseAt = Today });
@@ -343,6 +346,8 @@ public class ReviewSeedFreshTests
         Assert.Empty(await db.Set<TackCheckSector>().ToListAsync());
         Assert.Empty(await db.Set<TackCheckSection>().ToListAsync());
         Assert.Empty(await db.Set<PassportCheck>().ToListAsync());
+        Assert.Empty(await db.VolunteerShifts.ToListAsync());
+        Assert.Empty(await db.VolunteerClaims.ToListAsync());
         // Rulebooks are shared by every competition, so a reseed leaves them alone.
         Assert.Equal("Rules", (await db.Set<Rulebook>().SingleAsync()).Title);
         Assert.Empty(await db.Set<EquipmentAcknowledgement>().ToListAsync());

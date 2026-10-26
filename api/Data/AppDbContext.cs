@@ -48,6 +48,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<CalendarHeatVersion> CalendarHeatVersions => Set<CalendarHeatVersion>();
     public DbSet<SpecialAward> SpecialAwards => Set<SpecialAward>();
     public DbSet<FinalsTieOrder> FinalsTieOrders => Set<FinalsTieOrder>();
+    public DbSet<Entities.Operations.VolunteerShift> VolunteerShifts => Set<Entities.Operations.VolunteerShift>();
+    public DbSet<Entities.Operations.VolunteerClaim> VolunteerClaims => Set<Entities.Operations.VolunteerClaim>();
 
     private static string? StoredUtcTime(DateTime? value) => value is null ? null
         : (value.Value.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)
@@ -236,6 +238,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
             e.Property(c => c.Postcode).HasMaxLength(12);
             e.Property(c => c.CompetitionNumber).HasMaxLength(40);
             e.Property(c => c.ContactEmail).HasMaxLength(254);
+            e.Property(c => c.LorryWhat3Words).HasMaxLength(120);
+            e.Property(c => c.LorryDirectionsNote).HasMaxLength(1000);
             e.HasOne(c => c.CreatedBy)
                 .WithMany()
                 .HasForeignKey(c => c.CreatedByUserId)

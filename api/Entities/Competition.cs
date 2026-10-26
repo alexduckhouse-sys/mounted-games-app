@@ -21,6 +21,14 @@ public class Competition
     public string? CompetitionNumber { get; set; }
     /// <summary>Where entrants write to the organiser (a plain address, at most 254 characters). Shown on the public Details tab.</summary>
     public string? ContactEmail { get; set; }
+    /// <summary>Optional what3words address for the horsebox / lorry entrance gate (at most 120 characters).</summary>
+    public string? LorryWhat3Words { get; set; }
+    /// <summary>Optional latitude of the horsebox / lorry entrance gate.</summary>
+    public double? LorryLatitude { get; set; }
+    /// <summary>Optional longitude of the horsebox / lorry entrance gate.</summary>
+    public double? LorryLongitude { get; set; }
+    /// <summary>Optional approach notes for horseboxes and lorries (at most 1000 characters).</summary>
+    public string? LorryDirectionsNote { get; set; }
     /// <summary>One live-stream URL for the whole competition (YouTube, Twitch, etc).</summary>
     public string? StreamUrl { get; set; }
 
