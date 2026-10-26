@@ -89,36 +89,38 @@ export function DetailsTab() {
     <div className="ev-white rf-page mx-auto flex w-full max-w-xl flex-col pb-4 pt-3 lg:max-w-3xl">
       <h1 className="sr-only">Details &amp; entries</h1>
 
-      <div className="flex flex-col gap-1 pb-3">
-        <h2 className="ev-title">{competition.name}</h2>
-        <span className="ev-sub">{[dates, competition.location].filter(Boolean).join(' · ')}</span>
-      </div>
-      {competition.description && (
-        <div>
-          <p className={`ev-body whitespace-pre-wrap ${longDescription && !descOpen ? 'line-clamp-2' : ''}`}>{competition.description}</p>
-          {longDescription && (
-            <button type="button" className="ev-text-btn" aria-expanded={descOpen} onClick={() => setDescOpen((open) => !open)}>
-              {descOpen ? 'Less' : 'More'}
-            </button>
-          )}
+      <section className="mg-card flex flex-col p-4" aria-label="About this event">
+        <div className="flex flex-col gap-1 pb-3">
+          <h2 className="ev-title">{competition.name}</h2>
+          <span className="ev-sub">{[dates, competition.location].filter(Boolean).join(' · ')}</span>
         </div>
-      )}
+        {competition.description && (
+          <div>
+            <p className={`ev-body whitespace-pre-wrap ${longDescription && !descOpen ? 'line-clamp-2' : ''}`}>{competition.description}</p>
+            {longDescription && (
+              <button type="button" className="ev-text-btn" aria-expanded={descOpen} onClick={() => setDescOpen((open) => !open)}>
+                {descOpen ? 'Less' : 'More'}
+              </button>
+            )}
+          </div>
+        )}
 
-      <dl className="sp-facts ev-flat ev-facts mt-3" aria-label="Event facts">
-        {competition.location && (
-          <Fact label="Venue">{competition.location}{where && <> <a className="ev-link whitespace-nowrap" href={where} target="_blank" rel="noreferrer">Open in Maps</a></>}</Fact>
-        )}
-        {competition.postcode && <Fact label="Postcode">{competition.postcode}</Fact>}
-        {w3w && (
-          <Fact label="what3words">
-            <a className="font-semibold text-[rgb(var(--mg-heading))] hover:underline" href={`https://what3words.com/${w3w}`} target="_blank" rel="noreferrer">{`///${w3w}`}</a>
-          </Fact>
-        )}
-        {competition.competitionNumber && <Fact label="Comp no.">{competition.competitionNumber}</Fact>}
-        {competition.contactEmail && (
-          <Fact label="Email"><a className="font-semibold text-[rgb(var(--mg-heading))] hover:underline" href={`mailto:${competition.contactEmail}`}>{competition.contactEmail}</a></Fact>
-        )}
-      </dl>
+        <dl className="sp-facts ev-facts ev-card-facts mt-3" aria-label="Event facts">
+          {competition.location && (
+            <Fact label="Venue">{competition.location}{where && <> <a className="ev-link whitespace-nowrap" href={where} target="_blank" rel="noreferrer">Open in Maps</a></>}</Fact>
+          )}
+          {competition.postcode && <Fact label="Postcode">{competition.postcode}</Fact>}
+          {w3w && (
+            <Fact label="what3words">
+              <a className="font-semibold text-[rgb(var(--mg-heading))] hover:underline" href={`https://what3words.com/${w3w}`} target="_blank" rel="noreferrer">{`///${w3w}`}</a>
+            </Fact>
+          )}
+          {competition.competitionNumber && <Fact label="Comp no.">{competition.competitionNumber}</Fact>}
+          {competition.contactEmail && (
+            <Fact label="Email"><a className="font-semibold text-[rgb(var(--mg-heading))] hover:underline" href={`mailto:${competition.contactEmail}`}>{competition.contactEmail}</a></Fact>
+          )}
+        </dl>
+      </section>
 
       <h2 className="sp-sec">At the event</h2>
       <div className="ev-flat" role="list" aria-label="At the event">

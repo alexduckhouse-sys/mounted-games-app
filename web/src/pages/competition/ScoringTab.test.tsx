@@ -172,19 +172,20 @@ describe('the Show row inside Toplist', () => {
     await screen.findByRole('region', { name: 'Finals' });
     expect(await showRow()).toHaveTextContent('Finals');
     await user.click(await showRow());
-    expect(within(screen.getByRole('listbox', { name: 'Show' })).getAllByRole('option').map((o) => o.textContent)).toEqual(['Finals', 'Totals', 'By session', 'By game']);
-    // The heat tables live under the Scores tab now, not here.
-    expect(screen.queryByRole('option', { name: 'Heat tables' })).toBeNull();
+    expect(within(screen.getByRole('listbox', { name: 'Show' })).getAllByRole('option').map((o) => o.textContent)).toEqual(['Finals', 'Totals', 'By session', 'Heats']);
+    expect(screen.queryByRole('option', { name: 'By game' })).toBeNull();
   });
 
-  it('offers Totals, By session and By game without finals, and opens on Totals', async () => {
+  it('offers Totals, By session and Heats without finals, opens on Totals, and Heats shows the heat tables', async () => {
     const user = userEvent.setup();
     setCompetition([qualifier]);
     renderTab();
     await screen.findByRole('region', { name: 'Totals' });
     expect(await showRow()).toHaveTextContent('Totals');
     await user.click(await showRow());
-    expect(within(screen.getByRole('listbox', { name: 'Show' })).getAllByRole('option').map((o) => o.textContent)).toEqual(['Totals', 'By session', 'By game']);
+    expect(within(screen.getByRole('listbox', { name: 'Show' })).getAllByRole('option').map((o) => o.textContent)).toEqual(['Totals', 'By session', 'Heats']);
+    await user.click(screen.getByRole('option', { name: 'Heats' }));
+    expect(await screen.findByRole('region', { name: 'Section heat scores' })).toBeInTheDocument();
   });
 
   it('ignores a final nobody has a result in yet', async () => {
@@ -229,10 +230,10 @@ describe('the Show row inside Toplist', () => {
 });
 
 describe('the finals list', () => {
-  it('orders each final by its points with the place, the winner trophy and the qualifying chip', async () => {
+  it('orders each final by its points with the place and the winner trophy, without qualifying chips', async () => {
     renderTab();
     const list = await screen.findByRole('list', { name: 'A Final' });
-    expect(rowNames(list)).toEqual(['1stTeam 3ChampionsQ3Qualified 3rd6 points', '2ndTeam 1Q1Qualified 1st4 points', '3rdTeam 2Q2Qualified 2nd2 points']);
+    expect(rowNames(list)).toEqual(['1stTeam 3Champions6 points', '2ndTeam 14 points', '3rdTeam 22 points']);
     expect(within(list).getAllByRole('img', { name: 'Winner' })).toHaveLength(1);
   });
 
