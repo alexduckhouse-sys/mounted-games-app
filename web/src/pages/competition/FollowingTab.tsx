@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { FollowStar } from '../../components/FollowStar';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronRight, Plus, Star } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { Dropdown } from '../../components/Dropdown';
 import { usePageWidth } from '../../components/pageWidthState';
 import { usePageHeader } from '../../components/CompactPageBarContext';
@@ -22,8 +22,6 @@ export function FollowingTab() {
   const { competition, updatedAt, isStale, reload } = useCompetition();
   const { favourites, error, toggle, setMany } = useFavourites();
   const [search, setSearch] = useState('');
-  const [showTeams, setShowTeams] = useState(false);
-  const [listOpen, setListOpen] = useState(false);
   const [selectedDay, setSelectedDay] = useState('');
   const ids = useMemo(() => new Set(favourites.filter((f) => f.competitionId === competition.id).map((f) => f.teamId)), [favourites, competition.id]);
   const teams = competition.teams.filter((team) => ids.has(team.id));
@@ -39,6 +37,8 @@ export function FollowingTab() {
   const results = [...rows].reverse().filter((row) => row.scores.some((score) => score.racesRun > 0)).slice(0, 6);
   const query = search.trim().toLowerCase();
   const filtered = competition.teams.filter((team) => `${team.displayName} ${team.clubName} ${team.sectionName}`.toLowerCase().includes(query));
+  // Followed teams are listed above, so the finder only offers the others: a few to start with, every match once you type.
+  const findable = filtered.filter((team) => !ids.has(team.id)).slice(0, query ? 30 : 8);
   const clubs = useMemo(() => {
     const byClub = new Map<number, { id: number; name: string; teamIds: number[] }>();
     for (const team of competition.teams) {
@@ -48,20 +48,10 @@ export function FollowingTab() {
     }
     return [...byClub.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [competition.teams]);
-  const shownClubs = clubs.filter((club) => filtered.some((team) => team.clubId === club.id));
+  const shownClubs = clubs.filter((club) => filtered.some((team) => team.clubId === club.id)).slice(0, query ? 8 : 3);
   const followClub = (teamIds: number[], follow: boolean) => setMany(teamIds.map((teamId) => ({ competitionId: competition.id, teamId })), follow);
   const updated = updatedAt ? updatedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : null;
   usePageHeader({ title: 'Following', subtitle: updated ? `${competition.name} · ${updated}` : competition.name, onRefresh: reload, refreshLabel: 'Refresh' });
-
-  const listRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!listOpen) return;
-    const close = (event: PointerEvent) => { if (!listRef.current?.contains(event.target as Node)) setListOpen(false); };
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setListOpen(false); };
-    document.addEventListener('pointerdown', close);
-    document.addEventListener('keydown', escape);
-    return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', escape); };
-  }, [listOpen]);
 
   const where = (row: FollowedHeat) => {
     const ordinal = ordinals.get(row.session.id);
@@ -75,57 +65,33 @@ export function FollowingTab() {
     const currentRaceNum = runningIdx >= 0 ? runningIdx + 1 : orderedRaces.length;
     return `ON NOW · Race ${currentRaceNum} of ${orderedRaces.length}`;
   };
-  const choosing = showTeams || teams.length === 0;
+  /** What a followed team does next, in the words under its name. */
+  const nextLine = (teamId: number) => {
+    const state = next.get(teamId);
+    if (state?.kind === 'heat') {
+      return `Next: ${[heatName(state.row), `Lane ${state.lane}`, state.row.status === 'live' && !isStale ? 'on now' : formatTime(state.row.effective)].join(' · ')}`;
+    }
+    return state?.kind === 'done' ? 'Heats done' : 'Not drawn yet';
+  };
+  const star = 'flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[rgb(var(--mg-heading))] hover:bg-[rgb(var(--mg-subtle))]';
 
-  return <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-2 lg:max-w-3xl">
-    <div ref={listRef} className="mg-band mg-band-header relative z-10 py-2.5">
-      <button type="button" aria-expanded={listOpen} aria-controls="followed-teams" onClick={() => setListOpen(!listOpen)}
-        className={`flex min-h-11 w-full items-center gap-2 rounded-lg border border-[rgb(var(--mg-header-line))] px-3 text-left text-sm font-semibold text-white ${listOpen ? 'bg-white/10' : ''}`}>
-        <Star className="h-4 w-4 shrink-0 fill-[#F2C14E] text-[#F2C14E]" aria-hidden="true" />
-        <span className="shrink-0">Following {teams.length} {teams.length === 1 ? 'team' : 'teams'}</span>
-        <span className="min-w-0 flex-1 truncate text-xs font-medium text-[rgb(var(--mg-header-sub))]">{teams.map((team) => team.displayName).join(', ')}</span>
-        <ChevronDown className={`h-4 w-4 shrink-0 ${listOpen ? 'rotate-180' : ''}`} strokeWidth={2.25} aria-hidden="true" />
-      </button>
-      {listOpen && <div id="followed-teams" className="absolute inset-x-0 top-[60px] overflow-hidden rounded-[10px] border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))] text-[rgb(var(--mg-ink))] shadow-[0_10px_28px_rgb(15_42_74/0.22)]">
-        {teams.map((team) => {
-          const state = next.get(team.id);
-          const when = state?.kind === 'heat' ? `next ${formatTime(state.row.effective)}` : state?.kind === 'done' ? 'heats done' : 'not drawn yet';
-          return <div key={team.id} className="grid min-h-[52px] grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-x-2.5 border-t border-[rgb(var(--mg-rule-soft))] py-1 pl-3 pr-1.5 first:border-t-0">
-            <Star className="h-4 w-4 fill-[#C08308] text-[#C08308]" aria-hidden="true" />
-            <span className="flex min-w-0 flex-col gap-0.5"><Link to={`/competitions/${competition.id}/teams/${team.id}`} className="truncate text-[15px] font-semibold hover:underline" onClick={() => setListOpen(false)}>{team.displayName}</Link><span className="truncate text-xs text-[rgb(var(--mg-muted))]">{displaySectionName(team.sectionName)} · {when}</span></span>
-            <button className="min-h-11 rounded-lg px-3 text-[13px] font-semibold text-[rgb(var(--mg-elim))]" aria-label={`Unfollow ${team.displayName}`} onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}>Unfollow</button>
-          </div>;
-        })}
-        <button className="flex min-h-12 w-full items-center gap-2 border-t border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] px-3 text-left text-sm font-semibold text-[rgb(var(--mg-heading))]" onClick={() => { setShowTeams(true); setListOpen(false); }}>
-          <Plus className="h-4 w-4" strokeWidth={2.25} aria-hidden="true" />Add teams
-        </button>
-      </div>}
-    </div>
+  return <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-2 pt-3 lg:max-w-3xl">
     {error && <p role="alert" className="mg-notice">{error}</p>}
     {isStale && shouldNoticeSavedCopy(updatedAt, true, new Date(), LIVE_SAVED_COPY_NOTICE_AFTER_MS) && <p role="status" className="mg-notice">{lastUpdatedText(updatedAt)}. Times may have changed.
       <button className="mg-text-link ml-3 !min-h-11" onClick={reload}>Refresh</button></p>}
     {missing.map((teamId) => <p key={teamId} className="mg-notice">A followed team is no longer listed at this event. <button className="mg-text-link !min-h-11" onClick={() => toggle({ competitionId: competition.id, teamId })}>Remove saved team</button></p>)}
 
-    {choosing && <section className="mg-card space-y-3 p-4" aria-label="Choose teams">
-      {teams.length === 0 && <p>Star a team to see its next heats and results. Saved on this device — no sign-in is needed.</p>}
-      <label className="block font-semibold">Find a team<input type="search" className="input mt-1" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Team, club or age group" /></label>
-      {!filtered.length && <p className="mg-meta">{competition.teams.length ? 'No teams match that search.' : 'Teams haven’t been added to this event yet.'}</p>}
-      {shownClubs.length > 0 && <ul aria-label="Clubs" className="divide-y divide-[rgb(var(--mg-rule-soft))] rounded-lg border border-[rgb(var(--mg-rule-soft))] px-3">
-        {shownClubs.map((club) => {
-          const following = club.teamIds.every((id) => ids.has(id));
-          return <li key={club.id} className="flex items-center gap-3 py-1">
-            <div className="min-w-0 flex-1"><p className="font-semibold break-words">{club.name}</p><p className="mg-meta">{club.teamIds.length} {club.teamIds.length === 1 ? 'entry' : 'entries'}</p></div>
-            <button className="mg-btn mg-btn-secondary !px-3" aria-pressed={following} aria-label={`${following ? 'Unfollow' : 'Follow'} club ${club.name}`} onClick={() => followClub(club.teamIds, !following)}>{following ? 'Unfollow club' : 'Follow club'}</button>
-          </li>;
-        })}
-      </ul>}
-      <ul className="max-h-80 divide-y divide-[rgb(var(--mg-rule-soft))] overflow-y-auto">
-        {filtered.map((team) => <li key={team.id} className="flex items-center gap-3 py-1">
-          <div className="min-w-0 flex-1"><Link to={`/competitions/${competition.id}/teams/${team.id}`} className="font-semibold break-words hover:underline">{team.displayName}</Link><p className="mg-meta">{displaySectionName(team.sectionName)}</p></div>
-          <button className="mg-btn mg-btn-secondary !px-3" aria-pressed={ids.has(team.id)} aria-label={`${ids.has(team.id) ? 'Unfollow' : 'Follow'} ${team.displayName}`} onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}><FollowStar on={ids.has(team.id)} /></button>
+    {teams.length > 0 && <section aria-labelledby="followed-teams-title" className="mg-sec">
+      <div className="mg-sec-head"><h2 id="followed-teams-title">Teams you follow</h2></div>
+      <ul className="mg-card divide-y divide-[rgb(var(--mg-rule-soft))] overflow-hidden">
+        {teams.map((team) => <li key={team.id} className="flex min-h-14 items-center gap-1 py-1.5 pl-4 pr-1.5">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <Link to={`/competitions/${competition.id}/teams/${team.id}`} className="truncate text-base font-semibold leading-tight text-[rgb(var(--mg-ink))] hover:underline">{team.displayName}</Link>
+            <span className="truncate text-[13.5px] leading-tight text-[rgb(var(--mg-muted))]">{nextLine(team.id)}</span>
+          </div>
+          <button type="button" className={star} aria-pressed="true" aria-label={`Unfollow ${team.displayName}`} onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}><FollowStar on className="h-[22px] w-[22px]" /></button>
         </li>)}
       </ul>
-      {teams.length > 0 && <button className="mg-btn mg-btn-secondary w-full" onClick={() => setShowTeams(false)}>Close team picker</button>}
     </section>}
 
     {teams.length > 0 && <>
@@ -174,5 +140,32 @@ export function FollowingTab() {
         <p className="mg-meta px-1">Heat totals only. Full standings are in Toplists.</p>
       </section>
     </>}
+
+    <section aria-labelledby="find-team-title" className="mg-sec">
+      <div className="mg-sec-head"><h2 id="find-team-title">Find a team</h2></div>
+      <label className="flex h-[46px] items-center gap-2.5 rounded-full border-[1.5px] border-[rgb(var(--mg-control))] bg-[rgb(var(--mg-surface))] px-4 text-[rgb(var(--mg-muted))] focus-within:border-[rgb(var(--mg-heading))]">
+        <Search aria-hidden="true" className="h-[18px] w-[18px] shrink-0" strokeWidth={2.2} />
+        <input type="search" aria-label="Find a team, club or age group" placeholder="Team, club or age group" value={search} onChange={(event) => setSearch(event.target.value)}
+          className="h-full min-w-0 flex-1 border-0 bg-transparent text-base text-[rgb(var(--mg-ink))] outline-none placeholder:text-[rgb(var(--mg-faint))]" />
+      </label>
+      {!filtered.length && <p className="mg-meta px-1">{competition.teams.length ? 'No teams match that search.' : 'Teams haven’t been added to this event yet.'}</p>}
+      {(shownClubs.length > 0 || findable.length > 0) && <div className="mg-card divide-y divide-[rgb(var(--mg-rule-soft))] overflow-hidden">
+        {shownClubs.length > 0 && <ul aria-label="Clubs" className="divide-y divide-[rgb(var(--mg-rule-soft))]">
+          {shownClubs.map((club) => {
+            const following = club.teamIds.every((id) => ids.has(id));
+            return <li key={club.id} className="flex min-h-14 items-center gap-3 py-1.5 pl-4 pr-3">
+              <div className="min-w-0 flex-1"><p className="break-words text-base font-semibold leading-tight">{club.name}</p><p className="mg-meta">{club.teamIds.length} {club.teamIds.length === 1 ? 'team' : 'teams'}</p></div>
+              <button type="button" className="inline-flex min-h-9 shrink-0 items-center rounded-full border-[1.5px] border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-surface))] px-3.5 text-sm font-bold text-[rgb(var(--mg-heading))]" aria-pressed={following} aria-label={`${following ? 'Unfollow' : 'Follow'} club ${club.name}`} onClick={() => followClub(club.teamIds, !following)}>{following ? 'Unfollow club' : 'Follow club'}</button>
+            </li>;
+          })}
+        </ul>}
+        {findable.length > 0 && <ul className="divide-y divide-[rgb(var(--mg-rule-soft))]">
+          {findable.map((team) => <li key={team.id} className="flex min-h-14 items-center gap-1 py-1.5 pl-4 pr-1.5">
+            <div className="min-w-0 flex-1"><Link to={`/competitions/${competition.id}/teams/${team.id}`} className="break-words text-base font-semibold leading-tight text-[rgb(var(--mg-ink))] hover:underline">{team.displayName}</Link><p className="mg-meta">{displaySectionName(team.sectionName)}</p></div>
+            <button type="button" className={star} aria-pressed={ids.has(team.id)} aria-label={`${ids.has(team.id) ? 'Unfollow' : 'Follow'} ${team.displayName}`} onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}><FollowStar on={ids.has(team.id)} className="h-[22px] w-[22px]" /></button>
+          </li>)}
+        </ul>}
+      </div>}
+    </section>
   </div>;
 }
