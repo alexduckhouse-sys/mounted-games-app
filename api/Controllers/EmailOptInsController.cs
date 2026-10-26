@@ -37,6 +37,20 @@ public class EmailOptInsController(
         return Ok(new { ok = true });
     }
 
+    /// <summary>
+    /// RFC 8058 one-click unsubscribe: a mail app POSTs <c>List-Unsubscribe=One-Click</c> to the link in the message's
+    /// <c>List-Unsubscribe</c> header. The signed token is in the query, as the standard requires; the body is ignored. Answers
+    /// the same whatever the token, like the page's endpoint.
+    /// </summary>
+    [EnableRateLimiting(RequestLimits.UnsubscribePolicy)]
+    [HttpPost("api/email/unsubscribe-one-click")]
+    [AllowAnonymous]
+    public async Task<IActionResult> UnsubscribeOneClick([FromQuery] string? token, CancellationToken ct)
+    {
+        await optIns.UnsubscribeAsync(token, ct);
+        return Ok(new { ok = true });
+    }
+
     /// <summary>Site admins only: whether Resend email delivery is enabled and configured, with a masked sender address (never the API key).</summary>
     [HttpGet("api/admin/email-status")]
     [Authorize(Roles = Roles.Admin)]

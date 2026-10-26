@@ -65,6 +65,7 @@ public class ResendEmailSender(IHttpClientFactory http, IOptions<EmailOptions> o
                 ["text"] = message.TextBody,
             };
             if (message.HtmlBody is not null) payload["html"] = message.HtmlBody;
+            if (message.Headers is { Count: > 0 }) payload["headers"] = message.Headers;
             if (!string.IsNullOrWhiteSpace(o.ReplyTo)) payload["reply_to"] = o.ReplyTo;
             using var request = new HttpRequestMessage(HttpMethod.Post, Endpoint)
             {

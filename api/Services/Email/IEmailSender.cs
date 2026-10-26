@@ -9,7 +9,8 @@ public record EmailMessage(
     string Subject,
     string TextBody,
     string? HtmlBody = null,
-    string? IdempotencyKey = null);
+    string? IdempotencyKey = null,
+    IReadOnlyDictionary<string, string>? Headers = null);
 
 /// <summary>
 /// Sends one email. Implementations never throw: a failure comes back as <see cref="EmailDeliveryStatus.Failed"/>

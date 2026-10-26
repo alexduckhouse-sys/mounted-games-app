@@ -26,6 +26,45 @@ public static class EmailSqliteSchema
             );
             CREATE UNIQUE INDEX IF NOT EXISTS "IX_EmailOptIns_UnsubscribeTokenHash" ON "EmailOptIns" ("UnsubscribeTokenHash");
             CREATE INDEX IF NOT EXISTS "IX_EmailOptIns_Email" ON "EmailOptIns" ("Email");
+            CREATE TABLE IF NOT EXISTS "CustomEmails" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_CustomEmails" PRIMARY KEY AUTOINCREMENT,
+                "Subject" TEXT NOT NULL,
+                "Audience" INTEGER NOT NULL,
+                "BlocksJson" TEXT NOT NULL,
+                "HtmlBody" TEXT NOT NULL,
+                "TextBody" TEXT NOT NULL,
+                "CreatedByUserId" TEXT NULL,
+                "CreatedAt" TEXT NOT NULL,
+                "Status" INTEGER NOT NULL,
+                "Total" INTEGER NOT NULL,
+                "Sent" INTEGER NOT NULL,
+                "Failed" INTEGER NOT NULL,
+                "Skipped" INTEGER NOT NULL,
+                "CompletedAt" TEXT NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_CustomEmails_CreatedAt" ON "CustomEmails" ("CreatedAt");
+            CREATE TABLE IF NOT EXISTS "CustomEmailRecipients" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_CustomEmailRecipients" PRIMARY KEY AUTOINCREMENT,
+                "CustomEmailId" INTEGER NOT NULL,
+                "Address" TEXT NOT NULL,
+                "OptInId" INTEGER NULL,
+                "Status" INTEGER NOT NULL,
+                "ClaimedAt" TEXT NULL,
+                "ClaimToken" TEXT NULL,
+                "Attempts" INTEGER NOT NULL,
+                CONSTRAINT "FK_CustomEmailRecipients_CustomEmails_CustomEmailId" FOREIGN KEY ("CustomEmailId")
+                    REFERENCES "CustomEmails" ("Id") ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS "IX_CustomEmailRecipients_CustomEmailId_Status" ON "CustomEmailRecipients" ("CustomEmailId", "Status");
+            CREATE TABLE IF NOT EXISTS "CustomEmailImages" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_CustomEmailImages" PRIMARY KEY,
+                "Bytes" BLOB NOT NULL,
+                "ContentType" TEXT NOT NULL,
+                "UploadedByUserId" TEXT NULL,
+                "CreatedAt" TEXT NOT NULL,
+                "UsedByEmailId" INTEGER NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_CustomEmailImages_UsedByEmailId" ON "CustomEmailImages" ("UsedByEmailId");
             """);
     }
 }
