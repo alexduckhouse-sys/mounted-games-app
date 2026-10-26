@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 
-export interface AgeGroupLink { id: number; name: string }
+/** `live` and `next` ("09:05") come from the timetable; the menu shows them beside the name. */
+export interface AgeGroupLink { id: number; name: string; live?: boolean; next?: string | null }
 interface AgeGroupsState { competitionId: number | null; groups: AgeGroupLink[]; setGroups: (competitionId: number | null, groups: AgeGroupLink[]) => void }
 const Ctx = createContext<AgeGroupsState | null>(null);
 

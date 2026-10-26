@@ -20,6 +20,7 @@ import { CompetitionContext } from './competition/context';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { useNavExtras } from '../components/NavExtrasContext';
 import { useAgeGroups } from '../components/AgeGroupsContext';
+import { ageGroupStatuses } from '../lib/ageGroupStatus';
 import { useCompetitionMeta } from '../components/competitionMeta';
 import { displaySectionName } from '../lib/section';
 import { LIVE_SAVED_COPY_NOTICE_AFTER_MS, lastUpdatedText, readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, shouldNoticeSavedCopy, writeSavedCopy } from '../offline/savedCopies';
@@ -157,7 +158,10 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
 
   const { setGroups } = useAgeGroups();
   useEffect(() => {
-    if (data) setGroups(data.id, data.sections.map((s) => ({ id: s.id, name: displaySectionName(s.displayName) })));
+    if (data) {
+      const status = ageGroupStatuses(data.sessions, data.sections.map((s) => s.id));
+      setGroups(data.id, data.sections.map((s) => ({ id: s.id, name: displaySectionName(s.displayName), ...status.get(s.id) })));
+    }
     return () => setGroups(null, []);
   }, [data, setGroups]);
 
