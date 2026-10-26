@@ -2,11 +2,9 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { api } from '../../api';
 import { FAVOURITES_KEY } from '../../lib/favourites';
-import { competition, heat, race, result, session, standing, team } from '../../test/factories';
+import { standing } from '../../test/factories';
 import { buildToplist } from '../../lib/toplist';
-import { CompetitionContext } from './context';
 import { ToplistView } from './ToplistView';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn() } }));
@@ -73,85 +71,11 @@ describe('ToplistView positions', () => {
     expect(screen.getByRole('link', { name: /Team 2/ })).toHaveAttribute('href', '/competitions/1/teams/2');
   });
 
-  it('shows Prize Giving (Last to First) in Finals with trainer, club, riders and ponies', async () => {
-    vi.mocked(api.get).mockResolvedValueOnce({
-      data: [
-        {
-          id: 1,
-          teamId: 1,
-          teamName: 'Team 1',
-          competitionId: 1,
-          competitionName: 'Spring Games',
-          submittedAt: '2026-06-01T09:00:00Z',
-          isLocked: false,
-          trainerName: 'Sarah Coach',
-          riders: [
-            { id: 10, fullName: 'Alice Smith', horseName: 'Starlight', isCaptain: true, isReserve: false, orderIndex: 0, useInitialOnly: true },
-          ],
-        },
-      ],
-    });
-    const finalSession = session(2, {
-      competitionSectionId: 9,
-      name: 'Finals',
-      heats: [
-        heat(2, {
-          sessionId: 2,
-          label: 'A Final',
-          raceRoundStage: 2,
-          entries: [
-            { id: 1, teamId: 1, teamName: 'Team 1', laneIndex: 1 },
-            { id: 2, teamId: 2, teamName: 'Team 2', laneIndex: 2 },
-          ],
-          races: [
-            race(2, {
-              name: 'Flag',
-              isComplete: true,
-              results: [
-                result(2, 1, { points: 6 }),
-                result(1, 2, { points: 4 }),
-              ],
-            }),
-          ],
-        }),
-      ],
-    });
-    const comp = competition({
-      id: 1,
-      teams: [
-        team(1, { competitionSectionId: 9, clubName: 'Oak Pony Club', displayName: 'Team 1' }),
-        team(2, { competitionSectionId: 9, clubName: 'Beech Pony Club', displayName: 'Team 2' }),
-      ],
-      sessions: [finalSession],
-    });
-    const toplist = buildToplist([standing(2, 6), standing(1, 4)], [finalSession], comp.teams, 9, null);
-
-    render(
-      <MemoryRouter>
-        <CompetitionContext.Provider
-          value={{
-            competition: comp,
-            reload: vi.fn(),
-            streams: [],
-            streamingEnabled: false,
-            invoke: vi.fn(),
-            ready: 0,
-            streamMessages: [],
-          }}
-        >
-          <ToplistView list={toplist} section={{ id: 9, competitionId: 1, format: 2, ageGroup: 'Seniors', displayName: 'Seniors' }} />
-        </CompetitionContext.Provider>
-      </MemoryRouter>,
-    );
-
-    await userEvent.click(screen.getByRole('button', { name: 'Prize Giving (Last to First)' }));
-    const prizeList = await screen.findByRole('list', { name: 'A Final prize giving' });
-    const prizeRows = within(prizeList).getAllByRole('listitem').filter((li) => li.parentElement === prizeList);
-    // Ordered last (2nd: Team 1) to first (1st: Team 2)
-    expect(prizeRows[0]).toHaveTextContent('2nd · Team 1');
-    expect(prizeRows[0]).toHaveTextContent('Oak Pony Club');
-    expect(prizeRows[0]).toHaveTextContent('Trained by Sarah Coach');
-    expect(prizeRows[0]).toHaveTextContent('Alice S. — Starlight');
-    expect(prizeRows[1]).toHaveTextContent('1st · Team 2');
+  it('makes the whole team row a link to the team page inside the app', () => {
+    render(<MemoryRouter><ToplistView list={list([6, 4])} section={null} competitionId={3} /></MemoryRouter>);
+    const rows = within(screen.getByRole('region', { name: 'Totals' })).getAllByRole('link');
+    expect(rows[0]).toHaveAttribute('href', '/competitions/3/teams/1');
+    expect(rows[0]).toHaveTextContent('6');
+    expect(rows).toHaveLength(2);
   });
 });

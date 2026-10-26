@@ -33,7 +33,7 @@ export type SectionSubTab = 'draw' | 'scores' | 'toplist';
 const NO_ROWS: StandingRow[] = [];
 const TOPLIST_VIEW_PREF_KEY = 'mg.prefs.toplistView';
 const DEFAULT_AGE_GROUP_PREF_KEY = 'mg.prefs.defaultAgeGroup';
-const VALID_TOPLIST_VIEWS = new Set<ToplistViewTab>(['finals', 'totals', 'sessions', 'games']);
+const VALID_TOPLIST_VIEWS = new Set<ToplistViewTab>(['finals', 'totals', 'sessions', 'heats']);
 
 function readPreferredToplistView(): ToplistViewTab | null {
   try {
@@ -239,13 +239,6 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   const teamCount = competition.teams.filter((t) => t.competitionSectionId === sectionId && !t.isHorsConcours).length;
   const rail = desktop && competition.sections.length > 1
     ? <AgeGroupRail sections={competition.sections} teams={competition.teams} value={sectionId} onChange={chooseSection} /> : null;
-  const toplist = (
-    <section aria-label={sectionLabel} className="flex flex-col">
-      <div className="flex flex-col gap-2.5 pt-3 empty:hidden">{notices}</div>
-      {standings.length > 0 && <ToplistView list={list} section={section} competitionId={competition.id} teams={competition.teams} chosenView={chosenView} onChooseView={chooseView} />}
-      {sectionId != null && <div className="pt-3"><TackLeaderboard competitionId={competition.id} sectionId={sectionId} refresh={retry} /></div>}
-    </section>
-  );
   const sectionQuery = sectionId != null ? `?section=${sectionId}` : '';
   const finalsButton = canManage(competition) && (
     <div className="flex flex-wrap items-center gap-2" role="region" aria-label="Organiser quick actions">
@@ -353,6 +346,13 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
     </div>
   );
 
+  const toplist = (
+    <section aria-label={sectionLabel} className="flex flex-col">
+      <div className="flex flex-col gap-2.5 pt-3 empty:hidden">{notices}</div>
+      {standings.length > 0 && <ToplistView list={list} section={section} competitionId={competition.id} teams={competition.teams} chosenView={chosenView} onChooseView={chooseView} heatTables={scores} />}
+      {sectionId != null && <div className="pt-3"><TackLeaderboard competitionId={competition.id} sectionId={sectionId} refresh={retry} /></div>}
+    </section>
+  );
   const board = subTab === 'draw' ? (
     <TimetableBoard sectionId={sectionId} title={sectionName || 'Age group'} bandExtra={band} lead={finalsButton || undefined} />
   ) : (

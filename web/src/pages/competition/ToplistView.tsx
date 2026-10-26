@@ -1,14 +1,12 @@
-import { Fragment, useContext, useState } from 'react';
+import { Fragment, useContext, useState, type ReactNode } from 'react';
 import { Link, useInRouterContext } from 'react-router-dom';
 import { ChevronRight, Star, Trophy } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { api } from '../../api';
-import type { CompetitionSection, DeclarationForm, Team } from '../../types';
-import { ordinal, toplistNote, type FinalGroup, type GameStandingGroup, type Toplist } from '../../lib/toplist';
+import type { CompetitionSection, Team } from '../../types';
+import { ordinal, toplistNote, type FinalGroup, type Toplist } from '../../lib/toplist';
 import { useFavourites } from '../../hooks/useFavourites';
 import { CompetitionContext } from './context';
 import { parseBibAndFlag } from '../../lib/bib';
-import { statusLabel, statusLetter } from '../../lib/resultStatus';
 import { TeamSheet } from './TeamSheet';
 import { DropdownRow } from '../../components/DropdownRow';
 import { Rosette } from '../../components/Rosette';
@@ -20,10 +18,9 @@ import { EASE_OUT } from '../../lib/motion';
 // When a result moves teams, their rows slide to the new places rather than jumping.
 const RESORT = { layout: { duration: 0.5, ease: EASE_OUT } };
 import { formatPoints } from '../../lib/formatPoints';
-import { publicRiderName } from '../../lib/riderNames';
 
 
-export type ToplistViewTab = 'finals' | 'totals' | 'sessions' | 'games';
+export type ToplistViewTab = 'finals' | 'totals' | 'sessions' | 'heats';
 type View = ToplistViewTab;
 
 const separatorLabel = 'flex items-center gap-2 border-b border-[rgb(var(--mg-rule-soft))] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-red))]';
@@ -31,8 +28,8 @@ const dashes = <span aria-hidden="true" className="flex-1 border-t-2 border-dash
 
 /**
  * The age group's toplist: finals once they have results, totals with the final cut-off and any run-off,
- * points per session, or per-game breakdown across heats. A "Show" row above the list switches between them
- * (only when there is more than one). Tapping a team opens its breakdown.
+ * points per session, or the heat tables. A "Show" row above the list switches between them (only when there is
+ * more than one). Tapping anywhere on a team's row opens its team page (or its breakdown outside the app's pages).
  */
 export function ToplistView({
   list,
@@ -41,6 +38,7 @@ export function ToplistView({
   teams: suppliedTeams,
   chosenView,
   onChooseView,
+  heatTables,
 }: {
   list: Toplist;
   section: CompetitionSection | null;
@@ -48,6 +46,8 @@ export function ToplistView({
   teams?: Team[];
   chosenView?: View | null;
   onChooseView?: (view: View) => void;
+  /** The age group's heat tables, offered as "Heats" in the Show row. */
+  heatTables?: ReactNode;
 }) {
   const compCtx = useContext(CompetitionContext);
   const inRouter = useInRouterContext();
@@ -82,29 +82,12 @@ export function ToplistView({
     }
     return inner;
   };
-  const renderTeamLink = (teamId: number, teamName: string) =>
-    inRouter && competitionId != null ? (
-      <Link
-        to={`/competitions/${competitionId}/teams/${teamId}`}
-        aria-label={`${teamName} team page`}
-        title={`${teamName} team page`}
-        className="flex h-11 w-7 shrink-0 items-center justify-center text-[rgb(var(--mg-dash))] hover:text-[rgb(var(--mg-heading))]"
-      >
-        <ChevronRight aria-hidden="true" className="h-3.5 w-3.5" />
-      </Link>
-    ) : (
-      <ChevronRight aria-hidden="true" className="h-3 w-3 shrink-0 text-[rgb(var(--mg-dash))]" />
-    );
-
   const hasFinals = list.finals.length > 0;
   const hasSessions = list.bySession.sessions.length > 0;
-  const games = list.byGame ?? [];
-  const hasGames = games.length > 0;
   // null until the viewer picks one, so finals become the default the moment they have results.
   const [internalChosen, setInternalChosen] = useState<View | null>(null);
   const chosen = chosenView !== undefined ? chosenView : internalChosen;
   const setChosen = onChooseView ?? setInternalChosen;
-  const [chosenGame, setChosenGame] = useState<string | null>(null);
   const [openTeam, setOpenTeam] = useState<{ sectionId: number | null; teamId: number } | null>(null);
   // When results re-rank the table: climbers swell and lift, big climbs sparkle, and crossing the cut-off throws confetti.
   const rankIds = list.rows.map((row) => row.teamId);
@@ -116,7 +99,7 @@ export function ToplistView({
     ...(hasFinals ? ([['finals', 'Finals']] as [View, string][]) : []),
     ['totals', 'Totals'],
     ...(hasSessions ? ([['sessions', 'By session']] as [View, string][]) : []),
-    ...(hasGames ? ([['games', 'By game']] as [View, string][]) : []),
+    ...(heatTables ? ([['heats', 'Heats']] as [View, string][]) : []),
   ];
   const view: View = tabs.some(([id]) => id === chosen) ? chosen! : tabs[0][0];
   const places = section?.finalistCount ?? null;
@@ -125,6 +108,8 @@ export function ToplistView({
     if (inRouter && competitionId != null) return undefined;
     return list.detail.has(teamId) ? () => setOpenTeam({ sectionId: currentSectionId, teamId }) : undefined;
   };
+  // Inside the app every row is a link to the team page, so the whole box is tappable, not just the name.
+  const teamHref = (teamId: number) => (inRouter && competitionId != null ? `/competitions/${competitionId}/teams/${teamId}` : null);
   const flagFor = (teamId: number) => parseBibAndFlag(teams?.find((t) => t.id === teamId)?.bibDescription).flag;
   const flagBadge = (teamId: number) => {
     const flag = flagFor(teamId);
@@ -144,11 +129,9 @@ export function ToplistView({
           <FinalsList
             groups={list.finals}
             onOpen={open}
+            teamHref={teamHref}
             isFav={isFav}
             renderTeamName={renderTeamName}
-            renderTeamLink={renderTeamLink}
-            competitionId={competitionId}
-            teams={teams}
           />
         )}
 
@@ -168,7 +151,7 @@ export function ToplistView({
                 const content = <>
                   <span className="mg-display w-7 shrink-0 text-xl font-bold leading-none">{list.started ? row.position : '—'}<span className="sr-only">{list.started && row.joint ? ' (joint)' : ''}</span></span>
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-1">
-                    <span data-grow="start" className="truncate text-base font-semibold leading-tight">{renderTeamName(row.teamId, row.teamName, fav, !openRow)}</span>
+                    <span data-grow="start" className="truncate text-base font-semibold leading-tight">{renderTeamName(row.teamId, row.teamName, fav, false)}</span>
                     {note && <span className="text-[13.5px] font-medium leading-none text-[rgb(var(--mg-body))]">{note}</span>}
                   </span>
                   <span data-grow="end" className="flex shrink-0 flex-col items-end gap-0.5">
@@ -185,10 +168,7 @@ export function ToplistView({
                       data-followed={fav ? 'true' : undefined}
                       className={`flex min-h-11 items-center pr-1 ${lastInRunoff ? 'border-b border-dashed border-[rgb(var(--mg-rule))]' : 'border-b border-[rgb(var(--mg-rule-soft))]'} ${row.runoff ? 'shadow-[inset_6px_0_0_rgb(var(--mg-ink))]' : fav ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_3px_0_0_#C08308]' : ''}`}
                     >
-                      {openRow
-                        ? <button type="button" onClick={openRow} aria-haspopup="dialog" className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 pl-3 pr-1 text-left">{content}</button>
-                        : <div className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 pl-3 pr-1">{content}</div>}
-                      {openRow && renderTeamLink(row.teamId, row.teamName)}
+                      <RowBox open={openRow} href={teamHref(row.teamId)}>{content}</RowBox>
                     </motion.li>
                     {list.cutAfter === index && index < list.rows.length - 1 && (
                       <motion.li layout="position" transition={RESORT} role="separator" aria-label="Final cut-off" className={`${separatorLabel} !py-1.5 !text-[rgb(var(--mg-muted))]`}>
@@ -205,13 +185,15 @@ export function ToplistView({
                 {list.hc.map((team) => {
                   const fav = isFav(team.teamId);
                   return (
-                    <li key={team.teamId} data-followed={fav ? 'true' : undefined} className={`flex min-h-11 items-center gap-2.5 border-b border-[rgb(var(--mg-rule-soft))] px-3 text-[rgb(var(--mg-muted))] last:border-b-0 ${fav ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_3px_0_0_#C08308]' : ''}`}>
-                      <span className="mg-display w-7 shrink-0 text-xl font-bold leading-none text-[rgb(var(--mg-faint))]">HC</span>
-                      <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-1">
-                        <span className="truncate text-base font-semibold leading-tight">{renderTeamName(team.teamId, team.teamName, fav, true)}</span>
-                        {team.racesLeft > 0 && <span className="text-[13.5px] font-medium leading-none">{team.racesLeft} {team.racesLeft === 1 ? 'race' : 'races'} left</span>}
-                      </span>
-                      <span className="mg-display shrink-0 text-xl font-bold leading-none tabular-nums">{formatPoints(team.points)}<span className="sr-only"> points</span></span>
+                    <li key={team.teamId} data-followed={fav ? 'true' : undefined} className={`flex min-h-11 items-center border-b border-[rgb(var(--mg-rule-soft))] pr-1 text-[rgb(var(--mg-muted))] last:border-b-0 ${fav ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_3px_0_0_#C08308]' : ''}`}>
+                      <RowBox href={teamHref(team.teamId)}>
+                        <span className="mg-display w-7 shrink-0 text-xl font-bold leading-none text-[rgb(var(--mg-faint))]">HC</span>
+                        <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-1">
+                          <span className="truncate text-base font-semibold leading-tight">{renderTeamName(team.teamId, team.teamName, fav, false)}</span>
+                          {team.racesLeft > 0 && <span className="text-[13.5px] font-medium leading-none">{team.racesLeft} {team.racesLeft === 1 ? 'race' : 'races'} left</span>}
+                        </span>
+                        <span className="mg-display shrink-0 text-xl font-bold leading-none tabular-nums">{formatPoints(team.points)}<span className="sr-only"> points</span></span>
+                      </RowBox>
                     </li>
                   );
                 })}
@@ -238,10 +220,14 @@ export function ToplistView({
                   const openRow = open(row.teamId);
                   const fav = isFav(row.teamId);
                   return (
-                    <motion.tr key={row.teamId} layout="position" transition={RESORT} data-rank-id={row.teamId} data-followed={fav ? 'true' : undefined} className={`border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0 ${fav ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_3px_0_0_#C08308]' : ''}`}>
+                    <motion.tr key={row.teamId} layout="position" transition={RESORT} data-rank-id={row.teamId} data-followed={fav ? 'true' : undefined} className={`relative border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0 ${fav ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_3px_0_0_#C08308]' : ''}`}>
                       <td className="mg-display h-11 py-0 pl-3 text-base font-bold">{list.started ? row.position : '—'}</td>
                       <th scope="row" className="min-w-0 py-0 pr-2 text-left text-[15px] font-semibold leading-tight">
-                        {openRow ? <button type="button" onClick={openRow} aria-haspopup="dialog" className="block min-h-11 w-full text-left font-semibold">{renderTeamName(row.teamId, row.teamName, fav, false)}</button> : renderTeamName(row.teamId, row.teamName, fav, true)}
+                        {openRow
+                          ? <button type="button" onClick={openRow} aria-haspopup="dialog" className="block min-h-11 w-full text-left font-semibold after:absolute after:inset-0">{renderTeamName(row.teamId, row.teamName, fav, false)}</button>
+                          : teamHref(row.teamId)
+                            ? <Link to={teamHref(row.teamId)!} className="after:absolute after:inset-0 hover:underline">{renderTeamName(row.teamId, row.teamName, fav, false)}</Link>
+                            : renderTeamName(row.teamId, row.teamName, fav, false)}
                       </th>
                       {list.bySession.sessions.map((s, i) => (
                         <td key={s.id} className="mg-display text-center text-base font-semibold tabular-nums">
@@ -249,7 +235,7 @@ export function ToplistView({
                         </td>
                       ))}
                       <td className="mg-display pr-3 text-right text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]"><span data-grow="end"><ScoreFlash value={row.points}><TickerNumber value={row.points} /></ScoreFlash></span></td>
-                      <td>{openRow && renderTeamLink(row.teamId, row.teamName)}</td>
+                      <td aria-hidden="true">{(openRow || teamHref(row.teamId)) && <ChevronRight className="mr-2 h-3.5 w-3.5 text-[rgb(var(--mg-dash))]" />}</td>
                     </motion.tr>
                   );
                 })}
@@ -258,15 +244,7 @@ export function ToplistView({
           </section>
         )}
 
-        {view === 'games' && hasGames && (
-          <GamesList
-            groups={games}
-            chosen={chosenGame}
-            onChoose={setChosenGame}
-            onOpen={open}
-            renderTeamName={(id, name) => renderTeamName(id, name, isFav(id), true)}
-          />
-        )}
+        {view === 'heats' && heatTables}
 
         {list.runoff && view === 'totals' && (
           <section aria-labelledby="runoff-title" className="mg-card flex flex-col gap-3 p-3.5">
@@ -302,183 +280,53 @@ export function ToplistView({
   );
 }
 
-function GamesList({
-  groups,
-  chosen,
-  onChoose,
-  onOpen,
-  renderTeamName,
-}: {
-  groups: GameStandingGroup[];
-  chosen: string | null;
-  onChoose: (name: string) => void;
-  onOpen: (teamId: number) => (() => void) | undefined;
-  renderTeamName: (teamId: number, name: string) => React.ReactNode;
-}) {
-  const active = groups.find((g) => g.name === chosen) ?? groups[0];
-  return (
-    <div className="flex flex-col gap-2.5">
-      {groups.length > 1 && (
-        <div role="group" aria-label="Choose a game" className="mg-chips">
-          {groups.map((g) => (
-            <button key={g.name} type="button" className="mg-chip" aria-pressed={active.name === g.name} onClick={() => onChoose(g.name)}>
-              {g.name}
-            </button>
-          ))}
-        </div>
-      )}
-      <section aria-label={`Points by game: ${active.name}`} className="mg-card overflow-x-auto">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="mg-display border-b border-[rgb(var(--mg-rule))] text-xs font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-muted))]">
-              <th scope="col" className="w-9 py-1.5 pl-3 text-left font-bold">#</th>
-              <th scope="col" className="py-1.5 text-left font-bold">Team</th>
-              <th scope="col" className="py-1.5 px-2 text-left font-bold">Heat</th>
-              <th scope="col" className="w-12 py-1.5 text-center font-bold">Place</th>
-              <th scope="col" className="w-11 py-1.5 pr-3 text-right font-bold text-[rgb(var(--mg-heading))]">Pts</th>
-              <th scope="col" className="w-6"><span className="sr-only">Open</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {active.rows.map((row, idx) => {
-              const openRow = onOpen(row.teamId);
-              const placeLabel = row.isSitOut
-                ? <><span aria-hidden="true" className="text-[rgb(var(--mg-dash))]">S</span><span className="sr-only">Sat out</span></>
-                : row.eliminated
-                  ? <><span aria-hidden="true" className="text-[rgb(var(--mg-elim))]">{statusLetter(true, row.status)}</span><span className="sr-only">{statusLabel(true, row.status)}</span></>
-                  : row.placing != null ? ordinal(row.placing) : '–';
-              return (
-                <tr key={`${row.teamId}-${row.heatLabel}-${idx}`} className="border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0">
-                  <td className="mg-display h-11 py-0 pl-3 text-base font-bold">{row.position}{row.joint ? '=' : ''}</td>
-                  <th scope="row" className="min-w-0 py-0 pr-2 text-left text-[15px] font-semibold leading-tight">
-                    {openRow
-                      ? <button type="button" onClick={openRow} aria-haspopup="dialog" className="block min-h-11 w-full text-left font-semibold">{renderTeamName(row.teamId, row.teamName)}</button>
-                      : <>{renderTeamName(row.teamId, row.teamName)}</>}
-                  </th>
-                  <td className="py-0 px-2 text-xs font-medium text-[rgb(var(--mg-muted))]">{row.heatLabel}</td>
-                  <td className="mg-display text-center text-sm font-semibold tabular-nums text-[rgb(var(--mg-body))]">{placeLabel}</td>
-                  <td className="mg-display pr-3 text-right text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]">{formatPoints(row.points)}</td>
-                  <td aria-hidden="true">{openRow && <ChevronRight className="mr-2 h-3 w-3 text-[rgb(var(--mg-dash))]" />}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </section>
-    </div>
-  );
+/**
+ * One team's row: a link to its team page inside the app, a button opening its breakdown when the list stands alone,
+ * or plain text. The whole box is the target, with a chevron at the end.
+ */
+function RowBox({ open, href, children }: { open?: () => void; href: string | null; children: ReactNode }) {
+  const box = 'flex min-h-11 min-w-0 flex-1 items-center gap-2.5 pl-3 pr-1 text-left';
+  const chevron = <ChevronRight aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-[rgb(var(--mg-dash))]" />;
+  if (open) return <button type="button" onClick={open} aria-haspopup="dialog" className={box}>{children}{chevron}</button>;
+  if (href) return <Link to={href} className={box}>{children}{chevron}</Link>;
+  return <div className={box}>{children}</div>;
 }
 
-function FinalsList({ groups, onOpen, isFav, renderTeamName, renderTeamLink, competitionId, teams }: {
+function FinalsList({ groups, onOpen, teamHref, isFav, renderTeamName }: {
   groups: FinalGroup[];
   onOpen: (teamId: number) => (() => void) | undefined;
+  teamHref: (teamId: number) => string | null;
   isFav: (teamId: number) => boolean;
   renderTeamName: (teamId: number, teamName: string, fav: boolean, asLink?: boolean) => React.ReactNode;
-  renderTeamLink: (teamId: number, teamName: string) => React.ReactNode;
-  competitionId: number | null;
-  teams: Team[];
 }) {
-  const [prizeGiving, setPrizeGiving] = useState(false);
-  const [declarations, setDeclarations] = useState<DeclarationForm[] | null>(null);
-
-  function togglePrizeGiving() {
-    const next = !prizeGiving;
-    setPrizeGiving(next);
-    if (next && declarations === null && competitionId != null) {
-      api.get<DeclarationForm[]>('/declaration-forms', { params: { competitionId } })
-        .then((r) => setDeclarations(Array.isArray(r?.data) ? r.data : []))
-        .catch(() => setDeclarations([]));
-    }
-  }
-
-  const teamById = new Map(teams.map((t) => [t.id, t]));
-  const decByTeamId = new Map((declarations ?? []).map((d) => [d.teamId, d]));
-
   return (
     <section aria-label="Finals" className="mg-card overflow-hidden">
-      <div className="flex items-center justify-end border-b border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] px-3 py-1.5">
-        <button
-          type="button"
-          aria-pressed={prizeGiving}
-          onClick={togglePrizeGiving}
-          className="text-xs font-bold text-[rgb(var(--mg-heading))] hover:underline"
-        >
-          Prize Giving (Last to First)
-        </button>
-      </div>
       {groups.map((group, index) => (
         <Fragment key={group.id}>
           <h3 className={`${separatorLabel} ${index > 0 ? 'border-t' : ''}`}>{dashes}{group.label}{dashes}</h3>
-          {prizeGiving ? (
-            <ol aria-label={`${group.label} prize giving`}>
-              {group.rows.slice().reverse().map((row) => {
-                const teamObj = teamById.get(row.teamId);
-                const dec = decByTeamId.get(row.teamId);
-                const trainer = dec?.trainerName?.trim() || dec?.submittedByName?.trim() || teamObj?.trainerName?.trim() || null;
-                const riders = dec?.riders?.slice().sort((a, b) => a.orderIndex - b.orderIndex) ?? [];
-                return (
-                  <li key={row.teamId} className="flex flex-col gap-1 border-b border-[rgb(var(--mg-rule-soft))] px-3 py-2.5 last:border-b-0">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="mg-display text-lg font-bold text-[rgb(var(--mg-heading))]">
-                        {row.place != null ? ordinal(row.place) : '–'} · {row.teamName}
-                      </span>
-                      <span className="mg-display text-base font-bold tabular-nums text-[rgb(var(--mg-heading))]">
-                        {row.points != null ? formatPoints(row.points) : '–'} pts
-                      </span>
-                    </div>
-                    {teamObj?.clubName && (
-                      <div className="text-xs font-medium text-[rgb(var(--mg-muted))]">{teamObj.clubName}</div>
-                    )}
-                    {trainer && (
-                      <div className="text-xs font-semibold text-[rgb(var(--mg-body))]">Trained by {trainer}</div>
-                    )}
-                    {riders.length > 0 && (
-                      <ul className="mt-0.5 flex flex-col gap-0.5 text-xs text-[rgb(var(--mg-ink))]">
-                        {riders.map((r) => (
-                          <li key={r.id}>
-                            {publicRiderName(r)}{r.horseName ? ` — ${r.horseName}` : ''}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </li>
-                );
-              })}
-            </ol>
-          ) : (
-            <ol aria-label={group.label}>
-              {group.rows.map((row) => {
-                const openRow = onOpen(row.teamId);
-                const winner = row.place === 1;
-                // Once the final is over its winners are champions: a gold row, a rosette and a shine across it.
-                const champion = winner && group.complete === true;
-                const fav = isFav(row.teamId);
-                const content = <>
-                  <span className={`mg-display w-9 shrink-0 text-lg font-bold leading-none ${winner ? 'text-[rgb(var(--mg-late-time))]' : ''}`}>{row.place != null ? ordinal(row.place) : <span aria-hidden="true">–</span>}</span>
-                  <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                    <span className="truncate text-base font-semibold leading-tight">{renderTeamName(row.teamId, row.teamName, fav, !openRow)}</span>
-                    {winner && <Trophy aria-label="Winner" role="img" className="h-[13px] w-[13px] shrink-0 text-[rgb(var(--mg-late-time))]" />}
-                    {champion && <span className="mg-champion-label">Champions</span>}
-                    {row.qualifyingPosition != null && (
-                      <span className="shrink-0 rounded bg-[rgb(var(--mg-tint))] px-1.5 py-[3px] text-xs font-bold leading-none text-[rgb(var(--mg-body))]">
-                        <span aria-hidden="true">Q{row.qualifyingPosition}</span><span className="sr-only">Qualified {ordinal(row.qualifyingPosition)}</span>
-                      </span>
-                    )}
-                  </span>
-                  {champion && <span className="mg-champion-rosette"><Rosette width={26} /></span>}
-                  <span className="mg-display shrink-0 text-xl font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]">{row.points != null ? formatPoints(row.points) : '–'}<span className="sr-only"> points</span></span>
-                </>;
-                return (
-                  <li key={row.teamId} data-followed={fav ? 'true' : undefined} className={`flex min-h-11 items-center pr-1 border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0 ${champion ? 'mg-champion' : fav ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_3px_0_0_#C08308]' : ''}`}>
-                    {openRow
-                      ? <button type="button" onClick={openRow} aria-haspopup="dialog" className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 pl-3 pr-1 text-left">{content}</button>
-                      : <div className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 pl-3 pr-1">{content}</div>}
-                    {openRow && renderTeamLink(row.teamId, row.teamName)}
-                  </li>
-                );
-              })}
-            </ol>
-          )}
+          <ol aria-label={group.label}>
+            {group.rows.map((row) => {
+              const openRow = onOpen(row.teamId);
+              const winner = row.place === 1;
+              // Once the final is over its winners are champions: a gold row, a rosette and a shine across it.
+              const champion = winner && group.complete === true;
+              const fav = isFav(row.teamId);
+              return (
+                <li key={row.teamId} data-followed={fav ? 'true' : undefined} className={`flex min-h-11 items-center pr-1 border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0 ${champion ? 'mg-champion' : fav ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_3px_0_0_#C08308]' : ''}`}>
+                  <RowBox open={openRow} href={teamHref(row.teamId)}>
+                    <span className={`mg-display w-9 shrink-0 text-lg font-bold leading-none ${winner ? 'text-[rgb(var(--mg-late-time))]' : ''}`}>{row.place != null ? ordinal(row.place) : <span aria-hidden="true">–</span>}</span>
+                    <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                      <span className="truncate text-base font-semibold leading-tight">{renderTeamName(row.teamId, row.teamName, fav, false)}</span>
+                      {winner && <Trophy aria-label="Winner" role="img" className="h-[13px] w-[13px] shrink-0 text-[rgb(var(--mg-late-time))]" />}
+                      {champion && <span className="mg-champion-label">Champions</span>}
+                    </span>
+                    {champion && <span className="mg-champion-rosette"><Rosette width={26} /></span>}
+                    <span className="mg-display shrink-0 text-xl font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]">{row.points != null ? formatPoints(row.points) : '–'}<span className="sr-only"> points</span></span>
+                  </RowBox>
+                </li>
+              );
+            })}
+          </ol>
         </Fragment>
       ))}
     </section>

@@ -77,3 +77,7 @@ body:has(.ev-thread) { background: color-mix(in srgb, rgb(var(--mg-tint)) 55%, r
 .ev-send { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 0; border-radius: 22px; background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); cursor: pointer; } /* Its fade and press are in skin.css. */
 .ev-send:disabled { opacity: .35; cursor: default; }
 .ev-send:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
+/* Details: the event's facts sit in its card, under a line, with a line between each. */
+.ev-card-facts { border-top: 1px solid rgb(var(--mg-rule-soft)); margin-inline: -16px; margin-bottom: -16px; }
+.ev-card-facts > * + * { border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.ev-card-facts .sp-fact { padding-left: 16px; padding-right: 16px; }
