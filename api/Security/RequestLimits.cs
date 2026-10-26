@@ -1,6 +1,7 @@
 using System.Threading.RateLimiting;
 using System.Security.Claims;
 using Microsoft.AspNetCore.RateLimiting;
+using MountedGames.Api.Auth;
 using MountedGames.Api.Services;
 using RedisRateLimiting;
 
@@ -26,7 +27,7 @@ public static class RequestLimits
     /// <summary>Unsubscribing from emails: per IP (RateLimits:UnsubscribePerMinute, 10).</summary>
     public const string UnsubscribePolicy = "unsubscribe";
 
-    /// <summary>Interactive scorer-link reads: per IP, separate from previews and weather (RateLimits:ScorerReadsPerMinute, 120).</summary>
+    /// <summary>Interactive scorer-link reads: per scorer token or IP, separate from previews and weather (RateLimits:ScorerReadsPerMinute, 120).</summary>
     public const string ScorerReadPolicy = "scorer-read";
 
     /// <summary>
@@ -39,11 +40,11 @@ public static class RequestLimits
     {
         var authPermits = configuration.GetValue("RateLimits:AuthPerMinute", 5);
         var writePermits = configuration.GetValue("RateLimits:WritesPerMinute", 60);
-        // Volunteers at one venue often share an address, so scorer-link saves get a roomier per-IP allowance.
+        // Volunteers at one venue often share an address, so scorer-link saves get a roomier allowance.
         var scorerPermits = configuration.GetValue("RateLimits:ScorerWritesPerMinute", 240);
         var geocodePermits = configuration.GetValue("RateLimits:GeocodePerMinute", 20);
-        var publicReadPermits = configuration.GetValue("RateLimits:PublicReadsPerMinute", 120);
-        var exposurePermits = configuration.GetValue("RateLimits:SponsorExposurePerMinute", 12);
+        var publicReadPermits = configuration.GetValue("RateLimits:PublicReadsPerMinute", 1200);
+        var exposurePermits = configuration.GetValue("RateLimits:SponsorExposurePerMinute", 300);
         // Each search reads across every competition, so the web waits for a pause in typing before it asks.
         var statsPermits = configuration.GetValue("RateLimits:StatsPerMinute", 60);
         var resendPermits = configuration.GetValue("RateLimits:EmailResendPerMinute", 3);
@@ -61,7 +62,7 @@ public static class RequestLimits
             options.AddPolicy(TeamJoinPolicy, context => Partition(context, $"team-join:{WritePartition(context)}", joinPermits));
             options.AddPolicy(ShopReportPolicy, context => Partition(context, $"shop-report:{context.Connection.RemoteIpAddress}", reportPermits));
             options.AddPolicy(UnsubscribePolicy, context => Partition(context, $"unsubscribe:{context.Connection.RemoteIpAddress}", unsubscribePermits));
-            options.AddPolicy(ScorerReadPolicy, context => Partition(context, $"scorer-read:{context.Connection.RemoteIpAddress}", scorerReadPermits));
+            options.AddPolicy(ScorerReadPolicy, context => Partition(context, $"scorer-read:{ScorerPartition(context)}", scorerReadPermits));
         });
     }
 
@@ -80,7 +81,7 @@ public static class RequestLimits
                 || HttpMethods.IsHead(context.Request.Method) || HttpMethods.IsOptions(context.Request.Method)
                 ? RateLimitPartition.GetNoLimiter("read")
                 : context.Request.Path.StartsWithSegments("/api/scorer")
-                    ? Partition(context, $"scorer:{context.Connection.RemoteIpAddress}", scorerPermits)
+                    ? Partition(context, $"scorer:{ScorerPartition(context)}", scorerPermits)
                     : Partition(context, $"write:{WritePartition(context)}", writePermits));
         options.OnRejected = (context, _) =>
         {
@@ -98,12 +99,23 @@ public static class RequestLimits
         var redis = context.RequestServices.GetService<RedisConnection>()?.Available;
         return redis is null
             ? RateLimitPartition.GetFixedWindowLimiter($"memory:{key}", _ => Window(permits))
-            : RedisRateLimitPartition.GetFixedWindowRateLimiter($"mg:rl:{key}", _ => new RedisFixedWindowRateLimiterOptions
-            {
-                ConnectionMultiplexerFactory = () => redis,
-                PermitLimit = permits,
-                Window = TimeSpan.FromMinutes(1),
-            });
+            : RateLimitPartition.Get($"mg:rl:{key}", partitionKey => new ResilientRedisRateLimiter(
+                new RedisFixedWindowRateLimiter<string>(partitionKey, new RedisFixedWindowRateLimiterOptions
+                {
+                    ConnectionMultiplexerFactory = () => redis,
+                    PermitLimit = permits,
+                    Window = TimeSpan.FromMinutes(1),
+                }),
+                new FixedWindowRateLimiter(Window(permits))));
+    }
+
+    private static string ScorerPartition(HttpContext context)
+    {
+        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var token = context.Request.Headers[ScorerLinkTokens.Header].ToString().Trim();
+        return ScorerLinkTokens.LooksValid(token)
+            ? $"{ip}:token:{ScorerLinkTokens.Hash(token)}"
+            : $"ip:{ip}";
     }
 
     private static string WritePartition(HttpContext context)
@@ -120,4 +132,44 @@ public static class RequestLimits
         Window = TimeSpan.FromMinutes(1),
         QueueLimit = 0,
     };
+
+    private sealed class ResilientRedisRateLimiter(RateLimiter primary, RateLimiter fallback) : RateLimiter
+    {
+        public override TimeSpan? IdleDuration => primary.IdleDuration ?? fallback.IdleDuration;
+
+        public override RateLimiterStatistics? GetStatistics()
+        {
+            try { return primary.GetStatistics(); }
+            catch { return fallback.GetStatistics(); }
+        }
+
+        protected override RateLimitLease AttemptAcquireCore(int permitCount)
+        {
+            try { return primary.AttemptAcquire(permitCount); }
+            catch { return fallback.AttemptAcquire(permitCount); }
+        }
+
+        protected override async ValueTask<RateLimitLease> AcquireAsyncCore(int permitCount, CancellationToken cancellationToken)
+        {
+            try { return await primary.AcquireAsync(permitCount, cancellationToken); }
+            catch { return await fallback.AcquireAsync(permitCount, cancellationToken); }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                primary.Dispose();
+                fallback.Dispose();
+            }
+            base.Dispose(disposing);
+        }
+
+        protected override async ValueTask DisposeAsyncCore()
+        {
+            await primary.DisposeAsync();
+            await fallback.DisposeAsync();
+            await base.DisposeAsyncCore();
+        }
+    }
 }

@@ -23,8 +23,9 @@ public readonly record struct StatsViewer(bool SignedIn, bool SeesFullNames);
 /// Places come from <see cref="StandingsService"/>, so hors concours teams have none. A rider who asked for
 /// initials only is matched on the shortened name for anyone who isn't a site admin, so their surname finds nothing.
 /// </summary>
-public sealed class StatsService(AppDbContext db, StandingsService standings)
+public sealed class StatsService(AppDbContext db, StandingsService? standings = null)
 {
+    private readonly StandingsService? _standings = standings;
     public const int HitsPerKind = 8;
     public const int BrowsePageSize = 24;
     private const int MaxSearchRows = 2000;
@@ -542,15 +543,63 @@ public sealed class StatsService(AppDbContext db, StandingsService standings)
     /// </summary>
     private async Task<Dictionary<int, Placing>> PlacesAsync(List<TeamRow> teams, CancellationToken ct)
     {
+        _ = _standings;
         var places = new Dictionary<int, Placing>();
-        foreach (var section in teams.GroupBy(t => (t.CompetitionId, t.SectionId)))
+        if (teams.Count == 0) return places;
+
+        var compIds = teams.Select(t => t.CompetitionId).Distinct().ToList();
+        var sectionIds = teams.Select(t => t.SectionId).Distinct().ToList();
+
+        var allTeams = await db.Teams.AsNoTracking()
+            .Include(t => t.Results)
+            .Where(t => compIds.Contains(t.CompetitionId) && sectionIds.Contains(t.CompetitionSectionId) && !t.IsHorsConcours)
+            .ToListAsync(ct);
+        var allSections = await db.CompetitionSections.AsNoTracking()
+            .Where(s => compIds.Contains(s.CompetitionId) && sectionIds.Contains(s.Id))
+            .ToDictionaryAsync(s => s.Id, ct);
+
+        var teamsByCompSection = allTeams.GroupBy(t => (t.CompetitionId, t.CompetitionSectionId))
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        foreach (var compGroup in teams.GroupBy(t => t.CompetitionId))
         {
-            var rows = await standings.RowsAsync(section.Key.CompetitionId, section.Key.SectionId, ct);
-            var hasFinals = rows.Any(r => r.FinalTier is not null);
-            var wanted = section.Select(t => t.TeamId).ToHashSet();
-            for (var i = 0; i < rows.Count; i++)
-                if (wanted.Contains(rows[i].TeamId))
-                    places[rows[i].TeamId] = new Placing(i + 1, rows.Count, rows[i].FinalTier, hasFinals);
+            var compId = compGroup.Key;
+            var tiers = await FinalsTiers.LoadAsync(db, compId, ct);
+            var ties = await TieBreaker.LoadAsync(db, compId, ct);
+            var bonus = await TackCheck.TackCheckBonus.ForCompetitionAsync(db, compId, ct);
+
+            foreach (var sectionGroup in compGroup.GroupBy(t => t.SectionId))
+            {
+                if (!teamsByCompSection.TryGetValue((compId, sectionGroup.Key), out var sectionTeams) || sectionTeams.Count == 0)
+                    continue;
+                var section = allSections.GetValueOrDefault(sectionGroup.Key);
+                var scores = sectionTeams.ToDictionary(t => t.Id, t =>
+                {
+                    var inFinal = tiers.TierOf(t.Id) is not null;
+                    var finalResults = t.Results.Where(r => ties.IsFinalRace(r.RaceId)).ToList();
+                    var finalPoints = finalResults.Sum(r => r.Points);
+                    var earlier = t.Results.Sum(r => r.Points) - finalPoints;
+                    var total = SectionScoring.Total(section, inFinal, earlier, finalPoints, bonus.GetValueOrDefault(t.Id));
+                    var alone = inFinal && !SectionScoring.CarriesIntoFinal(section);
+                    return (Total: total, Tier: tiers.TierOf(t.Id), TieResults: alone ? finalResults : t.Results);
+                });
+                var facts = sectionTeams.ToDictionary(t => t.Id, t => ties.Facts(t.Id, t.CompetitionSectionId, scores[t.Id].TieResults, scores[t.Id].Total));
+                var ordered = sectionTeams
+                    .GroupBy(t => (Tier: scores[t.Id].Tier ?? FinalsTiers.NotInFinals, scores[t.Id].Total))
+                    .OrderBy(g => g.Key.Tier)
+                    .ThenByDescending(g => g.Key.Total)
+                    .SelectMany(g => ties.OrderLevel(g.Select(t => facts[t.Id]).ToList()))
+                    .ToList();
+
+                var hasFinals = ordered.Any(f => scores[f.TeamId].Tier is not null);
+                var wanted = sectionGroup.Select(t => t.TeamId).ToHashSet();
+                for (var i = 0; i < ordered.Count; i++)
+                {
+                    var teamId = ordered[i].TeamId;
+                    if (wanted.Contains(teamId))
+                        places[teamId] = new Placing(i + 1, ordered.Count, scores[teamId].Tier, hasFinals);
+                }
+            }
         }
         return places;
     }

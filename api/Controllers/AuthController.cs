@@ -46,6 +46,9 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest req, [FromServices] AccountIpRecorder ipRecorder)
     {
+        if (await _db.IsIpBlockedAsync(HttpContext, HttpContext.RequestAborted))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Sign-in from this network is blocked." });
+
         var user = await _users.FindByEmailAsync(req.Email);
         // The shared organiser account uses the admin key. Old demo databases
         // must not retain a second, well-known password login in production.
@@ -227,6 +230,9 @@ public class AuthController : ControllerBase
         [FromServices] IConfiguration config,
         [FromServices] AccountIpRecorder ipRecorder)
     {
+        if (await _db.IsIpBlockedAsync(HttpContext, HttpContext.RequestAborted))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Sign-up from this network is blocked." });
+
         var raw = (req.Username ?? string.Empty).Trim();
         if (raw.Length == 0)
             return BadRequest(new { message = "Username is required." });
@@ -339,7 +345,7 @@ public class AuthController : ControllerBase
                 var lockKey = BinaryPrimitives.ReadInt64BigEndian(SHA256.HashData(Encoding.UTF8.GetBytes(ipHash)));
                 await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({lockKey})", HttpContext.RequestAborted);
             }
-            var maxAccountsPerIp = config.GetValue("RateLimits:AccountsPerIp", 5);
+            var maxAccountsPerIp = config.GetValue("RateLimits:AccountsPerIp", 40);
             var createdFromIp = await _db.UserClaims.CountAsync(
                 c => c.ClaimType == CreatedIpClaimType && c.ClaimValue == ipHash,
                 HttpContext.RequestAborted);
@@ -380,6 +386,9 @@ public class AuthController : ControllerBase
     [Authorize(Roles = Roles.Admin)]
     public async Task<ActionResult<AuthResponse>> Register(RegisterRequest req)
     {
+        if (await _db.IsIpBlockedAsync(HttpContext, HttpContext.RequestAborted))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Registration from this network is blocked." });
+
         if (await _users.FindByEmailAsync(req.Email) is not null)
             return Conflict(new { message = "An account with that email already exists." });
 
@@ -503,7 +512,7 @@ public class AuthController : ControllerBase
 
         var result = await _users.ChangePasswordAsync(user, req.CurrentPassword, req.NewPassword);
         if (!result.Succeeded)
-            return BadRequest(new { message = string.Join(" ", result.Errors.Select(e => e.Description)) });
+            return BadRequest(new { message = string.Join(" ", result.Errors.Select(PasswordRules.Friendly).Distinct()) });
         return NoContent();
     }
 

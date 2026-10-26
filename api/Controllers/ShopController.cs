@@ -158,6 +158,9 @@ public class ShopController : ControllerBase
     [Authorize]
     public async Task<ActionResult<ShopCommentDto>> Comment(int id, CreateShopCommentRequest req)
     {
+        if (await _db.IsIpBlockedAsync(HttpContext, HttpContext.RequestAborted))
+            return StatusCode(403, new { message = "Posting from this network is blocked." });
+
         var post = await _db.ShopPosts.FindAsync(id);
         if (post is null || post.IsDeleted) return NotFound();
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;

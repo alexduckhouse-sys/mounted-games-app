@@ -78,12 +78,18 @@ public class NotificationScheduler : BackgroundService
         // Include earlier sessions in each relevant competition so delays cascade to later heats.
         var horizonStart = now.AddDays(-2);
         var horizonEnd = now.AddMinutes(90);
+        var competitionHorizonEnd = now.AddDays(14);
         var competitionIds = db.Sessions.Where(s =>
-            (s.ScheduledStart >= horizonStart && s.ScheduledStart <= horizonEnd)
+            s.Competition != null
+            && !s.Competition.IsArchived
+            && s.Competition.StartDate <= competitionHorizonEnd
+            && (s.Competition.EndDate ?? s.Competition.StartDate) >= horizonStart
+            && ((s.ScheduledStart >= horizonStart && s.ScheduledStart <= horizonEnd)
                 || (s.StartedAt >= horizonStart && s.StartedAt <= horizonEnd)
                 || s.Status == SessionStatus.InArena
-                || s.Heats.Any(h => h.ScheduledStart >= horizonStart && h.ScheduledStart <= horizonEnd))
-            .Select(s => s.CompetitionId);
+                || s.Heats.Any(h => h.ScheduledStart >= horizonStart && h.ScheduledStart <= horizonEnd)))
+            .Select(s => s.CompetitionId)
+            .Distinct();
         var sessions = await db.Sessions
             .Include(s => s.Section)
             .Include(s => s.Heats).ThenInclude(h => h.Races)

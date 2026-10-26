@@ -30,7 +30,7 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
             .OrderByDescending(x => x.Year).ThenBy(x => x.Title)
             .ToListAsync(ct);
         var result = new List<SeasonDto>(seasons.Count);
-        foreach (var season in seasons) result.Add(await ToDtoAsync(season, ct));
+        foreach (var season in seasons) result.Add(await ToDtoAsync(season, ct, checkCurrent: false));
         return result;
     }
 
@@ -295,11 +295,11 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
         .Include(x => x.Rounds).ThenInclude(x => x.Publications)
         .SingleOrDefaultAsync(x => x.Id == id, ct);
 
-    private async Task<SeasonDto> ToDtoAsync(Season season, CancellationToken ct)
+    private async Task<SeasonDto> ToDtoAsync(Season season, CancellationToken ct, bool checkCurrent = true)
     {
 
         var rounds = new List<SeasonRoundDto>();
-        foreach (var round in season.Rounds.OrderBy(x => x.OrderIndex)) rounds.Add(await ToRoundDtoAsync(round, ct));
+        foreach (var round in season.Rounds.OrderBy(x => x.OrderIndex)) rounds.Add(await ToRoundDtoAsync(round, ct, checkCurrent));
         return new SeasonDto(
             season.Id, season.Title, season.Year, season.Format, season.AgeGroup,
             season.BestResultsToCount,
@@ -307,11 +307,11 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
             rounds, season.CreatedAt, season.UpdatedAt, CanManage(season.OwnerUserId));
     }
 
-    private async Task<SeasonRoundDto> ToRoundDtoAsync(SeasonRound round, CancellationToken ct)
+    private async Task<SeasonRoundDto> ToRoundDtoAsync(SeasonRound round, CancellationToken ct, bool checkCurrent = true)
     {
         var latest = round.Publications.MaxBy(x => x.Version);
-        var current = false;
-        if (latest is not null)
+        var current = latest is not null;
+        if (latest is not null && checkCurrent)
         {
             try
             {

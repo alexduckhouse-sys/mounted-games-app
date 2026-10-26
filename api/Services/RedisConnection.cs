@@ -8,24 +8,68 @@ namespace MountedGames.Api.Services;
 /// </summary>
 public sealed class RedisConnection : IDisposable
 {
-    private readonly Lazy<IConnectionMultiplexer?> _connection;
+    private static readonly TimeSpan RetryCooldown = TimeSpan.FromSeconds(30);
 
-    public RedisConnection(IConfiguration config, ILogger<RedisConnection> log)
+    private readonly ConfigurationOptions? _options;
+    private readonly ILogger<RedisConnection> _log;
+    private readonly TimeProvider _time;
+    private readonly object _gate = new();
+    private IConnectionMultiplexer? _connection;
+    private DateTimeOffset? _lastFailureAt;
+    private bool _disposed;
+
+    public RedisConnection(IConfiguration config, ILogger<RedisConnection> log, TimeProvider? time = null)
     {
-        var options = RedisBackplane.Options(config);
-        _connection = new Lazy<IConnectionMultiplexer?>(() =>
-        {
-            if (options is null) return null;
-            try { return ConnectionMultiplexer.Connect(options); }
-            catch (Exception) { log.LogWarning("Redis is configured but could not be reached; using per-instance state."); return null; }
-        });
+        _options = RedisBackplane.Options(config);
+        _log = log;
+        _time = time ?? TimeProvider.System;
     }
 
     /// <summary>The connection when Redis is configured and reachable right now.</summary>
-    public IConnectionMultiplexer? Available => _connection.Value is { IsConnected: true } connection ? connection : null;
+    public IConnectionMultiplexer? Available
+    {
+        get
+        {
+            if (_options is null || _disposed) return null;
+            var current = Volatile.Read(ref _connection);
+            if (current is not null)
+                return current.IsConnected ? current : null;
+
+            lock (_gate)
+            {
+                if (_disposed) return null;
+                if (_connection is not null)
+                    return _connection.IsConnected ? _connection : null;
+
+                var now = _time.GetUtcNow();
+                if (_lastFailureAt is { } failedAt && now - failedAt < RetryCooldown)
+                    return null;
+
+                try
+                {
+                    _connection = ConnectionMultiplexer.Connect(_options);
+                    _lastFailureAt = null;
+                    return _connection.IsConnected ? _connection : null;
+                }
+                catch (Exception)
+                {
+                    _lastFailureAt = now;
+                    _log.LogWarning("Redis is configured but could not be reached; using per-instance state.");
+                    return null;
+                }
+            }
+        }
+    }
 
     public void Dispose()
     {
-        if (_connection.IsValueCreated) _connection.Value?.Dispose();
+        IConnectionMultiplexer? toDispose;
+        lock (_gate)
+        {
+            _disposed = true;
+            toDispose = _connection;
+            _connection = null;
+        }
+        toDispose?.Dispose();
     }
 }

@@ -234,10 +234,17 @@ public class TeamsController : ControllerBase
     [HttpDelete("{id:int}")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
-    public async Task<IActionResult> Delete(int competitionId, int id)
+    public async Task<IActionResult> Delete(int competitionId, int id, [FromQuery] bool force = false)
     {
         var t = await _db.Teams.FirstOrDefaultAsync(t => t.Id == id && t.CompetitionId == competitionId);
         if (t is null) return NotFound();
+        if (!force && await _db.Results.AnyAsync(r => r.TeamId == id))
+            return BadRequest(new { message = "This team already has scored results. Pass ?force=true to delete it anyway." });
+        if (force)
+        {
+            var results = await _db.Results.Where(r => r.TeamId == id).ToListAsync();
+            _db.Results.RemoveRange(results);
+        }
         _db.Teams.Remove(t);
         await _db.SaveChangesAsync();
         return NoContent();

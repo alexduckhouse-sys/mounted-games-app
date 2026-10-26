@@ -560,7 +560,7 @@ public class CompetitionsController : ControllerBase
 
     [HttpDelete("{id:int}/sections/{sectionId:int}")]
     [Authorize(Roles = Roles.Admin)]
-    public async Task<IActionResult> DeleteSection(int id, int sectionId)
+    public async Task<IActionResult> DeleteSection(int id, int sectionId, [FromQuery] bool force = false)
     {
         var section = await _db.CompetitionSections
             .Include(s => s.Teams)
@@ -568,6 +568,12 @@ public class CompetitionsController : ControllerBase
             .Include(s => s.Sessions).ThenInclude(ss => ss.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results)
             .FirstOrDefaultAsync(s => s.Id == sectionId && s.CompetitionId == id);
         if (section is null) return NotFound();
+
+        var hasPaidSignups = await _db.SectionSignups.AnyAsync(
+            s => s.CompetitionSectionId == sectionId && s.Status == SignupPaymentStatus.Paid);
+        var hasScoredResults = section.Sessions.Any(ss => ss.Heats.Any(h => h.Races.Any(r => r.Results.Count > 0)));
+        if (!force && (hasPaidSignups || section.Teams.Count > 0 || hasScoredResults))
+            return BadRequest(new { message = "This section already has paid entries, teams or scored results. Pass ?force=true to delete it anyway." });
 
         // Walk bottom-up so foreign keys don't complain.
         foreach (var ss in section.Sessions)
@@ -587,6 +593,9 @@ public class CompetitionsController : ControllerBase
             .ToListAsync();
         foreach (var d in decForms) _db.RiderEntries.RemoveRange(d.Riders);
         _db.DeclarationForms.RemoveRange(decForms);
+
+        var signups = await _db.SectionSignups.Where(s => s.CompetitionSectionId == sectionId).ToListAsync();
+        _db.SectionSignups.RemoveRange(signups);
 
         _db.Teams.RemoveRange(section.Teams);
         _db.CompetitionSections.Remove(section);
@@ -1003,7 +1012,7 @@ public class CompetitionsController : ControllerBase
         var comp = await _db.Competitions
             .Include(c => c.Sections)
             .Include(c => c.Teams)
-            .Include(c => c.Sessions).ThenInclude(s => s.Heats)
+            .Include(c => c.Sessions).ThenInclude(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results)
             .FirstOrDefaultAsync(c => c.Id == id);
         if (comp is null) return NotFound();
 
@@ -1024,7 +1033,9 @@ public class CompetitionsController : ControllerBase
 
         if (req.ReplaceExisting)
         {
-            var raceSessions = comp.Sessions.Where(s => s.Kind == SessionKind.Race).ToList();
+            var raceSessions = comp.Sessions
+                .Where(s => s.Kind == SessionKind.Race && !s.Heats.Any(h => h.Races.Any(r => r.Results.Count > 0)))
+                .ToList();
             _db.Sessions.RemoveRange(raceSessions);
             await _db.SaveChangesAsync();
         }
