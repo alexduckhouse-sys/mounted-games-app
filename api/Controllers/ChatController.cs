@@ -95,7 +95,7 @@ public class ChatController : ControllerBase
             CompetitionId = competitionId,
             UserId = user.Id,
             AuthorName = authorName,
-            Body = req.Body.Trim(),
+            Body = ProfanityFilter.Clean(req.Body.Trim()),
             Type = ChatMessageType.Chat,
             AdminOnly = !isAdmin || replyTo is not null,
             RecipientUserId = replyTo,
@@ -155,6 +155,7 @@ public class ChatController : ControllerBase
             return BadRequest();
         if (!await _db.Competitions.AnyAsync(c => c.Id == competitionId, cancellationToken)) return NotFound();
         var tag = req.Tag?.Trim();
+        var body = ProfanityFilter.Clean(req.Body.Trim());
         var user = await _users.GetUserAsync(User);
         var claimName = string.Equals(user?.Email, "admin@mg.local", StringComparison.OrdinalIgnoreCase)
             ? User.FindFirstValue("fullName") : null;
@@ -166,7 +167,7 @@ public class ChatController : ControllerBase
             if (tag?.StartsWith("missing-team:", StringComparison.OrdinalIgnoreCase) == true)
             {
                 if (!int.TryParse(tag["missing-team:".Length..], out var heatId) || heatId < 1) return BadRequest();
-                msg = await _scoring.CreateMissingTeamCallAsync(heatId, competitionId, null, req.Body,
+                msg = await _scoring.CreateMissingTeamCallAsync(heatId, competitionId, null, body,
                     user?.Id, authorName, cancellationToken);
             }
             else
@@ -179,7 +180,7 @@ public class ChatController : ControllerBase
                     {
                         CompetitionId = competitionId, UserId = user?.Id,
                         AuthorName = authorName.Length > 60 ? authorName[..60] : authorName,
-                        Body = req.Body.Trim(), Type = ChatMessageType.Announcement, Tag = tag,
+                        Body = body, Type = ChatMessageType.Announcement, Tag = tag,
                     };
                     _db.ChatMessages.Add(announcement);
                     await _db.SaveChangesAsync(cancellationToken);

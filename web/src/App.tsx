@@ -37,6 +37,8 @@ const DeclarationsTab = lazy(() => import('./pages/competition/DeclarationsTab')
 const BroadcastPage = lazy(() => import('./pages/competition/BroadcastPage').then((module) => ({ default: module.BroadcastPage })));
 const ProducePage = lazy(() => import('./pages/competition/ProducePage').then((module) => ({ default: module.ProducePage })));
 const ChatTab = lazy(() => import('./pages/competition/ChatTab').then((module) => ({ default: module.ChatTab })));
+const AnnouncementsPage = lazy(() => import('./pages/competition/AnnouncementsPage').then((module) => ({ default: module.AnnouncementsPage })));
+const MessageThreadPage = lazy(() => import('./pages/competition/MessageThreadPage').then((module) => ({ default: module.MessageThreadPage })));
 const ContactOrganisersPage = lazy(() => import('./pages/competition/ContactOrganisersPage').then((module) => ({ default: module.ContactOrganisersPage })));
 const EntryPage = lazy(() => import('./pages/competition/EntryPage').then((module) => ({ default: module.EntryPage })));
 const SectionEntryPage = lazy(() => import('./pages/competition/DetailsTab').then((module) => ({ default: module.SectionEntryPage })));
@@ -147,6 +149,8 @@ export default function App() {
                 <Route path="produce" element={<ProtectedRoute roles={['Admin', 'Trainer']}><ProducePage /></ProtectedRoute>} />
                 <Route path="chat" element={<AfterDrawOnly><ChatTab /></AfterDrawOnly>} />
                 <Route path="contact" element={<ContactOrganisersPage />} />
+                <Route path="announcements" element={<ProtectedRoute roles={['Admin']}><AnnouncementsPage /></ProtectedRoute>} />
+                <Route path="messages/:userId" element={<ProtectedRoute roles={['Admin']}><MessageThreadPage /></ProtectedRoute>} />
                 <Route path="details" element={<DetailsTab />} />
                 <Route path="sponsors" element={<SponsorsPage />} />
                 <Route path="live" element={<Navigate to="../chat" replace />} />

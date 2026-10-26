@@ -255,6 +255,11 @@ function ChatTabSession() {
         <div className="mg-section-head">
           <h2 id="announcements-title">Announcements</h2>
           {isAdmin && (
+            <Link to={`/competitions/${competition.id}/announcements`} className="text-xs font-semibold text-[rgb(var(--mg-heading))] underline">
+              Manage announcements
+            </Link>
+          )}
+          {isAdmin && (
             <Link to={`/competitions/${competition.id}/contact`} className="text-xs font-semibold text-[rgb(var(--mg-heading))] underline">
               Organiser messages{privateCount > 0 ? ` (${privateCount})` : ''}
             </Link>
