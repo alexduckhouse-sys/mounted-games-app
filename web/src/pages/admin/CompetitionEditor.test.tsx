@@ -228,6 +228,24 @@ describe('CompetitionEditor: structure and timing', () => {
     expect(stored().sections[0].sessions).toHaveLength(1);
   });
 
+  it('adds and removes a final and sets its points, for standard sections only', async () => {
+    seed('structure');
+    mount();
+    const group = screen.getByRole('group', { name: 'Structure for Seniors' });
+    const final = within(group).getByRole('group', { name: 'Final for Seniors' });
+    expect(within(final).getByRole('checkbox', { name: 'Carry points into the final' })).toBeChecked();
+    expect(within(final).getByRole('checkbox', { name: 'Double points in the final' })).not.toBeChecked();
+    await userEvent.click(within(final).getByRole('checkbox', { name: 'Double points in the final' }));
+    await userEvent.click(within(final).getByRole('checkbox', { name: 'Carry points into the final' }));
+    expect(stored().sections[0]).toMatchObject({ doublePointsInFinal: true, carryPointsIntoFinal: false });
+    await userEvent.click(within(final).getByRole('button', { name: 'Remove the final' }));
+    expect(stored().sections[0]).toMatchObject({ hasFinal: false });
+    await userEvent.click(within(group).getByRole('button', { name: '+ Add a final' }));
+    expect(stored().sections[0]).toMatchObject({ hasFinal: true });
+    await userEvent.click(within(group).getByRole('radio', { name: 'Heat, heat, final (HHF)' }));
+    expect(within(group).queryByRole('group', { name: 'Final for Seniors' })).not.toBeInTheDocument();
+  });
+
   it('picks the run-off race from the library and sets finalists, minutes, heat size and arena', async () => {
     seed('structure');
     mount();
@@ -399,8 +417,10 @@ describe('CompetitionEditor: creating', () => {
     }));
     expect(api.post).toHaveBeenCalledWith('/competitions/41/sections', {
       format: 3, ageGroup: 'Juniors', displayName: 'Junior Individuals', runoffRaceName: '2 Flag', usesRaceFinals: false, priceMinor: 1250, maxParticipants: 16, finalistCount: 6,
+      hasFinal: true, carryPointsIntoFinal: true, doublePointsInFinal: false,
     });
     expect(api.post).toHaveBeenCalledWith('/competitions/41/sections', expect.objectContaining({ ageGroup: 'Open', displayName: 'Open', usesRaceFinals: true }));
+    expect(vi.mocked(api.post).mock.calls.find(([, body]) => (body as { ageGroup?: string }).ageGroup === 'Open')?.[1]).not.toHaveProperty('hasFinal');
     const sessions = vi.mocked(api.post).mock.calls.filter(([url]) => url === '/competitions/41/sessions').map(([, body]) => body as Record<string, unknown>);
     expect(sessions.map((s) => s.name)).toEqual(['Junior Individuals · Session 1', 'Junior Individuals · Session 2', 'Open', 'Finals · Junior Individuals', 'Lunch']);
     expect(sessions[0]).toMatchObject({
@@ -680,6 +700,7 @@ describe('CompetitionEditor: editing', () => {
     expect(api.put).toHaveBeenCalledWith('/competitions/7', expect.objectContaining({ name: 'Autumn Area', isActive: true, isArchived: false, organiserName: 'Cheshire PC' }));
     expect(api.put).toHaveBeenCalledWith('/competitions/7/sections/21', expect.objectContaining({ priceMinor: 5000, maxParticipants: 12, finalistCount: 6, runoffRaceName: '2 Flag' }));
     expect(api.put).toHaveBeenCalledWith('/competitions/7/sections/22', expect.objectContaining({ maxParticipants: 0 }));
+    expect(api.put).toHaveBeenCalledWith('/competitions/7/sections/21', expect.objectContaining({ hasFinal: true, carryPointsIntoFinal: false, doublePointsInFinal: false }));
     // The session with heats only gets its minutes and arena; the planned one gets the whole structure and an estimated start.
     expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/31', { minutesPerHeat: 8, arenaName: 'Main arena' });
     expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/32', expect.objectContaining({ plannedRaces: ['Bending', 'Bottle'], lanesPerHeat: 4, minutesPerHeat: 10, scheduledStart: expect.any(String) }));

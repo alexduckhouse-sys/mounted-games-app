@@ -240,3 +240,7 @@
 .ops-people .rf-t2 { overflow-wrap: anywhere; }
 .ops-reason { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; padding: 4px 16px 14px; background: rgb(var(--mg-elim) / .07); }
 .ops-reason .rf-fld { flex: 1 1 200px; }
+
+/* The final in the race editor */
+.ops-addbar-flat { margin-top: 0; }
+.ops-final-end { display: flex; justify-content: flex-end; }

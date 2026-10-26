@@ -1,5 +1,5 @@
 import { describeHeats } from '../../../lib/formatPlan';
-import { lanesFor, MAX_SESSIONS, resizeSessions, sectionLocked, sectionName, setRaceFinals, type CreatorDraft, type SectionDraft } from '../../../lib/creatorDraft';
+import { lanesFor, MAX_SESSIONS, resizeSessions, sectionHasFinal, sectionLocked, sectionName, setRaceFinals, type CreatorDraft, type SectionDraft } from '../../../lib/creatorDraft';
 import { durationText, estimateText, sectionEstimate } from '../../../lib/creatorPlan';
 import { HatbandEditor } from './Hatbands';
 import { NumberBox, SelectBox, StepIntro, TextBox, type StepProps } from './parts';
@@ -49,6 +49,24 @@ export function StructureStep({ draft, change, problems, clear, templates, teamC
                   hint={`Defaults to heat size (${s.maxTeamsPerHeat || lanesFor(s.format)}).`}
                   onChange={(finalistCount) => { patch(i, { finalistCount }); clear(`section.${i}.finalists`); }} />
               </div>
+
+              {!s.usesRaceFinals && (
+                <div role="group" aria-label={`Final for ${sectionName(s)}`} className="flex flex-col gap-2 text-[15px] font-medium">
+                  {sectionHasFinal(s) ? (
+                    <>
+                      {([['Carry points into the final', 'carryPointsIntoFinal', s.carryPointsIntoFinal === true, false], ['Double points in the final', 'doublePointsInFinal', s.doublePointsInFinal === true, !!s.finalScored]] as const).map(([label, key, on, off]) => (
+                        <label key={key} className="flex min-h-11 cursor-pointer items-center gap-3">
+                          <input type="checkbox" className="h-4 w-4 accent-[rgb(var(--mg-heading))]" checked={on} disabled={off} onChange={(e) => patch(i, { [key]: e.target.checked })} />
+                          <span>{label}</span>
+                        </label>
+                      ))}
+                      <button type="button" className="min-h-11 self-start text-sm font-semibold text-[rgb(var(--mg-elim))] underline" onClick={() => patch(i, { hasFinal: false })}>Remove the final</button>
+                    </>
+                  ) : (
+                    <button type="button" className="flex min-h-12 w-full items-center justify-center rounded-xl bg-[rgb(var(--mg-tint))] text-base font-bold text-[rgb(var(--mg-heading))]" onClick={() => patch(i, { hasFinal: true })}>+ Add a final</button>
+                  )}
+                </div>
+              )}
 
               <SelectBox label="Run-off race" value={runoff} disabled={locked} onChange={(runoffRaceName) => patch(i, { runoffRaceName })} hint="Used to split teams that tie.">
                 <option value="">None</option>

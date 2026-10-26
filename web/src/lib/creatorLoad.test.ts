@@ -33,6 +33,12 @@ describe('draftFromCompetition', () => {
     expect(d.sections[0].hasEntries).toBeUndefined();
   });
 
+  it('loads the final options, treating missing ones as a final that carries no points and does not double', () => {
+    const d = draftFromCompetition(competition({ sections: [sec(5), sec(6, { hasFinal: false, carryPointsIntoFinal: true, doublePointsInFinal: true })] }));
+    expect(d.sections[0]).toMatchObject({ hasFinal: true, carryPointsIntoFinal: false, doublePointsInFinal: false });
+    expect(d.sections[1]).toMatchObject({ hasFinal: false, carryPointsIntoFinal: true, doublePointsInFinal: true });
+  });
+
   it('keeps the sessions with their structure, planned races and whether heats or scores exist', () => {
     const d = draftFromCompetition(competition({
       sections: [sec(5, { format: 1, activeSignupsCount: 2 })],

@@ -194,3 +194,13 @@ describe('hatbands', () => {
     expect(readDraft({ name: 'x', sections: [], laneHatbands: 'no' })!.laneHatbands).toEqual([]);
   });
 });
+
+describe('final options', () => {
+  it('start as a final that carries points and does not double, and heat, heat, final never has one', async () => {
+    const { sectionHasFinal } = await import('./creatorDraft');
+    expect(defaultSection()).toMatchObject({ hasFinal: true, carryPointsIntoFinal: true, doublePointsInFinal: false });
+    expect(sectionHasFinal(defaultSection())).toBe(true);
+    expect(sectionHasFinal({ usesRaceFinals: false, hasFinal: false })).toBe(false);
+    expect(sectionHasFinal({ usesRaceFinals: true, hasFinal: true })).toBe(false);
+  });
+});

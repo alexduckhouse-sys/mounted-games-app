@@ -48,6 +48,12 @@ export interface SectionDraft {
   sessions: SessionDraft[];
   /** The races chosen for the section's final; null means "decide later". */
   finalRaces?: string[] | null;
+  /** Standard format only: the section ends with a final. Missing means yes. */
+  hasFinal?: boolean;
+  /** Standard format only: a finalist's earlier points add to its final score. Missing means off. */
+  carryPointsIntoFinal?: boolean;
+  /** Standard format only: final race points count double. Missing means off. */
+  doublePointsInFinal?: boolean;
   /** The saved finals session id, when editing a competition that already has one. */
   finalSessionId?: number;
   /** Heats have been made for the finals session. */
@@ -116,9 +122,12 @@ export function defaultSection(format: Format = 2): SectionDraft {
   return {
     format, ageGroup: 'Seniors', priceGbp: '', maxParticipants: '', usesRaceFinals: false, finalistCount: '', runoffRaceName: '',
     minutesPerRace: String(DEFAULT_MINUTES), maxTeamsPerHeat: String(lanesFor(format)), arena: MAIN_ARENA, sessions: [{ races: null }],
-    finalRaces: null,
+    finalRaces: null, hasFinal: true, carryPointsIntoFinal: true, doublePointsInFinal: false,
   };
 }
+
+/** Whether a section has a final of its own: standard format only, and not removed. Heat, heat, final never does. */
+export const sectionHasFinal = (s: Pick<SectionDraft, 'usesRaceFinals' | 'hasFinal'>) => !s.usesRaceFinals && s.hasFinal !== false;
 
 export function defaultDraft(today: Date = new Date()): CreatorDraft {
   return {
@@ -278,6 +287,9 @@ function readSection(raw: unknown): SectionDraft {
     arena: text(r.arena, MAIN_ARENA) || MAIN_ARENA,
     sessions,
     finalRaces: finalRaces && finalRaces.length > 0 ? finalRaces : null,
+    hasFinal: r.hasFinal !== false,
+    carryPointsIntoFinal: typeof r.carryPointsIntoFinal === 'boolean' ? r.carryPointsIntoFinal : base.carryPointsIntoFinal,
+    doublePointsInFinal: r.doublePointsInFinal === true,
     ...(typeof r.finalSessionId === 'number' ? { finalSessionId: r.finalSessionId } : {}),
     ...(r.finalHasHeats ? { finalHasHeats: true } : {}),
     ...(r.finalScored ? { finalScored: true } : {}),

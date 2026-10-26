@@ -11,9 +11,12 @@ import { SessionKind } from '../../../types';
 /** A save that stopped part way. `competitionId` is set once the competition exists, so the person can carry on in edit mode. */
 export class SaveError extends Error {
   readonly competitionId: number | null;
-  constructor(message: string, competitionId: number | null) {
+  /** The HTTP status the API answered with, when it did. A 409 means the change isn't allowed as things stand. */
+  readonly status: number | null;
+  constructor(message: string, competitionId: number | null, status: number | null = null) {
     super(message);
     this.competitionId = competitionId;
+    this.status = status;
   }
 }
 
@@ -59,7 +62,7 @@ export async function saveCreator(draft: CreatorDraft, opts: {
   let competitionId = editingId;
   const step = async <T>(label: string, work: () => Promise<T>): Promise<T> => {
     progress(label);
-    try { return await work(); } catch (e) { throw new SaveError(`${label.replace(/…$/, '')} failed: ${messageOf(e, 'please try again')}`, competitionId); }
+    try { return await work(); } catch (e) { throw new SaveError(`${label.replace(/…$/, '')} failed: ${messageOf(e, 'please try again')}`, competitionId, (e as { response?: { status?: number } }).response?.status ?? null); }
   };
 
   if (editingId === null) {
@@ -90,6 +93,8 @@ export async function saveCreator(draft: CreatorDraft, opts: {
       // On an update, zero is how a cap is cleared (an omitted value leaves it as it is).
       maxParticipants: parseMaxParticipants(s.maxParticipants),
       finalistCount: parseFinalistCount(s.finalistCount),
+      // Heat, heat, final has no separate final, and the API refuses these for it.
+      ...(s.usesRaceFinals ? {} : { hasFinal: s.hasFinal !== false, carryPointsIntoFinal: s.carryPointsIntoFinal ?? true, doublePointsInFinal: s.doublePointsInFinal ?? false }),
     };
     if (s.existingId) {
       await step(`Saving ${name}…`, () => api.put(`${base}/sections/${s.existingId}`, { ...common, maxParticipants: common.maxParticipants ?? 0 }));
@@ -110,7 +115,7 @@ export async function saveCreator(draft: CreatorDraft, opts: {
   const orderOf = (key: string) => topOrder + (rank.get(key) ?? 0) + 1;
 
   const wantsFinals = (s: SectionDraft) =>
-    !s.usesRaceFinals && (Boolean(s.finalRaces && s.finalRaces.length > 0) || parseFinalistCount(s.finalistCount) !== null || Boolean(s.finalHasHeats) || Boolean(s.finalScored));
+    !s.usesRaceFinals && s.hasFinal !== false && (Boolean(s.finalRaces && s.finalRaces.length > 0) || parseFinalistCount(s.finalistCount) !== null || Boolean(s.finalHasHeats) || Boolean(s.finalScored));
   const keptSessions = new Set(draft.sections.flatMap((s) => [
     ...s.sessions.flatMap((x) => (x.existingId ? [x.existingId] : [])),
     ...(s.finalSessionId && wantsFinals(s) ? [s.finalSessionId] : []),
@@ -146,7 +151,7 @@ export async function saveCreator(draft: CreatorDraft, opts: {
 
   let nextFinalOrder = topOrder + rows.length + 1;
   for (const [sectionIndex, section] of draft.sections.entries()) {
-    if (section.usesRaceFinals) continue;
+    if (section.usesRaceFinals || section.hasFinal === false) continue;
     const hasFinalRaces = Boolean(section.finalRaces && section.finalRaces.length > 0);
     const hasFinalists = parseFinalistCount(section.finalistCount) !== null;
     const fName = finalSessionName(section);
