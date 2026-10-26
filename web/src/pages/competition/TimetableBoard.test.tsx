@@ -55,7 +55,9 @@ it('shows a late row with its delay and the planned time struck through', () => 
   // Screen readers get the planned time, the new time and the status in words.
   expect(late).toHaveTextContent(/Planned 11:00.*, now 11:06/);
   expect(late).toHaveTextContent('+6 min');
-  expect(screen.getAllByText('Main Arena · 6 min late').length).toBeGreaterThan(0);
+  // One amber line says so for the whole arena; the group heading just counts.
+  expect(screen.getByRole('status')).toHaveTextContent('Main Arena is running 6 minutes late');
+  expect(screen.queryByText('Main Arena · 6 min late')).toBeNull();
 });
 
 it('marks the running heat "ON NOW" without a planned-time note or late summary on the live session', () => {
@@ -66,7 +68,7 @@ it('marks the running heat "ON NOW" without a planned-time note or late summary 
   expect(live.querySelector('.tt-planned')).toBeNull();
   expect(live.querySelector('.tt-time')).not.toHaveClass('tt-time-late');
   expect(screen.getByText('Main Arena · 1 heat')).toBeVisible();
-  expect(screen.queryByText('Main Arena · 6 min late')).toBeNull();
+  expect(screen.queryByRole('status')).toBeNull();
 });
 
 it('uses the count in the group summary when nothing is late', () => {
@@ -76,32 +78,43 @@ it('uses the count in the group summary when nothing is late', () => {
   expect(document.querySelector('.tt-summary-late')).toBeNull();
 });
 
-it('hides finished groups behind "Show full timetable", then folds them into one line under a divider and expands them on tap', () => {
+it('shows only the most recent finished heat, greyed, until "Show full timetable" is tapped', () => {
   const { container } = renderBoard();
-  expect(screen.queryByRole('heading', { name: 'Finished today · 1' })).toBeNull();
-  expect(screen.queryByRole('button', { name: /Seniors · Session 1 · 1 finished/ })).toBeNull();
+  // The one finished heat stays in view with the other rows, in its place by time.
+  expect(screen.getByText('Heat 3')).toBeVisible();
+  expect(container.querySelector('.tt-finished')).toHaveTextContent('Heat 3');
+  expect(screen.queryByRole('heading', { name: /Finished/ })).toBeNull();
+  expect(container.querySelector('.tt-collapsed')).toBeNull();
+  // Nothing was hidden, so there is nothing to show.
+  expect(screen.queryByRole('button', { name: 'Show full timetable' })).toBeNull();
+});
+
+it('hides earlier finished heats behind "Show full timetable", which becomes "Hide finished heats"', () => {
+  setCompetition({
+    sessions: [
+      session(1, { status: 2, arenaName: 'Main Arena', scheduledStart: `${day}T07:00:00`, heats: [
+        heat(11, { sessionId: 1, orderIndex: 0, label: 'Early heat', finishedAt: `${day}T07:20:00` }),
+        heat(12, { sessionId: 1, orderIndex: 1, label: 'Middle heat', finishedAt: `${day}T07:50:00` }),
+        heat(13, { sessionId: 1, orderIndex: 2, label: 'Latest heat', finishedAt: `${day}T08:20:00` }),
+      ] }),
+      session(2, { status: 0, orderIndex: 2, arenaName: 'Main Arena', scheduledStart: `${day}T10:00:00`, heats: [heat(21, { sessionId: 2, label: 'Upcoming heat' })] }),
+    ],
+  });
+  renderBoard();
+  expect(screen.getByText('Latest heat')).toBeVisible();
+  expect(screen.getByText('Upcoming heat')).toBeVisible();
+  expect(screen.queryByText('Early heat')).toBeNull();
+  expect(screen.queryByText('Middle heat')).toBeNull();
 
   const toggle = screen.getByRole('button', { name: 'Show full timetable' });
   expect(toggle).toHaveAttribute('aria-expanded', 'false');
   fireEvent.click(toggle);
+  expect(screen.getByText('Early heat')).toBeVisible();
+  expect(screen.getByText('Middle heat')).toBeVisible();
 
-  expect(screen.getByRole('heading', { name: 'Finished today · 1' })).toBeVisible();
-  const folded = screen.getByRole('button', { name: /Seniors · Session 1 · 1 finished/ });
-  expect(folded).toHaveAttribute('aria-expanded', 'false');
-  expect(screen.queryByText('Heat 3')).toBeNull();
-  // Active groups come first, the folded one last.
-  expect(container.querySelector('.tt-collapsed')!.compareDocumentPosition(container.querySelector('.tt-live')!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
-
-  fireEvent.click(folded);
-  expect(screen.getByText('Heat 3')).toBeVisible();
-  const title = screen.getByRole('button', { name: /Seniors · Session 1/ });
-  expect(title).toHaveAttribute('aria-expanded', 'true');
-
-  fireEvent.click(title);
-  expect(screen.queryByText('Heat 3')).toBeNull();
-
-  fireEvent.click(screen.getByRole('button', { name: 'Hide finished sessions' }));
-  expect(screen.queryByRole('heading', { name: 'Finished today · 1' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Hide finished heats' }));
+  expect(screen.queryByText('Early heat')).toBeNull();
+  expect(screen.getByText('Latest heat')).toBeVisible();
 });
 
 it('filters by arena from the menu, flags the live arena and remembers the choice', () => {
@@ -145,38 +158,29 @@ it('hides the strip when there is one day and one arena', () => {
   expect(screen.getByText('Heat 1')).toBeVisible();
 });
 
-it('offers a segmented day control when the event runs over several days', () => {
+it('offers a day dropdown when the event runs over several days', () => {
   const tomorrow = dayKey(new Date(Date.now() + 86_400_000));
   setCompetition({ endDate: tomorrow });
-  renderBoard();
-  const group = screen.getByRole('group', { name: 'Choose day' });
-  const [first, second] = within(group).getAllByRole('button');
-  expect(first).toHaveAccessibleName(/^Day 1, .*, today$/);
-  expect(second).toHaveAccessibleName(/^Day 2, /);
-  expect(second).not.toHaveAccessibleName(/today/);
-  expect(first).toHaveAttribute('aria-pressed', 'true');
-  expect(first.textContent).toMatch(/^[A-Z][a-z]{2}$/);
+  const { container } = renderBoard();
+  const select = screen.getByRole('combobox', { name: 'Day' });
+  expect(select.textContent).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/);
+  // Day, arena and age group sit together on one navy line.
+  expect(container.querySelector('.tt-strip')!.querySelectorAll('[role="combobox"]').length).toBeGreaterThanOrEqual(2);
+  fireEvent.click(select);
+  const options = within(screen.getByRole('listbox', { name: 'Day' })).getAllByRole('option');
+  expect(options).toHaveLength(2);
+  expect(options[0]).toHaveTextContent('Today');
 
-  fireEvent.click(second);
-  expect(second).toHaveAttribute('aria-pressed', 'true');
-  expect(first).toHaveAttribute('aria-pressed', 'false');
+  fireEvent.click(options[1]);
   expect(screen.getByText('Nothing scheduled for this day.')).toBeVisible();
-  fireEvent.click(first);
+  fireEvent.click(select);
+  fireEvent.click(screen.getAllByRole('option')[0]);
   expect(screen.getByText('Heat 1')).toBeVisible();
 });
 
-it('labels the folded section "Finished" rather than "today" on another day', () => {
-  const yesterday = dayKey(new Date(Date.now() - 86_400_000));
-  setCompetition({
-    startDate: yesterday,
-    endDate: day,
-    sessions: [session(3, { status: 2, orderIndex: 0, arenaName: 'Finished Arena', scheduledStart: `${yesterday}T08:00:00`, heats: [heat(33, { sessionId: 3, label: 'Heat 3', finishedAt: `${yesterday}T08:30:00` })] })],
-  });
+it('has no day dropdown on a one-day event', () => {
   renderBoard();
-  fireEvent.click(within(screen.getByRole('group', { name: 'Choose day' })).getAllByRole('button')[0]);
-  fireEvent.click(screen.getByRole('button', { name: 'Show full timetable' }));
-  expect(screen.getByRole('heading', { name: 'Finished · 1' })).toBeVisible();
-  expect(screen.queryByText(/Finished today/)).toBeNull();
+  expect(screen.queryByRole('combobox', { name: 'Day' })).toBeNull();
 });
 
 function HeaderProbe() {
@@ -329,14 +333,14 @@ it('filters the timetable by age group (section) when the competition has multip
   const select = screen.getByRole('combobox', { name: 'Age group' });
   fireEvent.click(select);
   expect(within(screen.getByRole('listbox', { name: 'Age group' })).getAllByRole('option').map((o) => o.textContent))
-    .toEqual(['All age groups', 'Under 12', 'Under 15']);
+    .toEqual(['All ages', 'Under 12', 'Under 15']);
 
   fireEvent.click(screen.getByRole('option', { name: 'Under 15' }));
   expect(screen.getByText('U15 Heat 1')).toBeVisible();
   expect(screen.queryByText('U12 Heat 1')).toBeNull();
 
   fireEvent.click(select);
-  fireEvent.click(screen.getByRole('option', { name: 'All age groups' }));
+  fireEvent.click(screen.getByRole('option', { name: 'All ages' }));
   expect(screen.getByText('U12 Heat 1')).toBeVisible();
 });
 
@@ -410,7 +414,7 @@ it('links heat rows directly to the heat without a lanes dropdown and shows a si
   const { container } = renderBoard();
   expect(screen.queryByRole('button', { name: /Lanes for/i })).toBeNull();
   expect(screen.getByRole('link', { name: /Heat 1/ })).toHaveAttribute('href', '/competitions/1/session/1?heat=11');
-  expect(container.querySelector('.tt-strip')).toHaveClass('tt-strip-stacked');
+  expect(container.querySelector('.tt-strip')).not.toHaveClass('tt-strip-stacked');
   expect(container.querySelectorAll('.tt-shift-card')).toHaveLength(0);
 
   // Live session rows do not show how late they are running.
@@ -430,8 +434,8 @@ it('links heat rows directly to the heat without a lanes dropdown and shows a si
   expect(earlyRow.querySelector('.tt-time')).toHaveClass('tt-time-early');
 
   // Switching to Day 2 in a 2-day, 2-arena competition keeps the Arena selector available.
-  const [, day2Btn] = within(screen.getByRole('group', { name: 'Choose day' })).getAllByRole('button');
-  fireEvent.click(day2Btn);
+  fireEvent.click(screen.getByRole('combobox', { name: 'Day' }));
+  fireEvent.click(screen.getAllByRole('option')[1]);
   expect(screen.getByRole('combobox', { name: 'Arena' })).toBeInTheDocument();
 });
 
@@ -480,7 +484,7 @@ it('formats delays of an hour or more as hours and minutes, and lets organisers 
   const lateRow = screen.getByRole('link', { name: /Very Late Heat/ });
   expect(lateRow.querySelector('.tt-planned')).toHaveTextContent('+1h 34m · 10:00');
   expect(lateRow).toHaveTextContent('+1h 34m');
-  expect(screen.getByText('Main Arena · 1h 34m late')).toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent('Main Arena is running 1h 34m late');
   expect(screen.getByText('Pace: ~4.0m/race')).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('button', { name: 'Pause' }));

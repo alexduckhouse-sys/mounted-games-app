@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ChevronDown, ChevronRight, MapPin, Star, Users } from 'lucide-react';
+import { ChevronDown, ChevronRight, Clock, Star } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
@@ -10,17 +10,18 @@ import { usePageWidth } from '../../components/pageWidthState';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { SponsorStrip } from '../../components/SponsorStrip';
 import { useFavourites } from '../../hooks/useFavourites';
-import { computeTimings, formatDelayDuration, formatShiftDelta, formatTime, parsePausedAtMs, predictMinutesPerRace } from '../../lib/time';
+import { computeTimings, formatShiftDelta, formatTime, parsePausedAtMs, predictMinutesPerRace } from '../../lib/time';
 import { displaySectionName } from '../../lib/section';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
-import { groupMaxDelay, isGroupFinished, sessionOrdinals, statusLabel, TIMETABLE_COLOURS, timetableRows, type TimetableRow, type TimetableStatus } from '../../lib/timetableRows';
+import { arenaDelays, delayInWords, lastFinishedRow, sessionOrdinals, statusLabel, TIMETABLE_COLOURS, timetableRows, type TimetableRow, type TimetableStatus } from '../../lib/timetableRows';
 import './timetable.css';
 
 const STATUS_KEY: ReadonlyArray<[TimetableStatus, string]> = [['on-time', 'On time'], ['late', 'Late'], ['live', 'On now'], ['finished', 'Finished']];
 
 /**
- * The public timetable: a compact day/arena strip under the app header, then one block per session and per
- * age group's finals. Finished blocks fold into one line below the active ones. The page title, competition
+ * The public timetable: three small dropdowns (day, arena, age group) on one navy line under the app header, one
+ * amber line when an arena is running late, then one block per session and per age group's finals. Only the most
+ * recent finished heat shows (greyed); the rest come back with "Show full timetable". The page title, competition
  * name, update time and refresh button live in the app header. `bandExtra`, `lead` and `footer` let a page add its own controls.
  */
 export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtra, lead, footer }: {
@@ -62,7 +63,6 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   const [pickedDay, setPickedDay] = useState<string | null>(null);
   const arenaKey = `mg.tt.arena.${competition.id}`;
   const [showFinished, setShowFinished] = useState(false);
-  const [openDone, setOpenDone] = useState<ReadonlySet<string>>(new Set());
   const [arena, setArena] = useState(() => { try { return localStorage.getItem(arenaKey) ?? ''; } catch { return ''; } });
   const [sectionFilter, setSectionFilter] = useState('');
   const [shifting, setShifting] = useState(false);
@@ -114,13 +114,6 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   function chooseArena(name: string) {
     setArena(name);
     try { if (name) localStorage.setItem(arenaKey, name); else localStorage.removeItem(arenaKey); } catch { /* storage blocked */ }
-  }
-  function toggleDone(key: string) {
-    setOpenDone((current) => {
-      const next = new Set(current);
-      if (!next.delete(key)) next.add(key);
-      return next;
-    });
   }
   const today = dayKey(new Date());
   const startDay = dayKey(new Date(competition.startDate));
@@ -174,9 +167,15 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
       return row.session.heats.some((h) => h.entries.some((e) => teamSectionById.get(e.teamId) === selectedSectionId));
     });
 
+  // Only the latest finished heat stays on show; the rest wait behind "Show full timetable".
+  const latestFinished = lastFinishedRow(visibleRows);
+  const hiddenFinished = visibleRows.filter((row) => row.status === 'finished' && row !== latestFinished).length;
+  const shownRows = showFinished ? visibleRows : visibleRows.filter((row) => row.status !== 'finished' || row === latestFinished);
+  const lateArenas = arenaDelays(visibleRows);
+
   const sessionGroups = (() => {
     const bySession = new Map<number, { key: string; session: TimetableRow['session']; race: boolean; rows: TimetableRow[] }>();
-    for (const row of visibleRows.filter((item) => item.group === 'Heats')) {
+    for (const row of shownRows.filter((item) => item.group === 'Heats')) {
       const existing = bySession.get(row.session.id);
       if (existing) {
         existing.rows.push(row);
@@ -203,46 +202,25 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
         rows: group.rows,
       }));
   })();
-  const finalGroups = finalsByAgeGroup(visibleRows).map((group) => ({ ...group, noun: ['final', 'finals'] as const }));
+  const finalGroups = finalsByAgeGroup(shownRows).map((group) => ({ ...group, noun: ['final', 'finals'] as const }));
   const groups = [...sessionGroups, ...finalGroups].sort((a, b) => {
     const aStart = (a.rows[0]?.effective ?? a.rows[0]?.scheduled)?.getTime() ?? Infinity;
     const bStart = (b.rows[0]?.effective ?? b.rows[0]?.scheduled)?.getTime() ?? Infinity;
     return aStart - bStart || (a.rows[0]?.session.orderIndex ?? 0) - (b.rows[0]?.session.orderIndex ?? 0) || (a.rows[0]?.session.id ?? 0) - (b.rows[0]?.session.id ?? 0);
   });
-  const activeGroups = groups.filter((group) => !isGroupFinished(group.rows));
-  const finishedGroups = groups.filter((group) => isGroupFinished(group.rows));
   const updated = updatedAt ? updatedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : null;
   usePageHeader({ title, subtitle: updated ? `${competition.name} · ${updated}` : competition.name, onRefresh: reload, refreshLabel: 'Refresh timetable' });
 
   function renderGroup(group: typeof groups[number]) {
-    const done = isGroupFinished(group.rows);
-    const collapsed = done && !openDone.has(group.key);
     const heading = group.title ?? group.rows[0]?.session.name;
-    if (collapsed) {
-      const range = `${formatTime(group.rows[0].effective)}–${formatTime(group.rows[group.rows.length - 1].effective)}`;
-      return <section key={group.key} aria-label={heading} className="tt-cell">
-        <button type="button" className="tt-collapsed" aria-expanded="false" onClick={() => toggleDone(group.key)}>
-          <span className="tt-dot" style={{ backgroundColor: TIMETABLE_COLOURS.finished }} aria-hidden="true" />
-          <span className="tt-collapsed-copy"><strong>{heading}</strong> · {group.rows.length} finished</span>
-          <span className="tt-collapsed-range">{range}</span>
-          <ChevronDown className="tt-collapsed-chevron" size={14} aria-hidden="true" />
-        </button>
-      </section>;
-    }
     const groupArenas = [...new Set(group.rows.map((row) => row.session.arenaName?.trim() ?? ''))];
     const sharedArena = groupArenas.length === 1 ? groupArenas[0] : '';
-    const sessionLive = group.rows.some((row) => row.status === 'live' || row.session.status === 1);
-    const maxLate = sessionLive ? 0 : groupMaxDelay(group.rows);
     const count = `${group.rows.length} ${group.rows.length === 1 ? group.noun[0] : group.noun[1]}`;
-    const summary = maxLate > 0 ? [sharedArena, `${formatDelayDuration(maxLate)} late`] : [sharedArena, count];
-    const titleRow = group.title && <>
-      <h2>{group.title}</h2>
-      <span className={maxLate > 0 ? 'tt-summary-late' : undefined}>{summary.filter(Boolean).join(' · ')}</span>
-    </>;
     return <section key={group.key} aria-label={heading} className="tt-group">
-      {group.title && (done
-        ? <button type="button" className="tt-group-title" aria-expanded="true" onClick={() => toggleDone(group.key)}>{titleRow}</button>
-        : <div className="tt-group-title">{titleRow}</div>)}
+      {group.title && <div className="tt-group-title">
+        <h2>{group.title}</h2>
+        <span>{[sharedArena, count].filter(Boolean).join(' · ')}</span>
+      </div>}
       <div className="tt-card">
         {group.rows.map((row) => (
           <TimetableEvent
@@ -261,18 +239,18 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
     <div className="timetable-board">
       {bandExtra}
       {(days.length > 1 || showArenaSelect || showSectionSelect) && (
-        <div className={`tt-strip${days.length > 1 && (showArenaSelect || showSectionSelect) ? ' tt-strip-stacked' : ''}`}>
-          {days.length > 1 && (
-            <div className="tt-days" role="group" aria-label="Choose day">
-              {days.map((day, index) => <button key={day} type="button" className="tt-day" aria-pressed={selectedDay === day} aria-label={`Day ${index + 1}, ${new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}${day === today ? ', today' : ''}`} onClick={() => setPickedDay(day)}>
-                {new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short' })}
-              </button>)}
-            </div>
-          )}
+        <div className="tt-strip">
+          {days.length > 1 && <DaySelect days={days} selectedDay={selectedDay} today={today} onChoose={setPickedDay} />}
           {showArenaSelect && <ArenaSelect arenas={arenas} selectedArena={selectedArena} dayRows={dayRows} onChoose={chooseArena} />}
           {showSectionSelect && <SectionSelect sections={sections} selectedSection={selectedSection} onChoose={setSectionFilter} />}
         </div>
       )}
+      {lateArenas.map((late) => (
+        <p key={late.arena} className="tt-late-line" role="status">
+          <Clock aria-hidden="true" size={17} />
+          {late.arena ? `${late.arena} is running ${delayInWords(late.minutes)} late` : `Running ${delayInWords(late.minutes)} late`}
+        </p>
+      ))}
       {showQualifiers && (
         <div className="flex flex-wrap items-center gap-1.5 px-1 text-xs" role="group" aria-label="Delay timetable">
           <span className="font-semibold text-[rgb(var(--mg-muted))]">
@@ -330,34 +308,24 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
         {visibleRows.some(isProvisionalRow) && (
           <p className="tt-provisional-note" role="note">Provisional timetable: times are estimates until teams and races are confirmed.</p>
         )}
-        {activeGroups.map(renderGroup)}
+        {groups.map(renderGroup)}
         {visibleRows.length > 0 && (
           <ul className="tt-key" aria-label="Status colours">
             {STATUS_KEY.map(([status, label]) => <li key={status}><span className="tt-dot" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />{label}</li>)}
           </ul>
         )}
         {visibleRows.length === 0 && <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">Nothing scheduled for this day.</p>}
-        {(finishedGroups.length > 0 || Boolean(footer)) && (
+        {(hiddenFinished > 0 || showFinished || Boolean(footer)) && (
           <button
             type="button"
             className="mg-text-link self-center"
             aria-expanded={showFinished}
             onClick={() => setShowFinished((open) => !open)}
           >
-            {showFinished ? 'Hide finished sessions' : 'Show full timetable'}
+            {showFinished ? 'Hide finished heats' : 'Show full timetable'}
           </button>
         )}
-        {showFinished && (
-          <>
-            {finishedGroups.length > 0 && (
-              <>
-                <h2 className="tt-divider">{selectedDay === today ? 'Finished today' : 'Finished'} · {finishedGroups.length}<span aria-hidden="true" /></h2>
-                {finishedGroups.map(renderGroup)}
-              </>
-            )}
-            {footer}
-          </>
-        )}
+        {showFinished && footer}
         <SponsorStrip placement="Timetable" />
       </div>
     </div>
@@ -366,6 +334,24 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
 
 /** A race session with no heats yet: its time is an estimate. */
 const isProvisionalRow = (row: TimetableRow) => !row.heat && (row.session.kind ?? (row.session.isBreak ? 1 : 0)) === 0;
+
+const chevron = <ChevronDown aria-hidden="true" className="tt-arena-chevron" size={14} />;
+
+/** The day menu: "Mon 26" on the strip, "Mon 26 Oct" in the list. */
+function DaySelect({ days, selectedDay, today, onChoose }: { days: string[]; selectedDay: string; today: string; onChoose: (day: string) => void }) {
+  const at = (day: string) => new Date(`${day}T12:00:00`);
+  const options = days.map((day) => ({
+    value: day,
+    label: at(day).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
+    hint: day === today ? 'Today' : undefined,
+  }));
+  return (
+    <Dropdown label="Day" value={selectedDay} options={options} onChange={onChoose} className="tt-arena-wrap" buttonClassName="tt-arena">
+      <span className="tt-arena-text">{at(selectedDay).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })}</span>
+      {chevron}
+    </Dropdown>
+  );
+}
 
 /** The arena menu: "All arenas", then each arena (with "on now" when one is running). */
 function ArenaSelect({ arenas, selectedArena, dayRows, onChoose }: {
@@ -378,10 +364,9 @@ function ArenaSelect({ arenas, selectedArena, dayRows, onChoose }: {
   const options = [{ value: '', label: 'All arenas' }, ...arenas.map((name) => ({ value: name, label: name, live: isLive(name) }))];
   return (
     <Dropdown label="Arena" value={selectedArena} options={options} onChange={onChoose} className="tt-arena-wrap" buttonClassName="tt-arena">
-      <MapPin aria-hidden="true" className="tt-arena-pin" size={14} />
       <span className="tt-arena-text">{selectedArena || 'All arenas'}</span>
       {isLive(selectedArena) && <span className="tt-arena-live" aria-hidden="true" />}
-      <ChevronDown aria-hidden="true" className="tt-arena-chevron" size={14} />
+      {chevron}
     </Dropdown>
   );
 }
@@ -393,12 +378,11 @@ function SectionSelect({ sections, selectedSection, onChoose }: {
   onChoose: (id: string) => void;
 }) {
   const current = sections.find((s) => String(s.id) === selectedSection);
-  const options = [{ value: '', label: 'All age groups' }, ...sections.map((s) => ({ value: String(s.id), label: s.label }))];
+  const options = [{ value: '', label: 'All ages' }, ...sections.map((s) => ({ value: String(s.id), label: s.label }))];
   return (
     <Dropdown label="Age group" value={selectedSection} options={options} onChange={onChoose} className="tt-arena-wrap" buttonClassName="tt-arena">
-      <Users aria-hidden="true" className="tt-arena-pin" size={14} />
-      <span className="tt-arena-text">{current?.label ?? 'All age groups'}</span>
-      <ChevronDown aria-hidden="true" className="tt-arena-chevron" size={14} />
+      <span className="tt-arena-text">{current?.label ?? 'All ages'}</span>
+      {chevron}
     </Dropdown>
   );
 }
