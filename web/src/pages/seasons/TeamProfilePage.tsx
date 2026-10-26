@@ -272,6 +272,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
     {error && <Notice className="sv-msg">{error}</Notice>}
     {toast.node}
 
+    <div key={tab} className="mg-settle">
     {tab === 'history' && <>
       <div className="sp-card sp-gap">
         <div className="sp-row">
@@ -324,5 +325,6 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
         <button className="rf-btn rf-btn-primary" disabled={busy || !teamId}><Link2 className="h-4 w-4" aria-hidden="true" />{busy ? 'Linking…' : 'Link event team'}</button>
       </form>
     </>}
+    </div>
   </RefinePage>;
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowUp, Lock, Shield, Trash2 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
@@ -10,6 +11,8 @@ import { usePageHeader } from '../../components/CompactPageBarContext';
 import { usePageWidth } from '../../components/pageWidthState';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
+import { BUBBLE_IN, BUBBLE_SHOWN, BUBBLE_SPRING } from '../../lib/motion';
+import { useStillMotion } from '../../lite/useStillMotion';
 import type { ChatMessage } from '../../types';
 import './chat.css';
 import '../../components/sitePages.css';
@@ -57,6 +60,7 @@ function ContactOrganisersSession() {
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(true);
+  const still = useStillMotion();
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [body, setBody] = useState('');
   const [replyTo, setReplyTo] = useState<{ userId: string; name: string } | null>(null);
@@ -309,11 +313,13 @@ function ContactOrganisersSession() {
         return (
           <div key={message.id} className="flex flex-col gap-2">
             {heading && <span className="ev-day">{heading}</span>}
-            <div className={`ev-bub ${mine ? 'ev-bub-me' : 'ev-bub-them'}`}>
+            <motion.div className={`ev-bub ${mine ? 'ev-bub-me' : 'ev-bub-them'}`}
+              initial={still || messagesLoading ? false : BUBBLE_IN} animate={BUBBLE_SHOWN} transition={BUBBLE_SPRING}
+              style={{ transformOrigin: mine ? 'bottom right' : 'bottom left' }}>
               {!mine && <b className="ev-bub-from">{message.authorName || 'Organiser'}</b>}
               {message.body}
               <time dateTime={message.createdAt}>{messageTime(message)}</time>
-            </div>
+            </motion.div>
           </div>
         );
       })}

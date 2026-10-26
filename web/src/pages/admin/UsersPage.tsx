@@ -8,6 +8,8 @@ import { problemMessage } from '../../lib/apiError';
 import { RefineChoiceRow, RefineHeader, RefineList, RefineMenu, RefinePage } from '../refine/Refine';
 import { accountKind, type AccountInvite, type AdminUser, type InviteAccess, type StaffAccount } from './accountAccessTypes';
 import { useAccountSearch } from './useAccountSearch';
+import { AnimatePresence } from 'framer-motion';
+import { LeavingRow } from '../../components/LeavingRow';
 import '../operations/operations.css';
 
 /** The shared organiser sign-in can never be locked or blocked. */
@@ -141,15 +143,17 @@ export function UsersPage() {
           <>
             <h2 className="rf-sec ops-tt-head"><span>Invites sent</span></h2>
             <RefineList as="div" label="Invites sent">
+              <AnimatePresence initial={false}>
               {invites.map((invite) => (
-                <div key={invite.id} className="rf-row">
+                <LeavingRow as="div" key={invite.id} className="rf-row">
                   <span className="rf-grow"><span className="rf-t1">{invite.email}</span><span className="rf-t2">{inviteDetail(invite)}</span></span>
                   <span className="ops-acts">
                     <button type="button" className="rf-btn" aria-label={`Resend the invite to ${invite.email}`} disabled={busy} onClick={() => void resend(invite)}>Resend</button>
                     <button type="button" className="ops-danger-link" aria-label={`Cancel the invite to ${invite.email}`} disabled={busy} onClick={() => void cancel(invite)}>Cancel invite</button>
                   </span>
-                </div>
+                </LeavingRow>
               ))}
+              </AnimatePresence>
             </RefineList>
           </>
         )}

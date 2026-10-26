@@ -68,6 +68,7 @@ function SeasonDetail({ id }: { id: string }) {
       {tabs.map(([key, label]) => <Link key={key} to={tabLink(key)} aria-current={tab === key ? 'page' : undefined}>{label}</Link>)}
     </nav>
     {error && <Notice className="sv-msg" actionLabel="Try again" onAction={reload}>{error}</Notice>}
+    <div key={tab} className="mg-settle">
     {tab === 'standings' && <Standings season={season} table={table} />}
     {tab === 'rounds' && <>
       {canManage && <div className="sp-gap"><AddBar onClick={() => setAddingRound((open) => !open)}>{addingRound ? 'Close add round' : 'Add a round'}</AddBar></div>}
@@ -79,6 +80,7 @@ function SeasonDetail({ id }: { id: string }) {
       <p className="rf-note">Need to connect a team across events? <Link to="/team-profiles">Open team profiles</Link>.</p>
       <EmbedCard kind="season" seasonId={id} title={season.title} />
     </>}
+    </div>
   </RefinePage>;
 }
 

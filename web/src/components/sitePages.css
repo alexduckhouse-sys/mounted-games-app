@@ -119,3 +119,10 @@ a.sp-row:hover, button.sp-row:hover { background: rgb(var(--mg-subtle)); }
 .sp-legal li::marker { color: rgb(var(--mg-muted)); }
 .sp-legal code { font-size: 13.5px; }
 .sp-policy-title { margin: 18px 2px 12px; font: 800 28px/1.05 var(--mg-font-display); color: rgb(var(--mg-heading)); }
+
+/* A pressed row darkens a touch more than a hovered one (the colour fades: see skin.css). */
+a.sp-row:active, button.sp-row:active:not(:disabled), .sp-listing-head:active { background: rgb(var(--mg-tint) / .65); }
+/* Settings: while a bottom-bar tab is dragged, the others glide out of its way (only during the drag, so the drop
+   doesn't replay the slide). */
+:has(> .sp-tab-row[data-dragging]) > .sp-tab-row:not([data-dragging]) { transition: transform .2s var(--mg-ease-out); }
+@media (prefers-reduced-motion: reduce) { :has(> .sp-tab-row[data-dragging]) > .sp-tab-row:not([data-dragging]) { transition: none; } }
