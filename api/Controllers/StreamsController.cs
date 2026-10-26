@@ -15,6 +15,9 @@ using MountedGames.Api.Services.Streaming;
 
 namespace MountedGames.Api.Controllers;
 
+/// <summary>Who started a running stream. Staff-only; see <see cref="StreamsController.Publishers"/>.</summary>
+public sealed record StreamPublisherDto(int StreamId, string? StartedByName);
+
 [ApiController]
 [Route("api/competitions/{competitionId:int}/streams")]
 public sealed class StreamsController(AppDbContext db, ISfuClient sfu, IOptions<StreamingOptions> options,
@@ -34,6 +37,30 @@ public sealed class StreamsController(AppDbContext db, ISfuClient sfu, IOptions<
         var dtos = new List<LiveStreamDto>(streams.Count);
         foreach (var stream in streams) dtos.Add(stream.ToDto(await viewers.TotalAsync(stream.Id)));
         return new LiveStreamsResponse(true, dtos.ToArray());
+    }
+
+    /// <summary>
+    /// Who is publishing each running stream, so the go-live screen can say "Jo is already streaming". Staff only: the
+    /// public list above never carries a name. A person's account name, or a scorer link's label; null when unknown.
+    /// </summary>
+    [HttpGet("publishers")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<IReadOnlyList<StreamPublisherDto>>> Publishers(int competitionId, CancellationToken ct)
+    {
+        var running = await db.LiveStreams.AsNoTracking()
+            .Where(s => s.CompetitionId == competitionId && s.Status != LiveStreamStatus.Ended)
+            .Select(s => new { s.Id, s.StartedByUserId }).ToListAsync(ct);
+        var userIds = running.Select(s => s.StartedByUserId).Where(id => !id.StartsWith("scorer-link:", StringComparison.Ordinal)).Distinct().ToList();
+        var names = await db.Users.AsNoTracking().Where(u => userIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
+        var linkIds = running.Select(s => s.StartedByUserId).Where(id => id.StartsWith("scorer-link:", StringComparison.Ordinal))
+            .Select(id => int.TryParse(id["scorer-link:".Length..], out var n) ? n : 0).Distinct().ToList();
+        var labels = await db.ScorerLinks.AsNoTracking().Where(l => linkIds.Contains(l.Id)).ToDictionaryAsync(l => $"scorer-link:{l.Id}", l => l.Label, ct);
+        return running.Select(s =>
+        {
+            var name = names.GetValueOrDefault(s.StartedByUserId) ?? labels.GetValueOrDefault(s.StartedByUserId);
+            return new StreamPublisherDto(s.Id, string.IsNullOrWhiteSpace(name) ? null : name.Trim());
+        }).ToList();
     }
 
     [HttpGet("ice-servers")]
