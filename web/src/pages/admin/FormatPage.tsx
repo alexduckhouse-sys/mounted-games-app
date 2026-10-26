@@ -281,7 +281,7 @@ export function FormatPage() {
           const now = i === current;
           return (
             <li key={step.title} aria-current={now ? 'step' : undefined} className={`flex min-h-14 items-center gap-2.5 rounded-xl border-[1.5px] px-3 py-1.5 ${now ? 'border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-surface))]' : 'border-transparent'}`}>
-              <span aria-hidden="true" className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${step.done ? 'bg-[rgb(var(--mg-ok))] text-white' : now ? 'bg-[rgb(var(--mg-heading))] text-white' : 'border-2 border-[rgb(var(--mg-control))] text-[rgb(var(--mg-muted))]'}`}>
+              <span aria-hidden="true" className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${step.done ? 'bg-[rgb(var(--mg-ok))] text-white' : now ? 'bg-[rgb(var(--mg-button))] text-[rgb(var(--mg-button-ink))]' : 'border-2 border-[rgb(var(--mg-control))] text-[rgb(var(--mg-muted))]'}`}>
                 {step.done ? <Check className="h-4 w-4" strokeWidth={3} /> : i + 1}
               </span>
               <span className="flex min-w-0 flex-col gap-0.5">

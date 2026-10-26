@@ -144,7 +144,7 @@ export function ProducePage() {
       <div className="mg-card flex flex-wrap items-center justify-between gap-3 p-4">
         <div>
           <div className="flex items-center gap-2">
-            <Sliders className="h-5 w-5 text-[rgb(var(--mg-accent))]" aria-hidden="true" />
+            <Sliders className="h-5 w-5 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
             <h1 className="text-xl font-bold">Remote stream controller</h1>
           </div>
           <p className="mt-0.5 text-xs text-[rgb(var(--mg-muted))]">
@@ -209,7 +209,7 @@ export function ProducePage() {
           <div className="flex flex-wrap items-center gap-4">
             <QrCodeImage value={dualCamUrl} label="Second camera link" className="h-32 w-32 shrink-0 rounded-xl bg-white p-2" />
             <div className="min-w-0 flex-1">
-              <div className="break-all rounded-lg bg-[rgb(var(--mg-surface-alt))] p-2 font-mono text-xs">
+              <div className="break-all rounded-lg bg-[rgb(var(--mg-subtle))] p-2 font-mono text-xs">
                 {dualCamUrl}
               </div>
             </div>
@@ -221,7 +221,7 @@ export function ProducePage() {
       <div className="mg-card flex flex-col gap-3 p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Camera className="h-4 w-4 text-[rgb(var(--mg-accent))]" aria-hidden="true" />
+            <Camera className="h-4 w-4 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
             <h2 className="text-sm font-bold">Active cameras &amp; multi-angle switcher ({liveStreams.length})</h2>
           </div>
         </div>
@@ -238,7 +238,7 @@ export function ProducePage() {
                   key={s.id}
                   className={`flex items-center justify-between gap-2 rounded-xl border p-3 ${
                     isSelected
-                      ? 'border-[rgb(var(--mg-accent))] bg-[rgb(var(--mg-accent)/0.08)]'
+                      ? 'border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-heading)/0.08)]'
                       : 'border-[rgb(var(--mg-line))]'
                   }`}
                 >
@@ -314,7 +314,7 @@ export function ProducePage() {
       <div ref={overlaysRef} className="mg-card flex flex-col gap-3 p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Layers className="h-4 w-4 text-[rgb(var(--mg-accent))]" aria-hidden="true" />
+            <Layers className="h-4 w-4 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
             <h2 className="text-sm font-bold">Centred stream overlays</h2>
           </div>
           {activeCard !== 'none' && (
@@ -400,7 +400,7 @@ export function ProducePage() {
       {/* Live Announcement / Banner */}
       <div className="mg-card flex flex-col gap-3 p-4">
         <div className="flex items-center gap-2">
-          <Megaphone className="h-4 w-4 text-[rgb(var(--mg-accent))]" aria-hidden="true" />
+          <Megaphone className="h-4 w-4 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
           <h2 className="text-sm font-bold">Live announcement banner</h2>
         </div>
         <div className="flex flex-wrap gap-2">

@@ -50,7 +50,7 @@
 .live-composer-label svg { width: 14px; height: 14px; }
 .live-compose-row { display: flex; gap: 8px; }
 .live-compose-row .mg-field { min-width: 0; flex: 1; }
-.live-send { display: flex; width: 48px; height: 48px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 10px; background: rgb(var(--mg-button)); color: #fff; }
+.live-send { display: flex; width: 48px; height: 48px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 10px; background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); }
 .live-send:disabled { opacity: .45; }
 .live-send svg { width: 19px; height: 19px; }
 .staff-stream-wrap { display: flex; flex-shrink: 0; flex-direction: column; gap: 8px; }

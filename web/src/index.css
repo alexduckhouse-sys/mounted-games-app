@@ -142,8 +142,8 @@ body {
 :root { --navigation-colour: #1e3466; }
 [data-theme="light"] { --navigation-colour: #2f634d; }
 [data-theme="dark"] { --navigation-colour: #475569; }
-[data-theme="ocean"] { --navigation-colour: #0369a1; }
-[data-theme="sunset"] { --navigation-colour: #c2410c; }
+[data-theme="ocean"] { --navigation-colour: #075985; }
+[data-theme="sunset"] { --navigation-colour: #9a3412; }
 .navigation-selected {
   background-color: var(--navigation-colour) !important;
   color: #fff !important;
