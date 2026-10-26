@@ -51,3 +51,10 @@ body:has(.ev-white) { background: rgb(var(--mg-surface)); }
   .ev-step[data-state="cur"] .ev-dot { animation: none; }
 }
 /* Lite mode stills every animation and transition already (see skin.css), so the stepper needs nothing more. */
+
+/* Arrows either side of a title (race before and after) and small plain chips */
+.ev-arrow { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 0; border-radius: 22px; background: transparent; color: rgb(var(--mg-heading)); cursor: pointer; }
+.ev-arrow:hover:not(:disabled) { background: rgb(var(--mg-subtle)); }
+.ev-arrow:disabled { opacity: .3; cursor: default; }
+.ev-arrow:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
+.ev-chip { display: inline-flex; align-items: center; min-height: 28px; padding: 0 10px; border-radius: 999px; background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); font: 700 13px/1 var(--mg-font); }

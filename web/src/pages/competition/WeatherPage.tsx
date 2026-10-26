@@ -276,7 +276,7 @@ export function WeatherPage() {
           <WeatherIcon code={weather.weatherCode} className="h-16 w-16" />
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="sp-t2">{nowLabel}{updatedText ? ` · updated ${updatedText}` : ''}</span>
-            <span className="font-[var(--mg-font-display)] text-[44px] font-extrabold leading-none text-[rgb(var(--mg-heading))]">
+            <span className="mg-display text-[44px] font-extrabold leading-none text-[rgb(var(--mg-heading))]">
               {weather.headlineTemp == null ? '—' : `${weather.headlineTemp}°`}
             </span>
             <span className="sp-t1">{weather.conditionLabel}</span>
@@ -308,10 +308,10 @@ export function WeatherPage() {
 
               const inner = (
                 <>
-                  <span className="w-[46px] shrink-0 font-[var(--mg-font-display)] text-xl font-bold leading-none text-[rgb(var(--mg-heading))]">{formatTime(row.effective)}</span>
+                  <span className="w-[46px] shrink-0 mg-display text-xl font-bold leading-none text-[rgb(var(--mg-heading))]">{formatTime(row.effective)}</span>
                   <span className="sp-grow"><span className="sp-t1 !text-[15px]">{title}</span><span className="sp-t2">{words}</span></span>
                   {rowWeather && <WeatherIcon code={rowWeather.weather_code} isDay={rowWeather.is_day !== 0} className="h-9 w-9" />}
-                  {rowWeather && <span className="w-10 shrink-0 text-right font-[var(--mg-font-display)] text-lg font-bold">{`${Math.round(rowWeather.temperature_2m)}°`}</span>}
+                  {rowWeather && <span className="w-10 shrink-0 text-right mg-display text-lg font-bold">{`${Math.round(rowWeather.temperature_2m)}°`}</span>}
                   {race ? <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} /> : <span className="h-4 w-4 shrink-0" aria-hidden="true" />}
                 </>
               );

@@ -180,3 +180,22 @@ export function diffRaceEquipment(
     addItems,
   };
 }
+
+const POLE_SENTENCE: Partial<Record<PoleAction, string>> = {
+  'remove-5th': 'Take out the 5th pole.',
+  'add-5th': 'Put in the 5th pole.',
+  'clear-poles': 'Take out the bending poles.',
+  'set-4': 'Put in 4 poles.',
+  'set-5': 'Put in 5 poles.',
+};
+
+const crewList = (items: ChangeoverItem[]) => items.map((item) => `${item.count > 1 ? `${item.count} × ` : ''}${item.label} (${item.zone})`).join(', ');
+
+/** What the ring crew does before a race, as plain sentences: poles first, then what comes out and what goes in. */
+export function crewLines(diff: RaceChangeoverDiff): string[] {
+  return [
+    POLE_SENTENCE[diff.poleAction] ?? '',
+    diff.removeItems.length ? `Take out ${crewList(diff.removeItems)}.` : '',
+    diff.addItems.length ? `Bring in ${crewList(diff.addItems)}.` : '',
+  ].filter(Boolean);
+}

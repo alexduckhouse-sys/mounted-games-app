@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { diffRaceEquipment, equipmentFromDiagram } from './raceEquipment';
+import { crewLines, diffRaceEquipment, equipmentFromDiagram } from './raceEquipment';
 
 describe('equipmentFromDiagram', () => {
   it('counts equipment by name, including things stacked on other things at arbitrary depth', () => {
@@ -97,5 +97,31 @@ describe('diffRaceEquipment', () => {
     expect(diffRaceEquipment(null, fivePoleMug).poleAction).toBe('set-5');
     expect(diffRaceEquipment(fourPoleMug, coneRace).poleAction).toBe('clear-poles');
     expect(diffRaceEquipment(coneRace, null).poleAction).toBe('no-poles');
+  });
+});
+
+describe('crewLines', () => {
+  const lane = (poles: number, items: object[] = []) => JSON.stringify([
+    ...Array.from({ length: poles }, (_, i) => ({ t: 'pole', x: 20 + i * 15 })),
+    ...items,
+  ]);
+  const mugs = (n: number) => Array.from({ length: n }, () => ({ t: 'item', kind: 'mug', x: 30 }));
+
+  it('says what goes out and what comes in, in plain sentences', () => {
+    const lines = crewLines(diffRaceEquipment(lane(5, mugs(3)), lane(5, mugs(1))));
+    expect(lines).toEqual(['Take out 2 × Mug (Poles P1–P5).']);
+    expect(crewLines(diffRaceEquipment(lane(5), lane(5, mugs(2))))).toEqual(['Bring in 2 × Mug (Poles P1–P5).']);
+  });
+
+  it('puts the poles first', () => {
+    expect(crewLines(diffRaceEquipment(lane(5), lane(4)))[0]).toBe('Take out the 5th pole.');
+    expect(crewLines(diffRaceEquipment(lane(4), lane(5)))[0]).toBe('Put in the 5th pole.');
+    expect(crewLines(diffRaceEquipment(lane(5), lane(0)))[0]).toBe('Take out the bending poles.');
+    expect(crewLines(diffRaceEquipment(lane(0), lane(4)))[0]).toBe('Put in 4 poles.');
+    expect(crewLines(diffRaceEquipment(lane(0), lane(5)))[0]).toBe('Put in 5 poles.');
+  });
+
+  it('has nothing to say when the lane stays as it is', () => {
+    expect(crewLines(diffRaceEquipment(lane(5), lane(5)))).toEqual([]);
   });
 });

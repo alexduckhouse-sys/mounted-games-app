@@ -94,7 +94,8 @@ describe('race guide provenance', () => {
     expect(books[0].rulesText).toBe('Standard mounted games rules apply for Fake Race.');
     render(<RaceRulebookSection template={template()} showDiagram />);
     fireEvent.click(screen.getByRole('tab', { name: 'STRUK' }));
-    expect(screen.getByRole('tabpanel', { name: 'STRUK rules' })).toHaveTextContent('body-specific rules not verified');
+    expect(screen.getByRole('tabpanel', { name: 'STRUK rules' })).not.toHaveTextContent('body-specific rules not verified');
+    expect(screen.getByRole('tabpanel', { name: 'STRUK rules' })).toHaveTextContent('Verified STRUK rules and penalties for this race have not been added');
     expect(screen.getByRole('tab', { name: 'STRUK' })).toHaveAttribute('aria-selected', 'true');
   });
 });
