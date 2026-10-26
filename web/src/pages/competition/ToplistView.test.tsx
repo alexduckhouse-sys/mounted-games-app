@@ -43,13 +43,14 @@ describe('ToplistView positions', () => {
     const sessions = [{ id: 1, label: 'S1', title: 'Session 1' }];
     const before = { ...list([0, 0]), bySession: { sessions, cells: new Map<number, number[]>() } };
     const { rerender } = render(<MemoryRouter><ToplistView list={before} section={{ id: 8, competitionId: 3, format: 2, ageGroup: 'Open', displayName: 'Open' }} /></MemoryRouter>);
-    await userEvent.click(screen.getByRole('button', { name: 'By session' }));
+    await userEvent.click(screen.getByRole('combobox', { name: 'Show' }));
+    await userEvent.click(screen.getByRole('option', { name: 'By session' }));
     const body = within(screen.getByRole('region', { name: 'Points by session' })).getAllByRole('row').slice(1);
     expect(body.map((r) => within(r).getAllByRole('cell')[0].textContent)).toEqual(['—', '—']);
 
     const nextSection = { ...list([5, 3]), bySession: { sessions, cells: new Map([[1, [5]], [2, [3]]]) } };
     rerender(<MemoryRouter><ToplistView list={nextSection} section={{ id: 9, competitionId: 3, format: 2, ageGroup: 'U17', displayName: 'Under 17' }} /></MemoryRouter>);
-    expect(screen.getByRole('button', { name: 'By session' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('combobox', { name: 'Show' })).toHaveTextContent('By session');
     expect(screen.getByRole('region', { name: 'Points by session' })).toBeInTheDocument();
   });
 

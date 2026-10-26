@@ -11,7 +11,7 @@ const EntryPage = lazy(() => import('./EntryPage').then((module) => ({ default: 
 export function CompetitionHome() {
   const { competition } = useCompetition();
   const { canOrganise } = useAuth();
-  if (competitionPhase(competition) === 'complete') return <ScoringTab toplistOnly />;
+  if (competitionPhase(competition) === 'complete') return <ScoringTab startOn="toplist" />;
   if (!entryPhaseOnly(competition, canOrganise(competition))) return <SessionsTab />;
   return <Suspense fallback={null}><EntryPage /></Suspense>;
 }
