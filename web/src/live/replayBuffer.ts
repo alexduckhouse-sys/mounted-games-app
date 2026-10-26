@@ -35,6 +35,8 @@ export interface SavedReplayClip {
   followKeyframes?: FollowKeyframe[];
   resolutionLabel?: string;
   hasFilmingOptOut?: boolean;
+  /** Where the clip came from: a race recording made when a race was scored, or an instant replay. Absent for other clips. */
+  source?: 'race' | 'instant';
 }
 
 export interface ReplayBufferOptions {
@@ -268,6 +270,16 @@ export function subscribeSavedReplays(listener: () => void): () => void {
   return () => {
     listeners.delete(listener);
   };
+}
+
+/** Remembers where a clip came from, so the Replay tab can list race recordings apart from the rest. */
+export function tagSavedReplay(clipId: string, source: NonNullable<SavedReplayClip['source']>): SavedReplayClip | null {
+  const clip = savedReplays.find((c) => c.id === clipId);
+  if (!clip) return null;
+  clip.source = source;
+  void persistClip(clip);
+  notifyListeners();
+  return clip;
 }
 
 export function markReplayAsHighlight(

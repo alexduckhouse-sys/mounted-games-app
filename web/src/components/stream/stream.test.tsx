@@ -192,6 +192,14 @@ it('wires the viewer, changes cameras, passes announcements and uses captions or
   unmount(); expect(p.invoke).toHaveBeenCalledWith('StopWatching', 2);
 });
 
+it('hands the live video to the page and takes it back when the player goes', async () => {
+  vi.stubGlobal('RTCPeerConnection', fakePeerConstructor); vi.stubGlobal('MediaStream', fakeStreamConstructor);
+  const onMedia = vi.fn(); const { unmount } = render(<MemoryRouter><LiveVideo {...props()} canBroadcast={false} onMedia={onMedia} /></MemoryRouter>); await settle();
+  act(() => FakePeer.instances.at(-1)!.track()); await tick(2000);
+  expect(onMedia.mock.calls.some(([media]) => media !== null)).toBe(true);
+  unmount(); expect(onMedia).toHaveBeenLastCalledWith(null);
+});
+
 it('supports viewer quality switching, audio-only mode, sync live, picture-in-picture, and instant -15s replay on StreamPlayer', async () => {
   const onQuality = vi.fn();
   const onAudioOnly = vi.fn();

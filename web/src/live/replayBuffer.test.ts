@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { addSavedReplay, clearSavedReplays, createReplayBuffer, exportTrimmedClip, getSavedReplays, loadPersistedReplays, markReplayAsHighlight, removeSavedReplay, subscribeSavedReplays, updateReplayTrim, type MediaRecorderLike, type SavedReplayClip } from './replayBuffer';
+import { addSavedReplay, clearSavedReplays, createReplayBuffer, exportTrimmedClip, getSavedReplays, loadPersistedReplays, markReplayAsHighlight, removeSavedReplay, tagSavedReplay, subscribeSavedReplays, updateReplayTrim, type MediaRecorderLike, type SavedReplayClip } from './replayBuffer';
 import { encodeReplay } from './replayEncoding';
 import { ReplaySegmentStore, type ReplaySegment } from './replaySegments';
 import { asMedia, deferred, FakeMediaStream, flush } from '../test/streamFakes';
@@ -140,6 +140,12 @@ describe('saved replay edits and highlights', () => {
     expect(updateReplayTrim('missing', 0, 1)).toBeNull(); expect(markReplayAsHighlight('missing')).toBeNull();
     removeSavedReplay(original.id); expect(URL.revokeObjectURL).toHaveBeenCalledWith(original.url);
     expect(changed).toHaveBeenCalled(); unsubscribe();
+  });
+  it('remembers where a clip came from', () => {
+    const changed = vi.fn(); const unsubscribe = subscribeSavedReplays(changed); const original = clip(); addSavedReplay(original);
+    expect(tagSavedReplay(original.id, 'race')).toMatchObject({ source: 'race' });
+    expect(getSavedReplays()[0].source).toBe('race'); expect(changed).toHaveBeenCalled();
+    expect(tagSavedReplay('missing', 'instant')).toBeNull(); unsubscribe();
   });
   it('evicts old saved clips and respects competition-specific clearing', () => {
     for (let i = 0; i < 26; i++) addSavedReplay(clip(String(i)));

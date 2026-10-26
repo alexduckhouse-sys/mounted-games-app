@@ -1,0 +1,78 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { createReplayBuffer, removeSavedReplay, tagSavedReplay, type ReplayBufferHandle, type ReplayBufferStatus, type SavedReplayClip } from '../live/replayBuffer';
+import { useReplayPreparation } from '../live/useReplayPreparation';
+import type { QueuedScoreCard } from '../lib/scoreCard';
+
+export const RACE_RECORDING_SECONDS = 45;
+
+/**
+ * Records the live video this device is watching into the 30-minute replay buffer, so a producer can save an instant
+ * replay and every scored race is kept as a recording. Clips stay on this device. Preparing a clip plays it back in
+ * real time, so a 30-second clip takes about 30 seconds and the page must stay open.
+ */
+export function useControllerReplay({ competitionId, arena, streamId, media, scoreCards }: {
+  competitionId: number;
+  arena: string;
+  streamId: number | null;
+  media: MediaStream | null;
+  scoreCards?: QueuedScoreCard[];
+}) {
+  const buffer = useRef<ReplayBufferHandle | null>(null);
+  const [status, setStatus] = useState<ReplayBufferStatus>({ retainedSeconds: 0 });
+  const [noVideo, setNoVideo] = useState(false);
+  const [justMadeId, setJustMadeId] = useState<string | null>(null);
+  const preparation = useReplayPreparation();
+  const prepare = preparation.prepare;
+
+  useEffect(() => {
+    if (!media) return;
+    const handle = createReplayBuffer({ competitionId, streamId: streamId ?? undefined, arenaName: arena || 'Arena', windowSeconds: 1800, onStatus: setStatus });
+    handle.start(media);
+    buffer.current = handle;
+    return () => {
+      handle.dispose();
+      if (buffer.current === handle) buffer.current = null;
+    };
+  }, [media, competitionId, arena, streamId]);
+
+  // Keep a recording of each race when its result arrives. The first look only notes what is already there.
+  const lastCard = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    const latest = scoreCards?.at(-1);
+    if (lastCard.current === undefined) { lastCard.current = latest?.key ?? null; return; }
+    if (!latest || latest.key === lastCard.current) return;
+    lastCard.current = latest.key;
+    const sameArena = !latest.arenaName || latest.arenaName.trim().toLowerCase() === arena.trim().toLowerCase();
+    const current = buffer.current;
+    if (!current || !sameArena) return;
+    void prepare((options) => current.saveClip(`${latest.heading} · ${latest.card.raceName}`, { ...options, durationSeconds: RACE_RECORDING_SECONDS }), (clip) => { tagSavedReplay(clip.id, 'race'); });
+  }, [scoreCards, arena, prepare]);
+
+  const instant = useCallback((seconds: number, label: string, onSaved?: (clip: SavedReplayClip) => void) => {
+    const current = buffer.current;
+    if (!current) { setNoVideo(true); return; }
+    setNoVideo(false);
+    void prepare((options) => current.saveClip(label, { ...options, durationSeconds: seconds }), (clip) => {
+      tagSavedReplay(clip.id, 'instant');
+      setJustMadeId(clip.id);
+      onSaved?.(clip);
+    });
+  }, [prepare]);
+
+  const cancelClip = useCallback((clipId: string) => {
+    removeSavedReplay(clipId);
+    setJustMadeId((current) => (current === clipId ? null : current));
+  }, []);
+
+  return {
+    recording: Boolean(media),
+    retainedSeconds: media ? status.retainedSeconds : 0,
+    warning: media ? status.warning : undefined,
+    progress: preparation.progress,
+    error: noVideo ? 'Replays are recorded from the video on this page. Wait for the video to start, then try again.' : preparation.error,
+    cancelPreparation: preparation.cancel,
+    justMadeId,
+    instant,
+    cancelClip,
+  };
+}
