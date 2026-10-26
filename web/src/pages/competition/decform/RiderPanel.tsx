@@ -9,6 +9,7 @@ import {
   asked, breach, limitText, NUMBER_FIELD, OPTIONAL, STANDARD_CONFIG, type DecFormConfig, type ExtraAnswers, type Requirement,
 } from '../../../lib/decFormConfig';
 import type { CertifiedHorseLookup, SavedRider } from '../../../types';
+import '../../../components/sitePages.css';
 
 interface Props {
   title: string;
@@ -23,6 +24,8 @@ interface Props {
   onPick: (saved: SavedRider) => void;
   onCommit: () => void;
   onClose: () => void;
+  /** Takes this rider out of the slot. Shown as red text while a filled slot is open. */
+  onRemove?: () => void;
   /** What this competition's dec form asks. The standard form when omitted. */
   config?: DecFormConfig;
   competitionId?: number;
@@ -39,7 +42,7 @@ const labelOf = (text: string, requirement: Requirement) =>
  * the classes decide where it sits. Pick a saved rider to fill every field, or type a new one.
  * It asks only what the competition's dec form setup asks for.
  */
-export function RiderPanel({ title, reserve, editing, form, choices, addLabel, ready, onChange, onPick, onCommit, onClose, config = STANDARD_CONFIG, competitionId }: Props) {
+export function RiderPanel({ title, reserve, editing, form, choices, addLabel, ready, onChange, onPick, onCommit, onClose, onRemove, config = STANDARD_CONFIG, competitionId }: Props) {
   const nameRef = useRef<HTMLInputElement>(null);
   const [certLookup, setCertLookup] = useState<{ key: string; data: CertifiedHorseLookup } | null>(null);
   const slotKey = `${title}|${editing}`;
@@ -318,7 +321,10 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
           <p className="text-sm text-[rgb(var(--mg-muted))]">Still needed: {issues.missing.join(', ')}.</p>
         )}
 
-        <button type="button" className="mg-btn mg-btn-primary w-full" disabled={!ready} onClick={onCommit}>{addLabel}</button>
+        <div className="flex items-center gap-3">
+          {editing && onRemove && <button type="button" className="sp-red shrink-0" onClick={onRemove}>{reserve ? 'Remove reserve' : 'Remove rider'}</button>}
+          <button type="button" className="mg-btn mg-btn-primary min-w-0 flex-1" disabled={!ready} onClick={onCommit}>{addLabel}</button>
+        </div>
       </section>
     </>
   );

@@ -1,37 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Check, Download } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import type { DeclarationForm, SectionSignup, Team } from '../../types';
 import { downloadCsv, safeFilename } from '../../lib/csv';
 import { decFormsCsv } from '../../lib/decFormCsv';
+import type { LockInfo } from '../../lib/decFormDeadline';
 import { decDraftKey, parseDraft, ridersRequired, type DecFormDraft } from '../../lib/decForm';
 import { DecFormEditor } from './decform/DecFormEditor';
 import { DecFormList } from './DecFormList';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
+import { RefineDateTimeRow } from '../refine/Refine';
 import { PageGrid } from '../../components/PageGrid';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { parseConfigResponse, STANDARD_CONFIG, type DecFormConfig } from '../../lib/decFormConfig';
 import '../../components/sitePages.css';
 import '../../components/eventPages.css';
-
-interface LockTimeInfo {
-  competitionId: number;
-  declarationsCloseAt: string | null;
-  isClosed: boolean;
-}
-
-function toLocalDateTimeInput(iso: string | null | undefined): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 function readDraft(competitionId: number, teamId: number, required: number): DecFormDraft | null {
   try { return parseDraft(localStorage.getItem(decDraftKey(competitionId, teamId)), required); } catch { return null; }
@@ -51,8 +39,7 @@ export function DeclarationsTab() {
   // What this competition's dec form asks. Null until it has come back; the standard form if it can't be fetched.
   const [config, setConfig] = useState<DecFormConfig | null>(null);
 
-  const [lockInfo, setLockInfo] = useState<LockTimeInfo | null>(null);
-  const [lockInput, setLockInput] = useState('');
+  const [lockInfo, setLockInfo] = useState<LockInfo | null>(null);
   const [lockBusy, setLockBusy] = useState(false);
   const [lockError, setLockError] = useState('');
   const [deleteError, setDeleteError] = useState('');
@@ -67,11 +54,10 @@ export function DeclarationsTab() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.resolve(api.get<LockTimeInfo>(`/declaration-forms/competition/${competition.id}/lock-time`))
+    Promise.resolve(api.get<LockInfo>(`/declaration-forms/competition/${competition.id}/lock-time`))
       .then((r) => {
         if (!cancelled && r?.data) {
           setLockInfo(r.data);
-          setLockInput(toLocalDateTimeInput(r.data.declarationsCloseAt));
         }
       })
       .catch(() => { if (!cancelled) setLockInfo(null); });
@@ -82,12 +68,11 @@ export function DeclarationsTab() {
     setLockBusy(true);
     setLockError('');
     try {
-      const { data } = await api.put<LockTimeInfo>(
+      const { data } = await api.put<LockInfo>(
         `/declaration-forms/competition/${competition.id}/lock-time`,
         { declarationsCloseAt: iso },
       );
       setLockInfo(data);
-      setLockInput(toLocalDateTimeInput(data.declarationsCloseAt));
     } catch {
       setLockError('Couldn’t save the dec form deadline. Check your signal and try again.');
     } finally {
@@ -181,7 +166,8 @@ export function DeclarationsTab() {
   const teamRail = desktop && user != null && myTeams.length > 1;
   const editor = declarationsClosed && !isOrganiser ? null : team && forms && config && (
     <DecFormEditor key={team.id} competition={competition} team={team} existing={existing} draft={draft}
-      priorPhone={priorPhone} onSaved={saved} config={config} />
+      priorPhone={priorPhone} onSaved={saved} config={config} lockInfo={lockInfo}
+      onDelete={isOrganiser || !declarationsClosed ? (f) => void remove(f.id) : undefined} />
   );
   const cards = (
     <DecFormList
@@ -210,63 +196,31 @@ export function DeclarationsTab() {
     </nav>
   );
   const exportButton = (
-    <div className="flex justify-end">
-      <button onClick={exportCsv} disabled={count === 0} className="mg-small-btn gap-1.5 !min-h-9 !px-3 !text-xs" title="Download all submitted dec forms as CSV">
-        <Download className="h-3.5 w-3.5" /> Export CSV ({count})
-      </button>
-    </div>
+    <button type="button" onClick={exportCsv} disabled={count === 0} className="sp-pill sp-pill-sm disabled:opacity-50" title="Download all submitted dec forms as CSV">
+      Export CSV ({count})
+    </button>
   );
 
   const deadlineHeader = (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        {isOrganiser ? (
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="flex flex-col gap-1 text-xs font-medium text-[rgb(var(--mg-body))]">
-              <span>Declaration deadline (set lock time)</span>
-              <input
-                type="datetime-local"
-                aria-label="Declaration deadline"
-                value={lockInput}
-                onChange={(e) => setLockInput(e.target.value)}
-                className="rounded border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))] px-2.5 py-1.5 text-xs text-[rgb(var(--mg-ink))]"
-              />
-            </label>
-            <button
-              type="button"
-              disabled={lockBusy || !lockInput}
-              onClick={() => void updateLockTime(lockInput ? new Date(lockInput).toISOString() : null)}
-              className="btn-ghost !px-3 !py-1.5 text-xs font-semibold"
-            >
-              Set lock time
-            </button>
-            {lockInfo?.declarationsCloseAt && (
-              <button
-                type="button"
-                disabled={lockBusy}
-                onClick={() => void updateLockTime(null)}
-                className="btn-ghost !px-3 !py-1.5 text-xs"
-              >
-                Clear lock time
-              </button>
-            )}
+      {isOrganiser && (
+        <div className="flex flex-col gap-2">
+          <div className="sp-card">
+            <RefineDateTimeRow label="Dec forms close" value={lockInfo?.declarationsCloseAt ?? null} disabled={lockBusy}
+              eventDays={[new Date(competition.startDate)].filter((d) => !Number.isNaN(d.getTime()))} onChange={(iso) => { void updateLockTime(iso); }} />
           </div>
-        ) : <div />}
-        {isOrganiser && exportButton}
-      </div>
-      {lockInfo?.declarationsCloseAt && (
-        declarationsClosed ? (
-          <Notice
-            tone="info"
-            actionLabel={isOrganiser ? undefined : 'Message the organisers'}
-            actionTo={isOrganiser ? undefined : `/competitions/${competition.id}/contact`}
-          >
-            Dec forms closed on {new Date(lockInfo.declarationsCloseAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}.
-            {!isOrganiser && ' Contact the organiser for an emergency change.'}
-          </Notice>
-        ) : (
-          <Notice tone="info">Dec form deadline: {new Date(lockInfo.declarationsCloseAt).toLocaleString()}.</Notice>
-        )
+          <div className="flex justify-end">{exportButton}</div>
+        </div>
+      )}
+      {lockInfo?.declarationsCloseAt && declarationsClosed && (
+        <Notice
+          tone="info"
+          actionLabel={isOrganiser ? undefined : 'Message the organisers'}
+          actionTo={isOrganiser ? undefined : `/competitions/${competition.id}/contact`}
+        >
+          Dec forms closed on {new Date(lockInfo.declarationsCloseAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}.
+          {!isOrganiser && ' Contact the organiser for an emergency change.'}
+        </Notice>
       )}
 
       {lockError && <Notice>{lockError}</Notice>}

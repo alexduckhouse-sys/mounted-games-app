@@ -318,6 +318,6 @@ describe('MyTeamsPage followed teams', () => {
     mount();
     expect(await screen.findByRole('article', { name: 'Example Blue' })).toBeInTheDocument();
     const followedRegion = await screen.findByRole('region', { name: 'Hartpury Area Festival' });
-    expect(within(followedRegion).getByRole('link', { name: /Wirral Pairs/ })).toHaveAttribute('href', '/competitions/1/following');
+    expect(within(followedRegion).getByRole('link', { name: /Wirral Pairs/ })).toHaveAttribute('href', '/competitions/1/teams/2');
   });
 });

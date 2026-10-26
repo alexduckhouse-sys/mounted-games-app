@@ -69,7 +69,7 @@ describe('DeclarationsTab with a set-up dec form', () => {
     const user = userEvent.setup();
     mount();
     await screen.findByLabelText('Team name');
-    await user.click(within(screen.getByRole('list', { name: 'Riders' })).getAllByRole('listitem')[0].querySelector('button')!);
+    await user.click(screen.getByRole('button', { name: 'Add rider 1' }));
     expect(screen.queryByLabelText('Date of birth')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Height (hh)')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Rider’s weight')).toBeInTheDocument();
@@ -90,7 +90,7 @@ describe('DeclarationsTab with a set-up dec form', () => {
     const user = userEvent.setup();
     mount();
     await screen.findByLabelText('Team name');
-    await user.click(within(screen.getByRole('list', { name: 'Riders' })).getAllByRole('listitem')[0].querySelector('button')!);
+    await user.click(screen.getByRole('button', { name: 'Add rider 1' }));
     await user.type(screen.getByLabelText('Rider'), 'Ella Hughes');
     await user.type(screen.getByLabelText('Pony'), 'Pickle');
     await user.type(screen.getByLabelText('Rider’s weight'), '31.5');
@@ -98,11 +98,11 @@ describe('DeclarationsTab with a set-up dec form', () => {
 
     expect(screen.getByText('Expected 20 to 90 cm')).toBeInTheDocument();
     await user.type(screen.getByLabelText(/Girth/), '95');
-    expect(screen.getByRole('status')).toHaveTextContent('is above the limit');
+    expect(screen.getByText(/is above the limit/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add rider' })).toBeEnabled();
     await user.clear(screen.getByLabelText(/Girth/));
     await user.type(screen.getByLabelText(/Girth/), '10');
-    expect(screen.getByRole('status')).toHaveTextContent('is below the minimum');
+    expect(screen.getByText(/is below the minimum/)).toBeInTheDocument();
     await user.clear(screen.getByLabelText(/Girth/));
     await user.type(screen.getByLabelText(/Girth/), '95');
 
@@ -111,14 +111,18 @@ describe('DeclarationsTab with a set-up dec form', () => {
     expect(within(slot).getByText('Pickle')).toBeInTheDocument();
     expect(within(slot).getByText(/The organisers will see a flag/)).toBeInTheDocument();
 
-    await user.click(screen.getByRole('checkbox'));
-    expect(screen.getByRole('button', { name: 'Submit dec form' })).toBeDisabled();
-    await user.type(screen.getByLabelText('Phone number'), '12345');
-    expect(screen.getByText('Enter a UK or Irish number, like 07123 456789.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Submit dec form' })).toBeDisabled();
-    await user.clear(screen.getByLabelText('Phone number'));
-    await user.type(screen.getByLabelText('Phone number'), '+44 7123 456789');
-    await user.click(screen.getByRole('button', { name: 'Submit dec form' }));
+    await user.click(screen.getByRole('switch', { name: 'I agree to the terms' }));
+    expect(screen.getByRole('button', { name: 'Send dec form' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: /^Trainer:/ }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Trainer' }));
+    await user.type(sheet.getByLabelText('Phone'), '12345');
+    expect(sheet.getByText('Enter a UK or Irish number, like 07123 456789.')).toBeInTheDocument();
+    expect(sheet.getByRole('button', { name: 'Done' })).toBeDisabled();
+    await user.clear(sheet.getByLabelText('Phone'));
+    await user.type(sheet.getByLabelText('Phone'), '+44 7123 456789');
+    await user.click(sheet.getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Trainer' })).not.toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Send dec form' }));
     await waitFor(() => expect(state.post).toHaveBeenCalled());
     expect(state.post.mock.calls[0][1]).toMatchObject({ trainerPhone: '+44 7123 456789', bibDescription: '' });
     expect(screen.queryByLabelText('Bibs')).not.toBeInTheDocument();
@@ -132,7 +136,7 @@ describe('DeclarationsTab with a set-up dec form', () => {
     config = new Error('offline');
     mount();
     await screen.findByLabelText('Team name');
-    await user.click(within(screen.getByRole('list', { name: 'Riders' })).getAllByRole('listitem')[0].querySelector('button')!);
+    await user.click(screen.getByRole('button', { name: 'Add rider 1' }));
     expect(screen.getByLabelText('Date of birth')).toBeInTheDocument();
     expect(screen.getByLabelText('Height (hh)')).toBeInTheDocument();
   });

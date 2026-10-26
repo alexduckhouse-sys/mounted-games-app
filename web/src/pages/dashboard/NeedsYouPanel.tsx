@@ -1,13 +1,15 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, ClipboardList, CreditCard, Flag, Landmark } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
-import { initialsOf } from '../../lib/profile';
-import type { CompetitionPickerItem, PayoutsTo, SectionSignup, TrainerRequest } from '../../types';
-import { useNeedsYou } from '../profile/needsYou';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
+import { priceLabel } from '../../lib/money';
+import { displaySectionName } from '../../lib/section';
+import type { CompetitionPickerItem, PayoutsTo, SectionSignup, TrainerRequest } from '../../types';
+import type { ExtendedMySignup } from '../MySignupsPage';
+import { useNeedsYou } from '../profile/needsYou';
+import '../../components/sitePages.css';
 
 interface Attention {
   /** Events with entries still waiting to be paid or confirmed. */
@@ -55,14 +57,15 @@ function useAttention(events: CompetitionPickerItem[]): Attention {
 }
 
 /**
- * What is waiting on the person: join requests with Approve and Decline right here, dec forms still to fill in,
- * and for organisers the unpaid entries and payout set-up that need a look. Shown on the Me page for everyone.
+ * What is waiting on the person, one row each with the action on the row: join requests (Approve, Decline), dec forms
+ * still to fill in, entries of their own still to pay, and for organisers the unpaid entries, flagged dec forms and
+ * payout set-up that need a look. Nothing shows when nothing is waiting.
  */
-export function NeedsYouPanel({ events = [] }: { events?: CompetitionPickerItem[] }) {
+export function NeedsYouPanel({ events = [], dueEntries = [] }: { events?: CompetitionPickerItem[]; dueEntries?: ExtendedMySignup[] }) {
   const { requests, decForms, review, reviewError } = useNeedsYou();
   const attention = useAttention(events);
   const [failed, setFailed] = useState<string | null>(null);
-  const count = requests.length + decForms.length + attention.pendingEntries.length + attention.flaggedForms.length + (attention.payoutsNotReady ? 1 : 0);
+  const count = requests.length + decForms.length + dueEntries.length + attention.pendingEntries.length + attention.flaggedForms.length + (attention.payoutsNotReady ? 1 : 0);
 
   async function decide(request: TrainerRequest, action: 'approve' | 'decline') {
     setFailed(null);
@@ -72,62 +75,51 @@ export function NeedsYouPanel({ events = [] }: { events?: CompetitionPickerItem[
 
   if (count === 0) return null;
   return (
-    <section aria-label="Needs you" className="flex flex-col gap-2">
-      <div className="mg-section-head"><h2>Needs you</h2><span>{count}</span></div>
-      {requests.map((request) => (
-        <div key={request.userId} className="mg-card flex flex-col gap-2.5 px-3.5 py-3">
-          <div className="flex items-center gap-3">
-            <span aria-hidden="true" className="mg-display flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--mg-late-bg))] text-[15px] font-bold text-[rgb(var(--mg-late-ink))]">
-              {initialsOf(request.fullName, request.email)}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-base font-semibold leading-tight">{request.fullName}</div>
-              <div className="text-sm text-[rgb(var(--mg-muted))]">Wants to join as {request.requestedRole === 'Manager' ? 'a team manager' : 'a trainer'}</div>
+    <section aria-label="Needs you">
+      <h2 className="sp-sec sp-first">Needs you<small>{count}</small></h2>
+      <div className="sp-card">
+        {requests.map((request) => (
+          <div key={request.userId}>
+            <div className="sp-row flex-wrap">
+              <span className="sp-grow">
+                <span className="sp-t1">{request.fullName}</span>
+                <span className="sp-t2">Wants to join as {request.requestedRole === 'Manager' ? 'a team manager' : 'a trainer'}</span>
+              </span>
+              <span className="flex shrink-0 items-center gap-2">
+                <button type="button" className="sp-red" aria-label={`Decline ${request.fullName}`} onClick={() => decide(request, 'decline')}>Decline</button>
+                <button type="button" className="sp-pill sp-pill-fill sp-pill-sm" aria-label={`Approve ${request.fullName}`} onClick={() => decide(request, 'approve')}>Approve</button>
+              </span>
             </div>
+            {failed === request.userId && <div className="px-3.5 pb-3"><Notice>{reviewError ?? 'Couldn’t update this request. Check your signal and try again.'}</Notice></div>}
           </div>
-          <div className="flex gap-2">
-            <button type="button" className="mg-btn mg-btn-primary !min-h-11 flex-1 !text-[15px]" onClick={() => decide(request, 'approve')}>Approve</button>
-            <button type="button" className="mg-btn mg-btn-secondary !min-h-11 flex-1 !text-[15px]" onClick={() => decide(request, 'decline')}>Decline</button>
-          </div>
-          {failed === request.userId && <Notice>{reviewError ?? 'Couldn’t update this request. Check your signal and try again.'}</Notice>}
-        </div>
-      ))}
-      {decForms.map((t) => (
-        <NeedsLink key={`form-${t.id}`} to={`/competitions/${t.competitionId}/declarations?team=${t.id}`} urgent icon={<ClipboardList aria-hidden="true" className="h-6 w-6 shrink-0" />}>
-          Dec form needed: {t.displayName}
-        </NeedsLink>
-      ))}
-      {attention.pendingEntries.map((entry) => (
-        <NeedsLink key={`entries-${entry.id}`} to={`/competitions/${entry.id}/details`} sub={entry.name}
-          icon={<CreditCard aria-hidden="true" className="h-6 w-6 shrink-0 text-[rgb(var(--mg-heading))]" />}>
-          {entry.count} {entry.count === 1 ? 'entry' : 'entries'} waiting for payment
-        </NeedsLink>
-      ))}
-      {attention.flaggedForms.map((entry) => (
-        <NeedsLink key={`flags-${entry.id}`} to={`/competitions/${entry.id}/declarations`} sub={entry.name}
-          icon={<Flag aria-hidden="true" className="h-6 w-6 shrink-0 text-[rgb(var(--mg-late-time))]" />}>
-          {entry.count} dec {entry.count === 1 ? 'form' : 'forms'} flagged
-        </NeedsLink>
-      ))}
-      {attention.payoutsNotReady && (
-        <NeedsLink to="/me/payouts" sub="Entry money can’t be paid out until this is done"
-          icon={<Landmark aria-hidden="true" className="h-6 w-6 shrink-0 text-[rgb(var(--mg-heading))]" />}>
-          Club payouts aren’t ready
-        </NeedsLink>
-      )}
+        ))}
+        {decForms.map((t) => (
+          <NeedsRow key={`form-${t.id}`} count="1" title="Dec form to send" sub={t.displayName} act="Fill in" to={`/competitions/${t.competitionId}/declarations?team=${t.id}`} />
+        ))}
+        {dueEntries.map((entry) => (
+          <NeedsRow key={`due-${entry.id}`} count={priceLabel(entry.amountMinor)} title="Pay for your entry" sub={[entry.competitionName, displaySectionName(entry.sectionName)].filter(Boolean).join(' · ')}
+            act="How to pay" to={`/competitions/${entry.competitionId}/details`} />
+        ))}
+        {attention.pendingEntries.map((entry) => (
+          <NeedsRow key={`entries-${entry.id}`} count={String(entry.count)} title={entry.count === 1 ? 'Entry not paid' : 'Entries not paid'} sub={entry.name} act="Open" to={`/competitions/${entry.id}/details`} />
+        ))}
+        {attention.flaggedForms.map((entry) => (
+          <NeedsRow key={`flags-${entry.id}`} count={String(entry.count)} title={entry.count === 1 ? 'Dec form flagged' : 'Dec forms flagged'} sub={entry.name} act="Open" to={`/competitions/${entry.id}/declarations`} />
+        ))}
+        {attention.payoutsNotReady && (
+          <NeedsRow count="!" warn title="Payouts aren’t set up" sub="Entry money can’t be paid out until this is done" act="Set up" to="/me/payouts" />
+        )}
+      </div>
     </section>
   );
 }
 
-function NeedsLink({ to, icon, urgent, sub, children }: { to: string; icon: ReactNode; urgent?: boolean; sub?: string; children: ReactNode }) {
+function NeedsRow({ count, title, sub, act, to, warn }: { count: string; title: string; sub: string; act: string; to: string; warn?: boolean }) {
   return (
-    <Link to={to} className={`flex min-h-[60px] items-center gap-3 rounded-xl px-3.5 py-2 ${urgent ? 'bg-[rgb(var(--mg-problem-bg))] text-[rgb(var(--mg-problem-ink))]' : 'mg-card'}`}>
-      {icon}
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-base font-semibold leading-tight text-[rgb(var(--mg-ink))]">{children}</span>
-        {sub && <span className="block truncate text-sm text-[rgb(var(--mg-muted))]">{sub}</span>}
-      </span>
-      <ChevronRight aria-hidden="true" className="h-[18px] w-[18px] shrink-0" />
-    </Link>
+    <div className="sp-row">
+      <span className="sp-num" data-tone={warn ? 'warn' : undefined}>{count}</span>
+      <span className="sp-grow"><span className="sp-t1">{title}</span><span className="sp-t2">{sub}</span></span>
+      <Link to={to} className="sp-pill sp-pill-sm" aria-label={`${act}: ${title}, ${sub}`}>{act}</Link>
+    </div>
   );
 }

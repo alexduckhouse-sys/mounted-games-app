@@ -11,9 +11,13 @@ import { LiteModeSetting } from '../lite/LiteModeSetting';
 import { THEMES, type ThemeName } from '../theme/themes';
 import { useTheme } from '../theme/ThemeContext';
 import { RefineSwitchRow } from './refine/Refine';
+import { Notice } from '../components/Notice';
+import { useTeamNotifications } from '../hooks/useTeamNotifications';
+import type { Team } from '../types';
 import '../components/sitePages.css';
 
 const WEATHER_KEY = 'mg.showWeather';
+const NO_TEAMS: Team[] = [];
 
 const TEXT_SIZES: { value: TextSizePref; label: string }[] = [{ value: 'normal', label: 'Normal' }, { value: 'large', label: 'Large' }];
 
@@ -41,6 +45,12 @@ export function SettingsPage() {
   usePageHeader({ title: 'Settings', plain: true });
   const { current, rememberChoice, setRememberChoice, forget } = useCurrentCompetition();
   const { theme, setTheme } = useTheme();
+  // The same push subscribe and unsubscribe the Me page used to have; heat reminders for teams are set up elsewhere.
+  const notify = useTeamNotifications(NO_TEAMS);
+  const pushBlocked = notify.permission === 'denied' || notify.permission === 'unsupported';
+  const pushNote = notify.permission === 'denied' ? 'Blocked in your browser’s settings'
+    : notify.permission === 'unsupported' ? 'This browser can’t show notifications'
+      : 'Heat calls and announcements on this phone';
   const navigate = useNavigate();
   const location = useLocation();
   const [showWeather, setShowWeather] = useState(() => {
@@ -155,6 +165,11 @@ export function SettingsPage() {
 
       <h2 className="sp-sec">On competition days</h2>
       <div className="sp-card">
+        <div className="sp-row">
+          <span className="sp-grow"><span className="sp-t1">Notifications</span><span className="sp-t2">{pushNote}</span></span>
+          <button type="button" role="switch" aria-checked={notify.enabled} aria-label="Notifications" disabled={pushBlocked} className="rf-sw" onClick={() => { void notify.setEnabled(!notify.enabled); }}><span aria-hidden="true" /></button>
+        </div>
+        {notify.problem && <div className="px-3.5 py-3"><Notice>{notify.problem}</Notice></div>}
         <RefineSwitchRow label="Show weather" on={showWeather} onChange={toggleWeather} />
         <RefineSwitchRow label="Vibrate when I tap a score" on={scorerHaptics} onChange={setScorerHaptics} />
         <RefineSwitchRow label="Order scoring teams by lane" on={sortByLaneOrder} onChange={setSortByLaneOrder} />

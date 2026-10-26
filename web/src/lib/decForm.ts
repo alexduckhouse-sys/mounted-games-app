@@ -227,10 +227,31 @@ export function panelTitle(slots: readonly Slot[], index: number): string {
   return isReserveSlot(slots, index) ? (editing ? 'Edit reserve' : 'Add a non-riding reserve') : (editing ? 'Edit rider' : 'Add a rider');
 }
 
-export function statusText(slots: readonly Slot[], agreed: boolean, submitted: boolean): string {
-  if (submitted) return 'Submitted';
-  if (teamIsFull(slots)) return agreed ? 'Ready to submit' : 'Tick to agree, then submit';
-  return `${ridersAdded(slots)} of ${ridingSlotsCount(slots)} riders added`;
+/**
+ * The line under the send button: what is still missing, in the order the person would fix it, or what sending does.
+ * `unchanged` is true when the form was sent and nothing has been touched since.
+ */
+export function sendReason(slots: readonly Slot[], agreed: boolean, teamName: string, phoneIssue: string | null, sent: boolean, unchanged: boolean): string {
+  const missing = minRidersForSlots(slots) - ridersAdded(slots);
+  if (missing > 0) return `Add ${missing} more ${missing === 1 ? 'rider' : 'riders'} to send it.`;
+  if (teamName.trim() === '') return 'Add a team name to send it.';
+  if (phoneIssue) return phoneIssue;
+  if (!agreed) return 'Agree to the terms to send it.';
+  if (unchanged) return 'Nothing has changed since you sent it.';
+  return sent ? 'Sending again replaces the last one.' : 'Ready to send.';
+}
+
+/** "3 of 5 · reserve optional": how many riders are in, for the Riders heading. */
+export function ridersCount(slots: readonly Slot[]): string {
+  const base = `${ridersAdded(slots)} of ${ridingSlotsCount(slots)}`;
+  return slots.length >= 6 ? `${base} · reserve optional` : base;
+}
+
+/** The label of the one add bar: the next free slot ("Add rider 4", "Add a reserve"), or null when every slot is full. */
+export function addLabel(slots: readonly Slot[]): string | null {
+  const index = firstEmpty(slots);
+  if (index == null) return null;
+  return isReserveSlot(slots, index) ? 'Add a reserve' : `Add rider ${index + 1}`;
 }
 
 export function canSubmit(slots: readonly Slot[], agreed: boolean, teamName: string, phoneOk = true): boolean {

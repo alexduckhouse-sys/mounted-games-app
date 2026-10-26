@@ -4,12 +4,10 @@ import type { AxiosRequestConfig } from 'axios';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
-import type { CurrentCompetition } from '../competition/preference';
 import { competition, team } from '../test/factories';
-import type { DeclarationForm, ShopPost } from '../types';
+import type { ShopPost } from '../types';
 import { CompetitionContext } from './competition/context';
 import { TeamsTab } from './competition/TeamsTab';
-import { DeclarationsIndexPage } from './DeclarationsIndexPage';
 import { FormatPage } from './admin/FormatPage';
 import { ShopPage } from './ShopPage';
 import { chooseOption, selectedValue } from '../test/select';
@@ -39,45 +37,12 @@ function serve(reply: Reply) {
     try { return Promise.resolve({ data: reply(url, config) }); } catch (e) { return Promise.reject(e); }
   });
 }
-const setCurrent = (c: CurrentCompetition | null) => { hoisted.current = c; };
-
-const decForm = (id: number, competitionId: number, competitionName: string): DeclarationForm => ({
-  id, teamId: id, teamName: `Team ${id}`, competitionId, competitionName,
-  submittedAt: '2026-06-01T09:00:00Z', isLocked: false, riders: [],
-});
 
 beforeEach(() => {
   hoisted.current = null;
   hoisted.user = null;
   hoisted.roles = [];
   serve(() => []);
-});
-
-describe('DeclarationsIndexPage', () => {
-  it('shows a loading state, then the forms for the current competition', async () => {
-    setCurrent({ id: 1, name: 'Spring Games' });
-    serve((_url, config) => (config?.params?.competitionId === 1 ? [decForm(1, 1, 'Spring Games')] : []));
-    render(<MemoryRouter><DeclarationsIndexPage /></MemoryRouter>);
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
-    expect(await screen.findByRole('heading', { name: 'Team 1' })).toBeInTheDocument();
-    expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
-  });
-
-  it('loads again when switching to the all-forms view', async () => {
-    setCurrent({ id: 1, name: 'Spring Games' });
-    serve((_url, config) => (config?.params?.competitionId === 1 ? [decForm(1, 1, 'Spring Games')] : [decForm(1, 1, 'Spring Games'), decForm(2, 2, 'Autumn Games')]));
-    render(<MemoryRouter><DeclarationsIndexPage /></MemoryRouter>);
-    await screen.findByRole('heading', { name: 'Team 1' });
-    await userEvent.click(screen.getByRole('button', { name: /All my forms/ }));
-    expect(await screen.findByText('Everyone else\'s locked forms (2)')).toBeInTheDocument();
-    expect(api.get).toHaveBeenLastCalledWith('/declaration-forms', { params: {} });
-  });
-
-  it('treats a failed request as an empty list', async () => {
-    serve(() => { throw new Error('offline'); });
-    render(<MemoryRouter><DeclarationsIndexPage /></MemoryRouter>);
-    expect(await screen.findByText('No dec forms yet.')).toBeInTheDocument();
-  });
 });
 
 describe('ShopPage', () => {
