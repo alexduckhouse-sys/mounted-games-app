@@ -1,11 +1,11 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { autoConfirm } from '../../test/confirm';
 import type { CreatorDraft } from '../../lib/creatorDraft';
-import { saveCreator } from '../admin/creator/save';
+import { SaveError, saveCreator } from '../admin/creator/save';
 import { SectionsPage } from './SectionsPage';
 
 const reload = vi.fn();
@@ -16,7 +16,7 @@ const session = (id: number, sectionId: number, name: string, extra: Record<stri
 const competition = {
   id: 7, name: 'Spring Open', startDate: '2031-05-04T09:00:00.000Z', endDate: null, isActive: true, isArchived: false, laneHatbands: null,
   sections: [
-    { id: 11, format: 2, ageGroup: 'Under 12', displayName: 'Under 12', usesRaceFinals: false, tieBreakRule: 0, activeSignupsCount: 0 },
+    { id: 11, format: 2, ageGroup: 'Under 12', displayName: 'Under 12', usesRaceFinals: false, tieBreakRule: 0, activeSignupsCount: 0, hasFinal: false },
     { id: 12, format: 1, ageGroup: 'Under 15', displayName: 'Under 15 Pairs', usesRaceFinals: true, tieBreakRule: 2, activeSignupsCount: 0 },
   ],
   teams: [],
@@ -26,7 +26,7 @@ vi.mock('../competition/context', () => ({ useCompetition: () => ({ competition,
 vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ hasRole: (role: string) => role === 'Admin' }) }));
 vi.mock('../../api', () => ({ api: { get: vi.fn(), put: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
 vi.mock('../../lib/raceTemplates', () => ({ loadRaceTemplates: () => Promise.resolve([{ name: 'Flag' }, { name: 'Bending' }, { name: 'Sack' }]) }));
-vi.mock('../admin/creator/save', () => ({ saveCreator: vi.fn() }));
+vi.mock('../admin/creator/save', async (original) => ({ ...(await original<typeof import('../admin/creator/save')>()), saveCreator: vi.fn() }));
 
 function show() {
   return render(<MemoryRouter><SectionsPage /></MemoryRouter>);
@@ -202,5 +202,66 @@ describe('SectionsPage', () => {
     await user.type(screen.getByLabelText('Arena, your own'), 'Ring 2');
     await user.click(screen.getByRole('button', { name: 'Use' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Saving details failed: nope');
+  });
+
+  describe('the final', () => {
+    const extra = { id: 13, format: 3, ageGroup: 'Under 9', displayName: 'Under 9 Individuals', usesRaceFinals: false, tieBreakRule: 0, activeSignupsCount: 0, hasFinal: true, carryPointsIntoFinal: false, doublePointsInFinal: false };
+    beforeEach(() => { competition.sections.push(extra as never); });
+    afterEach(() => { competition.sections.splice(competition.sections.indexOf(extra as never), 1); });
+
+    it('shows the carry and double switches only once a final exists, and never for heat, heat, final', async () => {
+      show();
+      const withFinal = await screen.findByRole('region', { name: 'Under 9 Individuals' });
+      expect(within(withFinal).getByRole('switch', { name: 'Carry points into the final' })).toHaveAttribute('aria-checked', 'false');
+      expect(within(withFinal).getByRole('switch', { name: 'Double points in the final' })).toHaveAttribute('aria-checked', 'false');
+      expect(withFinal).toHaveTextContent('Final: Left for later');
+      const without = screen.getByRole('region', { name: 'Under 12' });
+      expect(within(without).queryByRole('switch', { name: /final/ })).not.toBeInTheDocument();
+      const hhf = screen.getByRole('region', { name: 'Under 15 Pairs' });
+      expect(within(hhf).queryByRole('switch', { name: /final/ })).not.toBeInTheDocument();
+      await userEvent.click(within(hhf).getByRole('button', { name: 'Edit' }));
+      expect(within(hhf).queryByRole('button', { name: /Add a final|Remove the final/ })).not.toBeInTheDocument();
+    });
+
+    it('saves the switches as they are turned', async () => {
+      const user = userEvent.setup();
+      show();
+      const card = await screen.findByRole('region', { name: 'Under 9 Individuals' });
+      await user.click(within(card).getByRole('switch', { name: 'Carry points into the final' }));
+      await waitFor(() => expect(saveCreator).toHaveBeenCalled());
+      expect(lastDraft().sections.find((x) => x.existingId === 13)).toMatchObject({ carryPointsIntoFinal: true, doublePointsInFinal: false });
+      await user.click(within(card).getByRole('switch', { name: 'Double points in the final' }));
+      await waitFor(() => expect(lastDraft().sections.find((x) => x.existingId === 13)).toMatchObject({ doublePointsInFinal: true }));
+    });
+
+    it('adds a final from the race editor with a bar, and removes it with red text', async () => {
+      const user = userEvent.setup();
+      show();
+      const none = await screen.findByRole('region', { name: 'Under 12' });
+      await user.click(within(none).getByRole('button', { name: 'Edit' }));
+      const add = within(none).getByRole('button', { name: 'Add a final' });
+      expect(add).toHaveClass('ops-addbar');
+      await user.click(add);
+      await waitFor(() => expect(lastDraft().sections.find((x) => x.existingId === 11)).toMatchObject({ hasFinal: true }));
+      expect(within(none).getByRole('tab', { name: 'Final' })).toHaveAttribute('aria-selected', 'true');
+      expect(within(none).getByRole('switch', { name: 'Carry points into the final' })).toBeInTheDocument();
+      const remove = within(none).getByRole('button', { name: 'Remove the final' });
+      expect(remove).toHaveClass('ops-danger-link');
+      await user.click(remove);
+      await waitFor(() => expect(lastDraft().sections.find((x) => x.existingId === 11)).toMatchObject({ hasFinal: false }));
+      expect(within(none).queryByRole('switch', { name: 'Carry points into the final' })).not.toBeInTheDocument();
+    });
+
+    it('shows the API’s reason when a final can’t be changed, and shows the saved state again', async () => {
+      vi.mocked(saveCreator).mockRejectedValueOnce(new SaveError('Saving Under 9 Individuals failed: Final races have already been scored, so double points can’t be changed.', 7, 409));
+      const user = userEvent.setup();
+      show();
+      const card = await screen.findByRole('region', { name: 'Under 9 Individuals' });
+      await user.click(within(card).getByRole('switch', { name: 'Double points in the final' }));
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('double points can’t be changed');
+      expect(alert).not.toHaveTextContent('Change something');
+      expect(reload).toHaveBeenCalled();
+    });
   });
 });

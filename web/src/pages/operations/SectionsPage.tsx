@@ -6,7 +6,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { defaultRaceList, SCOPE_LABEL, type RaceScope } from '../../lib/defaultRaces';
 import {
-  AGE_GROUP_PRESETS, defaultSection, FORMAT_LABEL, MAIN_ARENA, MAX_SESSIONS, resizeSessions, sectionLocked, sectionName, setRaceFinals,
+  AGE_GROUP_PRESETS, defaultSection, FORMAT_LABEL, MAIN_ARENA, MAX_SESSIONS, resizeSessions, sectionHasFinal, sectionLocked, sectionName, setRaceFinals,
   type CreatorDraft, type Format, type SectionDraft,
 } from '../../lib/creatorDraft';
 import { draftFromCompetition, teamCountsOf } from '../../lib/creatorLoad';
@@ -14,7 +14,7 @@ import { LANE_ROTATION_LABELS, type LaneRotationModeValue } from '../../lib/lane
 import { loadRaceTemplates } from '../../lib/raceTemplates';
 import { SessionKind, TieBreakRule, type CompetitionDetail, type Session } from '../../types';
 import { useCompetition } from '../competition/context';
-import { saveCreator } from '../admin/creator/save';
+import { SaveError, saveCreator } from '../admin/creator/save';
 import { RefineChoiceRow, RefineHeader, RefineList, RefinePage, RefineSwitchRow, type ChoiceOption } from '../refine/Refine';
 import './operations.css';
 
@@ -41,7 +41,7 @@ const messageOf = (error: unknown, fallback: string) => {
 function raceLines(section: SectionDraft): string {
   const text = (races: string[] | null) => (races === null ? 'Left for later' : `${races.length} ${races.length === 1 ? 'race' : 'races'}`);
   const lines = section.sessions.map((session, i) => (section.sessions.length === 1 && !section.finalSessionId ? text(session.races) : `Session ${i + 1}: ${text(session.races)}`));
-  if (section.finalSessionId) lines.push(`Final: ${text(section.finalRaces ?? null)}`);
+  if (sectionHasFinal(section)) lines.push(`Final: ${text(section.finalRaces ?? null)}`);
   return lines.join('\n');
 }
 
@@ -89,7 +89,14 @@ export function SectionsPage() {
       dirty.current = false;
       reload();
     } catch (caught) {
-      setError(`${messageOf(caught, 'Couldn’t save.')} Change something to try again.`);
+      if (caught instanceof SaveError && caught.status === 409) {
+        // The API said no to the change as things stand (a final that already exists or has scored): show why, then show the saved state again.
+        dirty.current = false;
+        setError(messageOf(caught, 'Couldn’t save.'));
+        reload();
+      } else {
+        setError(`${messageOf(caught, 'Couldn’t save.')} Change something to try again.`);
+      }
     } finally {
       setSaving(false);
     }
@@ -211,6 +218,14 @@ export function SectionsPage() {
                           onChange={(on) => setSessionSettings(section, { raceOrderAlternating: on })} />
                       </>
                     )}
+                    {sectionHasFinal(section) && (
+                      <>
+                        <RefineSwitchRow label="Carry points into the final" on={section.carryPointsIntoFinal === true} disabled={busy}
+                          onChange={(on) => change(index, (s) => ({ ...s, carryPointsIntoFinal: on }))} />
+                        <RefineSwitchRow label="Double points in the final" on={section.doublePointsInFinal === true} disabled={busy}
+                          onChange={(on) => change(index, (s) => ({ ...s, doublePointsInFinal: on }))} />
+                      </>
+                    )}
                   </div>
                   <div className="rf-row ops-races">
                     <span className="rf-grow"><span className="rf-t1">Races</span><span className="rf-t2 ops-lines">{raceLines(section)}</span></span>
@@ -264,12 +279,13 @@ function Stepper({ label, value, min, max, step = 1, disabled, onChange }: { lab
 
 /** The race list for each session and the final: reorder, remove, add from the library, or start from a preset. */
 function RaceEditor({ section, templates, disabled, onChange }: { section: SectionDraft; templates: string[]; disabled: boolean; onChange: (next: SectionDraft) => void }) {
-  const tabs = [...section.sessions.map((_, i) => `Session ${i + 1}`), ...(section.finalSessionId ? ['Final'] : [])];
+  const hasFinal = sectionHasFinal(section);
+  const tabs = [...section.sessions.map((_, i) => `Session ${i + 1}`), ...(hasFinal ? ['Final'] : [])];
   const [tab, setTab] = useState(0);
   const [query, setQuery] = useState('');
   const [presets, setPresets] = useState(false);
   const active = Math.min(tab, tabs.length - 1);
-  const onFinal = section.finalSessionId !== undefined && active === section.sessions.length;
+  const onFinal = hasFinal && active === section.sessions.length;
   const session = onFinal ? null : section.sessions[active];
   const races = onFinal ? section.finalRaces ?? null : session?.races ?? null;
   const fixed = onFinal ? Boolean(section.finalHasHeats || section.finalScored) : Boolean(session?.hasHeats || session?.scored);
@@ -297,6 +313,16 @@ function RaceEditor({ section, templates, disabled, onChange }: { section: Secti
       {tabs.length > 1 && (
         <div role="tablist" aria-label="Race list for" className="ops-seg">
           {tabs.map((label, i) => <button key={label} type="button" role="tab" aria-selected={i === active} onClick={() => { setTab(i); setPresets(false); }}>{label}</button>)}
+        </div>
+      )}
+      {!section.usesRaceFinals && !hasFinal && (
+        <button type="button" className="ops-addbar ops-addbar-flat" disabled={disabled} onClick={() => { onChange({ ...section, hasFinal: true }); setTab(section.sessions.length); setPresets(false); }}>
+          <Plus className="h-4 w-4" aria-hidden="true" />Add a final
+        </button>
+      )}
+      {onFinal && (
+        <div className="ops-final-end">
+          <button type="button" className="ops-danger-link" disabled={disabled} onClick={() => { onChange({ ...section, hasFinal: false }); setTab(0); setPresets(false); }}>Remove the final</button>
         </div>
       )}
       {fixed && <p className="rf-note">Heats are made, so these races are fixed.</p>}

@@ -47,6 +47,9 @@ export function draftFromCompetition(c: CompetitionDetail): CreatorDraft {
         ...(x.heats.length > 0 ? { hasHeats: true } : {}),
         ...(hasScores(x) ? { scored: true } : {}),
       })),
+      hasFinal: s.hasFinal ?? true,
+      carryPointsIntoFinal: s.carryPointsIntoFinal ?? false,
+      doublePointsInFinal: s.doublePointsInFinal ?? false,
       finalRaces: finalsSession?.plannedRaces && finalsSession.plannedRaces.length > 0 ? finalsSession.plannedRaces : null,
       ...(finalsSession ? {
         finalSessionId: finalsSession.id,
