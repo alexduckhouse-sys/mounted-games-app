@@ -599,6 +599,24 @@ public class CompetitionsController : ControllerBase
         [FromServices] StandingsService standings, [FromQuery] int? sectionId = null)
         => await standings.RowsAsync(id, sectionId, HttpContext.RequestAborted);
 
+    [HttpGet("{id:int}/archive")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("id")]
+    public async Task<IActionResult> Archive(
+        int id,
+        [FromServices] MountedGames.Api.Services.EventTools.EventArchiveService archiveService,
+        [FromQuery] string? format = null,
+        CancellationToken ct = default)
+    {
+        var archive = await archiveService.BuildArchiveAsync(id, ct);
+        if (archive is null) return NotFound();
+        if (string.Equals(format, "zip", StringComparison.OrdinalIgnoreCase))
+        {
+            return File(MountedGames.Api.Services.EventTools.EventArchiveService.BuildZipBytes(archive), "application/zip", archive.FileName);
+        }
+        return Ok(archive);
+    }
+
     [HttpPost("{id:int}/shift-day")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("id")]

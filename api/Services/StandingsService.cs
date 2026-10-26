@@ -71,7 +71,29 @@ public sealed class StandingsService(AppDbContext db)
             .SelectMany(g =>
             {
                 var byTeam = g.ToDictionary(r => r.TeamId);
-                return ties.OrderLevel(g.Select(r => facts[r.TeamId]).ToList()).Select(f => byTeam[f.TeamId]);
+                var orderedFacts = ties.OrderLevel(g.Select(r => facts[r.TeamId]).ToList());
+                if (orderedFacts.Count < 2)
+                    return orderedFacts.Select(f => byTeam[f.TeamId]);
+
+                var groupRows = new List<StandingRow>(orderedFacts.Count);
+                for (var i = 0; i < orderedFacts.Count; i++)
+                {
+                    var row = byTeam[orderedFacts[i].TeamId];
+                    string? reason = null;
+                    if (i + 1 < orderedFacts.Count)
+                    {
+                        var belowRow = byTeam[orderedFacts[i + 1].TeamId];
+                        reason = ties.Explain(orderedFacts, orderedFacts[i], orderedFacts[i + 1], belowRow.TeamName);
+                    }
+                    else if (i > 0)
+                    {
+                        var prevReason = ties.Explain(orderedFacts, orderedFacts[i - 1], orderedFacts[i], row.TeamName);
+                        if (prevReason == "Level on points and countback — run-off if on cut-off")
+                            reason = prevReason;
+                    }
+                    groupRows.Add(reason is null ? row : row with { TieBreakReason = reason });
+                }
+                return groupRows;
             })
             .ToList();
     }

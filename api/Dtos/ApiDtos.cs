@@ -420,7 +420,8 @@ public record StandingRow(
     double TotalPoints, int RacesRun, int Wins, int Eliminations, int? FinalTier = null,
     bool Withdrawn = false, int BonusPoints = 0, string? RefereeCard = null,
     string? Flag = null, string? BibDescription = null,
-    double? FinalPoints = null, double? EarlierPoints = null);
+    double? FinalPoints = null, double? EarlierPoints = null,
+    string? TieBreakReason = null);
 
 public record DeclarationFormDto(
     int Id, int TeamId, string TeamName, int CompetitionId, string CompetitionName,
