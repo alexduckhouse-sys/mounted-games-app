@@ -20,6 +20,7 @@ public static class CustomEmailAudiences
         CustomEmailAudience.News => "People who said yes to news",
         CustomEmailAudience.Trainers => "Trainers",
         CustomEmailAudience.OrganisersAndAdmins => "Organisers and admins",
+        CustomEmailAudience.Admins => "Admins",
         _ => audience.ToString(),
     };
 
@@ -47,7 +48,12 @@ public static class CustomEmailAudiences
         }
         else
         {
-            var roleNames = audience == CustomEmailAudience.Trainers ? new[] { Roles.Trainer } : [Roles.Trainer, Roles.Admin];
+            var roleNames = audience switch
+            {
+                CustomEmailAudience.Trainers => new[] { Roles.Trainer },
+                CustomEmailAudience.Admins => [Roles.Admin],
+                _ => [Roles.Trainer, Roles.Admin],
+            };
             var holders = from ur in db.UserRoles join r in db.Roles on ur.RoleId equals r.Id where roleNames.Contains(r.Name!) select ur.UserId;
             var people = await db.Users.AsNoTracking()
                 .Where(u => holders.Contains(u.Id) && u.EmailConfirmed && u.Email != null && u.LockedAt == null && u.BlockedAt == null)
@@ -75,6 +81,8 @@ public sealed class CustomEmailService(
     public const int MaxTextLength = 5000;
     public const int MaxTotalText = 30000;
     public const int MaxRecipients = 10000;
+    public const int MaxLinksPerText = 20;
+    public const int MaxFooterLength = 1000;
     private static readonly TimeSpan ClaimIsStale = TimeSpan.FromMinutes(2);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -124,8 +132,10 @@ public sealed class CustomEmailService(
         if (blocks.Count == 0) problems.Add("Add at least one block.");
         if (blocks.Count > MaxBlocks) problems.Add($"Use {MaxBlocks} blocks or fewer.");
 
+        var site = EmailSite.Origin(options.Value, configuration);
         var resolved = new List<ResolvedBlock>();
         var totalText = 0;
+        if (blocks.Count(b => b.Type == EmailBlockType.Footer) > 1) problems.Add("Use one footer.");
         for (var i = 0; i < Math.Min(blocks.Count, MaxBlocks); i++)
         {
             var block = blocks[i];
@@ -138,7 +148,16 @@ public sealed class CustomEmailService(
                     if (text.Length == 0) problems.Add($"{at}: write some text or remove it.");
                     else if (text.Length > MaxTextLength) problems.Add($"{at}: keep text to {MaxTextLength} characters.");
                     else if (HasControl(text, allowLineBreaks: true)) problems.Add($"{at}: the text has characters that can't be sent.");
-                    else resolved.Add(new ResolvedBlock(EmailBlockType.Text, Text: text));
+                    else
+                    {
+                        var links = await ResolveLinksAsync(block.Links, site, at, problems, ct);
+                        if (links is not null && links.Count > 0)
+                        {
+                            try { CustomEmailRenderer.LinkedParagraphs(text, links, strict: true); }
+                            catch (KeyNotFoundException missing) { problems.Add($"{at}: the words \"{missing.Message}\" aren't in the message, so they can't be a link."); links = null; }
+                        }
+                        if (links is not null) resolved.Add(new ResolvedBlock(EmailBlockType.Text, Text: text, Links: links));
+                    }
                     break;
                 case EmailBlockType.Picture:
                     var alt = block.Alt?.Trim();
@@ -146,7 +165,22 @@ public sealed class CustomEmailService(
                         problems.Add($"{at}: upload the picture again.");
                     else if (alt is { Length: > 200 } || (alt is not null && HasControl(alt, allowLineBreaks: false)))
                         problems.Add($"{at}: keep the description to 200 characters, on one line.");
-                    else resolved.Add(new ResolvedBlock(EmailBlockType.Picture, ImageId: imageId, Alt: alt));
+                    else
+                    {
+                        var (pictureLinked, pictureUrl) = await ResolveTargetAsync(block.Url, block.CompetitionId, block.Page, site, at + " link", problems, ct);
+                        if (pictureLinked) resolved.Add(new ResolvedBlock(EmailBlockType.Picture, ImageId: imageId, Alt: alt, Url: pictureUrl));
+                    }
+                    break;
+                case EmailBlockType.Footer:
+                    var footerText = block.Text?.Trim();
+                    var footerAlt = block.Alt?.Trim();
+                    if (footerText is { Length: > MaxFooterLength } || (footerText is not null && HasControl(footerText, allowLineBreaks: true)))
+                        problems.Add($"{at}: keep the footer to {MaxFooterLength} characters.");
+                    else if (block.ImageId is { } footerImage && !await db.CustomEmailImages.AnyAsync(x => x.Id == footerImage, ct))
+                        problems.Add($"{at}: upload the footer picture again.");
+                    else if (footerAlt is { Length: > 200 } || (footerAlt is not null && HasControl(footerAlt, allowLineBreaks: false)))
+                        problems.Add($"{at}: keep the description to 200 characters, on one line.");
+                    else resolved.Add(new ResolvedBlock(EmailBlockType.Footer, Text: string.IsNullOrEmpty(footerText) ? null : footerText, ImageId: block.ImageId, Alt: footerAlt));
                     break;
                 case EmailBlockType.Button:
                     var label = block.Label?.Trim() ?? string.Empty;
@@ -174,9 +208,68 @@ public sealed class CustomEmailService(
         if (totalText > MaxTotalText) problems.Add($"Keep the text to {MaxTotalText} characters in all.");
         if (problems.Count > 0) throw new CustomEmailException("The email can't be made yet.", 400, problems);
 
-        var site = EmailSite.Origin(options.Value, configuration)
-            ?? throw new CustomEmailException("The website address isn't set (Email:SiteUrl), so links and pictures can't be made.", 409);
+        if (site is null)
+            throw new CustomEmailException("The website address isn't set (Email:SiteUrl), so links and pictures can't be made.", 409);
         return (resolved, site);
+    }
+
+    /// <summary>The path on the site for each page an event's link can open.</summary>
+    private static string PagePath(EmailPage page, int competitionId) => page switch
+    {
+        EmailPage.Entry => $"/competitions/{competitionId}/enter",
+        EmailPage.Timetable => $"/competitions/{competitionId}/timetable",
+        EmailPage.Results => $"/competitions/{competitionId}/toplists",
+        _ => $"/competitions/{competitionId}",
+    };
+
+    /// <summary>
+    /// Where a link goes: an https address, or one of the site's pages for a competition, or nowhere (all blank). Adds to
+    /// <paramref name="problems"/> and returns false when it can't be made.
+    /// </summary>
+    private async Task<(bool Ok, string? Url)> ResolveTargetAsync(string? url, int? competitionId, EmailPage? page, string? site, string at,
+        List<string> problems, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(url))
+        {
+            if (SponsorLogos.TryNormaliseLink(url, out var link) && link is not null) return (true, link);
+            problems.Add($"{at}: the link must be a full https:// address.");
+            return (false, null);
+        }
+        if (competitionId is null && page is null) return (true, null);
+        if (competitionId is not { } id || page is not { } p || !Enum.IsDefined(p)
+            || !await db.Competitions.AsNoTracking().AnyAsync(c => c.Id == id, ct))
+        {
+            problems.Add($"{at}: choose the event and page to link to.");
+            return (false, null);
+        }
+        return (true, site is null ? "https://placeholder.invalid" : site + PagePath(p, id));
+    }
+
+    private async Task<List<ResolvedLink>?> ResolveLinksAsync(IReadOnlyList<EmailLinkDto>? links, string? site, string at, List<string> problems, CancellationToken ct)
+    {
+        var result = new List<ResolvedLink>();
+        if (links is null) return result;
+        if (links.Count > MaxLinksPerText) { problems.Add($"{at}: use {MaxLinksPerText} links or fewer."); return null; }
+        var ok = true;
+        foreach (var link in links)
+        {
+            var words = link.Words?.Trim() ?? string.Empty;
+            if (words.Length == 0 || words.Length > 100 || HasControl(words, allowLineBreaks: false))
+            {
+                problems.Add($"{at}: the words to link need 1 to 100 characters, on one line.");
+                ok = false;
+                continue;
+            }
+            if (string.IsNullOrWhiteSpace(link.Url) && link.CompetitionId is null && link.Page is null)
+            {
+                problems.Add($"{at}: say where \"{words}\" links to.");
+                ok = false;
+                continue;
+            }
+            var (good, url) = await ResolveTargetAsync(link.Url, link.CompetitionId, link.Page, site, $"{at} (\"{words}\")", problems, ct);
+            if (good && url is not null) result.Add(new ResolvedLink(words, url)); else ok = false;
+        }
+        return ok ? result : null;
     }
 
     public async Task<CustomEmailPreviewDto> PreviewAsync(CustomEmailContentRequest request, CancellationToken ct)

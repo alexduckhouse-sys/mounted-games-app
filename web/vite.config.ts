@@ -31,7 +31,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
         // Admin tools need a connection; don't download them for every spectator.
         // The link-preview image is only for crawlers; the embed widget's chunk only loads inside a club's page.
-        globIgnores: ['og/**', '**/BroadcastPage-*.js', '**/CompetitionEditor-*.js', '**/FormatPage-*.js', '**/RulesPage-*.js', '**/AdminPage-*.js', '**/EmbedApp-*.{js,css}'],
+        globIgnores: ['og/**', '**/BroadcastPage-*.js', '**/CompetitionEditor-*.js', '**/FormatPage-*.js', '**/RulesPage-*.js', '**/AdminPage-*.js', '**/EmailPage-*.{js,css}', '**/EmbedApp-*.{js,css}'],
       },
       devOptions: {
         enabled: true,

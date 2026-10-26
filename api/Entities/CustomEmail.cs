@@ -9,6 +9,8 @@ public enum CustomEmailAudience
     Trainers = 1,
     /// <summary>Organisers and site admins, by their confirmed account address.</summary>
     OrganisersAndAdmins = 2,
+    /// <summary>Site admins only, by their confirmed account address.</summary>
+    Admins = 3,
 }
 
 public enum CustomEmailStatus

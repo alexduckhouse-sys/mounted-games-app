@@ -46,6 +46,7 @@ describe('SiteAdminDashboard', () => {
     expect(within(manage).getByRole('link', { name: /Rules library/ })).toHaveTextContent('3 races');
     expect(within(manage).getByRole('link', { name: /Users/ })).toHaveAttribute('href', '/admin/users');
     expect(within(manage).getByRole('link', { name: /Blocked accounts/ })).toHaveAttribute('href', '/admin/blocked');
+    expect(within(manage).getByRole('link', { name: /Email/ })).toHaveAttribute('href', '/admin/email');
   });
 
   it('hides Needs you when nothing waits, and says when nothing is coming up', async () => {

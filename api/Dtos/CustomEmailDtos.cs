@@ -12,12 +12,33 @@ public enum EmailBlockType
     Button = 2,
     /// <summary>A competition's name, dates, venue and an Enter link, read from the competition when the email is made.</summary>
     Competition = 3,
+    /// <summary>The email's footer: optional text (blank means the usual line for the audience) and an optional picture. At most one, always rendered last.</summary>
+    Footer = 4,
 }
 
-/// <summary>One block of an email. Only the fields for its <c>Type</c> are read.</summary>
+/// <summary>A page on the site that an event's link can open.</summary>
+public enum EmailPage
+{
+    Competition = 0,
+    Entry = 1,
+    Timetable = 2,
+    Results = 3,
+}
+
+/// <summary>
+/// Words in a text block that become a link. The link is an https <c>Url</c>, or one of the site's own pages for a
+/// competition (<c>CompetitionId</c> + <c>Page</c>), which is turned into that page's https address when the email is made.
+/// </summary>
+public record EmailLinkDto(string? Words, string? Url = null, int? CompetitionId = null, EmailPage? Page = null);
+
+/// <summary>
+/// One block of an email. Only the fields for its <c>Type</c> are read. A text block may carry <c>Links</c>; a picture may link
+/// somewhere with <c>Url</c> or <c>CompetitionId</c> + <c>Page</c>.
+/// </summary>
 public record EmailBlockDto(
     EmailBlockType Type, string? Text = null, Guid? ImageId = null, string? Alt = null,
-    string? Label = null, string? Url = null, int? CompetitionId = null);
+    string? Label = null, string? Url = null, int? CompetitionId = null,
+    IReadOnlyList<EmailLinkDto>? Links = null, EmailPage? Page = null);
 
 public record CustomEmailContentRequest(string Subject, CustomEmailAudience Audience, IReadOnlyList<EmailBlockDto> Blocks);
 
