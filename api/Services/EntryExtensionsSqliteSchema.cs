@@ -28,7 +28,7 @@ public static class EntryExtensionsSqliteSchema
             FOREIGN KEY ("SignupId") REFERENCES "SectionSignups" ("Id") ON DELETE CASCADE,
             FOREIGN KEY ("TeamId") REFERENCES "Teams" ("Id") ON DELETE CASCADE
             """, 2),
-        ("SignupExtras", "\"SignupId\", \"StablesCount\", \"HookupsCount\", \"StablingClubOrTeam\", \"PaymentMethod\", \"IsWaitlist\", \"IsWithdrawn\", \"RefundPending\", \"TeamsCount\", \"StableAssignment\", \"HookupAssignment\", \"VehicleRegistration\", \"ArrivalNotes\"", """
+        ("SignupExtras", "\"SignupId\", \"StablesCount\", \"HookupsCount\", \"StablingClubOrTeam\", \"PaymentMethod\", \"IsWaitlist\", \"IsWithdrawn\", \"RefundPending\", \"TeamsCount\", \"StableAssignment\", \"HookupAssignment\", \"VehicleRegistration\", \"ArrivalNotes\", \"LastReminderSentAt\", \"ArrivalWindow\", \"FeeDisposition\", \"RefundedAmountMinor\", \"DispositionNote\", \"DispositionUpdatedAt\", \"WaitlistOfferedAt\", \"WaitlistOfferExpiresAt\"", """
             "SignupId" INTEGER NOT NULL PRIMARY KEY,
             "StablesCount" INTEGER NOT NULL DEFAULT 0,
             "HookupsCount" INTEGER NOT NULL DEFAULT 0,
@@ -42,6 +42,14 @@ public static class EntryExtensionsSqliteSchema
             "HookupAssignment" TEXT NULL,
             "VehicleRegistration" TEXT NULL,
             "ArrivalNotes" TEXT NULL,
+            "LastReminderSentAt" TEXT NULL,
+            "ArrivalWindow" TEXT NULL,
+            "FeeDisposition" TEXT NOT NULL DEFAULT 'None',
+            "RefundedAmountMinor" INTEGER NULL,
+            "DispositionNote" TEXT NULL,
+            "DispositionUpdatedAt" TEXT NULL,
+            "WaitlistOfferedAt" TEXT NULL,
+            "WaitlistOfferExpiresAt" TEXT NULL,
             FOREIGN KEY ("SignupId") REFERENCES "SectionSignups" ("Id") ON DELETE CASCADE
             """, 1),
         ("CompetitionEntrySettings", "\"CompetitionId\", \"EntriesCloseAt\", \"MaxStables\", \"MaxHookups\"", """
@@ -73,15 +81,19 @@ public static class EntryExtensionsSqliteSchema
                 await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"SignupMatchmaking\" ADD COLUMN \"DeclarationAccessGranted\" INTEGER NOT NULL DEFAULT 0;");
             if (table == "SignupExtras")
             {
-                if (await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM pragma_table_info('SignupExtras') WHERE name = 'HookupsCount'").SingleAsync() == 0)
-                    await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"SignupExtras\" ADD COLUMN \"HookupsCount\" INTEGER NOT NULL DEFAULT 0;");
-                foreach (var col in new[] { "StableAssignment", "HookupAssignment", "VehicleRegistration", "ArrivalNotes" })
-                {
-                    var checkSql = $"SELECT COUNT(*) AS Value FROM pragma_table_info('SignupExtras') WHERE name = '{col}'";
-                    var alterSql = $"ALTER TABLE \"SignupExtras\" ADD COLUMN \"{col}\" TEXT NULL;";
-                    if (await db.Database.SqlQueryRaw<int>(checkSql).SingleAsync() == 0)
-                        await db.Database.ExecuteSqlRawAsync(alterSql);
-                }
+                await EnsureSignupExtrasColumnAsync(db, "HookupsCount", "INTEGER NOT NULL DEFAULT 0");
+                await EnsureSignupExtrasColumnAsync(db, "StableAssignment", "TEXT NULL");
+                await EnsureSignupExtrasColumnAsync(db, "HookupAssignment", "TEXT NULL");
+                await EnsureSignupExtrasColumnAsync(db, "VehicleRegistration", "TEXT NULL");
+                await EnsureSignupExtrasColumnAsync(db, "ArrivalNotes", "TEXT NULL");
+                await EnsureSignupExtrasColumnAsync(db, "LastReminderSentAt", "TEXT NULL");
+                await EnsureSignupExtrasColumnAsync(db, "ArrivalWindow", "TEXT NULL");
+                await EnsureSignupExtrasColumnAsync(db, "FeeDisposition", "TEXT NOT NULL DEFAULT 'None'");
+                await EnsureSignupExtrasColumnAsync(db, "RefundedAmountMinor", "INTEGER NULL");
+                await EnsureSignupExtrasColumnAsync(db, "DispositionNote", "TEXT NULL");
+                await EnsureSignupExtrasColumnAsync(db, "DispositionUpdatedAt", "TEXT NULL");
+                await EnsureSignupExtrasColumnAsync(db, "WaitlistOfferedAt", "TEXT NULL");
+                await EnsureSignupExtrasColumnAsync(db, "WaitlistOfferExpiresAt", "TEXT NULL");
             }
             if (table == "CompetitionEntrySettings")
             {
@@ -109,5 +121,14 @@ public static class EntryExtensionsSqliteSchema
             CREATE INDEX IF NOT EXISTS "IX_SignupMatchmaking_PairRequestToSignupId" ON "SignupMatchmaking" ("PairRequestToSignupId");
             """);
         await transaction.CommitAsync();
+    }
+
+    private static async Task EnsureSignupExtrasColumnAsync(AppDbContext db, string column, string definition)
+    {
+        if (await db.Database.SqlQuery<int>($"SELECT COUNT(*) AS \"Value\" FROM pragma_table_info('SignupExtras') WHERE name = {column}").SingleAsync() == 0)
+        {
+            var alterSql = $"ALTER TABLE \"SignupExtras\" ADD COLUMN \"{column}\" {definition};";
+            await db.Database.ExecuteSqlRawAsync(alterSql);
+        }
     }
 }
