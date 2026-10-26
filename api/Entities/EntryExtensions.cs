@@ -39,6 +39,27 @@ public class SignupExtras
     public DateTime? WaitlistOfferExpiresAt { get; set; }
 }
 
+/// <summary>
+/// The rider on a guest or individual entry, when an adult enters for a child, plus the parent or guardian and an
+/// emergency contact. Personal data about a child: only the competition's staff and the person who made the entry
+/// may read it (see <c>SignupController</c>). Never put it in a public DTO, stats, logs, share cards or public exports.
+/// </summary>
+public class SignupGuestDetails
+{
+    public const int MaxNameLength = 120;
+    public const int MaxPhoneLength = 40;
+
+    public int SignupId { get; set; }
+    public string? RiderName { get; set; }
+    /// <summary>A calendar date (no time zone), like <see cref="RiderEntry.DateOfBirth"/>.</summary>
+    public DateTime? RiderDateOfBirth { get; set; }
+    public string? PonyName { get; set; }
+    public string? GuardianName { get; set; }
+    public string? GuardianPhone { get; set; }
+    public string? EmergencyContactName { get; set; }
+    public string? EmergencyContactPhone { get; set; }
+}
+
 public class CompetitionEntrySettings
 {
     public int CompetitionId { get; set; }

@@ -165,6 +165,23 @@ public class AppDbContext : IdentityDbContext<AppUser>
             e.HasOne<SectionSignup>().WithOne().HasForeignKey<SignupExtras>(x => x.SignupId)
                 .HasConstraintName("FK_SignupExtras_Signup").OnDelete(DeleteBehavior.Cascade);
         });
+        b.Entity<SignupGuestDetails>(e =>
+        {
+            e.ToTable("SignupGuestDetails");
+            e.HasKey(x => x.SignupId);
+            e.Property(x => x.SignupId).ValueGeneratedNever();
+            e.Property(x => x.RiderName).HasMaxLength(SignupGuestDetails.MaxNameLength);
+            e.Property(x => x.PonyName).HasMaxLength(SignupGuestDetails.MaxNameLength);
+            e.Property(x => x.GuardianName).HasMaxLength(SignupGuestDetails.MaxNameLength);
+            e.Property(x => x.GuardianPhone).HasMaxLength(SignupGuestDetails.MaxPhoneLength);
+            e.Property(x => x.EmergencyContactName).HasMaxLength(SignupGuestDetails.MaxNameLength);
+            e.Property(x => x.EmergencyContactPhone).HasMaxLength(SignupGuestDetails.MaxPhoneLength);
+            e.Property(x => x.RiderDateOfBirth).HasConversion(new CalendarDateTimeConverter());
+            if (Database.IsNpgsql())
+                e.Property(x => x.RiderDateOfBirth).HasColumnType("timestamp without time zone");
+            e.HasOne<SectionSignup>().WithOne().HasForeignKey<SignupGuestDetails>(x => x.SignupId)
+                .HasConstraintName("FK_SignupGuestDetails_Signup").OnDelete(DeleteBehavior.Cascade);
+        });
         b.Entity<CompetitionEntrySettings>(e =>
         {
             e.ToTable("CompetitionEntrySettings");

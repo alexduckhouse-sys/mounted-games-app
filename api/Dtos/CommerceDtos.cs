@@ -11,7 +11,14 @@ public record CreateCatalogueItemRequest(
     CommerceItemCategory Category,
     string? ImageUrl,
     string? DetailPrompt = null,
-    string? DetailHint = null);
+    string? DetailHint = null,
+    IReadOnlyList<CatalogueItemOptionInput>? Options = null);
+
+/// <param name="Id">An existing option's id, to keep it (and its sales) when editing; null for a new option.</param>
+/// <param name="StockQuantity">Stock for this option alone; null means no limit.</param>
+public record CatalogueItemOptionInput(int? Id, string? Label, int? StockQuantity);
+
+public record CatalogueItemOptionDto(int Id, string Label, int? StockQuantity);
 
 public record UpdateCatalogueItemRequest(
     string? Title,
@@ -23,7 +30,9 @@ public record UpdateCatalogueItemRequest(
     bool IsActive,
     long ExpectedVersion,
     string? DetailPrompt = null,
-    string? DetailHint = null);
+    string? DetailHint = null,
+    // Null leaves the options as they are; an empty list removes them all.
+    IReadOnlyList<CatalogueItemOptionInput>? Options = null);
 
 public record CatalogueItemDto(
     int Id,
@@ -39,7 +48,8 @@ public record CatalogueItemDto(
     DateTime CreatedAt,
     DateTime UpdatedAt,
     string? DetailPrompt = null,
-    string? DetailHint = null);
+    string? DetailHint = null,
+    IReadOnlyList<CatalogueItemOptionDto>? Options = null);
 
 public record CreateCompetitionListingRequest(int CatalogueItemId);
 
@@ -70,7 +80,8 @@ public record PublicCompetitionListingDto(
     CommerceItemCategory Category,
     string? ImageUrl,
     string? DetailPrompt = null,
-    string? DetailHint = null);
+    string? DetailHint = null,
+    IReadOnlyList<CatalogueItemOptionDto>? Options = null);
 
 public record EventCommerceSettingsDto(
     int CompetitionId,
@@ -87,7 +98,8 @@ public record EventCommerceSettingsDto(
 public record UpdateEventCommerceSettingsRequest(bool IsDemo);
 
 /// <param name="Detail">What the buyer typed for the item's <c>DetailPrompt</c>, at most 80 characters.</param>
-public record CreateEventOrderLineRequest(int ListingId, int Quantity, string? Detail = null);
+/// <param name="OptionId">The chosen option (size) when the item has options; required then, and refused otherwise.</param>
+public record CreateEventOrderLineRequest(int ListingId, int Quantity, string? Detail = null, int? OptionId = null);
 
 public record CreateEventOrderRequest(string? IdempotencyKey, IReadOnlyList<CreateEventOrderLineRequest>? Items);
 
@@ -100,7 +112,9 @@ public record EventOrderLineDto(
     int UnitPriceMinor,
     int Quantity,
     int LineTotalMinor,
-    string? Detail = null);
+    string? Detail = null,
+    int? OptionId = null,
+    string? OptionLabel = null);
 
 public record EventOrderDto(
     int Id,
@@ -176,7 +190,11 @@ internal static class CommerceDtoMappings
         item.CreatedAt,
         item.UpdatedAt,
         item.DetailPrompt,
-        item.DetailHint);
+        item.DetailHint,
+        item.Options.ToDtos());
+
+    public static IReadOnlyList<CatalogueItemOptionDto> ToDtos(this IEnumerable<CatalogueItemOption> options) =>
+        options.OrderBy(x => x.SortOrder).ThenBy(x => x.Id).Select(x => new CatalogueItemOptionDto(x.Id, x.Label, x.StockQuantity)).ToList();
 
     public static CompetitionListingDto ToDto(this CompetitionListing listing) => new(
         listing.Id,
@@ -202,7 +220,8 @@ internal static class CommerceDtoMappings
         listing.CatalogueItem.Category,
         listing.CatalogueItem.ImageUrl,
         listing.CatalogueItem.DetailPrompt,
-        listing.CatalogueItem.DetailHint);
+        listing.CatalogueItem.DetailHint,
+        listing.CatalogueItem.Options.ToDtos());
 
     public static EventOrderLineDto ToDto(this EventOrderLine line) => new(
         line.Id,
@@ -213,7 +232,9 @@ internal static class CommerceDtoMappings
         line.UnitPriceMinorSnapshot,
         line.Quantity,
         line.LineTotalMinor,
-        line.Detail);
+        line.Detail,
+        line.CatalogueItemOptionId,
+        line.OptionLabel);
 
     public static TestPaymentDto ToDto(this TestPaymentRecord payment) => new(
         payment.Id,

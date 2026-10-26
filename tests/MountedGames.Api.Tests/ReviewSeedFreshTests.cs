@@ -247,6 +247,8 @@ public class ReviewSeedFreshTests
         var seller = new AppUser { UserName = "seller@example.test", Email = "seller@example.test", FullName = "Seller" };
         db.Users.AddRange(user, seller);
         var item = new CatalogueItem { Seller = seller, Title = "Hay", Description = "A bale", PriceMinor = 500, StockQuantity = 7 };
+        var size = new CatalogueItemOption { Label = "Large bale", StockQuantity = 3 };
+        item.Options.Add(size);
         db.Set<CatalogueItem>().Add(item);
         await db.SaveChangesAsync();
         await ReviewCompetitionSeeder.SeedAsync(db, Today, Today.AddHours(10));
@@ -285,7 +287,8 @@ public class ReviewSeedFreshTests
             var listing = new CompetitionListing { Competition = competition, CatalogueItemId = item.Id, SellerUserId = seller.Id };
             db.Set<CompetitionListing>().Add(listing);
             var order = new EventOrder { Competition = competition, BuyerUserId = user.Id, IdempotencyKey = Guid.NewGuid().ToString(), RequestHash = "h", Status = CommerceOrderStatus.Paid, TotalMinor = 1000, HasStockReservation = true };
-            order.Lines.Add(new EventOrderLine { CatalogueItemId = item.Id, SellerUserId = seller.Id, TitleSnapshot = "Hay", Quantity = 2, UnitPriceMinorSnapshot = 500, LineTotalMinor = 1000, ReservedStockQuantity = 2 });
+            order.Lines.Add(new EventOrderLine { CatalogueItemId = item.Id, SellerUserId = seller.Id, TitleSnapshot = "Hay", Quantity = 2, UnitPriceMinorSnapshot = 500, LineTotalMinor = 1000, ReservedStockQuantity = 2,
+                CatalogueItemOptionId = size.Id, OptionLabel = size.Label, ReservedOptionStockQuantity = 2 });
             order.TestPayments.Add(new TestPaymentRecord { CompetitionId = competition.Id, OwnerUserId = user.Id, IdempotencyKey = Guid.NewGuid().ToString(), AmountMinor = 1000 });
             db.Set<EventOrder>().Add(order);
             var tack = new TackCheckSection { Competition = competition, Section = section, IsEnabled = true, Mode = TackCheckMode.BonusPoints };
@@ -298,6 +301,7 @@ public class ReviewSeedFreshTests
             db.VolunteerClaims.Add(new VolunteerClaim { ShiftId = vShift.Id, UserId = user.Id, VolunteerName = "Sam Volunteer" });
             db.Add(new SignupMatchmaking { SignupId = signup.Id, LookingForPair = true });
             db.Add(new SignupExtras { SignupId = signup.Id, StablesCount = 2 });
+            db.Add(new SignupGuestDetails { SignupId = signup.Id, RiderName = "Synthetic guest rider", GuardianName = "Synthetic parent", GuardianPhone = "07700900123" });
             db.Add(new CompetitionEntrySettings { CompetitionId = competition.Id, EntriesCloseAt = Today });
             db.Add(new CompetitionDeclarationLock { CompetitionId = competition.Id, DeclarationsCloseAt = Today });
             db.Set<RiderSwapEvent>().Add(new RiderSwapEvent { CompetitionId = competition.Id, DeclarationFormId = form.Id, TeamId = team.Id, OutRiderEntryId = 1, InRiderEntryId = 2, RequestId = Guid.NewGuid().ToString() });
@@ -318,6 +322,7 @@ public class ReviewSeedFreshTests
         Assert.Empty(await db.SectionSignups.ToListAsync());
         Assert.Empty(await db.Set<SignupMatchmaking>().ToListAsync());
         Assert.Empty(await db.Set<SignupExtras>().ToListAsync());
+        Assert.Empty(await db.Set<SignupGuestDetails>().ToListAsync());
         Assert.Empty(await db.Set<CompetitionEntrySettings>().ToListAsync());
         Assert.Empty(await db.Set<CompetitionDeclarationLock>().ToListAsync());
         Assert.Empty(await db.DeclarationForms.ToListAsync());
@@ -353,6 +358,8 @@ public class ReviewSeedFreshTests
         Assert.Empty(await db.Set<EquipmentAcknowledgement>().ToListAsync());
         // The two orders' held stock went back to the seller's item; the item and both users stay.
         Assert.Equal(7 + 2 * 2, (await db.Set<CatalogueItem>().SingleAsync()).StockQuantity);
+        // ...and to the option each line was for.
+        Assert.Equal(3 + 2 * 2, (await db.Set<CatalogueItemOption>().SingleAsync()).StockQuantity);
         Assert.Equal(2, await db.Users.CountAsync());
         Assert.Equal(0, await ReviewCompetitionSeeder.RemoveReviewCompetitionsAsync(db));
     }

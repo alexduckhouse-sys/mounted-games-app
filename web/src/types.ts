@@ -516,6 +516,41 @@ export interface MySignup {
   dispositionUpdatedAt?: string | null;
   waitlistOfferedAt?: string | null;
   waitlistOfferExpiresAt?: string | null;
+  /** The rider, parent and emergency contact on your own guest or individual entry (`GET /me/signups`). */
+  guest?: SignupGuestDetails | null;
+}
+
+/**
+ * The rider on a guest or individual entry when an adult enters for a child, plus the parent or guardian and an
+ * emergency contact (`SignupGuestDetailsDto`). Personal data about a child: only the competition's staff
+ * (`GET /competitions/:id/signups`) and the person who made the entry (`GET /me/signups`, the create reply) get it.
+ * Never show it on a public page, share card or export.
+ */
+export interface SignupGuestDetails {
+  riderName: string | null;
+  /** A calendar date, `yyyy-MM-dd`. */
+  riderDateOfBirth: string | null;
+  ponyName: string | null;
+  guardianName: string | null;
+  /** Tidied by the server (`07700900123`, `+447700900123`). */
+  guardianPhone: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+}
+
+/**
+ * The guest rider fields of `POST /competitions/:id/sections/:sectionId/signups` (`CreateSectionSignupInput`).
+ * Names need their phone number and the reverse; phones must be UK or Irish; the date of birth is `yyyy-MM-dd` or
+ * `dd/mm/yyyy` and in the past. Whole-team entries drop them.
+ */
+export interface SignupGuestDetailsInput {
+  riderName?: string | null;
+  riderDateOfBirth?: string | null;
+  ponyName?: string | null;
+  guardianName?: string | null;
+  guardianPhone?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
 }
 
 export interface FormedTeamPreview {
@@ -590,6 +625,8 @@ export interface SectionSignup {
   dispositionUpdatedAt?: string | null;
   waitlistOfferedAt?: string | null;
   waitlistOfferExpiresAt?: string | null;
+  /** Staff-only (and the entrant's own create reply): the guest rider, parent and emergency contact. */
+  guest?: SignupGuestDetails | null;
 }
 
 export interface UpdateSignupStablingInput {
@@ -702,6 +739,43 @@ export interface ClubInvoiceGroup {
   totalDueMinor: number;
   totalPaidMinor: number;
   signups: SectionSignup[];
+}
+
+/**
+ * One choice a seller offers for a catalogue item, usually a size (`CatalogueItemOptionDto`). Sent as `options` on
+ * catalogue items and public listings. `stockQuantity` null means no limit for that option; 0 means sold out.
+ */
+export interface CatalogueItemOption {
+  id: number;
+  label: string;
+  stockQuantity: number | null;
+}
+
+/**
+ * An option in `POST`/`PUT /commerce/catalogue` (`CatalogueItemOptionInput`). Send an existing option's `id` to keep it
+ * (its sales and stock stay with it); leave `id` out for a new one. On `PUT`, omitting `options` leaves them alone and
+ * an empty list removes them. Labels are 1 to 40 characters, unique, at most 30 options.
+ */
+export interface CatalogueItemOptionInput {
+  id?: number | null;
+  label: string;
+  stockQuantity: number | null;
+}
+
+/** The option fields on an order line (`EventOrderLineDto`); both null when the item had no options. */
+export interface EventOrderLineOption {
+  optionId?: number | null;
+  /** The option's label when the order was made ("M"), kept even if the seller renames it later. */
+  optionLabel?: string | null;
+}
+
+/** A line of `POST /commerce/competitions/:id/orders` (`CreateEventOrderLineRequest`). */
+export interface CreateEventOrderLine {
+  listingId: number;
+  quantity: number;
+  detail?: string | null;
+  /** Required when the item has options, refused when it has none. */
+  optionId?: number | null;
 }
 
 export interface ShopPost {

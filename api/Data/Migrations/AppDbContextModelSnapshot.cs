@@ -735,6 +735,41 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("CatalogueItem");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.Commerce.CatalogueItemOption", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CatalogueItemId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("StockQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(1L);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CatalogueItemId", "SortOrder");
+
+                    b.ToTable("CatalogueItemOption");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.Commerce.CompetitionListing", b =>
                 {
                     b.Property<int>("Id")
@@ -887,6 +922,9 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<int>("CatalogueItemId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("CatalogueItemOptionId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("CompetitionListingId")
                         .HasColumnType("integer");
 
@@ -900,8 +938,17 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<int>("LineTotalMinor")
                         .HasColumnType("integer");
 
+                    b.Property<string>("OptionLabel")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
                     b.Property<int>("Quantity")
                         .HasColumnType("integer");
+
+                    b.Property<int>("ReservedOptionStockQuantity")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.Property<int>("ReservedStockQuantity")
                         .ValueGeneratedOnAdd()
@@ -3199,6 +3246,43 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("SignupExtras", (string)null);
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.SignupGuestDetails", b =>
+                {
+                    b.Property<int>("SignupId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EmergencyContactName")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("EmergencyContactPhone")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("GuardianName")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("GuardianPhone")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("PonyName")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<DateTime?>("RiderDateOfBirth")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("RiderName")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.HasKey("SignupId");
+
+                    b.ToTable("SignupGuestDetails", (string)null);
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.SignupMatchmaking", b =>
                 {
                     b.Property<int>("SignupId")
@@ -3831,6 +3915,17 @@ namespace MountedGames.Api.Data.Migrations
                     b.Navigation("Seller");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.Commerce.CatalogueItemOption", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Commerce.CatalogueItem", "CatalogueItem")
+                        .WithMany("Options")
+                        .HasForeignKey("CatalogueItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CatalogueItem");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.Commerce.CompetitionListing", b =>
                 {
                     b.HasOne("MountedGames.Api.Entities.Commerce.CatalogueItem", "CatalogueItem")
@@ -4438,6 +4533,16 @@ namespace MountedGames.Api.Data.Migrations
                         .HasConstraintName("FK_SignupExtras_Signup");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.SignupGuestDetails", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.SectionSignup", null)
+                        .WithOne()
+                        .HasForeignKey("MountedGames.Api.Entities.SignupGuestDetails", "SignupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SignupGuestDetails_Signup");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.SignupMatchmaking", b =>
                 {
                     b.HasOne("MountedGames.Api.Entities.SectionSignup", null)
@@ -4662,6 +4767,11 @@ namespace MountedGames.Api.Data.Migrations
                     b.Navigation("SavedRiders");
 
                     b.Navigation("Teams");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Commerce.CatalogueItem", b =>
+                {
+                    b.Navigation("Options");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.Commerce.EventOrder", b =>

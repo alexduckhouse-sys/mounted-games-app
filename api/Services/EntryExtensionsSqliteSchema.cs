@@ -52,6 +52,18 @@ public static class EntryExtensionsSqliteSchema
             "WaitlistOfferExpiresAt" TEXT NULL,
             FOREIGN KEY ("SignupId") REFERENCES "SectionSignups" ("Id") ON DELETE CASCADE
             """, 1),
+        // Added by AddShopOptionsAndGuestDetails: the rider, parent and emergency contact on a guest or individual entry.
+        ("SignupGuestDetails", "\"SignupId\", \"RiderName\", \"RiderDateOfBirth\", \"PonyName\", \"GuardianName\", \"GuardianPhone\", \"EmergencyContactName\", \"EmergencyContactPhone\"", """
+            "SignupId" INTEGER NOT NULL PRIMARY KEY,
+            "RiderName" TEXT NULL,
+            "RiderDateOfBirth" TEXT NULL,
+            "PonyName" TEXT NULL,
+            "GuardianName" TEXT NULL,
+            "GuardianPhone" TEXT NULL,
+            "EmergencyContactName" TEXT NULL,
+            "EmergencyContactPhone" TEXT NULL,
+            CONSTRAINT "FK_SignupGuestDetails_Signup" FOREIGN KEY ("SignupId") REFERENCES "SectionSignups" ("Id") ON DELETE CASCADE
+            """, 1),
         ("CompetitionEntrySettings", "\"CompetitionId\", \"EntriesCloseAt\", \"MaxStables\", \"MaxHookups\"", """
             "CompetitionId" INTEGER NOT NULL PRIMARY KEY,
             "EntriesCloseAt" TEXT NULL,

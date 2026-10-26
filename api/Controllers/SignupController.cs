@@ -13,6 +13,7 @@ using MountedGames.Api.Entities.Commerce;
 using MountedGames.Api.Entities.Operations;
 using MountedGames.Api.Security;
 using MountedGames.Api.Services;
+using MountedGames.Api.Services.DecForms;
 using MountedGames.Api.Services.Email;
 
 namespace MountedGames.Api.Controllers;
@@ -46,11 +47,28 @@ public record CreateSectionSignupInput(
     [StringLength(120)] string? RiderName = null,
     [StringLength(32)] string? RiderDateOfBirth = null,
     [StringLength(120)] string? PonyName = null,
+    [StringLength(120)] string? GuardianName = null,
+    [StringLength(40)] string? GuardianPhone = null,
+    [StringLength(120)] string? EmergencyContactName = null,
+    [StringLength(40)] string? EmergencyContactPhone = null,
     [StringLength(40)] string? VehicleRegistration = null,
     [StringLength(500)] string? ArrivalNotes = null,
     [Range(0, 100)] int HookupsCount = 0,
     [StringLength(40)] string? ArrivalWindow = null
 );
+
+/// <summary>
+/// The rider, parent or guardian and emergency contact on a guest or individual entry. Personal data about a child:
+/// only in staff-only responses and the entrant's own (<c>GET api/me/signups</c>, the create reply). Never public.
+/// </summary>
+public record SignupGuestDetailsDto(
+    string? RiderName,
+    DateOnly? RiderDateOfBirth,
+    string? PonyName,
+    string? GuardianName,
+    string? GuardianPhone,
+    string? EmergencyContactName,
+    string? EmergencyContactPhone);
 
 public record SectionSignupExtendedDto(
     int Id, int CompetitionSectionId, string SectionName,
@@ -78,7 +96,8 @@ public record SectionSignupExtendedDto(
     string? DispositionNote = null,
     DateTime? DispositionUpdatedAt = null,
     DateTime? WaitlistOfferedAt = null,
-    DateTime? WaitlistOfferExpiresAt = null
+    DateTime? WaitlistOfferExpiresAt = null,
+    SignupGuestDetailsDto? Guest = null
 ) : SectionSignupDto(
     Id, CompetitionSectionId, SectionName, FullName, PonyClubName, ContactInfo,
     AmountMinor, Status, PaidAt, TeamId, CreatedAt,
@@ -115,7 +134,8 @@ public record MySignupExtendedDto(
     string? DispositionNote = null,
     DateTime? DispositionUpdatedAt = null,
     DateTime? WaitlistOfferedAt = null,
-    DateTime? WaitlistOfferExpiresAt = null
+    DateTime? WaitlistOfferExpiresAt = null,
+    SignupGuestDetailsDto? Guest = null
 ) : MySignupDto(
     Id, CompetitionId, CompetitionName, CompetitionStart, CompetitionSectionId, SectionName,
     FullName, PonyClubName, ContactInfo, AmountMinor, Status, PaidAt, TeamId, TeamName, CreatedAt
@@ -298,6 +318,74 @@ public class SignupController : ControllerBase
         return _db.Set<SignupExtras>().Where(x => ids.Contains(x.SignupId)).ToDictionaryAsync(x => x.SignupId);
     }
 
+    private Task<Dictionary<int, SignupGuestDetails>> LoadGuestMapAsync(IEnumerable<int> signupIds)
+    {
+        var ids = signupIds.Distinct().ToArray();
+        return _db.Set<SignupGuestDetails>().AsNoTracking().Where(x => ids.Contains(x.SignupId)).ToDictionaryAsync(x => x.SignupId);
+    }
+
+    private static SignupGuestDetailsDto? ToGuestDto(SignupGuestDetails? g) => g is null ? null : new SignupGuestDetailsDto(
+        g.RiderName,
+        g.RiderDateOfBirth is DateTime dob ? DateOnly.FromDateTime(dob) : null,
+        g.PonyName, g.GuardianName, g.GuardianPhone, g.EmergencyContactName, g.EmergencyContactPhone);
+
+    /// <summary>
+    /// Checks and tidies the guest rider fields. Null result and null <paramref name="details"/> when nothing was given.
+    /// A name needs its phone number and the reverse, phones must look like UK or Irish numbers, and a date of birth must
+    /// be a real past date.
+    /// </summary>
+    internal static string? ParseGuestDetails(CreateSectionSignupInput req, DateTime todayUtc, out SignupGuestDetails? details)
+    {
+        details = null;
+        static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        var rider = Clean(req.RiderName);
+        var dobText = Clean(req.RiderDateOfBirth);
+        var pony = Clean(req.PonyName);
+        var guardian = Clean(req.GuardianName);
+        var guardianPhone = Clean(req.GuardianPhone);
+        var emergency = Clean(req.EmergencyContactName);
+        var emergencyPhone = Clean(req.EmergencyContactPhone);
+        if (rider is null && dobText is null && pony is null && guardian is null && guardianPhone is null && emergency is null && emergencyPhone is null)
+            return null;
+        if (new[] { rider, pony, guardian, emergency }.Any(x => x?.Length > SignupGuestDetails.MaxNameLength))
+            return $"Names must be {SignupGuestDetails.MaxNameLength} characters or fewer.";
+
+        DateTime? dob = null;
+        if (dobText is not null)
+        {
+            string[] formats = ["yyyy-MM-dd", "dd/MM/yyyy", "d/M/yyyy"];
+            if (!DateOnly.TryParseExact(dobText, formats, System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var parsed))
+                return "Enter the rider's date of birth as a date, like 05/04/2015.";
+            var today = DateOnly.FromDateTime(todayUtc);
+            if (parsed > today || parsed < today.AddYears(-100))
+                return "Check the rider's date of birth: it must be in the past.";
+            dob = parsed.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
+        }
+
+        if ((guardian is null) != (guardianPhone is null))
+            return "Give both the parent or guardian's name and phone number, or neither.";
+        if ((emergency is null) != (emergencyPhone is null))
+            return "Give both the emergency contact's name and phone number, or neither.";
+        string? normalisedGuardianPhone = null, normalisedEmergencyPhone = null;
+        if (guardianPhone is not null && !PhoneNumbers.TryNormalise(guardianPhone, out normalisedGuardianPhone!))
+            return "The parent or guardian's phone number doesn't look right. Use a UK or Irish number, like 07123 456789.";
+        if (emergencyPhone is not null && !PhoneNumbers.TryNormalise(emergencyPhone, out normalisedEmergencyPhone!))
+            return "The emergency contact's phone number doesn't look right. Use a UK or Irish number, like 07123 456789.";
+
+        details = new SignupGuestDetails
+        {
+            RiderName = rider,
+            RiderDateOfBirth = dob,
+            PonyName = pony,
+            GuardianName = guardian,
+            GuardianPhone = normalisedGuardianPhone,
+            EmergencyContactName = emergency,
+            EmergencyContactPhone = normalisedEmergencyPhone,
+        };
+        return null;
+    }
+
     private Task<DateTime?> GetEntriesCloseAtAsync(int competitionId) => _db.Set<CompetitionEntrySettings>()
         .Where(x => x.CompetitionId == competitionId).Select(x => x.EntriesCloseAt).SingleOrDefaultAsync();
 
@@ -445,7 +533,8 @@ public class SignupController : ControllerBase
         return "None";
     }
 
-    private static SectionSignupExtendedDto ToExtendedDto(SectionSignup s, SignupMatchmaking? m, SignupExtras? ex = null)
+    /// <summary>Only for the competition's staff and the person who made the entry: <paramref name="guest"/> is a child's details.</summary>
+    private static SectionSignupExtendedDto ToExtendedDto(SectionSignup s, SignupMatchmaking? m, SignupExtras? ex = null, SignupGuestDetails? guest = null)
     {
         var b = s.ToDto();
         var disposition = EffectiveDisposition(ex, b.Status);
@@ -471,7 +560,8 @@ public class SignupController : ControllerBase
             ex?.DispositionNote,
             ex?.DispositionUpdatedAt,
             ex?.WaitlistOfferedAt,
-            ex?.WaitlistOfferExpiresAt
+            ex?.WaitlistOfferExpiresAt,
+            ToGuestDto(guest)
         );
     }
 
@@ -640,7 +730,8 @@ public class SignupController : ControllerBase
             {
                 var replayMeta = await LoadMatchmakingMapAsync(new[] { replay.Id });
                 var replayExtras = await LoadExtrasMapAsync(new[] { replay.Id });
-                return ToExtendedDto(replay, replayMeta.GetValueOrDefault(replay.Id), replayExtras.GetValueOrDefault(replay.Id));
+                var replayGuest = await LoadGuestMapAsync(new[] { replay.Id });
+                return ToExtendedDto(replay, replayMeta.GetValueOrDefault(replay.Id), replayExtras.GetValueOrDefault(replay.Id), replayGuest.GetValueOrDefault(replay.Id));
             }
         }
 
@@ -679,6 +770,10 @@ public class SignupController : ControllerBase
             return BadRequest(new { message = "Add your email address if you'd like emails when new competitions open." });
         if (req.EmailOptIn && req.EmailOptInVersion != EmailOptInWording.Version)
             return BadRequest(new { message = "The wording next to the email box has changed. Please reload the page and read it again." });
+        // A whole team's riders go on its dec form, so only a single rider's entry keeps these.
+        var guestError = ParseGuestDetails(req, clock.GetUtcNow().UtcDateTime, out var guestDetails);
+        if (guestError is not null) return BadRequest(new { message = guestError });
+        if (req.WholeTeam) guestDetails = null;
 
         if (!TryNormaliseArrivalWindow(req.ArrivalWindow, out var arrivalWindow))
             return BadRequest(new { message = "Arrival window must be FridayEvening, SaturdayMorning, or Other." });
@@ -820,7 +915,8 @@ public class SignupController : ControllerBase
             {
                 var winnerMeta = await LoadMatchmakingMapAsync(new[] { winner.Id });
                 var winnerExtras = await LoadExtrasMapAsync(new[] { winner.Id });
-                return ToExtendedDto(winner, winnerMeta.GetValueOrDefault(winner.Id), winnerExtras.GetValueOrDefault(winner.Id));
+                var winnerGuest = await LoadGuestMapAsync(new[] { winner.Id });
+                return ToExtendedDto(winner, winnerMeta.GetValueOrDefault(winner.Id), winnerExtras.GetValueOrDefault(winner.Id), winnerGuest.GetValueOrDefault(winner.Id));
             }
             throw;
         }
@@ -838,6 +934,11 @@ public class SignupController : ControllerBase
             VehicleRegistration = vehicleRegistration,
             ArrivalNotes = CompetitionFields.Trimmed(req.ArrivalNotes),
         });
+        if (guestDetails is not null)
+        {
+            guestDetails.SignupId = signup.Id;
+            _db.Add(guestDetails);
+        }
         await _db.SaveChangesAsync();
         await transaction.CommitAsync();
 
@@ -862,7 +963,8 @@ public class SignupController : ControllerBase
             .FirstAsync(s => s.Id == signup.Id);
         var meta = await LoadMatchmakingMapAsync(new[] { loaded.Id });
         var extras = await LoadExtrasMapAsync(new[] { loaded.Id });
-        return ToExtendedDto(loaded, meta.GetValueOrDefault(loaded.Id), extras.GetValueOrDefault(loaded.Id));
+        var guests = await LoadGuestMapAsync(new[] { loaded.Id });
+        return ToExtendedDto(loaded, meta.GetValueOrDefault(loaded.Id), extras.GetValueOrDefault(loaded.Id), guests.GetValueOrDefault(loaded.Id));
     }
 
     private Task<SectionSignup?> FindReplayAsync(int sectionId, string? userId, string requestId)
@@ -883,7 +985,8 @@ public class SignupController : ControllerBase
         var ids = rows.Select(r => r.Id).ToList();
         var meta = await LoadMatchmakingMapAsync(ids);
         var extras = await LoadExtrasMapAsync(ids);
-        return rows.Select(r => ToExtendedDto(r, meta.GetValueOrDefault(r.Id), extras.GetValueOrDefault(r.Id)));
+        var guests = await LoadGuestMapAsync(ids);
+        return rows.Select(r => ToExtendedDto(r, meta.GetValueOrDefault(r.Id), extras.GetValueOrDefault(r.Id), guests.GetValueOrDefault(r.Id)));
     }
 
     /// <summary>Organiser/admin marks a signup as paid (e.g. after receiving a BACS bank transfer) and triggers FormTeams.</summary>
@@ -933,7 +1036,8 @@ public class SignupController : ControllerBase
         if (meta?.LookingForPair != true && meta?.WaitingForGuestSpot != true)
             await FormTeamsCoreAsync(competitionId, signup.CompetitionSectionId,
                 new FormTeamsFromSignupsRequest(null, Preview: false, ReplaceExisting: false), signup.Id);
-        return ToExtendedDto(signup, await _db.Set<SignupMatchmaking>().FindAsync(signup.Id), ex);
+        return ToExtendedDto(signup, await _db.Set<SignupMatchmaking>().FindAsync(signup.Id), ex,
+            (await LoadGuestMapAsync(new[] { signup.Id })).GetValueOrDefault(signup.Id));
     }
 
     /// <summary>Public matchmaking listings for a competition: solo riders looking for a pair, whole teams looking for guest riders, and riders waiting for a guest ride spot.</summary>
@@ -1088,6 +1192,7 @@ public class SignupController : ControllerBase
         var ids = rows.Select(r => r.Id).ToList();
         var meta = await LoadMatchmakingMapAsync(ids);
         var extras = await LoadExtrasMapAsync(ids);
+        var guests = await LoadGuestMapAsync(ids);
         var compIds = rows.Select(r => r.Section?.CompetitionId ?? 0).Where(id => id > 0).Distinct().ToList();
         var drawnSections = await _db.Heats.AsNoTracking()
             .Where(h => compIds.Contains(h.Session!.CompetitionId) && h.Entries.Count > 0)
@@ -1145,7 +1250,8 @@ public class SignupController : ControllerBase
                 ex?.DispositionNote,
                 ex?.DispositionUpdatedAt,
                 ex?.WaitlistOfferedAt,
-                ex?.WaitlistOfferExpiresAt
+                ex?.WaitlistOfferExpiresAt,
+                ToGuestDto(guests.GetValueOrDefault(r.Id))
             );
         }).ToList();
     }
@@ -1465,6 +1571,10 @@ public class SignupController : ControllerBase
         var paidIds = allPaidSignups.Select(s => s.Id).ToList();
         var paidMeta = await LoadMatchmakingMapAsync(paidIds);
         var paidExtras = await LoadExtrasMapAsync(paidIds);
+        // A guest entry made by a parent carries the child's name: that is who rides, so it names the rider (and an
+        // Individual or Pairs team, shown with the entry's initial-only choice as before).
+        var paidGuests = await LoadGuestMapAsync(paidIds);
+        string RiderOf(SectionSignup s) => paidGuests.GetValueOrDefault(s.Id)?.RiderName ?? s.FullName;
         var paidSignups = allPaidSignups
             .Where(s => !(paidMeta.TryGetValue(s.Id, out var mm) && mm.WaitingForGuestSpot == true)
                      && !(paidExtras.TryGetValue(s.Id, out var ex) && (ex.IsWaitlist || ex.IsWithdrawn)))
@@ -1517,7 +1627,7 @@ public class SignupController : ControllerBase
                 if (tCount <= 1)
                 {
                     previews.Add(new FormedTeamPreview(clubName, clubId, string.Empty,
-                        new[] { whole.Id }, new[] { whole.FullName }, whole.TeamName));
+                        new[] { whole.Id }, new[] { RiderOf(whole) }, whole.TeamName));
                 }
                 else
                 {
@@ -1534,7 +1644,7 @@ public class SignupController : ControllerBase
                             ? customNames[k]
                             : $"{baseName} {suffix}".Trim();
                         previews.Add(new FormedTeamPreview(clubName, clubId, suffix,
-                            new[] { whole.Id }, new[] { whole.FullName }, tName));
+                            new[] { whole.Id }, new[] { RiderOf(whole) }, tName));
                     }
                 }
             }
@@ -1542,7 +1652,7 @@ public class SignupController : ControllerBase
             foreach (var named in singles.Where(s => !string.IsNullOrWhiteSpace(s.TeamName))
                          .GroupBy(s => s.TeamName!.Trim(), StringComparer.OrdinalIgnoreCase))
                 previews.Add(new FormedTeamPreview(clubName, clubId, string.Empty,
-                    named.Select(x => x.Id).ToList(), named.Select(x => x.FullName).ToList(), named.Key));
+                    named.Select(x => x.Id).ToList(), named.Select(RiderOf).ToList(), named.Key));
             var ordered = singles.Where(s => string.IsNullOrWhiteSpace(s.TeamName)).ToList();
             for (var i = 0; i < ordered.Count; i += ridersPerTeam)
             {
@@ -1552,16 +1662,16 @@ public class SignupController : ControllerBase
                     previews.Add(new FormedTeamPreview(
                         clubName, clubId, string.Empty,
                         slice.Select(x => x.Id).ToList(),
-                        slice.Select(x => x.FullName).ToList(),
-                        RiderNames.Display(slice[0].FullName, slice[0].UseInitialOnly, false)));
+                        slice.Select(RiderOf).ToList(),
+                        RiderNames.Display(RiderOf(slice[0]), slice[0].UseInitialOnly, false)));
                 }
                 else if (section.Format == SectionFormat.Pairs && ridersPerTeam == 2)
                 {
-                    var pairName = string.Join(" & ", slice.Select(x => RiderNames.Display(x.FullName, x.UseInitialOnly, false)));
+                    var pairName = string.Join(" & ", slice.Select(x => RiderNames.Display(RiderOf(x), x.UseInitialOnly, false)));
                     previews.Add(new FormedTeamPreview(
                         clubName, clubId, string.Empty,
                         slice.Select(x => x.Id).ToList(),
-                        slice.Select(x => x.FullName).ToList(),
+                        slice.Select(RiderOf).ToList(),
                         pairName));
                 }
                 else
@@ -1570,7 +1680,7 @@ public class SignupController : ControllerBase
                     previews.Add(new FormedTeamPreview(
                         clubName, clubId, suffix,
                         slice.Select(x => x.Id).ToList(),
-                        slice.Select(x => x.FullName).ToList()));
+                        slice.Select(RiderOf).ToList()));
                 }
             }
         }
@@ -1586,11 +1696,11 @@ public class SignupController : ControllerBase
                 var knownClub = clubsByName.GetValueOrDefault(pairClubKey);
                 var pairClubName = knownClub?.Name ?? pairClubKey;
                 var pairClubId = knownClub?.Id ?? 0;
-                var pairName = $"{RiderNames.Display(first.FullName, first.UseInitialOnly, false)} & {RiderNames.Display(second.FullName, second.UseInitialOnly, false)}";
+                var pairName = $"{RiderNames.Display(RiderOf(first), first.UseInitialOnly, false)} & {RiderNames.Display(RiderOf(second), second.UseInitialOnly, false)}";
                 previews.Add(new FormedTeamPreview(
                     pairClubName, pairClubId, string.Empty,
                     new[] { first.Id, second.Id },
-                    new[] { first.FullName, second.FullName },
+                    new[] { RiderOf(first), RiderOf(second) },
                     pairName));
             }
         }

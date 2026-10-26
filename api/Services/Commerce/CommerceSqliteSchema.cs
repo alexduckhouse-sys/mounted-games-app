@@ -12,6 +12,23 @@ public static class CommerceSqliteSchema
         await DbInitializer.EnsureColumnAsync(db, "CatalogueItem", "DetailPrompt", "TEXT NULL");
         await DbInitializer.EnsureColumnAsync(db, "CatalogueItem", "DetailHint", "TEXT NULL");
         await DbInitializer.EnsureColumnAsync(db, "EventOrderLine", "Detail", "TEXT NULL");
+        // Added by AddShopOptionsAndGuestDetails: seller-defined options (sizes) with optional stock each.
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "CatalogueItemOption" (
+                "Id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                "CatalogueItemId" INTEGER NOT NULL,
+                "Label" TEXT NOT NULL,
+                "StockQuantity" INTEGER NULL,
+                "SortOrder" INTEGER NOT NULL DEFAULT 0,
+                "Version" INTEGER NOT NULL DEFAULT 1,
+                CONSTRAINT "FK_CatalogueItemOption_CatalogueItem_CatalogueItemId" FOREIGN KEY ("CatalogueItemId") REFERENCES "CatalogueItem" ("Id") ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS "IX_CatalogueItemOption_CatalogueItemId_SortOrder" ON "CatalogueItemOption" ("CatalogueItemId", "SortOrder");
+            """);
+        await DbInitializer.EnsureColumnAsync(db, "EventOrderLine", "CatalogueItemOptionId", "INTEGER NULL");
+        await DbInitializer.EnsureColumnAsync(db, "EventOrderLine", "OptionLabel", "TEXT NULL");
+        await DbInitializer.EnsureColumnAsync(db, "EventOrderLine", "ReservedOptionStockQuantity", "INTEGER NOT NULL DEFAULT 0");
     }
 
     private static Task CreateTablesAsync(AppDbContext db) => db.Database.ExecuteSqlRawAsync("""

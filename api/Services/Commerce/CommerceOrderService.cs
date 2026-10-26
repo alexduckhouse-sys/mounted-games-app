@@ -38,27 +38,32 @@ public sealed class CommerceOrderService(AppDbContext db)
             return Invalid("At least one item is required.");
         if (request.Items.Count > 50)
             return Invalid("An order cannot contain more than 50 lines.");
-        if (request.Items.Any(x => x.ListingId <= 0 || x.Quantity is < 1 or > 99))
+        if (request.Items.Any(x => x is null || x.ListingId <= 0 || x.Quantity is < 1 or > 99))
             return Invalid("Each item needs a valid listing and a quantity from 1 to 99.");
+        if (request.Items.Any(x => x.OptionId is <= 0))
+            return Invalid("Each item needs a valid option.");
 
         if (request.Items.Any(x => x.Detail?.Trim().Length > MaxDetailLength))
             return Invalid($"Details can be at most {MaxDetailLength} characters.");
-        var byListing = request.Items
-            .GroupBy(x => x.ListingId)
+        // One line per listing and option, so an M and an L of the same hoodie are two lines.
+        var byLine = request.Items
+            .GroupBy(x => (x.ListingId, x.OptionId))
             .Select(g => new
             {
-                ListingId = g.Key,
+                g.Key.ListingId,
+                g.Key.OptionId,
                 Quantity = g.Sum(x => x.Quantity),
                 Details = g.Select(x => x.Detail?.Trim()).Where(d => !string.IsNullOrEmpty(d)).Distinct().ToList(),
             })
             .OrderBy(x => x.ListingId)
+            .ThenBy(x => x.OptionId ?? 0)
             .ToList();
-        if (byListing.Any(x => x.Details.Count > 1))
+        if (byLine.Any(x => x.Details.Count > 1))
             return Invalid("Send each item once, with a single detail.");
-        var grouped = byListing
-            .Select(x => new CreateEventOrderLineRequest(x.ListingId, x.Quantity, x.Details.SingleOrDefault()))
+        var grouped = byLine
+            .Select(x => new CreateEventOrderLineRequest(x.ListingId, x.Quantity, x.Details.SingleOrDefault(), x.OptionId))
             .ToList();
-        if (grouped.Any(x => x.Quantity > 99))
+        if (grouped.GroupBy(x => x.ListingId).Any(g => g.Sum(x => x.Quantity) > 99))
             return Invalid("The total quantity for one listing cannot exceed 99.");
 
         var requestHash = Hash(competitionId, grouped);
@@ -90,9 +95,9 @@ public sealed class CommerceOrderService(AppDbContext db)
                     return new CreateOrderResult(null, CreateOrderError.CompetitionNotFound, "Competition not found.");
                 }
 
-                var listingIds = grouped.Select(x => x.ListingId).ToList();
+                var listingIds = grouped.Select(x => x.ListingId).Distinct().ToList();
                 var listings = await db.Set<CompetitionListing>()
-                    .Include(x => x.CatalogueItem)
+                    .Include(x => x.CatalogueItem).ThenInclude(x => x!.Options)
                     .Where(x => listingIds.Contains(x.Id) && x.CompetitionId == competitionId)
                     .ToDictionaryAsync(x => x.Id, cancellationToken);
                 if (listings.Count != listingIds.Count || listings.Values.Any(x =>
@@ -108,6 +113,22 @@ public sealed class CommerceOrderService(AppDbContext db)
                     if (string.IsNullOrWhiteSpace(asked.DetailPrompt) || !string.IsNullOrWhiteSpace(requested.Detail)) continue;
                     await transaction.RollbackAsync(cancellationToken);
                     return Invalid($"Enter the {Lower(asked.DetailPrompt)} for {asked.Title}.");
+                }
+                // An item with options (sizes) needs one of them, and only its own; an item without takes none.
+                foreach (var requested in grouped)
+                {
+                    var item = listings[requested.ListingId].CatalogueItem!;
+                    if (item.Options.Count > 0 && requested.OptionId is null)
+                    {
+                        await transaction.RollbackAsync(cancellationToken);
+                        return Invalid($"Choose a size or option for {item.Title}.");
+                    }
+                    if (requested.OptionId is int optionId && item.Options.All(x => x.Id != optionId))
+                    {
+                        await transaction.RollbackAsync(cancellationToken);
+                        return new CreateOrderResult(null, CreateOrderError.ListingUnavailable,
+                            $"That option of {item.Title} is no longer available. Refresh the shop and choose again.");
+                    }
                 }
                 var totalMinor = grouped.Sum(x =>
                     (long)listings[x.ListingId].CatalogueItem!.PriceMinor * x.Quantity);
@@ -136,28 +157,18 @@ public sealed class CommerceOrderService(AppDbContext db)
                     }
                 }
 
-                var reservedStockByListing = new Dictionary<int, int>();
+                var reservations = new List<Reservation>();
                 foreach (var requested in grouped)
                 {
-                    var itemId = listings[requested.ListingId].CatalogueItemId;
-                    var reserved = await db.Set<CatalogueItem>()
-                        .Where(x => x.Id == itemId && x.IsActive &&
-                            (x.StockQuantity == null || x.StockQuantity >= requested.Quantity))
-                        .ExecuteUpdateAsync(setters => setters
-                            .SetProperty(x => x.StockQuantity,
-                                x => x.StockQuantity == null ? null : x.StockQuantity - requested.Quantity)
-                            .SetProperty(x => x.Version, x => x.Version + 1)
-                            .SetProperty(x => x.UpdatedAt, DateTime.UtcNow), cancellationToken);
-                    if (reserved != 1)
+                    var item = listings[requested.ListingId].CatalogueItem!;
+                    var option = item.Options.SingleOrDefault(x => x.Id == requested.OptionId);
+                    var reservation = await ReserveAsync(item.Id, item.Title, option?.Id, option?.Label, requested.Quantity, cancellationToken);
+                    if (!reservation.Ok)
                     {
                         await transaction.RollbackAsync(cancellationToken);
-                        return new CreateOrderResult(null, CreateOrderError.OutOfStock, "An item no longer has enough stock.");
+                        return new CreateOrderResult(null, CreateOrderError.OutOfStock, reservation.Message);
                     }
-                    var remainingStock = await db.Set<CatalogueItem>()
-                        .Where(x => x.Id == itemId)
-                        .Select(x => x.StockQuantity)
-                        .SingleAsync(cancellationToken);
-                    reservedStockByListing[requested.ListingId] = remainingStock.HasValue ? requested.Quantity : 0;
+                    reservations.Add(reservation);
                 }
 
                 var isDemo = await db.Set<EventCommerceSettings>()
@@ -177,10 +188,11 @@ public sealed class CommerceOrderService(AppDbContext db)
                     UpdatedAt = now,
                 };
                 if (isDemo) order.MarkAsTestOrder();
-                foreach (var requested in grouped)
+                foreach (var (requested, reservation) in grouped.Zip(reservations))
                 {
                     var listing = listings[requested.ListingId];
                     var item = listing.CatalogueItem!;
+                    var option = item.Options.SingleOrDefault(x => x.Id == requested.OptionId);
                     order.Lines.Add(new EventOrderLine
                     {
                         CompetitionListingId = listing.Id,
@@ -191,7 +203,10 @@ public sealed class CommerceOrderService(AppDbContext db)
                         Quantity = requested.Quantity,
                         // Only an item that asks for a detail keeps one.
                         Detail = string.IsNullOrWhiteSpace(item.DetailPrompt) ? null : requested.Detail?.Trim(),
-                        ReservedStockQuantity = reservedStockByListing[listing.Id],
+                        ReservedStockQuantity = reservation.ItemQuantity,
+                        CatalogueItemOptionId = option?.Id,
+                        OptionLabel = option?.Label,
+                        ReservedOptionStockQuantity = reservation.OptionQuantity,
                         LineTotalMinor = checked((int)((long)item.PriceMinor * requested.Quantity)),
                     });
                 }
@@ -226,7 +241,9 @@ public sealed class CommerceOrderService(AppDbContext db)
             .Include(x => x.TestPayments)
             .SingleOrDefaultAsync(x => x.Id == orderId, cancellationToken);
 
-    public async Task<bool> ReserveExistingLinesAsync(EventOrder order, CancellationToken cancellationToken)
+    /// <summary>Reserves stock again for an order that let it go (a declined test payment being retried).</summary>
+    /// <returns>Null when everything was reserved, otherwise what ran out, for the buyer. The caller rolls back.</returns>
+    public async Task<string?> ReserveExistingLinesAsync(EventOrder order, CancellationToken cancellationToken)
     {
         var requestedStables = 0;
         var requestedHookups = 0;
@@ -243,36 +260,92 @@ public sealed class CommerceOrderService(AppDbContext db)
         }
         foreach (var line in order.Lines)
         {
-            var reserved = await db.Set<CatalogueItem>()
-                .Where(x => x.Id == line.CatalogueItemId && x.IsActive &&
-                    (x.StockQuantity == null || x.StockQuantity >= line.Quantity))
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(x => x.StockQuantity,
-                        x => x.StockQuantity == null ? null : x.StockQuantity - line.Quantity)
-                    .SetProperty(x => x.Version, x => x.Version + 1)
-                    .SetProperty(x => x.UpdatedAt, DateTime.UtcNow), cancellationToken);
-            if (reserved != 1) return false;
-            var remainingStock = await db.Set<CatalogueItem>()
-                .Where(x => x.Id == line.CatalogueItemId)
-                .Select(x => x.StockQuantity)
-                .SingleAsync(cancellationToken);
-            line.ReservedStockQuantity = remainingStock.HasValue ? line.Quantity : 0;
+            var reservation = await ReserveAsync(
+                line.CatalogueItemId, line.TitleSnapshot, line.CatalogueItemOptionId, line.OptionLabel, line.Quantity, cancellationToken);
+            if (!reservation.Ok) return reservation.Message;
+            line.ReservedStockQuantity = reservation.ItemQuantity;
+            line.ReservedOptionStockQuantity = reservation.OptionQuantity;
         }
-        return true;
+        return null;
     }
 
+    /// <summary>Gives back the stock an order holds: to the item, and to the option (size) the line was for.</summary>
     public async Task ReleaseLinesAsync(EventOrder order, CancellationToken cancellationToken)
     {
         foreach (var line in order.Lines)
         {
-            if (line.ReservedStockQuantity <= 0) continue;
-            await db.Set<CatalogueItem>()
-                .Where(x => x.Id == line.CatalogueItemId && x.StockQuantity != null)
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(x => x.StockQuantity, x => x.StockQuantity + line.ReservedStockQuantity)
-                    .SetProperty(x => x.Version, x => x.Version + 1)
-                    .SetProperty(x => x.UpdatedAt, DateTime.UtcNow), cancellationToken);
+            if (line.ReservedStockQuantity > 0)
+                await db.Set<CatalogueItem>()
+                    .Where(x => x.Id == line.CatalogueItemId && x.StockQuantity != null)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(x => x.StockQuantity, x => x.StockQuantity + line.ReservedStockQuantity)
+                        .SetProperty(x => x.Version, x => x.Version + 1)
+                        .SetProperty(x => x.UpdatedAt, DateTime.UtcNow), cancellationToken);
+            if (line.ReservedOptionStockQuantity > 0 && line.CatalogueItemOptionId is int optionId)
+                await db.Set<CatalogueItemOption>()
+                    .Where(x => x.Id == optionId && x.CatalogueItemId == line.CatalogueItemId && x.StockQuantity != null)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(x => x.StockQuantity, x => x.StockQuantity + line.ReservedOptionStockQuantity)
+                        .SetProperty(x => x.Version, x => x.Version + 1), cancellationToken);
         }
+    }
+
+    /// <param name="Ok">False when there wasn't enough stock; <paramref name="Message"/> says what ran out.</param>
+    /// <param name="ItemQuantity">How much of the item's own stock was taken (0 when the item has no limit).</param>
+    /// <param name="OptionQuantity">How much of the option's stock was taken (0 without an option or a limit).</param>
+    private sealed record Reservation(bool Ok, int ItemQuantity, int OptionQuantity, string? Message = null);
+
+    /// <summary>
+    /// Takes <paramref name="quantity"/> from the item's stock and, for a line with an option, from that option's stock,
+    /// each with one conditional update (the same guarded decrement and version bump for both), so two buyers can never
+    /// take the last one. Runs inside the caller's serializable transaction, which rolls back on failure.
+    /// </summary>
+    private async Task<Reservation> ReserveAsync(
+        int itemId,
+        string title,
+        int? optionId,
+        string? optionLabel,
+        int quantity,
+        CancellationToken cancellationToken)
+    {
+        var reserved = await db.Set<CatalogueItem>()
+            .Where(x => x.Id == itemId && x.IsActive &&
+                (x.StockQuantity == null || x.StockQuantity >= quantity))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.StockQuantity,
+                    x => x.StockQuantity == null ? null : x.StockQuantity - quantity)
+                .SetProperty(x => x.Version, x => x.Version + 1)
+                .SetProperty(x => x.UpdatedAt, DateTime.UtcNow), cancellationToken);
+        if (reserved != 1) return new Reservation(false, 0, 0, "An item no longer has enough stock.");
+        var itemStock = await db.Set<CatalogueItem>()
+            .Where(x => x.Id == itemId)
+            .Select(x => x.StockQuantity)
+            .SingleAsync(cancellationToken);
+        var itemQuantity = itemStock.HasValue ? quantity : 0;
+        if (optionId is not int id) return new Reservation(true, itemQuantity, 0);
+
+        var reservedOption = await db.Set<CatalogueItemOption>()
+            .Where(x => x.Id == id && x.CatalogueItemId == itemId &&
+                (x.StockQuantity == null || x.StockQuantity >= quantity))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.StockQuantity,
+                    x => x.StockQuantity == null ? null : x.StockQuantity - quantity)
+                .SetProperty(x => x.Version, x => x.Version + 1), cancellationToken);
+        var optionStock = await db.Set<CatalogueItemOption>()
+            .Where(x => x.Id == id && x.CatalogueItemId == itemId)
+            .Select(x => new { x.StockQuantity, x.Label })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (reservedOption != 1)
+        {
+            var label = optionStock?.Label ?? optionLabel ?? "that option";
+            var message = optionStock is null
+                ? $"{title} in {label} is no longer available. Refresh the shop and choose again."
+                : optionStock.StockQuantity is null or <= 0
+                    ? $"{title} in {label} has sold out. Choose another option."
+                    : $"Only {optionStock.StockQuantity} left of {title} in {label}. Lower the quantity and try again.";
+            return new Reservation(false, 0, 0, message);
+        }
+        return new Reservation(true, itemQuantity, optionStock!.StockQuantity.HasValue ? quantity : 0);
     }
 
     private Task<EventOrder?> LoadByIdempotencyKeyAsync(
@@ -296,8 +369,8 @@ public sealed class CommerceOrderService(AppDbContext db)
 
     private static string Hash(int competitionId, IReadOnlyList<CreateEventOrderLineRequest> items)
     {
-        // The detail joins the hash only when there is one, so orders made before details existed still replay.
-        var input = $"{competitionId}|{string.Join('|', items.Select(x => $"{x.ListingId}:{x.Quantity}{(string.IsNullOrEmpty(x.Detail) ? "" : ":" + x.Detail)}"))}";
+        // The detail and option join the hash only when there is one, so older orders still replay.
+        var input = $"{competitionId}|{string.Join('|', items.Select(x => $"{x.ListingId}:{x.Quantity}{(string.IsNullOrEmpty(x.Detail) ? "" : ":" + x.Detail)}{(x.OptionId is int option ? "@" + option : "")}"))}";
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(input)));
     }
 }
