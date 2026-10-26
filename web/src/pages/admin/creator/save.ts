@@ -94,7 +94,7 @@ export async function saveCreator(draft: CreatorDraft, opts: {
       maxParticipants: parseMaxParticipants(s.maxParticipants),
       finalistCount: parseFinalistCount(s.finalistCount),
       // Heat, heat, final has no separate final, and the API refuses these for it.
-      ...(s.usesRaceFinals ? {} : { hasFinal: s.hasFinal !== false, carryPointsIntoFinal: s.carryPointsIntoFinal ?? false, doublePointsInFinal: s.doublePointsInFinal ?? false }),
+      ...(s.usesRaceFinals ? {} : { hasFinal: s.hasFinal !== false, carryPointsIntoFinal: s.carryPointsIntoFinal ?? true, doublePointsInFinal: s.doublePointsInFinal ?? false }),
     };
     if (s.existingId) {
       await step(`Saving ${name}…`, () => api.put(`${base}/sections/${s.existingId}`, { ...common, maxParticipants: common.maxParticipants ?? 0 }));
