@@ -23,6 +23,8 @@ export interface ToplistRow {
   withdrawn: boolean;
   /** Tack check bonus points, already in `points`. */
   bonus: number;
+  /** Plain-English explanation when two adjacent teams share the same total points. */
+  tieBreakReason?: string | null;
 }
 
 export interface Toplist {
@@ -223,10 +225,30 @@ export function buildToplist(standings: StandingRow[], sessions: Session[], team
   const ordered = [...standings].sort(compareRows);
   const standingRank = new Map(ordered.map((row, idx) => [row.teamId, (row as { place?: number }).place ?? idx + 1]));
   const finalGroups = buildFinalGroups(sessions, sectionId, standingRank);
-  const rows: ToplistRow[] = ordered.map((row) => {
+  const hasRaceResults = sessions.some((session) => session.competitionSectionId === sectionId && isRace(session)
+    && session.heats.some((heat) => heat.races.some((race) => race.results.length > 0)));
+  const rows: ToplistRow[] = ordered.map((row, idx) => {
     const position = ordered.findIndex((other) => level(other, row)) + 1;
     const joint = ordered.filter((other) => level(other, row)).length > 1;
-    return { teamId: row.teamId, teamName: row.teamName, points: row.totalPoints, position, joint, runoff: false, out: false, needed: null, racesLeft: racesLeft.get(row.teamId) ?? 0, withdrawn: row.withdrawn === true, bonus: row.bonusPoints ?? 0 };
+    let tieBreakReason: string | null = row.tieBreakReason ?? null;
+    if (!tieBreakReason && (row.totalPoints > 0 || hasRaceResults)) {
+      const next = ordered[idx + 1];
+      const prev = idx > 0 ? ordered[idx - 1] : undefined;
+      if (next && tier(row) === tier(next) && (row.totalPoints === next.totalPoints || Math.abs(row.totalPoints - next.totalPoints) < 0.1)) {
+        tieBreakReason = !hasRaceResults && row.tieBreakOrder == null && next.tieBreakOrder == null && (row.wins ?? 0) === (next.wins ?? 0) && row.totalPoints === next.totalPoints
+          ? 'Level on points and countback — run-off if on cut-off'
+          : explainTieBreak(row, next, sessions, sectionId);
+      } else if (prev && level(prev, row)) {
+        const prevReason = prev.tieBreakReason
+          ?? (!hasRaceResults && prev.tieBreakOrder == null && row.tieBreakOrder == null && (prev.wins ?? 0) === (row.wins ?? 0)
+            ? 'Level on points and countback — run-off if on cut-off'
+            : explainTieBreak(prev, row, sessions, sectionId));
+        if (prevReason === 'Level on points and countback — run-off if on cut-off') {
+          tieBreakReason = prevReason;
+        }
+      }
+    }
+    return { teamId: row.teamId, teamName: row.teamName, points: row.totalPoints, position, joint, runoff: false, out: false, needed: null, racesLeft: racesLeft.get(row.teamId) ?? 0, withdrawn: row.withdrawn === true, bonus: row.bonusPoints ?? 0, tieBreakReason };
   });
 
   const hcTeams = teams.filter((team) => team.isHorsConcours && team.competitionSectionId === sectionId);
@@ -659,10 +681,137 @@ function buildDetail(rows: ToplistRow[], finals: FinalGroup[], heatSessions: Ses
   return detail;
 }
 
+/**
+ * Computes a concise, human-readable tie-break explanation whenever two adjacent teams share the same total points.
+ */
+export function explainTieBreak(
+  above: StandingRow,
+  below: StandingRow,
+  sessions: Session[],
+  sectionId: number,
+): string | null {
+  if (above.tieBreakReason) return above.tieBreakReason;
+  if (Math.abs(above.totalPoints - below.totalPoints) >= 0.1) return null;
+  if (Math.abs(above.totalPoints - below.totalPoints) > 0 && Math.abs(above.totalPoints - below.totalPoints) < 0.1) {
+    return 'Settled by run-off / referee order';
+  }
+  if (above.tieBreakOrder != null && below.tieBreakOrder != null && above.tieBreakOrder !== below.tieBreakOrder) {
+    return 'Settled by run-off / referee order';
+  }
+  if (above.totalPoints <= 0 && (above.racesRun ?? 0) === 0 && (below.racesRun ?? 0) === 0) {
+    const anyScored = sessions.some((s) => s.competitionSectionId === sectionId && isRace(s)
+      && s.heats.some((h) => h.races.some((r) => r.results.length > 0)));
+    if (!anyScored) return null;
+  }
+
+  const sectionSessions = sessions
+    .filter((s) => s.competitionSectionId === sectionId && isRace(s))
+    .slice()
+    .sort((a, b) => a.orderIndex - b.orderIndex);
+
+  const allRaces: { isFinalHeat: boolean; raceName: string; aboveRes?: { placing: number | null; points: number; eliminated: boolean }; belowRes?: { placing: number | null; points: number; eliminated: boolean } }[] = [];
+  for (const session of sectionSessions) {
+    const heats = [...session.heats].sort((a, b) => a.orderIndex - b.orderIndex);
+    for (const heat of heats) {
+      const finalHeat = isFinal(session, heat);
+      const races = [...heat.races].sort((a, b) => a.orderIndex - b.orderIndex);
+      for (const race of races) {
+        if (race.results.length === 0) continue;
+        const aboveRes = race.results.find((r) => r.teamId === above.teamId);
+        const belowRes = race.results.find((r) => r.teamId === below.teamId);
+        if (aboveRes || belowRes) {
+          allRaces.push({ isFinalHeat: finalHeat, raceName: race.name, aboveRes, belowRes });
+        }
+      }
+    }
+  }
+
+  // 1. Check lettered / final heat results first when both competed in a final
+  const finalRaces = allRaces.filter((r) => r.isFinalHeat && (r.aboveRes || r.belowRes));
+  if (finalRaces.some((r) => r.aboveRes) && finalRaces.some((r) => r.belowRes)) {
+    const aFinalPts = finalRaces.reduce((sum, r) => sum + (r.aboveRes?.points ?? 0), 0);
+    const bFinalPts = finalRaces.reduce((sum, r) => sum + (r.belowRes?.points ?? 0), 0);
+    if (aFinalPts !== bFinalPts) {
+      return 'Ahead on A-Final placing';
+    }
+    const maxFinalPlace = Math.max(
+      0,
+      ...finalRaces.flatMap((r) => [
+        !r.aboveRes?.eliminated && (r.aboveRes?.placing ?? 0) > 0 ? r.aboveRes!.placing! : 0,
+        !r.belowRes?.eliminated && (r.belowRes?.placing ?? 0) > 0 ? r.belowRes!.placing! : 0,
+      ]),
+    );
+    for (let place = 1; place <= maxFinalPlace; place++) {
+      const aCount = finalRaces.filter((r) => !r.aboveRes?.eliminated && r.aboveRes?.placing === place).length;
+      const bCount = finalRaces.filter((r) => !r.belowRes?.eliminated && r.belowRes?.placing === place).length;
+      if (aCount !== bCount) return 'Ahead on A-Final placing';
+    }
+  }
+
+  // 2. Countback across all race results (or StandingRow.wins when sessions aren't passed)
+  const maxPlace = Math.max(
+    0,
+    ...allRaces.flatMap((r) => [
+      !r.aboveRes?.eliminated && (r.aboveRes?.placing ?? 0) > 0 ? r.aboveRes!.placing! : 0,
+      !r.belowRes?.eliminated && (r.belowRes?.placing ?? 0) > 0 ? r.belowRes!.placing! : 0,
+    ]),
+  );
+
+  let countbackFavoursBelow = false;
+  if (maxPlace > 0) {
+    for (let place = 1; place <= maxPlace; place++) {
+      const aCount = allRaces.filter((r) => !r.aboveRes?.eliminated && r.aboveRes?.placing === place).length;
+      const bCount = allRaces.filter((r) => !r.belowRes?.eliminated && r.belowRes?.placing === place).length;
+      if (aCount === bCount) continue;
+      if (aCount > bCount) {
+        const aWord = aCount === 1 ? 'place' : 'places';
+        const bWord = bCount === 1 ? 'place' : 'places';
+        return `Ahead of ${below.teamName} on Countback (${aCount}× ${ordinal(place)} ${aWord} vs ${bCount}× ${ordinal(place)} ${bWord})`;
+      }
+      countbackFavoursBelow = true;
+      break;
+    }
+  } else if ((above.wins ?? 0) !== (below.wins ?? 0)) {
+    const aWins = above.wins ?? 0;
+    const bWins = below.wins ?? 0;
+    if (aWins > bWins) {
+      const aWord = aWins === 1 ? 'place' : 'places';
+      const bWord = bWins === 1 ? 'place' : 'places';
+      return `Ahead of ${below.teamName} on Countback (${aWins}× 1st ${aWord} vs ${bWins}× 1st ${bWord})`;
+    }
+    countbackFavoursBelow = true;
+  }
+
+  // 3. Check Last Race when both competed in a recent race
+  for (let i = allRaces.length - 1; i >= 0; i--) {
+    const { raceName, aboveRes, belowRes } = allRaces[i];
+    if (!aboveRes || !belowRes) continue;
+    const aPlace = !aboveRes.eliminated && aboveRes.placing != null && aboveRes.placing > 0 ? aboveRes.placing : null;
+    const bPlace = !belowRes.eliminated && belowRes.placing != null && belowRes.placing > 0 ? belowRes.placing : null;
+    if (aPlace === bPlace && aboveRes.points === belowRes.points) continue;
+    const aboveBetter = (aPlace != null && bPlace != null && aPlace < bPlace)
+      || (aPlace != null && bPlace == null)
+      || aboveRes.points > belowRes.points;
+    if (aboveBetter) {
+      const aDesc = aPlace != null ? ordinal(aPlace) : `${aboveRes.points} pts`;
+      const bDesc = bPlace != null ? ordinal(bPlace) : belowRes.eliminated ? 'elim.' : `${belowRes.points} pts`;
+      return `Ahead on Last Race (${aDesc} in ${raceName} vs ${bDesc})`;
+    }
+    break;
+  }
+
+  if (countbackFavoursBelow) {
+    return 'Settled by run-off / referee order';
+  }
+
+  return 'Level on points and countback — run-off if on cut-off';
+}
+
 /** The small line under a team's name, or null when there is nothing worth saying. */
 export function toplistNote(row: ToplistRow): string | null {
   const tack = row.bonus > 0 ? `${row.bonus} tack bonus ${row.bonus === 1 ? 'point' : 'points'}` : null;
-  return [standingNote(row), tack].filter(Boolean).join(' · ') || null;
+  const tie = !row.withdrawn && !row.runoff ? row.tieBreakReason ?? null : null;
+  return [standingNote(row), tie, tack].filter(Boolean).join(' · ') || null;
 }
 
 function standingNote(row: ToplistRow): string | null {

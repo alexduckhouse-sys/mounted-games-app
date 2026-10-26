@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
@@ -62,6 +64,93 @@ public sealed class ResultsBookService(AppDbContext db, StandingsService standin
             new PrintableCompetitionDto(competition.Id, competition.Name, competition.Location, competition.StartDate, competition.EndDate),
             provisional, includePrivate, DateTime.UtcNow, sections,
             awards.Where(a => a.CompetitionSectionId is null).Select(ToDto).ToList(), notes);
+    }
+
+    /// <summary>
+    /// Formats a clean, public-safe plain-text results summary with podiums (🥇 1st, 🥈 2nd, 🥉 3rd),
+    /// finalists, points, riders formatted safely through <see cref="RiderNames.Display"/> so <c>UseInitialOnly</c>
+    /// minors never have their surname exposed, pony names, and special awards.
+    /// </summary>
+    public async Task<PublicResultsSummaryDto?> BuildPublicSummaryAsync(int competitionId, CancellationToken ct = default)
+    {
+        var book = await BuildAsync(competitionId, includePrivate: false, ct);
+        if (book is null) return null;
+
+        var teams = await db.Teams.AsNoTracking()
+            .Include(t => t.DeclarationForms).ThenInclude(f => f.Riders)
+            .Where(t => t.CompetitionId == competitionId)
+            .ToListAsync(ct);
+
+        var ridersByTeam = teams.ToDictionary(
+            t => t.Id,
+            t =>
+            {
+                var form = t.DeclarationForms.OrderByDescending(f => f.SubmittedAt).ThenByDescending(f => f.Id).FirstOrDefault();
+                return (IReadOnlyList<(string Name, string? Pony)>)(form?.Riders ?? [])
+                    .OrderBy(r => r.IsReserve)
+                    .ThenBy(r => r.OrderIndex)
+                    .ThenBy(r => r.Id)
+                    .Select(r => (
+                        Name: RiderNames.Display(r.FullName, r.UseInitialOnly, viewerSeesFullNames: false),
+                        Pony: string.IsNullOrWhiteSpace(r.HorseName) ? null : r.HorseName.Trim()))
+                    .Where(r => !string.IsNullOrWhiteSpace(r.Name))
+                    .ToList();
+            });
+
+        var sb = new StringBuilder();
+        var titleSuffix = book.IsProvisional ? "Provisional Results Summary" : "Results Summary";
+        sb.AppendLine($"🏆 {book.Competition.Name} — {titleSuffix}");
+        var dateStr = book.Competition.StartDate.ToString("d MMMM yyyy", CultureInfo.GetCultureInfo("en-GB"));
+        sb.AppendLine(string.IsNullOrWhiteSpace(book.Competition.Location)
+            ? dateStr
+            : $"{dateStr} · {book.Competition.Location}");
+
+        foreach (var section in book.Sections.Where(s => s.Standings.Count > 0))
+        {
+            sb.AppendLine();
+            sb.AppendLine($"=== {section.SectionName} ===");
+            foreach (var row in section.Standings)
+            {
+                var prefix = row.Rank switch
+                {
+                    1 => "🥇 1st:",
+                    2 => "🥈 2nd:",
+                    3 => "🥉 3rd:",
+                    _ => $"{TieBreaker.Ordinal(row.Rank)}:",
+                };
+                var finalPart = !string.IsNullOrWhiteSpace(row.FinalLabel) ? $", {row.FinalLabel}" : string.Empty;
+                sb.AppendLine($"{prefix} {row.TeamName} ({PointValues.Format(row.TotalPoints)} pts{finalPart})");
+
+                if (ridersByTeam.TryGetValue(row.TeamId, out var riders) && riders.Count > 0)
+                {
+                    var riderLine = string.Join(", ", riders.Select(r => r.Pony is not null ? $"{r.Name} ({r.Pony})" : r.Name));
+                    sb.AppendLine($"   Riders: {riderLine}");
+                }
+            }
+
+            foreach (var award in section.Awards)
+            {
+                var notePart = !string.IsNullOrWhiteSpace(award.Note) ? $" ({award.Note})" : string.Empty;
+                sb.AppendLine($"🎖️ {award.Title}: {award.Recipient}{notePart}");
+            }
+        }
+
+        if (book.EventAwards.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("=== Special Awards ===");
+            foreach (var award in book.EventAwards)
+            {
+                var notePart = !string.IsNullOrWhiteSpace(award.Note) ? $" ({award.Note})" : string.Empty;
+                sb.AppendLine($"🎖️ {award.Title}: {award.Recipient}{notePart}");
+            }
+        }
+
+        return new PublicResultsSummaryDto(
+            book.Competition.Id,
+            book.Competition.Name,
+            book.IsProvisional,
+            sb.ToString().TrimEnd());
     }
 
     /// <summary>Teams level on points inside the same final share a rank unless separated by a tie-break.</summary>

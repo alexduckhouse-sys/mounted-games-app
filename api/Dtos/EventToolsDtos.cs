@@ -64,3 +64,16 @@ public record StartingPointDto(
 public record SaveStartingPointRequest(string Name);
 public record RenameStartingPointRequest(string Name);
 public record CreateFromStartingPointRequest(string Name, DateTime StartDate, DateTime? EndDate);
+
+public record EventArchiveDto(
+    int CompetitionId,
+    string CompetitionName,
+    string FileName,
+    DateTime GeneratedAt,
+    IReadOnlyDictionary<string, string> Files);
+
+public record PublicResultsSummaryDto(
+    int CompetitionId,
+    string CompetitionName,
+    bool IsProvisional,
+    string SummaryText);

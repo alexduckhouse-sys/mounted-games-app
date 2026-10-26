@@ -546,6 +546,10 @@ export interface StandingRow {
   finalPoints?: number | null;
   /** Points scored before the final; null when it is in no lettered final. When the section doesn't carry points, `totalPoints` is `finalPoints` alone. */
   earlierPoints?: number | null;
+  /** Manual referee tie-break order when set. */
+  tieBreakOrder?: number | null;
+  /** Plain-English explanation when two adjacent teams share the same total points. */
+  tieBreakReason?: string | null;
 }
 
 /** Matches `TackCheckMode`: 0 pass or fail only, 1 a separate Tack & Turnout table, 2 bonus points in the standings. */
@@ -1281,4 +1285,20 @@ export interface EmergencyContactEntry {
   medicalNotes?: string | null;
   trainerName?: string | null;
   trainerPhone?: string | null;
+}
+
+export interface EventArchiveDto {
+  competitionId: number;
+  competitionName: string;
+  fileName: string;
+  generatedAt: string;
+  files: Record<string, string>;
+}
+
+export interface PublicResultsSummaryDto {
+  competitionId: number;
+  competitionName: string;
+  isProvisional: boolean;
+  generatedAt?: string;
+  summaryText: string;
 }

@@ -62,3 +62,11 @@ export function resultsBookToCsv(book: ResultsBook): string {
 export function resultsBookFileName(book: ResultsBook): string {
   return `${safeFilename(book.competition.name)}_results_book${book.includesPrivate ? '_organiser' : ''}.csv`;
 }
+
+export {
+  copyPublicResultsSummary,
+  formatPublicResultsSummary,
+  type FormatPublicResultsSummaryOptions,
+  type PublicSummaryRider,
+} from './resultsSummary';
+

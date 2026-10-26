@@ -237,4 +237,77 @@ public class ResultsBookTests : IClassFixture<ApiFactory>
         Assert.True(entries.Sections.Single().Teams.Single(t => t.TeamId == w.Arena.TeamIds[3]).IsHorsConcours);
         Assert.Equal(HttpStatusCode.NotFound, (await (await _f.AdminAsync()).GetAsync($"{Base(999999)}/print/entries")).StatusCode);
     }
+
+    // ---- public results summary & organiser archive ----
+
+    [Fact]
+    public async Task PublicResultsSummary_FormatsPodiumsAwardsAndProtectsInitialOnlyMinors()
+    {
+        var w = await WorldAsync();
+        var id = w.Arena.CompetitionId;
+        await _f.WithDbAsync(async db =>
+        {
+            var form = new DeclarationForm { TeamId = w.Arena.TeamIds[0], SubmittedAt = DateTime.UtcNow, TrainerName = "Coach Sarah", IsLocked = true, TermsAcceptedAt = DateTime.UtcNow };
+            db.DeclarationForms.Add(form);
+            await db.SaveChangesAsync();
+            db.RiderEntries.AddRange(
+                new RiderEntry { DeclarationFormId = form.Id, FullName = "Oliver Smith", HorseName = "Biscuit", IsCaptain = true, UseInitialOnly = true, OrderIndex = 0 },
+                new RiderEntry { DeclarationFormId = form.Id, FullName = "Ava Jones", HorseName = "Comet", IsReserve = false, UseInitialOnly = false, OrderIndex = 1 });
+            db.SpecialAwards.Add(new SpecialAward { CompetitionId = id, CompetitionSectionId = w.Arena.SectionId, Title = "Best Turned Out", Recipient = "Team 1", Note = "Gleaming", OrderIndex = 0 });
+            db.SpecialAwards.Add(new SpecialAward { CompetitionId = id, CompetitionSectionId = null, Title = "Spirit of the Games", Recipient = "All Riders", Note = null, OrderIndex = 1 });
+            await db.SaveChangesAsync();
+        });
+
+        var res = await _f.CreateClient().GetAsync($"{Base(id)}/results-summary");
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var summary = await res.ReadAsync<PublicResultsSummaryDto>();
+        Assert.Contains("🥇 1st:", summary.SummaryText);
+        Assert.Contains("Oliver S. (Biscuit)", summary.SummaryText);
+        Assert.DoesNotContain("Oliver Smith", summary.SummaryText);
+        Assert.Contains("Ava Jones (Comet)", summary.SummaryText);
+        Assert.Contains("🎖️ Best Turned Out: Team 1 (Gleaming)", summary.SummaryText);
+        Assert.Contains("🎖️ Spirit of the Games: All Riders", summary.SummaryText);
+        Assert.DoesNotContain("Lost a shoe", summary.SummaryText);
+        Assert.Equal(HttpStatusCode.NotFound, (await _f.CreateClient().GetAsync($"{Base(999999)}/results-summary")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Archive_RequiresCompetitionStaff_AndIncludesAllSixSelfContainedFilesAndZipFormat()
+    {
+        var w = await WorldAsync();
+        var id = w.Arena.CompetitionId;
+        await _f.WithDbAsync(async db =>
+        {
+            var form = new DeclarationForm { TeamId = w.Arena.TeamIds[0], SubmittedAt = DateTime.UtcNow, TrainerName = "Coach Sarah", IsLocked = true, TermsAcceptedAt = DateTime.UtcNow };
+            db.DeclarationForms.Add(form);
+            await db.SaveChangesAsync();
+            db.RiderEntries.Add(new RiderEntry { DeclarationFormId = form.Id, FullName = "Oliver Smith", HorseName = "Biscuit", PonyHeightHands = 13.2m, IsCaptain = true, UseInitialOnly = true, OrderIndex = 0 });
+            await db.SaveChangesAsync();
+        });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _f.CreateClient().GetAsync($"/api/competitions/{id}/archive")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await (await _f.TrainerAsync()).GetAsync($"/api/competitions/{id}/archive")).StatusCode);
+
+        var archiveRes = await w.Owner.GetAsync($"/api/competitions/{id}/archive");
+        Assert.Equal(HttpStatusCode.OK, archiveRes.StatusCode);
+        var archive = await archiveRes.ReadAsync<EventArchiveDto>();
+        Assert.Equal(id, archive.CompetitionId);
+        Assert.EndsWith("-archive.zip", archive.FileName);
+        Assert.Contains("results-book.csv", archive.Files.Keys);
+        Assert.Contains("standings.csv", archive.Files.Keys);
+        Assert.Contains("timetable.csv", archive.Files.Keys);
+        Assert.Contains("declarations.csv", archive.Files.Keys);
+        Assert.Contains("entries-summary.csv", archive.Files.Keys);
+        Assert.Contains("competition-snapshot.json", archive.Files.Keys);
+        Assert.Contains("Oliver S.", archive.Files["declarations.csv"]);
+        Assert.DoesNotContain("Oliver Smith", archive.Files["declarations.csv"]);
+
+        var zipRes = await w.Owner.GetAsync($"{Base(id)}/archive?format=zip");
+        Assert.Equal(HttpStatusCode.OK, zipRes.StatusCode);
+        Assert.Equal("application/zip", zipRes.Content.Headers.ContentType?.MediaType);
+        var zipBytes = await zipRes.Content.ReadAsByteArrayAsync();
+        Assert.True(zipBytes.Length > 100);
+        Assert.Equal((byte)'P', zipBytes[0]);
+        Assert.Equal((byte)'K', zipBytes[1]);
+    }
 }

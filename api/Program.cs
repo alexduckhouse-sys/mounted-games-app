@@ -111,6 +111,7 @@ builder.Services.AddSingleton<ScorerTokenGuard>();
 builder.Services.AddScoped<RaceFinalService>();
 builder.Services.AddScoped<StandingsService>();
 builder.Services.AddScoped<MountedGames.Api.Services.EventTools.ResultsBookService>();
+builder.Services.AddScoped<MountedGames.Api.Services.EventTools.EventArchiveService>();
 builder.Services.AddSingleton<ILiveBroadcaster, LiveBroadcaster>();
 builder.Services.AddSingleton<VapidKeyService>();
 builder.Services.AddScoped<PushNotifier>();
