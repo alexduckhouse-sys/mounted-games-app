@@ -5,7 +5,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useCompetition } from '../competition/context';
 import { LoadError, StatusPill } from './commerceUi';
-import { CATEGORY_LABEL, LISTING_LABEL, ORDER_LABEL, errorMessage, pounds } from './commerceFormat';
+import { CATEGORY_LABEL, LISTING_LABEL, ORDER_LABEL, errorMessage, orderLineText, pounds } from './commerceFormat';
 import type { CompetitionListing, EventCommerceSettings, EventOrder } from './types';
 import './commerce.css';
 
@@ -152,7 +152,7 @@ function CommerceManagementContent() {
               <StatusPill tone={order.isTestOrder ? 'test' : order.status === 2 ? 'good' : 'neutral'}>{order.isTestOrder ? `Demo · ${ORDER_LABEL[order.status]}` : ORDER_LABEL[order.status]}</StatusPill>
               <strong className="ml-auto">{pounds(order.totalMinor)}</strong>
             </div>
-            <p className="text-sm text-[rgb(var(--mg-body))]">{order.lines.map((line) => `${line.title} × ${line.quantity}`).join(', ')}</p>
+            <p className="text-sm text-[rgb(var(--mg-body))]">{order.lines.map(orderLineText).join(', ')}</p>
             {!order.isTestOrder && order.status === 0 && <button type="button" className="mg-btn mg-btn-primary self-start" disabled={busy} onClick={() => void manualAction(order, 'manual-payment')}>Mark external payment received</button>}
             {!order.isTestOrder && order.status === 2 && <button type="button" className="mg-btn mg-btn-secondary self-start" disabled={busy} onClick={() => void manualAction(order, 'manual-refund')}>Mark external refund sent</button>}
           </article>
