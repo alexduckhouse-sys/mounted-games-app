@@ -24,6 +24,15 @@ public class SignupExtras
     public bool IsWithdrawn { get; set; }
     public bool RefundPending { get; set; }
     public int TeamsCount { get; set; } = 1;
+    public DateTime? LastReminderSentAt { get; set; }
+    public string? ArrivalWindow { get; set; }
+    public string? VehicleRegistration { get; set; }
+    public string FeeDisposition { get; set; } = "None";
+    public int? RefundedAmountMinor { get; set; }
+    public string? DispositionNote { get; set; }
+    public DateTime? DispositionUpdatedAt { get; set; }
+    public DateTime? WaitlistOfferedAt { get; set; }
+    public DateTime? WaitlistOfferExpiresAt { get; set; }
 }
 
 public class CompetitionEntrySettings

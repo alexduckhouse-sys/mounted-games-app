@@ -3109,6 +3109,21 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<int>("SignupId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ArrivalWindow")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DispositionNote")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DispositionUpdatedAt")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FeeDisposition")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("None");
+
                     b.Property<int>("IsWaitlist")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -3119,6 +3134,9 @@ namespace MountedGames.Api.Data.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(0);
 
+                    b.Property<string>("LastReminderSentAt")
+                        .HasColumnType("text");
+
                     b.Property<string>("PaymentMethod")
                         .HasColumnType("text");
 
@@ -3126,6 +3144,9 @@ namespace MountedGames.Api.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(0);
+
+                    b.Property<int?>("RefundedAmountMinor")
+                        .HasColumnType("integer");
 
                     b.Property<int>("StablesCount")
                         .ValueGeneratedOnAdd()
@@ -3139,6 +3160,15 @@ namespace MountedGames.Api.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(1);
+
+                    b.Property<string>("VehicleRegistration")
+                        .HasColumnType("text");
+
+                    b.Property<string>("WaitlistOfferExpiresAt")
+                        .HasColumnType("text");
+
+                    b.Property<string>("WaitlistOfferedAt")
+                        .HasColumnType("text");
 
                     b.HasKey("SignupId");
 

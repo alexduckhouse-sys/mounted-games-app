@@ -149,6 +149,15 @@ public class AppDbContext : IdentityDbContext<AppUser>
             e.Property(x => x.IsWaitlist).HasConversion<int>().HasDefaultValue(false);
             e.Property(x => x.IsWithdrawn).HasConversion<int>().HasDefaultValue(false);
             e.Property(x => x.RefundPending).HasConversion<int>().HasDefaultValue(false);
+            e.Property(x => x.FeeDisposition).HasDefaultValue("None");
+            e.Property(x => x.LastReminderSentAt).HasColumnType("text").HasConversion(
+                value => StoredUtcTime(value), value => ReadUtcTime(value));
+            e.Property(x => x.DispositionUpdatedAt).HasColumnType("text").HasConversion(
+                value => StoredUtcTime(value), value => ReadUtcTime(value));
+            e.Property(x => x.WaitlistOfferedAt).HasColumnType("text").HasConversion(
+                value => StoredUtcTime(value), value => ReadUtcTime(value));
+            e.Property(x => x.WaitlistOfferExpiresAt).HasColumnType("text").HasConversion(
+                value => StoredUtcTime(value), value => ReadUtcTime(value));
             e.HasOne<SectionSignup>().WithOne().HasForeignKey<SignupExtras>(x => x.SignupId)
                 .HasConstraintName("FK_SignupExtras_Signup").OnDelete(DeleteBehavior.Cascade);
         });

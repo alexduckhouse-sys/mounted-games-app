@@ -402,6 +402,9 @@ export interface ClubPayouts {
   updatedAt: string | null;
 }
 
+export type ArrivalWindow = 'FridayEvening' | 'SaturdayMorning' | 'Other';
+export type FeeDisposition = 'None' | 'RefundPending' | 'Refunded' | 'Retained' | 'CreditRollover';
+
 export interface MySignup {
   id: number;
   competitionId: number;
@@ -418,6 +421,21 @@ export interface MySignup {
   teamId?: number | null;
   teamName?: string | null;
   createdAt: string;
+  stablesCount?: number;
+  stablingClubOrTeam?: string | null;
+  paymentMethod?: string | null;
+  isWaitlist?: boolean;
+  isWithdrawn?: boolean;
+  refundPending?: boolean;
+  teamsCount?: number;
+  arrivalWindow?: ArrivalWindow | null;
+  vehicleRegistration?: string | null;
+  feeDisposition?: FeeDisposition;
+  refundedAmountMinor?: number | null;
+  dispositionNote?: string | null;
+  dispositionUpdatedAt?: string | null;
+  waitlistOfferedAt?: string | null;
+  waitlistOfferExpiresAt?: string | null;
 }
 
 export interface FormedTeamPreview {
@@ -462,6 +480,101 @@ export interface SectionSignup {
   teamName?: string | null;
   /** A team manager or trainer entering a whole team in one go. */
   isWholeTeam?: boolean;
+  stablesCount?: number;
+  stablingClubOrTeam?: string | null;
+  paymentMethod?: string | null;
+  isWaitlist?: boolean;
+  isWithdrawn?: boolean;
+  refundPending?: boolean;
+  teamsCount?: number;
+  lastReminderSentAt?: string | null;
+  arrivalWindow?: ArrivalWindow | null;
+  vehicleRegistration?: string | null;
+  feeDisposition?: FeeDisposition;
+  refundedAmountMinor?: number | null;
+  dispositionNote?: string | null;
+  dispositionUpdatedAt?: string | null;
+  waitlistOfferedAt?: string | null;
+  waitlistOfferExpiresAt?: string | null;
+}
+
+export interface SendUnpaidRemindersInput {
+  signupIds: number[];
+  customNote?: string | null;
+}
+
+export interface SendUnpaidRemindersResult {
+  sentCount: number;
+  failedCount: number;
+  skippedCount: number;
+  sentAt: string;
+  signups: SectionSignup[];
+}
+
+export interface UpdateSignupArrivalInput {
+  arrivalWindow?: ArrivalWindow | null;
+  vehicleRegistration?: string | null;
+}
+
+export interface ArrivalManifestEntry {
+  signupId: number;
+  competitionSectionId: number;
+  sectionName: string;
+  fullName: string;
+  ponyClubName?: string | null;
+  teamName?: string | null;
+  teamsCount: number;
+  stablesCount: number;
+  stablingClubOrTeam?: string | null;
+  arrivalWindow: ArrivalWindow;
+  vehicleRegistration?: string | null;
+  status: SignupPaymentStatus;
+}
+
+export interface ArrivalManifest {
+  fridayEvening: ArrivalManifestEntry[];
+  saturdayMorning: ArrivalManifestEntry[];
+  other: ArrivalManifestEntry[];
+}
+
+export interface UpdateSignupDispositionInput {
+  feeDisposition: FeeDisposition;
+  refundedAmountMinor?: number | null;
+  dispositionNote?: string | null;
+}
+
+export interface FeeDispositionLedgerSummary {
+  totalRetainedMinor: number;
+  totalRefundedMinor: number;
+  refundsPendingMinor: number;
+  creditsRolledOverMinor: number;
+  rows: SectionSignup[];
+}
+
+export interface MarkClubPaidInput {
+  ponyClubName?: string | null;
+  signupIds?: number[] | null;
+}
+
+export interface MarkClubPaidResult {
+  ponyClubName: string;
+  clubBacsReference: string;
+  markedPaidCount: number;
+  totalAmountMinor: number;
+  signups: SectionSignup[];
+}
+
+export interface ClubInvoiceGroup {
+  clubName: string;
+  clubSlug: string;
+  clubBacsReference: string;
+  signupsCount: number;
+  teamsCount: number;
+  stablesCount: number;
+  totalAmountMinor: number;
+  totalDueMinor: number;
+  totalPaidMinor: number;
+  signups: SectionSignup[];
 }
 
 export interface ShopPost {
