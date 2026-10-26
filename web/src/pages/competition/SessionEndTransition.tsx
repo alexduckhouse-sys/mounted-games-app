@@ -329,7 +329,7 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
           )}
         </div>
 
-        <div className="sticky bottom-0 flex gap-2 border-t border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] p-3">
+        <div className="sticky bottom-0 flex gap-2 border-t border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] p-3 pb-[calc(12px+env(safe-area-inset-bottom))]">
           <button className="mg-btn mg-btn-secondary !min-h-10 !px-3 !py-2 text-sm" onClick={onClose}>Stay here</button>
           <button
             className="mg-btn mg-btn-primary ml-auto !min-h-10 !px-4 !py-2 text-sm"

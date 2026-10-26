@@ -219,6 +219,8 @@ export function ScoreRow({
   const dragged = useRef(false);
   const held = useRef(false);
   const holdTimer = useRef<number | null>(null);
+  // Places already there when the card opens stay still; only a place the scorer sets now springs in.
+  const [openedWith] = useState(() => (eliminated ? 'E' : state?.place ?? null));
   const [holding, setHolding] = useState(false);
 
   function clearHold() {
@@ -278,11 +280,11 @@ export function ScoreRow({
   const badge = sitting ? (
     <span className="sc-badge-sit" aria-label="Sitting out">S</span>
   ) : eliminated ? (
-    <span className="sc-place sc-place-out" aria-label={statusLabel(true, state?.status) ?? 'Eliminated'}>
+    <span key="E" className={`sc-place sc-place-out${openedWith === 'E' ? '' : ' sc-place-pop'}`} aria-label={statusLabel(true, state?.status) ?? 'Eliminated'}>
       {statusLetter(true, state?.status) ?? 'E'}
     </span>
   ) : state?.place ? (
-    <span className="sc-place" aria-label={`Place ${state.place}`}>{state.place}</span>
+    <span key={state.place} className={`sc-place${openedWith === state.place ? '' : ' sc-place-pop'}`} aria-label={`Place ${state.place}`}>{state.place}</span>
   ) : null;
 
   return (

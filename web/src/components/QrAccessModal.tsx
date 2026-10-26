@@ -197,7 +197,7 @@ function QrAccessSheet({
                   onClick={onClose}
                   className="mg-btn mg-btn-primary !min-h-10 !px-3.5 text-xs font-bold"
                 >
-                  <Printer className="h-4 w-4" aria-hidden="true" /> Print QR Posters Sheet
+                  <Printer className="h-4 w-4" aria-hidden="true" /> Print QR posters
                 </Link>
               </div>
             </div>

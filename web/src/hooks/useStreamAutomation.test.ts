@@ -48,9 +48,11 @@ describe('useStreamAutomation', () => {
     t.refresh({ done: [1] });
     await act(async () => {});
     expect(t.card()).toBe('heat');
+    expect(t.hook.result.current.step).toEqual({ card: 'heat', seconds: 20, run: 1 });
     await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
     expect(t.card()).toBe('none');
     expect(t.saveOverlay).toHaveBeenCalledTimes(2);
+    expect(t.hook.result.current.step).toBeNull();
   });
 
   it('runs the steps in turn: heat, then the toplist from session 2', async () => {
@@ -80,6 +82,7 @@ describe('useStreamAutomation', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(40_000); });
     expect(t.card()).toBe('toplist');
     expect(t.saveOverlay).toHaveBeenCalledTimes(1);
+    expect(t.hook.result.current.step).toBeNull();
   });
 
   it('does not run when automations are off, nothing is due, or the overlay cannot be changed', async () => {
