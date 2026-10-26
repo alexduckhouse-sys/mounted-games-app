@@ -11,6 +11,12 @@ public static class ReviewCompetitionSeeder
 {
     private const int LanesPerHeat = 6;
     private const int DemoEntryPriceMinor = 1500;
+
+    /// <summary>(has a final, earlier points carry into it, final points double), cycled over the demo age groups.</summary>
+    private static readonly (bool HasFinal, bool Carry, bool Doubled)[] FinalOptions =
+    [
+        (true, true, false), (true, false, false), (true, true, true), (true, false, true), (false, false, false),
+    ];
     // Cycled per age group: team counts span 4-16, race counts 6-10 (8 is the norm).
     private static readonly int[] TeamCounts = { 6, 8, 12, 16, 6, 10, 4, 14, 6 };
     private static readonly int[] RaceCounts = { 8, 8, 10, 8, 6, 8, 7, 9, 8 };
@@ -124,8 +130,14 @@ public static class ReviewCompetitionSeeder
                     var teamCount = TeamCounts[profile];
                     var raceCount = RaceCounts[profile];
                     var sectionName = SectionNaming.DisplayName(SectionFormat.Teams, ageGroup);
+                    // Vary the final options across the demo age groups so each combination can be seen: carry on or off,
+                    // double on or off, and some with no final at all.
+                    var (hasFinal, carry, doubled) = FinalOptions[(eventIndex * ageGroups.Length + ageIndex) % FinalOptions.Length];
                     var section = new CompetitionSection
                     {
+                        HasFinal = hasFinal,
+                        CarryPointsIntoFinal = carry,
+                        DoublePointsInFinal = doubled,
                         Competition = competition,
                         Format = SectionFormat.Teams,
                         AgeGroup = ageGroup,
@@ -145,7 +157,7 @@ public static class ReviewCompetitionSeeder
                     }).ToArray();
                     foreach (var team in teams) competition.Teams.Add(team);
 
-                    for (var round = 0; round < 2; round++)
+                    for (var round = 0; round < (hasFinal ? 2 : 1); round++)
                     {
                         var finished = offset < 0 || (offset == 0 && sessionOrder == 0);
                         var running = offset == 0 && sessionOrder == 1;
@@ -189,7 +201,7 @@ public static class ReviewCompetitionSeeder
                             var heat = new Heat
                             {
                                 Session = session,
-                                Label = round == 0 ? $"Heat {heatNumber + 1}" : "Final",
+                                Label = round == 0 ? $"Heat {heatNumber + 1}" : "A Final",
                                 OrderIndex = heatNumber + 1,
                                 DurationMinutes = MinutesPerHeat,
                                 ScheduledStart = start.AddMinutes(heatNumber * MinutesPerHeat),
@@ -226,7 +238,7 @@ public static class ReviewCompetitionSeeder
                                         .Select(x => x.team)
                                         .ToArray();
                                     for (var place = 0; place < ranked.Length; place++)
-                                        race.Results.Add(new Result { Race = race, Team = ranked[place], Placing = place + 1, Points = ranked.Length - place, RecordedAt = raceStart.AddMinutes(3) });
+                                        race.Results.Add(new Result { Race = race, Team = ranked[place], Placing = place + 1, Points = (ranked.Length - place) * (round == 1 && doubled ? 2 : 1), RecordedAt = raceStart.AddMinutes(3) });
                                 }
                             }
                         }

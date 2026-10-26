@@ -271,7 +271,8 @@ public class CompetitionPickerTests
             Assert.InRange(competition.Sections.Count, 3, 6); // large age groups split into A/B
             Assert.All(competition.Sections, section =>
                 Assert.InRange(competition.Teams.Count(team => team.CompetitionSectionId == section.Id), 3, 16));
-            Assert.Equal(competition.Sections.Count * 2, competition.Sessions.Count);
+            // A heats session for each age group, and a finals session for each that has a final.
+            Assert.Equal(competition.Sections.Sum(x => x.HasFinal ? 2 : 1), competition.Sessions.Count);
             Assert.All(competition.Sessions.SelectMany(s => s.Heats), heat =>
             {
                 Assert.InRange(heat.Entries.Count, 1, 6);

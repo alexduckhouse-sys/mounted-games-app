@@ -510,6 +510,18 @@ public class ScoringService
         var hasMultipleSections = teamSectionById.Values.Distinct().Count() > 1;
         var combinedScoringMode = ResolveCombinedScoringMode(heat.Session?.Notes, heat.Label, hasMultipleSections);
         var isQualifier = heat.RaceRoundStage == RaceRoundStage.Qualifier;
+        // A section can count its final's race points double (standard format only). The multiplier applies to the
+        // points a place earns, here and nowhere else, so every total, standing and export reads the doubled figure.
+        var doubledSectionIds = new HashSet<int>();
+        if (SectionScoring.IsFinalHeat(heat))
+        {
+            var sectionIds = teamSectionById.Values.Distinct().ToList();
+            doubledSectionIds = (await _db.CompetitionSections.AsNoTracking()
+                    .Where(sec => sectionIds.Contains(sec.Id) && !sec.UsesRaceFinals && sec.DoublePointsInFinal)
+                    .Select(sec => sec.Id).ToListAsync(cancellationToken)).ToHashSet();
+        }
+        int FinalMultiplier(int teamId)
+            => teamSectionById.TryGetValue(teamId, out var sectionId) && doubledSectionIds.Contains(sectionId) ? 2 : 1;
         int EffectivePlace(FinishingPlace fp)
         {
             if (fp.Eliminated || fp.Place < 1 || hcTeamIds.Count == 0) return fp.Place;
@@ -557,8 +569,8 @@ public class ScoringService
                 : 1;
             double placing = fp.Eliminated || hcTeamIds.Contains(fp.TeamId) ? 0
                 : isQualifier ? 1
-                : tiedCount > 1 ? DeadHeatPointsForPlace(effPlace, tiedCount, effBase, fp.Eliminated)
-                : PointsForPlace(effPlace, effBase, fp.Eliminated);
+                : (tiedCount > 1 ? DeadHeatPointsForPlace(effPlace, tiedCount, effBase, fp.Eliminated)
+                    : PointsForPlace(effPlace, effBase, fp.Eliminated)) * FinalMultiplier(fp.TeamId);
             if (!TryParsePointsDirective(fp.Note, out var overridePts, out var deltaPts))
                 return fp.Eliminated || hcTeamIds.Contains(fp.TeamId) ? 0 : fp.Points ?? placing;
             var points = overridePts ?? placing + deltaPts!.Value;

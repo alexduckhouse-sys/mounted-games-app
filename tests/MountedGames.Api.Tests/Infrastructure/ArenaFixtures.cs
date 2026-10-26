@@ -31,7 +31,9 @@ public static class ArenaFixtures
                 Format = SectionFormat.Teams,
                 AgeGroup = "U12",
                 DisplayName = "Under 12 Teams",
-                UsesRaceFinals = raceFinals
+                UsesRaceFinals = raceFinals,
+                // The long-standing behaviour: a finalist's earlier points count. New sections score the final on its own.
+                CarryPointsIntoFinal = true,
             };
             var club = new Club { Name = $"Club {Guid.NewGuid():N}" };
             db.CompetitionSections.Add(section);

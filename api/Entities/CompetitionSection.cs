@@ -32,6 +32,21 @@ public class CompetitionSection
     /// </summary>
     public bool UsesRaceFinals { get; set; }
 
+    // The three switches below are for the standard format only. Heat, heat, final (UsesRaceFinals) has no separate
+    // final session, so they are stored but ignored there. See SectionScoring.
+
+    /// <summary>The section ends with a finals session (A Final, B Final…). Off means it ends with its last heat session.</summary>
+    public bool HasFinal { get; set; } = true;
+
+    /// <summary>
+    /// On: a finalist's points from the earlier sessions add to its final's points in the standings.
+    /// Off: the final is scored on its own, so a finalist's standing is decided by its final alone.
+    /// </summary>
+    public bool CarryPointsIntoFinal { get; set; }
+
+    /// <summary>Race points in a final count double. Applied by <c>ScoringService</c> when a final race is saved.</summary>
+    public bool DoublePointsInFinal { get; set; }
+
     /// <summary>
     /// Cost (in minor units — pence / cents) to sign up a team for this section.
     /// Zero means free. Used by the pay-to-join signup flow.

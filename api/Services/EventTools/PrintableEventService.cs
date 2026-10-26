@@ -58,11 +58,13 @@ public sealed class PrintableEventService(AppDbContext db)
             var rows = section.Teams.Where(x => !x.IsHorsConcours).Select(team =>
             {
                 var results = team.Results.Where(x => x.Race?.Heat?.Session?.CompetitionSectionId == section.Id).ToArray();
+                var finalPoints = results.Where(x => x.Race?.Heat is { } heat && SectionScoring.IsFinalHeat(heat)).Sum(x => x.Points);
                 return new
                 {
                     Team = team,
                     Tier = tiers.SortKey(team.Id),
-                    Total = results.Sum(x => x.Points) + bonus.GetValueOrDefault(team.Id),
+                    Total = SectionScoring.Total(section, tiers.TierOf(team.Id) is not null,
+                        results.Sum(x => x.Points) - finalPoints, finalPoints, bonus.GetValueOrDefault(team.Id)),
                     Bonus = bonus.GetValueOrDefault(team.Id),
                     Run = results.Length,
                     Wins = results.Count(x => x.Placing == 1 && !x.Eliminated),
