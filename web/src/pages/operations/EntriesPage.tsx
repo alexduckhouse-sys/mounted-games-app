@@ -59,6 +59,7 @@ export function EntriesPage() {
   const [lock, setLock] = useState<string | null>(null);
   const [config, setConfig] = useState<DecFormConfig | null>(null);
   const [open, setOpen] = useState<number | null>(null);
+  const [withdrawReasons, setWithdrawReasons] = useState<Record<number, string>>({});
   const [setup, setSetup] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
@@ -101,14 +102,22 @@ export function EntriesPage() {
   const closed = Boolean(competition.signupsLocked);
 
   const groups = useMemo(() => {
-    const map = new Map<number, { name: string; teams: TeamEntry[] }>();
+    const map = new Map<number, { name: string; teams: TeamEntry[]; pendingSignups: SectionSignup[] }>();
     for (const entry of entries ?? []) {
-      const group = map.get(entry.sectionId) ?? { name: displaySectionName(entry.sectionName), teams: [] };
+      const group = map.get(entry.sectionId) ?? { name: displaySectionName(entry.sectionName), teams: [], pendingSignups: [] };
       group.teams.push(entry);
       map.set(entry.sectionId, group);
     }
+    for (const signup of live) {
+      const ext = signup as SectionSignup & { isWithdrawn?: boolean };
+      if (signup.status === 0 && !signup.teamId && !ext.isWithdrawn) {
+        const group = map.get(signup.competitionSectionId) ?? { name: displaySectionName(signup.sectionName), teams: [], pendingSignups: [] };
+        group.pendingSignups.push(signup);
+        map.set(signup.competitionSectionId, group);
+      }
+    }
     return [...map.entries()];
-  }, [entries]);
+  }, [entries, live]);
 
   const toggleEntries = () => run('Couldn’t change entries.', async () => {
     await api.post(`/competitions/${competition.id}/signups-locked`, { locked: !closed });
@@ -122,9 +131,15 @@ export function EntriesPage() {
     }
   });
 
+  const markSignupPaid = (signup: SectionSignup) => run('Couldn’t change the payment.', async () => {
+    await api.post(`/competitions/${competition.id}/signups/${signup.id}/mark-paid`);
+    reload();
+  });
+
   async function withdraw(team: TeamEntry) {
     if (!(await confirmDialog({ title: `Withdraw ${team.teamName}?`, message: 'They come out of the draw. You can bring them back until a draw depends on it.', confirmLabel: 'Withdraw', destructive: true }))) return;
-    await run('Couldn’t withdraw the entry.', () => api.put(`/competitions/${competition.id}/teams/${team.teamId}/entry-status`, { status: 1, reason: null }));
+    const customReason = (withdrawReasons[team.teamId] ?? '').trim();
+    await run('Couldn’t withdraw the entry.', () => api.put(`/competitions/${competition.id}/teams/${team.teamId}/entry-status`, { status: 1, reason: customReason || null }));
     reload();
   }
   async function reinstate(team: TeamEntry) {
@@ -160,11 +175,27 @@ export function EntriesPage() {
           </div>
         </RefineList>
 
-        {entries !== null && entries.length === 0 && <p className="rf-note">No entries yet.</p>}
+        {entries !== null && entries.length === 0 && groups.length === 0 && <p className="rf-note">No entries yet.</p>}
         {groups.map(([sectionId, group]) => (
           <Fragment key={sectionId}>
             <RefineSection title={group.name} />
             <RefineList as="div" label={group.name}>
+              {group.pendingSignups.map((signup) => {
+                const displayLabel = signup.teamName?.trim() || signup.ponyClubName?.trim() || signup.fullName;
+                return (
+                  <div key={`signup-${signup.id}`} className="rf-row ops-entry-row">
+                    <span className="rf-grow">
+                      <span className="rf-t1">{displayLabel}</span>
+                      <span className="rf-t2">
+                        <span className="ops-unpaid">Not paid</span>
+                        {signup.fullName && signup.fullName !== displayLabel ? ` · ${signup.fullName}` : ''}
+                      </span>
+                    </span>
+                    <span className="rf-st rf-warn">Pending payment</span>
+                    <button type="button" className="rf-btn" disabled={busy} onClick={() => void markSignupPaid(signup)}>Mark paid</button>
+                  </div>
+                );
+              })}
               {group.teams.map((team) => {
                 const mine = live.filter((s) => s.teamId === team.teamId);
                 const paid = mine.length > 0 && mine.every((s) => s.status === 1);
@@ -203,7 +234,18 @@ export function EntriesPage() {
                         <div className="ops-line ops-line-end">
                           {out
                             ? (team.canReinstate ? <button type="button" className="rf-btn" disabled={busy} onClick={() => void reinstate(team)}>Reinstate</button> : <span className="rf-t2">This entry is out of the draw.</span>)
-                            : <button type="button" className="ops-danger-link" disabled={busy} onClick={() => void withdraw(team)}>Withdraw this entry</button>}
+                            : (
+                              <div className="flex flex-wrap items-center gap-2">
+                                <input
+                                  aria-label={`Withdrawal reason for ${team.teamName}`}
+                                  placeholder="Reason for withdrawal (optional)"
+                                  value={withdrawReasons[team.teamId] ?? ''}
+                                  onChange={(e) => setWithdrawReasons((cur) => ({ ...cur, [team.teamId]: e.target.value }))}
+                                  className="min-h-9 rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))] px-2.5 text-sm"
+                                />
+                                <button type="button" className="ops-danger-link" disabled={busy} onClick={() => void withdraw(team)}>Withdraw this entry</button>
+                              </div>
+                            )}
                         </div>
                       </div>
                     )}

@@ -125,20 +125,41 @@ public class RiderSwapService(AppDbContext db)
                     outRider.IsCaptain = false;
                     outRider.OrderIndex = form.Riders.Count > 0 ? form.Riders.Max(r => r.OrderIndex) + 1 : 5;
 
+                    SavedRider? replacementSaved = null;
+                    if (!string.IsNullOrWhiteSpace(repRider) && form.Team?.ClubId is { } clubId)
+                    {
+                        var trimmedRider = repRider.Trim();
+                        var candidates = await db.SavedRiders.AsNoTracking()
+                            .Where(s => s.ClubId == clubId)
+                            .ToListAsync(ct);
+                        var matches = candidates
+                            .Where(s => string.Equals(s.FullName.Trim(), trimmedRider, StringComparison.OrdinalIgnoreCase))
+                            .ToList();
+                        replacementSaved = !string.IsNullOrWhiteSpace(repHorse)
+                            ? matches.FirstOrDefault(s => string.Equals(s.HorseName?.Trim(), repHorse.Trim(), StringComparison.OrdinalIgnoreCase))
+                              ?? matches.FirstOrDefault()
+                            : matches.FirstOrDefault();
+                    }
+
                     inRider = new RiderEntry
                     {
                         DeclarationFormId = form.Id,
+                        SavedRiderId = replacementSaved?.Id,
                         FullName = !string.IsNullOrWhiteSpace(repRider) ? repRider : outRider.FullName,
-                        DateOfBirth = string.IsNullOrWhiteSpace(repRider) ? outRider.DateOfBirth : null,
+                        DateOfBirth = string.IsNullOrWhiteSpace(repRider) ? outRider.DateOfBirth : replacementSaved?.DateOfBirth,
                         HorseName = !string.IsNullOrWhiteSpace(repHorse) ? repHorse : outRider.HorseName,
                         PonyHeightHands = string.IsNullOrWhiteSpace(repHorse) ? outRider.PonyHeightHands : null,
                         BibColour = outRider.BibColour,
                         IsCaptain = wasCaptain,
                         IsReserve = false,
-                        IsGuestRider = !string.IsNullOrWhiteSpace(repRider),
+                        IsGuestRider = !string.IsNullOrWhiteSpace(repRider) && replacementSaved is null,
                         OrderIndex = seatOrder,
-                        UseInitialOnly = outRider.UseInitialOnly,
-                        NoFilming = outRider.NoFilming,
+                        UseInitialOnly = !string.IsNullOrWhiteSpace(repRider)
+                            ? ((replacementSaved?.UseInitialOnly ?? false) || MountedGames.Api.Services.DecForms.DecFormRules.HasSingleLetterSurnameInitial(repRider))
+                            : outRider.UseInitialOnly,
+                        NoFilming = !string.IsNullOrWhiteSpace(repRider)
+                            ? (replacementSaved?.NoFilming ?? false)
+                            : outRider.NoFilming,
                     };
                     form.Riders.Add(inRider);
                     await db.SaveChangesAsync(ct);

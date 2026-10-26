@@ -472,7 +472,11 @@ public class CommerceController(AppDbContext db) : ControllerBase
         return await InSerializableTransactionAsync<EventOrderDto>(async () =>
         {
             var order = await _orders.LoadAsync(id, cancellationToken);
-            if (order is null || order.BuyerUserId != userId) return NotFound();
+            if (order is null) return NotFound();
+            var isBuyer = order.BuyerUserId == userId;
+            var isSeller = order.Lines.Count > 0 && order.Lines.All(line => line.SellerUserId == userId);
+            var isOrganiser = await CanManageCompetitionAsync(order.CompetitionId, cancellationToken);
+            if (!isBuyer && !isSeller && !isOrganiser) return NotFound();
             if (order.Status == CommerceOrderStatus.Cancelled) return order.ToDto();
             if (order.Status is not (CommerceOrderStatus.AwaitingManualPayment or CommerceOrderStatus.AwaitingTestPayment or CommerceOrderStatus.Declined))
                 return Conflict(new { message = "This order can no longer be cancelled by the buyer." });

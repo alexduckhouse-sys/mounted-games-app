@@ -146,9 +146,20 @@ export function SectionsPage() {
 
   function setTieBreak(section: SectionDraft, rule: string) {
     if (!section.existingId) return;
+    const saved = sectionsById.get(section.existingId);
+    const finalistCount = parseFinalistCount(section.finalistCount) ?? saved?.finalistCount ?? null;
+    const nextRule = Number(rule);
+    const nextDraft: CreatorDraft = {
+      ...latest.current,
+      sections: latest.current.sections.map((s) => (s.existingId === section.existingId
+        ? { ...s, tieBreak: nextRule, finalistCount: s.finalistCount || (finalistCount != null ? String(finalistCount) : '') }
+        : s)),
+    };
+    latest.current = nextDraft;
+    setDraft(nextDraft);
     const runoff = section.runoffRaceName.trim() || null;
     // The API clears the number of finalists when it is left out, so send the one the section has.
-    void saveSetting('the tie-break', () => api.put(`/competitions/${competition.id}/sections/${section.existingId}`, { runoffRaceName: runoff, tieBreakRule: Number(rule), finalistCount: parseFinalistCount(section.finalistCount) }));
+    void saveSetting('the tie-break', () => api.put(`/competitions/${competition.id}/sections/${section.existingId}`, { runoffRaceName: runoff, tieBreakRule: nextRule, finalistCount }));
   }
   function setSessionSettings(section: SectionDraft, patch: { laneRotationMode?: number; raceOrderAlternating?: boolean }) {
     if (!section.existingId) return;

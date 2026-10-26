@@ -61,8 +61,7 @@ public class TeamEntryService(AppDbContext db)
         var reason = (request.Reason ?? string.Empty).Trim();
         if (reason.Length > MaxReasonLength)
             throw new EntryValidationException($"The reason must be {MaxReasonLength} characters or fewer.");
-        if (request.Status == TeamEntryStatus.Withdrawn && reason.Length == 0)
-            throw new EntryValidationException("Say why the team is withdrawing.");
+        if (request.Status == TeamEntryStatus.Withdrawn && reason.Length == 0) reason = "Withdrawn by organiser";
         if (request.Status == TeamEntryStatus.NoShow && reason.Length == 0) reason = "Did not arrive";
 
         var strategy = db.Database.CreateExecutionStrategy();

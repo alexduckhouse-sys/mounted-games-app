@@ -94,8 +94,6 @@ public static class SignupConfirmationEmail
             html.Append(EmailHtml.Row("Where", competition.Location.Trim()));
         html.Append(EmailHtml.Row("Class", section.DisplayName));
         html.Append(EmailHtml.Row("Entry fee", Money(signup.AmountMinor)));
-        if (signup.AmountMinor > 0 && !string.IsNullOrWhiteSpace(competition.PaymentDestination))
-            html.Append(EmailHtml.Row("Payment instructions", competition.PaymentDestination.Trim()));
         html.Append("</table>");
 
         if (signup.AmountMinor <= 0)

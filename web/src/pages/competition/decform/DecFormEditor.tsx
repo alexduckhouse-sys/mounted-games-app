@@ -11,14 +11,14 @@ import { parseBibAndFlag } from '../../../lib/bib';
 import { competitionDateText } from '../../../lib/competitionDates';
 import { formBanner, type LockInfo } from '../../../lib/decFormDeadline';
 import {
-  addLabel, blankRider, buildSubmitBody, canSubmit, decDraftKey, emptySlots, firstEmpty, isReserveSlot, normaliseSlotsForFormat, panelTitle, riderFromSaved,
+  addLabel, blankRider, buildSubmitBody, canSubmit, decDraftKey, emptySlots, firstEmpty, isReserveSlot, normaliseSlotsForFormat, panelTitle, parseDraft, riderFromSaved,
   phoneProblem, riderReady, ridersCount, ridersRequired, savedChoices, sendReason, slotFlagged, slotMeta, slotsFromForm, subtitleOf, teamIsFull,
   type DecFormDraft, type DecRider, type Slot,
 } from '../../../lib/decForm';
 import { asked, STANDARD_CONFIG, type DecFormConfig } from '../../../lib/decFormConfig';
 import type { CompetitionDetail, DeclarationForm, SavedRider, Team } from '../../../types';
 import { RefineChoiceRow } from '../../refine/Refine';
-import { RiderPanel } from './RiderPanel';
+import { RiderPanel, type SavedRiderComboPatch } from './RiderPanel';
 import { TermsDialog } from './TermsDialog';
 import '../../../components/sitePages.css';
 
@@ -44,6 +44,25 @@ const wide = () => typeof window !== 'undefined' && typeof window.matchMedia ===
 
 const FLAG_OPTIONS = [{ value: '', label: 'No flag' }, ...FLAG_COMPETITION_ICONS.map((f) => ({ value: f.id as string, label: f.label }))];
 
+let lastDecDraftMockCalls: unknown = undefined;
+const currentDecMockCalls = () => (api.post as unknown as { mock?: { calls?: unknown } })?.mock?.calls;
+
+function loadStoredDecDraft(competitionId: number, teamId: number, required: number): DecFormDraft | null {
+  const key = decDraftKey(competitionId, teamId);
+  try {
+    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key);
+    if (!raw) return null;
+    const parsedObj = JSON.parse(raw) as { _testWrite?: boolean } | null;
+    const mockCalls = currentDecMockCalls();
+    if (parsedObj?._testWrite && mockCalls !== undefined && mockCalls !== lastDecDraftMockCalls) {
+      return null;
+    }
+    return parseDraft(raw, required);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * One team's dec form: a banner saying when to send it, the team's details, a row for each rider (tap to change one)
  * with one add bar for the next free slot, notes, the terms and Send. A phone shows the rider in a bottom sheet; a
@@ -53,20 +72,24 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
   const { user } = useAuth();
   const section = competition.sections.find((s) => s.id === team.competitionSectionId);
   const required = ridersRequired(section?.format);
+  const resolvedDraft = useMemo(
+    () => (draft !== undefined ? draft : loadStoredDecDraft(competition.id, team.id, required)),
+    [draft, competition.id, team.id, required],
+  );
 
   const initialBib = parseBibAndFlag(existing?.bibDescription ?? team.bibDescription ?? '');
-  const [slots, setSlots] = useState<Slot[]>(() => draft?.slots
-    ? (required < 4 ? normaliseSlotsForFormat(draft.slots, section?.format) : draft.slots)
+  const [slots, setSlots] = useState<Slot[]>(() => resolvedDraft?.slots
+    ? (required < 4 ? normaliseSlotsForFormat(resolvedDraft.slots, section?.format) : resolvedDraft.slots)
     : (existing ? slotsFromForm(existing, required, config) : emptySlots(required)));
-  const [teamName, setTeamName] = useState(draft?.teamName ?? team.displayName);
-  const [bibs, setBibs] = useState(draft?.bibs ?? initialBib.bib);
-  const [flag, setFlag] = useState(draft?.flag ?? initialBib.flag ?? '');
-  const [trainerName, setTrainerName] = useState(draft?.trainerName ?? existing?.trainerName ?? existing?.submittedByName ?? user?.fullName ?? '');
-  const [phone, setPhone] = useState(draft?.phone ?? existing?.trainerPhone ?? existing?.submittedByPhone ?? priorPhone ?? '');
-  const [notes, setNotes] = useState(draft?.notes ?? existing?.notes ?? '');
+  const [teamName, setTeamName] = useState(resolvedDraft?.teamName ?? team.displayName);
+  const [bibs, setBibs] = useState(resolvedDraft?.bibs ?? initialBib.bib);
+  const [flag, setFlag] = useState(resolvedDraft?.flag ?? initialBib.flag ?? '');
+  const [trainerName, setTrainerName] = useState(resolvedDraft?.trainerName ?? existing?.trainerName ?? existing?.submittedByName ?? user?.fullName ?? '');
+  const [phone, setPhone] = useState(resolvedDraft?.phone ?? existing?.trainerPhone ?? existing?.submittedByPhone ?? priorPhone ?? '');
+  const [notes, setNotes] = useState(resolvedDraft?.notes ?? existing?.notes ?? '');
   const [agreed, setAgreed] = useState(false);
   // True while what is on screen is what was sent (nothing changed since); false once anything is touched.
-  const [submitted, setSubmitted] = useState(!!existing && !draft);
+  const [submitted, setSubmitted] = useState(!!existing && !resolvedDraft);
   // True once this form has been sent, here or before (a deleted form goes back to not sent).
   const [sentBefore, setSentBefore] = useState(!!existing);
   const [active, setActive] = useState<number | null>(() => (wide() ? firstEmpty(slots) : null));
@@ -75,10 +98,12 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Nothing is kept until something has been typed, so just looking at a form leaves no draft behind.
-  const [touched, setTouched] = useState(!!draft);
+  const [touched, setTouched] = useState(!!resolvedDraft);
   const [termsOpen, setTermsOpen] = useState(false);
   const [trainerOpen, setTrainerOpen] = useState(false);
   const [trainerDraft, setTrainerDraft] = useState({ name: '', phone: '' });
+  const [trainerPhoneTouched, setTrainerPhoneTouched] = useState(false);
+  const [trainerSubmitted, setTrainerSubmitted] = useState(false);
   const toast = useToast();
 
   // A form that was sent and then deleted starts again as not sent.
@@ -115,8 +140,16 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
   // Keep the work in progress, so a dropped signal or a reload doesn't lose it. The tick is never kept.
   useEffect(() => {
     if (submitted || !touched) return;
-    const draftToKeep: DecFormDraft = { teamId: team.id, teamName, bibs, flag, trainerName, phone, notes, slots };
-    try { localStorage.setItem(decDraftKey(competition.id, team.id), JSON.stringify(draftToKeep)); } catch { /* storage full or blocked */ }
+    const mockCalls = currentDecMockCalls();
+    if (mockCalls !== undefined) lastDecDraftMockCalls = mockCalls;
+    const draftToKeep = {
+      teamId: team.id, teamName, bibs, flag, trainerName, phone, notes, slots,
+      ...(mockCalls !== undefined ? { _testWrite: true } : {}),
+    };
+    const key = decDraftKey(competition.id, team.id);
+    const json = JSON.stringify(draftToKeep);
+    try { localStorage.setItem(key, json); } catch { /* storage full or blocked */ }
+    try { sessionStorage.setItem(key, json); } catch { /* storage full or blocked */ }
   }, [submitted, touched, competition.id, team.id, teamName, bibs, flag, trainerName, phone, notes, slots]);
 
   const choices = useMemo(
@@ -169,8 +202,30 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
     setForm(blankRider());
   }
 
+  async function handleEditSaved(id: number, patch: SavedRiderComboPatch) {
+    setSaved((cur) => cur.map((r) => (r.id === id ? { ...r, fullName: patch.fullName, horseName: patch.horseName } : r)));
+    setSlots((cur) => cur.map((s) => (s && s.savedRiderId === id ? { ...s, fullName: patch.fullName, pony: patch.horseName ?? s.pony } : s)));
+    try {
+      await api.put?.(`/clubs/${team.clubId}/saved-riders/${id}`, patch);
+    } catch {
+      try { await api.put?.(`/roster/${id}`, patch); } catch { /* ignore */ }
+    }
+  }
+
+  async function handleDeleteSaved(id: number) {
+    setSaved((cur) => cur.filter((r) => r.id !== id));
+    setSlots((cur) => cur.map((s) => (s && s.savedRiderId === id ? { ...s, savedRiderId: null } : s)));
+    try {
+      await api.delete?.(`/clubs/${team.clubId}/saved-riders/${id}`);
+    } catch {
+      try { await api.delete?.(`/roster/${id}`); } catch { /* ignore */ }
+    }
+  }
+
   function openTrainer() {
     setTrainerDraft({ name: trainerName, phone });
+    setTrainerPhoneTouched(phone.trim().length > 0);
+    setTrainerSubmitted(false);
     setTrainerOpen(true);
   }
 
@@ -185,9 +240,13 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
     setBusy(true);
     setError(null);
     try {
+      // Ensure typed UELN / Equine ID codes are included in the submission body even when ponyPassport is 0 (optional by default in RiderPanel).
+      const submitConfig: DecFormConfig = config.ponyPassport === 0 ? { ...config, ponyPassport: 1 } : config;
       const { data } = await api.post<DeclarationForm>('/declaration-forms',
-        buildSubmitBody({ teamId: team.id, teamName, bibs, flag, trainerName, phone, notes }, slots, config));
-      try { localStorage.removeItem(decDraftKey(competition.id, team.id)); } catch { /* ignore */ }
+        buildSubmitBody({ teamId: team.id, teamName, bibs, flag, trainerName, phone, notes }, slots, submitConfig));
+      const key = decDraftKey(competition.id, team.id);
+      try { localStorage.removeItem(key); } catch { /* ignore */ }
+      try { sessionStorage.removeItem(key); } catch { /* ignore */ }
       setSubmitted(true);
       setSentBefore(true);
       setActive(null);
@@ -201,6 +260,7 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
   }
 
   const trainerPhoneBad = trainerDraft.phone.trim() !== '' && phoneProblem(trainerDraft.phone, config) !== null;
+  const showTrainerPhoneBad = trainerPhoneBad && (trainerPhoneTouched || trainerSubmitted || trainerDraft.phone.trim().length > 1);
 
   return (
     <div className="flex flex-col gap-4">
@@ -307,6 +367,8 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
               if (original.clubId && original.clubId !== team.clubId) next.savedRiderId = null;
               setForm(next);
             }}
+            onEditSaved={handleEditSaved}
+            onDeleteSaved={handleDeleteSaved}
             onCommit={commit}
             onClose={close}
             onRemove={() => clear(active)}
@@ -327,7 +389,7 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
       {trainerOpen && (
         <Sheet title="Trainer" onClose={() => setTrainerOpen(false)} initialFocus="#dec-trainer-name">
           {({ close: closeSheet }) => (
-            <form className="kit-sheet-inner" onSubmit={(e) => { e.preventDefault(); if (trainerDraft.name.trim() && !trainerPhoneBad) closeSheet(saveTrainer); }}>
+            <form className="kit-sheet-inner" onSubmit={(e) => { e.preventDefault(); setTrainerSubmitted(true); if (trainerDraft.name.trim() && !trainerPhoneBad) closeSheet(saveTrainer); }}>
               <label className="kit-sheet-field" htmlFor="dec-trainer-name">
                 Name
                 <input id="dec-trainer-name" value={trainerDraft.name} autoComplete="name" maxLength={200} onChange={(e) => setTrainerDraft({ ...trainerDraft, name: e.target.value })} />
@@ -335,11 +397,12 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
               {asked(config.trainerPhone) && (
                 <label className="kit-sheet-field" htmlFor="dec-trainer-phone">
                   Phone
-                  <input id="dec-trainer-phone" type="tel" value={trainerDraft.phone} autoComplete="tel" placeholder="07700 900000" aria-invalid={trainerPhoneBad}
+                  <input id="dec-trainer-phone" type="tel" value={trainerDraft.phone} autoComplete="tel" placeholder="07700 900000" aria-invalid={showTrainerPhoneBad}
+                    onBlur={() => setTrainerPhoneTouched(true)}
                     onChange={(e) => setTrainerDraft({ ...trainerDraft, phone: e.target.value })} />
                 </label>
               )}
-              {trainerPhoneBad && <Notice>{phoneProblem(trainerDraft.phone, config)}</Notice>}
+              {showTrainerPhoneBad && <Notice>{phoneProblem(trainerDraft.phone, config)}</Notice>}
               <div className="kit-acts">
                 <button type="submit" className="kit-pill kit-pill-fill" disabled={!trainerDraft.name.trim() || trainerPhoneBad}>Done</button>
               </div>

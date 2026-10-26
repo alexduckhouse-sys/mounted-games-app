@@ -80,12 +80,12 @@ function CommerceOrdersContent() {
     ? { ...next, competitionName: next.competitionName ?? existing.competitionName }
     : existing) ?? null);
 
-  async function cancel(order: EventOrder): Promise<boolean> {
-    if (!(await confirmDialog({ title: 'Cancel this order?', message: `Order ${order.id} is cancelled and the items go back on sale.`, confirmLabel: 'Cancel order', cancelLabel: 'Keep order', destructive: true }))) return false;
-    setBusyId(order.id);
+  async function cancelById(orderId: number): Promise<boolean> {
+    if (!(await confirmDialog({ title: 'Cancel this order?', message: `Order ${orderId} is cancelled and the items go back on sale.`, confirmLabel: 'Cancel order', cancelLabel: 'Keep order', destructive: true }))) return false;
+    setBusyId(orderId);
     setError(null);
     try {
-      await api.post(`/commerce/orders/${order.id}/cancel`);
+      await api.post(`/commerce/orders/${orderId}/cancel`);
       await load();
       return true;
     } catch (requestError) {
@@ -94,6 +94,10 @@ function CommerceOrdersContent() {
     } finally {
       setBusyId(null);
     }
+  }
+
+  async function cancel(order: EventOrder): Promise<boolean> {
+    return cancelById(order.id);
   }
 
   async function refund(order: EventOrder): Promise<boolean> {
@@ -165,7 +169,7 @@ function CommerceOrdersContent() {
               </>
             )
       ) : (
-        <SalesList sales={sales} />
+        <SalesList sales={sales} busyId={busyId} onCancelSale={(sale) => { void cancelById(sale.orderId); }} />
       )}
 
       {current && (
@@ -206,7 +210,7 @@ function OrderGroup({ title, meta, orders, onOpen }: { title: string; meta?: str
 
 const STABLING_LINE_PATTERN = /stabl|hook[\s-]*up|shaving|haylage|bedding|bale|camping|pitch|corral|lorry/i;
 
-function SalesList({ sales }: { sales: SellerSale[] | null }) {
+function SalesList({ sales, busyId, onCancelSale }: { sales: SellerSale[] | null; busyId: number | null; onCancelSale: (sale: SellerSale) => void }) {
   if (sales == null) return <p role="status" className="sp-note">Loading your sales…</p>;
 
   // Demo orders move no money, so they stay out of the totals.
@@ -246,13 +250,28 @@ function SalesList({ sales }: { sales: SellerSale[] | null }) {
           <div className="sp-card">
             {sales.map((sale) => {
               const status = STATUS[sale.status];
+              const canCancelSale = [0, 1, 3].includes(sale.status);
               return (
                 <div key={sale.orderId} className="cs-row">
                   <span className="sp-grow">
                     <span className="sp-t1">{eventName(sale.competitionName)}</span>
                     <span className="sp-t2">Order {sale.orderId}{sale.isTestOrder && ' · demo'} · {linesText(sale.lines)}</span>
                   </span>
-                  <span className="cs-right"><span className="sp-price !text-[18px]">{pounds(sale.sellerTotalMinor)}</span><Chip tone={status.tone}>{status.text}</Chip></span>
+                  <span className="cs-right">
+                    <span className="sp-price !text-[18px]">{pounds(sale.sellerTotalMinor)}</span>
+                    <Chip tone={status.tone}>{status.text}</Chip>
+                    {canCancelSale && (
+                      <button
+                        type="button"
+                        className="kit-redtext cs-redtext-s"
+                        disabled={busyId === sale.orderId}
+                        aria-label={`Cancel order ${sale.orderId}`}
+                        onClick={() => onCancelSale(sale)}
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </span>
                 </div>
               );
             })}
