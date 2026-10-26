@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { apiErrorMessage } from '../lib/apiError';
+import '../components/sitePages.css';
 
 type Phase = 'working' | 'done' | 'failed' | 'incomplete';
 
@@ -38,26 +39,33 @@ export function ConfirmEmailPage() {
   }, [userId, token, run]);
 
   return (
-    <div className="mx-auto max-w-lg space-y-4 p-4 text-sm leading-relaxed">
-      <h1 className="text-2xl font-bold">Confirm your email</h1>
-      {phase === 'working' && <p role="status">One moment…</p>}
-      {phase === 'done' && (
-        <>
-          <p role="status" className="font-semibold">Thanks, your email address is confirmed.</p>
-          <p><Link to={user ? '/me' : '/login'} className="mg-btn mg-btn-primary">{user ? 'Go to my profile' : 'Sign in'}</Link></p>
-        </>
-      )}
-      {phase === 'failed' && (
-        <>
-          <p role="alert" className="font-semibold">{message}</p>
-          <p>If the link has expired, sign in and use the "Resend email" button on your profile.</p>
-          <button type="button" className="mg-btn mg-btn-secondary" onClick={() => void run()}>Try again</button>
-        </>
-      )}
-      {phase === 'incomplete' && (
-        <p role="alert">This link looks incomplete. Please use the link in the email we sent you.</p>
-      )}
-      <p><Link to="/" className="underline">Back to Mounted Games</Link></p>
+    <div className="skin mx-auto w-full max-w-[560px]">
+      <div className="sp-small">
+        <h1>Confirm your email</h1>
+        {phase === 'working' && <p role="status">One moment…</p>}
+        {phase === 'done' && (
+          <>
+            <p role="status">Thanks, your email address is confirmed.</p>
+            <Link to={user ? '/me' : '/login'} className="sp-pill sp-pill-fill">{user ? 'Go to my profile' : 'Sign in'}</Link>
+          </>
+        )}
+        {phase === 'failed' && (
+          <>
+            <p role="alert">{message}</p>
+            <p>If the link has expired, sign in and use the "Resend email" button on your profile.</p>
+            <div className="sp-acts">
+              <button type="button" className="sp-pill sp-pill-fill" onClick={() => void run()}>Try again</button>
+              <Link to="/" className="sp-pill">Back to the app</Link>
+            </div>
+          </>
+        )}
+        {phase === 'incomplete' && (
+          <>
+            <p role="alert">This link looks incomplete. Please use the link in the email we sent you.</p>
+            <Link to="/" className="sp-pill">Back to the app</Link>
+          </>
+        )}
+      </div>
     </div>
   );
 }

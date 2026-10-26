@@ -23,11 +23,17 @@ describe('UnsubscribePage', () => {
     mount('?token=abc123');
     expect(await screen.findByText(/We won't email you when new competitions open/)).toBeTruthy();
     expect(api.post).toHaveBeenCalledWith('/email/unsubscribe', { token: 'abc123' });
+    const back = screen.getByRole('link', { name: 'Back to the app' });
+    expect(back).toHaveAttribute('href', '/');
+    expect(back).toHaveClass('sp-pill');
+    expect(back).not.toHaveClass('sp-pill-fill');
+    expect(screen.queryByText('Back to Mounted Games')).not.toBeInTheDocument();
   });
 
   it('does not call the server when the link has no token', () => {
     mount('');
     expect(screen.getByRole('alert').textContent).toMatch(/incomplete/);
+    expect(screen.getByRole('link', { name: 'Back to the app' })).toBeInTheDocument();
     expect(api.post).not.toHaveBeenCalled();
   });
 
@@ -35,6 +41,8 @@ describe('UnsubscribePage', () => {
     vi.mocked(api.post).mockRejectedValueOnce(new Error('offline'));
     mount('?token=abc123');
     expect((await screen.findByRole('alert')).textContent).toMatch(/Something went wrong/);
+    expect(screen.getByRole('button', { name: 'Try again' })).toHaveClass('sp-pill', 'sp-pill-fill');
+    expect(screen.getByRole('link', { name: 'Back to the app' })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/That's done/));

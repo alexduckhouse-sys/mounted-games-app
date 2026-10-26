@@ -35,7 +35,9 @@ describe('ConfirmEmailPage', () => {
 
   it('sends a signed-in person to their profile', async () => {
     mount('?userId=u1&token=1.abc', true);
-    expect(await screen.findByRole('link', { name: 'Go to my profile' })).toHaveAttribute('href', '/me');
+    const profile = await screen.findByRole('link', { name: 'Go to my profile' });
+    expect(profile).toHaveAttribute('href', '/me');
+    expect(profile).toHaveClass('sp-pill', 'sp-pill-fill');
   });
 
   it('does not call the server when the link is incomplete', () => {
@@ -49,6 +51,10 @@ describe('ConfirmEmailPage', () => {
     mount('?userId=u1&token=old');
     expect(await screen.findByRole('alert')).toHaveTextContent("expired or isn't valid");
     expect(screen.getByText(/Resend email/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Try again' })).toHaveClass('sp-pill-fill');
+    const back = screen.getByRole('link', { name: 'Back to the app' });
+    expect(back).toHaveClass('sp-pill');
+    expect(back).not.toHaveClass('sp-pill-fill');
   });
 
   it('offers a retry when the connection drops', async () => {
