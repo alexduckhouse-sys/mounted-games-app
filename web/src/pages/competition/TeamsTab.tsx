@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { FollowStar } from '../../components/FollowStar';
-import { Users, Plus, Save, ClipboardList, Ban, Star, Flag } from 'lucide-react';
+import { Plus, Save, ClipboardList, Ban, Flag, Search } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useFavourites } from '../../hooks/useFavourites';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import type { Club, DeclarationForm, Team } from '../../types';
-import { bibAccent, bibLabel, parseBibAndFlag } from '../../lib/bib';
+import { parseBibAndFlag } from '../../lib/bib';
 import { displaySectionName } from '../../lib/section';
 import { SelectField } from '../../components/SelectField';
+import { DropdownRow } from '../../components/DropdownRow';
 import { PageGrid } from '../../components/PageGrid';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
@@ -23,6 +24,7 @@ export function TeamsTab() {
   const { user, hasRole, canEdit, canOrganise } = useAuth();
   const mayAssignTrainers = canEdit() || canOrganise(competition);
   const [sectionId, setSectionId] = useState<number | 'all'>('all');
+  const [search, setSearch] = useState('');
   const [clubs, setClubs] = useState<Club[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [decFormTeamIds, setDecFormTeamIds] = useState<Set<number>>(new Set());
@@ -68,9 +70,13 @@ export function TeamsTab() {
   };
 
   const grouped = useMemo(() => {
-    const filter = sectionId === 'all'
+    const query = search.trim().toLowerCase();
+    const inSection = sectionId === 'all'
       ? competition.teams
       : competition.teams.filter((t) => t.competitionSectionId === sectionId);
+    const filter = query
+      ? inSection.filter((t) => `${t.displayName} ${t.clubName ?? ''}`.toLowerCase().includes(query))
+      : inSection;
     const map = new Map<string, Team[]>();
     for (const t of filter) {
       const key = t.sectionName;
@@ -78,7 +84,7 @@ export function TeamsTab() {
       map.get(key)!.push(t);
     }
     return Array.from(map.entries());
-  }, [competition.teams, sectionId]);
+  }, [competition.teams, sectionId, search]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -206,23 +212,19 @@ export function TeamsTab() {
       )}
 
       {grouped.map(([section, teams]) => (
-        <div key={section} className="mg-card p-3 sm:p-4">
-          <h3 className="mg-display mb-2 flex items-center gap-2 text-base font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-            <Users className="h-4 w-4 text-[rgb(var(--mg-heading))]" /> {displaySectionName(section)}
-          </h3>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <section key={section} aria-label={displaySectionName(section)} className="flex flex-col gap-2">
+          <h3 className="mg-display px-0.5 pt-2 text-[15px] font-bold uppercase leading-tight tracking-[0.05em] text-[rgb(var(--mg-heading))]">{displaySectionName(section)}</h3>
+          <ul className="mg-card divide-y divide-[rgb(var(--mg-rule-soft))] overflow-hidden">
             {teams.map((t) => {
               const hasDec = decFormTeamIds.has(t.id);
               const parsedBib = parseBibAndFlag(t.bibDescription);
+              const on = followed.has(t.id);
               return (
-                <div key={t.id}
-                  className={`flex items-center gap-2 rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-subtle))] p-2.5 text-[rgb(var(--mg-ink))] ${
-                    t.isHorsConcours || t.isWithdrawn ? 'opacity-70' : ''
-                  }`}>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 truncate text-sm font-semibold">
+                <li key={t.id} className={`flex min-h-14 items-center gap-1 py-1.5 pl-4 pr-1.5 text-[rgb(var(--mg-ink))] ${t.isHorsConcours || t.isWithdrawn ? 'opacity-70' : ''}`}>
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-base font-semibold leading-tight">
                       {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="h-3.5 w-5 shrink-0 rounded-[2px] object-cover" />}
-                      <Link to={`/competitions/${competition.id}/teams/${t.id}`} className="truncate text-[rgb(var(--mg-heading))] hover:underline">
+                      <Link to={`/competitions/${competition.id}/teams/${t.id}`} className="min-w-0 text-[rgb(var(--mg-ink))] hover:underline">
                         {t.displayName}
                       </Link>
                       {hasDec && (
@@ -246,23 +248,9 @@ export function TeamsTab() {
                         </span>
                       )}
                     </div>
-                    {parsedBib.bib && (
-                      <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[rgb(var(--mg-body))]">
-                        <span aria-hidden="true" className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border border-black/15" style={{ background: bibAccent(t.bibDescription) }} />
-                        <span className="truncate">{bibLabel(t.bibDescription)}</span>
-                      </div>
-                    )}
-                    {mayAssignTrainers ? (
-                      <TrainerPicker competitionId={competition.id} team={t} onSaved={reload} />
-                    ) : (
-                      <div className="truncate text-[10px] text-[rgb(var(--mg-muted))]">
-                        {t.trainerName ?? 'No trainer assigned'}
-                      </div>
-                    )}
+                    {t.clubName && <span className="truncate text-[13.5px] leading-tight text-[rgb(var(--mg-muted))]">{t.clubName}</span>}
+                    {mayAssignTrainers && <TrainerPicker competitionId={competition.id} team={t} onSaved={reload} />}
                   </div>
-                  <button className="mg-icon-btn" aria-pressed={followed.has(t.id)} aria-label={`${followed.has(t.id) ? 'Unfollow' : 'Follow'} ${t.displayName}`} onClick={() => toggle({ competitionId: competition.id, teamId: t.id })}>
-                    <FollowStar on={followed.has(t.id)} />
-                  </button>
                   {canEdit() && (
                     <button
                       onClick={async () => {
@@ -279,19 +267,44 @@ export function TeamsTab() {
                       {t.isHorsConcours ? 'Unmark HC' : 'Mark HC'}
                     </button>
                   )}
-                </div>
+                  <button
+                    type="button"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[rgb(var(--mg-heading))] hover:bg-[rgb(var(--mg-subtle))]"
+                    aria-pressed={on}
+                    aria-label={`${on ? 'Unfollow' : 'Follow'} ${t.displayName}`}
+                    onClick={() => toggle({ competitionId: competition.id, teamId: t.id })}
+                  >
+                    <FollowStar on={on} className="h-[22px] w-[22px]" />
+                  </button>
+                </li>
               );
             })}
-          </div>
-        </div>
+          </ul>
+        </section>
       ))}
+      {grouped.length === 0 && search.trim() && <p className="px-0.5 text-sm text-[rgb(var(--mg-muted))]">No team or club matches “{search.trim()}”.</p>}
 
     </>
   );
 
+  const searchBar = (
+    <label className="flex h-[46px] items-center gap-2.5 rounded-full border-[1.5px] border-[rgb(var(--mg-control))] bg-[rgb(var(--mg-surface))] px-4 text-[rgb(var(--mg-muted))] focus-within:border-[rgb(var(--mg-heading))]">
+      <Search aria-hidden="true" className="h-[18px] w-[18px] shrink-0" strokeWidth={2.2} />
+      <input
+        type="search"
+        aria-label="Find a team or club"
+        placeholder="Team or club"
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        className="h-full min-w-0 flex-1 border-0 bg-transparent text-base text-[rgb(var(--mg-ink))] outline-none placeholder:text-[rgb(var(--mg-faint))]"
+      />
+    </label>
+  );
+  const sectionOptions = [{ value: 'all', label: 'All age groups' }, ...competition.sections.map((sec) => ({ value: String(sec.id), label: displaySectionName(sec.displayName) }))];
+
   return (
     <div className="space-y-3 pt-2">
-      <Link className="mg-btn mg-btn-secondary" to="../following"><Star className="h-4 w-4" />View followed teams</Link>
+      {searchBar}
       {favouriteError && <p role="alert" className="mg-notice">{favouriteError}</p>}
       {desktop ? (
         <PageGrid variant="left" aside={sectionRail}>
@@ -301,32 +314,8 @@ export function TeamsTab() {
         </PageGrid>
       ) : (
         <>
-        <div className="mg-card flex flex-wrap items-center gap-2 p-2.5">
-          <div className="mg-chips flex-1">
-            <button
-              type="button"
-              aria-pressed={sectionId === 'all'}
-              onClick={() => setSectionId('all')}
-              className="mg-chip !min-h-9 !px-3 !text-sm"
-            >
-              All sections
-            </button>
-            {competition.sections.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                aria-pressed={sectionId === s.id}
-                onClick={() => setSectionId(s.id)}
-                className="mg-chip !min-h-9 !px-3 !text-sm"
-              >
-                {s.displayName}
-              </button>
-            ))}
-          </div>
-          {canCreate && <span className="ml-auto">{addButton}</span>}
-        </div>
-
-
+          <DropdownRow label="Age group" value={String(sectionId)} options={sectionOptions} onChange={(value) => setSectionId(value === 'all' ? 'all' : Number(value))} />
+          {canCreate && <div>{addButton}</div>}
           {teamBlocks}
         </>
       )}
