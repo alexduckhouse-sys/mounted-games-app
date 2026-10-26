@@ -373,8 +373,8 @@ export function RefineSwitchRow({ label, on, onChange, disabled = false }: { lab
 
 export interface RefineMenuItem { label: string; onSelect: () => void; /** Shown as red underlined text, for removing things. */ danger?: boolean }
 
-/** A small ⋯ button that opens a floating menu under it. Choosing an item closes the menu and runs it. */
-export function RefineMenu({ label, items, disabled = false }: { label: string; items: RefineMenuItem[]; disabled?: boolean }) {
+/** A small ⋯ button (or a pill with `text`) that opens a floating menu under it. Choosing an item closes the menu and runs it. */
+export function RefineMenu({ label, items, disabled = false, text }: { label: string; items: RefineMenuItem[]; disabled?: boolean; text?: string }) {
   const [open, setOpen] = useState(false);
   const [place, setPlace] = useState<Place | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -385,9 +385,13 @@ export function RefineMenu({ label, items, disabled = false }: { label: string; 
   }
   return (
     <>
-      <button ref={buttonRef} type="button" className="ops-ibtn" aria-label={label} aria-haspopup="menu" aria-expanded={open} disabled={disabled} onClick={toggle}>
-        <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-      </button>
+      {text ? (
+        <button ref={buttonRef} type="button" className="rf-btn" aria-label={label} aria-haspopup="menu" aria-expanded={open} disabled={disabled} onClick={toggle}>{text}</button>
+      ) : (
+        <button ref={buttonRef} type="button" className="ops-ibtn" aria-label={label} aria-haspopup="menu" aria-expanded={open} disabled={disabled} onClick={toggle}>
+          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+        </button>
+      )}
       {open && place && (
         <FloatingPanel anchor={buttonRef} place={place} onClose={() => setOpen(false)}>
           <div role="menu" aria-label={label} className="rf-choices">

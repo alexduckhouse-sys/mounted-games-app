@@ -11,6 +11,8 @@ interface AuthContextValue {
   loginWithAdminKey: (key: string, title?: string, email?: string, password?: string) => Promise<void>;
   /** `username` is the email; `fullName` is the person's own name (without it the API uses the start of the email). */
   signupTrainer: (username: string, password: string, role?: string, clubName?: string, fullName?: string) => Promise<void>;
+  /** Turns an emailed invitation into an account (`POST /auth/invites/accept`) and signs the person in. */
+  acceptInvite: (token: string, fullName: string, password: string) => Promise<void>;
   logout: () => void;
   /** Re-reads the signed-in person's profile, e.g. after they confirm their email address. */
   refreshUser: () => Promise<void>;
@@ -151,6 +153,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const acceptInvite = useCallback(async (inviteToken: string, fullName: string, password: string) => {
+    setLoading(true);
+    try {
+      const { data } = await api.post<StoredAuth>('/auth/invites/accept', { token: inviteToken, fullName, password });
+      writeStoredAuth(data);
+      setAuth(data);
+      setSignedOut(false);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const refreshUser = useCallback(async () => {
     try {
       const { data } = await api.get<UserProfile>('/auth/me');
@@ -203,6 +217,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login,
     loginWithAdminKey,
     signupTrainer,
+    acceptInvite,
     logout,
     refreshUser,
     signedOut,

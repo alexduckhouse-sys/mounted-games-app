@@ -9,3 +9,9 @@ export function apiErrorStatus(err: unknown): number | undefined {
   const status = (err as { response?: { status?: unknown } } | null)?.response?.status;
   return typeof status === 'number' ? status : undefined;
 }
+
+/** The text of an ASP.NET problem response (`detail`, else `message`), or the fallback when there isn't one. */
+export function problemMessage(err: unknown, fallback: string): string {
+  const data = (err as { response?: { data?: { detail?: unknown } } } | null)?.response?.data;
+  return typeof data?.detail === 'string' && data.detail.trim() ? data.detail : apiErrorMessage(err, fallback);
+}

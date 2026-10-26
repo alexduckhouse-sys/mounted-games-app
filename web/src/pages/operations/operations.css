@@ -227,6 +227,20 @@
 .ops-colour-field input[type="color"] { flex: none; width: 52px; height: 44px; padding: 2px; border: 1.5px solid rgb(var(--mg-border)); border-radius: 10px; background: rgb(var(--mg-surface)); cursor: pointer; }
 .ops-colour-field input:not([type="color"]) { width: 120px; min-height: 44px; padding: 0 10px; border: 1.5px solid rgb(var(--mg-border)); border-radius: 10px; font: 600 16px/1 var(--mg-font); text-transform: uppercase; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); }
 
+/* Users and blocked accounts */
+.ops-people .rf-row.ops-emailrow { flex-wrap: nowrap; }
+.ops-people .ops-emailrow .rf-grow { flex: 0 0 auto; }
+.ops-inrow { flex: 1 1 0; max-width: 240px; min-width: 0; min-height: 44px; padding: 0 10px; border: 1.5px solid rgb(var(--mg-border)); border-radius: 10px; font: 500 16px/1.2 var(--mg-font); text-align: left; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); box-sizing: border-box; }
+.ops-inrow:focus-visible { border-color: rgb(var(--mg-heading)); outline: 2px solid rgb(var(--mg-heading)); outline-offset: 1px; }
+.ops-sendrow { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+.ops-people .rf-row { flex-wrap: wrap; row-gap: 8px; padding-block: 8px; }
+.ops-people .rf-row.is-off { background: rgb(var(--mg-subtle)); color: rgb(var(--mg-muted)); }
+.ops-acts { display: flex; align-items: center; gap: 10px; flex: none; }
+.ops-people .rf-grow { flex: 1 1 160px; min-width: 0; }
+.ops-people .rf-t2 { overflow-wrap: anywhere; }
+.ops-reason { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; padding: 4px 16px 14px; background: rgb(var(--mg-elim) / .07); }
+.ops-reason .rf-fld { flex: 1 1 200px; }
+
 /* The final in the race editor */
 .ops-addbar-flat { margin-top: 0; }
 .ops-final-end { display: flex; justify-content: flex-end; }

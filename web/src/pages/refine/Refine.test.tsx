@@ -114,6 +114,20 @@ describe('RefineSheet', () => {
   });
 });
 
+describe('RefineMenu with text', () => {
+  it('opens from a pill button instead of the dots', async () => {
+    const user = userEvent.setup();
+    const choose = vi.fn();
+    render(<RefineMenu text="Make admin" label="Make Sam an admin" items={[{ label: 'Make organiser', onSelect: choose }]} />);
+    const button = screen.getByRole('button', { name: 'Make Sam an admin' });
+    expect(button).toHaveTextContent('Make admin');
+    expect(button).toHaveClass('rf-btn');
+    await user.click(button);
+    await user.click(screen.getByRole('menuitem', { name: 'Make organiser' }));
+    expect(choose).toHaveBeenCalledOnce();
+  });
+});
+
 describe('RefineMenu', () => {
   it('opens a small menu, runs the chosen item and closes, with Remove-style items in red', async () => {
     const user = userEvent.setup();

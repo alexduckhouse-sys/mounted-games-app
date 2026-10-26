@@ -74,6 +74,14 @@ export function SiteAdminDashboard() {
             {toApprove > 0 && <span className="ops-badge" aria-hidden="true">{toApprove}</span>}
             <Chevron />
           </Link>
+          <Link to="/admin/users" className="rf-row">
+            <span className="rf-grow rf-t1">Users</span>
+            <Chevron />
+          </Link>
+          <Link to="/admin/blocked" className="rf-row">
+            <span className="rf-grow rf-t1">Blocked accounts</span>
+            <Chevron />
+          </Link>
           <Link to="/admin/rules" className="rf-row">
             <span className="rf-grow"><span className="rf-t1">Rules library</span><span className="rf-t2">{races === null ? ' ' : `${races} ${races === 1 ? 'race' : 'races'}`}</span></span>
             <Chevron />

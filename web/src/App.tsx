@@ -49,6 +49,9 @@ const DeclarationsIndexPage = lazy(() => import('./pages/DeclarationsIndexPage')
 const SiteAdminDashboard = lazy(() => import('./pages/admin/SiteAdminDashboard').then((module) => ({ default: module.SiteAdminDashboard })));
 const AdminCompetitionsPage = lazy(() => import('./pages/admin/AdminCompetitionsPage').then((module) => ({ default: module.AdminCompetitionsPage })));
 const TrainerRequestsPage = lazy(() => import('./pages/admin/TrainerRequestsPage').then((module) => ({ default: module.TrainerRequestsPage })));
+const UsersPage = lazy(() => import('./pages/admin/UsersPage').then((module) => ({ default: module.UsersPage })));
+const BlockedAccountsPage = lazy(() => import('./pages/admin/BlockedAccountsPage').then((module) => ({ default: module.BlockedAccountsPage })));
+const InvitePage = lazy(() => import('./pages/InvitePage').then((module) => ({ default: module.InvitePage })));
 const CompetitionEditor = lazy(() => import('./pages/admin/CompetitionEditor').then((module) => ({ default: module.CompetitionEditor })));
 const FormatPage = lazy(() => import('./pages/admin/FormatPage').then((module) => ({ default: module.FormatPage })));
 const RulesLibraryPage = lazy(() => import('./pages/admin/RulesLibraryPage').then((module) => ({ default: module.RulesLibraryPage })));
@@ -104,6 +107,7 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignUpPage />} />
+            <Route path="/invite" element={<InvitePage />} />
             <Route path="/score" element={<ScorerPage />} />
             <Route path="/event-tools/:competitionId/print/:view" element={<PrintEventPage />} />
             <Route element={<AppShell />}>
@@ -174,6 +178,12 @@ export default function App() {
               } />
               <Route path="admin/trainer-requests" element={
                 <ProtectedRoute roles={['Admin']}><TrainerRequestsPage /></ProtectedRoute>
+              } />
+              <Route path="admin/users" element={
+                <ProtectedRoute roles={['Admin']}><UsersPage /></ProtectedRoute>
+              } />
+              <Route path="admin/blocked" element={
+                <ProtectedRoute roles={['Admin']}><BlockedAccountsPage /></ProtectedRoute>
               } />
               <Route path="admin/competitions/new" element={
                 <ProtectedRoute roles={['Admin', 'Trainer']}><CompetitionEditor /></ProtectedRoute>
