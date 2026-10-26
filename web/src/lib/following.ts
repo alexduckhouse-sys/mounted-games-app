@@ -83,3 +83,6 @@ export function summariseNext(team: { sectionName?: string | null }, next: TeamN
 export function arenaToShow(session: Session, arenas: readonly string[]): string | null {
   return arenas.length > 1 ? session.arenaName?.trim() || null : null;
 }
+
+export { nextUpAcrossTeams, type NextUpRide } from './timetableClashes';
+

@@ -260,6 +260,8 @@ export interface Race {
   results: ResultRow[];
 }
 
+export type ReplayRaceMarker = Pick<Race, 'id' | 'name' | 'orderIndex' | 'startedAt' | 'finishedAt' | 'isComplete'>;
+
 export interface Heat {
   id: number;
   sessionId: number;

@@ -511,4 +511,20 @@ public class AppDbContext : IdentityDbContext<AppUser>
                 .OnDelete(DeleteBehavior.SetNull);
         });
     }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        var count = base.SaveChanges(acceptAllChangesOnSuccess);
+        if (count > 0)
+            Services.StandingsService.BumpVersion();
+        return count;
+    }
+
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        var count = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        if (count > 0)
+            Services.StandingsService.BumpVersion();
+        return count;
+    }
 }

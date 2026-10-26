@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
@@ -11,9 +12,47 @@ namespace MountedGames.Api.Services;
 /// the age group's tie-break (<see cref="TieBreaker"/>). A finalist's total follows its section's final switches
 /// (<see cref="SectionScoring"/>): all its points when they carry into the final, its final's points alone when not.
 /// </summary>
-public sealed class StandingsService(AppDbContext db)
+public sealed class StandingsService(AppDbContext db, IMemoryCache? cache = null)
 {
+    private static long _version;
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, long> CompetitionVersions = new();
+
+    /// <summary>Invalidates all cached standings snapshots across competitions.</summary>
+    public static void BumpVersion() => Interlocked.Increment(ref _version);
+
+    /// <summary>Invalidates cached standings snapshots for a specific competition.</summary>
+    public static void Invalidate(int competitionId)
+    {
+        CompetitionVersions.AddOrUpdate(competitionId, 1, static (_, current) => current + 1);
+        Interlocked.Increment(ref _version);
+    }
+
     public async Task<List<StandingRow>> RowsAsync(int competitionId, int? sectionId = null, CancellationToken ct = default)
+    {
+        if (cache is not null)
+        {
+            var globalVersion = Interlocked.Read(ref _version);
+            var compVersion = CompetitionVersions.GetOrAdd(competitionId, 0);
+            var cacheKey = $"standings:v1:{competitionId}:{sectionId?.ToString() ?? "all"}:{globalVersion}:{compVersion}";
+            if (cache.TryGetValue<IReadOnlyList<StandingRow>>(cacheKey, out var cached) && cached is not null)
+                return cached.ToList();
+
+            var computed = await ComputeRowsAsync(competitionId, sectionId, ct);
+            cache.Set<IReadOnlyList<StandingRow>>(
+                cacheKey,
+                computed,
+                new MemoryCacheEntryOptions
+                {
+                    SlidingExpiration = TimeSpan.FromSeconds(2),
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(5),
+                });
+            return computed.ToList();
+        }
+
+        return await ComputeRowsAsync(competitionId, sectionId, ct);
+    }
+
+    private async Task<List<StandingRow>> ComputeRowsAsync(int competitionId, int? sectionId, CancellationToken ct)
     {
         var teamsQ = db.Teams
             .AsNoTracking()
