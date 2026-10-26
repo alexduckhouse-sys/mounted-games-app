@@ -74,6 +74,6 @@ body:has(.ev-thread) { background: color-mix(in srgb, rgb(var(--mg-tint)) 55%, r
 .ev-compose-field { flex: 1 1 auto; min-width: 0; }
 .ev-compose-field textarea { display: block; width: 100%; min-height: 44px; max-height: 110px; padding: 11px 14px; border: 1.5px solid rgb(var(--mg-control)); border-radius: 22px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); font: 500 16px/1.3 var(--mg-font); resize: none; box-sizing: border-box; }
 .ev-compose-field textarea:focus { outline: 0; border-color: rgb(var(--mg-heading)); }
-.ev-send { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 0; border-radius: 22px; background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); cursor: pointer; transition: opacity var(--mg-dur-fast) var(--mg-ease-out); }
+.ev-send { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 0; border-radius: 22px; background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); cursor: pointer; } /* Its fade and press are in skin.css. */
 .ev-send:disabled { opacity: .35; cursor: default; }
 .ev-send:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }

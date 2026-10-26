@@ -25,7 +25,7 @@ import { SelectField } from '../../components/SelectField';
 import { Notice } from '../../components/Notice';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { usePageWidth } from '../../components/pageWidthState';
-import type { StreamQualityPreset } from '../../types';
+import type { StreamPublisher, StreamQualityPreset } from '../../types';
 
 const DEFAULT_STREAM_LIMIT_SECONDS = 30 * 60;
 const EXTEND_STREAM_SECONDS = 15 * 60;
@@ -132,7 +132,23 @@ function BroadcastStudio() {
       : 'none';
   const label = caption || streamHeatLabel(competition.sessions, arena) || `${arena} · ${angle}`;
   const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
-  const occupied = !live && streams.some((stream) => stream.status !== 2 && same(stream.arenaName, arena) && same(stream.angleName, angle));
+  const occupant = !live ? streams.find((stream) => stream.status !== 2 && same(stream.arenaName, arena) && same(stream.angleName, angle)) : undefined;
+  const occupied = occupant !== undefined;
+  const occupantId = occupant?.id;
+  // Who is streaming there: asked for only when the angle you picked is taken, so the notice can name them.
+  const [occupantNames, setOccupantNames] = useState<Record<number, string | null>>({});
+  useEffect(() => {
+    if (occupantId === undefined) return;
+    let cancelled = false;
+    api.get<StreamPublisher[]>(`/competitions/${competition.id}/streams/publishers`)
+      .then(({ data }) => {
+        if (cancelled || !Array.isArray(data)) return;
+        setOccupantNames((names) => ({ ...names, ...Object.fromEntries(data.map((row) => [row.streamId, row.startedByName?.trim() || null])) }));
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [competition.id, occupantId]);
+  const occupantName = occupantId === undefined ? null : occupantNames[occupantId] ?? null;
   const arenaStreams = streams.filter((stream) => stream.status !== 2 && same(stream.arenaName, arena));
 
   useEffect(() => {
@@ -680,7 +696,7 @@ function BroadcastStudio() {
               </SelectField>
             </label>
           )}
-          {occupied && <Notice tone="info">Someone is already streaming {arena} · {angle}. Going live takes over from them.</Notice>}
+          {occupied && <Notice tone="info">{occupantName ?? 'Someone'} is already streaming {arena} · {angle}. Going live takes over from them.</Notice>}
           <Notice tone="info" role={null}>Anyone can watch. Check families know the event is being filmed. Keep this screen on: locking the phone pauses the stream.</Notice>
           <button disabled={busy || !arena.trim() || !angle.trim()} className="mg-btn mg-btn-primary !min-h-[52px] !bg-[rgb(var(--mg-red))] !text-white" onClick={() => run(async () => { const t = Date.now(); setStartedAt(t); setNow(t); setLimitSeconds(DEFAULT_STREAM_LIMIT_SECONDS); await publisher.current!.start(arena, angle, occupied); })}><VideoIcon />{occupied ? 'Take over and go live' : 'Go live'}</button>
         </div>

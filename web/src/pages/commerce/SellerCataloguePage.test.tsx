@@ -239,6 +239,55 @@ describe('Things I sell: add and edit', () => {
     await waitFor(() => expect(put).toHaveBeenCalledWith('/commerce/catalogue/20', expect.objectContaining({ stockQuantity: 11, expectedVersion: 7, isActive: true })));
   });
 
+  it('asks what to ask the buyer for, and sends the question and its hint with the item', async () => {
+    catalogueGet([]);
+    post.mockResolvedValue({ data: { ...mug, id: 30 } } as never);
+    mount();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add an item' }));
+    await userEvent.type(dialog().getByLabelText('Name'), 'Shavings');
+    await userEvent.type(dialog().getByLabelText('Description'), 'Delivered to your stable.');
+    await userEvent.type(dialog().getByLabelText('Price (£)'), '10');
+    expect(dialog().queryByLabelText(/^Hint/)).not.toBeInTheDocument();
+    await userEvent.type(dialog().getByLabelText(/^Ask the buyer for/), ' Stable number ');
+    await userEvent.type(dialog().getByLabelText(/^Hint/), 'e.g. B12');
+    await userEvent.click(dialog().getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/commerce/catalogue', expect.objectContaining({ detailPrompt: 'Stable number', detailHint: 'e.g. B12' })));
+  });
+
+  it('sends nothing for the question when it is left empty', async () => {
+    catalogueGet([]);
+    post.mockResolvedValue({ data: { ...mug, id: 30 } } as never);
+    mount();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add an item' }));
+    await userEvent.type(dialog().getByLabelText('Name'), 'Programme');
+    await userEvent.type(dialog().getByLabelText('Description'), 'Collect at the gate.');
+    await userEvent.type(dialog().getByLabelText('Price (£)'), '5');
+    await userEvent.click(dialog().getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/commerce/catalogue', expect.objectContaining({ detailPrompt: null, detailHint: null })));
+  });
+
+  it('opens an item with its question filled in, and keeps it when the item is edited or brought back', async () => {
+    const asking = { ...mug, detailPrompt: 'Number plate', detailHint: 'e.g. AB12 CDE' };
+    catalogueGet([asking]);
+    put.mockResolvedValue({ data: { ...asking, version: 8 } } as never);
+    const view = mount();
+    await openItem('Event mug');
+    await userEvent.click(screen.getByRole('button', { name: 'Edit details' }));
+    expect(dialog().getByLabelText(/^Ask the buyer for/)).toHaveValue('Number plate');
+    expect(dialog().getByLabelText(/^Hint/)).toHaveValue('e.g. AB12 CDE');
+    await userEvent.clear(dialog().getByLabelText(/^Hint/));
+    await userEvent.click(dialog().getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(put).toHaveBeenCalledWith('/commerce/catalogue/20', expect.objectContaining({ detailPrompt: 'Number plate', detailHint: null })));
+
+    // Bringing an archived item back sends the question too, so it isn't wiped.
+    view.unmount();
+    catalogueGet([{ ...asking, isActive: false }]);
+    mount();
+    await openItem('Event mug');
+    await userEvent.click(screen.getByRole('button', { name: 'Bring it back' }));
+    await waitFor(() => expect(put).toHaveBeenLastCalledWith('/commerce/catalogue/20', expect.objectContaining({ isActive: true, detailPrompt: 'Number plate', detailHint: 'e.g. AB12 CDE' })));
+  });
+
   it('keeps a sold-out item sold out unless the stepper is used', async () => {
     catalogueGet([{ ...mug, stockQuantity: 0 }]);
     put.mockResolvedValue({ data: mug } as never);

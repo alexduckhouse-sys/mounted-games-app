@@ -1,3 +1,4 @@
+import { isRealisticEmail } from './emailCheck';
 import { sectionDisplayName } from './section';
 
 /** The competition creator's draft: what the person has typed, step by step, before anything is saved. */
@@ -120,6 +121,10 @@ export interface CreatorDraft {
   endTime: string;
   location: string;
   postcode: string;
+  /** The governing body's number for the event. */
+  competitionNumber: string;
+  /** Where entrants write to the organiser. */
+  contactEmail: string;
   what3Words: string;
   appleMapsUrl: string;
   lat: string;
@@ -174,7 +179,7 @@ export function defaultDraft(today: Date = new Date()): CreatorDraft {
   return {
     step: 0, name: '', icon: 'flag', organiserName: '',
     startDate: today.toISOString().slice(0, 10), startTime: '09:00', endDate: '', endTime: '17:00',
-    location: '', postcode: '', what3Words: '', appleMapsUrl: '', lat: '', lon: '', description: '', paymentDestination: '', termsText: '',
+    location: '', postcode: '', competitionNumber: '', contactEmail: '', what3Words: '', appleMapsUrl: '', lat: '', lon: '', description: '', paymentDestination: '', termsText: '',
     sections: [defaultSection()], arenas: [defaultArena()], breaks: [], laneHatbands: [],
   };
 }
@@ -290,6 +295,7 @@ export function validateStep(draft: CreatorDraft, step: StepId): Problems {
     if (!draft.startDate) found.startDate = 'Choose a start date.';
     if (!draft.startTime) found.startTime = 'Choose a start time.';
     if (draft.endDate && draft.startDate && draft.endDate < draft.startDate) found.endDate = 'The end can’t be before the start.';
+    if (draft.contactEmail.trim() && !isRealisticEmail(draft.contactEmail)) found.contactEmail = 'That email address doesn’t look right.';
   } else if (step === 'sections') {
     const seen = new Set<string>();
     draft.sections.forEach((s, i) => {
@@ -418,7 +424,7 @@ export function readDraft(raw: unknown, today: Date = new Date()): CreatorDraft 
     organiserName: text(r.organiserName),
     startDate: text(r.startDate, base.startDate), startTime: text(r.startTime, base.startTime),
     endDate: text(r.endDate), endTime: text(r.endTime, base.endTime),
-    location: text(r.location), postcode: text(r.postcode), what3Words: text(r.what3Words),
+    location: text(r.location), postcode: text(r.postcode), competitionNumber: text(r.competitionNumber), contactEmail: text(r.contactEmail), what3Words: text(r.what3Words),
     appleMapsUrl: text(r.appleMapsUrl), lat: text(r.lat), lon: text(r.lon),
     description: text(r.description), paymentDestination: text(r.paymentDestination), termsText: text(r.termsText),
     sections,

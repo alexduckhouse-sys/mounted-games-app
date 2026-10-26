@@ -200,6 +200,13 @@ describe('Event shop: orders', () => {
     expect(within(rows).getByText('Order 27 · Buyer')).toBeInTheDocument();
   });
 
+  it('shows what the buyer answered next to the line', async () => {
+    load({ orders: [orderOf(31, 0, 'Jamie Carter', { lines: [{ ...line('Shavings', 2), detail: 'B12' }, { ...line('Programme', 1), detail: null }] })] });
+    mount();
+    await userEvent.click(await tab('Orders'));
+    expect(await screen.findByText('Shavings × 2 (B12), Programme × 1')).toBeInTheDocument();
+  });
+
   it('keeps demo orders free of payment buttons', async () => {
     load({ orders: [orderOf(40, 1, 'Test Buyer', { isTestOrder: true }), orderOf(41, 2, 'Test Buyer', { isTestOrder: true })] });
     mount();

@@ -7,6 +7,8 @@ import { problemMessage } from '../../lib/apiError';
 import { RefineHeader, RefineList, RefinePage } from '../refine/Refine';
 import { accountKind, type AdminUser, type BlockedAccount } from './accountAccessTypes';
 import { useAccountSearch } from './useAccountSearch';
+import { AnimatePresence } from 'framer-motion';
+import { LeavingRow } from '../../components/LeavingRow';
 import '../operations/operations.css';
 
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
@@ -101,15 +103,17 @@ export function BlockedAccountsPage() {
         {blocked === null && <p role="status" className="rf-note">Loading…</p>}
         {blocked !== null && (
           <RefineList as="div" label="Blocked">
+            <AnimatePresence initial={false}>
             {blocked.map((account) => (
-              <div key={account.id} className="rf-row">
+              <LeavingRow as="div" key={account.id} className="rf-row">
                 <span className="rf-grow">
                   <span className="rf-t1">{account.fullName}</span>
                   <span className="rf-t2">{[account.email, account.reason, shortDate(account.blockedAt)].filter(Boolean).join(' · ')}</span>
                 </span>
                 <button type="button" className="ops-danger-link" aria-label={`Unblock ${account.fullName}`} disabled={busy} onClick={() => void unblock(account)}>Unblock</button>
-              </div>
+              </LeavingRow>
             ))}
+            </AnimatePresence>
             {blocked.length === 0 && <div className="rf-row"><span className="rf-t2">No one is blocked</span></div>}
           </RefineList>
         )}

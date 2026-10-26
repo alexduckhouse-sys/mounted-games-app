@@ -8,7 +8,7 @@ import { usePageWidth } from '../../components/pageWidthState';
 import { useCompetition } from '../competition/context';
 import { Chip, FormSheet, SheetField, type ChipTone } from '../clubShop/ui';
 import { LoadError } from './commerceUi';
-import { errorMessage, pounds } from './commerceFormat';
+import { errorMessage, orderLineText, pounds } from './commerceFormat';
 import type { CommerceOrderStatus, CompetitionListing, EventCommerceSettings, EventOrder } from './types';
 import './commerce.css';
 import '../../components/sitePages.css';
@@ -206,7 +206,7 @@ function CommerceManagementContent() {
                     <span className="cs-line">
                       <span className="sp-grow">
                         <span className="sp-t1">Order {order.id} · {order.buyerName || 'Buyer'}</span>
-                        <span className="sp-t2">{order.lines.map((line) => `${line.title} × ${line.quantity}`).join(', ')}</span>
+                        <span className="sp-t2">{order.lines.map(orderLineText).join(', ')}</span>
                       </span>
                       <span className="cs-right">
                         <span className="sp-price !text-[18px]">{pounds(order.totalMinor)}</span>

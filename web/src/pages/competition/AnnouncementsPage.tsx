@@ -108,7 +108,7 @@ function AnnouncementsSession() {
         {pinned && (
           <section aria-labelledby="ann-pinned">
             <h2 id="ann-pinned" className="ann-h">Pinned</h2>
-            <div className="ann-card ann-pinned">
+            <div key={pinned.id} className="ann-card ann-pinned mg-reveal">
               <p className="ann-text">{pinned.body}</p>
               <button type="button" className="ann-red" onClick={() => void unpin()}>Unpin</button>
             </div>
@@ -136,7 +136,7 @@ function AnnouncementsSession() {
             <h2 id="ann-sent" className="ann-h">Sent</h2>
             <RefineList label="Sent announcements">
               {sent.map((message) => (
-                <li key={message.id} className="ann-row">
+                <li key={message.id} className={`ann-row${message.id === justSentId ? ' mg-arrive' : ''}`}>
                   <span className="ann-grow">
                     <span className="ann-text">{message.body}</span>
                     <span className="ann-meta">{sentLabel(message, justSentId)}</span>

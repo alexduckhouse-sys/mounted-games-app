@@ -9,7 +9,7 @@ import { downloadCsv, toCsv } from '../../lib/csv';
 import { RefineFoot } from '../refine/Refine';
 import { Chip, type ChipTone } from '../clubShop/ui';
 import { LoadError, TestReceipt } from './commerceUi';
-import { errorMessage, newIdempotencyKey, pounds } from './commerceFormat';
+import { errorMessage, newIdempotencyKey, orderLineText, pounds } from './commerceFormat';
 import { OutcomeState } from './DemoPaymentFlow';
 import { DemoOrderCheckout } from './EventShopPage';
 import type { CommerceOrderStatus, DemoOrderPaymentResult, EventOrder, EventOrderLine, SellerSale, TestPayment } from './types';
@@ -31,7 +31,7 @@ const STATUS: Record<CommerceOrderStatus, { text: string; tone: ChipTone }> = {
 
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 const whenText = (iso: string) => new Date(iso).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-const linesText = (lines: EventOrderLine[]) => lines.map((line) => `${line.title} × ${line.quantity}`).join(', ');
+const linesText = (lines: EventOrderLine[]) => lines.map(orderLineText).join(', ');
 const eventName = (name: string | null | undefined) => name || 'Event order';
 
 export function CommerceOrdersPage() {
@@ -214,16 +214,16 @@ function SalesList({ sales }: { sales: SellerSale[] | null }) {
   const sum = (statuses: CommerceOrderStatus[]) => real.filter((s) => statuses.includes(s.status)).reduce((total, s) => total + s.sellerTotalMinor, 0);
 
   function exportTreasurerCsv() {
-    const header = ['Order ID', 'Date', 'Item', 'Category', 'Quantity', 'Status', 'Test order', 'Amount (GBP)'];
+    const header = ['Order ID', 'Date', 'Item', 'Category', 'Quantity', 'Detail', 'Status', 'Test order', 'Amount (GBP)'];
     const rows: ReadonlyArray<unknown>[] = [];
     for (const sale of sales ?? []) {
       const statusText = STATUS[sale.status]?.text ?? String(sale.status);
       if (sale.lines.length === 0) {
-        rows.push([sale.orderId, sale.createdAt, 'Order total', 'Other items', 1, statusText, sale.isTestOrder ? 'Yes' : 'No', (sale.sellerTotalMinor / 100).toFixed(2)]);
+        rows.push([sale.orderId, sale.createdAt, 'Order total', 'Other items', 1, '', statusText, sale.isTestOrder ? 'Yes' : 'No', (sale.sellerTotalMinor / 100).toFixed(2)]);
       } else {
         for (const line of sale.lines) {
           const category = STABLING_LINE_PATTERN.test(line.title) ? 'Stabling & Hook-up' : 'Other items';
-          rows.push([sale.orderId, sale.createdAt, line.title, category, line.quantity, statusText, sale.isTestOrder ? 'Yes' : 'No', (line.lineTotalMinor / 100).toFixed(2)]);
+          rows.push([sale.orderId, sale.createdAt, line.title, category, line.quantity, line.detail ?? '', statusText, sale.isTestOrder ? 'Yes' : 'No', (line.lineTotalMinor / 100).toFixed(2)]);
         }
       }
     }
@@ -289,7 +289,7 @@ function OrderSheet({ order, busy, onClose, onPay, onCancel, onRefund }: {
             <div><dt>Event</dt><dd>{eventName(order.competitionName)}</dd></div>
             <div><dt>Status</dt><dd>{status.text}</dd></div>
             <div><dt>When</dt><dd>{whenText(when)}</dd></div>
-            {order.lines.map((line) => <div key={line.id}><dt>{line.title} × {line.quantity}</dt><dd>{pounds(line.lineTotalMinor)}</dd></div>)}
+            {order.lines.map((line) => <div key={line.id}><dt>{orderLineText(line)}</dt><dd>{pounds(line.lineTotalMinor)}</dd></div>)}
             <div><dt>Total</dt><dd><strong>{pounds(order.totalMinor)}</strong></dd></div>
           </dl>
           {order.isTestOrder && payment && <TestReceipt payment={payment} />}

@@ -106,7 +106,7 @@ export function StreamControlsPage() {
           <button type="button" className="sx-chip" aria-pressed={auto.on} onClick={() => setOn(!auto.on)}>{auto.on ? 'Auto on' : 'Auto off'}</button>
         </div>
 
-        <div role="tabpanel" aria-label={TABS.find((t) => t.id === tab)?.label}>
+        <div key={tab} role="tabpanel" className="mg-settle" aria-label={TABS.find((t) => t.id === tab)?.label}>
           {tab === 'overlay' && <OverlayTab competition={competition} overlay={overlay} tiles={tiles} canChange={Boolean(saveOverlay)} />}
           {tab === 'auto' && <AutoTab competition={competition} auto={auto} setOn={setOn} setRule={setRule} />}
           {tab === 'replay' && (

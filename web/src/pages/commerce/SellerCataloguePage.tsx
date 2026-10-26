@@ -26,9 +26,12 @@ interface ItemForm {
   /** An item that has sold out keeps its 0 left until the stepper is touched. */
   soldOut: boolean;
   imageUrl: string;
+  /** What the buyer is asked for with this item ("Stable number"), and the example shown in the box. */
+  detailPrompt: string;
+  detailHint: string;
 }
 
-const EMPTY_FORM: ItemForm = { title: '', description: '', price: '', category: 0, stock: 0, soldOut: false, imageUrl: '' };
+const EMPTY_FORM: ItemForm = { title: '', description: '', price: '', category: 0, stock: 0, soldOut: false, imageUrl: '', detailPrompt: '', detailHint: '' };
 const PICKER_PAGE_SIZE = 50;
 const MAX_PICKER_PAGES = 10_000;
 
@@ -156,6 +159,9 @@ function SellerCatalogueContent() {
       stockQuantity: form.soldOut ? 0 : form.stock === 0 ? null : form.stock,
       category: form.category,
       imageUrl: form.imageUrl.trim() || null,
+      detailPrompt: form.detailPrompt.trim() || null,
+      // A hint with no question has nowhere to show.
+      detailHint: form.detailPrompt.trim() ? form.detailHint.trim() || null : null,
       isActive: editing?.isActive ?? true,
       expectedVersion: editing?.version,
     };
@@ -186,7 +192,7 @@ function SellerCatalogueContent() {
   async function restore(item: CatalogueItem) {
     await run(() => api.put(`/commerce/catalogue/${item.id}`, {
       title: item.title, description: item.description, priceMinor: item.priceMinor, stockQuantity: item.stockQuantity,
-      category: item.category, imageUrl: item.imageUrl, isActive: true, expectedVersion: item.version,
+      category: item.category, imageUrl: item.imageUrl, detailPrompt: item.detailPrompt ?? null, detailHint: item.detailHint ?? null, isActive: true, expectedVersion: item.version,
     }), 'Couldn’t bring the item back. Refresh and try again.');
   }
 
@@ -307,6 +313,8 @@ function formFor(item: CatalogueItem | null): ItemForm {
     stock: item.stockQuantity ?? 0,
     soldOut: item.stockQuantity === 0,
     imageUrl: item.imageUrl ?? '',
+    detailPrompt: item.detailPrompt ?? '',
+    detailHint: item.detailHint ?? '',
   };
 }
 
@@ -353,6 +361,14 @@ function ItemSheet({ item, onSave, onClose }: { item: CatalogueItem | null; onSa
       <SheetField label="Description">
         <textarea rows={3} maxLength={4000} placeholder="What buyers get" value={form.description} onChange={(event) => change({ description: event.target.value })} />
       </SheetField>
+      <SheetField label="Ask the buyer for (optional)" hint="Shown when they add this item, such as “Stable number”.">
+        <input maxLength={60} value={form.detailPrompt} onChange={(event) => change({ detailPrompt: event.target.value })} />
+      </SheetField>
+      {form.detailPrompt.trim() !== '' && (
+        <SheetField label="Hint (optional)">
+          <input maxLength={80} placeholder="e.g. B12" value={form.detailHint} onChange={(event) => change({ detailHint: event.target.value })} />
+        </SheetField>
+      )}
       <SheetField label="Image link (optional)">
         <input type="url" placeholder="https://…" value={form.imageUrl} onChange={(event) => change({ imageUrl: event.target.value })} />
       </SheetField>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowUp } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
@@ -11,6 +12,8 @@ import { usePageWidth } from '../../components/pageWidthState';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
 import { Sheet } from '../../components/Sheet';
+import { BUBBLE_IN, BUBBLE_SHOWN, BUBBLE_SPRING } from '../../lib/motion';
+import { useStillMotion } from '../../lite/useStillMotion';
 import { clockTime, initials, markSeen, messageThreads, readSeen, threadMessages } from '../../lib/announcements';
 import type { ChatMessage } from '../../types';
 import './chat.css';
@@ -57,6 +60,7 @@ function ContactOrganisersSession() {
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(true);
+  const still = useStillMotion();
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
@@ -298,11 +302,13 @@ function ContactOrganisersSession() {
           <div key={message.id} className="flex flex-col gap-2">
             {heading && <span className="ev-day">{heading}</span>}
             <div className="cs-bub-row" data-mine={mine}>
-              <div className={`ev-bub ${mine ? 'ev-bub-me' : 'ev-bub-them'}`}>
+              <motion.div className={`ev-bub ${mine ? 'ev-bub-me' : 'ev-bub-them'}`}
+                initial={still || messagesLoading ? false : BUBBLE_IN} animate={BUBBLE_SHOWN} transition={BUBBLE_SPRING}
+                style={{ transformOrigin: mine ? 'bottom right' : 'bottom left' }}>
                 {!mine && !isAdmin && <b className="ev-bub-from">{message.authorName || 'Organiser'}</b>}
                 {message.body}
                 <time dateTime={message.createdAt}>{messageTime(message)}</time>
-              </div>
+              </motion.div>
               {canModerate && <button type="button" className="cs-bub-more" aria-label={`More for message: ${message.body}`} onClick={() => setMenuFor(message)}>⋯</button>}
             </div>
           </div>

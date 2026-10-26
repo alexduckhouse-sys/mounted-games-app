@@ -13,6 +13,10 @@ export interface CatalogueItem {
   stockQuantity: number | null;
   category: CommerceItemCategory;
   imageUrl: string | null;
+  /** What the buyer is asked for with this item, such as "Stable number". Null when nothing is asked. */
+  detailPrompt?: string | null;
+  /** An example shown inside that box, such as "e.g. B12". */
+  detailHint?: string | null;
   isActive: boolean;
   version: number;
   createdAt: string;
@@ -45,7 +49,7 @@ export interface PublicCompetitionListing {
   stockQuantity: number | null;
   category: CommerceItemCategory;
   imageUrl: string | null;
-  /** What the item asks the buyer for once it is in the order, such as "Stable number". Not sent by the API yet; the shop leaves the question out while it is missing. */
+  /** What the item asks the buyer for once it is in the order, such as "Stable number". The shop leaves the question out when it is empty. */
   detailPrompt?: string | null;
   /** An example for the box, such as "e.g. B12". */
   detailHint?: string | null;
@@ -67,6 +71,8 @@ export interface EventOrderLine {
   unitPriceMinor: number;
   quantity: number;
   lineTotalMinor: number;
+  /** What the buyer answered for the item's prompt (a stable number, a number plate). */
+  detail?: string | null;
 }
 
 export interface TestPayment {

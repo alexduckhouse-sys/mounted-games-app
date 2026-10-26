@@ -87,6 +87,12 @@ describe('validateStep', () => {
     expect(validateStep(draft({ startDate: '2026-10-31', endDate: '2026-11-01' }), 'when')).toEqual({});
   });
 
+  it('accepts a blank contact email or a real one, and says when it does not look right', () => {
+    expect(validateStep(draft({ contactEmail: '' }), 'when')).toEqual({});
+    expect(validateStep(draft({ contactEmail: ' entries@example.org ' }), 'when')).toEqual({});
+    expect(validateStep(draft({ contactEmail: 'entries@example' }), 'when')).toEqual({ contactEmail: 'That email address doesn’t look right.' });
+  });
+
   it('checks each section: an age group, no repeats, a sensible price and cap', () => {
     const a = { ...defaultSection(), ageGroup: ' ' };
     const b = { ...defaultSection(), ageGroup: 'Open', priceGbp: 'free', maxParticipants: '2.5' };
@@ -129,6 +135,14 @@ describe('readDraft', () => {
     }
     expect(readDraft(draft())?.cardsEnabled).toBeUndefined();
     expect(readDraft({ ...draft(), cardsEnabled: 'true' })?.cardsEnabled).toBeUndefined();
+  });
+
+  it('reads the competition number and contact email, and defaults them for an older draft', () => {
+    expect(readDraft({ ...draft(), competitionNumber: 'A1', contactEmail: 'a@example.org' })).toMatchObject({ competitionNumber: 'A1', contactEmail: 'a@example.org' });
+    const older: Record<string, unknown> = { ...draft() };
+    delete older.competitionNumber;
+    delete older.contactEmail;
+    expect(readDraft(older)).toMatchObject({ competitionNumber: '', contactEmail: '' });
   });
 
   it('refuses anything that is not a draft', () => {

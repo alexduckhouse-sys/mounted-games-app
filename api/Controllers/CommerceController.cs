@@ -47,7 +47,11 @@ public class CommerceController(AppDbContext db) : ControllerBase
             request.StockQuantity,
             request.Category,
             request.ImageUrl,
-            out var imageUrl);
+            request.DetailPrompt,
+            request.DetailHint,
+            out var imageUrl,
+            out var detailPrompt,
+            out var detailHint);
         if (error is not null) return BadRequest(new { message = error });
         var now = DateTime.UtcNow;
         var item = new CatalogueItem
@@ -59,6 +63,8 @@ public class CommerceController(AppDbContext db) : ControllerBase
             StockQuantity = request.StockQuantity,
             Category = request.Category,
             ImageUrl = imageUrl,
+            DetailPrompt = detailPrompt,
+            DetailHint = detailHint,
             CreatedAt = now,
             UpdatedAt = now,
         };
@@ -83,7 +89,11 @@ public class CommerceController(AppDbContext db) : ControllerBase
             request.StockQuantity,
             request.Category,
             request.ImageUrl,
-            out var imageUrl);
+            request.DetailPrompt,
+            request.DetailHint,
+            out var imageUrl,
+            out var detailPrompt,
+            out var detailHint);
         if (error is not null) return BadRequest(new { message = error });
         if (request.ExpectedVersion < 1)
             return BadRequest(new { message = "The current catalogue item version is required." });
@@ -110,6 +120,8 @@ public class CommerceController(AppDbContext db) : ControllerBase
                     .SetProperty(x => x.StockQuantity, request.StockQuantity)
                     .SetProperty(x => x.Category, request.Category)
                     .SetProperty(x => x.ImageUrl, imageUrl)
+                    .SetProperty(x => x.DetailPrompt, detailPrompt)
+                    .SetProperty(x => x.DetailHint, detailHint)
                     .SetProperty(x => x.IsActive, request.IsActive)
                     .SetProperty(x => x.Version, x => x.Version + 1)
                     .SetProperty(x => x.UpdatedAt, now), cancellationToken);
@@ -922,9 +934,23 @@ public class CommerceController(AppDbContext db) : ControllerBase
         int? stockQuantity,
         CommerceItemCategory category,
         string? imageUrl,
-        out string? normalisedImageUrl)
+        string? detailPrompt,
+        string? detailHint,
+        out string? normalisedImageUrl,
+        out string? normalisedPrompt,
+        out string? normalisedHint)
     {
         normalisedImageUrl = TrimOrNull(imageUrl, 2048);
+        normalisedPrompt = detailPrompt?.Trim();
+        normalisedHint = detailHint?.Trim();
+        if (string.IsNullOrEmpty(normalisedPrompt)) normalisedPrompt = null;
+        if (string.IsNullOrEmpty(normalisedHint)) normalisedHint = null;
+        if (normalisedPrompt?.Length > 60)
+            return "What you ask the buyer for must be at most 60 characters.";
+        if (normalisedHint?.Length > 80)
+            return "The hint must be at most 80 characters.";
+        // A hint with no question has nowhere to show, so it is dropped rather than kept out of sight.
+        if (normalisedPrompt is null) normalisedHint = null;
         if (string.IsNullOrWhiteSpace(title) || title.Trim().Length > 200)
             return "Title is required and must be at most 200 characters.";
         if (string.IsNullOrWhiteSpace(description) || description.Trim().Length > 4000)

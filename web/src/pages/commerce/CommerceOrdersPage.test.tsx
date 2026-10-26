@@ -204,6 +204,35 @@ describe('Orders and sales: an order in a sheet', () => {
   });
 });
 
+describe('Orders and sales: what the buyer answered', () => {
+  const withDetail = () => orderOf({ lines: [
+    { ...line, id: 1, title: 'Shavings', quantity: 2, unitPriceMinor: 1000, lineTotalMinor: 2000, detail: 'B12' },
+    { ...line, id: 2, title: 'Programme', quantity: 1, unitPriceMinor: 500, lineTotalMinor: 500, detail: null },
+  ] });
+
+  it('shows the answer next to its line in the list and the sheet', async () => {
+    load([withDetail()]);
+    mount();
+    expect(await screen.findByText(/Shavings × 2 \(B12\), Programme × 1/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Autumn Games/ }));
+    expect(dialog().getByText('Shavings × 2 (B12)')).toBeInTheDocument();
+    expect(dialog().getByText('Programme × 1')).toBeInTheDocument();
+  });
+
+  it('shows it in the seller\'s sales and puts it in its own column of the treasurer\'s CSV', async () => {
+    load([], [sale(33, 0, 2500, { lines: withDetail().lines })]);
+    const download = vi.spyOn(csv, 'downloadCsv').mockImplementation(() => undefined);
+    mount();
+    await userEvent.click(screen.getByRole('tab', { name: 'Sold' }));
+    expect(await screen.findByText(/Shavings × 2 \(B12\), Programme × 1/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Download for the treasurer (CSV)' }));
+    const text = download.mock.calls[0][1] as string;
+    expect(text).toContain('Quantity,Detail,Status');
+    expect(text).toContain('B12');
+    download.mockRestore();
+  });
+});
+
 describe('Orders and sales: sold', () => {
   it('shows Paid, Not paid yet and Refunded tiles, leaving demo orders out, then the sales and a CSV download', async () => {
     load([], [sale(1, 2, 2500), sale(2, 2, 9000, { isTestOrder: true }), sale(3, 0, 1300), sale(4, 1, 700), sale(5, 5, 2000), sale(6, 3, 4100), sale(7, 4, 800)]);
