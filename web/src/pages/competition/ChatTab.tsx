@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { AlertTriangle, Lock, Megaphone, MessageSquare, Pin, Radio, Save, Send, Shield, Trash2, Video, X } from 'lucide-react';
+import { AlertTriangle, Lock, MessageSquare, Pin, Radio, Save, Send, Shield, Trash2, Video, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
@@ -65,7 +65,6 @@ function ChatTabSession() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [allOpen, setAllOpen] = useState(false);
-  const [unpinnedTopId, setUnpinnedTopId] = useState<number | null>(null);
   const [lastChatComp, setLastChatComp] = useState<LastChatComp | null>(() => loadLastChatComp());
   const [dismissedCompWarning, setDismissedCompWarning] = useState(false);
   const loadController = useRef<AbortController | null>(null);
@@ -119,20 +118,16 @@ function ChatTabSession() {
   const banners = orderedMessages.filter((message) => message.type === 2 && message.tag === BANNER_TAG && !message.adminOnly);
   const visibleMessages = orderedMessages.filter((message) => message.type !== 1 && message.tag !== BANNER_TAG && !message.adminOnly);
   const privateCount = messages.filter((message) => message.adminOnly && !message.recipientUserId).length;
-  const latest = visibleMessages.slice(desktop ? 0 : -3).reverse();
 
-  // All announcements appear at the top first; pinned announcements replace them, or more recent announcements replace the pin.
-  const latestPin = banners.at(-1) ?? null;
-  const latestAnnouncement = visibleMessages.at(-1) ?? null;
-  const pinIsNewer = Boolean(latestPin && (!latestAnnouncement ||
-    new Date(latestPin.createdAt).getTime() > new Date(latestAnnouncement.createdAt).getTime() ||
-    (new Date(latestPin.createdAt).getTime() === new Date(latestAnnouncement.createdAt).getTime() && latestPin.id > latestAnnouncement.id)));
-  const rawBanner = pinIsNewer ? latestPin : latestAnnouncement;
-  const banner = rawBanner && rawBanner.id !== unpinnedTopId ? rawBanner : null;
-  const pinnedId = banner && pinIsNewer
+  // The pin is the latest banner message. It sits in its own box at the top of the announcements; the rest follow, newest first.
+  const banner = banners.at(-1) ?? null;
+  const pinnedId = banner
     ? pinnedSource?.bannerId === banner.id ? pinnedSource.messageId
       : visibleMessages.findLast((message) => message.body === banner.body)?.id ?? null
     : null;
+  // Spectators see the pinned notice once, in its box; organisers keep its row so they can unpin it from there too.
+  const listed = canPost ? visibleMessages : visibleMessages.filter((message) => message.id !== pinnedId);
+  const latest = listed.slice(desktop ? 0 : -3).reverse();
 
   const activeStreams = streams.filter((stream) => stream.status !== 2);
   const liveNow = activeStreams.length > 0;
@@ -183,7 +178,6 @@ function ChatTabSession() {
     setActionError(null);
     try {
       if (banners.length > 0) await deleteBanners();
-      if (latestAnnouncement) setUnpinnedTopId(latestAnnouncement.id);
     } catch {
       setActionError('Couldn’t unpin the banner. Check your connection and try again.');
       loadMessages();
@@ -208,7 +202,6 @@ function ChatTabSession() {
       }
       setMessages((current) => current.some((item) => item.id === posted.id) ? current : [...current, posted]);
       setPinnedSource({ bannerId: posted.id, messageId: target.id });
-      setUnpinnedTopId(null);
       // Keep the previous pin until the replacement is safely stored.
       try { if (banners.length > 0) await deleteBanners(); }
       catch { setActionError('The announcement was pinned, but the old banner could not be cleared. Try again.'); }
@@ -232,7 +225,6 @@ function ChatTabSession() {
       if (posted && typeof posted.id === 'number') {
         setMessages((current) => current.some((item) => item.id === posted.id) ? current : [...current, posted]);
       }
-      setUnpinnedTopId(null);
       reload();
       setBody((current) => current.trim() === text ? '' : current);
       const record = { id: competition.id, name: competition.name };
@@ -264,8 +256,16 @@ function ChatTabSession() {
               Organiser messages{privateCount > 0 ? ` (${privateCount})` : ''}
             </Link>
           )}
-          {!desktop && visibleMessages.length > 0 && <button ref={announcementsTriggerRef} type="button" onClick={() => setAllOpen(true)}>All {visibleMessages.length}</button>}
+          {!desktop && listed.length > 0 && <button ref={announcementsTriggerRef} type="button" onClick={() => setAllOpen(true)}>All {listed.length}</button>}
         </div>
+        {banner && (
+          <div className="live-pinned" role="status" aria-label="Pinned announcement">
+            <span className="live-pinned-label"><Pin aria-hidden="true" />Pinned</span>
+            <strong>{banner.body}</strong>
+            <span className="live-pinned-meta">Organisers · {messageTime(banner)}</span>
+            {canModerate && <button type="button" className="live-pinned-unpin" onClick={() => void unpinBanners()}>Unpin</button>}
+          </div>
+        )}
         {lastChatComp && lastChatComp.id !== competition.id && !dismissedCompWarning && canCompose && (
           <div className="live-comp-warning" role="status">
             <AlertTriangle aria-hidden="true" />
@@ -338,19 +338,6 @@ function ChatTabSession() {
       {actionError && !allOpen && <div className="live-action-error" role="alert"><span>{actionError}</span><button type="button" aria-label="Dismiss error" onClick={() => setActionError(null)}><X aria-hidden="true" /></button></div>}
       {actionNotice && !allOpen && <div className="live-banner" role="status"><span>{actionNotice}</span><button type="button" aria-label="Dismiss notice" onClick={() => setActionNotice(null)}><X aria-hidden="true" /></button></div>}
 
-      {banner && (
-        <div className="live-banner" role="status" aria-label="Top announcement">
-          <Megaphone aria-hidden="true" />
-          <div>
-            <strong>{banner.body}</strong>
-            <span>{pinIsNewer ? (canPost ? 'Pinned banner · everyone sees this' : `Pinned by organisers · ${messageTime(banner)}`) : `Latest announcement · ${messageTime(banner)}`}</span>
-          </div>
-          {canModerate && (pinIsNewer
-            ? <button type="button" onClick={() => void unpinBanners()}>Unpin</button>
-            : <button type="button" onClick={() => setUnpinnedTopId(banner.id)}>Hide on this device</button>)}
-        </div>
-      )}
-
       {canPost ? (
         <>
           <div className="live-col live-col-rail">
@@ -376,7 +363,7 @@ function ChatTabSession() {
 
       {allOpen && (
         <AnnouncementsOverlay
-          messages={visibleMessages.slice().reverse()}
+          messages={listed.slice().reverse()}
           staff={canPost}
           canModerate={canModerate}
           pinnedId={pinnedId}

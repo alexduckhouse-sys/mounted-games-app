@@ -191,7 +191,7 @@ describe('ChatTab and ContactOrganisersPage auth sessions', () => {
     });
     mountChat({ staffChatEnabled: true });
 
-    expect(await screen.findAllByText('Official heat 1 update')).toHaveLength(2);
+    expect(await screen.findByText('Official heat 1 update')).toBeVisible();
     expect(screen.queryByText('Private question from rider')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Organiser messages \(1\)/ })).toHaveAttribute('href', '/competitions/1/contact');
   });
