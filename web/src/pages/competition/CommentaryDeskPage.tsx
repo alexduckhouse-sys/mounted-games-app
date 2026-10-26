@@ -6,7 +6,6 @@ import { useAuth } from '../../auth/AuthContext';
 import { BibSwatch } from '../../components/BibSwatch';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { QrAccessModal } from '../../components/QrAccessModal';
-import { StreamControlStrip } from '../../components/stream/StreamControlStrip';
 import { usePageWidth } from '../../components/pageWidthState';
 import { formatPoints } from '../../lib/formatPoints';
 import { statusLetter } from '../../lib/resultStatus';
@@ -16,6 +15,7 @@ import { buildToplist, ordinal, sectionScoreVersion } from '../../lib/toplist';
 import { useLiveHub } from '../../live/useLiveHub';
 import type { DeclarationForm, Heat, Session, StandingRow, Team } from '../../types';
 import { useCompetition } from './context';
+import { DeskOverlays } from './streamControls/DeskOverlays';
 
 type DeskMode = 'split' | 'lanes' | 'standings';
 
@@ -439,13 +439,8 @@ export function CommentaryDeskPage() {
         </div>
       </header>
 
-      {/* Live Stream & Overlay Control Strip */}
-      {canControlStreams && <StreamControlStrip
-        competitionId={competition.id}
-        arenaName={activeHeatItem?.session.arenaName}
-        sectionId={sectionId}
-        activeHeatId={activeHeatItem?.heat.id}
-      />}
+      {/* One-tap stream overlays */}
+      {canControlStreams && <DeskOverlays />}
 
       {/* Key Talking Points Banner */}
       <section aria-label="Key talking points" className="mg-card grid grid-cols-1 gap-3 p-3.5 sm:grid-cols-3">

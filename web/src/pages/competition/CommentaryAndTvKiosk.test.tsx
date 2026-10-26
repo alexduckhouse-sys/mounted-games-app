@@ -216,70 +216,21 @@ describe('CommentaryDeskPage', () => {
     expect(within(talkingPoints).getByText(/South B \(2 pts\) holds 2nd — East C is 1 pts behind/)).toBeInTheDocument();
     expect(within(talkingPoints).getByText(/North A won Bending \(\+3 pts\)/)).toBeInTheDocument();
 
-    // Stream control strip triggers overlays, camera angles, zoom, mic, pause, replay & announcement
-    const streamStrip = await screen.findByRole('region', { name: 'Live stream control strip' });
-    expect(within(streamStrip).getByText(/LIVE · Main Camera \(14 watching\)/)).toBeInTheDocument();
-
-    await user.click(within(streamStrip).getByRole('button', { name: /Show Toplist on Stream/ }));
-    expect(saveOverlay).toHaveBeenCalled();
-    expect(within(streamStrip).getByRole('status')).toHaveTextContent('Showing: Show Toplist');
-
-    await user.click(within(streamStrip).getByRole('button', { name: /Show Lanes on Stream/ }));
-    await user.click(within(streamStrip).getByRole('button', { name: /Show Heat Table on Stream/ }));
-    await user.click(within(streamStrip).getByRole('button', { name: /Show Up Next on Stream/ }));
-    await user.click(within(streamStrip).getByRole('button', { name: /Hide Stream Overlay/ }));
-
-    // Camera angle switcher & controls
-    await user.click(within(streamStrip).getByRole('button', { name: 'Finish Line' }));
-    expect(api.post).toHaveBeenCalledWith('/competitions/1/streams/102/command', {
-      command: 'selectAngle',
-      value: '102',
-    });
-
-    await user.click(within(streamStrip).getByRole('button', { name: 'Remote zoom 2x' }));
-    expect(api.post).toHaveBeenCalledWith('/competitions/1/streams/102/command', {
-      command: 'setZoom',
-      value: '2',
-    });
-
-    await user.click(within(streamStrip).getByRole('button', { name: 'Mute stream mic' }));
-    expect(api.post).toHaveBeenCalledWith('/competitions/1/streams/102/command', {
-      command: 'mute',
-      value: 'true',
-    });
-    await user.click(within(streamStrip).getByRole('button', { name: 'Unmute stream mic' }));
-
-    await user.click(within(streamStrip).getByRole('button', { name: 'Pause stream (Back soon)' }));
-    expect(api.post).toHaveBeenCalledWith('/competitions/1/streams/102/command', {
-      command: 'pause',
-      value: 'true',
-    });
-    await user.click(within(streamStrip).getByRole('button', { name: 'Resume stream' }));
-
-    await user.click(within(streamStrip).getByRole('button', { name: /Save 15s Replay/ }));
-    expect(api.post).toHaveBeenCalledWith('/competitions/1/streams/102/command', {
-      command: 'saveReplay',
-      value: '15',
-    });
-
-    await user.click(within(streamStrip).getByRole('button', { name: /Save 30s Replay/ }));
-    expect(api.post).toHaveBeenCalledWith('/competitions/1/streams/102/command', {
-      command: 'saveReplay',
-      value: '30',
-    });
-
-    await user.click(within(streamStrip).getByRole('button', { name: 'Refresh stream cameras' }));
-
-    await user.type(within(streamStrip).getByLabelText('Quick stream announcement'), ' Final call for Heat 2');
-    await user.click(within(streamStrip).getByRole('button', { name: 'Post to stream' }));
-    expect(within(streamStrip).getByRole('status')).toHaveTextContent('Stream banner saved.');
-    expect(saveOverlay.mock.calls.at(-1)![0]({})).toMatchObject({ bannerText: 'Final call for Heat 2', bannerStyle: 1 });
-
-    // Handle chat error gracefully
-    saveOverlay.mockRejectedValueOnce(new Error('network error'));
-    await user.type(within(streamStrip).getByLabelText('Quick stream announcement'), 'Retry msg');
-    await user.click(within(streamStrip).getByRole('button', { name: 'Post to stream' }));
-    expect(await within(streamStrip).findByText('Could not save the stream banner. Try again.')).toBeInTheDocument();
+    // One-tap overlays replace the old stream strip
+    const overlays = await screen.findByRole('region', { name: 'Stream overlays' });
+    expect(screen.queryByRole('region', { name: 'Live stream control strip' })).toBeNull();
+    const tiles = within(within(overlays).getByRole('radiogroup', { name: 'On screen' })).getAllByRole('radio');
+    expect(tiles.map((tile) => tile.textContent)).toEqual(['Off', 'Toplist', 'Heat table', 'Podium', 'Race result', 'Up next', 'Race title', 'Sponsors']);
+    expect(tiles[0]).toHaveAttribute('aria-checked', 'true');
+    await user.click(within(overlays).getByRole('radio', { name: 'Toplist' }));
+    expect(saveOverlay.mock.calls.at(-1)![0]({ look: {}, sponsorMode: 0 })).toMatchObject({ look: { liveCard: 'toplist' } });
+    saveOverlay.mockResolvedValueOnce('failed');
+    await user.click(within(overlays).getByRole('radio', { name: 'Heat table' }));
+    expect(await within(overlays).findByRole('alert')).toHaveTextContent('Couldn’t change the overlay');
+    const autoChip = within(overlays).getByRole('button', { name: 'Auto off' });
+    await user.click(autoChip);
+    expect(within(overlays).getByRole('button', { name: 'Auto on' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(overlays).getByRole('link', { name: 'Overlay settings, automations and cameras' })).toHaveAttribute('href', '/competitions/1/stream-controls');
 
     // No heat table view any more; lanes show heat / toplist points and Up next lists what follows
     const viewGroup = screen.getByRole('group', { name: 'Commentary desk view' });
