@@ -9,7 +9,10 @@ import { lengthLabel, loadInstantLength } from '../../../lib/instantReplay';
 import { DEFAULT_OVERLAY } from '../../../lib/overlays';
 import { onAirStream } from '../../../lib/streamControls';
 import { DESK_TILES } from '../../../lib/streamOverlayTiles';
+import { Notice } from '../../../components/Notice';
+import { useToast } from '../../../components/Toast';
 import { useCompetition } from '../context';
+import { OverlayProblem } from './OverlayTab';
 import './streamControls.css';
 
 /** One-tap overlays for the Commentary desk. The same choices as the Overlay tab, without the settings. */
@@ -20,17 +23,19 @@ export function DeskOverlays() {
   const onAir = useMemo(() => onAirStream(streams, lastStreamCommand, null), [streams, lastStreamCommand]);
   const tiles = useOverlayTiles({ competitionId: competition.id, overlay, saveOverlay, onAir, setAutoOn: setOn });
   useStreamAutomation({ competition, overlay, saveOverlay, auto });
-  const [instantNote, setInstantNote] = useState<{ text: string; failed: boolean } | null>(null);
+  const [instantProblem, setInstantProblem] = useState<string | null>(null);
+  const toast = useToast();
   const [length] = useState(loadInstantLength);
 
   // The clip is saved by the camera phone, so it stays there; open the Replay tab on that phone to edit it.
   async function instantReplay() {
-    if (!onAir) { setInstantNote({ text: 'No camera is live.', failed: true }); return; }
+    setInstantProblem(null);
+    if (!onAir) { setInstantProblem('No camera is live.'); return; }
     try {
       await api.post(`/competitions/${competition.id}/streams/${onAir.id}/command`, { command: 'saveReplay', value: String(length) });
-      setInstantNote({ text: `Asked the camera phone to save the last ${lengthLabel(length)}.`, failed: false });
+      toast.show(`Asked the camera phone to save the last ${lengthLabel(length)}.`);
     } catch {
-      setInstantNote({ text: 'Couldn’t reach the camera phone. Check your connection and try again.', failed: true });
+      setInstantProblem('Couldn’t reach the camera phone. Check your signal and try again.');
     }
   }
 
@@ -44,13 +49,14 @@ export function DeskOverlays() {
           ))}
         </div>
       </fieldset>
-      {tiles.error && <p className="mg-notice sx-status" role="alert">{tiles.error}</p>}
+      <OverlayProblem tiles={tiles} />
       <div className="sx-chips">
         <button type="button" className="sx-btn" onClick={() => void instantReplay()}><RotateCcw className="h-4 w-4" aria-hidden="true" />Instant replay · {lengthLabel(length)}</button>
         <button type="button" className="sx-chip" aria-pressed={auto.on} onClick={() => setOn(!auto.on)}>{auto.on ? 'Auto on' : 'Auto off'}</button>
         <Link className="sx-desk-link" to={`/competitions/${competition.id}/stream-controls`}>Overlay settings, automations and cameras</Link>
       </div>
-      {instantNote && <p className={instantNote.failed ? 'mg-notice' : 'sx-note'} role={instantNote.failed ? 'alert' : 'status'}>{instantNote.text}</p>}
+      {instantProblem && <Notice className="sx-status" actionLabel={onAir ? 'Try again' : undefined} onAction={() => void instantReplay()}>{instantProblem}</Notice>}
+      {toast.node}
     </section>
   );
 }

@@ -9,6 +9,7 @@ import { CompStreamCard, LiveVideo } from './LiveVideo';
 import { chat, session } from '../../test/factories';
 import { asMedia, FakeMediaStream, FakePeer, fakePeerConstructor, fakeStreamConstructor, flush, liveStream, resetMedia } from '../../test/streamFakes';
 import * as replayBuffers from '../../live/replayBuffer';
+import { streamErrors } from '../../live/streamViewer';
 import { deferred } from '../../test/streamFakes';
 import type { StreamInvoke } from '../../live/streamRuntime';
 
@@ -112,6 +113,12 @@ it('offers Play if autoplay is blocked and retains it until playback succeeds', 
   expect(screen.getByText('Connecting…')).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: 'Play' })); await settle(); expect(screen.getByRole('button', { name: 'Play' })).toBeVisible();
   play.mockResolvedValue(); fireEvent.click(screen.getByRole('button', { name: 'Play' })); await settle(); expect(screen.queryByRole('button', { name: 'Play' })).toBeNull();
+});
+it('shows a finished or full stream as a heading and a next step', async () => {
+  const { rerender } = render(<StreamPlayer media={null} stream={liveStream()} label="Final" message={streamErrors.STREAM_NOT_FOUND} />); await settle();
+  expect(screen.getByText('The stream has finished')).toBeVisible(); expect(screen.getByText('Thanks for watching.')).toBeVisible();
+  rerender(<StreamPlayer media={null} stream={liveStream()} label="Final" message={streamErrors.STREAM_FULL} />); await settle();
+  expect(screen.getByText('The stream is full')).toBeVisible(); expect(screen.getByText('Try again in a minute.')).toBeVisible();
 });
 it('opens above chrome with native full screen and landscape, and exits on close, Escape and back', async () => {
   const push = vi.spyOn(history, 'pushState');

@@ -6,7 +6,7 @@ import type { ChatMessage, LiveStream, StreamQualityRid } from '../../types';
 import { useReplayPreparation } from '../../live/useReplayPreparation';
 import { ReplayPreparation } from './ReplayPreparation';
 import { createReplayBuffer, getSavedReplays, removeSavedReplay, type SavedReplayClip } from '../../live/replayBuffer';
-import { syncVideoLiveEdge } from '../../live/streamViewer';
+import { splitStreamMessage, syncVideoLiveEdge } from '../../live/streamViewer';
 import { ReplayInspector, SavedReplaysButton } from './ReplayInspector';
 import { StreamOverlays } from './StreamOverlays';
 import { useReplayWipe } from './ReplayWipe';
@@ -234,7 +234,12 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
         {(full || !captionBar) && <button className="mg-stream-control" aria-label={full ? 'Close full screen' : 'Open full screen'} onClick={full ? close : open}>{full ? <X /> : <Maximize />}</button>}
       </div>
       {needsPlay && <button className="mg-stream-control pointer-events-auto absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 !rounded-xl px-4" onClick={() => { void videoRef.current!.play().then(() => setNeedsPlay(false)).catch(() => setNeedsPlay(true)); }}><Play /> Play</button>}
-      {message && <p role="status" className="mg-stream-glass absolute left-3 right-3 top-1/2 p-3 text-center">{message}</p>}
+      {message && (() => {
+        const { title, body } = splitStreamMessage(message);
+        return title
+          ? <div role="status" className="mg-stream-glass absolute left-3 right-3 top-1/2 p-3 text-center"><strong className="block text-lg font-bold">{title}</strong><span className="block text-sm">{body}</span></div>
+          : <p role="status" className="mg-stream-glass absolute left-3 right-3 top-1/2 p-3 text-center">{message}</p>;
+      })()}
     </StreamOverlays>
     <div className="absolute bottom-12 left-3 right-3"><ReplayPreparation {...replayPreparation} /></div>
     <AnimatePresence>

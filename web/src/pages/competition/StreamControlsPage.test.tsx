@@ -98,7 +98,10 @@ describe('StreamControlsPage', () => {
     expect(api.post).not.toHaveBeenCalled();
     vi.mocked(api.post).mockRejectedValueOnce(new Error('offline'));
     await user.click(screen.getByRole('button', { name: 'End stream' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t end the stream');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t end the stream. Check your signal and try again.');
+    await user.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });
 
@@ -161,6 +164,23 @@ describe('Camera tab', () => {
 });
 
 describe('Overlay tab', () => {
+  it('offers Show me when the overlay changed on another phone, and Try again for a failed save', async () => {
+    const user = userEvent.setup();
+    mount();
+    saveOverlay.mockResolvedValueOnce('conflict');
+    await user.click(screen.getByRole('radio', { name: 'Heat table' }));
+    const strip = await screen.findByRole('alert');
+    expect(strip).toHaveTextContent('The overlay changed on another phone. Check it and try again.');
+    await user.click(within(strip).getByRole('button', { name: 'Show me' }));
+    expect(screen.getByRole('radio', { name: 'None' })).toHaveFocus();
+    saveOverlay.mockResolvedValueOnce('failed');
+    await user.click(screen.getByRole('radio', { name: 'Heat table' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t change the overlay. Check your signal and try again.');
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(saveOverlay).toHaveBeenCalledTimes(3);
+  });
+
   it('lays the overlays out as two-column tiles with None, Automatic and Back soon first', () => {
     mount();
     const group = screen.getByRole('radiogroup', { name: 'On screen' });

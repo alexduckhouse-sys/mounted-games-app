@@ -22,6 +22,8 @@ import { LiveDataCardOverlay, ProducerBanner, type LiveOverlayCardMode } from '.
 import { OverlayLayer, StreamNotice } from '../../components/stream/StreamOverlays';
 import { FilmingBanner } from '../../components/FilmingBanner';
 import { SelectField } from '../../components/SelectField';
+import { Notice } from '../../components/Notice';
+import { confirmDialog } from '../../components/ConfirmDialog';
 import { usePageWidth } from '../../components/pageWidthState';
 import type { StreamQualityPreset } from '../../types';
 
@@ -108,8 +110,6 @@ function BroadcastStudio() {
   const [showReplayDrawer, setShowReplayDrawer] = useState(false);
   const [caption, setCaption] = useState('');
   const [editingCaption, setEditingCaption] = useState(false);
-  const [ending, setEnding] = useState(false);
-  const [confirmEnd, setConfirmEnd] = useState(false);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now);
   const [limitSeconds, setLimitSeconds] = useState(DEFAULT_STREAM_LIMIT_SECONDS);
@@ -215,11 +215,14 @@ function BroadcastStudio() {
   const flip = () => run(() => publisher.current!.switchCamera());
 
   const end = useCallback(async () => {
-    setEnding(true); setError('');
+    setError('');
     try { await publisher.current!.stop(); navigate(`/competitions/${competition.id}/chat`); }
     catch { setError('The camera has stopped. Could not confirm the end with the server.'); }
-    finally { setEnding(false); }
   }, [competition.id, navigate]);
+
+  async function askToEnd() {
+    if (await confirmDialog({ title: 'End the stream?', message: 'Viewers will see that it has finished.', cancelLabel: 'Keep going', confirmLabel: 'End stream', destructive: true })) void end();
+  }
 
   useEffect(() => {
     setBroadcasting(live);
@@ -240,7 +243,7 @@ function BroadcastStudio() {
 
   async function run(action: () => Promise<unknown>) {
     setBusy(true); setError('');
-    try { await action(); } catch { setError('Could not complete that change. Check your connection and try again.'); }
+    try { await action(); } catch { setError('Couldn’t complete that change. Check your signal and try again.'); }
     finally { setBusy(false); }
   }
 
@@ -460,7 +463,7 @@ function BroadcastStudio() {
         >
           <Lock />Dim
         </button>
-        <button className="mg-stream-control flex-col !rounded-xl !bg-[rgb(var(--mg-red))] p-2" onClick={() => setConfirmEnd(true)}><Square />End</button>
+        <button className="mg-stream-control flex-col !rounded-xl !bg-[rgb(var(--mg-red))] p-2" onClick={() => void askToEnd()}><Square />End</button>
       </div>
       {showAnnounce && (
         <form
@@ -573,7 +576,6 @@ function BroadcastStudio() {
       {snapshot.state === 'paused' && <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[rgb(var(--mg-header-deep)/0.65)]"><h2 className="text-2xl font-bold">Viewers see Back soon</h2><button className="mg-stream-control pointer-events-auto px-4" disabled={busy} onClick={() => run(() => publisher.current!.pause(false))}><Play />Resume</button></div>}
       {(snapshot.state === 'starting' || snapshot.state === 'reconnecting') && <p role="status" className="mg-stream-glass absolute left-4 top-1/2 p-3">{snapshot.state === 'starting' ? 'Starting stream…' : 'Reconnecting…'}</p>}
       {error && <p role="alert" className="mg-stream-glass absolute left-4 right-24 top-20 p-3">{error}</p>}
-      {confirmEnd && <div className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-[rgb(var(--mg-header-deep)/0.8)]"><div role="alertdialog" aria-modal="true" aria-labelledby="end-stream-title" className="mg-stream-glass mx-4 max-w-sm space-y-3 border border-[rgb(var(--mg-header-line))] p-5"><h2 id="end-stream-title" className="text-2xl font-bold">End the stream?</h2><p>Viewers will see that it has finished.</p><div className="flex gap-3"><button autoFocus className="mg-stream-control !rounded-xl px-3" onClick={() => setConfirmEnd(false)}>Keep going</button><button disabled={ending} className="mg-stream-control !rounded-xl !bg-[rgb(var(--mg-red))] px-3" onClick={end}>End stream</button></div></div></div>}
       {screenDimmed && (
         <div
           role="dialog"
@@ -583,13 +585,14 @@ function BroadcastStudio() {
           onDoubleClick={() => setScreenDimmed(false)}
         >
           <Lock className="h-8 w-8" />
+          <h2 className="text-lg font-bold">Screen locked</h2>
           <p className="text-sm font-semibold">LIVE {time} · {arena} · {angle}</p>
           <button
             type="button"
             className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/50 hover:text-white"
             onClick={() => setScreenDimmed(false)}
           >
-            Double-tap or tap here to unlock screen
+            Double-tap to unlock.
           </button>
         </div>
       )}
@@ -620,7 +623,7 @@ function BroadcastStudio() {
   );
   return <div className={`mx-auto flex w-full flex-col gap-4 pb-6 pt-3 ${snapshot.media ? '' : 'max-w-xl'}`}>
     <Link className="mg-text-link" to={`/competitions/${competition.id}/chat`}>‹ Live stream</Link><h1 className="mg-h1">Go live</h1>
-    {error || snapshot.error ? <p role="alert" className="mg-notice">{error || snapshot.error}</p> : null}
+    {error || snapshot.error ? <Notice>{error || snapshot.error}</Notice> : null}
     <FilmingBanner competitionId={competition.id} refreshKey={competition.sessions} />
     {!snapshot.media && soundField}
     {!snapshot.media ? <button disabled={busy} className="mg-btn mg-btn-primary min-h-12" onClick={() => run(async () => { await publisher.current!.capture(sound); setDevices(await publisher.current!.devices()); setMics(await (publisher.current!.audioDevices?.() ?? Promise.resolve([]))); })}><Camera />Allow camera</button> : <>
@@ -677,8 +680,8 @@ function BroadcastStudio() {
               </SelectField>
             </label>
           )}
-          {occupied && <p role="status" className="mg-notice">Someone is already streaming {arena} · {angle}. Going live takes over from them.</p>}
-          <p className="mg-notice">Anyone can watch. Check families know the event is being filmed. Keep this screen on: locking the phone pauses the stream.</p>
+          {occupied && <Notice tone="info">Someone is already streaming {arena} · {angle}. Going live takes over from them.</Notice>}
+          <Notice tone="info" role={null}>Anyone can watch. Check families know the event is being filmed. Keep this screen on: locking the phone pauses the stream.</Notice>
           <button disabled={busy || !arena.trim() || !angle.trim()} className="mg-btn mg-btn-primary !min-h-[52px] !bg-[rgb(var(--mg-red))] !text-white" onClick={() => run(async () => { const t = Date.now(); setStartedAt(t); setNow(t); setLimitSeconds(DEFAULT_STREAM_LIMIT_SECONDS); await publisher.current!.start(arena, angle, occupied); })}><VideoIcon />{occupied ? 'Take over and go live' : 'Go live'}</button>
         </div>
       </div>

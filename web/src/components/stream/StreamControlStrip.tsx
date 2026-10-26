@@ -1,7 +1,9 @@
-import { useCallback, useContext, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Eye, EyeOff, Film, Layers, ListOrdered, Megaphone, Mic, MicOff, Pause, Play, RefreshCw, Table2, Trophy, Video } from 'lucide-react';
 import { api } from '../../api';
 import { scorerApi } from '../../offline/scorerLink';
+import { Notice } from '../Notice';
+import { useToast } from '../Toast';
 import { CompetitionContext } from '../../pages/competition/context';
 import type { LiveStream, LiveStreamsResponse, StreamCommand } from '../../types';
 
@@ -31,7 +33,10 @@ export function StreamControlStrip({
   const [paused, setPaused] = useState<boolean>(false);
   const [announcement, setAnnouncement] = useState<string>('');
   const [postingChat, setPostingChat] = useState<boolean>(false);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  // A quick "it worked" is a toast; a problem or a "nothing to send it to" stays on the strip until the next tap.
+  const toast = useToast();
+  const [problem, setProblem] = useState<{ text: string; tone?: 'info'; actionLabel?: string; onAction?: () => void } | null>(null);
+  const overlayGroup = useRef<HTMLDivElement>(null);
 
   const loadStreams = useCallback(() => {
     try {
@@ -69,30 +74,38 @@ export function StreamControlStrip({
     command: StreamCommand['command'], value: string | null, statusLabel: string, targetStreamId?: number,
   ): Promise<boolean> {
     const streamId = targetStreamId ?? activeStream?.id;
-    if (streamId == null) { setStatusMessage('No camera is broadcasting.'); return false; }
+    setProblem(null);
+    if (streamId == null) { setProblem({ text: 'No camera is broadcasting.', tone: 'info' }); return false; }
     try {
       await client.post(`/competitions/${competitionId}/streams/${streamId}/command`, { command, value });
-      setStatusMessage(`Requested: ${statusLabel}`);
+      toast.show(`Requested: ${statusLabel}`);
       return true;
     } catch {
-      setStatusMessage('Could not send the camera command. Check your connection and try again.');
+      setProblem({ text: 'Couldn’t reach the camera phone. Check your signal and try again.', actionLabel: 'Try again', onAction: () => void sendStreamCommand(command, value, statusLabel, targetStreamId) });
       return false;
     }
   }
 
   async function triggerOverlay(kind: 'lanes' | 'heat' | 'toplist' | 'upNext' | 'none', label: string) {
+    setProblem(null);
     if (useScorerClient || !context?.saveOverlay) {
-      setStatusMessage('Sign in as an organiser to change overlays.');
+      setProblem({ text: 'Sign in as an organiser to change overlays.', tone: 'info' });
       return;
     }
+    const tryAgain = { actionLabel: 'Try again', onAction: () => void triggerOverlay(kind, label) };
     try {
       const outcome = await context.saveOverlay((overlay) => ({
         ...overlay, look: { ...(overlay.look as Record<string, unknown>), liveCard: kind === 'upNext' ? 'next' : kind, liveSectionId: sectionId },
       }));
-      if (outcome !== 'saved') { setStatusMessage('Could not save the overlay. Check the latest settings and try again.'); return; }
+      if (outcome !== 'saved') {
+        setProblem(outcome === 'conflict'
+          ? { text: 'The overlay changed on another phone. Check it and try again.', actionLabel: 'Show me', onAction: () => overlayGroup.current?.querySelector<HTMLElement>('[aria-pressed="true"]')?.focus() }
+          : { text: 'Couldn’t update the overlay. Check your signal and try again.', ...tryAgain });
+        return;
+      }
       setActiveOverlay(kind);
-      setStatusMessage(`Showing: ${label}`);
-    } catch { setStatusMessage('Could not save the overlay. Try again.'); }
+      toast.show(`Showing: ${label}`);
+    } catch { setProblem({ text: 'Couldn’t update the overlay. Check your signal and try again.', ...tryAgain }); }
   }
 
   async function submitAnnouncement(e: FormEvent) {
@@ -100,12 +113,13 @@ export function StreamControlStrip({
     const body = announcement.trim();
     if (!body || postingChat || useScorerClient || !context?.saveOverlay) return;
     setPostingChat(true);
+    setProblem(null);
     try {
       const outcome = await context.saveOverlay((overlay) => ({ ...overlay, bannerText: body, bannerStyle: 1 }));
       if (outcome !== 'saved') throw new Error('Banner was not saved');
       setAnnouncement((current) => current.trim() === body ? '' : current);
-      setStatusMessage('Stream banner saved.');
-    } catch { setStatusMessage('Could not save the stream banner. Try again.'); }
+      toast.show('Stream banner saved.');
+    } catch { setProblem({ text: 'Couldn’t save the stream banner. Check your signal and try again.' }); }
     finally { setPostingChat(false); }
   }
 
@@ -141,7 +155,7 @@ export function StreamControlStrip({
       </div>
 
       {/* 1. Stream Overlay Triggers */}
-      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Stream overlay triggers">
+      <div ref={overlayGroup} className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Stream overlay triggers">
         <button
           type="button"
           aria-pressed={activeOverlay === 'lanes'}
@@ -307,11 +321,8 @@ export function StreamControlStrip({
         </form>
       )}
 
-      {statusMessage && (
-        <p role="status" className="m-0 text-xs font-semibold text-[rgb(var(--mg-heading))]">
-          {statusMessage}
-        </p>
-      )}
+      {problem && <Notice tone={problem.tone} actionLabel={problem.actionLabel} onAction={problem.onAction}>{problem.text}</Notice>}
+      {toast.node}
     </section>
   );
 }

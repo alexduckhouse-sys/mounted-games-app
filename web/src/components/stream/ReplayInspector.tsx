@@ -18,6 +18,8 @@ import { LEAVE, SPRING } from '../../lib/motion';
 import { useStillMotion } from '../../lite/useStillMotion';
 import { useReplayPreparation } from '../../live/useReplayPreparation';
 import { ReplayPreparation } from './ReplayPreparation';
+import { Notice } from '../Notice';
+import { useToast } from '../Toast';
 import type { ReplayEncodingOptions } from '../../live/replayEncoding';
 import {
   exportTrimmedClip,
@@ -213,7 +215,9 @@ export function ReplayInspector({
     () => (clip.followKeyframes?.length ?? 0) > 0
   );
 
-  const [photoFinishToast, setPhotoFinishToast] = useState<string | null>(null);
+  // A saved photo is a quick toast; a photo that couldn’t be saved is a problem strip with Try again.
+  const photoToast = useToast();
+  const [photoProblem, setPhotoProblem] = useState<string | null>(null);
   const [storageUpdate, setStorageUpdate] = useState({ id: clip.id, warning: clip.storageWarning });
   useEffect(() => subscribeSavedReplays(() => setStorageUpdate({ id: clip.id, warning: clip.storageWarning })), [clip]);
   const storageWarning = storageUpdate.id === clip.id ? storageUpdate.warning : clip.storageWarning;
@@ -237,7 +241,7 @@ export function ReplayInspector({
     setFollowKeyframes(clip.followKeyframes ? [...clip.followKeyframes] : []);
     setIsRecordingFollow(false);
     setFollowEnabled((clip.followKeyframes?.length ?? 0) > 0);
-    setPhotoFinishToast(null);
+    setPhotoProblem(null);
   }
 
   useEffect(() => {
@@ -512,12 +516,16 @@ export function ReplayInspector({
   };
 
   const handlePhotoFinishSnapshot = () => {
+    setPhotoProblem(null);
     try {
       const widthScale = (videoRef.current?.videoWidth || 1) / (videoRef.current?.clientWidth || videoRef.current?.videoWidth || 1);
       const heightScale = (videoRef.current?.videoHeight || 1) / (videoRef.current?.clientHeight || videoRef.current?.videoHeight || 1);
       capturePhotoFinishSnapshot(videoRef.current, clip, currentTime, { zoom, panX: panX * widthScale, panY: panY * heightScale });
-      setPhotoFinishToast(`Photo finish saved (${formatVideoTime(currentTime)})`);
-    } catch (error) { setPhotoFinishToast(error instanceof Error ? error.message : 'The photo could not be saved. Try again.'); }
+      photoToast.show(`Photo finish saved (${formatVideoTime(currentTime)})`);
+    } catch (error) {
+      // "Wait for the replay video to load" says what to do; every other failure gets the one standard sentence.
+      setPhotoProblem(error instanceof Error && error.message.startsWith('Wait for') ? error.message : 'Couldn’t save the photo. Try again.');
+    }
   };
 
   const handleTimeUpdate = () => {
@@ -598,7 +606,7 @@ export function ReplayInspector({
       exit={still ? undefined : { opacity: 0, y: 28, transition: LEAVE }}
       transition={SPRING}
     >
-      {storageWarning && <p role="status" className="p-3 text-sm text-amber-200">{storageWarning}</p>}
+      {storageWarning && <div className="p-3"><Notice role="status">{storageWarning}</Notice></div>}
       {/* Top Header Bar */}
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[rgb(var(--mg-header-line))] bg-[rgb(var(--mg-header-deep)/0.95)] px-4 py-2.5">
         <div className="min-w-0 flex-1 pr-3">
@@ -969,16 +977,13 @@ export function ReplayInspector({
         </div>
       </div>
 
-      {/* Photo Finish Snapshot Toast */}
-      {photoFinishToast && (
-        <div
-          role="status"
-          className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[120] rounded-xl bg-amber-400 text-black px-4 py-2 font-bold text-xs shadow-lg flex items-center gap-2"
-        >
-          <Camera className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span>{photoFinishToast}</span>
+      {/* Photo Finish Snapshot: a toast when it worked, a problem strip when it didn't */}
+      {photoProblem && (
+        <div className="pointer-events-auto fixed bottom-20 left-3 right-3 z-[120] mx-auto max-w-md">
+          <Notice actionLabel="Try again" onAction={handlePhotoFinishSnapshot}>{photoProblem}</Notice>
         </div>
       )}
+      {photoToast.node}
 
       <ReplayPreparation {...preparation} />
       {/* Post-Review Decision Bar */}
@@ -1169,7 +1174,7 @@ export function SavedReplaysDrawer({
               >
                 <div className="min-w-0 flex-1">
                   <div className="font-semibold truncate">{clip.label}</div>
-                  {clip.storageWarning && <p className="text-xs text-amber-200">{clip.storageWarning}</p>}
+                  {clip.storageWarning && <Notice role={null} className="my-1">{clip.storageWarning}</Notice>}
                   <div className="text-xs text-[rgb(var(--mg-header-sub))]">
                     {clip.arenaName} · {clip.durationSeconds}s · {formatTimestamp(clip.createdAt)}
                   </div>

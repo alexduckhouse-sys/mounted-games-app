@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { AlertTriangle, Lock, MessageSquare, Pin, Radio, Save, Send, Shield, Trash2, Video, X } from 'lucide-react';
+import { Lock, MessageSquare, Pin, Radio, Save, Send, Shield, Trash2, Video, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
@@ -13,6 +13,7 @@ import { LiveVideo } from '../../components/stream/LiveVideo';
 import type { ChatMessage, LiveStream } from '../../types';
 import './chat.css';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { Notice } from '../../components/Notice';
 
 const LAST_CHAT_COMP_KEY = 'mg.lastChatComp';
 const BANNER_TAG = 'banner';
@@ -76,7 +77,7 @@ function ChatTabSession() {
   const requestMessages = useCallback((controller: AbortController) => {
     void api.get<ChatMessage[]>(`/competitions/${competition.id}/chat`, { signal: controller.signal })
       .then((response) => { if (!controller.signal.aborted) setMessages(response.data); })
-      .catch(() => { if (!controller.signal.aborted) setMessagesError('Couldn’t load the announcements. Check your connection and try again.'); })
+      .catch(() => { if (!controller.signal.aborted) setMessagesError('Couldn’t load the announcements. Check your signal and try again.'); })
       .finally(() => { if (!controller.signal.aborted) setMessagesLoading(false); });
   }, [competition.id]);
   const loadMessages = useCallback(() => {
@@ -144,7 +145,7 @@ function ChatTabSession() {
       await api.delete(`/competitions/${competition.id}/chat/${id}`);
       setMessages((current) => current.filter((message) => message.id !== id));
     } catch {
-      setActionError('Couldn’t delete that announcement. Check your connection and try again.');
+      setActionError('Couldn’t delete that announcement. Check your signal and try again.');
     } finally {
       reload();
     }
@@ -179,7 +180,7 @@ function ChatTabSession() {
     try {
       if (banners.length > 0) await deleteBanners();
     } catch {
-      setActionError('Couldn’t unpin the banner. Check your connection and try again.');
+      setActionError('Couldn’t unpin the banner. Check your signal and try again.');
       loadMessages();
     } finally {
       pinningRef.current = false;
@@ -206,7 +207,7 @@ function ChatTabSession() {
       try { if (banners.length > 0) await deleteBanners(); }
       catch { setActionError('The announcement was pinned, but the old banner could not be cleared. Try again.'); }
     } catch {
-      setActionError('Couldn’t pin that announcement. Check your connection and try again.');
+      setActionError('Couldn’t pin that announcement. Check your signal and try again.');
     } finally {
       pinningRef.current = false;
       reload();
@@ -234,7 +235,7 @@ function ChatTabSession() {
     } catch (error) {
       setActionError((error as { response?: { status?: number } }).response?.status === 403
         ? 'Posting is blocked from this network. Contact an organiser.'
-        : 'Couldn’t send that post. Check your connection and try again.');
+        : 'Couldn’t send that post. Check your signal and try again.');
     } finally {
       sendingRef.current = false;
       setSending(false);
@@ -267,13 +268,11 @@ function ChatTabSession() {
           </div>
         )}
         {lastChatComp && lastChatComp.id !== competition.id && !dismissedCompWarning && canCompose && (
-          <div className="live-comp-warning" role="status">
-            <AlertTriangle aria-hidden="true" />
-            <span>Your last post was for another competition. <Link to={`/competitions/${lastChatComp.id}/chat`}>Switch back to {lastChatComp.name}</Link>, or post here.</span>
-            <button type="button" aria-label="Dismiss competition warning" onClick={() => setDismissedCompWarning(true)}><X aria-hidden="true" /></button>
-          </div>
+          <Notice role="status" actionLabel="Switch back" actionTo={`/competitions/${lastChatComp.id}/chat`} onDismiss={() => setDismissedCompWarning(true)} dismissLabel="Dismiss competition warning">
+            Your last post was for {lastChatComp.name}. Check you’re posting to the right one.
+          </Notice>
         )}
-        {messagesError && <div className="live-feed-error" role="alert"><span>{messagesError}</span><button type="button" onClick={loadMessages}>Try again</button></div>}
+        {messagesError && <Notice actionLabel="Try again" onAction={loadMessages}>{messagesError}</Notice>}
         {messagesLoading && messages.length === 0
           ? <div className="live-feed-state mg-card" role="status">Loading announcements…</div>
           : messagesError && messages.length === 0
@@ -322,7 +321,7 @@ function ChatTabSession() {
             Message organisers
           </Link>
         ) : (
-          <div className="live-composer-locked" role="status"><Lock aria-hidden="true" />Messaging the organisers isn’t available for this event yet.</div>
+          <Notice tone="info" icon={Lock}>Messaging the organisers isn’t available for this event yet.</Notice>
         )
       )}
     </>
@@ -335,8 +334,8 @@ function ChatTabSession() {
         {canPost ? <span className="live-role-badge">Organiser</span> : liveNow && <span className="mg-badge mg-badge-live">Live</span>}
       </div>
 
-      {actionError && !allOpen && <div className="live-action-error" role="alert"><span>{actionError}</span><button type="button" aria-label="Dismiss error" onClick={() => setActionError(null)}><X aria-hidden="true" /></button></div>}
-      {actionNotice && !allOpen && <div className="live-banner" role="status"><span>{actionNotice}</span><button type="button" aria-label="Dismiss notice" onClick={() => setActionNotice(null)}><X aria-hidden="true" /></button></div>}
+      {actionError && !allOpen && <Notice className="live-page-notice" onDismiss={() => setActionError(null)} dismissLabel="Dismiss error">{actionError}</Notice>}
+      {actionNotice && !allOpen && <Notice tone="info" className="live-page-notice" onDismiss={() => setActionNotice(null)} dismissLabel="Dismiss notice">{actionNotice}</Notice>}
 
       {canPost ? (
         <>
@@ -471,8 +470,9 @@ function AnnouncementsOverlay({ messages, staff, canModerate, pinnedId, error, o
   useDialogFocus(dialogRef, onClose, '[aria-label="Close announcements"]', returnFocusRef);
   return <div className="live-overlay" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <div ref={dialogRef} className="live-all-dialog" role="dialog" aria-modal="true" aria-label="All announcements">
+      <span aria-hidden="true" className="kit-sheet-grip" />
       <div className="live-all-head"><h2>All announcements</h2><button type="button" className="mg-icon-btn" aria-label="Close announcements" onClick={onClose}><X aria-hidden="true" /></button></div>
-      {error && <div className="live-action-error" role="alert"><span>{error}</span><button type="button" aria-label="Dismiss error" onClick={onDismissError}><X aria-hidden="true" /></button></div>}
+      {error && <Notice onDismiss={onDismissError} dismissLabel="Dismiss error">{error}</Notice>}
       <AnnouncementList messages={messages} staff={staff} canModerate={canModerate} pinnedId={pinnedId} onPin={onPin} onUnpin={onUnpin} onDelete={onDelete} onBlock={onBlock} full />
     </div>
   </div>;
@@ -505,7 +505,7 @@ function StaffStreamCard({ active, fallback, competitionId, canBroadcast, canEdi
         <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/commentary`}>Commentary desk</Link>
       </div>
     )}
-    {streamingNotSetUp && <p className="mg-notice" role="status">Streaming isn’t set up yet. Add the Cloudflare keys to switch it on.</p>}
+    {streamingNotSetUp && <Notice tone="info">Streaming isn’t set up yet. Add the Cloudflare keys to switch it on.</Notice>}
     {editing && canEditStream && <StreamSettingsOverlay competitionId={competitionId} fallback={fallback} canBroadcast={canBroadcast} canEditStream={canEditStream} onSaved={onSaved} onClose={closeSettings} returnFocusRef={changeRef} />}
   </div>;
 }
@@ -523,6 +523,7 @@ function StreamSettingsOverlay({ competitionId, fallback, canBroadcast, canEditS
   useDialogFocus(dialogRef, onClose, '[aria-label="Close stream settings"]', returnFocusRef);
   return <div className="live-overlay" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <div ref={dialogRef} className="staff-stream-dialog" role="dialog" aria-modal="true" aria-label="Stream settings">
+      <span aria-hidden="true" className="kit-sheet-grip" />
       <div className="live-all-head"><h2>Stream settings</h2><button type="button" className="mg-icon-btn" aria-label="Close stream settings" onClick={onClose}><X aria-hidden="true" /></button></div>
       {canBroadcast && <Link to={`/competitions/${competitionId}/broadcast`} className="mg-btn mg-btn-primary"><Video aria-hidden="true" />Change camera</Link>}
       <CompStreamEditor competition={{ id: competitionId, streamUrl: fallback }} canEditStream={canEditStream} onSaved={onSaved} />
@@ -554,7 +555,7 @@ function CompStreamEditor({ competition, canEditStream, onSaved }: { competition
       setUrl(value);
       onSaved();
     } catch {
-      setError('Couldn’t save the stream link. Check your connection and try again.');
+      setError('Couldn’t save the stream link. Check your signal and try again.');
     }
     finally { setBusy(false); }
   }
@@ -564,6 +565,6 @@ function CompStreamEditor({ competition, canEditStream, onSaved }: { competition
       <button type="button" className="mg-btn mg-btn-secondary" onClick={() => void save(url.trim() || null)} disabled={!canEditStream || busy || url.trim() === savedUrl}><Save aria-hidden="true" />Save</button>
       {savedUrl && <button type="button" className="mg-icon-btn" title="Clear stream" onClick={() => void save(null)} disabled={!canEditStream || busy}><X aria-hidden="true" /></button>}
     </div>
-    {error && <p className="staff-stream-error" role="alert">{error}</p>}
+    {error && <Notice onDismiss={() => setError(null)} dismissLabel="Dismiss error">{error}</Notice>}
   </div>;
 }

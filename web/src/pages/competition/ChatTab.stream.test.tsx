@@ -337,3 +337,15 @@ it('reports stream-link failures, preserves the input and restores focus on clos
   fireEvent.keyDown(document, { key: 'Escape' });
   await waitFor(() => expect(opener).toHaveFocus());
 });
+
+it('warns when the last post was for another competition, with a Switch back link', async () => {
+  context.roles = ['Admin'];
+  localStorage.setItem('mg.lastChatComp', JSON.stringify({ id: 7, name: 'Demo Clover Challenge' }));
+  render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
+  const warning = screen.getByText(/Your last post was for Demo Clover Challenge/).closest('[role="status"]') as HTMLElement;
+  expect(warning).toHaveTextContent('Check you’re posting to the right one.');
+  expect(within(warning).getByRole('link', { name: 'Switch back' })).toHaveAttribute('href', '/competitions/7/chat');
+  fireEvent.click(screen.getByRole('button', { name: 'Dismiss competition warning' }));
+  expect(screen.queryByText(/Your last post was for/)).toBeNull();
+  localStorage.removeItem('mg.lastChatComp');
+});
