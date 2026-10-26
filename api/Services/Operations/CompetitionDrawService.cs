@@ -154,6 +154,22 @@ public class CompetitionDrawService(AppDbContext db)
                     Encoding.UTF8.GetBytes(preview.Fingerprint), Encoding.UTF8.GetBytes(request.Fingerprint ?? string.Empty)))
                 throw new DrawChangedException("The draw inputs changed after preview. Preview the draw again.");
 
+            var sessionIds = preview.Sessions.Select(s => s.SessionId).Distinct().ToList();
+            var sessionsBefore = await db.Sessions.AsNoTracking()
+                .Where(s => s.CompetitionId == competitionId && sessionIds.Contains(s.Id))
+                .Include(s => s.Heats).ThenInclude(h => h.Entries)
+                .Include(s => s.Heats).ThenInclude(h => h.Races)
+                .ToListAsync(cancellationToken);
+            var sectionName = await db.CompetitionSections.AsNoTracking()
+                .Where(s => s.Id == sectionId && s.CompetitionId == competitionId)
+                .Select(s => s.DisplayName)
+                .FirstOrDefaultAsync(cancellationToken) ?? $"Section {sectionId}";
+            var undoSnapshotJson = DrawUndoService.BuildSnapshotJson(
+                "SectionDraw",
+                $"Draw for {sectionName}",
+                sessionsBefore,
+                sectionId: sectionId);
+
             var heatIds = preview.Sessions.SelectMany(s => s.Heats).Select(h => h.HeatId).ToList();
             var oldEntries = await db.HeatEntries.Where(e => heatIds.Contains(e.HeatId)).ToListAsync(cancellationToken);
             db.HeatEntries.RemoveRange(oldEntries);
@@ -170,11 +186,13 @@ public class CompetitionDrawService(AppDbContext db)
                 RequestId = $"section-draw-{Guid.NewGuid():N}",
                 Fingerprint = preview.Fingerprint,
                 ActorUserId = actorUserId,
+                ResultJson = undoSnapshotJson,
                 CreatedAt = DateTime.UtcNow,
             });
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return preview;
+            var undoStatus = await DrawUndoService.GetStatusAsync(db, competitionId, cancellationToken);
+            return preview with { DrawUndo = undoStatus };
         });
     }
 

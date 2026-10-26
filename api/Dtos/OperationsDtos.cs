@@ -13,8 +13,26 @@ public record DrawFairnessDto(
     int MaximumOpponentMeetings, int RepeatedOpponentPairs,
     int MaximumLaneUseSpread, bool EveryTeamAppearsOncePerSession,
     IReadOnlyList<string> Warnings);
+public record DrawUndoStatusDto(
+    bool Available,
+    int? UndoId,
+    string? Kind,
+    string? Label,
+    int? SectionId,
+    int? SessionId,
+    DateTime? CreatedAt,
+    DateTime? ExpiresAt,
+    int AffectedHeats,
+    int AffectedSessions);
+public record DrawUndoResultDto(
+    bool Restored,
+    string Label,
+    int RestoredSessions,
+    int RestoredHeats,
+    DrawUndoStatusDto UndoStatus);
 public record DrawPreviewDto(int SectionId, int Seed, string Fingerprint,
-    IReadOnlyList<DrawSessionDto> Sessions, DrawFairnessDto Fairness);
+    IReadOnlyList<DrawSessionDto> Sessions, DrawFairnessDto Fairness,
+    DrawUndoStatusDto? DrawUndo = null);
 
 /// <summary>A result as staff see it: ResultDto plus the referee's private note.</summary>
 public record ScorePlaceDto(int TeamId, int Place, bool Eliminated, double Points, bool IsSitOut = false,
@@ -48,7 +66,17 @@ public record CompetitionReadinessDto(int CompetitionId, bool IsReady, string Eq
     IReadOnlyList<EquipmentChecklistItemDto> EquipmentChecklist,
     IReadOnlyList<EquipmentReadinessIssueDto> EquipmentIssues,
     IReadOnlyList<FlaggedDecFormDto> FlaggedDecForms,
-    IReadOnlyList<RaceListToChooseDto> RaceListsToChoose);
+    IReadOnlyList<RaceListToChooseDto> RaceListsToChoose,
+    DrawUndoStatusDto? DrawUndo = null);
+
+public record TeamRaceLineupPlanDto(
+    int CompetitionId,
+    int TeamId,
+    Dictionary<string, Dictionary<string, string>> Assignments,
+    DateTime? UpdatedAt = null);
+
+public record SaveTeamRaceLineupRequest(
+    Dictionary<string, Dictionary<string, string>>? Assignments);
 /// <summary>A team whose latest dec form has riders with flags (an answer outside the organiser's limits). Counts only: no rider details.</summary>
 public record FlaggedDecFormDto(int TeamId, string TeamName, int SectionId, string SectionName, int FlaggedRiders);
 /// <summary>

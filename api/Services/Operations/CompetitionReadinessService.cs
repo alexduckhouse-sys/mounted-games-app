@@ -82,8 +82,9 @@ public class CompetitionReadinessService(AppDbContext db, EquipmentCalculator eq
         var ready = missing.Count == 0 && unpaid.Count == 0 && incomplete.Count == 0
             && overlaps.Count == 0 && equipment.Issues.Count == 0
             && equipment.Checklist.All(x => x.Acknowledged);
+        var drawUndo = await DrawUndoService.GetStatusAsync(db, competitionId, cancellationToken);
         return new CompetitionReadinessDto(competitionId, ready, equipment.Fingerprint,
-            missing, unpaid, incomplete, overlaps, equipment.Checklist, equipment.Issues, flagged, raceLists);
+            missing, unpaid, incomplete, overlaps, equipment.Checklist, equipment.Issues, flagged, raceLists, drawUndo);
     }
 
     /// <summary>

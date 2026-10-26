@@ -73,9 +73,10 @@ public sealed class EventToolsController(AppDbContext db) : ControllerBase
 
     [HttpGet("print/results")]
     [AllowAnonymous]
-    public async Task<ActionResult<PrintableResultsDto>> PrintableResults(int competitionId, CancellationToken ct)
+    public async Task<ActionResult<PrintableResultsDto>> PrintableResults(
+        int competitionId, [FromQuery] int? sessionId = null, CancellationToken ct = default)
     {
-        var result = await new PrintableEventService(db).ResultsAsync(competitionId, ct);
+        var result = await new PrintableEventService(db).ResultsAsync(competitionId, ct, sessionId);
         return result is null ? NotFound() : result;
     }
 
