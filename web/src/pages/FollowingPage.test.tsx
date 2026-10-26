@@ -34,7 +34,7 @@ describe('FollowingPage', () => {
   it('has a way to choose a competition when nothing is starred', () => {
     mount();
     // One short sentence, no empty box, and the grey add bar.
-    expect(screen.getByText('Star teams at a competition and they show up here with their next heats. Stars are saved on this phone.')).toBeInTheDocument();
+    expect(screen.getByText('Star teams at a competition and they show up here with their next heats.')).toBeInTheDocument();
     expect(screen.queryByText('No starred teams yet')).not.toBeInTheDocument();
     const add = screen.getByRole('link', { name: 'Choose a competition' });
     expect(add).toHaveAttribute('href', '/events');
@@ -48,7 +48,7 @@ describe('FollowingPage', () => {
     expect(within(first).getByText('LIVE')).toBeInTheDocument();
     expect(within(first).getByText('Today')).toBeInTheDocument();
     const live = within(first).getByRole('link', { name: /Stockport A/ });
-    expect(live).toHaveAttribute('href', '/competitions/1/following');
+    expect(live).toHaveAttribute('href', '/competitions/1/teams/1');
     expect(live).toHaveTextContent('Open · Heat 1, lane 2 · Arena 2');
     expect(live).toHaveTextContent('On now');
     expect(within(first).getByRole('link', { name: /Stockport B/ })).toHaveTextContent('Junior · not drawn yet');
@@ -56,7 +56,21 @@ describe('FollowingPage', () => {
     const second = await screen.findByRole('region', { name: 'Northern Winter League R1' });
     expect(within(second).queryByText('LIVE')).not.toBeInTheDocument();
     expect(within(second).getByText('Thu 7 Nov')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Follow teams at another event' })).toHaveAttribute('href', '/events');
+    const add = screen.getByRole('link', { name: 'Follow teams at another competition' });
+    expect(add).toHaveAttribute('href', '/events');
+    expect(add).toHaveClass('sp-add');
+  });
+
+  it('keeps the rows plain: no star, no coloured time, no hatband bar and no note about where stars are kept', async () => {
+    follow([1, 1], [1, 2]);
+    mount();
+    const first = await screen.findByRole('region', { name: 'Hartpury Area Festival' });
+    const row = within(first).getByRole('link', { name: /Stockport A/ });
+    expect(row.querySelector('svg:not(.sp-chev)')).toBeNull();
+    expect(row.querySelector('.sp-num')).not.toHaveClass('text-[rgb(var(--mg-red))]');
+    expect(row.className).not.toMatch(/late|live/);
+    expect(within(row).getByText('On now')).toHaveClass('sp-time-label');
+    expect(screen.queryByText(/saved on this/i)).not.toBeInTheDocument();
   });
 
   it('tells the user about a followed team the event no longer lists', async () => {

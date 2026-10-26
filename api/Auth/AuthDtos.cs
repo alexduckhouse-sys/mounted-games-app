@@ -30,6 +30,12 @@ public record SignupTrainerRequest(
 /// <summary>Deleting your own account needs the current password again, so a stolen session can't do it.</summary>
 public record DeleteAccountRequest(string Password);
 
+/// <summary>Changing your own password needs the current one, so a stolen session can't lock the owner out.</summary>
+public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
+
+/// <summary>The signed-in person's own name, as shown on their profile and in the team.</summary>
+public record UpdateMyProfileRequest(string FullName);
+
 public record AuthResponse(
     string Token,
     DateTime ExpiresAt,

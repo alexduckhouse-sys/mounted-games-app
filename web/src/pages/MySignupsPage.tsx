@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { ChevronRight } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { usePageHeader } from '../components/CompactPageBarContext';
 import { confirmDialog } from '../components/ConfirmDialog';
 import { Notice } from '../components/Notice';
+import { Sheet } from '../components/Sheet';
 import { priceLabel } from '../lib/money';
 import { groupSignups } from '../lib/mySignups';
 import { displaySectionName } from '../lib/section';
-import type { MySignup, SignupPaymentStatus } from '../types';
+import type { MySignup } from '../types';
 import { DemoEntryPayment } from './commerce/DemoEntryPayment';
+import '../components/sitePages.css';
 
 export interface ExtendedMySignup extends MySignup {
   lookingForPair?: boolean;
@@ -33,12 +36,15 @@ export interface ExtendedMySignup extends MySignup {
   linkedTeams?: { id: number; name: string }[];
 }
 
-const STATUS: Record<SignupPaymentStatus, { label: string; cls: string }> = {
-  0: { label: 'Awaiting payment', cls: 'mg-tag-late' },
-  1: { label: 'Paid', cls: 'mg-tag-ok' },
-  2: { label: 'Refunded', cls: '' },
-  3: { label: 'Cancelled', cls: '!bg-[rgb(var(--mg-done-bg))] !text-[rgb(var(--mg-body))]' },
-};
+/** The status word on the right of a row, and whether it is the one that needs the person (an unpaid entry). */
+function statusOf(s: ExtendedMySignup): { label: string; due: boolean } {
+  if (s.status === 2) return { label: 'Refunded', due: false };
+  if (s.refundPending) return { label: 'Refund pending', due: false };
+  if (s.isWithdrawn) return { label: 'Withdrawn', due: false };
+  if (s.status === 3) return { label: 'Cancelled', due: false };
+  if (s.status === 0) return s.isWaitlist ? { label: 'Waiting list', due: false } : { label: 'Not paid', due: true };
+  return { label: 'Paid', due: false };
+}
 
 export function MySignupsPage() {
   const { user } = useAuth();
@@ -51,6 +57,7 @@ function SignupList() {
   const [error, setError] = useState<string | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [openId, setOpenId] = useState<number | null>(null);
   const now = useMemo(() => new Date(), []);
 
   useEffect(() => {
@@ -84,18 +91,11 @@ function SignupList() {
     }
   }
 
-  const waiting = signups?.filter((s) => s.status === 0 && !s.isWaitlist && !s.isWithdrawn).length ?? 0;
-  usePageHeader({
-    title: 'My signups',
-    subtitle: signups ? (waiting ? `${waiting} waiting for payment` : `${signups.length} ${signups.length === 1 ? 'entry' : 'entries'}`) : undefined,
-    plain: true,
-    backTo: '/me',
-    backLabel: 'Back to Me',
-  });
+  usePageHeader({ title: 'My entries', plain: true, backTo: '/me', backLabel: 'Back to Me' });
 
   if (!user) {
     return (
-      <div className="mx-auto w-full max-w-xl pt-3">
+      <div className="mx-auto w-full max-w-[560px] pt-3">
         <div className="mg-card flex flex-wrap items-center gap-3 p-4">
           <p className="mg-lede">Sign in to see comps you've entered.</p>
           <Link to="/login" className="mg-btn mg-btn-primary !min-h-11 !px-4 !text-[15px]">Sign in</Link>
@@ -105,130 +105,110 @@ function SignupList() {
   }
 
   if (signups == null && !loadFailed) {
-    return <div className="mx-auto w-full max-w-xl pt-3"><p role="status" className="mg-meta px-1">Loading your signups…</p></div>;
+    return <div className="mx-auto w-full max-w-[560px] pt-3"><p role="status" className="sp-note">Loading your entries…</p></div>;
   }
 
   const { comingUp, past } = groupSignups(signups ?? [], now);
+  const pairRequests = (signups ?? []).filter((s) => s.pairRequestFromSignupId && s.pairRequestStatus === 'Pending');
+  const open = (signups ?? []).find((s) => s.id === openId) ?? null;
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-2 pt-3">
-      {loadFailed && signups == null && <Notice actionLabel="Try again" onAction={() => { setLoadFailed(false); setAttempt((n) => n + 1); }}>Couldn’t load your signups. Check your signal and try again.</Notice>}
+    <div className="skin mx-auto flex w-full max-w-[560px] flex-col pb-4 pt-3">
+      {loadFailed && signups == null && <Notice actionLabel="Try again" onAction={() => { setLoadFailed(false); setAttempt((n) => n + 1); }}>Couldn’t load your entries. Check your signal and try again.</Notice>}
       {error && <Notice onDismiss={() => setError(null)}>{error}</Notice>}
 
       {signups && signups.length === 0 && (
         <div className="mg-card space-y-3 p-5">
-          <p className="mg-lede">You haven't signed up to any competitions yet.</p>
+          <p className="mg-lede">You haven't entered any competitions yet.</p>
           <Link to="/events" className="mg-btn mg-btn-primary !min-h-11 !px-4 !text-[15px]">Browse competitions</Link>
         </div>
       )}
 
-      {([['Coming up', comingUp], ['Past', past]] as const).map(([title, rows]) => rows.length > 0 && (
-        <section key={title} className="mg-sec" aria-label={title}>
-          <div className="mg-sec-head"><h2>{title}</h2></div>
-          <ul className="mg-lines">
-            {rows.map((s) => (
-              <SignupRow
-                key={s.id}
-                signup={s}
-                onRespondPair={respondPair}
-                onWithdraw={withdrawSignup}
-              />
+      {pairRequests.length > 0 && (
+        <section aria-label="Pair request">
+          <h2 className="sp-sec sp-first">{pairRequests.length === 1 ? 'Pair request' : 'Pair requests'}</h2>
+          <div className="sp-card">
+            {pairRequests.map((s) => (
+              <div key={s.id} className="sp-row flex-wrap">
+                <span className="sp-grow">
+                  <span className="sp-t1">{[s.pairRequestFromName ?? 'Another rider', s.pairRequestFromClub].filter(Boolean).join(' · ')}</span>
+                  <span className="sp-t2">{[s.competitionName, displaySectionName(s.sectionName)].filter(Boolean).join(' · ')}</span>
+                </span>
+                <span className="flex shrink-0 items-center gap-2">
+                  <button type="button" className="sp-red" aria-label={`Decline pair request from ${s.pairRequestFromName ?? 'another rider'}`} onClick={() => void respondPair(s.id, false)}>Decline</button>
+                  <button type="button" className="sp-pill sp-pill-fill sp-pill-sm" aria-label={`Accept pair request from ${s.pairRequestFromName ?? 'another rider'}`} onClick={() => void respondPair(s.id, true)}>Accept</button>
+                </span>
+              </div>
             ))}
+          </div>
+        </section>
+      )}
+
+      {([['Coming up', comingUp], ['Past', past]] as const).map(([title, rows]) => rows.length > 0 && (
+        <section key={title} aria-label={title}>
+          <h2 className={`sp-sec ${title === 'Coming up' && pairRequests.length === 0 ? 'sp-first' : ''}`}>{title}</h2>
+          <ul className="sp-card m-0 list-none p-0">
+            {rows.map((s) => {
+              const status = statusOf(s as ExtendedMySignup);
+              return (
+                <li key={s.id}>
+                  <button type="button" className="sp-row" onClick={() => setOpenId(s.id)}>
+                    <span className="sp-grow">
+                      <span className="sp-t1">{s.competitionName}</span>
+                      <span className="sp-t2">{[displaySectionName(s.sectionName), priceLabel(s.amountMinor)].filter(Boolean).join(' · ')}</span>
+                    </span>
+                    <span className={`sp-t2 ${status.due ? 'sp-st-amber' : ''}`}>{status.label}</span>
+                    <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </section>
       ))}
+
+      {open && <EntrySheet signup={open} onClose={() => setOpenId(null)} onWithdraw={withdrawSignup} />}
     </div>
   );
 }
 
-function SignupRow({
-  signup: s,
-  onRespondPair,
-  onWithdraw,
-}: {
-  signup: ExtendedMySignup;
-  onRespondPair: (signupId: number, accept: boolean) => Promise<void>;
-  onWithdraw: (signupId: number) => Promise<void>;
-}) {
-  const status = s.status === 2 ? STATUS[2] : s.refundPending
-    ? { label: 'Withdrawn — refund pending', cls: 'mg-tag-late' }
-    : s.isWithdrawn ? { label: 'Withdrawn', cls: '' }
-    : s.isWaitlist && s.status === 0
-      ? { label: 'Waiting list', cls: 'mg-tag-late' }
-      : STATUS[s.status];
-  const due = s.status === 0 && !s.isWaitlist && !s.isWithdrawn;
+/** One entry: what it is, then what can be done with it. Withdrawing closes the sheet first, then asks. */
+function EntrySheet({ signup: s, onClose, onWithdraw }: { signup: ExtendedMySignup; onClose: () => void; onWithdraw: (signupId: number) => Promise<void> }) {
+  const status = statusOf(s);
   const canWithdraw = (s.status === 0 || s.status === 1) && !s.isWithdrawn && !s.drawComplete;
   const declarationTeams = s.declarationAccessGranted && s.status < 2 && !s.isWithdrawn
     ? s.linkedTeams?.length ? s.linkedTeams : s.teamId ? [{ id: s.teamId, name: s.teamName || s.fullName }] : [] : [];
+  const paid = s.status === 1 && s.paidAt ? ` on ${new Date(s.paidAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : '';
+  const notes = [
+    s.lookingForPair && !s.teamId ? 'Looking for a Pair (50% entry)' : null,
+    s.waitingForGuestSpot && !s.teamId ? 'Waiting for a Guest Ride Spot' : null,
+    s.lookingForGuestRiders ? 'Looking for Guest Rider(s)' : null,
+    (s.stablesCount ?? 0) > 0 ? `Stabling: ${s.stablesCount} ${s.stablesCount === 1 ? 'stable' : 'stables'}${s.stablingClubOrTeam ? ` (${s.stablingClubOrTeam})` : ''}` : null,
+    s.pairRequestToSignupId && s.pairRequestStatus === 'Pending' ? `Pair request sent to ${s.pairRequestToName ?? 'a rider'}, waiting for an answer` : null,
+    s.ponyClubName ? `Pony Club: ${s.ponyClubName}` : null,
+  ].filter((note): note is string => note !== null);
   return (
-    <li className={`flex flex-col gap-2 px-3 py-2.5 ${due ? 'mg-line-late' : ''}`}>
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2.5">
-        <span className="flex min-w-0 flex-col gap-[3px]">
-          <Link to={`/competitions/${s.competitionId}`} className="truncate text-[15px] font-semibold !text-[rgb(var(--mg-ink))]">{s.competitionName}</Link>
-          <span className="text-xs text-[rgb(var(--mg-muted))]">{[displaySectionName(s.sectionName), s.teamName || s.fullName].filter(Boolean).join(' · ')}</span>
-        </span>
-        <span className="flex flex-col items-end gap-1">
-          <span className="mg-display text-lg font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]">{priceLabel(s.amountMinor)}</span>
-          <span className={`mg-tag !text-[11px] !font-bold ${status.cls}`}>{status.label}</span>
-        </span>
-      </div>
-      {s.lookingForPair && !s.teamId && (
-        <span className="text-xs font-semibold text-[rgb(var(--mg-heading))]">Looking for a Pair (50% entry)</span>
-      )}
-      {s.waitingForGuestSpot && !s.teamId && (
-        <span className="text-xs font-semibold text-[rgb(var(--mg-heading))]">Waiting for a Guest Ride Spot</span>
-      )}
-      {s.lookingForGuestRiders && (
-        <span className="text-xs font-semibold text-[rgb(var(--mg-heading))]">Looking for Guest Rider(s)</span>
-      )}
-      {(s.stablesCount ?? 0) > 0 && (
-        <span className="text-xs text-[rgb(var(--mg-muted))]">
-          Stabling: {s.stablesCount} {s.stablesCount === 1 ? 'stable' : 'stables'}{s.stablingClubOrTeam ? ` (${s.stablingClubOrTeam})` : ''}
-        </span>
-      )}
-      {s.pairRequestFromSignupId && s.pairRequestStatus === 'Pending' && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-tint))] p-2.5 text-xs">
-          <span className="font-semibold text-[rgb(var(--mg-heading))]">
-            Pair request from {s.pairRequestFromName ?? 'another rider'}{s.pairRequestFromClub ? ` (${s.pairRequestFromClub})` : ''}
-          </span>
-          <div className="flex gap-1.5">
-            <button
-              type="button"
-              onClick={() => void onRespondPair(s.id, true)}
-              className="mg-btn mg-btn-primary !min-h-8 !px-3 !py-1 !text-xs"
-            >
-              Accept pair
-            </button>
-            <button
-              type="button"
-              onClick={() => void onRespondPair(s.id, false)}
-              className="mg-btn mg-btn-secondary !min-h-8 !px-3 !py-1 !text-xs"
-            >
-              Decline
-            </button>
+    <Sheet title={s.competitionName} onClose={onClose}
+      description={`${[displaySectionName(s.sectionName), s.teamName || s.fullName, priceLabel(s.amountMinor)].filter(Boolean).join(' · ')} · ${status.label}${paid}`}>
+      {({ close }) => (
+        <>
+          {notes.map((note) => <p key={note} className="kit-sheet-text m-0">{note}</p>)}
+          <div className="flex flex-col gap-2">
+            {status.due && <Link to={`/competitions/${s.competitionId}/details`} className="kit-pill kit-pill-fill" aria-label={`How to pay for ${s.competitionName}`}>How to pay</Link>}
+            {declarationTeams.map((t) => (
+              <Link key={t.id} to={`/competitions/${s.competitionId}/declarations?team=${t.id}`} className="kit-pill">
+                {declarationTeams.length === 1 ? 'Fill in dec form' : `Dec form for ${t.name}`}
+              </Link>
+            ))}
           </div>
-        </div>
+          {s.amountMinor > 0 && <DemoEntryPayment signupId={s.id} signupStatus={s.status} />}
+          <div className="flex items-center justify-between gap-2">
+            {canWithdraw
+              ? <button type="button" className="kit-redtext" onClick={() => close(() => { onClose(); void onWithdraw(s.id); })}>Withdraw</button>
+              : <span />}
+            <button type="button" className="kit-pill" onClick={() => close()}>Close</button>
+          </div>
+        </>
       )}
-      {s.pairRequestToSignupId && s.pairRequestStatus === 'Pending' && (
-        <span className="text-xs text-[rgb(var(--mg-muted))]">
-          Pair request sent to {s.pairRequestToName ?? 'rider'} · awaiting response
-        </span>
-      )}
-      {declarationTeams.map((t) => <Link key={t.id} to={`/competitions/${s.competitionId}/declarations?team=${t.id}`} className="mg-btn mg-btn-secondary !min-h-11">Dec form for {t.name}</Link>)}
-      {due && <Link to={`/competitions/${s.competitionId}/details`} className="mg-btn mg-btn-primary !min-h-11 w-full !rounded-lg !text-sm">How to pay<span className="sr-only"> for {s.competitionName}</span></Link>}
-      {s.status === 1 && s.paidAt && <span className="text-xs text-[rgb(var(--mg-muted))]">Paid {new Date(s.paidAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>}
-      {s.ponyClubName && <span className="text-xs text-[rgb(var(--mg-muted))]">Pony Club: {s.ponyClubName}</span>}
-      {s.amountMinor > 0 && <DemoEntryPayment signupId={s.id} signupStatus={s.status} />}
-      {canWithdraw && (
-        <div className="flex justify-end pt-1">
-          <button
-            type="button"
-            onClick={() => void onWithdraw(s.id)}
-            className="mg-btn mg-btn-secondary !min-h-8 !px-3 !py-1 !text-xs"
-          >
-            Withdraw Entry
-          </button>
-        </div>
-      )}
-    </li>
+    </Sheet>
   );
 }

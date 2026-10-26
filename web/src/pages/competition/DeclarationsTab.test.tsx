@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -57,14 +57,27 @@ function mount(extra: Partial<CompetitionDetail> = {}, url = '/competitions/4/de
   );
 }
 
+
 const opened = () => screen.findByLabelText('Team name');
-const slotButtons = () => within(screen.getByRole('list', { name: 'Riders' })).getAllByRole('listitem');
+const riderRows = () => within(screen.getByRole('list', { name: 'Riders' })).queryAllByRole('listitem');
+const addBar = () => screen.getByRole('button', { name: /^(Add rider \d|Add a reserve)$/ });
+const agree = () => screen.getByRole('switch', { name: 'I agree to the terms' });
 
 async function fillPanel(user: ReturnType<typeof userEvent.setup>, v: { name: string; dob: string; pony?: string; height?: string }) {
   await user.type(screen.getByLabelText('Rider'), v.name);
   await user.type(screen.getByLabelText('Date of birth'), v.dob);
   if (v.pony !== undefined) await user.type(screen.getByLabelText('Pony'), v.pony);
   if (v.height !== undefined) await user.type(screen.getByLabelText('Height (hh)'), v.height);
+}
+
+/** Sets the trainer through the Trainer row's sheet. */
+async function setTrainer(user: ReturnType<typeof userEvent.setup>, v: { name?: string; phone?: string }) {
+  await user.click(screen.getByRole('button', { name: /^Trainer:/ }));
+  const sheet = within(await screen.findByRole('dialog', { name: 'Trainer' }));
+  if (v.name !== undefined) { await user.clear(sheet.getByLabelText('Name')); await user.type(sheet.getByLabelText('Name'), v.name); }
+  if (v.phone !== undefined) { await user.clear(sheet.getByLabelText('Phone')); await user.type(sheet.getByLabelText('Phone'), v.phone); }
+  await user.click(sheet.getByRole('button', { name: 'Done' }));
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Trainer' })).not.toBeInTheDocument());
 }
 
 beforeEach(() => {
@@ -84,18 +97,21 @@ beforeEach(() => {
 });
 
 describe('DeclarationsTab: the dec form', () => {
-  it('opens a lone team at once, with the design\'s fields, five rider slots and a reserve slot', async () => {
+  it('opens a lone team at once, with a banner, the team card, the riders and one add bar', async () => {
     mount();
     await opened();
     expect(await screen.findByRole('heading', { name: 'Stockport C' })).toBeInTheDocument();
     expect(screen.getByText('U10 · Cheshire Area MG · Sat 24 Oct')).toBeInTheDocument();
-    for (const label of ['Team name', 'Bibs', 'Trainer name', 'Phone number', /Notes for the organisers/]) expect(screen.getByLabelText(label)).toBeInTheDocument();
-    expect(screen.getByLabelText('Trainer name')).toHaveValue('Alex Morgan');
-    expect(slotButtons()).toHaveLength(6);
-    expect(within(slotButtons()[5]).getByText('Non-riding reserve (optional)')).toBeInTheDocument();
-    expect(screen.getByText('0 of 5 riders added')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Submit dec form' })).toBeDisabled();
-    expect(screen.queryByText(/Dec form due by/)).not.toBeInTheDocument();
+    for (const label of ['Team name', 'Bibs', 'Notes']) expect(screen.getByLabelText(label)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Trainer: Alex Morgan/ })).toBeInTheDocument();
+    expect(screen.getByText('Not sent yet.')).not.toHaveAttribute('data-tone');
+    // Only filled riders are rows; one bar adds the next, and the reserve is offered last.
+    expect(riderRows()).toHaveLength(0);
+    expect(addBar()).toHaveTextContent('Add rider 1');
+    expect(screen.getByText('0 of 5 · reserve optional')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send dec form' })).toBeDisabled();
+    expect(screen.getByText('Add 4 more riders to send it.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete this dec form' })).not.toBeInTheDocument();
     // No rider numbers, order controls or captain, and no helper copy.
     expect(screen.queryByTitle('Captain')).not.toBeInTheDocument();
     expect(screen.queryByText(/captain/i)).not.toBeInTheDocument();
@@ -105,23 +121,23 @@ describe('DeclarationsTab: the dec form', () => {
     const user = userEvent.setup();
     mount();
     await opened();
-    await user.click(within(slotButtons()[0]).getByRole('button'));
+    await user.click(addBar());
     const panel = screen.getByRole('region', { name: 'Add a rider' });
     expect(within(panel).getByRole('button', { name: 'Add rider' })).toBeDisabled();
     await fillPanel(user, { name: 'Ella Hughes', dob: '05/04/2015', pony: 'Pickle', height: '13.2' });
     await user.click(within(panel).getByRole('button', { name: 'Add rider' }));
-    expect(within(slotButtons()[0]).getByText('Ella Hughes')).toBeInTheDocument();
-    expect(within(slotButtons()[0]).getByText('Pickle · 13.2 hh · born 05/04/2015')).toBeInTheDocument();
-    expect(screen.getByText('1 of 5 riders added')).toBeInTheDocument();
+    expect(within(riderRows()[0]).getByText('Ella Hughes')).toBeInTheDocument();
+    expect(within(riderRows()[0]).getByText('Pickle · 13.2 hh · born 05/04/2015')).toBeInTheDocument();
+    expect(screen.getByText('1 of 5 · reserve optional')).toBeInTheDocument();
     expect(screen.getByLabelText('Rider')).toHaveValue('');
-    expect(within(slotButtons()[1]).getByText('Adding')).toBeInTheDocument();
+    expect(addBar()).toHaveTextContent('Add rider 2');
   });
 
   it('keeps Add rider off until the date and the height are real', async () => {
     const user = userEvent.setup();
     mount();
     await opened();
-    await user.click(within(slotButtons()[0]).getByRole('button'));
+    await user.click(addBar());
     const add = screen.getByRole('button', { name: 'Add rider' });
     await fillPanel(user, { name: 'Ella', dob: '31/02/2015', pony: 'Pickle', height: '13.5' });
     expect(add).toBeDisabled();
@@ -138,7 +154,7 @@ describe('DeclarationsTab: the dec form', () => {
     const user = userEvent.setup();
     mount();
     await opened();
-    await user.click(within(slotButtons()[0]).getByRole('button'));
+    await user.click(addBar());
     await user.click(screen.getByRole('button', { name: 'Ella Hughes — Pickle' }));
     expect(screen.getByLabelText('Rider')).toHaveValue('Ella Hughes');
     expect(screen.getByLabelText('Date of birth')).toHaveValue('05/04/2015');
@@ -149,53 +165,8 @@ describe('DeclarationsTab: the dec form', () => {
     expect(screen.getByRole('button', { name: 'Oliver Smith — Bramble' })).toBeInTheDocument();
   });
 
-  it('asks the reserve only for a name and date of birth, and copies no pony across', async () => {
-    const user = userEvent.setup();
-    mount();
-    await opened();
-    await user.click(within(slotButtons()[5]).getByRole('button'));
-    const panel = screen.getByRole('region', { name: 'Add a non-riding reserve' });
-    expect(within(panel).queryByLabelText('Pony')).not.toBeInTheDocument();
-    expect(within(panel).queryByLabelText('Height (hh)')).not.toBeInTheDocument();
-    await user.click(within(panel).getByRole('button', { name: 'Ella Hughes — Pickle' }));
-    expect(within(panel).getByRole('button', { name: 'Add reserve' })).toBeEnabled();
-    await user.click(within(panel).getByRole('button', { name: 'Add reserve' }));
-    expect(within(slotButtons()[5]).getByText('Reserve')).toBeInTheDocument();
-    expect(within(slotButtons()[5]).getByText('Non-riding · born 05/04/2015')).toBeInTheDocument();
-    expect(screen.getByText('0 of 5 riders added')).toBeInTheDocument();
-  });
-
-  it('edits a filled rider with Save, clears one with the cross, and closes the panel', async () => {
-    const user = userEvent.setup();
-    mount();
-    await opened();
-    await user.click(within(slotButtons()[0]).getByRole('button'));
-    await user.click(screen.getByRole('button', { name: 'Ella Hughes — Pickle' }));
-    await user.click(screen.getByRole('button', { name: 'Add rider' }));
-    await user.click(within(slotButtons()[0]).getAllByRole('button')[0]);
-    const panel = screen.getByRole('region', { name: 'Edit rider' });
-    expect(within(panel).queryByText('Pick a saved rider')).not.toBeInTheDocument();
-    await user.clear(within(panel).getByLabelText('Pony'));
-    await user.type(within(panel).getByLabelText('Pony'), 'Pickles');
-    await user.click(within(panel).getByRole('button', { name: 'Save' }));
-    expect(within(slotButtons()[0]).getByText('Pickles · 13.2 hh · born 05/04/2015')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Remove Ella Hughes' }));
-    expect(within(slotButtons()[0]).getByText('Adding')).toBeInTheDocument();
-    await user.click(within(screen.getByRole('region', { name: 'Add a rider' })).getByRole('button', { name: 'Close' }));
-    expect(screen.queryByRole('region', { name: 'Add a rider' })).not.toBeInTheDocument();
-  });
-
-  it('closes the panel with Escape', async () => {
-    const user = userEvent.setup();
-    mount();
-    await opened();
-    await user.click(within(slotButtons()[0]).getByRole('button'));
-    await user.type(screen.getByLabelText('Rider'), '{Escape}');
-    expect(screen.queryByRole('region', { name: 'Add a rider' })).not.toBeInTheDocument();
-  });
-
   async function fillTeam(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(within(slotButtons()[0]).getByRole('button'));
+    await user.click(addBar());
     for (const name of ['Ella Hughes — Pickle', 'Oliver Smith — Bramble', 'Maisie Clarke — Toffee', 'Harry Wood — Jasper']) {
       await user.click(screen.getByRole('button', { name }));
       await user.click(screen.getByRole('button', { name: 'Add rider' }));
@@ -204,24 +175,80 @@ describe('DeclarationsTab: the dec form', () => {
     await user.click(screen.getByRole('button', { name: 'Add rider' }));
   }
 
-  it('submits only when all five riders are in and the terms are ticked, sending the new fields', async () => {
+  it('asks the reserve only for a name and date of birth, and copies no pony across', async () => {
     const user = userEvent.setup();
     mount();
     await opened();
-    const submit = screen.getByRole('button', { name: 'Submit dec form' });
+    await fillTeam(user);
+    // The reserve is the last slot, so the add bar only offers it once the five riders are in.
+    const panel = screen.getByRole('region', { name: 'Add a non-riding reserve' });
+    expect(within(panel).queryByLabelText('Pony')).not.toBeInTheDocument();
+    expect(within(panel).queryByLabelText('Height (hh)')).not.toBeInTheDocument();
+    await user.click(within(panel).getByRole('button', { name: 'Ruby Ash — Domino' }));
+    expect(within(panel).getByRole('button', { name: 'Add reserve' })).toBeEnabled();
+    await user.click(within(panel).getByRole('button', { name: 'Add reserve' }));
+    expect(riderRows()).toHaveLength(6);
+    expect(within(riderRows()[5]).getByText('Reserve')).toBeInTheDocument();
+    expect(within(riderRows()[5]).getByText('Non-riding · born 14/03/2016')).toBeInTheDocument();
+    expect(screen.getByText('5 of 5 · reserve optional')).toBeInTheDocument();
+    // Every slot is full, so there is no add bar.
+    expect(screen.queryByRole('button', { name: /^(Add rider \d|Add a reserve)$/ })).not.toBeInTheDocument();
+  });
+
+  it('edits a filled rider with Save, removes one from its panel, and closes the panel', async () => {
+    const user = userEvent.setup();
+    mount();
+    await opened();
+    await user.click(addBar());
+    await user.click(screen.getByRole('button', { name: 'Ella Hughes — Pickle' }));
+    await user.click(screen.getByRole('button', { name: 'Add rider' }));
+    await user.click(within(riderRows()[0]).getByRole('button'));
+    const panel = screen.getByRole('region', { name: 'Edit rider' });
+    expect(within(panel).queryByText('Pick a saved rider')).not.toBeInTheDocument();
+    await user.clear(within(panel).getByLabelText('Pony'));
+    await user.type(within(panel).getByLabelText('Pony'), 'Pickles');
+    await user.click(within(panel).getByRole('button', { name: 'Save' }));
+    expect(within(riderRows()[0]).getByText('Pickles · 13.2 hh · born 05/04/2015')).toBeInTheDocument();
+    await user.click(within(riderRows()[0]).getByRole('button'));
+    await user.click(within(screen.getByRole('region', { name: 'Edit rider' })).getByRole('button', { name: 'Remove rider' }));
+    expect(riderRows()).toHaveLength(0);
+    expect(screen.queryByRole('region', { name: 'Edit rider' })).not.toBeInTheDocument();
+    expect(addBar()).toHaveTextContent('Add rider 1');
+    await user.click(addBar());
+    expect(within(screen.getByRole('region', { name: 'Add a rider' })).queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument();
+    await user.click(within(screen.getByRole('region', { name: 'Add a rider' })).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('region', { name: 'Add a rider' })).not.toBeInTheDocument();
+  });
+
+  it('closes the panel with Escape', async () => {
+    const user = userEvent.setup();
+    mount();
+    await opened();
+    await user.click(addBar());
+    await user.type(screen.getByLabelText('Rider'), '{Escape}');
+    expect(screen.queryByRole('region', { name: 'Add a rider' })).not.toBeInTheDocument();
+  });
+
+  it('sends only when the riders are in and the terms are on, and says why not until then', async () => {
+    const user = userEvent.setup();
+    mount();
+    await opened();
+    const send = screen.getByRole('button', { name: 'Send dec form' });
     await fillTeam(user);
     // The reserve slot opens after the fifth rider; leaving it empty is fine.
-    expect(within(slotButtons()[5]).getByText('Adding')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Add a non-riding reserve' })).toBeInTheDocument();
     await user.click(within(screen.getByRole('region', { name: 'Add a non-riding reserve' })).getByRole('button', { name: 'Close' }));
-    expect(screen.getByText('Tick to agree, then submit')).toBeInTheDocument();
+    expect(addBar()).toHaveTextContent('Add a reserve');
+    expect(screen.getByText('Agree to the terms to send it.')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Team complete' })).toBeInTheDocument();
-    expect(submit).toBeDisabled();
+    expect(send).toBeDisabled();
     await user.type(screen.getByLabelText('Bibs'), 'Yellow with navy stars');
-    await user.type(screen.getByLabelText('Phone number'), '07700 900123');
-    await user.click(screen.getByRole('checkbox', { name: /I agree to the terms and conditions/ }));
-    expect(screen.getByText('Ready to submit')).toBeInTheDocument();
-    expect(submit).toBeEnabled();
-    await user.click(submit);
+    await setTrainer(user, { phone: '07700 900123' });
+    expect(screen.getByRole('button', { name: /^Trainer: Alex Morgan · 07700 900123/ })).toBeInTheDocument();
+    await user.click(agree());
+    expect(screen.getByText('Ready to send.')).toBeInTheDocument();
+    expect(send).toBeEnabled();
+    await user.click(send);
 
     await waitFor(() => expect(state.post).toHaveBeenCalledTimes(1));
     const [url, body] = state.post.mock.calls[0];
@@ -234,8 +261,9 @@ describe('DeclarationsTab: the dec form', () => {
     expect(body.riders[0]).toMatchObject({ savedRiderId: 1, fullName: 'Ella Hughes', dateOfBirth: '2015-04-05', horseName: 'Pickle', ponyHeightHands: 13.2, isCaptain: false, isReserve: false, orderIndex: 0 });
     expect(body.riders[4]).toMatchObject({ savedRiderId: null, fullName: 'Sam New', dateOfBirth: '2016-02-01', ponyHeightHands: 12 });
     expect(await screen.findByText('Dec form sent. You can still change it.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Submitted' })).toBeDisabled();
-    expect(screen.getAllByText('Submitted')).toHaveLength(2);
+    expect(screen.getByText('Sent. You can still change it.')).toHaveAttribute('data-tone', 'good');
+    expect(screen.getByRole('button', { name: 'Send changes' })).toBeDisabled();
+    expect(screen.getByText('Nothing has changed since you sent it.')).toBeInTheDocument();
   });
 
   it('lets the form be sent again after a change', async () => {
@@ -243,11 +271,12 @@ describe('DeclarationsTab: the dec form', () => {
     mount();
     await opened();
     await fillTeam(user);
-    await user.click(screen.getByRole('checkbox', { name: /I agree/ }));
-    await user.click(screen.getByRole('button', { name: 'Submit dec form' }));
+    await user.click(agree());
+    await user.click(screen.getByRole('button', { name: 'Send dec form' }));
     await screen.findByText('Dec form sent. You can still change it.');
-    await user.type(screen.getByLabelText(/Notes for the organisers/), 'Late arrival');
-    expect(screen.getByRole('button', { name: 'Submit dec form' })).toBeEnabled();
+    await user.type(screen.getByLabelText('Notes'), 'Late arrival');
+    expect(screen.getByRole('button', { name: 'Send changes' })).toBeEnabled();
+    expect(screen.getByText('Sending again replaces the last one.')).toBeInTheDocument();
   });
 
   it('shows the API\'s reason when the form is refused, and keeps the work', async () => {
@@ -256,11 +285,11 @@ describe('DeclarationsTab: the dec form', () => {
     mount();
     await opened();
     await fillTeam(user);
-    await user.click(screen.getByRole('checkbox', { name: /I agree/ }));
-    await user.click(screen.getByRole('button', { name: 'Submit dec form' }));
+    await user.click(agree());
+    await user.click(screen.getByRole('button', { name: 'Send dec form' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('A saved rider is not available to this account.');
-    expect(screen.getByRole('button', { name: 'Submit dec form' })).toBeEnabled();
-    expect(within(slotButtons()[0]).getByText('Ella Hughes')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send dec form' })).toBeEnabled();
+    expect(within(riderRows()[0]).getByText('Ella Hughes')).toBeInTheDocument();
   });
 
   it('falls back to a plain message when there was no signal', async () => {
@@ -269,8 +298,8 @@ describe('DeclarationsTab: the dec form', () => {
     mount();
     await opened();
     await fillTeam(user);
-    await user.click(screen.getByRole('checkbox', { name: /I agree/ }));
-    await user.click(screen.getByRole('button', { name: 'Submit dec form' }));
+    await user.click(agree());
+    await user.click(screen.getByRole('button', { name: 'Send dec form' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t send the dec form. Check your signal and try again.');
   });
 
@@ -280,8 +309,8 @@ describe('DeclarationsTab: the dec form', () => {
     mount();
     await opened();
     await fillTeam(user);
-    await user.click(screen.getByRole('checkbox', { name: /I agree/ }));
-    await user.click(screen.getByRole('button', { name: 'Submit dec form' }));
+    await user.click(agree());
+    await user.click(screen.getByRole('button', { name: 'Send dec form' }));
     await screen.findByRole('alert');
     await user.click(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() => expect(state.post).toHaveBeenCalledTimes(2));
@@ -292,22 +321,50 @@ describe('DeclarationsTab: the dec form', () => {
     const user = userEvent.setup();
     const { unmount } = mount();
     await opened();
-    await user.click(screen.getByRole('button', { name: 'terms and conditions' }));
+    await user.click(screen.getByRole('button', { name: 'terms' }));
     const dialog = screen.getByRole('dialog', { name: 'Terms and conditions' });
     expect(dialog).toHaveTextContent('Hats must be worn.');
     expect(dialog).toHaveTextContent('No bare feet.');
-    expect(screen.getByRole('checkbox', { name: /I agree/ })).not.toBeChecked();
+    expect(agree()).toHaveAttribute('aria-checked', 'false');
     await user.click(within(dialog).getByRole('button', { name: 'Close' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     unmount();
 
     mount({ termsText: '   ' });
     await opened();
-    await user.click(await screen.findByRole('button', { name: 'terms and conditions' }));
+    await user.click(await screen.findByRole('button', { name: 'terms' }));
     expect(screen.getByRole('dialog')).toHaveTextContent(/Placeholder\./);
   });
 
-  it('opens an existing declaration for editing, with the saved details and the submitted banner', async () => {
+  it('keeps the trainer sheet honest: a name is needed, and a bad phone number is refused', async () => {
+    const user = userEvent.setup();
+    mount();
+    await opened();
+    await user.click(screen.getByRole('button', { name: /^Trainer:/ }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Trainer' }));
+    expect(sheet.getByLabelText('Name')).toHaveValue('Alex Morgan');
+    await user.clear(sheet.getByLabelText('Name'));
+    expect(sheet.getByRole('button', { name: 'Done' })).toBeDisabled();
+    await user.type(sheet.getByLabelText('Name'), 'Jo Hughes');
+    await user.type(sheet.getByLabelText('Phone'), '12345');
+    expect(sheet.getByText('Enter a UK or Irish number, like 07123 456789.')).toBeInTheDocument();
+    expect(sheet.getByRole('button', { name: 'Done' })).toBeDisabled();
+    await user.clear(sheet.getByLabelText('Phone'));
+    await user.type(sheet.getByLabelText('Phone'), '07123 456789{Enter}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Trainer' })).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Trainer: Jo Hughes · 07123 456789. Change it' })).toBeInTheDocument();
+  });
+
+  it('picks a flag for the team from the Flag row', async () => {
+    const user = userEvent.setup();
+    mount();
+    await opened();
+    await user.click(screen.getByRole('button', { name: 'Flag: No flag' }));
+    await user.click(screen.getByRole('option', { name: 'England' }));
+    expect(screen.getByRole('button', { name: 'Flag: England' })).toBeInTheDocument();
+  });
+
+  it('opens an existing declaration for editing, with the saved details and the sent banner', async () => {
     forms = [{
       id: 9, teamId: 7, teamName: 'Stockport C', competitionId: 4, competitionName: 'Cheshire Area MG', submittedByUserId: 'u1', submittedByName: 'Alex Morgan',
       submittedByPhone: '07700 900123', submittedAt: '2026-10-20T09:00:00Z', notes: 'Early start please', isLocked: true, bibDescription: 'Blue bibs',
@@ -319,15 +376,46 @@ describe('DeclarationsTab: the dec form', () => {
     }];
     mount();
     await opened();
-    expect(await screen.findByText('Dec form sent. You can still change it.')).toBeInTheDocument();
+    expect(await screen.findByText('Sent. You can still change it.')).toBeInTheDocument();
     expect(screen.getByLabelText('Team name')).toHaveValue('Stockport C');
     expect(screen.getByLabelText('Bibs')).toHaveValue('Blue bibs');
-    expect(screen.getByLabelText('Trainer name')).toHaveValue('Jo Hughes');
-    expect(screen.getByLabelText('Phone number')).toHaveValue('07700 900123');
-    expect(screen.getByLabelText(/Notes for the organisers/)).toHaveValue('Early start please');
-    expect(within(slotButtons()[0]).getByText('Pickle · 13.2 hh · born 05/04/2015')).toBeInTheDocument();
-    expect(within(slotButtons()[5]).getByText('Non-riding · born 02/01/2016')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Submitted' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Trainer: Jo Hughes · 07700 900123. Change it' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Notes')).toHaveValue('Early start please');
+    expect(within(riderRows()[0]).getByText('Pickle · 13.2 hh · born 05/04/2015')).toBeInTheDocument();
+    expect(within(riderRows()[1]).getByText('Non-riding · born 02/01/2016')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send changes' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Delete this dec form' })).toBeInTheDocument();
+  });
+
+  it('says when a sent form can still be changed, and by when to send an unsent one', async () => {
+    state.get.mockImplementation(async (url: string) => {
+      if (url === '/declaration-forms') return { data: forms };
+      if (url === '/clubs/1/saved-riders') return { data: savedRiders };
+      if (url === '/declaration-forms/competition/4/lock-time') return { data: { competitionId: 4, declarationsCloseAt: '2040-10-26T17:00:00Z', isClosed: false } };
+      throw new Error(`unexpected ${url}`);
+    });
+    const { unmount } = mount();
+    expect(await screen.findByText(/^Send by /)).not.toHaveAttribute('data-tone');
+    unmount();
+    forms = [{ id: 9, teamId: 7, teamName: 'Stockport C', competitionId: 4, competitionName: 'x', submittedByUserId: 'u1', submittedAt: '2026-10-20T09:00:00Z', isLocked: true, riders: [] }];
+    mount();
+    expect(await screen.findByText(/^Sent\. You can change it until /)).toHaveAttribute('data-tone', 'good');
+  });
+
+  it('deletes a sent dec form from the editor, after asking, and goes back to not sent', async () => {
+    forms = [{ id: 9, teamId: 7, teamName: 'Stockport C', competitionId: 4, competitionName: 'x', submittedByUserId: 'u1', submittedAt: '2026-10-20T09:00:00Z', isLocked: true, riders: [] }];
+    const user = userEvent.setup();
+    mount();
+    await opened();
+    const asked = autoConfirm([false, true]);
+    await user.click(await screen.findByRole('button', { name: 'Delete this dec form' }));
+    await waitFor(() => expect(asked).toHaveBeenCalledWith('The dec form for Stockport C goes for good.'));
+    expect(state.del).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Delete this dec form' }));
+    await waitFor(() => expect(state.del).toHaveBeenCalledWith('/declaration-forms/9'));
+    expect(await screen.findByText('Not sent yet.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send dec form' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete this dec form' })).not.toBeInTheDocument();
   });
 
   it('keeps the captain flag and privacy choices of a rider it does not show', async () => {
@@ -341,10 +429,10 @@ describe('DeclarationsTab: the dec form', () => {
     const user = userEvent.setup();
     mount();
     await opened();
-    await screen.findByText('Dec form sent. You can still change it.');
-    await user.click(screen.getByRole('checkbox', { name: /I agree/ }));
-    await user.type(screen.getByLabelText(/Notes for the organisers/), 'x');
-    await user.click(screen.getByRole('button', { name: 'Submit dec form' }));
+    await screen.findByText('Sent. You can still change it.');
+    await user.click(agree());
+    await user.type(screen.getByLabelText('Notes'), 'x');
+    await user.click(screen.getByRole('button', { name: 'Send changes' }));
     await waitFor(() => expect(state.post).toHaveBeenCalled());
     const riders = state.post.mock.calls[0][1].riders;
     expect(riders[0].isCaptain).toBe(true);
@@ -354,23 +442,24 @@ describe('DeclarationsTab: the dec form', () => {
 
   it('needs only two riders for a pair and one for an individual, with no reserve slot', async () => {
     mount({ teams: [team(8, { competitionId: 4, competitionSectionId: 6, clubId: 1, displayName: 'Pair A', trainerUserId: 'u1' })] });
-    expect(await screen.findByText('0 of 2 riders added')).toBeInTheDocument();
-    expect(slotButtons()).toHaveLength(2);
+    expect(await screen.findByText('0 of 2')).toBeInTheDocument();
+    expect(addBar()).toHaveTextContent('Add rider 1');
+    expect(screen.getByText('Add 2 more riders to send it.')).toBeInTheDocument();
   });
 
-  it('allows a four-rider team to submit without a fifth rider', async () => {
+  it('allows a four-rider team to send without a fifth rider', async () => {
     const user = userEvent.setup();
     mount();
     await opened();
-    await user.click(within(slotButtons()[0]).getByRole('button'));
+    await user.click(addBar());
     for (const name of ['Ella Hughes — Pickle', 'Oliver Smith — Bramble', 'Maisie Clarke — Toffee', 'Harry Wood — Jasper']) {
       await user.click(screen.getByRole('button', { name }));
       await user.click(screen.getByRole('button', { name: 'Add rider' }));
     }
-    await user.click(screen.getByRole('checkbox', { name: /I agree/ }));
-    const submit = screen.getByRole('button', { name: 'Submit dec form' });
-    expect(submit).toBeEnabled();
-    await user.click(submit);
+    await user.click(agree());
+    const send = screen.getByRole('button', { name: 'Send dec form' });
+    expect(send).toBeEnabled();
+    await user.click(send);
     await waitFor(() => expect(state.post).toHaveBeenCalledTimes(1));
     expect(state.post.mock.calls[0][1].riders).toHaveLength(4);
   });
@@ -383,7 +472,7 @@ describe('DeclarationsTab: the dec form', () => {
     ];
     mount();
     await opened();
-    await user.click(within(slotButtons()[0]).getByRole('button'));
+    await user.click(addBar());
     expect(screen.getByRole('button', { name: 'Ella Hughes — Pickle' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Ella Hughes — Flash' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Ella Hughes — Flash' }));
@@ -392,22 +481,28 @@ describe('DeclarationsTab: the dec form', () => {
     expect(screen.getByLabelText('Height (hh)')).toHaveValue('14.0');
   });
 
-  it('lets organisers set and clear the deadline, and reports failed saves', async () => {
+  it('lets organisers set and clear the deadline from a date row, and reports failed saves', async () => {
     state.user!.roles = ['Admin'];
     const user = userEvent.setup();
     const lockUrl = '/declaration-forms/competition/4/lock-time';
-    state.put.mockResolvedValueOnce({ data: { competitionId: 4, declarationsCloseAt: '2040-01-02T12:00:00Z', isClosed: false } });
+    state.put.mockResolvedValueOnce({ data: { competitionId: 4, declarationsCloseAt: '2026-10-23T09:00:00.000Z', isClosed: false } });
     mount();
     await opened();
-    fireEvent.change(screen.getByLabelText('Declaration deadline'), { target: { value: '2040-01-02T12:00' } });
-    await user.click(screen.getByRole('button', { name: 'Set lock time' }));
-    expect(state.put).toHaveBeenCalledWith(lockUrl, { declarationsCloseAt: new Date('2040-01-02T12:00').toISOString() });
+    await user.click(screen.getByRole('button', { name: 'Dec forms close: Not set' }));
+    const calendar = within(screen.getByRole('dialog', { name: 'Dec forms close' }));
+    await user.click(calendar.getByRole('gridcell', { name: 'Saturday 24 October' }));
+    await user.click(calendar.getByRole('button', { name: 'Done' }));
+    expect(state.put).toHaveBeenCalledWith(lockUrl, { declarationsCloseAt: new Date(2026, 9, 24, 9, 0).toISOString() });
+
+    const row = await screen.findByRole('button', { name: /^Dec forms close: (?!Not set)/ });
     state.put.mockRejectedValueOnce(new Error('offline'));
-    await user.click(await screen.findByRole('button', { name: 'Clear lock time' }));
+    await user.click(row);
+    await user.click(within(screen.getByRole('dialog', { name: 'Dec forms close' })).getByRole('button', { name: 'Remove' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t save the dec form deadline. Check your signal and try again.');
     state.put.mockResolvedValueOnce({ data: { competitionId: 4, declarationsCloseAt: null, isClosed: false } });
-    await user.click(screen.getByRole('button', { name: 'Clear lock time' }));
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Clear lock time' })).not.toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: /^Dec forms close: (?!Not set)/ }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Dec forms close' })).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Dec forms close: Not set' })).toBeInTheDocument());
     expect(state.put).toHaveBeenLastCalledWith(lockUrl, { declarationsCloseAt: null });
   });
 
@@ -499,7 +594,7 @@ describe('DeclarationsTab: drafts', () => {
     const user = userEvent.setup();
     const first = mount();
     await user.type(await screen.findByLabelText('Bibs'), 'Green stripes');
-    await user.click(within(slotButtons()[0]).getByRole('button'));
+    await user.click(addBar());
     await user.click(screen.getByRole('button', { name: 'Ella Hughes — Pickle' }));
     await user.click(screen.getByRole('button', { name: 'Add rider' }));
     expect(JSON.parse(localStorage.getItem(decDraftKey(4, 7))!)).toMatchObject({ teamId: 7, bibs: 'Green stripes' });
@@ -507,7 +602,7 @@ describe('DeclarationsTab: drafts', () => {
 
     mount();
     expect(await screen.findByDisplayValue('Green stripes')).toBeInTheDocument();
-    expect(within(slotButtons()[0]).getByText('Ella Hughes')).toBeInTheDocument();
+    expect(within(riderRows()[0]).getByText('Ella Hughes')).toBeInTheDocument();
     expect(screen.queryByText('Dec form sent. You can still change it.')).not.toBeInTheDocument();
   });
 
@@ -516,13 +611,13 @@ describe('DeclarationsTab: drafts', () => {
     mount();
     await user.type(await screen.findByLabelText('Bibs'), 'Green');
     expect(localStorage.getItem(decDraftKey(4, 7))).not.toBeNull();
-    await user.click(within(slotButtons()[0]).getByRole('button'));
+    await user.click(addBar());
     for (const name of ['Ella Hughes — Pickle', 'Oliver Smith — Bramble', 'Maisie Clarke — Toffee', 'Harry Wood — Jasper', 'Ruby Ash — Domino']) {
       await user.click(screen.getByRole('button', { name }));
       await user.click(screen.getByRole('button', { name: 'Add rider' }));
     }
-    await user.click(screen.getByRole('checkbox', { name: /I agree/ }));
-    await user.click(screen.getByRole('button', { name: 'Submit dec form' }));
+    await user.click(agree());
+    await user.click(screen.getByRole('button', { name: 'Send dec form' }));
     await screen.findByText('Dec form sent. You can still change it.');
     expect(localStorage.getItem(decDraftKey(4, 7))).toBeNull();
   });
@@ -530,7 +625,7 @@ describe('DeclarationsTab: drafts', () => {
   it('ignores a draft that does not fit the team', async () => {
     localStorage.setItem(decDraftKey(4, 7), JSON.stringify({ teamId: 7, slots: [null, null] }));
     mount();
-    expect(await screen.findByText('0 of 5 riders added')).toBeInTheDocument();
+    expect(await screen.findByText('0 of 5 · reserve optional')).toBeInTheDocument();
   });
 
   it('survives a device that will not store drafts', async () => {
@@ -709,7 +804,7 @@ describe('DeclarationsTab: around the form', () => {
     const user = userEvent.setup();
     mount();
     await screen.findByRole('heading', { name: 'Stockport C' });
-    await user.click(within(slotButtons()[0]).getByRole('button'));
+    await user.click(addBar());
     expect(screen.queryByText('Pick a saved rider')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Rider')).toBeInTheDocument();
   });

@@ -104,3 +104,33 @@ describe('RiderPanel on a set-up dec form', () => {
     expect(screen.getByLabelText(/Saddle/)).toHaveValue('17');
   });
 });
+
+describe('RiderPanel: removing a rider', () => {
+  const panel = (props: { editing: boolean; reserve?: boolean; onRemove?: () => void }) => render(
+    <RiderPanel title="Edit rider" reserve={props.reserve ?? false} editing={props.editing} form={{ ...blankRider(), fullName: 'Ella', pony: 'Pickle' }} choices={[]} addLabel="Save"
+      ready config={BASIC_CONFIG} onChange={vi.fn()} onPick={vi.fn()} onCommit={vi.fn()} onClose={vi.fn()} onRemove={props.onRemove} />,
+  );
+
+  it('offers Remove rider as red text while a filled slot is open, and calls it', async () => {
+    const onRemove = vi.fn();
+    panel({ editing: true, onRemove });
+    const remove = screen.getByRole('button', { name: 'Remove rider' });
+    expect(remove).toHaveClass('sp-red');
+    await userEvent.click(remove);
+    expect(onRemove).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls it Remove reserve for the reserve slot', () => {
+    panel({ editing: true, reserve: true, onRemove: vi.fn() });
+    expect(screen.getByRole('button', { name: 'Remove reserve' })).toBeInTheDocument();
+  });
+
+  it('has no Remove for an empty slot, or when nothing can be removed', () => {
+    const view = panel({ editing: false, onRemove: vi.fn() });
+    expect(screen.queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument();
+    view.unmount();
+    panel({ editing: true });
+    expect(screen.queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument();
+  });
+});
+

@@ -1,12 +1,20 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CompactPageBarProvider, useCompactPageBarState } from '../components/CompactPageBarContext';
 import { CurrentCompetitionProvider, useCurrentCompetition } from '../competition/CurrentCompetitionContext';
+import { useTeamNotifications } from '../hooks/useTeamNotifications';
 import { LiteModeProvider } from '../lite/LiteModeContext';
 import { ThemeProvider } from '../theme/ThemeContext';
 import { SettingsPage } from './SettingsPage';
+
+vi.mock('../hooks/useTeamNotifications', () => ({ useTeamNotifications: vi.fn() }));
+const setEnabled = vi.fn();
+beforeEach(() => {
+  setEnabled.mockReset();
+  vi.mocked(useTeamNotifications).mockReturnValue({ enabled: false, setEnabled, permission: 'default', problem: null });
+});
 
 function Probe() {
   const { pathname, hash } = useLocation();
@@ -267,5 +275,52 @@ describe('SettingsPage: bottom bar', () => {
     expect(names().slice(0, 4)).toEqual(['Timetable', 'Toplists', 'Live stream', 'Details']);
     expect(screen.getByRole('switch', { name: 'Show Shop in the bottom bar' })).toHaveAttribute('aria-checked', 'false');
     expect(localStorage.getItem('mg.prefs.bottomTabs')).toBeNull();
+  });
+});
+
+describe('SettingsPage: notifications', () => {
+  const card = () => within(screen.getByRole('heading', { name: 'On competition days' }).nextElementSibling as HTMLElement);
+
+  it('puts a Notifications switch first in On competition days, with its sub-line', () => {
+    mount();
+    const first = card().getAllByRole('switch')[0];
+    expect(first).toHaveAccessibleName('Notifications');
+    expect(first).toHaveAttribute('aria-checked', 'false');
+    expect(card().getByText('Heat calls and announcements on this phone')).toBeInTheDocument();
+  });
+
+  it('turns notifications on', async () => {
+    mount();
+    await userEvent.click(card().getByRole('switch', { name: 'Notifications' }));
+    expect(setEnabled).toHaveBeenCalledWith(true);
+  });
+
+  it('turns them off again when they are on', async () => {
+    vi.mocked(useTeamNotifications).mockReturnValue({ enabled: true, setEnabled, permission: 'granted', problem: null });
+    mount();
+    const on = card().getByRole('switch', { name: 'Notifications' });
+    expect(on).toHaveAttribute('aria-checked', 'true');
+    await userEvent.click(on);
+    expect(setEnabled).toHaveBeenCalledWith(false);
+  });
+
+  it('switches it off, and says why, when the browser has blocked notifications', () => {
+    vi.mocked(useTeamNotifications).mockReturnValue({ enabled: false, setEnabled, permission: 'denied', problem: null });
+    mount();
+    expect(card().getByRole('switch', { name: 'Notifications' })).toBeDisabled();
+    expect(card().getByText('Blocked in your browser’s settings')).toBeInTheDocument();
+  });
+
+  it('switches it off, and says why, when the browser can’t show notifications', () => {
+    vi.mocked(useTeamNotifications).mockReturnValue({ enabled: false, setEnabled, permission: 'unsupported', problem: null });
+    mount();
+    expect(card().getByRole('switch', { name: 'Notifications' })).toBeDisabled();
+    expect(card().getByText('This browser can’t show notifications')).toBeInTheDocument();
+  });
+
+  it('shows the problem strip when turning them on failed', () => {
+    vi.mocked(useTeamNotifications).mockReturnValue({ enabled: false, setEnabled, permission: 'default', problem: 'This browser can’t show notifications. Try Chrome or Safari.' });
+    mount();
+    expect(card().getByRole('alert')).toHaveTextContent('Try Chrome or Safari.');
   });
 });

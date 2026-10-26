@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Star } from 'lucide-react';
+import { ChevronRight, Plus } from 'lucide-react';
 import { api } from '../api';
 import { usePageWidth } from '../components/pageWidthState';
 import { usePageHeader } from '../components/CompactPageBarContext';
@@ -13,7 +13,6 @@ import type { CompetitionDetail } from '../types';
 import '../components/sitePages.css';
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
-const TIME_COLOUR = { ok: 'text-[rgb(var(--mg-heading))]', late: 'text-[rgb(var(--mg-late-time))]', live: 'text-[rgb(var(--mg-red))]', wait: 'text-[rgb(var(--mg-faint))]' } as const;
 
 export function FollowingPage() {
   usePageWidth('wide');
@@ -35,16 +34,16 @@ export function FollowingTeamsSection({ plain = false }: { plain?: boolean }) {
   return <div className="flex flex-col gap-4">
     {error && <Notice>{error}</Notice>}
     {!ids.length && (plain
-      ? <p className="m-0 px-0.5 text-[15.5px] leading-relaxed text-[rgb(var(--mg-body))]">Star teams at a competition and they show up here with their next heats. Stars are saved on this phone.</p>
-      : <div className="mg-card space-y-3 p-5"><h2 className="font-bold">No starred teams yet</h2><p>Open a competition and star the teams you want to follow. Stars are saved on this device.</p></div>)}
+      ? <p className="m-0 px-0.5 text-[15.5px] leading-relaxed text-[rgb(var(--mg-body))]">Star teams at a competition and they show up here with their next heats.</p>
+      : <div className="mg-card space-y-3 p-5"><h2 className="font-bold">No starred teams yet</h2><p>Open a competition and star the teams you want to follow.</p></div>)}
     <div className="mg-cards-grid mg-cards-grid-2 flex flex-col gap-4 empty:hidden">
       {ids.slice(0, limit).map((id) => <FollowingEvent key={id} id={id} teamIds={favourites.filter((item) => item.competitionId === id).map((item) => item.teamId)} />)}
     </div>
     {ids.length > limit && <button className="mg-btn mg-btn-secondary" onClick={() => setLimit(limit + 12)}>Show more events</button>}
     {plain
-      ? <Link to="/events" className="sp-add"><Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />{ids.length ? 'Follow teams at another event' : 'Choose a competition'}</Link>
+      ? <Link to="/events" className="sp-add"><Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />{ids.length ? 'Follow teams at another competition' : 'Choose a competition'}</Link>
       : <Link to="/events" className="flex min-h-12 items-center justify-center gap-2 rounded-lg border border-dashed border-[rgb(var(--mg-control))] bg-[rgb(var(--mg-surface))] text-sm font-semibold !text-[rgb(var(--mg-heading))]">
-        <Plus className="h-4 w-4" strokeWidth={2.25} aria-hidden="true" />{ids.length ? 'Follow teams at another event' : 'Choose a competition'}
+        <Plus className="h-4 w-4" strokeWidth={2.25} aria-hidden="true" />{ids.length ? 'Follow teams at another competition' : 'Choose a competition'}
       </Link>}
   </div>;
 }
@@ -76,21 +75,20 @@ function FollowingEvent({ id, teamIds }: { id: number; teamIds: number[] }) {
   // Followed teams that the event no longer lists still count; they are cleaned up on the event's own page.
   const gone = data ? teamIds.filter((teamId) => !data.teams.some((team) => team.id === teamId)) : [];
   const missing = gone.length;
-  return <section className="mg-sec" aria-label={data?.name ?? `Competition ${id}`}>
-    <div className="mg-sec-head">
-      <h2>{data?.name ?? `Competition ${id}`}</h2>
-      {live && <span className="!font-bold !tracking-[0.06em] text-[rgb(var(--mg-red))]">LIVE</span>}
-      {data && <span>{today ? 'Today' : competitionDateText(data.startDate, data.endDate)}</span>}
-    </div>
-    {!data && !error && <p role="status" className="mg-meta px-1">Loading event…</p>}
+  return <section aria-label={data?.name ?? `Competition ${id}`}>
+    <h2 className="sp-sec">
+      <span>{data?.name ?? `Competition ${id}`}{live && <span className="ml-2 text-[rgb(var(--mg-red))]">LIVE</span>}</span>
+      {data && <small>{today ? 'Today' : competitionDateText(data.startDate, data.endDate)}</small>}
+    </h2>
+    {!data && !error && <p role="status" className="sp-note">Loading event…</p>}
     {error && <Notice actionLabel="Try again" onAction={() => setAttempt(attempt + 1)}>Couldn’t refresh this event. Check your signal and try again.</Notice>}
-    {data && <div className="mg-lines">
+    {data && rows.length > 0 && <div className="sp-card">
       {rows.map((team) => {
         const summary = summariseNext(team, next?.get(team.id), arenas);
-        return <Link key={team.id} to={`/competitions/${id}/following`} className={`mg-line grid-cols-[20px_minmax(0,1fr)_auto] !min-h-[52px] ${summary.tone === 'late' ? 'mg-line-late' : ''}`}>
-          <Star className="h-[18px] w-[18px] fill-[#C08308] text-[#C08308]" aria-hidden="true" />
-          <span className="flex min-w-0 flex-col gap-0.5"><strong className="mg-line-title">{team.displayName}</strong><span className="mg-line-sub">{summary.sub}</span></span>
-          <span className="flex flex-col items-end gap-0.5"><span className={`mg-line-time ${TIME_COLOUR[summary.tone]}`}>{summary.time}</span><span className="text-[10px] font-semibold uppercase leading-none tracking-[0.06em] text-[rgb(var(--mg-muted))]">{summary.label}</span></span>
+        return <Link key={team.id} to={`/competitions/${id}/teams/${team.id}`} className="sp-row">
+          <span className="sp-grow"><span className="sp-t1">{team.displayName}</span><span className="sp-t2">{summary.sub}</span></span>
+          <span className="sp-time"><span className="sp-num !min-w-0">{summary.time}</span><span className="sp-time-label">{summary.label}</span></span>
+          <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
         </Link>;
       })}
     </div>}

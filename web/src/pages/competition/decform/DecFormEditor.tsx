@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import { CircleCheck, Plus, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronRight, CircleCheck, Plus } from 'lucide-react';
 import { Notice } from '../../../components/Notice';
+import { Sheet } from '../../../components/Sheet';
 import { useToast } from '../../../components/Toast';
 import { api } from '../../../api';
 import { useAuth } from '../../../auth/AuthContext';
@@ -8,16 +9,18 @@ import { FLAG_COMPETITION_ICONS } from '../../../competition/icons';
 import { apiErrorMessage } from '../../../lib/apiError';
 import { parseBibAndFlag } from '../../../lib/bib';
 import { competitionDateText } from '../../../lib/competitionDates';
+import { formBanner, type LockInfo } from '../../../lib/decFormDeadline';
 import {
-  blankRider, buildSubmitBody, canSubmit, decDraftKey, emptySlots, firstEmpty, isReserveSlot, normaliseSlotsForFormat, panelTitle, riderFromSaved,
-  phoneProblem, riderReady, ridersRequired, savedChoices, slotFlagged, slotLabel, slotMeta, slotsFromForm, statusText, subtitleOf, teamIsFull,
+  addLabel, blankRider, buildSubmitBody, canSubmit, decDraftKey, emptySlots, firstEmpty, isReserveSlot, normaliseSlotsForFormat, panelTitle, riderFromSaved,
+  phoneProblem, riderReady, ridersCount, ridersRequired, savedChoices, sendReason, slotFlagged, slotMeta, slotsFromForm, subtitleOf, teamIsFull,
   type DecFormDraft, type DecRider, type Slot,
 } from '../../../lib/decForm';
 import { asked, STANDARD_CONFIG, type DecFormConfig } from '../../../lib/decFormConfig';
 import type { CompetitionDetail, DeclarationForm, SavedRider, Team } from '../../../types';
-import { Field } from '../../auth/Field';
+import { RefineChoiceRow } from '../../refine/Refine';
 import { RiderPanel } from './RiderPanel';
 import { TermsDialog } from './TermsDialog';
+import '../../../components/sitePages.css';
 
 interface Props {
   competition: CompetitionDetail;
@@ -29,17 +32,24 @@ interface Props {
   /** A phone number this person gave on an earlier form. */
   priorPhone?: string;
   onSaved: (form: DeclarationForm) => void;
+  /** Deletes the team's sent dec form (the page asks first). Without it there is no delete button. */
+  onDelete?: (form: DeclarationForm) => void;
+  /** When dec forms close, for the banner at the top. */
+  lockInfo?: LockInfo | null;
   /** What this competition's dec form asks. The standard form when omitted. */
   config?: DecFormConfig;
 }
 
 const wide = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 1024px)').matches;
 
+const FLAG_OPTIONS = [{ value: '', label: 'No flag' }, ...FLAG_COMPETITION_ICONS.map((f) => ({ value: f.id as string, label: f.label }))];
+
 /**
- * One team's dec form: the team's details, five rider slots and an optional non-riding reserve, with a panel
- * for the slot being filled. Replaces the old rider grid (docs/designs/dec-form-handoff.md).
+ * One team's dec form: a banner saying when to send it, the team's details, a row for each rider (tap to change one)
+ * with one add bar for the next free slot, notes, the terms and Send. A phone shows the rider in a bottom sheet; a
+ * laptop shows it beside the form. See docs/designs/dec-form-handoff.md.
  */
-export function DecFormEditor({ competition, team, existing, draft, priorPhone, onSaved, config = STANDARD_CONFIG }: Props) {
+export function DecFormEditor({ competition, team, existing, draft, priorPhone, onSaved, onDelete, lockInfo, config = STANDARD_CONFIG }: Props) {
   const { user } = useAuth();
   const section = competition.sections.find((s) => s.id === team.competitionSectionId);
   const required = ridersRequired(section?.format);
@@ -55,7 +65,10 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
   const [phone, setPhone] = useState(draft?.phone ?? existing?.trainerPhone ?? existing?.submittedByPhone ?? priorPhone ?? '');
   const [notes, setNotes] = useState(draft?.notes ?? existing?.notes ?? '');
   const [agreed, setAgreed] = useState(false);
+  // True while what is on screen is what was sent (nothing changed since); false once anything is touched.
   const [submitted, setSubmitted] = useState(!!existing && !draft);
+  // True once this form has been sent, here or before (a deleted form goes back to not sent).
+  const [sentBefore, setSentBefore] = useState(!!existing);
   const [active, setActive] = useState<number | null>(() => (wide() ? firstEmpty(slots) : null));
   const [form, setForm] = useState<DecRider>(blankRider);
   const [saved, setSaved] = useState<SavedRider[]>([]);
@@ -64,9 +77,20 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
   // Nothing is kept until something has been typed, so just looking at a form leaves no draft behind.
   const [touched, setTouched] = useState(!!draft);
   const [termsOpen, setTermsOpen] = useState(false);
-  // True once this visit has sent the form, so the toast says so and the page doesn't repeat it.
-  const [justSent, setJustSent] = useState(false);
+  const [trainerOpen, setTrainerOpen] = useState(false);
+  const [trainerDraft, setTrainerDraft] = useState({ name: '', phone: '' });
   const toast = useToast();
+
+  // A form that was sent and then deleted starts again as not sent.
+  const hadExisting = useRef(!!existing);
+  useEffect(() => {
+    if (hadExisting.current && !existing) {
+      setSentBefore(false);
+      setSubmitted(false);
+      setAgreed(false);
+    }
+    hadExisting.current = !!existing;
+  }, [existing]);
 
   useEffect(() => {
     let cancelled = false;
@@ -109,6 +133,9 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
   const ready = canSubmit(slots, agreed, teamName, phoneIssue === null);
   const entryName = existing?.entryTeamName ?? null;
   const when = competition.startDate ? competitionDateText(competition.startDate, competition.endDate) : '';
+  const banner = formBanner(sentBefore, lockInfo);
+  const add = addLabel(slots);
+  const trainerLine = [trainerName.trim(), asked(config.trainerPhone) ? phone.trim() : ''].filter(Boolean).join(' · ');
 
   function changed<T>(set: (value: T) => void) {
     return (value: T) => { set(value); setSubmitted(false); setTouched(true); setError(null); };
@@ -128,8 +155,7 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
     setSlots((cur) => cur.map((s, i) => (i === index ? null : s)));
     setSubmitted(false);
     setTouched(true);
-    setActive(index);
-    setForm(blankRider());
+    close();
   }
 
   function commit() {
@@ -139,9 +165,19 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
     setSubmitted(false);
     setTouched(true);
     setError(null);
-    const following = firstEmpty(next);
-    setActive(following);
+    setActive(firstEmpty(next));
     setForm(blankRider());
+  }
+
+  function openTrainer() {
+    setTrainerDraft({ name: trainerName, phone });
+    setTrainerOpen(true);
+  }
+
+  function saveTrainer() {
+    changed(setTrainerName)(trainerDraft.name.trim());
+    changed(setPhone)(trainerDraft.phone.trim());
+    setTrainerOpen(false);
   }
 
   async function submit() {
@@ -153,7 +189,7 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
         buildSubmitBody({ teamId: team.id, teamName, bibs, flag, trainerName, phone, notes }, slots, config));
       try { localStorage.removeItem(decDraftKey(competition.id, team.id)); } catch { /* ignore */ }
       setSubmitted(true);
-      setJustSent(true);
+      setSentBefore(true);
       setActive(null);
       toast.show('Dec form sent. You can still change it.');
       onSaved(data);
@@ -164,92 +200,87 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
     }
   }
 
+  const trainerPhoneBad = trainerDraft.phone.trim() !== '' && phoneProblem(trainerDraft.phone, config) !== null;
+
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <h2 className="mg-h1 lg:!text-[44px] lg:!leading-none">
-          {flag && <img src={`/flags/${flag}.png`} alt="" className="inline-block h-6 w-8 rounded-sm object-cover align-middle mr-2" />}
-          {teamName.trim() || 'Team name'}
-        </h2>
-        <p className="mg-meta !text-base">{subtitleOf([section?.displayName, competition.name, when])}</p>
-        {entryName && entryName.trim().toLowerCase() !== teamName.trim().toLowerCase() && (
-          <p className="text-sm text-[rgb(var(--mg-muted))]">Entered as “{entryName}”.</p>
-        )}
-      </div>
+    <div className="flex flex-col gap-4">
+      <h2 className="sr-only">{teamName.trim() || 'Dec form'}</h2>
+      <p role="status" className="sp-banner m-0" data-tone={banner.tone === 'good' ? 'good' : undefined}>{banner.text}</p>
 
-      {submitted && !justSent && <Notice tone="info">Dec form sent. You can still change it.</Notice>}
-
-      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-7">
-        <section aria-label="Dec form" className="flex flex-col gap-4">
-          <div className="grid gap-4 lg:grid-cols-2 lg:gap-3">
-            <Field label="Team name" className="lg:col-span-2">
-              {({ id }) => <div className="mg-field"><input id={id} value={teamName} placeholder="e.g. Stockport C" maxLength={150} onChange={(e) => changed(setTeamName)(e.target.value)} /></div>}
-            </Field>
+      <div className="flex flex-col gap-2 lg:grid lg:grid-cols-2 lg:items-start lg:gap-7">
+        <section aria-label="Dec form" className="flex flex-col">
+          <h3 className="sp-sec sp-first">Team<small>{subtitleOf([section?.displayName, competition.name, when])}</small></h3>
+          <div className="sp-card">
+            <label className="sp-field">
+              Team name
+              <input value={teamName} placeholder="e.g. Stockport C" maxLength={150} onChange={(e) => changed(setTeamName)(e.target.value)} />
+            </label>
             {asked(config.bib) && (
-              <Field label="Bibs" className="lg:col-span-2">
-                {({ id }) => <div className="mg-field"><input id={id} value={bibs} placeholder="e.g. Yellow with navy stars" maxLength={200} onChange={(e) => changed(setBibs)(e.target.value)} /></div>}
-              </Field>
+              <label className="sp-field">
+                Bibs
+                <input value={bibs} placeholder="e.g. Yellow with navy stars" maxLength={200} onChange={(e) => changed(setBibs)(e.target.value)} />
+              </label>
             )}
-            <Field label={<>Flag / nation <span className="font-normal text-[rgb(var(--mg-muted))]">(optional)</span></>} className="lg:col-span-2">
-              {({ id }) => (
-                <div className="mg-field flex items-center gap-2">
-                  {flag && <img src={`/flags/${flag}.png`} alt="" className="h-5 w-7 shrink-0 rounded-sm object-cover" />}
-                  <select id={id} value={flag} onChange={(e) => changed(setFlag)(e.target.value)}>
-                    <option value="">No flag</option>
-                    {FLAG_COMPETITION_ICONS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
-                  </select>
+            <RefineChoiceRow label="Flag" value={flag} options={FLAG_OPTIONS} onChange={changed(setFlag)} />
+            <button type="button" className="sp-row" onClick={openTrainer} aria-label={`Trainer: ${trainerLine || 'not set'}. Change it`}>
+              <span className="sp-t1 sp-grow">Trainer</span>
+              <span className="sp-val min-w-0 max-w-[60%] truncate">{trainerLine || 'Add'}</span>
+              <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
+            </button>
+          </div>
+          {entryName && entryName.trim().toLowerCase() !== teamName.trim().toLowerCase() && (
+            <p className="sp-note">Entered as “{entryName}”.</p>
+          )}
+
+          <h3 className="sp-sec">Riders<small>{ridersCount(slots)}</small></h3>
+          <div className="sp-card" role="list" aria-label="Riders">
+            {slots.map((rider, index) => {
+              if (!rider) return null;
+              const isReserve = isReserveSlot(slots, index);
+              return (
+                <div key={index} role="listitem">
+                  <button type="button" className="sp-row" aria-current={index === active ? 'true' : undefined} data-active={index === active || undefined} onClick={() => select(index)}>
+                    <span className="sp-num" aria-hidden="true">{isReserve ? 'R' : index + 1}</span>
+                    <span className="sp-grow">
+                      <span className="sp-t1">{rider.fullName}</span>
+                      <span className="sp-t2">{slotMeta(rider, isReserve, config)}</span>
+                      {slotFlagged(rider, config) && <span className="sp-t2 font-semibold !text-[rgb(var(--mg-elim))]">An answer is outside the limits. The organisers will see a flag; you can still send the form.</span>}
+                    </span>
+                    {isReserve && <span className="sp-chip" data-tone="grey">Reserve</span>}
+                    <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
+                  </button>
                 </div>
-              )}
-            </Field>
-            <Field label="Trainer name">
-              {({ id }) => <div className="mg-field"><input id={id} value={trainerName} autoComplete="name" maxLength={200} onChange={(e) => changed(setTrainerName)(e.target.value)} /></div>}
-            </Field>
-            {asked(config.trainerPhone) && (
-              <Field label="Phone number" error={phone.trim() === '' ? null : phoneIssue}>
-                {({ id, invalid }) => <div className="mg-field" data-invalid={invalid}><input id={id} type="tel" value={phone} autoComplete="tel" aria-invalid={invalid} onChange={(e) => changed(setPhone)(e.target.value)} /></div>}
-              </Field>
+              );
+            })}
+            {add && (
+              <button type="button" className="sp-add sp-add-row" onClick={() => select(firstEmpty(slots)!)}>
+                <Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />{add}
+              </button>
             )}
           </div>
 
-          <ol aria-label="Riders" className="mg-card mg-list m-0 list-none p-0">
-            {slots.map((rider, index) => {
-              const isActive = index === active;
-              const isReserve = isReserveSlot(slots, index);
-              return (
-                <li key={index} className={isActive ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_4px_0_0_rgb(var(--mg-heading))]' : ''}>
-                  {rider ? (
-                    <>
-                    <div className="flex min-h-16 items-center gap-1 pl-4 pr-1 lg:min-h-[72px] lg:pl-[18px]">
-                      <button type="button" onClick={() => select(index)} className="flex min-w-0 flex-1 flex-col items-start gap-0.5 py-2.5 text-left">
-                        <span className="flex items-center gap-2 text-base font-semibold leading-tight lg:text-[17px]">
-                          {rider.fullName}
-                          {isReserve && <span className="mg-badge mg-badge-outline !h-5">Reserve</span>}
-                        </span>
-                        <span className="max-w-full truncate text-[13px] text-[rgb(var(--mg-muted))] lg:text-sm">{slotMeta(rider, isReserve, config)}</span>
-                      </button>
-                      <button type="button" className="mg-icon-btn !border-0 !bg-transparent text-[rgb(var(--mg-muted))] hover:!text-[rgb(var(--mg-elim))]" aria-label={`Remove ${rider.fullName}`} onClick={() => clear(index)}>
-                        <X aria-hidden="true" className="h-[18px] w-[18px]" />
-                      </button>
-                    </div>
-                    {slotFlagged(rider, config) && (
-                      <Notice role={null} className="mx-4 mb-3">{rider.fullName} has an answer outside the limits. The organisers will see a flag; you can still send the form.</Notice>
-                    )}
-                    </>
-                  ) : (
-                    <button type="button" onClick={() => select(index)}
-                      className="flex min-h-16 w-full items-center gap-3 px-4 text-left lg:min-h-[72px] lg:px-[18px]">
-                      <span className={`flex-1 text-base font-semibold lg:text-[17px] ${isActive ? 'text-[rgb(var(--mg-heading))]' : 'text-[rgb(var(--mg-muted))]'}`}>{slotLabel(slots, index)}</span>
-                      <span className="flex items-center gap-1.5 text-[15px] font-semibold text-[rgb(var(--mg-heading))]"><Plus aria-hidden="true" className="h-[18px] w-[18px]" />{isActive ? 'Adding' : 'Add'}</span>
-                    </button>
-                  )}
-                </li>
-              );
-            })}
-          </ol>
+          <h3 className="sp-sec">For the organisers</h3>
+          <div className="sp-card">
+            <label className="sp-field">
+              Notes
+              <textarea value={notes} placeholder="Optional" onChange={(e) => changed(setNotes)(e.target.value)} />
+            </label>
+            <div className="sp-row">
+              <span className="sp-t1 sp-grow">I agree to the <button type="button" onClick={() => setTermsOpen(true)} className="font-semibold text-[rgb(var(--mg-heading))] underline underline-offset-2">terms</button></span>
+              <button type="button" role="switch" aria-checked={agreed} aria-label="I agree to the terms" className="rf-sw" onClick={() => { setAgreed(!agreed); setSubmitted(false); }}><span aria-hidden="true" /></button>
+            </div>
+          </div>
 
-          <Field label={<>Notes for the organisers <span className="font-normal text-[rgb(var(--mg-muted))]">(optional)</span></>}>
-            {({ id }) => <div className="mg-field"><input id={id} value={notes} onChange={(e) => changed(setNotes)(e.target.value)} /></div>}
-          </Field>
+          <div className="mt-4 flex flex-col items-stretch gap-2.5">
+            <button type="button" className="kit-pill kit-pill-fill w-full" disabled={!ready || busy || submitted} onClick={() => { void submit(); }}>
+              {busy ? 'Sending…' : sentBefore ? 'Send changes' : 'Send dec form'}
+            </button>
+            <p aria-live="polite" className="sp-t2 m-0 text-center">{sendReason(slots, agreed, teamName, phoneIssue, sentBefore, submitted)}</p>
+            {sentBefore && existing && onDelete && (
+              <div className="flex justify-center"><button type="button" className="sp-red" onClick={() => onDelete(existing)}>Delete this dec form</button></div>
+            )}
+          </div>
+          {error && <Notice actionLabel="Try again" onAction={() => { void submit(); }} actionDisabled={busy}>{error}</Notice>}
         </section>
 
         {active != null ? (
@@ -278,34 +309,44 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
             }}
             onCommit={commit}
             onClose={close}
+            onRemove={() => clear(active)}
           />
         ) : (
           <section aria-label="Next step" className="hidden flex-col items-start gap-3 rounded-xl border-[1.5px] border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-surface))] p-6 lg:flex">
             <CircleCheck aria-hidden="true" className="h-7 w-7 text-[rgb(var(--mg-heading))]" />
-            <h2 className="mg-display text-[28px] font-bold leading-none text-[rgb(var(--mg-heading))]">{full ? 'Team complete' : 'Pick a slot'}</h2>
+            <h3 className="mg-display text-[28px] font-bold leading-none text-[rgb(var(--mg-heading))]">{full ? 'Team complete' : 'Pick a slot'}</h3>
             <p className="text-base leading-snug text-[rgb(var(--mg-body))]">
-              {full ? 'Check the riders, agree to the terms, then submit. You can come back and change it afterwards.' : 'Click an empty slot to add a rider.'}
+              {full ? 'Check the riders, agree to the terms, then send. You can come back and change it afterwards.' : 'Tap Add rider to fill the next slot.'}
             </p>
           </section>
         )}
       </div>
 
-      <div className="flex flex-col gap-2 lg:sticky lg:bottom-0 lg:z-10 lg:-mx-4 lg:flex-row lg:items-center lg:gap-6 lg:border-t lg:border-[rgb(var(--mg-rule))] lg:bg-[rgb(var(--mg-surface))] lg:px-4 lg:py-3.5">
-        <label className="flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))] px-4 text-base font-medium lg:order-2 lg:min-h-11 lg:border-0 lg:px-0 lg:text-[15px]">
-          <input type="checkbox" className="h-[22px] w-[22px] shrink-0 cursor-pointer accent-[rgb(var(--mg-button))]" checked={agreed}
-            onChange={(e) => { setAgreed(e.target.checked); setSubmitted(false); }} />
-          <span>I agree to the <button type="button" onClick={(e) => { e.preventDefault(); setTermsOpen(true); }} className="font-semibold text-[rgb(var(--mg-heading))] underline underline-offset-2">terms and conditions</button></span>
-        </label>
-        <button type="button" className="mg-btn mg-btn-primary lg:order-3" disabled={!ready || busy || submitted} onClick={() => { void submit(); }}>
-          {submitted ? 'Submitted' : 'Submit dec form'}
-        </button>
-        <span aria-live="polite" className="text-center text-[13px] font-medium text-[rgb(var(--mg-muted))] lg:order-1 lg:flex-1 lg:text-left lg:text-[15px] lg:text-[rgb(var(--mg-body))]">
-          {statusText(slots, agreed, submitted)}
-        </span>
-      </div>
-      {error && <Notice actionLabel="Try again" onAction={() => { void submit(); }} actionDisabled={busy}>{error}</Notice>}
       {toast.node}
       {termsOpen && <TermsDialog termsText={competition.termsText} onClose={() => setTermsOpen(false)} />}
+      {trainerOpen && (
+        <Sheet title="Trainer" onClose={() => setTrainerOpen(false)} initialFocus="#dec-trainer-name">
+          {({ close: closeSheet }) => (
+            <form className="kit-sheet-inner" onSubmit={(e) => { e.preventDefault(); if (trainerDraft.name.trim() && !trainerPhoneBad) closeSheet(saveTrainer); }}>
+              <label className="kit-sheet-field" htmlFor="dec-trainer-name">
+                Name
+                <input id="dec-trainer-name" value={trainerDraft.name} autoComplete="name" maxLength={200} onChange={(e) => setTrainerDraft({ ...trainerDraft, name: e.target.value })} />
+              </label>
+              {asked(config.trainerPhone) && (
+                <label className="kit-sheet-field" htmlFor="dec-trainer-phone">
+                  Phone
+                  <input id="dec-trainer-phone" type="tel" value={trainerDraft.phone} autoComplete="tel" placeholder="07700 900000" aria-invalid={trainerPhoneBad}
+                    onChange={(e) => setTrainerDraft({ ...trainerDraft, phone: e.target.value })} />
+                </label>
+              )}
+              {trainerPhoneBad && <Notice>{phoneProblem(trainerDraft.phone, config)}</Notice>}
+              <div className="kit-acts">
+                <button type="submit" className="kit-pill kit-pill-fill" disabled={!trainerDraft.name.trim() || trainerPhoneBad}>Done</button>
+              </div>
+            </form>
+          )}
+        </Sheet>
+      )}
     </div>
   );
 }

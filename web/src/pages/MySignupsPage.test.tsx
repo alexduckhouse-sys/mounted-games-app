@@ -25,6 +25,15 @@ beforeEach(() => {
   vi.mocked(api.get).mockResolvedValue({ data: [] });
 });
 
+const openRow = async (name: string | RegExp) => {
+  await userEvent.click(await screen.findByRole('button', { name }));
+  return within(await screen.findByRole('dialog'));
+};
+const closeSheet = async () => {
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Close' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+};
+
 describe('MySignupsPage', () => {
   it('asks a visitor to sign in', () => {
     auth.user = null;
@@ -36,7 +45,7 @@ describe('MySignupsPage', () => {
   it('says it is loading while the entries are on their way', async () => {
     vi.mocked(api.get).mockReturnValueOnce(new Promise(() => {}));
     mount();
-    expect(screen.getByRole('status')).toHaveTextContent('Loading your signups…');
+    expect(screen.getByRole('status')).toHaveTextContent('Loading your entries…');
   });
 
   it('offers to browse competitions when the person has no entries', async () => {
@@ -44,7 +53,7 @@ describe('MySignupsPage', () => {
     expect(await screen.findByRole('link', { name: 'Browse competitions' })).toHaveAttribute('href', '/events');
   });
 
-  it('groups entries into coming up and past, with the price and status of each', async () => {
+  it('shows one plain row per entry, coming up and past, with the status on the right', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: [
       signup(1, { teamName: 'Stockport A', sectionName: 'Teams Open' }),
       signup(2, { status: 1, paidAt: '2026-10-12T10:00:00Z', amountMinor: 9500 }),
@@ -54,66 +63,103 @@ describe('MySignupsPage', () => {
     mount();
     const coming = await screen.findByRole('region', { name: 'Coming up' });
     const past = screen.getByRole('region', { name: 'Past' });
-    expect(within(coming).getAllByRole('listitem')).toHaveLength(2);
-    const first = within(coming).getAllByRole('listitem')[0];
-    expect(first).toHaveTextContent('Event 1');
-    expect(first).toHaveTextContent('Open · Stockport A');
-    expect(first).toHaveTextContent('£18.00');
-    expect(first).toHaveTextContent('Awaiting payment');
-    expect(within(coming).getAllByRole('listitem')[1]).toHaveTextContent('Paid 12 Oct');
-    expect(within(coming).getAllByRole('listitem')[1]).toHaveTextContent('£95.00');
-    expect(within(past).getAllByRole('listitem').map((li) => li.textContent)).toEqual([expect.stringContaining('Refunded'), expect.stringContaining('Cancelled')]);
-    expect(within(past).getByText('Free')).toBeInTheDocument();
+    const rows = within(coming).getAllByRole('button');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent('Event 1');
+    expect(rows[0]).toHaveTextContent('Open · £18.00');
+    // Not paid is amber and bold; everything else is plain grey.
+    expect(within(rows[0]).getByText('Not paid')).toHaveClass('sp-st-amber');
+    expect(rows[1]).toHaveTextContent('Under 14 · £95.00');
+    expect(within(rows[1]).getByText('Paid')).not.toHaveClass('sp-st-amber');
+    expect(within(past).getAllByRole('button').map((b) => b.textContent)).toEqual([expect.stringContaining('Refunded'), expect.stringContaining('Cancelled')]);
+    expect(within(past).getByText(/Free/)).toBeInTheDocument();
+    // Nothing to tap on the rows but the row itself.
+    expect(screen.queryByRole('link', { name: /How to pay/ })).not.toBeInTheDocument();
   });
 
-  it('gives only the awaiting payment entry a How to pay link, to the event’s details', async () => {
+  it('opens a sheet for an unpaid entry with How to pay, to the event’s details', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: [signup(1), signup(2, { status: 1 })] });
     mount();
-    const pay = await screen.findAllByRole('link', { name: /How to pay/ });
-    expect(pay).toHaveLength(1);
-    expect(pay[0]).toHaveAttribute('href', '/competitions/11/details');
-    expect(screen.queryByRole('button', { name: /Cancel entry/ })).not.toBeInTheDocument();
+    const sheet = await openRow(/^Event 1/);
+    const pay = sheet.getByRole('link', { name: 'How to pay for Event 1' });
+    expect(pay).toHaveAttribute('href', '/competitions/11/details');
+    expect(pay).toHaveClass('kit-pill-fill');
+    expect(sheet.getByText(/Under 14 · Ellie Hart · £18.00 · Not paid/)).toBeInTheDocument();
+    await closeSheet();
+    // A paid entry has nothing to pay.
+    const paid = await openRow(/^Event 2/);
+    expect(paid.queryByRole('link', { name: /How to pay/ })).not.toBeInTheDocument();
+    expect(paid.getByText(/· Paid/)).toBeInTheDocument();
   });
 
-  it('shows the Pony Club, and the demo payment note for paid entries only', async () => {
+  it('shows the Pony Club inside the sheet, and the demo payment note for paid entries only', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: [signup(1, { ponyClubName: 'Cheshire PC' }), signup(2, { amountMinor: 0 })] });
     mount();
-    expect(await screen.findByText('Pony Club: Cheshire PC')).toBeInTheDocument();
-    expect(screen.getByText('demo payment 1')).toBeInTheDocument();
-    expect(screen.queryByText('demo payment 2')).not.toBeInTheDocument();
+    const first = await openRow(/^Event 1/);
+    expect(first.getByText('Pony Club: Cheshire PC')).toBeInTheDocument();
+    expect(first.getByText('demo payment 1')).toBeInTheDocument();
+    await closeSheet();
+    const second = await openRow(/^Event 2/);
+    expect(second.queryByText(/demo payment/)).not.toBeInTheDocument();
   });
 
   it('says so when the entries will not load', async () => {
     vi.mocked(api.get).mockRejectedValue(new Error('offline'));
     mount();
-    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load your signups. Check your signal and try again.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load your entries. Check your signal and try again.');
     vi.mocked(api.get).mockResolvedValue({ data: [signup(3)] });
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByText('Event 3')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('lets a rider accept an incoming pair-up request', async () => {
-    const incoming: ExtendedMySignup = {
-      ...signup(5, { sectionName: 'Open Pairs', amountMinor: 900 }),
-      lookingForPair: true,
-      pairRequestFromSignupId: 4,
-      pairRequestFromName: 'Alice Partner',
-      pairRequestFromClub: 'Cheshire PC',
-      pairRequestStatus: 'Pending',
-    };
-    vi.mocked(api.get).mockResolvedValue({ data: [incoming] });
-    vi.mocked(api.post).mockResolvedValue({
-      data: { ...incoming, lookingForPair: false, teamId: 22, teamName: 'Alice Partner & Ellie Hart', pairRequestStatus: 'Accepted' },
-    });
-    mount();
-    expect(await screen.findByText(/Pair request from Alice Partner/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Accept pair' }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/my/signups/5/pair-respond', { accept: true }));
-    expect(await screen.findByText(/Alice Partner & Ellie Hart/)).toBeInTheDocument();
+  const incoming = (): ExtendedMySignup => ({
+    ...signup(5, { sectionName: 'Open Pairs', amountMinor: 900 }),
+    lookingForPair: true,
+    pairRequestFromSignupId: 4,
+    pairRequestFromName: 'Alice Partner',
+    pairRequestFromClub: 'Cheshire PC',
+    pairRequestStatus: 'Pending',
   });
 
-  it('lets a rider or manager withdraw an upcoming pre-draw entry and shows Withdrawn — refund pending', async () => {
+  it('shows an incoming pair request as its own small card at the top, and lets a rider accept it', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [incoming()] });
+    vi.mocked(api.post).mockResolvedValue({
+      data: { ...incoming(), lookingForPair: false, teamId: 22, teamName: 'Alice Partner & Ellie Hart', pairRequestStatus: 'Accepted' },
+    });
+    mount();
+    const card = within(await screen.findByRole('region', { name: 'Pair request' }));
+    expect(card.getByText('Alice Partner · Cheshire PC')).toBeInTheDocument();
+    expect(card.getByText('Event 5 · Open Pairs')).toBeInTheDocument();
+    expect(card.getByRole('button', { name: /^Decline/ })).toHaveClass('sp-red');
+    await userEvent.click(card.getByRole('button', { name: 'Accept pair request from Alice Partner' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/my/signups/5/pair-respond', { accept: true }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Pair request' })).not.toBeInTheDocument());
+  });
+
+  it('lets a rider decline a pair request, and says so when that fails', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [incoming()] });
+    vi.mocked(api.post).mockRejectedValue(new Error('offline'));
+    mount();
+    await userEvent.click(await screen.findByRole('button', { name: 'Decline pair request from Alice Partner' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/my/signups/5/pair-respond', { accept: false }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t update the pair request. Check your signal and try again.');
+    // The request stays until the server has answered.
+    expect(screen.getByRole('region', { name: 'Pair request' })).toBeInTheDocument();
+  });
+
+  it('says in the sheet when a pair request was sent and is waiting', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [{ ...signup(6), pairRequestToSignupId: 7, pairRequestToName: 'Bea Rider', pairRequestStatus: 'Pending', lookingForPair: true, stablesCount: 1, waitingForGuestSpot: true, lookingForGuestRiders: true }] });
+    mount();
+    const sheet = await openRow(/^Event 6/);
+    expect(sheet.getByText('Pair request sent to Bea Rider, waiting for an answer')).toBeInTheDocument();
+    expect(sheet.getByText('Looking for a Pair (50% entry)')).toBeInTheDocument();
+    expect(sheet.getByText('Waiting for a Guest Ride Spot')).toBeInTheDocument();
+    expect(sheet.getByText('Looking for Guest Rider(s)')).toBeInTheDocument();
+    expect(sheet.getByText('Stabling: 1 stable')).toBeInTheDocument();
+  });
+
+  it('lets a rider or manager withdraw an upcoming pre-draw entry from the sheet, in red, after asking', async () => {
     const entry: ExtendedMySignup = {
       ...signup(8, { status: 1, paidAt: '2026-10-12T10:00:00Z', amountMinor: 4000, teamName: 'Cheshire A' }),
       stablesCount: 2,
@@ -125,15 +171,17 @@ describe('MySignupsPage', () => {
       data: { ...entry, status: 3, isWithdrawn: true, refundPending: true, teamId: null, teamName: null },
     });
     mount();
-    expect(await screen.findByText(/Stabling: 2 stables \(Cheshire PC\)/)).toBeInTheDocument();
+    const sheet = await openRow(/^Event 8/);
+    expect(sheet.getByText(/Stabling: 2 stables \(Cheshire PC\)/)).toBeInTheDocument();
+    expect(sheet.getByText(/Paid on 12 Oct/)).toBeInTheDocument();
     const asked = autoConfirm(true);
-    const withdrawBtn = screen.getByRole('button', { name: 'Withdraw Entry' });
-    await userEvent.click(withdrawBtn);
+    const withdraw = sheet.getByRole('button', { name: 'Withdraw' });
+    expect(withdraw).toHaveClass('kit-redtext');
+    await userEvent.click(withdraw);
     await waitFor(() => expect(asked).toHaveBeenCalledWith('Cheshire A at Event 8. You can’t withdraw once the draw has happened.'));
     expect(asked.titles).toEqual(['Withdraw this entry?']);
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/my/signups/8/withdraw', {}));
-    expect(await screen.findByText('Withdrawn — refund pending')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Withdraw Entry' })).not.toBeInTheDocument();
+    expect(await screen.findByText('Refund pending')).toBeInTheDocument();
   });
 
   it('does nothing when the rider changes their mind, and says so when withdrawing fails', async () => {
@@ -142,23 +190,20 @@ describe('MySignupsPage', () => {
     vi.mocked(api.post).mockRejectedValue(new Error('offline'));
     mount();
     autoConfirm(false);
-    await userEvent.click(await screen.findByRole('button', { name: 'Withdraw Entry' }));
+    await userEvent.click((await openRow(/^Event 8/)).getByRole('button', { name: 'Withdraw' }));
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
     expect(api.post).not.toHaveBeenCalled();
     autoConfirm(true);
-    await userEvent.click(screen.getByRole('button', { name: 'Withdraw Entry' }));
+    await userEvent.click((await openRow(/^Event 8/)).getByRole('button', { name: 'Withdraw' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t withdraw this entry. Check your signal and try again.');
   });
 
-  it('hides Withdraw Entry once the draw has taken place', async () => {
-    const drawnEntry: ExtendedMySignup = {
-      ...signup(9, { status: 1, amountMinor: 4000 }),
-      drawComplete: true,
-    };
-    vi.mocked(api.get).mockResolvedValue({ data: [drawnEntry] });
+  it('hides Withdraw once the draw has taken place', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [{ ...signup(9, { status: 1, amountMinor: 4000 }), drawComplete: true }] });
     mount();
-    expect(await screen.findByText('Event 9')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Withdraw Entry' })).not.toBeInTheDocument();
+    const sheet = await openRow(/^Event 9/);
+    expect(sheet.queryByRole('button', { name: 'Withdraw' })).not.toBeInTheDocument();
+    expect(sheet.getByRole('button', { name: 'Close' })).toBeInTheDocument();
   });
 });
 
@@ -167,9 +212,17 @@ describe('withdrawal and trusted multi-team declarations', () => {
     vi.mocked(api.get).mockResolvedValue({ data: [{ ...signup(1, { status: 2 }), isWithdrawn: true, refundPending: false }] });
     mount();
     expect(await screen.findByText('Refunded')).toBeInTheDocument();
-    expect(screen.queryByText('Withdrawn — refund pending')).not.toBeInTheDocument();
+    expect(screen.queryByText('Refund pending')).not.toBeInTheDocument();
   });
-  it('links every granted team and keeps the primary-team fallback', async () => {
+
+  it('shows a withdrawn entry and a waiting-list entry in plain words', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [{ ...signup(1, { status: 3 }), isWithdrawn: true }, { ...signup(2), isWaitlist: true }] });
+    mount();
+    expect(await screen.findByText('Withdrawn')).toBeInTheDocument();
+    expect(screen.getByText('Waiting list')).not.toHaveClass('sp-st-amber');
+  });
+
+  it('links every granted team in the sheet, and keeps the primary-team fallback', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: [
       { ...signup(1, { status: 1 }), declarationAccessGranted: true, linkedTeams: [{ id: 21, name: 'Synthetic A' }, { id: 22, name: 'Synthetic B' }] },
       { ...signup(2, { status: 1, teamId: 23, teamName: 'Synthetic C' }), declarationAccessGranted: true },
@@ -177,15 +230,21 @@ describe('withdrawal and trusted multi-team declarations', () => {
       { ...signup(4, { status: 3 }), declarationAccessGranted: true, linkedTeams: [{ id: 25, name: 'Cancelled' }] },
     ] });
     mount();
-    expect(await screen.findByRole('link', { name: 'Dec form for Synthetic A' })).toHaveAttribute('href', '/competitions/11/declarations?team=21');
-    expect(screen.getByRole('link', { name: 'Dec form for Synthetic B' })).toHaveAttribute('href', '/competitions/11/declarations?team=22');
-    expect(screen.getByRole('link', { name: 'Dec form for Synthetic C' })).toHaveAttribute('href', '/competitions/12/declarations?team=23');
-    expect(screen.getAllByRole('link', { name: /Dec form for/ })).toHaveLength(3);
+    const many = await openRow(/^Event 1/);
+    expect(many.getByRole('link', { name: 'Dec form for Synthetic A' })).toHaveAttribute('href', '/competitions/11/declarations?team=21');
+    expect(many.getByRole('link', { name: 'Dec form for Synthetic B' })).toHaveAttribute('href', '/competitions/11/declarations?team=22');
+    await closeSheet();
+    const one = await openRow(/^Event 2/);
+    expect(one.getByRole('link', { name: 'Fill in dec form' })).toHaveAttribute('href', '/competitions/12/declarations?team=23');
+    await closeSheet();
+    expect((await openRow(/^Event 3/)).queryByRole('link', { name: /dec form/i })).not.toBeInTheDocument();
+    await closeSheet();
+    expect((await openRow(/^Event 4/)).queryByRole('link', { name: /dec form/i })).not.toBeInTheDocument();
   });
 });
 
 it('keeps withdrawal available after the event starts if no draw exists', async () => {
   vi.mocked(api.get).mockResolvedValue({ data: [{ ...signup(1, { competitionStart: old, status: 1 }), drawComplete: false }] });
   mount();
-  expect(await screen.findByRole('button', { name: 'Withdraw Entry' })).toBeInTheDocument();
+  expect((await openRow(/^Event 1/)).getByRole('button', { name: 'Withdraw' })).toBeInTheDocument();
 });

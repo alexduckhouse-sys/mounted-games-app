@@ -1,27 +1,23 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Bell, ChevronRight, ClipboardList, Contact, CreditCard, Landmark, LogOut, Package, Pencil, ShoppingBag, UserCog, UserRound, Users, type LucideIcon } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ChevronRight, Plus } from 'lucide-react';
 import { api } from '../api';
 import { signOutDestination } from '../auth/signOutDestination';
 import { useAuth } from '../auth/AuthContext';
 import { EmailConfirmBanner } from '../components/EmailConfirmBanner';
-import { Notice } from '../components/Notice';
-import { usePageWidth } from '../components/pageWidthState';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { useMyTeams } from '../hooks/useMyTeams';
 import { heatRowsForTeam, heatTime } from '../lib/myTeams';
 import { formatDelayDuration } from '../lib/time';
 import { dayKey } from '../lib/timetableDay';
 import { displaySectionName } from '../lib/section';
-import { useTeamNotifications } from '../hooks/useTeamNotifications';
 import { initialsOf, roleLabel } from '../lib/profile';
 import type { DeclarationForm, Team } from '../types';
+import type { ExtendedMySignup } from './MySignupsPage';
 import { useNeedsYou } from './profile/needsYou';
 import { NeedsYouPanel } from './dashboard/NeedsYouPanel';
-import { QuickActions } from './dashboard/QuickActions';
-import { SiteAdmin } from './dashboard/SiteAdmin';
-import { TodaysEvents } from './dashboard/TodaysEvents';
 import { useTodaysEvents } from './dashboard/useTodaysEvents';
+import '../components/sitePages.css';
 
 const NO_TEAMS: Team[] = [];
 
@@ -33,22 +29,21 @@ interface SavedRiderRow {
 }
 
 /**
- * Who I am, what needs me, my club and my account, in one place (the Me tab). For an admin this is the whole dashboard:
- * what needs them, quick actions, today's events and the site admin sections, in a grid on a laptop.
+ * Who I am, what needs me, my club, my shop and my account, in one place (the Me tab): a header, then rows grouped
+ * under small headings. What shows depends on the role; there is no site admin on this page (it has its own).
  */
 export function ProfilePage() {
-  usePageWidth('wide');
-  const { user, hasRole, logout } = useAuth();
+  const { user, hasRole, canOrganise, logout } = useAuth();
   const { current } = useCurrentCompetition();
   const { teams } = useNeedsYou();
   const mine = useMyTeams();
   const now = useMemo(() => new Date(), []);
-  const location = useLocation();
   const navigate = useNavigate();
-  const notify = useTeamNotifications(NO_TEAMS);
   const [savedRiders, setSavedRiders] = useState<SavedRiderRow[] | null>(null);
   const [ridersOpen, setRidersOpen] = useState(false);
   const [forms, setForms] = useState<DeclarationForm[] | null>(null);
+  const [entries, setEntries] = useState<ExtendedMySignup[] | null>(null);
+  const [itemCount, setItemCount] = useState<number | null>(null);
 
   const userId = user?.id;
   const clubId = user?.clubId ?? null;
@@ -69,15 +64,17 @@ export function ProfilePage() {
     return () => { cancelled = true; };
   }, [userId, competitionId]);
 
-  const isAdmin = hasRole('Admin');
-  const organiser = isAdmin || hasRole('Trainer') || hasRole('Manager');
-  const events = useTodaysEvents(organiser);
-
-  // /admin sends people here with #site-admin; the section exists only once the page has drawn.
-  const wantsSiteAdmin = isAdmin && location.hash === '#site-admin';
   useEffect(() => {
-    if (wantsSiteAdmin) document.getElementById('site-admin')?.scrollIntoView?.();
-  }, [wantsSiteAdmin]);
+    if (!userId) return;
+    let cancelled = false;
+    api.get<ExtendedMySignup[]>('/me/signups').then((r) => { if (!cancelled && Array.isArray(r.data)) setEntries(r.data); }).catch(() => {});
+    api.get<{ isActive?: boolean }[]>('/commerce/catalogue').then((r) => { if (!cancelled && Array.isArray(r.data)) setItemCount(r.data.filter((item) => item.isActive !== false).length); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [userId]);
+
+  const isAdmin = hasRole('Admin');
+  const canCreate = isAdmin || hasRole('Trainer');
+  const events = useTodaysEvents(true);
 
   if (!user) return null;
 
@@ -87,17 +84,8 @@ export function ProfilePage() {
     return comp ? heatRowsForTeam(team, comp).filter((row) => row.status !== 'over' && row.effective && dayKey(row.effective) === todayKey).map((row) => ({ team, row })) : [];
   }).sort((a, b) => a.row.effective!.getTime() - b.row.effective!.getTime()).slice(0, 6);
 
-  const teamsToday = todays.length > 0 && <Section title="Your teams today">
-    <div className="mg-card mg-list">
-      {todays.map(({ team, row }) => <Link key={`${team.id}-${row.heatId}`} to={`/competitions/${team.competitionId}/teams/${team.id}`} className="mg-row !min-h-14">
-        <span className={`shrink-0 font-semibold ${row.delayMinutes > 0 ? 'text-[rgb(var(--mg-late-time))]' : ''}`}>{heatTime(row)}</span>
-        <span className="flex min-w-0 flex-col gap-1">
-          <strong>{team.displayName}</strong>
-          <span className="text-xs text-[rgb(var(--mg-muted))]">{[displaySectionName(team.sectionName), row.sessionName, row.label, row.lane != null ? `Lane ${row.lane}` : '', row.delayMinutes > 0 ? `+${formatDelayDuration(row.delayMinutes)}` : ''].filter(Boolean).join(' · ')}</span>
-        </span>
-      </Link>)}
-    </div>
-  </Section>;
+  const dueEntries = (entries ?? []).filter((e) => e.status === 0 && !e.isWaitlist && !e.isWithdrawn);
+  const comingUp = events.upcoming.filter((event) => canOrganise({ id: event.id })).length;
 
   const runsClub = isAdmin || hasRole('Manager');
   const showClub = isAdmin || clubId != null || hasRole('Trainer') || hasRole('Manager') || (teams?.length ?? 0) > 0;
@@ -105,20 +93,88 @@ export function ProfilePage() {
   const teamsHere = competitionId == null ? [] : (teams ?? NO_TEAMS).filter((t) => t.competitionId === competitionId);
   const submitted = teamsHere.filter((t) => forms?.some((f) => f.teamId === t.id)).length;
   const decFormCount = forms && teamsHere.length > 0 ? `${submitted} of ${teamsHere.length}` : undefined;
+  const line = [roleLabel(user.roles), user.clubName].filter(Boolean).join(' · ');
 
-  const clubSection = showClub && (
-<Section title="My club" aside={user.clubName ?? undefined}>
-          <div className="mg-card mg-list">
-            {showTeams && <ListRow to="/teams" icon={Users} label="Teams" count={teams ? String(teams.length) : undefined} />}
+  return (
+    <div className="skin mx-auto w-full max-w-[560px] pb-4 pt-3">
+      <h1 className="sr-only">Me</h1>
+      <div className="sp-card">
+        <div className="sp-row !min-h-[84px]">
+          <div className="sp-ava" aria-hidden="true">{initialsOf(user.fullName, user.email)}</div>
+          <div className="sp-grow">
+            <h2 className="m-0 truncate font-[family-name:var(--mg-font-display)] text-2xl font-extrabold leading-none text-[rgb(var(--mg-heading))]">{user.fullName || user.email}</h2>
+            <span className="sp-t2">{line}</span>
+          </div>
+          <Link to="/me/account" className="sp-pill sp-pill-sm" aria-label="Edit your account details">Edit</Link>
+        </div>
+      </div>
+
+      <EmailConfirmBanner />
+
+      <NeedsYouPanel events={events.upcoming} dueEntries={dueEntries} />
+
+      {todays.length > 0 && (
+        <Section title="Your teams today">
+          {todays.map(({ team, row }) => (
+            <Link key={`${team.id}-${row.heatId}`} to={`/competitions/${team.competitionId}/teams/${team.id}`} className="sp-row">
+              <span className="sp-grow">
+                <span className="sp-t1">{team.displayName}</span>
+                <span className="sp-t2">{[displaySectionName(team.sectionName), row.sessionName, row.label, row.lane != null ? `Lane ${row.lane}` : '', row.delayMinutes > 0 ? `+${formatDelayDuration(row.delayMinutes)}` : ''].filter(Boolean).join(' · ')}</span>
+              </span>
+              <span className="sp-num" data-tone={row.delayMinutes > 0 ? 'warn' : undefined}>{heatTime(row)}</span>
+              <Chevron />
+            </Link>
+          ))}
+        </Section>
+      )}
+
+      {events.today.length > 0 && (canCreate || todays.length === 0) && (
+        <Section title="Today">
+          {events.today.map((event) => (
+            <Link key={event.id} to={`/competitions/${event.id}`} className="sp-row">
+              <span className="sp-grow">
+                <span className="sp-t1">{event.name}</span>
+                <span className="sp-t2">{event.live
+                  ? `${[event.live.sectionName, event.live.heatLabel, event.live.arenaName].filter(Boolean).join(' · ')} on now`
+                  : event.location ?? ''}</span>
+              </span>
+              {event.live && <span className="sp-chip" data-tone="live">LIVE</span>}
+              <Chevron />
+            </Link>
+          ))}
+        </Section>
+      )}
+
+      {canCreate && (
+        <section aria-label="Organiser">
+          <h2 className="sp-sec">Organiser</h2>
+          <div className="sp-card">
+            <Link to={isAdmin ? '/admin/competitions' : '/events'} className="sp-row">
+              <span className="sp-grow">
+                <span className="sp-t1">Your competitions</span>
+                {comingUp > 0 && <span className="sp-t2">{comingUp} coming up</span>}
+              </span>
+              <Chevron />
+            </Link>
+            {isAdmin && (
+              <Link to="/admin" className="sp-row">
+                <span className="sp-grow"><span className="sp-t1">Site admin</span><span className="sp-t2">Users, trainer requests, email</span></span>
+                <Chevron />
+              </Link>
+            )}
+            <Link to="/admin/competitions/new" className="sp-add sp-add-row"><Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />Create a competition</Link>
+          </div>
+        </section>
+      )}
+
+      {showClub && (
+        <section aria-label="My club">
+          <h2 className="sp-sec">My club{user.clubName && <small>{user.clubName}</small>}</h2>
+          <div className="sp-card">
+            {showTeams && <ListRow to="/teams" label="Teams" value={teams ? String(teams.length) : undefined} />}
             {clubId != null && (
               <>
-                <ListRow
-                  icon={Contact}
-                  label="Saved riders"
-                  count={savedRiders != null ? String(savedRiders.length) : undefined}
-                  expanded={ridersOpen}
-                  onClick={() => setRidersOpen((open) => !open)}
-                />
+                <ListRow label="Saved riders" value={savedRiders != null ? String(savedRiders.length) : undefined} expanded={ridersOpen} onClick={() => setRidersOpen((open) => !open)} />
                 {ridersOpen && (
                   <div className="flex flex-col gap-2 bg-[rgb(var(--mg-subtle))] px-4 py-3 text-sm">
                     {savedRiders && savedRiders.length > 0 ? (
@@ -136,111 +192,58 @@ export function ProfilePage() {
                     ) : (
                       <p className="m-0 text-[rgb(var(--mg-muted))]">No saved riders yet.</p>
                     )}
-                    <Link to="/declarations" className="mg-text-link !min-h-0 self-start !text-sm font-semibold">
-                      Manage on dec forms →
-                    </Link>
+                    <Link to="/declarations" className="font-semibold text-[rgb(var(--mg-heading))] underline">Manage on dec forms</Link>
                   </div>
                 )}
               </>
             )}
-            <ListRow to="/declarations" icon={ClipboardList} label="Dec forms" count={decFormCount} />
-            {runsClub && <ListRow to="/me/members" icon={UserCog} label="Members" />}
-            {runsClub && <ListRow to="/me/payouts" icon={Landmark} label="Payouts" />}
+            <ListRow to="/declarations" label="Dec forms" value={decFormCount} />
+            {runsClub && <ListRow to="/me/members" label="Members" />}
+            {runsClub && <ListRow to="/me/payouts" label="Payouts" />}
           </div>
-        </Section>
-  );
-
-  const accountSection = (
-    <Section title="Account">
-        <div className="mg-card mg-list">
-          <button type="button" role="switch" aria-checked={notify.enabled} disabled={notify.permission === 'denied'}
-            onClick={() => { void notify.setEnabled(!notify.enabled); }}
-            className="mg-row !min-h-14 disabled:opacity-50">
-            <Bell aria-hidden="true" className="h-6 w-6 shrink-0 text-[rgb(var(--mg-heading))]" />
-            <span className="flex-1 text-base font-semibold">Notifications</span>
-            <span aria-hidden="true" className={`flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors ${notify.enabled ? 'bg-[rgb(var(--mg-button))]' : 'bg-[rgb(var(--mg-control))]'}`}>
-              <span className={`h-5 w-5 rounded-full bg-white transition-transform ${notify.enabled ? 'translate-x-5' : ''}`} />
-            </span>
-          </button>
-          {notify.problem && <div className="px-3.5 pb-3"><Notice>{notify.problem}</Notice></div>}
-          <ListRow to="/me/account" icon={UserRound} label="My account" />
-          {!isAdmin && <ListRow to="/me/signups" icon={CreditCard} label="My signups" />}
-          <ListRow to="/me/catalogue" icon={Package} label="My items for sale" />
-          <ListRow to="/me/orders" icon={ShoppingBag} label="Orders & sales" />
-          <button type="button" className="mg-row !min-h-14" onClick={() => { logout(); navigate(signOutDestination(), { replace: true }); }}>
-            <LogOut aria-hidden="true" className="h-6 w-6 shrink-0 text-[rgb(var(--mg-heading))]" />
-            <span className="flex-1 text-base font-semibold">Sign out</span>
-          </button>
-        </div>
-      </Section>
-  );
-
-  return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-      <div className="mg-band flex items-center gap-3.5 py-4">
-        <div className="mg-display flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--mg-heading))] text-[22px] font-bold leading-none text-[rgb(var(--mg-surface))]" aria-hidden="true">
-          {initialsOf(user.fullName, user.email)}
-        </div>
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <h1 className="mg-display truncate text-[26px] font-bold leading-none text-[rgb(var(--mg-heading))]">{user.fullName || user.email}</h1>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="mg-badge bg-[rgb(var(--mg-tint))] text-[rgb(var(--mg-heading))]">{roleLabel(user.roles)}</span>
-            {user.clubName && <span className="text-sm text-[rgb(var(--mg-muted))]">{user.clubName}</span>}
-          </div>
-        </div>
-        <Link to="/me/account" className="mg-icon-btn" aria-label="Account details"><Pencil aria-hidden="true" className="h-[18px] w-[18px]" /></Link>
-      </div>
-
-      <EmailConfirmBanner />
-
-      {isAdmin ? (
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="flex flex-col gap-6 lg:col-span-2">
-            <NeedsYouPanel events={events.week} />
-            {teamsToday}
-            <TodaysEvents events={events.week} loaded={events.loaded} />
-          </div>
-          <div className="flex flex-col gap-6">
-            <QuickActions focus={events.focus} today={events.today.length > 0} />
-            {clubSection}
-            {accountSection}
-          </div>
-        </div>
-      ) : (
-        <>
-          <NeedsYouPanel events={events.week} />
-            {teamsToday}
-          <QuickActions focus={events.focus} today={events.today.length > 0} />
-          {clubSection}
-          {accountSection}
-        </>
+        </section>
       )}
 
-      {isAdmin && <SiteAdmin hideTrainerRequests />}
+      <Section title="Shop">
+        <ListRow to="/me/catalogue" label="Things I sell" value={itemCount != null ? String(itemCount) : undefined} />
+        <ListRow to="/me/orders" label="Orders and sales" />
+      </Section>
+
+      <Section title="Account">
+        {!isAdmin && <ListRow to="/me/signups" label="My entries" value={entries ? String(entries.length) : undefined} />}
+        <ListRow to="/me/account" label="My account" />
+        <ListRow to="/settings" label="Settings" sub="Notifications, theme, bottom bar" />
+        <button type="button" className="sp-row" onClick={() => { logout(); navigate(signOutDestination(), { replace: true }); }}>
+          <span className="sp-grow"><span className="sp-t1">Sign out</span></span>
+        </button>
+      </Section>
     </div>
   );
 }
 
-function Section({ title, aside, children }: { title: string; aside?: string; children: ReactNode }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section aria-label={title} className="flex flex-col gap-2">
-      <div className="mg-section-head"><h2>{title}</h2>{aside && <span>{aside}</span>}</div>
-      {children}
+    <section aria-label={title}>
+      <h2 className="sp-sec">{title}</h2>
+      <div className="sp-card">{children}</div>
     </section>
   );
 }
 
-/** A tappable row with an icon, a label, an optional count and a chevron. */
-function ListRow({ to, onClick, expanded, icon: IconComponent, label, count }: { to?: string; onClick?: () => void; expanded?: boolean; icon: LucideIcon; label: string; count?: string }) {
+function Chevron({ open = false }: { open?: boolean }) {
+  return <ChevronRight aria-hidden="true" className={`sp-chev h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`} strokeWidth={2.5} />;
+}
+
+/** A tappable row: a label (and an optional second line), an optional value and a chevron. */
+function ListRow({ to, onClick, expanded, label, sub, value }: { to?: string; onClick?: () => void; expanded?: boolean; label: string; sub?: string; value?: string }) {
   const body = (
     <>
-      <IconComponent aria-hidden="true" className="h-6 w-6 shrink-0 text-[rgb(var(--mg-heading))]" />
-      <span className="flex-1 text-base font-semibold">{label}</span>
-      {count && <span className="text-[15px] text-[rgb(var(--mg-muted))]">{count}</span>}
-      <ChevronRight aria-hidden="true" className={`h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-dash))] transition-transform ${expanded ? 'rotate-90' : ''}`} />
+      <span className="sp-grow"><span className="sp-t1">{label}</span>{sub && <span className="sp-t2">{sub}</span>}</span>
+      {value && <span className="sp-t2">{value}</span>}
+      <Chevron open={expanded} />
     </>
   );
   return to
-    ? <Link to={to} className="mg-row !min-h-14">{body}</Link>
-    : <button type="button" aria-expanded={expanded} onClick={onClick} className="mg-row !min-h-14">{body}</button>;
+    ? <Link to={to} className="sp-row">{body}</Link>
+    : <button type="button" aria-expanded={expanded} onClick={onClick} className="sp-row">{body}</button>;
 }

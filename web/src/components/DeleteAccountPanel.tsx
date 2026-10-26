@@ -6,8 +6,9 @@ import { useAuth } from '../auth/AuthContext';
 import { deletionErrorMessage } from '../lib/accountDeletion';
 import { Notice } from './Notice';
 import { Sheet } from './Sheet';
+import './sitePages.css';
 
-/** Asks for the password again in a delete-type sheet, then deletes the signed-in person's own account and signs them out. */
+/** "Delete my account" as red text. It asks for the password again in a delete-type sheet, then deletes the signed-in person's own account and signs them out. */
 export function DeleteAccountPanel() {
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -38,16 +39,8 @@ export function DeleteAccountPanel() {
   }
 
   return (
-    <section aria-labelledby="delete-account-title" className="mg-card space-y-3 p-4">
-      <h2 id="delete-account-title" className="mg-h2">Delete my account</h2>
-      <p className="mg-lede">
-        This removes your sign-in, your notes, your saved riders and your push notifications. Chat messages and
-        marketplace posts you wrote stay, but show as "Deleted user". Competitions you created stay too, with no owner.
-        You can't undo it.
-      </p>
-      <button type="button" className="mg-btn mg-btn-secondary" onClick={() => setOpen(true)}>
-        Delete my account
-      </button>
+    <>
+      <button type="button" className="sp-red" onClick={() => setOpen(true)}>Delete my account</button>
       {open && (
         <Sheet
           title="Delete your account?"
@@ -77,6 +70,6 @@ export function DeleteAccountPanel() {
           </form>
         </Sheet>
       )}
-    </section>
+    </>
   );
 }

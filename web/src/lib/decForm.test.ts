@@ -3,7 +3,7 @@ import type { DeclarationForm, RiderEntry, SavedRider } from '../types';
 import {
   blankRider, buildSubmitBody, canSubmit, decDraftKey, dobText, emptySlots, firstEmpty, heightText, isReserveSlot, normaliseSlotsForFormat, panelTitle,
   parseDob, parseDraft, parseHeight, riderFromSaved, riderReady, ridersAdded, ridersRequired, savedChoices, slotLabel, slotMeta,
-  slotsFromForm, statusText, subtitleOf, teamIsFull, type DecRider, type Slot,
+  slotsFromForm, sendReason, ridersCount, addLabel, subtitleOf, teamIsFull, type DecRider, type Slot,
 } from './decForm';
 
 const rider = (fullName: string, extra: Partial<DecRider> = {}): DecRider =>
@@ -225,13 +225,24 @@ describe('submitting', () => {
     expect(canSubmit(filled(5), true, '  ')).toBe(false);
   });
 
-  it('says where the form has got to', () => {
-    expect(statusText(filled(3), false, false)).toBe('3 of 5 riders added');
-    expect(statusText(emptySlots(2), false, false)).toBe('0 of 2 riders added');
-    expect(statusText(filled(4), false, false)).toBe('Tick to agree, then submit');
-    expect(statusText(filled(5), false, false)).toBe('Tick to agree, then submit');
-    expect(statusText(filled(5), true, false)).toBe('Ready to submit');
-    expect(statusText(filled(5), true, true)).toBe('Submitted');
+  it('says what is missing before the form can be sent, then what sending does', () => {
+    expect(sendReason(filled(3), false, 'Stockport C', null, false, false)).toBe('Add 1 more rider to send it.');
+    expect(sendReason(emptySlots(2), false, 'Stockport C', null, false, false)).toBe('Add 2 more riders to send it.');
+    expect(sendReason(filled(4), true, '  ', null, false, false)).toBe('Add a team name to send it.');
+    expect(sendReason(filled(4), true, 'Stockport C', 'Enter a UK phone number.', false, false)).toBe('Enter a UK phone number.');
+    expect(sendReason(filled(5), false, 'Stockport C', null, false, false)).toBe('Agree to the terms to send it.');
+    expect(sendReason(filled(5), true, 'Stockport C', null, false, false)).toBe('Ready to send.');
+    expect(sendReason(filled(5), true, 'Stockport C', null, true, false)).toBe('Sending again replaces the last one.');
+    expect(sendReason(filled(5), true, 'Stockport C', null, true, true)).toBe('Nothing has changed since you sent it.');
+  });
+
+  it('counts riders for the heading and labels the one add bar by the next free slot', () => {
+    expect(ridersCount(filled(3))).toBe('3 of 5 · reserve optional');
+    expect(ridersCount(emptySlots(2))).toBe('0 of 2');
+    expect(addLabel(filled(3))).toBe('Add rider 4');
+    expect(addLabel(emptySlots(1))).toBe('Add rider 1');
+    expect(addLabel(filled(5))).toBe('Add a reserve');
+    expect(addLabel(filled(5, true))).toBeNull();
   });
 
   it('builds the request: reserve flagged, optional pony on the reserve preserved if given, order kept, terms ticked', () => {

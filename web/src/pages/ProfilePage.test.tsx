@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, type StoredAuth } from '../api';
 import { AuthProvider } from '../auth/AuthContext';
 import { CurrentCompetitionProvider } from '../competition/CurrentCompetitionContext';
-import { useTeamNotifications } from '../hooks/useTeamNotifications';
 import { competition, heat, race, session, team } from '../test/factories';
 import { ProfilePage } from './ProfilePage';
 import { NeedsYouProvider } from './profile/NeedsYouProvider';
@@ -15,7 +14,6 @@ vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
   api: { get: vi.fn(), post: vi.fn() },
 }));
-vi.mock('../hooks/useTeamNotifications', () => ({ useTeamNotifications: vi.fn() }));
 
 interface Options {
   roles?: string[];
@@ -24,7 +22,6 @@ interface Options {
   competition?: boolean;
 }
 
-const setEnabled = vi.fn();
 const requests = [
   { userId: 'r1', fullName: 'Sam Lee', email: 'sam@example.com', clubName: 'Stockport PC', requestedAt: '2026-10-20T09:00:00Z' },
   { userId: 'r2', fullName: 'Priya Shah', email: 'priya@example.com', clubName: null, requestedAt: '2026-10-21T09:00:00Z' },
@@ -52,8 +49,12 @@ function mount(options: Options = {}) {
   );
 }
 
+const today = new Date();
+const at = (h: number, m: number) => new Date(today.getFullYear(), today.getMonth(), today.getDate(), h, m).toISOString();
+const pickerItem = (id: number, extra: Record<string, unknown> = {}) => ({ id, name: `Event ${id}`, startDate: at(9, 0), endDate: null, icon: 'flag', ...extra });
+const dueEntry = { id: 31, competitionId: 11, competitionName: 'Spring Open', competitionStart: at(9, 0), competitionSectionId: 1, sectionName: 'Under 15 Pairs', fullName: 'Sophie Hart', amountMinor: 4000, status: 0, createdAt: '2026-10-01T00:00:00Z' };
+
 beforeEach(() => {
-  setEnabled.mockReset();
   responses = {
     '/auth/me': {},
     '/competitions/access': [],
@@ -65,37 +66,49 @@ beforeEach(() => {
     ],
     '/declaration-forms': [{ id: 1, teamId: 1 }],
     '/admin/trainer-requests': requests,
+    '/me/signups': [],
+    '/commerce/catalogue': [],
+    '/competitions/picker': { items: [], hasMore: false },
   };
   vi.mocked(api.get).mockImplementation(async (url) => {
     if (url in responses) return { data: responses[url] };
     throw new Error(`unexpected ${url}`);
   });
   vi.mocked(api.post).mockResolvedValue({ data: {} });
-  vi.mocked(useTeamNotifications).mockReturnValue({ enabled: false, setEnabled, permission: 'default', problem: null });
 });
 
 const section = (name: string) => within(screen.getByRole('region', { name }));
 const needsSection = async () => within(await screen.findByRole('region', { name: 'Needs you' }));
 
-describe('ProfilePage: header band', () => {
-  it('shows who the person is: initials, name, role badge, club', () => {
+describe('ProfilePage: header', () => {
+  it('shows who the person is: initials, name, role and club', () => {
     mount({ roles: ['Manager'] });
     expect(screen.getByRole('heading', { name: 'Alex Morgan' })).toBeInTheDocument();
     expect(screen.getByText('AM')).toBeInTheDocument();
-    expect(screen.getByText('Team manager')).toHaveClass('mg-badge');
-    expect(screen.getAllByText('Stockport PC')).toHaveLength(2);
+    expect(screen.getByText('Team manager · Stockport PC')).toBeInTheDocument();
   });
 
   it('uses the email when there is no name, and leaves the club out when there is none', () => {
     mount({ roles: ['Member'], fullName: '', clubName: null });
     expect(screen.getByRole('heading', { name: 'alex@example.com' })).toBeInTheDocument();
     expect(screen.getByText('Member')).toBeInTheDocument();
-    expect(screen.queryByText('Stockport PC')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Stockport PC/)).not.toBeInTheDocument();
   });
 
-  it('has an edit button that opens the account details', () => {
+  it('has an Edit pill that opens the account details', () => {
     mount();
-    expect(screen.getByRole('link', { name: 'Account details' })).toHaveAttribute('href', '/me/account');
+    const edit = screen.getByRole('link', { name: 'Edit your account details' });
+    expect(edit).toHaveAttribute('href', '/me/account');
+    expect(edit).toHaveTextContent('Edit');
+  });
+
+  it('has no big quick action buttons, no notifications switch and no site admin block left on it', async () => {
+    mount({ roles: ['Admin'] });
+    await screen.findByRole('region', { name: 'Account' });
+    expect(screen.queryByRole('region', { name: 'Quick actions' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Email opt-ins/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Site admin' })).not.toBeInTheDocument();
   });
 });
 
@@ -175,6 +188,16 @@ describe('ProfilePage: my club', () => {
     expect(within(list).getByText('Starlight')).toBeInTheDocument();
     expect(within(list).getByText('Zoe Evans')).toBeInTheDocument();
     expect(club.getByRole('link', { name: /Manage on dec forms/ })).toHaveAttribute('href', '/declarations');
+    await userEvent.click(toggle);
+    expect(club.queryByRole('list', { name: 'Saved riders list' })).not.toBeInTheDocument();
+  });
+
+  it('says so when there are no saved riders', async () => {
+    responses['/clubs/7/saved-riders'] = [];
+    mount();
+    const club = section('My club');
+    await userEvent.click(await club.findByRole('button', { name: /Saved riders/ }));
+    expect(club.getByText('No saved riders yet.')).toBeInTheDocument();
   });
 
   it('is hidden for a member with no club and no teams', async () => {
@@ -198,48 +221,30 @@ describe('ProfilePage: my club', () => {
   });
 });
 
-describe('ProfilePage: account', () => {
-  it('has a notifications switch that turns notifications on', async () => {
+describe('ProfilePage: shop and account', () => {
+  it('has Things I sell, with how many are on sale, and Orders and sales', async () => {
+    responses['/commerce/catalogue'] = [{ id: 1, isActive: true }, { id: 2, isActive: true }, { id: 3, isActive: false }];
     mount();
-    const toggle = section('Account').getByRole('switch', { name: 'Notifications' });
-    expect(toggle).toHaveAttribute('aria-checked', 'false');
-    await userEvent.click(toggle);
-    expect(setEnabled).toHaveBeenCalledWith(true);
+    const shop = section('Shop');
+    expect(shop.getByRole('link', { name: /Things I sell/ })).toHaveAttribute('href', '/me/catalogue');
+    expect(await shop.findByText('2')).toBeInTheDocument();
+    expect(shop.getByRole('link', { name: 'Orders and sales' })).toHaveAttribute('href', '/me/orders');
   });
 
-  it('turns them off again when they are on', async () => {
-    vi.mocked(useTeamNotifications).mockReturnValue({ enabled: true, setEnabled, permission: 'granted', problem: null });
-    mount();
-    const toggle = section('Account').getByRole('switch', { name: 'Notifications' });
-    expect(toggle).toHaveAttribute('aria-checked', 'true');
-    await userEvent.click(toggle);
-    expect(setEnabled).toHaveBeenCalledWith(false);
-  });
-
-  it('disables the switch when the browser has blocked notifications', () => {
-    vi.mocked(useTeamNotifications).mockReturnValue({ enabled: false, setEnabled, permission: 'denied', problem: null });
-    mount();
-    expect(section('Account').getByRole('switch', { name: 'Notifications' })).toBeDisabled();
-  });
-
-  it('keeps the switch usable when the browser has no notifications, and shows the problem strip', () => {
-    vi.mocked(useTeamNotifications).mockReturnValue({ enabled: false, setEnabled, permission: 'unsupported', problem: 'This browser can’t show notifications. Try Chrome or Safari.' });
-    mount();
-    expect(section('Account').getByRole('switch', { name: 'Notifications' })).toBeEnabled();
-    expect(section('Account').getByRole('alert')).toHaveTextContent('This browser can’t show notifications. Try Chrome or Safari.');
-  });
-
-  it('keeps the account pages that used to be in the menu', () => {
+  it('has My entries (with a count), My account and Settings, then Sign out', async () => {
+    responses['/me/signups'] = [{ ...dueEntry }, { ...dueEntry, id: 32, status: 1 }];
     mount();
     const account = section('Account');
-    expect(account.getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
-      ['My account', '/me/account'], ['My signups', '/me/signups'], ['My items for sale', '/me/catalogue'], ['Orders & sales', '/me/orders'],
-    ]);
+    expect(account.getByRole('link', { name: /My entries/ })).toHaveAttribute('href', '/me/signups');
+    expect(await account.findByText('2')).toBeInTheDocument();
+    expect(account.getByRole('link', { name: 'My account' })).toHaveAttribute('href', '/me/account');
+    expect(account.getByRole('link', { name: /Settings/ })).toHaveAttribute('href', '/settings');
+    expect(account.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
   });
 
-  it('leaves out my signups for an admin', () => {
+  it('leaves out my entries for an admin', () => {
     mount({ roles: ['Admin'] });
-    expect(section('Account').queryByRole('link', { name: /My signups/ })).not.toBeInTheDocument();
+    expect(section('Account').queryByRole('link', { name: /My entries/ })).not.toBeInTheDocument();
   });
 
   it('signs out and goes home', async () => {
@@ -256,43 +261,52 @@ describe('ProfilePage: needs you', () => {
     expect(screen.queryByRole('region', { name: 'Needs you' })).not.toBeInTheDocument();
   });
 
-  it('shows an admin the trainer requests, with the count in the heading', async () => {
+  it('shows an admin the trainer requests, with the count in the heading and the actions on the row', async () => {
     mount({ roles: ['Admin'] });
     const needs = await needsSection();
-    expect(await needs.findByText('Sam Lee')).toBeInTheDocument();
-    expect(needs.getByText('Priya Shah')).toBeInTheDocument();
+    expect(await needs.findByText('Sam Lee', { selector: '.sp-t1' })).toBeInTheDocument();
+    expect(needs.getByText('Priya Shah', { selector: '.sp-t1' })).toBeInTheDocument();
     expect(needs.getAllByText('Wants to join as a trainer')).toHaveLength(2);
-    expect(needs.getByText('2', { selector: 'span' })).toBeInTheDocument();
-    expect(needs.getByText('PS')).toBeInTheDocument();
-    expect(needs.getAllByRole('button', { name: 'Approve' })).toHaveLength(2);
+    expect(needs.getByText('2', { selector: 'small' })).toBeInTheDocument();
+    expect(needs.getByRole('button', { name: 'Approve Sam Lee' })).toHaveClass('sp-pill-fill');
+    // Decline is red text, not a pill.
+    expect(needs.getByRole('button', { name: 'Decline Sam Lee' })).toHaveClass('sp-red');
   });
 
-  it('approves a request, and the card goes', async () => {
+  it('approves a request, and the row goes', async () => {
     mount({ roles: ['Admin'] });
     const needs = await needsSection();
-    await needs.findByText('Sam Lee');
-    await userEvent.click(needs.getAllByRole('button', { name: 'Approve' })[0]);
+    await needs.findByText('Sam Lee', { selector: '.sp-t1' });
+    await userEvent.click(needs.getByRole('button', { name: 'Approve Sam Lee' }));
     expect(api.post).toHaveBeenCalledWith('/admin/trainer-requests/r1/approve');
-    expect(await needs.findByText('Priya Shah')).toBeInTheDocument();
-    expect(needs.queryByText('Sam Lee')).not.toBeInTheDocument();
-    expect(needs.getByText('1', { selector: 'span' })).toBeInTheDocument();
+    expect(await needs.findByText('Priya Shah', { selector: '.sp-t1' })).toBeInTheDocument();
+    expect(needs.queryByText('Sam Lee', { selector: '.sp-t1' })).not.toBeInTheDocument();
+    expect(needs.getByText('1', { selector: 'small' })).toBeInTheDocument();
   });
 
-  it('declines a request, and the section goes with the last card', async () => {
+  it('declines a request after asking, and the section goes with the last row', async () => {
     responses['/admin/trainer-requests'] = [requests[1]];
     const confirm = autoConfirm(true);
     mount({ roles: ['Admin'] });
-    await userEvent.click((await needsSection()).getByRole('button', { name: 'Decline' }));
+    await userEvent.click((await needsSection()).getByRole('button', { name: 'Decline Priya Shah' }));
     expect(confirm).toHaveBeenCalledWith('Their account stays a member.');
     expect(api.post).toHaveBeenCalledWith('/admin/trainer-requests/r2/decline');
     await vi.waitFor(() => expect(screen.queryByRole('region', { name: 'Needs you' })).not.toBeInTheDocument());
   });
 
-  it('keeps the card and says so under it when the server refuses', async () => {
+  it('keeps the row when the person says no to declining', async () => {
+    autoConfirm(false);
+    mount({ roles: ['Admin'] });
+    await userEvent.click((await needsSection()).getByRole('button', { name: 'Decline Sam Lee' }));
+    expect(api.post).not.toHaveBeenCalled();
+    expect(screen.getByText('Sam Lee', { selector: '.sp-t1' })).toBeInTheDocument();
+  });
+
+  it('keeps the row and says so under it when the server refuses', async () => {
     vi.mocked(api.post).mockRejectedValue(new Error('conflict'));
     mount({ roles: ['Admin'] });
     const needs = await needsSection();
-    await userEvent.click(needs.getAllByRole('button', { name: 'Approve' })[0]);
+    await userEvent.click(await needs.findByRole('button', { name: 'Approve Sam Lee' }));
     expect(await needs.findByRole('alert')).toHaveTextContent('Could not approve this request. Check your connection and try again.');
     expect(needs.getByText('Sam Lee')).toBeInTheDocument();
   });
@@ -301,18 +315,8 @@ describe('ProfilePage: needs you', () => {
     vi.mocked(api.post).mockRejectedValue({ response: { status: 409, data: { message: 'Could not approve this request. Refresh the list and try again.' } } });
     mount({ roles: ['Admin'] });
     const needs = await needsSection();
-    await userEvent.click(needs.getAllByRole('button', { name: 'Approve' })[0]);
+    await userEvent.click(await needs.findByRole('button', { name: 'Approve Sam Lee' }));
     expect(await needs.findByRole('alert')).toHaveTextContent('Refresh the list and try again.');
-  });
-
-  it('lets an admin approve or decline with no edit mode to switch on', async () => {
-    mount({ roles: ['Admin'] });
-    const needs = await needsSection();
-    const approve = needs.getAllByRole('button', { name: 'Approve' })[0];
-    expect(approve).toBeEnabled();
-    expect(needs.getAllByRole('button', { name: 'Decline' })[0]).toBeEnabled();
-    await userEvent.click(approve);
-    expect(api.post).toHaveBeenCalledWith('/admin/trainer-requests/r1/approve');
   });
 
   it('does not ask a trainer or a member for join requests', () => {
@@ -323,11 +327,9 @@ describe('ProfilePage: needs you', () => {
   it('shows a team manager their club\'s trainer requests, and lets them answer', async () => {
     mount({ roles: ['Manager'] });
     const needs = await needsSection();
-    await needs.findByText('Sam Lee');
+    await needs.findByText('Sam Lee', { selector: '.sp-t1' });
     expect(api.get).toHaveBeenCalledWith('/admin/trainer-requests');
-    const approve = needs.getAllByRole('button', { name: 'Approve' })[0];
-    expect(approve).toBeEnabled();
-    await userEvent.click(approve);
+    await userEvent.click(needs.getByRole('button', { name: 'Approve Sam Lee' }));
     expect(api.post).toHaveBeenCalledWith('/admin/trainer-requests/r1/approve');
   });
 
@@ -339,7 +341,7 @@ describe('ProfilePage: needs you', () => {
     expect(needs.getByText('Wants to join as a trainer')).toBeInTheDocument();
   });
 
-  it('asks for the dec forms that are still missing, linking to the form for that team', async () => {
+  it('asks for the dec forms that are still missing, with Fill in on the row', async () => {
     responses['/trainer/my-teams'] = [
       team(1, { competitionId: 4, displayName: 'Stockport C', needsDeclaration: true }),
       team(2, { competitionId: 4, displayName: 'Stockport D', needsDeclaration: false }),
@@ -347,55 +349,90 @@ describe('ProfilePage: needs you', () => {
     ];
     mount({ roles: ['Trainer'] });
     const needs = await needsSection();
-    const row = needs.getByRole('link', { name: /Dec form needed: Stockport C/ });
-    expect(row).toHaveAttribute('href', '/competitions/4/declarations?team=1');
+    expect(needs.getByText('Dec form to send')).toBeInTheDocument();
+    expect(needs.getByRole('link', { name: /Fill in.*Stockport C/ })).toHaveAttribute('href', '/competitions/4/declarations?team=1');
     expect(needs.queryByText(/Stockport D/)).not.toBeInTheDocument();
-    expect(needs.getByText('1', { selector: 'span' })).toBeInTheDocument();
+    expect(needs.getByText('1', { selector: 'small' })).toBeInTheDocument();
   });
 
   it('counts approvals and missing dec forms together', async () => {
     responses['/trainer/my-teams'] = [team(1, { competitionId: 4, needsDeclaration: true })];
     mount({ roles: ['Manager'] });
     const needs = await needsSection();
-    await needs.findByText('Sam Lee');
-    expect(needs.getByText('3', { selector: 'span' })).toBeInTheDocument();
+    await needs.findByText('Sam Lee', { selector: '.sp-t1' });
+    expect(needs.getByText('3', { selector: 'small' })).toBeInTheDocument();
   });
-});
 
-describe('ProfilePage: the dashboard', () => {
-  it('gives an admin quick actions, today’s events and the site admin sections on one page', async () => {
-    responses['/competitions/picker'] = { items: [{ id: 4, name: 'Spring Games', startDate: new Date().toISOString(), endDate: null, icon: 'flag' }], hasMore: false };
+  it('asks a rider to pay for an entry that is not paid, with How to pay on the row', async () => {
+    responses['/me/signups'] = [dueEntry, { ...dueEntry, id: 32, status: 1 }, { ...dueEntry, id: 33, isWithdrawn: true }, { ...dueEntry, id: 34, isWaitlist: true }];
+    mount({ roles: ['Member'], clubName: null });
+    const needs = await needsSection();
+    expect(await needs.findByText('Pay for your entry')).toBeInTheDocument();
+    expect(needs.getByText('£40.00')).toBeInTheDocument();
+    expect(needs.getByText('Spring Open · Under 15 Pairs')).toBeInTheDocument();
+    expect(needs.getByRole('link', { name: /How to pay/ })).toHaveAttribute('href', '/competitions/11/details');
+    expect(needs.getAllByRole('link')).toHaveLength(1);
+  });
+
+  it('tells an organiser about unpaid entries, flagged dec forms and payouts that are not ready', async () => {
+    responses['/competitions/picker'] = { items: [pickerItem(4)], hasMore: false };
+    responses['/competitions/4/signups'] = [{ status: 0 }, { status: 1 }, { status: 0 }];
+    responses['/competitions/4/dec-form-flags'] = [{ teamId: 3 }];
+    responses['/clubs/7/payouts/summary'] = { ready: false };
     mount({ roles: ['Admin'] });
-    expect(screen.getByRole('heading', { name: 'Site admin' })).toBeInTheDocument();
-    const quick = section('Quick actions');
-    expect(quick.getByRole('link', { name: /Create competition/ })).toHaveAttribute('href', '/admin/competitions/new');
-    expect(await quick.findByRole('link', { name: /Score now/ })).toHaveAttribute('href', '/competitions/4/scoring');
-    expect(quick.getByRole('link', { name: /Rules library/ })).toHaveAttribute('href', '/admin/rules');
-    expect(await section('Today’s events').findByRole('link', { name: 'Jump in to Spring Games' })).toHaveAttribute('href', '/competitions/4');
-    expect(screen.getByRole('region', { name: 'My club' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
-  });
-
-  it('gives a trainer Create competition but no site admin or events list', () => {
-    mount({ roles: ['Trainer'] });
-    expect(screen.queryByRole('heading', { name: 'Site admin' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Today’s events' })).not.toBeInTheDocument();
-    expect(section('Quick actions').getByRole('link', { name: /Create competition/ })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /Rules library/ })).not.toBeInTheDocument();
-  });
-
-  it('gives a plain member neither', () => {
-    mount({ roles: ['Member'] });
-    expect(screen.queryByRole('region', { name: 'Quick actions' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Site admin' })).not.toBeInTheDocument();
+    const needs = await needsSection();
+    expect(await needs.findByText('Entries not paid')).toBeInTheDocument();
+    expect(await needs.findByText('Dec form flagged')).toBeInTheDocument();
+    expect(await needs.findByText('Payouts aren’t set up')).toBeInTheDocument();
+    expect(needs.getByRole('link', { name: /Set up/ })).toHaveAttribute('href', '/me/payouts');
+    expect(needs.getAllByRole('link', { name: /Open/ }).map((a) => a.getAttribute('href'))).toEqual(['/competitions/4/details', '/competitions/4/declarations']);
   });
 });
 
+describe('ProfilePage: organiser', () => {
+  it('gives an admin Your competitions, Site admin and a grey Create a competition bar', async () => {
+    responses['/competitions/picker'] = { items: [pickerItem(4), pickerItem(5)], hasMore: false };
+    mount({ roles: ['Admin'] });
+    const organiser = section('Organiser');
+    expect(organiser.getByRole('link', { name: /Your competitions/ })).toHaveAttribute('href', '/admin/competitions');
+    expect(await organiser.findByText('2 coming up')).toBeInTheDocument();
+    expect(organiser.getByRole('link', { name: /Site admin/ })).toHaveAttribute('href', '/admin');
+    const create = organiser.getByRole('link', { name: 'Create a competition' });
+    expect(create).toHaveAttribute('href', '/admin/competitions/new');
+    expect(create).toHaveClass('sp-add');
+  });
 
-describe('ProfilePage: your teams today', () => {
-  it('shows the session, heat, lane and delay below Needs you', async () => {
-    const today = new Date();
-    const at = (h: number, m: number) => new Date(today.getFullYear(), today.getMonth(), today.getDate(), h, m).toISOString();
+  it('gives a trainer the card without Site admin, counting only the events they run', async () => {
+    responses['/competitions/picker'] = { items: [pickerItem(4), pickerItem(5)], hasMore: false };
+    responses['/competitions/access'] = [{ competitionId: 4, owner: true }];
+    mount({ roles: ['Trainer'] });
+    const organiser = section('Organiser');
+    expect(organiser.queryByRole('link', { name: /Site admin/ })).not.toBeInTheDocument();
+    expect(organiser.getByRole('link', { name: /Your competitions/ })).toHaveAttribute('href', '/events');
+    expect(await organiser.findByText('1 coming up')).toBeInTheDocument();
+    expect(organiser.getByRole('link', { name: 'Create a competition' })).toBeInTheDocument();
+  });
+
+  it('gives a plain member and a team manager no organiser card', () => {
+    mount({ roles: ['Member'] });
+    expect(screen.queryByRole('region', { name: 'Organiser' })).not.toBeInTheDocument();
+  });
+});
+
+describe('ProfilePage: today', () => {
+  it('shows the events running today, with a LIVE chip when a heat is on', async () => {
+    responses['/competitions/picker'] = { items: [pickerItem(4, { name: 'Spring Games', live: { sectionName: 'Under 12', heatLabel: 'Heat 1', arenaName: 'Main Arena' } }), pickerItem(5, { name: 'Autumn Cup', location: 'Stoneleigh Park' })], hasMore: false };
+    responses['/trainer/my-teams'] = [];
+    mount({ roles: ['Member'], clubName: null });
+    const todaySection = await screen.findByRole('region', { name: 'Today' });
+    const live = within(todaySection).getByRole('link', { name: /Spring Games/ });
+    expect(live).toHaveAttribute('href', '/competitions/4');
+    expect(live).toHaveTextContent('Under 12 · Heat 1 · Main Arena on now');
+    expect(within(live).getByText('LIVE')).toBeInTheDocument();
+    expect(within(todaySection).getByRole('link', { name: /Autumn Cup/ })).toHaveTextContent('Stoneleigh Park');
+  });
+
+  it('shows the session, heat, lane and delay of my teams, below Needs you', async () => {
     responses['/trainer/my-teams'] = [team(1, { competitionId: 4, displayName: 'Example Club A', sectionName: 'Open', relationship: 'trainer' })];
     responses['/competitions/4'] = competition({ id: 4, startDate: at(9, 0), sessions: [session(1, {
       name: 'Open session', scheduledStart: at(9, 0), startedAt: at(9, 10), status: 1,
@@ -403,11 +440,11 @@ describe('ProfilePage: your teams today', () => {
     })] });
     responses['/declaration-forms'] = [];
     mount({ roles: ['Admin'] });
-    const todaySection = await screen.findByRole('region', { name: 'Your teams today' });
-    expect(todaySection).toHaveTextContent('09:10');
-    expect(todaySection).toHaveTextContent('Open session · Heat 1 · Lane 3 · +10 min');
-    expect(within(todaySection).getByRole('link')).toHaveAttribute('href', '/competitions/4/teams/1');
+    const teamsToday = await screen.findByRole('region', { name: 'Your teams today' });
+    expect(teamsToday).toHaveTextContent('09:10');
+    expect(teamsToday).toHaveTextContent('Open session · Heat 1 · Lane 3 · +10 min');
+    expect(within(teamsToday).getByRole('link')).toHaveAttribute('href', '/competitions/4/teams/1');
     const needs = await screen.findByRole('region', { name: 'Needs you' });
-    expect(needs.compareDocumentPosition(todaySection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(needs.compareDocumentPosition(teamsToday) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

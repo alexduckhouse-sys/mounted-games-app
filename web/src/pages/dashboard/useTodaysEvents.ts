@@ -12,6 +12,8 @@ export interface TodaysEvents {
   today: CompetitionPickerItem[];
   /** Running today or starting within the next seven days, soonest first. */
   week: CompetitionPickerItem[];
+  /** Every competition still to come or running, soonest first (the first page the picker returns). */
+  upcoming: CompetitionPickerItem[];
   /** The event quick actions point at: one with a heat on now, else the first today, else the first this week. */
   focus: CompetitionPickerItem | null;
 }
@@ -43,6 +45,6 @@ export function useTodaysEvents(enabled = true): TodaysEvents {
       return start > now.getTime() && start - now.getTime() <= WEEK_MS;
     });
     const focus = today.find((item) => item.live) ?? today[0] ?? week[0] ?? null;
-    return { loaded: items != null || failed, today, week, focus };
+    return { loaded: items != null || failed, today, week, upcoming: all, focus };
   }, [items, failed, now]);
 }

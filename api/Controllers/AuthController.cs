@@ -443,6 +443,71 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// Changes the signed-in person's own name (their sign-in email stays as it is). The shared admin account
+    /// takes its name from the sign-in, so it is refused.
+    /// </summary>
+    [HttpPut("me")]
+    [Authorize]
+    public async Task<ActionResult<UserProfile>> UpdateMe(UpdateMyProfileRequest req)
+    {
+        var user = await _users.GetUserAsync(User);
+        if (user is null) return Unauthorized();
+        if (string.Equals(user.Email, "admin@mg.local", StringComparison.OrdinalIgnoreCase))
+            return Conflict(new { message = "This shared account takes its name from how you sign in, so it can't be changed here." });
+
+        var name = (req.FullName ?? string.Empty).Trim();
+        if (name.Length == 0)
+            return BadRequest(new { message = "Enter your name." });
+        if (name.Length > 100)
+            return BadRequest(new { message = "Your name must be 100 characters or fewer." });
+
+        user.FullName = name;
+        var saved = await _users.UpdateAsync(user);
+        if (!saved.Succeeded) return StatusCode(500, new { message = "Could not save your name. Try again." });
+
+        var roles = await _users.GetRolesAsync(user);
+        var club = user.ClubId.HasValue ? await _db.Clubs.FindAsync(user.ClubId.Value) : null;
+        return new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club?.Name, roles.ToList(), user.EmailConfirmed);
+    }
+
+    /// <summary>
+    /// Changes the signed-in person's own password. Needs the current one; a wrong guess counts towards the same
+    /// lockout as signing in, so this can't be used to guess it. Other signed-in devices keep their tokens until
+    /// those expire (tokens aren't tied to the password), so an account that may be stolen should also be locked
+    /// by an administrator.
+    /// </summary>
+    [EnableRateLimiting("auth")]
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword(ChangePasswordRequest req)
+    {
+        var user = await _users.GetUserAsync(User);
+        if (user is null) return Unauthorized();
+
+        // The shared admin signs in with the admin key and has no password of its own to change.
+        if (string.Equals(user.Email, "admin@mg.local", StringComparison.OrdinalIgnoreCase) || !await _users.HasPasswordAsync(user))
+            return Conflict(new { message = "This account signs in without a password, so there's none to change." });
+        if (string.IsNullOrEmpty(req.CurrentPassword))
+            return BadRequest(new { message = "Enter your current password." });
+        if (string.IsNullOrEmpty(req.NewPassword))
+            return BadRequest(new { message = "Enter a new password." });
+
+        var check = await _signIn.CheckPasswordSignInAsync(user, req.CurrentPassword, lockoutOnFailure: true);
+        if (check.IsLockedOut)
+            return BadRequest(new { message = "Too many wrong passwords. Try again in a few minutes." });
+        if (!check.Succeeded)
+            return BadRequest(new { message = "Your current password isn't right." });
+
+        if (req.NewPassword == req.CurrentPassword)
+            return BadRequest(new { message = "Choose a different password from your current one." });
+
+        var result = await _users.ChangePasswordAsync(user, req.CurrentPassword, req.NewPassword);
+        if (!result.Succeeded)
+            return BadRequest(new { message = string.Join(" ", result.Errors.Select(e => e.Description)) });
+        return NoContent();
+    }
+
+    /// <summary>
     /// Opens the link from the confirmation email. No sign-in needed. A wrong user, a wrong or old token and an
     /// expired one all get the same answer, so it can't be used to find out who has an account.
     /// </summary>
