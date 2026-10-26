@@ -20,7 +20,7 @@ import { enqueue, placingsOf, type QueuedScore } from '../offline/scoreOutbox';
 import { nextRoundLanes } from '../lib/nextRoundLanes';
 import { sessionPointsBase, withQueuedResults } from '../lib/queuedView';
 import { dropDrafts, pushUndo, undoSave, type UndoEntry } from '../lib/scoreUndo';
-import { overridePoints, nextRaceToScore, placesFromResults, tapTeam, toggleEliminated } from '../lib/raceScoring';
+import { clearDeadHeat, markDeadHeat, overridePoints, nextRaceToScore, placesFromResults, tapTeam, toggleEliminated } from '../lib/raceScoring';
 import { displayLaneFor, lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './competition/laneRules';
 import { HEAT_SAVED, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
 import { browserPublisherDependencies, createStreamPublisher, type PublisherSnapshot } from '../live/streamPublisher';
@@ -942,6 +942,8 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
           onReset={() => change([])}
           onSubmit={submit}
               onOverridePoints={(teamId, points, reason) => change(overridePoints(shown, teamId, points, reason))}
+              onDeadHeat={(teamIds) => change(markDeadHeat(shown, teamIds))}
+              onClearDeadHeat={(teamId) => change(clearDeadHeat(shown, teamId))}
           onUndo={canUndo ? undo : undefined}
           undoLabel={lastUndo?.kind === 'save' ? 'Undo last save' : 'Undo'}
           allowReasons

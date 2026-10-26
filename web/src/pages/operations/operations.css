@@ -245,3 +245,8 @@
 /* On the day tools (tack, passport, print, people and QR codes, results): tight headings with no line under them. Tack, passport, print and results also run their lists edge to edge like the event's Details page, with no line above or below; people and QR codes keep cards. */
 .ops-tools .rf-sec { border-bottom: 0; margin-top: 4px; }
 .ops-flat .rf-list { margin-inline: -16px; border: 0; border-radius: 0; box-shadow: none; }
+
+/* An unpaid bank-transfer entry: an amber badge and a one-tap Mark paid under the row. */
+.ops-pending { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 0 16px 12px; background: rgb(var(--mg-surface)); }
+.ops-badge-pending { display: inline-flex; align-items: center; min-height: 26px; padding: 0 10px; border-radius: 999px; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); font: 700 12.5px/1 var(--mg-font); letter-spacing: .02em; white-space: nowrap; }
+.ops-markpaid { margin-left: auto; }

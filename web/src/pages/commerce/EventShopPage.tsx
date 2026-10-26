@@ -48,6 +48,9 @@ function EventShopContent() {
   const [order, setOrder] = useState<EventOrder | null>(null);
   const [view, setView] = useState<View>('shop');
   const orderAttempt = useRef<{ basketSignature: string; idempotencyKey: string } | null>(null);
+  // The order button at the foot of the list; the sticky basket bar scrolls to it and steps aside while it is on screen.
+  const orderButton = useRef<HTMLElement | null>(null);
+  const [orderVisible, setOrderVisible] = useState(false);
 
   const load = useCallback(() =>
     Promise.all([
@@ -71,6 +74,23 @@ function EventShopContent() {
   const estimatedTotal = basketLines.reduce((total, line) => total + line.listing.priceMinor * line.quantity, 0);
   const basketCount = basketLines.reduce((total, line) => total + line.quantity, 0);
   const isDemo = settings?.isDemo ?? false;
+  const hasBasket = basketLines.length > 0;
+
+  useEffect(() => {
+    const target = orderButton.current;
+    if (!hasBasket || !target || typeof IntersectionObserver === 'undefined') return;
+    const watcher = new IntersectionObserver(([entry]) => setOrderVisible(entry.isIntersecting));
+    watcher.observe(target);
+    return () => { watcher.disconnect(); setOrderVisible(false); };
+  }, [hasBasket, view]);
+
+  function showOrderButton() {
+    const target = orderButton.current;
+    if (!target) return;
+    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches || document.documentElement.dataset.lite === 'true';
+    target.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'center' });
+    target.focus({ preventScroll: true });
+  }
 
   function changeQuantity(listing: PublicCompetitionListing, next: number) {
     if (busy) return;
@@ -163,7 +183,7 @@ function EventShopContent() {
     .filter((group) => group.items.length > 0);
   const orderLabel = `Order: ${feeText(estimatedTotal)}`;
   return (
-    <div className="rf-page mx-auto flex w-full max-w-xl flex-col pb-2 pt-3">
+    <div className={`rf-page mx-auto flex w-full max-w-xl flex-col pt-3 ${hasBasket ? 'pb-24' : 'pb-2'}`}>
       <ShopHeader />
       <div className="sp-seg" role="navigation" aria-label="Shop switcher">
         <Link to={`/competitions/${competition.id}/shop`} aria-current="page">Event shop</Link>
@@ -204,15 +224,24 @@ function EventShopContent() {
           </ul>
         </section>
       ))}
-      {basketLines.length > 0 && (user ? (
-        <button type="button" className="ev-bar" disabled={busy} onClick={() => void checkout()}>{busy ? 'Placing order…' : orderLabel}</button>
+      {hasBasket && (user ? (
+        <button type="button" ref={(node) => { orderButton.current = node; }} className="ev-bar" disabled={busy} onClick={() => void checkout()}>{busy ? 'Placing order…' : orderLabel}</button>
       ) : (
-        <Link className="ev-bar" to="/login" state={{ from: `/competitions/${competition.id}/shop` }}>Sign in to order</Link>
+        <Link ref={(node) => { orderButton.current = node; }} className="ev-bar" to="/login" state={{ from: `/competitions/${competition.id}/shop` }}>Sign in to order</Link>
       ))}
       {orderError && <div className="mt-3"><Notice actionLabel="Try again" onAction={() => void checkout()} actionDisabled={busy}>{orderError}</Notice></div>}
       {isDemo && basketLines.length > 0 && <p className="sp-note">This is a demo event. Next you will see a test payment page, and no money is taken.</p>}
       {user && <div className="pt-1"><Link className="ev-text-btn" to="/me/orders">Your orders</Link></div>}
       <p className="sp-note">MG App connects buyers with independent sellers; your purchase contract is directly with the seller listed on each item.</p>
+      {hasBasket && !orderVisible && (
+        <div className="shop-basket-bar" role="region" aria-label="Your basket">
+          <span className="shop-basket-text">
+            <span className="shop-basket-count">{itemsText(basketCount)}</span>
+            <span className="shop-basket-total">{feeText(estimatedTotal)}</span>
+          </span>
+          <button type="button" className="kit-pill kit-pill-fill" onClick={showOrderButton}>Checkout</button>
+        </div>
+      )}
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, CloudOff, MoreHorizontal, Printer, Trash2, U
 import { hatbandFor, inLaneOrder } from '../../lib/laneOrder';
 import { describePlacings, type QueuedScore } from '../../offline/scoreOutbox';
 import type { NextLanes } from '../../lib/nextRoundLanes';
-import { manualPoints, type PendingPlace } from '../../lib/raceScoring';
+import { deadHeatPoints, deadHeatSize, isDeadHeat, manualPoints, type PendingPlace } from '../../lib/raceScoring';
 import { pointsForPlace } from '../../lib/queuedView';
 import { summariseRace } from '../../lib/raceSummary';
 import { afterRed, afterYellow, stepPoints, type CardMark } from '../../lib/refereeCards';
@@ -13,7 +13,7 @@ import { getSortByLaneOrder, PREFS_CHANGED_EVENT } from '../../lib/userPrefs';
 import { TieBreakRule, type Heat, type Race } from '../../types';
 import { displayLaneFor, sitsOutOf, type LaneRules } from './laneRules';
 import {
-  EliminationSheet, HeatGrid, NextLanesCard, RaceControlsPanel, ScoreRow, SummaryCard,
+  EliminationSheet, HOLD_ELIMINATE_MS, HeatGrid, NextLanesCard, RaceControlsPanel, ScoreRow, SummaryCard,
   type ScoreOverrideValue,
 } from './ScoringParts';
 import { RaceToolsSheet, type ToolLink, type ToolTeam } from './RaceToolsSheet';
@@ -57,6 +57,10 @@ interface ScoringProps {
   onSetCard?: (teamId: number, card: CardMark) => Promise<void> | void;
   /** Called when a scorer changes a team's points by hand in race tools. */
   onOverridePoints?: (teamId: number, points: number | undefined, reason?: string) => void;
+  /** Mark these teams as a dead heat (same place, shared points). Without it race tools has no Dead heat switch. */
+  onDeadHeat?: (teamIds: number[]) => void;
+  /** Split a dead heat that the team is part of. */
+  onClearDeadHeat?: (teamId: number) => void;
   /** How teams level on points are ordered in the summary. */
   tieRule?: TieBreakRule;
   /** Private reasons already saved for the finished races, by team, for the summary. */
@@ -93,7 +97,7 @@ async function attempt(action: () => Promise<void> | void): Promise<void> {
 export function ScoringSection({
   heat, races, activeRace, onSelectRace, sessionBase, laneRules, qualifiers, pending, canScore, queued,
   onClickTeam, onToggleElim, onReset, onSubmit, correctionReason, onCorrectionReason, allowAudit = false,
-  onUndo, undoLabel = 'Undo', allowReasons = false, hcTeamIds = NO_TEAMS, onSetHc, cards, onSetCard, onOverridePoints,
+  onUndo, undoLabel = 'Undo', allowReasons = false, hcTeamIds = NO_TEAMS, onSetHc, cards, onSetCard, onOverridePoints, onDeadHeat, onClearDeadHeat,
   tieRule = TieBreakRule.Countback, notes = {}, nextLanes = null, laneHatbands = null, onRefresh,
   teamFacts, factsOn, onToggleFacts, toolLinks = NO_LINKS,
   onAddRace, onRenameRace, onRerunRace, runoffTeams, onPickRunoffWinner,
@@ -127,7 +131,7 @@ export function ScoringSection({
     const overrides: Record<number, ScoreOverrideValue> = {};
     for (const place of pending) {
       const points = manualPoints(place.refereeNote, place.points);
-      if (points !== undefined) overrides[place.teamId] = { points, reason: place.refereeNote?.replace(/\[pts:[^\]]*\]/gi, '').trim() };
+      if (points !== undefined) overrides[place.teamId] = { points, reason: place.refereeNote?.replace(/\[pts:[^\]]*\]/gi, '').replace(/\[dead-heat\]/gi, '').trim() };
     }
     return overrides;
   }, [pending]);
@@ -203,7 +207,8 @@ export function ScoringSection({
       && savedResult.eliminated === state?.eliminated
       && (savedResult.placing ?? 0) === (state?.place ?? 0)) return savedResult.points;
     if (state?.eliminated) return 0;
-    return state?.place ? pointsFor(state.place, false) : 0;
+    if (!state?.place) return 0;
+    return deadHeatPoints((place) => pointsFor(place, false), state.place, deadHeatSize(pending, teamId));
   }
 
   const toolTeams: ToolTeam[] = rows.map((e) => {
@@ -221,6 +226,9 @@ export function ScoringSection({
       byHand,
       card: cardsByTeam[e.teamId] ?? null,
       hc: hcTeamIds.has(e.teamId),
+      eliminated: pendingByTeam.get(e.teamId)?.eliminated ?? false,
+      sitting,
+      deadHeat: isDeadHeat(pendingByTeam.get(e.teamId)),
     };
   });
 
@@ -301,6 +309,7 @@ export function ScoringSection({
               })}
             </ul>
 
+            {live && <p className="sc-hint sc-hint-quiet">Hold a lane for {HOLD_ELIMINATE_MS / 1000} s to eliminate</p>}
             {live && editing && <p className="sc-hint">Saving again replaces this race’s points.</p>}
             {live && isQualifier && <p className="sc-hint">The first {qualifiers} home go through; the rest score 1 point each.</p>}
 
@@ -416,6 +425,9 @@ export function ScoringSection({
           onYellow={(teamId) => { void attempt(() => onSetCard?.(teamId, afterYellow(cardsByTeam[teamId] ?? null))); }}
           onRed={(teamId) => { void attempt(() => onSetCard?.(teamId, afterRed(cardsByTeam[teamId] ?? null))); }}
           onStepPoints={stepTeam}
+          onEliminate={live ? onToggleElim : undefined}
+          onDeadHeat={live ? onDeadHeat : undefined}
+          onClearDeadHeat={live ? onClearDeadHeat : undefined}
           factsOn={factsOn}
           onToggleFacts={onToggleFacts}
           links={links}

@@ -318,3 +318,22 @@ it('applies compact many-race styling and two-line wrapping when a heat has 6 or
   const teamSpan = screen.getByText('Northamptonshire Valiant Riders');
   expect(teamSpan).toHaveClass('heat-team-name', 'heat-team-name-long');
 });
+
+it('marks one team\'s row, drops the card and ignores ?heat= when told to', () => {
+  const first = heat(4, { sessionId: 4, orderIndex: 0, label: 'Heat 1', entries: [{ id: 4, teamId: 1, teamName: 'Oak A', laneIndex: 1 }, { id: 5, teamId: 2, teamName: 'Elm B', laneIndex: 2 }] });
+  const second = heat(5, { sessionId: 4, orderIndex: 1, label: 'Heat 2', entries: [{ id: 6, teamId: 3, teamName: 'Ash C', laneIndex: 1 }] });
+  const shownSession = session(4, { sectionName: 'Teams Seniors', heats: [first, second] });
+  state.competition = competition({ name: 'Autumn Games', startDate: '2026-10-16', sessions: [shownSession] });
+  render(
+    <MemoryRouter initialEntries={['/?heat=5']}>
+      <HeatScores session={shownSession} heats={[first, second]} activeHeatId={4} embedded bare ignoreUrlHeat highlightTeamId={2} />
+    </MemoryRouter>,
+  );
+  const rows = screen.getAllByRole('row');
+  const mine = rows.filter((row) => row.classList.contains('heat-row-me'));
+  expect(mine).toHaveLength(1);
+  expect(mine[0]).toHaveTextContent('Elm B');
+  expect(mine[0]).toHaveAttribute('aria-current', 'true');
+  expect(screen.queryByText('Ash C')).toBeNull();
+  expect(screen.getByRole('region', { name: 'Scores' })).not.toHaveClass('mg-card');
+});

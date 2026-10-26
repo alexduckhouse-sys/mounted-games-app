@@ -1,6 +1,9 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { ChangePop } from '../../components/ChangePop';
 import { ChevronDown } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
+import { LeavingRow } from '../../components/LeavingRow';
+import { feeText } from '../../lib/entryOptions';
 import { api } from '../../api';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
@@ -165,6 +168,7 @@ export function EntriesPage() {
           <Fragment key={sectionId}>
             <RefineSection title={group.name} />
             <RefineList as="div" label={group.name}>
+              <AnimatePresence initial={false}>
               {group.teams.map((team) => {
                 const mine = live.filter((s) => s.teamId === team.teamId);
                 const paid = mine.length > 0 && mine.every((s) => s.status === 1);
@@ -173,19 +177,28 @@ export function EntriesPage() {
                 const out = team.status !== 0;
                 const tag = out ? { text: 'Withdrawn', tone: 'mut' } : !form ? { text: 'Missing', tone: 'mut' } : flags.length > 0 ? { text: 'Flagged', tone: 'warn' } : { text: 'Received', tone: 'ok' };
                 const isOpen = open === team.teamId;
+                const pending = !out && mine.length > 0 && !paid;
+                const owed = mine.filter((s) => s.status === 0).reduce((sum, s) => sum + s.amountMinor, 0);
                 return (
-                  <div key={team.teamId}>
+                  <LeavingRow as="div" key={team.teamId}>
                     <button type="button" className="rf-row ops-entry-row" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : team.teamId)}>
                       <span className="rf-grow">
                         <span className="rf-t1">{team.teamName}</span>
                         <span className="rf-t2">
-                          {mine.length > 0 && <span className={paid ? 'ops-paid' : 'ops-unpaid'}><ChangePop value={paid ? 'Paid' : 'Not paid'} tick={paid}>{paid ? 'Paid' : 'Not paid'}</ChangePop></span>}
-                          {mine.length > 0 && form ? ' · ' : ''}{form ? `Form in ${whenText(form.submittedAt)}` : ''}
+                          {mine.length > 0 && !pending && <span className={paid ? 'ops-paid' : 'ops-unpaid'}><ChangePop value={paid ? 'Paid' : 'Not paid'} tick={paid}>{paid ? 'Paid' : 'Not paid'}</ChangePop></span>}
+                          {mine.length > 0 && !pending && form ? ' · ' : ''}{form ? `Form in ${whenText(form.submittedAt)}` : ''}
                         </span>
                       </span>
                       <span className={`rf-st rf-${tag.tone}`}>{tag.text}</span>
                       <ChevronDown className={`rf-chev rf-chev-down h-4 w-4 ${isOpen ? 'ops-flip' : ''}`} aria-hidden="true" />
                     </button>
+                    {pending && (
+                      <div className="ops-pending">
+                        <span className="ops-badge-pending">Pending payment</span>
+                        {owed > 0 && <span className="rf-t2">{feeText(owed)} by bank transfer</span>}
+                        <button type="button" className="rf-btn rf-btn-primary ops-markpaid" disabled={busy} aria-label={`Mark ${team.teamName} paid`} onClick={() => void setPaid(team, true)}>Mark paid</button>
+                      </div>
+                    )}
                     {isOpen && (
                       <div className="ops-entry-body">
                         {mine.length > 0 && (
@@ -207,9 +220,10 @@ export function EntriesPage() {
                         </div>
                       </div>
                     )}
-                  </div>
+                  </LeavingRow>
                 );
               })}
+              </AnimatePresence>
             </RefineList>
           </Fragment>
         ))}
@@ -244,13 +258,15 @@ function FormView({ form, flags }: { form: DeclarationForm; flags: string[] }) {
       {flags.map((text) => <Notice key={text} role="status">{text}</Notice>)}
       <p className="rf-t1">Trainer: {form.trainerName ?? form.submittedByName ?? 'not given'}</p>
       <ol className="ops-riders">
-        {riders.map((rider, i) => (
-          <li key={rider.id}>
-            <span className="ops-race-n">{i + 1}</span>
-            <span className="rf-grow"><span className="rf-t1">{rider.fullName}</span><span className="rf-t2">{rider.horseName ?? ''}</span></span>
-            <span className="rf-t2 ops-facts">{[rider.ponyHeightHands != null ? `${heightText(rider.ponyHeightHands)} hh` : '', ageOf(rider)].filter(Boolean).join(' · ')}</span>
-          </li>
-        ))}
+        <AnimatePresence initial={false}>
+          {riders.map((rider, i) => (
+            <LeavingRow key={rider.id}>
+              <span className="ops-race-n">{i + 1}</span>
+              <span className="rf-grow"><span className="rf-t1">{rider.fullName}</span><span className="rf-t2">{rider.horseName ?? ''}</span></span>
+              <span className="rf-t2 ops-facts">{[rider.ponyHeightHands != null ? `${heightText(rider.ponyHeightHands)} hh` : '', ageOf(rider)].filter(Boolean).join(' · ')}</span>
+            </LeavingRow>
+          ))}
+        </AnimatePresence>
       </ol>
       {form.notes && <p className="rf-t2">{form.notes}</p>}
     </div>

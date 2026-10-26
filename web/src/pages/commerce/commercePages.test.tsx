@@ -110,6 +110,26 @@ describe('EventShopPage', () => {
     expect(screen.getByText(/Pay the organiser using their usual payment details/)).toBeInTheDocument();
   });
 
+  it('shows a sticky basket bar once there is something in the basket, and Checkout takes you to the order button', async () => {
+    shopGet(manualSettings, [{ ...listing, id: 11, title: 'Pony hay', stockQuantity: 9, priceMinor: 1600, category: 0 }]);
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    render(<MemoryRouter><EventShopPage /></MemoryRouter>);
+    await screen.findByText('Pony hay');
+    expect(screen.queryByRole('region', { name: 'Your basket' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Add one Pony hay' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add one Pony hay' }));
+    const bar = screen.getByRole('region', { name: 'Your basket' });
+    expect(bar).toHaveTextContent('2 items');
+    expect(bar).toHaveTextContent('£32');
+    await userEvent.click(within(bar).getByRole('button', { name: 'Checkout' }));
+    expect(scrollIntoView).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Order: £32' })).toHaveFocus();
+    await userEvent.click(screen.getByRole('button', { name: 'Remove one Pony hay' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Remove one Pony hay' }));
+    expect(screen.queryByRole('region', { name: 'Your basket' })).not.toBeInTheDocument();
+  });
+
   it('marks sold-out items and lets the quantity stepper change the basket', async () => {
     shopGet(manualSettings, [{ ...listing, stockQuantity: 0 }, { ...listing, id: 11, title: 'Pony hay', stockQuantity: 3, category: 0 }]);
     render(<MemoryRouter><EventShopPage /></MemoryRouter>);
