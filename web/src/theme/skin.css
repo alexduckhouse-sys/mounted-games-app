@@ -40,6 +40,7 @@
   --mg-toast-ink: 255 255 255;
   --mg-toast-tick: 31 107 67;
   --mg-danger: 200 32 47;
+  --mg-warn: 217 119 6;
   --mg-font: 'Barlow', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --mg-font-display: 'Barlow Condensed', 'Arial Narrow', system-ui, -apple-system, sans-serif;
   --mg-radius-card: 12px;
@@ -54,6 +55,8 @@
   --mg-header-bg: var(--mg-header);
   --mg-header-ink: 255 255 255;
   --mg-button-ink: 255 255 255;
+  /* Solid fills with text on them use --mg-button/--mg-button-ink (at least 7:1 in every theme), never --mg-heading,
+     which is pale ice-blue in Stable Night. Solid red fills with text use --mg-danger; --mg-elim is for red text. */
 }
 [data-theme="light"] {
   --mg-ground: 244 248 245;
@@ -71,7 +74,7 @@
   --mg-ground: 240 248 255;
   --mg-tint: 219 238 252;
   --mg-heading: 7 89 133;
-  --mg-button: 3 105 161;
+  --mg-button: 7 89 133;
   --mg-header: 3 105 161;
   --mg-header-deep: 7 77 117;
   --mg-header-line: 56 140 190;
@@ -83,7 +86,7 @@
   --mg-ground: 255 248 240;
   --mg-tint: 254 232 210;
   --mg-heading: 154 52 18;
-  --mg-button: 194 65 12;
+  --mg-button: 154 52 18;
   --mg-header: 154 52 18;
   --mg-header-deep: 124 45 18;
   --mg-header-line: 196 104 70;
@@ -409,8 +412,8 @@ a.mg-line:active, button.mg-line:active { background: rgb(var(--mg-tint) / .65);
 .btn-primary:hover:not(:disabled), .skin .btn-primary:hover:not(:disabled) { background: rgb(var(--mg-button)); filter: brightness(1.12); }
 .btn-ghost, .skin .btn-ghost { background: rgb(var(--mg-surface)); border: 1.5px solid rgb(var(--mg-control)); color: rgb(var(--mg-heading)); }
 .btn-ghost:hover:not(:disabled), .skin .btn-ghost:hover:not(:disabled) { background: rgb(var(--mg-surface)); border-color: rgb(var(--mg-heading)); }
-.btn-danger, .skin .btn-danger { background: rgb(var(--mg-elim)); border: 1.5px solid rgb(var(--mg-elim)); color: #fff; }
-.btn-danger:hover:not(:disabled), .skin .btn-danger:hover:not(:disabled) { background: rgb(var(--mg-elim)); filter: brightness(1.1); }
+.btn-danger, .skin .btn-danger { background: rgb(var(--mg-danger)); border: 1.5px solid rgb(var(--mg-danger)); color: #fff; }
+.btn-danger:hover:not(:disabled), .skin .btn-danger:hover:not(:disabled) { background: rgb(var(--mg-danger)); filter: brightness(1.1); }
 .input, .skin .input { border-radius: 10px; border: 1.5px solid rgb(var(--mg-control)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); font-family: var(--mg-font); }
 .input:focus, .skin .input:focus { border-color: rgb(var(--mg-heading)); --tw-ring-color: rgb(var(--mg-heading) / .35); }
 
@@ -703,7 +706,7 @@ html[data-lite="true"] .mg-seg > button[aria-pressed="true"] {
 .mg-field .mg-select { border: 0; background: transparent; padding: 0; }
 
 /* Confirmation sheet: see theme/kit.css. */
-.mg-btn-danger { background: rgb(var(--mg-elim)); border-color: rgb(var(--mg-elim)); color: #fff !important; }
+.mg-btn-danger { background: rgb(var(--mg-danger)); border-color: rgb(var(--mg-danger)); color: #fff !important; }
 .mg-btn-danger:hover:not(:disabled) { filter: brightness(1.1); }
 
 

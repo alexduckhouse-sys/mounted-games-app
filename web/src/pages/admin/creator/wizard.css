@@ -20,12 +20,12 @@
 .cw-step { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 6px 10px; border: 0; border-radius: 10px; background: transparent; color: rgb(var(--mg-body)); font: 600 14px/1.2 var(--mg-font); text-align: left; cursor: pointer; }
 .cw-step:hover:not(:disabled) { background: rgb(var(--mg-subtle)); }
 .cw-step:disabled { opacity: .5; cursor: default; }
-.cw-step[aria-current="step"] { background: rgb(var(--mg-heading)); color: #fff; font-weight: 700; }
+.cw-step[aria-current="step"] { background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); font-weight: 700; }
 .cw-drawer .cw-step { border-radius: 0; min-height: 46px; padding: 0 16px; border-bottom: 1px solid rgb(var(--mg-rule-soft)); }
 .cw-drawer .cw-step[aria-current="step"] { background: rgb(var(--mg-tint) / .6); color: rgb(var(--mg-heading)); }
 .cw-badge { flex: none; width: 24px; height: 24px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; border: 2px solid rgb(var(--mg-control)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-muted)); font: 700 12px/1 var(--mg-font); }
 .cw-step[data-done="true"] .cw-badge { background: rgb(var(--mg-ok)); border-color: rgb(var(--mg-ok)); color: #fff; }
-.cw-step[aria-current="step"] .cw-badge { background: #fff; border-color: #fff; color: rgb(var(--mg-heading)); }
+.cw-step[aria-current="step"] .cw-badge { background: rgb(var(--mg-button-ink)); border-color: rgb(var(--mg-button-ink)); color: rgb(var(--mg-button)); }
 .cw-drawer .cw-step[aria-current="step"] .cw-badge { border-color: rgb(var(--mg-heading)); }
 
 /* The bottom bar: Back, "Step N of 10", Next. */
@@ -105,7 +105,7 @@
 .cw-tile { position: relative; flex: 1 1 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 68px; padding: 12px 14px; text-align: left; border-radius: 10px; border: 1.5px solid rgb(var(--mg-border)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); cursor: pointer; }
 .cw-tile[aria-pressed="true"] { padding: 11px 13px; border: 2px solid rgb(var(--mg-heading)); background: rgb(var(--mg-tint) / .5); }
 .cw-tile strong { font: 700 17px/1.1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
-.cw-tick { position: absolute; top: 8px; right: 8px; width: 20px; height: 20px; border-radius: 10px; background: rgb(var(--mg-heading)); color: #fff; display: none; align-items: center; justify-content: center; }
+.cw-tick { position: absolute; top: 8px; right: 8px; width: 20px; height: 20px; border-radius: 10px; background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); display: none; align-items: center; justify-content: center; }
 .cw-tile[aria-pressed="true"] .cw-tick { display: flex; }
 .cw-seg { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: 12px; background: rgb(var(--mg-tint)); }
 .cw-seg button { min-height: 40px; padding: 0 16px; border: 0; border-radius: 8px; background: transparent; color: rgb(var(--mg-body)); font: 700 14px/1 var(--mg-font); white-space: nowrap; cursor: pointer; }
@@ -136,7 +136,7 @@
 .cw-flag img { width: 26px; height: auto; border-radius: 2px; border: 1px solid rgb(0 0 0 / .15); }
 
 /* Hatbands. */
-.cw-lane { flex: none; width: 26px; height: 26px; border-radius: 13px; background: rgb(var(--mg-heading)); color: #fff; display: flex; align-items: center; justify-content: center; font: 700 12px/1 var(--mg-font); }
+.cw-lane { flex: none; width: 26px; height: 26px; border-radius: 13px; background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); display: flex; align-items: center; justify-content: center; font: 700 12px/1 var(--mg-font); }
 .cw-edit { border-top: 1px solid rgb(var(--mg-rule-soft)); background: rgb(var(--mg-subtle)); box-shadow: inset 4px 0 0 rgb(var(--mg-heading)); padding: 4px 16px 12px; }
 .cw-vrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; border-top: 1px solid rgb(var(--mg-rule-soft)); font: 600 16px/1.2 var(--mg-font); color: rgb(var(--mg-ink)); }
 .cw-vrow:first-child { border-top: 0; }

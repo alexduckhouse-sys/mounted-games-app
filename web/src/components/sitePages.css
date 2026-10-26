@@ -121,7 +121,7 @@ a.sp-row:hover, button.sp-row:hover { background: rgb(var(--mg-subtle)); }
 .sp-policy-title { margin: 18px 2px 12px; font: 800 28px/1.05 var(--mg-font-display); color: rgb(var(--mg-heading)); }
 
 /* Signed-in pages (Me, My account, My entries, Dec forms) */
-.sp-ava { flex: none; display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 26px; background: rgb(var(--mg-heading)); color: #fff; font: 800 19px/1 var(--mg-font-display); }
+.sp-ava { flex: none; display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 26px; background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); font: 800 19px/1 var(--mg-font-display); }
 .sp-num { flex: none; min-width: 28px; text-align: center; font: 700 20px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
 .sp-num[data-tone="warn"] { color: rgb(var(--mg-late-ink)); }
 .sp-pill-sm { min-height: 36px; padding: 0 14px; font-size: 14px; }

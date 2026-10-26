@@ -10,7 +10,7 @@
 
 .sx-radio { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 2px solid rgb(var(--mg-border)); background: rgb(var(--mg-surface)); }
 [aria-checked="true"] > .sx-radio { border: 6px solid rgb(var(--mg-heading)); }
-.sx-onair { flex: none; padding: 4px 8px; border-radius: 4px; background: rgb(var(--mg-elim)); color: #fff; font: 800 11px/1 var(--mg-font); letter-spacing: .06em; }
+.sx-onair { flex: none; padding: 4px 8px; border-radius: 4px; background: rgb(var(--mg-danger)); color: #fff; font: 800 11px/1 var(--mg-font); letter-spacing: .06em; }
 
 .sx-addbar { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 52px; margin-top: 12px; border: 0; border-radius: 12px; background: #E9EDF2; color: #17385F; font: 700 16px/1 var(--mg-font); cursor: pointer; }
 .sx-addbar:hover { filter: brightness(.97); }
@@ -23,7 +23,7 @@
 
 .sx-pills { display: flex; flex-wrap: wrap; gap: 6px; }
 .sx-pill { flex: none; min-height: 36px; padding: 0 14px; border: 1.5px solid rgb(var(--mg-heading)); border-radius: 999px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); font: 700 14px/1 var(--mg-font); cursor: pointer; }
-.sx-pill[aria-checked="true"], .sx-pill[aria-pressed="true"] { background: rgb(var(--mg-heading)); color: #fff; }
+.sx-pill[aria-checked="true"], .sx-pill[aria-pressed="true"] { background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); }
 .sx-pill:disabled { opacity: .5; cursor: not-allowed; }
 .sx-row-pills { flex-wrap: wrap; }
 .sx-row-pills .sx-pills { flex: 1 1 100%; }
@@ -31,12 +31,12 @@
 .sx-fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
 .sx-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
 .sx-tile { display: flex; align-items: stretch; min-height: 56px; border: 1.5px solid rgb(var(--mg-rule)); border-radius: 12px; background: rgb(var(--mg-surface)); overflow: hidden; }
-.sx-tile[data-on="true"] { border-color: rgb(var(--mg-heading)); background: rgb(var(--mg-heading)); }
+.sx-tile[data-on="true"] { border-color: rgb(var(--mg-button)); background: rgb(var(--mg-button)); }
 .sx-tile[data-open="true"] { box-shadow: 0 0 0 2px #F2C230; }
 .sx-tile-pick { flex: 1 1 auto; min-width: 0; padding: 0 12px; border: 0; background: transparent; text-align: left; font: 700 16px/1.15 var(--mg-font); color: rgb(var(--mg-heading)); cursor: pointer; }
-.sx-tile[data-on="true"] .sx-tile-pick { color: #fff; }
+.sx-tile[data-on="true"] .sx-tile-pick { color: rgb(var(--mg-button-ink)); }
 .sx-tile-chev { flex: none; width: 40px; border: 0; border-left: 1px solid rgb(var(--mg-rule)); background: transparent; color: rgb(var(--mg-muted)); display: flex; align-items: center; justify-content: center; cursor: pointer; }
-.sx-tile[data-on="true"] .sx-tile-chev { color: #fff; border-left-color: rgb(255 255 255 / .2); }
+.sx-tile[data-on="true"] .sx-tile-chev { color: rgb(var(--mg-button-ink)); border-left-color: rgb(var(--mg-button-ink) / .2); }
 .sx-tile-pick:focus-visible, .sx-tile-chev:focus-visible { outline: 2px solid #F2C230; outline-offset: -2px; }
 .sx-settings { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; padding: 14px; border: 1px solid rgb(var(--mg-rule)); border-radius: 12px; background: rgb(var(--mg-surface)); }
 .sx-opt { display: flex; flex-direction: column; gap: 6px; }
@@ -54,7 +54,7 @@
 .sx-desk-title { margin: 0; font: 700 14px/1.1 var(--mg-font-display); letter-spacing: .05em; text-transform: uppercase; color: rgb(var(--mg-heading)); }
 .sx-desk-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .sx-desk-tile { min-height: 52px; padding: 4px; border: 1.5px solid rgb(var(--mg-border)); border-radius: 10px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); font: 700 13px/1.15 var(--mg-font); cursor: pointer; }
-.sx-desk-tile[aria-checked="true"] { border-color: rgb(var(--mg-heading)); background: rgb(var(--mg-heading)); color: #fff; }
+.sx-desk-tile[aria-checked="true"] { border-color: rgb(var(--mg-button)); background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); }
 .sx-desk-tile:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
 .sx-desk-link { color: rgb(var(--mg-heading)); font: 700 14px/1.2 var(--mg-font); text-decoration: underline; text-underline-offset: 3px; }
 

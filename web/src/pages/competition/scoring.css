@@ -302,7 +302,7 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-.sc-submit-btn:disabled { background: rgb(var(--mg-button) / 0.45); border-color: transparent; color: #fff; }
+.sc-submit-btn:disabled { background: rgb(var(--mg-button) / 0.45); border-color: transparent; color: rgb(var(--mg-button-ink)); }
 .sc-wide-btn { width: 100%; }
 .sc-hint { margin: 8px 2px 0; font: 400 13px/1.35 var(--mg-font); color: rgb(var(--mg-muted)); }
 
@@ -318,7 +318,7 @@
 /* Lane view and next round lanes. */
 .sc-lane-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid rgb(var(--mg-rule-soft)); }
 .sc-lane-item:first-child { border-top: 0; }
-.sc-lane-item .sc-lane { width: 28px; height: 28px; border-radius: 8px; background: rgb(var(--mg-heading)); color: #fff; font-size: 17px; }
+.sc-lane-item .sc-lane { width: 28px; height: 28px; border-radius: 8px; background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); font-size: 17px; }
 
 /* Sheets. */
 .sc-overlay { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; background: rgb(var(--mg-overlay) / .55); animation: sc-fade 160ms cubic-bezier(0.22, 1, 0.36, 1); }
@@ -331,7 +331,7 @@
 .sc-field { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
 .sc-choices { display: flex; flex-wrap: wrap; gap: 6px; }
 .sc-choice { min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1.5px solid rgb(var(--mg-control)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); font: 600 14px/1.1 var(--mg-font); cursor: pointer; }
-.sc-choice[aria-pressed="true"] { background: rgb(var(--mg-button)); border-color: rgb(var(--mg-button)); color: #fff; }
+.sc-choice[aria-pressed="true"] { background: rgb(var(--mg-button)); border-color: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); }
 button.sc-done-name { background: none; border: 0; padding: 0; text-align: left; cursor: pointer; }
 
 /* Score override sheet controls. */
@@ -421,11 +421,11 @@ button.sc-done-name { background: none; border: 0; padding: 0; text-align: left;
   display: grid;
   place-items: center;
   border-radius: 999px;
-  background: rgb(var(--mg-dash));
-  color: #fff;
+  background: rgb(var(--mg-done-bg));
+  color: rgb(var(--mg-muted));
   font: 700 15px/1 var(--mg-font-display);
 }
-.sc-fact { font: 600 12.5px/1.25 var(--mg-font); color: #1F5FBF; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-fact { font: 600 12.5px/1.25 var(--mg-font); color: rgb(var(--mg-heading)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sc-chip { flex: none; display: inline-block; width: 12px; height: 16px; border-radius: 2px; }
 .sc-chip-yellow { background: #F2C230; box-shadow: 0 0 0 1px #C49A12; }
 .sc-chip-red { background: #E12A39; }

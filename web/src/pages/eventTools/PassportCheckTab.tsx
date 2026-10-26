@@ -216,7 +216,7 @@ export function PassportCheckTab({ competitionId }: { competitionId: string }) {
                     </button>
                   </div>
                   {isOpen && (
-                    <div className="mt-2 grid gap-2.5 rounded-xl border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface-muted))]/40 p-3 text-sm sm:grid-cols-2">
+                    <div className="mt-2 grid gap-2.5 rounded-xl border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-subtle))] p-3 text-sm sm:grid-cols-2">
                       <label className="rf-fld">
                         Passport code
                         <input
