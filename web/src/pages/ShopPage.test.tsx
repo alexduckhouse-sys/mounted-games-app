@@ -33,7 +33,14 @@ describe('the shop', () => {
     expect(row).toHaveTextContent('just now');
     expect(row).toHaveTextContent('£120.00');
     expect(screen.getByRole('button', { name: /Bending poles/ })).toHaveTextContent('2 days ago');
-    expect(screen.getByRole('link', { name: 'Sign in to post' })).toHaveAttribute('href', '/login');
+    // Each listing is its own card with a larger photo, and the sell button is a navy pill that leads to sign-in.
+    expect(row.closest('li')).toHaveClass('sp-listing');
+    expect(screen.getAllByRole('img', { name: /No photo/ })[0]).toHaveClass('sp-thumb');
+    const sell = screen.getByRole('link', { name: 'Sell something' });
+    expect(sell).toHaveAttribute('href', '/login');
+    expect(sell).toHaveClass('sp-pill', 'sp-pill-fill');
+    expect(screen.queryByRole('link', { name: 'Sign in to post' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Community noticeboard/)).not.toBeInTheDocument();
   });
 
   it('opens a listing to show the description, contact and comments', async () => {

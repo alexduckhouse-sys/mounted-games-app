@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingBag, Plus, Flag, Trash2, MessageCircle, Lock, X, Send, Image as ImageIcon, Check, Search, ChevronRight } from 'lucide-react';
+import { ShoppingBag, Plus, Flag, Trash2, MessageCircle, Lock, X, Send, Image as ImageIcon, Check, ChevronRight } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { usePageWidth } from '../components/pageWidthState';
 import { usePageHeader } from '../components/CompactPageBarContext';
 import { LazyImage } from '../components/LazyImage';
+import { RoundSearch } from '../components/RoundSearch';
+import '../components/sitePages.css';
 import { NumberField } from '../components/NumberField';
 import { priceLabel } from '../lib/money';
 import type { CompetitionSummary, ShopComment, ShopPost } from '../types';
@@ -40,12 +42,7 @@ export function ShopPage() {
           <button type="button" aria-pressed={tab === 'tack'} onClick={() => setTab('tack')}>Tack and kit</button>
           <button type="button" aria-pressed={tab === 'events'} onClick={() => setTab('events')}>Event shops</button>
         </div>
-        <label className="mg-navy-field">
-          <Search className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
-          <span className="sr-only">Search the shop</span>
-          <input type="search" placeholder={tab === 'tack' ? 'Saddle, bending poles, 13.2…' : 'Event name'} value={query} onChange={(event) => setQuery(event.target.value)} />
-        </label>
-        <p className="text-xs text-[rgb(var(--mg-muted))]">Community noticeboard — purchases are agreed directly between buyer and seller.</p>
+        <RoundSearch band label="Search the shop" placeholder={tab === 'tack' ? 'Saddle, bending poles, 13.2…' : 'Event name'} value={query} onChange={setQuery} />
       </div>
       {tab === 'tack' ? <ShopClassifieds query={query} floatingSell intro="" /> : <EventShopLinks query={query} />}
     </div>
@@ -114,14 +111,14 @@ export function ShopClassifieds({ intro = 'Buy, sell or swap tack and equipment 
   const isAdmin = canEdit();
   const needle = query.trim().toLowerCase();
   const shown = needle ? posts.filter((p) => `${p.title} ${p.body} ${p.authorName} ${p.ponyClubName ?? ''}`.toLowerCase().includes(needle)) : posts;
-  const buttonClass = floatingSell ? 'mg-sell-btn' : 'mg-btn mg-btn-primary !min-h-11 !px-3 !text-sm';
+  const buttonClass = floatingSell ? 'sp-pill sp-pill-fill' : 'mg-btn mg-btn-primary !min-h-11 !px-3 !text-sm';
   const sell = user ? (
     <button type="button" onClick={() => setComposerOpen((v) => !v)} aria-expanded={composerOpen} className={buttonClass}>
       {composerOpen ? <X className="h-[18px] w-[18px]" aria-hidden="true" /> : <Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />}{composerOpen ? 'Cancel' : floatingSell ? 'Sell something' : 'New post'}
     </button>
   ) : (
     <Link to="/login" className={buttonClass}>
-      <Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />Sign in to post
+      <Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />{floatingSell ? 'Sell something' : 'Sign in to post'}
     </Link>
   );
 
@@ -148,7 +145,7 @@ export function ShopClassifieds({ intro = 'Buy, sell or swap tack and equipment 
       ) : shown.length === 0 ? (
         <p className="mg-card p-4">Nothing matches that search.</p>
       ) : (
-        <ul className="mg-lines">
+        <ul className="sp-listings">
           {shown.map((p) => (
             <PostRow
               key={p.id}
@@ -162,7 +159,7 @@ export function ShopClassifieds({ intro = 'Buy, sell or swap tack and equipment 
           ))}
         </ul>
       )}
-      {floatingSell && <div className="mg-sell-bar">{sell}</div>}
+      {floatingSell && <div className="sp-sell-bar">{sell}</div>}
     </div>
   );
 }
@@ -321,17 +318,17 @@ function PostRow({
 
   const where = [post.authorName, post.ponyClubName].filter(Boolean).join(' · ');
   return (
-    <li className={post.isDeleted ? 'opacity-60' : ''}>
-      <button type="button" onClick={onToggle} aria-expanded={open} className="mg-line grid-cols-[44px_minmax(0,1fr)_auto] !min-h-[64px] !gap-x-3 !py-2">
+    <li className={`sp-listing ${post.isDeleted ? 'opacity-60' : ''}`.trim()}>
+      <button type="button" onClick={onToggle} aria-expanded={open} className="sp-listing-head">
         {post.imageBase64
-          ? <LazyImage src={post.imageBase64} alt="" className="h-11 w-11 rounded-lg object-cover" compact />
-          : <span role="img" aria-label={`No photo: ${post.title}`} className="flex h-11 w-11 items-center justify-center rounded-lg bg-[rgb(var(--mg-tint))] text-[rgb(var(--mg-faint))]"><ImageIcon className="h-[22px] w-[22px]" aria-hidden="true" /></span>}
-        <span className="flex min-w-0 flex-col gap-0.5">
-          <strong className="text-[15px] font-semibold leading-tight">{post.title}</strong>
-          <span className="mg-line-sub">{where}</span>
-          <span className="mg-line-sub">{timeAgo(post.createdAt)}{post.isDeleted ? ' · Removed' : ''}</span>
+          ? <LazyImage src={post.imageBase64} alt="" className="sp-thumb" compact />
+          : <span role="img" aria-label={`No photo: ${post.title}`} className="sp-thumb"><ImageIcon className="h-[22px] w-[22px]" aria-hidden="true" /></span>}
+        <span className="sp-grow !gap-1">
+          <strong className="text-[17px] font-semibold leading-tight">{post.title}</strong>
+          <span className="sp-t2 truncate">{where}</span>
+          <span className="sp-t2 !text-[12.5px]">{timeAgo(post.createdAt)}{post.isDeleted ? ' · Removed' : ''}</span>
         </span>
-        <span className="mg-display text-lg font-bold leading-none text-[rgb(var(--mg-heading))]">{post.priceMinor != null ? priceLabel(post.priceMinor) : ''}</span>
+        <span className="sp-price">{post.priceMinor != null ? priceLabel(post.priceMinor) : ''}</span>
       </button>
       {open && (
         <div className="space-y-2 border-t border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-subtle))] px-3 py-3">

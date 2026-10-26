@@ -9,6 +9,7 @@ import { competitionDateText, isOnToday } from '../lib/competitionDates';
 import { arenaNames, nextHeats, summariseNext } from '../lib/following';
 import { readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } from '../offline/savedCopies';
 import type { CompetitionDetail } from '../types';
+import '../components/sitePages.css';
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const TIME_COLOUR = { ok: 'text-[rgb(var(--mg-heading))]', late: 'text-[rgb(var(--mg-late-time))]', live: 'text-[rgb(var(--mg-red))]', wait: 'text-[rgb(var(--mg-faint))]' } as const;
@@ -20,25 +21,30 @@ export function FollowingPage() {
   usePageHeader({ title: 'Following', subtitle: favourites.length ? `${plural(favourites.length, 'team')} · ${plural(ids.length, 'event')}` : undefined, plain: true });
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-2 pt-3 lg:max-w-none">
-      <FollowingTeamsSection />
+      <FollowingTeamsSection plain />
     </div>
   );
 }
 
-export function FollowingTeamsSection() {
+/** `plain` is the site-level Following page: one short sentence when empty and a grey add bar, with no box. */
+export function FollowingTeamsSection({ plain = false }: { plain?: boolean }) {
   const { favourites, error } = useFavourites();
   const ids = [...new Set(favourites.map((item) => item.competitionId))];
   const [limit, setLimit] = useState(12);
   return <div className="flex flex-col gap-4">
     {error && <p role="alert" className="mg-notice">{error}</p>}
-    {!ids.length && <div className="mg-card space-y-3 p-5"><h2 className="font-bold">No starred teams yet</h2><p>Open a competition and star the teams you want to follow. Stars are saved on this device.</p></div>}
+    {!ids.length && (plain
+      ? <p className="m-0 px-0.5 text-[15.5px] leading-relaxed text-[rgb(var(--mg-body))]">Star teams at a competition and they show up here with their next heats. Stars are saved on this phone.</p>
+      : <div className="mg-card space-y-3 p-5"><h2 className="font-bold">No starred teams yet</h2><p>Open a competition and star the teams you want to follow. Stars are saved on this device.</p></div>)}
     <div className="mg-cards-grid mg-cards-grid-2 flex flex-col gap-4 empty:hidden">
       {ids.slice(0, limit).map((id) => <FollowingEvent key={id} id={id} teamIds={favourites.filter((item) => item.competitionId === id).map((item) => item.teamId)} />)}
     </div>
     {ids.length > limit && <button className="mg-btn mg-btn-secondary" onClick={() => setLimit(limit + 12)}>Show more events</button>}
-    <Link to="/events" className="flex min-h-12 items-center justify-center gap-2 rounded-lg border border-dashed border-[rgb(var(--mg-control))] bg-[rgb(var(--mg-surface))] text-sm font-semibold !text-[rgb(var(--mg-heading))]">
-      <Plus className="h-4 w-4" strokeWidth={2.25} aria-hidden="true" />{ids.length ? 'Follow teams at another event' : 'Choose a competition'}
-    </Link>
+    {plain
+      ? <Link to="/events" className="sp-add"><Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />{ids.length ? 'Follow teams at another event' : 'Choose a competition'}</Link>
+      : <Link to="/events" className="flex min-h-12 items-center justify-center gap-2 rounded-lg border border-dashed border-[rgb(var(--mg-control))] bg-[rgb(var(--mg-surface))] text-sm font-semibold !text-[rgb(var(--mg-heading))]">
+        <Plus className="h-4 w-4" strokeWidth={2.25} aria-hidden="true" />{ids.length ? 'Follow teams at another event' : 'Choose a competition'}
+      </Link>}
   </div>;
 }
 

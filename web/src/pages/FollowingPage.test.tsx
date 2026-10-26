@@ -33,8 +33,12 @@ beforeEach(() => {
 describe('FollowingPage', () => {
   it('has a way to choose a competition when nothing is starred', () => {
     mount();
-    expect(screen.getByText('No starred teams yet')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Choose a competition' })).toHaveAttribute('href', '/events');
+    // One short sentence, no empty box, and the grey add bar.
+    expect(screen.getByText('Star teams at a competition and they show up here with their next heats. Stars are saved on this phone.')).toBeInTheDocument();
+    expect(screen.queryByText('No starred teams yet')).not.toBeInTheDocument();
+    const add = screen.getByRole('link', { name: 'Choose a competition' });
+    expect(add).toHaveAttribute('href', '/events');
+    expect(add).toHaveClass('sp-add');
   });
 
   it('shows one block per event, with each starred team and its next heat', async () => {
