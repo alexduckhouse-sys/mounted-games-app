@@ -76,7 +76,7 @@ export function NeedsYouPanel({ events = [], dueEntries = [] }: { events?: Compe
   if (count === 0) return null;
   return (
     <section aria-label="Needs you">
-      <h2 className="sp-sec sp-first">Needs you<small>{count}</small></h2>
+      <h2 className="sp-sec">Needs you<small>{count}</small></h2>
       <div className="sp-card">
         {requests.map((request) => (
           <div key={request.userId}>

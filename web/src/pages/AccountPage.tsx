@@ -4,6 +4,7 @@ import { ChevronRight } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { ChangePasswordSheet } from '../components/ChangePasswordSheet';
+import { usePageHeader } from '../components/CompactPageBarContext';
 import { DeleteAccountPanel } from '../components/DeleteAccountPanel';
 import { Notice } from '../components/Notice';
 import { useToast } from '../components/Toast';
@@ -20,6 +21,7 @@ export function AccountPage() {
   const [error, setError] = useState<string | null>(null);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const toast = useToast();
+  usePageHeader({ title: 'My account', plain: true, backTo: '/me', backLabel: 'Back to Me' });
   if (!user) return null;
 
   function startEditing() {
