@@ -197,7 +197,7 @@ it('marks only the selected announcement as pinned when two announcements have t
 it('offers camera controls to competition collaborators without granting global chat moderation', async () => {
   context.roles = ['Member']; context.organiser = true; context.enabled = true;
   render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
-  expect(screen.getByRole('link', { name: 'Go live from this device' })).toHaveAttribute('href', '/competitions/1/broadcast');
+  expect(screen.getByRole('link', { name: 'Go live' })).toHaveAttribute('href', '/competitions/1/broadcast');
   expect(screen.queryByRole('textbox', { name: 'Announcement' })).toBeNull();
 });
 
@@ -237,13 +237,25 @@ it('lets an admin post an announcement straight away, with no edit mode note', a
 it('gives organisers a clear Go live button, whether or not streaming is switched on', async () => {
   context.roles = ['Admin']; context.enabled = true;
   const { rerender } = render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
-  const goLive = screen.getByRole('link', { name: /Go live from this device/ });
+  const goLive = screen.getByRole('link', { name: 'Go live' });
   expect(goLive).toHaveAttribute('href', '/competitions/1/broadcast');
   expect(screen.queryByText(/Streaming isn’t set up yet/)).toBeNull();
+  expect(screen.getByRole('link', { name: 'Control the stream' })).toHaveAttribute('href', '/competitions/1/stream-controls');
+  expect(screen.getByRole('link', { name: 'Commentary desk' })).toHaveAttribute('href', '/competitions/1/commentary');
+  expect(screen.queryByText('End stream')).toBeNull();
 
   context.enabled = false; rerender(<MemoryRouter><ChatTab /></MemoryRouter>);
-  expect(screen.queryByRole('link', { name: /Go live from this device/ })).toBeNull();
+  expect(screen.queryByRole('link', { name: 'Go live' })).toBeNull();
   expect(screen.getByText('Streaming isn’t set up yet. Add the Cloudflare keys to switch it on.')).toBeVisible();
+});
+
+it('hides Go live once a stream is on but keeps the control and desk links', async () => {
+  context.roles = ['Admin']; context.enabled = true;
+  context.streams = [{ id: 4, competitionId: 1, arenaName: 'Arena 1', angleName: 'Main', status: 0, caption: null, audioMuted: false, hasAudio: true, startedAt: '2026-06-01T10:00:00Z', viewerCount: 2, generation: 1 }];
+  render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
+  expect(screen.queryByRole('link', { name: 'Go live' })).toBeNull();
+  expect(screen.getByRole('link', { name: 'Control the stream' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Commentary desk' })).toBeInTheDocument();
 });
 
 it('does not tell the public streaming is not set up', async () => {

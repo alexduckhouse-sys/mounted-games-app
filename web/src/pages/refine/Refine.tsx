@@ -25,6 +25,8 @@ interface HeaderProps {
   /** Trailing controls in the top row (an overflow button, a star, "+ Add item"). */
   actions?: ReactNode;
   title: string;
+  /** A page-level action on the right of the title row (for example "End stream"). */
+  titleAction?: ReactNode;
   /** Shows the yellow DEMO chip beside the title. */
   demo?: boolean;
   subtitle?: ReactNode;
@@ -48,7 +50,7 @@ function moveTabFocus(event: ReactKeyboardEvent<HTMLElement>) {
   tabs[next].click();
 }
 
-export function RefineHeader({ back, onBack, backLabel = 'Back', context, actions, title, demo, subtitle, tabs, tabsLabel = 'Sections', tabsKind = 'nav', children }: HeaderProps) {
+export function RefineHeader({ back, onBack, backLabel = 'Back', context, actions, title, titleAction, demo, subtitle, tabs, tabsLabel = 'Sections', tabsKind = 'nav', children }: HeaderProps) {
   const tabsRef = useRef<HTMLElement>(null);
   const [moreTabs, setMoreTabs] = useState(false);
   const activeTab = tabs?.findIndex((tab) => tab.active) ?? -1;
@@ -74,7 +76,12 @@ export function RefineHeader({ back, onBack, backLabel = 'Back', context, action
         <span className="rf-ctx">{context}</span>
         {actions}
       </div>
-      <h1 className="rf-ttl">{title}{demo && <DemoChip />}</h1>
+      {titleAction ? (
+        <div className="rf-ttl-row">
+          <h1 className="rf-ttl">{title}{demo && <DemoChip />}</h1>
+          {titleAction}
+        </div>
+      ) : <h1 className="rf-ttl">{title}{demo && <DemoChip />}</h1>}
       {subtitle && <p className="rf-sub">{subtitle}</p>}
       {children}
       {tabs && tabs.length > 0 && (

@@ -28,6 +28,7 @@ What each document is for and how far to trust it. When a doc and the code disag
 | --- | --- |
 | `specs/event-platform.md` | Agreed scope for seasons, event tools, shops and operations (16 October). Mostly shipped in PRs #33–#36 |
 | `specs/live-stream.md` | Live video through the Cloudflare Realtime SFU: flows, API, limits. Shipped in #30 |
+| `specs/stream-controls-backend.md` | The server work the Stream controls page still needs: auto rules, stored race recordings, viewer renderers. Proposal (26 October) |
 | `designs/mobile-redesign-handoff.md` + `mobile-redesign-proposal.html` | Timetable, Live & stream, heat scores on phones. Shipped in #37 |
 | `designs/event-platform-refinement-handoff.md` + `.html` | Visual rules (navy `#17385f`, red only for LIVE and destructive actions, Barlow fonts) and screens for shops, seasons and organiser pages |
 | `designs/design-decisions.md` | The house style for redesigned pages: looks, controls, buttons, copy, navigation and per-page decisions the owner picked (25–26 October 2026). Start here for any new page, public or organiser |

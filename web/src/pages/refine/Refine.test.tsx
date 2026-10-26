@@ -19,6 +19,13 @@ describe('RefineHeader', () => {
     expect(screen.queryByText('DEMO')).not.toBeInTheDocument();
   });
 
+  it('puts a page-level action on the right of the title row', () => {
+    render(<MemoryRouter><RefineHeader context="x" title="Stream controls" titleAction={<button type="button">End stream</button>} /></MemoryRouter>);
+    const action = screen.getByRole('button', { name: 'End stream' });
+    expect(action.parentElement).toHaveClass('rf-ttl-row');
+    expect(action.parentElement).toContainElement(screen.getByRole('heading', { name: 'Stream controls' }));
+  });
+
   it('marks the current link tab with aria-current', () => {
     render(<MemoryRouter><RefineHeader context="c" title="Season" tabs={[
       { label: 'Standings', to: '/s', active: true }, { label: 'Rounds', to: '/s?tab=rounds', active: false },

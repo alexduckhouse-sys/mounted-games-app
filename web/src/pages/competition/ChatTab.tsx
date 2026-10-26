@@ -512,9 +512,10 @@ function StaffStreamCard({ active, fallback, competitionId, canBroadcast, canEdi
         : canBroadcast ? <Link className="staff-stream-change" to={`/competitions/${competitionId}/broadcast`}>Change</Link> : null}
     </div>
     {canBroadcast && (
-      <div className="flex flex-wrap gap-2">
-        <Link className="mg-btn mg-btn-primary" to={`/competitions/${competitionId}/broadcast`}><Video aria-hidden="true" />Go live from this device</Link>
-        <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/produce`}>Remote controller (2nd phone)</Link>
+      <div className="staff-stream-actions">
+        {!active && <Link className="mg-btn mg-btn-primary" to={`/competitions/${competitionId}/broadcast`}>Go live</Link>}
+        <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/stream-controls`}>Control the stream</Link>
+        <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/commentary`}>Commentary desk</Link>
       </div>
     )}
     {streamingNotSetUp && <p className="mg-notice" role="status">Streaming isn’t set up yet. Add the Cloudflare keys to switch it on.</p>}
