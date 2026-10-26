@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { RefreshCw, Save } from 'lucide-react';
 import { api } from '../../api';
+import { Notice } from '../../components/Notice';
+import { useToast } from '../../components/Toast';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompetition } from '../competition/context';
 import { RefineDisclosure, RefineList, RefineNote, RefineSection } from '../refine/Refine';
@@ -30,7 +32,7 @@ function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: (
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const toast = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -44,7 +46,7 @@ function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: (
       setDraft(scoreResponse.data.results.map((result) => ({ ...result })));
       setHistory(historyResponse.data);
     } catch (loadError) {
-      setError(apiMessage(loadError, 'Couldn’t load the score record. Try again.'));
+      setError(apiMessage(loadError, 'Couldn’t load the score record. Check your signal and try again.'));
     } finally {
       setLoading(false);
     }
@@ -64,7 +66,6 @@ function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: (
     }
     setBusy(true);
     setError(null);
-    setMessage(null);
     try {
       await api.put(`/races/${raceId}/score`, {
         places: draft.map((result) => {
@@ -87,25 +88,25 @@ function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: (
         reason: correctionReason.trim(),
       });
       setCorrectionReason('');
-      setMessage('Correction saved.');
+      toast.show('Correction saved');
       await load();
       onChanged?.();
     } catch (saveError) {
-      setError(apiMessage(saveError, 'Couldn’t save the correction. Refresh the score and try again.'));
+      setError(apiMessage(saveError, 'Couldn’t save the correction. Refresh the score, check your signal and try again.'));
     } finally {
       setBusy(false);
     }
   }
 
-  if (loading) return <div><p role="status" className="rf-note">Loading score history…</p></div>;
+  if (loading) return <div>{toast.node}<p role="status" className="rf-note">Loading score history…</p></div>;
 
   const heading = `score-audit-${raceId}`;
   return (
     <section aria-labelledby={heading}>
       <RefineSection title="Score record" meta={`Revision ${score?.revision ?? 0}`} />
       <h2 id={heading} className="sr-only">Score record</h2>
-      {error && <p role="alert" className="mg-notice ops-alert">{error}</p>}
-      {message && <p role="status" className="rf-note ops-ok">{message}</p>}
+      {error && <Notice actionLabel={score ? undefined : 'Try again'} onAction={() => void load()}>{error}</Notice>}
+      {toast.node}
 
       {score && <>
         <RefineList as="div">

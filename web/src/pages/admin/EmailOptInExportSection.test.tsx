@@ -31,7 +31,7 @@ describe('EmailOptInExportSection', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /Download opt-in list/ }));
 
-    expect((await screen.findByRole('alert')).textContent).toMatch(/Could not download/);
+    expect((await screen.findByRole('alert')).textContent).toMatch(/Couldn’t download/);
     expect(csv.downloadCsv).not.toHaveBeenCalled();
   });
 
@@ -75,13 +75,13 @@ describe('EmailOptInExportSection', () => {
 
     vi.mocked(api.post).mockRejectedValueOnce(new Error('offline'));
     await userEvent.click(screen.getByRole('button', { name: /Send test email/ }));
-    expect((await screen.findByRole('alert')).textContent).toMatch(/Could not send the test email/);
+    expect((await screen.findByRole('alert')).textContent).toMatch(/Couldn’t send the test email/);
   });
 
   it('reports when delivery settings could not be checked', async () => {
     vi.mocked(api.get).mockRejectedValue(new Error('offline'));
     render(<EmailOptInExportSection />);
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Could not check email settings');
+    expect(await screen.findByRole('status')).toHaveTextContent('Couldn’t check the email settings');
   });
 });

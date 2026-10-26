@@ -1,4 +1,5 @@
 import { useAuth } from '../../auth/AuthContext';
+import { Notice } from '../../components/Notice';
 import { useStatsProfile } from '../../hooks/useStats';
 import { formatPercent, gameLine, statsFacts } from '../../lib/stats';
 import '../../components/sitePages.css';
@@ -13,7 +14,7 @@ export function TeamGameStats({ profileId, linked }: { profileId: string; linked
   const load = useStatsProfile(linked > 0 ? `/stats/team-profiles/${profileId}` : null, user?.id ?? 'public');
   if (linked === 0 || load.status === 'idle' || load.status === 'missing') return null;
   if (load.status === 'loading') return <p role="status" className="sp-note">Loading race statistics…</p>;
-  if (load.status === 'error') return <p role="alert" className="sp-note">{load.message}</p>;
+  if (load.status === 'error') return <Notice>{load.message}</Notice>;
   const games = load.data.games ?? [];
   return <>
     <h2 className="sp-sec">Race statistics</h2>

@@ -1,6 +1,7 @@
 import { motion, useReducedMotion } from 'framer-motion';
-import { CreditCard, Lock, ShieldCheck } from 'lucide-react';
+import { CircleAlert, CreditCard, Lock, ShieldCheck } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { Notice } from '../../components/Notice';
 import { RefineFoot, RefineHeader, RefinePage } from '../refine/Refine';
 import { newIdempotencyKey, pounds } from './commerceFormat';
 import { TestReceipt } from './commerceUi';
@@ -126,7 +127,7 @@ export function DemoPaymentFlow({
       onPayment?.(confirmed);
     } catch (error) {
       const message = (error as { response?: { data?: { message?: string; detail?: string } | string } }).response?.data;
-      setRequestError(typeof message === 'string' ? message : message?.message ?? message?.detail ?? 'The demo payment could not be checked. Try again.');
+      setRequestError(typeof message === 'string' ? message : message?.message ?? message?.detail ?? 'Couldn’t check the demo payment. Check your signal and try again.');
       setStep('details');
     }
   }
@@ -202,12 +203,12 @@ export function DemoPaymentFlow({
                   <button type="button" aria-pressed={declining} onClick={() => fillDemoDetails(DECLINE_CARD)}>Decline</button>
                 </div>
               </fieldset>
-              {validationError && <p role="alert" className="text-sm font-semibold text-[rgb(var(--mg-elim))]">{validationError}</p>}
+              {validationError && <p role="alert" className="mg-field-msg m-0 text-sm font-semibold text-[rgb(var(--mg-elim))]"><CircleAlert aria-hidden="true" />{validationError}</p>}
               {requestError && (
-                <div role="alert" className="demo-pay__error">
-                  <p>{requestError}</p>
-                  <p className="mt-1 text-xs">Your demo details are still here. Trying again will check the same payment attempt.</p>
-                </div>
+                <Notice>
+                  {requestError}
+                  <span className="mt-1 block text-xs">Your demo details are still here. Trying again will check the same payment attempt.</span>
+                </Notice>
               )}
             </form>
             <RefineFoot column aboveTabs>
@@ -222,13 +223,10 @@ export function DemoPaymentFlow({
 
   return (
     <section className="demo-pay" data-reduced-motion={reducedMotion ? 'true' : 'false'} aria-label="Demo payment">
-      <header className="demo-pay__banner">
-        <ShieldCheck aria-hidden="true" className="h-5 w-5 shrink-0" />
-        <div>
-          <p className="font-extrabold">DEMO · no money is taken</p>
-          <p className="text-sm">Use the made-up details on this screen. Never enter real card details here.</p>
-        </div>
-      </header>
+      <Notice tone="info" icon={ShieldCheck} role={null}>
+        <span className="block font-extrabold">DEMO · no money is taken</span>
+        Use the made-up details on this screen. Never enter real card details here.
+      </Notice>
 
       <>
         {step === 'review' && (
@@ -244,7 +242,7 @@ export function DemoPaymentFlow({
             {canPay ? (
               <button type="button" className="mg-btn mg-btn-primary w-full" onClick={() => setStep('details')}>Enter demo details</button>
             ) : (
-              <p className="mg-notice">This demo payment has already finished.</p>
+              <Notice tone="info">This demo payment has already finished.</Notice>
             )}
           </motion.div>
         )}
@@ -282,12 +280,12 @@ export function DemoPaymentFlow({
                 <input value={cvc} onChange={(event) => setCvc(event.target.value.replace(/\D/g, '').slice(0, 3))} inputMode="numeric" autoComplete="off" placeholder="000" />
               </label>
             </div>
-            {validationError && <p role="alert" className="text-sm font-semibold text-rose-700 dark:text-rose-300">{validationError}</p>}
+            {validationError && <p role="alert" className="mg-field-msg m-0 text-sm font-semibold text-[rgb(var(--mg-elim))]"><CircleAlert aria-hidden="true" />{validationError}</p>}
             {requestError && (
-              <div role="alert" className="demo-pay__error">
-                <p>{requestError}</p>
-                <p className="mt-1 text-xs">Your demo details are still here. Trying again will check the same payment attempt.</p>
-              </div>
+              <Notice>
+                {requestError}
+                <span className="mt-1 block text-xs">Your demo details are still here. Trying again will check the same payment attempt.</span>
+              </Notice>
             )}
             <button type="submit" className="mg-btn mg-btn-primary w-full">Run demo payment for {pounds(amountMinor)}</button>
             <button type="button" className="mg-btn mg-btn-secondary w-full" onClick={() => void submitOutcome(2)}>Cancel demo payment</button>

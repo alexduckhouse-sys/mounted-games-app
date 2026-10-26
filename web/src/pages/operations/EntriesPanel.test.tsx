@@ -131,7 +131,7 @@ describe('EntriesPanel', () => {
     const dialog = screen.getByRole('dialog');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Mark as no-show' }));
 
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Nothing was changed');
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('nothing was changed');
     expect(api.put).toHaveBeenCalledWith('/competitions/7/teams/1/entry-status', { status: 2, reason: null });
   });
 

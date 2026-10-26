@@ -63,7 +63,7 @@ describe('ScoreAuditPanel', () => {
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/races/9/score', expect.objectContaining({
       places: [{ teamId: 4, place: 1, eliminated: false }], expectedRevision: 1, reason: 'Judge recount',
     })));
-    expect(await screen.findByText('Correction saved.')).toBeInTheDocument();
+    expect(await screen.findByText('Correction saved')).toBeInTheDocument();
   });
 
   it('preserves and edits half-point manual overrides when saving a correction', async () => {

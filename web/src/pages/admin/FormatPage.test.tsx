@@ -147,7 +147,7 @@ describe('On the day: breaks and briefings', () => {
       competitionSectionId: null, name: 'Riders briefing', arenaName: 'Arena 2', kind: 2, isBreak: false, durationMinutes: 45, orderIndex: 4,
       scheduledStart: new Date(2026, 9, 31, 8, 45).toISOString(),
     })));
-    expect(await screen.findByText('Riders briefing added to the timetable.')).toBeInTheDocument();
+    expect(await screen.findByText('Riders briefing added to the timetable')).toBeInTheDocument();
 
     const confirm = autoConfirm([false, true]);
     await userEvent.click(within(breaks).getByRole('button', { name: 'Remove Lunch' }));
@@ -343,6 +343,6 @@ describe('On the day: signups and teams', () => {
   it('says so when the competition will not load', async () => {
     vi.mocked(api.get).mockRejectedValue(new Error('offline'));
     mount();
-    expect(await screen.findByText('Could not load organiser details. Please try again.')).toBeInTheDocument();
+    expect(await screen.findByText('Couldn’t load the organiser details. Check your signal and try again.')).toBeInTheDocument();
   });
 });

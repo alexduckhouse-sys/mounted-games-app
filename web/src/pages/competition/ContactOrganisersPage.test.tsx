@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -152,5 +152,15 @@ describe('signed in', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Posting is blocked from this network');
     await userEvent.click(screen.getByRole('button', { name: 'Dismiss error' }));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+  it('offers Try again when a message could not be sent, and sends it again', async () => {
+    state.post.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ data: { id: 5, body: 'Hi', adminOnly: true, userId: 'u1', createdAt: '2026-10-26T09:00:00Z', competitionId: 1, authorName: 'Me' } });
+    mount();
+    await userEvent.type(screen.getByPlaceholderText('Message the organisers…'), 'Hi');
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t send that message. Check your signal and try again.');
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(state.post).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
   });
 });

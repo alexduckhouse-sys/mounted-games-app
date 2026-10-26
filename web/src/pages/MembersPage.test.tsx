@@ -116,7 +116,24 @@ describe('MembersPage: the list', () => {
       return { data: url === '/competitions/access' ? [] : {} };
     });
     mount();
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load the members. Try again.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load the members. Check your signal and try again.');
+  });
+
+  it('tries again from the problem strip', async () => {
+    let fail = true;
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/clubs/7/members') {
+        if (fail) throw new Error('offline');
+        return { data: members };
+      }
+      return { data: url === '/competitions/access' ? [] : {} };
+    });
+    mount();
+    await screen.findByRole('alert');
+    fail = false;
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByText('Alex Morgan')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('treats a page served instead of the list as a failure', async () => {
@@ -125,7 +142,7 @@ describe('MembersPage: the list', () => {
       return { data: url === '/competitions/access' ? [] : {} };
     });
     mount();
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load the members. Try again.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load the members. Check your signal and try again.');
   });
 });
 
@@ -173,7 +190,7 @@ describe('MembersPage: waiting for you', () => {
     const user = userEvent.setup();
     mount();
     await user.click((await (await waitingFor()).findAllByRole('button', { name: 'Approve' }))[0]);
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not update this request. Try again.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t update this request. Check your signal and try again.');
     expect(group('Waiting for you').getByText('Sam Lee')).toBeInTheDocument();
   });
 });
@@ -276,7 +293,7 @@ describe('MembersPage: a person\'s row', () => {
     await screen.findByText('Kerry Hall');
     await user.click(row('Kerry Hall'));
     await user.click(screen.getByRole('button', { name: 'Remove from club' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not remove them. Try again.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t remove them. Check your signal and try again.');
     expect(screen.getByText('Kerry Hall')).toBeInTheDocument();
   });
 

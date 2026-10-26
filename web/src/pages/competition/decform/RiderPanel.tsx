@@ -3,9 +3,10 @@ import { X } from 'lucide-react';
 import { api } from '../../../api';
 import { Field } from '../../auth/Field';
 import { NumberField } from '../../../components/NumberField';
+import { Notice } from '../../../components/Notice';
 import { riderIssues, type DecRider } from '../../../lib/decForm';
 import {
-  asked, breach, breachWarning, limitText, NUMBER_FIELD, OPTIONAL, STANDARD_CONFIG, type DecFormConfig, type ExtraAnswers, type Requirement,
+  asked, breach, limitText, NUMBER_FIELD, OPTIONAL, STANDARD_CONFIG, type DecFormConfig, type ExtraAnswers, type Requirement,
 } from '../../../lib/decFormConfig';
 import type { CertifiedHorseLookup, SavedRider } from '../../../types';
 
@@ -195,35 +196,28 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
             </Field>
           )}
           {!reserve && activeCertLookup?.found && (
-            <div role="status" className="col-span-2 rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface-muted))]/40 px-3 py-2 text-xs">
-              <div className="flex flex-wrap items-center gap-2">
-                {activeCertLookup.status === 'Certified' && (
-                  <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2 py-0.5 font-semibold text-emerald-700 dark:text-emerald-300">
-                    Certified ✓
-                  </span>
-                )}
-                {activeCertLookup.status === 'Expired' && (
-                  <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-700 dark:text-amber-300">
-                    Vaccine expired
-                  </span>
-                )}
-                {activeCertLookup.status === 'TooRecent' && (
-                  <span className="inline-flex items-center rounded-full bg-rose-500/15 px-2 py-0.5 font-semibold text-rose-700 dark:text-rose-300">
-                    &lt;7d rule
-                  </span>
-                )}
-                {activeCertLookup.lastFluVaccineDate && <span className="text-[rgb(var(--mg-body))]">
-                  {activeCertLookup.status === 'Expired'
-                    ? `Last vaccine: ${activeCertLookup.lastFluVaccineDate ?? '—'} (expired) · Needs re-check`
-                    : `Last vaccine: ${activeCertLookup.lastFluVaccineDate ?? '—'}${activeCertLookup.lastTetanusDate ? ` · Last tetanus: ${activeCertLookup.lastTetanusDate}` : ''}`}
-                </span>}
-              </div>
+            <Notice
+              tone={activeCertLookup.status === 'Expired' || activeCertLookup.status === 'TooRecent' ? 'problem' : 'info'}
+              role="status"
+              className="col-span-2"
+            >
+              <strong>
+                {activeCertLookup.status === 'Certified' ? 'Certified ✓'
+                  : activeCertLookup.status === 'Expired' ? 'Vaccine expired'
+                    : activeCertLookup.status === 'TooRecent' ? '<7d rule' : 'Found'}
+              </strong>
+              {activeCertLookup.lastFluVaccineDate && <>
+                {' '}
+                {activeCertLookup.status === 'Expired'
+                  ? `Last vaccine: ${activeCertLookup.lastFluVaccineDate ?? '—'} (expired) · Needs re-check`
+                  : `Last vaccine: ${activeCertLookup.lastFluVaccineDate ?? '—'}${activeCertLookup.lastTetanusDate ? ` · Last tetanus: ${activeCertLookup.lastTetanusDate}` : ''}`}
+              </>}
               {activeCertLookup.officialNotes && (
-                <p className="mt-1 text-[rgb(var(--mg-muted))]">
+                <span className="mt-1 block font-medium">
                   {activeCertLookup.inspectorRole ?? 'Official'}{activeCertLookup.inspectedByName ? ` ${activeCertLookup.inspectedByName}` : ''}: “{activeCertLookup.officialNotes}”
-                </p>
+                </span>
               )}
-            </div>
+            </Notice>
           )}
           {!reserve && asked(config.ponyAge) && (
             <Field label={labelOf('Pony’s age (years)', config.ponyAge)} error={issues.invalid.ponyAge}>
@@ -280,7 +274,7 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
                       {field.type === NUMBER_FIELD && field.unit && <span className="mg-field-suffix">{field.unit}</span>}
                     </div>
                     {hint && !kind && <span className="text-[13px] text-[rgb(var(--mg-muted))]">{hint}</span>}
-                    {kind && <p role="status" className="mg-flag">{breachWarning(kind)}{hint ? `. ${hint}.` : ''}</p>}
+                    {kind && <Notice role="status">{field.label} is {kind === 'over' ? 'above the limit' : 'below the minimum'}.{hint ? ` ${hint}.` : ''} The organisers will see a flag; you can still send the form.</Notice>}
                   </>
                 )}
               </Field>

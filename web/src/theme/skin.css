@@ -595,11 +595,6 @@ html[data-lite="true"] dialog::backdrop { animation: none !important; }
 @media (prefers-reduced-motion: reduce) { .mg-conn-back, .mg-sent-row { animation: none !important; } }
 html[data-lite="true"] .mg-conn-back, html[data-lite="true"] .mg-sent-row { animation: none !important; }
 
-/* Copy buttons: the tick pops in and draws itself. */
-.mg-copied-tick { flex: none; overflow: visible; animation: mg-copied-pop 320ms cubic-bezier(.34, 1.56, .64, 1); }
-.mg-copied-tick path { fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; animation: mg-outcome-draw 280ms ease-out 60ms both; }
-@keyframes mg-copied-pop { from { transform: scale(.5) rotate(-20deg); } }
-
 /* A field that turns out wrong gives one small shake as it turns red, and its message slides in under it. */
 .mg-field[data-invalid="true"], input[aria-invalid="true"]:not(.mg-field input), textarea[aria-invalid="true"]:not(.mg-field textarea), .mg-select[aria-invalid="true"]:not(.mg-field .mg-select) { animation: mg-shake 380ms ease-out; }
 .mg-field-msg { animation: mg-field-msg 260ms var(--mg-ease-out); }

@@ -474,7 +474,7 @@ it('links organiser screen actions to the selected age group and hides them from
     expect(within(quickBar).getByRole('link', { name: /TV Kiosk/ })).toHaveAttribute('href', '/competitions/1/tv?section=9');
 
     await user.click(within(quickBar).getByRole('button', { name: /QR Access/ }));
-    const modal = await screen.findByRole('dialog', { name: 'QR Code Access Hub' });
+    const modal = await screen.findByRole('dialog', { name: 'Share with QR codes' });
     expect(within(modal).getByRole('tab', { name: /Volunteer & Scorer QR Links/ })).toHaveAttribute('aria-selected', 'true');
 
     await user.click(within(modal).getByRole('tab', { name: /Screens, PA & Spectator QR Codes/ }));
@@ -483,5 +483,5 @@ it('links organiser screen actions to the selected age group and hides them from
     expect(within(modal).getByRole('link', { name: /Print QR Posters Sheet/ })).toHaveAttribute('href', '/event-tools/1/print/posters');
 
     await user.click(within(modal).getByRole('button', { name: 'Close QR access modal' }));
-    expect(screen.queryByRole('dialog', { name: 'QR Code Access Hub' })).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Share with QR codes' })).toBeNull());
   });

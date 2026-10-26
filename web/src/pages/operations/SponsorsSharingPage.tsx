@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, ChevronLeft, Plus } from 'lucide-react';
+import { ChevronLeft, Plus } from 'lucide-react';
 import { api } from '../../api';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { Notice } from '../../components/Notice';
+import { useToast } from '../../components/Toast';
 import { competitionCalendarUrl, competitionLink } from '../../lib/sharing';
 import {
   SPONSOR_PLACEMENTS, dateToEnd, dateToStart, endToDate, hasPlacement, isHttpsLink, parseSponsorAdmin, parseSponsorAdmins, startToDate, withPlacement,
@@ -86,18 +88,18 @@ export function SponsorsSharingPage() {
     if (!saved) throw new Error('Unexpected answer');
     changed([...items, saved]);
     setView({ kind: 'edit', id: saved.id });
-  }, 'Couldn’t add that sponsor. Try again.');
+  }, 'Couldn’t add that sponsor. Check your signal and try again.');
 
   const setLogo = (sponsor: SponsorAdmin, file: File) => run(async () => {
     const logo = await prepareLogo(file);
     const saved = parseSponsorAdmin((await api.put<unknown>(`${base}/${sponsor.id}/logo`, logo, { headers: { 'Content-Type': logo.type } })).data);
     if (saved) replace(saved);
-  }, 'Couldn’t save the logo. Try again.');
+  }, 'Couldn’t save the logo. Check your signal and try again.');
 
   const removeLogo = (sponsor: SponsorAdmin) => run(async () => {
     const saved = parseSponsorAdmin((await api.delete<unknown>(`${base}/${sponsor.id}/logo`)).data);
     if (saved) replace({ ...saved, logoUrl: null });
-  }, 'Couldn’t remove the logo. Try again.');
+  }, 'Couldn’t remove the logo. Check your signal and try again.');
 
   async function removeSponsor(sponsor: SponsorAdmin) {
     if (!items) return;
@@ -105,7 +107,7 @@ export function SponsorsSharingPage() {
     const ok = await run(async () => {
       await api.delete(`${base}/${sponsor.id}`);
       changed(items.filter((item) => item.id !== sponsor.id));
-    }, `Couldn’t remove ${sponsor.name}. Try again.`);
+    }, `Couldn’t remove ${sponsor.name}. Check your signal and try again.`);
     if (ok) setView({ kind: 'list' });
   }
 
@@ -119,17 +121,14 @@ export function SponsorsSharingPage() {
         ? <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel="Back to preparations" context={competition.name} title={title} />
         : <RefineHeader onBack={toList} backLabel="Back to sponsors and sharing" context={competition.name} title={title} />}
       <div className="ops-cards ops-tt ops-spons" aria-busy={busy}>
-        {error && <p role="alert" className="mg-notice ops-alert">{error}</p>}
+        {error && <Notice>{error}</Notice>}
         {view.kind !== 'list' && <button type="button" className="ops-back" onClick={toList}><ChevronLeft className="h-4 w-4" aria-hidden="true" />Sponsors and sharing</button>}
 
         {view.kind === 'list' && (
           <>
             <h2 className="rf-sec ops-tt-head"><span>Sponsors</span></h2>
             {loadError && !items && (
-              <div role="alert" className="rf-list ops-dup">
-                <span>Couldn’t load the sponsors.</span>
-                <div className="rf-actions"><button type="button" className="rf-btn" onClick={() => { setLoadError(false); setRetry((n) => n + 1); }}>Try again</button></div>
-              </div>
+              <Notice actionLabel="Try again" onAction={() => { setLoadError(false); setRetry((n) => n + 1); }}>Couldn’t load the sponsors. Check your signal and try again.</Notice>
             )}
             {!items && !loadError && <p role="status" className="rf-note">Loading…</p>}
             {items && (
@@ -186,7 +185,8 @@ export function SponsorsSharingPage() {
 
 /** Copies the event's address, or opens the phone's share sheet. */
 function ShareLinkRow({ id, name }: { id: number; name: string }) {
-  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [state, setState] = useState<'idle' | 'failed'>('idle');
+  const toast = useToast();
   const url = competitionLink(id, window.location.origin);
   async function share() {
     setState('idle');
@@ -194,14 +194,15 @@ function ShareLinkRow({ id, name }: { id: number; name: string }) {
       try { await navigator.share({ title: name, url }); return; }
       catch (caught) { if (caught && typeof caught === 'object' && 'name' in caught && caught.name === 'AbortError') return; }
     }
-    try { await navigator.clipboard.writeText(url); setState('copied'); }
+    try { await navigator.clipboard.writeText(url); toast.show('Link copied'); }
     catch { setState('failed'); }
   }
   return (
     <div className="rf-row">
       <span className="rf-grow rf-t1">Event link</span>
       {state === 'failed' && <a className="rf-t2" href={url}>Copy this link</a>}
-      <button type="button" className="rf-btn" onClick={() => void share()}>{state === 'copied' ? <><Check className="h-4 w-4" aria-hidden="true" />Copied</> : 'Share'}</button>
+      <button type="button" className="rf-btn" onClick={() => void share()}>Share</button>
+      {toast.node}
     </div>
   );
 }
@@ -252,22 +253,22 @@ function EditSponsor({ sponsor, busy, onProblem, onPatch, onLogo, onRemoveLogo, 
   function saveName() {
     const next = name.trim();
     if (!next) { setName(sponsor.name); onProblem('A sponsor needs a name.'); return; }
-    if (next !== sponsor.name) onPatch({ name: next }, 'Couldn’t save the name. Try again.');
+    if (next !== sponsor.name) onPatch({ name: next }, 'Couldn’t save the name. Check your signal and try again.');
   }
   function saveLink() {
     const next = link.trim();
     if (next === (sponsor.linkUrl ?? '')) return;
     if (next && !isHttpsLink(next)) { onProblem('The link must start with https://'); setLink(sponsor.linkUrl ?? ''); return; }
     onProblem(null);
-    onPatch({ linkUrl: next || null }, 'Couldn’t save the website. Try again.');
+    onPatch({ linkUrl: next || null }, 'Couldn’t save the website. Check your signal and try again.');
   }
   function setDate(which: 'startsAt' | 'endsAt', value: string) {
     const iso = value ? (which === 'startsAt' ? dateToStart(value) : dateToEnd(value)) : null;
-    onPatch({ [which]: iso }, 'Couldn’t save the dates. Try again.');
+    onPatch({ [which]: iso }, 'Couldn’t save the dates. Check your signal and try again.');
   }
   function setDatedOn(on: boolean) {
     setDated(on);
-    if (!on && (sponsor.startsAt || sponsor.endsAt)) onPatch({ startsAt: null, endsAt: null }, 'Couldn’t clear the dates. Try again.');
+    if (!on && (sponsor.startsAt || sponsor.endsAt)) onPatch({ startsAt: null, endsAt: null }, 'Couldn’t clear the dates. Check your signal and try again.');
   }
 
   return (
@@ -294,7 +295,7 @@ function EditSponsor({ sponsor, busy, onProblem, onPatch, onLogo, onRemoveLogo, 
       <RefineList as="div" label="Where it shows">
         {PLACES.map((place) => (
           <RefineSwitchRow key={place.key} label={place.label} on={hasPlacement(sponsor.showOn, place.key)} disabled={busy}
-            onChange={(on) => onPatch({ showOn: withPlacement(sponsor.showOn & SHOWN_BITS, place.key, on) }, 'Couldn’t save where it shows. Try again.')} />
+            onChange={(on) => onPatch({ showOn: withPlacement(sponsor.showOn & SHOWN_BITS, place.key, on) }, 'Couldn’t save where it shows. Check your signal and try again.')} />
         ))}
       </RefineList>
 
@@ -307,7 +308,7 @@ function EditSponsor({ sponsor, busy, onProblem, onPatch, onLogo, onRemoveLogo, 
             <label className="rf-fld">Until<input type="date" value={endToDate(sponsor.endsAt)} min={startToDate(sponsor.startsAt) || undefined} onChange={(event) => setDate('endsAt', event.target.value)} /></label>
           </div>
         )}
-        <RefineSwitchRow label="Showing" on={sponsor.isEnabled} disabled={busy} onChange={(on) => onPatch({ isEnabled: on }, 'Couldn’t change that. Try again.')} />
+        <RefineSwitchRow label="Showing" on={sponsor.isEnabled} disabled={busy} onChange={(on) => onPatch({ isEnabled: on }, 'Couldn’t change that. Check your signal and try again.')} />
       </RefineList>
 
       <div className="ops-end-left ops-remove"><button type="button" className="ops-danger-link" disabled={busy} onClick={onRemove}>Remove this sponsor</button></div>

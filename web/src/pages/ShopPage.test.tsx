@@ -116,7 +116,7 @@ describe('the shop', () => {
     await userEvent.type(screen.getByLabelText(/Why are you reporting this post/), 'Looks wrong');
     await userEvent.click(screen.getByRole('button', { name: 'Send report' }));
     expect(api.post).toHaveBeenCalledWith('/shop/posts/1/report', { reason: 'Looks wrong' });
-    expect(await screen.findByText('Reported. An admin will review.')).toBeInTheDocument();
+    expect(await screen.findByText('Reported. An admin will look at it.')).toHaveClass('kit-toast-text');
     expect(screen.queryByRole('button', { name: 'Remove post' })).not.toBeInTheDocument();
   });
 
@@ -135,11 +135,11 @@ describe('the shop', () => {
     expect(reason).toHaveAttribute('maxlength', '1000');
     await userEvent.type(reason, 'Fake report reason');
     await userEvent.click(screen.getByRole('button', { name: 'Send report' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not send the report. Try again.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t send the report. Check your signal and try again.');
     expect(reason).toHaveValue('Fake report reason');
-    expect(screen.queryByText('Reported. An admin will review.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Reported. An admin will look at it.')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Send report' }));
-    expect(await screen.findByText('Reported. An admin will review.')).toBeInTheDocument();
+    expect(await screen.findByText('Reported. An admin will look at it.')).toHaveClass('kit-toast-text');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 

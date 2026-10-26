@@ -7,6 +7,7 @@ import { initialsOf } from '../../lib/profile';
 import type { CompetitionPickerItem, PayoutsTo, SectionSignup, TrainerRequest } from '../../types';
 import { useNeedsYou } from '../profile/needsYou';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { Notice } from '../../components/Notice';
 
 interface Attention {
   /** Events with entries still waiting to be paid or confirmed. */
@@ -88,7 +89,7 @@ export function NeedsYouPanel({ events = [] }: { events?: CompetitionPickerItem[
             <button type="button" className="mg-btn mg-btn-primary !min-h-11 flex-1 !text-[15px]" onClick={() => decide(request, 'approve')}>Approve</button>
             <button type="button" className="mg-btn mg-btn-secondary !min-h-11 flex-1 !text-[15px]" onClick={() => decide(request, 'decline')}>Decline</button>
           </div>
-          {failed === request.userId && <p role="alert" className="text-sm font-medium text-[rgb(var(--mg-elim))]">{reviewError ?? 'Could not update this request. Try again.'}</p>}
+          {failed === request.userId && <Notice>{reviewError ?? 'Couldn’t update this request. Check your signal and try again.'}</Notice>}
         </div>
       ))}
       {decForms.map((t) => (
@@ -120,7 +121,7 @@ export function NeedsYouPanel({ events = [] }: { events?: CompetitionPickerItem[
 
 function NeedsLink({ to, icon, urgent, sub, children }: { to: string; icon: ReactNode; urgent?: boolean; sub?: string; children: ReactNode }) {
   return (
-    <Link to={to} className={`flex min-h-[60px] items-center gap-3 rounded-xl px-3.5 py-2 ${urgent ? 'bg-[rgb(var(--mg-live-row))] text-[rgb(var(--mg-elim))]' : 'mg-card'}`}>
+    <Link to={to} className={`flex min-h-[60px] items-center gap-3 rounded-xl px-3.5 py-2 ${urgent ? 'bg-[rgb(var(--mg-problem-bg))] text-[rgb(var(--mg-problem-ink))]' : 'mg-card'}`}>
       {icon}
       <span className="min-w-0 flex-1">
         <span className="block truncate text-base font-semibold leading-tight text-[rgb(var(--mg-ink))]">{children}</span>

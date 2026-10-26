@@ -61,7 +61,7 @@ describe('DecFormConfigEditor', () => {
     expect(api.put.mock.calls[0][1]).toMatchObject({
       dob: 1, dobFormat: 1, weight: 2, weightUnit: 1, medicalNotes: 2, ponyPassport: 1, ponyHeight: 0, customFields: [],
     });
-    expect(await screen.findByText('Saved. New dec forms will use this.')).toBeInTheDocument();
+    expect(await screen.findByText('Dec form setup saved')).toBeInTheDocument();
     expect(screen.queryByText(/trainers see the standard form/)).not.toBeInTheDocument();
   });
 

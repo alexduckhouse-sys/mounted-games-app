@@ -3,6 +3,8 @@ import { ChangePop } from '../../components/ChangePop';
 import { ChevronDown } from 'lucide-react';
 import { api } from '../../api';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { Notice } from '../../components/Notice';
+import { useToast } from '../../components/Toast';
 import { apiErrorMessage } from '../../lib/apiError';
 import { downloadCsv, safeFilename } from '../../lib/csv';
 import { decFormsCsv } from '../../lib/decFormCsv';
@@ -59,7 +61,7 @@ export function EntriesPage() {
   const [open, setOpen] = useState<number | null>(null);
   const [setup, setSetup] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const toast = useToast();
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -76,7 +78,7 @@ export function EntriesPage() {
     if (f.status === 'fulfilled' && Array.isArray(f.value.data)) setForms(f.value.data);
     if (l.status === 'fulfilled') setLock(l.value.data?.declarationsCloseAt ?? null);
     if (c.status === 'fulfilled') setConfig(parseConfigResponse(c.value.data)?.config ?? STANDARD_CONFIG);
-    setError(e.status === 'rejected' ? 'Couldn’t load the entries. Try again.' : null);
+    setError(e.status === 'rejected' ? 'Couldn’t load the entries. Check your signal and try again.' : null);
   }, [competition.id]);
 
   useEffect(() => {
@@ -88,9 +90,8 @@ export function EntriesPage() {
   async function run(failure: string, work: () => Promise<unknown>): Promise<boolean> {
     setBusy(true);
     setError(null);
-    setNotice(null);
     try { await work(); await load(); return true; }
-    catch (caught) { setError(apiErrorMessage(caught, failure)); return false; }
+    catch (caught) { setError(apiErrorMessage(caught, `${failure} Check your signal and try again.`)); return false; }
     finally { setBusy(false); }
   }
 
@@ -131,7 +132,7 @@ export function EntriesPage() {
     reload();
   }
   async function copyLink() {
-    try { await navigator.clipboard.writeText(`${window.location.origin}/competitions/${competition.id}/declarations`); setNotice('Form link copied.'); }
+    try { await navigator.clipboard.writeText(`${window.location.origin}/competitions/${competition.id}/declarations`); toast.show('Link copied'); }
     catch { setError('Couldn’t copy the link.'); }
   }
 
@@ -149,8 +150,8 @@ export function EntriesPage() {
     <RefinePage>
       <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel="Back to preparations" context={competition.name} title="Entries and dec forms" />
       <div className="ops-cards ops-entries" aria-busy={busy}>
-        {error && <p role="alert" className="mg-notice ops-alert">{error}</p>}
-        {notice && <p role="status" className="rf-note">{notice}</p>}
+        {error && <Notice>{error}</Notice>}
+        {toast.node}
 
         <RefineList as="div">
           <div className="rf-row">
@@ -240,7 +241,7 @@ function FormView({ form, flags }: { form: DeclarationForm; flags: string[] }) {
   const riders = form.riders.slice().sort((a, b) => a.orderIndex - b.orderIndex);
   return (
     <div className="ops-form">
-      {flags.map((text) => <p key={text} role="status" className="ops-flag">{text}</p>)}
+      {flags.map((text) => <Notice key={text} role="status">{text}</Notice>)}
       <p className="rf-t1">Trainer: {form.trainerName ?? form.submittedByName ?? 'not given'}</p>
       <ol className="ops-riders">
         {riders.map((rider, i) => (

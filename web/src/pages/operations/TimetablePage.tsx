@@ -4,6 +4,7 @@ import { useSavedToast } from '../../components/SavedTick';
 import { TickerNumber } from '../../components/TickerNumber';
 import { api } from '../../api';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { Notice } from '../../components/Notice';
 import { apiErrorMessage } from '../../lib/apiError';
 import { competitionUpdateBody } from '../../lib/competitionPayload';
 import { HATBAND_COLOURS, MAX_LANES, lanesFor } from '../../lib/creatorDraft';
@@ -94,7 +95,7 @@ export function TimetablePage() {
     setError(null);
     setNotice(null);
     try { await work(); reload(); savedToast.show('Changes'); return true; }
-    catch (caught) { setError(apiErrorMessage(caught, failure)); return false; }
+    catch (caught) { setError(apiErrorMessage(caught, `${failure} Check your signal and try again.`)); return false; }
     finally { setBusy(false); }
   }
   const put = (id: number, body: Record<string, unknown>) => api.put(`/competitions/${competition.id}/sessions/${id}`, body);
@@ -199,8 +200,8 @@ export function TimetablePage() {
       {savedToast.node}
       <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel="Back to preparations" context={competition.name} title="Timetable and draw" />
       <div className="ops-cards ops-tt" aria-busy={busy}>
-        {error && <p role="alert" className="mg-notice ops-alert">{error}</p>}
-        {notice && <p role="status" className="rf-note">{notice}</p>}
+        {error && <Notice>{error}</Notice>}
+        {notice && <Notice tone="info" onDismiss={() => setNotice(null)}>{notice}</Notice>}
 
         <RefineList as="div">
           <div className="rf-row ops-mv">

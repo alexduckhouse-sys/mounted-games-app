@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import type { MySignup } from '../types';
 import { MySignupsPage, type ExtendedMySignup } from './MySignupsPage';
+import { autoConfirm } from '../test/confirm';
 
 vi.mock('../api', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
 const auth = vi.hoisted(() => ({ user: { id: 'u1' } as { id: string } | null }));
@@ -85,7 +86,11 @@ describe('MySignupsPage', () => {
   it('says so when the entries will not load', async () => {
     vi.mocked(api.get).mockRejectedValue(new Error('offline'));
     mount();
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load your signups.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load your signups. Check your signal and try again.');
+    vi.mocked(api.get).mockResolvedValue({ data: [signup(3)] });
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByText('Event 3')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('lets a rider accept an incoming pair-up request', async () => {
@@ -121,11 +126,28 @@ describe('MySignupsPage', () => {
     });
     mount();
     expect(await screen.findByText(/Stabling: 2 stables \(Cheshire PC\)/)).toBeInTheDocument();
+    const asked = autoConfirm(true);
     const withdrawBtn = screen.getByRole('button', { name: 'Withdraw Entry' });
     await userEvent.click(withdrawBtn);
+    await waitFor(() => expect(asked).toHaveBeenCalledWith('Cheshire A at Event 8. You can’t withdraw once the draw has happened.'));
+    expect(asked.titles).toEqual(['Withdraw this entry?']);
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/my/signups/8/withdraw', {}));
     expect(await screen.findByText('Withdrawn — refund pending')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Withdraw Entry' })).not.toBeInTheDocument();
+  });
+
+  it('does nothing when the rider changes their mind, and says so when withdrawing fails', async () => {
+    const entry: ExtendedMySignup = { ...signup(8, { status: 1, amountMinor: 4000, teamName: 'Cheshire A' }), drawComplete: false };
+    vi.mocked(api.get).mockResolvedValue({ data: [entry] });
+    vi.mocked(api.post).mockRejectedValue(new Error('offline'));
+    mount();
+    autoConfirm(false);
+    await userEvent.click(await screen.findByRole('button', { name: 'Withdraw Entry' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(api.post).not.toHaveBeenCalled();
+    autoConfirm(true);
+    await userEvent.click(screen.getByRole('button', { name: 'Withdraw Entry' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t withdraw this entry. Check your signal and try again.');
   });
 
   it('hides Withdraw Entry once the draw has taken place', async () => {

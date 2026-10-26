@@ -3,12 +3,14 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Minus, Plus } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
-import { CopiedTick } from '../../components/CopiedTick';
+import { Notice } from '../../components/Notice';
+import { useToast } from '../../components/Toast';
 import { EntryEmailFields, type EntryEmail } from '../../components/EntryEmailFields';
 import { NumberField } from '../../components/NumberField';
 import { RiderPrivacyFields, type RiderPrivacy } from '../../components/RiderPrivacyFields';
 import { EMAIL_OPT_IN_VERSION, looksLikeEmail, newRequestId } from '../../lib/emailOptIn';
 import { entryOptions, entryTitle, feeText, type EntryKind } from '../../lib/entryOptions';
+import { displaySectionName } from '../../lib/section';
 import { CONSENT_VERSION } from '../../lib/termsTick';
 import type { CompetitionDetail, CompetitionSection, SectionSignup } from '../../types';
 import { useEntrySettings } from './entrySettings';
@@ -50,8 +52,8 @@ export function EntryForm({ competition, section, kind, step, onSent }: {
   const [stablingClubOrTeam, setStablingClubOrTeam] = useState('');
   const [privacy, setPrivacy] = useState<RiderPrivacy>({ useInitialOnly: false, noFilming: false });
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [err, setErr] = useState<{ text: string; retry: boolean } | null>(null);
+  const toast = useToast();
 
   const isWaitlist = kind === 'waitlist';
   const guestWaiting = kind === 'guest' && section.format === 2;
@@ -75,13 +77,15 @@ export function EntryForm({ competition, section, kind, step, onSent }: {
 
   // The pay step only makes sense once the details are in, so a direct link or a reload goes back to them.
   if (step === 'pay' && !ready) return <Navigate to={`${base}${query}`} replace />;
-  if (closed) return <p role="status" className="mg-notice">Entries are closed for this competition.</p>;
-  if (full && kind === 'standard') return <p role="status" className="mg-notice">This age group is full.</p>;
+  if (closed) return <Notice tone="info">Entries are closed for this competition.</Notice>;
+  if (full && kind === 'standard') {
+    return <Notice tone="info" actionLabel="Join the waiting list" actionTo={`${base}?type=waitlist`}>{displaySectionName(section.displayName)} is full. You can join the waiting list.</Notice>;
+  }
 
   async function submit() {
     if (!ready || busy) return;
     const emailText = entryEmail.email.trim();
-    if (emailText && !looksLikeEmail(emailText)) { setErr("That email address doesn't look right."); return; }
+    if (emailText && !looksLikeEmail(emailText)) { setErr({ text: 'That email address doesn’t look right.', retry: false }); return; }
     requestId.current ??= newRequestId();
     setBusy(true);
     setErr(null);
@@ -125,7 +129,7 @@ export function EntryForm({ competition, section, kind, step, onSent }: {
       if (isDemo && signup.status === 0 && signup.amountMinor > 0) navigate(`/me/signups/${signup.id}/test-payment`);
     } catch (e) {
       const msg = (e as { response?: { data?: { message?: string } | string } }).response?.data;
-      setErr(typeof msg === 'string' ? msg : msg?.message ?? 'Could not sign up.');
+      setErr({ text: typeof msg === 'string' ? msg : msg?.message ?? 'Couldn’t submit your entry. Check your signal and try again. Nothing was sent.', retry: true });
     } finally {
       setBusy(false);
     }
@@ -133,10 +137,12 @@ export function EntryForm({ competition, section, kind, step, onSent }: {
 
   async function copyBankDetails() {
     const text = [competition.paymentDestination && `Pay to: ${competition.paymentDestination}`, `Reference: ${reference}`, `Amount: ${feeText(priceMinor)}`].filter(Boolean).join('\n');
-    try { await navigator.clipboard.writeText(text); setCopied(true); window.setTimeout(() => setCopied(false), 2000); } catch { /* the details are on screen to copy by hand */ }
+    try { await navigator.clipboard.writeText(text); toast.show('Bank details copied'); } catch { /* the details are on screen to copy by hand */ }
   }
 
-  const error = err && <p role="alert" className="mt-3 text-sm font-semibold text-[rgb(var(--mg-elim))]">{err}</p>;
+  const error = err && (
+    <Notice className="mt-3" actionLabel={err.retry ? 'Try again' : undefined} onAction={err.retry ? () => void submit() : undefined} actionDisabled={busy}>{err.text}</Notice>
+  );
 
   if (step === 'pay') {
     return (
@@ -154,7 +160,7 @@ export function EntryForm({ competition, section, kind, step, onSent }: {
             {!competition.paymentDestination && <p className="sp-note">The organiser will send you their payment details.</p>}
             <div className="pt-2.5">
               <button type="button" className="sp-pill !min-h-9 !px-3.5 !text-sm" onClick={() => void copyBankDetails()}>
-                {copied ? <><CopiedTick className="h-4 w-4" /> Copied</> : 'Copy bank details'}
+                Copy bank details
               </button>
             </div>
           </>
@@ -169,6 +175,7 @@ export function EntryForm({ competition, section, kind, step, onSent }: {
         <div className="pt-2"><Link to={`${base}${query}`} className="ev-text-btn">Edit</Link></div>
         <button type="button" className="ev-bar" disabled={busy || !ready} onClick={() => void submit()}>{busy ? 'Submitting…' : 'Submit'}</button>
         {error}
+        {toast.node}
       </>
     );
   }

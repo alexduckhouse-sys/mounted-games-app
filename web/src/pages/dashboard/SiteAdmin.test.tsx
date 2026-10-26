@@ -99,10 +99,10 @@ describe('admin trainer requests', () => {
   it('shows load errors inline and lets the admin retry', async () => {
     failLoad = true;
     mount();
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load trainer requests. Try again.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load the trainer requests. Check your signal and try again.');
     expect(screen.queryByText('No trainer requests.')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Refresh list' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load trainer requests.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load the trainer requests.');
     failLoad = false;
     await userEvent.click(screen.getByRole('button', { name: 'Refresh list' }));
     expect(await screen.findByText(request.fullName)).toBeInTheDocument();
@@ -114,7 +114,7 @@ describe('admin trainer requests', () => {
     vi.mocked(api.post).mockRejectedValue(new Error('conflict'));
     mount();
     await userEvent.click(await screen.findByRole('button', { name: action }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not update trainer requests. Refresh the list and try again.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t update the trainer requests. Refresh the list and try again.');
     expect(screen.getByText(request.fullName)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
   });

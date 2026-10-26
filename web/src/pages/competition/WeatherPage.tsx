@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { api } from '../../api';
+import { Notice } from '../../components/Notice';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { usePageWidth } from '../../components/pageWidthState';
 import { WeatherIcon } from '../../components/WeatherIcon';
@@ -266,12 +267,11 @@ export function WeatherPage() {
         </div>
       )}
 
-      <section aria-label="Day weather summary" className="ev-card flex items-center gap-4 p-4">
+      <section aria-label="Day weather summary" className={weather ? 'ev-card flex items-center gap-4 p-4' : undefined}>
         {!weather ? (
-          <p role="status" className="ev-body">
-            {lat == null || lon == null ? 'Weather is unavailable because this venue has no map location.'
-              : fetched?.key !== requestKey ? 'Loading weather…' : 'Weather is unavailable for this day. Try refreshing.'}
-          </p>
+          lat == null || lon == null ? <Notice tone="info">There’s no weather here because the venue has no map location.</Notice>
+            : fetched?.key !== requestKey ? <Notice tone="info">Loading weather…</Notice>
+              : <Notice actionLabel="Try again" onAction={refresh}>Couldn’t load the weather for this day. Check your signal and try again.</Notice>
         ) : <>
           <WeatherIcon code={weather.weatherCode} className="h-16 w-16" />
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">

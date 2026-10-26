@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -253,14 +253,14 @@ describe('CommentaryDeskPage', () => {
 
     // Open QR Access Modal
     await user.click(screen.getByRole('button', { name: /QR Access/ }));
-    const qrModal = await screen.findByRole('dialog', { name: 'QR Code Access Hub' });
+    const qrModal = await screen.findByRole('dialog', { name: 'Share with QR codes' });
     await user.click(within(qrModal).getByRole('tab', { name: /Screens, PA & Spectator QR Codes/ }));
     expect(within(qrModal).getByText('2nd Phone Stream Controller')).toBeInTheDocument();
     await user.click(within(qrModal).getAllByRole('button', { name: /Copy link/ })[0]);
-    expect(await within(qrModal).findByText('Copied')).toBeInTheDocument();
+    expect(await within(qrModal).findByText('Link copied')).toBeInTheDocument();
     await user.click(within(qrModal).getByRole('tab', { name: /Volunteer & Scorer QR Links/ }));
     await user.click(within(qrModal).getByRole('button', { name: 'Close QR access modal' }));
-    expect(screen.queryByRole('dialog', { name: 'QR Code Access Hub' })).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Share with QR codes' })).toBeNull());
   });
 });
 
@@ -298,7 +298,7 @@ describe('TvKioskPage', () => {
 
     // Open QR Access Modal from TV Kiosk
     await user.click(screen.getByRole('button', { name: /QR Access/ }));
-    expect(await screen.findByRole('dialog', { name: 'QR Code Access Hub' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Share with QR codes' })).toBeInTheDocument();
   });
 
   it('handles offline stream list and scorer client mode in StreamControlStrip', async () => {

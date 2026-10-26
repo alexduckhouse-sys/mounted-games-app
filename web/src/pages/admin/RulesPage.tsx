@@ -8,6 +8,7 @@ import { RaceDiagram } from '../../components/RaceDiagram';
 import { DiagramEditor } from '../../components/DiagramEditor';
 import { FieldDrop, PartHead } from './LaptopParts';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { Notice } from '../../components/Notice';
 import { usePageWidth } from '../../components/pageWidthState';
 import { RulebooksPanel } from '../operations/RulebooksPage';
 
@@ -138,7 +139,7 @@ export function RaceRulesLibrary() {
       load();
     } catch (err) {
       const msg = (err as { response?: { data?: { message?: string } | string } }).response?.data;
-      setError(typeof msg === 'string' ? msg : msg?.message ?? 'Could not save.');
+      setError(typeof msg === 'string' ? msg : msg?.message ?? 'Couldn’t save the race. Check your signal and try again.');
     } finally {
       setBusy(false);
     }
@@ -152,7 +153,7 @@ export function RaceRulesLibrary() {
       load();
     } catch (err) {
       const msg = (err as { response?: { data?: { message?: string } | string } }).response?.data;
-      setError(typeof msg === 'string' ? msg : msg?.message ?? 'Could not delete.');
+      setError(typeof msg === 'string' ? msg : msg?.message ?? 'Couldn’t delete the race. Check your signal and try again.');
     }
   }
 
@@ -176,7 +177,7 @@ export function RaceRulesLibrary() {
         {showDiagram && <DiagramEditor value={draft.diagramJson} onChange={(json) => setDraft({ ...draft, diagramJson: json })} />}
         {showDiagram && showJson && <textarea rows={4} aria-label="Diagram JSON" className="input font-mono text-xs" value={draft.diagramJson} onChange={(e) => setDraft({ ...draft, diagramJson: e.target.value })} />}
       </div>
-      {error && <p role="alert" className="mg-notice !bg-[rgb(var(--mg-live-row))] !text-[rgb(var(--mg-elim))]">{error}</p>}
+      {error && <Notice>{error}</Notice>}
       <div className="flex justify-end gap-3">
         <button type="button" onClick={close} className="mg-btn mg-btn-secondary !min-h-[50px] !rounded-[10px] !px-[18px] !text-base">Cancel</button>
         <button type="submit" disabled={busy} className="mg-btn mg-btn-primary !min-h-[50px] !rounded-[10px] !px-[18px] !text-base">{busy ? 'Saving…' : 'Save'}</button>
@@ -232,7 +233,7 @@ export function RaceRulesLibrary() {
         </ul>
       </div>
       {list.length > 0 && <p className="mg-meta">{list.length} races in the library</p>}
-      {error && !draft && <p role="alert" className="mg-notice !bg-[rgb(var(--mg-live-row))] !text-[rgb(var(--mg-elim))]">{error}</p>}
+      {error && !draft && <Notice>{error}</Notice>}
     </div>
   );
 }

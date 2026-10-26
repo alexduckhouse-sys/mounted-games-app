@@ -3,7 +3,8 @@ import { api } from '../../api';
 import type { DeclarationForm } from '../../types';
 import { RefineDisclosure, RefineList, RefineNote, RefineSheet } from '../refine/Refine';
 import type { RiderSwap, TeamEntry } from './types';
-import { apiMessage, isOffline, newRequestId, statusOf } from './types';
+import { OFFLINE_MESSAGE, apiMessage, isOffline, newRequestId, statusOf } from './types';
+import { Notice } from '../../components/Notice';
 import './operations.css';
 
 function when(iso: string): string {
@@ -56,8 +57,8 @@ export function RiderSwapSheet({ competitionId, team, canWrite, onClose, onSwapp
     } catch (failure) {
       setForm(undefined);
       setLoadError(isOffline(failure)
-        ? 'You appear to be offline. Riders need a connection. Try again when you have signal.'
-        : apiMessage(failure, 'Couldn’t load the declaration. Try again.'));
+        ? OFFLINE_MESSAGE
+        : apiMessage(failure, 'Couldn’t load the declaration. Check your signal and try again.'));
     }
   }, [competitionId, team.teamId]);
 
@@ -101,7 +102,7 @@ export function RiderSwapSheet({ competitionId, team, canWrite, onClose, onSwapp
       const status = statusOf(failure);
       setError(isOffline(failure)
         ? 'The connection dropped, so we can’t tell whether the swap went through. Tap Swap again. It can’t apply twice.'
-        : apiMessage(failure, status === 409 ? 'This declaration can’t be changed that way.' : 'Couldn’t swap the rider. Try again.'));
+        : apiMessage(failure, status === 409 ? 'This declaration can’t be changed that way.' : 'Couldn’t swap the rider. Check your signal and try again.'));
       if (!isOffline(failure)) setRequestId(newRequestId());
     } finally {
       setBusy(false);
@@ -111,7 +112,7 @@ export function RiderSwapSheet({ competitionId, team, canWrite, onClose, onSwapp
   return (
     <RefineSheet title={`Swap a rider: ${team.teamName}`} onClose={onClose}>
       {form === undefined && !loadError && <p role="status" className="rf-note">Loading the declaration…</p>}
-      {loadError && <p role="alert" className="mg-notice ops-alert">{loadError} <button type="button" className="rf-btn rf-btn-text" onClick={() => void load()}>Try again</button></p>}
+      {loadError && <Notice actionLabel="Try again" onAction={() => void load()}>{loadError}</Notice>}
       {form === null && <RefineNote>This team hasn’t submitted a declaration yet, so there is nobody to swap.</RefineNote>}
       {form && reserves.length === 0 && (
         <RefineNote>The declaration lists no reserve. Record an emergency rider or pony replacement below.</RefineNote>
@@ -155,7 +156,7 @@ export function RiderSwapSheet({ competitionId, team, canWrite, onClose, onSwapp
               <span className="rf-grow">Override the lock<span className="rf-t2">Locked declaration.</span></span>
             </label>
           )}
-          {error && <p role="alert" className="mg-notice ops-alert">{error}</p>}
+          {error && <Notice>{error}</Notice>}
           <div className="rf-actions">
             <button type="button" className="rf-btn" onClick={onClose}>Cancel</button>
             <button type="submit" className="rf-btn rf-btn-primary rf-grow" disabled={busy || !canWrite || outId == null || effectiveInId == null || !emergencyReady}>{busy ? 'Swapping…' : 'Swap rider'}</button>

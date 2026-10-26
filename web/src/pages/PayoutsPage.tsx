@@ -4,6 +4,7 @@ import { Check, ChevronDown, ChevronLeft, FlaskConical } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { Dropdown } from '../components/Dropdown';
+import { Notice } from '../components/Notice';
 import { PageSkeleton } from '../components/Skeletons';
 import { apiErrorMessage } from '../lib/apiError';
 import {
@@ -51,7 +52,8 @@ export function PayoutsPage() {
   const [changingBank, setChangingBank] = useState(false);
   const [step, setStep] = useState(1);
   const [problems, setProblems] = useState<Problems>({});
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ text: string; retry: boolean } | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -73,7 +75,7 @@ export function PayoutsPage() {
       setLoadFailed(null);
     }).catch(() => { if (!cancelled) setLoadFailed(clubId); });
     return () => { cancelled = true; };
-  }, [clubId]);
+  }, [clubId, attempt]);
 
   if (!user) return null;
   const current = data && data.clubId === clubId ? data : null;
@@ -120,7 +122,7 @@ export function PayoutsPage() {
       } catch (err) {
         const errors = fieldErrors(err);
         setProblems(errors);
-        setNotice(Object.keys(errors).length > 0 ? null : apiErrorMessage(err, 'Could not save the bank account. Try again.'));
+        setNotice(Object.keys(errors).length > 0 ? null : { text: apiErrorMessage(err, 'Couldn’t save the bank account. Check your signal and try again.'), retry: true });
       } finally {
         setBusy(false);
       }
@@ -145,7 +147,7 @@ export function PayoutsPage() {
     } catch (err) {
       const errors = fieldErrors(err);
       setProblems(errors);
-      setNotice(Object.keys(errors).length > 0 ? null : apiErrorMessage(err, 'Could not save. Try again.'));
+      setNotice(Object.keys(errors).length > 0 ? null : { text: apiErrorMessage(err, 'Couldn’t save the payout details. Check your signal and try again.'), retry: true });
     } finally {
       setBusy(false);
     }
@@ -161,7 +163,7 @@ export function PayoutsPage() {
       const errors = fieldErrors(err);
       setProblems(errors);
       const keys = Object.keys(errors);
-      setNotice(keys.length ? 'Some details are missing. Fix them to finish.' : apiErrorMessage(err, 'Could not finish. Try again.'));
+      setNotice(keys.length ? { text: 'Some details are missing. Fix them to finish.', retry: false } : { text: apiErrorMessage(err, 'Couldn’t finish. Check your signal and try again.'), retry: true });
     } finally {
       setBusy(false);
     }
@@ -180,10 +182,9 @@ export function PayoutsPage() {
         </div>
       </div>
 
-      <p className="flex items-start gap-2.5 rounded-xl bg-[rgb(var(--mg-tint))] px-3.5 py-3 text-sm text-[rgb(var(--mg-body))]">
-        <FlaskConical aria-hidden="true" className="mt-0.5 h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-heading))]" />
-        <span><strong className="font-semibold">Test mode: no real money moves yet.</strong> This is how payouts will be set up once online payments are switched on. Entries are still paid for by hand.</span>
-      </p>
+      <Notice tone="info" icon={FlaskConical} role={null}>
+        <strong className="font-semibold">Test mode: no real money moves yet.</strong> This is how payouts will be set up once online payments are switched on. Entries are still paid for by hand.
+      </Notice>
 
       {isAdmin && (
         <Field label="Club">
@@ -200,15 +201,13 @@ export function PayoutsPage() {
 
       {clubId == null && !isAdmin && <p className="text-base text-[rgb(var(--mg-body))]">Payouts belong to a club. Join a club first.</p>}
       {clubId != null && !current && (loadFailed === clubId
-        ? <p role="alert" className="text-sm font-medium text-[rgb(var(--mg-elim))]">Could not load the payout details. Try again.</p>
+        ? <Notice actionLabel="Try again" onAction={() => { setLoadFailed(null); setAttempt((n) => n + 1); }}>Couldn’t load the payout details. Check your signal and try again.</Notice>
         : <PageSkeleton />)}
 
       {current && form && (
         <>
           {ready && (
-            <p role="status" className="flex items-center gap-2 rounded-xl bg-[rgb(var(--mg-live-row))] px-3.5 py-3 text-base font-semibold text-[rgb(var(--mg-heading))]">
-              <Check aria-hidden="true" className="h-5 w-5 shrink-0" />Payouts are ready{current.bank ? ` · ${bankLine(current.bank)}` : ''}
-            </p>
+            <Notice tone="info" icon={Check}>Payouts are ready{current.bank ? ` · ${bankLine(current.bank)}` : ''}</Notice>
           )}
 
           <nav aria-label="Steps">
@@ -232,7 +231,7 @@ export function PayoutsPage() {
             {step === 6 && <ReviewStep data={current} form={form} problems={problems} edit={go} />}
           </section>
 
-          {notice && <p role="alert" className="text-sm font-medium text-[rgb(var(--mg-elim))]">{notice}</p>}
+          {notice && <Notice actionLabel={notice.retry ? 'Try again' : undefined} onAction={notice.retry ? () => { void next(); } : undefined} actionDisabled={busy}>{notice.text}</Notice>}
 
           <div className="flex gap-2">
             {step > 1 && <button type="button" className="mg-btn mg-btn-secondary !min-h-12 flex-1" disabled={busy} onClick={() => go(step - 1)}>Back</button>}
@@ -419,9 +418,9 @@ function ReviewStep({ data, form, problems, edit }: { data: ClubPayouts; form: P
         })}
       </dl>
       {missing.length > 0 && (
-        <p className="text-sm text-[rgb(var(--mg-elim))]">
+        <Notice role={null}>
           Still to do: {[...new Set(missing.map(stepOfField))].sort().map((n) => STEPS[n - 1].toLowerCase()).join(', ')}.
-        </p>
+        </Notice>
       )}
     </>
   );

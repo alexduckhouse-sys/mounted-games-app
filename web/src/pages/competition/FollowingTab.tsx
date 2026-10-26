@@ -3,6 +3,7 @@ import { FollowStar } from '../../components/FollowStar';
 import { Link } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { Dropdown } from '../../components/Dropdown';
+import { Notice } from '../../components/Notice';
 import { usePageWidth } from '../../components/pageWidthState';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { useFavourites } from '../../hooks/useFavourites';
@@ -76,10 +77,9 @@ export function FollowingTab() {
   const star = 'flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[rgb(var(--mg-heading))] hover:bg-[rgb(var(--mg-subtle))]';
 
   return <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-2 pt-3 lg:max-w-3xl">
-    {error && <p role="alert" className="mg-notice">{error}</p>}
-    {isStale && shouldNoticeSavedCopy(updatedAt, true, new Date(), LIVE_SAVED_COPY_NOTICE_AFTER_MS) && <p role="status" className="mg-notice">{lastUpdatedText(updatedAt)}. Times may have changed.
-      <button className="mg-text-link ml-3 !min-h-11" onClick={reload}>Refresh</button></p>}
-    {missing.map((teamId) => <p key={teamId} className="mg-notice">A followed team is no longer listed at this event. <button className="mg-text-link !min-h-11" onClick={() => toggle({ competitionId: competition.id, teamId })}>Remove saved team</button></p>)}
+    {error && <Notice>{error}</Notice>}
+    {isStale && shouldNoticeSavedCopy(updatedAt, true, new Date(), LIVE_SAVED_COPY_NOTICE_AFTER_MS) && <Notice tone="info" actionLabel="Refresh" onAction={reload}>{lastUpdatedText(updatedAt)}. Times may have changed.</Notice>}
+    {missing.map((teamId) => <Notice key={teamId} tone="info" role={null} actionLabel="Remove it" onAction={() => toggle({ competitionId: competition.id, teamId })}>A team you follow is no longer at this event.</Notice>)}
 
     {teams.length > 0 && <section aria-labelledby="followed-teams-title" className="mg-sec">
       <div className="mg-sec-head"><h2 id="followed-teams-title">Teams you follow</h2></div>

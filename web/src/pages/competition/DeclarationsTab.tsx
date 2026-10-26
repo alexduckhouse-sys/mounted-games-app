@@ -11,6 +11,7 @@ import { decDraftKey, parseDraft, ridersRequired, type DecFormDraft } from '../.
 import { DecFormEditor } from './decform/DecFormEditor';
 import { DecFormList } from './DecFormList';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { Notice } from '../../components/Notice';
 import { PageGrid } from '../../components/PageGrid';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
@@ -54,6 +55,7 @@ export function DeclarationsTab() {
   const [lockInput, setLockInput] = useState('');
   const [lockBusy, setLockBusy] = useState(false);
   const [lockError, setLockError] = useState('');
+  const [deleteError, setDeleteError] = useState('');
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -87,7 +89,7 @@ export function DeclarationsTab() {
       setLockInfo(data);
       setLockInput(toLocalDateTimeInput(data.declarationsCloseAt));
     } catch {
-      setLockError('The deadline could not be saved. Please try again.');
+      setLockError('Couldn’t save the dec form deadline. Check your signal and try again.');
     } finally {
       setLockBusy(false);
     }
@@ -156,9 +158,14 @@ export function DeclarationsTab() {
 
   async function remove(id: number) {
     const target = forms?.find((f) => f.id === id);
-    if (!(await confirmDialog({ title: 'Delete this dec form?', message: `Delete the dec form for ${target?.teamName ?? 'this team'}? This can’t be undone.`, confirmLabel: 'Delete dec form', destructive: true }))) return;
-    await api.delete(`/declaration-forms/${id}`);
-    setForms((cur) => cur?.filter((f) => f.id !== id) ?? cur);
+    if (!(await confirmDialog({ title: 'Delete this dec form?', message: `The dec form for ${target?.teamName ?? 'this team'} goes for good.`, confirmLabel: 'Delete dec form', destructive: true }))) return;
+    setDeleteError('');
+    try {
+      await api.delete(`/declaration-forms/${id}`);
+      setForms((cur) => cur?.filter((f) => f.id !== id) ?? cur);
+    } catch {
+      setDeleteError('Couldn’t delete the dec form. Check your signal and try again.');
+    }
   }
 
   function saved(form: DeclarationForm) {
@@ -172,9 +179,7 @@ export function DeclarationsTab() {
   const count = forms?.length ?? 0;
 
   const teamRail = desktop && user != null && myTeams.length > 1;
-  const editor = declarationsClosed && !isOrganiser ? (
-    <p className="text-sm font-medium text-[rgb(var(--mg-muted))]">Declarations are locked for this competition.</p>
-  ) : team && forms && config && (
+  const editor = declarationsClosed && !isOrganiser ? null : team && forms && config && (
     <DecFormEditor key={team.id} competition={competition} team={team} existing={existing} draft={draft}
       priorPhone={priorPhone} onSaved={saved} config={config} />
   );
@@ -240,7 +245,7 @@ export function DeclarationsTab() {
                 type="button"
                 disabled={lockBusy}
                 onClick={() => void updateLockTime(null)}
-                className="btn-ghost !px-3 !py-1.5 text-xs text-rose-600"
+                className="btn-ghost !px-3 !py-1.5 text-xs"
               >
                 Clear lock time
               </button>
@@ -250,21 +255,22 @@ export function DeclarationsTab() {
         {isOrganiser && exportButton}
       </div>
       {lockInfo?.declarationsCloseAt && (
-        <div role="status" className="mg-notice flex items-center justify-between gap-2 text-xs">
-          {declarationsClosed ? (
-            <span>
-              Declarations closed ({new Date(lockInfo.declarationsCloseAt).toLocaleString()}).
-              {!isOrganiser && ' Contact the organiser if you need an emergency change.'}
-            </span>
-          ) : (
-            <span>
-              Declaration deadline: {new Date(lockInfo.declarationsCloseAt).toLocaleString()}.
-            </span>
-          )}
-        </div>
+        declarationsClosed ? (
+          <Notice
+            tone="info"
+            actionLabel={isOrganiser ? undefined : 'Message the organisers'}
+            actionTo={isOrganiser ? undefined : `/competitions/${competition.id}/contact`}
+          >
+            Dec forms closed on {new Date(lockInfo.declarationsCloseAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}.
+            {!isOrganiser && ' Contact the organiser for an emergency change.'}
+          </Notice>
+        ) : (
+          <Notice tone="info">Dec form deadline: {new Date(lockInfo.declarationsCloseAt).toLocaleString()}.</Notice>
+        )
       )}
 
-      {lockError && <p role="alert" className="text-sm text-rose-600">{lockError}</p>}
+      {lockError && <Notice>{lockError}</Notice>}
+      {deleteError && <Notice onDismiss={() => setDeleteError('')}>{deleteError}</Notice>}
     </>
   );
 
@@ -288,9 +294,7 @@ export function DeclarationsTab() {
           <p className="ev-body m-0 flex-1 !text-[15px] !text-[rgb(var(--mg-ink))]">Trainers sign in to send dec forms for their teams.</p>
           <Link to="/login" state={{ from: `/competitions/${competition.id}/declarations` }} className="sp-pill !min-h-9 !px-3.5 !text-sm">Sign in</Link>
         </div>
-      ) : declarationsClosed && !isOrganiser ? (
-        <p className="text-sm font-medium text-[rgb(var(--mg-muted))]">Declarations are locked for this competition.</p>
-      ) : myTeams.length === 0 ? (
+      ) : declarationsClosed && !isOrganiser ? null : myTeams.length === 0 ? (
         <p className="text-sm text-[rgb(var(--mg-muted))]">You have no teams in this competition.</p>
       ) : (
         <>

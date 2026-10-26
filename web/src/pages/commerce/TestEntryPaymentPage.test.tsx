@@ -64,7 +64,7 @@ describe('test payment page', () => {
     renderPage();
 
     expect(await screen.findByRole('heading', { name: /Test payment/ })).toBeInTheDocument();
-    expect(screen.getByRole('note')).toHaveTextContent(/We don’t ask for card details and no money is taken/);
+    expect(screen.getByText(/We don’t ask for card details and no money is taken/).closest('.kit-strip-info')).toHaveTextContent('Test payment');
     expect(screen.getByText('Test amount')).toBeInTheDocument();
     expect(screen.getByText('£15.00')).toBeInTheDocument();
     expect(document.querySelectorAll('input, textarea, select')).toHaveLength(0);
@@ -94,7 +94,7 @@ describe('test payment page', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Try a declined card (test)' }));
 
     expect(await screen.findByText('Test card declined')).toBeInTheDocument();
-    expect(screen.getByRole('note')).toHaveTextContent('Nothing was charged');
+    expect(screen.getByText(/Nothing was charged\. This was only a demonstration/).closest('.kit-strip-info')).not.toBeNull();
     expect(screen.queryByText('TEST RECEIPT')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Back to the test payment' }));
     expect(screen.getByRole('button', { name: 'Pay £15.00 (test)' })).toBeInTheDocument();
@@ -152,7 +152,7 @@ describe('test payment page', () => {
     renderPage();
 
     expect(await screen.findByText('Online payment isn’t available for this event.')).toBeInTheDocument();
-    expect(screen.getByText(/pay the organiser directly/)).toBeInTheDocument();
+    expect(screen.getByText(/Pay the organiser directly/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Pay/ })).not.toBeInTheDocument();
     expect(post).not.toHaveBeenCalled();
   });
@@ -167,12 +167,13 @@ describe('test payment page', () => {
   it('copes with an entry that is not on the account and with a failed load', async () => {
     serve({ signup: null });
     const first = renderPage();
-    expect(await screen.findByText('We couldn’t find that entry on your account.')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Couldn’t find that entry' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'My signups' })).toHaveAttribute('href', '/me/signups');
     first.unmount();
 
     serve({ failSignups: true });
     renderPage();
-    expect(await screen.findByText(/We couldn’t load this entry/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Couldn’t load this entry' })).toBeInTheDocument();
     serve();
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByRole('button', { name: 'Pay £15.00 (test)' })).toBeInTheDocument();

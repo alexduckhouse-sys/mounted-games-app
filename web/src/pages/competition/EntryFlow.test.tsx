@@ -98,7 +98,7 @@ describe('step 1: what you are entering', () => {
 
   it('says entries are closed instead of offering them', () => {
     mount('/competitions/1/enter', [section()], { signupsLocked: true });
-    expect(screen.getByRole('status')).toHaveTextContent('Entries for this event are closed.');
+    expect(screen.getByRole('status')).toHaveTextContent('Entries are closed for this competition.');
     expect(screen.queryByRole('link', { name: /^Team/ })).not.toBeInTheDocument();
   });
 
@@ -191,7 +191,8 @@ describe('steps 2 and 3: details, then pay', () => {
 
   it('does not take an entry for a full age group from a direct link', () => {
     mount('/competitions/1/enter/5', [section({ maxParticipants: 1, activeSignupsCount: 1 })]);
-    expect(screen.getByRole('status')).toHaveTextContent('This age group is full.');
+    expect(screen.getByRole('status')).toHaveTextContent('Under 12 is full. You can join the waiting list.');
+    expect(screen.getByRole('link', { name: 'Join the waiting list' })).toHaveAttribute('href', '/competitions/1/enter/5?type=waitlist');
   });
 
   it('skips the pay step for a free age group', async () => {
@@ -330,11 +331,21 @@ describe('the entry form', () => {
     vi.mocked(api.post).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ data: { id: 9, status: 1, amountMinor: 0 } });
     await fill();
     await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not sign up.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t submit your entry. Check your signal and try again. Nothing was sent.');
     await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(2));
     const ids = vi.mocked(api.post).mock.calls.map((c) => (c[1] as { requestId: string }).requestId);
     expect(ids[0]).toBe(ids[1]);
+  });
+
+  it('sends the entry again from Try again in the problem strip', async () => {
+    mount('/competitions/1/enter/5', [section({ priceMinor: 0 })]);
+    vi.mocked(api.post).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ data: { id: 9, status: 1, amountMinor: 0 } });
+    await fill();
+    await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('Entry submitted')).toBeInTheDocument();
   });
 
   it('shows the server’s own message when it refuses an entry', async () => {
@@ -351,7 +362,7 @@ describe('the entry form', () => {
     await userEvent.type(screen.getByLabelText(/Your email/), 'parent@');
     await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
     expect(api.post).not.toHaveBeenCalled();
-    expect((await screen.findAllByRole('alert'))[0].textContent).toMatch(/doesn't look right/);
+    expect((await screen.findAllByRole('alert'))[0].textContent).toMatch(/doesn’t look right/);
   });
 
   it('says plainly when the confirmation email could not be sent', async () => {
@@ -384,7 +395,7 @@ describe('the entry form', () => {
     await userEvent.click(next());
     await userEvent.click(screen.getByRole('button', { name: 'Copy bank details' }));
     expect(writeText).toHaveBeenCalledWith('Pay to: Club 12-34-56\nReference: Alice Rider\nAmount: £10');
-    expect(await screen.findByRole('button', { name: /Copied/ })).toBeInTheDocument();
+    expect(await screen.findByRole('status')).toHaveTextContent('Bank details copied');
   });
 
   it('says the organiser will send payment details when none were set', async () => {

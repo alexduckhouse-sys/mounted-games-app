@@ -92,7 +92,7 @@ describe('FollowingTab', () => {
   it('lets a visitor remove a deleted team without knowing private records', async () => {
     localStorage.setItem(FAVOURITES_KEY, '[{"competitionId":1,"teamId":99}]');
     mount();
-    await userEvent.click(screen.getByRole('button', { name: 'Remove saved team' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Remove it' }));
     expect(localStorage.getItem(FAVOURITES_KEY)).toBeNull();
   });
   it('keeps an unsuccessful star action visible as an error', async () => {

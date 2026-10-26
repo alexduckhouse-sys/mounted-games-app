@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNo
 import { useSearchParams } from 'react-router-dom';
 import { ChevronRight, ExternalLink, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { api } from '../../api';
+import { Notice } from '../../components/Notice';
+import { useToast } from '../../components/Toast';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompetition } from '../competition/context';
 import { RaceRulesSheet } from '../../components/RaceRulesSheet';
@@ -95,6 +97,7 @@ function GlobalRulebooks() {
 function GameRulesList() {
   const [races, setRaces] = useState<RaceTemplate[] | null>(null);
   const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState<string | null>(null);
 
@@ -104,7 +107,7 @@ function GameRulesList() {
       .then((r) => { if (!cancelled) setRaces(Array.isArray(r.data) ? r.data : []); })
       .catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; };
-  }, []);
+  }, [attempt]);
 
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -115,7 +118,7 @@ function GameRulesList() {
   return (
     <div className="mt-3 flex flex-col gap-2.5">
       <RoundSearch label="Find a race" placeholder="Find a race" value={search} onChange={setSearch} />
-      {failed ? <p role="alert" className="mg-notice">Couldn’t load the game rules. Check your connection and try again.</p>
+      {failed ? <Notice actionLabel="Try again" onAction={() => { setFailed(false); setAttempt((n) => n + 1); }}>Couldn’t load the rules. Check your signal and try again.</Notice>
         : races === null ? <p role="status" className="sp-note">Loading the game rules…</p>
           : shown.length === 0 ? <p className="sp-note">{search.trim() ? `No race matches “${search.trim()}”.` : 'No game rules have been added yet.'}</p>
             : (
@@ -153,7 +156,7 @@ export function RulebooksPanel({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const toast = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -163,7 +166,7 @@ export function RulebooksPanel({
       setRulebooks(data);
       setSelectedId((current) => (current != null && data.some((item) => item.id === current) ? current : null));
     } catch (loadError) {
-      setError(apiMessage(loadError, 'Couldn’t load the rulebooks. Try again.'));
+      setError(apiMessage(loadError, 'Couldn’t load the rulebooks. Check your signal and try again.'));
     } finally {
       setLoading(false);
     }
@@ -180,7 +183,6 @@ export function RulebooksPanel({
   async function open(id: number) {
     setSelectedId(id);
     setDraft(null);
-    setSaved(false);
     setError(null);
     if (texts[id]) return;
     setOpening(true);
@@ -188,7 +190,7 @@ export function RulebooksPanel({
       const { data } = await api.get<Rulebook>(`/rulebooks/${id}`);
       setTexts((current) => ({ ...current, [id]: data }));
     } catch (openError) {
-      setError(apiMessage(openError, 'Couldn’t load this rulebook. Try again.'));
+      setError(apiMessage(openError, 'Couldn’t load this rulebook. Check your signal and try again.'));
     } finally {
       setOpening(false);
     }
@@ -202,7 +204,6 @@ export function RulebooksPanel({
       sourceUrl: rulebook.sourceUrl ?? '',
       text: rulebook.text,
     } : { ...emptyDraft });
-    setSaved(false);
     setError(null);
   }
 
@@ -215,7 +216,6 @@ export function RulebooksPanel({
     }
     setBusy(true);
     setError(null);
-    setSaved(false);
     try {
       const payload = {
         title: draft.title.trim(),
@@ -227,12 +227,12 @@ export function RulebooksPanel({
         ? await api.post<Rulebook>('/rulebooks', payload)
         : await api.put<Rulebook>(`/rulebooks/${draft.id}`, payload);
       setDraft(null);
-      setSaved(true);
+      toast.show('Rulebook saved');
       setTexts((current) => ({ ...current, [response.data.id]: response.data }));
       setSelectedId(response.data.id);
       await load();
     } catch (saveError) {
-      setError(apiMessage(saveError, 'Couldn’t save this rulebook. Check the details and try again.'));
+      setError(apiMessage(saveError, 'Couldn’t save this rulebook. Check the details and your signal, then try again.'));
     } finally {
       setBusy(false);
     }
@@ -246,12 +246,11 @@ export function RulebooksPanel({
     try {
       await api.delete(`/rulebooks/${rulebook.id}`);
       setDraft(null);
-      setSaved(false);
-      setSelectedId(null);
+        setSelectedId(null);
       setTexts((current) => Object.fromEntries(Object.entries(current).filter(([id]) => Number(id) !== rulebook.id)));
       await load();
     } catch (deleteError) {
-      setError(apiMessage(deleteError, 'Couldn’t delete this rulebook. Try again.'));
+      setError(apiMessage(deleteError, 'Couldn’t delete this rulebook. Check your signal and try again.'));
     } finally {
       setBusy(false);
     }
@@ -267,8 +266,8 @@ export function RulebooksPanel({
           </div>
         )}
 
-      {error && <p role="alert" className="mg-notice ops-alert">{error} {!draft && <button type="button" className="rf-btn rf-btn-text" onClick={() => (selectedId != null && !selected ? void open(selectedId) : void load())}>Try again</button>}</p>}
-      {saved && <p role="status" className="rf-note">Rulebook saved.</p>}
+      {error && <Notice actionLabel={!draft ? 'Try again' : undefined} onAction={() => (selectedId != null && !selected ? void open(selectedId) : void load())}>{error}</Notice>}
+      {toast.node}
       {loading && rulebooks.length === 0 && <p role="status" className="rf-note">Loading rulebooks…</p>}
       {!loading && rulebooks.length === 0 && !draft && !error && (
         <RefineNote>

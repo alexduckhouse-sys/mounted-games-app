@@ -15,6 +15,7 @@ import { loadRaceTemplates } from '../../lib/raceTemplates';
 import { SessionKind, TieBreakRule, type CompetitionDetail, type Session } from '../../types';
 import { useCompetition } from '../competition/context';
 import { SaveError, saveCreator } from '../admin/creator/save';
+import { Notice } from '../../components/Notice';
 import { RefineChoiceRow, RefineHeader, RefineList, RefinePage, RefineSwitchRow, type ChoiceOption } from '../refine/Refine';
 import './operations.css';
 
@@ -55,6 +56,7 @@ export function SectionsPage() {
   const [saving, setSaving] = useState(false);
   const [waiting, setWaiting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retryable, setRetryable] = useState(false);
   const [templates, setTemplates] = useState<string[]>([]);
   const [pending, setPending] = useState<Array<{ key: number; format: Format }>>([]);
   const [editing, setEditing] = useState<string | null>(null);
@@ -83,6 +85,7 @@ export function SectionsPage() {
     setWaiting(false);
     setSaving(true);
     setError(null);
+    setRetryable(false);
     try {
       const current = competitionRef.current;
       await saveCreator(latest.current, { editingId: current.id, competition: current, teamCounts: teamCountsOf(current), progress: () => {} });
@@ -95,7 +98,8 @@ export function SectionsPage() {
         setError(messageOf(caught, 'Couldn’t save.'));
         reload();
       } else {
-        setError(`${messageOf(caught, 'Couldn’t save.')} Change something to try again.`);
+        setError(messageOf(caught, 'Couldn’t save. Check your signal and try again.'));
+        setRetryable(true);
       }
     } finally {
       setSaving(false);
@@ -123,8 +127,9 @@ export function SectionsPage() {
   async function saveSetting(what: string, work: () => Promise<unknown>) {
     setSaving(true);
     setError(null);
+    setRetryable(false);
     try { await work(); reload(); }
-    catch (caught) { setError(messageOf(caught, `Couldn’t save ${what}. Try again.`)); }
+    catch (caught) { setError(messageOf(caught, `Couldn’t save ${what}. Check your signal and try again.`)); }
     finally { setSaving(false); }
   }
 
@@ -176,7 +181,7 @@ export function SectionsPage() {
     <RefinePage>
       <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel="Back to preparations" context={competition.name} title="Sections and races" />
       <div className="ops-sections" aria-busy={busy}>
-        {error && <p role="alert" className="mg-notice ops-alert">{error}</p>}
+        {error && <Notice actionLabel={retryable ? 'Try again' : undefined} onAction={() => void flush()}>{error}</Notice>}
         {busy && <p role="status" className="rf-note">Saving…</p>}
         <hr className="ops-navybar ops-navybar-first" />
         {draft.sections.map((section, index) => {

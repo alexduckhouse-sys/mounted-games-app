@@ -34,8 +34,7 @@
 .cw-bar-side { flex: 1 1 0; display: flex; }
 .cw-bar-side:last-child { justify-content: flex-end; }
 .cw-count { flex: none; font: 600 13px/1.2 var(--mg-font); color: rgb(var(--mg-muted)); }
-.cw-msgs { display: flex; flex-direction: column; gap: 2px; max-width: 80rem; margin: 0 auto; padding: 8px 16px 0; font: 500 13px/1.3 var(--mg-font); color: rgb(var(--mg-muted)); }
-.cw-msgs [role="alert"] { color: rgb(var(--mg-elim)); }
+.cw-msgs { display: flex; flex-direction: column; gap: 6px; max-width: 80rem; margin: 0 auto; padding: 8px 16px 0; font: 500 13px/1.3 var(--mg-font); color: rgb(var(--mg-muted)); }
 
 /* Headings and the navy lines between the parts of a step. */
 .cw-h { margin: 0 0 6px; font: 800 30px/1.1 var(--mg-font-display); color: rgb(var(--mg-heading)); }

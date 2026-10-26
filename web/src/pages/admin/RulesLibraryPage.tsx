@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, Plus, Search } from 'lucide-react';
 import { api } from '../../api';
+import { Notice } from '../../components/Notice';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { DiagramEditor } from '../../components/DiagramEditor';
 import { RaceDiagram } from '../../components/RaceDiagram';
@@ -32,7 +33,7 @@ export function RulesLibraryPage() {
     let cancelled = false;
     api.get<RaceTemplate[]>('/race-templates')
       .then(({ data }) => { if (!cancelled) setRaces(Array.isArray(data) ? data : []); })
-      .catch(() => { if (!cancelled) { setRaces([]); setError('Couldn’t load the races. Try again.'); } });
+      .catch(() => { if (!cancelled) { setRaces([]); setError('Couldn’t load the races. Check your signal and try again.'); } });
     return () => { cancelled = true; };
   }, []);
 
@@ -56,20 +57,20 @@ export function RulesLibraryPage() {
   const save = (race: RaceTemplate, patch: Partial<RaceTemplate>) => run(async () => {
     const { data } = await api.put<RaceTemplate>(`/race-templates/${race.id}`, bodyOf(race, patch));
     replace({ ...race, ...patch, ...data });
-  }, 'Couldn’t save that. Try again.');
+  }, 'Couldn’t save that. Check your signal and try again.');
 
   const create = (name: string) => run(async () => {
     const { data } = await api.post<RaceTemplate>('/race-templates', { name, category: null, summary: null, rules: null, diagramJson: '[]' });
     setRaces((current) => [...(current ?? []), data]);
     setView({ kind: 'edit', id: data.id });
-  }, 'Couldn’t add that race. Try again.');
+  }, 'Couldn’t add that race. Check your signal and try again.');
 
   async function remove(race: RaceTemplate) {
     if (!(await confirmDialog({ title: 'Delete this race?', message: `“${race.name}” goes from the library for good.`, confirmLabel: 'Delete race', destructive: true }))) return;
     const ok = await run(async () => {
       await api.delete(`/race-templates/${race.id}`);
       setRaces((current) => (current ?? []).filter((r) => r.id !== race.id));
-    }, 'Couldn’t delete that race. Try again.');
+    }, 'Couldn’t delete that race. Check your signal and try again.');
     if (ok) setView({ kind: 'list' });
   }
 
@@ -83,7 +84,7 @@ export function RulesLibraryPage() {
         ? <RefineHeader back="/admin" backLabel="Back to site admin" context="Site admin" title={title} />
         : <RefineHeader onBack={toList} backLabel="Back to the rules library" context="Rules library" title={title} />}
       <div className="ops-cards ops-tt ops-admin" aria-busy={busy}>
-        {error && <p role="alert" className="mg-notice ops-alert">{error}</p>}
+        {error && <Notice>{error}</Notice>}
         {view.kind !== 'list' && <button type="button" className="ops-back" onClick={toList}><ChevronLeft className="h-4 w-4" aria-hidden="true" />Rules library</button>}
 
         {view.kind === 'list' && (

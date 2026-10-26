@@ -2,6 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
 import { api } from '../../api';
+import { Notice } from '../../components/Notice';
+import { useToast } from '../../components/Toast';
 import { Chevron, RefineList, RefineNote, RefineSection } from '../refine/Refine';
 import {
   MAX_SECTOR_NAME, MAX_TACK_SECTORS, TACK_MODES, draftFromMarks, isScored, marksFromDraft, marksFromRiderGrid,
@@ -31,7 +33,7 @@ export function TackCheckTab({ competitionId }: { competitionId: string }) {
     let cancelled = false;
     api.get<TackCheckBoard>(`/event-tools/competitions/${competitionId}/tack-check`)
       .then(({ data }) => { if (!cancelled) { setBoard(data); setError(null); } })
-      .catch((caught) => { if (!cancelled) setError(message(caught, 'Couldn’t load the tack check.')); });
+      .catch((caught) => { if (!cancelled) setError(message(caught, 'Couldn’t load the tack check. Check your signal and try again.')); });
     return () => { cancelled = true; };
   }, [competitionId, attempt]);
 
@@ -47,7 +49,7 @@ export function TackCheckTab({ competitionId }: { competitionId: string }) {
         <span className="rf-grow"><span className="rf-t1">Print tack check forms</span><span className="rf-t2">One form per age group, with each team’s riders and ponies</span></span><Chevron />
       </Link>
     </RefineList></nav>
-    {error && <div role="alert" className="mg-notice tools-msg">{error} <button type="button" className="rf-btn rf-btn-text" onClick={() => setAttempt((n) => n + 1)}>Try again</button></div>}
+    {error && <Notice className="tools-msg" actionLabel="Try again" onAction={() => setAttempt((n) => n + 1)}>{error}</Notice>}
     {!board && !error && <p role="status" className="rf-note">Loading the tack check…</p>}
     {board && board.sections.length === 0 && <RefineNote>Add an age group to this competition first.</RefineNote>}
     {board && section && <div className="tools-form">
@@ -69,9 +71,9 @@ function SettingsForm({ competitionId, section, onSaved }: { competitionId: stri
   const [sectors, setSectors] = useState<SectorDraft[]>(() => section.sectors.map((s) => ({ key: nextKey++, id: s.id || null, name: s.name })));
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const toast = useToast();
 
-  function edit(change: () => void) { change(); setSaved(false); setProblem(null); }
+  function edit(change: () => void) { change(); setProblem(null); }
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -87,8 +89,8 @@ function SettingsForm({ competitionId, section, onSaved }: { competitionId: stri
       onSaved(data);
       // New sectors now have ids; keep them so the next save updates rather than adds.
       setSectors(data.sectors.map((s) => ({ key: nextKey++, id: s.id, name: s.name })));
-      setSaved(true);
-    } catch (caught) { setProblem(message(caught, 'Couldn’t save the tack check.')); }
+      toast.show('Tack check saved');
+    } catch (caught) { setProblem(message(caught, 'Couldn’t save the tack check. Check your signal and try again.')); }
     finally { setBusy(false); }
   }
 
@@ -109,9 +111,9 @@ function SettingsForm({ competitionId, section, onSaved }: { competitionId: stri
       {sectors.length < MAX_TACK_SECTORS && <button type="button" className="rf-btn rf-btn-text" onClick={() => edit(() => setSectors((list) => [...list, { key: nextKey++, id: null, name: '' }]))}><Plus className="h-4 w-4" aria-hidden="true" />Add a sector</button>}
       {section.configured && <p className="tools-muted">Removing a sector also removes the results recorded in it.</p>}
     </fieldset>
-    {problem && <p role="alert" className="tools-error">{problem}</p>}
+    {problem && <Notice>{problem}</Notice>}
     <button className="rf-btn rf-btn-primary rf-wide">{busy ? 'Saving…' : 'Save tack check'}</button>
-    {saved && <p role="status" className="rf-note">Tack check saved.</p>}
+    {toast.node}
   </fieldset></form>;
 }
 
@@ -156,7 +158,7 @@ function TeamMarks({ competitionId, section, team, onSaved }: { competitionId: s
         `/event-tools/competitions/${competitionId}/tack-check/sections/${section.sectionId}/teams/${team.teamId}`, { marks: result.marks });
       onSaved(data);
       setDirty(false);
-    } catch (caught) { setProblem(message(caught, 'Couldn’t save these results.')); }
+    } catch (caught) { setProblem(message(caught, 'Couldn’t save these results. Check your signal and try again.')); }
     finally { setBusy(false); }
   }
 
@@ -221,7 +223,7 @@ function TeamMarks({ competitionId, section, team, onSaved }: { competitionId: s
         ))}
       </div>
     )}
-    {problem && <p role="alert" className="tools-error">{problem}</p>}
+    {problem && <Notice>{problem}</Notice>}
     <button className="rf-btn rf-btn-primary" disabled={!dirty}>{busy ? 'Saving…' : `Save ${team.teamName}`}</button>
   </fieldset></form>;
 }

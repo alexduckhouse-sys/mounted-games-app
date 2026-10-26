@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CopiedTick } from '../components/CopiedTick';
 import { useLocation } from 'react-router-dom';
-import { Check, ChevronDown, RefreshCw, X } from 'lucide-react';
+import { Check, ChevronDown, CircleAlert, RefreshCw, X } from 'lucide-react';
 import { api } from '../api';
 import { joinKeyFromSearch } from '../lib/sharing';
 import type { Team, TeamSupporter } from '../types';
 import { JoinQr, TeamCalendarFeed } from './TeamSharing';
 import { SelectField } from '../components/SelectField';
 import { confirmDialog } from '../components/ConfirmDialog';
+import { Notice } from '../components/Notice';
+import { useToast } from '../components/Toast';
 
 const messageOf = (e: unknown, fallback: string) => {
   const data = (e as { response?: { data?: { message?: string } | string } }).response?.data;
@@ -34,7 +35,7 @@ export function JoinTeamCard({ onJoined }: { onJoined: () => void }) {
       setResult(data.status === 1 ? `You're now supporting ${data.teamName}.` : `Request sent for ${data.teamName}. The trainer needs to accept.`);
       onJoined();
     } catch (e) {
-      setError(messageOf(e, 'Could not join. Check the key.'));
+      setError(messageOf(e, 'Couldn’t join. Check the key and try again.'));
     } finally {
       setBusy(false);
     }
@@ -56,8 +57,8 @@ export function JoinTeamCard({ onJoined }: { onJoined: () => void }) {
         />
         <button onClick={join} disabled={busy || !key.trim()} className="mg-btn mg-btn-primary !min-h-11 !px-4">{busy ? '…' : 'Join'}</button>
       </div>
-      {result && <p role="status" className="flex items-center gap-1.5 text-sm text-[rgb(var(--mg-ok))]"><Check className="h-4 w-4" aria-hidden="true" /> {result}</p>}
-      {error && <p role="alert" className="text-sm text-[rgb(var(--mg-elim))]">{error}</p>}
+      {result && <Notice tone="info">{result}</Notice>}
+      {error && <Notice>{error}</Notice>}
     </div>
   );
 }
@@ -67,24 +68,26 @@ export function CodeRow({ team, onTeamUpdated }: { team: Team; onTeamUpdated: ()
   const [editing, setEditing] = useState(false);
   const [codeInput, setCodeInput] = useState('');
   const [codeErr, setCodeErr] = useState<string | null>(null);
+  const [codeProblem, setCodeProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const toast = useToast();
 
   function copyKey() {
     if (!team.supporterJoinKey) return;
     navigator.clipboard?.writeText(team.supporterJoinKey)
-      .then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })
+      .then(() => toast.show('Code copied'))
       .catch(() => {});
   }
   async function run(action: () => Promise<unknown>, after?: () => void) {
     setBusy(true);
     setCodeErr(null);
+    setCodeProblem(null);
     try {
       await action();
       onTeamUpdated();
       after?.();
     } catch (e) {
-      setCodeErr(messageOf(e, 'Could not change the code.'));
+      setCodeProblem(messageOf(e, 'Couldn’t change the code. Check your signal and try again.'));
     } finally {
       setBusy(false);
     }
@@ -107,24 +110,26 @@ export function CodeRow({ team, onTeamUpdated }: { team: Team; onTeamUpdated: ()
           <span className="text-[10px] font-semibold uppercase leading-none tracking-[0.08em] text-[rgb(var(--mg-muted))]">Parent join code</span>
           <span className="mg-display truncate text-lg font-bold leading-none tracking-[0.08em]">{team.supporterJoinKey ?? 'Not set'}</span>
         </span>
-        {team.supporterJoinKey && <button type="button" onClick={copyKey} className="mg-small-btn" aria-label={`Copy join code for ${team.displayName}`}>{copied ? <><CopiedTick className="h-3.5 w-3.5 text-[rgb(var(--mg-ok))]" />Copied</> : 'Copy'}</button>}
-        <button type="button" onClick={() => { setEditing(!editing); setCodeInput(team.supporterJoinKey ?? ''); setCodeErr(null); }} aria-expanded={editing} className="inline-flex min-h-11 items-center px-2.5 text-[13px] font-semibold text-[rgb(var(--mg-heading))]">{team.supporterJoinKey ? 'Change' : 'Set code'}<span className="sr-only"> join code for {team.displayName}</span></button>
+        {team.supporterJoinKey && <button type="button" onClick={copyKey} className="mg-small-btn" aria-label={`Copy join code for ${team.displayName}`}>Copy</button>}
+        <button type="button" onClick={() => { setEditing(!editing); setCodeInput(team.supporterJoinKey ?? ''); setCodeErr(null); setCodeProblem(null); }} aria-expanded={editing} className="inline-flex min-h-11 items-center px-2.5 text-[13px] font-semibold text-[rgb(var(--mg-heading))]">{team.supporterJoinKey ? 'Change' : 'Set code'}<span className="sr-only"> join code for {team.displayName}</span></button>
       </div>
       {editing && (
         <div className="space-y-2 bg-[rgb(var(--mg-subtle))] px-3.5 py-3">
           <div className="flex items-center gap-2">
             <input className="input min-h-11 flex-1 font-mono text-sm uppercase" aria-label="New join code" placeholder="STOCKPORT-A" maxLength={32} value={codeInput} onChange={(e) => setCodeInput(e.target.value.toUpperCase())} autoFocus />
             <button type="button" onClick={saveCustom} disabled={busy} className="mg-btn mg-btn-primary !min-h-11 !px-3"><Check className="h-4 w-4" aria-hidden="true" /> Save</button>
-            <button type="button" onClick={() => { setEditing(false); setCodeErr(null); }} className="mg-icon-btn" aria-label="Cancel"><X className="h-4 w-4" /></button>
+            <button type="button" onClick={() => { setEditing(false); setCodeErr(null); setCodeProblem(null); }} className="mg-icon-btn" aria-label="Cancel"><X className="h-4 w-4" /></button>
           </div>
           <p className="mg-meta">3 to 32 characters: letters, digits, dashes and underscores. It must be unique within this competition.</p>
-          {codeErr && <p role="alert" className="text-sm text-[rgb(var(--mg-elim))]">{codeErr}</p>}
+          {codeErr && <p role="alert" className="mg-field-msg text-sm font-medium text-[rgb(var(--mg-elim))]"><CircleAlert aria-hidden="true" />{codeErr}</p>}
+          {codeProblem && <Notice>{codeProblem}</Notice>}
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={random} disabled={busy} className="mg-btn mg-btn-secondary !min-h-11 !px-3 !text-sm"><RefreshCw className="h-4 w-4" aria-hidden="true" /> New random code</button>
             {team.supporterJoinKey && <button type="button" onClick={revoke} disabled={busy} className="mg-btn mg-btn-secondary !min-h-11 !px-3 !text-sm !text-[rgb(var(--mg-elim))]">Turn code off</button>}
           </div>
         </div>
       )}
+      {toast.node}
     </div>
   );
 }
@@ -200,7 +205,8 @@ export function ManageTeamBlock({ team, onSaved }: { team: Team; onSaved: () => 
   const [trainerId, setTrainerId] = useState(team.trainerUserId ?? '');
   const [bibs, setBibs] = useState(team.bibDescription ?? '');
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const toast = useToast();
 
   useEffect(() => {
     api.get<{ userId: string; fullName: string }[]>(`/clubs/${team.clubId}/trainers`)
@@ -210,13 +216,13 @@ export function ManageTeamBlock({ team, onSaved }: { team: Team; onSaved: () => 
 
   async function save() {
     setBusy(true);
-    setMessage(null);
+    setProblem(null);
     try {
       await api.put(`/teams/${team.id}/trainer`, { trainerUserId: trainerId, bibDescription: bibs });
-      setMessage('Saved.');
+      toast.show('Team details saved');
       onSaved();
     } catch {
-      setMessage('Could not save. Check your connection and try again.');
+      setProblem('Couldn’t save the team details. Check your signal and try again.');
     } finally {
       setBusy(false);
     }
@@ -237,8 +243,9 @@ export function ManageTeamBlock({ team, onSaved }: { team: Team; onSaved: () => 
       </label>
       <div className="flex items-center gap-2">
         <button type="button" className="mg-btn mg-btn-primary !min-h-11 !px-3 !text-sm" disabled={busy} onClick={save}>Save team details</button>
-        {message && <span role="status" className="text-xs text-[rgb(var(--mg-body))]">{message}</span>}
       </div>
+      {problem && <Notice actionLabel="Try again" onAction={save} actionDisabled={busy}>{problem}</Notice>}
+      {toast.node}
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { api } from '../../api';
 import type { Club, DeclarationForm, Team } from '../../types';
 import { parseBibAndFlag } from '../../lib/bib';
 import { displaySectionName } from '../../lib/section';
+import { Notice } from '../../components/Notice';
 import { SelectField } from '../../components/SelectField';
 import { DropdownRow } from '../../components/DropdownRow';
 import { PageGrid } from '../../components/PageGrid';
@@ -305,7 +306,7 @@ export function TeamsTab() {
   return (
     <div className="space-y-3 pt-2">
       {searchBar}
-      {favouriteError && <p role="alert" className="mg-notice">{favouriteError}</p>}
+      {favouriteError && <Notice>{favouriteError}</Notice>}
       {desktop ? (
         <PageGrid variant="left" aside={sectionRail}>
           <div className="space-y-3">
@@ -355,7 +356,7 @@ function TrainerPicker({ competitionId, team, onSaved }: { competitionId: number
         <option value="">No trainer assigned</option>
         {options.map((t) => <option key={t.userId} value={t.userId}>{t.fullName}</option>)}
       </SelectField>
-      {error && <span role="alert" className="text-[rgb(var(--mg-elim))]"> Could not change the trainer.</span>}
+      {error && <Notice className="mt-1">Couldn’t change the trainer. Check your signal and try again.</Notice>}
     </label>
   );
 }

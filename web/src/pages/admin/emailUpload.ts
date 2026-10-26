@@ -17,6 +17,6 @@ export async function uploadPicture(file: File): Promise<PictureDraft> {
     const { data } = await api.post<CustomEmailImage>('/admin/custom-email-images', file, { headers: { 'Content-Type': file.type } });
     return { imageId: data.id, url: data.url, name: file.name || 'Pasted picture' };
   } catch (caught) {
-    throw new Error(problemMessage(caught, 'Couldn’t upload the picture. Try again.'), { cause: caught });
+    throw new Error(problemMessage(caught, 'Couldn’t upload the picture. Check your signal and try again.'), { cause: caught });
   }
 }

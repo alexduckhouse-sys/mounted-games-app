@@ -357,17 +357,17 @@ describe('NavigationDrawer: settings, QR scanner and weather', () => {
     expect(scanBtn.compareDocumentPosition(settingsLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     await userEvent.click(scanBtn);
-    expect(screen.getByRole('dialog', { name: 'Scan permission QR code' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Scan the QR code' })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Close QR scanner' }));
-    expect(screen.queryByRole('dialog', { name: 'Scan permission QR code' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Scan the QR code' })).not.toBeInTheDocument());
 
     await userEvent.click(scanBtn);
     fireEvent.change(screen.getByLabelText('Permission link or key'), {
       target: { value: '/competitions/4/broadcast?pair=pair_secret_1234567890' },
     });
     await userEvent.click(screen.getByRole('button', { name: 'Verify permission key' }));
-    expect(screen.getByRole('alert')).toHaveTextContent('Invalid permission QR code');
+    expect(screen.getByRole('alert')).toHaveTextContent('That QR code isn’t a scoring or camera code');
     expect(onClose).not.toHaveBeenCalled();
   });
 
@@ -443,10 +443,10 @@ describe('NavigationDrawer: permission scanner', () => {
   it('opens and closes the scanner without dismissing or navigating the menu', async () => {
     mount();
     await userEvent.click(screen.getByRole('button', { name: 'Scan a QR code' }));
-    expect(screen.getByRole('dialog', { name: 'Scan permission QR code' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Scan the QR code' })).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'Close QR scanner' }));
-    expect(screen.queryByRole('dialog', { name: 'Scan permission QR code' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Scan the QR code' })).not.toBeInTheDocument());
     expect(screen.getByRole('dialog', { name: 'Menu' })).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByTestId('probe')).toHaveTextContent('/|');
@@ -464,7 +464,7 @@ describe('NavigationDrawer: permission scanner', () => {
     expect(verify).toHaveBeenCalledExactlyOnceWith('/scorer/session', { headers: { 'X-Scorer-Token': token } });
     expect(readScorerToken()).toBe(token);
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('dialog', { name: 'Scan permission QR code' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Scan the QR code' })).not.toBeInTheDocument();
     expect(api.get).not.toHaveBeenCalledWith('/scorer/session', expect.anything());
   });
 
@@ -474,7 +474,7 @@ describe('NavigationDrawer: permission scanner', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Scan a QR code' }));
     fireEvent.change(screen.getByLabelText('Permission link or key'), { target: { value: 'mgs_fake_expired_permission' } });
     fireEvent.click(screen.getByRole('button', { name: 'Verify permission key' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid or expired permission key');
+    expect(await screen.findByRole('alert')).toHaveTextContent('That QR code isn’t a scoring or camera code, or it has stopped working');
     expect(onClose).not.toHaveBeenCalled();
     expect(readScorerToken()).toBeNull();
     expect(screen.getByTestId('probe')).toHaveTextContent('/|');

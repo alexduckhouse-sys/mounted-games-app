@@ -1,7 +1,6 @@
 /* Organiser tools page: unified with the mg-* scoreboard and timetable design tokens. */
 .tools-pad { padding: 20px 0; }
 .tools-msg { margin-top: 12px; }
-.tools-success { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-weight: 600; color: rgb(var(--mg-ok)); }
 .tools-form { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
 .tools-fields { display: flex; flex-direction: column; gap: 12px; border: 0; margin: 0; padding: 0; min-width: 0; }
 .rf-fld .tools-csv { min-height: 12rem; height: auto; padding: 10px; font: 400 14px/1.5 var(--mg-font); font-variant-numeric: tabular-nums; resize: vertical; }

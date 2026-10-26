@@ -5,6 +5,7 @@ import { useCompetition } from './context';
 import { useChatFeed } from './useChatFeed';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
+import { Notice } from '../../components/Notice';
 import { RefineHeader, RefineList, RefinePage } from '../refine/Refine';
 import {
   BANNER_TAG, bannerMessages, clockTime, initials, markSeen, messageThreads, pinnedAnnouncement, readSeen, sentAnnouncements, sentLabel,
@@ -29,11 +30,11 @@ function AnnouncementsSession() {
   const { competition, reload } = useCompetition();
   const { hasRole } = useAuth();
   const isAdmin = hasRole('Admin');
-  const feed = useChatFeed(competition.id, 'Couldn’t load the announcements. Check your connection and try again.');
+  const feed = useChatFeed(competition.id, 'Couldn’t load the announcements. Check your signal and try again.');
   const [body, setBody] = useState(() => readDraft(competition.id));
   const [sending, setSending] = useState(false);
   const [justSentId, setJustSentId] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ text: string; retry?: () => void } | null>(null);
   const busy = useRef(false);
 
   useEffect(() => { writeDraft(competition.id, body); }, [competition.id, body]);
@@ -56,8 +57,8 @@ function AnnouncementsSession() {
       reload();
     } catch (caught) {
       setError((caught as { response?: { status?: number } }).response?.status === 403
-        ? 'Posting is blocked from this network. Contact an organiser.'
-        : 'Couldn’t send that announcement. Check your connection and try again.');
+        ? { text: 'Posting is blocked from this network. Contact an organiser.' }
+        : { text: 'Couldn’t send that announcement. Check your signal and try again.', retry: () => void send() });
     } finally {
       busy.current = false;
       setSending(false);
@@ -79,9 +80,9 @@ function AnnouncementsSession() {
       if (!data || typeof data.id !== 'number' || data.tag !== BANNER_TAG) throw new Error('Invalid announcement response');
       feed.add(data);
       try { await clearBanners(previous); }
-      catch { setError('That announcement is pinned, but the old one could not be cleared. Try again.'); }
+      catch { setError({ text: 'That announcement is pinned, but the old one couldn’t be cleared. Check your signal and try again.' }); }
     } catch {
-      setError('Couldn’t pin that announcement. Check your connection and try again.');
+      setError({ text: 'Couldn’t pin that announcement. Check your signal and try again.', retry: () => void pin(target) });
     } finally {
       busy.current = false;
       reload();
@@ -93,7 +94,7 @@ function AnnouncementsSession() {
     busy.current = true;
     setError(null);
     try { await clearBanners(bannerMessages(feed.messages)); }
-    catch { setError('Couldn’t unpin that. Check your connection and try again.'); feed.load(); }
+    catch { setError({ text: 'Couldn’t unpin that. Check your signal and try again.', retry: () => void unpin() }); feed.load(); }
     finally { busy.current = false; reload(); }
   }
 
@@ -101,9 +102,8 @@ function AnnouncementsSession() {
     <RefinePage className="ann-page">
       <RefineHeader back={`/competitions/${competition.id}/chat`} backLabel="Back to live stream" context={competition.name} title="Announcements" />
       <div className="ann-body">
-        {(error || feed.error) && (
-          <p className="mg-notice" role="alert">{error ?? feed.error}{feed.error && !error && <> <button type="button" className="ann-link" onClick={feed.load}>Try again</button></>}</p>
-        )}
+        {error && <Notice actionLabel={error.retry ? 'Try again' : undefined} onAction={error.retry}>{error.text}</Notice>}
+        {!error && feed.error && <Notice actionLabel="Try again" onAction={feed.load}>{feed.error}</Notice>}
 
         {pinned && (
           <section aria-labelledby="ann-pinned">

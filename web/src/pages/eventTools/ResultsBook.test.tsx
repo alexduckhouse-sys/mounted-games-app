@@ -168,7 +168,7 @@ describe('ResultsBookTab', () => {
       { competitionSectionId: 5, title: 'Best turned out', recipient: 'North A', note: null },
       { competitionSectionId: 5, title: 'Spirit of the Games', recipient: 'Everyone', note: 'Thank you' },
     ] }));
-    expect(await screen.findByText('Awards saved.')).toBeInTheDocument();
+    expect(await screen.findByText('Awards saved')).toBeInTheDocument();
   });
 
   it('shows the reason when the awards cannot be saved', async () => {

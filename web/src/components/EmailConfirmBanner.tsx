@@ -3,6 +3,8 @@ import { MailCheck } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { apiErrorStatus } from '../lib/apiError';
+import { Notice } from './Notice';
+import { useToast } from './Toast';
 
 type Phase = 'idle' | 'sending' | 'sent' | 'notSent' | 'failed' | 'slow';
 
@@ -13,6 +15,7 @@ type Phase = 'idle' | 'sending' | 'sent' | 'notSent' | 'failed' | 'slow';
 export function EmailConfirmBanner() {
   const { user, refreshUser } = useAuth();
   const [phase, setPhase] = useState<Phase>('idle');
+  const toast = useToast();
   if (!user || user.emailConfirmed !== false) return null;
 
   async function resend() {
@@ -20,33 +23,32 @@ export function EmailConfirmBanner() {
     try {
       const { data } = await api.post<{ status?: string }>('/auth/resend-confirmation');
       if (data?.status === 'AlreadyConfirmed') { await refreshUser(); return; }
-      setPhase(data?.status === 'Sent' ? 'sent' : data?.status === 'NotSent' ? 'notSent' : 'failed');
+      if (data?.status === 'Sent') { setPhase('sent'); toast.show('New link sent. Check your spam too.'); return; }
+      setPhase(data?.status === 'NotSent' ? 'notSent' : 'failed');
     } catch (err) {
       setPhase(apiErrorStatus(err) === 429 ? 'slow' : 'failed');
     }
   }
 
-  const note: Record<Exclude<Phase, 'idle' | 'sending'>, string> = {
-    sent: `We've sent a new link to ${user.email}. It can take a minute, and it's worth checking your spam folder.`,
-    notSent: "We couldn't send the email just now, because email isn't switched on here. Please try again later.",
-    failed: "We couldn't send the email just now. Please try again in a few minutes.",
-    slow: "You've asked a few times in a row. Wait a minute, then try again.",
+  const problem: Partial<Record<Phase, string>> = {
+    notSent: 'We couldn’t send the email just now, because email isn’t switched on here. Try again later.',
+    failed: 'We couldn’t send the email just now. Try again in a few minutes.',
+    slow: 'You’ve asked a few times in a row. Wait a minute, then try again.',
   };
 
   return (
-    <div className="mg-card flex flex-col gap-2.5 px-3.5 py-3">
-      <div className="flex items-start gap-3">
-        <MailCheck aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-[rgb(var(--mg-heading))]" />
-        <p className="m-0 flex-1 text-[15px] leading-snug text-[rgb(var(--mg-ink))]">
-          Please confirm your email address. We sent a link to <span className="font-semibold">{user.email}</span>.
-        </p>
-      </div>
-      <button type="button" className="mg-btn mg-btn-secondary !min-h-11 !text-[15px]" disabled={phase === 'sending'} onClick={() => void resend()}>
-        {phase === 'sending' ? 'Sending…' : 'Resend email'}
-      </button>
-      {phase !== 'idle' && phase !== 'sending' && (
-        <p role="status" className={`m-0 text-sm font-medium ${phase === 'sent' ? 'text-[rgb(var(--mg-ok))]' : 'text-[rgb(var(--mg-body))]'}`}>{note[phase]}</p>
-      )}
+    <div className="flex flex-col gap-2">
+      <Notice
+        tone="info"
+        icon={MailCheck}
+        actionLabel={phase === 'sending' ? 'Sending…' : 'Send it again'}
+        actionDisabled={phase === 'sending'}
+        onAction={() => void resend()}
+      >
+        Confirm your email address. We sent a link to <span className="font-semibold">{user.email}</span>.
+      </Notice>
+      {problem[phase] && <Notice>{problem[phase]}</Notice>}
+      {toast.node}
     </div>
   );
 }

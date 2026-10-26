@@ -1,7 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import { Link } from 'react-router-dom';
-import { X } from 'lucide-react';
+import { Link, useInRouterContext } from 'react-router-dom';
+import { Sheet } from '../../components/Sheet';
 import type { Team } from '../../types';
 import { bibAccent, bibLabel, parseBibAndFlag } from '../../lib/bib';
 import { ordinal, type TeamBlock, type TeamDetail } from '../../lib/toplist';
@@ -17,7 +15,10 @@ export interface TeamSheetRider {
   horseName?: string | null;
 }
 
-/** A team's points by session and its final, as a bottom sheet. Esc or the backdrop closes it and focus goes back to the row. */
+/**
+ * A team's points by session and its final, as a kit sheet: the team name, one line about it, Team page and Close,
+ * then the breakdown. Esc, a swipe down or a tap on the dim behind it closes it and focus goes back to the row.
+ */
 export function TeamSheet({
   detail,
   sectionName,
@@ -33,100 +34,73 @@ export function TeamSheet({
   riders?: TeamSheetRider[];
   onClose: () => void;
 }) {
-  const sheetRef = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(onClose);
-  useEffect(() => { closeRef.current = onClose; });
-
-  useEffect(() => {
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    sheetRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); return; }
-      if (event.key !== 'Tab') return;
-      const focusable = [...(sheetRef.current?.querySelectorAll<HTMLElement>('button:not([disabled])') ?? [])];
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    }
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener('keydown', onKeyDown);
-      opener?.focus();
-    };
-  }, []);
-
+  const inRouter = useInRouterContext();
   const rode = detail.blocks.filter((block) => block.kind === 'session' && block.points != null).length;
   const rodeText = rode > 0 ? `rode ${rode} ${rode === 1 ? 'session' : 'sessions'}` : null;
   const sub = [sectionName, [rodeText, detail.final?.label].filter(Boolean).join(' + ')].filter(Boolean).join(' · ');
   const parsedBib = parseBibAndFlag(team?.bibDescription);
+  const teamPage = competitionId != null ? `/competitions/${competitionId}/teams/${detail.teamId}` : null;
 
-  return createPortal(
-    <div className="mg-font fixed inset-0 z-[80] flex items-end justify-center bg-[rgb(var(--mg-overlay)/0.55)]" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div ref={sheetRef} role="dialog" aria-modal="true" aria-labelledby="team-sheet-title" className="flex max-h-[82dvh] w-full max-w-[560px] flex-col gap-3.5 overflow-y-auto rounded-t-[14px] bg-[rgb(var(--mg-surface))] px-4 pb-6 pt-2 text-[rgb(var(--mg-ink))] shadow-[0_-8px_24px_rgb(var(--mg-overlay)/0.22)]">
-        <span aria-hidden="true" className="mx-auto h-1 w-9 shrink-0 rounded-sm bg-[rgb(var(--mg-control))]" />
-        <div className="sticky -top-2 z-[1] -mx-4 -mt-1.5 flex items-start gap-2.5 border-b border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] px-4 pb-2.5 pt-1.5">
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <h2 id="team-sheet-title" className="mg-display text-2xl font-bold leading-none text-[rgb(var(--mg-heading))]">
-              {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="mr-1.5 inline-block h-4 w-6 rounded-[2px] object-cover align-middle" />}
-              <a href={statsProfileHref(StatsSubjectKind.Team, detail.teamName.trim().toLowerCase())} className="!text-inherit !no-underline hover:!underline">{detail.teamName}</a>
-            </h2>
-            {sub && <p className="text-[13px] font-medium leading-snug text-[rgb(var(--mg-muted))]">{sub}</p>}
-            {parsedBib.bib && (
-              <p className="flex items-center gap-1.5 text-xs font-medium text-[rgb(var(--mg-body))]">
-                <span aria-hidden="true" className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border border-black/15" style={{ background: bibAccent(team?.bibDescription) }} />
-                <span className="truncate">{bibLabel(team?.bibDescription)}</span>
-              </p>
-            )}
+  return (
+    <Sheet
+      title={<>
+        {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="mr-1.5 inline-block h-4 w-6 rounded-[2px] object-cover align-middle" />}
+        <a href={statsProfileHref(StatsSubjectKind.Team, detail.teamName.trim().toLowerCase())} className="!text-inherit !no-underline hover:!underline">{detail.teamName}</a>
+      </>}
+      description={sub || undefined}
+      onClose={onClose}
+    >
+      {({ close }) => (
+        <>
+          {parsedBib.bib && (
+            <p className="m-0 flex items-center gap-1.5 text-xs font-medium text-[rgb(var(--mg-body))]">
+              <span aria-hidden="true" className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border border-black/15" style={{ background: bibAccent(team?.bibDescription) }} />
+              <span className="truncate">{bibLabel(team?.bibDescription)}</span>
+            </p>
+          )}
+
+          <div className="kit-acts">
+            {teamPage && (inRouter
+              ? <Link to={teamPage} onClick={onClose} className="kit-pill kit-pill-fill">Team page</Link>
+              : <a href={teamPage} className="kit-pill kit-pill-fill">Team page</a>)}
+            <button type="button" className={teamPage ? 'kit-pill' : 'kit-pill kit-pill-fill'} onClick={() => close()}>Close</button>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close team breakdown" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[rgb(var(--mg-control))] text-[rgb(var(--mg-heading))]"><X aria-hidden="true" className="h-4 w-4" /></button>
-        </div>
 
-        {competitionId != null && (
-          <Link to={`/competitions/${competitionId}/teams/${detail.teamId}`} onClick={onClose} className="mg-tint-link !min-h-10 justify-between !px-3 !text-sm">
-            <span>Full team page &amp; riders</span>
-            <span aria-hidden="true">→</span>
-          </Link>
-        )}
-
-        <div className={`grid gap-2 ${detail.final ? 'grid-cols-2' : 'grid-cols-1'}`}>
-          <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-tint))] px-3 py-2.5">
-            <span className={`${eyebrow} text-[rgb(var(--mg-muted))]`}>Qualifying</span>
-            <span className="mg-display text-[22px] font-bold leading-none text-[rgb(var(--mg-heading))]">
-              {detail.qualifyingPosition != null ? <>{ordinal(detail.qualifyingPosition)} · {detail.qualifyingPoints} pts</> : 'No points yet'}
-            </span>
-          </div>
-          {detail.final && (
-            <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-live-row))] px-3 py-2.5">
-              <span className={`${eyebrow} text-[rgb(var(--mg-red))]`}>{detail.final.label}</span>
+          <div className={`grid gap-2 ${detail.final ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-tint))] px-3 py-2.5">
+              <span className={`${eyebrow} text-[rgb(var(--mg-muted))]`}>Qualifying</span>
               <span className="mg-display text-[22px] font-bold leading-none text-[rgb(var(--mg-heading))]">
-                {detail.final.place != null ? ordinal(detail.final.place) : '–'} · {formatPoints(detail.final.points ?? 0)} pts
+                {detail.qualifyingPosition != null ? <>{ordinal(detail.qualifyingPosition)} · {detail.qualifyingPoints} pts</> : 'No points yet'}
               </span>
             </div>
+            {detail.final && (
+              <div className="flex flex-col gap-1 rounded-[10px] bg-[rgb(var(--mg-live-row))] px-3 py-2.5">
+                <span className={`${eyebrow} text-[rgb(var(--mg-red))]`}>{detail.final.label}</span>
+                <span className="mg-display text-[22px] font-bold leading-none text-[rgb(var(--mg-heading))]">
+                  {detail.final.place != null ? ordinal(detail.final.place) : '–'} · {formatPoints(detail.final.points ?? 0)} pts
+                </span>
+              </div>
+            )}
+          </div>
+
+          {riders && riders.length > 0 && (
+            <section aria-label="Riders and ponies" className="flex flex-col gap-1">
+              <span className={`${eyebrow} text-[rgb(var(--mg-muted))]`}>Riders & ponies</span>
+              <ul className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                {riders.map((r, i) => (
+                  <li key={`${r.fullName}-${i}`}>
+                    <a href={statsProfileHref(StatsSubjectKind.Rider, r.fullName.trim().toLowerCase())} className="font-semibold text-[rgb(var(--mg-heading))]">{r.fullName}</a>
+                    {r.horseName && <> on <a href={statsProfileHref(StatsSubjectKind.Pony, r.horseName.trim().toLowerCase())} className="text-[rgb(var(--mg-body))]">{r.horseName}</a></>}
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
-        </div>
 
-        {riders && riders.length > 0 && (
-          <section aria-label="Riders and ponies" className="flex flex-col gap-1">
-            <span className={`${eyebrow} text-[rgb(var(--mg-muted))]`}>Riders & ponies</span>
-            <ul className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-              {riders.map((r, i) => (
-                <li key={`${r.fullName}-${i}`}>
-                  <a href={statsProfileHref(StatsSubjectKind.Rider, r.fullName.trim().toLowerCase())} className="font-semibold text-[rgb(var(--mg-heading))]">{r.fullName}</a>
-                  {r.horseName && <> on <a href={statsProfileHref(StatsSubjectKind.Pony, r.horseName.trim().toLowerCase())} className="text-[rgb(var(--mg-body))]">{r.horseName}</a></>}
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {detail.blocks.map((block) => <Block key={block.key} block={block} />)}
-      </div>
-    </div>,
-    document.body,
+          {detail.blocks.map((block) => <Block key={block.key} block={block} />)}
+        </>
+      )}
+    </Sheet>
   );
 }
 

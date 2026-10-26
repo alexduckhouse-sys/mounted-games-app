@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { ChevronRight, Link2, Plus, Save, Star } from 'lucide-react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
+import { Notice } from '../../components/Notice';
+import { PageProblem } from '../../components/PageProblem';
+import { useToast } from '../../components/Toast';
 import { useAuth } from '../../auth/AuthContext';
 import { FAVOURITES_CHANGED, readFavourites, toggleFavourite } from '../../lib/favourites';
 import { SectionFormatLabel } from '../../types';
@@ -74,7 +77,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const toast = useToast();
   const [refresh, setRefresh] = useState(0);
   const [search, setSearch] = useState('');
   const [favourites, setFavourites] = useState(readFavourites);
@@ -110,7 +113,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
       }
       setError(null);
     }).catch((caught) => {
-      if (!cancelled) setError(message(caught, id ? 'Couldn’t load this team profile.' : 'Couldn’t load team profiles.'));
+      if (!cancelled) setError(message(caught, id ? 'Couldn’t load this team profile. Check your signal and try again.' : 'Couldn’t load team profiles. Check your signal and try again.'));
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [id, mayManage, user?.id, refresh]);
@@ -120,7 +123,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
     let cancelled = false;
     api.get<CompetitionDetailOption>(`/competitions/${competitionId}`)
       .then(({ data }) => { if (!cancelled) setCompetition(data); })
-      .catch((caught) => { if (!cancelled) setError(message(caught, 'Couldn’t load teams for that competition.')); });
+      .catch((caught) => { if (!cancelled) setError(message(caught, 'Couldn’t load teams for that competition. Check your signal and try again.')); });
     return () => { cancelled = true; };
   }, [competitionId, user?.id]);
 
@@ -152,33 +155,33 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
   }, [competition, history]);
 
   function chooseCompetition(value: string) {
-    setCompetitionId(value); setCompetition(null); setTeamId(''); setError(null); setSuccess(null);
+    setCompetitionId(value); setCompetition(null); setTeamId(''); setError(null);
   }
 
   async function saveProfile(event: FormEvent) {
     event.preventDefault();
-    setBusy(true); setError(null); setSuccess(null);
+    setBusy(true); setError(null);
     try {
       const club = clubId === NEW_CLUB ? { clubId: 0, clubName: newClubName.trim() } : { clubId: Number(clubId) };
       if (id) {
         await api.put(`/team-profiles/${id}`, { ...club, suffix, displayName });
-        setSuccess('Profile saved.'); setRefresh((value) => value + 1);
+        toast.show('Profile saved'); setRefresh((value) => value + 1);
       } else {
         const { data } = await api.post<TeamProfile>('/team-profiles', { ...club, suffix, displayName });
         navigate(`/team-profiles/${data.id}`);
       }
-    } catch (caught) { setError(message(caught, 'Couldn’t save the profile. Check the details and try again.')); }
+    } catch (caught) { setError(message(caught, 'Couldn’t save the profile. Check the details and your signal, then try again.')); }
     finally { setBusy(false); }
   }
 
   async function linkTeam(event: FormEvent) {
     event.preventDefault();
     if (!id || !competitionId || !teamId) return;
-    setBusy(true); setError(null); setSuccess(null);
+    setBusy(true); setError(null);
     try {
       await api.post(`/competitions/${competitionId}/team-profile-links`, { teamProfileId: id, teamId: Number(teamId) });
-      setSuccess('Event team linked.'); setCompetitionId(''); setTeamId(''); setCompetition(null); setTab('history'); setRefresh((value) => value + 1);
-    } catch (caught) { setError(message(caught, 'Couldn’t link that event team.')); }
+      toast.show('Event team linked'); setCompetitionId(''); setTeamId(''); setCompetition(null); setTab('history'); setRefresh((value) => value + 1);
+    } catch (caught) { setError(message(caught, 'Couldn’t link that event team. Check your signal and try again.')); }
     finally { setBusy(false); }
   }
 
@@ -187,7 +190,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
   if (!id) {
     if (creating && mayManage) return <RefinePage>
       <RefineHeader context="Team profiles" title="Create a team profile" subtitle="Use one profile for the same club team across different events." />
-      {error && <div role="alert" className="mg-notice sv-msg">{error}</div>}
+      {error && <Notice className="sv-msg">{error}</Notice>}
       <form onSubmit={saveProfile}>
         <fieldset disabled={busy} className="sv-fieldset sv-stack">
           <legend className="sr-only">Team details</legend>
@@ -207,7 +210,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
     const shown = (profiles ?? []).filter((profile) => `${profile.displayName} ${profile.clubName}`.toLowerCase().includes(needle));
     return <RefinePage>
       <h1 className="sr-only">Team profiles</h1>
-      {error && <div role="alert" className="mg-notice sv-msg">{error} <button type="button" className="mg-text-link min-h-11" onClick={() => { setLoading(true); setError(null); setRefresh((value) => value + 1); }}>Try again</button></div>}
+      {error && <Notice className="sv-msg" actionLabel="Try again" onAction={() => { setLoading(true); setError(null); setRefresh((value) => value + 1); }}>{error}</Notice>}
       {!error && (profiles?.length ? <>
         <RoundSearch label="Find a team or club" placeholder="Team or club" value={search} onChange={setSearch} />
         {shown.length > 0 && <ul className="sp-card sp-gap m-0 list-none p-0" aria-label="Team profiles">{[...shown].sort((a, b) => a.displayName.localeCompare(b.displayName)).map((profile) => <li key={profile.id}><Link to={`/team-profiles/${profile.id}`} className="sp-row"><span className="sp-grow"><span className="sp-t1">{profile.displayName}</span><span className="sp-t2">{profile.clubName}{profile.suffix ? ` · suffix ${profile.suffix}` : ''}</span></span><ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} /></Link></li>)}</ul>}
@@ -219,7 +222,9 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
 
   if (!history) return <RefinePage>
     <RefineHeader back="/team-profiles" backLabel="Back to team profiles" context="Team profiles" title="Team history" />
-    <div role="alert" className="mg-notice sv-msg">{error ?? 'Team profile not found.'} {error && <button type="button" className="mg-text-link min-h-11" onClick={() => { setLoading(true); setError(null); setRefresh((value) => value + 1); }}>Try again</button>}</div>
+    {error
+      ? <PageProblem title="Couldn’t load this team" primaryLabel="Try again" onPrimary={() => { setLoading(true); setError(null); setRefresh((value) => value + 1); }}>{error}</PageProblem>
+      : <PageProblem title="Team profile not found" secondaryLabel="Team profiles" secondaryTo="/team-profiles">Check the link, or pick the team from the list.</PageProblem>}
   </RefinePage>;
 
   const profile = history.profile;
@@ -261,11 +266,11 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
     <h1 className="sr-only">{profile.displayName}</h1>
     {tabs.length > 0 && (
       <div className="sp-seg" role="tablist" aria-label="Team profile sections">
-        {tabs.map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => { setTab(key); setError(null); setSuccess(null); }}>{label}</button>)}
+        {tabs.map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => { setTab(key); setError(null); }}>{label}</button>)}
       </div>
     )}
-    {error && <div role="alert" className="mg-notice sv-msg">{error}</div>}
-    {success && <div role="status" className="mg-notice sv-msg">{success}</div>}
+    {error && <Notice className="sv-msg">{error}</Notice>}
+    {toast.node}
 
     {tab === 'history' && <>
       <div className="sp-card sp-gap">

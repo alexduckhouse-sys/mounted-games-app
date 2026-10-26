@@ -62,7 +62,7 @@ describe('EquipmentPage', () => {
     const user = userEvent.setup();
     show();
     await user.click(await screen.findByRole('checkbox', { name: '30 × Pole' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('changed on another device');
+    expect(await screen.findByRole('status')).toHaveTextContent('changed on another phone');
     await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
   });
 

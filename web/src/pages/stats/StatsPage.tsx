@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CardDropdownRow } from '../../components/CardDropdownRow';
+import { Notice } from '../../components/Notice';
 import { usePageWidth } from '../../components/pageWidthState';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { RoundSearch } from '../../components/RoundSearch';
@@ -55,7 +56,7 @@ function StatsBrowseView() {
     <div>
       {text.trim().length === 1 && <RefineNote>Type at least two letters to narrow the list.</RefineNote>}
       {list.status === 'loading' && <p role="status" className="rf-note">Loading…</p>}
-      {list.status === 'error' && <div role="alert" className="mg-notice mt-3">{list.message}</div>}
+      {list.status === 'error' && <Notice className="mt-3">{list.message}</Notice>}
       {list.status === 'ready' && <BrowseResults list={list} plural={tab.plural} label={tab.label} words={isSearchableQuery(text) ? tidyStatsQuery(text) : ''} />}
     </div>
   </RefinePage>;
@@ -71,7 +72,7 @@ function BrowseResults({ list, plural: noun, label, words }: { list: Extract<Sta
   const remaining = list.total - list.items.length;
   return <>
     <ul className="sp-card sp-gap m-0 list-none p-0" aria-label={label}>{list.items.map((hit) => <HitRow key={hit.key} hit={hit} />)}</ul>
-    {list.moreError && <div role="alert" className="mg-notice mt-3">{list.moreError}</div>}
+    {list.moreError && <Notice className="mt-3">{list.moreError}</Notice>}
     {remaining > 0 && <button type="button" className="rf-btn rf-wide mt-3" disabled={list.loadingMore} onClick={list.loadMore}>
       {list.loadingMore ? 'Loading…' : `Show more (${remaining} left)`}
     </button>}
@@ -100,7 +101,7 @@ function StatsProfileRoute({ segment }: { segment: string }) {
     <div className="py-6 text-[rgb(var(--mg-muted))]"><h2 className="m-0 mb-1 font-['Barlow_Condensed',sans-serif] text-xl font-bold text-[rgb(var(--mg-heading))]">No statistics found</h2>
       <p className="m-0">There are no finished competitions under this name. <Link to="/stats" className="font-semibold text-[rgb(var(--mg-heading))]">Browse the list</Link></p></div>
   </RefinePage>;
-  if (load.status === 'error') return <RefinePage>{back}<div role="alert" className="mg-notice mt-3">{load.message}</div></RefinePage>;
+  if (load.status === 'error') return <RefinePage>{back}<Notice className="mt-3">{load.message}</Notice></RefinePage>;
   if (load.status !== 'ready') return <RefinePage>{back}<p role="status" className="rf-note">Loading statistics…</p></RefinePage>;
   return <RefinePage>{back}<ProfileBody profile={load.data} /></RefinePage>;
 }

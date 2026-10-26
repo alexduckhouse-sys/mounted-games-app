@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { CreditCard } from 'lucide-react';
 import { api } from '../../api';
+import { Notice } from '../../components/Notice';
+import { PageProblem } from '../../components/PageProblem';
 import type { MySignup } from '../../types';
 import { RefineFoot, RefineHeader, RefineList, RefinePage, RefineSection } from '../refine/Refine';
 import { OutcomeState, PaidAmount } from './DemoPaymentFlow';
@@ -68,20 +70,18 @@ export function TestEntryPaymentPage() {
   if (load.state === 'error') {
     return (
       <RefinePage>
-        <div role="alert" className="mg-card m-4 flex flex-col items-start gap-3 p-4">
-          <p>We couldn’t load this entry. Check your connection and try again.</p>
-          <button type="button" className="mg-btn mg-btn-secondary" onClick={retry}>Try again</button>
-        </div>
+        <PageProblem title="Couldn’t load this entry" primaryLabel="Try again" onPrimary={retry} secondaryLabel="My signups" secondaryTo="/me/signups">
+          Check your signal and try again.
+        </PageProblem>
       </RefinePage>
     );
   }
   if (load.state === 'missing') {
     return (
       <RefinePage>
-        <div role="alert" className="mg-card m-4 flex flex-col items-start gap-3 p-4">
-          <p>We couldn’t find that entry on your account.</p>
-          <Link className="mg-btn mg-btn-secondary" to="/me/signups">My signups</Link>
-        </div>
+        <PageProblem title="Couldn’t find that entry" secondaryLabel="My signups" secondaryTo="/me/signups">
+          It isn’t on your account.
+        </PageProblem>
       </RefinePage>
     );
   }
@@ -90,9 +90,11 @@ export function TestEntryPaymentPage() {
 
 function TestBanner({ children }: { children: string }) {
   return (
-    <div role="note" className="mx-4 mt-3 rounded-lg border-2 border-violet-400 bg-violet-50 p-3 text-violet-950">
-      <p className="text-sm font-extrabold uppercase tracking-wide">Test payment</p>
-      <p className="mt-1 text-sm">{children}</p>
+    <div className="mx-4 mt-3">
+      <Notice tone="info" role={null}>
+        <span className="block font-extrabold uppercase tracking-wide">Test payment</span>
+        {children}
+      </Notice>
     </div>
   );
 }
@@ -111,9 +113,11 @@ function TestPaymentScreen({ signup, isDemo, payments }: { signup: MySignup; isD
     return (
       <RefinePage>
         <RefineHeader back={back} backLabel="Back to the competition" context={signup.competitionName} title="Payment" />
-        <div role="note" className="mg-card m-4 flex flex-col items-start gap-3 p-4">
-          <p className="font-semibold">Online payment isn’t available for this event.</p>
-          <p>Please pay the organiser directly. Your entry stays pending until they confirm it.</p>
+        <div className="m-4 flex flex-col items-start gap-3">
+          <Notice tone="info" role={null} className="w-full">
+            <span className="block font-semibold">Online payment isn’t available for this event.</span>
+            Pay the organiser directly. Your entry stays pending until they confirm it.
+          </Notice>
           <Link className="mg-btn mg-btn-secondary" to={back}>Back to the competition</Link>
         </div>
       </RefinePage>
@@ -136,7 +140,7 @@ function TestPaymentScreen({ signup, isDemo, payments }: { signup: MySignup; isD
       setShown(data.payment);
       setReviewing(true);
     } catch (requestError) {
-      setError(errorMessage(requestError, 'The test payment could not be checked. Try again.'));
+      setError(errorMessage(requestError, 'Couldn’t check the test payment. Check your signal and try again.'));
     } finally {
       setBusy(false);
     }
@@ -155,7 +159,7 @@ function TestPaymentScreen({ signup, isDemo, payments }: { signup: MySignup; isD
       setStatus(data.signupStatus);
       setShown(data.payment);
     } catch (requestError) {
-      setError(errorMessage(requestError, 'The test refund could not be checked. Try again.'));
+      setError(errorMessage(requestError, 'Couldn’t check the test refund. Check your signal and try again.'));
     } finally {
       setBusy(false);
     }
@@ -203,7 +207,7 @@ function TestPaymentScreen({ signup, isDemo, payments }: { signup: MySignup; isD
             </p>
           </>
         )}
-        {error && <p role="alert" className="mx-4 text-sm font-semibold text-[rgb(var(--mg-elim))]">{error}</p>}
+        {error && <div className="mx-4"><Notice>{error}</Notice></div>}
         <RefineFoot column>
           {status === 0 && (
             <button type="button" className="rf-btn rf-btn-primary" onClick={() => { setReviewing(false); setError(null); }}>Back to the test payment</button>
@@ -245,9 +249,11 @@ function TestPaymentScreen({ signup, isDemo, payments }: { signup: MySignup; isD
         <p className="text-sm"><span className="font-bold">TEST CARD</span> · •••• •••• •••• 4242<br /><span className="rf-t2">For show only. Nothing is entered or stored.</span></p>
       </div>
       {error && (
-        <div role="alert" className="mx-4 mt-3 rounded-lg border-l-4 border-rose-600 bg-rose-50 p-3 text-sm text-rose-900">
-          <p>{error}</p>
-          <p className="mt-1 text-xs">Trying again checks the same test payment.</p>
+        <div className="mx-4 mt-3">
+          <Notice>
+            {error}
+            <span className="mt-1 block text-xs">Trying again checks the same test payment.</span>
+          </Notice>
         </div>
       )}
       <RefineFoot column>

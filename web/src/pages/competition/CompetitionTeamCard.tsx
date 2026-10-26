@@ -5,6 +5,8 @@ import type { CompetitionHelper, CompetitionTeam } from '../../types';
 import { RefineList, RefineNote, RefineSection } from '../refine/Refine';
 import { apiMessage } from '../operations/types';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { Notice } from '../../components/Notice';
+import { useToast } from '../../components/Toast';
 
 /** Keeps a wrong or partial response from reaching the screen. */
 function parseTeam(data: unknown): CompetitionTeam | null {
@@ -22,13 +24,14 @@ type TeamState = { competitionId: number; team: CompetitionTeam } | 'error' | nu
  * Who runs one competition. The owner and every competition admin can add and remove competition admins
  * (via `canWrite`), and anyone on the team can leave. The API decides; this only hides what won't work.
  */
-export function CompetitionTeamCard({ competitionId, canWrite = true }: { competitionId: number; canWrite?: boolean }) {
+export function CompetitionTeamCard({ competitionId, competitionName, canWrite = true }: { competitionId: number; competitionName?: string; canWrite?: boolean }) {
   const { user, refreshAccess } = useAuth();
   const [state, setState] = useState<TeamState>(null);
   const [retry, setRetry] = useState(0);
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const toast = useToast();
 
   useEffect(() => {
     let cancelled = false;
@@ -54,14 +57,14 @@ export function CompetitionTeamCard({ competitionId, canWrite = true }: { compet
     const address = email.trim();
     if (!address || busy) return;
     setBusy(true);
-    setNotice(null);
+    setProblem(null);
     try {
       const { data } = await api.post<CompetitionHelper>(`/competitions/${competitionId}/team`, { email: address });
       changeHelpers((helpers) => [...helpers.filter((helper) => helper.userId !== data.userId), data]);
       setEmail('');
-      setNotice({ kind: 'ok', text: `${data.name} is now a competition admin.` });
+      toast.show(`${data.name} is now a competition admin`);
     } catch (error) {
-      setNotice({ kind: 'error', text: apiMessage(error, 'Couldn’t add that person. Check your connection and try again.') });
+      setProblem(apiMessage(error, 'Couldn’t add that person. Check your signal and try again.'));
     } finally {
       setBusy(false);
     }
@@ -71,13 +74,13 @@ export function CompetitionTeamCard({ competitionId, canWrite = true }: { compet
     if (busy) return;
     if (!(await confirmDialog({ title: `Remove ${helper.name} from the team?`, message: 'They lose access to this competition.', confirmLabel: 'Remove from team', destructive: true }))) return;
     setBusy(true);
-    setNotice(null);
+    setProblem(null);
     try {
       await api.delete(`/competitions/${competitionId}/team/${helper.userId}`);
       changeHelpers((helpers) => helpers.filter((item) => item.userId !== helper.userId));
-      setNotice({ kind: 'ok', text: `Removed ${helper.name}.` });
+      toast.show(`Removed ${helper.name}`);
     } catch (error) {
-      setNotice({ kind: 'error', text: apiMessage(error, `Couldn’t remove ${helper.name}. Try again.`) });
+      setProblem(apiMessage(error, `Couldn’t remove ${helper.name}. Check your signal and try again.`));
     } finally {
       setBusy(false);
     }
@@ -85,16 +88,16 @@ export function CompetitionTeamCard({ competitionId, canWrite = true }: { compet
 
   async function leave(helper: CompetitionHelper) {
     if (busy) return;
-    if (!(await confirmDialog({ title: 'Leave this team?', message: 'You’ll lose access to this competition for this team.', confirmLabel: 'Leave team', destructive: true }))) return;
+    if (!(await confirmDialog({ title: 'Leave this team?', message: `You’ll lose access to ${competitionName ?? 'this competition'} for this team.`, confirmLabel: 'Leave team', destructive: true }))) return;
     setBusy(true);
-    setNotice(null);
+    setProblem(null);
     try {
       await api.delete(`/competitions/${competitionId}/team/${helper.userId}`);
       changeHelpers((helpers) => helpers.filter((item) => item.userId !== helper.userId));
-      setNotice({ kind: 'ok', text: 'You’ve left this team.' });
+      toast.show('You’ve left this team');
       await refreshAccess();
     } catch (error) {
-      setNotice({ kind: 'error', text: apiMessage(error, 'Couldn’t leave the team. Try again.') });
+      setProblem(apiMessage(error, 'Couldn’t leave the team. Check your signal and try again.'));
     } finally {
       setBusy(false);
     }
@@ -106,10 +109,7 @@ export function CompetitionTeamCard({ competitionId, canWrite = true }: { compet
     <section aria-label="Competition team">
       <RefineSection title="Competition team" />
       {state === 'error' && (
-        <div role="alert" className="rf-list flex flex-col items-start gap-2 p-3">
-          <p>Couldn’t load the team. Check your connection and try again.</p>
-          <button type="button" className="mg-btn mg-btn-secondary" onClick={() => { setState(null); setRetry((n) => n + 1); }}>Try again</button>
-        </div>
+        <Notice className="mt-2" actionLabel="Try again" onAction={() => { setState(null); setRetry((n) => n + 1); }}>Couldn’t load the team. Check your signal and try again.</Notice>
       )}
       {state === null && <p role="status" className="rf-note">Loading the team…</p>}
       {team && (
@@ -159,7 +159,8 @@ export function CompetitionTeamCard({ competitionId, canWrite = true }: { compet
           )}
         </>
       )}
-      {notice && <p role={notice.kind === 'error' ? 'alert' : 'status'} className="mg-notice">{notice.text}</p>}
+      {problem && <Notice className="mt-2" onDismiss={() => setProblem(null)}>{problem}</Notice>}
+      {toast.node}
     </section>
   );
 }

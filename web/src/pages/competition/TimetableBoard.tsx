@@ -6,6 +6,7 @@ import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import { Dropdown } from '../../components/Dropdown';
+import { Notice } from '../../components/Notice';
 import { usePageWidth } from '../../components/pageWidthState';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { SponsorStrip } from '../../components/SponsorStrip';
@@ -67,7 +68,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   const [sectionFilter, setSectionFilter] = useState('');
   const [shifting, setShifting] = useState(false);
   const [customDelay, setCustomDelay] = useState('');
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ text: string; retry?: () => void } | null>(null);
   const pace = useMemo(() => predictMinutesPerRace(competition.sessions ?? []), [competition.sessions]);
 
   async function shiftTimes(deltaMinutes: number) {
@@ -81,7 +82,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
       reload();
       return true;
     } catch {
-      setActionError('The timetable could not be shifted. Please try again.');
+      setActionError({ text: 'Couldn’t shift the timetable. Check your signal and try again.', retry: () => void shiftTimes(deltaMinutes) });
       return false;
     } finally {
       setShifting(false);
@@ -96,9 +97,12 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
       });
       reload();
     } catch {
-      setActionError(currentlyPaused
-        ? 'The timetable could not be resumed. Please try again.'
-        : 'The timetable could not be paused. Please try again.');
+      setActionError({
+        text: currentlyPaused
+          ? 'Couldn’t resume the timetable. Check your signal and try again.'
+          : 'Couldn’t pause the timetable. Check your signal and try again.',
+        retry: () => void togglePause(currentlyPaused),
+      });
     } finally {
       setShifting(false);
     }
@@ -106,7 +110,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   async function applyCustomDelay() {
     const parsed = Number(customDelay);
     if (!Number.isInteger(parsed) || parsed === 0 || parsed < -720 || parsed > 720) {
-      setActionError('Enter a whole number from -720 to 720, excluding zero.');
+      setActionError({ text: 'Enter a whole number from -720 to 720, excluding zero.' });
       return;
     }
     if (await shiftTimes(parsed)) setCustomDelay('');
@@ -302,7 +306,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
           )}
         </div>
       )}
-      {actionError && <p role="alert" className="px-4 py-2 text-sm text-red-700">{actionError}</p>}
+      {actionError && <Notice className="mx-4 my-2" actionLabel={actionError.retry ? 'Try again' : undefined} onAction={actionError.retry}>{actionError.text}</Notice>}
       <div className="tt-body">
         {lead}
         {visibleRows.some(isProvisionalRow) && (

@@ -988,10 +988,10 @@ describe('SessionPage', () => {
       await opened('Bending');
       const sheet = await openTools();
       await userEvent.click(within(sheet).getByRole('button', { name: /QR access/ }));
-      const modal = await screen.findByRole('dialog', { name: 'QR Code Access Hub' });
+      const modal = await screen.findByRole('dialog', { name: 'Share with QR codes' });
       expect(modal).toBeInTheDocument();
       await userEvent.click(within(modal).getByRole('button', { name: 'Close QR access modal' }));
-      expect(screen.queryByRole('dialog', { name: 'QR Code Access Hub' })).toBeNull();
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Share with QR codes' })).toBeNull());
       expect(screen.getByRole('region', { name: 'Scoring Bending' })).toBeInTheDocument();
     });
   });

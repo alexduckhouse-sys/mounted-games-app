@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { api } from '../../api';
+import { Notice } from '../../components/Notice';
 import { useCompetition } from '../competition/context';
 import { Chevron, RefineList, RefineNote, RefineSection, RefineSheet, RefineStatus } from '../refine/Refine';
 import { RedrawPreviewView } from './RedrawPreviewView';
 import { RiderSwapSheet } from './RiderSwapSheet';
 import type { SetTeamEntryStatusResult, TeamEntry, TeamEntryStatus } from './types';
-import { apiMessage, isOffline, statusOf } from './types';
+import { OFFLINE_MESSAGE, apiMessage, isOffline, statusOf } from './types';
 import './operations.css';
 
 interface StatusSheet { team: TeamEntry; next: TeamEntryStatus }
@@ -40,8 +41,8 @@ export function EntriesPanel({ canWrite, onTimetableChanged }: { canWrite: boole
       setEntries(Array.isArray(data) ? data : []);
     } catch (error) {
       setLoadError(isOffline(error)
-        ? 'You appear to be offline. Entries need a connection. Try again when you have signal.'
-        : apiMessage(error, 'Couldn’t load the entries. Try again.'));
+        ? OFFLINE_MESSAGE
+        : apiMessage(error, 'Couldn’t load the entries. Check your signal and try again.'));
     } finally {
       setLoading(false);
     }
@@ -79,9 +80,9 @@ export function EntriesPanel({ canWrite, onTimetableChanged }: { canWrite: boole
 
   return (
     <section aria-label="Entries">
-      {message && <p role="status" className="ops-toast"><span>{message}</span><button type="button" className="rf-btn rf-btn-text" onClick={() => setMessage(null)}>Dismiss</button></p>}
+      {message && <Notice tone="info" onDismiss={() => setMessage(null)}>{message}</Notice>}
       {loading && !entries && <p role="status" className="rf-note">Loading teams…</p>}
-      {loadError && <p role="alert" className="mg-notice ops-alert">{loadError} <button type="button" className="rf-btn rf-btn-text" onClick={() => void load()}>Try again</button></p>}
+      {loadError && <Notice actionLabel="Try again" onAction={() => void load()}>{loadError}</Notice>}
       {entries && entries.length === 0 && <RefineNote>No teams have entered yet.</RefineNote>}
 
       {redrawSections.length > 0 && (
@@ -195,8 +196,8 @@ function StatusSheetView({ competitionId, sheet, onClose, onDone }: {
     } catch (failure) {
       const status = statusOf(failure);
       setError(isOffline(failure)
-        ? 'No connection. Nothing was changed. Try again when you have signal.'
-        : apiMessage(failure, status === 409 ? 'This can’t be undone any more.' : 'Couldn’t save the change. Try again.'));
+        ? OFFLINE_MESSAGE
+        : apiMessage(failure, status === 409 ? 'This can’t be undone any more.' : 'Couldn’t save the change. Check your signal and try again.'));
     } finally {
       setBusy(false);
     }
@@ -212,7 +213,7 @@ function StatusSheetView({ competitionId, sheet, onClose, onDone }: {
           <textarea className="ops-note-input" value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} />
         </label>
         <span className="rf-t2">Visible to organisers only.</span>
-        {error && <p role="alert" className="mg-notice ops-alert">{error}</p>}
+        {error && <Notice>{error}</Notice>}
         <div className="rf-actions">
           <button type="button" className="rf-btn" onClick={onClose}>Cancel</button>
           <button type="submit" className="rf-btn rf-btn-primary rf-grow" disabled={busy}>{busy ? 'Saving…' : next === 0 ? 'Reinstate team' : next === 1 ? 'Withdraw team' : 'Mark as no-show'}</button>

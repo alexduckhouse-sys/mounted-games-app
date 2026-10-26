@@ -3,6 +3,8 @@ import { Plus, X } from 'lucide-react';
 import { api } from '../../api';
 import { apiErrorMessage } from '../../lib/apiError';
 import { NumberField } from '../../components/NumberField';
+import { Notice } from '../../components/Notice';
+import { useToast } from '../../components/Toast';
 import { SelectField } from '../../components/SelectField';
 import {
   asked, BASIC_CONFIG, configProblem, MAX_CUSTOM_FIELDS, newFieldId, NUMBER_FIELD, parseConfigResponse, STANDARD_CONFIG, TEXT_FIELD,
@@ -69,7 +71,9 @@ export function DecFormConfigEditor({ competitionId, readOnly = false }: Props) 
   const [draft, setDraft] = useState<DecFormConfig>(STANDARD_CONFIG);
   const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const toast = useToast();
 
   useEffect(() => {
     let cancelled = false;
@@ -86,14 +90,14 @@ export function DecFormConfigEditor({ competitionId, readOnly = false }: Props) 
       }
     })();
     return () => { cancelled = true; };
-  }, [competitionId]);
+  }, [competitionId, attempt]);
 
-  if (loadFailed) return <p className="text-sm text-[rgb(var(--mg-muted))]">Couldn’t load the dec form setup. Check your signal and try again.</p>;
+  if (loadFailed) return <Notice role={null} actionLabel="Try again" onAction={() => { setLoadFailed(false); setAttempt((n) => n + 1); }}>Couldn’t load the dec form setup. Check your signal and try again.</Notice>;
   if (!saved) return <p className="text-sm text-[rgb(var(--mg-muted))]">Loading the dec form setup…</p>;
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved.config);
   const problem = configProblem(draft);
-  const change = (patch: Partial<DecFormConfig>) => { setDraft((cur) => ({ ...cur, ...patch })); setMessage(null); };
+  const change = (patch: Partial<DecFormConfig>) => { setDraft((cur) => ({ ...cur, ...patch })); setSaveError(null); };
   const setPart = (key: PartKey, value: Requirement) => change({ [key]: value } as Partial<DecFormConfig>);
 
   function setField(id: string, patch: Partial<CustomField>) {
@@ -107,14 +111,14 @@ export function DecFormConfigEditor({ competitionId, readOnly = false }: Props) 
   async function save() {
     if (readOnly || busy || problem) return;
     setBusy(true);
-    setMessage(null);
+    setSaveError(null);
     try {
       const { data } = await api.put(`/competitions/${competitionId}/dec-form-config`, draft);
       const parsed = parseConfigResponse(data);
       if (parsed) { setSaved(parsed); setDraft(parsed.config); }
-      setMessage({ kind: 'ok', text: 'Saved. New dec forms will use this.' });
+      toast.show('Dec form setup saved');
     } catch (err) {
-      setMessage({ kind: 'error', text: apiErrorMessage(err, 'Could not save the dec form setup. Check your signal and try again.') });
+      setSaveError(apiErrorMessage(err, 'Couldn’t save the dec form setup. Check your signal and try again.'));
     } finally {
       setBusy(false);
     }
@@ -193,21 +197,17 @@ export function DecFormConfigEditor({ competitionId, readOnly = false }: Props) 
       </fieldset>
 
       <div className="flex flex-col gap-2">
-        <p className="mg-notice">
+        <Notice tone="info" role={null}>
           Changes apply to dec forms sent from now on.
           {saved.formsSubmitted > 0 && ` The ${saved.formsSubmitted} already in keep the answers they have.`}
-        </p>
-        {problem && <p role="alert" className="text-sm font-medium text-[rgb(var(--mg-elim))]">{problem}</p>}
+        </Notice>
+        {problem && <Notice>{problem}</Notice>}
+        {saveError && <Notice actionLabel="Try again" onAction={() => { void save(); }} actionDisabled={busy}>{saveError}</Notice>}
         <div className="flex flex-wrap items-center gap-3">
           <button type="button" className="mg-btn mg-btn-primary !min-h-12" disabled={readOnly || busy || !!problem || (!dirty && !saved.isStandard)} onClick={() => { void save(); }}>
             {busy ? 'Saving…' : saved.isStandard && !dirty ? 'Save this setup' : 'Save the dec form'}
           </button>
-          {message && (
-            <span role={message.kind === 'error' ? 'alert' : 'status'}
-              className={`text-sm font-medium ${message.kind === 'error' ? 'text-[rgb(var(--mg-elim))]' : 'text-[rgb(var(--mg-ok))]'}`}>
-              {message.text}
-            </span>
-          )}
+          {toast.node}
         </div>
       </div>
     </div>

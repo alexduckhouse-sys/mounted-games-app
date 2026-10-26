@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { Notice } from '../components/Notice';
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { usePageWidth } from '../components/pageWidthState';
@@ -28,7 +29,7 @@ function FormChip({ team, form }: { team: Team; form: DeclarationForm | undefine
   if (team.relationship !== 'trainer' && team.relationship !== 'manager') return null;
   return form
     ? <span className="mg-tag mg-tag-ok shrink-0">Dec form in</span>
-    : <span className="mg-tag shrink-0 !bg-[rgb(var(--mg-live-row))] !text-[rgb(var(--mg-elim))]">Dec form due</span>;
+    : <span className="mg-tag shrink-0 !bg-[rgb(var(--mg-problem-bg))] !text-[rgb(var(--mg-problem-ink))]">Dec form due</span>;
 }
 
 function RelationshipTag({ team }: { team: Team }) {
@@ -109,7 +110,7 @@ export function MyTeamsPage() {
                 <span className="truncate text-xs text-[rgb(var(--mg-muted))]">{[section, next ? `next ${heatTime(next)}, ${next.label}${next.arenaName ? ` · ${next.arenaName}` : ''}` : 'no heats yet'].join(' · ')}</span>
               </span>
               <span className="flex items-center gap-1.5">
-                {clashWith && <span className="mg-tag shrink-0 !bg-amber-100 !text-amber-900" title={`Clashes with ${clashWith}`}>Schedule clash</span>}
+                {clashWith && <span className="mg-tag shrink-0 !bg-[rgb(var(--mg-problem-bg))] !text-[rgb(var(--mg-problem-ink))]" title={`Clashes with ${clashWith}`}>Schedule clash</span>}
                 <RelationshipTag team={team} />
                 <FormChip team={team} form={form} />
               </span>
@@ -124,7 +125,7 @@ export function MyTeamsPage() {
                 <strong className="mg-display truncate text-xl font-bold leading-none text-[rgb(var(--mg-heading))]">{team.displayName}</strong>
                 <span className="truncate text-xs text-[rgb(var(--mg-muted))]">{[section, ridersText(form), comps.get(team.competitionId)?.name].filter(Boolean).join(' · ')}</span>
               </Link>
-              {clashWith && <span className="mg-tag shrink-0 !bg-amber-100 !text-amber-900" title={`Clashes with ${clashWith}`}>Schedule clash</span>}
+              {clashWith && <span className="mg-tag shrink-0 !bg-[rgb(var(--mg-problem-bg))] !text-[rgb(var(--mg-problem-ink))]" title={`Clashes with ${clashWith}`}>Schedule clash</span>}
               <RelationshipTag team={team} />
               <FormChip team={team} form={form} />
               <button type="button" onClick={() => setOpenId(null)} aria-expanded="true" aria-label={`Hide details for ${team.displayName}`} className="flex h-11 w-9 shrink-0 items-center justify-center text-[rgb(var(--mg-faint))]"><ChevronDown className="h-4 w-4 rotate-180" aria-hidden="true" /></button>
@@ -146,8 +147,9 @@ export function MyTeamsPage() {
                 <span className="text-[15px] font-semibold">Heat alerts</span>
                 <span className="text-xs text-[rgb(var(--mg-muted))]">{alertsNote(notify.enabled, notify.permission)}</span>
               </span>
-              <Switch label="Heat alerts" on={notify.enabled} disabled={notify.permission === 'denied' || notify.permission === 'unsupported'} onChange={notify.setEnabled} />
+              <Switch label="Heat alerts" on={notify.enabled} disabled={notify.permission === 'denied'} onChange={notify.setEnabled} />
             </div>
+            {notify.problem && <div className="px-3.5 pb-2.5"><Notice>{notify.problem}</Notice></div>}
             {team.bibDescription && <p className="border-t border-[rgb(var(--mg-rule-soft))] px-3.5 py-2.5 text-xs text-[rgb(var(--mg-muted))]">Bibs: {team.bibDescription}</p>}
             {team.relationship === 'manager' && <ManageTeamBlock team={team} onSaved={reload} />}
             {(team.relationship === 'trainer' || team.relationship === 'manager') && <SupportersBlock team={team} />}

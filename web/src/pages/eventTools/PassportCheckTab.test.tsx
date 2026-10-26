@@ -82,7 +82,7 @@ describe('passport check tab', () => {
     await userEvent.click(screen.getByLabelText(/^Pepper/));
     expect(await screen.findByRole('alert')).toHaveTextContent('The passport check is turned off for this competition.');
     await userEvent.click(screen.getByLabelText('Check passports at this event'));
-    expect(await screen.findByText('Couldn’t change the passport check.')).toBeInTheDocument();
+    expect(await screen.findByText(/Couldn’t change the passport check\./)).toBeInTheDocument();
   });
 
   it('offers a retry when the board does not load, and says when nothing is declared', async () => {

@@ -17,7 +17,7 @@ vi.mock('../api', async (importOriginal) => ({
 }));
 const auth = vi.hoisted(() => ({ roles: [] as string[], clubName: 'Stockport Pony Club' as string | null }));
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ user: { id: 'u1', clubName: auth.clubName }, hasRole: (role: string) => auth.roles.includes(role) }) }));
-const notify = vi.hoisted(() => ({ enabled: false, permission: 'default', setEnabled: vi.fn() }));
+const notify = vi.hoisted(() => ({ enabled: false, permission: 'default', setEnabled: vi.fn(), problem: null as string | null }));
 vi.mock('../hooks/useTeamNotifications', () => ({ useTeamNotifications: () => notify }));
 
 const entries = [{ id: 1, teamId: 1, teamName: 'Example Blue', laneIndex: 4 }];
@@ -32,7 +32,7 @@ function mount() {
 beforeEach(() => {
   auth.roles = [];
   auth.clubName = 'Stockport Pony Club';
-  Object.assign(notify, { enabled: false, permission: 'default', setEnabled: vi.fn() });
+  Object.assign(notify, { enabled: false, permission: 'default', setEnabled: vi.fn(), problem: null });
   myTeams = [team(1, { displayName: 'Example Blue', relationship: 'supporter' })];
   forms = [];
   detail = competition();
@@ -128,7 +128,7 @@ describe('MyTeamsPage layout', () => {
     mount();
     await userEvent.click(await screen.findByRole('button', { name: 'Copy join code for Stockport A' }));
     expect(writeText).toHaveBeenCalledWith('STOCKPORT-A');
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Copy join code for Stockport A' })).toHaveTextContent('Copied'));
+    expect(await screen.findByText('Code copied')).toHaveClass('kit-toast-text');
     await userEvent.click(screen.getByRole('button', { name: /Change/ }));
     const box = screen.getByLabelText('New join code');
     await userEvent.clear(box);
@@ -182,14 +182,22 @@ describe('MyTeamsPage layout', () => {
     expect(notify.setEnabled).toHaveBeenCalledWith(true);
   });
 
-  it.each([
-    ['denied', 'Browser permission denied'],
-    ['unsupported', 'Not supported in this browser'],
-  ])('disables the alerts switch when permission is %s', async (permission, note) => {
-    notify.permission = permission;
+  it('disables the alerts switch when the browser permission is denied', async () => {
+    notify.permission = 'denied';
     mount();
     expect(await screen.findByRole('switch', { name: 'Heat alerts' })).toBeDisabled();
-    expect(screen.getByText(note)).toBeInTheDocument();
+    expect(screen.getByText('Browser permission denied')).toBeInTheDocument();
+  });
+
+  it('keeps the switch usable when notifications are unsupported, and shows the problem strip once tapped', async () => {
+    notify.permission = 'unsupported';
+    const { rerender } = mount();
+    expect(await screen.findByRole('switch', { name: 'Heat alerts' })).toBeEnabled();
+    expect(screen.getByText('Not supported in this browser')).toBeInTheDocument();
+    expect(screen.queryByText(/can’t show notifications/)).toBeNull();
+    notify.problem = 'This browser can’t show notifications. Try Chrome or Safari.';
+    rerender(<MemoryRouter><MyTeamsPage /></MemoryRouter>);
+    expect(await screen.findByRole('alert')).toHaveTextContent('This browser can’t show notifications. Try Chrome or Safari.');
   });
 
   it('says when alerts are on', async () => {
@@ -246,7 +254,7 @@ describe('MyTeamsPage joining a team', () => {
     expect(await screen.findByText('Request sent for Cheshire A. The trainer needs to accept.')).toBeInTheDocument();
     await userEvent.type(box, 'two');
     await userEvent.click(screen.getByRole('button', { name: 'Join' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not join. Check the key.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t join. Check the key and try again.');
     await userEvent.type(box, 'three');
     await userEvent.click(screen.getByRole('button', { name: 'Join' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Nope'));
@@ -276,7 +284,7 @@ describe('MyTeamsPage for a club manager', () => {
     fireEvent.change(screen.getByPlaceholderText('e.g. Red bibs, numbered 1 to 5'), { target: { value: 'Blue bibs 1-5' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save team details' }));
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/teams/1/trainer', { trainerUserId: 'tr-1', bibDescription: 'Blue bibs 1-5' }));
-    expect(await screen.findByText('Saved.', undefined, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText('Team details saved', undefined, { timeout: 5000 })).toHaveClass('kit-toast-text');
     expect(screen.getByText('Your club')).toBeInTheDocument();
   });
 
@@ -291,7 +299,11 @@ describe('MyTeamsPage for a club manager', () => {
     vi.mocked(api.put).mockRejectedValue(new Error('offline'));
     mount();
     fireEvent.click(await screen.findByRole('button', { name: 'Save team details' }));
-    expect(await screen.findByText(/Could not save/)).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t save the team details. Check your signal and try again.');
+    vi.mocked(api.put).mockResolvedValue({ data: {} });
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByText('Team details saved')).toBeInTheDocument();
+    expect(api.put).toHaveBeenCalledTimes(2);
   });
 });
 

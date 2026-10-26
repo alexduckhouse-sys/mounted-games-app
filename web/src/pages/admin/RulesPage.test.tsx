@@ -116,7 +116,7 @@ describe('RulesPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Name taken.');
     vi.mocked(api.post).mockRejectedValueOnce({});
     await user.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not save.'));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t save the race.'));
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(api.post).toHaveBeenLastCalledWith('/race-templates', expect.objectContaining({ name: 'Bucket Race', category: null, summary: null, rules: null })));
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument());

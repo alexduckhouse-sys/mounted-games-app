@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ChevronLeft, Printer } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { PageProblem } from '../../components/PageProblem';
 import { QrCode } from '../../components/QrCode';
 import { competitionDateText } from '../../lib/competitionDates';
 import { competitionLink } from '../../lib/sharing';
@@ -30,11 +31,11 @@ export function PosterPage({ competitionId }: { competitionId: string }) {
   }, [competitionId, attempt]);
 
   if (failed) {
-    return <div className="mg-card p-4" role="alert">Couldn’t load this event. <button className="mg-btn mg-btn-secondary" onClick={() => setAttempt(attempt + 1)}>Try again</button></div>;
+    return <PageProblem title="Couldn’t load this event" primaryLabel="Try again" onPrimary={() => setAttempt(attempt + 1)}>Check your signal and try again.</PageProblem>;
   }
   if (!poster) return <p className="mg-card p-4" role="status">Preparing the poster…</p>;
   if (!canOrganise(poster)) {
-    return <div className="mg-card p-4" role="alert">The venue poster is for this event’s organisers.</div>;
+    return <PageProblem title="Organisers only">The venue poster is for this event’s organisers.</PageProblem>;
   }
 
   const link = competitionLink(poster.id, window.location.origin);

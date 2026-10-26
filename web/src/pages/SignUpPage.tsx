@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Eye, EyeOff, Plus, Send } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
+import { Notice } from '../components/Notice';
 import { PasswordChecklist } from '../components/PasswordChecklist';
 import { isRealisticEmail, suggestEmailFix } from '../lib/emailCheck';
 import { friendlyPasswordErrors, passwordMeetsRules } from '../lib/passwordRules';
@@ -82,11 +83,11 @@ export function SignUpPage() {
       setSentTo({ club: typed, role: chosenRole.id });
     } catch (err) {
       const { status, message, code, passwordErrors } = problemsFrom(err);
-      if (status === 409) setErrors({ email: 'An account with that email already exists.' });
+      if (status === 409) setErrors({ email: 'There’s already an account with that email. Sign in instead?' });
       else if (code?.startsWith('email_') && message) setErrors({ email: message });
       else if (passwordErrors.length) setErrors({ password: passwordErrors.join(' ') });
       else if (status === 400 && message?.toLowerCase().includes('password')) setErrors({ password: message.replace(/non-?\s?alphanumeric/gi, 'special') });
-      else setErrors({ form: message ?? 'Could not create the account. Try again.' });
+      else setErrors({ form: message ?? 'Couldn’t create the account. Check your signal and try again.' });
     }
   }
 
@@ -124,7 +125,7 @@ export function SignUpPage() {
           {({ id }) => <div className="mg-field"><input id={id} value={name} autoComplete="name" autoFocus onChange={(e) => setName(e.target.value)} /></div>}
         </Field>
         <div className="flex flex-col gap-1.5">
-          <Field label="Email" error={errors.email ?? (emailLeft && email.trim() !== '' && !emailOk ? "That doesn't look like a valid email address." : null)}>
+          <Field label="Email" error={errors.email ?? (emailLeft && email.trim() !== '' && !emailOk ? 'That doesn’t look like a valid email address.' : null)}>
             {({ id, invalid, describedBy }) => (
               <div className="mg-field" data-invalid={invalid}>
                 <input id={id} type="email" value={email} autoComplete="email" aria-invalid={invalid} aria-describedby={describedBy}
@@ -134,12 +135,7 @@ export function SignUpPage() {
             )}
           </Field>
           {emailLeft && emailFix && (
-            <p role="status" className="m-0 text-sm text-[rgb(var(--mg-body))]">
-              Did you mean <strong>{emailFix.slice(emailFix.lastIndexOf('@') + 1)}</strong>?{' '}
-              <button type="button" className="font-semibold text-[rgb(var(--mg-heading))] underline" onClick={() => setEmail(emailFix)}>
-                Use {emailFix}
-              </button>
-            </p>
+            <Notice tone="info" actionLabel="Use that" onAction={() => setEmail(emailFix)}>Did you mean {emailFix}?</Notice>
           )}
         </div>
         <div className="flex flex-col gap-2.5">
@@ -205,7 +201,7 @@ export function SignUpPage() {
 
         {clubPicked && chosenRole && <p className="text-sm font-medium leading-[1.4] text-[rgb(var(--mg-muted))]">Approved by {approver}.</p>}
 
-        {errors.form && <p role="alert" className="text-sm font-medium text-[rgb(var(--mg-elim))]">{errors.form}</p>}
+        {errors.form && <Notice>{errors.form}</Notice>}
 
         <div className="mt-auto flex flex-col gap-2.5 pt-2">
           <button type="submit" disabled={!ready || loading} className="mg-btn mg-btn-primary w-full">Create account</button>

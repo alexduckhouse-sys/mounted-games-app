@@ -43,14 +43,14 @@ export function LoginPage() {
       const res = (err as { response?: { status?: number; data?: { message?: string; errors?: unknown; errorCodes?: unknown } } })?.response;
       const status = res?.status;
       if (status === 429) {
-        setError(res?.data?.message || 'Too many attempts. Wait a minute and try again.');
+        setError(res?.data?.message || 'Too many tries. Wait a minute and try again.');
       } else if (useKey) {
         const pwErrors = friendlyPasswordErrors(res?.data);
         if (status === 400) setError(pwErrors[0] || res?.data?.message || 'Check your details and key.');
-        else if (status === 401) setError(res?.data?.message && res.data.message !== 'Invalid admin key.' ? res.data.message : 'That key or password did not work.');
-        else setError('That key or password did not work.');
+        else if (status === 401) setError(res?.data?.message && res.data.message !== 'Invalid admin key.' ? res.data.message : 'That key or password didn’t work.');
+        else setError('That key or password didn’t work.');
       } else {
-        setError(status === 401 || status === 400 ? 'Email or password is wrong.' : 'Could not sign in. Try again.');
+        setError(status === 401 || status === 400 ? 'Email or password is wrong.' : 'Couldn’t sign in. Check your signal and try again.');
       }
     }
   }

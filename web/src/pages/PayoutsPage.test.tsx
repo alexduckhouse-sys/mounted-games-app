@@ -286,7 +286,7 @@ describe('PayoutsPage: the stepped flow', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Go to step 1: Who\'s being paid' }));
     vi.mocked(api.put).mockRejectedValueOnce(new Error('offline'));
     await next();
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not save. Try again.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t save the payout details. Check your signal and try again.');
   });
 });
 
@@ -294,13 +294,13 @@ describe('PayoutsPage: access and loading', () => {
   it('shows a message when the details cannot be loaded', async () => {
     vi.mocked(api.get).mockRejectedValue(new Error('down'));
     mount();
-    expect(await screen.findByText('Could not load the payout details. Try again.')).toBeInTheDocument();
+    expect(await screen.findByText('Couldn’t load the payout details. Check your signal and try again.')).toBeInTheDocument();
   });
 
   it('refuses an odd response', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { nope: true } });
     mount();
-    expect(await screen.findByText('Could not load the payout details. Try again.')).toBeInTheDocument();
+    expect(await screen.findByText('Couldn’t load the payout details. Check your signal and try again.')).toBeInTheDocument();
   });
 
   it('lets an admin pick any club', async () => {

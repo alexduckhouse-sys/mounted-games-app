@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { CopiedTick } from '../../components/CopiedTick';
+import { Notice } from '../../components/Notice';
+import { useToast } from '../../components/Toast';
 import { Link } from 'react-router-dom';
 import { ChevronRight, ClipboardList, QrCode as QrCodeIcon, Sparkles, Users } from 'lucide-react';
 import { useCompetition } from './context';
@@ -156,7 +157,7 @@ export function DetailsTab() {
           </div>
           {competition.sections.map((section) => <MatchmakingBoard key={section.id} competitionId={competition.id} section={section} />)}
           {closed ? (
-            <p role="status" className="sp-note">Entries are closed.</p>
+            <Notice tone="info" className="mx-4 mt-3">Entries are closed for this competition.</Notice>
           ) : (
             <Link to={user ? enterTo : '/login'} state={user ? undefined : { from: enterTo }} className="ev-bar">{enterLabel}</Link>
           )}
@@ -192,7 +193,7 @@ export function DetailsTab() {
       {/* The owner, competition admins and site admins see who runs the event and can change it. */}
       {user && (mayOrganise || hasRole('Admin')) && (
         <div className="mt-4 flex flex-col gap-3">
-          <CompetitionTeamCard competitionId={competition.id} canWrite={canManage(competition)} />
+          <CompetitionTeamCard competitionId={competition.id} competitionName={competition.name} canWrite={canManage(competition)} />
           <ScorerLinksCard competitionId={competition.id} canWrite={canManage(competition)} />
         </div>
       )}
@@ -207,7 +208,7 @@ export function DetailsTab() {
  * Share event link (native share sheet or clipboard) and inline QR code toggle, used on both DetailsTab and EntryPage.
  */
 export function EventShareRows({ competitionId, competitionName }: { competitionId: number; competitionName: string }) {
-  const [copied, setCopied] = useState(false);
+  const toast = useToast();
   const [shareError, setShareError] = useState(false);
   const [showQr, setShowQr] = useState(false);
   const shareUrl = competitionLink(competitionId, window.location.origin);
@@ -225,8 +226,7 @@ export function EventShareRows({ competitionId, competitionName }: { competition
     }
     try {
       await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      toast.show('Link copied');
     } catch {
       setShareError(true);
     }
@@ -236,16 +236,15 @@ export function EventShareRows({ competitionId, competitionName }: { competition
     <>
       <div>
         <button type="button" className="sp-row" onClick={() => { void shareEvent(); }}>
-          <span className="sp-grow"><span className="sp-t1 !font-medium">{copied ? 'Link copied' : 'Share event link'}</span></span>
-          {copied
-            ? <CopiedTick className="h-5 w-5 text-[rgb(var(--mg-ok))]" />
-            : <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />}
+          <span className="sp-grow"><span className="sp-t1 !font-medium">Share event link</span></span>
+          <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
         </button>
         {shareError && (
-          <p className="sp-note !mx-4" role="alert">
-            Couldn’t copy the link. Press and hold <a className="ev-link" href={shareUrl}>the event link</a> to copy it, or show the QR code below.
-          </p>
+          <Notice className="mx-4 my-2">
+            Couldn’t copy the link. Press and hold <a className="ev-link" href={shareUrl}>the event link</a> to copy it, or show the QR code.
+          </Notice>
         )}
+        {toast.node}
       </div>
       <div>
         <button type="button" className="sp-row" aria-expanded={showQr} onClick={() => setShowQr((open) => !open)}>
@@ -281,8 +280,9 @@ function MatchmakingBoard({ competitionId, section }: { competitionId: number; s
   const userId = user?.id;
   const [entries, setEntries] = useState<MatchingEntry[]>([]);
   const [mine, setMine] = useState<MatchingSignup[]>([]);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
   useEffect(() => {
     let cancelled = false;
     api.get<MatchingEntry[]>(`/competitions/${competitionId}/matchmaking`).then(({ data }) => { if (!cancelled) setEntries(Array.isArray(data) ? data : []); }).catch(() => { if (!cancelled) setEntries([]); });
@@ -293,9 +293,9 @@ function MatchmakingBoard({ competitionId, section }: { competitionId: number; s
   const own = user ? mine.find((e) => e.competitionSectionId === section.id && e.lookingForPair && !e.teamId && (e.status === 0 || e.status === 1)) : undefined;
   async function requestPair(targetSignupId: number) {
     if (!own || busy) return;
-    setBusy(true); setNotice(null);
-    try { await api.post(`/my/signups/${own.id}/pair-request`, { targetSignupId }); setNotice('Pair-up request sent.'); }
-    catch { setNotice('Could not send the pair-up request. Check your entries and try again.'); }
+    setBusy(true); setFailed(false);
+    try { await api.post(`/my/signups/${own.id}/pair-request`, { targetSignupId }); toast.show('Pair-up request sent'); }
+    catch { setFailed(true); }
     finally { setBusy(false); }
   }
   return seekers.length > 0 ? (
@@ -341,7 +341,8 @@ function MatchmakingBoard({ competitionId, section }: { competitionId: number; s
           </span>
         </div>
       ))}
-      {notice && <p role="status" className="m-0 text-xs font-semibold text-[rgb(var(--mg-ok))]">{notice}</p>}
+      {failed && <Notice>Couldn’t send the pair-up request. Check your signal and try again.</Notice>}
+      {toast.node}
     </div>
   ) : null;
 }
@@ -373,7 +374,7 @@ function EquipmentBlock({ competitionId }: { competitionId: number }) {
       </button>
       {open && (
         loadError ? (
-          <p role="alert" className="sp-note !mx-4">Could not load equipment.</p>
+          <Notice className="mx-4 my-2" actionLabel="Try again" onAction={() => setLoadError(false)}>Couldn’t load the equipment. Check your signal and try again.</Notice>
         ) : data == null ? (
           <p className="sp-note !mx-4">Loading…</p>
         ) : data.lines.length === 0 ? (

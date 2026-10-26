@@ -67,7 +67,7 @@ describe('CompetitionTeamCard', () => {
     await user.click(screen.getByRole('button', { name: 'Add competition admin' }));
     expect(api.post).toHaveBeenCalledWith('/competitions/5/team', { email: 'cam@example.com' });
     expect(await screen.findByText('Cam Caller')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Cam Caller is now a competition admin.');
+    expect(screen.getByRole('status')).toHaveTextContent('Cam Caller is now a competition admin');
     expect(screen.getByLabelText('Email address')).toHaveValue('');
   });
 
@@ -127,7 +127,7 @@ describe('CompetitionTeamCard', () => {
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/competitions/5/team/h1'));
     await waitFor(() => expect(screen.queryByText('Hana Helper')).not.toBeInTheDocument());
     expect(screen.getByText('Lee Line')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Removed Hana Helper.');
+    expect(screen.getByRole('status')).toHaveTextContent('Removed Hana Helper');
     expect(auth.refreshAccess).not.toHaveBeenCalled();
   });
 
@@ -157,15 +157,15 @@ describe('CompetitionTeamCard', () => {
     it('leaves the team, then reloads their access', async () => {
       const user = userEvent.setup();
       vi.mocked(api.delete).mockResolvedValue({ data: null });
-      render(<CompetitionTeamCard competitionId={5} />);
+      render(<CompetitionTeamCard competitionId={5} competitionName="Spring Games" />);
       const asked = autoConfirm([false, true]);
       await user.click(await screen.findByRole('button', { name: 'Leave this team' }));
-      await waitFor(() => expect(asked).toHaveBeenCalledWith('You’ll lose access to this competition for this team.'));
+      await waitFor(() => expect(asked).toHaveBeenCalledWith('You’ll lose access to Spring Games for this team.'));
       expect(api.delete).not.toHaveBeenCalled();
       await user.click(screen.getByRole('button', { name: 'Leave this team' }));
       await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/competitions/5/team/h1'));
       await waitFor(() => expect(auth.refreshAccess).toHaveBeenCalledTimes(1));
-      expect(screen.getByRole('status')).toHaveTextContent('You’ve left this team.');
+      expect(screen.getByRole('status')).toHaveTextContent('You’ve left this team');
       expect(screen.queryByRole('button', { name: 'Leave this team' })).not.toBeInTheDocument();
     });
 

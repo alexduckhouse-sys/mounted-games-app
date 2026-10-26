@@ -39,7 +39,7 @@ describe('EntryEmailFields', () => {
 
   it('flags an address that does not look right and keeps the box off', () => {
     render(<Harness initial={{ email: 'parent@', optIn: false }} />);
-    expect(screen.getByRole('alert').textContent).toMatch(/doesn't look right/);
+    expect(screen.getByRole('alert').textContent).toMatch(/doesn’t look right/);
     expect(box().disabled).toBe(true);
   });
 });

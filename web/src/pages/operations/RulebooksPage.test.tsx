@@ -126,7 +126,7 @@ describe('RulebooksPage', () => {
     await user.type(screen.getByLabelText('Rulebook text'), 'Body');
     await user.click(screen.getByRole('button', { name: 'Save rulebook' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/rulebooks', { title: 'New', edition: '1', sourceUrl: null, text: 'Body' }));
-    expect(await screen.findByText('Rulebook saved.')).toBeInTheDocument();
+    expect(await screen.findByText('Rulebook saved')).toBeInTheDocument();
     expect(await screen.findByText('Body')).toBeInTheDocument();
   });
 
@@ -197,6 +197,20 @@ describe('RulebooksPage', () => {
     expect(screen.getByText('No race matches “zzz”.')).toBeInTheDocument();
   });
 
+  it('loads the game rules again from the Try again button', async () => {
+    let calls = 0;
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (url === '/race-templates') { calls += 1; if (calls === 1) throw new Error('offline'); return { data: [{ id: 1, name: 'Speed Weave', category: 'Poles' }] }; }
+      return { data: url === '/rulebooks' ? [handbook] : null };
+    });
+    const user = userEvent.setup();
+    mount();
+    await user.click(await screen.findByRole('tab', { name: 'Game rules' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Check your signal and try again.');
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByRole('button', { name: 'Speed Weave' })).toBeInTheDocument();
+  });
+
   it('opens a race in the rules sheet', async () => {
     serveRaces();
     const user = userEvent.setup();
@@ -216,7 +230,7 @@ describe('RulebooksPage', () => {
     const user = userEvent.setup();
     const view = mount();
     await user.click(await screen.findByRole('tab', { name: 'Game rules' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load the game rules');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load the rules');
     view.unmount();
     vi.mocked(api.get).mockImplementation(async (url: string) => ({ data: url === '/rulebooks' ? [handbook] : url === '/race-templates' ? [] : null }));
     mount();

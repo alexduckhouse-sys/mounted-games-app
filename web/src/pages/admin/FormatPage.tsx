@@ -18,6 +18,8 @@ import { PartHead } from './LaptopParts';
 import { RaceListDialog } from './RaceListDialog';
 import { NumberField } from '../../components/NumberField';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { Notice } from '../../components/Notice';
+import { useToast } from '../../components/Toast';
 import { usePageWidth } from '../../components/pageWidthState';
 import { DecFormConfigEditor } from './DecFormConfig';
 import { ScorerLinksCard } from '../competition/ScorerLinksCard';
@@ -54,6 +56,7 @@ export function FormatPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const toast = useToast();
   const [editing, setEditing] = useState<number | null>(null);
   const [cardsEnabled, toggleCardsEnabled] = useCardsEnabled(editingId ?? undefined);
 
@@ -66,7 +69,7 @@ export function FormatPage() {
         const { data } = await api.get<SectionSignup[]>(`/competitions/${editingId}/signups`);
         setSignups(data);
       } else setSignups([]);
-    } catch { setError('Could not load organiser details. Please try again.'); }
+    } catch { setError('Couldn’t load the organiser details. Check your signal and try again.'); }
   }, [editingId, canOrganise]);
 
   // Initial load. The same steps as reload(), kept inline so state is only set once a response
@@ -83,7 +86,7 @@ export function FormatPage() {
           const { data } = await api.get<SectionSignup[]>(`/competitions/${editingId}/signups`);
           if (!cancelled) setSignups(data);
         } else setSignups([]);
-      } catch { if (!cancelled) setError('Could not load organiser details. Please try again.'); }
+      } catch { if (!cancelled) setError('Couldn’t load the organiser details. Check your signal and try again.'); }
     })();
     loadRaceTemplates().then((list) => { if (!cancelled) setTemplates(list.map((t) => t.name)); }).catch(() => {});
     return () => { cancelled = true; };
@@ -101,7 +104,7 @@ export function FormatPage() {
     try {
       await action();
       await reload();
-      if (done) setNotice(done);
+      if (done) toast.show(done);
       return true;
     } catch (e) {
       setError(message(e, failure));
@@ -111,7 +114,13 @@ export function FormatPage() {
     }
   }
 
-  if (!comp) return <div className="skin mx-auto w-full max-w-[880px] pt-10 text-sm text-[rgb(var(--mg-muted))]">{error ?? 'Loading…'}</div>;
+  if (!comp) {
+    return (
+      <div className="skin mx-auto w-full max-w-[880px] pt-10 text-sm text-[rgb(var(--mg-muted))]">
+        {error ? <Notice actionLabel="Try again" onAction={() => { setError(null); void reload(); }}>{error}</Notice> : 'Loading…'}
+      </div>
+    );
+  }
 
   if (!canOrganise(comp)) {
     return (
@@ -171,12 +180,12 @@ export function FormatPage() {
   const planOf = new Map(plan.map((row) => [row.id, row]));
 
   // ----- changes -----
-  const toggleLock = () => run(() => api.post(`/competitions/${competition.id}/signups-locked`, { locked: !competition.signupsLocked }), 'Could not change signups.');
+  const toggleLock = () => run(() => api.post(`/competitions/${competition.id}/signups-locked`, { locked: !competition.signupsLocked }), 'Couldn’t change signups. Check your signal and try again.');
 
   const saveRaces = (s: Session, races: string[]) => {
     setEditing(null);
-    void run(() => api.put(`/competitions/${competition.id}/sessions/${s.id}`, { plannedRaces: races }), 'Could not save the race list.',
-      `Race list saved for ${s.name}. It applies when you generate the timetable.`);
+    void run(() => api.put(`/competitions/${competition.id}/sessions/${s.id}`, { plannedRaces: races }), 'Couldn’t save the race list. Check your signal and try again.',
+      `Race list saved for ${s.name}`);
   };
 
   const addBreak = (b: { kind: 1 | 2; name: string; date: string; time: string; minutes: string; arena: string }) => {
@@ -184,12 +193,12 @@ export function FormatPage() {
     return run(() => api.post(`/competitions/${competition.id}/sessions`, {
       competitionSectionId: null, name: b.name, arenaName: b.arena || null, scheduledStart: new Date(`${b.date}T${b.time}`).toISOString(), orderIndex: order,
       notes: null, isBreak: b.kind === 1, durationMinutes: parseInt(b.minutes, 10), kind: b.kind, location: null,
-    }), 'Could not add that.', `${b.name} added to the timetable.`);
+    }), 'Couldn’t add that. Check your signal and try again.', `${b.name} added to the timetable`);
   };
 
   const removeBreak = async (s: Session) => {
     if (!(await confirmDialog({ title: `Remove ${s.name}?`, message: 'Later sessions move up to fill the gap.', confirmLabel: 'Remove break', destructive: true }))) return;
-    void run(() => api.delete(`/competitions/${competition.id}/sessions/${s.id}`), 'Could not remove that.');
+    void run(() => api.delete(`/competitions/${competition.id}/sessions/${s.id}`), 'Couldn’t remove that. Check your signal and try again.');
   };
 
   async function generate() {
@@ -208,7 +217,7 @@ export function FormatPage() {
           teamIds: activeTeams(section).map((t) => t.id), raceNames: racesFor(s), lanesPerHeat: s.lanesPerHeat ?? lanesFor(section.format), replaceExisting: true,
         });
       }
-    }, 'Could not generate the timetable.');
+    }, 'Couldn’t make the timetable. Check your signal and try again.');
     if (ok) setNotice(`Timetable generated for ${withTeams.length} ${withTeams.length === 1 ? 'session' : 'sessions'}.${skipped.length ? ` ${skipped.length} left alone because they had started.` : ''}`);
   }
 
@@ -284,8 +293,9 @@ export function FormatPage() {
         })}
       </ol>
 
-      {error && <p role="alert" className="mg-notice !bg-[rgb(var(--mg-live-row))] !text-[rgb(var(--mg-elim))]">{error}</p>}
-      {notice && <p role="status" className="mg-notice">{notice}</p>}
+      {error && <Notice>{error}</Notice>}
+      {notice && <Notice tone="info">{notice}</Notice>}
+      {toast.node}
 
       <div className="flex flex-col gap-9 lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:items-start lg:gap-7">
         <div className="flex min-w-0 flex-col gap-9">
@@ -499,7 +509,7 @@ function FormTeamsSectionCard({
       setCommitted(true);
       await onChanged();
     } catch (e) {
-      setError(message(e, 'Could not form teams.'));
+      setError(message(e, 'Couldn’t form the teams. Check your signal and try again.'));
     } finally {
       setBusy(false);
     }

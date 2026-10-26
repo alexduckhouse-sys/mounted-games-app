@@ -233,7 +233,7 @@ describe('DeclarationsTab: the dec form', () => {
     expect(body.riders).toHaveLength(5);
     expect(body.riders[0]).toMatchObject({ savedRiderId: 1, fullName: 'Ella Hughes', dateOfBirth: '2015-04-05', horseName: 'Pickle', ponyHeightHands: 13.2, isCaptain: false, isReserve: false, orderIndex: 0 });
     expect(body.riders[4]).toMatchObject({ savedRiderId: null, fullName: 'Sam New', dateOfBirth: '2016-02-01', ponyHeightHands: 12 });
-    expect(await screen.findByText('Dec form submitted. You can still change it.')).toBeInTheDocument();
+    expect(await screen.findByText('Dec form sent. You can still change it.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Submitted' })).toBeDisabled();
     expect(screen.getAllByText('Submitted')).toHaveLength(2);
   });
@@ -245,9 +245,8 @@ describe('DeclarationsTab: the dec form', () => {
     await fillTeam(user);
     await user.click(screen.getByRole('checkbox', { name: /I agree/ }));
     await user.click(screen.getByRole('button', { name: 'Submit dec form' }));
-    await screen.findByText('Dec form submitted. You can still change it.');
+    await screen.findByText('Dec form sent. You can still change it.');
     await user.type(screen.getByLabelText(/Notes for the organisers/), 'Late arrival');
-    expect(screen.queryByText('Dec form submitted. You can still change it.')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Submit dec form' })).toBeEnabled();
   });
 
@@ -272,7 +271,21 @@ describe('DeclarationsTab: the dec form', () => {
     await fillTeam(user);
     await user.click(screen.getByRole('checkbox', { name: /I agree/ }));
     await user.click(screen.getByRole('button', { name: 'Submit dec form' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not send the dec form. Check your signal and try again.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t send the dec form. Check your signal and try again.');
+  });
+
+  it('sends the form again from Try again in the problem strip', async () => {
+    state.post.mockRejectedValueOnce(new Error('Network Error'));
+    const user = userEvent.setup();
+    mount();
+    await opened();
+    await fillTeam(user);
+    await user.click(screen.getByRole('checkbox', { name: /I agree/ }));
+    await user.click(screen.getByRole('button', { name: 'Submit dec form' }));
+    await screen.findByRole('alert');
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(state.post).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
   });
 
   it('shows the organiser\'s own terms behind the link, and a labelled placeholder when there are none', async () => {
@@ -285,7 +298,7 @@ describe('DeclarationsTab: the dec form', () => {
     expect(dialog).toHaveTextContent('No bare feet.');
     expect(screen.getByRole('checkbox', { name: /I agree/ })).not.toBeChecked();
     await user.click(within(dialog).getByRole('button', { name: 'Close' }));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     unmount();
 
     mount({ termsText: '   ' });
@@ -306,7 +319,7 @@ describe('DeclarationsTab: the dec form', () => {
     }];
     mount();
     await opened();
-    expect(await screen.findByText('Dec form submitted. You can still change it.')).toBeInTheDocument();
+    expect(await screen.findByText('Dec form sent. You can still change it.')).toBeInTheDocument();
     expect(screen.getByLabelText('Team name')).toHaveValue('Stockport C');
     expect(screen.getByLabelText('Bibs')).toHaveValue('Blue bibs');
     expect(screen.getByLabelText('Trainer name')).toHaveValue('Jo Hughes');
@@ -328,7 +341,7 @@ describe('DeclarationsTab: the dec form', () => {
     const user = userEvent.setup();
     mount();
     await opened();
-    await screen.findByText('Dec form submitted. You can still change it.');
+    await screen.findByText('Dec form sent. You can still change it.');
     await user.click(screen.getByRole('checkbox', { name: /I agree/ }));
     await user.type(screen.getByLabelText(/Notes for the organisers/), 'x');
     await user.click(screen.getByRole('button', { name: 'Submit dec form' }));
@@ -391,7 +404,7 @@ describe('DeclarationsTab: the dec form', () => {
     expect(state.put).toHaveBeenCalledWith(lockUrl, { declarationsCloseAt: new Date('2040-01-02T12:00').toISOString() });
     state.put.mockRejectedValueOnce(new Error('offline'));
     await user.click(await screen.findByRole('button', { name: 'Clear lock time' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('The deadline could not be saved');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t save the dec form deadline. Check your signal and try again.');
     state.put.mockResolvedValueOnce({ data: { competitionId: 4, declarationsCloseAt: null, isClosed: false } });
     await user.click(screen.getByRole('button', { name: 'Clear lock time' }));
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Clear lock time' })).not.toBeInTheDocument());
@@ -408,7 +421,8 @@ describe('DeclarationsTab: the dec form', () => {
       throw new Error(`unexpected ${url}`);
     });
     mount();
-    expect(await screen.findByText(/Declarations are locked for this competition/)).toBeInTheDocument();
+    expect(await screen.findByText(/Dec forms closed on 1 Jan\./)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Message the organisers' })).toHaveAttribute('href', '/competitions/4/contact');
     expect(screen.queryByLabelText('Team name')).not.toBeInTheDocument();
   });
 
@@ -494,7 +508,7 @@ describe('DeclarationsTab: drafts', () => {
     mount();
     expect(await screen.findByDisplayValue('Green stripes')).toBeInTheDocument();
     expect(within(slotButtons()[0]).getByText('Ella Hughes')).toBeInTheDocument();
-    expect(screen.queryByText('Dec form submitted. You can still change it.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Dec form sent. You can still change it.')).not.toBeInTheDocument();
   });
 
   it('forgets the draft once the form has gone in', async () => {
@@ -509,7 +523,7 @@ describe('DeclarationsTab: drafts', () => {
     }
     await user.click(screen.getByRole('checkbox', { name: /I agree/ }));
     await user.click(screen.getByRole('button', { name: 'Submit dec form' }));
-    await screen.findByText('Dec form submitted. You can still change it.');
+    await screen.findByText('Dec form sent. You can still change it.');
     expect(localStorage.getItem(decDraftKey(4, 7))).toBeNull();
   });
 
@@ -633,11 +647,23 @@ describe('DeclarationsTab: around the form', () => {
     await user.click(screen.getByRole('button', { name: /^Stockport C.*Sent/ }));
     const asked = autoConfirm([false, true]);
     await user.click(await screen.findByRole('button', { name: 'Delete the dec form for Stockport C' }));
-    await waitFor(() => expect(asked).toHaveBeenCalledWith('Delete the dec form for Stockport C? This can’t be undone.'));
+    await waitFor(() => expect(asked).toHaveBeenCalledWith('The dec form for Stockport C goes for good.'));
     expect(state.del).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Delete the dec form for Stockport C' }));
     await waitFor(() => expect(state.del).toHaveBeenCalledWith('/declaration-forms/9'));
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Delete the dec form for Stockport C' })).not.toBeInTheDocument());
+  });
+
+  it('says so when a dec form could not be deleted, and keeps it in the list', async () => {
+    const user = userEvent.setup();
+    forms = [{ id: 9, teamId: 7, teamName: 'Stockport C', competitionId: 4, competitionName: 'x', submittedByUserId: 'u1', submittedAt: '2026-10-20T09:00:00Z', isLocked: true, riders: [] }];
+    state.del.mockRejectedValueOnce(new Error('offline'));
+    mount();
+    autoConfirm(true);
+    await user.click(await screen.findByRole('button', { name: /^Stockport C.*Sent/ }));
+    await user.click(await screen.findByRole('button', { name: 'Delete the dec form for Stockport C' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t delete the dec form. Check your signal and try again.');
+    expect(screen.getByRole('button', { name: 'Delete the dec form for Stockport C' })).toBeInTheDocument();
   });
 
   it('exports the forms as a CSV with height and trainer columns', async () => {

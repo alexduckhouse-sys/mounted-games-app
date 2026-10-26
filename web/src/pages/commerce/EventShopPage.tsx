@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { Link } from 'react-router-dom';
 import { usePageHeader } from '../../components/CompactPageBarContext';
+import { Notice } from '../../components/Notice';
 import { RoundStepper } from '../../components/RoundStepper';
 import { feeText } from '../../lib/entryOptions';
 import { usePageWidth } from '../../components/pageWidthState';
@@ -42,6 +43,7 @@ function EventShopContent() {
   // What an item asks for once it is in the order (a stable number, a number plate), by listing.
   const [details, setDetails] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [orderError, setOrderError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [order, setOrder] = useState<EventOrder | null>(null);
   const [view, setView] = useState<View>('shop');
@@ -58,7 +60,7 @@ function EventShopContent() {
         setSettings(settingsResponse.data);
       })
       .catch((requestError: unknown) => {
-        setError(errorMessage(requestError, 'Couldn’t load the event shop.'));
+        setError(errorMessage(requestError, 'Couldn’t load the event shop. Check your signal and try again.'));
       }), [competition.id]);
 
   useEffect(() => { void load(); }, [load]);
@@ -94,7 +96,7 @@ function EventShopContent() {
       orderAttempt.current = { basketSignature, idempotencyKey: newIdempotencyKey('event-order') };
     }
     setBusy(true);
-    setError(null);
+    setOrderError(null);
     try {
       const { data } = await api.post<EventOrder>(`/commerce/competitions/${competition.id}/orders`, {
         idempotencyKey: orderAttempt.current.idempotencyKey,
@@ -110,7 +112,7 @@ function EventShopContent() {
         void load();
       }
     } catch (requestError) {
-      setError(errorMessage(requestError, 'Couldn’t place your order. Check the basket and try again.'));
+      setOrderError(errorMessage(requestError, 'Couldn’t place your order. Check the basket and try again.'));
     } finally {
       setBusy(false);
     }
@@ -120,6 +122,7 @@ function EventShopContent() {
     setView('shop');
     setOrder(null);
     setError(null);
+    setOrderError(null);
   }
 
   if (view === 'placed' && order) {
@@ -206,6 +209,7 @@ function EventShopContent() {
       ) : (
         <Link className="ev-bar" to="/login" state={{ from: `/competitions/${competition.id}/shop` }}>Sign in to order</Link>
       ))}
+      {orderError && <div className="mt-3"><Notice actionLabel="Try again" onAction={() => void checkout()} actionDisabled={busy}>{orderError}</Notice></div>}
       {isDemo && basketLines.length > 0 && <p className="sp-note">This is a demo event. Next you will see a test payment page, and no money is taken.</p>}
       {user && <div className="pt-1"><Link className="ev-text-btn" to="/me/orders">Your orders</Link></div>}
       <p className="sp-note">MG App connects buyers with independent sellers; your purchase contract is directly with the seller listed on each item.</p>

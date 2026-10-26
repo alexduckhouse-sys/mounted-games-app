@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
 import { api } from '../../api';
+import { Notice } from '../../components/Notice';
+import { useToast } from '../../components/Toast';
 import { Chevron, RefineList, RefineNote, RefineSection } from '../refine/Refine';
 import type { SpecialAward } from './resultsBookTypes';
 import { SelectField } from '../../components/SelectField';
@@ -25,7 +27,7 @@ export function ResultsBookTab({ competitionId }: { competitionId: string }) {
   const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     let cancelled = false;
@@ -37,25 +39,24 @@ export function ResultsBookTab({ competitionId }: { competitionId: string }) {
       setSections(competition.data.sections ?? []);
       setAwards(list.data.map((a) => ({ key: nextKey++, competitionSectionId: a.competitionSectionId, title: a.title, recipient: a.recipient, note: a.note ?? '' })));
       setLoaded(true);
-    }).catch((caught) => { if (!cancelled) { setError(message(caught, 'Couldn’t load the awards.')); setLoadFailed(true); setLoaded(true); } });
+    }).catch((caught) => { if (!cancelled) { setError(message(caught, 'Couldn’t load the awards. Check your signal and try again.')); setLoadFailed(true); setLoaded(true); } });
     return () => { cancelled = true; };
   }, [competitionId]);
 
   function change(key: number, patch: Partial<AwardDraft>) {
-    setSaved(false);
     setAwards((current) => current.map((a) => (a.key === key ? { ...a, ...patch } : a)));
   }
 
   async function save() {
-    setBusy(true); setError(null); setSaved(false);
+    setBusy(true); setError(null);
     try {
       await api.put(`/event-tools/competitions/${competitionId}/awards`, {
         awards: awards.filter((a) => a.title.trim() || a.recipient.trim()).map((a) => ({
           competitionSectionId: a.competitionSectionId, title: a.title, recipient: a.recipient, note: a.note.trim() || null,
         })),
       });
-      setSaved(true);
-    } catch (caught) { setError(message(caught, 'Couldn’t save the awards.')); }
+      toast.show('Awards saved');
+    } catch (caught) { setError(message(caught, 'Couldn’t save the awards. Check your signal and try again.')); }
     finally { setBusy(false); }
   }
 
@@ -74,7 +75,7 @@ export function ResultsBookTab({ competitionId }: { competitionId: string }) {
     </RefineList></nav>
 
     <RefineSection title="Special awards" />
-    {error && <div role="alert" className="mg-notice tools-msg">{error}</div>}
+    {error && <Notice className="tools-msg">{error}</Notice>}
     {/* Without the saved list, saving would replace the real awards with an empty one, so the editor stays hidden. */}
     {loaded && !loadFailed && <div className="tools-form">
       {awards.length === 0 && <RefineNote>No special awards yet. Add one for best turned out, spirit of the games and so on.</RefineNote>}
@@ -88,13 +89,13 @@ export function ResultsBookTab({ competitionId }: { competitionId: string }) {
           </SelectField>
         </label>
         <label className="rf-fld">Note (optional)<input value={award.note} maxLength={300} onChange={(event) => change(award.key, { note: event.target.value })} /></label>
-        <button type="button" className="rf-btn rf-btn-text" onClick={() => { setSaved(false); setAwards((current) => current.filter((a) => a.key !== award.key)); }}>
+        <button type="button" className="rf-btn rf-btn-text" onClick={() => { setAwards((current) => current.filter((a) => a.key !== award.key)); }}>
           <Trash2 className="h-4 w-4" aria-hidden="true" />Remove award {index + 1}
         </button>
       </fieldset>)}
-      <button type="button" className="rf-btn rf-btn-text" onClick={() => { setSaved(false); setAwards((current) => [...current, blank()]); }}><Plus className="h-4 w-4" aria-hidden="true" />Add an award</button>
+      <button type="button" className="rf-btn rf-btn-text" onClick={() => { setAwards((current) => [...current, blank()]); }}><Plus className="h-4 w-4" aria-hidden="true" />Add an award</button>
       <button type="button" className="rf-btn rf-btn-primary rf-wide" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save awards'}</button>
-      {saved && <p role="status" className="rf-note">Awards saved.</p>}
+      {toast.node}
     </div>}
   </section>;
 }

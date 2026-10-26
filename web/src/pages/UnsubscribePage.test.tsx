@@ -42,6 +42,7 @@ describe('UnsubscribePage', () => {
     mount('?token=abc123');
     expect((await screen.findByRole('alert')).textContent).toMatch(/Something went wrong/);
     expect(screen.getByRole('button', { name: 'Try again' })).toHaveClass('sp-pill', 'sp-pill-fill');
+    expect(screen.getByRole('heading', { name: 'Couldn’t update your choice' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Back to the app' })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));

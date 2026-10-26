@@ -24,6 +24,8 @@ import { StepHeading } from './creator/controls';
 import { StructureStep } from './creator/StructureStep';
 import { WhenWhereStep } from './creator/WhenWhereStep';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { Notice } from '../../components/Notice';
+import { PageProblem } from '../../components/PageProblem';
 import { usePageWidth } from '../../components/pageWidthState';
 import './creator/wizard.css';
 
@@ -171,7 +173,7 @@ export function CompetitionEditor() {
       if (isEdit) navigate(`/competitions/${savedId}`);
       else { setCreatedId(savedId); window.scrollTo?.({ top: 0 }); }
     } catch (e) {
-      setError({ message: e instanceof Error ? e.message : 'Could not save.', competitionId: e instanceof SaveError ? e.competitionId : null });
+      setError({ message: e instanceof Error ? e.message : 'Couldn’t save the competition. Check your signal and try again.', competitionId: e instanceof SaveError ? e.competitionId : null });
     } finally {
       setBusy(false);
       setProgress(null);
@@ -185,7 +187,13 @@ export function CompetitionEditor() {
   }
 
   if (loading) return <div className="p-6 text-sm text-slate-500">Loading…</div>;
-  if (loadFailed && !stored) return <div role="alert" className="p-6 text-sm text-[rgb(var(--mg-elim))]">Could not load competition.</div>;
+  if (loadFailed && !stored) {
+    return (
+      <PageProblem title="Couldn’t load this competition" primaryLabel="Reload page" onPrimary={() => window.location.reload()} secondaryLabel="Go back" onSecondary={() => navigate(-1)}>
+        Check your signal and try again.
+      </PageProblem>
+    );
+  }
 
   const props = { draft, change, problems, clear };
   const savedText = savedAt && clockTime(savedAt) ? `Draft saved ${clockTime(savedAt)}` : '';
@@ -252,13 +260,13 @@ export function CompetitionEditor() {
         <footer className="cw-bar">
           {(!mayOrganise || Object.keys(problems).length > 0 || error || (busy && progress)) && (
             <div className="cw-msgs">
-              {!mayOrganise && <span>Only admins and trainers can save changes.</span>}
-              {Object.keys(problems).length > 0 && <span role="alert">Please fix the highlighted fields.</span>}
+              {!mayOrganise && <Notice tone="info">Only admins and trainers can save changes.</Notice>}
+              {Object.keys(problems).length > 0 && <Notice>Please fix the highlighted fields.</Notice>}
               {error && (
-                <span role="alert">
+                <Notice actionLabel={error.competitionId == null ? 'Try again' : undefined} onAction={error.competitionId == null ? () => { void create(); } : undefined} actionDisabled={busy}>
                   {error.message}
                   {error.competitionId != null && !isEdit && <> The competition was created. <Link className="underline" to={`/admin/competitions/${error.competitionId}`}>Open it to finish</Link>.</>}
-                </span>
+                </Notice>
               )}
               {busy && progress && <span role="status">{progress}</span>}
             </div>

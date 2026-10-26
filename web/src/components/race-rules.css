@@ -7,12 +7,13 @@
 .race-rules-overlay { position: fixed; inset: 0; z-index: 90; display: flex; align-items: flex-end; justify-content: center; background: rgb(var(--mg-overlay) / .55); }
 .race-rules-sheet {
   width: min(100%, 560px); max-height: min(85dvh, 700px); overflow-y: auto; padding: 10px 16px calc(28px + env(safe-area-inset-bottom));
-  border-radius: 20px 20px 0 0; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); box-shadow: 0 -10px 30px rgb(var(--mg-overlay) / .22);
+  border-radius: 26px 26px 0 0; corner-shape: squircle; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); box-shadow: 0 -10px 30px rgb(var(--mg-overlay) / .22);
   animation: race-rules-up .22s ease-out;
 }
-.race-rules-handle { display: block; width: 40px; height: 5px; margin: 0 auto 5px; border-radius: 99px; background: rgb(var(--mg-control)); }
-.race-rules-head { display: flex; min-height: 54px; align-items: center; gap: 12px; }
-.race-rules-head h2 { flex: 1; color: rgb(var(--mg-heading)); font: 700 22px/1.1 var(--mg-font-display); }
+.race-rules-handle { display: block; width: 36px; height: 5px; margin: 0 auto 5px; border-radius: 99px; background: rgb(var(--mg-control)); }
+.race-rules-head { display: flex; min-height: 44px; align-items: center; gap: 12px; }
+.race-rules-head h2 { flex: 1; color: rgb(var(--mg-heading)); font: 800 22px/1.05 var(--mg-font-display); }
+.race-rules-acts { margin-top: 16px; }
 .race-rules-body { display: flex; flex-direction: column; gap: 14px; }
 .race-rules-body h3 { margin-bottom: 4px; color: rgb(var(--mg-heading)); font: 700 15px/1 var(--mg-font); text-transform: uppercase; letter-spacing: .04em; }
 .race-rules-body ul { list-style: disc; padding-left: 20px; }

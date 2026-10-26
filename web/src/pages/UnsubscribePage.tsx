@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
+import { PageProblem } from '../components/PageProblem';
 import '../components/sitePages.css';
 
 type Phase = 'working' | 'done' | 'failed' | 'incomplete';
@@ -31,6 +32,21 @@ export function UnsubscribePage() {
     void run();
   }, [token, run]);
 
+  if (phase === 'failed') {
+    return (
+      <PageProblem title="Couldn’t update your choice" primaryLabel="Try again" onPrimary={() => void run()} secondaryLabel="Back to the app" secondaryTo="/">
+        Something went wrong. Check your signal and try again.
+      </PageProblem>
+    );
+  }
+  if (phase === 'incomplete') {
+    return (
+      <PageProblem title="This link looks incomplete" secondaryLabel="Back to the app" secondaryTo="/">
+        Use the link in the email we sent you.
+      </PageProblem>
+    );
+  }
+
   return (
     <div className="skin mx-auto w-full max-w-[560px]">
       <div className="sp-small">
@@ -40,21 +56,6 @@ export function UnsubscribePage() {
           <>
             <p role="status">That's done. We won't email you when new competitions open.</p>
             <p>If you change your mind, tick the box next time you enter a competition.</p>
-            <Link to="/" className="sp-pill">Back to the app</Link>
-          </>
-        )}
-        {phase === 'failed' && (
-          <>
-            <p role="alert">Something went wrong, and we couldn't update your choice.</p>
-            <div className="sp-acts">
-              <button type="button" className="sp-pill sp-pill-fill" onClick={() => void run()}>Try again</button>
-              <Link to="/" className="sp-pill">Back to the app</Link>
-            </div>
-          </>
-        )}
-        {phase === 'incomplete' && (
-          <>
-            <p role="alert">This link looks incomplete. Please use the link in the email we sent you.</p>
             <Link to="/" className="sp-pill">Back to the app</Link>
           </>
         )}

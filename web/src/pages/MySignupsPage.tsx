@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { usePageHeader } from '../components/CompactPageBarContext';
+import { confirmDialog } from '../components/ConfirmDialog';
+import { Notice } from '../components/Notice';
 import { priceLabel } from '../lib/money';
 import { groupSignups } from '../lib/mySignups';
 import { displaySectionName } from '../lib/section';
@@ -47,32 +49,38 @@ function SignupList() {
   const { user } = useAuth();
   const [signups, setSignups] = useState<ExtendedMySignup[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const now = useMemo(() => new Date(), []);
 
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
     api.get<ExtendedMySignup[]>('/me/signups')
-      .then((r) => { if (!cancelled) { setSignups(r.data); setError(null); } })
-      .catch(() => { if (!cancelled) setError('Could not load your signups.'); });
+      .then((r) => { if (!cancelled) { setSignups(r.data); setError(null); setLoadFailed(false); } })
+      .catch(() => { if (!cancelled) setLoadFailed(true); });
     return () => { cancelled = true; };
-  }, [user]);
+  }, [user, attempt]);
 
   async function respondPair(signupId: number, accept: boolean) {
     try {
       const { data } = await api.post<ExtendedMySignup>(`/my/signups/${signupId}/pair-respond`, { accept });
       setSignups((cur) => cur?.map((item) => (item.id === signupId ? data : item)) ?? null);
     } catch {
-      setError('Could not update pair request.');
+      setError('Couldn’t update the pair request. Check your signal and try again.');
     }
   }
 
   async function withdrawSignup(signupId: number) {
+    const entry = signups?.find((item) => item.id === signupId);
+    const who = entry ? [entry.teamName || entry.fullName, entry.competitionName && `at ${entry.competitionName}`].filter(Boolean).join(' ') : 'This entry';
+    if (!(await confirmDialog({ title: 'Withdraw this entry?', message: `${who}. You can’t withdraw once the draw has happened.`, confirmLabel: 'Withdraw entry', destructive: true }))) return;
+    setError(null);
     try {
       const { data } = await api.post<ExtendedMySignup>(`/my/signups/${signupId}/withdraw`, {});
       setSignups((cur) => cur?.map((item) => (item.id === signupId ? { ...item, ...data } : item)) ?? null);
     } catch {
-      setError('Could not withdraw entry. The draw may already have taken place.');
+      setError('Couldn’t withdraw this entry. Check your signal and try again. If the draw has happened, it can’t be withdrawn.');
     }
   }
 
@@ -96,14 +104,15 @@ function SignupList() {
     );
   }
 
-  if (signups == null && !error) {
+  if (signups == null && !loadFailed) {
     return <div className="mx-auto w-full max-w-xl pt-3"><p role="status" className="mg-meta px-1">Loading your signups…</p></div>;
   }
 
   const { comingUp, past } = groupSignups(signups ?? [], now);
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-2 pt-3">
-      {error && <div role="alert" className="mg-notice">{error}</div>}
+      {loadFailed && signups == null && <Notice actionLabel="Try again" onAction={() => { setLoadFailed(false); setAttempt((n) => n + 1); }}>Couldn’t load your signups. Check your signal and try again.</Notice>}
+      {error && <Notice onDismiss={() => setError(null)}>{error}</Notice>}
 
       {signups && signups.length === 0 && (
         <div className="mg-card space-y-3 p-5">

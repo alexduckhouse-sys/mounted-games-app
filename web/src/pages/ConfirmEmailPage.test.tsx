@@ -43,6 +43,7 @@ describe('ConfirmEmailPage', () => {
   it('does not call the server when the link is incomplete', () => {
     mount('?userId=u1');
     expect(screen.getByRole('alert')).toHaveTextContent(/incomplete/);
+    expect(screen.getByRole('link', { name: 'Back to the app' })).toHaveAttribute('href', '/');
     expect(api.post).not.toHaveBeenCalled();
   });
 
@@ -50,7 +51,7 @@ describe('ConfirmEmailPage', () => {
     vi.mocked(api.post).mockRejectedValueOnce({ response: { status: 400, data: { message: 'This confirmation link has expired or isn\'t valid.' } } });
     mount('?userId=u1&token=old');
     expect(await screen.findByRole('alert')).toHaveTextContent("expired or isn't valid");
-    expect(screen.getByText(/Resend email/)).toBeInTheDocument();
+    expect(screen.getByText(/Send it again/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Try again' })).toHaveClass('sp-pill-fill');
     const back = screen.getByRole('link', { name: 'Back to the app' });
     expect(back).toHaveClass('sp-pill');
@@ -60,7 +61,7 @@ describe('ConfirmEmailPage', () => {
   it('offers a retry when the connection drops', async () => {
     vi.mocked(api.post).mockRejectedValueOnce(new Error('offline'));
     mount('?userId=u1&token=1.abc');
-    expect(await screen.findByRole('alert')).toHaveTextContent(/Check your connection/);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Check your signal/);
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/confirmed/));
   });

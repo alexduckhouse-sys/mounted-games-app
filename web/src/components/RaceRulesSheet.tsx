@@ -1,10 +1,11 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useEffect, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, X } from 'lucide-react';
+import { BookOpen } from 'lucide-react';
 import { api } from '../api';
 import { equipmentFromDiagram } from '../lib/raceEquipment';
 import type { RaceTemplate } from '../types';
+import { Notice } from './Notice';
 import { RaceDiagram } from './RaceDiagram';
 
 export const GOVERNING_BODIES = ['EGUK', 'Pony Club', 'MGA', 'STRUK'] as const;
@@ -226,7 +227,7 @@ export function RaceRulesSheet({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-[rgb(var(--mg-overlay)/0.45)] p-0 sm:items-center sm:p-4"
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -235,24 +236,15 @@ export function RaceRulesSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-[rgb(var(--mg-surface))] p-4 shadow-xl sm:rounded-2xl"
+        className="flex max-h-[90vh] w-full max-w-2xl flex-col gap-3 overflow-y-auto rounded-t-[26px] bg-[rgb(var(--mg-surface))] px-5 pb-6 pt-2 shadow-xl [corner-shape:squircle] sm:rounded-[20px]"
       >
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 id={titleId} className="mg-display text-xl font-bold text-[rgb(var(--mg-heading))]">
-            {template?.name ?? raceName}
-          </h2>
-          <button
-            type="button"
-            className="mg-icon-btn"
-            aria-label="Close rules"
-            onClick={onClose}
-          >
-            <X className="h-5 w-5" aria-hidden="true" />
-          </button>
-        </div>
+        <span aria-hidden="true" className="kit-sheet-grip" />
+        <h2 id={titleId} className="kit-sheet-title">
+          {template?.name ?? raceName}
+        </h2>
 
-        {loading && !template && <p role="status" className="text-sm text-[rgb(var(--mg-muted))]">Loading race rules…</p>}
-        {!loading && !template && <p className="text-sm text-[rgb(var(--mg-muted))]">No rules have been added for this race yet.</p>}
+        {loading && !template && <Notice tone="info">Loading race rules…</Notice>}
+        {!loading && !template && <Notice tone="info" role={null}>No rules have been added for this race yet.</Notice>}
         {template && (
           <div className="space-y-3">
             {template.summary && <p className="text-sm text-[rgb(var(--mg-body))]">{template.summary}</p>}
@@ -268,6 +260,9 @@ export function RaceRulesSheet({
             </div>
           </div>
         )}
+        <div className="kit-acts">
+          <button type="button" className="kit-pill kit-pill-fill" aria-label="Close rules" onClick={onClose}>Close</button>
+        </div>
       </div>
     </div>
   );

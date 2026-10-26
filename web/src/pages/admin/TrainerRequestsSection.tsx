@@ -5,6 +5,7 @@ import { initialsOf } from '../../lib/profile';
 import type { TrainerRequest } from '../../types';
 import { PartHead } from './LaptopParts';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { Notice } from '../../components/Notice';
 
 export function TrainerRequestsSection() {
   const [requests, setRequests] = useState<TrainerRequest[]>([]);
@@ -22,7 +23,7 @@ export function TrainerRequestsSection() {
     api.get<TrainerRequest[]>('/admin/trainer-requests').then(({ data }) => {
       if (!cancelled) setRequests(data);
     }).catch(() => {
-      if (!cancelled) setError('Could not load trainer requests. Try again.');
+      if (!cancelled) setError('Couldn’t load the trainer requests. Check your signal and try again.');
     }).finally(() => {
       if (!cancelled) setLoading(false);
     });
@@ -48,7 +49,7 @@ export function TrainerRequestsSection() {
       await load();
       window.dispatchEvent(new CustomEvent('mg:trainer-requests-changed', { detail: { userId: request.userId } }));
     } catch (err) {
-      setError(apiErrorMessage(err, 'Could not update trainer requests. Refresh the list and try again.'));
+      setError(apiErrorMessage(err, 'Couldn’t update the trainer requests. Refresh the list and try again.'));
     } finally {
       setBusy(false);
     }
@@ -60,7 +61,7 @@ export function TrainerRequestsSection() {
     try {
       await load();
     } catch {
-      setError('Could not load trainer requests. Try again.');
+      setError('Couldn’t load the trainer requests. Check your signal and try again.');
     } finally {
       setLoading(false);
     }
@@ -69,10 +70,7 @@ export function TrainerRequestsSection() {
   return (
     <section className="flex flex-col gap-3" aria-labelledby="trainer-requests-title">
       <PartHead id="trainer-requests-title" title="Waiting for you" meta={requests.length > 0 ? requests.length : undefined} alert />
-      {error && <div role="alert" className="text-sm font-medium text-[rgb(var(--mg-elim))]">
-        <p>{error}</p>
-        <button type="button" className="mg-btn mg-btn-secondary mt-2 !min-h-11" disabled={busy || loading} onClick={refresh}>Refresh list</button>
-      </div>}
+      {error && <Notice actionLabel="Refresh list" onAction={refresh} actionDisabled={busy || loading}>{error}</Notice>}
       {loading ? <p role="status" className="mg-meta">Loading trainer requests…</p> : (
         <>
           {!error && requests.length === 0 && <p className="mg-card p-4 text-sm text-[rgb(var(--mg-muted))]">No trainer requests.</p>}

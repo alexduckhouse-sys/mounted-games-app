@@ -29,8 +29,21 @@ it('shows a failed date save without claiming success', async () => {
   vi.mocked(api.put).mockRejectedValue(new Error('offline'));
   render(<EntryManagement competition={competition()} signups={[]} entriesCloseAt={null} />);
   await userEvent.click(screen.getByRole('button', { name: 'Save closing date' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('Could not save');
+  expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t save');
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
+});
+it('says the closing date is saved in a toast', async () => {
+  render(<EntryManagement competition={competition()} signups={[]} entriesCloseAt={null} />);
+  await userEvent.click(screen.getByRole('button', { name: 'Save closing date' }));
+  expect(await screen.findByRole('status')).toHaveTextContent('Entry closing date saved');
+});
+it('offers Try again after a failed date save and saves on the second go', async () => {
+  vi.mocked(api.put).mockRejectedValueOnce(new Error('offline'));
+  render(<EntryManagement competition={competition()} signups={[]} entriesCloseAt={null} />);
+  await userEvent.click(screen.getByRole('button', { name: 'Save closing date' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+  expect(await screen.findByRole('status')).toHaveTextContent('Entry closing date saved');
+  expect(api.put).toHaveBeenCalledTimes(2);
 });
 it('excludes waiting, withdrawn and refunded entries from stabling totals', async () => {
   render(<EntryManagement competition={competition()} entriesCloseAt={null} signups={[

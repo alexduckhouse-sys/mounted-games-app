@@ -1,6 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
+import { Notice } from '../../components/Notice';
+import { PageProblem } from '../../components/PageProblem';
+import { useToast } from '../../components/Toast';
 import { useAuth } from '../../auth/AuthContext';
 import { SectionFormatLabel, type CompetitionDetail, type CompetitionSummary } from '../../types';
 import { Chevron, RefineList, RefineNote, RefinePage, RefineSection, RefineStatus } from '../refine/Refine';
@@ -41,7 +44,7 @@ function SeasonDetail({ id }: { id: string }) {
     ]).then(([season, table]) => {
       if (!controller.signal.aborted) { setData({ season: season.data, table: table.data }); setError(''); }
     }).catch((reason) => {
-      if (!controller.signal.aborted) setError(seasonError(reason, 'This season couldn’t be loaded. Check your connection and try again.'));
+      if (!controller.signal.aborted) setError(seasonError(reason, 'This season couldn’t be loaded. Check your signal and try again.'));
     });
     return () => controller.abort();
   }, [id, attempt]);
@@ -49,7 +52,7 @@ function SeasonDetail({ id }: { id: string }) {
   const reload = () => setAttempt((value) => value + 1);
   const pageCanManage = !!data?.season.canManage;
   if (!data) return <RefinePage>
-    {error ? <p role="alert" className="mg-notice sv-msg">{error} <button className="mg-text-link min-h-11" onClick={reload}>Try again</button></p> : <p role="status" className="sp-note">Loading season…</p>}
+    {error ? <PageProblem title="Couldn’t load this season" primaryLabel="Try again" onPrimary={reload}>{error}</PageProblem> : <p role="status" className="sp-note">Loading season…</p>}
   </RefinePage>;
 
   const { season, table } = data;
@@ -64,7 +67,7 @@ function SeasonDetail({ id }: { id: string }) {
     <nav className="sp-seg" aria-label="Season sections">
       {tabs.map(([key, label]) => <Link key={key} to={tabLink(key)} aria-current={tab === key ? 'page' : undefined}>{label}</Link>)}
     </nav>
-    {error && <p role="alert" className="mg-notice sv-msg">{error} <button className="mg-text-link min-h-11" onClick={reload}>Try again</button></p>}
+    {error && <Notice className="sv-msg" actionLabel="Try again" onAction={reload}>{error}</Notice>}
     {tab === 'standings' && <Standings season={season} table={table} />}
     {tab === 'rounds' && <>
       {canManage && <div className="sp-gap"><AddBar onClick={() => setAddingRound((open) => !open)}>{addingRound ? 'Close add round' : 'Add a round'}</AddBar></div>}
@@ -104,7 +107,7 @@ function Standings({ season, table }: { season: SeasonView; table: StandingsView
       <CardDropdownRow label="Show" value={String(activeFormat)} options={formatOptions} disabled={formats.length < 2}
         onChange={(value) => { setSelectedFormat(Number(value) as typeof activeFormat); setSelectedDivision('all'); }} />
     </div>
-    {stale && <p className="mg-notice sv-msg">Results or rules changed since publication. Republish to update the table.</p>}
+    {stale && <Notice className="sv-msg" role={null}>Results or rules changed since publication. Republish to update the table.</Notice>}
     {!visibleStandings.length ? <div className="sv-empty"><h2>No standings yet</h2><p>Results will appear after the first round is published.</p></div> : <>
       <div className="rf-table-wrap sp-gap"><table className="rf-table sv-table">
         <caption className="sr-only">Season standings. Struck-through points fall outside the best results that count.</caption>
@@ -168,7 +171,7 @@ function AddRound({ season, onChanged }: { season: SeasonView; onChanged: () => 
     const controller = new AbortController();
     api.get<CompetitionSummary[]>('/competitions', { params: { includeArchived: true }, signal: controller.signal }).then(({ data }) => {
       if (!controller.signal.aborted) setCompetitions(data);
-    }).catch((reason) => { if (!controller.signal.aborted) setListError(seasonError(reason, 'Competitions couldn’t be loaded. Try again.')); });
+    }).catch((reason) => { if (!controller.signal.aborted) setListError(seasonError(reason, 'Competitions couldn’t be loaded. Check your signal and try again.')); });
     return () => controller.abort();
   }, [listAttempt]);
 
@@ -177,7 +180,7 @@ function AddRound({ season, onChanged }: { season: SeasonView; onChanged: () => 
     const controller = new AbortController();
     api.get<CompetitionDetail>(`/competitions/${competitionId}`, { signal: controller.signal }).then(({ data }) => {
       if (!controller.signal.aborted) setDetail(data);
-    }).catch((reason) => { if (!controller.signal.aborted) setDetailError(seasonError(reason, 'The competition couldn’t be loaded. Try again.')); })
+    }).catch((reason) => { if (!controller.signal.aborted) setDetailError(seasonError(reason, 'The competition couldn’t be loaded. Check your signal and try again.')); })
       .finally(() => { if (!controller.signal.aborted) setDetailLoading(false); });
     return () => controller.abort();
   }, [competitionId, detailAttempt]);
@@ -197,18 +200,18 @@ function AddRound({ season, onChanged }: { season: SeasonView; onChanged: () => 
       });
       setSectionId(''); setMultiplier('1'); onChanged();
     }
-    catch (reason) { setActionError(seasonError(reason, 'This round couldn’t be added. Try again.')); }
+    catch (reason) { setActionError(seasonError(reason, 'This round couldn’t be added. Check your signal and try again.')); }
     finally { setBusy(false); }
   }
 
   return <form className="sv-add" onSubmit={submit}>
     <fieldset disabled={busy} className="sv-fieldset sv-stack">
       <legend className="rf-sec">Add an event round</legend>
-      {listError && <p role="alert" className="mg-notice">{listError} <button type="button" className="mg-text-link min-h-11" onClick={() => { setListError(''); setListAttempt((value) => value + 1); }}>Try again</button></p>}
-      {actionError && <p role="alert" className="mg-notice">{actionError}</p>}
+      {listError && <Notice actionLabel="Try again" onAction={() => { setListError(''); setListAttempt((value) => value + 1); }}>{listError}</Notice>}
+      {actionError && <Notice>{actionError}</Notice>}
       <label className="rf-fld">Competition<SelectField required value={competitionId} onChange={(event) => chooseCompetition(event.target.value)}><option value="">{competitions ? 'Choose a competition' : 'Loading competitions…'}</option>{competitions?.map((competition) => <option key={competition.id} value={competition.id}>{competition.name} · {new Date(competition.startDate).getFullYear()}</option>)}</SelectField></label>
       {competitionId && detailLoading && <p role="status" className="rf-note sv-flush">Loading sections…</p>}
-      {detailError && <p role="alert" className="mg-notice">{detailError} <button type="button" className="mg-text-link min-h-11" onClick={() => { setDetailLoading(true); setDetailError(''); setDetailAttempt((value) => value + 1); }}>Try again</button></p>}
+      {detailError && <Notice actionLabel="Try again" onAction={() => { setDetailLoading(true); setDetailError(''); setDetailAttempt((value) => value + 1); }}>{detailError}</Notice>}
       {detail && (sections.length ? <>
         <label className="rf-fld">Section<SelectField required value={sectionId} onChange={(event) => setSectionId(event.target.value)}><option value="">Choose a section</option>{sections.map((section) => <option key={section.id} value={section.id}>{section.displayName}</option>)}</SelectField></label>
         <label className="rf-fld">Points multiplier<SelectField value={multiplier} onChange={(event) => setMultiplier(event.target.value)}><option value="1">1× (standard)</option><option value="1.5">1.5× (major)</option><option value="2">2× (championship)</option></SelectField></label>
@@ -222,14 +225,14 @@ function Round({ seasonId, round, canManage, expanded, onToggle, onChanged }: { 
   const [preview, setPreview] = useState<PublicationView | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const toast = useToast();
   const base = `/seasons/${seasonId}/rounds/${round.id}`;
   const mult = round.pointsMultiplier && round.pointsMultiplier > 0 ? round.pointsMultiplier : 1;
 
   async function act(action: () => Promise<void>) {
-    setBusy(true); setError(''); setNotice('');
+    setBusy(true); setError('');
     try { await action(); }
-    catch (reason) { setError(seasonError(reason, 'This change couldn’t be saved. Check your connection and try again.')); setPreview(null); }
+    catch (reason) { setError(seasonError(reason, 'This change couldn’t be saved. Check your signal and try again.')); setPreview(null); }
     finally { setBusy(false); }
   }
 
@@ -245,7 +248,7 @@ function Round({ seasonId, round, canManage, expanded, onToggle, onChanged }: { 
       <Chevron down />
     </button>
     {expanded && <div className="sv-round-detail">
-      {error && <p role="alert" className="mg-notice">{error}</p>}{notice && <p role="status" className="mg-notice">{notice}</p>}
+      {error && <Notice>{error}</Notice>}{toast.node}
       <p className="rf-note sv-flush"><strong>{publicationStatus}</strong> · {round.isIncluded ? 'Counts in standings' : 'Excluded from standings'}{mult !== 1 ? ` · ${mult}× points` : ''}. <Link className="sv-link" to={`/competitions/${round.competitionId}`}>Open {round.competitionName}</Link></p>
       {canManage && <div className="sv-actions">
         <label className="rf-fld">
@@ -267,7 +270,7 @@ function Round({ seasonId, round, canManage, expanded, onToggle, onChanged }: { 
       {preview && canManage && <section className="sv-stack" aria-label="Publication preview">
         <div><h3 className="rf-sec">Version {preview.nextVersion} preview</h3><p className="rf-note sv-flush">{preview.rankingBasis}. Ties share a place and HC teams are excluded.</p></div>
         <PublicationResults publication={preview} />
-        <button type="button" className="rf-btn rf-btn-primary" disabled={busy} onClick={() => void act(async () => { await api.post(`${base}/publications`, { sourceFingerprint: preview.sourceFingerprint, expectedVersion: preview.nextVersion }); setPreview(null); setNotice('Round results published.'); onChanged(); })}>{busy ? 'Publishing…' : `Publish version ${preview.nextVersion}`}</button>
+        <button type="button" className="rf-btn rf-btn-primary" disabled={busy} onClick={() => void act(async () => { await api.post(`${base}/publications`, { sourceFingerprint: preview.sourceFingerprint, expectedVersion: preview.nextVersion }); setPreview(null); toast.show('Round results published'); onChanged(); })}>{busy ? 'Publishing…' : `Publish version ${preview.nextVersion}`}</button>
       </section>}
       {round.publishedVersion ? <PublicationHistory base={base} latest={round.publishedVersion} /> : !canManage && <p className="rf-note sv-flush">There are no published results for this round.</p>}
     </div>}
@@ -286,11 +289,11 @@ function PublicationHistory({ base, latest }: { base: string; latest: number }) 
   return <details className="sv-versions"><summary>Published versions</summary><form className="sv-versions-form" onSubmit={async (event) => {
     event.preventDefault(); setBusy(true); setError('');
     try { const { data } = await api.get<PublicationView & { version: number; publishedAt: string }>(`${base}/publications/${version}`); setPublication(data); }
-    catch (reason) { setError(seasonError(reason, 'This version couldn’t be loaded. Try again.')); }
+    catch (reason) { setError(seasonError(reason, 'This version couldn’t be loaded. Check your signal and try again.')); }
     finally { setBusy(false); }
   }}>
     <div className="sv-versions-pick"><label className="rf-fld">Version<NumberField  min={1} max={latest} required value={version} onChange={(event) => setVersion(Number(event.target.value))} disabled={busy} /></label><button className="rf-btn" disabled={busy}>{busy ? 'Loading…' : 'View version'}</button></div>
-    {error && <p role="alert" className="mg-notice">{error}</p>}
+    {error && <Notice>{error}</Notice>}
     {publication && <><p className="rf-note sv-flush">Version {publication.version} · published {new Date(publication.publishedAt).toLocaleString('en-GB')}</p><p className="rf-note sv-flush">{publication.rankingBasis}</p><PublicationResults publication={publication} /></>}
   </form></details>;
 }
