@@ -7,7 +7,7 @@ using MountedGames.Api.Entities.Operations;
 
 namespace MountedGames.Api.Services.Operations;
 
-public sealed record DrawUndoEntrySnapshot(int TeamId, int LaneIndex);
+public sealed record DrawUndoEntrySnapshot(int TeamId, int LaneIndex, string? BibColourOverride = null);
 public sealed record DrawUndoRaceSnapshot(string Name, int OrderIndex);
 public sealed record DrawUndoHeatSnapshot(
     int OriginalHeatId,
@@ -62,7 +62,7 @@ public static class DrawUndoService
                         h.RaceRoundStage,
                         h.Entries
                             .OrderBy(e => e.LaneIndex).ThenBy(e => e.TeamId)
-                            .Select(e => new DrawUndoEntrySnapshot(e.TeamId, e.LaneIndex))
+                            .Select(e => new DrawUndoEntrySnapshot(e.TeamId, e.LaneIndex, e.BibColourOverride))
                             .ToList(),
                         h.Races
                             .OrderBy(r => r.OrderIndex).ThenBy(r => r.Id)
@@ -224,6 +224,8 @@ public static class DrawUndoService
                     existingHeat.OrderIndex = heatSnap.OrderIndex;
                     existingHeat.ScheduledStart = heatSnap.ScheduledStart;
                     existingHeat.DurationMinutes = heatSnap.DurationMinutes;
+                    existingHeat.RaceRoundId = heatSnap.RaceRoundId;
+                    existingHeat.RaceRoundStage = heatSnap.RaceRoundStage;
 
                     db.HeatEntries.RemoveRange(existingHeat.Entries);
                     existingHeat.Entries.Clear();
@@ -234,6 +236,7 @@ public static class DrawUndoService
                             HeatId = existingHeat.Id,
                             TeamId = entrySnap.TeamId,
                             LaneIndex = entrySnap.LaneIndex,
+                            BibColourOverride = entrySnap.BibColourOverride,
                         });
                     }
 
@@ -261,6 +264,7 @@ public static class DrawUndoService
                         OrderIndex = heatSnap.OrderIndex,
                         ScheduledStart = heatSnap.ScheduledStart,
                         DurationMinutes = heatSnap.DurationMinutes,
+                        RaceRoundId = heatSnap.RaceRoundId,
                         RaceRoundStage = heatSnap.RaceRoundStage,
                         Entries = heatSnap.Entries
                             .Where(e => validTeamIds.Contains(e.TeamId))
@@ -268,6 +272,7 @@ public static class DrawUndoService
                             {
                                 TeamId = e.TeamId,
                                 LaneIndex = e.LaneIndex,
+                                BibColourOverride = e.BibColourOverride,
                             })
                             .ToList(),
                         Races = heatSnap.Races
@@ -295,6 +300,7 @@ public static class DrawUndoService
         else
             db.Set<DrawChange>().Remove(targetChange);
         await db.SaveChangesAsync(cancellationToken);
+        StandingsService.Invalidate(competitionId);
 
         var nextStatus = await GetStatusAsync(db, competitionId, cancellationToken);
         return (
@@ -306,7 +312,7 @@ public static class DrawUndoService
         new(false, null, null, null, null, null, null, null, 0, 0);
 
     private static bool HasScoredResults(Heat heat) =>
-        heat.Races.Any(r => r.IsComplete || r.Results.Count > 0);
+        heat.StartedAt != null || heat.Races.Any(r => r.IsComplete || r.StartedAt != null || r.Results.Count > 0);
 
     private static DrawUndoSnapshot? TryParseSnapshot(string? json)
     {

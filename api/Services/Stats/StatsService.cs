@@ -576,12 +576,13 @@ public sealed class StatsService(AppDbContext db, StandingsService? standings = 
                 var scores = sectionTeams.ToDictionary(t => t.Id, t =>
                 {
                     var inFinal = tiers.TierOf(t.Id) is not null;
-                    var finalResults = t.Results.Where(r => ties.IsFinalRace(r.RaceId)).ToList();
+                    var effectiveResults = ties.EffectiveResults(t.Results);
+                    var finalResults = effectiveResults.Where(r => ties.IsFinalRace(r.RaceId)).ToList();
                     var finalPoints = finalResults.Sum(r => r.Points);
-                    var earlier = t.Results.Sum(r => r.Points) - finalPoints;
+                    var earlier = effectiveResults.Sum(r => r.Points) - finalPoints;
                     var total = SectionScoring.Total(section, inFinal, earlier, finalPoints, bonus.GetValueOrDefault(t.Id));
                     var alone = inFinal && !SectionScoring.CarriesIntoFinal(section);
-                    return (Total: total, Tier: tiers.TierOf(t.Id), TieResults: alone ? finalResults : t.Results);
+                    return (Total: total, Tier: tiers.TierOf(t.Id), TieResults: alone ? finalResults : effectiveResults);
                 });
                 var facts = sectionTeams.ToDictionary(t => t.Id, t => ties.Facts(t.Id, t.CompetitionSectionId, scores[t.Id].TieResults, scores[t.Id].Total));
                 var ordered = sectionTeams

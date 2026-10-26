@@ -57,10 +57,14 @@ export function assignSitOutRiderForRace(
   requiredRiders: number = 4,
 ): Record<string, RiderRaceRole> {
   const row: Record<string, RiderRaceRole> = {};
+  const availableNonReserves = riders.filter(
+    (r) => !r.isReserve && riderLineupKey(r) !== sitOutRiderKey,
+  ).length;
+  const keepReservesOut = availableNonReserves >= requiredRiders;
   let leg = 1;
   for (const rider of riders) {
     const key = riderLineupKey(rider);
-    if (key === sitOutRiderKey || leg > requiredRiders) {
+    if (key === sitOutRiderKey || leg > requiredRiders || (keepReservesOut && rider.isReserve)) {
       row[key] = 'sit-out';
     } else {
       row[key] = String(leg) as RiderRaceRole;

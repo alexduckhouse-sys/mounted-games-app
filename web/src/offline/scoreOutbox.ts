@@ -89,7 +89,10 @@ export function settle(list: QueuedScore[], sent: QueuedScore, outcome: SendOutc
 }
 
 function samePlacings(a: Placing[], b: Placing[]): boolean {
-  const key = (places: Placing[]) => places.map((p) => `${p.teamId}:${p.eliminated ? statusLetter(true, p.status) : p.place}`).sort().join(',');
+  const key = (places: Placing[]) => places.map((p) => {
+    const pts = typeof p.points === 'number' && Number.isFinite(p.points) ? `/${p.points}` : '';
+    return `${p.teamId}:${p.eliminated ? statusLetter(true, p.status) : p.place}${pts}`;
+  }).sort().join(',');
   return key(a) === key(b);
 }
 
@@ -219,6 +222,7 @@ export function parseOutboxBackup(
       ? item.competitionId
       : (topCompId ?? fallbackCompetitionId ?? 0);
     if (!compId || compId <= 0) return null;
+    if (fallbackCompetitionId !== undefined && compId !== fallbackCompetitionId) return null;
     const viaLink = viaLinkOverride !== undefined ? viaLinkOverride : item.viaLink === true;
     out.push({
       ...(typeof item.saveId === 'string' && item.saveId ? { saveId: item.saveId } : {}),
@@ -238,7 +242,17 @@ export function parseOutboxBackup(
   return out;
 }
 
-/** Merges imported backup scores into the current outbox, replacing older entries for the same race. */
+/** Merges imported backup scores into the current outbox, replacing older entries for the same race while preserving newer local saves. */
 export function mergeOutboxBackup(existing: QueuedScore[], imported: QueuedScore[]): QueuedScore[] {
-  return imported.reduce((acc, item) => enqueue(acc, item), existing);
+  return imported.reduce((acc, item) => {
+    const current = acc.find((q) => q.raceId === item.raceId);
+    if (current) {
+      const currentMs = Date.parse(current.queuedAt);
+      const importedMs = Date.parse(item.queuedAt);
+      if (Number.isFinite(currentMs) && Number.isFinite(importedMs) && currentMs > importedMs) {
+        return acc;
+      }
+    }
+    return enqueue(acc, item);
+  }, existing);
 }

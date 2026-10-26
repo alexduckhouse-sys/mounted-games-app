@@ -171,6 +171,7 @@ async function persistClip(clip: SavedReplayClip): Promise<void> {
         savedHighlight: clip.savedHighlight, trimStartSeconds: clip.trimStartSeconds,
         trimEndSeconds: clip.trimEndSeconds, followKeyframes: clip.followKeyframes,
         resolutionLabel: clip.resolutionLabel, hasFilmingOptOut: clip.hasFilmingOptOut,
+        source: clip.source, races: clip.races,
       });
     });
     clip.storageWarning = undefined;

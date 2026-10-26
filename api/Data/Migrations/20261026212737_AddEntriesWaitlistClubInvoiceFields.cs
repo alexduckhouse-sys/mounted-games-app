@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -48,12 +48,6 @@ namespace MountedGames.Api.Data.Migrations
                 nullable: true);
 
             migrationBuilder.AddColumn<string>(
-                name: "VehicleRegistration",
-                table: "SignupExtras",
-                type: "text",
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
                 name: "WaitlistOfferExpiresAt",
                 table: "SignupExtras",
                 type: "text",
@@ -91,10 +85,6 @@ namespace MountedGames.Api.Data.Migrations
 
             migrationBuilder.DropColumn(
                 name: "RefundedAmountMinor",
-                table: "SignupExtras");
-
-            migrationBuilder.DropColumn(
-                name: "VehicleRegistration",
                 table: "SignupExtras");
 
             migrationBuilder.DropColumn(

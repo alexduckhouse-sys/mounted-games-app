@@ -428,7 +428,7 @@ export function treasurerCsv(input: TreasurerCsvInput): string {
 }
 
 function splitCsvCells(line: string): string[] {
-  const delimiter = line.includes('\t') && !line.includes(',') ? '\t' : ',';
+  const delimiter = line.includes('\t') ? '\t' : ',';
   const cells: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -465,7 +465,7 @@ function isHeaderRow(cells: string[]): boolean {
   const joined = cells.join(' ').toLowerCase();
   return (
     (joined.includes('date') || joined.includes('description') || joined.includes('reference')) &&
-    (joined.includes('amount') || joined.includes('credit') || joined.includes('value'))
+    (joined.includes('amount') || joined.includes('credit') || joined.includes('value') || joined.includes('paid in'))
   );
 }
 
@@ -473,12 +473,18 @@ export function parseBankStatementCsv(text: string): BankStatementLine[] {
   if (!text || !text.trim()) return [];
   const rawLines = text.replace(/\r\n?/g, '\n').split('\n');
   const parsed: BankStatementLine[] = [];
+  const balanceColIndices = new Set<number>();
 
   for (let idx = 0; idx < rawLines.length; idx++) {
     const raw = rawLines[idx].trim();
     if (!raw) continue;
     const cells = splitCsvCells(raw);
-    if (idx === 0 && isHeaderRow(cells)) continue;
+    if (idx === 0 && isHeaderRow(cells)) {
+      cells.forEach((cell, cIdx) => {
+        if (/\bbalance\b/i.test(cell)) balanceColIndices.add(cIdx);
+      });
+      continue;
+    }
 
     let date = '';
     let reference = '';
@@ -486,8 +492,9 @@ export function parseBankStatementCsv(text: string): BankStatementLine[] {
 
     if (cells.length >= 3) {
       date = cells[0];
-      // Find the rightmost positive numeric amount column (e.g. Date, Description, Amount or Date, Type, Description, Credit)
+      // Find the rightmost positive numeric amount column (excluding any 'Balance' column from the header)
       for (let c = cells.length - 1; c >= 1; c--) {
+        if (balanceColIndices.has(c)) continue;
         const candidate = parseAmountToMinor(cells[c]);
         if (candidate !== null) {
           amountMinor = candidate;

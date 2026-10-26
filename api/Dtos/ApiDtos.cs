@@ -489,7 +489,7 @@ public record StandingRow(
     bool Withdrawn = false, int BonusPoints = 0, string? RefereeCard = null,
     string? Flag = null, string? BibDescription = null,
     double? FinalPoints = null, double? EarlierPoints = null,
-    string? TieBreakReason = null);
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? TieBreakReason = null);
 
 public record DeclarationFormDto(
     int Id, int TeamId, string TeamName, int CompetitionId, string CompetitionName,

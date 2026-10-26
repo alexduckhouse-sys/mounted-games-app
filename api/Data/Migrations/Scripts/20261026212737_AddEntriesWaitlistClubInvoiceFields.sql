@@ -45,13 +45,6 @@ END $EF$;
 DO $EF$
 BEGIN
     IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261026212737_AddEntriesWaitlistClubInvoiceFields') THEN
-    ALTER TABLE "SignupExtras" ADD "VehicleRegistration" text;
-    END IF;
-END $EF$;
-
-DO $EF$
-BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261026212737_AddEntriesWaitlistClubInvoiceFields') THEN
     ALTER TABLE "SignupExtras" ADD "WaitlistOfferExpiresAt" text;
     END IF;
 END $EF$;

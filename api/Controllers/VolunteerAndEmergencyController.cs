@@ -92,7 +92,6 @@ public class VolunteerAndEmergencyController(AppDbContext db) : ControllerBase
         int id, int shiftId, UpdateVolunteerShiftRequest req, CancellationToken ct = default)
     {
         var shift = await db.VolunteerShifts
-            .Include(s => s.Session)
             .Include(s => s.Claims)
             .FirstOrDefaultAsync(s => s.Id == shiftId && s.CompetitionId == id, ct);
         if (shift is null) return NotFound();
@@ -114,13 +113,13 @@ public class VolunteerAndEmergencyController(AppDbContext db) : ControllerBase
 
         shift.Role = role;
         shift.SessionId = req.SessionId;
-        shift.Session = session;
         shift.ArenaName = CompetitionFields.Trimmed(req.ArenaName) ?? session?.ArenaName;
         shift.StartTimeLabel = CompetitionFields.Trimmed(req.StartTimeLabel);
         shift.Notes = CompetitionFields.Trimmed(req.Notes);
         shift.RequiredCount = req.RequiredCount;
 
         await db.SaveChangesAsync(ct);
+        shift.Session = session;
 
         var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return ToShiftDto(shift, isStaff: true, currentUserId);
@@ -240,7 +239,25 @@ public class VolunteerAndEmergencyController(AppDbContext db) : ControllerBase
             .Where(t => t.CompetitionId == id)
             .ToListAsync(ct);
 
+        var signups = await db.SectionSignups
+            .AsNoTracking()
+            .Include(s => s.Section)
+            .Where(s => s.Section!.CompetitionId == id && s.Status != Entities.SignupPaymentStatus.Cancelled && s.Status != Entities.SignupPaymentStatus.Refunded)
+            .ToListAsync(ct);
+        var signupIds = signups.Select(s => s.Id).ToList();
+        var guestDetailsMap = signupIds.Count == 0
+            ? new Dictionary<int, Entities.SignupGuestDetails>()
+            : await db.Set<Entities.SignupGuestDetails>()
+                .AsNoTracking()
+                .Where(g => signupIds.Contains(g.SignupId))
+                .ToDictionaryAsync(g => g.SignupId, ct);
+        var signupsByTeamId = signups
+            .Where(s => s.TeamId.HasValue)
+            .GroupBy(s => s.TeamId!.Value)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         var results = new List<EmergencyContactLookupDto>();
+        var coveredSignupIds = new HashSet<int>();
         foreach (var team in teams.OrderBy(t => t.Section?.DisplayName ?? string.Empty).ThenBy(t => t.DisplayName))
         {
             var latestForm = team.DeclarationForms
@@ -249,12 +266,18 @@ public class VolunteerAndEmergencyController(AppDbContext db) : ControllerBase
                 .FirstOrDefault();
             if (latestForm is null) continue;
 
+            var teamSignups = signupsByTeamId.GetValueOrDefault(team.Id) ?? [];
+            foreach (var ts in teamSignups) coveredSignupIds.Add(ts.Id);
+            var primarySignup = teamSignups.FirstOrDefault();
+
             var trainerName = CompetitionFields.Trimmed(latestForm.TrainerName)
                 ?? CompetitionFields.Trimmed(latestForm.SubmittedBy?.FullName)
-                ?? CompetitionFields.Trimmed(team.Trainer?.FullName);
+                ?? CompetitionFields.Trimmed(team.Trainer?.FullName)
+                ?? CompetitionFields.Trimmed(primarySignup?.FullName);
             var trainerPhone = CompetitionFields.Trimmed(latestForm.TrainerPhone)
                 ?? CompetitionFields.Trimmed(latestForm.SubmittedBy?.PhoneNumber)
-                ?? CompetitionFields.Trimmed(team.Trainer?.PhoneNumber);
+                ?? CompetitionFields.Trimmed(team.Trainer?.PhoneNumber)
+                ?? CompetitionFields.Trimmed(primarySignup?.ContactInfo);
             var teamBibDesc = ResultStatuses.PublicBibDescription(team.BibDescription);
 
             foreach (var rider in latestForm.Riders.OrderBy(r => r.OrderIndex).ThenBy(r => r.Id))
@@ -263,10 +286,23 @@ public class VolunteerAndEmergencyController(AppDbContext db) : ControllerBase
                     ?? CompetitionFields.Trimmed(team.BibColour)
                     ?? CompetitionFields.Trimmed(team.Club?.BibColour);
 
+                var matchingGuest = teamSignups
+                    .Select(s => guestDetailsMap.GetValueOrDefault(s.Id))
+                    .FirstOrDefault(g => g is not null && (
+                        string.Equals(CompetitionFields.Trimmed(g.RiderName), CompetitionFields.Trimmed(rider.FullName), StringComparison.OrdinalIgnoreCase)
+                        || teamSignups.Count == 1));
+
+                var emergencyName = CompetitionFields.Trimmed(rider.EmergencyContactName)
+                    ?? CompetitionFields.Trimmed(matchingGuest?.EmergencyContactName)
+                    ?? CompetitionFields.Trimmed(matchingGuest?.GuardianName);
+                var emergencyPhone = CompetitionFields.Trimmed(rider.EmergencyContactPhone)
+                    ?? CompetitionFields.Trimmed(matchingGuest?.EmergencyContactPhone)
+                    ?? CompetitionFields.Trimmed(matchingGuest?.GuardianPhone);
+
                 results.Add(new EmergencyContactLookupDto(
                     RiderEntryId: rider.Id,
                     RiderName: rider.FullName,
-                    PonyName: rider.HorseName,
+                    PonyName: CompetitionFields.Trimmed(rider.HorseName) ?? CompetitionFields.Trimmed(matchingGuest?.PonyName),
                     TeamId: team.Id,
                     TeamName: team.DisplayName,
                     SectionId: team.CompetitionSectionId,
@@ -275,12 +311,42 @@ public class VolunteerAndEmergencyController(AppDbContext db) : ControllerBase
                     BibColour: bibColour,
                     BibDescription: teamBibDesc,
                     IsReserve: rider.IsReserve,
-                    EmergencyContactName: rider.EmergencyContactName,
-                    EmergencyContactPhone: rider.EmergencyContactPhone,
+                    EmergencyContactName: emergencyName,
+                    EmergencyContactPhone: emergencyPhone,
                     MedicalNotes: rider.MedicalNotes,
                     TrainerName: trainerName,
                     TrainerPhone: trainerPhone));
             }
+        }
+
+        var teamsById = teams.ToDictionary(t => t.Id);
+        foreach (var signup in signups.Where(s => !coveredSignupIds.Contains(s.Id)))
+        {
+            if (!guestDetailsMap.TryGetValue(signup.Id, out var guest)) continue;
+            var riderName = CompetitionFields.Trimmed(guest.RiderName);
+            var emergencyName = CompetitionFields.Trimmed(guest.EmergencyContactName) ?? CompetitionFields.Trimmed(guest.GuardianName);
+            var emergencyPhone = CompetitionFields.Trimmed(guest.EmergencyContactPhone) ?? CompetitionFields.Trimmed(guest.GuardianPhone);
+            if (string.IsNullOrEmpty(riderName) && string.IsNullOrEmpty(emergencyName) && string.IsNullOrEmpty(emergencyPhone))
+                continue;
+
+            var linkedTeam = signup.TeamId.HasValue ? teamsById.GetValueOrDefault(signup.TeamId.Value) : null;
+            results.Add(new EmergencyContactLookupDto(
+                RiderEntryId: -signup.Id,
+                RiderName: riderName ?? CompetitionFields.Trimmed(signup.FullName) ?? "Entry Rider",
+                PonyName: CompetitionFields.Trimmed(guest.PonyName),
+                TeamId: linkedTeam?.Id ?? 0,
+                TeamName: linkedTeam?.DisplayName ?? (CompetitionFields.Trimmed(signup.TeamName) ?? CompetitionFields.Trimmed(signup.PonyClubName) ?? "Pending Entry"),
+                SectionId: signup.CompetitionSectionId,
+                SectionName: signup.Section?.DisplayName ?? linkedTeam?.Section?.DisplayName ?? string.Empty,
+                ClubName: CompetitionFields.Trimmed(signup.PonyClubName) ?? linkedTeam?.Club?.Name ?? string.Empty,
+                BibColour: CompetitionFields.Trimmed(linkedTeam?.BibColour) ?? CompetitionFields.Trimmed(linkedTeam?.Club?.BibColour),
+                BibDescription: ResultStatuses.PublicBibDescription(linkedTeam?.BibDescription),
+                IsReserve: false,
+                EmergencyContactName: emergencyName,
+                EmergencyContactPhone: emergencyPhone,
+                MedicalNotes: null,
+                TrainerName: CompetitionFields.Trimmed(signup.FullName),
+                TrainerPhone: CompetitionFields.Trimmed(signup.ContactInfo)));
         }
 
         var tokens = string.IsNullOrWhiteSpace(q)

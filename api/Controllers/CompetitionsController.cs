@@ -791,7 +791,11 @@ public class CompetitionsController : ControllerBase
         var ties = await TieBreaker.LoadAsync(_db, competitionId, HttpContext.RequestAborted);
         // Tack check bonus points count here as they do in the standings, so finals are seeded from the table people see.
         var bonus = await Services.TackCheck.TackCheckBonus.ForCompetitionAsync(_db, competitionId, HttpContext.RequestAborted);
-        var facts = teams.Select(t => ties.Facts(t.Id, t.CompetitionSectionId, t.Results, t.Results.Sum(r => r.Points) + bonus.GetValueOrDefault(t.Id)));
+        var facts = teams.Select(t =>
+        {
+            var effective = ties.EffectiveResults(t.Results);
+            return ties.Facts(t.Id, t.CompetitionSectionId, effective, effective.Sum(r => r.Points) + bonus.GetValueOrDefault(t.Id));
+        });
         return (ties, ties.Rank(facts), teams.ToDictionary(t => t.Id, t => t.DisplayName));
     }
 

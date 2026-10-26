@@ -69,14 +69,18 @@ export function useTeamRaceLineup(
       .then((res) => {
         const payload = ((res as { data?: TeamRaceLineupPlan })?.data ?? res) as TeamRaceLineupPlan | undefined;
         if (cancelled || !payload || typeof payload.assignments !== 'object' || payload.assignments === null) return;
-        if (Object.keys(payload.assignments).length > 0) {
+        if (Object.keys(payload.assignments).length > 0 || payload.updatedAt) {
           setAssignments(payload.assignments);
           writeLocalPlan(competitionId, teamId, payload.assignments);
+        } else {
+          setAssignments(readLocalPlan(competitionId, teamId));
         }
         setUpdatedAt(payload.updatedAt ?? null);
       })
       .catch(() => {
-        // Keep local plan when offline or unauthenticated
+        if (!cancelled) {
+          setAssignments(readLocalPlan(competitionId, teamId));
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

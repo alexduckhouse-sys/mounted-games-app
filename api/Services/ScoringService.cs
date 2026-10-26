@@ -524,10 +524,13 @@ public class ScoringService
             => teamSectionById.TryGetValue(teamId, out var sectionId) && doubledSectionIds.Contains(sectionId) ? 2 : 1;
         int EffectivePlace(FinishingPlace fp)
         {
-            if (fp.Eliminated || fp.Place < 1 || hcTeamIds.Count == 0) return fp.Place;
+            if (fp.Eliminated || fp.Place < 1 || hcTeamIds.Count == 0 || hcTeamIds.Contains(fp.TeamId)) return fp.Place;
             var hcAhead = accepted.Count(other =>
                 !other.Eliminated && !sitOut.Contains(other.TeamId) && hcTeamIds.Contains(other.TeamId)
-                && other.Place > 0 && other.Place < fp.Place);
+                && other.Place > 0 && other.Place < fp.Place
+                && !accepted.Any(nhc => !hcTeamIds.Contains(nhc.TeamId) && !nhc.Eliminated && !sitOut.Contains(nhc.TeamId)
+                    && nhc.Place == other.Place
+                    && (string.IsNullOrWhiteSpace(other.Note) || !other.Note.Contains("[dead-heat]", StringComparison.OrdinalIgnoreCase))));
             return Math.Max(1, fp.Place - hcAhead);
         }
         (int Place, int Base) EffectiveSectionScore(FinishingPlace fp)

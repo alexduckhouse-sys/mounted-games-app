@@ -247,8 +247,15 @@ public class TeamsController : ControllerBase
             var results = await _db.Results.Where(r => r.TeamId == id).ToListAsync();
             _db.Results.RemoveRange(results);
         }
+        var heatEntries = await _db.HeatEntries.Where(he => he.TeamId == id).ToListAsync();
+        if (heatEntries.Count > 0)
+            _db.HeatEntries.RemoveRange(heatEntries);
+        var linkedSignups = await _db.SectionSignups.Where(s => s.TeamId == id).ToListAsync();
+        foreach (var signup in linkedSignups)
+            signup.TeamId = null;
         _db.Teams.Remove(t);
         await _db.SaveChangesAsync();
+        StandingsService.Invalidate(competitionId);
         return NoContent();
     }
 

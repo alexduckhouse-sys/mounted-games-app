@@ -202,7 +202,7 @@ export function useAudioLevel(
     const audioTracks = stream && typeof stream.getAudioTracks === 'function'
       ? stream.getAudioTracks()
       : [];
-    const activeTrack = audioTracks.find((t) => t.readyState !== 'ended') ?? audioTracks[0] ?? null;
+    const activeTrack = audioTracks.find((t) => t.readyState !== 'ended') ?? null;
 
     if (!stream || !activeTrack) {
       return undefined;
@@ -218,6 +218,9 @@ export function useAudioLevel(
     if (AudioCtx) {
       try {
         audioContext = new AudioCtx();
+        if (audioContext.state === 'suspended' && typeof audioContext.resume === 'function') {
+          void Promise.resolve(audioContext.resume()).catch(() => {});
+        }
         analyserNode = audioContext.createAnalyser();
         analyserNode.fftSize = 256;
         analyserNode.smoothingTimeConstant = 0.65;
@@ -231,8 +234,11 @@ export function useAudioLevel(
     }
 
     const sampleOnce = (elapsedMs: number) => {
+      if (audioContext && audioContext.state === 'suspended' && typeof audioContext.resume === 'function') {
+        void Promise.resolve(audioContext.resume()).catch(() => {});
+      }
       const currentTracks = typeof stream.getAudioTracks === 'function' ? stream.getAudioTracks() : [];
-      const track = currentTracks.find((t) => t.readyState !== 'ended') ?? currentTracks[0] ?? null;
+      const track = currentTracks.find((t) => t.readyState !== 'ended') ?? null;
       const trackMuted = !track || track.enabled === false || track.muted === true || track.readyState === 'ended';
       const isMutedNow = muted || trackMuted;
 
@@ -302,7 +308,7 @@ export function useAudioLevel(
   const audioTracks = stream && typeof stream.getAudioTracks === 'function'
     ? stream.getAudioTracks()
     : [];
-  const activeTrack = audioTracks.find((t) => t.readyState !== 'ended') ?? audioTracks[0] ?? null;
+  const activeTrack = audioTracks.find((t) => t.readyState !== 'ended') ?? null;
 
   if (!stream || !activeTrack) {
     const warning = evaluateAudioSilenceWarning({

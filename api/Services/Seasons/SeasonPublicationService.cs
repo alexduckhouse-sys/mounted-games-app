@@ -194,7 +194,7 @@ public sealed class SeasonPublicationService(AppDbContext db)
             }
         }
 
-        var fingerprint = Fingerprint(round.Season, races, links, multiplier, profilesByTeam, bonus);
+        var fingerprint = Fingerprint(round.Season, races, links, multiplier, profilesByTeam, bonus, rows);
         var nextVersion = round.Publications.Select(x => x.Version).DefaultIfEmpty(0).Max() + 1;
         var preview = new SeasonPublicationPreviewDto(
             seasonId, roundId, round.CompetitionId, round.CompetitionSectionId,
@@ -307,7 +307,8 @@ public sealed class SeasonPublicationService(AppDbContext db)
         IReadOnlyDictionary<int, EventTeamProfileLink> links,
         double multiplier,
         IReadOnlyDictionary<int, List<RiderProfile>> profilesByTeam,
-        IReadOnlyDictionary<int, int>? bonus = null)
+        IReadOnlyDictionary<int, int>? bonus = null,
+        IReadOnlyList<SeasonPublicationPreviewRow>? previewRows = null)
     {
         var value = new StringBuilder()
             .Append(season.Id).Append('|').Append(season.Format).Append('|').Append(season.AgeGroup).Append('|');
@@ -334,6 +335,15 @@ public sealed class SeasonPublicationService(AppDbContext db)
                     .Append(result.Team?.DisplayName).Append(':')
                     .Append(result.Team?.Club?.Name).Append(':')
                     .Append(identity).Append('|');
+            }
+        }
+        if (previewRows is not null)
+        {
+            foreach (var row in previewRows.OrderBy(r => r.EventRank).ThenBy(r => r.EventTeamId).ThenBy(r => r.TeamProfileId))
+            {
+                value.Append("P:").Append(row.EventTeamId).Append(':').Append(row.TeamProfileId).Append(':')
+                    .Append(row.EventRank).Append(':').Append(PointValues.Format(row.EventPoints)).Append(':')
+                    .Append(PointValues.Format(row.SeasonPoints)).Append('|');
             }
         }
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value.ToString())));

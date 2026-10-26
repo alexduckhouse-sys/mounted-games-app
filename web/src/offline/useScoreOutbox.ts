@@ -136,7 +136,11 @@ export function importCompetitionOutbox(
   raw: string,
   options?: { fallbackCompetitionId?: number; viaLink?: boolean },
 ): { ok: true; count: number } | { ok: false; error: string } {
-  const parsed = parseOutboxBackup(raw, options?.fallbackCompetitionId, options?.viaLink);
+  const viaLinkOverride =
+    options?.viaLink !== undefined
+      ? options.viaLink
+      : Boolean(localStorage.getItem('mg.scorer.token'));
+  const parsed = parseOutboxBackup(raw, options?.fallbackCompetitionId, viaLinkOverride);
   if (!parsed) return { ok: false, error: OUTBOX_IMPORT_ERROR };
   if (!updateOutbox((current) => mergeOutboxBackup(current, parsed))) {
     return { ok: false, error: OUTBOX_STORAGE_ERROR };

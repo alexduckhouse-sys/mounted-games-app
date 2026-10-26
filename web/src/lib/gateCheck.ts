@@ -9,7 +9,7 @@ export const GATE_CHECK_LABELS: Record<Exclude<GateCheckStatus, null>, string> =
 };
 
 const GATE_TAG_RE = /\[gate:(\d+):(\d+)=(at-gate|warming-up|missing)\]/g;
-const INTERNAL_TAGS_RE = /\s*\[(?:paused|shift|scoring|gate):[^\]]*\]\s*/g;
+const INTERNAL_TAGS_RE = /\s*\[(?:paused|shift|scoring|gate|pts):[^\]]*\]\s*/g;
 
 function gateKey(heatId: number, teamId: number): string {
   return `${heatId}:${teamId}`;

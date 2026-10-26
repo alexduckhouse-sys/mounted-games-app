@@ -410,12 +410,16 @@ public class SignupController : ControllerBase
         await _db.SaveChangesAsync();
     }
 
-    private Task<int> ActivePlacesAsync(int sectionId, int? exceptSignupId = null) => _db.SectionSignups
-        .Where(s => s.CompetitionSectionId == sectionId && s.Id != exceptSignupId
-            && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending)
-            && !_db.Set<SignupMatchmaking>().Any(m => m.SignupId == s.Id && m.WaitingForGuestSpot)
-            && !_db.Set<SignupExtras>().Any(x => x.SignupId == s.Id && (x.IsWithdrawn || x.IsWaitlist)))
-        .SumAsync(s => _db.Set<SignupExtras>().Where(x => x.SignupId == s.Id).Select(x => (int?)x.TeamsCount).FirstOrDefault() ?? 1);
+    private Task<int> ActivePlacesAsync(int sectionId, int? exceptSignupId = null, DateTime? nowUtc = null)
+    {
+        var now = nowUtc ?? DateTime.UtcNow;
+        return _db.SectionSignups
+            .Where(s => s.CompetitionSectionId == sectionId && s.Id != exceptSignupId
+                && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending)
+                && !_db.Set<SignupMatchmaking>().Any(m => m.SignupId == s.Id && m.WaitingForGuestSpot)
+                && !_db.Set<SignupExtras>().Any(x => x.SignupId == s.Id && (x.IsWithdrawn || (x.IsWaitlist && (x.WaitlistOfferExpiresAt == null || x.WaitlistOfferExpiresAt <= now)))))
+            .SumAsync(s => _db.Set<SignupExtras>().Where(x => x.SignupId == s.Id).Select(x => (int?)x.TeamsCount).FirstOrDefault() ?? 1);
+    }
 
     private Task<T> InEntryTransactionAsync<T>(Func<Task<T>> action) =>
         _db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
@@ -687,7 +691,8 @@ public class SignupController : ControllerBase
 
         await _db.SaveChangesAsync();
         var meta = await _db.Set<SignupMatchmaking>().FindAsync(signup.Id);
-        return ToExtendedDto(signup, meta, ex);
+        var guest = (await LoadGuestMapAsync(new[] { signup.Id })).GetValueOrDefault(signup.Id);
+        return ToExtendedDto(signup, meta, ex, guest);
     }
 
     /// <summary>
@@ -1524,7 +1529,9 @@ public class SignupController : ControllerBase
         return result;
     }
 
-    private async Task<FormTeamsResult?> FormTeamsCoreAsync(int competitionId, int sectionId, FormTeamsFromSignupsRequest req, int? onlySignupId = null)
+    private async Task<FormTeamsResult?> FormTeamsCoreAsync(
+        int competitionId, int sectionId, FormTeamsFromSignupsRequest req,
+        int? onlySignupId = null, IReadOnlySet<int>? onlySignupIds = null)
     {
         var section = await _db.CompetitionSections
             .Include(s => s.Competition)
@@ -1565,6 +1572,7 @@ public class SignupController : ControllerBase
         var replaceable = sectionTeams.Where(t => replaceableIds.Contains(t.Id)).ToList();
         var allPaidSignups = sectionSignups.Where(s => s.Status == SignupPaymentStatus.Paid
                 && (onlySignupId == null || s.Id == onlySignupId)
+                && (onlySignupIds == null || onlySignupIds.Contains(s.Id))
                 && linkedIds[s.Id].All(replaceableIds.Contains))
             .OrderBy(s => s.CreatedAt).ToList();
         var paidIds = allPaidSignups.Select(s => s.Id).ToList();
@@ -1845,9 +1853,10 @@ public class SignupController : ControllerBase
         if (sentCount > 0)
             await _db.SaveChangesAsync();
 
+        var guests = await LoadGuestMapAsync(rows.Select(r => r.Id));
         foreach (var signup in rows)
         {
-            updatedDtos.Add(ToExtendedDto(signup, meta.GetValueOrDefault(signup.Id), extras.GetValueOrDefault(signup.Id)));
+            updatedDtos.Add(ToExtendedDto(signup, meta.GetValueOrDefault(signup.Id), extras.GetValueOrDefault(signup.Id), guests.GetValueOrDefault(signup.Id)));
         }
 
         return new SendUnpaidRemindersResultDto(sentCount, failedCount, skippedCount, nowUtc, updatedDtos);
@@ -2003,11 +2012,18 @@ public class SignupController : ControllerBase
         else
         {
             ex.RefundedAmountMinor = req.RefundedAmountMinor;
+            if (signup.Status == SignupPaymentStatus.Refunded)
+            {
+                signup.Status = ex.IsWithdrawn ? SignupPaymentStatus.Cancelled : SignupPaymentStatus.Paid;
+                if (signup.Status == SignupPaymentStatus.Paid && signup.PaidAt is null)
+                    signup.PaidAt = nowUtc;
+            }
         }
 
         await _db.SaveChangesAsync();
         var meta = await _db.Set<SignupMatchmaking>().FindAsync(signup.Id);
-        return ToExtendedDto(signup, meta, ex);
+        var guest = (await LoadGuestMapAsync(new[] { signup.Id })).GetValueOrDefault(signup.Id);
+        return ToExtendedDto(signup, meta, ex, guest);
     }
 
     /// <summary>Returns the Refund, Retained-Fee and Credit Ledger summary totals and rows for a competition.</summary>
@@ -2027,6 +2043,7 @@ public class SignupController : ControllerBase
         var ids = rows.Select(r => r.Id).ToList();
         var meta = await LoadMatchmakingMapAsync(ids);
         var extras = await LoadExtrasMapAsync(ids);
+        var guests = await LoadGuestMapAsync(ids);
 
         var totalRetained = 0;
         var totalRefunded = 0;
@@ -2037,7 +2054,7 @@ public class SignupController : ControllerBase
         foreach (var r in rows)
         {
             extras.TryGetValue(r.Id, out var ex);
-            var dto = ToExtendedDto(r, meta.GetValueOrDefault(r.Id), ex);
+            var dto = ToExtendedDto(r, meta.GetValueOrDefault(r.Id), ex, guests.GetValueOrDefault(r.Id));
             var isLedgerRow = dto.IsWithdrawn || dto.Status is SignupPaymentStatus.Refunded or SignupPaymentStatus.Cancelled || dto.FeeDisposition != "None";
             if (!isLedgerRow) continue;
 
@@ -2085,9 +2102,10 @@ public class SignupController : ControllerBase
         var ids = rows.Select(r => r.Id).ToList();
         var meta = await LoadMatchmakingMapAsync(ids);
         var extras = await LoadExtrasMapAsync(ids);
+        var guests = await LoadGuestMapAsync(ids);
 
         var activeDtos = rows
-            .Select(r => ToExtendedDto(r, meta.GetValueOrDefault(r.Id), extras.GetValueOrDefault(r.Id)))
+            .Select(r => ToExtendedDto(r, meta.GetValueOrDefault(r.Id), extras.GetValueOrDefault(r.Id), guests.GetValueOrDefault(r.Id)))
             .Where(d => !d.IsWithdrawn && !d.IsWaitlist && !string.IsNullOrWhiteSpace(d.PonyClubName)
                 && !string.Equals(d.PonyClubName.Trim(), "Unaffiliated", StringComparison.OrdinalIgnoreCase))
             .ToList();
@@ -2176,19 +2194,28 @@ public class SignupController : ControllerBase
         }
         await _db.SaveChangesAsync();
 
-        foreach (var signup in matching)
-        {
-            meta.TryGetValue(signup.Id, out var m);
-            if (m?.LookingForPair != true && m?.WaitingForGuestSpot != true)
+        var eligibleForTeams = matching
+            .Where(s =>
             {
-                await FormTeamsCoreAsync(competitionId, signup.CompetitionSectionId,
-                    new FormTeamsFromSignupsRequest(null, Preview: false, ReplaceExisting: false), signup.Id);
-            }
+                meta.TryGetValue(s.Id, out var m);
+                return m?.LookingForPair != true && m?.WaitingForGuestSpot != true;
+            })
+            .GroupBy(s => s.CompetitionSectionId);
+
+        foreach (var sectionGroup in eligibleForTeams)
+        {
+            var groupSignupIds = sectionGroup.Select(s => s.Id).ToHashSet();
+            await FormTeamsCoreAsync(
+                competitionId,
+                sectionGroup.Key,
+                new FormTeamsFromSignupsRequest(null, Preview: false, ReplaceExisting: false),
+                onlySignupIds: groupSignupIds);
         }
 
         var refreshedMeta = await LoadMatchmakingMapAsync(matchingIds);
         var refreshedExtras = await LoadExtrasMapAsync(matchingIds);
-        var dtos = matching.Select(s => ToExtendedDto(s, refreshedMeta.GetValueOrDefault(s.Id), refreshedExtras.GetValueOrDefault(s.Id))).ToList();
+        var refreshedGuests = await LoadGuestMapAsync(matchingIds);
+        var dtos = matching.Select(s => ToExtendedDto(s, refreshedMeta.GetValueOrDefault(s.Id), refreshedExtras.GetValueOrDefault(s.Id), refreshedGuests.GetValueOrDefault(s.Id))).ToList();
         return new MarkClubPaidResultDto(
             resolvedClubName,
             BuildClubBacsReference(competitionId, resolvedClubName),
@@ -2216,12 +2243,19 @@ public class SignupController : ControllerBase
         if (ex?.IsWaitlist != true || ex.IsWithdrawn || signup.Status is SignupPaymentStatus.Cancelled or SignupPaymentStatus.Refunded)
             return Conflict(new { message = "This entry is not on the waiting list." });
 
+        var nowUtc = clock.GetUtcNow().UtcDateTime;
         var teamsCount = ex.TeamsCount > 0 ? ex.TeamsCount : 1;
         if (signup.Section!.MaxParticipants is int cap && meta?.WaitingForGuestSpot != true
-            && (long)await ActivePlacesAsync(signup.CompetitionSectionId, signup.Id) + teamsCount > cap)
+            && (long)await ActivePlacesAsync(signup.CompetitionSectionId, signup.Id, nowUtc) + teamsCount > cap)
             return Conflict(new { message = "There is no space in this section to offer a waitlist spot yet." });
+        if (meta?.WaitingForGuestSpot != true && (ex.StablesCount > 0 || ex.HookupsCount > 0))
+        {
+            var capacity = await VenueCapacity.GetCapacityAsync(_db, competitionId, excludeSignupId: signup.Id);
+            var capErr = VenueCapacity.CheckCapacityError(capacity, ex.StablesCount, ex.HookupsCount);
+            if (capErr is not null)
+                return Conflict(new { message = capErr });
+        }
 
-        var nowUtc = clock.GetUtcNow().UtcDateTime;
         var expiresAtUtc = nowUtc.AddHours(24);
         ex.WaitlistOfferedAt = nowUtc;
         ex.WaitlistOfferExpiresAt = expiresAtUtc;
@@ -2236,7 +2270,8 @@ public class SignupController : ControllerBase
             await confirmation.SendWaitlistOfferAsync(signup, signup.Section.Competition!, signup.Section, expiresAtUtc, amountMinor);
         }
 
-        return ToExtendedDto(signup, meta, ex);
+        var guest = (await LoadGuestMapAsync(new[] { signup.Id })).GetValueOrDefault(signup.Id);
+        return ToExtendedDto(signup, meta, ex, guest);
     }
 
     /// <summary>Allows a waitlisted entrant with an active 24-hour spot offer to accept their spot and proceed to payment.</summary>
@@ -2273,8 +2308,15 @@ public class SignupController : ControllerBase
 
         var teamsCount = ex.TeamsCount > 0 ? ex.TeamsCount : 1;
         if (signup.Section!.MaxParticipants is int cap && meta?.WaitingForGuestSpot != true
-            && (long)await ActivePlacesAsync(signup.CompetitionSectionId, signup.Id) + teamsCount > cap)
+            && (long)await ActivePlacesAsync(signup.CompetitionSectionId, signup.Id, nowUtc) + teamsCount > cap)
             return Conflict(new { message = "That spot has already been filled." });
+        if (meta?.WaitingForGuestSpot != true && (ex.StablesCount > 0 || ex.HookupsCount > 0))
+        {
+            var capacity = await VenueCapacity.GetCapacityAsync(_db, competitionId, excludeSignupId: signup.Id);
+            var capErr = VenueCapacity.CheckCapacityError(capacity, ex.StablesCount, ex.HookupsCount);
+            if (capErr is not null)
+                return Conflict(new { message = capErr });
+        }
 
         var amount = meta?.WaitingForGuestSpot == true ? 0L : meta?.LookingForPair == true
             ? signup.Section.PriceMinor / 2 : (long)signup.Section.PriceMinor * teamsCount;

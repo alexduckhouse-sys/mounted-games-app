@@ -987,7 +987,7 @@ public class SignupTests : IClassFixture<ApiFactory>
             stockQuantity = (int?)null,
             category = 2, // Camping
         });
-        Assert.Equal(HttpStatusCode.OK, stableCatRes.StatusCode);
+        stableCatRes.EnsureSuccessStatusCode();
         var stableCat = await stableCatRes.Content.ReadFromJsonAsync<CatalogueItemDto>();
 
         var hookupCatRes = await admin.PostAsJsonAsync("/api/commerce/catalogue", new
@@ -998,7 +998,7 @@ public class SignupTests : IClassFixture<ApiFactory>
             stockQuantity = (int?)null,
             category = 2, // Camping
         });
-        Assert.Equal(HttpStatusCode.OK, hookupCatRes.StatusCode);
+        hookupCatRes.EnsureSuccessStatusCode();
         var hookupCat = await hookupCatRes.Content.ReadFromJsonAsync<CatalogueItemDto>();
 
         var stableListRes = await admin.PostAsJsonAsync(
