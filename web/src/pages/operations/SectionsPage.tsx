@@ -6,7 +6,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { defaultRaceList, SCOPE_LABEL, type RaceScope } from '../../lib/defaultRaces';
 import {
-  AGE_GROUP_PRESETS, defaultSection, FORMAT_LABEL, MAIN_ARENA, MAX_SESSIONS, resizeSessions, sectionHasFinal, sectionLocked, sectionName, setRaceFinals,
+  AGE_GROUP_PRESETS, defaultSection, FORMAT_LABEL, MAIN_ARENA, MAX_SESSIONS, parseFinalistCount, resizeSessions, sectionHasFinal, sectionLocked, sectionName, setRaceFinals,
   type CreatorDraft, type Format, type SectionDraft,
 } from '../../lib/creatorDraft';
 import { draftFromCompetition, teamCountsOf } from '../../lib/creatorLoad';
@@ -142,7 +142,8 @@ export function SectionsPage() {
   function setTieBreak(section: SectionDraft, rule: string) {
     if (!section.existingId) return;
     const runoff = section.runoffRaceName.trim() || null;
-    void saveSetting('the tie-break', () => api.put(`/competitions/${competition.id}/sections/${section.existingId}`, { runoffRaceName: runoff, tieBreakRule: Number(rule) }));
+    // The API clears the number of finalists when it is left out, so send the one the section has.
+    void saveSetting('the tie-break', () => api.put(`/competitions/${competition.id}/sections/${section.existingId}`, { runoffRaceName: runoff, tieBreakRule: Number(rule), finalistCount: parseFinalistCount(section.finalistCount) }));
   }
   function setSessionSettings(section: SectionDraft, patch: { laneRotationMode?: number; raceOrderAlternating?: boolean }) {
     if (!section.existingId) return;

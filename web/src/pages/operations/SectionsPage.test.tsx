@@ -136,7 +136,7 @@ describe('SectionsPage', () => {
     const card = await screen.findByRole('region', { name: 'Under 12' });
     await user.click(within(card).getByRole('button', { name: 'Tie-break: Most wins' }));
     await user.click(screen.getByRole('option', { name: 'Last race' }));
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/sections/11', { runoffRaceName: null, tieBreakRule: 1 }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/sections/11', { runoffRaceName: null, tieBreakRule: 1, finalistCount: null }));
 
     await user.click(within(card).getByRole('switch', { name: 'Run 2 heats in parallel' }));
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/2/settings', { minutesPerHeat: 10, raceOrderAlternating: true, laneRotationMode: 0 }));
