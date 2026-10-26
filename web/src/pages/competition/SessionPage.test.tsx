@@ -9,6 +9,7 @@ import type { CompetitionDetail, DeclarationForm, StandingRow } from '../../type
 import { CompetitionContext } from './context';
 import { SessionPage } from './SessionPage';
 import { formatPoints } from '../../lib/formatPoints';
+import { autoConfirm } from '../../test/confirm';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('./HeatScores', () => ({ HeatScores: () => <p>Public results</p> }));
@@ -65,7 +66,15 @@ async function tapRider(name: string, count: number) {
   }
 }
 const badge = (name: string) => within(row(name)).queryByLabelText(/^Place \d+$/);
-const completeRace = () => userEvent.click(screen.getByRole('button', { name: 'Race complete' }));
+const completeRace = () => userEvent.click(screen.getByRole('button', { name: 'SAVE SCORES' }));
+const openTools = async () => {
+  await userEvent.click(screen.getByRole('button', { name: 'Race tools' }));
+  return screen.getByRole('dialog', { name: 'Race tools' });
+};
+const teamMenu = async (sheet: HTMLElement, name: string) => {
+  await userEvent.click(within(sheet).getByRole('button', { name: `More for ${name}` }));
+  return within(sheet).getByRole('menu', { name });
+};
 const outbox = () => JSON.parse(localStorage.getItem('mg.outbox.scores') ?? '[]') as { raceId: number; reason?: string; places: { teamId: number; place: number; eliminated: boolean; status?: number; refereeNote?: string }[] }[];
 
 const teams = [team(1, { displayName: 'Oak A' }), team(2, { displayName: 'Beech B' }), team(3, { displayName: 'Ash C' })];
@@ -244,6 +253,8 @@ describe('SessionPage', () => {
       await saveRace();
       await opened('H1 R2');
       await saveRace();
+      // The heat is done, so the page for the next heat comes up before its first race.
+      await userEvent.click(await screen.findByRole('button', { name: 'Start scoring Heat 2' }));
       await opened('H2 R1');
     }, 60_000);
 
@@ -301,6 +312,7 @@ describe('SessionPage', () => {
       await opened('Bending');
       await tapRider('Rider 1', 1);
       fireEvent.keyDown(screen.getByRole('button', { name: /^Rider 3, lane/ }), { key: 'Delete' });
+      await tapRider('Rider 2', 2);
       await completeRace();
       const sheet = screen.getByRole('dialog', { name: 'Why were teams eliminated?' });
       expect(within(sheet).getByText('Rider 3')).toBeInTheDocument();
@@ -309,6 +321,7 @@ describe('SessionPage', () => {
       expect(outbox()[0].places).toEqual([
         { teamId: 1, place: 1, eliminated: false },
         { teamId: 3, place: 0, eliminated: true, status: 2, refereeNote: 'Did not start' },
+        { teamId: 2, place: 2, eliminated: false },
       ]);
     });
 
@@ -317,9 +330,10 @@ describe('SessionPage', () => {
       await opened('Bending');
       await tapRider('Rider 1', 1);
       fireEvent.keyDown(screen.getByRole('button', { name: /^Rider 2, lane/ }), { key: 'Delete' });
+      await tapRider('Rider 3', 2);
       await completeRace();
       await userEvent.click(screen.getByRole('button', { name: 'Save without reasons' }));
-      expect(outbox()[0].places).toEqual([{ teamId: 1, place: 1, eliminated: false }, { teamId: 2, place: 0, eliminated: true }]);
+      expect(outbox()[0].places).toEqual([{ teamId: 1, place: 1, eliminated: false }, { teamId: 2, place: 0, eliminated: true }, { teamId: 3, place: 2, eliminated: false }]);
     });
 
     it('loads the notes staff saved when a scored race is corrected, and sends them back', async () => {
@@ -346,8 +360,9 @@ describe('SessionPage', () => {
         </MemoryRouter>,
       );
       await opened('Bending');
-      await userEvent.type(screen.getByLabelText('Reason for correction'), 'Judge changed it');
       await waitFor(() => expect(within(row('Rider 2')).getByLabelText('Did not finish')).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('button', { name: 'Edit this race' }));
+      await userEvent.type(screen.getByLabelText('Reason for correction'), 'Judge changed it');
       await completeRace();
       // Rider 2 is out for not finishing, so the sheet starts on that reason.
       await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Save race' }));
@@ -403,6 +418,7 @@ describe('SessionPage', () => {
       const earlier = race(1, { name: 'Bending', isComplete: true, results: [result(1, 1, { points: 2 }), result(2, 2, { points: 1 })] });
       mount(competition({ teams, sessions: [session(1, { status: 1, heats: [heat(1, { entries: entries(2), races: [earlier, race(2, { name: 'Flag' })] })] })] }));
       await userEvent.click(await screen.findByRole('button', { name: 'Previous race' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit this race' }));
       await userEvent.type(await screen.findByLabelText('Reason for correction'), 'Wrong order');
       await userEvent.click(screen.getByRole('button', { name: /Clear/ }));
       await tapRider('Rider 2', 1);
@@ -420,46 +436,229 @@ describe('SessionPage', () => {
   });
 
   describe('hors concours', () => {
-    it('marks a team hors concours from the Score override sheet', async () => {
+    it('marks a team hors concours from its menu in race tools, and Undo puts it back', async () => {
       vi.mocked(api.put).mockResolvedValue({ data: {} });
       const reload = vi.fn();
       mount(scoringData(3), [], reload);
       await opened('Bending');
-      await userEvent.click(screen.getByRole('button', { name: 'Score override' }));
-      const sheet = screen.getByRole('dialog', { name: /Score override/ });
-      await userEvent.click(within(sheet).getByRole('button', { name: /Rider 2/ }));
-      await userEvent.click(within(sheet).getByRole('radio', { name: /Hors concours/i }));
-      await userEvent.click(within(sheet).getByRole('button', { name: 'Save override' }));
-      await userEvent.click(screen.getByRole('button', { name: 'Make HC' }));
-      expect(api.put).toHaveBeenCalledWith('/competitions/1/teams/2', { isHorsConcours: true });
+      const sheet = await openTools();
+      await userEvent.click(within(await teamMenu(sheet, 'Rider 2')).getByRole('menuitem', { name: 'Make HC' }));
+      await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/1/teams/2', { isHorsConcours: true }));
       await waitFor(() => expect(reload).toHaveBeenCalled());
+      await userEvent.click(screen.getByRole('button', { name: 'Close race tools' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+      await waitFor(() => expect(api.put).toHaveBeenLastCalledWith('/competitions/1/teams/2', { isHorsConcours: false }));
     });
 
-    it('tags a team that is already HC, and can bring it back from Score override', async () => {
+    it('tags a team that is already HC, and can bring it back', async () => {
       vi.mocked(api.put).mockResolvedValue({ data: {} });
       mount(competition({ teams: [team(1, { displayName: 'Oak A', isHorsConcours: true })], sessions: scoringData(2).sessions }));
       await opened('Bending');
       expect(within(row('Rider 1')).getByText('HC', { selector: 'span' })).toBeInTheDocument();
-      await userEvent.click(screen.getByRole('button', { name: 'Score override' }));
-      const sheet = screen.getByRole('dialog', { name: /Score override/ });
-      await userEvent.click(within(sheet).getByRole('button', { name: /Rider 1/ }));
-      await userEvent.click(within(sheet).getByRole('radio', { name: /Automatic/i }));
-      await userEvent.click(within(sheet).getByRole('button', { name: 'Done' }));
-      await userEvent.click(screen.getByRole('button', { name: 'Bring back' }));
-      expect(api.put).toHaveBeenCalledWith('/competitions/1/teams/1', { isHorsConcours: false });
+      const sheet = await openTools();
+      await userEvent.click(within(await teamMenu(sheet, 'Rider 1')).getByRole('menuitem', { name: 'Remove HC' }));
+      await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/1/teams/1', { isHorsConcours: false }));
     });
 
     it('says so when the change could not be saved', async () => {
       vi.mocked(api.put).mockRejectedValue(new Error('no'));
       mount(scoringData(3));
       await opened('Bending');
-      await userEvent.click(screen.getByRole('button', { name: 'Score override' }));
-      const sheet = screen.getByRole('dialog', { name: /Score override/ });
-      await userEvent.click(within(sheet).getByRole('button', { name: /Rider 2/ }));
-      await userEvent.click(within(sheet).getByRole('radio', { name: /Hors concours/i }));
-      await userEvent.click(within(sheet).getByRole('button', { name: 'Save override' }));
-      await userEvent.click(screen.getByRole('button', { name: 'Make HC' }));
+      const sheet = await openTools();
+      await userEvent.click(within(await teamMenu(sheet, 'Rider 2')).getByRole('menuitem', { name: 'Make HC' }));
       expect(await screen.findByText('Couldn’t change hors concours. Try again.')).toBeInTheDocument();
+    });
+  });
+
+  describe('cards', () => {
+    it('gives a yellow card at once, keeps it on the server, and Undo takes it off', async () => {
+      vi.mocked(api.put).mockResolvedValue({ data: {} });
+      const reload = vi.fn();
+      mount(scoringData(3), [], reload);
+      await opened('Bending');
+      let sheet = await openTools();
+      await userEvent.click(within(await teamMenu(sheet, 'Rider 2')).getByRole('menuitem', { name: 'Yellow card' }));
+      expect(within(row('Rider 2')).getByRole('img', { name: 'Yellow card' })).toBeInTheDocument();
+      await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/1/teams/2/card', { card: 'yellow' }));
+      await waitFor(() => expect(reload).toHaveBeenCalled());
+
+      sheet = screen.getByRole('dialog', { name: 'Race tools' });
+      await userEvent.click(within(await teamMenu(sheet, 'Rider 2')).getByRole('menuitem', { name: 'Second yellow (red card)' }));
+      await waitFor(() => expect(api.put).toHaveBeenLastCalledWith('/competitions/1/teams/2/card', { card: 'red' }));
+      expect(within(row('Rider 2')).getByRole('img', { name: 'Red card' })).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Close race tools' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+      await waitFor(() => expect(api.put).toHaveBeenLastCalledWith('/competitions/1/teams/2/card', { card: 'yellow' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+      await waitFor(() => expect(api.put).toHaveBeenLastCalledWith('/competitions/1/teams/2/card', { card: 'none' }));
+      await waitFor(() => expect(within(row('Rider 2')).queryByRole('img', { name: /card/ })).toBeNull());
+    });
+
+    it('shows a card the server already holds, and puts it back if the change fails', async () => {
+      vi.mocked(api.put).mockRejectedValue(new Error('offline'));
+      const data = scoringData(3);
+      data.sessions[0].heats[0].entries[0] = { ...data.sessions[0].heats[0].entries[0], refereeCard: 'red' };
+      mount(data);
+      await opened('Bending');
+      expect(within(row('Rider 1')).getByRole('img', { name: 'Red card' })).toBeInTheDocument();
+      const sheet = await openTools();
+      await userEvent.click(within(await teamMenu(sheet, 'Rider 1')).getByRole('menuitem', { name: 'Remove red card' }));
+      expect(await screen.findByText('Couldn’t change the card. Try again.')).toBeInTheDocument();
+      expect(within(row('Rider 1')).getByRole('img', { name: 'Red card' })).toBeInTheDocument();
+    });
+  });
+
+  describe('changing points', () => {
+    it('moves a team’s points by hand from race tools, and Undo takes the change back', async () => {
+      mount(scoringData(3));
+      await opened('Bending');
+      await tapRider('Rider 1', 1);
+      const sheet = await openTools();
+      await userEvent.click(within(await teamMenu(sheet, 'Rider 1')).getByRole('menuitem', { name: 'Change points' }));
+      await userEvent.click(within(sheet).getByRole('button', { name: 'One point fewer for Rider 1' }));
+      expect(within(sheet).getByText('2')).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Close race tools' }));
+      expect(row('Rider 1')).toHaveTextContent('2 pts by hand');
+      await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+      await waitFor(() => expect(row('Rider 1')).not.toHaveTextContent('by hand'));
+    });
+  });
+
+  describe('the heat picker and the pages around it', () => {
+    const two = (n: number) => entries(n).map((e) => ({ ...e }));
+    const day = (extra: { finishFirst?: boolean } = {}) => competition({
+      teams,
+      laneHatbands: ['Red', 'White'],
+      sessions: [
+        session(1, {
+          status: 1, name: 'Under 12', sectionName: 'Under 12', orderIndex: 1, scheduledStart: '2026-06-01T10:00:00Z', heats: [
+            heat(1, { label: 'Heat 1', orderIndex: 1, entries: two(2), races: [race(11, { name: 'Bending', orderIndex: 1, isComplete: extra.finishFirst ?? false, results: extra.finishFirst ? [result(1, 1, { points: 2 }), result(2, 2, { points: 1 })] : [] })] }),
+            heat(2, { label: 'Heat 2', orderIndex: 2, sessionId: 1, entries: [{ id: 21, teamId: 3, teamName: 'Rider 3', laneIndex: 1 }, { id: 22, teamId: 4, teamName: 'Rider 4', laneIndex: 2 }], races: [race(21, { name: 'Flag', heatId: 2, orderIndex: 1 })] }),
+          ],
+        }),
+        session(2, {
+          status: 0, name: 'Pairs', sectionName: 'Pairs', orderIndex: 2, arenaName: 'Second Arena', heats: [
+            heat(3, { label: 'Heat 1', sessionId: 2, orderIndex: 1, entries: [{ id: 31, teamId: 5, teamName: 'Pair 5', laneIndex: 1 }], races: [race(31, { name: 'Mug', heatId: 3 })] }),
+          ],
+        }),
+      ],
+    });
+    const decForms: DeclarationForm[] = [
+      { ...form(3), riders: [
+        { id: 301, fullName: 'Ella Rider', horseName: 'Biscuit', isCaptain: false, isReserve: false, orderIndex: 1, flags: ['No pony passport yet'] },
+        { id: 302, fullName: 'Spare Rider', horseName: 'Pip', isCaptain: false, isReserve: true, orderIndex: 2 },
+      ] },
+    ];
+
+    it('shows the arena in bold and the heat, and lists every heat with where it has got to', async () => {
+      mount(day());
+      const bar = screen.getByRole('button', { name: 'Heat: Main Arena, Under 12 · Heat 1' });
+      expect(within(bar).getByText('Main Arena')).toBeInTheDocument();
+      expect(bar).toHaveAttribute('aria-expanded', 'false');
+      await userEvent.click(bar);
+      const list = screen.getByRole('listbox', { name: 'Heats' });
+      const options = within(list).getAllByRole('option');
+      expect(options.map((o) => o.textContent)).toEqual([
+        expect.stringContaining('Main Arena · Under 12 · Heat 1'),
+        expect.stringContaining('Main Arena · Under 12 · Heat 2'),
+        expect.stringContaining('Second Arena · Pairs · Heat 1'),
+        expect.stringContaining('Up next: Heat 2'),
+      ]);
+      expect(options[0]).toHaveTextContent('Not started');
+      expect(options[0]).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('opens a heat that has not started as a read-only table, and scores it only after a confirm', async () => {
+      const confirm = autoConfirm(true);
+      mount(day());
+      await userEvent.click(screen.getByRole('button', { name: /^Heat:/ }));
+      await userEvent.click(screen.getByRole('option', { name: /Main Arena · Under 12 · Heat 2/ }));
+      expect(screen.queryByRole('region', { name: /^Scoring/ })).toBeNull();
+      expect(screen.getByRole('heading', { name: 'Main Arena · Under 12 · Heat 2' })).toBeInTheDocument();
+      expect(screen.getByRole('region', { name: 'Heat table' })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Score this heat' }));
+      await opened('Flag');
+      expect(confirm.titles).toEqual(['Score Heat 2 in Main Arena?']);
+      expect(confirm).toHaveBeenCalledWith(expect.stringContaining('Another scorer may be on it'));
+    });
+
+    it('stays on the table when the scorer says no', async () => {
+      autoConfirm(false);
+      mount(day());
+      await userEvent.click(screen.getByRole('button', { name: /^Heat:/ }));
+      await userEvent.click(screen.getByRole('option', { name: /Main Arena · Under 12 · Heat 2/ }));
+      await userEvent.click(screen.getByRole('button', { name: 'Score this heat' }));
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+      expect(screen.getByRole('region', { name: 'Heat table' })).toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: /^Scoring/ })).toBeNull();
+    });
+
+    it('opens a heat in another arena in its own session, as a table first', async () => {
+      mount(day());
+      await userEvent.click(screen.getByRole('button', { name: /^Heat:/ }));
+      await userEvent.click(screen.getByRole('option', { name: /Second Arena · Pairs · Heat 1/ }));
+      expect(await screen.findByRole('button', { name: 'Heat: Second Arena, Pairs · Heat 1' })).toBeInTheDocument();
+      expect(screen.getByRole('region', { name: 'Heat table' })).toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: /^Scoring/ })).toBeNull();
+    });
+
+    it('lets an earlier, finished heat be opened for scoring again', async () => {
+      mount(day({ finishFirst: true }));
+      // Heat 1 is finished, so Heat 2 is the one on. Going back to Heat 1 opens it for correction, not a table.
+      await opened('Flag');
+      await userEvent.click(screen.getByRole('button', { name: /^Heat:/ }));
+      expect(screen.getByRole('option', { name: /Main Arena · Under 12 · Heat 1/ })).toHaveTextContent('Finished');
+      await userEvent.click(screen.getByRole('option', { name: /Main Arena · Under 12 · Heat 1/ }));
+      await opened('Bending');
+      expect(screen.getByText('Race 1 of 1 · Scored')).toBeInTheDocument();
+    });
+
+    it('moves to the next heat page when the last race is saved, with lanes, teams and dec forms', async () => {
+      mount(day(), decForms);
+      await opened('Bending');
+      await tapRider('Rider 1', 1);
+      await tapRider('Rider 2', 2);
+      await completeRace();
+      expect(await screen.findByRole('heading', { name: 'Next: Heat 2' })).toBeInTheDocument();
+      expect(screen.getByText('Main Arena · Under 12 · Heat 2')).toBeInTheDocument();
+      expect(screen.getByText('L1')).toBeInTheDocument();
+      expect(screen.getByText('Rider 3')).toBeInTheDocument();
+      expect(screen.getByText('1 flag')).toBeInTheDocument();
+      expect(screen.getByText('No dec form yet')).toBeInTheDocument();
+      expect(screen.queryByText('Ella Rider')).toBeNull();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Show dec form for Rider 3' }));
+      expect(screen.getByText('Ella Rider')).toBeInTheDocument();
+      expect(screen.getByText('Biscuit')).toBeInTheDocument();
+      expect(screen.getByText('No pony passport yet')).toBeInTheDocument();
+      expect(screen.queryByText('Spare Rider')).toBeNull();
+      await userEvent.click(screen.getByRole('button', { name: 'Hide dec form for Rider 3' }));
+      expect(screen.queryByText('Ella Rider')).toBeNull();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Start scoring Heat 2' }));
+      await opened('Flag');
+    });
+
+    it('goes back to the heat from the next heat page, and reaches it from the picker', async () => {
+      mount(day(), decForms);
+      await userEvent.click(screen.getByRole('button', { name: /^Heat:/ }));
+      await userEvent.click(screen.getByRole('option', { name: /Up next: Heat 2/ }));
+      expect(screen.getByRole('heading', { name: 'Next: Heat 2' })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Back to Heat 1' }));
+      await opened('Bending');
+    });
+
+    it('starts the next heat in another session by opening it', async () => {
+      const data = day();
+      data.sessions[1].arenaName = null;
+      data.sessions[0].heats = data.sessions[0].heats.slice(0, 1);
+      mount(data);
+      await opened('Bending');
+      await userEvent.click(screen.getByRole('button', { name: /^Heat:/ }));
+      await userEvent.click(screen.getByRole('option', { name: /Up next: Heat 1/ }));
+      await userEvent.click(screen.getByRole('button', { name: 'Start scoring Heat 1' }));
+      expect(await screen.findByRole('button', { name: 'Heat: Main Arena, Pairs · Heat 1' })).toBeInTheDocument();
     });
   });
 
@@ -743,29 +942,27 @@ describe('SessionPage', () => {
   });
 
   describe('Commentator facts, post-race summary modal, and QR Access', () => {
-    it('prompts whether to show commentator facts, toggles them on, shows live facts, and opens the post-race toplist & heat table modal after completing a race', async () => {
+    it('turns commentator facts on from race tools, shows a line under each team, and opens the post-race toplist & heat table modal after completing a race', async () => {
       const forms: DeclarationForm[] = [
         {
           ...form(1),
           riders: [{ id: 101, fullName: 'Alice Rider', horseName: 'Starlight', isCaptain: true, isReserve: false, orderIndex: 1 }],
         },
       ];
-      mount(scoringData(2), forms);
+      mount(scoringData(2), forms, vi.fn(), [standing(1, 12, { teamName: 'Oak A', bonusPoints: 10, racesRun: 2 }), standing(2, 1, { teamName: 'Beech B', racesRun: 2 })]);
       await opened('Bending');
-
-      const prompt = screen.getByRole('region', { name: 'Commentator scoring prompt' });
-      expect(within(prompt).getByText('Do you want to see commentator facts while scoring?')).toBeInTheDocument();
-
-      await userEvent.click(within(prompt).getByRole('button', { name: 'Yes, show commentator facts' }));
-      expect(localStorage.getItem('mg.commentatorScoring.1')).toBe('yes');
       expect(screen.queryByRole('region', { name: 'Commentator scoring prompt' })).toBeNull();
-      expect(screen.getByRole('button', { name: /Commentator facts: ON/ })).toHaveAttribute('aria-pressed', 'true');
+      expect(document.querySelector('.sc-fact')).toBeNull();
 
-      const factsPanel = screen.getByRole('region', { name: 'Live commentator facts' });
-      expect(within(factsPanel).getByText(/Lane 1: Rider 1/)).toBeInTheDocument();
-      expect(within(factsPanel).getByText(/Starlight/)).toBeInTheDocument();
-      await waitFor(() => expect(factsPanel).toHaveTextContent('12 pts')); // Official tack bonus is preserved.
-      expect(within(factsPanel).getByRole('button', { name: /Show Toplist on Stream/ })).toBeInTheDocument();
+      const sheet = await openTools();
+      await userEvent.click(within(sheet).getByRole('switch'));
+      expect(localStorage.getItem('mg.commentatorScoring.1')).toBe('yes');
+      await userEvent.click(screen.getByRole('button', { name: 'Close race tools' }));
+
+      // Official standings (with the tack bonus) decide the line under each team.
+      await waitFor(() => expect(row('Rider 1')).toHaveTextContent('Leading'));
+      expect(row('Rider 2')).toHaveTextContent('11 points behind 1st');
+      expect(screen.queryByRole('region', { name: 'Live commentator facts' })).toBeNull();
 
       // Complete a race while Commentator Mode is ON:
       await tapRider('Rider 1', 1);
@@ -786,27 +983,30 @@ describe('SessionPage', () => {
       await opened('Flag');
     });
 
-    it('opens the QR Code Access Hub from the session header', async () => {
+    it('opens the QR Code Access Hub from race tools, and comes back to scoring when it closes', async () => {
       mount(scoringData(2));
       await opened('Bending');
-      await userEvent.click(screen.getByRole('button', { name: /QR Access/ }));
+      const sheet = await openTools();
+      await userEvent.click(within(sheet).getByRole('button', { name: /QR access/ }));
       const modal = await screen.findByRole('dialog', { name: 'QR Code Access Hub' });
       expect(modal).toBeInTheDocument();
       await userEvent.click(within(modal).getByRole('button', { name: 'Close QR access modal' }));
       expect(screen.queryByRole('dialog', { name: 'QR Code Access Hub' })).toBeNull();
+      expect(screen.getByRole('region', { name: 'Scoring Bending' })).toBeInTheDocument();
     });
   });
 });
 
 
-it('adds a race from the score override sheet without dropping protected games', async () => {
+it('adds a race from race tools without dropping protected games', async () => {
   const data = scoringData(2);
   data.sessions[0].heats[0].races[0] = race(1, { name: 'Bending', isComplete: true, results: [result(1, 1), result(2, 2)] });
   vi.mocked(api.put).mockResolvedValue({ data: {} });
   mount(data);
   await opened('Flag');
-  await userEvent.click(screen.getByRole('button', { name: 'Score override' }));
-  const sheet = screen.getByRole('dialog', { name: 'Score override' });
+  await openTools();
+  await userEvent.click(screen.getByRole('button', { name: /Organiser tools/ }));
+  const sheet = screen.getByRole('dialog', { name: 'Organiser tools' });
   await userEvent.selectOptions(within(sheet).getByRole('combobox', { name: 'Race to add' }), 'Sword');
   await userEvent.click(within(sheet).getByRole('button', { name: 'Add race' }));
   await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/1/sessions/1/races', {
@@ -815,19 +1015,16 @@ it('adds a race from the score override sheet without dropping protected games',
 });
 
 
-it('keeps official tie order in commentator facts and announces the current rotated lanes', async () => {
-  mount(scoringData(2), [], vi.fn(), [standing(2, 10, { racesRun: 2 }), standing(1, 10, { racesRun: 2 })]);
+it('keeps official tie order in the commentator line and announces the current rotated lanes', async () => {
+  localStorage.setItem('mg.commentatorScoring.1', 'yes');
+  mount(scoringData(2), [], vi.fn(), [standing(2, 10, { racesRun: 2 }), standing(1, 8, { racesRun: 2 })]);
   await opened('Bending');
-  await userEvent.click(screen.getByRole('button', { name: 'Yes, show commentator facts' }));
-  const facts = screen.getByRole('region', { name: 'Live commentator facts' });
-  await waitFor(() => expect(within(facts).getByText('Lane 1: Rider 1').closest('li')).toHaveTextContent('Rank 2nd'));
+  await waitFor(() => expect(row('Rider 2')).toHaveTextContent('Leading'));
+  expect(row('Rider 1')).toHaveTextContent('2 points behind 1st');
   await userEvent.click(screen.getByRole('button', { name: 'Next race' }));
   await opened('Flag');
   const lane = screen.getByRole('button', { name: /^Rider 1, lane/ }).getAttribute('aria-label')!.split('lane ')[1];
-  expect(within(facts).getByText(`Lane ${lane}: Rider 1`)).toBeVisible();
-  vi.mocked(api.post).mockResolvedValue({ data: {} });
-  await userEvent.click(within(facts).getByRole('button', { name: `Call Rider 1 (L${lane})` }));
-  expect(api.post).toHaveBeenCalledWith('/competitions/1/chat', expect.objectContaining({ body: expect.stringContaining(`Rider 1 (Lane ${lane})`) }));
+  expect(row('Rider 1')).toHaveTextContent(`L${lane}`);
 });
 
 it('clears the in-memory draft and undo action when a race is rerun', async () => {
@@ -835,8 +1032,9 @@ it('clears the in-memory draft and undo action when a race is rerun', async () =
   mount(scoringData(2));
   await opened('Bending');
   await tapRider('Rider 1', 1);
-  await userEvent.click(screen.getByRole('button', { name: 'Score override' }));
-  const sheet = screen.getByRole('dialog', { name: 'Score override' });
+  await openTools();
+  await userEvent.click(screen.getByRole('button', { name: /Organiser tools/ }));
+  const sheet = screen.getByRole('dialog', { name: 'Organiser tools' });
   await userEvent.click(within(sheet).getByRole('button', { name: /Re-run stopped race/ }));
   await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/sessions/races/1/results'));
   expect(screen.queryByLabelText('Place 1')).toBeNull();

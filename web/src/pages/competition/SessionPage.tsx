@@ -1,11 +1,10 @@
 import { usePageWidth } from '../../components/pageWidthState';
 import { NumberField } from '../../components/NumberField';
-import { useParams, useSearchParams, Link } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  AlertTriangle, ChevronLeft, Coffee, Wand2, X, Clock, ClipboardList, Users, CheckCircle2,
-  Mic, Monitor, QrCode as QrCodeIcon, Table2, Trophy,
+  AlertTriangle, ChevronLeft, ClipboardList, Coffee, Wand2, X, Table2, Trophy,
 } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
@@ -15,34 +14,38 @@ import type { QueuedScore } from '../../offline/scoreOutbox';
 import { SessionEndTransition } from './SessionEndTransition';
 import { HeatScores } from './HeatScores';
 import { ScoringSection } from './ScoringSection';
-import { HeatGrid, ScoreClashBanner, TeamCardBadge, getStoredCards, playAlertChime, setStoredCard, useCardsEnabled, type ScoreClashItem } from './ScoringParts';
+import { ScoreClashBanner, TeamCardBadge, getStoredCards, playAlertChime, setStoredCard, useCardsEnabled, type ScoreClashItem } from './ScoringParts';
 import { RaceListPicker, RaceSelect } from '../../components/RacePicker';
-import { bibAccent } from '../../lib/bib';
 import { enqueue, placingsOf } from '../../offline/scoreOutbox';
 import { nextRoundLanes } from '../../lib/nextRoundLanes';
-import { pointsForPlace, sessionPointsBase, withQueuedResults } from '../../lib/queuedView';
-import { dropDrafts, pushUndo, undoSave, type UndoEntry } from '../../lib/scoreUndo';
+import { sessionPointsBase, withQueuedResults } from '../../lib/queuedView';
+import { dropDrafts, pushUndo, undoSave, type MarkChange, type UndoEntry } from '../../lib/scoreUndo';
+import { allHeats, arenaOf, canScoreHeat, heatBarLabel, heatIsComplete, heatName, heatStatus, type HeatRef } from '../../lib/heatChoices';
+import { commentatorFacts } from '../../lib/commentatorFacts';
+import type { CardMark } from '../../lib/refereeCards';
+import { BetweenHeats, HeatPickerBar, HeatTableView } from './HeatViews';
 import {
   overridePoints, nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey as draftKeyFor, tapTeam, toggleEliminated,
   writeScoringDraft, type PendingPlace,
 } from '../../lib/raceScoring';
 import { OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../../offline/useScoreOutbox';
 import { laneLabel, LANE_ROTATION_LABELS, LaneRotationMode, type LaneRotationModeValue } from '../../lib/lanes';
-import { displayLaneFor, lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './laneRules';
+import { lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './laneRules';
 import { useRaceNotes } from './useRaceNotes';
 import { formatPoints } from '../../lib/formatPoints';
 import { ScorerLinksCard } from './ScorerLinksCard';
 import { QrAccessModal } from '../../components/QrAccessModal';
+import { bibAccent } from '../../lib/bib';
 import { StreamControlStrip } from '../../components/stream/StreamControlStrip';
 import { ordinal } from '../../lib/toplist';
-import { publicRiderName } from '../../lib/riderNames';
 import { statusLetter } from '../../lib/resultStatus';
 
 // Official totals include bonuses, HC exclusions and organiser tie decisions.
-function useCommentatorStandings(competition: CompetitionDetail, sectionId: number): StandingRow[] {
+function useCommentatorStandings(competition: CompetitionDetail, sectionId: number, enabled = true): StandingRow[] {
   const [saved, setSaved] = useState<{ key: string; rows: StandingRow[] } | null>(null);
   const key = `${competition.id}:${sectionId}`;
   useEffect(() => {
+    if (!enabled) return;
     let active = true;
     api.get<StandingRow[]>(`/competitions/${competition.id}/standings`, { params: { sectionId } })
       .then(({ data }) => {
@@ -52,8 +55,8 @@ function useCommentatorStandings(competition: CompetitionDetail, sectionId: numb
       })
       .catch(() => { if (active) setSaved({ key, rows: [] }); });
     return () => { active = false; };
-  }, [competition.id, competition.sessions, sectionId, key]);
-  return saved?.key === key ? saved.rows : [];
+  }, [competition.id, competition.sessions, sectionId, key, enabled]);
+  return enabled && saved?.key === key ? saved.rows : [];
 }
 
 type CommentatorChoice = 'yes' | 'no' | null;
@@ -79,11 +82,6 @@ interface PostRaceRecapState {
   session: Session;
 }
 
-function formatTime(d: Date | null): string {
-  if (!d) return '—';
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
 function heatStartTime(session: Session, heat: Heat, heatIndex: number): Date | null {
   if (heat.startedAt) return new Date(heat.startedAt);
   const baseStr = session.scheduledStart;
@@ -95,12 +93,20 @@ function heatStartTime(session: Session, heat: Heat, heatIndex: number): Date | 
   return new Date(base.getTime() + heatIndex * heatMinutes * 60_000);
 }
 
-function heatIsComplete(heat: Heat): boolean {
-  return heat.races.length > 0 && heat.races.every((r) => r.isComplete);
+/** One session on the day. A different session or heat in the address starts afresh, so the page never shows a stale heat. */
+export function SessionPage() {
+  const { sessionId } = useParams<{ sessionId: string }>();
+  const [searchParams] = useSearchParams();
+  return <SessionScoring key={`${sessionId}:${searchParams.get('heat') ?? ''}`} />;
 }
 
-export function SessionPage() {
+type SessionView = 'score' | 'table' | 'between';
+
+const NO_CARDS: Record<number, CardMark> = {};
+
+function SessionScoring() {
   usePageWidth('wide');
+  const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId: string }>();
   const [searchParams] = useSearchParams();
   const requestedHeat = Number(searchParams.get('heat'));
@@ -132,6 +138,17 @@ export function SessionPage() {
 
   const [activeHeatId, setActiveHeatId] = useState<number | null>(() => orderedHeats.find((heat) => heat.id === requestedHeat)?.id ?? firstIncompleteHeatId);
   const [activeRaceId, setActiveRaceId] = useState<number | null>(null);
+  const heatRefs = useMemo(() => allHeats(competition.sessions), [competition.sessions]);
+  // The arena the scorer is working in. Opening a heat in another arena keeps it in the address, so that heat opens as a table.
+  const mine = searchParams.get('mine') || (session ? arenaOf(session) : '');
+  // A heat in another arena, or one that has not started, opens as a read-only table first.
+  const [view, setView] = useState<SessionView>(() => {
+    if (searchParams.get('score') === '1') return 'score';
+    const first = orderedHeats.find((h) => h.id === requestedHeat)?.id ?? firstIncompleteHeatId;
+    const ref = heatRefs.find((r) => r.heat.id === first);
+    return ref && !canScoreHeat(heatRefs, mine, ref) ? 'table' : 'score';
+  });
+  const [cardOverrides, setCardOverrides] = useState<{ at: CompetitionDetail; map: Record<number, CardMark> }>({ at: competition, map: {} });
   const [correctionReasons, setCorrectionReasons] = useState<Record<number, string>>({});
   const outbox = useScoreOutbox();
   const [showTransition, setShowTransition] = useState(false);
@@ -211,7 +228,6 @@ export function SessionPage() {
 
   const orderedRaces = useMemo(
     () => (activeHeat?.races ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex),
-    // eslint-disable-next-line react-hooks/preserve-manual-memoization -- ring-call callbacks only read the immutable heat snapshot
     [activeHeat?.races]
   );
 
@@ -257,22 +273,6 @@ export function SessionPage() {
     }
   }, [scoringDraftKey, pendingState]);
 
-  // Detect when the heat the admin is scoring transitions from in-progress → complete,
-  // and prompt to advance to the next heat.
-  const prevHeatStateRef = useRef<{ id: number; complete: boolean } | null>(null);
-  const [heatEndOverlay, setHeatEndOverlay] = useState<{ finishedHeat: Heat; nextHeat: Heat | null } | null>(null);
-  useEffect(() => {
-    if (!activeHeat) { prevHeatStateRef.current = null; return; }
-    const now = { id: activeHeat.id, complete: heatIsComplete(activeHeat) };
-    const prev = prevHeatStateRef.current;
-    if (prev && prev.id === now.id && !prev.complete && now.complete) {
-      const idx = orderedHeats.findIndex((h) => h.id === activeHeat.id);
-      const nextHeat = orderedHeats[idx + 1] ?? null;
-      setHeatEndOverlay({ finishedHeat: activeHeat, nextHeat });
-    }
-    prevHeatStateRef.current = now;
-  }, [activeHeat, orderedHeats]);
-
   // Offer the end-of-session screen whenever the session or its heats change and every heat is done.
   // Adjusted during render against the last values seen, so closing the screen is not undone on re-render.
   const [transitionChecked, setTransitionChecked] = useState<{ session: Session | null; orderedHeats: Heat[] } | null>(null);
@@ -299,6 +299,26 @@ export function SessionPage() {
     const waiting = Object.fromEntries((queued?.places ?? []).filter((p) => p.refereeNote).map((p) => [p.teamId, p.refereeNote as string]));
     return { ...savedReasons, ...waiting };
   }, [outbox, summaryRace?.id, savedReasons]);
+
+  const activeRef = heatRefs.find((r) => r.heat.id === activeHeatId) ?? null;
+  const arena = activeRef ? arenaOf(activeRef.session) : mine;
+  const nextRef = activeRef
+    ? heatRefs.slice(heatRefs.findIndex((r) => r.heat.id === activeRef.heat.id) + 1).find((r) => arenaOf(r.session) === arena) ?? null
+    : null;
+  const urlFor = (ref: HeatRef, extra = '') => `/competitions/${competition.id}/session/${ref.session.id}?heat=${ref.heat.id}&mine=${encodeURIComponent(mine)}${extra}`;
+
+  const factsSectionId = session?.competitionSectionId ?? competition.sections[0]?.id ?? -1;
+  const factStandings = useCommentatorStandings(competition, factsSectionId, commentatorMode && view === 'score');
+  const teamFacts = useMemo(
+    () => (commentatorMode && viewHeat ? commentatorFacts(viewHeat.entries.map((e) => e.teamId), viewHeat.races, factStandings) : undefined),
+    [commentatorMode, viewHeat, factStandings],
+  );
+  const cardOverridesNow = cardOverrides.at === competition ? cardOverrides.map : NO_CARDS;
+  const tableCards = useMemo(() => {
+    const out: Record<number, CardMark> = {};
+    for (const e of viewHeat?.entries ?? []) if (e.refereeCard) out[e.teamId] = e.refereeCard;
+    return out;
+  }, [viewHeat]);
 
   if (!session) {
     return (
@@ -374,6 +394,54 @@ export function SessionPage() {
     }
   }
 
+  /** Today's HC change, noted so Undo can put the team back. */
+  async function setHcRecorded(teamId: number, hc: boolean) {
+    const before = hcTeamIds.has(teamId);
+    await setHc(teamId, hc);
+    if (activeRace) recordMark({ type: 'hc', teamId, before });
+  }
+
+  function recordMark(change: MarkChange) {
+    if (activeRace) setUndoStack((stack) => pushUndo(stack, { kind: 'mark', raceId: activeRace.id, change }));
+  }
+
+  /** Gives a team a card, or takes it off. It shows at once and is kept on the server for everyone. */
+  async function setCard(teamId: number, card: CardMark, record: boolean) {
+    const entry = activeHeat?.entries.find((e) => e.teamId === teamId);
+    const before: CardMark = teamId in cardOverridesNow ? cardOverridesNow[teamId] : entry?.refereeCard ?? null;
+    setCardOverrides({ at: competition, map: { ...cardOverridesNow, [teamId]: card } });
+    try {
+      await api.put(`/competitions/${competition.id}/teams/${teamId}/card`, { card: card ?? 'none' });
+      setSaveError(null);
+      if (record) recordMark({ type: 'card', teamId, before });
+      reload();
+    } catch {
+      setCardOverrides({ at: competition, map: { ...cardOverridesNow, [teamId]: before } });
+      setSaveError('Couldn’t change the card. Try again.');
+    }
+  }
+
+  /** Opens a heat from the picker. Another session is another page; a heat that isn't yours to score yet opens as a table. */
+  function pickHeat(ref: HeatRef) {
+    setPending([]);
+    setUndoStack((stack) => dropDrafts(stack));
+    if (ref.session.id !== session!.id) {
+      navigate(urlFor(ref));
+      return;
+    }
+    setActiveHeatId(ref.heat.id);
+    setView(canScoreHeat(heatRefs, mine, ref) ? 'score' : 'table');
+  }
+
+  function startNext(ref: HeatRef) {
+    if (ref.session.id !== session!.id) {
+      navigate(urlFor(ref, '&score=1'));
+      return;
+    }
+    setActiveHeatId(ref.heat.id);
+    setView('score');
+  }
+
   // Results go into this phone's outbox and send when there's signal, so the
   // scorer can move straight on to the next race. `places` carries the reasons when the sheet asked for them.
   /** Queues the race's result; false when it can't be saved yet (the error says why). */
@@ -434,6 +502,11 @@ export function SessionPage() {
     }
 
     const queuedIds = new Set([...outbox.map((q) => q.raceId), activeRace.id]);
+    // The last race of the heat: stay on it and show the page for the next heat, with its lanes and dec forms.
+    if (nextRef && !session.raceOrderAlternating && activeHeat.races.every((r) => r.isComplete || queuedIds.has(r.id))) {
+      setView('between');
+      return true;
+    }
     const next = nextRaceToScore(orderedHeats, session.raceOrderAlternating === true, { heatId: activeHeat.id, raceId: activeRace.id }, queuedIds);
     if (next) {
       if (next.heatId !== activeHeat.id) {
@@ -453,6 +526,12 @@ export function SessionPage() {
     if (!lastUndo) return;
     setUndoStack((stack) => stack.slice(0, -1));
     if (lastUndo.kind === 'draft') { setPending(lastUndo.places); return; }
+    if (lastUndo.kind === 'mark') {
+      const { change } = lastUndo;
+      if (change.type === 'card') void setCard(change.teamId, change.before, false);
+      else void setHc(change.teamId, change.before).catch(() => undefined);
+      return;
+    }
     let restore: PendingPlace[] = [];
     updateOutbox((list) => {
       const result = undoSave(list, lastUndo);
@@ -464,10 +543,12 @@ export function SessionPage() {
     preferredRaceRef.current = lastUndo.raceId;
     setActiveHeatId(heat.id);
     setActiveRaceId(lastUndo.raceId);
+    setView('score');
     setPendingState({ key: draftKeyFor(heat.id, lastUndo.raceId), places: restore, edited: restore.length > 0 });
     if (restore.length === 0) writeScoringDraft(draftKeyFor(heat.id, lastUndo.raceId), []);
   }
 
+  const sectionQuery = session.competitionSectionId != null ? `?section=${session.competitionSectionId}` : '';
   const activeIndex = orderedHeats.findIndex((h) => h.id === activeHeatId);
   const followingHeat = viewHeats[activeIndex + 1]
     ?? competition.sessions.filter((s) => (s.kind ?? 0) === 0 && s.orderIndex > session.orderIndex).sort((a, b) => a.orderIndex - b.orderIndex).find((s) => s.heats.length > 0)?.heats
@@ -564,83 +645,61 @@ export function SessionPage() {
 
       {canManage(competition) ? (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))] px-3 py-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                aria-pressed={commentatorMode}
-                onClick={() => saveCommentatorChoice(commentatorMode ? 'no' : 'yes')}
-                className={`mg-btn !min-h-9 !px-3 text-xs font-bold ${
-                  commentatorMode ? 'mg-btn-primary' : 'mg-btn-secondary'
-                }`}
-              >
-                <Mic className="h-3.5 w-3.5" aria-hidden="true" />
-                {commentatorMode ? 'Commentator facts: ON' : 'Commentator facts: OFF'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowQrModal(true)}
-                className="mg-btn mg-btn-secondary !min-h-9 !px-3 text-xs font-bold"
-              >
-                <QrCodeIcon className="h-3.5 w-3.5" aria-hidden="true" /> QR Access
-              </button>
+          {activeRef && (
+            <div className="-mx-4">
+              <HeatPickerBar
+                arena={arena}
+                label={heatBarLabel(activeRef)}
+                items={[
+                  ...heatRefs.map((ref) => ({
+                    key: `heat:${ref.heat.id}`,
+                    label: `${arenaOf(ref.session)} · ${heatBarLabel(ref)}`,
+                    status: heatStatus(ref),
+                    selected: view !== 'between' && ref.heat.id === activeHeatId,
+                    onSelect: () => pickHeat(ref),
+                  })),
+                  ...(nextRef ? [{
+                    key: 'up-next',
+                    label: `Up next: ${heatName(nextRef.heat, nextRef.index)}`,
+                    status: 'Lanes, teams and dec forms',
+                    selected: view === 'between',
+                    onSelect: () => setView('between'),
+                  }] : []),
+                ]}
+              />
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Link
-                to={`/competitions/${competition.id}/commentary${session.competitionSectionId != null ? `?section=${session.competitionSectionId}` : ''}`}
-                className="mg-btn mg-btn-secondary !min-h-9 !px-3 text-xs font-bold"
-              >
-                <Mic className="h-3.5 w-3.5" aria-hidden="true" /> PA Desk
-              </Link>
-              <Link
-                to={`/competitions/${competition.id}/tv${session.competitionSectionId != null ? `?section=${session.competitionSectionId}` : ''}`}
-                className="mg-btn mg-btn-secondary !min-h-9 !px-3 text-xs font-bold"
-              >
-                <Monitor className="h-3.5 w-3.5" aria-hidden="true" /> TV Kiosk
-              </Link>
-            </div>
-          </div>
-
-          {commentatorChoice === null && (
-            <section
-              aria-label="Commentator scoring prompt"
-              className="mg-card flex flex-wrap items-center justify-between gap-3 border-2 border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-ground))] p-3.5"
-            >
-              <div className="min-w-0 flex-1">
-                <h2 className="m-0 flex items-center gap-1.5 text-sm font-bold text-[rgb(var(--mg-heading))]">
-                  <Mic className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  Do you want to see commentator facts while scoring?
-                </h2>
-                <p className="mt-1 mb-0 text-xs text-[rgb(var(--mg-muted))]">
-                  Shows team riders, ponies and live storylines while you score, plus the updated heat table and toplist after each race.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => saveCommentatorChoice('yes')}
-                  className="mg-btn mg-btn-primary !min-h-9 !px-3 text-xs font-bold"
-                >
-                  Yes, show commentator facts
-                </button>
-                <button
-                  type="button"
-                  onClick={() => saveCommentatorChoice('no')}
-                  className="mg-btn mg-btn-secondary !min-h-9 !px-3 text-xs font-bold"
-                >
-                  No, just score
-                </button>
-              </div>
-            </section>
           )}
 
-          <HeatTabs
-            session={session}
-            heats={orderedHeats}
-            activeHeatId={activeHeatId}
-            onSelect={(id) => { setActiveHeatId(id); setPending([]); setUndoStack((stack) => dropDrafts(stack)); }}
-          />
-          {canOrganise(competition) && activeHeat && unassignedTeams.length > 0 && (
+          {view === 'table' && activeRef && viewHeat && (
+            <HeatTableView
+              title={`${arena} · ${heatBarLabel(activeRef)}`}
+              status={heatStatus(activeRef)}
+              heat={viewHeat}
+              races={viewRaces}
+              rules={lanesOf(session)}
+              hcTeamIds={hcTeamIds}
+              cardsByTeam={tableCards}
+              canOverride
+              arena={arena}
+              onScoreIt={() => setView('score')}
+            />
+          )}
+
+          {view === 'between' && nextRef && (
+            <BetweenHeats
+              title={`Next: ${heatName(nextRef.heat, nextRef.index)}`}
+              meta={`${arenaOf(nextRef.session)} · ${heatBarLabel(nextRef)}`}
+              heat={nextRef.heat}
+              hatbands={competition.laneHatbands}
+              decForms={decFormByTeamId}
+              startLabel={`Start scoring ${heatName(nextRef.heat, nextRef.index)}`}
+              backLabel={`Back to ${activeHeat ? heatName(activeHeat, Math.max(0, orderedHeats.findIndex((h) => h.id === activeHeat.id))) : 'the heat'}`}
+              onStart={() => startNext(nextRef)}
+              onBack={() => setView('score')}
+            />
+          )}
+
+          {view === 'score' && canOrganise(competition) && activeHeat && unassignedTeams.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50/80 px-3 py-2 text-xs text-amber-950">
               <span className="font-semibold">Unassigned teams ({unassignedTeams.length}):</span>
               {unassignedTeams.map((t) => (
@@ -656,7 +715,7 @@ export function SessionPage() {
             </div>
           )}
 
-          {canOrganise(competition) &&
+          {view === 'score' && canOrganise(competition) &&
             activeHeat &&
             activeHeat.entries.length > 0 &&
             !activeHeat.startedAt &&
@@ -695,19 +754,7 @@ export function SessionPage() {
             </div>
           )}
 
-          {commentatorMode && viewHeat && (
-            <CommentatorFactsPanel
-              competition={competition}
-              session={session}
-              activeRaceIndex={Math.max(0, viewRaces.findIndex((r) => r.id === activeRaceId))}
-              viewHeat={viewHeat}
-              decFormByTeamId={decFormByTeamId}
-              callingTeamId={callingTeamId}
-              onCallMissingTeam={canOrganise(competition) ? handleCallMissingTeam : undefined}
-            />
-          )}
-
-          {viewHeat ? (
+          {view === 'score' && (viewHeat ? (
             <ScoringSection
               key={`${viewHeat.id}:${activeRaceId}`}
               heat={viewHeat}
@@ -741,7 +788,9 @@ export function SessionPage() {
               undoLabel={lastUndo?.kind === 'save' ? 'Undo last save' : 'Undo'}
               allowReasons
               hcTeamIds={hcTeamIds}
-              onSetHc={canOrganise(competition) ? setHc : undefined}
+              onSetHc={canOrganise(competition) ? setHcRecorded : undefined}
+              cards={cardOverridesNow}
+              onSetCard={(teamId, card) => setCard(teamId, card, true)}
               tieRule={competition.sections.find((s) => s.id === session.competitionSectionId)?.tieBreakRule}
               notes={summaryNotes}
               nextLanes={nextLanes}
@@ -749,7 +798,14 @@ export function SessionPage() {
               onRefresh={reload}
               correctionReason={activeRace ? correctionReasons[activeRace.id] ?? '' : ''}
               onCorrectionReason={(reason) => { if (activeRace) setCorrectionReasons((current) => ({ ...current, [activeRace.id]: reason })); }}
-              competitionId={competition.id}
+              teamFacts={teamFacts}
+              factsOn={commentatorMode}
+              onToggleFacts={() => saveCommentatorChoice(commentatorMode ? 'no' : 'yes')}
+              toolLinks={[
+                { key: 'qr', label: 'QR access', sub: 'Let another scorer in', onSelect: () => setShowQrModal(true) },
+                { key: 'pa', label: 'PA desk', sub: 'Read-outs for the announcer', onSelect: () => navigate(`/competitions/${competition.id}/commentary${sectionQuery}`) },
+                { key: 'tv', label: 'TV kiosk', sub: 'Big screen for the arena', onSelect: () => navigate(`/competitions/${competition.id}/tv${sectionQuery}`) },
+              ]}
               onAddRace={canOrganise(competition) ? async (raceName) => {
                 const programme = viewRaces.map((r) => r.name);
                 try {
@@ -785,7 +841,7 @@ export function SessionPage() {
             />
           ) : (
             <div className="card p-3 text-slate-500 dark:text-slate-300 text-sm">No heats in this session yet.</div>
-          )}
+          ))}
 
           <details className="mg-card p-3">
             <summary className="cursor-pointer font-semibold">Organiser tools</summary>
@@ -816,24 +872,6 @@ export function SessionPage() {
       ) : (
         <HeatScores session={session} heats={orderedHeats} activeHeatId={activeHeatId} />
       )}
-
-      <AnimatePresence>
-        {heatEndOverlay && (
-          <HeatEndOverlay
-            finishedHeat={heatEndOverlay.finishedHeat}
-            nextHeat={heatEndOverlay.nextHeat}
-            sessionBase={sessionBase}
-            hcTeamIds={hcTeamIds}
-            decFormByTeamId={decFormByTeamId}
-            onAdvance={() => {
-              const { nextHeat } = heatEndOverlay;
-              setHeatEndOverlay(null);
-              if (nextHeat) setActiveHeatId(nextHeat.id);
-            }}
-            onClose={() => setHeatEndOverlay(null)}
-          />
-        )}
-      </AnimatePresence>
 
       <AnimatePresence>
         {showTransition && (
@@ -873,146 +911,6 @@ export function SessionPage() {
         canWrite={canManage(competition)}
       />
     </div>
-  );
-}
-
-function CommentatorFactsPanel({
-  competition,
-  session,
-  activeRaceIndex,
-  viewHeat,
-  decFormByTeamId,
-  callingTeamId,
-  onCallMissingTeam,
-}: {
-  competition: CompetitionDetail;
-  session: Session;
-  activeRaceIndex: number;
-  viewHeat: Heat;
-  decFormByTeamId: Map<number, DeclarationForm>;
-  callingTeamId?: number | null;
-  onCallMissingTeam?: (entry: { teamId: number; teamName: string; laneIndex: number }) => Promise<void>;
-}) {
-  const sectionId = session.competitionSectionId ?? competition.sections[0]?.id ?? -1;
-  const section = competition.sections.find((s) => s.id === sectionId) ?? null;
-  const cutoffPlaces = section?.finalistCount ?? 6;
-
-  const standings = useCommentatorStandings(competition, sectionId);
-
-  const toplist = useMemo(() => ({
-    rows: standings.map((row, index) => ({ teamId: row.teamId, teamName: row.teamName, points: row.totalPoints, position: index + 1 })),
-    started: standings.some((row) => row.racesRun > 0),
-  }), [standings]);
-
-  const rowByTeamId = useMemo(() => {
-    const map = new Map<number, { rankLabel: string; points: number; gapLabel: string }>();
-    const leaderPoints = toplist.rows[0]?.points ?? 0;
-    const cutoffPoints = toplist.rows[Math.min(cutoffPlaces - 1, Math.max(0, toplist.rows.length - 1))]?.points ?? 0;
-    toplist.rows.forEach((row, idx) => {
-      const gapToFirst = Math.max(0, leaderPoints - row.points);
-      const gapToCut = idx < cutoffPlaces ? 0 : Math.max(0, cutoffPoints - row.points);
-      const gapLabel = idx === 0
-        ? 'Leader'
-        : idx < cutoffPlaces
-          ? `−${formatPoints(gapToFirst)} to 1st · Top ${cutoffPlaces}`
-          : `−${formatPoints(gapToCut)} to Top ${cutoffPlaces}`;
-      map.set(row.teamId, {
-        rankLabel: toplist.started ? ordinal(row.position) : '—',
-        points: row.points,
-        gapLabel,
-      });
-    });
-    return map;
-  }, [toplist, cutoffPlaces]);
-
-  const heatPointsByTeamId = useMemo(() => {
-    const map = new Map<number, number>();
-    for (const r of viewHeat.races) {
-      for (const res of r.results) {
-        map.set(res.teamId, (map.get(res.teamId) ?? 0) + res.points);
-      }
-    }
-    return map;
-  }, [viewHeat.races]);
-
-  const entries = viewHeat.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex);
-
-  return (
-    <section aria-label="Live commentator facts" className="mg-card space-y-3 p-3.5">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[rgb(var(--mg-rule-soft))] pb-2">
-        <div className="flex items-center gap-2">
-          <Mic className="h-4 w-4 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
-          <h2 className="mg-display m-0 text-sm font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-            Live Commentator Facts · {viewHeat.label || 'Current Heat'}
-          </h2>
-        </div>
-        <span className="text-xs font-semibold text-[rgb(var(--mg-muted))]">
-          Official standings; queued scores are not included yet.
-        </span>
-      </div>
-
-      {entries.length > 0 && (
-        <ul className="m-0 grid grid-cols-1 gap-2 list-none p-0 sm:grid-cols-2">
-          {entries.map((entry) => {
-            const st = rowByTeamId.get(entry.teamId);
-            const heatPts = heatPointsByTeamId.get(entry.teamId) ?? 0;
-            const dec = decFormByTeamId.get(entry.teamId);
-            const riders = (dec?.riders ?? []).filter((r) => !r.isReserve).slice().sort((a, b) => a.orderIndex - b.orderIndex);
-            return (
-              <li
-                key={entry.id}
-                className="flex flex-col gap-1 rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] px-3 py-2 text-xs"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-bold text-[rgb(var(--mg-ink))]">
-                    Lane {displayLaneFor(viewHeat, entry, activeRaceIndex, lanesOf(session))}: {entry.teamName}
-                  </span>
-                  <span className="font-bold text-[rgb(var(--mg-heading))]">
-                    Rank {st?.rankLabel ?? '—'} · {st ? formatPoints(st.points) : '—'} pts (Heat: {formatPoints(heatPts)})
-                  </span>
-                </div>
-                {st?.gapLabel && (
-                  <span className="text-[11px] font-semibold text-[rgb(var(--mg-muted))]">{st.gapLabel}</span>
-                )}
-                {riders.length > 0 && (
-                  <span className="text-[11px] text-[rgb(var(--mg-body))]">
-                    {riders.map((r) => `${publicRiderName(r)}${r.horseName ? ` (${r.horseName})` : ''}`).join(', ')}
-                  </span>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      {onCallMissingTeam && entries.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[rgb(var(--mg-rule-soft))] pt-2 text-xs">
-          <span className="font-semibold text-[rgb(var(--mg-muted))]">Call missing team to ring:</span>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {entries.map((entry) => (
-              <button
-                key={entry.teamId}
-                type="button"
-                disabled={callingTeamId === entry.teamId || displayLaneFor(viewHeat, entry, activeRaceIndex, lanesOf(session)) === 'S'}
-                onClick={() => void onCallMissingTeam(entry)}
-                className="mg-btn mg-btn-secondary !min-h-8 !px-2.5 text-xs font-semibold"
-                title={`Call ${entry.teamName} (Lane ${displayLaneFor(viewHeat, entry, activeRaceIndex, lanesOf(session))}) to ring`}
-              >
-                {callingTeamId === entry.teamId ? 'Calling…' : `Call ${entry.teamName} (L${displayLaneFor(viewHeat, entry, activeRaceIndex, lanesOf(session))})`}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <StreamControlStrip
-        competitionId={competition.id}
-        arenaName={session.arenaName}
-        sectionId={session.competitionSectionId}
-        activeHeatId={viewHeat.id}
-        compact
-      />
-    </section>
   );
 }
 
@@ -1741,53 +1639,6 @@ function ScoreAdjustmentsPanel({
   );
 }
 
-function HeatTabs({ session, heats, activeHeatId, onSelect }: {
-  session: Session;
-  heats: Heat[];
-  activeHeatId: number | null;
-  onSelect: (id: number) => void;
-}) {
-  if (heats.length === 0) return null;
-  const activeIdx = Math.max(0, heats.findIndex((h) => h.id === activeHeatId));
-  const activeHeat = heats[activeIdx] ?? heats[0];
-  const start = heatStartTime(session, activeHeat, activeIdx);
-  const racesDone = activeHeat.races.filter((r) => r.isComplete).length;
-
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <div className="flex items-center gap-2 text-xs text-[rgb(var(--mg-muted))]">
-        <span className="font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-ink))]">
-          {activeHeat.label ?? `Heat ${activeIdx + 1}`}
-        </span>
-        <span>·</span>
-        <span className="inline-flex items-center gap-1">
-          <Clock className="h-3 w-3" aria-hidden="true" />
-          {formatTime(start)}
-        </span>
-        <span>·</span>
-        <span>{racesDone}/{activeHeat.races.length} races</span>
-      </div>
-      {heats.length > 1 && (
-        <div className="mg-seg" role="group" aria-label="Heats">
-          {heats.map((heat, i) => {
-            const isActive = heat.id === activeHeatId;
-            return (
-              <button
-                key={heat.id}
-                type="button"
-                aria-pressed={isActive}
-                onClick={() => onSelect(heat.id)}
-              >
-                {heat.label ?? `Heat ${i + 1}`}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function balancedHeatSizes(numTeams: number, maxLanes: number): number[] {
   if (numTeams <= 0 || maxLanes <= 0) return [];
   const heatCount = Math.max(1, Math.ceil(numTeams / maxLanes));
@@ -2022,120 +1873,3 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
  * Pops up when the heat the admin was scoring just finished. Shows the
  * next heat's teams with dec form summaries; "Continue" advances activeHeatId.
  */
-function HeatEndOverlay({
-  finishedHeat, nextHeat, sessionBase, hcTeamIds, decFormByTeamId, onAdvance, onClose,
-}: {
-  finishedHeat: Heat;
-  nextHeat: Heat | null;
-  sessionBase: number;
-  hcTeamIds: ReadonlySet<number>;
-  decFormByTeamId: Map<number, DeclarationForm>;
-  onAdvance: () => void;
-  onClose: () => void;
-}) {
-  const teams = nextHeat ? nextHeat.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex) : [];
-  return (
-    <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm grid place-items-center p-3"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }}
-        className="card w-full max-w-xl max-h-[90vh] overflow-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2">
-          <CheckCircle2 className="w-6 h-6 text-emerald-500 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-base truncate">{finishedHeat.label ?? 'Heat'} complete</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-300">Results are saved.</p>
-          </div>
-          <button onClick={onClose} className="btn-ghost !py-1 !px-1.5">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800">
-          <HeatGrid
-            heat={finishedHeat}
-            races={finishedHeat.races ?? []}
-            activeRaceId={null}
-            activeIndex={-1}
-            rules={{ lanesPerHeat: null, mode: LaneRotationMode.MoveUp }}
-            pending={[]}
-            pointsFor={(p, e) => pointsForPlace(finishedHeat, sessionBase, p, e)}
-            hcTeamIds={hcTeamIds}
-          />
-        </div>
-
-        {nextHeat ? (
-          <>
-            <div className="p-4 space-y-2">
-              <div className="flex items-center gap-1.5">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-600 text-white text-[10px] font-bold uppercase">
-                  Up next
-                </span>
-                <span className="font-bold text-base truncate">{nextHeat.label ?? 'Next heat'}</span>
-                <span className="ml-auto text-[11px] text-slate-500 inline-flex items-center gap-1">
-                  <Users className="w-3 h-3" /> {teams.length} team{teams.length === 1 ? '' : 's'}
-                </span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                {teams.map((t) => {
-                  const form = decFormByTeamId.get(t.teamId);
-                  const riders = form?.riders.filter((r) => !r.isReserve) ?? [];
-                  return (
-                    <div key={t.teamId} className="rounded-md bg-slate-50 dark:bg-slate-800/70 px-2 py-1.5 text-xs flex gap-2 items-start">
-                      <span
-                        className="inline-block w-2.5 h-2.5 rounded-full mt-1 shrink-0"
-                        style={{ background: bibAccent(t.bibColour) }}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="font-semibold truncate text-sm">{t.teamName}</div>
-                        {form ? (
-                          <div className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
-                            {riders.length === 0 ? (
-                              <span className="text-slate-400 italic">No active riders listed</span>
-                            ) : (
-                              riders.slice(0, 4).map((r, i) => (
-                                <span key={r.id}>
-                                  {i > 0 && ', '}
-                                  <span className={r.isCaptain ? 'font-semibold' : ''}>{r.fullName}</span>
-                                  {r.horseName && <span className="text-slate-400"> · {r.horseName}</span>}
-                                </span>
-                              ))
-                            )}
-                          </div>
-                        ) : (
-                          <div className="text-[11px] text-amber-700 dark:text-amber-300 italic inline-flex items-center gap-1">
-                            <ClipboardList className="w-3 h-3" /> Dec form not yet submitted
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="p-3 border-t border-slate-200 dark:border-slate-800 flex items-center gap-2">
-              <button onClick={onClose} className="btn-ghost !py-1.5 !px-3 text-xs">Stay on this heat</button>
-              <button onClick={onAdvance} className="btn-primary !py-1.5 !px-3 text-xs ml-auto">
-                Continue to {nextHeat.label ?? 'next heat'} <ChevronLeft className="w-3.5 h-3.5 rotate-180" />
-              </button>
-            </div>
-          </>
-        ) : (
-          <div className="p-4">
-            <p className="text-sm text-slate-700 dark:text-slate-200">
-              That was the last heat of this session. Click below to wrap up.
-            </p>
-            <div className="mt-3 flex justify-end">
-              <button onClick={onClose} className="btn-primary !py-1.5 !px-3 text-xs">Got it</button>
-            </div>
-          </div>
-        )}
-      </motion.div>
-    </motion.div>
-  );
-}
