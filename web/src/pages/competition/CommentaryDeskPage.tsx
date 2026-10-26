@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ClipboardCheck, Mic, Monitor, QrCode as QrCodeIcon, Radio, Sparkles, Table2, Trophy, Users } from 'lucide-react';
+import { ClipboardCheck, Mic, Monitor, QrCode as QrCodeIcon, Radio, Sparkles, Trophy, Users } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { BibSwatch } from '../../components/BibSwatch';
@@ -16,9 +16,8 @@ import { buildToplist, ordinal, sectionScoreVersion } from '../../lib/toplist';
 import { useLiveHub } from '../../live/useLiveHub';
 import type { DeclarationForm, Heat, Session, StandingRow, Team } from '../../types';
 import { useCompetition } from './context';
-import { HeatScores } from './HeatScores';
 
-type DeskMode = 'split' | 'lanes' | 'heat' | 'standings';
+type DeskMode = 'split' | 'lanes' | 'standings';
 
 const isRaceSession = (s: Session) => (s.kind ?? (s.isBreak ? 1 : 0)) === 0;
 const isHeatDone = (h: Heat) => Boolean(h.finishedAt) || (h.races.length > 0 && h.races.every((r) => r.isComplete));
@@ -72,7 +71,7 @@ export function CommentaryDeskPage() {
   });
 
   usePageHeader({
-    title: 'PA Commentator Desk',
+    title: 'Commentary desk',
     subtitle: competition.name,
     backTo: `/competitions/${competition.id}/scoring${sectionId != null ? `?section=${sectionId}` : ''}`,
     backLabel: 'Back to scoring',
@@ -279,6 +278,27 @@ export function CommentaryDeskPage() {
     });
   }, [toplist, section?.finalistCount, teamById, standingByTeamId, decByTeamId, competition.teams, sectionId]);
 
+  // Points each team has made in the heat on show (the toplist total sits beside it).
+  const heatPointsByTeamId = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const race of activeHeatItem?.heat.races ?? []) {
+      for (const res of race.results) map.set(res.teamId, (map.get(res.teamId) ?? 0) + (res.isSitOut ? 0 : res.points));
+    }
+    return map;
+  }, [activeHeatItem]);
+
+  // The next few races to run in this section, after the one on now.
+  const upNext = useMemo(() => {
+    const list: string[] = [];
+    const start = activeHeatItem ? sectionHeats.findIndex((item) => item.heat.id === activeHeatItem.heat.id) : -1;
+    for (const item of start < 0 ? [] : sectionHeats.slice(start)) {
+      for (const race of item.heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex)) {
+        if (!race.isComplete) list.push(`${race.name} · ${item.label}`);
+      }
+    }
+    return list.slice(1, 4);
+  }, [sectionHeats, activeHeatItem]);
+
   const rankByTeamId = useMemo(() => {
     const map = new Map<number, string>();
     for (const row of orderedStandings) {
@@ -331,7 +351,7 @@ export function CommentaryDeskPage() {
             </span>
             <h1 className="mg-display m-0 text-xl font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))] sm:text-2xl">
               <Mic className="mr-1.5 inline h-5 w-5 align-text-bottom" aria-hidden="true" />
-              PA Commentator Desk · {sectionName}
+              Commentary desk · {sectionName}
             </h1>
           </div>
 
@@ -394,9 +414,6 @@ export function CommentaryDeskPage() {
             <button type="button" aria-pressed={mode === 'lanes'} onClick={() => setMode('lanes')}>
               Current Heat Lanes
             </button>
-            <button type="button" aria-pressed={mode === 'heat'} onClick={() => setMode('heat')}>
-              Heat Table
-            </button>
             <button type="button" aria-pressed={mode === 'standings'} onClick={() => setMode('standings')}>
               Standings in Order
             </button>
@@ -455,6 +472,7 @@ export function CommentaryDeskPage() {
       {/* Main Content Grid */}
       <div className={mode === 'split' ? 'grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start' : 'flex flex-col gap-4'}>
         {(mode === 'split' || mode === 'lanes') && (
+          <div className="flex flex-col gap-4">
           <section aria-label="Current Heat — Lanes in Order" className="mg-card overflow-hidden">
             <div className="flex flex-wrap items-baseline justify-between gap-2 border-b-2 border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-ground))] px-4 py-3">
               <div className="flex items-center gap-2">
@@ -463,11 +481,9 @@ export function CommentaryDeskPage() {
                   Current Heat — Lanes in Order
                 </h2>
               </div>
-              {activeHeatItem && (
-                <span className="text-xs font-bold text-[rgb(var(--mg-body))]">
-                  {activeHeatItem.label}
-                </span>
-              )}
+              <span className="text-xs font-bold text-[rgb(var(--mg-body))]">
+                {activeHeatItem ? `${activeHeatItem.label} · ` : ''}Heat / toplist
+              </span>
             </div>
 
             {!activeHeatItem || activeHeatItem.heat.entries.length === 0 ? (
@@ -483,7 +499,8 @@ export function CommentaryDeskPage() {
                     const dec = decByTeamId.get(entry.teamId);
                     const riders = (dec?.riders ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex);
                     const rankText = rankByTeamId.get(entry.teamId) ?? '—';
-                    const ptsText = formatPoints(st?.totalPoints ?? 0);
+                    const toplistPts = formatPoints(st?.totalPoints ?? 0);
+                    const heatPts = formatPoints(heatPointsByTeamId.get(entry.teamId) ?? 0);
                     const lastRace = lastRaceByTeamId.get(entry.teamId) ?? 'No completed race yet';
 
                     return (
@@ -503,8 +520,8 @@ export function CommentaryDeskPage() {
                               </span>
                             )}
                           </div>
-                          <span className="mg-display shrink-0 text-sm font-bold text-[rgb(var(--mg-heading))]">
-                            Rank {rankText} · {ptsText} pts
+                          <span className="mg-display shrink-0 text-sm font-bold text-[rgb(var(--mg-heading))]" aria-label={`Rank ${rankText}, ${heatPts} in this heat, ${toplistPts} on the toplist`}>
+                            Rank {rankText} · {heatPts} / {toplistPts}
                           </span>
                         </div>
 
@@ -532,32 +549,20 @@ export function CommentaryDeskPage() {
               </ol>
             )}
           </section>
-        )}
 
-        {mode === 'heat' && (
-          <section aria-label="Current Heat Table" className="mg-card overflow-hidden p-4">
-            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 border-b-2 border-[rgb(var(--mg-heading))] pb-2">
-              <div className="flex items-center gap-2">
-                <Table2 className="h-5 w-5 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
-                <h2 className="mg-display m-0 text-lg font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-                  Current Heat Table
-                </h2>
-              </div>
-              {activeHeatItem && (
-                <span className="text-xs font-bold text-[rgb(var(--mg-body))]">{activeHeatItem.label}</span>
-              )}
+          <section aria-label="Up next" className="mg-card overflow-hidden">
+            <div className="border-b-2 border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-ground))] px-4 py-3">
+              <h2 className="mg-display m-0 text-lg font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">Up next</h2>
             </div>
-            {activeHeatItem ? (
-              <HeatScores
-                session={activeHeatItem.session}
-                heats={activeHeatItem.session.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex)}
-                activeHeatId={activeHeatItem.heat.id}
-                embedded
-              />
+            {upNext.length === 0 ? (
+              <p className="p-4 text-sm text-[rgb(var(--mg-muted))]">Nothing else to run in this section.</p>
             ) : (
-              <p className="p-4 text-sm text-[rgb(var(--mg-muted))]">No active heat in this section yet.</p>
+              <ol className="m-0 divide-y divide-[rgb(var(--mg-rule-soft))] list-none p-0">
+                {upNext.map((label) => <li key={label} className="px-4 py-3 text-base font-semibold text-[rgb(var(--mg-ink))]">{label}</li>)}
+              </ol>
             )}
           </section>
+          </div>
         )}
 
         {(mode === 'split' || mode === 'standings') && (

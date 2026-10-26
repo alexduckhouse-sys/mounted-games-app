@@ -200,11 +200,11 @@ beforeEach(() => {
 });
 
 describe('CommentaryDeskPage', () => {
-  it('renders key talking points, stream controls, Score & Commentate link, Heat Table view, and QR Access modal', async () => {
+  it('renders key talking points, stream controls, Score & Commentate link, heat / toplist points, Up next and QR Access modal', async () => {
     const user = userEvent.setup();
     renderWithCompetition('/competitions/1/commentary?section=9');
 
-    expect(await screen.findByRole('heading', { name: /PA Commentator Desk · Under 17/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /Commentary desk · Under 17/ })).toBeInTheDocument();
 
     // Score & Commentate quick link
     const scoreLink = screen.getByRole('link', { name: /Score & Commentate/ });
@@ -281,10 +281,16 @@ describe('CommentaryDeskPage', () => {
     await user.click(within(streamStrip).getByRole('button', { name: 'Post to stream' }));
     expect(await within(streamStrip).findByText('Could not save the stream banner. Try again.')).toBeInTheDocument();
 
-    // Switch desk view to Heat Table
+    // No heat table view any more; lanes show heat / toplist points and Up next lists what follows
     const viewGroup = screen.getByRole('group', { name: 'Commentary desk view' });
-    await user.click(within(viewGroup).getByRole('button', { name: 'Heat Table' }));
-    expect(screen.getByRole('region', { name: 'Current Heat Table' })).toBeInTheDocument();
+    expect(within(viewGroup).queryByRole('button', { name: 'Heat Table' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Current Heat Table' })).toBeNull();
+    expect(screen.queryByText(/Say this/)).toBeNull();
+    expect(screen.getByLabelText('Rank 1st, 3 in this heat, 3 on the toplist')).toHaveTextContent('3 / 3');
+    expect(screen.getByLabelText('Rank 3rd, 1 in this heat, 1 on the toplist')).toHaveTextContent('1 / 1');
+    const upNext = screen.getByRole('region', { name: 'Up next' });
+    expect(within(upNext).getAllByRole('listitem')).toHaveLength(1);
+    expect(within(upNext).getByText('Bending · Session 1 · Heat 2')).toBeInTheDocument();
 
     // Open QR Access Modal
     await user.click(screen.getByRole('button', { name: /QR Access/ }));

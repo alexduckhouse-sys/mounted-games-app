@@ -20,6 +20,8 @@ main:has(.rf-hd) { padding-top: 0; }
 .rf-hd .rf-btn { color: rgb(var(--mg-header-ink)); border: 1px solid rgb(var(--mg-header-line)); border-radius: 10px; background: transparent; min-height: 40px; padding: 0 12px; font: 600 14px/1 var(--mg-font); }
 .rf-hd .rf-btn:hover:not(:disabled) { background: rgb(255 255 255 / .08); border-color: rgb(var(--mg-header-faint)); }
 .rf-ttl { margin: 0 0 0 12px; display: flex; align-items: center; gap: 8px; font: 700 26px/1.05 var(--mg-font-display); letter-spacing: .01em; color: rgb(var(--mg-header-ink)); overflow-wrap: anywhere; }
+.rf-ttl-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rf-ttl-row .rf-ttl { flex: 1; min-width: 0; }
 .rf-sub { margin: 4px 0 0 12px; font: 400 14px/1.3 var(--mg-font); color: rgb(var(--mg-header-sub)); }
 .rf-tabs { position: relative; display: flex; gap: 2px; overflow-x: auto; margin: 8px -8px -12px -4px; padding: 0 8px; scrollbar-width: none; }
 .rf-tabs::-webkit-scrollbar { display: none; }

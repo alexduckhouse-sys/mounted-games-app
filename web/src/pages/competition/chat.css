@@ -70,6 +70,8 @@
 .live-send:disabled { opacity: .45; }
 .live-send svg { width: 19px; height: 19px; }
 .staff-stream-wrap { display: flex; flex-shrink: 0; flex-direction: column; gap: 8px; }
+.staff-stream-actions { display: flex; gap: 8px; }
+.staff-stream-actions > * { flex: 1 1 0; justify-content: center; white-space: nowrap; }
 .staff-stream { display: flex; min-height: 56px; align-items: center; gap: 12px; padding: 6px 6px 6px 12px; }
 .staff-stream-thumb { display: flex; width: 56px; height: 36px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 6px; background: rgb(var(--mg-header-deep)); color: #fff; }
 .staff-stream-thumb svg { width: 16px; height: 16px; }
