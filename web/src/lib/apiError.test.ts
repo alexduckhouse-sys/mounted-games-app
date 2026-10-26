@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apiErrorMessage, apiErrorStatus } from './apiError';
+import { apiErrorMessage, apiErrorStatus, problemMessage } from './apiError';
 
 describe('apiErrorMessage', () => {
   it('uses the message the API sent', () => {
@@ -25,5 +25,14 @@ describe('apiErrorStatus', () => {
     expect(apiErrorStatus(new Error('offline'))).toBeUndefined();
     expect(apiErrorStatus(null)).toBeUndefined();
     expect(apiErrorStatus({ response: { status: 'x' } })).toBeUndefined();
+  });
+});
+
+describe('problemMessage', () => {
+  it('prefers the problem detail, then the message, then the fallback', () => {
+    expect(problemMessage({ response: { data: { detail: 'Only a master admin can lock an admin account.', message: 'x' } } }, 'Try again.')).toBe('Only a master admin can lock an admin account.');
+    expect(problemMessage({ response: { data: { message: 'Nope.' } } }, 'Try again.')).toBe('Nope.');
+    expect(problemMessage({ response: { data: { detail: ' ' } } }, 'Try again.')).toBe('Try again.');
+    expect(problemMessage(null, 'Try again.')).toBe('Try again.');
   });
 });
