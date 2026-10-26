@@ -1,4 +1,5 @@
 import { hatbandFor, bibName, inLaneOrder } from '../../lib/laneOrder';
+import { hatbandName } from '../../lib/hatbands';
 import { heatTotals } from '../../lib/raceSummary';
 import { statusLetter } from '../../lib/resultStatus';
 import { ordinal } from '../../lib/toplist';
@@ -47,7 +48,7 @@ export function HeatPrintSheet({ heat, races, rules, hcTeamIds, tieRule, hatband
                 <td>{bibName(e.bibColour)}</td>
                 {races.map((r, i) => {
                   const hat = hatbandFor(hatbands, displayLaneFor(heat, e, i, rules));
-                  return <td key={r.id}>{cell(r, i, e)}{hat ? ` · ${hat} hatband` : ''}</td>;
+                  return <td key={r.id}>{cell(r, i, e)}{hat ? ` · ${hatbandName(hat)} hatband` : ''}</td>;
                 })}
                 <td>{formatPoints(t?.points ?? 0)}</td>
                 <td>{t?.hc ? 'HC' : t?.position ?? ''}</td>

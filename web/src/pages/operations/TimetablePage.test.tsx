@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -135,10 +135,76 @@ describe('TimetablePage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Move Blue up' }));
     await waitFor(() => expect(api.put).toHaveBeenLastCalledWith('/competitions/7', expect.objectContaining({ laneHatbands: ['Blue', 'Red'] })));
-    await user.click(screen.getByRole('button', { name: 'Remove Red' }));
+    await user.click(screen.getByRole('button', { name: 'More for Red' }));
+    expect(screen.getByRole('menuitem', { name: 'Remove' })).toHaveClass('rf-menu-danger');
+    await user.click(screen.getByRole('menuitem', { name: 'Remove' }));
     await waitFor(() => expect(api.put).toHaveBeenLastCalledWith('/competitions/7', expect.objectContaining({ laneHatbands: ['Blue'] })));
     await user.click(screen.getByRole('button', { name: 'Remove all hatbands' }));
     await waitFor(() => expect(api.put).toHaveBeenLastCalledWith('/competitions/7', expect.objectContaining({ laneHatbands: [] })));
+  });
+
+  it('changes a hatband’s name and colour in a panel under its row and saves as you go', async () => {
+    const user = userEvent.setup();
+    show();
+    await user.click(await screen.findByRole('button', { name: 'More for Blue' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Change colour' }));
+    const panel = screen.getByRole('group', { name: 'Change colour of Blue' });
+    const name = within(panel).getByLabelText('Name');
+    await user.clear(name);
+    await user.type(name, 'Lilac');
+    const hex = within(panel).getByLabelText('Colour code');
+    await user.clear(hex);
+    await user.type(hex, '#b79ced');
+    expect(api.put).not.toHaveBeenCalled();
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    expect(api.put).toHaveBeenCalledWith('/competitions/7', expect.objectContaining({ laneHatbands: ['Red', 'Lilac #B79CED'] }));
+    await user.click(within(panel).getByRole('button', { name: 'Done' }));
+    expect(screen.queryByRole('group', { name: /Change colour of/ })).not.toBeInTheDocument();
+  });
+
+  it('sends the last change at once when Done is pressed, and lets the colour picker and a bare hex box both work', async () => {
+    const user = userEvent.setup();
+    show();
+    await user.click(await screen.findByRole('button', { name: 'More for Red' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Change colour' }));
+    const panel = screen.getByRole('group', { name: 'Change colour of Red' });
+    fireEvent.change(within(panel).getByLabelText('Colour'), { target: { value: '#112233' } });
+    expect(within(panel).getByLabelText('Colour code')).toHaveValue('#112233');
+    await user.clear(within(panel).getByLabelText('Colour code'));
+    await user.type(within(panel).getByLabelText('Colour code'), '445566');
+    await user.click(within(panel).getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7', expect.objectContaining({ laneHatbands: ['Red #445566', 'Blue'] })));
+  });
+
+  it('keeps the old name when the name is emptied, and shows a custom hatband by its name only', async () => {
+    const user = userEvent.setup();
+    competition.laneHatbands = ['Lilac #B79CED', 'Blue'];
+    try {
+      show();
+      expect(await screen.findByText('Lilac')).toBeInTheDocument();
+      expect(screen.queryByText(/#B79CED/)).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'More for Lilac' }));
+      await user.click(screen.getByRole('menuitem', { name: 'Change colour' }));
+      const panel = screen.getByRole('group', { name: 'Change colour of Lilac' });
+      expect(within(panel).getByLabelText('Colour code')).toHaveValue('#B79CED');
+      await user.clear(within(panel).getByLabelText('Name'));
+      await user.type(within(panel).getByLabelText('Colour code'), '{Backspace}0');
+      await user.click(within(panel).getByRole('button', { name: 'Done' }));
+      await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7', expect.objectContaining({ laneHatbands: ['Lilac #B79CE0', 'Blue'] })));
+    } finally {
+      competition.laneHatbands = ['Red', 'Blue'];
+    }
+  });
+
+  it('adds a hatband with a picked colour and its own name', async () => {
+    const user = userEvent.setup();
+    show();
+    await user.click(await screen.findByRole('button', { name: 'Add a hatband' }));
+    await user.type(screen.getByLabelText('Name'), 'Mint');
+    fireEvent.change(screen.getByLabelText('Colour'), { target: { value: '#a0e8c0' } });
+    expect(screen.getByLabelText('Colour code')).toHaveValue('#A0E8C0');
+    await user.click(screen.getByRole('button', { name: 'Add hatband' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7', expect.objectContaining({ laneHatbands: ['Red', 'Blue', 'Mint #A0E8C0'] })));
   });
 
   it('draws a section, shows heat 1 lanes and applies or shuffles it', async () => {

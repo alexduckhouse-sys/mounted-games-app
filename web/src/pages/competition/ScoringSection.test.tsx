@@ -328,6 +328,14 @@ describe('team colours and hatbands', () => {
     expect(screen.queryByText(/hatband/)).toBeNull();
   });
 
+  it('paints a custom hatband in its own colour and shows only its name', () => {
+    render(<Harness hatbands={['Lilac #B79CED', 'Blue', 'Green']} />);
+    const alphaBtn = screen.getByRole('button', { name: /^Alpha, lane/ });
+    expect(within(alphaBtn).getByText('Lilac hatband')).toBeInTheDocument();
+    expect(alphaBtn).not.toHaveTextContent('#B79CED');
+    expect((alphaBtn.closest('li') as HTMLElement).style.boxShadow).toContain('#B79CED');
+  });
+
   it('toggles the score history and correction panel when the active race is completed', async () => {
     const user = userEvent.setup();
     render(<Harness activeIdx={0} allowAudit />);

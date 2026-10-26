@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Minus, Plus, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Minus, Plus, X } from 'lucide-react';
 import { TickerNumber } from '../../components/TickerNumber';
 import { usePageWidth } from '../../components/pageWidthState';
 import './refine.css';
@@ -368,5 +368,37 @@ export function RefineSwitchRow({ label, on, onChange, disabled = false }: { lab
       <span className="rf-grow rf-t1">{label}</span>
       <button type="button" role="switch" aria-checked={on} aria-label={label} disabled={disabled} className="rf-sw" onClick={() => onChange(!on)}><span aria-hidden="true" /></button>
     </div>
+  );
+}
+
+export interface RefineMenuItem { label: string; onSelect: () => void; /** Shown as red underlined text, for removing things. */ danger?: boolean }
+
+/** A small ⋯ button that opens a floating menu under it. Choosing an item closes the menu and runs it. */
+export function RefineMenu({ label, items, disabled = false }: { label: string; items: RefineMenuItem[]; disabled?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [place, setPlace] = useState<Place | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  function toggle() {
+    if (open) { setOpen(false); return; }
+    setPlace(placeUnder(buttonRef.current));
+    setOpen(true);
+  }
+  return (
+    <>
+      <button ref={buttonRef} type="button" className="ops-ibtn" aria-label={label} aria-haspopup="menu" aria-expanded={open} disabled={disabled} onClick={toggle}>
+        <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+      </button>
+      {open && place && (
+        <FloatingPanel anchor={buttonRef} place={place} onClose={() => setOpen(false)}>
+          <div role="menu" aria-label={label} className="rf-choices">
+            {items.map((item) => (
+              <button key={item.label} type="button" role="menuitem" className={`rf-choice ${item.danger ? 'rf-menu-danger' : ''}`.trim()} onClick={() => { setOpen(false); item.onSelect(); }}>
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </div>
+        </FloatingPanel>
+      )}
+    </>
   );
 }

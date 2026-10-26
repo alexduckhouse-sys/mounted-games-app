@@ -223,3 +223,6 @@
 .ops-diagram { padding: 10px 16px; }
 .ops-diagram-edit { margin-top: 12px; }
 .ops-admin .rf-fld .ops-textarea { min-height: 10rem; }
+.ops-colour-field { display: flex; align-items: center; gap: 10px; }
+.ops-colour-field input[type="color"] { flex: none; width: 52px; height: 44px; padding: 2px; border: 1.5px solid rgb(var(--mg-border)); border-radius: 10px; background: rgb(var(--mg-surface)); cursor: pointer; }
+.ops-colour-field input:not([type="color"]) { width: 120px; min-height: 44px; padding: 0 10px; border: 1.5px solid rgb(var(--mg-border)); border-radius: 10px; font: 600 16px/1 var(--mg-font); text-transform: uppercase; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); }

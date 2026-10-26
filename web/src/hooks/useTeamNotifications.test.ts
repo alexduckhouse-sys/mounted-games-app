@@ -237,6 +237,19 @@ describe('useTeamNotifications: what it announces', () => {
     }]);
   });
 
+  it('names a custom hatband colour without its colour code', async () => {
+    enable();
+    competitions = {
+      1: competition({
+        name: 'Spring Games',
+        laneHatbands: ['White', 'Lilac #B79CED', 'Yellow'],
+        sessions: [session(1, { name: 'Seniors heats', scheduledStart: at(58), heats: [heat(10, { entries: [{ id: 1, laneIndex: 2, teamId: 1, teamName: 'Ashdown A' }] })] })],
+      }),
+    };
+    await mount([myTeam()]);
+    expect(shown[0]?.options?.body).toBe(`Seniors heats starts at ${clock(58)} · Lane 2 (Lilac hatband/silk) (Spring Games).`);
+  });
+
   it('notifies immediately when a team is drawn into a Final with time, lane and hatband/silk colour', async () => {
     enable();
     competitions = {
