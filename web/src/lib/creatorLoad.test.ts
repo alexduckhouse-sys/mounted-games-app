@@ -71,6 +71,23 @@ describe('draftFromCompetition', () => {
     expect(s).toMatchObject({ format: 1, hasEntries: true, maxTeamsPerHeat: '4', minutesPerRace: '10', finalRaces: ['Flag', 'Mug'], finalSessionId: 4, finalHasHeats: true, finalScored: true });
   });
 
+  it('loads the B and C finals own race lists from the finals session', () => {
+    const d = draftFromCompetition(competition({
+      sections: [sec(5)],
+      sessions: [
+        session(4, { name: 'Finals · Senior Pairs', orderIndex: 4, plannedRaces: ['Flag'], plannedFinalRaces: { B: ['Mug', 'Pole'], C: ['Relay'] } }),
+        session(5, { name: 'Open', orderIndex: 5 }),
+      ],
+    }));
+    expect(d.sections[0]).toMatchObject({ finalRaces: ['Flag'], finalRacesB: ['Mug', 'Pole'], finalRacesC: ['Relay'] });
+    const none = draftFromCompetition(competition({
+      sections: [sec(5)],
+      sessions: [session(4, { name: 'Finals · Senior Pairs', orderIndex: 4, plannedRaces: ['Flag'], plannedFinalRaces: { B: [] } })],
+    }));
+    expect(none.sections[0]).not.toHaveProperty('finalRacesB');
+    expect(none.sections[0]).not.toHaveProperty('finalRacesC');
+  });
+
   it('takes timing from the first session and marks sections that have teams', () => {
     const d = draftFromCompetition(competition({
       sections: [sec(5), sec(6, { format: 9 as never })],

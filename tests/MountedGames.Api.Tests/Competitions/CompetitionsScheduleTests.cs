@@ -407,6 +407,67 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
     }
 
+    // ---- per-final race lists ----
+
+    private async Task<int> PlannedFinalsSessionAsync(int comp, int section, string? plannedFinals, string? planned = "[\"Bending\",\"Relay\"]")
+        => await _f.WithDbAsync(async db =>
+        {
+            var s = new Session
+            {
+                CompetitionId = comp, CompetitionSectionId = section, Name = "Finals · Planned", OrderIndex = 90,
+                Status = SessionStatus.Upcoming, PlannedRaces = planned, PlannedFinalRaces = plannedFinals,
+            };
+            db.Sessions.Add(s);
+            await db.SaveChangesAsync();
+            return s.Id;
+        });
+
+    [Fact]
+    public async Task Scaffold_GivesEachFinalItsOwnRaces_AndFallsBackToTheRequestList()
+    {
+        var (comp, section, _) = await CompWithTeamsAsync(0, "OwnLists");
+        var admin = await _f.AdminAsync();
+        var sessionId = await PlannedFinalsSessionAsync(comp, section, "{\"B\":[\"Flag\",\"Mug\"]}");
+
+        var r = await admin.PostAsJsonAsync($"/api/competitions/{comp}/finals/scaffold",
+            new { competitionSectionId = section, raceNames = new[] { "Bending", "Relay" }, lanesPerHeat = 4, numHeats = 3, existingSessionId = sessionId });
+
+        var s = await r.ReadAsync<SessionDto>();
+        Assert.Equal(new[] { "Bending", "Relay" }, s.Heats.Single(h => h.Label == "A Final").Races.Select(x => x.Name));
+        Assert.Equal(new[] { "Flag", "Mug" }, s.Heats.Single(h => h.Label == "B Final").Races.Select(x => x.Name));
+        Assert.Equal(new[] { "Bending", "Relay" }, s.Heats.Single(h => h.Label == "C Final").Races.Select(x => x.Name));
+    }
+
+    [Fact]
+    public async Task Scaffold_WithoutFinalLists_GivesEveryFinalTheSameRaces()
+    {
+        var (comp, section, _) = await CompWithTeamsAsync(0, "NoOwnLists");
+        var admin = await _f.AdminAsync();
+        var sessionId = await PlannedFinalsSessionAsync(comp, section, null);
+
+        var s = await (await admin.PostAsJsonAsync($"/api/competitions/{comp}/finals/scaffold",
+            new { competitionSectionId = section, raceNames = new[] { "Bending" }, lanesPerHeat = 4, numHeats = 2, existingSessionId = sessionId })).ReadAsync<SessionDto>();
+
+        Assert.All(s.Heats, h => Assert.Equal(new[] { "Bending" }, h.Races.Select(x => x.Name)));
+    }
+
+    [Fact]
+    public async Task CreateFinals_FromStandings_GivesBAndCTheirOwnRaces_ThenPopulateKeepsThem()
+    {
+        var (comp, section, _) = await CompWithTeamsAsync(5, "OwnListsFromStandings");
+        var admin = await _f.AdminAsync();
+        var sessionId = await PlannedFinalsSessionAsync(comp, section, "{\"B\":[\"Flag\"],\"C\":[\"Mug\",\"Pole\"]}");
+
+        var s = await (await admin.PostAsJsonAsync($"/api/competitions/{comp}/finals", new
+        {
+            competitionSectionId = section, topN = 5, raceNames = new[] { "Bending" }, lanesPerHeat = 2, existingSessionId = sessionId,
+        })).ReadAsync<SessionDto>();
+
+        Assert.Equal(new[] { "Bending" }, s.Heats.Single(h => h.Label == "A Final").Races.Select(x => x.Name));
+        Assert.Equal(new[] { "Flag" }, s.Heats.Single(h => h.Label == "B Final").Races.Select(x => x.Name));
+        Assert.Equal(new[] { "Mug", "Pole" }, s.Heats.Single(h => h.Label == "C Final").Races.Select(x => x.Name));
+    }
+
     // ---- scaffold finals ----
 
     private static object Scaffold(int heats = 2, int lanes = 4, string[]? races = null, int? sectionId = null,

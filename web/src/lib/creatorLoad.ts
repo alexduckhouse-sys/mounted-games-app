@@ -53,6 +53,8 @@ export function draftFromCompetition(c: CompetitionDetail): CreatorDraft {
       ...(s.tieBreakRule != null ? { tieBreak: s.tieBreakRule } : {}),
       ...(first?.laneRotationMode != null ? { laneRotation: first.laneRotationMode } : {}),
       finalRaces: finalsSession?.plannedRaces && finalsSession.plannedRaces.length > 0 ? finalsSession.plannedRaces : null,
+      ...(finalsSession?.plannedFinalRaces?.B?.length ? { finalRacesB: finalsSession.plannedFinalRaces.B } : {}),
+      ...(finalsSession?.plannedFinalRaces?.C?.length ? { finalRacesC: finalsSession.plannedFinalRaces.C } : {}),
       ...(finalsSession ? {
         finalSessionId: finalsSession.id,
         ...(finalsSession.heats.length > 0 ? { finalHasHeats: true } : {}),

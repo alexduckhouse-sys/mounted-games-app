@@ -2902,6 +2902,9 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<int>("OrderIndex")
                         .HasColumnType("integer");
 
+                    b.Property<string>("PlannedFinalRaces")
+                        .HasColumnType("text");
+
                     b.Property<string>("PlannedRaces")
                         .HasColumnType("text");
 

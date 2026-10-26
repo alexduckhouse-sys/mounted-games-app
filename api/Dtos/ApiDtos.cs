@@ -253,7 +253,8 @@ public record SessionDto(
     IReadOnlyList<HeatDto> Heats,
     LaneRotationMode LaneRotationMode = LaneRotationMode.MoveUp,
     int? QualifiersPerHeat = null,
-    IReadOnlyList<string>? PlannedRaces = null);
+    IReadOnlyList<string>? PlannedRaces = null,
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? PlannedFinalRaces = null);
 
 public record UpdateSessionSettingsRequest(int? MinutesPerHeat, bool? RaceOrderAlternating,
     LaneRotationMode? LaneRotationMode = null, [Range(1, 20)] int? QualifiersPerHeat = null);
@@ -267,16 +268,18 @@ public record CreateSessionRequest(
     bool IsBreak, int? DurationMinutes,
     SessionKind? Kind, string? Location,
     [Range(1, 20)] int? LanesPerHeat = null, [Range(1, 180)] int? MinutesPerHeat = null,
-    IReadOnlyList<string>? PlannedRaces = null);
+    IReadOnlyList<string>? PlannedRaces = null,
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? PlannedFinalRaces = null);
 
 /// <summary>
 /// Null leaves a field as it is; an empty arena name clears the arena. <c>PlannedRaces</c> replaces the planned list
 /// (an empty list clears it). Heat size and the planned races are structure: they are refused once the session has
-/// started or any race in it is scored.
+/// started or any race in it is scored. <c>PlannedFinalRaces</c> (keys B to Z) does the same for the B, C... finals' own lists.
 /// </summary>
 public record UpdateSessionRequest([StringLength(120)] string? Name = null, [StringLength(80)] string? ArenaName = null, DateTime? ScheduledStart = null,
     [Range(1, 20)] int? LanesPerHeat = null, [Range(1, 180)] int? MinutesPerHeat = null, [Range(1, 1440)] int? DurationMinutes = null,
-    IReadOnlyList<string>? PlannedRaces = null);
+    IReadOnlyList<string>? PlannedRaces = null,
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? PlannedFinalRaces = null);
 
 public record UpdateSessionStatusRequest(SessionStatus Status);
 

@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { api } from '../../api';
 import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
 import { competition, heat, race, result, session, standing, team } from '../../test/factories';
 import type { CompetitionDetail, Heat, Session, StandingRow } from '../../types';
@@ -319,6 +320,21 @@ describe('embedded in the timetable', () => {
     await user.click(screen.getByRole('combobox', { name: 'Age group' }));
     await user.click(screen.getByRole('option', { name: 'Under 14' }));
     expect(screen.getByTestId('search')).toHaveTextContent('?section=10');
+  });
+
+  it('creates finals in the planned finals session, with its races filled in', async () => {
+    state.manage = true;
+    const user = userEvent.setup();
+    setCompetition([qualifier, session(7, { competitionSectionId: 9, name: 'Finals · Under 12', status: 0, plannedRaces: ['Bending', 'Flag'], heats: [] })]);
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+    state.get.mockImplementation((url: string) => Promise.resolve({ data: url.includes('standings') ? standings : [], headers: {} }));
+    renderTab('/?section=9', { toplistOnly: false });
+    await user.click(screen.getByRole('button', { name: /Create finals/ }));
+    const dialogButton = (await screen.findAllByRole('button', { name: /Create finals/ })).at(-1)!;
+    await user.click(dialogButton);
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(expect.stringMatching(/\/finals$/), expect.objectContaining({
+      raceNames: ['Bending', 'Flag'], existingSessionId: 7,
+    })));
   });
 
   it('switches to heat scores without rendering the timetable underneath, and back again', async () => {
