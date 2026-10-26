@@ -34,7 +34,7 @@ export function BlockedAccountsPage() {
   }
 
   async function block(person: AdminUser) {
-    if (!(await confirmDialog({ title: `Block ${person.fullName}?`, message: 'They can’t sign in, enter competitions or post in chat, and the internet addresses they use are blocked too.', confirmLabel: 'Block account', destructive: true }))) return;
+    if (!(await confirmDialog({ title: `Block ${person.fullName}?`, message: 'They can’t sign in, enter competitions or post in chat.', confirmLabel: 'Block account', destructive: true }))) return;
     await run(async () => {
       await api.post(`/admin/users/${encodeURIComponent(person.id)}/block`, { reason: reason.trim() || null });
       search.patch(person.id, { isBlocked: true });
