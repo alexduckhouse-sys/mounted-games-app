@@ -244,3 +244,7 @@
 /* The final in the race editor */
 .ops-addbar-flat { margin-top: 0; }
 .ops-final-end { display: flex; justify-content: flex-end; }
+
+/* On the day tools (tack, passport, print, people and QR codes, results): lists run edge to edge like the event's Details page, with no line above or below them or under their headings. */
+.ops-tools .rf-list { margin-inline: -16px; border: 0; border-radius: 0; box-shadow: none; }
+.ops-tools .rf-sec { border-bottom: 0; }
