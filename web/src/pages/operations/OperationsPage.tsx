@@ -242,17 +242,17 @@ function OperationsPageContent() {
       {shownView === 'entries' && <EntriesPanel canWrite={canWrite} onTimetableChanged={reloadCompetition} />}
 
       {shownView === 'scorers' && (
-        <div className="space-y-6 ops-tools">
+        <div className="space-y-3 ops-tools">
           <ScorerLinksCard competitionId={competition.id} canWrite={canWrite} />
           <CompetitionTeamCard competitionId={competition.id} canWrite={canWrite} />
         </div>
       )}
 
-      {shownView === 'tack' && <div className="ops-tools"><TackCheckTab competitionId={String(competition.id)} /></div>}
-      {shownView === 'passport' && <div className="ops-tools"><PassportCheckTab competitionId={String(competition.id)} /></div>}
+      {shownView === 'tack' && <div className="ops-tools ops-flat"><TackCheckTab competitionId={String(competition.id)} /></div>}
+      {shownView === 'passport' && <div className="ops-tools ops-flat"><PassportCheckTab competitionId={String(competition.id)} /></div>}
       {shownView === 'import' && <TeamImportPanel competitionId={String(competition.id)} onImported={reloadCompetition} />}
-      {shownView === 'print' && <div className="ops-tools"><PrintSheetsPanel competitionId={String(competition.id)} /></div>}
-      {shownView === 'results' && <div className="ops-tools"><ResultsBookTab competitionId={String(competition.id)} /></div>}
+      {shownView === 'print' && <div className="ops-tools ops-flat"><PrintSheetsPanel competitionId={String(competition.id)} /></div>}
+      {shownView === 'results' && <div className="ops-tools ops-flat"><ResultsBookTab competitionId={String(competition.id)} /></div>}
       {shownView === 'duplicate' && mayDuplicate && <DuplicateEventPanel competition={competition} />}
 
       {shownView === 'draw' && (

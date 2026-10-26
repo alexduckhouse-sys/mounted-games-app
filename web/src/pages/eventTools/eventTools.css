@@ -11,6 +11,10 @@
 .tools-check { display: flex; align-items: center; gap: 10px; min-height: 44px; font: 600 15px/1.2 var(--mg-font); color: rgb(var(--mg-ink)); }
 .tools-check input { width: 22px; height: 22px; flex-shrink: 0; accent-color: rgb(var(--mg-heading)); }
 .tools-check-sub { display: block; font: 500 13px/1.2 var(--mg-font); color: rgb(var(--mg-muted)); }
+.tools-search { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1.5px solid rgb(var(--mg-line)); border-radius: 22px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-muted)); }
+.tools-search svg { width: 18px; height: 18px; flex-shrink: 0; }
+.tools-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: 500 16px/1.2 var(--mg-font); color: rgb(var(--mg-ink)); }
+.tools-search:focus-within { border-color: rgb(var(--mg-heading)); }
 .tools-row { display: flex; align-items: flex-end; gap: 8px; }
 .tools-row > .rf-fld { flex: 1; }
 .tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 8px; }

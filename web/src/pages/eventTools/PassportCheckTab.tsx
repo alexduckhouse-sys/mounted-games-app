@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Search } from 'lucide-react';
 import { api } from '../../api';
 import { RefineNote, RefineSection } from '../refine/Refine';
 import type { PassportCheckBoard, PassportCheckPony } from '../../types';
@@ -158,8 +159,7 @@ export function PassportCheckTab({ competitionId }: { competitionId: string }) {
       <label className="tools-check"><input type="checkbox" checked={board.enabled} disabled={busy !== null} onChange={(event) => toggle(event.target.checked)} />Check passports at this event</label>
       {!board.enabled && <RefineNote>Turn this on to tick off ponies as they arrive. Turning it off later keeps the ticks.</RefineNote>}
       {board.enabled && <>
-        <p role="status" className="tools-muted">{board.checked} of {board.total} {board.total === 1 ? 'pony' : 'ponies'} checked</p>
-        <label className="rf-fld">Find a team or pony<input type="search" placeholder="Team, pony, rider, passport code or owner…" value={filter} onChange={(event) => setFilter(event.target.value)} /></label>
+        <label className="tools-search"><Search aria-hidden="true" /><input type="search" aria-label="Find a team or pony" placeholder="Search ponies, riders, teams or owners" value={filter} onChange={(event) => setFilter(event.target.value)} /></label>
         {board.sections.map((section) => {
           const teams = section.teams.filter((team) => !search || matches(team.teamName) || matches(team.clubName) || team.ponies.some(ponyMatches));
           if (teams.length === 0) return null;
