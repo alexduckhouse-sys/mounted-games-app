@@ -2,8 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* The theme is the person's choice (data-theme), never the device's dark mode, so native controls follow it too. */
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --mg-font: 'Barlow', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --mg-font-display: 'Barlow Condensed', 'Arial Narrow', system-ui, -apple-system, sans-serif;
 }
@@ -141,7 +142,7 @@ body {
 /* Navigation follows the palette without changing status colours in the arena. */
 :root { --navigation-colour: #1e3466; }
 [data-theme="light"] { --navigation-colour: #2f634d; }
-[data-theme="dark"] { --navigation-colour: #475569; }
+[data-theme="dark"] { --navigation-colour: #475569; color-scheme: dark; }
 [data-theme="ocean"] { --navigation-colour: #075985; }
 [data-theme="sunset"] { --navigation-colour: #9a3412; }
 .navigation-selected {
