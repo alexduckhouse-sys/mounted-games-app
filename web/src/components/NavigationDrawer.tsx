@@ -75,8 +75,9 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
     ...(current ? [] : [{ to: '/team-profiles', label: 'Team profiles', icon: IdCard, end: false }]),
     { to: '/shop', label: 'Tack and kit shop', icon: ShoppingBag, end: false },
   ];
-  const weatherRow = current != null && !lite && (
-    <Link to={`${base}/weather`} onClick={close} className={`${itemClass(false)} hover:!bg-[rgb(var(--mg-subtle))]`}>
+  // Weather shows with a competition open, or away from one only when switched on in Settings.
+  const weatherRow = (current != null || showWeather) && !lite && (
+    <Link to={current ? `${base}/weather` : '/events'} onClick={close} className={`${itemClass(false)} hover:!bg-[rgb(var(--mg-subtle))]`}>
       <CloudSun className={iconClass(false)} /><span className="font-medium text-[rgb(var(--mg-ink))]">Weather</span>{showWeather && <span className="ml-auto"><WeatherBadge /></span>}
     </Link>
   );
@@ -119,6 +120,7 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
 
           <nav aria-label="General" className="flex flex-col">
             <h3 className={sectionHeading}>General</h3>
+            {!current && weatherRow}
             {generalLinks.map((item) => (
               <NavLink key={item.label} to={item.to} end={item.end} onClick={close} className={({ isActive }) => itemClass(isActive)}>
                 {({ isActive }) => <><item.icon className={iconClass(isActive)} />{item.label}</>}

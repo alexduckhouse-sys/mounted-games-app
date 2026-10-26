@@ -376,10 +376,12 @@ describe('NavigationDrawer: settings, QR scanner and weather', () => {
     expect(screen.queryByText('Weather', { selector: 'span.font-medium' })).not.toBeInTheDocument();
   });
 
-  it('shows the weather only while a competition is open, and not even when switched on without one', async () => {
+  it('shows the weather when it was switched on before or when following a competition', async () => {
     localStorage.setItem('mg.showWeather', '1');
     const first = mount();
-    expect(screen.queryByText('Weather', { selector: 'span.font-medium' })).not.toBeInTheDocument();
+    expect(screen.getByText('Weather', { selector: 'span.font-medium' })).toBeInTheDocument();
+    // Away from a competition it sits under General, above the other rows.
+    expect(screen.getByRole('heading', { name: 'General' }).compareDocumentPosition(screen.getByRole('link', { name: /Weather/ })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     first.unmount();
 
     localStorage.removeItem('mg.showWeather');
