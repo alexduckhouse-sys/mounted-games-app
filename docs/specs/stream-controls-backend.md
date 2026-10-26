@@ -8,7 +8,8 @@ Status: proposal, 26 October 2026. The Stream controls page (`/competitions/:id/
 | --- | --- | --- |
 | Overlay tiles | The choice is saved in the overlay's `look` JSON (`liveCard`, `liveSectionId`, `liveOptions`) through `PUT /competitions/:id/overlays` | Viewers draw Toplist, Heat table and Up next. Podium, Race result, Race title, sponsor size and "Automatic" are saved but not drawn |
 | Auto rules | Kept in the organiser's browser and run only while the Stream controls page is open on that device | Stops when the tab closes or the phone sleeps |
-| Race recordings | The 30-minute replay buffer and saved clips live in the phone's IndexedDB (`live/replayBuffer.ts`) | Only the phone that filmed can watch them; they vanish with the browser storage |
+| Race recordings and clips | The Stream controls page records the live video it is showing into the 30-minute replay buffer (`live/replayBuffer.ts`). Each scored race is kept as a 45 second recording, instant replays are saved on demand, and clips sit in this device's IndexedDB | Only the device that was watching has them, and only from when it opened the page. They vanish with the browser storage. A clip takes as long to prepare as it lasts (the encoder plays it back in real time), so 30 minutes is not practical |
+| Play on air | Not built | Replays have never reached viewers: the broadcaster's replay screen is local. The Replay tab has no Play on air button for that reason |
 
 ## 1. Auto rules on the server
 
@@ -54,6 +55,10 @@ Recommendation: B for a first version (segments already exist, no new vendor), m
 - Clips cut from a recording are saved as a small JSON record (start, end, keyframes, slow-mo) beside the video, so framing edits cost no storage.
 
 **Cost.** Roughly 1.5 Mbit/s for 720p is about 0.7 GB per hour. A 6-hour, two-arena event is about 8 GB stored for two weeks, plus a few viewing downloads. Check current object-storage prices before choosing; egress to organisers is the part that surprises.
+
+### Playing a replay to viewers ("Play on air")
+
+Needs one of: the camera phone mixes the clip into its outgoing video (heavy on the phone), or the clip is stored on the server (section above) and a hub event tells every viewer to play it over the video. The second also gives the cross-device clips the Replay tab lacks. Slow motion is a playback speed in the editor only today; the encoder has no speed option, so a saved clip is always full speed.
 
 ## 3. Viewer renderers for the new overlay tiles
 

@@ -11,10 +11,12 @@ import { CompetitionContext } from '../../pages/competition/context';
 import { StreamChips } from './StreamChips';
 import { StreamPlayer } from './StreamPlayer';
 
-export function LiveVideo({ competitionId, streams, sessions, invoke, ready, messages, canBroadcast, fallback, competitionName, publicLayout = false, showPlaceholder = false, lastCommand }: {
+export function LiveVideo({ competitionId, streams, sessions, invoke, ready, messages, canBroadcast, fallback, competitionName, publicLayout = false, showPlaceholder = false, lastCommand, onMedia }: {
   competitionId: number; streams: LiveStream[]; sessions: Session[]; invoke: StreamInvoke; ready: number;
   messages: { message: ChatMessage; receivedAt: number }[]; canBroadcast: boolean; fallback?: string | null; competitionName: string;
   publicLayout?: boolean; showPlaceholder?: boolean; lastCommand?: StreamCommand | null;
+  /** Hands the live video to the page (for example to record replays from it). Called with null when it goes away. */
+  onMedia?: (media: MediaStream | null) => void;
 }) {
   const { lite } = useLiteMode();
   const ctx = useContext(CompetitionContext);
@@ -62,7 +64,7 @@ export function LiveVideo({ competitionId, streams, sessions, invoke, ready, mes
       </div>
       {typeof RTCPeerConnection === 'undefined' ? <p role="status" className="mg-card p-4">Live video is not supported in this browser.</p>
         : lite && !tapped ? <TapToWatch stream={selected} captionBar={publicLayout} onTap={() => setTapped(true)} />
-        : <ConnectedPlayer key={selected.id} stream={selected} invoke={invoke} ready={ready} announcement={messages.filter((item) => item.message.type === 2).at(-1)} captionBar={publicLayout} label={label} />}
+        : <ConnectedPlayer key={selected.id} stream={selected} invoke={invoke} ready={ready} onMedia={onMedia} announcement={messages.filter((item) => item.message.type === 2).at(-1)} captionBar={publicLayout} label={label} />}
       <p className={`m-0 text-xs text-[rgb(var(--mg-muted))] ${publicLayout ? 'px-4 pt-2' : ''}`}>{SPECTATOR_NOTICE}</p>
     </> : fallback ? <CompStreamCard key={fallback} streamUrl={fallback} compName={competitionName} publicLayout={publicLayout} />
       : showPlaceholder ? <div className="live-stream-placeholder mg-card" role="status"><Video aria-hidden="true" /><strong>Stream hasn’t started</strong></div> : null}
@@ -76,8 +78,8 @@ function TapToWatch({ stream, captionBar, onTap }: { stream: LiveStream; caption
     <small>{stream.arenaName} · {stream.angleName}. Video uses a lot of data, so it only starts when you tap.</small>
   </button>;
 }
-function ConnectedPlayer({ stream, invoke, ready, announcement, captionBar, label }: {
-  stream: LiveStream; invoke: StreamInvoke; ready: number;
+function ConnectedPlayer({ stream, invoke, ready, announcement, captionBar, label, onMedia }: {
+  stream: LiveStream; invoke: StreamInvoke; ready: number; onMedia?: (media: MediaStream | null) => void;
   announcement?: { message: ChatMessage; receivedAt: number };
   captionBar?: boolean; label: string | null;
 }) {
@@ -89,6 +91,10 @@ function ConnectedPlayer({ stream, invoke, ready, announcement, captionBar, labe
     const unsubscribe = next.subscribe(() => setSnapshot(next.getSnapshot()));
     return () => { unsubscribe(); next.dispose(); };
   }, [stream.competitionId, stream.id, invoke]);
+  useEffect(() => {
+    onMedia?.(snapshot.media);
+    return () => onMedia?.(null);
+  }, [snapshot.media, onMedia]);
   useEffect(() => { viewer.current!.sync(ready, stream.generation); }, [ready, stream.generation, stream.competitionId, stream.id, invoke]);
   return <StreamPlayer media={snapshot.media} stream={stream} label={label} reconnecting={snapshot.state === 'reconnecting'} message={snapshot.message || (snapshot.state === 'connecting' ? 'Connecting…' : null)} announcement={announcement} captionBar={captionBar} quality={snapshot.preferredRid ?? 'f'} onQuality={(rid) => viewer.current?.setQuality(rid)} audioOnly={snapshot.audioOnly} onAudioOnly={(enabled) => viewer.current?.setAudioOnly(enabled)} onSyncLive={() => viewer.current?.syncLive()} />;
 }

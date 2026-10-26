@@ -232,6 +232,14 @@ describe('CommentaryDeskPage', () => {
     expect(within(overlays).getByRole('button', { name: 'Auto on' })).toHaveAttribute('aria-pressed', 'true');
     expect(within(overlays).getByRole('link', { name: 'Overlay settings, automations and cameras' })).toHaveAttribute('href', '/competitions/1/stream-controls');
 
+    // Instant replay asks the camera phone to save the clip
+    await user.click(within(overlays).getByRole('button', { name: /Instant replay · 30s/ }));
+    expect(api.post).toHaveBeenCalledWith('/competitions/1/streams/101/command', { command: 'saveReplay', value: '30' });
+    expect(await within(overlays).findByRole('status')).toHaveTextContent('Asked the camera phone to save the last 30s.');
+    vi.mocked(api.post).mockRejectedValueOnce(new Error('offline'));
+    await user.click(within(overlays).getByRole('button', { name: /Instant replay · 30s/ }));
+    expect(await within(overlays).findByText(/Couldn’t reach the camera phone/)).toBeInTheDocument();
+
     // No heat table view any more; lanes show heat / toplist points and Up next lists what follows
     const viewGroup = screen.getByRole('group', { name: 'Commentary desk view' });
     expect(within(viewGroup).queryByRole('button', { name: 'Heat Table' })).toBeNull();
