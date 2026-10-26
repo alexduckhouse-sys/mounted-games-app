@@ -237,7 +237,7 @@ describe('submitting', () => {
   });
 
   it('counts riders for the heading and labels the one add bar by the next free slot', () => {
-    expect(ridersCount(filled(3))).toBe('3 of 5 · reserve optional');
+    expect(ridersCount(filled(3))).toBe('3 of 5 · 4 needed · reserve optional');
     expect(ridersCount(emptySlots(2))).toBe('0 of 2');
     expect(addLabel(filled(3))).toBe('Add rider 4');
     expect(addLabel(emptySlots(1))).toBe('Add rider 1');

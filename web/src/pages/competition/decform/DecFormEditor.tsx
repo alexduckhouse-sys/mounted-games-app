@@ -266,7 +266,7 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
               <textarea value={notes} placeholder="Optional" onChange={(e) => changed(setNotes)(e.target.value)} />
             </label>
             <div className="sp-row">
-              <span className="sp-t1 sp-grow">I agree to the <button type="button" onClick={() => setTermsOpen(true)} className="font-semibold text-[rgb(var(--mg-heading))] underline underline-offset-2">terms</button></span>
+              <span className="sp-grow"><span className="sp-t1">I agree to the <button type="button" onClick={() => setTermsOpen(true)} className="inline min-h-0 p-0 align-baseline font-semibold text-[rgb(var(--mg-heading))] underline underline-offset-2">terms</button></span></span>
               <button type="button" role="switch" aria-checked={agreed} aria-label="I agree to the terms" className="rf-sw" onClick={() => { setAgreed(!agreed); setSubmitted(false); }}><span aria-hidden="true" /></button>
             </div>
           </div>

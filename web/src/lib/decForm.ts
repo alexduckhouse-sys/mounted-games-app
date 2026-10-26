@@ -243,7 +243,8 @@ export function sendReason(slots: readonly Slot[], agreed: boolean, teamName: st
 
 /** "3 of 5 · reserve optional": how many riders are in, for the Riders heading. */
 export function ridersCount(slots: readonly Slot[]): string {
-  const base = `${ridersAdded(slots)} of ${ridingSlotsCount(slots)}`;
+  const need = minRidersForSlots(slots);
+  const base = `${ridersAdded(slots)} of ${ridingSlotsCount(slots)}${need < ridingSlotsCount(slots) ? ` · ${need} needed` : ''}`;
   return slots.length >= 6 ? `${base} · reserve optional` : base;
 }
 

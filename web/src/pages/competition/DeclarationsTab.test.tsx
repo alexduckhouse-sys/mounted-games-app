@@ -108,7 +108,7 @@ describe('DeclarationsTab: the dec form', () => {
     // Only filled riders are rows; one bar adds the next, and the reserve is offered last.
     expect(riderRows()).toHaveLength(0);
     expect(addBar()).toHaveTextContent('Add rider 1');
-    expect(screen.getByText('0 of 5 · reserve optional')).toBeInTheDocument();
+    expect(screen.getByText('0 of 5 · 4 needed · reserve optional')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send dec form' })).toBeDisabled();
     expect(screen.getByText('Add 4 more riders to send it.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Delete this dec form' })).not.toBeInTheDocument();
@@ -128,7 +128,7 @@ describe('DeclarationsTab: the dec form', () => {
     await user.click(within(panel).getByRole('button', { name: 'Add rider' }));
     expect(within(riderRows()[0]).getByText('Ella Hughes')).toBeInTheDocument();
     expect(within(riderRows()[0]).getByText('Pickle · 13.2 hh · born 05/04/2015')).toBeInTheDocument();
-    expect(screen.getByText('1 of 5 · reserve optional')).toBeInTheDocument();
+    expect(screen.getByText('1 of 5 · 4 needed · reserve optional')).toBeInTheDocument();
     expect(screen.getByLabelText('Rider')).toHaveValue('');
     expect(addBar()).toHaveTextContent('Add rider 2');
   });
@@ -190,7 +190,7 @@ describe('DeclarationsTab: the dec form', () => {
     expect(riderRows()).toHaveLength(6);
     expect(within(riderRows()[5]).getByText('Reserve')).toBeInTheDocument();
     expect(within(riderRows()[5]).getByText('Non-riding · born 14/03/2016')).toBeInTheDocument();
-    expect(screen.getByText('5 of 5 · reserve optional')).toBeInTheDocument();
+    expect(screen.getByText('5 of 5 · 4 needed · reserve optional')).toBeInTheDocument();
     // Every slot is full, so there is no add bar.
     expect(screen.queryByRole('button', { name: /^(Add rider \d|Add a reserve)$/ })).not.toBeInTheDocument();
   });
@@ -625,7 +625,7 @@ describe('DeclarationsTab: drafts', () => {
   it('ignores a draft that does not fit the team', async () => {
     localStorage.setItem(decDraftKey(4, 7), JSON.stringify({ teamId: 7, slots: [null, null] }));
     mount();
-    expect(await screen.findByText('0 of 5 · reserve optional')).toBeInTheDocument();
+    expect(await screen.findByText('0 of 5 · 4 needed · reserve optional')).toBeInTheDocument();
   });
 
   it('survives a device that will not store drafts', async () => {
