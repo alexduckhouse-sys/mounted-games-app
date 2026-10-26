@@ -116,6 +116,38 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
         return dto;
     }
 
+    /// <summary>Allows a collecting-ring steward or scorer link to update a lane's gate check-in status.</summary>
+    [HttpPut("api/scorer/heats/{heatId:int}/gate-check")]
+    public async Task<ActionResult<SessionDto>> UpdateGateCheck(int heatId, UpdateGateCheckRequest req, CancellationToken ct)
+    {
+        if (Link.Scope == ScorerLink.ScopeCamera)
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "This link is for the tripod camera only." });
+
+        if (!SessionsController.TryNormalizeGateCheckStatus(req.Status, out var normalizedStatus))
+            return BadRequest(new { message = "Status must be 'at-gate', 'warming-up', 'missing', or null." });
+
+        var heat = await db.Heats
+            .Include(h => h.Session)
+            .Include(h => h.Entries)
+            .FirstOrDefaultAsync(h => h.Id == heatId && h.Session!.CompetitionId == Link.CompetitionId, ct);
+        if (heat?.Session is null) return NotFound();
+
+        if (!heat.Entries.Any(e => e.TeamId == req.TeamId))
+            return BadRequest(new { message = "Team is not in this heat." });
+
+        heat.Session.Notes = SessionsController.ApplyGateCheckNote(heat.Session.Notes, heatId, req.TeamId, normalizedStatus);
+        await db.SaveChangesAsync(ct);
+
+        var session = await db.Sessions.AsNoTracking()
+            .Include(s => s.Section)
+            .Include(s => s.Heats).ThenInclude(h => h.Entries).ThenInclude(e => e.Team)
+            .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
+            .FirstAsync(s => s.Id == heat.SessionId, ct);
+        var dto = session.ToDto();
+        await live.SessionUpdated(Link.CompetitionId, dto);
+        return dto;
+    }
+
     /// <summary>True only for a race in this link's competition.</summary>
     private Task<bool> InScopeAsync(int raceId, CancellationToken ct)
     {

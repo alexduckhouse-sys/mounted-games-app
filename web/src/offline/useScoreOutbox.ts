@@ -2,7 +2,16 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { scorerApi } from './scorerLink';
 import type { Heat } from '../types';
-import { nextToSend, outcomeOfError, settle, type QueuedScore, type SendOutcome } from './scoreOutbox';
+import {
+  mergeOutboxBackup,
+  nextToSend,
+  outcomeOfError,
+  parseOutboxBackup,
+  serializeOutboxBackup,
+  settle,
+  type QueuedScore,
+  type SendOutcome,
+} from './scoreOutbox';
 
 const KEY = 'mg.outbox.scores';
 const CHANGED = 'mg:outbox';
@@ -113,4 +122,50 @@ export function useScoreOutbox(): QueuedScore[] {
     };
   }, []);
   return list;
+}
+
+/** Serialise a competition's queued offline scores into a shareable JSON backup string. */
+export function exportCompetitionOutbox(competitionId: number, now?: string): string {
+  return serializeOutboxBackup(readOutbox(), competitionId, now);
+}
+
+export const OUTBOX_IMPORT_ERROR = 'That backup could not be read. Check that the whole JSON backup was copied.';
+
+/** Validate and merge a JSON backup of offline scores into the active outbox, flushing immediately if online. */
+export function importCompetitionOutbox(
+  raw: string,
+  options?: { fallbackCompetitionId?: number; viaLink?: boolean },
+): { ok: true; count: number } | { ok: false; error: string } {
+  const parsed = parseOutboxBackup(raw, options?.fallbackCompetitionId, options?.viaLink);
+  if (!parsed) return { ok: false, error: OUTBOX_IMPORT_ERROR };
+  if (!updateOutbox((current) => mergeOutboxBackup(current, parsed))) {
+    return { ok: false, error: OUTBOX_STORAGE_ERROR };
+  }
+  return { ok: true, count: parsed.length };
+}
+
+/** Share a competition's offline outbox backup via the native share sheet, or copy it to the clipboard. */
+export async function shareOrCopyOutboxBackup(
+  competitionId: number,
+  competitionName?: string,
+): Promise<'shared' | 'copied' | 'unavailable'> {
+  const json = exportCompetitionOutbox(competitionId);
+  const title = competitionName ? `${competitionName} — offline score backup` : 'Offline score backup';
+  if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+    try {
+      await navigator.share({ title, text: json });
+      return 'shared';
+    } catch {
+      // Fall back to clipboard if the share sheet was dismissed or unsupported for text.
+    }
+  }
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(json);
+      return 'copied';
+    } catch {
+      return 'unavailable';
+    }
+  }
+  return 'unavailable';
 }

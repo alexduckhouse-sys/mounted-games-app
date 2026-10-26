@@ -139,11 +139,11 @@ public sealed record CompetitionSetup(
         return first is null ? null : PlannedRaceList.Write(first.Races.OrderBy(r => r.OrderIndex).Select(r => r.Name));
     }
 
-    // [paused:…] and [shift:…] describe a live arena, not the plan.
+    // [paused:…], [shift:…] and [gate:…] describe a live arena, not the plan.
     static string? CleanNotes(string? notes)
     {
         if (string.IsNullOrWhiteSpace(notes)) return null;
-        var cleaned = Regex.Replace(notes, @"\s*\[(paused|shift):[^\]]*\]\s*", " ").Trim();
+        var cleaned = Regex.Replace(notes, @"\s*\[(paused|shift|gate):[^\]]*\]\s*", " ").Trim();
         return cleaned.Length == 0 ? null : cleaned;
     }
 }

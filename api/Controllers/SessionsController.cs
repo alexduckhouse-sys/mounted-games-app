@@ -1272,6 +1272,143 @@ public class SessionsController : ControllerBase
             pace.SampleHeats);
     }
 
+    /// <summary>Updates or clears a lane's collecting-ring gate check-in status (<c>at-gate</c>, <c>warming-up</c>, <c>missing</c>, or <c>null</c>).</summary>
+    [HttpPut("{id:int}/heats/{heatId:int}/gate-check")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<SessionDto>> UpdateGateCheck(
+        int competitionId, int id, int heatId, UpdateGateCheckRequest req)
+    {
+        if (!TryNormalizeGateCheckStatus(req.Status, out var normalizedStatus))
+            return BadRequest(new { message = "Status must be 'at-gate', 'warming-up', 'missing', or null." });
+
+        var session = await SessionsWithDetail()
+            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+        if (session is null) return NotFound();
+
+        var heat = session.Heats.FirstOrDefault(h => h.Id == heatId);
+        if (heat is null) return NotFound();
+
+        if (!heat.Entries.Any(e => e.TeamId == req.TeamId))
+            return BadRequest(new { message = "Team is not in this heat." });
+
+        session.Notes = ApplyGateCheckNote(session.Notes, heatId, req.TeamId, normalizedStatus);
+        await _db.SaveChangesAsync();
+
+        var dto = session.ToDto();
+        await _live.SessionUpdated(competitionId, dto);
+        return dto;
+    }
+
+    /// <summary>Sends a priority Farrier / Vet / First Aid call for an arena to competition notices and optionally pauses the arena.</summary>
+    [HttpPost("{id:int}/assistance")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<ChatMessageDto>> RequestArenaAssistance(
+        int competitionId, int id, RequestArenaAssistanceRequest req)
+    {
+        var (serviceKey, serviceTitle) = NormalizeAssistanceService(req.Service);
+        if (serviceKey is null || serviceTitle is null)
+            return BadRequest(new { message = "Service must be 'farrier', 'vet', or 'first-aid'." });
+        if (req.Note is { Length: > 300 })
+            return BadRequest(new { message = "Note must be 300 characters or fewer." });
+
+        var session = await SessionsWithDetail()
+            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+        if (session is null) return NotFound();
+
+        var arena = !string.IsNullOrWhiteSpace(req.ArenaName)
+            ? req.ArenaName.Trim()
+            : (!string.IsNullOrWhiteSpace(session.ArenaName) ? session.ArenaName.Trim() : "Main Arena");
+        var extraNote = req.Note?.Trim();
+        var body = !string.IsNullOrEmpty(extraNote)
+            ? $"{serviceTitle} needed at {arena} — {extraNote}"
+            : $"{serviceTitle} needed at {arena}";
+
+        var pausedSessions = new List<Session>();
+        if (req.HoldArena)
+        {
+            var arenaSessions = await SessionsWithDetail()
+                .Where(s => s.CompetitionId == competitionId && s.Status != SessionStatus.Finished)
+                .OrderBy(s => s.OrderIndex)
+                .ToListAsync();
+            var targetSessions = arenaSessions
+                .Where(s => string.IsNullOrWhiteSpace(session.ArenaName)
+                    || string.Equals(s.ArenaName?.Trim(), arena, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            foreach (var target in targetSessions)
+            {
+                if (!ParsePauseNoteMs(target.Notes).HasValue)
+                {
+                    target.Notes = ApplyPauseNote(target.Notes, nowMs);
+                    pausedSessions.Add(target);
+                }
+            }
+        }
+
+        var authorName = User.FindFirst("fullName")?.Value ?? "Organiser";
+        var msg = new ChatMessage
+        {
+            CompetitionId = competitionId,
+            UserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
+            AuthorName = authorName.Length > 60 ? authorName[..60] : authorName,
+            Body = body,
+            Type = ChatMessageType.Announcement,
+            Tag = $"assistance:{serviceKey}",
+        };
+        _db.ChatMessages.Add(msg);
+        await _db.SaveChangesAsync();
+
+        foreach (var paused in pausedSessions)
+            await _live.SessionUpdated(competitionId, paused.ToDto());
+
+        var msgDto = msg.ToDto();
+        await _live.Announcement(competitionId, msgDto);
+        await _live.ChatMessage(competitionId, msgDto);
+        return msgDto;
+    }
+
+    internal static bool TryNormalizeGateCheckStatus(string? raw, out string? normalized)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            normalized = null;
+            return true;
+        }
+        var trimmed = raw.Trim().ToLowerInvariant();
+        if (trimmed is "at-gate" or "warming-up" or "missing")
+        {
+            normalized = trimmed;
+            return true;
+        }
+        normalized = null;
+        return false;
+    }
+
+    internal static string? ApplyGateCheckNote(string? notes, int heatId, int teamId, string? status)
+    {
+        var raw = notes ?? string.Empty;
+        var pattern = $@"\s*\[gate:{heatId}:{teamId}=[^\]]*\]\s*";
+        var cleaned = System.Text.RegularExpressions.Regex.Replace(raw, pattern, " ").Trim();
+        if (string.IsNullOrEmpty(status))
+            return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;
+        var tag = $"[gate:{heatId}:{teamId}={status}]";
+        return string.IsNullOrWhiteSpace(cleaned) ? tag : $"{cleaned} {tag}";
+    }
+
+    private static (string? Key, string? Title) NormalizeAssistanceService(string? raw)
+    {
+        var key = raw?.Trim().ToLowerInvariant();
+        return key switch
+        {
+            "farrier" => ("farrier", "Farrier"),
+            "vet" => ("vet", "Vet"),
+            "first-aid" or "firstaid" or "first aid" => ("first-aid", "First Aid"),
+            _ => (null, null),
+        };
+    }
+
     private static string ApplyPauseNote(string? notes, long timestampMs)
     {
         var cleaned = RemovePauseNote(notes);
@@ -1322,3 +1459,5 @@ public record ShiftSessionTimesRequest(int DeltaMinutes, string? ArenaName = nul
 public record PauseTimetableRequest(string? ArenaName = null);
 public record ResumeTimetableRequest(string? ArenaName = null);
 public record PacePredictionDto(double? AvgMinutesPerRace, int? RecommendedMinutesPer5RaceHeat, double Multiplier, int SampleHeats);
+public record UpdateGateCheckRequest(int TeamId, string? Status);
+public record RequestArenaAssistanceRequest(string Service, string? ArenaName = null, string? Note = null, bool HoldArena = true);
