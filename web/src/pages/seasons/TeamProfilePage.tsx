@@ -1,18 +1,23 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Link2, Plus, Save, Star } from 'lucide-react';
+import { ChevronRight, Link2, Plus, Save, Star } from 'lucide-react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { FAVOURITES_CHANGED, readFavourites, toggleFavourite } from '../../lib/favourites';
 import { SectionFormatLabel } from '../../types';
-import { Chevron, RefineDisclosure, RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, type RefineTab } from '../refine/Refine';
+import { Chevron, RefineDisclosure, RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection } from '../refine/Refine';
 import { ordinal, positionLabels, shortDate } from './seasonModel';
+import { plural } from '../../lib/stats';
 import type { SeasonView, StandingView } from './seasonViewTypes';
 import { buildRows, latestPerRound, seasonChoices, type SeasonDetail } from './teamHistoryModel';
 import { TeamGameStats } from './TeamGameStats';
 import type { ClubOption, CompetitionDetailOption, CompetitionSummaryOption, TeamProfile, TeamProfileHistory } from './teamProfileTypes';
 import './seasonViews.css';
 import { SelectField } from '../../components/SelectField';
+import { RoundSearch } from '../../components/RoundSearch';
+import { usePageHeader } from '../../components/CompactPageBarContext';
+import { AddBar } from '../admin/creator/controls';
+import '../../components/sitePages.css';
 
 type ProfileTab = 'history' | 'edit' | 'link';
 
@@ -71,6 +76,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
+  const [search, setSearch] = useState('');
   const [favourites, setFavourites] = useState(readFavourites);
   const [seasonData, setSeasonData] = useState<{ seasonId: string; season: SeasonView; standings: StandingView[] } | null>(null);
   const canManageProfile = !!history?.profile.canManage && mayManage;
@@ -78,6 +84,16 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
   const choices = useMemo(() => seasonChoices(history?.publishedResults ?? []), [history]);
   const selected = choices.find((choice) => choice.seasonId === query.get('season')) ?? choices[0] ?? null;
   const selectedId = selected?.seasonId ?? null;
+  const headerContext = !selected ? undefined
+    : seasonData && seasonData.seasonId === selectedId ? `${seasonData.season.ageGroup} ${SectionFormatLabel[seasonData.season.format]} · ${seasonData.season.year}`
+      : `${selected.title} · ${selected.year}`;
+  usePageHeader({
+    title: !id ? 'Team profiles' : history?.profile.displayName ?? 'Team history',
+    subtitle: id ? headerContext : undefined,
+    plain: true,
+    backTo: id ? (selected ? `/seasons/${selected.seasonId}` : '/team-profiles') : undefined,
+    backLabel: id ? (selected ? 'Back to standings' : 'Back to team profiles') : undefined,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -166,7 +182,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
     finally { setBusy(false); }
   }
 
-  if (loading) return <RefinePage><RefineHeader context="Team profiles" title={id ? 'Team history' : 'Team profiles'} /><p role="status" className="rf-note">Loading team history…</p></RefinePage>;
+  if (loading) return <RefinePage><p role="status" className="sp-note">Loading team history…</p></RefinePage>;
 
   if (!id) {
     if (creating && mayManage) return <RefinePage>
@@ -187,16 +203,17 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
       </form>
     </RefinePage>;
 
+    const needle = search.trim().toLowerCase();
+    const shown = (profiles ?? []).filter((profile) => `${profile.displayName} ${profile.clubName}`.toLowerCase().includes(needle));
     return <RefinePage>
-      <RefineHeader
-        context="Across every event" title="Team profiles" subtitle="Published results stay together when the same team competes at more than one event."
-        actions={mayManage ? <button type="button" className="rf-btn" onClick={() => setCreating(true)}><Plus className="h-4 w-4" aria-hidden="true" />New profile</button> : undefined}
-      />
+      <h1 className="sr-only">Team profiles</h1>
       {error && <div role="alert" className="mg-notice sv-msg">{error} <button type="button" className="mg-text-link min-h-11" onClick={() => { setLoading(true); setError(null); setRefresh((value) => value + 1); }}>Try again</button></div>}
       {!error && (profiles?.length ? <>
-        <RefineSection title="All profiles" meta={profiles.length} />
-        <RefineList label="Team profiles">{profiles.map((profile) => <li key={profile.id}><Link to={`/team-profiles/${profile.id}`} className="rf-row"><span className="rf-grow"><span className="rf-t1">{profile.displayName}</span><span className="rf-t2">{profile.clubName}{profile.suffix ? ` · suffix ${profile.suffix}` : ''}</span></span><Chevron /></Link></li>)}</RefineList>
+        <RoundSearch label="Find a team or club" placeholder="Team or club" value={search} onChange={setSearch} />
+        {shown.length > 0 && <ul className="sp-card sp-gap m-0 list-none p-0" aria-label="Team profiles">{[...shown].sort((a, b) => a.displayName.localeCompare(b.displayName)).map((profile) => <li key={profile.id}><Link to={`/team-profiles/${profile.id}`} className="sp-row"><span className="sp-grow"><span className="sp-t1">{profile.displayName}</span><span className="sp-t2">{profile.clubName}{profile.suffix ? ` · suffix ${profile.suffix}` : ''}</span></span><ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} /></Link></li>)}</ul>}
+        {shown.length === 0 && <p className="sp-note">No team or club matches “{search.trim()}”.</p>}
       </> : <div className="sv-empty"><h2>No team profiles yet</h2><p>Profiles will appear here once an organiser creates them.</p></div>)}
+      {mayManage && <div className="sp-gap"><AddBar onClick={() => setCreating(true)}>New profile</AddBar></div>}
     </RefinePage>;
   }
 
@@ -207,8 +224,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
 
   const profile = history.profile;
   const identityLocked = history.eventTeams.length > 0 || history.publishedResults.length > 0;
-  const tabs: (RefineTab & { id: ProfileTab })[] = canManageProfile ? ([['history', 'History'], ['edit', 'Edit profile'], ['link', 'Link event']] as [ProfileTab, string][])
-    .map(([key, label]) => ({ id: key, label, active: tab === key, onSelect: () => { setTab(key); setError(null); setSuccess(null); } })) : [];
+  const tabs = canManageProfile ? ([['history', 'History'], ['edit', 'Edit profile'], ['link', 'Link event']] as [ProfileTab, string][]) : [];
 
   const eventTeams = history.eventTeams;
   const following = eventTeams.length > 0 && eventTeams.every((team) => favourites.some((item) => item.competitionId === team.competitionId && item.teamId === team.teamId));
@@ -235,39 +251,45 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
     const label = positionLabels(seasonData!.standings).get(standing.teamProfileId) ?? String(standing.rank);
     return label.startsWith('=') ? `=${ordinal(standing.rank)}` : ordinal(standing.rank);
   })() : null;
-  const context = !selected ? 'Team record' : detail ? `${detail.season.ageGroup} ${SectionFormatLabel[detail.season.format]} · ${detail.season.year}` : `${selected.title} · ${selected.year}`;
   const previous = choices.filter((choice) => choice.seasonId !== selectedId);
+  const seasonLine = !selected ? null : placeLabel
+    ? `${placeLabel} in the ${selected.title} with ${plural(total, 'point')}, ${roundsText}`
+    : `${plural(total, 'point')} in the ${selected.title}, ${roundsText}`;
+  const club = profile.suffix ? `${profile.clubName} · suffix ${profile.suffix}` : profile.clubName;
 
   return <RefinePage>
-    <RefineHeader
-      back={selected ? `/seasons/${selected.seasonId}` : '/team-profiles'} backLabel={selected ? 'Back to standings' : 'Back to team profiles'}
-      context={context} title={profile.displayName}
-      subtitle={selected ? <>{placeLabel && <><strong>{placeLabel}</strong> · </>}{total} pts · {roundsText}</> : profile.suffix ? `${profile.clubName} · suffix ${profile.suffix}` : profile.clubName}
-      actions={history.eventTeams.length > 0 ? <button type="button" className="rf-ib sv-star" aria-pressed={following} aria-label={`${following ? 'Unstar' : 'Star'} ${profile.displayName}`} title="Follow on this device" onClick={toggleStar}><Star className="h-5 w-5" aria-hidden="true" /></button> : undefined}
-      tabs={tabs} tabsKind="tablist" tabsLabel="Team profile sections"
-    />
+    <h1 className="sr-only">{profile.displayName}</h1>
+    {tabs.length > 0 && (
+      <div className="sp-seg" role="tablist" aria-label="Team profile sections">
+        {tabs.map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => { setTab(key); setError(null); setSuccess(null); }}>{label}</button>)}
+      </div>
+    )}
     {error && <div role="alert" className="mg-notice sv-msg">{error}</div>}
     {success && <div role="status" className="mg-notice sv-msg">{success}</div>}
 
     {tab === 'history' && <>
+      <div className="sp-card sp-gap">
+        <div className="sp-row">
+          <span className="sp-grow"><span className="sp-t2">{club}</span>{seasonLine && <span className="sp-t1">{seasonLine}</span>}</span>
+          {history.eventTeams.length > 0 && <button type="button" className="rf-ib sv-star" aria-pressed={following} aria-label={`${following ? 'Unstar' : 'Star'} ${profile.displayName}`} title="Follow on this device" onClick={toggleStar}><Star className="h-5 w-5" aria-hidden="true" /></button>}
+        </div>
+      </div>
       {history.publishedResults.length === 0 ? <div className="sv-empty"><h2>No published results</h2><p>This team hasn’t appeared in a published season round yet.</p></div> : <>
-        <div className="rf-table-wrap sv-gap"><table className="rf-table sv-table sv-hist">
-          <caption className="sr-only">Rounds in {selected?.title}. Struck-through points fall outside the best results that count.</caption>
-          <thead><tr><th scope="col">Round</th><th scope="col" className="sv-place">Place</th><th scope="col">Pts</th></tr></thead>
-          <tbody>{rows.map((row) => <tr key={row.key}>
-            <td><span className="rf-t1">R{row.order} · {row.name}</span><span className="rf-t2">{shortDate(row.date, false)}{row.dropped ? ' · dropped' : row.place === null ? ' · did not enter' : ''}</span></td>
-            <td className={row.place === null ? 'sv-dim' : row.dropped ? 'rf-num sv-dim' : 'rf-num'}>{row.place === null ? '—' : ordinal(row.place)}</td>
-            <td className={row.points === null ? 'sv-dim' : 'rf-num'}>{row.points === null ? '—' : row.dropped ? <s className="sv-struck">{row.points}</s> : row.points}</td>
-          </tr>)}</tbody>
-        </table></div>
+        <h2 className="sp-sec">{selected?.title}</h2>
+        <ul className="sp-card m-0 list-none p-0" aria-label={`Rounds in ${selected?.title}. Struck-through points fall outside the best results that count.`}>
+          {rows.map((row) => <li key={row.key} className="sp-row">
+            <span className="sp-grow"><span className="sp-t1">R{row.order} · {row.name}</span><span className="sp-t2">{shortDate(row.date, false)}{row.dropped ? ' · dropped' : row.place === null ? ' · did not enter' : ''}</span></span>
+            <span className="sp-place">{row.place === null ? '—' : ordinal(row.place)}</span>
+            <span className="sp-rpts" data-drop={row.dropped || undefined}>{row.points === null ? '—' : row.dropped ? <s className="sv-struck">{row.points}</s> : row.points}</span>
+          </li>)}
+        </ul>
         {previous.length > 0 && <div className="sv-gap"><RefineList as="div"><RefineDisclosure title="Previous seasons" sub={`${previous.length} more`}>
           <div className="sv-prev">{previous.map((choice) => <Link key={choice.seasonId} className="rf-row" to={`?season=${choice.seasonId}`}><span className="rf-grow"><span className="rf-t1">{choice.title}</span><span className="rf-t2">{choice.year}</span></span><Chevron /></Link>)}</div>
         </RefineDisclosure></RefineList></div>}
-        <RefineNote>Public results only. No rider names.</RefineNote>
       </>}
       <TeamGameStats profileId={profile.id} linked={history.eventTeams.length} />
-      <RefineSection title="Linked events" />
-      {history.eventTeams.length === 0 ? <p className="rf-note">No event teams are linked yet.</p> : <RefineList label="Linked events">{history.eventTeams.map((item) => <li key={item.id} className="rf-row"><span className="rf-grow"><span className="rf-t1">{item.competitionName}</span><span className="rf-t2">{item.teamName}</span></span><time className="rf-t2" dateTime={item.linkedAt}>Linked {date(item.linkedAt)}</time></li>)}</RefineList>}
+      <h2 className="sp-sec">Competitions</h2>
+      {history.eventTeams.length === 0 ? <p className="sp-note">No event teams are linked yet.</p> : <ul className="sp-card m-0 list-none p-0" aria-label="Competitions">{history.eventTeams.map((item) => <li key={item.id}><Link to={`/competitions/${item.competitionId}`} className="sp-row"><span className="sp-grow"><span className="sp-t1">{item.competitionName}</span><span className="sp-t2">{item.teamName}</span></span><ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} /></Link></li>)}</ul>}
     </>}
 
     {tab === 'edit' && canManageProfile && <>

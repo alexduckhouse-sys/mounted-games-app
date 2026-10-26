@@ -1,4 +1,4 @@
-import type { StatsBrowse, StatsHit, StatsProfile, StatsSubjectKind, StatsSummary } from '../types';
+import type { StatsBrowse, StatsGame, StatsHit, StatsProfile, StatsSubjectKind, StatsSummary } from '../types';
 import { formatPoints } from './formatPoints';
 
 /** The API's limits on a search or profile name (`StatsNames` in the API). */
@@ -119,4 +119,36 @@ export function summaryTiles(summary: StatsSummary): StatsTile[] {
     { label: 'Point quota', value: formatPercent(summary.pointQuotaPercent), detail: pointsOf(summary.points, summary.maxPoints) },
     { label: 'Races won', value: formatPercent(summary.winPercent), detail: `${summary.wins} of ${plural(summary.races, 'race')}` },
   ];
+}
+
+/** The same headline figures as plain "label, value" lines, as the team profile lists them. */
+export function statsFacts(summary: StatsSummary): { label: string; value: string }[] {
+  const podiums = summary.firsts + summary.seconds + summary.thirds;
+  const bFinals = summary.bFinals ?? 0;
+  const cFinals = summary.cFinals ?? 0;
+  const finals = summary.entriesWithFinals === 0
+    ? 'No finals run'
+    : bFinals > 0 || cFinals > 0
+      ? `A ${summary.aFinals} · B ${bFinals} · C ${cFinals} of ${summary.entriesWithFinals}`
+      : `${summary.aFinals} of ${summary.entriesWithFinals}`;
+  const quota = summary.pointQuotaPercent == null ? '' : ` (${formatPercent(summary.pointQuotaPercent)})`;
+  return [
+    { label: 'Competitions', value: String(summary.competitions) },
+    { label: 'Podiums', value: podiums === 0 ? 'None yet' : `${podiums} (1st ${summary.firsts}, 2nd ${summary.seconds}, 3rd ${summary.thirds})` },
+    { label: 'Average place', value: summary.averagePlace == null ? '—' : String(summary.averagePlace) },
+    { label: 'A Finals', value: finals },
+    { label: 'Points', value: `${formatPoints(summary.points)} of ${formatPoints(summary.maxPoints)}${quota}` },
+    { label: 'Races won', value: `${summary.wins} of ${summary.races}` },
+  ];
+}
+
+/** One game's line in the team profile's "By game" list: "12 races · 2 wins · average 4.1 pts · average place 5.8". */
+export function gameLine(game: StatsGame): string {
+  const average = game.averagePoints ?? (game.races > 0 ? Math.round((game.points / game.races) * 10) / 10 : null);
+  return [
+    plural(game.races, 'race'),
+    plural(game.wins, 'win'),
+    average == null ? null : `average ${average} pts`,
+    game.averagePlace == null ? null : `average place ${game.averagePlace}`,
+  ].filter(Boolean).join(' · ');
 }

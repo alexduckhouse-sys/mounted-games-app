@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { StatsSummary } from '../types';
+import type { StatsGame, StatsSummary } from '../types';
 import {
   STATS_TABS, finalLabel, formatPercent, isSearchableQuery, isStatsBrowse, isStatsProfile, ordinalPlace, plural, pointsOf,
-  statsKindFromPath, statsProfileHref, summaryTiles, tidyStatsQuery,
+  gameLine, statsFacts, statsKindFromPath, statsProfileHref, summaryTiles, tidyStatsQuery,
 } from './stats';
 
 const summary = (overrides: Partial<StatsSummary> = {}): StatsSummary => ({
@@ -69,6 +69,40 @@ describe('formatting', () => {
     expect(empty[2].value).toBe('—');
     const abc = summaryTiles(summary({ entriesWithFinals: 3, aFinals: 1, bFinals: 1, cFinals: 1 }));
     expect(abc[3].detail).toBe('A 1 · B 1 · C 1 (of 3)');
+  });
+});
+
+describe('plain figures for the team profile', () => {
+  it('lists each figure as a label and one line of text', () => {
+    expect(statsFacts(summary())).toEqual([
+      { label: 'Competitions', value: '2' },
+      { label: 'Podiums', value: '2 (1st 1, 2nd 1, 3rd 0)' },
+      { label: 'Average place', value: '1.5' },
+      { label: 'A Finals', value: '1 of 1' },
+      { label: 'Points', value: '7 of 12 (58.3%)' },
+      { label: 'Races won', value: '1 of 4' },
+    ]);
+  });
+
+  it('says so when there is nothing to show yet', () => {
+    const facts = statsFacts(summary({ firsts: 0, seconds: 0, thirds: 0, averagePlace: null, entriesWithFinals: 0, pointQuotaPercent: null, points: 0, maxPoints: 0, races: 0, wins: 0 }));
+    expect(facts.map((fact) => fact.value)).toEqual(['2', 'None yet', '—', 'No finals run', '0 of 0', '0 of 0']);
+  });
+
+  it('breaks the finals down when B or C finals were reached', () => {
+    expect(statsFacts(summary({ entriesWithFinals: 5, aFinals: 2, bFinals: 2, cFinals: 1 }))[3].value).toBe('A 2 · B 2 · C 1 of 5');
+  });
+
+  const game = (overrides: Partial<StatsGame> = {}): StatsGame => ({ name: 'Two Flag', races: 12, wins: 2, winPercent: 16.7, nonFinishes: 0, points: 49, maxPoints: 84, pointQuotaPercent: 58.3, averagePoints: 4.1, averagePlace: 5.8, ...overrides });
+
+  it('describes a game on one line', () => {
+    expect(gameLine(game())).toBe('12 races · 2 wins · average 4.1 pts · average place 5.8');
+    expect(gameLine(game({ races: 1, wins: 1 }))).toBe('1 race · 1 win · average 4.1 pts · average place 5.8');
+  });
+
+  it('works the average out when the API did not, and leaves out what is not known', () => {
+    expect(gameLine(game({ averagePoints: undefined, averagePlace: null }))).toBe('12 races · 2 wins · average 4.1 pts');
+    expect(gameLine(game({ averagePoints: null, races: 0, points: 0, wins: 0, averagePlace: undefined }))).toBe('0 races · 0 wins');
   });
 });
 

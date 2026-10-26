@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
 import { readFavourites } from '../../lib/favourites';
 import TeamProfilePage from './TeamProfilePage';
 import type { TeamProfileHistory } from './teamProfileTypes';
@@ -16,8 +17,13 @@ const profile = { id: 'profile-1', clubId: 3, clubName: 'North Club', suffix: 'A
 const history: TeamProfileHistory = { profile, eventTeams: [], publishedResults: [] };
 let currentHistory = history;
 
+function HeaderProbe() {
+  const { header } = useCompactPageBarState();
+  return <span data-testid="header">{header ? `${header.title}|${header.subtitle ?? ''}|${header.backTo ?? ''}` : 'none'}</span>;
+}
+
 function renderPage() {
-  return render(<MemoryRouter initialEntries={['/team-profiles/profile-1']}><Routes><Route path="/team-profiles/:id" element={<TeamProfilePage />} /></Routes></MemoryRouter>);
+  return render(<MemoryRouter initialEntries={['/team-profiles/profile-1']}><CompactPageBarProvider><Routes><Route path="/team-profiles/:id" element={<TeamProfilePage />} /></Routes><HeaderProbe /></CompactPageBarProvider></MemoryRouter>);
 }
 
 beforeEach(() => {
@@ -68,12 +74,15 @@ describe('TeamProfilePage', () => {
     });
     renderPage();
 
-    expect(await screen.findByText('League · 2031')).toBeInTheDocument();
-    expect(screen.getByText(/10 pts · 1 round/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: 'League' })).toBeInTheDocument();
+    expect(screen.getByText('10 points in the League, 1 round')).toBeInTheDocument();
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
     expect(screen.queryByText('Edit profile')).not.toBeInTheDocument();
     expect(screen.queryByText('Link an event team')).not.toBeInTheDocument();
-    expect(screen.getByText('Public results only. No rider names.')).toBeInTheDocument();
+    expect(screen.queryByText('Public results only. No rider names.')).not.toBeInTheDocument();
+    // Season results come first, then the race figures and the competitions.
+    const headings = screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent);
+    expect(headings).toEqual(['League', 'Competitions']);
   });
 
   it('shows the place, the best-N summary, dropped results and rounds not entered, using the season table', async () => {
@@ -93,15 +102,29 @@ describe('TeamProfilePage', () => {
     });
     renderPage();
 
-    expect(await screen.findByText('U14 Teams · 2031')).toBeInTheDocument();
-    expect(screen.getByText(/best 1 of 2 rounds/)).toHaveTextContent('=3rd · 10 pts · best 1 of 2 rounds');
-    const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1);
+    expect(await screen.findByText(/best 1 of 2 rounds/)).toHaveTextContent('=3rd in the League with 10 points, best 1 of 2 rounds');
+    const rows = within(await screen.findByRole('list', { name: /Rounds in League/ })).getAllByRole('listitem');
     expect(rows).toHaveLength(3);
     expect(rows[0]).toHaveTextContent('R3 · May Cup31 May · dropped4th5');
     expect(rows[0].querySelector('s')).toHaveTextContent('5');
     expect(rows[1]).toHaveTextContent('R2 · Spring Qualifier10 May · did not enter——');
     expect(rows[2]).toHaveTextContent('R1 · Club Day26 Apr1st10');
-    expect(screen.getByRole('link', { name: 'Back to standings' })).toHaveAttribute('href', '/seasons/season-1');
+    expect(screen.getByTestId('header')).toHaveTextContent('North Club A|U14 Teams · 2031|/seasons/season-1');
+  });
+
+  it('lists each linked competition as a link, without the date it was linked', async () => {
+    currentHistory = { ...history, profile: { ...profile, canManage: false }, eventTeams: [{ id: 1, teamProfileId: profile.id, competitionId: 12, competitionName: 'Spring', teamId: 41, teamName: 'North Club A', linkedAt: '2031-05-04' }] };
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (String(url).endsWith('/history')) return { data: currentHistory };
+      if (url === '/team-profiles') return { data: [profile] };
+      if (url === '/clubs') return { data: [] };
+      if (String(url).startsWith('/stats/team-profiles/')) throw Object.assign(new Error('gone'), { response: { status: 404 } });
+      throw new Error(`Unexpected GET ${url}`);
+    });
+    renderPage();
+    const list = await screen.findByRole('list', { name: 'Competitions' });
+    expect(within(list).getByRole('link', { name: /Spring/ })).toHaveAttribute('href', '/competitions/12');
+    expect(screen.queryByText(/Linked/)).not.toBeInTheDocument();
   });
 
   it('follows the linked event teams on this device from the star in the header', async () => {
@@ -144,6 +167,28 @@ describe('TeamProfilePage', () => {
     expect(screen.queryByText('No team profiles yet')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByText('North Club A')).toBeInTheDocument();
+  });
+
+  it('lists the profiles with a round search and none of the old labels', async () => {
+    const other = { ...profile, id: 'profile-2', displayName: 'Ashgrove U14', clubName: 'Ashgrove Pony Club', suffix: '' };
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/team-profiles') return { data: [profile, other] };
+      if (url === '/clubs') return { data: [] };
+      throw new Error(`Unexpected GET ${url}`);
+    });
+    const user = userEvent.setup();
+    render(<MemoryRouter initialEntries={['/team-profiles']}><Routes><Route path="/team-profiles" element={<TeamProfilePage />} /></Routes></MemoryRouter>);
+
+    const list = await screen.findByRole('list', { name: 'Team profiles' });
+    expect(within(list).getAllByRole('link').map((link) => link.textContent)).toEqual(['Ashgrove U14Ashgrove Pony Club', 'North Club ANorth Club · suffix A']);
+    expect(screen.queryByText(/across every event/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Published results stay together/)).not.toBeInTheDocument();
+    expect(screen.queryByText('All profiles')).not.toBeInTheDocument();
+    await user.type(screen.getByRole('searchbox', { name: 'Find a team or club' }), 'north');
+    expect(within(screen.getByRole('list', { name: 'Team profiles' })).getAllByRole('link')).toHaveLength(1);
+    await user.clear(screen.getByRole('searchbox'));
+    await user.type(screen.getByRole('searchbox'), 'zzz');
+    expect(screen.getByText('No team or club matches “zzz”.')).toBeInTheDocument();
   });
 
   it('does not allow the create form to be cancelled while submission is in flight', async () => {
