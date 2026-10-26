@@ -30,6 +30,7 @@ What each document is for and how far to trust it. When a doc and the code disag
 | `specs/live-stream.md` | Live video through the Cloudflare Realtime SFU: flows, API, limits. Shipped in #30 |
 | `designs/mobile-redesign-handoff.md` + `mobile-redesign-proposal.html` | Timetable, Live & stream, heat scores on phones. Shipped in #37 |
 | `designs/event-platform-refinement-handoff.md` + `.html` | Visual rules (navy `#17385f`, red only for LIVE and destructive actions, Barlow fonts) and screens for shops, seasons and organiser pages |
+| `designs/design-decisions.md` | The house style for redesigned pages: looks, controls, buttons, copy, navigation and per-page decisions the owner picked (25–26 October 2026). Start here for any new page, public or organiser |
 | `designs/live-stream-proposal.html` | Static mock-ups of the streaming screens |
 
 The `.html` files are self-contained previews; open them in a browser rather than reading the markup.
