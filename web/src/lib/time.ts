@@ -162,6 +162,8 @@ interface Lane {
 }
 
 const arenaKey = (s: Session) => s.arenaName?.trim() ?? '';
+const calendarDayKey = (d: Date) =>
+  `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 
 /**
  * Walks the sessions in order. When a session has `startedAt` we anchor on the
@@ -186,6 +188,8 @@ export function computeTimings(sessions: Session[], options?: ComputeTimingsOpti
   const pace = predictMinutesPerRace(ordered, options?.historicalAvgMinutesPerRace);
   const hasArenas = ordered.some((s) => arenaKey(s) !== '');
   const lanes = new Map<string, Lane>();
+  const lastDayByArena = new Map<string, string>();
+  let lastDayKey = '';
   const laneFor = (key: string): Lane => {
     let lane = lanes.get(key);
     if (!lane) { lane = { offsetMs: 0, pauseOffsetMs: 0, lastEffectiveEnd: null }; lanes.set(key, lane); }
@@ -194,17 +198,32 @@ export function computeTimings(sessions: Session[], options?: ComputeTimingsOpti
 
   for (const s of ordered) {
     const key = hasArenas ? arenaKey(s) : '';
+    const rawScheduled = s.scheduledStart ? new Date(s.scheduledStart) : null;
+    const shiftMatch = s.notes?.match(/\[shift:([+-]?\d+)\]/);
+    const manualShiftMs = shiftMatch ? parseInt(shiftMatch[1], 10) * 60_000 : 0;
+    const scheduled = rawScheduled ? new Date(rawScheduled.getTime() - manualShiftMs) : null;
+    const dayKey = scheduled
+      ? calendarDayKey(scheduled)
+      : (lastDayByArena.get(key) ?? lastDayKey);
+    if (scheduled) {
+      lastDayByArena.set(key, dayKey);
+      lastDayKey = dayKey;
+    }
+
     let lane: Lane;
     if (key === '' && hasArenas) {
-      // Whole-event item: a throwaway lane built from every arena so far.
-      const all = [...lanes.values()];
+      // Whole-event item: a throwaway lane built from every arena on the same day so far.
+      const dayPrefix = `${dayKey}::`;
+      const all = [...lanes.entries()]
+        .filter(([k]) => k.startsWith(dayPrefix))
+        .map(([, l]) => l);
       lane = {
         offsetMs: Math.max(0, ...all.map((l) => l.offsetMs + l.pauseOffsetMs)) - Math.max(0, ...all.map((l) => l.pauseOffsetMs)),
         pauseOffsetMs: Math.max(0, ...all.map((l) => l.pauseOffsetMs)),
         lastEffectiveEnd: all.reduce<Date | null>((latest, l) => (l.lastEffectiveEnd && (!latest || l.lastEffectiveEnd > latest) ? l.lastEffectiveEnd : latest), null),
       };
     } else {
-      lane = laneFor(key);
+      lane = laneFor(`${dayKey}::${key}`);
     }
 
     const previousPauseMs = lane.pauseOffsetMs;
@@ -212,10 +231,6 @@ export function computeTimings(sessions: Session[], options?: ComputeTimingsOpti
     const pauseMs = (pausedAtMs != null ? Math.max(0, nowMs - pausedAtMs) : 0);
     lane.pauseOffsetMs = hasArenas && key === '' ? Math.max(previousPauseMs, pauseMs) : pauseMs;
 
-    const rawScheduled = s.scheduledStart ? new Date(s.scheduledStart) : null;
-    const shiftMatch = s.notes?.match(/\[shift:([+-]?\d+)\]/);
-    const manualShiftMs = shiftMatch ? parseInt(shiftMatch[1], 10) * 60_000 : 0;
-    const scheduled = rawScheduled ? new Date(rawScheduled.getTime() - manualShiftMs) : null;
     let effective: Date | null = null;
 
     if (s.startedAt) {

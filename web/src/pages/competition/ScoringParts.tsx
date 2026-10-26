@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { motion, type PanInfo } from 'framer-motion';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { api } from '../../api';
 import { BibSwatch, HatbandSwatch } from '../../components/BibSwatch';
 import { dotColour } from '../../lib/teamColours';
 import { hatbandColour } from '../../lib/hatbands';
@@ -79,20 +80,25 @@ export function TeamCardBadge({ card }: { card?: RefereeCard }) {
   return null;
 }
 
-/** Checks if a referee note starts with [YC] or [RC] and returns the card type plus clean note. */
+/** Checks if a referee note carries a yellow or red card ([YC]/[RC] or [card:yellow]/[card:red]) and returns the card type plus clean note. */
 export function parseRefereeCard(note: string | null | undefined): { card: RefereeCard; cleanNote: string } {
   if (!note) return { card: null, cleanNote: '' };
-  const match = /^\s*\[(YC|RC)\]\s*(.*)$/i.exec(note);
-  if (match) {
-    const card: RefereeCard = match[1].toUpperCase() === 'YC' ? 'yellow' : 'red';
-    return { card, cleanNote: match[2].trim() };
+  const prefixMatch = /^\s*\[(YC|RC)\]\s*(.*)$/i.exec(note);
+  if (prefixMatch) {
+    const card: RefereeCard = prefixMatch[1].toUpperCase() === 'YC' ? 'yellow' : 'red';
+    return { card, cleanNote: prefixMatch[2].replace(/\s*\[card:(yellow|red)\]\s*/gi, ' ').trim() };
+  }
+  const tagMatch = /\[card:(yellow|red)\]/i.exec(note);
+  if (tagMatch) {
+    const card: RefereeCard = tagMatch[1].toLowerCase() === 'yellow' ? 'yellow' : 'red';
+    return { card, cleanNote: note.replace(/\s*\[card:(yellow|red)\]\s*/gi, ' ').trim() };
   }
   return { card: null, cleanNote: note.trim() };
 }
 
 /** Formats a referee note with the [YC] or [RC] prefix when a card is selected. */
 export function formatRefereeCardNote(card: RefereeCard, cleanNote: string): string {
-  const clean = cleanNote.replace(/^\s*\[(YC|RC)\]\s*/i, '').trim();
+  const clean = cleanNote.replace(/^\s*\[(YC|RC)\]\s*/i, '').replace(/\s*\[card:(yellow|red)\]\s*/gi, ' ').trim();
   if (card === 'yellow') return clean ? `[YC] ${clean}` : '[YC]';
   if (card === 'red') return clean ? `[RC] ${clean}` : '[RC]';
   return clean;
@@ -109,7 +115,7 @@ export function getStoredCards(competitionId?: number | null): Record<number, 'y
   }
 }
 
-/** Saves or clears a team's card in localStorage and dispatches an event. */
+/** Saves or clears a team's card in localStorage, dispatches an event, and syncs to the server. */
 export function setStoredCard(competitionId: number | null | undefined, teamId: number, card: RefereeCard): void {
   if (!competitionId) return;
   try {
@@ -124,6 +130,7 @@ export function setStoredCard(competitionId: number | null | undefined, teamId: 
   } catch {
     // Ignore storage errors.
   }
+  void api.put(`/competitions/${competitionId}/teams/${teamId}/card`, { card: card ?? 'none' }).catch(() => {});
 }
 
 /** Plays a subtle two-tone audio chime and short haptic pulse for urgent scorer/organiser alerts. */

@@ -142,4 +142,21 @@ public class IcsCalendarTests
         Assert.DoesNotContain("LOCATION", ics);
         Assert.DoesNotContain("URL:", ics);
     }
+
+    [Fact]
+    public void AllDayEvents_EmitValueDateWithoutTime()
+    {
+        var allDay = new IcsEvent(
+            Uid: "competition-1@mg-app",
+            StartUtc: new DateTime(2026, 10, 17, 0, 0, 0, DateTimeKind.Utc),
+            EndUtc: new DateTime(2026, 10, 19, 0, 0, 0, DateTimeKind.Utc),
+            Summary: "Weekend Championships",
+            StampUtc: Start,
+            AllDay: true);
+
+        var lines = Lines(new IcsCalendar("-//T//EN").Add(allDay).Build());
+
+        Assert.Contains("DTSTART;VALUE=DATE:20261017", lines);
+        Assert.Contains("DTEND;VALUE=DATE:20261019", lines);
+    }
 }

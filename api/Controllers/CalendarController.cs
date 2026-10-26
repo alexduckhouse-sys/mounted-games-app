@@ -42,7 +42,12 @@ public partial class CalendarController(AppDbContext db, IConfiguration configur
         if (c is null) return NotFound();
 
         var start = Utc(c.StartDate);
-        var end = c.EndDate is { } e && Utc(e) > start ? Utc(e) : start.AddHours(8);
+        var allDay = start.TimeOfDay == TimeSpan.Zero && c.EndDate is { } endDay && Utc(endDay).TimeOfDay == TimeSpan.Zero;
+        var end = allDay
+            ? Utc(c.EndDate!.Value).Date.AddDays(1)
+            : c.EndDate is { } e && Utc(e) > start
+                ? (Utc(e).TimeOfDay == TimeSpan.Zero ? Utc(e).Date.AddHours(17) : Utc(e))
+                : start.AddHours(8);
         var link = SiteLink(site, $"/competitions/{c.Id}");
         var description = new StringBuilder();
         if (!string.IsNullOrWhiteSpace(c.Description)) description.Append(Truncate(c.Description.Trim(), 1500));
@@ -58,7 +63,8 @@ public partial class CalendarController(AppDbContext db, IConfiguration configur
             StampUtc: clock.GetUtcNow().UtcDateTime,
             Location: c.Location,
             Description: description.Length > 0 ? description.ToString() : null,
-            Url: link));
+            Url: link,
+            AllDay: allDay));
 
         // The link comes from the caller, so keep this out of shared caches.
         Response.Headers.CacheControl = "private, max-age=60";
@@ -85,7 +91,8 @@ public partial class CalendarController(AppDbContext db, IConfiguration configur
             .Include(s => s.Heats).ThenInclude(h => h.Entries)
             .Include(s => s.Heats).ThenInclude(h => h.Races)
             .ToListAsync(ct);
-        var times = TimetableTimes.Compute(sessions);
+        var now = clock.GetUtcNow().UtcDateTime;
+        var times = TimetableTimes.Compute(sessions, now);
         var link = SiteLink(site, $"/competitions/{team.CompetitionId}");
 
         var drafts = new List<HeatEvent>();
@@ -102,7 +109,6 @@ public partial class CalendarController(AppDbContext db, IConfiguration configur
         }
 
         var versions = await db.CalendarHeatVersions.Where(v => v.TeamId == team.Id).ToDictionaryAsync(v => v.HeatId, ct);
-        var now = clock.GetUtcNow().UtcDateTime;
         var calendar = new IcsCalendar(ProductId)
         {
             Name = $"{team.DisplayName} heats, {team.Competition.Name}",

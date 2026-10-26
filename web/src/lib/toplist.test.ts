@@ -566,18 +566,79 @@ it('handles changed opponents across sessions, using complete allocations in eac
 });
 
 describe('sectionScoreVersion', () => {
-  it('ignores clocks but invalidates for combined and other-section scores', () => {
+  it('ignores clocks and unrelated other-section sessions, but invalidates for own or combined-section scores', () => {
     expect(sectionScoreVersion([], null)).toBe('');
     const s1 = session(1, [heat(1, [1, 2], [race(1, { startedAt: '2026-06-01T10:00:00Z' })])]);
     const s1ClockStopped = session(1, [heat(1, [1, 2], [race(1, { startedAt: '2026-06-01T10:00:00Z', finishedAt: '2026-06-01T10:03:00Z' })], { startedAt: '2026-06-01T10:00:00Z' })], { startedAt: '2026-06-01T10:00:00Z' });
     const otherSection = session(2, [heat(2, [8, 9], [scored(2, [8, 5], [9, 3])])], { competitionSectionId: SECTION + 1 });
+    const combinedSection = session(3, [heat(3, [1, 8], [scored(3, [1, 5], [8, 3])])], { competitionSectionId: SECTION + 1, notes: '[scoring:by-section]' });
 
     const v0 = sectionScoreVersion([s1], SECTION);
     expect(sectionScoreVersion([s1ClockStopped], SECTION)).toBe(v0);
-    expect(sectionScoreVersion([s1ClockStopped, otherSection], SECTION)).not.toBe(v0);
+    expect(sectionScoreVersion([s1ClockStopped, otherSection], SECTION)).toBe(v0);
+    expect(sectionScoreVersion([s1ClockStopped, combinedSection], SECTION)).not.toBe(v0);
 
     const s1Scored = session(1, [heat(1, [1, 2], [scored(1, [1, 5], [2, 3])])]);
     expect(sectionScoreVersion([s1Scored], SECTION)).not.toBe(v0);
+  });
+});
+
+describe('Heat-Heat-Final (UsesRaceFinals) and tie-breaker parity', () => {
+  it('replaces 1 pt qualifier score with round final score in S1 and does not treat HHF round finals as competition finals', () => {
+    const q1 = heat(1, [1, 2], [scored(1, [1, 1], [2, 1])], { label: 'Bending · Heat 1', raceRoundStage: 1, raceRoundId: 10 });
+    const q2 = heat(2, [3, 4], [scored(2, [3, 1], [4, 0])], { label: 'Bending · Heat 2', raceRoundStage: 1, raceRoundId: 10 });
+    const roundFinal = heat(3, [1, 3], [scored(3, [1, 3], [3, 2])], { label: 'Bending · Final', raceRoundStage: 2, raceRoundId: 10 });
+    const hhfSession = session(1, [q1, q2, roundFinal]);
+
+    const list = buildToplist(
+      [standing(1, 3), standing(3, 2), standing(2, 1), standing(4, 0)],
+      [hhfSession],
+      [],
+      SECTION,
+      2,
+    );
+    expect(list.finals).toEqual([]);
+    expect(list.bySession.sessions.map((s) => s.label)).toEqual(['S1']);
+    expect(list.bySession.cells.get(1)).toEqual([3]);
+    expect(list.bySession.cells.get(3)).toEqual([2]);
+    expect(list.bySession.cells.get(2)).toEqual([1]);
+    expect(list.detail.get(1)?.qualifyingPoints).toBe(3);
+  });
+
+  it('separates tied points when broken by countback wins or last race (excluding sit-outs) and suppresses false run-offs', () => {
+    const r1 = race(1, {
+      isComplete: true,
+      results: [
+        result(2, 1, { points: 5 }),
+        result(3, 2, { points: 4 }),
+      ],
+    });
+    const r2 = race(2, {
+      isComplete: true,
+      results: [
+        result(2, null, { points: 0, isSitOut: true }),
+        result(3, 4, { points: 1 }),
+      ],
+    });
+    const s1 = session(1, [heat(1, [2, 3], [r1, r2])]);
+    const list = buildToplist(
+      [
+        standing(1, 12),
+        { ...standing(3, 5), wins: 0 },
+        { ...standing(2, 5), wins: 1 },
+      ],
+      [s1],
+      [],
+      SECTION,
+      2,
+    );
+    expect(list.rows.map((r) => [r.teamId, r.position, r.joint])).toEqual([
+      [1, 1, false],
+      [2, 2, false],
+      [3, 3, false],
+    ]);
+    expect(list.runoff).toBeNull();
+    expect(list.cutAfter).toBe(1);
   });
 });
 

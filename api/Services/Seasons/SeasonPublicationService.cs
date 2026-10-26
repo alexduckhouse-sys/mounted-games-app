@@ -28,14 +28,18 @@ public sealed class SeasonPublicationService(AppDbContext db)
 
         var sessions = await db.Sessions.AsNoTracking()
             .Where(x => x.CompetitionId == round.CompetitionId
-                && x.CompetitionSectionId == round.CompetitionSectionId
-                && x.Kind == SessionKind.Race && !x.IsBreak)
-            .Include(x => x.Heats).ThenInclude(x => x.Entries)
+                && x.Kind == SessionKind.Race && !x.IsBreak
+                && (x.CompetitionSectionId == round.CompetitionSectionId
+                    || x.Heats.Any(h => h.Entries.Any(e => e.Team!.CompetitionSectionId == round.CompetitionSectionId))))
+            .Include(x => x.Heats).ThenInclude(x => x.Entries).ThenInclude(x => x.Team)
             .Include(x => x.Heats).ThenInclude(x => x.Races).ThenInclude(x => x.Results).ThenInclude(x => x.Team)!.ThenInclude(x => x!.Club)
             .OrderBy(x => x.OrderIndex)
             .ToListAsync(ct);
 
-        var races = sessions.SelectMany(x => x.Heats).SelectMany(x => x.Races).OrderBy(x => x.Id).ToList();
+        var relevantHeats = sessions.SelectMany(x => x.Heats
+            .Where(h => x.CompetitionSectionId == round.CompetitionSectionId
+                || h.Entries.Any(e => e.Team?.CompetitionSectionId == round.CompetitionSectionId))).ToList();
+        var races = relevantHeats.SelectMany(x => x.Races).OrderBy(x => x.Id).ToList();
         if (races.Count == 0)
             throw new SeasonPublicationException("The section has no races to publish.", 409);
         if (races.Any(x => !x.IsComplete))
@@ -45,28 +49,44 @@ public sealed class SeasonPublicationService(AppDbContext db)
             throw new SeasonPublicationException("Every team in every completed race must have a recorded result.", 409);
 
         var tiers = FinalsTiers.From(sessions);
+        var ties = await TieBreaker.LoadAsync(db, round.CompetitionId, ct);
+        var bonus = await TackCheck.TackCheckBonus.ForCompetitionAsync(db, round.CompetitionId, ct);
         // A section that scores its final on its own ranks its finalists on the final alone, as the standings do.
         var finalRaceIds = sessions.SelectMany(x => x.Heats).Where(SectionScoring.IsFinalHeat)
             .SelectMany(x => x.Races).Select(x => x.Id).ToHashSet();
-        var totals = races.SelectMany(x => x.Results)
-            .Where(x => x.Team is { IsHorsConcours: false })
+        var rawTotals = races.SelectMany(x => x.Results)
+            .Where(x => x.Team is { IsHorsConcours: false } && x.Team.CompetitionSectionId == round.CompetitionSectionId)
             .GroupBy(x => x.TeamId)
             .Select(x =>
             {
-                var finalPoints = x.Where(y => finalRaceIds.Contains(y.RaceId)).Sum(y => y.Points);
+                var effective = ties.EffectiveResults(x);
+                var finalResults = effective.Where(y => finalRaceIds.Contains(y.RaceId)).ToList();
+                var finalPoints = finalResults.Sum(y => y.Points);
+                var inFinal = tiers.TierOf(x.Key) is not null;
+                var totalPts = SectionScoring.Total(round.CompetitionSection, inFinal,
+                    effective.Sum(y => y.Points) - finalPoints, finalPoints, bonus.GetValueOrDefault(x.Key));
+                var alone = inFinal && !SectionScoring.CarriesIntoFinal(round.CompetitionSection);
+                var facts = ties.Facts(x.Key, round.CompetitionSectionId, alone ? finalResults : effective, totalPts);
                 return new
                 {
                     TeamId = x.Key,
                     Team = x.First().Team!,
-                    Points = SectionScoring.Total(round.CompetitionSection, tiers.TierOf(x.Key) is not null,
-                        x.Sum(y => y.Points) - finalPoints, finalPoints, 0),
+                    Points = totalPts,
                     Tier = tiers.SortKey(x.Key),
+                    Facts = facts,
                 };
             })
-            .OrderBy(x => x.Tier)
-            .ThenByDescending(x => x.Points)
-            .ThenBy(x => x.Team.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(x => x.TeamId)
+            .ToList();
+
+        var totals = rawTotals
+            .GroupBy(x => (x.Tier, x.Points))
+            .OrderBy(g => g.Key.Tier)
+            .ThenByDescending(g => g.Key.Points)
+            .SelectMany(g =>
+            {
+                var byTeam = g.ToDictionary(x => x.TeamId);
+                return ties.OrderLevel(g.Select(x => x.Facts).ToList()).Select(f => byTeam[f.TeamId]);
+            })
             .ToList();
 
         var teamIds = totals.Select(x => x.TeamId).ToArray();
@@ -129,9 +149,19 @@ public sealed class SeasonPublicationService(AppDbContext db)
         for (var index = 0; index < totals.Count; index++)
         {
             var total = totals[index];
-            // Teams only tie on the same points within the same final.
-            if (previous != (total.Tier, total.Points)) rank = index + 1;
-            previous = (total.Tier, total.Points);
+            var key = (total.Tier, total.Points);
+            // Teams only tie on the same points within the same final when not separated by tie-break.
+            if (previous != key)
+            {
+                rank = index + 1;
+            }
+            else if (index > 0)
+            {
+                var levelGroup = totals.Where(t => (t.Tier, t.Points) == key).Select(t => t.Facts).ToList();
+                if (!ties.AreLevel(levelGroup, totals[index - 1].Facts, total.Facts))
+                    rank = index + 1;
+            }
+            previous = key;
             var basePoints = points.GetValueOrDefault(rank);
             var seasonPoints = (int)Math.Round(basePoints * multiplier, MidpointRounding.AwayFromZero);
             if (profilesByTeam.TryGetValue(total.TeamId, out var riderProfiles))
@@ -164,7 +194,7 @@ public sealed class SeasonPublicationService(AppDbContext db)
             }
         }
 
-        var fingerprint = Fingerprint(round.Season, races, links, multiplier, profilesByTeam);
+        var fingerprint = Fingerprint(round.Season, races, links, multiplier, profilesByTeam, bonus);
         var nextVersion = round.Publications.Select(x => x.Version).DefaultIfEmpty(0).Max() + 1;
         var preview = new SeasonPublicationPreviewDto(
             seasonId, roundId, round.CompetitionId, round.CompetitionSectionId,
@@ -276,12 +306,18 @@ public sealed class SeasonPublicationService(AppDbContext db)
         IReadOnlyList<Race> races,
         IReadOnlyDictionary<int, EventTeamProfileLink> links,
         double multiplier,
-        IReadOnlyDictionary<int, List<RiderProfile>> profilesByTeam)
+        IReadOnlyDictionary<int, List<RiderProfile>> profilesByTeam,
+        IReadOnlyDictionary<int, int>? bonus = null)
     {
         var value = new StringBuilder()
             .Append(season.Id).Append('|').Append(season.Format).Append('|').Append(season.AgeGroup).Append('|');
         if (multiplier != 1.0)
             value.Append("M:").Append(multiplier.ToString("R", CultureInfo.InvariantCulture)).Append('|');
+        if (bonus is not null)
+        {
+            foreach (var (teamId, b) in bonus.Where(kv => kv.Value != 0).OrderBy(kv => kv.Key))
+                value.Append("B:").Append(teamId).Append(':').Append(PointValues.Format(b)).Append('|');
+        }
         foreach (var rule in season.PlacePoints.OrderBy(x => x.Place))
             value.Append(rule.Place).Append(':').Append(rule.Points).Append('|');
         foreach (var race in races.OrderBy(x => x.Id))

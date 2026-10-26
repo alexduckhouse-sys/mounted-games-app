@@ -11,12 +11,13 @@ public sealed class PrintableEventService(AppDbContext db)
     {
         var competition = await LoadAsync(competitionId, ct);
         if (competition is null) return null;
+        var timings = Calendar.TimetableTimes.Compute(competition.Sessions);
         var sessions = competition.Sessions.Where(IsRace)
             .OrderBy(x => x.OrderIndex).ThenBy(x => x.Id)
             .Select(x => new PrintableSessionDto(
                 x.Id, x.Section?.DisplayName ?? string.Empty, x.Name, x.ArenaName, x.OrderIndex,
                 OrderedHeats(x).Select(h => new PrintableHeatDto(
-                    h.Id, h.Label ?? $"Heat {h.OrderIndex}", HeatStart(x, h),
+                    h.Id, h.Label ?? $"Heat {h.OrderIndex}", HeatStart(x, h, timings),
                     h.Entries.OrderBy(e => e.LaneIndex).Select(e => new PrintableTeamDto(
                         e.TeamId, e.Team!.DisplayName, e.Team.Club!.Name, e.Team.Suffix, e.LaneIndex)).ToArray(),
                     h.Races.OrderBy(r => r.OrderIndex).Select(r => new PrintableRaceDto(r.Id, r.Name, r.OrderIndex)).ToArray())).ToArray()))
@@ -28,12 +29,13 @@ public sealed class PrintableEventService(AppDbContext db)
     {
         var competition = await LoadAsync(competitionId, ct);
         if (competition is null) return null;
+        var timings = Calendar.TimetableTimes.Compute(competition.Sessions);
         var heats = competition.Sessions.Where(IsRace)
             .OrderBy(x => x.OrderIndex).ThenBy(x => x.Id)
             .SelectMany(x => OrderedHeats(x).Select(h => new { Session = x, Heat = h }))
             .Select(x => new PrintableScoreHeatDto(
                 x.Heat.Id, x.Heat.Label ?? $"Heat {x.Heat.OrderIndex}", x.Session.Section?.DisplayName ?? string.Empty,
-                x.Session.Name, HeatStart(x.Session, x.Heat),
+                x.Session.Name, HeatStart(x.Session, x.Heat, timings),
                 x.Heat.Races.OrderBy(r => r.OrderIndex).Select(r => new PrintableScoreRaceDto(
                     r.Id, r.Name,
                     x.Heat.Entries.OrderBy(e => e.LaneIndex).Select(e =>
@@ -52,33 +54,64 @@ public sealed class PrintableEventService(AppDbContext db)
         var competition = await LoadAsync(competitionId, ct);
         if (competition is null) return null;
         var tiers = FinalsTiers.From(competition.Sessions);
+        var ties = await TieBreaker.LoadAsync(db, competitionId, ct);
         var bonus = await TackCheck.TackCheckBonus.ForCompetitionAsync(db, competitionId, ct);
         var sections = competition.Sections.OrderBy(x => x.DisplayName).Select(section =>
         {
-            var rows = section.Teams.Where(x => !x.IsHorsConcours).Select(team =>
+            var rawRows = section.Teams.Where(x => !x.IsHorsConcours).Select(team =>
             {
-                var results = team.Results.Where(x => x.Race?.Heat?.Session?.CompetitionSectionId == section.Id).ToArray();
-                var finalPoints = results.Where(x => x.Race?.Heat is { } heat && SectionScoring.IsFinalHeat(heat)).Sum(x => x.Points);
+                var rawResults = team.Results
+                    .Where(x => x.Race?.Heat?.Session is { } s ? IsRace(s) : true)
+                    .ToArray();
+                var results = ties.EffectiveResults(rawResults);
+                var finalResults = results.Where(x => x.Race?.Heat is { } heat && SectionScoring.IsFinalHeat(heat)).ToList();
+                var finalPoints = finalResults.Sum(x => x.Points);
+                var inFinal = tiers.TierOf(team.Id) is not null;
+                var total = SectionScoring.Total(section, inFinal,
+                    results.Sum(x => x.Points) - finalPoints, finalPoints, bonus.GetValueOrDefault(team.Id));
+                var alone = inFinal && !SectionScoring.CarriesIntoFinal(section);
+                var facts = ties.Facts(team.Id, section.Id, alone ? finalResults : results, total);
                 return new
                 {
                     Team = team,
                     Tier = tiers.SortKey(team.Id),
-                    Total = SectionScoring.Total(section, tiers.TierOf(team.Id) is not null,
-                        results.Sum(x => x.Points) - finalPoints, finalPoints, bonus.GetValueOrDefault(team.Id)),
+                    Total = total,
                     Bonus = bonus.GetValueOrDefault(team.Id),
-                    Run = results.Length,
-                    Wins = results.Count(x => x.Placing == 1 && !x.Eliminated),
-                    Eliminations = results.Count(x => x.Eliminated && ResultStatuses.Of(x) == ResultStatus.Eliminated),
+                    Run = rawResults.Count(x => !x.IsSitOut),
+                    Wins = results.Count(x => !x.IsSitOut && x.Placing == 1 && !x.Eliminated),
+                    Eliminations = rawResults.Count(x => x.Eliminated && ResultStatuses.Of(x) == ResultStatus.Eliminated),
+                    Facts = facts,
                 };
-            }).OrderBy(x => x.Tier).ThenByDescending(x => x.Total).ThenBy(x => x.Team.DisplayName, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Team.Id).ToList();
+            }).ToList();
+
+            var rows = rawRows
+                .GroupBy(x => (x.Tier, x.Total))
+                .OrderBy(g => g.Key.Tier)
+                .ThenByDescending(g => g.Key.Total)
+                .SelectMany(g =>
+                {
+                    var byTeam = g.ToDictionary(x => x.Team.Id);
+                    return ties.OrderLevel(g.Select(x => x.Facts).ToList()).Select(f => byTeam[f.TeamId]);
+                })
+                .ToList();
+
             (int Tier, double Total)? previous = null;
             var rank = 0;
             var result = new List<PrintableResultRowDto>();
             for (var i = 0; i < rows.Count; i++)
             {
-                // Teams only tie on the same points within the same final.
-                if (previous != (rows[i].Tier, rows[i].Total)) rank = i + 1;
-                previous = (rows[i].Tier, rows[i].Total);
+                var key = (rows[i].Tier, rows[i].Total);
+                if (previous != key)
+                {
+                    rank = i + 1;
+                }
+                else if (i > 0)
+                {
+                    var levelGroup = rows.Where(r => (r.Tier, r.Total) == key).Select(r => r.Facts).ToList();
+                    if (!ties.AreLevel(levelGroup, rows[i - 1].Facts, rows[i].Facts))
+                        rank = i + 1;
+                }
+                previous = key;
                 result.Add(new PrintableResultRowDto(rank, rows[i].Team.Id, rows[i].Team.DisplayName,
                     rows[i].Team.Club?.Name ?? string.Empty, rows[i].Total, rows[i].Run, rows[i].Wins, rows[i].Eliminations, rows[i].Bonus));
             }
@@ -124,10 +157,14 @@ public sealed class PrintableEventService(AppDbContext db)
     /// When a heat starts: its own time if one was set, otherwise the session's start plus the length of
     /// the heats before it (the auto-timetable only sets the session's start).
     /// </summary>
-    private static DateTime? HeatStart(Session session, Heat heat)
+    private static DateTime? HeatStart(
+        Session session,
+        Heat heat,
+        IReadOnlyDictionary<int, Calendar.HeatTime>? timings = null)
     {
         if (heat.ScheduledStart is not null) return heat.ScheduledStart;
-        if (session.ScheduledStart is null) return null;
+        if (session.ScheduledStart is null)
+            return timings is not null && timings.TryGetValue(heat.Id, out var t) ? t.Start : null;
         var start = session.ScheduledStart.Value;
         foreach (var earlier in OrderedHeats(session))
         {

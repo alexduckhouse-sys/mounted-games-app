@@ -577,7 +577,13 @@ public class ScoringService
             PointValues.Validate(points);
             return points;
         }
-        var incomingCore = accepted.Select(p => new CorePlace(p.TeamId, p.Eliminated ? null : p.Place, p.Eliminated,
+        int? StoredPlacing(FinishingPlace fp)
+        {
+            if (fp.Eliminated || sitOut.Contains(fp.TeamId)) return null;
+            if (fp.Place < 1) return fp.Place;
+            return EffectiveSectionScore(fp).Place;
+        }
+        var incomingCore = accepted.Select(p => new CorePlace(p.TeamId, StoredPlacing(p), p.Eliminated,
                 p.Status ?? ResultStatus.Finished, CleanNoteOrNull(p.Note), PointsFor(p)))
             .OrderBy(p => p.TeamId).ToList();
         var currentCore = current.Select(p => new CorePlace(p.TeamId, p.Eliminated ? null : p.Place, p.Eliminated,
@@ -630,7 +636,9 @@ public class ScoringService
             var unchanged = seen.Count == currentCore.Count && seen.Zip(currentCore).All(pair =>
                 pair.First.TeamId == pair.Second.TeamId
                 && pair.First.Eliminated == pair.Second.Eliminated
-                && (pair.First.Eliminated ? null : (int?)pair.First.Place) == pair.Second.Place
+                && (pair.First.Eliminated
+                    ? pair.Second.Place is null
+                    : pair.First.Place == pair.Second.Place || StoredPlacing(pair.First) == pair.Second.Place)
                 && (pair.First.Status is null
                     || ResultStatuses.Of(pair.First.Eliminated, pair.First.Status.Value) == pair.Second.Status));
             if (!unchanged)
@@ -644,7 +652,7 @@ public class ScoringService
         {
             RaceId = raceId,
             TeamId = fp.TeamId,
-            Placing = fp.Eliminated || sitOut.Contains(fp.TeamId) ? null : fp.Place,
+            Placing = StoredPlacing(fp),
             Eliminated = fp.Eliminated,
             Status = fp.Eliminated ? fp.Status ?? ResultStatus.Eliminated : ResultStatus.Finished,
             RefereeNote = CleanNoteOrNull(fp.Note),

@@ -99,19 +99,20 @@ public class AppDbContext : IdentityDbContext<AppUser>
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // Existing API timestamps without an offset are interpreted as UTC.
+        // Browsers already submit scheduled times with an explicit UTC offset.
+        foreach (var property in b.Model.GetEntityTypes().SelectMany(e => e.GetProperties()))
+        {
+            if ((Nullable.GetUnderlyingType(property.ClrType) ?? property.ClrType) == typeof(DateTime)
+                && property.GetValueConverter() is null)
+                property.SetValueConverter(new UtcDateTimeConverter());
+        }
+        b.Entity<SavedRider>().Property(r => r.DateOfBirth).HasConversion(new CalendarDateTimeConverter());
+        b.Entity<RiderEntry>().Property(r => r.DateOfBirth).HasConversion(new CalendarDateTimeConverter());
         if (Database.IsNpgsql())
         {
-            // Existing API timestamps without an offset are interpreted as UTC.
-            // Browsers already submit scheduled times with an explicit UTC offset.
-            foreach (var property in b.Model.GetEntityTypes().SelectMany(e => e.GetProperties()))
-            {
-                if ((Nullable.GetUnderlyingType(property.ClrType) ?? property.ClrType) == typeof(DateTime))
-                    property.SetValueConverter(new UtcDateTimeConverter());
-            }
-            b.Entity<SavedRider>().Property(r => r.DateOfBirth)
-                .HasColumnType("timestamp without time zone").HasConversion(new CalendarDateTimeConverter());
-            b.Entity<RiderEntry>().Property(r => r.DateOfBirth)
-                .HasColumnType("timestamp without time zone").HasConversion(new CalendarDateTimeConverter());
+            b.Entity<SavedRider>().Property(r => r.DateOfBirth).HasColumnType("timestamp without time zone");
+            b.Entity<RiderEntry>().Property(r => r.DateOfBirth).HasColumnType("timestamp without time zone");
         }
 
         // These tables may already contain rows written by the original feature branches.

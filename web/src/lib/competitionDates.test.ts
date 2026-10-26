@@ -35,6 +35,12 @@ describe('competitionDateText', () => {
   it('returns an empty string when the start is unreadable', () => {
     expect(competitionDateText('not a date')).toBe('');
   });
+
+  it('keeps date-only, UTC midnight, and BST midnight strings on the right UK calendar day', () => {
+    expect(competitionDateText('2026-10-17', '2026-10-18')).toBe('Sat 17 – Sun 18 Oct');
+    expect(competitionDateText('2026-10-17T00:00:00Z', '2026-10-18T00:00:00Z')).toBe('Sat 17 – Sun 18 Oct');
+    expect(competitionDateText('2026-10-16T23:00:00Z', '2026-10-17T23:00:00Z')).toBe('Sat 17 – Sun 18 Oct');
+  });
 });
 
 describe('isOnToday', () => {

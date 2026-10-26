@@ -372,4 +372,17 @@ public class TimetableTimesTests
         Assert.Equal(2, pace.SampleHeats);
         Assert.Equal(25.0 / 30, pace.Multiplier, 8);
     }
+
+    [Fact]
+    public void DayOneDelayDoesNotShiftDayTwoSessions()
+    {
+        var day1Late = NewSession(1, At(9), started: At(9, 45), heats: [NewHeat(1, 1, 30)]);
+        var day1Next = NewSession(2, At(10), heats: [NewHeat(2, 1, 30)]);
+        var day2Morning = NewSession(3, At(9).AddDays(1), heats: [NewHeat(3, 1, 30)]);
+
+        var times = TimetableTimes.Compute([day1Late, day1Next, day2Morning]);
+
+        Assert.Equal(At(10, 45), times[2].Start);
+        Assert.Equal(At(9).AddDays(1), times[3].Start);
+    }
 }

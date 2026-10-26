@@ -37,20 +37,21 @@ public sealed class StandingsService(AppDbContext db)
         {
             var section = sections.GetValueOrDefault(t.CompetitionSectionId);
             var inFinal = tiers.TierOf(t.Id) is not null;
-            var finalResults = t.Results.Where(r => ties.IsFinalRace(r.RaceId)).ToList();
+            var effectiveResults = ties.EffectiveResults(t.Results);
+            var finalResults = effectiveResults.Where(r => ties.IsFinalRace(r.RaceId)).ToList();
             var finalPoints = finalResults.Sum(r => r.Points);
-            var earlier = t.Results.Sum(r => r.Points) - finalPoints;
+            var earlier = effectiveResults.Sum(r => r.Points) - finalPoints;
             var total = SectionScoring.Total(section, inFinal, earlier, finalPoints, bonus.GetValueOrDefault(t.Id));
             var alone = inFinal && !SectionScoring.CarriesIntoFinal(section);
             return (Total: total, Final: inFinal ? finalPoints : (double?)null, Earlier: inFinal ? earlier : (double?)null,
-                TieResults: alone ? finalResults : t.Results);
+                TieResults: alone ? finalResults : effectiveResults, Effective: effectiveResults);
         });
 
         var rows = teams.Select(t => new StandingRow(
                 t.Id, t.DisplayName, t.Club?.Name ?? string.Empty, t.BibColour,
                 scores[t.Id].Total,
-                t.Results.Count,
-                t.Results.Count(r => r.Placing == 1 && !r.Eliminated),
+                t.Results.Count(r => !r.IsSitOut),
+                scores[t.Id].Effective.Count(r => !r.IsSitOut && r.Placing == 1 && !r.Eliminated),
                 t.Results.Count(r => r.Eliminated && ResultStatuses.Of(r) == ResultStatus.Eliminated),
                 tiers.TierOf(t.Id),
                 t.EntryStatus != TeamEntryStatus.Active,

@@ -14,7 +14,8 @@ public sealed record IcsEvent(
     string? Description = null,
     string? Url = null,
     int? Sequence = null,
-    DateTime? LastModifiedUtc = null);
+    DateTime? LastModifiedUtc = null,
+    bool AllDay = false);
 
 /// <summary>
 /// A small writer for iCalendar (RFC 5545) files: CRLF line ends, text escaping, lines folded at 75 octets
@@ -64,8 +65,16 @@ public sealed class IcsCalendar
         lines.Add("BEGIN:VEVENT");
         lines.Add("UID:" + EscapeText(e.Uid));
         lines.Add("DTSTAMP:" + FormatUtc(e.StampUtc));
-        lines.Add("DTSTART:" + FormatUtc(e.StartUtc));
-        lines.Add("DTEND:" + FormatUtc(e.EndUtc));
+        if (e.AllDay)
+        {
+            lines.Add("DTSTART;VALUE=DATE:" + FormatDate(e.StartUtc));
+            lines.Add("DTEND;VALUE=DATE:" + FormatDate(e.EndUtc));
+        }
+        else
+        {
+            lines.Add("DTSTART:" + FormatUtc(e.StartUtc));
+            lines.Add("DTEND:" + FormatUtc(e.EndUtc));
+        }
         if (e.Sequence is { } sequence) lines.Add("SEQUENCE:" + sequence.ToString(CultureInfo.InvariantCulture));
         if (e.LastModifiedUtc is { } modified) lines.Add("LAST-MODIFIED:" + FormatUtc(modified));
         lines.Add("SUMMARY:" + EscapeText(e.Summary));
@@ -76,6 +85,10 @@ public sealed class IcsCalendar
         lines.Add("TRANSP:OPAQUE");
         lines.Add("END:VEVENT");
     }
+
+    /// <summary>Basic ISO 8601 calendar date form, such as <c>20261017</c>.</summary>
+    public static string FormatDate(DateTime value) =>
+        value.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
 
     /// <summary>Basic ISO 8601 UTC form, such as <c>20261017T093000Z</c>.</summary>
     public static string FormatUtc(DateTime value)

@@ -107,19 +107,48 @@ export interface TeamDetail {
 }
 
 const isRace = (session: Session) => (session.kind ?? (session.isBreak ? 1 : 0)) === 0;
-/** Same rule as the timetable: a final heat, or a session or heat named "final". */
-const isFinal = (session: Session, heat: Heat) => heat.raceRoundStage === 2 || /\bfinals?\b/i.test(heat.label ?? '') || /\bfinals?\b/i.test(session.name);
+const isHhfRoundFinal = (session: Session, heat: Heat) =>
+  heat.raceRoundStage === 2 && (heat.raceRoundId != null || session.heats.some((h) => h.raceRoundStage === 1));
+/** Same rule as the timetable: a competition-end final heat, or a session or heat named "final" (excluding HHF round finals). */
+const isFinal = (session: Session, heat: Heat) =>
+  !isHhfRoundFinal(session, heat) && (heat.raceRoundStage === 2 || /\bfinals?\b/i.test(heat.label ?? '') || /\bfinals?\b/i.test(session.name));
 const heatDone = (heat: Heat) => !!heat.finishedAt || (heat.races.length > 0 && heat.races.every((race) => race.isComplete));
+
+function hhfRoundKey(heat: Heat, raceName?: string): string {
+  if (heat.raceRoundId != null) return `id:${heat.raceRoundId}`;
+  const prefix = (heat.label ?? '').split('·')[0]?.trim().toLowerCase();
+  return `name:${(raceName ?? prefix ?? '').trim().toLowerCase()}`;
+}
+
+function hhfFinalistKeys(session: Session): Set<string> {
+  const keys = new Set<string>();
+  for (const heat of session.heats) {
+    if (!isHhfRoundFinal(session, heat)) continue;
+    for (const race of heat.races) {
+      const rk = hhfRoundKey(heat, race.name);
+      for (const result of race.results) {
+        keys.add(`${rk}:${result.teamId}`);
+      }
+    }
+  }
+  return keys;
+}
 
 /**
  * Fingerprint of a section's race scores and heat assignments. Clock changes (`startedAt`/`finishedAt`) leave this unchanged.
- * Include every race session: teams may also score in combined or differently labelled sessions.
+ * Includes this section's race sessions plus any combined-scoring sessions so cross-section scores don't trigger false refreshes.
  */
 export function sectionScoreVersion(sessions: Session[], sectionId: number | null | undefined): string {
   if (sectionId == null) return '';
   const parts: string[] = [];
   const raceSessions = sessions
-    .filter(isRace)
+    .filter((session) => {
+      if (!isRace(session)) return false;
+      const secId = (session as { sectionId?: number | null }).sectionId ?? session.competitionSectionId;
+      if (secId === sectionId || secId == null) return true;
+      return session.heats.some((h) => /\[scoring:/i.test(`${session.notes ?? ''} ${h.label ?? ''}`))
+        || /\[scoring:/i.test(session.notes ?? '');
+    })
     .slice()
     .sort((a, b) => a.orderIndex - b.orderIndex);
   for (const session of raceSessions) {
@@ -168,12 +197,15 @@ export function buildToplist(standings: StandingRow[], sessions: Session[], team
     }
   }
   heatSessions.forEach((session, index) => {
+    const finalistKeys = hhfFinalistKeys(session);
     for (const heat of session.heats) {
       if (isFinal(session, heat)) continue;
       const open = heatDone(heat) ? 0 : heat.races.filter((race) => !race.isComplete).length;
       for (const entry of heat.entries) racesLeft.set(entry.teamId, (racesLeft.get(entry.teamId) ?? 0) + open);
       for (const race of heat.races) {
+        const rk = heat.raceRoundStage === 1 ? hhfRoundKey(heat, race.name) : null;
         for (const result of race.results) {
+          if (rk && finalistKeys.has(`${rk}:${result.teamId}`)) continue;
           const cells = sessionPoints.get(result.teamId) ?? heatSessions.map(() => 0);
           cells[index] += result.points;
           sessionPoints.set(result.teamId, cells);
@@ -182,10 +214,13 @@ export function buildToplist(standings: StandingRow[], sessions: Session[], team
     }
   });
 
+  const tieFacts = buildTieBreakFacts(sessions, sectionId);
   // Once finals exist the final a team is in (A, then B, then C) decides its place before points do.
   const tier = (row: StandingRow) => row.finalTier ?? Number.MAX_SAFE_INTEGER;
-  const level = (a: StandingRow, b: StandingRow) => tier(a) === tier(b) && a.totalPoints === b.totalPoints;
-  const ordered = [...standings].sort((a, b) => tier(a) - tier(b) || b.totalPoints - a.totalPoints);
+  const compareRows = (a: StandingRow, b: StandingRow) =>
+    tier(a) - tier(b) || b.totalPoints - a.totalPoints || compareTieBreak(a, b, tier(a) < Number.MAX_SAFE_INTEGER, finalsPoints, tieFacts);
+  const level = (a: StandingRow, b: StandingRow) => compareRows(a, b) === 0;
+  const ordered = [...standings].sort(compareRows);
   const standingRank = new Map(ordered.map((row, idx) => [row.teamId, (row as { place?: number }).place ?? idx + 1]));
   const finalGroups = buildFinalGroups(sessions, sectionId, standingRank);
   const rows: ToplistRow[] = ordered.map((row) => {
@@ -206,7 +241,8 @@ export function buildToplist(standings: StandingRow[], sessions: Session[], team
   const places = finalistCount === 0 ? 0 : (finalistCount ?? defaultPlaces);
   if (scored && places > 0 && rows.length > places) {
     const linePoints = rows[places - 1].points;
-    const tied = rows.filter((row) => row.points === linePoints);
+    const linePosition = rows[places - 1].position;
+    const tied = rows.filter((row) => row.position === linePosition);
     const lastTied = rows.lastIndexOf(tied[tied.length - 1]);
     if (lastTied >= places) {
       // The tie straddles the line, so the tied teams ride a run-off for the places left.
@@ -473,6 +509,103 @@ function qualifyingRanks(rows: ToplistRow[], sessionPoints: Map<number, number[]
   return ranks;
 }
 
+interface TeamTieBreakFacts {
+  placingCounts: number[];
+  recentPoints: number[];
+  finalPlacingCounts: number[];
+  finalRecentPoints: number[];
+}
+
+function buildTieBreakFacts(sessions: Session[], sectionId: number): Map<number, TeamTieBreakFacts> {
+  const facts = new Map<number, TeamTieBreakFacts>();
+  const ensure = (teamId: number): TeamTieBreakFacts => {
+    let f = facts.get(teamId);
+    if (!f) {
+      f = { placingCounts: Array(10).fill(0), recentPoints: [], finalPlacingCounts: Array(10).fill(0), finalRecentPoints: [] };
+      facts.set(teamId, f);
+    }
+    return f;
+  };
+  const orderedSessions = sessions
+    .filter((s) => s.competitionSectionId === sectionId && isRace(s))
+    .slice()
+    .sort((a, b) => a.orderIndex - b.orderIndex || a.id - b.id);
+  for (const session of orderedSessions) {
+    const finalistKeys = hhfFinalistKeys(session);
+    const heats = session.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex || a.id - b.id);
+    for (const heat of heats) {
+      const inFinal = isFinal(session, heat);
+      const races = heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex || a.id - b.id);
+      for (const race of races) {
+        const rk = heat.raceRoundStage === 1 ? hhfRoundKey(heat, race.name) : null;
+        for (const result of race.results) {
+          if (result.isSitOut) continue;
+          if (rk && finalistKeys.has(`${rk}:${result.teamId}`)) continue;
+          const f = ensure(result.teamId);
+          if (inFinal) {
+            if (!result.eliminated && (result.placing ?? 0) >= 1 && (result.placing ?? 0) <= 10) {
+              f.finalPlacingCounts[(result.placing ?? 1) - 1]++;
+            }
+            f.finalRecentPoints.unshift(result.points);
+          }
+          if (!result.eliminated && (result.placing ?? 0) >= 1 && (result.placing ?? 0) <= 10) {
+            f.placingCounts[(result.placing ?? 1) - 1]++;
+          }
+          f.recentPoints.unshift(result.points);
+        }
+      }
+    }
+  }
+  return facts;
+}
+
+type TieBreakRow = StandingRow & {
+  tieBreakOrder?: number | null;
+  finalsTieOrder?: number | null;
+  finalPlace?: number | null;
+  place?: number | null;
+};
+
+function compareTieBreak(
+  aRow: StandingRow,
+  bRow: StandingRow,
+  inFinal: boolean,
+  finalsPoints: Map<number, number>,
+  facts: Map<number, TeamTieBreakFacts>,
+): number {
+  const a = aRow as TieBreakRow;
+  const b = bRow as TieBreakRow;
+  if (a.finalsTieOrder != null && b.finalsTieOrder != null && a.finalsTieOrder !== b.finalsTieOrder) return a.finalsTieOrder - b.finalsTieOrder;
+  if (a.tieBreakOrder != null && b.tieBreakOrder != null && a.tieBreakOrder !== b.tieBreakOrder) return a.tieBreakOrder - b.tieBreakOrder;
+  if (a.finalPlace != null && b.finalPlace != null && a.finalPlace !== b.finalPlace) return a.finalPlace - b.finalPlace;
+  if (a.place != null && b.place != null && a.place !== b.place) return a.place - b.place;
+  const fa = facts.get(a.teamId);
+  const fb = facts.get(b.teamId);
+  if (inFinal) {
+    const aFp = a.finalPoints ?? finalsPoints.get(a.teamId);
+    const bFp = b.finalPoints ?? finalsPoints.get(b.teamId);
+    if (aFp != null && bFp != null && aFp !== bFp) return bFp - aFp;
+    if (fa && fb) {
+      for (let i = 0; i < 10; i++) {
+        if (fa.finalPlacingCounts[i] !== fb.finalPlacingCounts[i]) return fb.finalPlacingCounts[i] - fa.finalPlacingCounts[i];
+      }
+      for (let i = 0; i < Math.min(fa.finalRecentPoints.length, fb.finalRecentPoints.length); i++) {
+        if (fa.finalRecentPoints[i] !== fb.finalRecentPoints[i]) return fb.finalRecentPoints[i] - fa.finalRecentPoints[i];
+      }
+    }
+  }
+  if (a.wins !== b.wins) return b.wins - a.wins;
+  if (fa && fb) {
+    for (let i = 0; i < 10; i++) {
+      if (fa.placingCounts[i] !== fb.placingCounts[i]) return fb.placingCounts[i] - fa.placingCounts[i];
+    }
+    for (let i = 0; i < Math.min(fa.recentPoints.length, fb.recentPoints.length); i++) {
+      if (fa.recentPoints[i] !== fb.recentPoints[i]) return fb.recentPoints[i] - fa.recentPoints[i];
+    }
+  }
+  return 0;
+}
+
 function buildDetail(rows: ToplistRow[], finals: FinalGroup[], heatSessions: Session[], qualifying: Map<number, { position: number; points: number }>): Map<number, TeamDetail> {
   const names = new Map<number, string>(rows.map((row) => [row.teamId, row.teamName]));
   for (const group of finals) for (const finalRow of group.rows) if (!names.has(finalRow.teamId)) names.set(finalRow.teamId, finalRow.teamName);
@@ -487,16 +620,29 @@ function buildDetail(rows: ToplistRow[], finals: FinalGroup[], heatSessions: Ses
       blocks.push({ key: `final-${group.id}`, kind: 'final', label: group.label, note: 'not carried over', points: mine.points, races: group.races.get(teamId) ?? [] });
     }
     heatSessions.forEach((session, index) => {
+      const finalistKeys = hhfFinalistKeys(session);
       const heats = session.heats.filter((heat) => !isFinal(session, heat) && (heat.entries.some((entry) => entry.teamId === teamId) || heat.races.some((race) => race.results.some((result) => result.teamId === teamId))));
-      const races: TeamRaceResult[] = heats.flatMap((heat) => heat.races).flatMap((race) =>
-        race.results.filter((result) => result.teamId === teamId).map((result) => ({ id: result.id, name: race.name, placing: result.placing, eliminated: result.eliminated, points: result.points, status: result.status })));
+      const races: TeamRaceResult[] = [];
+      let sessionTotal = 0;
+      for (const heat of heats) {
+        for (const race of heat.races) {
+          const rk = heat.raceRoundStage === 1 ? hhfRoundKey(heat, race.name) : null;
+          for (const result of race.results) {
+            if (result.teamId !== teamId) continue;
+            races.push({ id: result.id, name: race.name, placing: result.placing, eliminated: result.eliminated, points: result.points, status: result.status });
+            if (!(rk && finalistKeys.has(`${rk}:${teamId}`))) {
+              sessionTotal += result.points;
+            }
+          }
+        }
+      }
       const labels = heats.map((heat) => heat.label?.trim()).filter(Boolean);
       blocks.push({
         key: `session-${session.id}`,
         kind: 'session',
         label: [`Session ${index + 1}`, ...labels].join(' · '),
         note: null,
-        points: heats.length === 0 ? null : races.reduce((sum, race) => sum + race.points, 0),
+        points: heats.length === 0 ? null : sessionTotal,
         races,
       });
     });

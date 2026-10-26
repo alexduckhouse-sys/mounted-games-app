@@ -562,4 +562,19 @@ describe('pause cascade regressions', () => {
     expect(pace.multiplier).toBeCloseTo(25 / 30);
     expect(parsePausedAtMs('[paused:999999999999999999999999]')).toBeNull();
   });
+
+  it('does not cascade Day 1 delays or pauses into Day 2 sessions', () => {
+    const day2Offset = 24 * 60; // +24h
+    const timings = computeTimings([
+      session(1, { orderIndex: 1, arenaName: 'Arena 1', scheduledStart: at(0), startedAt: at(45), notes: paused, heats: [heat(1)] }),
+      session(2, { orderIndex: 2, arenaName: 'Arena 1', scheduledStart: at(60), heats: [heat(2)] }),
+      session(3, { orderIndex: 3, arenaName: 'Arena 1', scheduledStart: at(day2Offset), heats: [heat(3)] }),
+    ], { nowMs: ms(25) });
+    // Day 1 session 2 inherits the 45m delay from Day 1 session 1.
+    expect(timeOf(timings.get(2)!.effective)).toBe(ms(105));
+    expect(timings.get(2)!.shifted).toBe(true);
+    // Day 2 session 3 starts on time at 09:00 on Day 2.
+    expect(timeOf(timings.get(3)!.effective)).toBe(ms(day2Offset));
+    expect(timings.get(3)!.shifted).toBe(false);
+  });
 });
