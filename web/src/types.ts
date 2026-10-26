@@ -334,6 +334,8 @@ export interface CompetitionDetail {
   streamUrl?: string | null;
   organiserName?: string | null;
   paymentDestination?: string | null;
+  /** Optional external https:// payment link (Stripe Payment Link, SumUp, PayPal) shown alongside BACS instructions. */
+  paymentLinkUrl?: string | null;
   /** When true the public signup form is hidden and the API rejects new signups. */
   signupsLocked?: boolean;
   /** Explicit capability from APIs that keep trainer messages private. Missing means unavailable. */
@@ -418,6 +420,41 @@ export interface MySignup {
   teamId?: number | null;
   teamName?: string | null;
   createdAt: string;
+  lookingForPair?: boolean;
+  lookingForGuestRiders?: boolean;
+  waitingForGuestSpot?: boolean;
+  pairRequestFromSignupId?: number | null;
+  pairRequestFromName?: string | null;
+  pairRequestFromClub?: string | null;
+  pairRequestToSignupId?: number | null;
+  pairRequestToName?: string | null;
+  pairRequestStatus?: string | null;
+  declarationAccessGranted?: boolean;
+  stablesCount?: number;
+  stablingClubOrTeam?: string | null;
+  paymentMethod?: string | null;
+  isWaitlist?: boolean;
+  isWithdrawn?: boolean;
+  refundPending?: boolean;
+  teamsCount?: number;
+  drawComplete?: boolean;
+  linkedTeams?: { id: number; name: string }[] | null;
+  /** Assigned barn / stable boxes, e.g. "Barn B, Boxes 14–18". */
+  stableAssignment?: string | null;
+  /** Assigned electric hook-up pitch, e.g. "Hook-up Post 4". */
+  hookupAssignment?: string | null;
+  /** Lorry or towing vehicle registration plate. */
+  vehicleRegistration?: string | null;
+  /** Arrival or stabling notes for the gate steward. */
+  arrivalNotes?: string | null;
+  /** Organiser's bank transfer / payment instructions for this competition. */
+  paymentDestination?: string | null;
+  /** Organiser's external https:// payment link (Stripe, SumUp, PayPal) for this competition. */
+  paymentLinkUrl?: string | null;
+  competitionEnd?: string | null;
+  competitionLocation?: string | null;
+  competitionPostcode?: string | null;
+  competitionWhat3Words?: string | null;
 }
 
 export interface FormedTeamPreview {
@@ -462,6 +499,53 @@ export interface SectionSignup {
   teamName?: string | null;
   /** A team manager or trainer entering a whole team in one go. */
   isWholeTeam?: boolean;
+  lookingForPair?: boolean;
+  lookingForGuestRiders?: boolean;
+  waitingForGuestSpot?: boolean;
+  pairRequestFromSignupId?: number | null;
+  pairRequestToSignupId?: number | null;
+  pairRequestStatus?: string | null;
+  stablesCount?: number;
+  stablingClubOrTeam?: string | null;
+  paymentMethod?: string | null;
+  isWaitlist?: boolean;
+  isWithdrawn?: boolean;
+  refundPending?: boolean;
+  teamsCount?: number;
+  /** Assigned barn / stable boxes, e.g. "Barn B, Boxes 14–18". */
+  stableAssignment?: string | null;
+  /** Assigned electric hook-up pitch, e.g. "Hook-up Post 4". */
+  hookupAssignment?: string | null;
+  /** Lorry or towing vehicle registration plate. */
+  vehicleRegistration?: string | null;
+  /** Arrival or stabling notes for the gate steward. */
+  arrivalNotes?: string | null;
+}
+
+export interface UpdateSignupStablingInput {
+  stableAssignment?: string | null;
+  hookupAssignment?: string | null;
+  vehicleRegistration?: string | null;
+  arrivalNotes?: string | null;
+}
+
+export interface StablingBooking {
+  signupId: number;
+  sectionId: number;
+  sectionName: string;
+  fullName: string;
+  ponyClubOrTeam: string;
+  stablesCount: number;
+  status: SignupPaymentStatus;
+  stableAssignment?: string | null;
+  hookupAssignment?: string | null;
+  vehicleRegistration?: string | null;
+  arrivalNotes?: string | null;
+}
+
+export interface StablingSummary {
+  totalStables: number;
+  bookings: StablingBooking[];
 }
 
 export interface ShopPost {

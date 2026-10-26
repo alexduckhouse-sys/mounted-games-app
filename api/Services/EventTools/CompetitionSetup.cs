@@ -18,7 +18,8 @@ public sealed record CompetitionSetup(
     string? What3Words, string? AppleMapsUrl, string? TermsText, string? DecFormConfigJson,
     string? LaneHatbands, bool EnablePassportCheck, string? PaymentDestination,
     IReadOnlyList<CompetitionSetup.SectionSetup> Sections,
-    IReadOnlyList<CompetitionSetup.SessionSetup> Sessions)
+    IReadOnlyList<CompetitionSetup.SessionSetup> Sessions,
+    string? PaymentLinkUrl = null)
 {
     public sealed record SectionSetup(
         SectionFormat Format, string AgeGroup, string DisplayName, string? RunoffRaceName, TieBreakRule TieBreakRule,
@@ -78,7 +79,8 @@ public sealed record CompetitionSetup(
             sections.Select(s => new SectionSetup(s.Format, s.AgeGroup, s.DisplayName, s.RunoffRaceName, s.TieBreakRule,
                 s.FinalistCount, s.UsesRaceFinals, s.PriceMinor, s.MaxParticipants,
                 s.HasFinal, s.CarryPointsIntoFinal, s.DoublePointsInFinal)).ToList(),
-            sessions);
+            sessions,
+            source.PaymentLinkUrl);
     }
 
     static List<FinalHeatSetup>? FinalHeatsOf(Session session, DateTime eventStart)
@@ -164,6 +166,7 @@ public sealed class CompetitionSetupService(AppDbContext db)
                 LaneHatbands = setup.LaneHatbands,
                 EnablePassportCheck = setup.EnablePassportCheck,
                 PaymentDestination = setup.PaymentDestination,
+                PaymentLinkUrl = setup.PaymentLinkUrl,
                 CreatedByUserId = creatorUserId,
             };
             db.Competitions.Add(clone);

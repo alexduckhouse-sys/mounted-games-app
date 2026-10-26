@@ -40,7 +40,8 @@ public static class Mappings
         IsDemo: isDemo, TermsText: c.TermsText,
         PayoutsTo: payoutsTo, LaneHatbands: PlannedRaceList.Read(c.LaneHatbands),
         UseRefereeCards: DecFormConfig.For(c).UseRefereeCards,
-        Postcode: c.Postcode, CompetitionNumber: c.CompetitionNumber, ContactEmail: c.ContactEmail);
+        Postcode: c.Postcode, CompetitionNumber: c.CompetitionNumber, ContactEmail: c.ContactEmail,
+        PaymentLinkUrl: includePaymentDetails ? CompetitionFields.ResolvePaymentLinkUrl(c.PaymentLinkUrl, c.PaymentDestination) : null);
 
     /// <param name="activeSignups">Paid and pending entries: the ones that count towards <c>MaxParticipants</c>.</param>
     public static CompetitionSectionDto ToDto(this CompetitionSection s, int activeSignups = 0) =>

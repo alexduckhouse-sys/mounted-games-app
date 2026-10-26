@@ -235,6 +235,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
             e.Property(c => c.Postcode).HasMaxLength(12);
             e.Property(c => c.CompetitionNumber).HasMaxLength(40);
             e.Property(c => c.ContactEmail).HasMaxLength(254);
+            e.Property(c => c.PaymentLinkUrl).HasMaxLength(500);
             e.HasOne(c => c.CreatedBy)
                 .WithMany()
                 .HasForeignKey(c => c.CreatedByUserId)

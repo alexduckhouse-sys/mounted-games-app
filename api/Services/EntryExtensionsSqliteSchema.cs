@@ -28,7 +28,7 @@ public static class EntryExtensionsSqliteSchema
             FOREIGN KEY ("SignupId") REFERENCES "SectionSignups" ("Id") ON DELETE CASCADE,
             FOREIGN KEY ("TeamId") REFERENCES "Teams" ("Id") ON DELETE CASCADE
             """, 2),
-        ("SignupExtras", "\"SignupId\", \"StablesCount\", \"StablingClubOrTeam\", \"PaymentMethod\", \"IsWaitlist\", \"IsWithdrawn\", \"RefundPending\", \"TeamsCount\"", """
+        ("SignupExtras", "\"SignupId\", \"StablesCount\", \"StablingClubOrTeam\", \"PaymentMethod\", \"IsWaitlist\", \"IsWithdrawn\", \"RefundPending\", \"TeamsCount\", \"StableAssignment\", \"HookupAssignment\", \"VehicleRegistration\", \"ArrivalNotes\"", """
             "SignupId" INTEGER NOT NULL PRIMARY KEY,
             "StablesCount" INTEGER NOT NULL DEFAULT 0,
             "StablingClubOrTeam" TEXT NULL,
@@ -37,6 +37,10 @@ public static class EntryExtensionsSqliteSchema
             "IsWithdrawn" INTEGER NOT NULL DEFAULT 0,
             "RefundPending" INTEGER NOT NULL DEFAULT 0,
             "TeamsCount" INTEGER NOT NULL DEFAULT 1,
+            "StableAssignment" TEXT NULL,
+            "HookupAssignment" TEXT NULL,
+            "VehicleRegistration" TEXT NULL,
+            "ArrivalNotes" TEXT NULL,
             FOREIGN KEY ("SignupId") REFERENCES "SectionSignups" ("Id") ON DELETE CASCADE
             """, 1),
         ("CompetitionEntrySettings", "\"CompetitionId\", \"EntriesCloseAt\"", """
@@ -64,6 +68,16 @@ public static class EntryExtensionsSqliteSchema
             if (table == "SignupMatchmaking"
                 && await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM pragma_table_info('SignupMatchmaking') WHERE name = 'DeclarationAccessGranted'").SingleAsync() == 0)
                 await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"SignupMatchmaking\" ADD COLUMN \"DeclarationAccessGranted\" INTEGER NOT NULL DEFAULT 0;");
+            if (table == "SignupExtras")
+            {
+                foreach (var col in new[] { "StableAssignment", "HookupAssignment", "VehicleRegistration", "ArrivalNotes" })
+                {
+                    var checkSql = $"SELECT COUNT(*) AS Value FROM pragma_table_info('SignupExtras') WHERE name = '{col}'";
+                    var alterSql = $"ALTER TABLE \"SignupExtras\" ADD COLUMN \"{col}\" TEXT NULL;";
+                    if (await db.Database.SqlQueryRaw<int>(checkSql).SingleAsync() == 0)
+                        await db.Database.ExecuteSqlRawAsync(alterSql);
+                }
+            }
             var count = await db.Database.SqlQuery<int>($"SELECT COUNT(*) AS \"Value\" FROM pragma_foreign_key_list({table})").SingleAsync();
             if (count == foreignKeys) continue;
 

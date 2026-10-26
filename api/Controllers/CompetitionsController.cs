@@ -241,6 +241,7 @@ public class CompetitionsController : ControllerBase
     }
 
     private const string ContactEmailProblem = "That contact email doesn't look right. Check it, or leave it blank.";
+    private const string PaymentLinkProblem = "That payment link doesn't look right. Use a full https:// link, or leave it blank.";
 
     [HttpPost]
     [Authorize(Roles = Roles.Organiser)]
@@ -249,6 +250,8 @@ public class CompetitionsController : ControllerBase
         string? contactEmail = null;
         if (!string.IsNullOrWhiteSpace(req.ContactEmail) && !EmailAddresses.TryNormalise(req.ContactEmail, out contactEmail))
             return BadRequest(new { message = ContactEmailProblem });
+        if (!CompetitionFields.TryNormalisePaymentLinkUrl(req.PaymentLinkUrl, out var paymentLinkUrl))
+            return BadRequest(new { message = PaymentLinkProblem });
         var appleUrl = string.IsNullOrWhiteSpace(req.AppleMapsUrl) ? null : req.AppleMapsUrl.Trim();
         var lat = req.Latitude;
         var lon = req.Longitude;
@@ -281,6 +284,7 @@ public class CompetitionsController : ControllerBase
             StreamUrl = string.IsNullOrWhiteSpace(req.StreamUrl) ? null : req.StreamUrl.Trim(),
             OrganiserName = string.IsNullOrWhiteSpace(req.OrganiserName) ? null : req.OrganiserName.Trim(),
             PaymentDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim(),
+            PaymentLinkUrl = paymentLinkUrl,
             TermsText = string.IsNullOrWhiteSpace(req.TermsText) ? null : req.TermsText.Trim(),
             // New competitions start with the basic dec form and pin the creator's club for payouts; older ones with no setup keep the standard form.
             DecFormConfigJson = (MountedGames.Api.Services.DecForms.DecFormConfig.Basic with
@@ -306,6 +310,8 @@ public class CompetitionsController : ControllerBase
         string? contactEmail = null;
         if (!string.IsNullOrWhiteSpace(req.ContactEmail) && !EmailAddresses.TryNormalise(req.ContactEmail, out contactEmail))
             return BadRequest(new { message = ContactEmailProblem });
+        if (!CompetitionFields.TryNormalisePaymentLinkUrl(req.PaymentLinkUrl, out var paymentLinkUrl))
+            return BadRequest(new { message = PaymentLinkProblem });
         var c = await _db.Competitions
             .Include(c => c.Sections).Include(c => c.Teams).Include(c => c.Sessions)
             .FirstOrDefaultAsync(c => c.Id == id);
@@ -334,10 +340,11 @@ public class CompetitionsController : ControllerBase
         c.StreamUrl = string.IsNullOrWhiteSpace(req.StreamUrl) ? null : req.StreamUrl.Trim();
         c.What3Words = string.IsNullOrWhiteSpace(req.What3Words) ? null : req.What3Words.Trim();
         c.AppleMapsUrl = appleUrl;
-        // Null leaves these three as they are (older clients don't send them); a blank value clears them.
+        // Null leaves these fields as they are (older clients don't send them); a blank value clears them.
         if (req.Postcode is not null) c.Postcode = CompetitionFields.Postcode(req.Postcode);
         if (req.CompetitionNumber is not null) c.CompetitionNumber = CompetitionFields.Trimmed(req.CompetitionNumber);
         if (req.ContactEmail is not null) c.ContactEmail = contactEmail;
+        if (req.PaymentLinkUrl is not null) c.PaymentLinkUrl = paymentLinkUrl;
         c.OrganiserName = string.IsNullOrWhiteSpace(req.OrganiserName) ? null : req.OrganiserName.Trim();
         c.PaymentDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim();
         c.TermsText = string.IsNullOrWhiteSpace(req.TermsText) ? null : req.TermsText.Trim();
