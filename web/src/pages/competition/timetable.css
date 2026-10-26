@@ -3,7 +3,7 @@
 
 /* Day, arena and age group: three small dropdowns on one slim navy strip, full width and sticky below the header. */
 .tt-strip {
-  position: sticky; top: var(--mg-shell-h, 0px); z-index: 20; display: flex; align-items: center; gap: 6px; padding: 2px 0 10px;
+  position: sticky; top: var(--mg-shell-h, 0px); z-index: 20; display: flex; align-items: center; gap: 6px; padding: 2px 0 6px;
   border-image: conic-gradient(rgb(var(--mg-header)) 0 0) fill 0 // 0 100vmax; color: #fff;
 }
 /* Under the age-group band the two navy bars read as one: no second gap between the dropdowns. */
@@ -41,12 +41,17 @@ a.tt-row:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offs
   text-decoration: none !important; transition: background .15s;
 }
 .tt-row + .tt-row { border-top: 1px solid rgb(var(--mg-rule-soft)); }
-.tt-row { position: relative; }
+.tt-row { position: relative; isolation: isolate; }
 /* A heat that has just gone live: a red glow sweeps over the row once and fades. */
 .tt-lit { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, rgb(var(--mg-red) / .22), rgb(var(--mg-red) / .06)); animation: tt-lit 1.8s var(--mg-ease-out, ease-out) both; }
 @keyframes tt-lit { 0% { opacity: 0; clip-path: inset(0 100% 0 0); } 25% { opacity: 1; clip-path: inset(0 0 0 0); } 100% { opacity: 0; clip-path: inset(0 0 0 0); } }
 @media (prefers-reduced-motion: reduce) { .tt-lit { display: none; } }
 html[data-lite="true"] .tt-lit { display: none; }
+/* A start time a delay has just moved: the row warms gold once and fades back over 900 ms. */
+.tt-shifted { position: absolute; inset: 0; z-index: -1; pointer-events: none; background: rgb(var(--mg-late-bg)); animation: tt-shifted .9s ease-out both; }
+@keyframes tt-shifted { 0%, 20% { opacity: .9; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .tt-shifted { display: none; } }
+html[data-lite="true"] .tt-shifted { display: none; }
 a.tt-row:hover { background: rgb(var(--mg-subtle)); }
 a.tt-row:focus-visible { outline-offset: -2px; }
 .tt-time { font: 700 23px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; color: rgb(var(--mg-heading)); }

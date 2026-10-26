@@ -76,6 +76,24 @@ body:has(.mg-tabs) .kit-toast { bottom: calc(84px + env(safe-area-inset-bottom, 
 .kit-toast svg { flex: none; width: 22px; height: 22px; padding: 4px; border-radius: 50%; background: rgb(var(--mg-toast-tick)); }
 .kit-toast path { fill: none; stroke: #fff; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; }
 
+/* The "save quick access" banner: floats just above the bottom tabs, never dims or blocks the page. */
+.mg-remember { position: fixed; z-index: 40; left: max(12px, env(safe-area-inset-left, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); margin: 0 auto; max-width: 30rem; display: flex; flex-direction: column; gap: 10px; padding: 12px 12px 12px 14px; border: 1px solid rgb(var(--mg-rule)); border-radius: 16px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); box-shadow: 0 10px 28px rgb(var(--mg-overlay) / .16), 0 1px 3px rgb(var(--mg-overlay) / .08); font-family: var(--mg-font); animation: mg-remember-in .22s var(--mg-ease-out); }
+body:has(.mg-tabs) .mg-remember { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+.mg-remember.is-closing { animation: mg-remember-out .16s ease-in forwards; pointer-events: none; }
+.mg-remember-title { margin: 0; font: 800 17px/1.1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
+.mg-remember-text { margin: 3px 0 0; font: 500 13.5px/1.4 var(--mg-font); color: rgb(var(--mg-body)); }
+.mg-remember-acts { display: flex; gap: 8px; }
+.mg-remember-acts .kit-pill { flex: 1; min-height: 44px; }
+@media (min-width: 640px) {
+  .mg-remember { flex-direction: row; align-items: center; gap: 16px; }
+  .mg-remember-acts { flex: none; }
+  .mg-remember-acts .kit-pill { flex: none; }
+}
+@keyframes mg-remember-in { from { opacity: 0; transform: translateY(12px); } }
+@keyframes mg-remember-out { to { opacity: 0; transform: translateY(12px); } }
+@media (prefers-reduced-motion: reduce) { .mg-remember, .mg-remember.is-closing { animation: none; } }
+html[data-lite="true"] .mg-remember { box-shadow: none; }
+
 /* Kind 8: field errors stay red, with a small icon. */
 .mg-field-msg { display: flex; align-items: flex-start; gap: 5px; }
 .mg-field-msg > svg { flex: none; width: 14px; height: 14px; margin-top: 2px; }

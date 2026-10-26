@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ConfirmDialog, confirmDialog, useConfirm } from './ConfirmDialog';
@@ -83,12 +83,52 @@ describe('confirmDialog', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Remove' }));
     await expect(yes).resolves.toBe(true);
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
-    expect(document.querySelector('.mg-confirm-backdrop')).toBeNull();
+    expect(document.querySelector('.mg-confirm-backdrop:not(.mg-confirm-leaving)')).toBeNull();
+    await waitFor(() => expect(document.querySelector('.mg-confirm-backdrop')).toBeNull());
 
     const no = confirmDialog({ title: 'Remove?', message: 'Gone for good.' });
     await screen.findByRole('alertdialog');
     await userEvent.keyboard('{Escape}');
     await expect(no).resolves.toBe(false);
+  });
+
+  it('leaves on a hidden, inert copy that goes once its animation ends', async () => {
+    const answer = confirmDialog({ title: 'Remove?', message: 'Gone for good.', confirmLabel: 'Remove' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+    await expect(answer).resolves.toBe(true);
+    const ghost = await waitFor(() => {
+      const found = document.querySelector<HTMLElement>('.mg-confirm-leaving');
+      expect(found).not.toBeNull();
+      return found!;
+    });
+    expect(ghost).toHaveAttribute('aria-hidden', 'true');
+    expect(ghost.inert).toBe(true);
+    expect(ghost.querySelector('[role]')).toBeNull();
+    fireEvent.animationEnd(ghost.querySelector('.mg-confirm')!);
+    expect(ghost.isConnected).toBe(false);
+  });
+
+  it('answers only once, even if a second answer comes in while it leaves', async () => {
+    const answer = confirmDialog({ title: 'Remove?', message: 'Gone for good.', confirmLabel: 'Remove' });
+    const remove = await screen.findByRole('button', { name: 'Remove' });
+    fireEvent.click(remove);
+    fireEvent.click(remove);
+    await expect(answer).resolves.toBe(true);
+    await waitFor(() => expect(document.querySelectorAll('.mg-confirm-leaving').length).toBeLessThanOrEqual(1));
+  });
+
+  it.each([
+    ['lite mode', () => { document.documentElement.dataset.lite = 'true'; }],
+    ['reduced motion', () => { vi.stubGlobal('matchMedia', () => ({ matches: true })); }],
+  ])('closes at once with %s', async (_name, setUp) => {
+    setUp();
+    const answer = confirmDialog({ title: 'Remove?', message: 'Gone for good.', confirmLabel: 'Remove' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+    await expect(answer).resolves.toBe(true);
+    await waitFor(() => expect(document.querySelector('.mg-confirm-backdrop')).toBeNull());
+    expect(document.querySelector('.mg-confirm-leaving')).toBeNull();
+    delete document.documentElement.dataset.lite;
+    vi.unstubAllGlobals();
   });
 
   it('is what useConfirm gives back', () => {

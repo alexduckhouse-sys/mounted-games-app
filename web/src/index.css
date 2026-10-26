@@ -159,3 +159,10 @@ nav a:focus-visible, summary:focus-visible {
 .ticker-line { animation: ticker-in .45s ease-out; }
 @keyframes ticker-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .ticker-line { animation: none; } }
+
+/* iOS Safari zooms into any field under 16px when it gets focus, so on phones every typed field is at least 16px. */
+@media (max-width: 639px) {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="button"], [type="submit"], [type="reset"], [type="image"]),
+  select,
+  textarea { font-size: max(16px, 1em) !important; }
+}

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, type CSSProperties } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
@@ -46,7 +46,7 @@ export function StreamControlsPage() {
   const onAir = useMemo(() => onAirStream(liveStreams, lastStreamCommand, pickedId), [liveStreams, lastStreamCommand, pickedId]);
   const overlay = ctxOverlay ?? DEFAULT_OVERLAY;
   const { auto, setOn, setRule } = useStreamAuto(competition.id);
-  useStreamAutomation({ competition, overlay, saveOverlay, auto });
+  const { step: autoStep } = useStreamAutomation({ competition, overlay, saveOverlay, auto });
   const tiles = useOverlayTiles({ competitionId: competition.id, overlay, saveOverlay, onAir, setAutoOn: setOn });
   const clips = useSavedReplays(competition.id);
   const arenaName = onAir?.arenaName || competition.sessions[0]?.arenaName || 'Arena 1';
@@ -103,7 +103,11 @@ export function StreamControlsPage() {
             onClick={() => replay.instant(instantLength, `Instant replay ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`, (clip) => { choose('replay'); setOpenClipId(clip.id); })}>
             <RotateCcw className="h-4 w-4" aria-hidden="true" />Instant replay · {lengthLabel(instantLength)}
           </button>
-          <button type="button" className="sx-chip" aria-pressed={auto.on} onClick={() => setOn(!auto.on)}>{auto.on ? 'Auto on' : 'Auto off'}</button>
+          <button type="button" className="sx-chip sx-auto-chip" aria-pressed={auto.on} onClick={() => setOn(!auto.on)}>
+            {auto.on ? 'Auto on' : 'Auto off'}
+            {autoStep && <span className="sr-only">, showing the {autoStep.card} card for {autoStep.seconds} seconds</span>}
+            {autoStep && <span key={autoStep.run} aria-hidden="true" className="sx-auto-count" style={{ '--sx-count': `${autoStep.seconds}s` } as CSSProperties} />}
+          </button>
         </div>
 
         <div key={tab} role="tabpanel" className="mg-settle" aria-label={TABS.find((t) => t.id === tab)?.label}>

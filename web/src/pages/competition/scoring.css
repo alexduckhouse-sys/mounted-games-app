@@ -113,21 +113,23 @@
 }
 .sc-row-sit { opacity: .55; }
 
-/* Press-and-hold red fill: starts after 250 ms and is full at 600 ms, when the team is eliminated. */
+/* Press-and-hold red fill: starts after 250 ms (so a tap doesn't flash it) and is full at 600 ms, when the team is
+   eliminated (HOLD_ELIMINATE_MS). It grows with a transform so it stays smooth on a busy phone, and it is a progress
+   indicator rather than decoration, so lite mode and reduced motion keep it. */
 .sc-hold {
   position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 0;
+  inset: 0;
   background: rgb(var(--mg-elim) / 0.16);
   pointer-events: none;
+  transform: scaleX(0);
+  transform-origin: left center;
   animation: scHoldFill 350ms linear 250ms forwards;
 }
 @keyframes scHoldFill {
-  from { width: 0; }
-  to { width: 100%; }
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
 }
+html[data-lite="true"] .sc-hold { animation-duration: 350ms !important; }
 
 .sc-main-btn {
   position: relative;
@@ -327,7 +329,7 @@
 @media (min-width: 640px) { .sc-sheet { border-radius: 16px; } }
 @keyframes sc-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes sc-sheet-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-@media (prefers-reduced-motion: reduce) { .sc-overlay, .sc-sheet, .sc-hold { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .sc-overlay, .sc-sheet { animation: none; } }
 .sc-field { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
 .sc-choices { display: flex; flex-wrap: wrap; gap: 6px; }
 .sc-choice { min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1.5px solid rgb(var(--mg-control)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); font: 600 14px/1.1 var(--mg-font); cursor: pointer; }
@@ -413,6 +415,14 @@ button.sc-done-name { background: none; border: 0; padding: 0; text-align: left;
   color: rgb(var(--mg-button-ink));
   font: 800 20px/1 var(--mg-font-display);
 }
+.sc-place-pop { animation: scPlacePop 180ms cubic-bezier(.34, 1.56, .64, 1); }
+/* A tapped lane's place disc springs in, so the scorer sees which tap landed. */
+@keyframes scPlacePop {
+  0% { transform: scale(.82); }
+  60% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) { .sc-place-pop { animation: none; } }
 .sc-place-out { background: rgb(var(--mg-live-row)); color: rgb(var(--mg-elim)); }
 .sc-badge-sit {
   min-width: 32px;

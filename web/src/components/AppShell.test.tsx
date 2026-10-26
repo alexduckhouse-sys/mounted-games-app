@@ -90,7 +90,7 @@ describe('AppShell: choosing a competition', () => {
 
   it('does not ask to remember a competition on the events list', () => {
     mount('/events');
-    expect(screen.queryByRole('dialog', { name: 'Remember this competition?' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Save quick access on this device?' })).not.toBeInTheDocument();
   });
 });
 

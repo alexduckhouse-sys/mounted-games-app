@@ -549,3 +549,18 @@ it('reports pause and shift failures and keeps the entered custom delay for retr
   expect(post).toHaveBeenCalledTimes(2);
   post.mockRestore();
 });
+
+it('warms a row once when a delay moves its start time while you watch, but not on first draw', () => {
+  setCompetition({}, null, 'Main Arena');
+  const { container, rerender } = renderBoard();
+  expect(container.querySelector('.tt-shifted')).toBeNull();
+  // Session 1 started later still, so session 2 in the same arena moves back again.
+  const value = state.value as { competition: ReturnType<typeof competition> };
+  const sessions = value.competition.sessions.map((s) => (s.id === 1 ? { ...s, startedAt: `${day}T10:15:00` } : s));
+  state.value = { ...value, competition: { ...value.competition, sessions } };
+  rerender(<MemoryRouter><TimetableBoard /></MemoryRouter>);
+  const moved = container.querySelector('.tt-late')!;
+  expect(moved).toHaveTextContent('Heat 2');
+  expect(moved.querySelector('.tt-shifted')).not.toBeNull();
+  expect(container.querySelectorAll('.tt-shifted')).toHaveLength(1);
+});

@@ -433,7 +433,7 @@ export function FormatPage() {
       </div>
 
       <footer className="fixed inset-x-0 bottom-0 z-40 border-t border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))]">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-end gap-3 px-3 py-4 sm:px-4">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-end gap-3 px-3 pt-4 pb-[calc(16px+env(safe-area-inset-bottom))] sm:px-4">
           <button type="button" onClick={() => void generate()} disabled={busy} className="mg-btn mg-btn-primary !min-h-[50px] !rounded-[10px] !px-[18px] !text-base">{busy ? 'Working…' : 'Generate timetable'}</button>
         </div>
       </footer>

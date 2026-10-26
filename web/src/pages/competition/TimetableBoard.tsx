@@ -417,6 +417,11 @@ function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false
   const [liveSeen, setLiveSeen] = useState({ live, lit: 0 });
   if (liveSeen.live !== live) setLiveSeen({ live, lit: live ? liveSeen.lit + 1 : liveSeen.lit });
   const lit = liveSeen.live === live ? liveSeen.lit : liveSeen.lit + (live ? 1 : 0);
+  // A delay that moves this line's start time while you're looking warms the row once, so the change is easy to spot.
+  const at = row.effective?.getTime() ?? null;
+  const [timeSeen, setTimeSeen] = useState({ at, shifts: 0 });
+  if (timeSeen.at !== at) setTimeSeen({ at, shifts: timeSeen.shifts + 1 });
+  const shifts = timeSeen.at === at ? timeSeen.shifts : timeSeen.shifts + 1;
   const race = (session.kind ?? (session.isBreak ? 1 : 0)) === 0;
   const heatName = heat ? heat.label || `Heat ${row.heatIndex + 1}` : 'Heats to follow';
   const name = race ? heatName : session.name;
@@ -455,6 +460,7 @@ function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false
     <span className="sr-only">{statusLabel(status, delayMinutes)}</span>
     {race ? <ChevronRight className="tt-chevron" size={14} aria-hidden="true" /> : <span className="tt-chevron" aria-hidden="true" />}
     {live && lit > 0 && <span key={lit} className="tt-lit" aria-hidden="true" />}
+    {shifts > 0 && !live && <span key={`shift-${shifts}`} className="tt-shifted" aria-hidden="true" />}
   </>;
   const className = `tt-row tt-${status}${hasFollowedTeam ? ' tt-followed' : ''}`;
   return race ? <Link className={className} data-followed={hasFollowedTeam ? 'true' : undefined} to={`/competitions/${competitionId}/session/${session.id}${heat ? `?heat=${heat.id}` : ''}`}>{content}</Link> : <div className={className} data-followed={hasFollowedTeam ? 'true' : undefined}>{content}</div>;

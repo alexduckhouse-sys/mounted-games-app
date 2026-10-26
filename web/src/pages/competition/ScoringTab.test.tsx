@@ -487,7 +487,7 @@ it('links organiser screen actions to the selected age group and hides them from
     await user.click(within(modal).getByRole('tab', { name: /Screens, PA & Spectator QR Codes/ }));
     expect(within(modal).getByText('PA Commentator Desk')).toBeInTheDocument();
     expect(within(modal).getByText('TV Kiosk Display')).toBeInTheDocument();
-    expect(within(modal).getByRole('link', { name: /Print QR Posters Sheet/ })).toHaveAttribute('href', '/event-tools/1/print/posters');
+    expect(within(modal).getByRole('link', { name: /Print QR posters/ })).toHaveAttribute('href', '/event-tools/1/print/posters');
 
     await user.click(within(modal).getByRole('button', { name: 'Close QR access modal' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Share with QR codes' })).toBeNull());

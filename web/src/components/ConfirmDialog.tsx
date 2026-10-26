@@ -59,13 +59,44 @@ export function confirmDialog(options: ConfirmOptions): Promise<boolean> {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const root = createRoot(host);
+    let answered = false;
     const answer = (confirmed: boolean) => {
+      if (answered) return;
+      answered = true;
       resolve(confirmed);
+      const ghost = leavingCopy(host);
       // Not inside the click that got us here: React will not unmount a root while it is handling that root's event.
-      queueMicrotask(() => { root.unmount(); host.remove(); });
+      queueMicrotask(() => { root.unmount(); host.remove(); if (ghost) playLeave(ghost); });
     };
     root.render(<ConfirmDialog {...options} onAnswer={answer} />);
   });
+}
+
+/** The longest an answered dialog's copy stays while it slides or fades away (skin.css `.mg-confirm-leaving`). */
+const LEAVE_MS = 400;
+
+/**
+ * A still copy of the answered dialog, so it can leave the way it came while the real one (and its focus trap) is
+ * already gone. Lite mode and reduced motion get none. The copy is inert and hidden from screen readers.
+ */
+function leavingCopy(host: HTMLElement): HTMLElement | null {
+  const reduced = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduced || document.documentElement.dataset.lite === 'true') return null;
+  const shown = host.firstElementChild;
+  if (!(shown instanceof HTMLElement)) return null;
+  const ghost = shown.cloneNode(true) as HTMLElement;
+  ghost.classList.add('mg-confirm-leaving');
+  ghost.setAttribute('aria-hidden', 'true');
+  ghost.inert = true;
+  ghost.querySelector('[role]')?.removeAttribute('role');
+  return ghost;
+}
+
+function playLeave(ghost: HTMLElement) {
+  document.body.appendChild(ghost);
+  const done = () => ghost.remove();
+  ghost.querySelector('.mg-confirm')?.addEventListener('animationend', done, { once: true });
+  setTimeout(done, LEAVE_MS);
 }
 
 /** `const confirm = useConfirm(); if (!(await confirm({ title, message, destructive: true }))) return;` */
