@@ -1,5 +1,6 @@
 import { enqueue, type QueuedScore } from '../offline/scoreOutbox';
 import type { PendingPlace } from './raceScoring';
+import type { CardMark } from './refereeCards';
 
 /** How many actions can be undone. */
 export const UNDO_LIMIT = 10;
@@ -10,7 +11,13 @@ export interface DraftUndo { kind: 'draft'; raceId: number; places: PendingPlace
 /** A race save. `queuedBefore` is the save it replaced in the outbox, if any; `draft` is what was on screen when it was saved. */
 export interface SaveUndo { kind: 'save'; raceId: number; sent: QueuedScore; queuedBefore: QueuedScore | null; draft: PendingPlace[] }
 
-export type UndoEntry = DraftUndo | SaveUndo;
+/** A card or HC change made from race tools: what the team had before, so undo can put it back. */
+export type MarkChange = { type: 'card'; teamId: number; before: CardMark } | { type: 'hc'; teamId: number; before: boolean };
+
+/** A card or HC change made while this race was open. */
+export interface MarkUndo { kind: 'mark'; raceId: number; change: MarkChange }
+
+export type UndoEntry = DraftUndo | SaveUndo | MarkUndo;
 
 export function pushUndo(stack: UndoEntry[], entry: UndoEntry): UndoEntry[] {
   return [...stack, entry].slice(-UNDO_LIMIT);

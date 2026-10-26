@@ -750,6 +750,7 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
     if (!lastUndo) return;
     setUndoStack((stack) => stack.slice(0, -1));
     if (lastUndo.kind === 'draft') { setPending(lastUndo.places); return; }
+    if (lastUndo.kind === 'mark') return;
     let restore: PendingPlace[] = [];
     updateOutbox((list) => {
       const result = undoSave(list, lastUndo);

@@ -199,6 +199,8 @@ export interface Team {
   trainerUserId?: string | null;
   trainerName?: string | null;
   isHorsConcours: boolean;
+  /** The team's current disciplinary card, if staff gave one. */
+  refereeCard?: 'yellow' | 'red' | null;
   /** "trainer", "manager" (of the team's club), "supporter" or null — only set on /trainer/my-teams. */
   relationship?: 'trainer' | 'manager' | 'supporter' | null;
   /** Join key — set only when the viewer is the trainer or the club's manager. */
@@ -230,6 +232,8 @@ export interface HeatEntry {
   teamName: string;
   bibColour?: string | null;
   laneIndex: number;
+  /** The team's current disciplinary card ('yellow' or 'red'), or none. Set by staff on the scoring screen. */
+  refereeCard?: 'yellow' | 'red' | null;
 }
 
 export interface ResultRow {
