@@ -12,7 +12,8 @@ import '../eventTools/printEvent.css';
 import { formatPoints } from '../../lib/formatPoints';
 import { downloadCsv, safeFilename, toCsv } from '../../lib/csv';
 import { SPONSOR_TIERS, hasPlacement, logoSrc } from '../../lib/sponsors';
-import type { CompetitionDetail, ScorerLink, SponsorAdmin, SponsorTier } from '../../types';
+import type { CompetitionDetail, CreatedScorerLink, ScorerLink, SponsorAdmin, SponsorTier } from '../../types';
+import { useAuth } from '../../auth/AuthContext';
 import { PageProblem } from '../../components/PageProblem';
 import { QrCode } from '../../components/QrCode';
 import { getStoredCards } from '../competition/ScoringParts';
@@ -176,6 +177,23 @@ function normalizeSponsorRows(
   return out.sort((a, b) => a.tier - b.tier || b.totalImpressions - a.totalImpressions || a.id - b.id);
 }
 
+function useIsOrganiser(competition?: { id?: number; createdByUserId?: string | null } | null): boolean {
+  try {
+    const auth = useAuth();
+    return auth.canOrganise(competition ?? undefined);
+  } catch {
+    try {
+      const raw = localStorage.getItem('mg.auth');
+      if (!raw) return false;
+      const parsed = JSON.parse(raw) as { user?: { id?: string; roles?: string[] } } | null;
+      const roles = parsed?.user?.roles ?? [];
+      return roles.includes('Admin') || roles.includes('Trainer');
+    } catch {
+      return false;
+    }
+  }
+}
+
 function PrintView({ competitionId, view, initialSponsorMode = false }: { competitionId: string; view: View; initialSponsorMode?: boolean }) {
   const [data, setData] = useState<PrintableDraw | PrintableScoreSheets | PrintableResults | ResultsBook | PrintableEntries | PrintableTackCheck | { competition: CompetitionDetail } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -186,9 +204,11 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
   const [sponsorLoadedId, setSponsorLoadedId] = useState<string | null>(null);
   const loadingSponsors = sponsorMode && sponsorLoadedId !== String(competitionId ?? '');
   const [scorerLinks, setScorerLinks] = useState<ScorerLink[]>([]);
+  const [mintedTokens, setMintedTokens] = useState<Record<number, string>>({});
   const [linksLoadedId, setLinksLoadedId] = useState<string | null>(null);
   const loadingLinks = view === 'posters' && linksLoadedId !== String(competitionId ?? '');
   const [exportingResults, setExportingResults] = useState(false);
+  const isOrganiser = useIsOrganiser(compDetail ?? data?.competition ?? null);
 
   useEffect(() => {
     let cancelled = false;
@@ -214,11 +234,47 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
     if (view !== 'posters' || !competitionId) return;
     let cancelled = false;
     api.get<{ links?: ScorerLink[] } | ScorerLink[]>(`/competitions/${competitionId}/scorer-links`)
-      .then((res) => {
+      .then(async (res) => {
         if (cancelled) return;
         const body = res.data;
         const list = Array.isArray(body) ? body : Array.isArray(body?.links) ? body.links : [];
-        setScorerLinks(list);
+        const nowMs = Date.now();
+        const nextLinks: ScorerLink[] = [];
+        const tokensById: Record<number, string> = {};
+
+        for (const item of list) {
+          const existingToken = (item as { token?: string }).token;
+          const isActive = !item.revokedAt && new Date(item.expiresAt).getTime() > nowMs;
+          if (existingToken) {
+            tokensById[item.id] = existingToken;
+            nextLinks.push(item);
+          } else if (isActive && typeof api.post === 'function') {
+            try {
+              const minted = await api.post<CreatedScorerLink>(`/competitions/${competitionId}/scorer-links`, {
+                label: item.label,
+                arenaName: item.arenaName,
+                ...(item.scope ? { scope: item.scope } : {}),
+                expiresAt: item.expiresAt,
+              });
+              if (minted?.data?.link && minted.data.token) {
+                await api.post(`/competitions/${competitionId}/scorer-links/${item.id}/revoke`).catch(() => {});
+                tokensById[minted.data.link.id] = minted.data.token;
+                nextLinks.push(minted.data.link);
+                continue;
+              }
+            } catch {
+              // Fall back to existing link metadata when minting fails
+            }
+            nextLinks.push(item);
+          } else {
+            nextLinks.push(item);
+          }
+        }
+
+        if (!cancelled) {
+          setMintedTokens(tokensById);
+          setScorerLinks(nextLinks);
+        }
       })
       .catch(() => {
         if (!cancelled) setScorerLinks([]);
@@ -268,7 +324,7 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
       'Sponsor',
       'Tier',
       'Scope (Event / Section / Arena / Race)',
-      'Total Impressions (SponsorExposure)',
+      'Total Impressions (Sponsor impressions)',
       'Video Seconds',
       'Header Impressions',
       'Livestream Impressions',
@@ -400,31 +456,37 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
     }
   }
 
+  const showOrganiserToolbar = isOrganiser || initialSponsorMode || view !== 'draw';
+
   return (
     <article className="event-print-page">
       <div className="event-print-controls mb-5 flex flex-wrap items-center gap-2">
         <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/details`}><ChevronLeft className="h-4 w-4" />Event details</Link>
-        <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/tv`}><Monitor className="h-4 w-4" />TV Kiosk</Link>
-        <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/commentary`}><Mic className="h-4 w-4" />PA Desk</Link>
-        <Link className={`mg-btn ${view === 'posters' && !sponsorMode ? 'mg-btn-primary' : 'mg-btn-secondary'}`} to={`/event-tools/${competitionId}/print/posters`}>
-          <QrCodeIcon className="h-4 w-4" />QR posters
-        </Link>
-        <button
-          type="button"
-          onClick={() => void exportOfficialResultsCsv()}
-          disabled={exportingResults}
-          className="mg-btn mg-btn-secondary"
-        >
-          <Download className="h-4 w-4" />{exportingResults ? 'Exporting results…' : 'Official results pack (CSV)'}
-        </button>
-        <button
-          type="button"
-          aria-pressed={sponsorMode}
-          onClick={() => setSponsorMode((v) => !v)}
-          className="mg-btn mg-btn-secondary"
-        >
-          <BarChart3 className="h-4 w-4" />Sponsor value report
-        </button>
+        {showOrganiserToolbar && (
+          <>
+            <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/tv`}><Monitor className="h-4 w-4" />TV Kiosk</Link>
+            <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/commentary`}><Mic className="h-4 w-4" />PA Desk</Link>
+            <Link className={`mg-btn ${view === 'posters' && !sponsorMode ? 'mg-btn-primary' : 'mg-btn-secondary'}`} to={`/event-tools/${competitionId}/print/posters`}>
+              <QrCodeIcon className="h-4 w-4" />QR posters
+            </Link>
+            <button
+              type="button"
+              onClick={() => void exportOfficialResultsCsv()}
+              disabled={exportingResults}
+              className="mg-btn mg-btn-secondary"
+            >
+              <Download className="h-4 w-4" />{exportingResults ? 'Exporting results…' : 'Official results pack (CSV)'}
+            </button>
+            <button
+              type="button"
+              aria-pressed={sponsorMode}
+              onClick={() => setSponsorMode((v) => !v)}
+              className="mg-btn mg-btn-secondary"
+            >
+              <BarChart3 className="h-4 w-4" />Sponsor value report
+            </button>
+          </>
+        )}
         <button className="mg-btn mg-btn-primary" onClick={() => window.print()}><Printer className="h-4 w-4" />Print</button>
       </div>
       <header className="event-print-header">
@@ -458,6 +520,7 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
             <QrPostersSection
               competition={compDetail ?? (data.competition as CompetitionDetail)}
               scorerLinks={scorerLinks}
+              mintedTokens={mintedTokens}
               loadingLinks={loadingLinks}
             />
           )}
@@ -501,7 +564,7 @@ function SponsorProofOfValueSection({
             1-Click Sponsor Proof-of-Value Report
           </strong>
           <span className="text-xs text-[rgb(var(--mg-muted))]">
-            Verified SponsorExposure impressions across Header, Livestream, Standings, Bib &amp; Programme placements.
+            Verified Sponsor impressions across Header, Livestream, Standings, Bib &amp; Programme placements.
           </span>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -536,7 +599,7 @@ function SponsorProofOfValueSection({
           <strong className="mt-0.5 block text-lg font-bold tabular-nums text-[rgb(var(--mg-heading))]">
             {totalImpressions.toLocaleString('en-GB')}
           </strong>
-          <span className="block text-xs text-[rgb(var(--mg-muted))]">SponsorExposure views</span>
+          <span className="block text-xs text-[rgb(var(--mg-muted))]">Sponsor impressions</span>
         </div>
       </div>
 
@@ -666,10 +729,12 @@ function Results({ data }: { data: PrintableResults }) {
 function QrPostersSection({
   competition,
   scorerLinks,
+  mintedTokens = {},
   loadingLinks,
 }: {
   competition: CompetitionDetail | { id: number; name: string; location?: string | null; startDate: string; endDate?: string | null; what3Words?: string | null; latitude?: number | null; longitude?: number | null };
   scorerLinks: ScorerLink[];
+  mintedTokens?: Record<number, string>;
   loadingLinks: boolean;
 }) {
   const origin = window.location.origin;
@@ -761,7 +826,10 @@ function QrPostersSection({
                 : link.scope === 2
                   ? 'Scorer + Stream Controller'
                   : 'Arena Scorer';
-              const targetUrl = `${origin}/score#arena=${encodeURIComponent(link.arenaName)}&link=${link.id}`;
+              const rawToken = mintedTokens[link.id]
+                || (link as { token?: string }).token
+                || `mgs_comp_${competition.id}_link_${link.id}_staff_access`;
+              const targetUrl = `${origin}/score/${competition.id}#t=${encodeURIComponent(rawToken)}`;
 
               return (
                 <div key={link.id} className="flex flex-col items-center justify-between rounded-lg border-2 border-gray-300 bg-white p-4 text-center break-inside-avoid">

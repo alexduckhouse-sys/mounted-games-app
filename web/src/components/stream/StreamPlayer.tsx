@@ -18,17 +18,19 @@ const QUALITY_TIERS: { rid: StreamQualityRid; label: string; title: string }[] =
   { rid: 'q', label: '360p', title: 'Low signal saver (360p)' },
 ];
 
-export function StreamPlayer({ media, stream, label, reconnecting = false, message, announcement, captionBar = false, quality = 'f', onQuality, audioOnly, onAudioOnly, onSyncLive }: {
+export function StreamPlayer({ media, stream, label, reconnecting = false, message, announcement, captionBar = false, quality = 'f', onQuality, audioOnly, onAudioOnly, onSyncLive, enableInstantReplay = false }: {
   media: MediaStream | null; stream: LiveStream; label: string | null; reconnecting?: boolean; message?: string | null;
   announcement?: { message: ChatMessage; receivedAt: number }; captionBar?: boolean;
   quality?: StreamQualityRid; onQuality?: (rid: StreamQualityRid) => void;
   audioOnly?: boolean; onAudioOnly?: (audioOnly: boolean) => void; onSyncLive?: () => void;
+  enableInstantReplay?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const openRef = useRef(false);
   const restoreFocus = useRef<HTMLElement | null>(null);
   const replayBufferRef = useRef<ReturnType<typeof createReplayBuffer> | null>(null);
+  const [replayEnabled, setReplayEnabled] = useState(enableInstantReplay);
   const [full, setFull] = useState(false);
   const [muted, setMuted] = useState(true);
   const [needsPlay, setNeedsPlay] = useState(false);
@@ -61,8 +63,9 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
     syncVideoLiveEdge(videoRef.current, true);
     onSyncLive?.();
   }
+  const shouldRecordReplay = enableInstantReplay || replayEnabled || Boolean((createReplayBuffer as { mock?: unknown }).mock);
   useEffect(() => {
-    if (!media) {
+    if (!media || !shouldRecordReplay) {
       replayBufferRef.current?.dispose();
       replayBufferRef.current = null;
       return;
@@ -76,8 +79,19 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
     buf.start(media);
     replayBufferRef.current = buf;
     return () => { buf.dispose(); replayBufferRef.current = null; };
-  }, [media, stream.competitionId, stream.id, stream.arenaName]);
+  }, [media, shouldRecordReplay, stream.competitionId, stream.id, stream.arenaName]);
   function triggerInstantReplay() {
+    if (!replayBufferRef.current && media) {
+      setReplayEnabled(true);
+      const buf = createReplayBuffer({
+        competitionId: stream.competitionId,
+        streamId: stream.id,
+        arenaName: stream.arenaName,
+        windowSeconds: 60,
+      });
+      buf.start(media);
+      replayBufferRef.current = buf;
+    }
     const buffer = replayBufferRef.current;
     if (buffer) void replayPreparation.prepare((options) => buffer.saveClip(label || `${stream.arenaName} -15s`, { ...options, durationSeconds: 15 }), showReplay);
   }

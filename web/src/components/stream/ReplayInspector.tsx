@@ -109,6 +109,8 @@ export function interpolateFollowTransform(
   };
 }
 
+export const interpolateCrop = interpolateFollowTransform;
+
 /**
  * Captures a crisp photo-finish PNG snapshot at current playhead and zoom/pan transform,
  * renders bottom metadata banner, and triggers a file download.
@@ -261,20 +263,37 @@ export function ReplayInspector({
     };
   }, []);
 
-  function applyFollowTransformAtTime(timeSec: number) {
-      if (!isDragging && followEnabled) {
-        const width = videoRef.current?.clientWidth || videoRef.current?.videoWidth || 1;
-        const height = videoRef.current?.clientHeight || videoRef.current?.videoHeight || 1;
-        const transform = interpolateFollowTransform(followKeyframes.map((key) => ({ ...key,
-          panX: key.panX * width / (key.viewportWidth || width), panY: key.panY * height / (key.viewportHeight || height),
-        })), timeSec);
-        if (transform) {
-          setZoom(transform.zoom);
-          setPanX(transform.panX);
-          setPanY(transform.panY);
-        }
+  const applyFollowTransformAtTime = useCallback((timeSec: number) => {
+    if (!isDragging && followEnabled) {
+      const width = videoRef.current?.clientWidth || videoRef.current?.videoWidth || 1;
+      const height = videoRef.current?.clientHeight || videoRef.current?.videoHeight || 1;
+      const transform = interpolateFollowTransform(followKeyframes.map((key) => ({ ...key,
+        panX: key.panX * width / (key.viewportWidth || width), panY: key.panY * height / (key.viewportHeight || height),
+      })), timeSec);
+      if (transform) {
+        setZoom(transform.zoom);
+        setPanX(transform.panX);
+        setPanY(transform.panY);
       }
-  }
+    }
+  }, [followEnabled, followKeyframes, isDragging, videoRef]);
+
+  // Drive Follow-Cam keyframe interpolation at 60fps via requestAnimationFrame during live playback
+  useEffect(() => {
+    if (!isPlaying || !followEnabled || isDragging || followKeyframes.length === 0) return;
+    let frameId = 0;
+    const tick = () => {
+      const video = videoRef.current;
+      if (video) {
+        applyFollowTransformAtTime(video.currentTime);
+      }
+      frameId = window.requestAnimationFrame(tick);
+    };
+    frameId = window.requestAnimationFrame(tick);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [isPlaying, followEnabled, isDragging, followKeyframes.length, applyFollowTransformAtTime, videoRef]);
 
   function recordKeyframe(time: number, targetZoom: number, targetPanX: number, targetPanY: number) {
       setFollowKeyframes((prev) => {

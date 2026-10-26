@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Eye, EyeOff, Film, Layers, ListOrdered, Megaphone, Mic, MicOff, Pause, Play, RefreshCw, Table2, Trophy, Video } from 'lucide-react';
 import { api } from '../../api';
-import { scorerApi } from '../../offline/scorerLink';
+import { readScorerToken, scorerApi } from '../../offline/scorerLink';
 import { Notice } from '../Notice';
 import { useToast } from '../Toast';
 import { CompetitionContext } from '../../pages/competition/context';
@@ -88,11 +88,27 @@ export function StreamControlStrip({
 
   async function triggerOverlay(kind: 'lanes' | 'heat' | 'toplist' | 'upNext' | 'none', label: string) {
     setProblem(null);
-    if (useScorerClient || !context?.saveOverlay) {
+    const tryAgain = { actionLabel: 'Try again', onAction: () => void triggerOverlay(kind, label) };
+    if (useScorerClient) {
+      const token = readScorerToken();
+      const card = kind === 'upNext' ? 'next' : kind === 'none' ? 'clear' : kind;
+      try {
+        await scorerApi.post(
+          `/competitions/${competitionId}/scorer-links/overlay-card`,
+          { card, liveSectionId: sectionId },
+          token ? { headers: { 'X-Scorer-Token': token } } : undefined,
+        );
+        setActiveOverlay(kind);
+        toast.show(`Showing: ${label}`);
+      } catch {
+        setProblem({ text: 'Couldn’t update the overlay. Check your signal and try again.', ...tryAgain });
+      }
+      return;
+    }
+    if (!context?.saveOverlay) {
       setProblem({ text: 'Sign in as an organiser to change overlays.', tone: 'info' });
       return;
     }
-    const tryAgain = { actionLabel: 'Try again', onAction: () => void triggerOverlay(kind, label) };
     try {
       const outcome = await context.saveOverlay((overlay) => ({
         ...overlay, look: { ...(overlay.look as Record<string, unknown>), liveCard: kind === 'upNext' ? 'next' : kind, liveSectionId: sectionId },

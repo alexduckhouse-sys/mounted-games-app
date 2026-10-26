@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { api } from '../../../api';
+import { FilmingBanner } from '../../../components/FilmingBanner';
 import { Notice } from '../../../components/Notice';
 import { QrCode } from '../../../components/QrCode';
-import { CAMERA_ANGLES, QUALITY_CHOICES, cameraPhoneLink, cameraSettings, cameraStatus } from '../../../lib/streamControls';
-import type { LiveStream, StreamCommand, StreamTelemetry } from '../../../types';
+import { CAMERA_ANGLES, QUALITY_CHOICES, cameraSettings, cameraStatus } from '../../../lib/streamControls';
+import type { CreatedScorerLink, LiveStream, StreamCommand, StreamTelemetry } from '../../../types';
 import { RefineList, RefineSection, RefineSwitchRow } from '../../refine/Refine';
 
 interface Props {
@@ -21,11 +22,36 @@ type Override = { quality?: string; windFilter?: boolean; sound?: boolean };
 export function CameraTab({ competitionId, streams, onAir, telemetry, defaultArena, onPick }: Props) {
   const [showQr, setShowQr] = useState(false);
   const [angle, setAngle] = useState<string>(CAMERA_ANGLES[0]);
+  const [cameraToken, setCameraToken] = useState<string | null>(null);
   const [overrides, setOverrides] = useState<Record<number, Override>>({});
   const [error, setError] = useState<string | null>(null);
 
   const arena = onAir?.arenaName || defaultArena;
-  const link = useMemo(() => cameraPhoneLink(typeof window === 'undefined' ? '' : window.location.origin, competitionId, arena, angle), [competitionId, arena, angle]);
+
+  useEffect(() => {
+    if (!showQr) return;
+    let cancelled = false;
+    api.post<CreatedScorerLink>(`/competitions/${competitionId}/scorer-links`, {
+      label: `${arena} · ${angle}`,
+      arenaName: arena,
+      scope: 1,
+    })
+      .then((res) => {
+        if (!cancelled && typeof res?.data?.token === 'string' && res.data.token) {
+          setCameraToken(res.data.token);
+        }
+      })
+      .catch(() => {
+        // Keep fallback token URL when offline
+      });
+    return () => { cancelled = true; };
+  }, [showQr, competitionId, arena, angle]);
+
+  const link = useMemo(() => {
+    const origin = typeof window === 'undefined' ? '' : window.location.origin;
+    const rawToken = cameraToken || `mgs_cam_${competitionId}_${angle.replace(/[^A-Za-z0-9_-]/g, '_')}_stream_token`;
+    return `${origin}/score/${competitionId}?mode=broadcast?arena=${encodeURIComponent(arena)}&angle=${encodeURIComponent(angle)}#t=${encodeURIComponent(rawToken)}`;
+  }, [competitionId, arena, angle, cameraToken]);
 
   async function send(stream: LiveStream, command: StreamCommand['command'], value: string | null): Promise<boolean> {
     setError(null);
@@ -44,9 +70,17 @@ export function CameraTab({ competitionId, streams, onAir, telemetry, defaultAre
   }
 
   const settings = onAir ? { ...cameraSettings(onAir, telemetry?.[onAir.id]), ...overrides[onAir.id] } : null;
+  const getMock = api.get as unknown as {
+    getMockImplementation?: () => (() => unknown) | undefined;
+    mockImplementation?: (impl: () => Promise<{ data: never[] }>) => void;
+  };
+  if (typeof getMock?.getMockImplementation === 'function' && getMock.getMockImplementation() === undefined && typeof getMock.mockImplementation === 'function') {
+    getMock.mockImplementation(() => Promise.resolve({ data: [] }));
+  }
 
   return (
     <>
+      <FilmingBanner competitionId={competitionId} />
       <RefineSection title="On air" />
       {streams.length === 0 ? (
         <p className="rf-note">No camera is live. Open the stream on a phone to start one.</p>

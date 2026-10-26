@@ -12,7 +12,9 @@ import type { ScorerSession } from '../types';
 import { Notice } from './Notice';
 import { Sheet } from './Sheet';
 
-type ParsedPermissionTarget = { kind: 'scorer'; token: string };
+type ParsedPermissionTarget =
+  | { kind: 'scorer'; token: string }
+  | { kind: 'route'; to: string };
 
 const NOT_ACCEPTED = 'That QR code isn’t a scoring or camera code, or it has stopped working. Ask the organiser for a new one.';
 
@@ -42,7 +44,7 @@ function parsePermissionTarget(raw: string): ParsedPermissionTarget | null {
     const url = new URL(trimmed, base);
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return null;
 
-    if (url.pathname === '/score' || url.pathname === '/score/') {
+    if (url.pathname === '/score' || url.pathname === '/score/' || /^\/score\/\d+\/?$/.test(url.pathname)) {
       const fromHash = tokenFromHash(url.hash);
       const fromQuery = url.searchParams.get('t')?.trim() ?? null;
       const token = fromHash || fromQuery;
@@ -50,6 +52,29 @@ function parsePermissionTarget(raw: string): ParsedPermissionTarget | null {
         return { kind: 'scorer', token };
       }
       return null;
+    }
+
+    const joinMatch = /^\/join\/([A-Za-z0-9_-]+)\/?$/.exec(url.pathname);
+    if (joinMatch) {
+      return { kind: 'route', to: `/join/${joinMatch[1]}${url.search}${url.hash}` };
+    }
+    if ((url.pathname === '/teams' || url.pathname === '/teams/') && url.searchParams.get('join')?.trim()) {
+      return { kind: 'route', to: `/teams?join=${encodeURIComponent(url.searchParams.get('join')!.trim())}` };
+    }
+
+    const compMatch = /^\/competitions\/(\d+)\/?$/.exec(url.pathname);
+    if (compMatch) {
+      return { kind: 'route', to: `/competitions/${compMatch[1]}` };
+    }
+
+    const tvMatch = /^\/(?:tv\/(\d+)|competitions\/(\d+)\/tv)\/?$/.exec(url.pathname);
+    if (tvMatch) {
+      return { kind: 'route', to: tvMatch[1] ? `/tv/${tvMatch[1]}` : `/competitions/${tvMatch[2]}/tv` };
+    }
+
+    const commentaryMatch = /^\/(?:commentary\/(\d+)|competitions\/(\d+)\/commentary)\/?$/.exec(url.pathname);
+    if (commentaryMatch) {
+      return { kind: 'route', to: commentaryMatch[1] ? `/commentary/${commentaryMatch[1]}` : `/competitions/${commentaryMatch[2]}/commentary` };
     }
 
   } catch {
@@ -140,6 +165,12 @@ function QrPermissionScannerDialog({
       return;
     }
 
+    if (parsed.kind === 'route') {
+      onClose();
+      navigateTo(parsed.to);
+      return;
+    }
+
     verifyingRef.current = true;
     setVerifying(true);
     try {
@@ -165,6 +196,8 @@ function QrPermissionScannerDialog({
       if (mountedRef.current) setVerifying(false);
     }
   }, [navigateTo, onClose, onScorerVerified]);
+
+  const hasDetector = typeof window !== 'undefined' && 'BarcodeDetector' in window;
 
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
@@ -269,6 +302,12 @@ function QrPermissionScannerDialog({
             </div>
           )}
 
+          {cameraActive && !hasDetector && (
+            <p className="text-xs text-[rgb(var(--mg-muted))]">
+              Live camera QR detection isn’t supported in this browser. Take or upload a photo below, or paste the link directly.
+            </p>
+          )}
+
           {error && <Notice>{error}</Notice>}
 
           <div className="kit-acts">
@@ -278,6 +317,7 @@ function QrPermissionScannerDialog({
               <input
                 type="file"
                 accept="image/*"
+                capture="environment"
                 className="sr-only"
                 aria-label="Upload QR code image"
                 onChange={(e) => void handleImageUpload(e.target.files?.[0])}

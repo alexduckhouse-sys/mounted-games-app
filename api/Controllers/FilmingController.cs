@@ -42,6 +42,7 @@ public class FilmingController(AppDbContext db) : ControllerBase
             {
                 e.TeamId, TeamName = e.Team!.DisplayName, e.LaneIndex,
                 HeatId = e.HeatId, e.Heat!.Label, e.Heat.OrderIndex, e.Heat.FinishedAt,
+                Races = e.Heat.Races.Select(r => new { r.IsComplete }).ToList(),
                 SessionId = e.Heat.SessionId, SessionName = e.Heat.Session!.Name, SessionOrder = e.Heat.Session.OrderIndex,
                 e.Heat.Session.ArenaName,
             })
@@ -57,10 +58,14 @@ public class FilmingController(AppDbContext db) : ControllerBase
             .ToDictionary(x => x.Id, x => x.Number);
 
         return entries
-            .SelectMany(e => current.Where(r => r.TeamId == e.TeamId).Select(r => new FilmingOptOutDto(
-                e.HeatId, e.SessionId, e.SessionName, e.ArenaName,
-                string.IsNullOrWhiteSpace(e.Label) ? $"Heat {position.GetValueOrDefault(e.HeatId, 1)}" : e.Label!,
-                e.TeamId, e.TeamName, e.LaneIndex, r.FullName, r.IsReserve, e.FinishedAt != null, e.SessionOrder, e.OrderIndex)))
+            .SelectMany(e =>
+            {
+                var finished = e.FinishedAt != null || (e.Races.Count > 0 && e.Races.All(r => r.IsComplete));
+                return current.Where(r => r.TeamId == e.TeamId).Select(r => new FilmingOptOutDto(
+                    e.HeatId, e.SessionId, e.SessionName, e.ArenaName,
+                    string.IsNullOrWhiteSpace(e.Label) ? $"Heat {position.GetValueOrDefault(e.HeatId, 1)}" : e.Label!,
+                    e.TeamId, e.TeamName, e.LaneIndex, r.FullName, r.IsReserve, finished, e.SessionOrder, e.OrderIndex));
+            })
             .OrderBy(x => x.SessionOrder).ThenBy(x => x.HeatOrder).ThenBy(x => x.Lane).ThenBy(x => x.RiderName)
             .ToList();
     }

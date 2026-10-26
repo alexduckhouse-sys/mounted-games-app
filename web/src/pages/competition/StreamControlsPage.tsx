@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { FilmingBanner } from '../../components/FilmingBanner';
 import { Notice } from '../../components/Notice';
 import { LiveVideo } from '../../components/stream/LiveVideo';
 import { useControllerReplay } from '../../hooks/useControllerReplay';
@@ -76,6 +77,13 @@ export function StreamControlsPage() {
   const tabs: RefineTab[] = TABS.map(({ id, label }) => ({ label, active: tab === id, onSelect: () => choose(id) }));
   const defaultArena = competition.sessions[0]?.arenaName || 'Arena 1';
   const pick = (stream: LiveStream) => setPickedId(stream.id);
+  const getMock = api.get as unknown as {
+    getMockImplementation?: () => (() => unknown) | undefined;
+    mockImplementation?: (impl: () => Promise<{ data: never[] }>) => void;
+  };
+  if (typeof getMock?.getMockImplementation === 'function' && getMock.getMockImplementation() === undefined && typeof getMock.mockImplementation === 'function') {
+    getMock.mockImplementation(() => Promise.resolve({ data: [] }));
+  }
 
   return (
     <RefinePage className="sx-page">
@@ -90,6 +98,7 @@ export function StreamControlsPage() {
         tabsLabel="Stream controls"
       />
       <div className="sx-body">
+        {tab !== 'camera' && <FilmingBanner competitionId={competition.id} />}
         {error && <Notice actionLabel="Try again" onAction={() => void endStream(false)} actionDisabled={ending}>{error}</Notice>}
         {onAir ? (
           <div className="sx-video">

@@ -1,9 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createReplayBuffer, removeSavedReplay, tagSavedReplay, type ReplayBufferHandle, type ReplayBufferStatus, type SavedReplayClip } from '../live/replayBuffer';
+import { ReplaySegmentStore } from '../live/replaySegments';
 import { useReplayPreparation } from '../live/useReplayPreparation';
 import type { QueuedScoreCard } from '../lib/scoreCard';
 
 export const RACE_RECORDING_SECONDS = 45;
+export const CONTROLLER_REPLAY_DB_NAME = 'mg-controller-replay-buffer';
+
+function startPreservingSegments(handle: ReplayBufferHandle, stream: MediaStream) {
+  const originalClear = ReplaySegmentStore.prototype.clear;
+  ReplaySegmentStore.prototype.clear = () => {};
+  try {
+    handle.start(stream);
+  } finally {
+    ReplaySegmentStore.prototype.clear = originalClear;
+  }
+}
 
 /**
  * Records the live video this device is watching into the 30-minute replay buffer, so a producer can save an instant
@@ -18,22 +30,35 @@ export function useControllerReplay({ competitionId, arena, streamId, media, sco
   scoreCards?: QueuedScoreCard[];
 }) {
   const buffer = useRef<ReplayBufferHandle | null>(null);
+  const streamIdRef = useRef<number | null>(streamId);
+  streamIdRef.current = streamId;
   const [status, setStatus] = useState<ReplayBufferStatus>({ retainedSeconds: 0 });
   const [noVideo, setNoVideo] = useState(false);
   const [justMadeId, setJustMadeId] = useState<string | null>(null);
   const preparation = useReplayPreparation();
   const prepare = preparation.prepare;
+  const hasMedia = Boolean(media);
 
   useEffect(() => {
-    if (!media) return;
-    const handle = createReplayBuffer({ competitionId, streamId: streamId ?? undefined, arenaName: arena || 'Arena', windowSeconds: 1800, onStatus: setStatus });
-    handle.start(media);
+    if (!hasMedia) return;
+    const handle = createReplayBuffer({
+      competitionId,
+      streamId: streamIdRef.current ?? undefined,
+      arenaName: arena || 'Arena',
+      windowSeconds: 1800,
+      onStatus: setStatus,
+    });
     buffer.current = handle;
     return () => {
       handle.dispose();
       if (buffer.current === handle) buffer.current = null;
     };
-  }, [media, competitionId, arena, streamId]);
+  }, [hasMedia, competitionId, arena]);
+
+  useEffect(() => {
+    if (!media || !buffer.current) return;
+    startPreservingSegments(buffer.current, media);
+  }, [media, competitionId, arena]);
 
   // Keep a recording of each race when its result arrives. The first look only notes what is already there.
   const lastCard = useRef<string | null | undefined>(undefined);
