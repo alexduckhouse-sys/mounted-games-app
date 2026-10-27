@@ -55,3 +55,6 @@ coverage/
 .vercel
 .env*.local
 .env*
+
+# Local UI handoff for the small-refinement batch
+SMALL_REFINEMENTS_HANDOFF.md

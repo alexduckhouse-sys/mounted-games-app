@@ -7,7 +7,23 @@
   padding: 24px;
 }
 
-.event-print-header { border-bottom: 3px solid #17385f; margin-bottom: 24px; padding-bottom: 14px; }
+.event-print-header { align-items: flex-start; border-bottom: 3px solid #17385f; display: flex; gap: 16px; justify-content: space-between; margin-bottom: 24px; padding-bottom: 14px; }
+.event-print-header-text { min-width: 0; }
+.event-print-ref { font-weight: 600; }
+.event-print-qr-box { flex: none; font-size: 11px; line-height: 1.2; text-align: center; width: 24mm; }
+.event-print-qr-small { height: auto; margin: 0 auto 2px; width: 100%; }
+
+/* Volunteer card: pocket-sized, plain black on white so it survives a mono printer and a cutting guillotine. */
+.vc-pick { display: grid; font-size: 13px; font-weight: 600; gap: 4px; max-width: 100%; min-width: 16rem; }
+.vc-card { background: #fff; border: 1.5px solid #000; color: #000; max-width: 90mm; padding: 4mm; break-inside: avoid; }
+.vc-kicker { font-size: 9pt; font-weight: 700; letter-spacing: .06em; margin: 0; text-transform: uppercase; }
+.vc-title { font: 700 18pt/1.1 var(--mg-font-display); margin: 1mm 0 0; }
+.vc-sub { font-size: 10pt; margin: 1mm 0 0; }
+.vc-head { border-bottom: 1.5px solid #000; font-size: 10pt; font-weight: 700; margin: 3mm 0 1mm; padding-bottom: 1mm; text-transform: uppercase; }
+.vc-note { font-size: 8.5pt; margin: 1mm 0; }
+.vc-list { font-size: 10pt; line-height: 1.3; list-style: decimal; margin: 0; padding-left: 5mm; }
+.vc-kit { columns: 2; list-style: square; }
+.vc-kit li { break-inside: avoid; }
 .event-print-header h1 { color: #17385f; font: 700 34px/1 var(--mg-font-display); margin: 2px 0 7px; }
 .event-print-header p { margin: 2px 0; }
 .event-print-kicker, .event-print-kind { color: #17385f; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }

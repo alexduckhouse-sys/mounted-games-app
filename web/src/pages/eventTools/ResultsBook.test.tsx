@@ -192,4 +192,62 @@ describe('ResultsBookTab', () => {
     mount();
     expect(await screen.findByText(/No special awards yet/)).toBeInTheDocument();
   });
+
+  describe('Copy results', () => {
+    const writeText = vi.fn();
+    beforeEach(() => { writeText.mockReset(); Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true }); });
+
+    it('copies the digest with a public link and only then says it worked', async () => {
+      get.mockResolvedValueOnce({ data: book() });
+      writeText.mockResolvedValue(undefined);
+      renderView('results-book');
+      await userEvent.click(await screen.findByRole('button', { name: 'Copy results' }));
+      await screen.findByText('Copied. Paste it into your message.');
+      const text = String(writeText.mock.calls[0][0]);
+      expect(text).toContain('Spring event');
+      expect(text).toContain('1. North A');
+      expect(text).toContain('/competitions/12/toplists');
+      expect(get).toHaveBeenCalledTimes(1);
+    });
+
+    it('fetches the public book from the organiser copy and never copies private notes', async () => {
+      get.mockResolvedValueOnce({ data: book({ includesPrivate: true, refereeNotes: [{ sectionName: 'Under 12', heatLabel: 'H1', raceName: 'Bending', teamName: 'North A', statusLetter: 'E', note: 'secret ref note' }] }) });
+      renderView('results-book-organiser');
+      const button = await screen.findByRole('button', { name: 'Copy results' });
+      get.mockResolvedValueOnce({ data: book() });
+      writeText.mockResolvedValue(undefined);
+      await userEvent.click(button);
+      await screen.findByText('Copied. Paste it into your message.');
+      expect(get).toHaveBeenLastCalledWith('/event-tools/competitions/12/results-book');
+      expect(String(writeText.mock.calls[0][0])).not.toContain('secret ref note');
+    });
+
+    it('offers the text to copy by hand when the clipboard refuses', async () => {
+      get.mockResolvedValueOnce({ data: book() });
+      writeText.mockRejectedValue(new Error('blocked'));
+      renderView('results-book');
+      await userEvent.click(await screen.findByRole('button', { name: 'Copy results' }));
+      const box = await screen.findByLabelText(/Select this text and copy it yourself/);
+      expect((box as HTMLTextAreaElement).value).toContain('1. North A');
+      expect(screen.queryByText('Copied. Paste it into your message.')).not.toBeInTheDocument();
+    });
+
+    it('offers it by hand when there is no clipboard at all', async () => {
+      get.mockResolvedValueOnce({ data: book() });
+      Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+      renderView('results-book');
+      await userEvent.click(await screen.findByRole('button', { name: 'Copy results' }));
+      expect(await screen.findByLabelText(/Select this text/)).toBeInTheDocument();
+    });
+
+    it('says so when the public results cannot be fetched', async () => {
+      get.mockResolvedValueOnce({ data: book({ includesPrivate: true }) });
+      renderView('results-book-organiser');
+      const button = await screen.findByRole('button', { name: 'Copy results' });
+      get.mockRejectedValueOnce(new Error('offline'));
+      await userEvent.click(button);
+      expect(await screen.findByText('Couldn’t get the results. Check your signal and try again.')).toBeInTheDocument();
+      expect(writeText).not.toHaveBeenCalled();
+    });
+  });
 });

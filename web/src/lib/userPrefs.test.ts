@@ -28,6 +28,7 @@ import {
   STORAGE_KEYS,
   syncTextSizeDom,
   triggerScorerHaptic,
+  ELIMINATED_HAPTIC,
   useUserPrefs,
 } from './userPrefs';
 
@@ -152,11 +153,13 @@ describe('userPrefs', () => {
 
     expect(triggerScorerHaptic(12)).toBe(true);
     expect(vibrateMock).toHaveBeenCalledWith(12);
+    expect(triggerScorerHaptic(ELIMINATED_HAPTIC)).toBe(true);
+    expect(vibrateMock).toHaveBeenLastCalledWith([40, 60, 40]);
 
     setScorerHaptics(false);
     expect(getScorerHaptics()).toBe(false);
     expect(triggerScorerHaptic()).toBe(false);
-    expect(vibrateMock).toHaveBeenCalledTimes(1);
+    expect(vibrateMock).toHaveBeenCalledTimes(2);
 
     setScorerHaptics(true);
     vibrateMock.mockImplementationOnce(() => {

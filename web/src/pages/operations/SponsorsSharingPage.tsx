@@ -7,7 +7,7 @@ import { Notice } from '../../components/Notice';
 import { useToast } from '../../components/Toast';
 import { competitionCalendarUrl, competitionLink } from '../../lib/sharing';
 import {
-  SPONSOR_PLACEMENTS, dateToEnd, dateToStart, endToDate, hasPlacement, isHttpsLink, parseSponsorAdmin, parseSponsorAdmins, startToDate, withPlacement,
+  SPONSOR_PLACEMENTS, dateToEnd, dateToStart, endToDate, hasPlacement, isHttpsLink, parseSponsorAdmin, parseSponsorAdmins, sponsorStatus, startToDate, withPlacement,
   type SponsorPlacementKey,
 } from '../../lib/sponsors';
 import type { SponsorAdmin } from '../../types';
@@ -37,6 +37,33 @@ const placesText = (sponsor: SponsorAdmin) => {
   const shown = PLACES.filter((place) => hasPlacement(sponsor.showOn, place.key)).length;
   return shown === PLACES.length ? 'Everywhere' : shown === 0 ? 'Nowhere' : `${shown} ${shown === 1 ? 'place' : 'places'}`;
 };
+
+const STATUS_REFRESH_MS = 60_000;
+
+/** The current time, refreshed every minute and again when the page comes back into view. Cleans up after itself. */
+function useNow(intervalMs = STATUS_REFRESH_MS): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const tick = () => setNow(Date.now());
+    const onVisible = () => { if (document.visibilityState === 'visible') tick(); };
+    const timer = window.setInterval(tick, intervalMs);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', tick);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', tick);
+    };
+  }, [intervalMs]);
+  return now;
+}
+
+const STATUS_NOTE = {
+  Disabled: 'Switched off, so it is not showing.',
+  Scheduled: 'Not showing yet. It starts on the From date.',
+  Active: 'Showing now.',
+  Expired: 'Past its Until date, so it is not showing.',
+} as const;
 
 /** Sponsors and sharing: who sponsors the event and where they show, then the ways to share it. Every change saves as it is made. */
 export function SponsorsSharingPage() {
@@ -249,6 +276,7 @@ function EditSponsor({ sponsor, busy, onProblem, onPatch, onLogo, onRemoveLogo, 
   const [link, setLink] = useState(sponsor.linkUrl ?? '');
   const [dated, setDated] = useState(Boolean(sponsor.startsAt || sponsor.endsAt));
   const hasLogo = sponsor.logoUrl !== null;
+  const status = sponsorStatus(sponsor, useNow());
 
   function saveName() {
     const next = name.trim();
@@ -309,6 +337,10 @@ function EditSponsor({ sponsor, busy, onProblem, onPatch, onLogo, onRemoveLogo, 
           </div>
         )}
         <RefineSwitchRow label="Showing" on={sponsor.isEnabled} disabled={busy} onChange={(on) => onPatch({ isEnabled: on }, 'Couldn’t change that. Check your signal and try again.')} />
+        <div className="rf-row" aria-label="Status">
+          <span className="rf-grow"><span className="rf-t1">Status</span><span className="rf-t2">{STATUS_NOTE[status]}</span></span>
+          <span className={`ops-status ops-status-${status.toLowerCase()}`}>{status}</span>
+        </div>
       </RefineList>
 
       <div className="ops-end-left ops-remove"><button type="button" className="ops-danger-link" disabled={busy} onClick={onRemove}>Remove this sponsor</button></div>

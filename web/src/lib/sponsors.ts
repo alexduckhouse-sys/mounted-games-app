@@ -340,6 +340,17 @@ export function buildSponsorReportCsv(
 
 // ---- dates ----
 
+/** Schedule status, matching the API's inclusive start and exclusive end. Use parsed admin data. */
+export function sponsorStatus(
+  sponsor: Pick<SponsorAdmin, 'isEnabled' | 'startsAt' | 'endsAt'>,
+  now = Date.now(),
+): 'Disabled' | 'Scheduled' | 'Active' | 'Expired' {
+  if (!sponsor.isEnabled) return 'Disabled';
+  if (sponsor.endsAt && Date.parse(sponsor.endsAt) <= now) return 'Expired';
+  if (sponsor.startsAt && Date.parse(sponsor.startsAt) > now) return 'Scheduled';
+  return 'Active';
+}
+
 const pad = (n: number) => String(n).padStart(2, '0');
 
 /** A `yyyy-mm-dd` box as the moment the sponsor starts: midnight at the start of that day, in the device's zone. */

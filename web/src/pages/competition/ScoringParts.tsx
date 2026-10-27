@@ -20,6 +20,7 @@ import { displayLaneFor, sitsOutOf, type LaneRules } from './laneRules';
 import './heat.css';
 import './scoring.css';
 import { formatPoints } from '../../lib/formatPoints';
+import { triggerScorerHaptic } from '../../lib/userPrefs';
 
 export interface ScoreOverrideValue {
   points: number;
@@ -128,13 +129,7 @@ export function setStoredCard(competitionId: number | null | undefined, teamId: 
 
 /** Plays a subtle two-tone audio chime and short haptic pulse for urgent scorer/organiser alerts. */
 export function playAlertChime(): void {
-  try {
-    if (typeof navigator !== 'undefined' && navigator.vibrate && localStorage.getItem('mg.prefs.scorerHaptics') !== '0') {
-      navigator.vibrate([80, 40, 120]);
-    }
-  } catch {
-    // Ignore vibration errors.
-  }
+  triggerScorerHaptic([80, 40, 120]);
   try {
     const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AudioCtx) return;
@@ -194,7 +189,7 @@ export function LaneBand({ hatband, bib }: { hatband?: string | null; bib?: stri
 /** One team in the race being scored. A tap places it (or takes it off again); pressing and holding eliminates it. */
 export function ScoreRow({
   entry, lane, hatband, state, sitting, hc, canScore, points = 0, overridePoints,
-  card, fact,
+  card, fact, last = false,
   onTap, onSwipeEliminate, onToggleElim,
 }: {
   entry: HeatEntry;
@@ -209,6 +204,8 @@ export function ScoreRow({
   card?: RefereeCard;
   /** The commentator's line for this team, shown small and blue under the name. */
   fact?: string;
+  /** The only racing lane still to be scored: picked out quietly, never placed for the scorer. */
+  last?: boolean;
   onTap: () => void;
   onSwipeEliminate: () => void;
   onToggleElim: () => void;
@@ -266,13 +263,7 @@ export function ScoreRow({
       return;
     }
     if (!disabled) {
-      try {
-        if (typeof navigator !== 'undefined' && navigator.vibrate && localStorage.getItem('mg.prefs.scorerHaptics') !== '0') {
-          navigator.vibrate(15);
-        }
-      } catch {
-        // Ignore storage or vibration errors.
-      }
+      triggerScorerHaptic(15);
       onTap();
     }
   }
@@ -288,13 +279,13 @@ export function ScoreRow({
   ) : null;
 
   return (
-    <li className={`sc-row ${placed ? 'sc-row-placed' : ''} ${eliminated ? 'sc-row-out' : ''} ${sitting ? 'sc-row-sit' : ''}`}>
+    <li className={`sc-row ${placed ? 'sc-row-placed' : ''} ${eliminated ? 'sc-row-out' : ''} ${sitting ? 'sc-row-sit' : ''} ${last ? 'sc-row-last' : ''}`}>
       {holding && <span className="sc-hold" aria-hidden="true" />}
       <motion.button
         type="button"
         className="sc-main-btn"
         disabled={disabled}
-        aria-label={`${entry.teamName}, lane ${lane}${hc ? ', hors concours' : ''}`}
+        aria-label={`${entry.teamName}, lane ${lane}${hc ? ', hors concours' : ''}${last ? ', last lane to score' : ''}`}
         drag={!disabled ? 'y' : false}
         dragSnapToOrigin
         dragElastic={0.4}
@@ -321,6 +312,7 @@ export function ScoreRow({
             <span className="sc-name">{entry.teamName}</span>
             <CardChip card={card} hc={hc} />
             {overridePoints != null && !hc && <span className="sc-tag sc-tag-manual">{formatPoints(points)} pts by hand</span>}
+            {last && <span className="sc-tag sc-tag-last" aria-hidden="true">Last to score</span>}
           </span>
           {fact && <span className="sc-fact">{fact}</span>}
         </span>

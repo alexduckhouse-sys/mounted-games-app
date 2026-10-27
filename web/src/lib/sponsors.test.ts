@@ -5,10 +5,38 @@ import {
   datesText, dateToEnd, dateToStart, endToDate, fitWithin, formatDurationHms, groupByTier,
   hasPlacement, isHttpsLink, logoSrc, msUntilNext, onBreak, parseSponsor, parseSponsorAdmin, parseSponsorAdmins, parseSponsorControl,
   parseSponsors, placementBit, rotationIndex, shownText, skipRotation, sponsorReportPlacementLabel, sponsorReportPlacementLabels,
-  sponsorsFor, startToDate, withPlacement,
+  sponsorStatus, sponsorsFor, startToDate, withPlacement,
 } from './sponsors';
 
 afterEach(() => { vi.unstubAllEnvs(); });
+
+describe('sponsorStatus', () => {
+  const start = '2031-05-04T09:00:00Z';
+  const end = '2031-05-05T09:00:00Z';
+  const now = Date.parse(start);
+  it('gives disabled sponsors precedence over their dates', () => {
+    expect(sponsorStatus({ isEnabled: false, startsAt: end, endsAt: null }, now)).toBe('Disabled');
+    expect(sponsorStatus({ isEnabled: false, startsAt: null, endsAt: start }, now)).toBe('Disabled');
+  });
+  it('matches the API: inclusive start and exclusive end', () => {
+    const data = { isEnabled: true, startsAt: start, endsAt: end };
+    expect(sponsorStatus(data, now - 1)).toBe('Scheduled');
+    expect(sponsorStatus(data, now)).toBe('Active');
+    expect(sponsorStatus(data, Date.parse(end) - 1)).toBe('Active');
+    expect(sponsorStatus(data, Date.parse(end))).toBe('Expired');
+  });
+  it('supports open-ended schedules and offsets', () => {
+    expect(sponsorStatus({ isEnabled: true, startsAt: null, endsAt: null }, now)).toBe('Active');
+    expect(sponsorStatus({ isEnabled: true, startsAt: null, endsAt: start }, now)).toBe('Expired');
+    expect(sponsorStatus({ isEnabled: true, startsAt: end, endsAt: null }, now)).toBe('Scheduled');
+    expect(sponsorStatus({ isEnabled: true, startsAt: '2031-05-04T10:00:00+01:00', endsAt: null }, now)).toBe('Active');
+  });
+  it('can use the current time for a fresh render', () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+    expect(sponsorStatus({ isEnabled: true, startsAt: start, endsAt: end })).toBe('Active');
+    clock.mockRestore();
+  });
+});
 
 describe('the placement registry', () => {
   it('gives each place its own single bit, a label and a description', () => {

@@ -998,6 +998,26 @@ describe('SessionPage', () => {
         expect(screen.queryByRole('button', { name: 'Dismiss ring call notice' })).toBeNull();
       });
 
+      it('offers phone and WhatsApp from the private declaration, only for usable numbers', async () => {
+        mount(late(), [
+          { ...form(1), trainerPhone: '+44 7700 900123' },
+          { ...form(2), trainerPhone: '07700 900456' },
+        ]);
+        const phone1 = await screen.findByRole('link', { name: 'Phone the trainer of Rider 1' });
+        expect(phone1).toHaveAttribute('href', 'tel:+447700900123');
+        expect(screen.getByRole('link', { name: 'WhatsApp the trainer of Rider 1' }).getAttribute('href'))
+          .toMatch(/^https:\/\/wa\.me\/447700900123\?text=Rider%201%3A%20you%20are%20wanted/);
+        expect(screen.getByRole('link', { name: 'Phone the trainer of Rider 2' })).toHaveAttribute('href', 'tel:07700900456');
+        expect(screen.queryByRole('link', { name: 'WhatsApp the trainer of Rider 2' })).toBeNull();
+        expect(api.post).not.toHaveBeenCalled();
+      });
+
+      it('hides the contact row when no number is on the form', async () => {
+        mount(late(), [{ ...form(1), trainerPhone: 'not a number' }, form(2)]);
+        await screen.findByRole('button', { name: /^Call Rider 1/ });
+        expect(screen.queryByText(/Phone the trainer/)).toBeNull();
+      });
+
       it('shows a problem strip when the call did not go', async () => {
         vi.mocked(api.post).mockRejectedValue(new Error('offline'));
         mount(late());

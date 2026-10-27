@@ -6,6 +6,7 @@ import type { PrintableDraw, PrintableResults, PrintableScoreSheets } from '../e
 import type { PrintableEntries, ResultsBook } from '../eventTools/resultsBookTypes';
 import { EntriesView, ResultsBookView } from '../eventTools/ResultsBookView';
 import { PosterPage } from '../eventTools/PosterPage';
+import { VolunteerCard } from '../eventTools/VolunteerCard';
 import { TackCheckForms, type PrintableTackCheck } from '../eventTools/TackCheckPrint';
 import { statusLetter } from '../../lib/resultStatus';
 import '../eventTools/printEvent.css';
@@ -28,8 +29,12 @@ const VIEWS = {
   entries: { path: 'print/entries', title: 'Entry list' },
   'tack-check': { path: 'print/tack-check', title: 'Tack check' },
   posters: { path: 'print/posters', title: 'QR posters' },
+  'volunteer-card': { path: 'print/draw', title: 'Volunteer card' },
 } as const;
 type View = keyof typeof VIEWS;
+
+/** Sheets that carry a small QR code to the public live scores. */
+const QR_VIEWS: readonly View[] = ['draw', 'score-sheets'];
 
 function date(value: string) {
   return new Date(value).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' });
@@ -255,6 +260,8 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
   if (error) return <PageProblem title="Couldn’t load the print view" primaryLabel="Try again" onPrimary={() => { setError(null); setAttempt(attempt + 1); }}>{error}</PageProblem>;
   if (!data) return <p className="mg-card p-4" role="status">Preparing the print view…</p>;
   const competition = data.competition;
+  const reference = competition.competitionNumber?.trim() || null;
+  const showQr = !sponsorMode && QR_VIEWS.includes(view);
 
   const totalSections = compDetail?.sections?.length
     ?? ('sections' in data && Array.isArray(data.sections) ? data.sections.length : 0);
@@ -428,10 +435,17 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
         <button className="mg-btn mg-btn-primary" onClick={() => window.print()}><Printer className="h-4 w-4" />Print</button>
       </div>
       <header className="event-print-header">
-        <p className="event-print-kicker">Mounted Games</p>
-        <h1>{competition.name}</h1>
-        <p>{date(competition.startDate)}{competition.location ? ` · ${competition.location}` : ''}</p>
-        <p className="event-print-kind">{sponsorMode ? 'Sponsor Proof-of-Value Report' : VIEWS[view].title}</p>
+        <div className="event-print-header-text">
+          <p className="event-print-kicker">Mounted Games</p>
+          <h1>{competition.name}</h1>
+          <p>{date(competition.startDate)}{competition.location ? ` · ${competition.location}` : ''}</p>
+          {reference && <p className="event-print-ref">Reference: {reference}</p>}
+          <p className="event-print-kind">{sponsorMode ? 'Sponsor Proof-of-Value Report' : VIEWS[view].title}</p>
+        </div>
+        {showQr && <div className="event-print-qr-box">
+          <QrCode value={`${window.location.origin}/competitions/${competition.id}/toplists`} label="QR code for the live scores" className="event-print-qr-small" />
+          <span>Live scores</span>
+        </div>}
       </header>
 
       {sponsorMode ? (
@@ -453,6 +467,7 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
           {view === 'results' && <Results data={data as PrintableResults} />}
           {(view === 'results-book' || view === 'results-book-organiser') && <ResultsBookView data={data as ResultsBook} />}
           {view === 'entries' && <EntriesView data={data as PrintableEntries} />}
+          {view === 'volunteer-card' && <VolunteerCard data={data as PrintableDraw} />}
           {view === 'tack-check' && <TackCheckForms data={data as PrintableTackCheck} />}
           {view === 'posters' && (
             <QrPostersSection

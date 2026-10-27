@@ -1,5 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { entryOptions, feesLine, feeText, needsPayStep, parseEntryKind, sectionFull } from './entryOptions';
+import { entryOptions, feesLine, feeText, needsPayStep, parseEntryKind, remainingPlaces, sectionFull } from './entryOptions';
+
+describe('remainingPlaces', () => {
+  it('uses admission places rather than a count of teams already formed', () => {
+    expect(remainingPlaces({ maxParticipants: 10, activeSignupsCount: 4 })).toBe(6);
+    expect(remainingPlaces({ maxParticipants: 10, activeSignupsCount: 0 })).toBe(10);
+    expect(remainingPlaces({ maxParticipants: 10, activeSignupsCount: 10 })).toBe(0);
+    expect(remainingPlaces({ maxParticipants: 10, activeSignupsCount: 12 })).toBe(0);
+  });
+  it('does not invent availability when the cap or count is absent or invalid', () => {
+    expect(remainingPlaces({})).toBeNull();
+    expect(remainingPlaces({ maxParticipants: 10 })).toBeNull();
+    expect(remainingPlaces({ maxParticipants: null, activeSignupsCount: 3 })).toBeNull();
+    for (const maxParticipants of [0, -1, NaN, Infinity, 2.5]) {
+      expect(remainingPlaces({ maxParticipants, activeSignupsCount: 1 })).toBeNull();
+    }
+    for (const activeSignupsCount of [-1, NaN, Infinity, 2.5]) {
+      expect(remainingPlaces({ maxParticipants: 10, activeSignupsCount })).toBeNull();
+    }
+  });
+});
 
 describe('feeText', () => {
   it.each([

@@ -47,6 +47,14 @@ describe('DetailsTab matchmaker', () => {
     vi.mocked(api.get).mockResolvedValue({ data: [] });
   });
 
+  it('shows the places left under each age group, but not when full', async () => {
+    mount([section({ maxParticipants: 8, activeSignupsCount: 7 }), section({ id: 6, displayName: 'Teams U16', maxParticipants: 8, activeSignupsCount: 8 })]);
+    const list = await screen.findByRole('list', { name: 'Age groups and fees' });
+    expect(list).toHaveTextContent('Teams U121 team place left');
+    expect(list).toHaveTextContent('Teams U16Full · Waiting list');
+    expect(list.textContent).not.toMatch(/0 team places/);
+  });
+
   it('offers pair requests only from the signed-in rider’s own seeking entry', async () => {
     vi.mocked(api.get).mockImplementation(async (url: string) => ({ data: url.endsWith('/matchmaking') ? [
       { signupId: 20, competitionSectionId: 5, fullName: 'Synthetic Partner', lookingForPair: true },

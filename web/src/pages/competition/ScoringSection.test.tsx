@@ -598,6 +598,114 @@ describe('race switcher bar and press-and-hold', () => {
     expect(vibrate).not.toHaveBeenCalled();
     localStorage.removeItem('mg.prefs.scorerHaptics');
   });
+
+  it('respects the Settings switch, which stores "false"', async () => {
+    const user = userEvent.setup();
+    const vibrate = vi.fn();
+    Object.defineProperty(navigator, 'vibrate', { value: vibrate, configurable: true, writable: true });
+    localStorage.setItem('mg.prefs.scorerHaptics', 'false');
+    render(<Harness />);
+    await user.click(screen.getByRole('button', { name: /^Bravo, lane/ }));
+    fireEvent.keyDown(screen.getByRole('button', { name: /^Alpha, lane/ }), { key: 'Delete' });
+    expect(vibrate).not.toHaveBeenCalled();
+  });
+});
+
+describe('the elimination buzz', () => {
+  function withVibrate(impl: () => boolean = () => true) {
+    const vibrate = vi.fn(impl);
+    Object.defineProperty(navigator, 'vibrate', { value: vibrate, configurable: true, writable: true });
+    return vibrate;
+  }
+
+  it('buzzes twice-short once when a hold puts a team out, and not for the tap that never happened', () => {
+    const vibrate = withVibrate();
+    vi.useFakeTimers();
+    try {
+      render(<Harness />);
+      const bravo = screen.getByRole('button', { name: /^Bravo, lane/ });
+      fireEvent.pointerDown(bravo);
+      act(() => { vi.advanceTimersByTime(600); });
+      fireEvent.click(bravo);
+      expect(vibrate).toHaveBeenCalledTimes(1);
+      expect(vibrate).toHaveBeenCalledWith([40, 60, 40]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('buzzes for the Delete key, but not when taking an elimination back', async () => {
+    const vibrate = withVibrate();
+    render(<Harness initial={[{ teamId: 2, place: 0, eliminated: true }]} />);
+    fireEvent.keyDown(screen.getByRole('button', { name: /^Bravo, lane/ }), { key: 'Delete' });
+    expect(vibrate).not.toHaveBeenCalled();
+    fireEvent.keyDown(screen.getByRole('button', { name: /^Alpha, lane/ }), { key: 'Delete' });
+    expect(vibrate).toHaveBeenCalledWith([40, 60, 40]);
+  });
+
+  it('keeps scoring when the phone refuses to vibrate', () => {
+    withVibrate(() => { throw new Error('blocked'); });
+    render(<Harness />);
+    fireEvent.keyDown(screen.getByRole('button', { name: /^Alpha, lane/ }), { key: 'Delete' });
+    expect(within(screen.getByRole('region', { name: /^Scoring/ })).getByLabelText('Eliminated')).toBeInTheDocument();
+  });
+});
+
+describe('the last lane', () => {
+  const lastRows = () => document.querySelectorAll('.sc-row-last');
+
+  it('picks out the one lane left to score, without placing it', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    expect(lastRows()).toHaveLength(0);
+    await user.click(screen.getByRole('button', { name: /^Bravo, lane/ }));
+    await user.click(screen.getByRole('button', { name: /^Charlie, lane/ }));
+    expect(lastRows()).toHaveLength(1);
+    const alpha = screen.getByRole('button', { name: /^Alpha, lane \d, last lane to score$/ });
+    expect(within(alpha).getByText('Last to score')).toBeInTheDocument();
+    expect(within(alpha).queryByLabelText(/^Place/)).toBeNull();
+    await user.click(alpha);
+    expect(lastRows()).toHaveLength(0);
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(lastRows()).toHaveLength(0);
+  });
+
+  it('never picks a team sitting out, and counts an elimination as scored', async () => {
+    const user = userEvent.setup();
+    render(<Harness lanes={2} />);
+    const racing = within(screen.getByRole('region', { name: /^Scoring/ })).getAllByRole('button').filter((b) => !b.hasAttribute('disabled') && /, lane \d/.test(b.getAttribute('aria-label') ?? ''));
+    fireEvent.keyDown(racing[0], { key: 'Delete' });
+    expect(lastRows()).toHaveLength(1);
+    expect(document.querySelector('.sc-row-last.sc-row-sit')).toBeNull();
+    await user.click(racing[1]);
+    expect(lastRows()).toHaveLength(0);
+  });
+
+  it('is not shown on a saved race', () => {
+    render(<Harness activeIdx={0} initial={[{ teamId: 2, place: 1, eliminated: false }]} />);
+    expect(lastRows()).toHaveLength(0);
+  });
+});
+
+describe('checking the finishing order', () => {
+  it('lists hatband, team and place once every lane is scored', async () => {
+    const user = userEvent.setup();
+    render(<Harness hatbands={['Red', 'Blue', 'Lilac #B79CED']} hcTeamIds={new Set([3])} />);
+    expect(screen.queryByRole('region', { name: 'Finishing order' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: /^Charlie, lane/ }));
+    await user.click(screen.getByRole('button', { name: /^Bravo, lane/ }));
+    fireEvent.keyDown(screen.getByRole('button', { name: /^Alpha, lane/ }), { key: 'Delete' });
+    const review = screen.getByRole('region', { name: 'Finishing order' });
+    const lines = within(review).getAllByRole('listitem').map((li) => li.textContent);
+    // Race 2 moves everyone up a lane from the draw: Alpha 1, Bravo 2, Charlie 3.
+    expect(lines).toEqual(['Lilac · Charlie · 1st (HC)', 'Blue · Bravo · 2nd', 'Red · Alpha · Eliminated']);
+  });
+
+  it('names the lane number when the event sets no hatbands', () => {
+    render(<Harness initial={allPlaced} />);
+    const lines = within(screen.getByRole('region', { name: 'Finishing order' })).getAllByRole('listitem').map((li) => li.textContent);
+    expect(lines[0]).toMatch(/^Lane \d · Bravo · 1st$/);
+  });
 });
 
 

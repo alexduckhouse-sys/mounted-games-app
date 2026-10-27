@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSavedToast } from '../../components/SavedTick';
 import { Notice } from '../../components/Notice';
 import { ChevronLeft, ChevronRight, CloudOff, MoreHorizontal, Printer, Trash2, Undo2 } from 'lucide-react';
@@ -9,7 +9,8 @@ import { deadHeatPoints, deadHeatSize, isDeadHeat, manualPoints, type PendingPla
 import { pointsForPlace } from '../../lib/queuedView';
 import { summariseRace } from '../../lib/raceSummary';
 import { afterRed, afterYellow, stepPoints, type CardMark } from '../../lib/refereeCards';
-import { getSortByLaneOrder, PREFS_CHANGED_EVENT } from '../../lib/userPrefs';
+import { ELIMINATED_HAPTIC, getSortByLaneOrder, PREFS_CHANGED_EVENT, triggerScorerHaptic } from '../../lib/userPrefs';
+import { finishingReview, lastLaneLeft, raceLanes } from '../../lib/raceLanes';
 import { TieBreakRule, type Heat, type Race } from '../../types';
 import { displayLaneFor, sitsOutOf, type LaneRules } from './laneRules';
 import {
@@ -24,6 +25,8 @@ import './scoring.css';
 export type { PendingPlace } from '../../lib/raceScoring';
 
 interface ScoringProps {
+  /** The event, for the public live-scores QR on the printed heat sheet. */
+  competitionId?: number | null;
   heat: Heat;
   races: Race[];
   activeRace: Race | null;
@@ -95,7 +98,7 @@ async function attempt(action: () => Promise<void> | void): Promise<void> {
 }
 
 export function ScoringSection({
-  heat, races, activeRace, onSelectRace, sessionBase, laneRules, qualifiers, pending, canScore, queued,
+  competitionId = null, heat, races, activeRace, onSelectRace, sessionBase, laneRules, qualifiers, pending, canScore, queued,
   onClickTeam, onToggleElim, onReset, onSubmit, correctionReason, onCorrectionReason, allowAudit = false,
   onUndo, undoLabel = 'Undo', allowReasons = false, hcTeamIds = NO_TEAMS, onSetHc, cards, onSetCard, onOverridePoints, onDeadHeat, onClearDeadHeat,
   tieRule = TieBreakRule.Countback, notes = {}, nextLanes = null, laneHatbands = null, onRefresh,
@@ -119,7 +122,20 @@ export function ScoringSection({
     };
   }, []);
 
+  // A team the scorer has just asked to put out. Once the page has actually put it out the phone buzzes, once.
+  const askedOut = useRef<number | null>(null);
+  useEffect(() => {
+    const teamId = askedOut.current;
+    if (teamId == null) return;
+    askedOut.current = null;
+    if (pending.some((p) => p.teamId === teamId && p.eliminated)) triggerScorerHaptic(ELIMINATED_HAPTIC);
+  }, [pending]);
+
   const pendingByTeam = new Map(pending.map((p) => [p.teamId, p]));
+  function toggleOut(teamId: number) {
+    askedOut.current = pendingByTeam.get(teamId)?.eliminated ? null : teamId;
+    onToggleElim(teamId);
+  }
   const queuedByRace = new Map(queued.map((q) => [q.raceId, q]));
   const activeQueued = activeRace ? queuedByRace.get(activeRace.id) : undefined;
   const activeIdx = activeRace ? races.findIndex((r) => r.id === activeRace.id) : -1;
@@ -188,6 +204,9 @@ export function ScoringSection({
   const live = canScore && (!saved || editing);
   const canSave = racingRows.length > 0 && (doneCount >= racingRows.length || (isQualifier && placedCount >= Math.min(qualifiers, racingRows.length)));
   const auditOpen = Boolean(activeRace && auditRaceId === activeRace.id);
+  const lanes = activeRace ? raceLanes(heat, laneIdx, laneRules, laneHatbands) : [];
+  const lastTeamId = live ? lastLaneLeft(lanes, pending, new Set(Object.keys(activeOverrides).map(Number))) : null;
+  const review = live && canSave ? finishingReview(lanes, pending, hcTeamIds) : [];
 
   function complete() {
     if (!canSave) return;
@@ -301,9 +320,10 @@ export function ScoringSection({
                     overridePoints={ov?.points}
                     card={cardsByTeam[e.teamId]}
                     fact={teamFacts?.[e.teamId]}
+                    last={e.teamId === lastTeamId}
                     onTap={() => onClickTeam(e.teamId)}
-                    onSwipeEliminate={() => onToggleElim(e.teamId)}
-                    onToggleElim={() => onToggleElim(e.teamId)}
+                    onSwipeEliminate={() => toggleOut(e.teamId)}
+                    onToggleElim={() => toggleOut(e.teamId)}
                   />
                 );
               })}
@@ -324,6 +344,13 @@ export function ScoringSection({
               <div className="sc-bottom">
                 <button type="button" className="mg-btn mg-btn-secondary sc-wide-btn" onClick={() => setEditing(true)}>Edit this race</button>
               </div>
+            )}
+
+            {review.length > 0 && (
+              <section className="sc-review" aria-label="Finishing order">
+                <h4 className="sc-review-title">Check the order before saving</h4>
+                <ol>{review.map((line) => <li key={line.teamId} className={line.out ? 'is-out' : undefined}>{line.text}</li>)}</ol>
+              </section>
             )}
 
             {live && (
@@ -403,7 +430,7 @@ export function ScoringSection({
         </>
       )}
 
-      {races.length > 0 && <HeatPrintSheet heat={heat} races={races} rules={laneRules} hcTeamIds={hcTeamIds} tieRule={tieRule} hatbands={laneHatbands} />}
+      {races.length > 0 && <HeatPrintSheet heat={heat} races={races} rules={laneRules} hcTeamIds={hcTeamIds} tieRule={tieRule} hatbands={laneHatbands} competitionId={competitionId} />}
 
       {sheet && (
         <EliminationSheet
@@ -425,7 +452,7 @@ export function ScoringSection({
           onYellow={(teamId) => { void attempt(() => onSetCard?.(teamId, afterYellow(cardsByTeam[teamId] ?? null))); }}
           onRed={(teamId) => { void attempt(() => onSetCard?.(teamId, afterRed(cardsByTeam[teamId] ?? null))); }}
           onStepPoints={stepTeam}
-          onEliminate={live ? onToggleElim : undefined}
+          onEliminate={live ? toggleOut : undefined}
           onDeadHeat={live ? onDeadHeat : undefined}
           onClearDeadHeat={live ? onClearDeadHeat : undefined}
           factsOn={factsOn}
