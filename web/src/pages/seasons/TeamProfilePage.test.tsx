@@ -5,7 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
-import { readFavourites } from '../../lib/favourites';
+import { FAVOURITES_KEY, readFavourites } from '../../lib/favourites';
+import { readFollowedProfiles } from '../../lib/followedProfiles';
 import TeamProfilePage from './TeamProfilePage';
 import type { TeamProfileHistory } from './teamProfileTypes';
 import { chooseOption, optionLabels } from '../../test/select';
@@ -141,10 +142,32 @@ describe('TeamProfilePage', () => {
     expect(readFavourites()).toEqual([]);
   });
 
-  it('has no star when no event team is linked yet', async () => {
+  it('can be followed from its profile with no event team linked yet, and stays followed', async () => {
+    const user = userEvent.setup();
     renderPage();
-    await screen.findByRole('heading', { name: 'North Club A' });
-    expect(screen.queryByRole('button', { name: /Star/ })).not.toBeInTheDocument();
+    const star = await screen.findByRole('button', { name: 'Star North Club A' });
+    expect(star).toHaveAttribute('aria-pressed', 'false');
+    await user.click(star);
+    expect(readFollowedProfiles()).toEqual([{ id: profile.id, name: 'North Club A', clubName: profile.clubName }]);
+    expect(readFavourites()).toEqual([]);
+    expect(screen.getByRole('button', { name: 'Unstar North Club A' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: 'Unstar North Club A' }));
+    expect(readFollowedProfiles()).toEqual([]);
+  });
+
+  it('follows the profile and its linked event teams together, and an old event-team follow still shows as starred', async () => {
+    currentHistory = { ...history, eventTeams: [{ id: 1, teamProfileId: profile.id, competitionId: 12, competitionName: 'Spring', teamId: 41, teamName: 'North Club A', linkedAt: '2031-05-04' }] };
+    localStorage.setItem(FAVOURITES_KEY, JSON.stringify([{ competitionId: 12, teamId: 41 }]));
+    const user = userEvent.setup();
+    renderPage();
+    const star = await screen.findByRole('button', { name: 'Unstar North Club A' });
+    expect(star).toHaveAttribute('aria-pressed', 'true');
+    expect(readFollowedProfiles()).toEqual([]);
+    await user.click(star);
+    expect(readFavourites()).toEqual([]);
+    await user.click(screen.getByRole('button', { name: 'Star North Club A' }));
+    expect(readFavourites()).toEqual([{ competitionId: 12, teamId: 41 }]);
+    expect(readFollowedProfiles().map((item) => item.id)).toEqual([profile.id]);
   });
 
   it('locks club and suffix after the profile has been linked', async () => {
