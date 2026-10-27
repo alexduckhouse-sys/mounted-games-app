@@ -45,6 +45,25 @@ export interface AuthResponse {
   user: UserProfile;
 }
 
+/** A password reset link (`PasswordResetLinkState`): 0 usable, 1 expired or replaced by a newer link, 2 already used, 3 not valid. */
+export type PasswordResetLinkState = 0 | 1 | 2 | 3;
+
+/** `POST /api/auth/password-reset/check`. Says nothing about whose account the link is for. */
+export interface PasswordResetCheck {
+  state: PasswordResetLinkState;
+  /** Only for a usable link. */
+  expiresAt: string | null;
+}
+
+/** The body of a refused `POST /api/auth/password-reset/confirm` (400, 404 or 410). */
+export interface PasswordResetProblem {
+  code: 'expired' | 'used' | 'invalid' | 'password_rules' | 'password_required';
+  message: string;
+  /** Friendly wording per broken password rule, with Identity's codes in `errorCodes`. Only for `password_rules`. */
+  errors?: string[] | null;
+  errorCodes?: string[] | null;
+}
+
 export interface TrainerRequest {
   userId: string;
   fullName: string;

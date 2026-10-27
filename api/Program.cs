@@ -82,7 +82,8 @@ builder.Services
             {
                 var uid = ctx.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
                 var accounts = ctx.HttpContext.RequestServices.GetRequiredService<LiveAccounts>();
-                if (uid is null || !await accounts.IsActiveAsync(uid, ctx.HttpContext.RequestAborted))
+                // A token issued before the account's sessions were ended (a password reset) is refused like a deleted account's.
+                if (uid is null || !await accounts.AcceptsTokenAsync(uid, LiveAccounts.SessionVersionOf(ctx.Principal), ctx.HttpContext.RequestAborted))
                 {
                     ctx.Fail("This account no longer exists.");
                     return;
@@ -155,6 +156,7 @@ builder.Services.AddScoped<MountedGames.Api.Services.Email.AccountEmailService>(
 builder.Services.AddScoped<MountedGames.Api.Services.Accounts.AccountIpRecorder>();
 builder.Services.AddScoped<MountedGames.Api.Services.Accounts.AccountAccessService>();
 builder.Services.AddScoped<MountedGames.Api.Services.Accounts.AccountInviteService>();
+builder.Services.AddScoped<MountedGames.Api.Services.Accounts.PasswordResetService>();
 // Does an address's domain take mail? Short timeout, one retry; a DNS failure lets the sign-up through.
 builder.Services.AddSingleton<DnsClient.ILookupClient>(_ => new DnsClient.LookupClient(new DnsClient.LookupClientOptions
 {

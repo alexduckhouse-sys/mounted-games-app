@@ -51,6 +51,8 @@ public class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("RateLimits:ShopReportsPerMinute", "100000");
         builder.UseSetting("RateLimits:UnsubscribePerMinute", "100000");
         builder.UseSetting("RateLimits:ScorerReadsPerMinute", "100000");
+        builder.UseSetting("RateLimits:PasswordResetRequestsPerMinute", "100000");
+        builder.UseSetting("RateLimits:PasswordResetLinksPerMinute", "100000");
         builder.ConfigureServices(services =>
         {
             var scheduler = services.Single(d => d.ImplementationType == typeof(NotificationScheduler));

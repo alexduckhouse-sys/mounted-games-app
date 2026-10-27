@@ -34,6 +34,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<IpBlock> IpBlocks => Set<IpBlock>();
     public DbSet<AccountIp> AccountIps => Set<AccountIp>();
     public DbSet<AccountInvite> AccountInvites => Set<AccountInvite>();
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     public DbSet<RaceTemplate> RaceTemplates => Set<RaceTemplate>();
     public DbSet<TeamSupporter> TeamSupporters => Set<TeamSupporter>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
