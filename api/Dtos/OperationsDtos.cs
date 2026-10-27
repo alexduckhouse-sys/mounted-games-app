@@ -271,3 +271,23 @@ public record EmergencyContactLookupDto(
     string? MedicalNotes,
     string? TrainerName,
     string? TrainerPhone);
+/// <summary>A team named on a protest.</summary>
+public record ProtestTeamDto(int TeamId, string TeamName);
+/// <summary>
+/// A protest as staff see it. Staff-only: never put any of this on a public DTO or broadcast to
+/// <c>comp:{id}</c>; the public sees only <c>RaceDto.UnderReview</c>. <c>RaceSignedOff</c> says the race
+/// (or, for a heat-wide protest, any race in the heat) was already signed off when it was read.
+/// </summary>
+public record ProtestDto(int Id, int CompetitionId, int SessionId, string SessionName,
+    int HeatId, string? HeatLabel, int HeatOrder, int? RaceId, string? RaceName,
+    ProtestTeamDto? RaisedByTeam, IReadOnlyList<ProtestTeamDto> Concerns, string? RaisedByName,
+    string Reason, ProtestStatus Status, string? Decision,
+    string? CreatedByUserId, DateTime CreatedAt, string? DecidedByUserId, DateTime? DecidedAt,
+    bool RaceSignedOff);
+/// <param name="HeatId">The heat; may be left out when <paramref name="RaceId"/> is given.</param>
+/// <param name="RaceId">The race; null protests the whole heat.</param>
+public record CreateProtestRequest(int? HeatId, int? RaceId, int? RaisedByTeamId,
+    IReadOnlyList<int>? ConcernsTeamIds, string? RaisedByName, string? Reason, string? RequestId);
+/// <param name="Outcome">Upheld or Dismissed.</param>
+public record DecideProtestRequest(ProtestStatus Outcome, string? Decision);
+public record WithdrawProtestRequest(string? Note);

@@ -310,6 +310,8 @@ export interface Race {
   startedAt?: string | null;
   finishedAt?: string | null;
   results: ResultRow[];
+  /** An open protest covers this race. Only the flag reaches the public, never the protest. */
+  underReview?: boolean;
 }
 
 export type ReplayRaceMarker = Pick<Race, 'id' | 'name' | 'orderIndex' | 'startedAt' | 'finishedAt' | 'isComplete'>;
@@ -327,6 +329,8 @@ export interface Heat {
   raceRoundStage?: RaceRoundStage;
   entries: HeatEntry[];
   races: Race[];
+  /** An open protest covers at least one of its races. */
+  underReview?: boolean;
 }
 
 export interface Session {
@@ -1776,4 +1780,34 @@ export interface PublicResultsSummaryDto {
   isProvisional: boolean;
   generatedAt?: string;
   summaryText: string;
+/** Where a protest stands (API `ProtestStatus`). Only Open blocks signing off. */
+export const ProtestStatus = { Open: 0, Upheld: 1, Dismissed: 2, Withdrawn: 3 } as const;
+export type ProtestStatus = typeof ProtestStatus[keyof typeof ProtestStatus];
+
+export interface ProtestTeam { teamId: number; teamName: string }
+
+/** A protest as staff see it (`GET /competitions/{id}/protests`). Staff-only: never show it to the public. */
+export interface Protest {
+  id: number;
+  competitionId: number;
+  sessionId: number;
+  sessionName: string;
+  heatId: number;
+  heatLabel?: string | null;
+  heatOrder: number;
+  /** Null means the whole heat. */
+  raceId?: number | null;
+  raceName?: string | null;
+  raisedByTeam?: ProtestTeam | null;
+  concerns: ProtestTeam[];
+  raisedByName?: string | null;
+  reason: string;
+  status: ProtestStatus;
+  decision?: string | null;
+  createdByUserId?: string | null;
+  createdAt: string;
+  decidedByUserId?: string | null;
+  decidedAt?: string | null;
+  /** The race (or a race in the heat) was already signed off when this was read. */
+  raceSignedOff: boolean;
 }

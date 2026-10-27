@@ -8,6 +8,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompetition } from '../competition/context';
+import { ProtestsPanel } from './ProtestsPanel';
 import { CompetitionTeamCard } from '../competition/CompetitionTeamCard';
 import { ScorerLinksCard } from '../competition/ScorerLinksCard';
 import { Chevron, RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineSheet } from '../refine/Refine';
@@ -51,10 +52,10 @@ export function OperationsPage() {
   return <OperationsPageContent key={`${competition.id}:${user.id}`} />;
 }
 
-type View = 'checks' | 'draw' | 'entries' | 'scorers' | 'volunteers' | 'safety' | 'tack' | 'passport' | 'import' | 'print' | 'results' | 'duplicate';
+type View = 'checks' | 'draw' | 'entries' | 'protests' | 'scorers' | 'volunteers' | 'safety' | 'tack' | 'passport' | 'import' | 'print' | 'results' | 'duplicate';
 type Sheet = 'draw' | null;
 
-const VALID_VIEWS = new Set<View>(['checks', 'draw', 'entries', 'scorers', 'volunteers', 'safety', 'tack', 'passport', 'import', 'print', 'results', 'duplicate']);
+const VALID_VIEWS = new Set<View>(['checks', 'draw', 'entries', 'protests', 'scorers', 'volunteers', 'safety', 'tack', 'passport', 'import', 'print', 'results', 'duplicate']);
 
 function OperationsPageContent() {
   const canWrite = true; // anyone who can organise this competition may change it; the API decides
@@ -187,6 +188,9 @@ function OperationsPageContent() {
     title = 'Entries';
     context = `Organiser · ${competition.name}`;
     actions = null;
+  } else if (shownView === 'protests') {
+    title = 'Protests';
+    actions = null;
   } else if (shownView === 'scorers') {
     title = 'Scorers & team';
     actions = null;
@@ -228,6 +232,7 @@ function OperationsPageContent() {
     { label: 'Preparations', active: shownView === 'checks', onSelect: () => setView('checks') },
     { label: 'Draw', active: shownView === 'draw', onSelect: () => setView('draw') },
     { label: 'Entries', active: shownView === 'entries', onSelect: () => setView('entries') },
+    { label: 'Protests', active: shownView === 'protests', onSelect: () => setView('protests') },
     { label: 'Scorers & team', active: shownView === 'scorers', onSelect: () => setView('scorers') },
     { label: 'Volunteers', active: shownView === 'volunteers', onSelect: () => setView('volunteers') },
     { label: 'Emergency contacts', active: shownView === 'safety', onSelect: () => setView('safety') },
@@ -256,6 +261,11 @@ function OperationsPageContent() {
       )}
 
       {shownView === 'entries' && <EntriesPanel canWrite={canWrite} onTimetableChanged={reloadCompetition} />}
+
+      {shownView === 'protests' && (
+        <ProtestsPanel competitionId={competition.id} title="Protests and decisions"
+          empty="No protests yet. Log one from race tools on the scoring screen." />
+      )}
 
       {shownView === 'scorers' && (
         <div className="space-y-3 ops-tools">

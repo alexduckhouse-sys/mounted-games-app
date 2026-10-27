@@ -251,3 +251,8 @@
 .ops-status-active { border-color: rgb(var(--mg-ok)); color: rgb(var(--mg-ok)); }
 .ops-status-scheduled { border-color: transparent; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); }
 .ops-status-disabled, .ops-status-expired { background: rgb(var(--mg-subtle)); color: rgb(var(--mg-muted)); }
+/* Protest log: the teams a protest is about, one switch each. */
+.ops-protest-teams { display: flex; flex-direction: column; margin: 0; padding: 0; border: 0; }
+.ops-protest-teams legend { padding: 0 0 4px; font: 600 14px/1.2 var(--mg-font); color: rgb(var(--mg-body)); }
+.ops-protest-team { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; border-top: 1px solid rgb(var(--mg-rule-soft)); font: 500 15px/1.2 var(--mg-font); color: rgb(var(--mg-ink)); }
+.ops-protest-team input { width: 22px; height: 22px; flex: none; margin: 0; accent-color: rgb(var(--mg-button)); }

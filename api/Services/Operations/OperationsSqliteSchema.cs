@@ -237,6 +237,37 @@ public static class OperationsSqliteSchema
         CREATE INDEX IF NOT EXISTS "IX_VolunteerClaim_ShiftId" ON "VolunteerClaim" ("ShiftId");
 
         CREATE INDEX IF NOT EXISTS "IX_VolunteerClaim_ShiftId_UserId" ON "VolunteerClaim" ("ShiftId", "UserId");
+        CREATE TABLE IF NOT EXISTS "Protest" (
+            "Id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            "CompetitionId" INTEGER NOT NULL,
+            "HeatId" INTEGER NOT NULL,
+            "RaceId" INTEGER,
+            "RaisedByTeamId" INTEGER,
+            "ConcernsTeamIdsJson" TEXT NOT NULL,
+            "RaisedByName" TEXT,
+            "Reason" TEXT NOT NULL,
+            "Status" INTEGER NOT NULL,
+            "Decision" TEXT,
+            "DecidedByUserId" TEXT,
+            "DecidedAt" TEXT,
+            "CreatedByUserId" TEXT,
+            "CreatedAt" TEXT NOT NULL,
+            "RequestId" TEXT NOT NULL,
+            CONSTRAINT "FK_Protest_Competitions_CompetitionId" FOREIGN KEY ("CompetitionId") REFERENCES "Competitions" ("Id") ON DELETE CASCADE,
+            CONSTRAINT "FK_Protest_Heats_HeatId" FOREIGN KEY ("HeatId") REFERENCES "Heats" ("Id") ON DELETE CASCADE,
+            CONSTRAINT "FK_Protest_Races_RaceId" FOREIGN KEY ("RaceId") REFERENCES "Races" ("Id") ON DELETE CASCADE,
+            CONSTRAINT "FK_Protest_Teams_RaisedByTeamId" FOREIGN KEY ("RaisedByTeamId") REFERENCES "Teams" ("Id") ON DELETE SET NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS "IX_Protest_CompetitionId_Status" ON "Protest" ("CompetitionId", "Status");
+
+        CREATE UNIQUE INDEX IF NOT EXISTS "IX_Protest_CompetitionId_RequestId" ON "Protest" ("CompetitionId", "RequestId");
+
+        CREATE INDEX IF NOT EXISTS "IX_Protest_HeatId" ON "Protest" ("HeatId");
+
+        CREATE INDEX IF NOT EXISTS "IX_Protest_RaceId" ON "Protest" ("RaceId");
+
+        CREATE INDEX IF NOT EXISTS "IX_Protest_RaisedByTeamId" ON "Protest" ("RaisedByTeamId");
         """);
     }
 }

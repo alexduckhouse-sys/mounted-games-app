@@ -727,6 +727,12 @@ public class ScorerLinkTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.Unauthorized, (await scorer.GetAsync($"/api/races/{race}/score/history")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await scorer.GetAsync($"/api/competitions/{w.Arena.CompetitionId}/team")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await scorer.GetAsync(LinksUrl(w.Arena.CompetitionId))).StatusCode);
+        // The protest log is staff-only: a link can't read, raise, decide or withdraw protests.
+        var protests = $"/api/competitions/{w.Arena.CompetitionId}/protests";
+        Assert.Equal(HttpStatusCode.Unauthorized, (await scorer.GetAsync(protests)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await scorer.PostAsJsonAsync(protests, new CreateProtestRequest(null, race, null, null, null, "x", "p1"))).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await scorer.PostAsJsonAsync($"{protests}/1/decision", new DecideProtestRequest(ProtestStatus.Upheld, "x"))).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await scorer.PostAsJsonAsync($"{protests}/1/withdraw", new WithdrawProtestRequest(null))).StatusCode);
         var scorerCannotCreateLinks = await scorer.PostAsJsonAsync(LinksUrl(w.Arena.CompetitionId), new { label = "Mine", arenaName = "Main" });
         Assert.Equal(HttpStatusCode.Unauthorized, scorerCannotCreateLinks.StatusCode);
     }

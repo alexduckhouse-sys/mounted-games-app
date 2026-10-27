@@ -361,3 +361,28 @@ it('marks one team\'s row, drops the card and ignores ?heat= when told to', () =
   expect(screen.queryByText('Ash C')).toBeNull();
   expect(screen.getByRole('region', { name: 'Scores' })).not.toHaveClass('mg-card');
 });
+
+it('marks races under an open protest as under review, and says nothing more', () => {
+  const shownHeat = heat(40, { sessionId: 40, orderIndex: 0, label: 'Heat 1', entries: [{ id: 40, teamId: 40, teamName: 'Elm D', laneIndex: 1 }],
+    races: [race(41, { name: 'Bending', orderIndex: 0, isComplete: true, underReview: true }), race(42, { name: 'Sack', orderIndex: 1 }), race(43, { name: 'Mug', orderIndex: 2, underReview: true })] });
+  const shownSession = session(40, { sectionName: 'Teams Seniors', status: 1, scheduledStart: '2026-10-16T10:00:00', heats: [shownHeat] });
+  state.competition = competition({ name: 'Autumn Games', startDate: '2026-10-16', sessions: [shownSession] });
+  render(<CompactPageBarProvider><MemoryRouter><HeatScores session={shownSession} heats={[shownHeat]} activeHeatId={40} /></MemoryRouter></CompactPageBarProvider>);
+  expect(screen.getByTestId('heat-under-review')).toHaveTextContent('Under review: Bending, Mug');
+});
+
+it('marks a heat-heat-final round under review when any of its heats has a race under review, and shows nothing otherwise', () => {
+  const q1 = heat(50, { sessionId: 50, orderIndex: 0, label: 'Bending · Q1', raceRoundId: 7, raceRoundStage: 1,
+    entries: [{ id: 50, teamId: 50, teamName: 'Oak A', laneIndex: 1 }], races: [race(51, { name: 'Bending', underReview: true })] });
+  const q2 = heat(52, { sessionId: 50, orderIndex: 1, label: 'Flag · Q1', raceRoundId: 8, raceRoundStage: 1,
+    entries: [{ id: 51, teamId: 51, teamName: 'Ash C', laneIndex: 1 }], races: [race(53, { name: 'Flag' })] });
+  const shownSession = session(50, { sectionName: 'Teams Seniors', status: 1, scheduledStart: '2026-10-16T10:00:00', heats: [q1, q2] });
+  state.competition = competition({ name: 'Autumn Games', startDate: '2026-10-16', sessions: [shownSession] });
+  const { unmount } = render(<CompactPageBarProvider><MemoryRouter><HeatScores session={shownSession} heats={[q1, q2]} activeHeatId={50} /></MemoryRouter></CompactPageBarProvider>);
+  expect(screen.getByTestId('heat-under-review')).toHaveTextContent('Under review: Bending');
+  unmount();
+
+  const calm = { ...q1, races: [race(51, { name: 'Bending' })] };
+  render(<CompactPageBarProvider><MemoryRouter><HeatScores session={{ ...shownSession, heats: [calm, q2] }} heats={[calm, q2]} activeHeatId={50} /></MemoryRouter></CompactPageBarProvider>);
+  expect(screen.queryByTestId('heat-under-review')).toBeNull();
+});
