@@ -4,7 +4,7 @@ import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CurrentCompetitionProvider } from '../competition/CurrentCompetitionContext';
 import type { TickerItem } from '../lib/ticker';
-import { TickerProvider, useTicker } from './TickerContext';
+import { TickerProvider, useTicker, type DockAction } from './TickerContext';
 import { TopBarTicker } from './TopBarTicker';
 
 const live: TickerItem = { key: 'live-1', kind: 'live', text: 'Now: Seniors Session 1 · Heat 1' };
@@ -12,22 +12,23 @@ const next: TickerItem = { key: 'next-2', kind: 'next', text: 'Next 10:30: Senio
 const info: TickerItem = { key: 'info', kind: 'info', text: 'Spring Games' };
 const notice: TickerItem = { key: 'announcement-7', kind: 'announcement', text: 'Lunch moved to 1pm' };
 
-function Publish({ items, watch = null }: { items: TickerItem[]; watch?: number | null }) {
-  const { setItems, setWatchCompetitionId } = useTicker();
+function Publish({ items, watch = null, action = null }: { items: TickerItem[]; watch?: number | null; action?: DockAction | null }) {
+  const { setItems, setWatchCompetitionId, setDockAction } = useTicker();
   useEffect(() => { setWatchCompetitionId(watch); }, [watch, setWatchCompetitionId]);
   useEffect(() => { setItems(items); }, [items, setItems]);
+  useEffect(() => { setDockAction(action); }, [action, setDockAction]);
   return null;
 }
 function Go({ to }: { to: string }) {
   const navigate = useNavigate();
   return <button onClick={() => navigate(to)}>Go {to}</button>;
 }
-function Page({ items, watch = null }: { items: TickerItem[]; watch?: number | null }) {
+function Page({ items, watch = null, action = null }: { items: TickerItem[]; watch?: number | null; action?: DockAction | null }) {
   return (
     <MemoryRouter initialEntries={['/competitions/1']}>
       <CurrentCompetitionProvider>
         <TickerProvider>
-          <Publish items={items} watch={watch} />
+          <Publish items={items} watch={watch} action={action} />
           <TopBarTicker />
           <Go to="/competitions/1/chat" />
           <button>Outside</button>
@@ -38,7 +39,9 @@ function Page({ items, watch = null }: { items: TickerItem[]; watch?: number | n
 }
 const remember = () => { document.cookie = `mg.competition=${encodeURIComponent(JSON.stringify({ id: 1, name: 'Spring Games' }))}; Path=/`; };
 const show = (items: TickerItem[]) => render(<Page items={items} />);
-const strip = () => document.querySelector('.ticker-line')?.textContent ?? null;
+// The line now showing; the one it pushed out stays behind it until its slide ends.
+const strip = () => document.querySelector('.ticker-line:not(.ticker-out)')?.textContent ?? null;
+const leaving = () => document.querySelector('.ticker-out')?.textContent ?? null;
 const tick = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
 
 function stubMotion(reduce: boolean) {
@@ -151,21 +154,36 @@ describe('TopBarTicker: rotating', () => {
     expect(() => show([live, next])).not.toThrow();
   });
 
-  it('jumps to a new announcement when it arrives, flashes and holds it for 10 seconds, otherwise keeps its place', async () => {
+  it('pushes the line before up and out as the next one slides in', async () => {
+    show([live, next]);
+    expect(leaving()).toBeNull();
+    expect(document.querySelector('.ticker-in')).toBeNull();
+    await tick(4500);
+    expect(leaving()).toBe('LiveSeniors Session 1 · Heat 1');
+    expect(document.querySelector('.ticker-in')).toHaveTextContent('Heat 2');
+  });
+
+  it('just swaps the line, with nothing sliding, when the visitor prefers reduced motion', async () => {
+    stubMotion(true);
+    const { rerender } = show([live, next]);
+    rerender(<Page items={[notice, live, next]} />);
+    expect(strip()).toBe('NoticeLunch moved to 1pm');
+    expect(leaving()).toBeNull();
+  });
+
+  it('jumps to a new announcement when it arrives, without a flash, and holds it for 10 seconds, otherwise keeps its place', async () => {
     const { rerender, container } = show([live, next]);
     await tick(4500);
     expect(strip()).toContain('Heat 2');
     rerender(<Page items={[live, next, { ...info }]} />);
     expect(strip()).toContain('Heat 2');
-    expect(container.querySelector('.mg-strip-flash')).toBeNull();
     rerender(<Page items={[notice, live, next]} />);
     expect(strip()).toBe('NoticeLunch moved to 1pm');
-    expect(container.querySelector('.mg-strip-flash')).not.toBeNull();
+    expect(container.querySelector('.mg-strip-flash')).toBeNull();
     await tick(4500);
     expect(strip()).toBe('NoticeLunch moved to 1pm');
     await tick(5500);
     expect(strip()).toBe('LiveSeniors Session 1 · Heat 1');
-    expect(container.querySelector('.mg-strip-flash')).toBeNull();
   });
 
   it('goes back to the first line when the one being shown disappears', async () => {
@@ -265,4 +283,30 @@ it('keeps a red Watch shortcut between the rotating text and arrow, including wi
   expect(screen.getByRole('link', { name: 'Watch the live video' })).toBeVisible();
   rerender(<Page items={[info]} watch={2} />); expect(screen.queryByRole('link', { name: 'Watch the live video' })).toBeNull();
   rerender(<Page items={[]} watch={null} />); expect(document.querySelector('.mg-strip-bar')).toBeNull();
+});
+
+describe('TopBarTicker: the page button beside the dock', () => {
+  const action = (count: number, onClick = vi.fn()): DockAction => ({ label: 'Day, arena and age group', count, onClick });
+
+  it('sits beside the ticker and calls the page, closing the list first', () => {
+    const onClick = vi.fn();
+    render(<Page items={[live, info, notice]} action={action(0, onClick)} />);
+    fireEvent.click(screen.getByRole('button', { name: 'All updates (3)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Day, arena and age group' }));
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(screen.getByRole('button', { name: 'All updates (3)' })).toHaveAttribute('aria-expanded', 'false');
+    expect(document.querySelector('.mg-dock-count')).toBeNull();
+  });
+
+  it('shows how many filters are set', () => {
+    render(<Page items={[live]} action={action(2)} />);
+    expect(screen.getByRole('button', { name: 'Day, arena and age group, 2 set' })).toBeVisible();
+    expect(document.querySelector('.mg-dock-count')).toHaveTextContent('2');
+  });
+
+  it('still shows on its own when there is no news', () => {
+    render(<Page items={[]} action={action(0)} />);
+    expect(document.querySelector('.mg-strip-bar')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Day, arena and age group' })).toBeVisible();
+  });
 });

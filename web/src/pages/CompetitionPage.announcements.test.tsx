@@ -62,25 +62,14 @@ it('keeps the active banner in the ticker, replaces it and removes it on the del
   await waitFor(() => expect(latestTickerText()).not.toContain('New pinned notice'));
 });
 
-describe('announcement pop-up', () => {
-  const pop = () => document.querySelector('.mg-announce-pop');
-
-  it('pops up a live announcement on other tabs and goes when the announcement is deleted', async () => {
-    renderAt('/competitions/1');
-    expect(await screen.findByText('Competition loaded')).toBeVisible();
-    act(() => state.handlers?.onAnnouncement(chat(7, { type: 2, body: 'Arena 2 is closed' }) as never));
-    await waitFor(() => expect(pop()).toHaveTextContent('Arena 2 is closed'));
-    expect(pop()!.querySelector('a')).toHaveAttribute('href', '/competitions/1/chat');
-    act(() => state.handlers?.onChatMessageDeleted({ id: 7 } as never));
-    await waitFor(() => expect(pop()).toBeNull());
-  });
-
-  it('stays quiet on the Live tab, where the announcement lands in the feed', async () => {
-    renderAt('/competitions/1/chat');
-    expect(await screen.findByText('Competition loaded')).toBeVisible();
-    act(() => state.handlers?.onAnnouncement(chat(8, { type: 2, body: 'Lunch until 1pm' }) as never));
-    expect(pop()).toBeNull();
-  });
+it('shows a live announcement once, in the ticker, with no pop-up card', async () => {
+  renderAt('/competitions/1');
+  expect(await screen.findByText('Competition loaded')).toBeVisible();
+  act(() => state.handlers?.onAnnouncement(chat(7, { type: 2, body: 'Arena 2 is closed' }) as never));
+  await waitFor(() => expect(latestTickerText()).toContain('Arena 2 is closed'));
+  expect(screen.queryByRole('button', { name: 'Dismiss announcement' })).toBeNull();
+  act(() => state.handlers?.onChatMessageDeleted({ id: 7 } as never));
+  await waitFor(() => expect(latestTickerText()).not.toContain('Arena 2 is closed'));
 });
 
 type Published = { connected: boolean; failures: number; intervalMs: number; retrying: boolean; retry: () => void } | null;

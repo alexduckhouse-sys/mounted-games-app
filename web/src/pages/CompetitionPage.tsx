@@ -29,7 +29,6 @@ import { displaySectionName } from '../lib/section';
 import { LIVE_SAVED_COPY_NOTICE_AFTER_MS, lastUpdatedText, readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, shouldNoticeSavedCopy, writeSavedCopy } from '../offline/savedCopies';
 import { PageSkeleton, TimetableSkeleton, ToplistSkeleton } from '../components/Skeletons';
 import { competitionPhase } from '../lib/competitionPhase';
-import { AnnouncementPop } from '../components/AnnouncementPop';
 
 const BANNER_TAG = 'banner';
 
@@ -197,12 +196,6 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
     return () => setWatchCompetitionId(null);
   }, [hasStreams, competitionId, setWatchCompetitionId]);
   const [announcements, setAnnouncements] = useState<ChatMessage[]>([]);
-  // A live announcement pops up on every tab but the Live one, where it already lands in the feed.
-  const [popped, setPopped] = useState<ChatMessage | null>(null);
-  const onLiveTab = /\/chat\/?$/.test(pathname);
-  const onLiveTabRef = useRef(onLiveTab);
-  useEffect(() => { onLiveTabRef.current = onLiveTab; }, [onLiveTab]);
-  const dismissPopped = useCallback(() => setPopped(null), []);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 60_000);
@@ -249,13 +242,12 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
       const message = m as ChatMessage;
       addStreamMessage(message);
       if (message.competitionId === competitionId) {
+        // Announcements show once, in the ticker dock (it jumps to a new one); there is no pop-up card.
         setAnnouncements((current) => addAnnouncement(current, message));
-        if (message.type === 2 && !onLiveTabRef.current) setPopped(message);
       }
     },
     onChatMessageDeleted: ({ id }) => {
       setAnnouncements((current) => current.filter((message) => message.id !== id));
-      setPopped((current) => (current?.id === id ? null : current));
       setStreamMessages((current) => current.filter((item) => item.message.id !== id));
     },
     onSessionUpdated: (s) => {
@@ -346,7 +338,6 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
     <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamTelemetry, lastStreamCommand, streamingEnabled: streamState.streamingEnabled, streamingChecked: streamState.streamingChecked, invoke, ready, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save, scoreCards, sponsors: sponsorFeed.sponsors, reloadSponsors: sponsorFeed.reloadSponsors, sponsorSkip: sponsorFeed.sponsorSkip }}>
       {/* The page fades in over its loading placeholder rather than snapping into place. */}
       <div className="mg-settle flex flex-col gap-4">
-        <AnnouncementPop message={onLiveTab ? null : popped} to={`/competitions/${data.id}/chat`} onDismiss={dismissPopped} />
         <div className="pt-4 empty:hidden -mb-4 has-[+.rf-page]:mb-0"><ScoreOutboxPanel competitionId={data.id} /></div>
         <Outlet />
         {partial && <Notice tone="info" className="mx-auto w-full max-w-xl">Loading the rest of the timetable…</Notice>}
