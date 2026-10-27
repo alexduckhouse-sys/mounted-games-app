@@ -13,6 +13,9 @@ import { computeTimings, formatTime } from '../../lib/time';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
 import { timetableRows, type TimetableRow } from '../../lib/timetableRows';
 import { useCompetition } from './context';
+import { useLanguage } from '../../i18n/LanguageContext';
+import { activeLocale } from '../../i18n/translate';
+import { weatherConditionKey } from '../../lib/weatherText';
 
 interface ForecastApiResponse {
   utc_offset_seconds?: number;
@@ -64,27 +67,9 @@ export interface HourForecast {
 interface DayWeatherModel {
   headlineTemp: number | null;
   weatherCode: number | undefined;
-  conditionLabel: string;
   maxRainChance: number | null;
   maxWindSpeed: number | null;
   hours: HourForecast[];
-}
-
-function weatherConditionLabel(code?: number): string {
-  if (code == null) return 'Conditions unavailable';
-  if (code === 0) return 'Sunny';
-  if (code === 1) return 'Mainly clear';
-  if (code === 2) return 'Partly cloudy';
-  if (code === 3) return 'Overcast';
-  if (code <= 49) return 'Foggy';
-  if (code <= 59) return 'Light drizzle';
-  if (code <= 64) return 'Light rain';
-  if (code <= 69) return 'Heavy rain';
-  if (code <= 79) return 'Snow';
-  if (code <= 84) return 'Rain showers';
-  if (code <= 86) return 'Snow showers';
-  if (code <= 99) return 'Thunderstorm';
-  return 'Partly cloudy';
 }
 
 function finite(value: unknown): value is number {
@@ -133,7 +118,7 @@ function buildDayWeather(
       if (hour < 0 || hour > 23 || !finite(temp) || !finite(code)
         || !finite(rainProb) || !finite(rainMm) || !finite(wind)) return;
       byInstant.set(startsAt, {
-        startsAt, hour, label: at.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), temperature_2m: temp, weather_code: code,
+        startsAt, hour, label: at.toLocaleTimeString(activeLocale(), { hour: '2-digit', minute: '2-digit' }), temperature_2m: temp, weather_code: code,
         precipitation_probability: rainProb, precipitation: rainMm, wind_speed_10m: wind,
         is_day: hourly.is_day?.[i] ?? 1,
       });
@@ -152,13 +137,14 @@ function buildDayWeather(
   const headline = current?.temperature_2m ?? hours.find(h => h.hour === 13)?.temperature_2m ?? hours[0]?.temperature_2m ?? high;
   const headlineTemp = finite(headline) ? Math.round(headline) : null;
   return {
-    headlineTemp, weatherCode, conditionLabel: weatherConditionLabel(weatherCode),
+    headlineTemp, weatherCode,
     maxRainChance, maxWindSpeed, hours,
   };
 }
 
 export function WeatherPage() {
   usePageWidth('wide');
+  const { t, locale } = useLanguage();
   const { competition, reload } = useCompetition();
   const [refreshVersion, setRefreshVersion] = useState(0);
   const refresh = useCallback(() => {
@@ -166,12 +152,12 @@ export function WeatherPage() {
     setRefreshVersion(version => version + 1);
   }, [reload]);
   usePageHeader({
-    title: 'Weather',
+    title: t('teams.weather.title'),
     subtitle: competition.name,
     backTo: `/competitions/${competition.id}`,
-    backLabel: 'Back to timetable',
+    backLabel: t('teams.weather.backToTimetable'),
     onRefresh: refresh,
-    refreshLabel: 'Refresh weather and timetable',
+    refreshLabel: t('teams.weather.refresh'),
   });
 
   const timings = useMemo(() => computeTimings(competition.sessions), [competition.sessions]);
@@ -238,10 +224,10 @@ export function WeatherPage() {
   const weather = buildDayWeather(activeForecast, activeCurrent, selectedDay);
 
   const updatedText = weather && fetched?.key === requestKey
-    ? fetched.receivedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+    ? fetched.receivedAt.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
     : null;
   const selectedDateLabel = selectedDay
-    ? new Date(`${selectedDay}T12:00:00`).toLocaleDateString('en-GB', {
+    ? new Date(`${selectedDay}T12:00:00`).toLocaleDateString(locale, {
         weekday: 'long',
         day: 'numeric',
         month: 'short',
@@ -249,48 +235,48 @@ export function WeatherPage() {
     : '';
 
   const isToday = selectedDay === today;
-  const nowLabel = isToday ? 'Now' : selectedDateLabel;
+  const nowLabel = isToday ? t('teams.weather.now') : selectedDateLabel;
 
   return (
     <div className="rf-page mx-auto flex w-full max-w-xl flex-col pb-8 pt-3">
-      <h1 className="sr-only">Weather</h1>
+      <h1 className="sr-only">{t('teams.weather.title')}</h1>
       {days.length > 1 && (
-        <div className="sp-seg mb-3" role="tablist" aria-label="Choose day">
+        <div className="sp-seg mb-3" role="tablist" aria-label={t('teams.weather.chooseDay')}>
           {days.map((day, index) => {
-            const shortDay = new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short' });
+            const shortDay = new Date(`${day}T12:00:00`).toLocaleDateString(locale, { weekday: 'short' });
             return (
               <button key={day} type="button" role="tab" aria-selected={selectedDay === day} onClick={() => setPickedDay(day)}>
-                {`Day ${index + 1} · ${shortDay}`}
+                {t('teams.weather.dayN', { number: index + 1, day: shortDay })}
               </button>
             );
           })}
         </div>
       )}
 
-      <section aria-label="Day weather summary" className={weather ? 'ev-card flex items-center gap-4 p-4' : undefined}>
+      <section aria-label={t('teams.weather.summary')} className={weather ? 'ev-card flex items-center gap-4 p-4' : undefined}>
         {!weather ? (
-          lat == null || lon == null ? <Notice tone="info">There’s no weather here because the venue has no map location.</Notice>
-            : fetched?.key !== requestKey ? <Notice tone="info">Loading weather…</Notice>
-              : <Notice actionLabel="Try again" onAction={refresh}>Couldn’t load the weather for this day. Check your signal and try again.</Notice>
+          lat == null || lon == null ? <Notice tone="info">{t('teams.weather.noLocation')}</Notice>
+            : fetched?.key !== requestKey ? <Notice tone="info">{t('teams.weather.loading')}</Notice>
+              : <Notice actionLabel={t('common.tryAgain')} onAction={refresh}>{t('teams.weather.error')}</Notice>
         ) : <>
           <WeatherIcon code={weather.weatherCode} className="h-16 w-16" />
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="sp-t2">{nowLabel}{updatedText ? ` · updated ${updatedText}` : ''}</span>
+            <span className="sp-t2">{nowLabel}{updatedText ? ` · ${t('teams.weather.updated', { time: updatedText })}` : ''}</span>
             <span className="mg-display text-[44px] font-extrabold leading-none text-[rgb(var(--mg-heading))]">
               {weather.headlineTemp == null ? '—' : `${weather.headlineTemp}°`}
             </span>
-            <span className="sp-t1">{weather.conditionLabel}</span>
+            <span className="sp-t1">{t(weatherConditionKey(weather.weatherCode))}</span>
             <span className="sp-t2">
-              {[weather.maxRainChance == null ? null : `${weather.maxRainChance}% chance of rain`, weather.maxWindSpeed == null ? null : `Wind up to ${weather.maxWindSpeed} km/h`].filter(Boolean).join(' · ') || 'Rain and wind forecast unavailable'}
+              {[weather.maxRainChance == null ? null : t('teams.weather.rainChance', { percent: weather.maxRainChance }), weather.maxWindSpeed == null ? null : t('teams.weather.windUpTo', { speed: weather.maxWindSpeed })].filter(Boolean).join(' · ') || t('teams.weather.rainWindUnavailable')}
             </span>
           </div>
         </>}
       </section>
 
-      <section aria-label="Timetable with weather">
-        <h2 className="sp-sec">Through the day</h2>
+      <section aria-label={t('teams.weather.timetableAria')}>
+        <h2 className="sp-sec">{t('teams.weather.throughDay')}</h2>
         {dayRows.length === 0 ? (
-          <p className="sp-note">Nothing scheduled for this day.</p>
+          <p className="sp-note">{t('teams.weather.nothing')}</p>
         ) : (
           <div className="sp-card">
             {dayRows.map((row) => {
@@ -298,13 +284,13 @@ export function WeatherPage() {
               const rowWeather = instant == null ? undefined
                 : weather?.hours.find(hour => hour.startsAt <= instant && instant < hour.startsAt + 3_600_000);
               const race = (row.session.kind ?? (row.session.isBreak ? 1 : 0)) === 0;
-              const heatName = row.heat ? row.heat.label || `Heat ${row.heatIndex + 1}` : row.session.name;
+              const heatName = row.heat ? row.heat.label || t('teams.team.heatN', { number: row.heatIndex + 1 }) : row.session.name;
               const sectionText = row.session.sectionName ? displaySectionName(row.session.sectionName) : '';
               // A heat reads "Under 12 · Heat 1"; a session with no heats already names its age group.
               const title = race && row.heat ? [sectionText, heatName].filter(Boolean).join(' · ') : heatName;
               const words = rowWeather
-                ? [weatherConditionLabel(rowWeather.weather_code), rowWeather.precipitation_probability >= 20 ? `${Math.round(rowWeather.precipitation_probability)}% chance of rain` : null].filter(Boolean).join(', ')
-                : 'Weather unavailable';
+                ? [t(weatherConditionKey(rowWeather.weather_code)), rowWeather.precipitation_probability >= 20 ? t('teams.weather.rainChance', { percent: Math.round(rowWeather.precipitation_probability) }) : null].filter(Boolean).join(', ')
+                : t('teams.weather.rowUnavailable');
 
               const inner = (
                 <>

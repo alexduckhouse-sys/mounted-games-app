@@ -10,6 +10,7 @@ import { useLiteMode } from '../../lite/LiteModeContext';
 import { CompetitionContext } from '../../pages/competition/context';
 import { StreamChips } from './StreamChips';
 import { StreamPlayer } from './StreamPlayer';
+import { useT } from '../../i18n/LanguageContext';
 
 export function LiveVideo({ competitionId, streams, sessions, invoke, ready, messages, canBroadcast, fallback, competitionName, publicLayout = false, showPlaceholder = false, lastCommand, onMedia }: {
   competitionId: number; streams: LiveStream[]; sessions: Session[]; invoke: StreamInvoke; ready: number;
@@ -19,6 +20,7 @@ export function LiveVideo({ competitionId, streams, sessions, invoke, ready, mes
   onMedia?: (media: MediaStream | null) => void;
 }) {
   const { lite } = useLiteMode();
+  const t = useT();
   const ctx = useContext(CompetitionContext);
   const effectiveCommand = lastCommand !== undefined ? lastCommand : ctx?.lastStreamCommand;
   const [selectedId, select] = useState<number | null>(null);
@@ -46,8 +48,8 @@ export function LiveVideo({ competitionId, streams, sessions, invoke, ready, mes
   };
 
   return <section className={`flex min-h-0 flex-col ${publicLayout ? '' : 'gap-3'}`}>
-    {!publicLayout && (selected || canBroadcast) && <div className="flex items-center gap-3"><h2 className="mg-h2 flex-1">Live video</h2>
-      {canBroadcast && <Link to={`/competitions/${competitionId}/broadcast`} className="mg-btn mg-btn-primary !bg-[rgb(var(--mg-red))] !text-white"><Video aria-hidden="true" className="h-4 w-4" />Go live</Link>}
+    {!publicLayout && (selected || canBroadcast) && <div className="flex items-center gap-3"><h2 className="mg-h2 flex-1">{t('teams.stream.liveVideo')}</h2>
+      {canBroadcast && <Link to={`/competitions/${competitionId}/broadcast`} className="mg-btn mg-btn-primary !bg-[rgb(var(--mg-red))] !text-white"><Video aria-hidden="true" className="h-4 w-4" />{t('teams.stream.goLive')}</Link>}
     </div>}
     {selected ? <>
       <div className={`flex flex-wrap items-center gap-2 ${publicLayout && active.length > 1 ? 'pb-2' : ''}`}>
@@ -58,24 +60,25 @@ export function LiveVideo({ competitionId, streams, sessions, invoke, ready, mes
             className="mg-stream-chip text-xs"
             onClick={() => setPinnedAngle(false)}
           >
-            Auto-follow director
+            {t('teams.stream.autoFollow')}
           </button>
         )}
       </div>
-      {typeof RTCPeerConnection === 'undefined' ? <p role="status" className="mg-card p-4">Live video is not supported in this browser.</p>
+      {typeof RTCPeerConnection === 'undefined' ? <p role="status" className="mg-card p-4">{t('teams.stream.unsupported')}</p>
         : lite && !tapped ? <TapToWatch stream={selected} captionBar={publicLayout} onTap={() => setTapped(true)} />
         : <ConnectedPlayer key={selected.id} stream={selected} invoke={invoke} ready={ready} onMedia={onMedia} announcement={messages.filter((item) => item.message.type === 2).at(-1)} captionBar={publicLayout} label={label} />}
       <p className={`m-0 text-xs text-[rgb(var(--mg-muted))] ${publicLayout ? 'px-4 pt-2' : ''}`}>{SPECTATOR_NOTICE}</p>
     </> : fallback ? <CompStreamCard key={fallback} streamUrl={fallback} compName={competitionName} publicLayout={publicLayout} />
-      : showPlaceholder ? <div className="live-stream-placeholder mg-card" role="status"><strong>The stream hasn’t started</strong></div> : null}
+      : showPlaceholder ? <div className="live-stream-placeholder mg-card" role="status"><strong>{t('teams.stream.notStarted')}</strong></div> : null}
   </section>;
 }
 /** Lite mode: no connection is made until the viewer asks for the video. */
 function TapToWatch({ stream, captionBar, onTap }: { stream: LiveStream; captionBar: boolean; onTap: () => void }) {
+  const t = useT();
   return <button type="button" onClick={onTap} className={`mg-tap-video ${captionBar ? '' : 'rounded-xl'}`}>
     <span className="mg-tap-video-play"><Play aria-hidden="true" /></span>
-    <b>Tap to watch</b>
-    <small>{stream.arenaName} · {stream.angleName}. Video uses a lot of data, so it only starts when you tap.</small>
+    <b>{t('teams.stream.tapToWatch')}</b>
+    <small>{stream.arenaName} · {stream.angleName}. {t('teams.stream.dataNote')}</small>
   </button>;
 }
 function ConnectedPlayer({ stream, invoke, ready, announcement, captionBar, label, onMedia }: {
@@ -83,6 +86,7 @@ function ConnectedPlayer({ stream, invoke, ready, announcement, captionBar, labe
   announcement?: { message: ChatMessage; receivedAt: number };
   captionBar?: boolean; label: string | null;
 }) {
+  const t = useT();
   const viewer = useRef<ReturnType<typeof createStreamViewer> | null>(null);
   const [snapshot, setSnapshot] = useState<ViewerSnapshot>({ media: null, state: 'connecting', message: null });
   useEffect(() => {
@@ -96,17 +100,18 @@ function ConnectedPlayer({ stream, invoke, ready, announcement, captionBar, labe
     return () => onMedia?.(null);
   }, [snapshot.media, onMedia]);
   useEffect(() => { viewer.current!.sync(ready, stream.generation); }, [ready, stream.generation, stream.competitionId, stream.id, invoke]);
-  return <StreamPlayer media={snapshot.media} stream={stream} label={label} reconnecting={snapshot.state === 'reconnecting'} message={snapshot.message || (snapshot.state === 'connecting' ? 'Connecting…' : null)} announcement={announcement} captionBar={captionBar} quality={snapshot.preferredRid ?? 'f'} onQuality={(rid) => viewer.current?.setQuality(rid)} audioOnly={snapshot.audioOnly} onAudioOnly={(enabled) => viewer.current?.setAudioOnly(enabled)} onSyncLive={() => viewer.current?.syncLive()} />;
+  return <StreamPlayer media={snapshot.media} stream={stream} label={label} reconnecting={snapshot.state === 'reconnecting'} message={snapshot.message || (snapshot.state === 'connecting' ? t('teams.stream.connecting') : null)} announcement={announcement} captionBar={captionBar} quality={snapshot.preferredRid ?? 'f'} onQuality={(rid) => viewer.current?.setQuality(rid)} audioOnly={snapshot.audioOnly} onAudioOnly={(enabled) => viewer.current?.setAudioOnly(enabled)} onSyncLive={() => viewer.current?.syncLive()} />;
 }
 export function CompStreamCard({ streamUrl, compName, publicLayout = false }: { streamUrl: string; compName: string; publicLayout?: boolean }) {
+  const t = useT();
   const [loaded, setLoaded] = useState(false);
   const link = streamLink(streamUrl);
   if (!link) return null;
   return <div className={`mg-card overflow-hidden ${publicLayout ? 'live-stream-frame' : ''}`}>
-    {!publicLayout && <div className="flex items-center justify-between gap-3 px-4 py-3"><h2 className="mg-h2">Stream</h2><a href={link.href} target="_blank" rel="noreferrer" className="mg-text-link">Open stream</a></div>}
+    {!publicLayout && <div className="flex items-center justify-between gap-3 px-4 py-3"><h2 className="mg-h2">{t('teams.stream.stream')}</h2><a href={link.href} target="_blank" rel="noreferrer" className="mg-text-link">{t('teams.stream.openStream')}</a></div>}
     {link.embed && (loaded ? <iframe src={link.embed} title={compName} className="aspect-video w-full" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
-      : <button className="mg-font flex aspect-video w-full items-center justify-center gap-2 bg-[rgb(var(--mg-header-deep))] text-white" onClick={() => setLoaded(true)}><Video aria-hidden="true" />Tap to load the stream</button>)}
-    {!link.embed && publicLayout && <a href={link.href} target="_blank" rel="noreferrer" className="mg-font flex aspect-video w-full items-center justify-center gap-2 bg-[rgb(var(--mg-header-deep))] text-white"><Video aria-hidden="true" />Open stream</a>}
-    {publicLayout && <div className="live-stream-caption"><span className="mg-badge mg-badge-outline">Stream</span><strong>{compName}</strong><a href={link.href} target="_blank" rel="noreferrer">Full screen</a></div>}
+      : <button className="mg-font flex aspect-video w-full items-center justify-center gap-2 bg-[rgb(var(--mg-header-deep))] text-white" onClick={() => setLoaded(true)}><Video aria-hidden="true" />{t('teams.stream.tapToLoad')}</button>)}
+    {!link.embed && publicLayout && <a href={link.href} target="_blank" rel="noreferrer" className="mg-font flex aspect-video w-full items-center justify-center gap-2 bg-[rgb(var(--mg-header-deep))] text-white"><Video aria-hidden="true" />{t('teams.stream.openStream')}</a>}
+    {publicLayout && <div className="live-stream-caption"><span className="mg-badge mg-badge-outline">{t('teams.stream.stream')}</span><strong>{compName}</strong><a href={link.href} target="_blank" rel="noreferrer">{t('teams.stream.fullScreen')}</a></div>}
   </div>;
 }

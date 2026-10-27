@@ -17,6 +17,7 @@ import './operations.css';
 import '../../components/sitePages.css';
 import '../../components/eventPages.css';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 interface RulebookDraft {
   id: number | null;
@@ -40,6 +41,7 @@ export function RulebooksPage() {
 
 /** Rulebooks are shared by every competition. The list holds titles only; a rulebook's text is fetched when it is opened. */
 function GlobalRulebooks() {
+  const { t } = useLanguage();
   let competition: { id: number; name: string } | null = null;
   try {
     competition = readCompetitionContext().competition;
@@ -51,9 +53,9 @@ function GlobalRulebooks() {
   const canWrite = canEdit();
 
   const tabsRow = (
-    <div className="sp-seg mt-3" role="tablist" aria-label="Rules and rulebooks">
-      <button type="button" role="tab" aria-selected={tab === 'rulebooks'} onClick={() => setTab('rulebooks')}>Rulebooks</button>
-      <button type="button" role="tab" aria-selected={tab === 'races'} onClick={() => setTab('races')}>Game rules</button>
+    <div className="sp-seg mt-3" role="tablist" aria-label={t('teams.rulebooks.tabsAria')}>
+      <button type="button" role="tab" aria-selected={tab === 'rulebooks'} onClick={() => setTab('rulebooks')}>{t('teams.rulebooks.rulebooks')}</button>
+      <button type="button" role="tab" aria-selected={tab === 'races'} onClick={() => setTab('races')}>{t('teams.rulebooks.gameRules')}</button>
     </div>
   );
 
@@ -69,10 +71,10 @@ function GlobalRulebooks() {
       <>
         <RefineHeader
           back={competition ? `/competitions/${competition.id}` : '/events'}
-          backLabel={competition ? 'Back to event' : 'Back to events'}
-          context={competition?.name ?? 'Rules & rulebooks'}
+          backLabel={competition ? t('teams.rulebooks.backToEvent') : t('teams.rulebooks.backToEvents')}
+          context={competition?.name ?? t('teams.rulebooks.context')}
           actions={actions}
-          title={tab === 'rulebooks' && draft ? (draft.id == null ? 'New rulebook' : 'Edit rulebook') : 'Rules'}
+          title={tab === 'rulebooks' && draft ? (draft.id == null ? 'New rulebook' : 'Edit rulebook') : t('teams.rulebooks.rules')}
         />
         {!editing && tabsRow}
       </>
@@ -95,6 +97,7 @@ function GlobalRulebooks() {
 
 /** Every race with its rules: search for one, tap it, and its rules open in a sheet. */
 function GameRulesList() {
+  const { t } = useLanguage();
   const [races, setRaces] = useState<RaceTemplate[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -117,12 +120,12 @@ function GameRulesList() {
 
   return (
     <div className="mt-3 flex flex-col gap-2.5">
-      <RoundSearch label="Find a race" placeholder="Find a race" value={search} onChange={setSearch} />
-      {failed ? <Notice actionLabel="Try again" onAction={() => { setFailed(false); setAttempt((n) => n + 1); }}>Couldn’t load the rules. Check your signal and try again.</Notice>
-        : races === null ? <p role="status" className="sp-note">Loading the game rules…</p>
-          : shown.length === 0 ? <p className="sp-note">{search.trim() ? `No race matches “${search.trim()}”.` : 'No game rules have been added yet.'}</p>
+      <RoundSearch label={t('teams.rulebooks.findRace')} placeholder={t('teams.rulebooks.findRace')} value={search} onChange={setSearch} />
+      {failed ? <Notice actionLabel={t('common.tryAgain')} onAction={() => { setFailed(false); setAttempt((n) => n + 1); }}>{t('teams.rulebooks.rulesError')}</Notice>
+        : races === null ? <p role="status" className="sp-note">{t('teams.rulebooks.loadingGameRules')}</p>
+          : shown.length === 0 ? <p className="sp-note">{search.trim() ? t('teams.rulebooks.noRaceMatch', { query: search.trim() }) : t('teams.rulebooks.noGameRules')}</p>
             : (
-              <div className="sp-card" role="list" aria-label="Races">
+              <div className="sp-card" role="list" aria-label={t('teams.rulebooks.races')}>
                 {shown.map((race) => (
                   <div key={race.id} role="listitem">
                     <button type="button" className="sp-row" onClick={() => setOpen(race.name)}>
@@ -147,6 +150,7 @@ export function RulebooksPanel({
   onShowGameRules?: () => void;
 } = {}) {
   const { canEdit } = useAuth();
+  const { t, locale } = useLanguage();
   const canWrite = canEdit();
   const [rulebooks, setRulebooks] = useState<RulebookSummary[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -266,13 +270,13 @@ export function RulebooksPanel({
           </div>
         )}
 
-      {error && <Notice actionLabel={!draft ? 'Try again' : undefined} onAction={() => (selectedId != null && !selected ? void open(selectedId) : void load())}>{error}</Notice>}
+      {error && <Notice actionLabel={!draft ? t('common.tryAgain') : undefined} onAction={() => (selectedId != null && !selected ? void open(selectedId) : void load())}>{error}</Notice>}
       {toast.node}
-      {loading && rulebooks.length === 0 && <p role="status" className="rf-note">Loading rulebooks…</p>}
+      {loading && rulebooks.length === 0 && <p role="status" className="rf-note">{t('teams.rulebooks.loadingRulebooks')}</p>}
       {!loading && rulebooks.length === 0 && !draft && !error && (
         <RefineNote>
-          No rulebook has been added yet.{' '}
-          {onShowGameRules ? <>See <button type="button" className="ev-link underline" onClick={onShowGameRules}>Game rules</button> for how each race is ridden.</> : 'Game rules has how each race is ridden.'}
+          {t('teams.rulebooks.noRulebook')}{' '}
+          {onShowGameRules ? <>{t('teams.rulebooks.see')}{' '}<button type="button" className="ev-link underline" onClick={onShowGameRules}>{t('teams.rulebooks.gameRules')}</button>{' '}{t('teams.rulebooks.seeAfter')}</> : t('teams.rulebooks.gameRulesHas')}
           {canWrite && ' Use Add rulebook to publish one.'}
         </RefineNote>
       )}
@@ -285,16 +289,16 @@ export function RulebooksPanel({
             {rulebooks.map((item) => (
               <button key={item.id} type="button" className="rf-row" aria-current={selectedId === item.id ? 'true' : undefined} onClick={() => void open(item.id)}>
                 <span className="rf-grow"><span className="rf-t1">{item.title}</span><span className="rf-t2">{item.edition}</span></span>
-                {selectedId === item.id && <RefineStatus tone="ok">Showing</RefineStatus>}
+                {selectedId === item.id && <RefineStatus tone="ok">{t('teams.rulebooks.showing')}</RefineStatus>}
               </button>
             ))}
           </RefineList>
 
-          {opening && !selected && <p role="status" className="rf-note">Loading rulebook…</p>}
+          {opening && !selected && <p role="status" className="rf-note">{t('teams.rulebooks.loadingRulebook')}</p>}
           {selected && <article className="rulebook-reader">
             <h2 className="ops-reader-title">{selected.title}</h2>
-            <p className="rf-note">{selected.edition} · Updated {new Date(selected.updatedAt).toLocaleDateString('en-GB')}</p>
-            {selected.sourceUrl && <RefineList as="div"><a href={selected.sourceUrl} target="_blank" rel="noreferrer" className="rf-row"><span className="rf-grow rf-t1">Source</span><ExternalLink aria-hidden="true" className="h-4 w-4 rf-chev" /></a></RefineList>}
+            <p className="rf-note">{selected.edition} · {t('teams.rulebooks.updated', { date: new Date(selected.updatedAt).toLocaleDateString(locale) })}</p>
+            {selected.sourceUrl && <RefineList as="div"><a href={selected.sourceUrl} target="_blank" rel="noreferrer" className="rf-row"><span className="rf-grow rf-t1">{t('teams.rulebooks.source')}</span><ExternalLink aria-hidden="true" className="h-4 w-4 rf-chev" /></a></RefineList>}
             {canWrite && <div className="rf-actions ops-reader-actions">
               <button type="button" className="rf-btn" aria-label={`Edit ${selected.title}`} onClick={() => edit(selected)} disabled={busy}><Pencil aria-hidden="true" className="h-4 w-4" />Edit</button>
               <button type="button" className="rf-btn ops-danger" aria-label={`Delete ${selected.title}`} onClick={() => void remove(selected)} disabled={busy}><Trash2 aria-hidden="true" className="h-4 w-4" />Delete</button>
