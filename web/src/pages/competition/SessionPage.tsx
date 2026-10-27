@@ -874,30 +874,14 @@ function SessionScoring() {
                   setSaveError('Couldn’t add race. Check your signal and try again.');
                 }
               } : undefined}
-              onRenameRace={canOrganise(competition) && activeRace ? async (newName) => {
-                try {
-                  await api.put(`/competitions/${competition.id}/sessions/${session.id}/races/${activeRace.id}`, {
-                    newName,
-                    applyToAllHeats: true,
-                  });
-                  reload();
-                } catch {
-                  setSaveError('Couldn’t change race. Check your signal and try again.');
-                }
-              } : undefined}
-              onRerunRace={canOrganise(competition) && activeRace ? async () => {
-                try {
-                  await api.delete(`/sessions/races/${activeRace.id}/results`);
-                  if (activeHeat) { writeScoringDraft(draftKeyFor(activeHeat.id, activeRace.id), []); clearRaceDraft(activeRace.id, activeHeat.id); }
-                  updateOutbox((list) => list.filter((q) => q.raceId !== activeRace.id));
-                  reload();
-                } catch {
-                  setSaveError('Couldn’t clear race for re-run. Check your signal and try again.');
-                }
-              } : undefined}
             />
           ) : (
-            <div className="card p-3 text-slate-500 dark:text-slate-300 text-sm">No heats in this session yet.</div>
+            <div className="card flex flex-wrap items-center justify-between gap-2 p-3 text-sm text-slate-500 dark:text-slate-300">
+              No heats in this session yet.
+              <button className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => setShowGenerator(true)}>
+                <Wand2 className="w-3.5 h-3.5" /> Set up heats
+              </button>
+            </div>
           ))}
 
         </>

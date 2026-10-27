@@ -534,3 +534,5 @@ button.sc-done-name { background: none; border: 0; padding: 0; text-align: left;
 .sc-fit .sc-row { flex: 1 1 0; min-height: 44px; max-height: 84px; }
 .sc-fit .sc-bottom { margin-top: auto; padding-top: 10px; }
 body:has(.sc-fit) main.skin { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+.sc-bottom-saved { display: flex; flex-direction: row; gap: 8px; align-items: center; }
+.sc-bottom-saved .sc-wide-btn { flex: 1; width: auto; }

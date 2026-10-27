@@ -490,7 +490,8 @@ describe('a saved race', () => {
     expect(screen.getByText('Race 1 of 3 · Scored')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Bravo, lane/ })).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'SAVE SCORES' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Race tools' })).toBeNull();
+    // Race tools stay reachable on a saved race, for run-offs, overrides and the score history.
+    expect(screen.getByRole('button', { name: 'Race tools' })).toBeInTheDocument();
     expect(screen.queryByText(/replaces this race/)).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Edit this race' }));

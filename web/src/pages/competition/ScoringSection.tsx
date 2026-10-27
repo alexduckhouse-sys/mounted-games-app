@@ -374,8 +374,11 @@ export function ScoringSection({
             )}
 
             {canScore && saved && !editing && (
-              <div className="sc-bottom">
+              <div className="sc-bottom sc-bottom-saved">
                 <button type="button" className="mg-btn mg-btn-secondary sc-wide-btn" onClick={() => setEditing(true)}>Edit this race</button>
+                <button type="button" className="sc-tool-btn" aria-label="Race tools" onClick={() => setToolsOpen(true)}>
+                  <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
+                </button>
               </div>
             )}
 

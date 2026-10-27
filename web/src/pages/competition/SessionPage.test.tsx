@@ -853,7 +853,7 @@ describe('SessionPage', () => {
         })],
       });
       mount(tiedComp);
-      await screen.findByText('Organiser tools');
+      await openOrganiserTools();
 
       await userEvent.selectOptions(screen.getByLabelText('Run-off winner'), '2');
       await userEvent.click(screen.getByRole('button', { name: 'Record run-off winner' }));
@@ -899,7 +899,7 @@ describe('SessionPage', () => {
       });
       vi.mocked(api.put).mockRejectedValueOnce(new Error('offline'));
       mount(tiedComp);
-      await screen.findByText('Organiser tools');
+      await openOrganiserTools();
 
       await userEvent.click(screen.getByRole('button', { name: 'Record run-off winner' }));
       expect(await screen.findByText('Couldn’t save the run-off result. Check your signal and try again.')).toBeInTheDocument();
