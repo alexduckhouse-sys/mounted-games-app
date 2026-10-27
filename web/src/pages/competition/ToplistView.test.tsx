@@ -25,11 +25,32 @@ describe('ToplistView positions', () => {
     expect(screen.queryByText(/joint/i)).not.toBeInTheDocument();
   });
 
-  it('shows real positions, with ties marked and points gap behind the leader, once there are points', () => {
-    render(<ToplistView list={list([6, 6, 2])} section={null} />);
+  it('shows real positions once there are points, tints tied rows, and has no gap behind the leader', () => {
+    const { container } = render(<ToplistView list={list([6, 6, 2])} section={null} />);
     expect(positions()).toEqual(['1', '1', '3']);
     expect(screen.getAllByText('(joint)', { exact: false })).toHaveLength(2);
-    expect(screen.getByText('−4')).toHaveAttribute('title', '4 behind leader');
+    expect([...container.querySelectorAll('li[data-tied="true"]')].map((li) => li.getAttribute('data-rank-id'))).toEqual(['1', '2']);
+    expect(screen.queryByText('−4')).not.toBeInTheDocument();
+    expect(screen.queryByTitle(/behind leader/)).not.toBeInTheDocument();
+  });
+
+  it('colours the notes (green for a guaranteed place, amber for points to get) and draws a red cut-off line', () => {
+    const toplist = buildToplist([standing(1, 20), standing(2, 15), standing(3, 8)], [], [], 9, 2);
+    Object.assign(toplist.rows[0], { guaranteed: true, racesLeft: 1 });
+    Object.assign(toplist.rows[1], { toStay: 2, racesLeft: 1 });
+    Object.assign(toplist.rows[2], { needed: 8, racesLeft: 1 });
+    render(<MemoryRouter><ToplistView list={toplist} section={null} /></MemoryRouter>);
+    expect(screen.getByText('Guaranteed a place in the A Final')).toHaveClass('text-[rgb(var(--mg-ok))]');
+    expect(screen.getByText('2 pts to stay in the A Final')).toHaveClass('text-[rgb(var(--mg-late-time))]');
+    expect(screen.getByText('8 pts needed for the A Final (normal finishes)')).toHaveClass('text-[rgb(var(--mg-late-time))]');
+    const cut = screen.getByRole('separator', { name: 'A Final cut-off' });
+    expect(cut).toHaveClass('text-[rgb(var(--mg-red))]');
+    expect(cut.className).not.toMatch(/mg-muted/);
+  });
+
+  it('does not tint anyone before a race is scored, even though everyone is level', () => {
+    const { container } = render(<MemoryRouter><ToplistView list={list([0, 0, 0])} section={null} /></MemoryRouter>);
+    expect(container.querySelectorAll('li[data-tied="true"]')).toHaveLength(0);
   });
 
   it('does not show a zero-point gap for a hidden run-off tie-breaker', () => {

@@ -6,6 +6,7 @@ import type { Heat, ScorerSession, StreamCommand } from '../types';
 import { HEAT_SAVED, updateOutbox } from '../offline/useScoreOutbox';
 import { createReplayBuffer } from '../live/replayBuffer';
 import { asMedia, FakeMediaStream } from '../test/streamFakes';
+import { chooseOption } from '../test/select';
 import { ScorerPage } from './ScorerPage';
 
 const link = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), request: vi.fn() }));
@@ -58,6 +59,8 @@ beforeEach(() => {
   link.post.mockReset();
   link.get.mockResolvedValue({ data: timetable() });
   vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false); // keep the outbox from sending during these tests
+  // An earlier test's sheet saves its choice after the exit delay; start each test with the question unanswered.
+  localStorage.removeItem('mg.commentatorScoring.1');
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); window.history.replaceState(null, '', '/'); });
 
@@ -429,18 +432,90 @@ describe('ScorerPage', () => {
 
 
 describe('tripod remote commands', () => {
-  async function camera(withMedia = false) {
+  async function camera(withMedia = false, hash = '#t=mgs_token', over: Record<string, unknown> = {}) {
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
-    const state = { state: 'live', media: withMedia ? asMedia(new FakeMediaStream()) : null, streamId: 10, viewerCount: 0, signal: 'good', audioMuted: false, hasAudio: false, error: null };
+    const state: Record<string, unknown> = { state: 'live', media: withMedia ? asMedia(new FakeMediaStream()) : null, streamId: 10, viewerCount: 0, signal: 'good', audioMuted: false, hasAudio: false, error: null, ...over };
     const dispose = vi.fn(); const unsubscribe = vi.fn();
-    const controls = { getSnapshot: () => state, subscribe: vi.fn((callback: () => void) => { callback(); return unsubscribe; }), dispose, mute: vi.fn(async () => {}), pause: vi.fn(async () => {}), switchCamera: vi.fn(async () => {}), setWindFilter: vi.fn(async () => {}), setZoom: vi.fn(async () => {}), setQualityPreset: vi.fn(async () => {}) };
+    let notify = () => {};
+    const stopWatching = vi.fn();
+    const devicesChanged: { listener: (cameras: MediaDeviceInfo[], mics: MediaDeviceInfo[]) => void } = { listener: () => {} };
+    const controls = {
+      getSnapshot: () => state, subscribe: vi.fn((callback: () => void) => { notify = callback; callback(); return unsubscribe; }), dispose,
+      mute: vi.fn(async () => {}), pause: vi.fn(async () => {}), switchCamera: vi.fn(async () => {}), switchAudio: vi.fn(async () => {}), setWindFilter: vi.fn(async () => {}),
+      setZoom: vi.fn(async () => {}), setQualityPreset: vi.fn(async () => {}), start: vi.fn(async () => {}), setCameraLock: vi.fn(async () => {}),
+      capture: vi.fn(async () => {}), devices: vi.fn(async () => [] as MediaDeviceInfo[]), audioDevices: vi.fn(async () => [] as MediaDeviceInfo[]),
+      watchDevices: vi.fn((listener: typeof devicesChanged.listener) => { devicesChanged.listener = listener; return stopWatching; }),
+    };
     tripod.create.mockReturnValue(controls);
     vi.stubGlobal('RTCPeerConnection', class {}); Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {} });
     link.get.mockResolvedValue({ data: timetable({ scope: 1 }) });
-    const view = open(); await screen.findByRole('region', { name: 'Tripod camera broadcaster' });
+    const view = open(hash); await screen.findByRole('region', { name: 'Tripod camera broadcaster' });
+    await waitFor(() => expect(tripod.create).toHaveBeenCalled());
+    if (withMedia) await screen.findByLabelText('Tripod camera preview');
+    const change = (patch: Record<string, unknown>) => act(() => { Object.assign(state, patch); notify(); });
     const send = async (command: string, value?: string, streamId = 10) => act(async () => { tripod.handlers.onStreamCommand?.({ streamId, arenaName: 'Main', command, value } as StreamCommand); });
-    return { state, controls, send, ...view };
+    return { state, controls, send, change, stopWatching, devicesChanged, ...view };
   }
+  it('starts on the camera position the link names', async () => {
+    const view = await camera(true, '#t=mgs_token&angle=Judges%20box', { state: 'idle', streamId: null });
+    expect(localStorage.getItem('mg.scorer.angle')).toBe('Judges box');
+    expect(window.location.hash).toBe('');
+    expect(screen.getByRole('button', { name: 'Judges box' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Main camera' })).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(screen.getByRole('button', { name: 'Go live' }));
+    await waitFor(() => expect(view.controls.start).toHaveBeenCalledWith('Main', 'Judges box', true));
+  });
+  it('uses a known position without listing it twice, and forgets an old one when a new link has none', async () => {
+    localStorage.setItem('mg.scorer.angle', 'Old spot');
+    const first = await camera(true, '#t=mgs_token&angle=Finish%20line', { state: 'idle', streamId: null });
+    expect(screen.getAllByRole('button', { name: 'Finish line' })).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Finish line' })).toHaveAttribute('aria-pressed', 'true');
+    first.unmount();
+    await camera(true, '#t=mgs_other', { state: 'idle', streamId: null });
+    expect(localStorage.getItem('mg.scorer.angle')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Main camera' })).toHaveAttribute('aria-pressed', 'true');
+  });
+  it('lists cameras and microphones once allowed, follows devices being plugged in, and switches', async () => {
+    const view = await camera(false, '#t=mgs_token', { state: 'idle', streamId: null });
+    view.controls.devices.mockResolvedValue([{ deviceId: 'back', label: 'Back camera' }, { deviceId: 'usb', label: 'USB camera' }] as MediaDeviceInfo[]);
+    view.controls.audioDevices.mockResolvedValue([{ deviceId: 'mic', label: 'Phone mic' }] as MediaDeviceInfo[]);
+    view.controls.capture.mockImplementation(async () => { Object.assign(view.state, { media: asMedia(new FakeMediaStream()) }); });
+    fireEvent.click(screen.getByRole('button', { name: 'Allow camera' }));
+    await waitFor(() => expect(view.controls.devices).toHaveBeenCalled());
+    view.change({});
+    expect(await screen.findByRole('combobox', { name: 'Camera' })).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Microphone' })).toBeNull();
+    expect(view.controls.watchDevices).toHaveBeenCalledOnce();
+    act(() => view.devicesChanged.listener([{ deviceId: 'back', label: 'Back camera' }] as MediaDeviceInfo[],
+      [{ deviceId: 'mic', label: 'Phone mic' }, { deviceId: 'lapel', label: 'Lapel mic' }] as MediaDeviceInfo[]));
+    expect(screen.queryByRole('combobox', { name: 'Camera' })).toBeNull();
+    chooseOption(screen.getByRole('combobox', { name: 'Microphone' }), 'lapel');
+    await waitFor(() => expect(view.controls.switchAudio).toHaveBeenCalledWith('lapel'));
+    act(() => view.devicesChanged.listener([{ deviceId: 'back', label: '' }, { deviceId: 'usb', label: '' }] as MediaDeviceInfo[], []));
+    chooseOption(screen.getByRole('combobox', { name: 'Camera' }), 'Camera 2');
+    await waitFor(() => expect(view.controls.switchCamera).toHaveBeenCalledWith('usb'));
+    view.controls.switchCamera.mockRejectedValueOnce(new Error('busy'));
+    chooseOption(screen.getByRole('combobox', { name: 'Camera' }), 'Camera 1');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t switch to that camera');
+    view.unmount();
+    expect(view.stopWatching).toHaveBeenCalledOnce();
+  });
+  it('says so when the camera won’t start', async () => {
+    const view = await camera(false, '#t=mgs_token', { state: 'idle', streamId: null });
+    view.controls.capture.mockRejectedValueOnce(new Error('NotAllowedError'));
+    fireEvent.click(screen.getByRole('button', { name: 'Allow camera' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('The camera didn’t start');
+    expect(screen.getByRole('button', { name: 'Allow camera' })).toBeEnabled();
+  });
+  it('offers the camera locks the phone reports', async () => {
+    const view = await camera(true, '#t=mgs_token', { cameraLocks: { whiteBalance: false } });
+    expect(screen.queryByRole('button', { name: 'Lock focus' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Lock white balance' }));
+    await waitFor(() => expect(view.controls.setCameraLock).toHaveBeenCalledWith('whiteBalance', true));
+    view.controls.setCameraLock.mockRejectedValueOnce(new Error('refused'));
+    fireEvent.click(screen.getByRole('button', { name: 'Lock white balance' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('The camera didn’t accept that');
+  });
   it('routes commands only to the exact active camera and disposes it on unmount', async () => {
     const view = await camera();
     await view.send('mute', 'true', 11); expect(view.controls.mute).not.toHaveBeenCalled();
@@ -483,7 +558,7 @@ it('labels scoped scores honestly and keeps organiser and stream tools off a sco
   })] }) });
   open();
   await opened('Bending');
-  await userEvent.click(screen.getByRole('button', { name: 'Yes, show them' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Yes, show them' }));
   const facts = await screen.findByRole('region', { name: 'Live commentator facts' });
   expect(facts).toHaveTextContent('Available scores: 3 pts');
   expect(facts).not.toHaveTextContent('Rank');

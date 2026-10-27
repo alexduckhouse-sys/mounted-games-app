@@ -2,17 +2,21 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Camera, KeyRound, Upload } from 'lucide-react';
 import {
+  angleFromHash,
   parseScorerSession,
   scorerApi,
+  scorerLinkUrl,
   tokenFromHash,
   writeSavedScorerSession,
+  writeScorerAngle,
   writeScorerToken,
 } from '../offline/scorerLink';
 import type { ScorerSession } from '../types';
 import { Notice } from './Notice';
 import { Sheet } from './Sheet';
 
-type ParsedPermissionTarget = { kind: 'scorer'; token: string };
+/** `angle` is the camera position a camera link names beside its token, if any. */
+type ParsedPermissionTarget = { kind: 'scorer'; token: string; angle?: string | null };
 
 const NOT_ACCEPTED = 'That QR code isn’t a scoring or camera code, or it has stopped working. Ask the organiser for a new one.';
 
@@ -29,7 +33,7 @@ function parsePermissionTarget(raw: string): ParsedPermissionTarget | null {
   // Direct fragment `#t=<token>`
   if (trimmed.startsWith('#')) {
     const token = tokenFromHash(trimmed);
-    return token && SAFE_TOKEN_RE.test(token) ? { kind: 'scorer', token } : null;
+    return token && SAFE_TOKEN_RE.test(token) ? { kind: 'scorer', token, angle: angleFromHash(trimmed) } : null;
   }
 
   // Raw scorer token (e.g. `mgs_...`)
@@ -47,7 +51,7 @@ function parsePermissionTarget(raw: string): ParsedPermissionTarget | null {
       const fromQuery = url.searchParams.get('t')?.trim() ?? null;
       const token = fromHash || fromQuery;
       if (token && SAFE_TOKEN_RE.test(token)) {
-        return { kind: 'scorer', token };
+        return { kind: 'scorer', token, angle: angleFromHash(url.hash) };
       }
       return null;
     }
@@ -153,10 +157,11 @@ function QrPermissionScannerDialog({
         return;
       }
       writeScorerToken(parsed.token);
+      writeScorerAngle(parsed.angle ?? null);
       writeSavedScorerSession(session);
       onScorerVerified?.(parsed.token, session);
       onClose();
-      navigateTo(`/score#t=${encodeURIComponent(parsed.token)}`);
+      navigateTo(scorerLinkUrl('', parsed.token, parsed.angle));
     } catch {
       if (!mountedRef.current) return;
       setError(NOT_ACCEPTED);

@@ -31,6 +31,7 @@ const publisher = vi.hoisted(() => ({
   capture: vi.fn(), devices: vi.fn(), audioDevices: vi.fn(async (): Promise<MediaDeviceInfo[]> => []), switchCamera: vi.fn(), switchAudio: vi.fn(),
   setWindFilter: vi.fn(), setZoom: vi.fn(), setQualityPreset: vi.fn(), reconnect: vi.fn(),
   start: vi.fn(), stop: vi.fn(), dispose: vi.fn(), mute: vi.fn(), pause: vi.fn(), caption: vi.fn(), viewers: vi.fn(),
+  watchDevices: vi.fn(), setCameraLock: vi.fn(),
 }));
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('../../live/streamPublisher', () => ({ browserPublisherDependencies: () => ({}), createStreamPublisher: () => publisher }));
@@ -69,10 +70,38 @@ beforeEach(() => {
   publisher.stop.mockImplementation(async () => update({ state: 'ended', media: null }));
   publisher.pause.mockImplementation(async (paused: boolean) => update({ state: paused ? 'paused' : 'live' }));
   publisher.mute.mockImplementation(async (muted: boolean) => update({ audioMuted: muted }));
+  publisher.watchDevices.mockReset().mockReturnValue(vi.fn());
+  publisher.setCameraLock.mockReset().mockResolvedValue(undefined);
+});
+it('refreshes the camera and microphone lists when a device is plugged in, and stops listening on the way out', async () => {
+  const stopWatching = vi.fn();
+  let changed: (cameras: MediaDeviceInfo[], microphones: MediaDeviceInfo[]) => void = () => {};
+  publisher.watchDevices.mockImplementation((listener: typeof changed) => { changed = listener; return stopWatching; });
+  const view = show();
+  expect(publisher.watchDevices).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Allow camera' })); await settle();
+  expect(publisher.watchDevices).toHaveBeenCalledOnce();
+  act(() => changed([{ deviceId: 'usb', label: 'USB capture' }, { deviceId: 'hdmi', label: 'HDMI capture' }] as MediaDeviceInfo[], [{ deviceId: 'lapel', label: 'Lapel mic' }] as MediaDeviceInfo[]));
+  expect(optionLabels(screen.getByRole('combobox', { name: 'Camera' }))).toContain('HDMI capture');
+  expect(optionLabels(screen.getByRole('combobox', { name: 'Microphone' }))).toContain('Lapel mic');
+  view.unmount();
+  expect(stopWatching).toHaveBeenCalledOnce();
+});
+it('offers the camera locks the camera reports and applies them', async () => {
+  show();
+  fireEvent.click(screen.getByRole('button', { name: 'Allow camera' })); await settle();
+  expect(screen.queryByRole('group', { name: 'Camera locks' })).toBeNull();
+  act(() => update({ cameraLocks: { exposure: false, focus: true } }));
+  expect(screen.getByRole('button', { name: 'Lock focus' })).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(screen.getByRole('button', { name: 'Lock exposure' })); await settle();
+  expect(publisher.setCameraLock).toHaveBeenCalledWith('exposure', true);
+  publisher.setCameraLock.mockRejectedValueOnce(new Error('refused'));
+  fireEvent.click(screen.getByRole('button', { name: 'Lock focus' })); await settle();
+  expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t complete that change');
 });
 afterEach(() => { vi.useRealTimers(); });
 it('checks ownership, configuration and browser support before opening a camera', () => {
-  state.organiser = false; const { rerender } = show(); expect(screen.getByText('Only the organiser can broadcast.')).toBeVisible();
+  state.organiser = false; const { rerender } = show(); expect(screen.getByRole('heading', { name: 'Only the organiser’s team can go live' })).toBeVisible(); expect(screen.getByRole('link', { name: 'Back to competition' })).toHaveAttribute('href', '/competitions/1');
   state.organiser = true; state.enabled = false; rerender(<MemoryRouter><BroadcastPage /></MemoryRouter>); expect(screen.getByText(/not set up/)).toBeVisible();
   state.enabled = true; vi.stubGlobal('RTCPeerConnection', undefined); rerender(<MemoryRouter><BroadcastPage /></MemoryRouter>); expect(screen.getByText(/cannot broadcast/)).toBeVisible();
   expect(publisher.capture).not.toHaveBeenCalled();
