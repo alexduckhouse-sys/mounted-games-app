@@ -13,7 +13,7 @@
 .heat-grid td.heat-cf { color: rgb(var(--mg-muted)); background: rgb(var(--mg-subtle)); }
 .heat-grid .heat-pts { width: 48px; }
 
-.heat-grid thead th.heat-pts { text-align: center; padding-bottom: 8px; color: rgb(var(--mg-heading)); }
+.heat-grid thead th.heat-pts { text-align: right; padding-right: 6px; padding-bottom: 8px; color: rgb(var(--mg-heading)); }
 .heat-grid thead th:first-child { padding-left: 12px; }
 .heat-grid thead th.heat-rank + th { padding-left: 0; }
 .heat-grid thead th.heat-team-head { padding: 7px 4px 8px 12px; }
