@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ChevronRight, Star } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Star } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { ScoreFlash } from '../../components/ScoreFlash';
 import { TickerNumber } from '../../components/TickerNumber';
@@ -49,6 +49,13 @@ function HeatScoresPageBar({ backTo, title, subtitle, badge }: {
   return null;
 }
 
+/** A change-heat button: a link to the other heat, or a faded, inert box at either end of the session. */
+function HeatStep({ to, label, icon }: { to: string | null; label: string; icon: ReactNode }) {
+  return to
+    ? <Link to={to} className="heat-step" aria-label={label}>{icon}</Link>
+    : <span className="heat-step" aria-disabled="true" aria-hidden="true">{icon}</span>;
+}
+
 /** The public heat page: who is racing, the score for every race so far and the running total. */
 export function HeatScores({ session, heats, activeHeatId, embedded = false, bare = false, ignoreUrlHeat = false, highlightTeamId = null }: {
   session: Session;
@@ -95,6 +102,14 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
     [heats],
   );
   const nextHeat = !isRaceFinals ? heats[index + 1] ?? null : null;
+  const earlierHeat = !isRaceFinals ? heats[index - 1] ?? null : null;
+  // Change-heat buttons sit beside the heat name on the page itself (not in the team page or the scoring tab).
+  const canStep = !embedded && !isRaceFinals && heats.length > 1;
+  const heatLink = (target: Heat) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('heat', String(target.id));
+    return `/competitions/${competition.id}/session/${session.id}?${next.toString()}`;
+  };
   const row = useMemo(() => {
     if (!heat) return null;
     return timetableRows(competition.sessions, computeTimings(competition.sessions), true).find((item) => item.heat?.id === heat.id) ?? null;
@@ -359,7 +374,13 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
                     <th scope="col" className="heat-team-head">
                       <div className="heat-title">
                         {section && <span className="heat-title-section">{section}</span>}
-                        <span className="heat-title-name">{heatLabel}</span>
+                        {canStep ? (
+                          <span className="heat-name-row">
+                            <HeatStep to={earlierHeat ? heatLink(earlierHeat) : null} label={t('competition.heat.earlier')} icon={<ChevronLeft aria-hidden="true" className="h-4 w-4" strokeWidth={2.5} />} />
+                            <span className="heat-title-name">{heatLabel}</span>
+                            <HeatStep to={nextHeat ? heatLink(nextHeat) : null} label={t('competition.heat.later')} icon={<ChevronRight aria-hidden="true" className="h-4 w-4" strokeWidth={2.5} />} />
+                          </span>
+                        ) : <span className="heat-title-name">{heatLabel}</span>}
                         <span className={`heat-title-meta ${status === 'live' ? 'heat-title-meta-live' : status === 'late' ? 'heat-title-meta-late' : ''}`}>{tableMeta}</span>
                       </div>
                       <span>{t('competition.toplist.team')}</span>

@@ -31,6 +31,13 @@
   overflow: hidden; padding-top: 3px; color: rgb(var(--mg-muted)); font: 500 13px/1 var(--mg-font);
   letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap;
 }
+/* Change heat: step to the earlier or later heat of the session either side of the heat name. */
+.heat-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.heat-step {
+  width: 28px; height: 28px; flex: none; display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgb(var(--mg-line)); border-radius: 8px; color: rgb(var(--mg-heading)); background: rgb(var(--mg-surface));
+}
+.heat-step[aria-disabled="true"] { color: rgb(var(--mg-line)); pointer-events: none; }
 .heat-title-meta-live { color: rgb(var(--mg-elim)); font-weight: 600; }
 .heat-title-meta-late { color: rgb(var(--mg-late-time)); font-weight: 600; }
 
@@ -46,7 +53,7 @@
 .heat-name-running,
 .race-rules-btn.heat-name.heat-name-running { color: rgb(var(--mg-red)); }
 .heat-sep {
-  position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: rgb(var(--mg-ink));
+  position: absolute; left: 0; bottom: 0; width: 64px; height: 1px; background: rgb(var(--mg-ink));
   transform-origin: 0 50%; transform: rotate(-55deg);
 }
 
@@ -56,7 +63,7 @@
 .heat-grid tbody td.heat-rank-cell { padding-left: 12px; text-align: left; font: 700 17px/1 var(--mg-font-display); color: rgb(var(--mg-muted)); }
 .heat-team {
   overflow: hidden; padding: 2px 4px 2px 2px; text-align: left;
-  font: 600 13.5px/1.15 var(--mg-font); color: rgb(var(--mg-ink));
+  font: 700 16px/1.18 var(--mg-font); color: rgb(var(--mg-ink));
 }
 .heat-team-link {
   display: flex; flex-direction: column; min-width: 0; color: inherit; text-decoration: none;
@@ -67,9 +74,11 @@
   overflow: hidden; text-overflow: ellipsis; white-space: normal; word-break: break-word;
 }
 .heat-team-name-long {
-  font-size: 12px; line-height: 1.1;
+  font-size: 14.5px; line-height: 1.15;
 }
 .heat-team-lane { font: 500 11px/1.1 'Barlow', sans-serif; color: rgb(var(--mg-muted)); }
+/* The heat table no longer shows each team's lane under its name. */
+.heat-grid .heat-team-lane { display: none; }
 .heat-grid tbody th.heat-team:first-child { padding-left: 12px; }
 .heat-cell {
   text-align: center; font: 600 16px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; color: rgb(var(--mg-ink));
