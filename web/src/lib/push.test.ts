@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
-import { pushSupported, subscribeForPush, unsubscribeFromPush } from './push';
+import { pushSupported, readPushReadiness, subscribeForPush, unsubscribeFromPush } from './push';
 
 vi.mock('../api', () => ({ api: { get: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
 const get = vi.mocked(api.get);
@@ -31,7 +31,105 @@ function setup({ existing = null as ReturnType<typeof fakeSubscription> | null, 
   return { pushManager, created };
 }
 
-afterEach(() => { Reflect.deleteProperty(navigator, 'serviceWorker'); });
+afterEach(() => {
+  vi.useRealTimers();
+  Reflect.deleteProperty(navigator, 'serviceWorker');
+});
+
+describe('readPushReadiness', () => {
+  afterEach(() => {
+    expect(get).not.toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it('reports unsupported without accessing a service worker', async () => {
+    expect(await readPushReadiness()).toBe('unsupported');
+  });
+
+  it.each(['default', 'denied'])('reports %s without prompting or reading subscriptions', async (permission) => {
+    const { pushManager } = setup({ permission });
+    const requestPermission = vi.fn();
+    vi.stubGlobal('Notification', { permission, requestPermission });
+    expect(await readPushReadiness()).toBe(permission);
+    expect(requestPermission).not.toHaveBeenCalled();
+    expect(pushManager.getSubscription).not.toHaveBeenCalled();
+  });
+
+  it('distinguishes permission from an actual browser subscription', async () => {
+    const { pushManager } = setup();
+    expect(await readPushReadiness()).toBe('not-subscribed');
+    pushManager.getSubscription.mockResolvedValue(fakeSubscription());
+    expect(await readPushReadiness()).toBe('ready');
+    expect(pushManager.subscribe).not.toHaveBeenCalled();
+  });
+
+  it('reports a failed subscription lookup and allows a later retry', async () => {
+    const { pushManager } = setup();
+    pushManager.getSubscription.mockRejectedValueOnce(new Error('Browser unavailable'));
+    expect(await readPushReadiness()).toBe('error');
+    expect(await readPushReadiness()).toBe('not-subscribed');
+  });
+
+  it('stops waiting for a subscription lookup that never resolves', async () => {
+    vi.useFakeTimers();
+    const { pushManager } = setup();
+    pushManager.getSubscription.mockReturnValue(new Promise(() => {}));
+    const pending = readPushReadiness();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await pending).toBe('error');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe('service worker readiness', () => {
+  it.each([
+    ['read', readPushReadiness, 'error'],
+    ['subscribe', subscribeForPush, false],
+    ['unsubscribe', unsubscribeFromPush, undefined],
+  ] as const)('%s stops waiting and does not act when the worker becomes ready late', async (_, operation, expected) => {
+    vi.useFakeTimers();
+    const { pushManager } = setup();
+    let finish!: (value: { pushManager: typeof pushManager }) => void;
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: { ready: new Promise((resolve) => { finish = resolve; }) },
+    });
+    const pending = operation();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await pending).toBe(expected);
+    finish({ pushManager });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pushManager.getSubscription).not.toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
+    expect(del).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([
+    ['read', readPushReadiness, 'error'],
+    ['subscribe', subscribeForPush, false],
+    ['unsubscribe', unsubscribeFromPush, undefined],
+  ] as const)('%s handles worker rejection and clears its timeout', async (_, operation, expected) => {
+    vi.useFakeTimers();
+    setup();
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: { ready: Promise.reject(new Error('Worker unavailable')) },
+    });
+    expect(await operation()).toBe(expected);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(post).not.toHaveBeenCalled();
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it('clears the timer after a successful check', async () => {
+    vi.useFakeTimers();
+    setup({ existing: fakeSubscription() });
+    expect(await readPushReadiness()).toBe('ready');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
 
 describe('pushSupported', () => {
   it('needs a service worker, push manager and notifications', () => {
