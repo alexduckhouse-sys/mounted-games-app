@@ -1,87 +1,97 @@
 import { describe, expect, it } from 'vitest';
-import { detectHeatBibClashes, normaliseBibColourKey, SPARE_BIB_COLOURS, suggestSpareBibOverrides, type HeatBibEntryLike } from './bib';
+import {
+  SPARE_BIB_COLOURS,
+  bibAccent,
+  detectHeatBibClashes,
+  effectiveBibColour,
+  formatBibWithFlag,
+  hasHeatBibClash,
+  normaliseBibColourKey,
+  parseBibAndFlag,
+  suggestSpareBibOverrides,
+} from './bib';
 
-describe('normaliseBibColourKey', () => {
-  it('strips the flag tag, bib suffixes and spelling variants', () => {
-    expect(normaliseBibColourKey('[flag:gb] Gray BIBS')).toBe('grey');
-    expect(normaliseBibColourKey('Dark  Green bib')).toBe('dark green');
-    expect(normaliseBibColourKey('[flag:gb]')).toBeNull();
-    expect(normaliseBibColourKey(undefined)).toBeNull();
+describe('bib branches', () => {
+  it('handles blank and untagged input', () => {
+    expect(parseBibAndFlag(null)).toEqual({ bib: '', flag: null });
+    expect(parseBibAndFlag('   ')).toEqual({ bib: '', flag: null });
+    expect(parseBibAndFlag('[flag:UK]')).toEqual({ bib: '', flag: 'uk' });
+    expect(formatBibWithFlag('Red', null)).toBe('Red');
+    expect(formatBibWithFlag('', 'UK')).toBe('[flag:uk]');
+    expect(formatBibWithFlag('[flag:ie] Red', '  ')).toBe('Red');
   });
-});
 
-describe('suggestSpareBibOverrides branches', () => {
-  it('skips entries with no bib colour at all', () => {
-    const entries: HeatBibEntryLike[] = [
-      { teamId: 1 }, { teamId: 2, bibColour: '  ' }, { teamId: 3, bibColour: 'red' }, { teamId: 4, bibColour: 'Red' },
+  it('picks an accent from a later word and falls back to the hash palette', () => {
+    expect(bibAccent('spotty, navy')).toBe('#0284c7');
+    expect(bibAccent('zzz qqq')).toBe('#f59e0b');
+    expect(bibAccent('unknown pattern')).toBe('#10b981');
+  });
+
+  it('chooses the effective colour from override, direct, then fallback', () => {
+    expect(effectiveBibColour({ bibColourOverride: ' Pink ', bibColour: 'Red' }, 'Blue')).toBe('Pink');
+    expect(effectiveBibColour({ bibColourOverride: '  ', bibColour: ' Red ' }, 'Blue')).toBe('Red');
+    expect(effectiveBibColour({ bibColour: null }, ' Blue ')).toBe('Blue');
+    expect(effectiveBibColour({}, '  ')).toBeNull();
+    expect(effectiveBibColour({})).toBeNull();
+  });
+
+  it('normalises keys, including a lone bib word and empty results', () => {
+    expect(normaliseBibColourKey(null)).toBeNull();
+    expect(normaliseBibColourKey('bib')).toBe('bib');
+    expect(normaliseBibColourKey(' Red  BIBS ')).toBe('red');
+    expect(normaliseBibColourKey('Gray bib')).toBe('grey');
+  });
+
+  it('detects clashes using lookup fallbacks, ordering by lane, id and team', () => {
+    const entries = [
+      { id: 2, teamId: 5, laneIndex: 1, bibColour: 'Red' },
+      { id: 1, teamId: 4, laneIndex: 1, bibColour: 'red bib' },
+      { teamId: 3, laneIndex: 0 },
+      { teamId: 2, laneIndex: 2 },
     ];
-    expect(suggestSpareBibOverrides(entries)).toEqual({ 4: 'blue' });
+    const clashes = detectHeatBibClashes(entries, { 3: 'Green', 2: null });
+    expect(clashes).toHaveLength(1);
+    expect(clashes[0].colourKey).toBe('red');
+    expect(clashes[0].colourLabel).toBe('Red');
+    expect(clashes[0].entries.map((e) => e.teamId)).toEqual([4, 5]);
+    expect(hasHeatBibClash(entries)).toBe(true);
+    expect(hasHeatBibClash([{ teamId: 1, bibColour: 'red' }, { teamId: 2, bibColour: 'blue' }])).toBe(false);
+    expect(hasHeatBibClash([{ teamId: 1 }, { teamId: 2 }], new Map())).toBe(false);
+    expect(detectHeatBibClashes([{ id: 1, teamId: 9, bibColour: 'red' }, { id: 1, teamId: 8, bibColour: 'red' }])[0].entries.map((e) => e.teamId)).toEqual([8, 9]);
   });
 
-  it('keeps the team that has no override and moves the one that does', () => {
-    const entries: HeatBibEntryLike[] = [
-      { teamId: 1, laneIndex: 0, bibColour: 'blue', bibColourOverride: 'red' },
-      { teamId: 2, laneIndex: 1, bibColour: 'red' },
+  it('suggests overrides using base colours, spare colours and skipping untouched entries', () => {
+    // second team's own colour is free after the first moves? it is used, so a spare is chosen
+    const clash = [
+      { id: 1, teamId: 1, laneIndex: 0, bibColour: 'red' },
+      { id: 2, teamId: 2, laneIndex: 1, bibColour: 'red' },
+      { id: 3, teamId: 3, laneIndex: 2, bibColour: 'blue' },
     ];
-    // Team 2 has no override, so it keeps red; team 1 goes back to its own blue, which clears the override.
-    expect(suggestSpareBibOverrides(entries)).toEqual({ 1: null });
-  });
+    expect(suggestSpareBibOverrides(clash)).toEqual({ 2: 'yellow' });
 
-  it('breaks ties by lane, then id, then team id', () => {
-    const base = { bibColour: 'green' };
-    // Later lane loses.
-    expect(suggestSpareBibOverrides([{ teamId: 1, laneIndex: 2, ...base }, { teamId: 2, laneIndex: 1, ...base }])).toEqual({ 1: 'red' });
-    // Same lane: higher id loses.
-    expect(suggestSpareBibOverrides([{ teamId: 1, id: 20, laneIndex: 1, ...base }, { teamId: 2, id: 10, laneIndex: 1, ...base }])).toEqual({ 1: 'red' });
-    // Same lane and id: higher team id loses.
-    expect(suggestSpareBibOverrides([{ teamId: 5, id: 1, laneIndex: 1, ...base }, { teamId: 3, id: 1, laneIndex: 1, ...base }])).toEqual({ 5: 'red' });
-    // Missing lane and id count as zero.
-    expect(suggestSpareBibOverrides([{ teamId: 9, ...base }, { teamId: 8, ...base }])).toEqual({ 9: 'red' });
-  });
-
-  it('gives up on a clash when every spare colour is already in use', () => {
-    const others: HeatBibEntryLike[] = SPARE_BIB_COLOURS.map((c, i) => ({ teamId: 100 + i, laneIndex: 10 + i, bibColour: c }));
-    const entries: HeatBibEntryLike[] = [
-      { teamId: 1, laneIndex: 0, bibColour: 'red', bibColourOverride: 'teal' },
-      { teamId: 2, laneIndex: 1, bibColour: 'blue', bibColourOverride: 'teal' },
-      ...others,
+    // team wearing an override that clashes with a free natural colour reverts to natural (null)
+    const reverts = [
+      { id: 1, teamId: 1, laneIndex: 0, bibColour: 'red' },
+      { id: 2, teamId: 2, laneIndex: 1, bibColour: 'green', bibColourOverride: 'red' },
     ];
-    // Blue is the second team's own colour but another team wears it, and no spare is left, so nothing changes.
+    expect(suggestSpareBibOverrides(reverts)).toEqual({ 2: null });
+
+    // an existing override that is already the right spare is left alone
+    const stable = [
+      { id: 1, teamId: 1, laneIndex: 0, bibColour: 'red' },
+      { id: 2, teamId: 2, laneIndex: 1, bibColour: 'red', bibColourOverride: 'yellow' },
+      { id: 3, teamId: 3, laneIndex: 2, bibColour: 'red', bibColourOverride: 'red' },
+    ];
+    expect(suggestSpareBibOverrides(stable)).toEqual({ 3: 'blue' });
+
+    // entries with no colour, or no clash, give no updates; lookup beats entry colour
+    expect(suggestSpareBibOverrides([{ teamId: 1 }, { teamId: 2 }])).toEqual({});
+    expect(suggestSpareBibOverrides([{ teamId: 1, bibColour: 'red' }, { teamId: 2, bibColour: 'red' }], new Map([[2, 'blue']]))).toEqual({});
+  });
+
+  it('gives up quietly when every spare colour is taken', () => {
+    const entries = SPARE_BIB_COLOURS.map((c, i) => ({ id: i + 1, teamId: i + 1, laneIndex: i, bibColour: c }));
+    entries.push({ id: 99, teamId: 99, laneIndex: 99, bibColour: 'red' });
     expect(suggestSpareBibOverrides(entries)).toEqual({});
-  });
-
-  it('uses the team lookup (map or record) when the entries carry no colour of their own', () => {
-    const entries: HeatBibEntryLike[] = [{ teamId: 1 }, { teamId: 2 }];
-    expect(suggestSpareBibOverrides(entries, new Map([[1, 'Red'], [2, 'red']]))).toEqual({ 2: 'blue' });
-    expect(suggestSpareBibOverrides(entries, { 1: 'Red', 2: 'red' })).toEqual({ 2: 'blue' });
-  });
-
-  it('returns the team to its own colour when that is free', () => {
-    const entries: HeatBibEntryLike[] = [
-      { teamId: 1, laneIndex: 0, bibColour: 'teal' },
-      { teamId: 2, laneIndex: 1, bibColour: 'pink', bibColourOverride: 'teal' },
-    ];
-    expect(suggestSpareBibOverrides(entries)).toEqual({ 2: null });
-  });
-
-  it('does not repeat an override that is already right', () => {
-    const entries: HeatBibEntryLike[] = [
-      { teamId: 1, laneIndex: 0, bibColour: 'teal' },
-      { teamId: 2, laneIndex: 1, bibColour: 'teal', bibColourOverride: 'teal' },
-    ];
-    // Team 2 has an override, so it is the one moved; its own colour is taken, so a spare is picked.
-    expect(suggestSpareBibOverrides(entries)).toEqual({ 2: 'red' });
-  });
-});
-
-describe('detectHeatBibClashes ordering', () => {
-  it('lists clashing entries in lane order with a capitalised label', () => {
-    const [clash] = detectHeatBibClashes([
-      { teamId: 2, laneIndex: 1, bibColour: 'red' },
-      { teamId: 1, laneIndex: 0, bibColour: 'Red bib' },
-      { teamId: 3, bibColour: undefined },
-    ]);
-    expect(clash.colourLabel).toBe('Red');
-    expect(clash.entries.map((e) => e.teamId)).toEqual([1, 2]);
   });
 });

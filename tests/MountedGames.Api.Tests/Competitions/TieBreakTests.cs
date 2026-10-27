@@ -324,8 +324,8 @@ public class TieBreakTests : IClassFixture<ApiFactory>
 
         Assert.Equal(new[] { t[1], t[0], t[2] }, standings.EnumerateArray().Select(r => r.GetProperty("teamId").GetInt32()));
         Assert.Contains("Ahead on Last Race", standings[0].GetProperty("tieBreakReason").GetString());
-        // A team with no tie to explain has no reason: the API leaves the null field out.
-        Assert.True(!standings[1].TryGetProperty("tieBreakReason", out var reason) || reason.ValueKind == JsonValueKind.Null);
+        // A null reason is left out of the JSON (WhenWritingNull), so absent and null both mean "no reason".
+        Assert.False(standings[1].TryGetProperty("tieBreakReason", out var reason) && reason.ValueKind != JsonValueKind.Null);
     }
 
     [Fact]

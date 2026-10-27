@@ -369,3 +369,74 @@ it('invokes on the joined connection and rejects before joining, during recovery
   unmount();
   await expect(result.current.invoke('WatchStream', 1, 2)).rejects.toThrow('not ready');
 });
+
+it('lets a second hook on the same competition share the connection and be ready at once', async () => {
+  const connection = next();
+  const firstReady = vi.fn();
+  const secondReady = vi.fn();
+  const onChat = vi.fn();
+  const first = renderHook(() => useLiveHub(31, { onReady: firstReady }));
+  await flush();
+  expect(first.result.current.connected).toBe(true);
+
+  const second = renderHook(() => useLiveHub(31, { onReady: secondReady, onChatMessage: onChat }));
+  await flush();
+  expect(hub.connections).toHaveLength(1);
+  expect(connection.start).toHaveBeenCalledTimes(1);
+  expect(second.result.current.connected).toBe(true);
+  expect(secondReady).toHaveBeenCalledTimes(1);
+  expect(firstReady).toHaveBeenCalledTimes(1);
+
+  act(() => connection.emit('chatMessage', { id: 9 }));
+  expect(onChat).toHaveBeenCalledWith({ id: 9 });
+  second.unmount();
+  first.unmount();
+});
+
+it('keeps both subscribers waiting until their shared connection has joined', async () => {
+  const connection = next();
+  let finishStart!: () => void;
+  connection.start.mockImplementationOnce(() => new Promise<void>((resolve) => {
+    finishStart = () => { connection.state = 'Connected'; resolve(); };
+  }));
+  const firstReady = vi.fn();
+  const secondReady = vi.fn();
+  const first = renderHook(() => useLiveHub(32, { onReady: firstReady }));
+  const second = renderHook(() => useLiveHub(32, { onReady: secondReady }));
+  expect(first.result.current.connected).toBe(false);
+  expect(second.result.current.connected).toBe(false);
+  expect(secondReady).not.toHaveBeenCalled();
+
+  finishStart();
+  await flush();
+  expect(connection.start).toHaveBeenCalledTimes(1);
+  expect(connection.invoke).toHaveBeenCalledWith('JoinCompetition', 32);
+  expect(first.result.current.connected).toBe(true);
+  expect(second.result.current.connected).toBe(true);
+  expect(firstReady).toHaveBeenCalledTimes(1);
+  expect(secondReady).toHaveBeenCalledTimes(1);
+});
+
+it('delivers queued updates in order when Lite Mode is switched off mid-burst', async () => {
+  vi.useFakeTimers();
+  document.documentElement.dataset.lite = 'true';
+  try {
+    const connection = next();
+    const onSessionUpdated = vi.fn();
+    renderHook(() => useLiveHub(33, { onSessionUpdated }));
+    await flush();
+    connection.emit('sessionUpdated', { id: 1, name: 'Queued' });
+    expect(onSessionUpdated).not.toHaveBeenCalled();
+
+    delete document.documentElement.dataset.lite;
+    connection.emit('sessionUpdated', { id: 1, name: 'Latest' });
+    expect(onSessionUpdated.mock.calls).toEqual([
+      [{ id: 1, name: 'Queued' }], [{ id: 1, name: 'Latest' }],
+    ]);
+    await act(async () => { await vi.advanceTimersByTimeAsync(LITE_HUB_COALESCE_MS); });
+    expect(onSessionUpdated).toHaveBeenCalledTimes(2);
+  } finally {
+    delete document.documentElement.dataset.lite;
+    vi.useRealTimers();
+  }
+});

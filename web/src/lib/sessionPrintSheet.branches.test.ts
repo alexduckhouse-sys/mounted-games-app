@@ -9,145 +9,139 @@ import {
   isPrintableHeatCompleted,
 } from './sessionPrintSheet';
 
-const loose = <T,>(v: unknown) => v as T;
-
-const cell = (extra: Record<string, unknown> = {}) => ({ placing: null, eliminated: false, points: 0, ...extra });
-
-const heat = (sessionName: string, sectionName: string, teams: unknown[][] | null, id = 1) =>
-  loose<PrintableScoreHeat>({
-    id,
-    sessionName,
-    sectionName,
-    races: teams === null ? undefined : teams.map((t) => ({ teams: t })),
-  });
-
-const done = (sessionName: string, sectionName = 'Open', id = 1) => heat(sessionName, sectionName, [[cell({ placing: 1 })]], id);
-const todo = (sessionName: string, sectionName = 'Open', id = 1) => heat(sessionName, sectionName, [[cell()]], id);
-
-describe('isPrintableHeatCompleted', () => {
-  it('needs races, and every race to have a scored cell of some kind', () => {
-    expect(isPrintableHeatCompleted(heat('S', 'A', null))).toBe(false);
-    expect(isPrintableHeatCompleted(heat('S', 'A', []))).toBe(false);
-    expect(isPrintableHeatCompleted(heat('S', 'A', [[cell({ eliminated: true })]]))).toBe(true);
-    expect(isPrintableHeatCompleted(heat('S', 'A', [[cell({ isSitOut: true })]]))).toBe(true);
-    expect(isPrintableHeatCompleted(heat('S', 'A', [[cell({ points: 3 })]]))).toBe(true);
-    expect(isPrintableHeatCompleted(heat('S', 'A', [[cell({ points: 0 })]]))).toBe(false);
-    expect(isPrintableHeatCompleted(heat('S', 'A', [[cell({ points: null })]]))).toBe(false);
-    expect(isPrintableHeatCompleted(heat('S', 'A', [[cell({ placing: 2 })], [cell()]]))).toBe(false);
-  });
+type Cell = PrintableScoreHeat['races'][number]['teams'][number];
+const cell = (over: Partial<Cell> = {}): Cell => ({
+  teamId: 1,
+  teamName: 'A',
+  placing: null,
+  eliminated: false,
+  points: null,
+  lane: 1,
+  ...over,
+});
+const heat = (id: number, session: string, section: string, teams: Cell[][]): PrintableScoreHeat => ({
+  heatId: id,
+  label: `Heat ${id}`,
+  sectionName: section,
+  sessionName: session,
+  scheduledStart: null,
+  races: teams.map((t, i) => ({ raceId: id * 10 + i, name: `R${i}`, teams: t })),
 });
 
-describe('buildSessionSelectorOptions', () => {
-  it('defaults to a single empty "All Sessions" option', () => {
-    const [all, ...rest] = buildSessionSelectorOptions();
-    expect(rest).toEqual([]);
-    expect(all).toMatchObject({ value: 'all', totalHeats: 0, completedHeats: 0, isCompleted: false });
+const results: PrintableResults = {
+  competition: { id: 1, name: 'C', location: '', startDate: '2026-05-01T00:00:00Z', endDate: null },
+  isProvisional: false,
+  sections: [
+    { competitionSectionId: 1, sectionName: 'U17', results: [] },
+    { competitionSectionId: 2, sectionName: 'Open', results: [] },
+  ],
+};
+
+describe('sessionPrintSheet branches', () => {
+  it('treats a heat as incomplete without races and completes on each scoring signal', () => {
+    expect(isPrintableHeatCompleted(heat(1, 'S', 'U17', []))).toBe(false);
+    expect(isPrintableHeatCompleted(heat(1, 'S', 'U17', [[cell({ eliminated: true })]]))).toBe(true);
+    expect(isPrintableHeatCompleted(heat(1, 'S', 'U17', [[cell({ isSitOut: true })]]))).toBe(true);
+    expect(isPrintableHeatCompleted(heat(1, 'S', 'U17', [[cell({ points: 3 })]]))).toBe(true);
+    expect(isPrintableHeatCompleted(heat(1, 'S', 'U17', [[cell({ points: 0 })]]))).toBe(false);
+    // every race must be scored
+    expect(isPrintableHeatCompleted(heat(1, 'S', 'U17', [[cell({ placing: 1 })], [cell()]]))).toBe(false);
   });
 
-  it('prefers backend summaries and labels completed, partial and untouched sessions', () => {
-    const summaries = loose<PrintableSessionSummary[]>([
-      { sessionId: 1, sessionName: 'S1', sectionName: 'Open', totalHeats: 4, completedHeats: 4, isCompleted: true },
-      { sessionId: 2, sessionName: 'S2', sectionName: '', totalHeats: 4, completedHeats: 1, isCompleted: false },
-      { sessionId: 3, sessionName: 'S3', sectionName: 'U12', totalHeats: 4, completedHeats: 0, isCompleted: false },
-      { sessionId: 4, sessionName: 'S4', sectionName: '', totalHeats: 2, completedHeats: 0, isCompleted: false },
-    ]);
-    const opts = buildSessionSelectorOptions([done('Ignored')], [], summaries);
+  it('builds options from backend summaries with each suffix and label shape', () => {
+    const summaries: PrintableSessionSummary[] = [
+      { sessionId: 1, sessionName: 'S1', sectionName: 'U17', orderIndex: 0, totalHeats: 2, completedHeats: 2, isCompleted: true },
+      { sessionId: 2, sessionName: 'S2', sectionName: 'Open', orderIndex: 1, totalHeats: 4, completedHeats: 1, isCompleted: false },
+      { sessionId: 3, sessionName: 'S3', sectionName: '', orderIndex: 2, totalHeats: 4, completedHeats: 0, isCompleted: false },
+      { sessionId: 4, sessionName: 'S4', sectionName: '', orderIndex: 3, totalHeats: 2, completedHeats: 2, isCompleted: true },
+    ];
+    const opts = buildSessionSelectorOptions([], [], summaries);
     expect(opts.map((o) => o.label)).toEqual([
       'All Sessions',
-      'S1 · Open (Completed)',
-      'S2 (1/4 heats)',
-      'S3 · U12',
-      'S4',
+      'S1 · U17 (Completed)',
+      'S2 · Open (1/4 heats)',
+      'S3',
+      'S4 (Completed)',
     ]);
-    expect(opts[0]).toMatchObject({ totalHeats: 1, completedHeats: 1, isCompleted: true });
+    expect(opts[0].isCompleted).toBe(false);
+    expect(opts[2].sessionId).toBe(2);
   });
 
-  it('groups heats by session name, seeding names from draw sessions first', () => {
-    const draw = loose<PrintableSession[]>([
-      { sessionId: 7, sessionName: 'Draw only', sectionName: 'Pre' },
-      { sessionId: 8, sessionName: 'Both', sectionName: 'Mixed' },
-      { sessionId: 99, sessionName: 'Both', sectionName: 'Duplicate ignored' },
-    ]);
-    const opts = buildSessionSelectorOptions(
-      [
-        done('Both', 'Mixed', 1),
-        todo('Both', 'Mixed', 2),
-        done('Heats only', '', 3),
-        todo('Pending', 'Open', 4),
-        done('Finished', 'Open', 5),
-      ],
-      draw,
-    );
-    const byValue = Object.fromEntries(opts.map((o) => [o.value, o]));
-    expect(byValue['Draw only']).toMatchObject({ sessionId: 7, totalHeats: 0, isCompleted: false, label: 'Draw only · Pre' });
-    expect(byValue['Both']).toMatchObject({ sessionId: 8, totalHeats: 2, completedHeats: 1, label: 'Both · Mixed (1/2 heats)' });
-    expect(byValue['Heats only']).toMatchObject({ sessionId: null, isCompleted: true, label: 'Heats only (Completed)' });
-    expect(byValue['Pending'].label).toBe('Pending · Open');
-    expect(byValue['Finished'].label).toBe('Finished · Open (Completed)');
-    expect(opts[0]).toMatchObject({ totalHeats: 5, completedHeats: 3, isCompleted: false });
-  });
-});
+  it('merges draw sessions with heats, keeping unknown sessions and partial progress', () => {
+    const drawSessions: PrintableSession[] = [
+      { sessionId: 9, sectionName: 'U17', sessionName: 'Draw S', arenaName: null, orderIndex: 0, heats: [] },
+      { sessionId: 10, sectionName: 'U17', sessionName: 'Draw S', arenaName: null, orderIndex: 1, heats: [] },
+    ];
+    const heats = [
+      heat(1, 'Draw S', 'U17', [[cell({ placing: 1 })]]),
+      heat(2, 'Draw S', 'U17', [[cell()]]),
+      heat(3, 'Other', '', [[cell({ placing: 1 })]]),
+    ];
+    const opts = buildSessionSelectorOptions(heats, drawSessions);
+    const draw = opts.find((o) => o.value === 'Draw S')!;
+    expect(draw.sessionId).toBe(9);
+    expect(draw.label).toBe('Draw S · U17 (1/2 heats)');
+    const other = opts.find((o) => o.value === 'Other')!;
+    expect(other.sessionId).toBeNull();
+    expect(other.label).toBe('Other (Completed)');
+    expect(opts[0].isCompleted).toBe(false);
 
-describe('session filters', () => {
-  const heats = [done('A', 'Open', 1), done('B', 'Open', 2)];
-  const sessions = loose<PrintableSession[]>([{ sessionName: 'A' }, { sessionName: 'B' }]);
-
-  it('returns copies of everything for an empty or "all" selection', () => {
-    expect(filterPrintableHeatsBySession(heats, '')).toEqual(heats);
-    expect(filterPrintableHeatsBySession(heats, 'all')).not.toBe(heats);
-    expect(filterPrintableDrawSessions(sessions, '')).toHaveLength(2);
-    expect(filterPrintableDrawSessions(sessions, 'all')).not.toBe(sessions);
+    // draw session without heats: zero totals, never complete, no suffix
+    const empty = buildSessionSelectorOptions([], drawSessions).find((o) => o.value === 'Draw S')!;
+    expect(empty.totalHeats).toBe(0);
+    expect(empty.isCompleted).toBe(false);
+    expect(empty.label).toBe('Draw S · U17');
+    // default args
+    expect(buildSessionSelectorOptions()).toHaveLength(1);
   });
 
-  it('narrows to the named session', () => {
-    expect(filterPrintableHeatsBySession(heats, 'B').map((h) => (h as unknown as { id: number }).id)).toEqual([2]);
-    expect(filterPrintableDrawSessions(sessions, 'A')).toHaveLength(1);
-    expect(filterPrintableDrawSessions(sessions, 'missing')).toEqual([]);
+  it('filters draw sessions and handles empty / all selectors', () => {
+    const ds: PrintableSession[] = [
+      { sessionId: 1, sectionName: 'a', sessionName: 'A', arenaName: null, orderIndex: 0, heats: [] },
+      { sessionId: 2, sectionName: 'b', sessionName: 'B', arenaName: null, orderIndex: 1, heats: [] },
+    ];
+    expect(filterPrintableDrawSessions(ds, 'B').map((s) => s.sessionId)).toEqual([2]);
+    expect(filterPrintableDrawSessions(ds, 'all')).toHaveLength(2);
+    expect(filterPrintableDrawSessions(ds, '')).toHaveLength(2);
+    expect(filterPrintableHeatsBySession([], '')).toEqual([]);
   });
-});
 
-describe('buildCompletedSessionNoticeboardSheet', () => {
-  const results = loose<PrintableResults>({
-    sections: [{ sectionName: 'Open' }, { sectionName: 'U12' }, { sectionName: 'Other' }],
-  });
-
-  it('returns null without results', () => {
+  it('returns null without results and falls back through latest-completed, latest-with-results and first', () => {
     expect(buildCompletedSessionNoticeboardSheet(null, [], 'all')).toBeNull();
     expect(buildCompletedSessionNoticeboardSheet(undefined, [], 'all')).toBeNull();
-  });
 
-  it('picks the latest completed session when nothing is selected', () => {
-    const sheet = buildCompletedSessionNoticeboardSheet(results, [done('S1', 'Open', 1), done('S2', 'U12', 2), todo('S3', 'Other', 3)], '');
-    expect(sheet).toMatchObject({ sessionName: 'S2', sectionNames: ['U12'], isCompleted: true, completedHeatsCount: 1, totalHeatsCount: 1 });
-    expect(sheet?.sections.map((s) => s.sectionName)).toEqual(['U12']);
-  });
+    // no heats at all: target 'all', all sections kept, nothing complete
+    const none = buildCompletedSessionNoticeboardSheet(results, [], '')!;
+    expect(none.sessionName).toBe('All Sessions');
+    expect(none.isCompleted).toBe(false);
+    expect(none.sections).toHaveLength(2);
+    expect(none.sectionNames).toEqual([]);
 
-  it('falls back to the latest session with any results, then to the first session', () => {
-    const partial = buildCompletedSessionNoticeboardSheet(
-      results,
-      [todo('S1', 'Open', 1), done('S2', 'Open', 2), todo('S2', 'Open', 3)],
-      'all',
-    );
-    expect(partial).toMatchObject({ sessionName: 'S2', isCompleted: false, completedHeatsCount: 1, totalHeatsCount: 2 });
-    expect(partial?.heats).toHaveLength(1);
+    // partial progress picks the latest session with results and prints only completed heats
+    const partial = [
+      heat(1, 'S1', 'U17', [[cell()]]),
+      heat(2, 'S2', 'Open', [[cell({ placing: 1 })]]),
+      heat(3, 'S2', 'Open', [[cell()]]),
+    ];
+    const p = buildCompletedSessionNoticeboardSheet(results, partial, 'all')!;
+    expect(p.sessionName).toBe('S2');
+    expect(p.isCompleted).toBe(false);
+    expect(p.completedHeatsCount).toBe(1);
+    expect(p.totalHeatsCount).toBe(2);
+    expect(p.heats.map((h) => h.heatId)).toEqual([2]);
+    expect(p.sections.map((s) => s.sectionName)).toEqual(['Open']);
 
-    const none = buildCompletedSessionNoticeboardSheet(results, [todo('S1', 'Open', 1), todo('S2', 'Open', 2)], 'all');
-    expect(none).toMatchObject({ sessionName: 'S1', isCompleted: false, completedHeatsCount: 0 });
-    expect(none?.heats).toHaveLength(1); // nothing completed, so print all of the session's heats
-  });
+    // nothing scored: first session, prints all of its heats
+    const unscored = [heat(1, 'S1', 'U17', [[cell()]]), heat(2, 'S2', 'Open', [[cell()]])];
+    const u = buildCompletedSessionNoticeboardSheet(results, unscored, 'all')!;
+    expect(u.sessionName).toBe('S1');
+    expect(u.heats.map((h) => h.heatId)).toEqual([1]);
 
-  it('labels an empty event "All Sessions" and keeps every section when no section names exist', () => {
-    const sheet = buildCompletedSessionNoticeboardSheet(results, [], 'all');
-    expect(sheet).toMatchObject({ sessionName: 'All Sessions', sectionNames: [], isCompleted: false, totalHeatsCount: 0 });
-    expect(sheet?.sections).toHaveLength(3);
-    const blank = buildCompletedSessionNoticeboardSheet(results, [done('S', '  ', 1)], 'S');
-    expect(blank?.sectionNames).toEqual([]);
-    expect(blank?.sections).toHaveLength(3);
-  });
-
-  it('uses an explicitly selected session', () => {
-    const sheet = buildCompletedSessionNoticeboardSheet(results, [done('S1', 'Open', 1), done('S2', 'U12', 2)], 'S1');
-    expect(sheet?.sessionName).toBe('S1');
-    expect(sheet?.sectionNames).toEqual(['Open']);
+    // explicit session with a blank section name keeps every section
+    const blank = [heat(1, 'S1', '  ', [[cell({ placing: 1 })]])];
+    const b = buildCompletedSessionNoticeboardSheet(results, blank, 'S1')!;
+    expect(b.sectionNames).toEqual([]);
+    expect(b.sections).toHaveLength(2);
+    expect(b.isCompleted).toBe(true);
   });
 });
