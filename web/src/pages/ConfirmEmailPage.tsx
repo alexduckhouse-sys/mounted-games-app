@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { apiErrorMessage } from '../lib/apiError';
@@ -9,21 +9,60 @@ import { tr } from '../i18n/translate';
 import '../components/sitePages.css';
 
 type Phase = 'working' | 'done' | 'failed';
+type ConfirmLink = { userId: string; token: string };
+
+/** Where the link waits while its owner signs in: this tab only, and never in an address a server sees. */
+const CONFIRM_LINK_KEY = 'mg.confirmEmail.link';
+
+function stored(): ConfirmLink | null {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(CONFIRM_LINK_KEY) ?? 'null') as Partial<ConfirmLink> | null;
+    return typeof value?.userId === 'string' && typeof value.token === 'string' ? { userId: value.userId, token: value.token } : null;
+  } catch { return null; }
+}
+
+function keep(link: ConfirmLink | null) {
+  try {
+    if (link) sessionStorage.setItem(CONFIRM_LINK_KEY, JSON.stringify(link));
+    else sessionStorage.removeItem(CONFIRM_LINK_KEY);
+  } catch { /* storage may be blocked; the link then lasts as long as the page */ }
+}
+
+/**
+ * The link's account and token: from the fragment (`#u=…&t=…`, which browsers never send to a server), from the query
+ * string older emails used (`?userId=…&token=…`), or from this tab's storage after a sign-in. One found in the address is
+ * kept for the sign-in round trip and taken out of the address bar and history.
+ */
+function readLink(): ConfirmLink | null {
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const query = new URLSearchParams(window.location.search);
+  const userId = (hash.get('u') ?? query.get('userId'))?.trim() ?? '';
+  const token = (hash.get('t') ?? query.get('token'))?.trim() ?? '';
+  if (window.location.hash || query.has('userId') || query.has('token')) {
+    try { window.history.replaceState(window.history.state, '', window.location.pathname); } catch { /* history may be blocked */ }
+  }
+  if (userId && token) {
+    keep({ userId, token });
+    return { userId, token };
+  }
+  return stored();
+}
 
 /**
  * Opened from the link in the confirmation email. Confirming needs the person signed in to the account the email was sent
  * for: whoever reads a mailbox isn't always its account's owner, and a confirmed address lets staff accounts reset their
- * password by email. Signed out, the page asks them to sign in and comes back here with the link (the sign-in page returns
- * to `from`), which also covers opening the email on a different device from the one they signed up on.
+ * password by email. Signed out, the page asks them to sign in and the sign-in page returns to `/confirm-email` (`from`),
+ * which also covers opening the email on a different device from the one they signed up on. The token waits in this tab's
+ * sessionStorage meanwhile, never in the return address, and is dropped once the address is confirmed.
  */
 export function ConfirmEmailPage() {
   const t = useT();
-  const [params] = useSearchParams();
-  const location = useLocation();
-  const userId = params.get('userId')?.trim() ?? '';
-  const token = params.get('token')?.trim() ?? '';
+  // Read once: the address is cleaned straight after, and StrictMode keeps this state across its second render.
+  const [link] = useState(readLink);
+  const userId = link?.userId ?? '';
+  const token = link?.token ?? '';
   const { user, refreshUser, logout } = useAuth();
-  const complete = userId !== '' && token !== '';
+  const complete = link !== null;
   const signedInHere = !!user && user.id === userId;
   const [phase, setPhase] = useState<Phase>('working');
   const [message, setMessage] = useState('');
@@ -32,6 +71,7 @@ export function ConfirmEmailPage() {
     setPhase('working');
     try {
       await api.post('/auth/confirm-email', { userId, token });
+      keep(null);
       setPhase('done');
       await refreshUser();
     } catch (err) {
@@ -60,7 +100,7 @@ export function ConfirmEmailPage() {
         <div className="sp-small">
           <h1>{t('shell.confirmEmail.title')}</h1>
           <p>{t('shell.confirmEmail.signInBody')}</p>
-          <Link to="/login" state={{ from: location.pathname + location.search }} className="sp-pill sp-pill-fill">{t('shell.confirmEmail.signIn')}</Link>
+          <Link to="/login" state={{ from: '/confirm-email' }} className="sp-pill sp-pill-fill">{t('shell.confirmEmail.signIn')}</Link>
         </div>
       </div>
     );
