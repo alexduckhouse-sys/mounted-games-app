@@ -236,6 +236,61 @@ public static class SignupConfirmationEmail
         return new EmailMessage(toAddress, subject, sb.ToString(), EmailHtml.Wrap(html.ToString()));
     }
 
+    public static EmailMessage BuildClubPaymentReceipt(
+        string clubName, string clubBacsReference, Competition competition, string toAddress,
+        IReadOnlyList<SectionSignup> signups, int totalAmountMinor, string? competitionUrl = null)
+    {
+        var totalText = Money(totalAmountMinor);
+        var sb = new StringBuilder();
+        sb.AppendLine("Hello,");
+        sb.AppendLine();
+        sb.AppendLine($"Payment has been received and allocated for {clubName} at {competition.Name}.");
+        sb.AppendLine();
+        sb.AppendLine($"Event: {competition.Name}");
+        sb.AppendLine($"Club: {clubName}");
+        sb.AppendLine($"Club reference: {clubBacsReference}");
+        sb.AppendLine($"Entries paid: {signups.Count}");
+        sb.AppendLine($"Total allocated: {totalText}");
+        sb.AppendLine();
+        sb.AppendLine("Allocated entries:");
+        foreach (var s in signups)
+        {
+            var secName = s.Section?.DisplayName ?? "Section";
+            var label = !string.IsNullOrWhiteSpace(s.TeamName) ? $"{s.FullName} ({s.TeamName})" : s.FullName;
+            sb.AppendLine($"- {secName}: {label} — {Money(s.AmountMinor)}");
+        }
+        if (!string.IsNullOrEmpty(competitionUrl))
+        {
+            sb.AppendLine();
+            sb.AppendLine("View competition details:");
+            sb.AppendLine(competitionUrl);
+        }
+        sb.AppendLine();
+        sb.AppendLine("Mounted Games");
+
+        var html = new StringBuilder();
+        html.Append("<p style=\"margin:0 0 12px;\">Hello,</p>");
+        html.Append($"<p style=\"margin:0 0 16px;\">Payment has been received and allocated for <strong>{EmailHtml.Encode(clubName)}</strong> at <strong>{EmailHtml.Encode(competition.Name)}</strong>.</p>");
+        html.Append("<table role=\"presentation\" style=\"width:100%;border-collapse:collapse;margin:0 0 16px;\">");
+        html.Append(EmailHtml.Row("Event", competition.Name));
+        html.Append(EmailHtml.Row("Club", clubName));
+        html.Append(EmailHtml.Row("Club reference", clubBacsReference));
+        html.Append(EmailHtml.Row("Entries paid", signups.Count.ToString(Uk)));
+        html.Append(EmailHtml.Row("Total allocated", totalText));
+        foreach (var s in signups)
+        {
+            var secName = s.Section?.DisplayName ?? "Section";
+            var label = !string.IsNullOrWhiteSpace(s.TeamName) ? $"{s.FullName} ({s.TeamName})" : s.FullName;
+            html.Append(EmailHtml.Row(secName, $"{label} · {Money(s.AmountMinor)}"));
+        }
+        html.Append("</table>");
+        if (!string.IsNullOrEmpty(competitionUrl))
+            html.Append(EmailHtml.Button(competitionUrl, "Open competition page"));
+
+        var subject = $"Club payment receipt: {clubName} at {competition.Name}";
+        return new EmailMessage(toAddress, subject, sb.ToString(), EmailHtml.Wrap(html.ToString()));
+    }
+
     public static string FormatDateTime(DateTime utc)
     {
         var uk = ToUk(utc);
@@ -329,6 +384,26 @@ public class SignupConfirmationService(
         catch (Exception ex)
         {
             log.LogWarning("Could not build the waitlist offer email: {Reason}", ex.GetType().Name);
+            return EmailDeliveryStatus.Failed;
+        }
+    }
+
+    public async Task<EmailDeliveryStatus> SendClubPaymentReceiptAsync(
+        string toAddress, string clubName, string clubBacsReference, Competition competition,
+        IReadOnlyList<SectionSignup> signups, int totalAmountMinor)
+    {
+        if (string.IsNullOrWhiteSpace(toAddress) || signups.Count == 0) return EmailDeliveryStatus.NotRequested;
+        try
+        {
+            var site = SiteOrigin();
+            var message = SignupConfirmationEmail.BuildClubPaymentReceipt(
+                clubName, clubBacsReference, competition, toAddress, signups, totalAmountMinor,
+                site is null ? null : $"{site}/competitions/{competition.Id}");
+            return await sender.SendAsync(message);
+        }
+        catch (Exception ex)
+        {
+            log.LogWarning("Could not build the club payment receipt email: {Reason}", ex.GetType().Name);
             return EmailDeliveryStatus.Failed;
         }
     }

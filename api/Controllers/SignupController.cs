@@ -249,7 +249,12 @@ public record FeeDispositionLedgerSummaryDto(
 
 public record MarkClubPaidInput(
     [StringLength(150)] string? PonyClubName = null,
-    IReadOnlyList<int>? SignupIds = null
+    IReadOnlyList<int>? SignupIds = null,
+    bool SendReceiptEmail = true
+);
+
+public record OfferWaitlistSpotInput(
+    [Range(1, 168)] int? HoursValid = null
 );
 
 public record MarkClubPaidResultDto(
@@ -2139,13 +2144,15 @@ public class SignupController : ControllerBase
     [HttpPost("api/competitions/{competitionId:int}/signups/mark-club-paid")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
-    public Task<ActionResult<MarkClubPaidResultDto>> MarkClubPaid(int competitionId, MarkClubPaidInput req) =>
-        InEntryTransactionAsync(() => MarkClubPaidOnceAsync(competitionId, req));
+    public Task<ActionResult<MarkClubPaidResultDto>> MarkClubPaid(
+        int competitionId, MarkClubPaidInput req, [FromServices] SignupConfirmationService confirmation) =>
+        InEntryTransactionAsync(() => MarkClubPaidOnceAsync(competitionId, req, confirmation));
 
-    private async Task<ActionResult<MarkClubPaidResultDto>> MarkClubPaidOnceAsync(int competitionId, MarkClubPaidInput req)
+    private async Task<ActionResult<MarkClubPaidResultDto>> MarkClubPaidOnceAsync(
+        int competitionId, MarkClubPaidInput req, SignupConfirmationService confirmation)
     {
-        var compExists = await _db.Competitions.AsNoTracking().AnyAsync(c => c.Id == competitionId);
-        if (!compExists) return NotFound();
+        var comp = await _db.Competitions.AsNoTracking().FirstOrDefaultAsync(c => c.Id == competitionId);
+        if (comp is null) return NotFound();
 
         if (await _db.Set<EventCommerceSettings>().AnyAsync(x => x.CompetitionId == competitionId && x.IsDemo))
             return Conflict(new { message = "Demo entry payments can only be changed through the labelled test checkout." });
@@ -2212,26 +2219,41 @@ public class SignupController : ControllerBase
                 onlySignupIds: groupSignupIds);
         }
 
+        var clubBacsRef = BuildClubBacsReference(competitionId, resolvedClubName);
+        if (req.SendReceiptEmail)
+        {
+            var recipientEmails = matching
+                .Where(s => !string.IsNullOrWhiteSpace(s.ContactEmail))
+                .Select(s => s.ContactEmail!.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            foreach (var email in recipientEmails)
+            {
+                await confirmation.SendClubPaymentReceiptAsync(email, resolvedClubName, clubBacsRef, comp, matching, totalAmountMinor);
+            }
+        }
+
         var refreshedMeta = await LoadMatchmakingMapAsync(matchingIds);
         var refreshedExtras = await LoadExtrasMapAsync(matchingIds);
         var refreshedGuests = await LoadGuestMapAsync(matchingIds);
         var dtos = matching.Select(s => ToExtendedDto(s, refreshedMeta.GetValueOrDefault(s.Id), refreshedExtras.GetValueOrDefault(s.Id), refreshedGuests.GetValueOrDefault(s.Id))).ToList();
         return new MarkClubPaidResultDto(
             resolvedClubName,
-            BuildClubBacsReference(competitionId, resolvedClubName),
+            clubBacsRef,
             matching.Count,
             totalAmountMinor,
             dtos
         );
     }
 
-    /// <summary>Offers a 24-hour acceptance spot to a waitlisted signup and sends an email notification.</summary>
+    /// <summary>Offers an acceptance spot to a waitlisted signup (6h window if competition starts within 72h, else 24h) and sends an email notification.</summary>
     [HttpPost("api/competitions/{competitionId:int}/signups/{signupId:int}/offer-waitlist-spot")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<ActionResult<SectionSignupExtendedDto>> OfferWaitlistSpot(
         int competitionId, int signupId,
-        [FromServices] SignupConfirmationService confirmation, [FromServices] TimeProvider clock)
+        [FromServices] SignupConfirmationService confirmation, [FromServices] TimeProvider clock,
+        [FromBody] OfferWaitlistSpotInput? req = null)
     {
         var signup = await _db.SectionSignups
             .Include(s => s.Section).ThenInclude(sec => sec!.Competition)
@@ -2256,7 +2278,10 @@ public class SignupController : ControllerBase
                 return Conflict(new { message = capErr });
         }
 
-        var expiresAtUtc = nowUtc.AddHours(24);
+        var compStart = signup.Section.Competition?.StartDate;
+        var defaultHours = compStart.HasValue && compStart.Value > nowUtc && compStart.Value <= nowUtc.AddHours(72) ? 6 : 24;
+        var hoursValid = req?.HoursValid is > 0 ? req.HoursValid.Value : defaultHours;
+        var expiresAtUtc = nowUtc.AddHours(hoursValid);
         ex.WaitlistOfferedAt = nowUtc;
         ex.WaitlistOfferExpiresAt = expiresAtUtc;
         await _db.SaveChangesAsync();
