@@ -57,7 +57,7 @@ export interface PasswordResetCheck {
 
 /** The body of a refused `POST /api/auth/password-reset/confirm` (400, 404 or 410). */
 export interface PasswordResetProblem {
-  code: 'expired' | 'used' | 'invalid' | 'password_rules' | 'password_required';
+  code: 'expired' | 'used' | 'invalid' | 'conflict' | 'password_rules' | 'password_required';
   message: string;
   /** Friendly wording per broken password rule, with Identity's codes in `errorCodes`. Only for `password_rules`. */
   errors?: string[] | null;

@@ -1,13 +1,17 @@
 import { useState, type FormEvent } from 'react';
-import { api } from '../api';
+import { useAuth } from '../auth/AuthContext';
 import { apiErrorMessage } from '../lib/apiError';
 import { passwordMeetsRules } from '../lib/passwordRules';
 import { Notice } from './Notice';
 import { PasswordChecklist } from './PasswordChecklist';
 import { Sheet } from './Sheet';
 
-/** Asks for the current password and a new one, then changes the signed-in person's own password. */
+/**
+ * Asks for the current password and a new one, then changes the signed-in person's own password. That signs every other
+ * device out; this one carries on with the fresh sign-in the API sends back.
+ */
 export function ChangePasswordSheet({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
+  const { changePassword } = useAuth();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [busy, setBusy] = useState(false);
@@ -20,7 +24,7 @@ export function ChangePasswordSheet({ onClose, onChanged }: { onClose: () => voi
     setBusy(true);
     setError(null);
     try {
-      await api.post('/auth/change-password', { currentPassword: current, newPassword: next });
+      await changePassword(current, next);
       onChanged();
     } catch (e) {
       setError(apiErrorMessage(e, 'Couldn’t change your password. Check your signal and try again.'));

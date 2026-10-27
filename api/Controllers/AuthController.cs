@@ -447,7 +447,7 @@ public class AuthController : ControllerBase
             return Conflict(new { message = "This is the only administrator account. Make someone else an administrator first." });
 
         await deletion.DeleteAsync(user, HttpContext.RequestAborted);
-        accounts.Forget(user.Id);
+        await accounts.SessionsEndedAsync(user.Id);
         return NoContent();
     }
 
@@ -481,14 +481,15 @@ public class AuthController : ControllerBase
 
     /// <summary>
     /// Changes the signed-in person's own password. Needs the current one; a wrong guess counts towards the same
-    /// lockout as signing in, so this can't be used to guess it. Other signed-in devices keep their tokens until
-    /// those expire (tokens aren't tied to the password), so an account that may be stolen should also be locked
-    /// by an administrator.
+    /// lockout as signing in, so this can't be used to guess it. It also signs the account out everywhere else: the
+    /// account's <c>SessionVersion</c> goes up with the new password, so <see cref="LiveAccounts"/> refuses every older
+    /// token at once and their live-hub connections close, and this device gets a fresh token back. Any Google or Apple
+    /// sign-in is disconnected in the same transaction, so one an intruder linked doesn't survive the change.
     /// </summary>
     [EnableRateLimiting("auth")]
     [HttpPost("change-password")]
     [Authorize]
-    public async Task<IActionResult> ChangePassword(ChangePasswordRequest req)
+    public async Task<ActionResult<AuthResponse>> ChangePassword(ChangePasswordRequest req, [FromServices] LiveAccounts accounts)
     {
         var user = await _users.GetUserAsync(User);
         if (user is null) return Unauthorized();
@@ -510,10 +511,30 @@ public class AuthController : ControllerBase
         if (req.NewPassword == req.CurrentPassword)
             return BadRequest(new { message = "Choose a different password from your current one." });
 
-        var result = await _users.ChangePasswordAsync(user, req.CurrentPassword, req.NewPassword);
-        if (!result.Succeeded)
+        var userId = user.Id;
+        var (result, changed) = await _db.Database.CreateExecutionStrategy().ExecuteAsync<(IdentityResult, AppUser?)>(async () =>
+        {
+            _db.ChangeTracker.Clear();
+            await using var transaction = await _db.Database.BeginTransactionAsync(HttpContext.RequestAborted);
+            var account = await _users.FindByIdAsync(userId);
+            if (account is null) return (IdentityResult.Failed(new IdentityError { Code = "Gone", Description = "This account no longer exists." }), null);
+            // Saved with the new password (ChangePasswordAsync saves the whole account), so other devices' tokens stop working.
+            account.SessionVersion++;
+            var outcome = await _users.ChangePasswordAsync(account, req.CurrentPassword, req.NewPassword);
+            if (!outcome.Succeeded) return (outcome, null);
+            await _db.UserLogins.Where(l => l.UserId == userId).ExecuteDeleteAsync(HttpContext.RequestAborted);
+            await transaction.CommitAsync(HttpContext.RequestAborted);
+            return (outcome, account);
+        });
+        if (changed is null)
             return BadRequest(new { message = string.Join(" ", result.Errors.Select(PasswordRules.Friendly).Distinct()) });
-        return NoContent();
+        // Live-hub connections opened with an older token close; this device carries on with the token returned here.
+        await accounts.SessionsEndedAsync(userId, changed.SessionVersion);
+        user = changed;
+        var (token, expiresAt, roles) = await _tokens.CreateTokenAsync(user);
+        var club = user.ClubId.HasValue ? await _db.Clubs.FindAsync(user.ClubId.Value) : null;
+        return new AuthResponse(token, expiresAt,
+            new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club?.Name, roles.ToList(), user.EmailConfirmed));
     }
 
     /// <summary>

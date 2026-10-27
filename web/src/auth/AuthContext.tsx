@@ -13,6 +13,11 @@ interface AuthContextValue {
   signupTrainer: (username: string, password: string, role?: string, clubName?: string, fullName?: string) => Promise<void>;
   /** Turns an emailed invitation into an account (`POST /auth/invites/accept`) and signs the person in. */
   acceptInvite: (token: string, fullName: string, password: string) => Promise<void>;
+  /**
+   * Changes the signed-in person's own password (`POST /auth/change-password`). That signs the account out everywhere else,
+   * so the API sends back a fresh sign-in for this device, which replaces the old one here. Rejects as the request does.
+   */
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   logout: () => void;
   /** Re-reads the signed-in person's profile, e.g. after they confirm their email address. */
   refreshUser: () => Promise<void>;
@@ -165,6 +170,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    const { data } = await api.post<unknown>('/auth/change-password', { currentPassword, newPassword });
+    // An older API answered 204 with no body; this device then keeps the sign-in it has.
+    const fresh = data as Partial<StoredAuth> | null | undefined;
+    if (!fresh || typeof fresh.token !== 'string' || !fresh.user) return;
+    writeStoredAuth(fresh as StoredAuth);
+    setAuth(fresh as StoredAuth);
+  }, []);
+
   const refreshUser = useCallback(async () => {
     try {
       const { data } = await api.get<UserProfile>('/auth/me');
@@ -218,6 +232,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loginWithAdminKey,
     signupTrainer,
     acceptInvite,
+    changePassword,
     logout,
     refreshUser,
     signedOut,

@@ -1,65 +1,71 @@
 using System.Globalization;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using MountedGames.Api.Data;
+using MountedGames.Api.Hubs;
 
 namespace MountedGames.Api.Auth;
 
 /// <summary>
-/// A sign-in token outlives the account it was issued for (24 hours by default). This turns away a token whose
-/// account has been deleted or emptied (see <c>AccountDeletionService</c>), or locked or blocked by an admin (see
-/// <c>AccountAccessService</c>), and a token issued before the account's sessions were ended (a password reset raises
-/// <c>AppUser.SessionVersion</c>; each token carries the value it was issued under in <see cref="SessionVersionClaim"/>).
-/// Answers are cached briefly so most requests don't touch the database; <see cref="Forget"/> clears one at once on the
-/// instance that made the change. Other instances catch up within <see cref="CacheFor"/>.
+/// A sign-in token outlives the account it was issued for (24 hours by default). <see cref="StateAsync"/> is checked on every
+/// request and every live-hub connection (<c>Program.cs</c>, <c>OnTokenValidated</c>), in the same single database round
+/// trip that reads the account's current roles. It turns away a token whose account has been deleted or emptied (see
+/// <c>AccountDeletionService</c>), locked or blocked by an admin (see <c>AccountAccessService</c>), or whose sessions were
+/// ended after it was issued (a password reset or change raises <c>AppUser.SessionVersion</c>; each token carries the value it
+/// was issued under in <see cref="SessionVersionClaim"/>). Nothing is cached, so this holds at once on every instance.
+/// Call <see cref="SessionsEndedAsync"/> after ending an account's sessions, so its open live-hub connections close too.
 /// </summary>
-public sealed class LiveAccounts(IServiceScopeFactory scopes, IMemoryCache cache)
+public sealed class LiveAccounts(LiveConnections connections)
 {
-    public static readonly TimeSpan CacheFor = TimeSpan.FromSeconds(60);
-
     /// <summary>The token claim holding the account's <c>SessionVersion</c> when the token was made. Older tokens have none (0).</summary>
     public const string SessionVersionClaim = "sv";
 
-    private sealed record State(bool Active, int SessionVersion);
+    /// <summary>What a token check needs to know about an account, read in one query.</summary>
+    public sealed class TokenState
+    {
+        public DateTimeOffset? LockoutEnd { get; init; }
+        public DateTime? LockedAt { get; init; }
+        public DateTime? BlockedAt { get; init; }
+        public int SessionVersion { get; init; }
+        public List<string> Roles { get; init; } = [];
 
-    /// <summary>Whether the account can be used at all: it exists, isn't an emptied shell, and isn't locked or blocked.</summary>
-    public async Task<bool> IsActiveAsync(string userId, CancellationToken ct = default)
-        => (await StateAsync(userId, refresh: false, ct)).Active;
+        /// <summary>
+        /// The account can be used and its sessions haven't been ended since the token was issued. An emptied account is
+        /// locked out for good; an ordinary lockout after wrong passwords ends, and keeps its sessions.
+        /// </summary>
+        public bool Accepts(int tokenSessionVersion) =>
+            LockoutEnd != DateTimeOffset.MaxValue && LockedAt == null && BlockedAt == null && tokenSessionVersion >= SessionVersion;
+    }
 
     /// <summary>
-    /// Whether a token for <paramref name="userId"/> issued under <paramref name="sessionVersion"/> still works: the account
-    /// is active and its sessions haven't been ended since. A token newer than this instance remembers means the cache is
-    /// behind, so it reads again rather than wait for the entry to expire.
+    /// The account row by primary key, with its role names from a correlated join (<c>AspNetUserRoles</c> by its
+    /// <c>(UserId, RoleId)</c> key, <c>AspNetRoles</c> by id): one SQL statement, one round trip.
     /// </summary>
-    public async Task<bool> AcceptsTokenAsync(string userId, int sessionVersion, CancellationToken ct = default)
-    {
-        var state = await StateAsync(userId, refresh: false, ct);
-        if (state.Active && sessionVersion > state.SessionVersion) state = await StateAsync(userId, refresh: true, ct);
-        return state.Active && sessionVersion >= state.SessionVersion;
-    }
+    public static IQueryable<TokenState> StateQuery(AppDbContext db, string userId) =>
+        db.Users.AsNoTracking().Where(u => u.Id == userId).Select(u => new TokenState
+        {
+            LockoutEnd = u.LockoutEnd,
+            LockedAt = u.LockedAt,
+            BlockedAt = u.BlockedAt,
+            SessionVersion = u.SessionVersion,
+            Roles = (from membership in db.UserRoles
+                     join role in db.Roles on membership.RoleId equals role.Id
+                     where membership.UserId == u.Id && role.Name != null
+                     select role.Name!).ToList(),
+        });
+
+    /// <summary>Null when the account doesn't exist.</summary>
+    public static Task<TokenState?> StateAsync(AppDbContext db, string userId, CancellationToken ct = default)
+        => StateQuery(db, userId).FirstOrDefaultAsync(ct);
 
     /// <summary>The session version a validated token was issued under; 0 for tokens made before the claim existed.</summary>
     public static int SessionVersionOf(ClaimsPrincipal? principal)
         => int.TryParse(principal?.FindFirstValue(SessionVersionClaim), NumberStyles.None, CultureInfo.InvariantCulture, out var version) ? version : 0;
 
-    public void Forget(string userId) => cache.Remove(Key(userId));
-
-    private async Task<State> StateAsync(string userId, bool refresh, CancellationToken ct)
-    {
-        if (!refresh && cache.TryGetValue(Key(userId), out State? cached) && cached is not null) return cached;
-        using var scope = scopes.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var account = await db.Users.AsNoTracking().Where(u => u.Id == userId)
-            .Select(u => new { u.LockoutEnd, u.LockedAt, u.BlockedAt, u.SessionVersion }).FirstOrDefaultAsync(ct);
-        // An emptied account is locked out for good; an ordinary lockout after wrong passwords ends, and keeps its sessions.
-        // An admin lock or block ends them at once.
-        var active = account is not null && account.LockoutEnd != DateTimeOffset.MaxValue
-            && account.LockedAt == null && account.BlockedAt == null;
-        var state = new State(active, account?.SessionVersion ?? 0);
-        cache.Set(Key(userId), state, CacheFor);
-        return state;
-    }
-
-    private static string Key(string userId) => $"live-account:{userId}";
+    /// <summary>
+    /// Call once an account's sessions have ended (lock, block, deletion, password reset or change). Tokens are already
+    /// refused by the next request; this closes the live-hub connections that were opened with them, on every instance.
+    /// <paramref name="validFromVersion"/> keeps connections made with a token issued under that session version or later.
+    /// </summary>
+    public Task SessionsEndedAsync(string userId, int? validFromVersion = null) => connections.EndSessionsAsync(userId, validFromVersion);
 }

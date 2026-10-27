@@ -7,8 +7,15 @@ using MountedGames.Api.Services.Streaming;
 
 namespace MountedGames.Api.Hubs;
 
-public class LiveHub(ViewerRegistry viewers) : Hub
+public class LiveHub(ViewerRegistry viewers, LiveConnections connections) : Hub
 {
+    /// <summary>Signed-in connections are recorded so they can be closed when the account's sessions end.</summary>
+    public override async Task OnConnectedAsync()
+    {
+        connections.Add(Context);
+        await base.OnConnectedAsync();
+    }
+
     public Task<WatchStreamResponse> WatchStream(int competitionId, int streamId) =>
         viewers.WatchAsync(Context.ConnectionId, competitionId, streamId, Context.ConnectionAborted, AnonymousViewerIp());
 
@@ -26,6 +33,7 @@ public class LiveHub(ViewerRegistry viewers) : Hub
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
+        connections.Remove(Context);
         await viewers.DisconnectAsync(Context.ConnectionId);
         await base.OnDisconnectedAsync(exception);
     }
