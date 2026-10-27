@@ -1,7 +1,8 @@
-import type { DeclarationForm, RiderEntry, SavedRider, SectionFormat } from '../types';
-import { formatBibWithFlag } from './bib';
+import { tr } from '../i18n/translate';
+import type { DeclarationForm, RiderEntry, SavedRider, SavedTeamDeclaration, SectionFormat } from '../types';
+import { formatBibWithFlag, parseBibAndFlag } from './bib';
 import {
-  asked, blankExtras, normalisePhone, PHONE_HELP, breach, extraIssues, extrasBody, extrasFromEntry, extrasReady, STANDARD_CONFIG, type DecFormConfig, type ExtraAnswers,
+  asked, blankExtras, normalisePhone, phoneHelp, breach, extraIssues, extrasBody, extrasFromEntry, extrasReady, STANDARD_CONFIG, type DecFormConfig, type ExtraAnswers,
 } from './decFormConfig';
 
 /**
@@ -99,20 +100,20 @@ export function riderIssues(rider: DecRider, reserve: boolean, config: DecFormCo
   const issues = extraIssues(rider.extra, reserve, config, today);
   const missing = [...issues.missing];
   const invalid = { ...issues.invalid };
-  if (!rider.fullName.trim()) missing.unshift('rider’s name');
+  if (!rider.fullName.trim()) missing.unshift(tr('entries.dec.missingName'));
   if (asked(config.dob) && config.dobFormat === 0) {
-    if (rider.dob.trim() === '') { if (config.dob === 2) missing.push('date of birth'); }
-    else if (parseDob(rider.dob, today) === null) invalid.dob = 'Use dd/mm/yyyy, like 05/04/2015.';
+    if (rider.dob.trim() === '') { if (config.dob === 2) missing.push(tr('entries.dec.missingDob')); }
+    else if (parseDob(rider.dob, today) === null) invalid.dob = tr('entries.dec.badDob');
   }
   if (!reserve) {
-    if (rider.pony.trim() === '') missing.push('pony’s name');
+    if (rider.pony.trim() === '') missing.push(tr('entries.dec.missingPony'));
     if (asked(config.ponyHeight)) {
-      if (rider.height.trim() === '') { if (config.ponyHeight === 2) missing.push('pony’s height'); }
-      else if (parseHeight(rider.height) === null) invalid.height = 'Use hands, like 13.2 (inches run 0 to 3).';
+      if (rider.height.trim() === '') { if (config.ponyHeight === 2) missing.push(tr('entries.dec.missingHeight')); }
+      else if (parseHeight(rider.height) === null) invalid.height = tr('entries.dec.badHeight');
     }
   }
   if (reserve && asked(config.ponyHeight) && rider.height.trim() !== '' && parseHeight(rider.height) === null) {
-    invalid.height = 'Use hands, like 13.2 (inches run 0 to 3).';
+    invalid.height = tr('entries.dec.badHeight');
   }
   return { missing, invalid };
 }
@@ -206,10 +207,10 @@ export function savedChoices(saved: readonly SavedRider[], slots: readonly Slot[
 /** The second line of a filled slot: "Pickle · 13.2 hh · born 05/04/2015". Only what the form asks is shown. */
 export function slotMeta(rider: DecRider, reserve: boolean, config: DecFormConfig = STANDARD_CONFIG): string {
   const born = !asked(config.dob) ? null
-    : config.dobFormat === 1 ? (rider.extra.birthYear ? `born ${rider.extra.birthYear}` : null)
+    : config.dobFormat === 1 ? (rider.extra.birthYear ? tr('entries.dec.born', { value: rider.extra.birthYear }) : null)
       : config.dobFormat === 2 ? (rider.extra.ageGroup ? rider.extra.ageGroup : null)
-        : rider.dob ? `born ${rider.dob}` : null;
-  const parts = reserve && (!rider.pony.trim() || !rider.height.trim()) ? ['Non-riding', born] : [rider.pony, asked(config.ponyHeight) && rider.height ? `${rider.height} hh` : null, born];
+        : rider.dob ? tr('entries.dec.born', { value: rider.dob }) : null;
+  const parts = reserve && (!rider.pony.trim() || !rider.height.trim()) ? [tr('entries.dec.nonRiding'), born] : [rider.pony, asked(config.ponyHeight) && rider.height ? `${rider.height} hh` : null, born];
   return parts.filter(Boolean).join(' · ');
 }
 
@@ -219,12 +220,12 @@ export function slotFlagged(rider: DecRider, config: DecFormConfig): boolean {
 }
 
 export function slotLabel(slots: readonly Slot[], index: number): string {
-  return isReserveSlot(slots, index) ? 'Non-riding reserve (optional)' : 'Rider';
+  return isReserveSlot(slots, index) ? tr('entries.dec.nonRidingReserve') : tr('entries.dec.rider');
 }
 
 export function panelTitle(slots: readonly Slot[], index: number): string {
   const editing = !!slots[index];
-  return isReserveSlot(slots, index) ? (editing ? 'Edit reserve' : 'Add a non-riding reserve') : (editing ? 'Edit rider' : 'Add a rider');
+  return isReserveSlot(slots, index) ? (editing ? tr('entries.dec.editReserve') : tr('entries.dec.addNonRidingReserve')) : (editing ? tr('entries.dec.editRider') : tr('entries.dec.addARider'));
 }
 
 /**
@@ -233,26 +234,26 @@ export function panelTitle(slots: readonly Slot[], index: number): string {
  */
 export function sendReason(slots: readonly Slot[], agreed: boolean, teamName: string, phoneIssue: string | null, sent: boolean, unchanged: boolean): string {
   const missing = minRidersForSlots(slots) - ridersAdded(slots);
-  if (missing > 0) return `Add ${missing} more ${missing === 1 ? 'rider' : 'riders'} to send it.`;
-  if (teamName.trim() === '') return 'Add a team name to send it.';
+  if (missing > 0) return tr('entries.dec.addMoreRiders', { count: missing });
+  if (teamName.trim() === '') return tr('entries.dec.needTeamName');
   if (phoneIssue) return phoneIssue;
-  if (!agreed) return 'Agree to the terms to send it.';
-  if (unchanged) return 'Nothing has changed since you sent it.';
-  return sent ? 'Sending again replaces the last one.' : 'Ready to send.';
+  if (!agreed) return tr('entries.dec.needAgree');
+  if (unchanged) return tr('entries.dec.unchanged');
+  return sent ? tr('entries.dec.resendReplaces') : tr('entries.dec.ready');
 }
 
 /** "3 of 5 · reserve optional": how many riders are in, for the Riders heading. */
 export function ridersCount(slots: readonly Slot[]): string {
   const need = minRidersForSlots(slots);
-  const base = `${ridersAdded(slots)} of ${ridingSlotsCount(slots)}${need < ridingSlotsCount(slots) ? ` · ${need} needed` : ''}`;
-  return slots.length >= 6 ? `${base} · reserve optional` : base;
+  const base = `${tr('entries.dec.countOf', { added: ridersAdded(slots), total: ridingSlotsCount(slots) })}${need < ridingSlotsCount(slots) ? ` · ${tr('entries.dec.countNeeded', { need })}` : ''}`;
+  return slots.length >= 6 ? `${base} · ${tr('entries.dec.reserveOptional')}` : base;
 }
 
 /** The label of the one add bar: the next free slot ("Add rider 4", "Add a reserve"), or null when every slot is full. */
 export function addLabel(slots: readonly Slot[]): string | null {
   const index = firstEmpty(slots);
   if (index == null) return null;
-  return isReserveSlot(slots, index) ? 'Add a reserve' : `Add rider ${index + 1}`;
+  return isReserveSlot(slots, index) ? tr('entries.dec.addReserveRow') : tr('entries.dec.addRiderN', { n: index + 1 });
 }
 
 export function canSubmit(slots: readonly Slot[], agreed: boolean, teamName: string, phoneOk = true): boolean {
@@ -262,8 +263,8 @@ export function canSubmit(slots: readonly Slot[], agreed: boolean, teamName: str
 /** What is wrong with the trainer's phone number, in friendly words, or null when it is fine (or not asked for). */
 export function phoneProblem(phone: string, config: DecFormConfig): string | null {
   if (!asked(config.trainerPhone)) return null;
-  if (phone.trim() === '') return config.trainerPhone === 2 ? 'Add a phone number for the trainer.' : null;
-  return normalisePhone(phone) === null ? PHONE_HELP : null;
+  if (phone.trim() === '') return config.trainerPhone === 2 ? tr('entries.dec.phoneNeeded') : null;
+  return normalisePhone(phone) === null ? phoneHelp() : null;
 }
 
 export interface DecFormFields {
@@ -341,4 +342,121 @@ export function parseDraft(raw: string | null, required: number): DecFormDraft |
 /** The line under the team name: "U10 · Cheshire Area MG · Sat 24 Oct". Parts that are missing are left out. */
 export function subtitleOf(parts: readonly (string | null | undefined)[]): string {
   return parts.map((p) => p?.trim()).filter(Boolean).join(' · ');
+}
+
+/** Warning raised when a rider from a saved team looks older than the target section's age band. */
+export interface SavedTeamAgeWarning {
+  slotIndex: number;
+  riderName: string;
+  birthYear: number;
+  ageInCompetitionYear: number;
+  maxAge: number;
+  message: string;
+}
+
+export interface AppliedSavedTeamResult {
+  slots: Slot[];
+  teamName: string;
+  bibs: string;
+  flag: string;
+  trainerName: string;
+  phone: string;
+  ageWarnings: SavedTeamAgeWarning[];
+}
+
+/**
+ * Extracts the maximum age (as of 1 January / competition year) from a section or age-group label such as
+ * `"U12"`, `"Under 15"`, `"U17 Pairs"`, or `"Junior"` (U15). Returns `null` for Open / Senior sections.
+ */
+export function parseAgeGroupMaxAge(ageGroupOrSection: string | null | undefined): number | null {
+  const raw = ageGroupOrSection?.trim() ?? '';
+  if (!raw) return null;
+  const underMatch = /\b(?:u|under[\s-]*)(\d{1,2})\b/i.exec(raw);
+  if (underMatch) {
+    const n = Number(underMatch[1]);
+    return n >= 6 && n <= 25 ? n : null;
+  }
+  if (/\bjunior\b/i.test(raw)) return 15;
+  return null;
+}
+
+function birthYearFromRider(rider: DecRider): number | null {
+  const dobMatch = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(rider.dob.trim());
+  if (dobMatch) return Number(dobMatch[3]);
+  if (/^\d{4}$/.test(rider.extra.birthYear.trim())) return Number(rider.extra.birthYear.trim());
+  return null;
+}
+
+/**
+ * Readable label for a saved team in the "Auto-fill from a previous team" picker, e.g.
+ * `"Kent A · U15 · Summer Champs (5 riders)"`.
+ */
+export function savedTeamSummaryLabel(savedTeam: SavedTeamDeclaration): string {
+  const ridingCount = savedTeam.riders.filter((r) => !r.isReserve).length;
+  const reserveCount = savedTeam.riders.filter((r) => r.isReserve).length;
+  const countText = reserveCount > 0 ? `${ridingCount} riders + reserve` : `${ridingCount} ${ridingCount === 1 ? 'rider' : 'riders'}`;
+  const head = subtitleOf([savedTeam.entryTeamName || savedTeam.teamName, savedTeam.ageGroup || savedTeam.sectionName, savedTeam.competitionName]);
+  return `${head} (${countText})`;
+}
+
+/**
+ * Applies a previously declared team (`SavedTeamDeclaration`) onto a declaration form for `targetFormat`,
+ * copying riders, ponies, heights, privacy flags, bib/flag, and trainer contact while checking whether any
+ * rider exceeds the target section's age band for `competitionYear`.
+ */
+export function applySavedTeamToForm(
+  savedTeam: SavedTeamDeclaration,
+  targetFormat: SectionFormat | undefined,
+  config: DecFormConfig = STANDARD_CONFIG,
+  options?: {
+    targetAgeGroup?: string | null;
+    competitionYear?: number | null;
+  },
+): AppliedSavedTeamResult {
+  const required = ridersRequired(targetFormat);
+  const ordered = savedTeam.riders.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+  const reserveEntry = hasReserveSlotForRiders(required) ? ordered.find((r) => r.isReserve) : undefined;
+  const ridingEntries = ordered.filter((r) => r !== reserveEntry && !r.isReserve);
+
+  const slots = emptySlots(required);
+  for (let i = 0; i < Math.min(required, ridingEntries.length); i++) {
+    slots[i] = riderFromEntry(ridingEntries[i], config);
+  }
+  if (reserveEntry && hasReserveSlotForRiders(required)) {
+    slots[slots.length - 1] = riderFromEntry(reserveEntry, config);
+  }
+
+  const parsedBib = parseBibAndFlag(savedTeam.bibDescription);
+  const maxAge = parseAgeGroupMaxAge(options?.targetAgeGroup);
+  const compYear = options?.competitionYear ?? null;
+  const ageWarnings: SavedTeamAgeWarning[] = [];
+
+  if (maxAge !== null && compYear !== null && compYear >= 2000) {
+    slots.forEach((slot, idx) => {
+      if (!slot) return;
+      const birthYear = birthYearFromRider(slot);
+      if (birthYear === null) return;
+      const ageInCompYear = compYear - birthYear;
+      if (ageInCompYear > maxAge) {
+        ageWarnings.push({
+          slotIndex: idx,
+          riderName: slot.fullName,
+          birthYear,
+          ageInCompetitionYear: ageInCompYear,
+          maxAge,
+          message: `${slot.fullName} turns ${ageInCompYear} in ${compYear} (check U${maxAge} eligibility).`,
+        });
+      }
+    });
+  }
+
+  return {
+    slots,
+    teamName: (savedTeam.entryTeamName || savedTeam.teamName || '').trim(),
+    bibs: parsedBib.bib,
+    flag: parsedBib.flag ?? '',
+    trainerName: (savedTeam.trainerName ?? '').trim(),
+    phone: (savedTeam.trainerPhone ?? '').trim(),
+    ageWarnings,
+  };
 }

@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api';
 import type { CompetitionDetail } from '../../types';
 
-interface EntrySettings { competitionId: number; entriesCloseAt: string | null; entriesClosed: boolean }
+interface EntrySettings {
+  competitionId: number; entriesCloseAt: string | null; entriesClosed: boolean;
+  stablesRemaining?: number | null; hookupsRemaining?: number | null;
+}
 type CompetitionWithCloseAt = CompetitionDetail & { entriesCloseAt?: string | null };
 export function useEntrySettings(competition: CompetitionWithCloseAt) {
   const [now] = useState(() => Date.now());
@@ -21,5 +24,8 @@ export function useEntrySettings(competition: CompetitionWithCloseAt) {
   const current = saved?.competitionId === competition.id ? saved : null;
   const entriesCloseAt = current ? current.entriesCloseAt : competition.entriesCloseAt ?? null;
   const closed = !!competition.signupsLocked || !!current?.entriesClosed || (!!entriesCloseAt && new Date(entriesCloseAt).getTime() <= now);
-  return { entriesCloseAt, closed };
+  // The venue's shared stable and hook-up counts: the server's own, from the settings when they have loaded.
+  const stablesRemaining = current ? current.stablesRemaining ?? null : competition.stablesRemaining ?? null;
+  const hookupsRemaining = current ? current.hookupsRemaining ?? null : competition.hookupsRemaining ?? null;
+  return { entriesCloseAt, closed, stablesRemaining, hookupsRemaining };
 }

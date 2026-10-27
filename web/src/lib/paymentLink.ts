@@ -74,8 +74,8 @@ export function paymentProviderLabel(url?: string | null): string {
 }
 
 /**
- * Standard button copy for paying online by card or Apple Pay.
+ * Button copy for the organiser's payment link. The provider decides how people can pay, so the button doesn't promise card or Apple Pay.
  */
 export function paymentLinkCtaLabel(): string {
-  return 'Pay Online by Card / Apple Pay →';
+  return 'Pay online';
 }

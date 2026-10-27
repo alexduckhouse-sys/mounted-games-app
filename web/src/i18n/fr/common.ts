@@ -1,0 +1,33 @@
+import type { AreaCatalogue } from '../messages';
+import type { common as en } from '../en/common';
+
+export const common: AreaCatalogue<typeof en> = {
+  'common.back': 'Retour',
+  'common.close': 'Fermer',
+  'common.cancel': 'Annuler',
+  'common.confirm': 'Confirmer',
+  'common.notNow': 'Pas maintenant',
+  'common.save': 'Enregistrer',
+  'common.saving': 'Enregistrement…',
+  'common.delete': 'Supprimer',
+  'common.edit': 'Modifier',
+  'common.done': 'Terminé',
+  'common.next': 'Suivant',
+  'common.continue': 'Continuer',
+  'common.search': 'Rechercher',
+  'common.loading': 'Chargement…',
+  'common.tryAgain': 'Réessayer',
+  'common.refresh': 'Actualiser',
+  'common.reload': 'Recharger la page',
+  'common.goBack': 'Revenir en arrière',
+  'common.yes': 'Oui',
+  'common.no': 'Non',
+  'common.live': 'En direct',
+  'common.finished': 'Terminé',
+  'common.today': 'Aujourd’hui',
+  'common.tomorrow': 'Demain',
+  'common.signIn': 'Se connecter',
+  'common.signOut': 'Se déconnecter',
+  'common.mountedGames': 'Mounted Games',
+  'common.somethingWrong': 'Un problème est survenu. Réessayez.',
+};

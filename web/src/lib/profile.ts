@@ -1,3 +1,4 @@
+import { tr } from '../i18n/translate';
 import type { Role } from '../types';
 
 /** Up to two capital letters for an avatar: first and last word of the name, or the start of the email. */
@@ -11,10 +12,10 @@ export function initialsOf(fullName: string | null | undefined, email?: string |
 
 /** The badge text for the most senior role a person holds. */
 export function roleLabel(roles: readonly Role[]): string {
-  if (roles.includes('Admin')) return 'Admin';
-  if (roles.includes('Manager')) return 'Team manager';
-  if (roles.includes('Trainer')) return 'Trainer';
-  if (roles.includes('TrainerRequest')) return 'Trainer request';
-  if (roles.includes('ManagerRequest')) return 'Team manager request';
-  return 'Member';
+  if (roles.includes('Admin')) return tr('account.role.admin');
+  if (roles.includes('Manager')) return tr('account.role.manager');
+  if (roles.includes('Trainer')) return tr('account.role.trainer');
+  if (roles.includes('TrainerRequest')) return tr('account.role.trainerRequest');
+  if (roles.includes('ManagerRequest')) return tr('account.role.managerRequest');
+  return tr('account.role.member');
 }

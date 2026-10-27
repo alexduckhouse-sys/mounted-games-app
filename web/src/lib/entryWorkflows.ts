@@ -1,3 +1,4 @@
+// Unused in web UI yet — reserved for iOS / upcoming wiring
 import { toCsv } from './csv';
 import { priceLabel } from './money';
 import { displaySectionName } from './section';

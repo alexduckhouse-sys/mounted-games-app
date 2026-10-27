@@ -11,11 +11,11 @@ const clip = (id: string): SavedReplayClip => ({ id, competitionId: 1, arenaName
 const card = (key: string, arenaName = 'Main'): QueuedScoreCard => ({ key, arenaName, heading: 'Seniors · Heat 1', card: { raceName: `Race ${key}` } as never, receivedAt: 0 });
 const media = {} as MediaStream;
 
-let handle: { start: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn>; saveClip: ReturnType<typeof vi.fn> };
+let handle: { start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn>; saveClip: ReturnType<typeof vi.fn> };
 let onStatus: (status: buffer.ReplayBufferStatus) => void = () => {};
 
 beforeEach(() => {
-  handle = { start: vi.fn(() => true), dispose: vi.fn(), saveClip: vi.fn(async (label?: string) => clip(label ?? 'x')) };
+  handle = { start: vi.fn(() => true), stop: vi.fn(), dispose: vi.fn(), saveClip: vi.fn(async (label?: string) => clip(label ?? 'x')) };
   vi.mocked(buffer.createReplayBuffer).mockImplementation((options) => { onStatus = options.onStatus!; return handle as never; });
   vi.mocked(buffer.tagSavedReplay).mockReset();
   vi.mocked(buffer.removeSavedReplay).mockReset();
@@ -36,10 +36,17 @@ describe('useControllerReplay', () => {
     expect(result.current.retainedSeconds).toBe(42);
     expect(result.current.warning).toBe('Low space');
     rerender({ competitionId: 1, arena: 'Main', streamId: 4, media: null, scoreCards: [] });
-    expect(handle.dispose).toHaveBeenCalled();
+    // A gap in the video (a camera switch) pauses recording but keeps the 30 minutes already recorded.
+    expect(handle.stop).toHaveBeenCalled();
+    expect(handle.dispose).not.toHaveBeenCalled();
     expect(result.current.recording).toBe(false);
     expect(result.current.retainedSeconds).toBe(0);
+    const next = {} as MediaStream;
+    rerender({ competitionId: 1, arena: 'Main', streamId: 5, media: next, scoreCards: [] });
+    expect(handle.start).toHaveBeenLastCalledWith(next);
+    expect(buffer.createReplayBuffer).toHaveBeenCalledTimes(1);
     unmount();
+    expect(handle.dispose).toHaveBeenCalled();
   });
 
   it('names the arena Arena when it has none, and works without a stream id', () => {

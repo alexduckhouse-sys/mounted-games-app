@@ -43,7 +43,7 @@ function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: (
         api.get<RaceScoreHistory[]>(`/races/${raceId}/score/history`),
       ]);
       setScore(scoreResponse.data);
-      setDraft(scoreResponse.data.results.map((result) => ({ ...result })));
+      setDraft(scoreResponse.data.results.filter((result) => !result.isSitOut).map((result) => ({ ...result })));
       setHistory(historyResponse.data);
     } catch (loadError) {
       setError(apiMessage(loadError, 'Couldn’t load the score record. Check your signal and try again.'));
@@ -155,7 +155,7 @@ function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: (
                 <span className="rf-t1">{eventLabel(entry.kind)}</span>
                 <span className="rf-t2">Revision {entry.revision} · {new Date(entry.createdAt).toLocaleString('en-GB')}</span>
                 <span className="ops-reason">{entry.reason}</span>
-                {entry.actorUserId && <span className="rf-t2">By <code className="break-all">{entry.actorUserId}</code></span>}
+                {(entry.actorLabel || entry.actorUserId) && <span className="rf-t2">By <code className="break-all">{entry.actorLabel || entry.actorUserId}</code></span>}
                 <span className="rf-t2">{scoreSummary(entry.before)} → {scoreSummary(entry.after)}</span>
               </span>
             </li>
@@ -176,5 +176,5 @@ function eventLabel(kind: RaceScoreEventKind): string {
 
 function scoreSummary(results: ScorePlace[]): string {
   if (results.length === 0) return 'No results';
-  return results.map((result) => result.eliminated ? `Team ${result.teamId}: ${statusLetter(true, result.status)}` : `Team ${result.teamId}: ${result.place}`).join(', ');
+  return results.map((result) => result.isSitOut ? `Team ${result.teamId}: S` : result.eliminated ? `Team ${result.teamId}: ${statusLetter(true, result.status)}` : `Team ${result.teamId}: ${result.place}`).join(', ');
 }

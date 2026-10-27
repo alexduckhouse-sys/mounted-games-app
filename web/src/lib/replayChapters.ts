@@ -1,3 +1,4 @@
+// Unused in web UI yet — reserved for iOS / upcoming wiring
 import type { Race } from '../types';
 
 export type ReplayRaceMarker = Pick<Race, 'id' | 'name' | 'orderIndex' | 'startedAt' | 'finishedAt' | 'isComplete'>;

@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { ChangePop } from '../../components/ChangePop';
 import { ChevronDown } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
@@ -17,11 +18,16 @@ import {
 } from '../../lib/decFormConfig';
 import { heightText } from '../../lib/decForm';
 import { displaySectionName } from '../../lib/section';
-import type { DeclarationForm, RiderEntry, SectionSignup } from '../../types';
+import { parsePassSignupIdFromSearch } from '../../lib/stablingPass';
+import type { CompetitionEntrySettings, DeclarationForm, RiderEntry, SectionSignup } from '../../types';
 import { useCompetition } from '../competition/context';
 import { RefineChoiceRow, RefineDateTimeRow, RefineHeader, RefineList, RefinePage, RefineSection } from '../refine/Refine';
 import type { TeamEntry } from './types';
+import { EntryTools } from './EntryTools';
+import { SignupDetail } from './SignupDetail';
+import { FILTERS, bucketCounts, capacityLines, fetchEntrySettings, signupBucket, type EntryFilter } from './entryLogic';
 import './operations.css';
+import './entryTools.css';
 
 type PartKey = 'trainerPhone' | 'bib' | 'dob' | 'weight' | 'ponyHeight' | 'ponyPassport' | 'ponyAge' | 'membershipNumber' | 'emergencyContact' | 'medicalNotes';
 const PARTS: Array<{ key: PartKey; label: string }> = [
@@ -56,6 +62,9 @@ interface LockTime { declarationsCloseAt: string | null }
 /** Entries and dec forms: who has entered and paid, which forms are in, and what the form asks. Every change saves as it is made. */
 export function EntriesPage() {
   const { competition, reload } = useCompetition();
+  const { search } = useLocation();
+  const passSignupId = parsePassSignupIdFromSearch(search);
+  const [passNotice, setPassNotice] = useState<string | null>(null);
   const [entries, setEntries] = useState<TeamEntry[] | null>(null);
   const [signups, setSignups] = useState<SectionSignup[]>([]);
   const [forms, setForms] = useState<DeclarationForm[]>([]);
@@ -66,23 +75,39 @@ export function EntriesPage() {
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  const [capacity, setCapacity] = useState<CompetitionEntrySettings | null>(null);
+  const [{ filter, openSignup }, setSelection] = useState<{ filter: EntryFilter; openSignup: number | null; openedPass: string | null }>({ filter: 'all', openSignup: null, openedPass: null });
+  const setFilter = (next: EntryFilter) => setSelection((previous) => ({ ...previous, filter: next }));
+  const setOpenSignup = (next: number | null) => setSelection((previous) => ({ ...previous, openSignup: next }));
 
   const load = useCallback(async () => {
     const base = `/competitions/${competition.id}`;
-    const [e, s, f, l, c] = await Promise.allSettled([
+    const [e, s, f, l, c, cap] = await Promise.allSettled([
       api.get<TeamEntry[]>(`${base}/entries`),
       api.get<SectionSignup[]>(`${base}/signups`),
       api.get<DeclarationForm[]>('/declaration-forms', { params: { competitionId: competition.id } }),
       api.get<LockTime>(`/declaration-forms/competition/${competition.id}/lock-time`),
       api.get(`${base}/dec-form-config`),
+      fetchEntrySettings(competition.id),
     ]);
     if (e.status === 'fulfilled') setEntries(Array.isArray(e.value.data) ? e.value.data : []);
-    if (s.status === 'fulfilled' && Array.isArray(s.value.data)) setSignups(s.value.data);
+    if (s.status === 'fulfilled' && Array.isArray(s.value.data)) {
+      setSignups(s.value.data);
+      const pass = s.value.data.find((signup) => signup.id === passSignupId);
+      setPassNotice(passSignupId !== null && !pass ? 'This pass does not match an entry for this event. Check the event and ask the organiser for help.' : null);
+      const passKey = `${competition.id}:${passSignupId}`;
+      if (pass) setSelection((previous) => previous.openedPass === passKey ? previous : {
+        filter: signupBucket(pass), openSignup: pass.id, openedPass: passKey,
+      });
+    } else if (passSignupId !== null) {
+      setPassNotice('Couldn’t check this pass. Check your signal and try again.');
+    }
     if (f.status === 'fulfilled' && Array.isArray(f.value.data)) setForms(f.value.data);
     if (l.status === 'fulfilled') setLock(l.value.data?.declarationsCloseAt ?? null);
     if (c.status === 'fulfilled') setConfig(parseConfigResponse(c.value.data)?.config ?? STANDARD_CONFIG);
+    if (cap.status === 'fulfilled') setCapacity(cap.value);
     setError(e.status === 'rejected' ? 'Couldn’t load the entries. Check your signal and try again.' : null);
-  }, [competition.id]);
+  }, [competition.id, passSignupId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -99,8 +124,12 @@ export function EntriesPage() {
   }
 
   const live = signups.filter((s) => s.status === 0 || s.status === 1);
-  const paidCount = live.filter((s) => s.status === 1).length;
-  const unpaidCount = live.length - paidCount;
+  const counts = useMemo(() => bucketCounts(signups), [signups]);
+  const paidCount = counts.paid;
+  const unpaidCount = counts.pending;
+  const capacityText = capacityLines(capacity);
+  const reloadAll = useCallback(async () => { await load(); }, [load]);
+  const shown = useMemo(() => (filter === 'all' ? [] : signups.filter((s) => signupBucket(s) === filter)), [signups, filter]);
   const closed = Boolean(competition.signupsLocked);
 
   const groups = useMemo(() => {
@@ -118,12 +147,27 @@ export function EntriesPage() {
     reload();
   });
 
-  const setPaid = (team: TeamEntry, paid: boolean) => run('Couldn’t change the payment.', async () => {
-    for (const signup of live.filter((s) => s.teamId === team.teamId)) {
-      if (paid && signup.status === 0) await api.post(`/competitions/${competition.id}/signups/${signup.id}/mark-paid`);
-      if (!paid && signup.status === 1) await api.put(`/signups/${signup.id}/status`, { status: 0 });
-    }
-  });
+  const setPaid = async (team: TeamEntry, paid: boolean) => {
+    const targets = live.filter((s) => s.teamId === team.teamId && s.status === (paid ? 0 : 1));
+    if (targets.length === 0) return;
+    const total = targets.reduce((sum, s) => sum + s.amountMinor, 0);
+    const what = targets.length === 1 ? '1 entry' : `${targets.length} entries`;
+    const ok = await confirmDialog(paid
+      ? { title: `Mark ${team.teamName} paid?`, message: `${what} (${feeText(total)}) will be recorded as received. Paid entries can form teams and send confirmations.`, confirmLabel: 'Mark paid' }
+      : { title: `Mark ${team.teamName} not paid?`, message: `${what} (${feeText(total)}) will go back to pending payment.`, confirmLabel: 'Mark not paid' });
+    if (!ok) return;
+    await run('Couldn’t change the payment.', async () => {
+      for (const signup of targets) {
+        if (paid) await api.post(`/competitions/${competition.id}/signups/${signup.id}/mark-paid`);
+        else await api.put(`/signups/${signup.id}/status`, { status: 0 });
+      }
+    });
+  };
+  const markSignupPaid = async (signup: SectionSignup) => {
+    const ok = await confirmDialog({ title: `Mark ${signup.fullName} paid?`, message: `1 entry (${feeText(signup.amountMinor)}) will be recorded as received. Paid entries can form teams and send confirmations.`, confirmLabel: 'Mark paid' });
+    if (!ok) return;
+    await run('Couldn’t change the payment.', () => api.post(`/competitions/${competition.id}/signups/${signup.id}/mark-paid`));
+  };
 
   async function withdraw(team: TeamEntry) {
     if (!(await confirmDialog({ title: `Withdraw ${team.teamName}?`, message: 'They come out of the draw. You can bring them back until a draw depends on it.', confirmLabel: 'Withdraw', destructive: true }))) return;
@@ -154,17 +198,39 @@ export function EntriesPage() {
       <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel="Back to preparations" context={competition.name} title="Entries and dec forms" />
       <div className="ops-cards ops-entries" aria-busy={busy}>
         {error && <Notice>{error}</Notice>}
+        {passNotice && <Notice>{passNotice}</Notice>}
         {toast.node}
 
         <RefineList as="div">
           <div className="rf-row">
-            <span className="rf-grow"><span className="rf-t1">{closed ? 'Entries closed' : 'Entries open'}</span><span className="rf-t2">{paidCount} paid · {unpaidCount} not paid</span></span>
+            <span className="rf-grow">
+              <span className="rf-t1">{closed ? 'Entries closed' : 'Entries open'}</span>
+              <span className="rf-t2">{paidCount} paid · {unpaidCount} not paid</span>
+              {capacityText.length > 0 && <span className="rf-t2 et-cap">{capacityText.join(' · ')}</span>}
+            </span>
             <button type="button" className="rf-btn" disabled={busy} onClick={() => void toggleEntries()}>{closed ? 'Reopen entries' : 'Close entries'}</button>
+          </div>
+          <div className="rf-row">
+            <span className="rf-grow"><span className="rf-t1">Tools</span><span className="rf-t2">Bank statement, reminders, clubs, arrivals, refunds, exports</span></span>
+            <EntryTools competition={competition} signups={signups} capacity={capacity} onChanged={reloadAll} />
           </div>
         </RefineList>
 
-        {entries !== null && entries.length === 0 && <p className="rf-note">No entries yet.</p>}
-        {groups.map(([sectionId, group]) => (
+        <div className="ops-chips et-filters" role="group" aria-label="Show entries">
+          {FILTERS.map((f) => (
+            <button key={f.value} type="button" className="rf-btn et-chip" aria-pressed={filter === f.value} onClick={() => setFilter(f.value)}>{f.label} · {counts[f.value]}</button>
+          ))}
+        </div>
+
+        {filter !== 'all' && (
+          <SignupList
+            signups={shown} filter={filter} busy={busy} openId={openSignup} competition={competition}
+            onOpen={(id) => setOpenSignup(openSignup === id ? null : id)} onMarkPaid={(s) => void markSignupPaid(s)} onChanged={reloadAll}
+          />
+        )}
+
+        {filter === 'all' && entries !== null && entries.length === 0 && <p className="rf-note">No entries yet.</p>}
+        {filter === 'all' && groups.map(([sectionId, group]) => (
           <Fragment key={sectionId}>
             <RefineSection title={group.name} />
             <RefineList as="div" label={group.name}>
@@ -213,6 +279,12 @@ export function EntriesPage() {
                             <button type="button" className="rf-btn" onClick={() => void copyLink()}>Copy form link</button>
                           </div>
                         )}
+                        {signups.filter((s) => s.teamId === team.teamId).map((s, _i, all) => (
+                          <div key={s.id} className="et-sub">
+                            {all.length > 1 && <p className="et-sub-name">{s.fullName}</p>}
+                            <SignupDetail competition={competition} signup={s} onChanged={reloadAll} />
+                          </div>
+                        ))}
                         <div className="ops-line ops-line-end">
                           {out
                             ? (team.canReinstate ? <button type="button" className="rf-btn" disabled={busy} onClick={() => void reinstate(team)}>Reinstate</button> : <span className="rf-t2">This entry is out of the draw.</span>)
@@ -248,6 +320,48 @@ export function EntriesPage() {
         {setup && config && <SetupEditor config={config} busy={busy} onSave={saveConfig} />}
       </div>
     </RefinePage>
+  );
+}
+
+/** Entries picked by the filter, one row each: people not in a team yet (pending, waiting list) or out of the event (withdrawn). */
+function SignupList({ signups, filter, busy, openId, competition, onOpen, onMarkPaid, onChanged }: {
+  signups: SectionSignup[]; filter: EntryFilter; busy: boolean; openId: number | null; competition: ReturnType<typeof useCompetition>['competition'];
+  onOpen: (id: number) => void; onMarkPaid: (s: SectionSignup) => void; onChanged: () => Promise<void>;
+}) {
+  const empty: Record<EntryFilter, string> = { all: '', paid: 'No paid entries yet.', pending: 'Nobody is waiting to pay.', waitlist: 'The waiting list is empty.', withdrawn: 'No withdrawn entries.' };
+  if (signups.length === 0) return <p className="rf-note">{empty[filter]}</p>;
+  return (
+    <RefineList as="div" label="Entries">
+      {signups.map((s) => {
+        const bucket = signupBucket(s);
+        const isOpen = openId === s.id;
+        const tag = bucket === 'paid' ? { text: 'Paid', tone: 'ok' } : bucket === 'pending' ? { text: 'Pending payment', tone: 'warn' } : bucket === 'waitlist' ? { text: 'Waitlist', tone: 'mut' } : { text: 'Withdrawn', tone: 'mut' };
+        return (
+          <div key={s.id}>
+            <button type="button" className="rf-row ops-entry-row" aria-expanded={isOpen} onClick={() => onOpen(s.id)}>
+              <span className="rf-grow">
+                <span className="rf-t1">{s.fullName}</span>
+                <span className="rf-t2">{displaySectionName(s.sectionName)} · {feeText(s.amountMinor)}{s.teamName ? ` · ${s.teamName}` : ''}</span>
+              </span>
+              <span className={`rf-st rf-${tag.tone}`}>{tag.text}</span>
+              <ChevronDown className={`rf-chev rf-chev-down h-4 w-4 ${isOpen ? 'ops-flip' : ''}`} aria-hidden="true" />
+            </button>
+            {bucket === 'pending' && (
+              <div className="ops-pending">
+                <span className="ops-badge-pending">Pending payment</span>
+                <span className="rf-t2">{feeText(s.amountMinor)} by bank transfer</span>
+                <button type="button" className="rf-btn rf-btn-primary ops-markpaid" disabled={busy} aria-label={`Mark ${s.fullName} paid`} onClick={() => onMarkPaid(s)}>Mark paid</button>
+              </div>
+            )}
+            {isOpen && (
+              <div className="ops-entry-body">
+                <SignupDetail competition={competition} signup={s} onChanged={onChanged} />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </RefineList>
   );
 }
 

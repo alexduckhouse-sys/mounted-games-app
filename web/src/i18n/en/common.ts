@@ -1,0 +1,33 @@
+import type { Message } from '../messages';
+
+/** Words used all over the app. A page that needs one of these should use it rather than its own copy. */
+export const common = {
+  'common.back': 'Back',
+  'common.close': 'Close',
+  'common.cancel': 'Cancel',
+  'common.confirm': 'Confirm',
+  'common.notNow': 'Not now',
+  'common.save': 'Save',
+  'common.saving': 'Saving…',
+  'common.delete': 'Delete',
+  'common.edit': 'Edit',
+  'common.done': 'Done',
+  'common.next': 'Next',
+  'common.continue': 'Continue',
+  'common.search': 'Search',
+  'common.loading': 'Loading…',
+  'common.tryAgain': 'Try again',
+  'common.refresh': 'Refresh',
+  'common.reload': 'Reload page',
+  'common.goBack': 'Go back',
+  'common.yes': 'Yes',
+  'common.no': 'No',
+  'common.live': 'Live',
+  'common.finished': 'Finished',
+  'common.today': 'Today',
+  'common.tomorrow': 'Tomorrow',
+  'common.signIn': 'Sign in',
+  'common.signOut': 'Sign out',
+  'common.mountedGames': 'Mounted Games',
+  'common.somethingWrong': 'Something went wrong. Try again.',
+} satisfies Record<string, Message>;

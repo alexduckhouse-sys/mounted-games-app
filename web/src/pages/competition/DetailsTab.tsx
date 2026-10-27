@@ -13,6 +13,7 @@ import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { CompetitionTeamCard } from './CompetitionTeamCard';
 import { EmbedCard } from './EmbedCard';
+import { HorseboxEntranceCard } from './HorseboxEntranceCard';
 import { ScorerLinksCard } from './ScorerLinksCard';
 import { EventSponsorsSection } from './SponsorsCard';
 import { usePageWidth } from '../../components/pageWidthState';
@@ -22,6 +23,7 @@ import { placesLeftText } from '../../lib/placesLeft';
 import '../../components/sitePages.css';
 import '../../components/eventPages.css';
 import { usePageHeader } from '../../components/CompactPageBarContext';
+import { useT } from '../../i18n/LanguageContext';
 
 /** A row in a flat list: the label and a chevron. Goes to a page, or to a file or address when `href` is used. */
 function LinkRow({ to, href, label }: { to?: string; href?: string; label: string }) {
@@ -49,6 +51,7 @@ function mapsUrl(competition: CompetitionDetail): string | null {
 
 export function DetailsTab() {
   usePageWidth('wide');
+  const t = useT();
   const { competition, reload } = useCompetition();
   const { canManage, canOrganise, hasRole, user } = useAuth();
   const [signupResult, setSignupResult] = useState<{ key: string; items: SectionSignup[] } | null>(null);
@@ -58,7 +61,7 @@ export function DetailsTab() {
   const [descOpen, setDescOpen] = useState(false);
   const entrySettings = useEntrySettings(competition);
 
-  usePageHeader({ title: 'Details', subtitle: `${competition.name}${competitionDateText(competition.startDate, competition.endDate) ? ` · ${competitionDateText(competition.startDate, competition.endDate)}` : ''}` });
+  usePageHeader({ title: t('competition.details.title'), subtitle: `${competition.name}${competitionDateText(competition.startDate, competition.endDate) ? ` · ${competitionDateText(competition.startDate, competition.endDate)}` : ''}` });
 
   async function refreshSignups() {
     if (!mayOrganise) return;
@@ -82,15 +85,15 @@ export function DetailsTab() {
   const dates = competitionDateText(competition.startDate, competition.endDate, true);
   const where = mapsUrl(competition);
   const w3w = competition.what3Words?.replace(/^\/\/\//, '');
-  const enterLabel = !user ? 'Sign in to enter' : competition.sections.some((s) => s.format === 2) ? 'Enter a team' : 'Enter';
+  const enterLabel = !user ? t('competition.details.signInToEnter') : competition.sections.some((s) => s.format === 2) ? t('competition.details.enterTeam') : t('competition.details.enter');
   const enterTo = `/competitions/${competition.id}/enter`;
   const closed = entrySettings.closed && !mayOrganise;
 
   return (
     <div className="ev-white rf-page mx-auto flex w-full max-w-xl flex-col pb-4 pt-3 lg:max-w-3xl">
-      <h1 className="sr-only">Details &amp; entries</h1>
+      <h1 className="sr-only">{t('competition.details.heading')}</h1>
 
-      <section className="mg-card flex flex-col p-4" aria-label="About this event">
+      <section className="mg-card flex flex-col p-4" aria-label={t('competition.details.about')}>
         <div className="flex flex-col gap-1 pb-3">
           <h2 className="ev-title">{competition.name}</h2>
           <span className="ev-sub">{[dates, competition.location].filter(Boolean).join(' · ')}</span>
@@ -100,48 +103,50 @@ export function DetailsTab() {
             <p className={`ev-body whitespace-pre-wrap ${longDescription && !descOpen ? 'line-clamp-2' : ''}`}>{competition.description}</p>
             {longDescription && (
               <button type="button" className="ev-text-btn" aria-expanded={descOpen} onClick={() => setDescOpen((open) => !open)}>
-                {descOpen ? 'Less' : 'More'}
+                {descOpen ? t('competition.details.less') : t('competition.details.more')}
               </button>
             )}
           </div>
         )}
 
-        <dl className="sp-facts ev-facts ev-card-facts mt-3" aria-label="Event facts">
+        <dl className="sp-facts ev-facts ev-card-facts mt-3" aria-label={t('competition.details.facts')}>
           {competition.location && (
-            <Fact label="Venue">{competition.location}{where && <> <a className="ev-link whitespace-nowrap" href={where} target="_blank" rel="noreferrer">Open in Maps</a></>}</Fact>
+            <Fact label={t('competition.details.venue')}>{competition.location}{where && <> <a className="ev-link whitespace-nowrap" href={where} target="_blank" rel="noreferrer">{t('competition.details.openMaps')}</a></>}</Fact>
           )}
-          {competition.postcode && <Fact label="Postcode">{competition.postcode}</Fact>}
+          {competition.postcode && <Fact label={t('competition.details.postcode')}>{competition.postcode}</Fact>}
           {w3w && (
             <Fact label="what3words">
               <a className="font-semibold text-[rgb(var(--mg-heading))] hover:underline" href={`https://what3words.com/${w3w}`} target="_blank" rel="noreferrer">{`///${w3w}`}</a>
             </Fact>
           )}
-          {competition.competitionNumber && <Fact label="Comp no.">{competition.competitionNumber}</Fact>}
+          {competition.competitionNumber && <Fact label={t('competition.details.compNo')}>{competition.competitionNumber}</Fact>}
           {competition.contactEmail && (
-            <Fact label="Email"><a className="font-semibold text-[rgb(var(--mg-heading))] hover:underline" href={`mailto:${competition.contactEmail}`}>{competition.contactEmail}</a></Fact>
+            <Fact label={t('competition.details.email')}><a className="font-semibold text-[rgb(var(--mg-heading))] hover:underline" href={`mailto:${competition.contactEmail}`}>{competition.contactEmail}</a></Fact>
           )}
         </dl>
       </section>
 
-      <h2 className="sp-sec">At the event</h2>
-      <div className="ev-flat" role="list" aria-label="At the event">
-        <LinkRow to="../teams" label="Teams" />
-        <LinkRow to="../declarations" label="Dec forms" />
-        <LinkRow to="../shop" label="Event shop" />
-        <LinkRow to="../shop" label="Book stabling, hook-up and shavings" />
-        <LinkRow to="../rulebooks" label="Rules" />
-        <LinkRow to="../arena" label="Arena setup and race diagrams" />
-        <LinkRow to="../weather" label="Weather" />
-        <LinkRow to="../contact" label="Message the organisers" />
+      <HorseboxEntranceCard competition={competition} />
+
+      <h2 className="sp-sec">{t('competition.details.atEvent')}</h2>
+      <div className="ev-flat" role="list" aria-label={t('competition.details.atEvent')}>
+        <LinkRow to="../teams" label={t('competition.details.teams')} />
+        <LinkRow to="../declarations" label={t('competition.details.decForms')} />
+        <LinkRow to="../shop" label={t('competition.details.shop')} />
+        <LinkRow to="../shop" label={t('competition.details.stabling')} />
+        <LinkRow to="../rulebooks" label={t('competition.details.rules')} />
+        <LinkRow to="../arena" label={t('competition.details.arena')} />
+        <LinkRow to="../weather" label={t('competition.details.weather')} />
+        <LinkRow to="../contact" label={t('competition.details.contact')} />
       </div>
       {user && <EquipmentBlock competitionId={competition.id} />}
 
-      <h2 className="sp-sec">Share and print</h2>
-      <div className="ev-flat" role="list" aria-label="Share and print">
-        <LinkRow href={competitionCalendarUrl(competition.id, window.location.origin)} label="Add to calendar" />
+      <h2 className="sp-sec">{t('competition.details.sharePrint')}</h2>
+      <div className="ev-flat" role="list" aria-label={t('competition.details.sharePrint')}>
+        <LinkRow href={competitionCalendarUrl(competition.id, window.location.origin)} label={t('competition.details.calendar')} />
         <EventShareRows competitionId={competition.id} competitionName={competition.name} />
-        <LinkRow to={`/event-tools/${competition.id}/print/draw`} label="Print draw" />
-        <LinkRow to={`/event-tools/${competition.id}/print/results`} label="Print results" />
+        <LinkRow to={`/event-tools/${competition.id}/print/draw`} label={t('competition.details.printDraw')} />
+        <LinkRow to={`/event-tools/${competition.id}/print/results`} label={t('competition.details.printResults')} />
         {mayOrganise && <LinkRow to={`/event-tools/${competition.id}/print/poster`} label="Print venue poster" />}
       </div>
 
@@ -149,8 +154,8 @@ export function DetailsTab() {
 
       {competition.sections.length > 0 && (
         <>
-          <h2 className="sp-sec">Enter</h2>
-          <div className="ev-flat" role="list" aria-label="Age groups and fees">
+          <h2 className="sp-sec">{t('competition.details.enterHeading')}</h2>
+          <div className="ev-flat" role="list" aria-label={t('competition.details.ageGroups')}>
             {competition.sections.map((section) => (
               <div key={section.id} className="sp-row" role="listitem">
                 <span className="sp-grow"><span className="sp-t1">{section.displayName}</span>{!closed && placesLeftText(section) && <span className="sp-t2">{placesLeftText(section)}</span>}</span>
@@ -160,7 +165,7 @@ export function DetailsTab() {
           </div>
           {competition.sections.map((section) => <MatchmakingBoard key={section.id} competitionId={competition.id} section={section} />)}
           {closed ? (
-            <Notice tone="info" className="mx-4 mt-3">Entries are closed for this competition.</Notice>
+            <Notice tone="info" className="mx-4 mt-3">{t('competition.details.entriesClosed')}</Notice>
           ) : (
             <Link to={user ? enterTo : '/login'} state={user ? undefined : { from: enterTo }} className="ev-bar">{enterLabel}</Link>
           )}
@@ -211,10 +216,13 @@ export function DetailsTab() {
  * Share event link (native share sheet or clipboard) and inline QR code toggle, used on both DetailsTab and EntryPage.
  */
 export function EventShareRows({ competitionId, competitionName }: { competitionId: number; competitionName: string }) {
+  const t = useT();
   const toast = useToast();
   const [shareError, setShareError] = useState(false);
   const [showQr, setShowQr] = useState(false);
   const shareUrl = competitionLink(competitionId, window.location.origin);
+  // The sentence has a link in the middle, so it is split at {link} and the pieces go around the <a>.
+  const [copyBefore, copyAfter = ''] = t('competition.details.copyFailed').split('{link}');
 
   async function shareEvent() {
     setShareError(false);
@@ -229,7 +237,7 @@ export function EventShareRows({ competitionId, competitionName }: { competition
     }
     try {
       await navigator.clipboard.writeText(shareUrl);
-      toast.show('Link copied');
+      toast.show(t('competition.details.linkCopied'));
     } catch {
       setShareError(true);
     }
@@ -239,30 +247,30 @@ export function EventShareRows({ competitionId, competitionName }: { competition
     <>
       <div>
         <button type="button" className="sp-row" onClick={() => { void shareEvent(); }}>
-          <span className="sp-grow"><span className="sp-t1 !font-medium">Share event link</span></span>
+          <span className="sp-grow"><span className="sp-t1 !font-medium">{t('competition.details.shareLink')}</span></span>
           <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
         </button>
         {shareError && (
           <Notice className="mx-4 my-2">
-            Couldn’t copy the link. Press and hold <a className="ev-link" href={shareUrl}>the event link</a> to copy it, or show the QR code.
+            {copyBefore}<a className="ev-link" href={shareUrl}>{t('competition.details.copyFailedLink')}</a>{copyAfter}
           </Notice>
         )}
         {toast.node}
       </div>
       <div>
         <button type="button" className="sp-row" aria-expanded={showQr} onClick={() => setShowQr((open) => !open)}>
-          <span className="sp-grow"><span className="sp-t1 !font-medium">Show event QR code</span></span>
+          <span className="sp-grow"><span className="sp-t1 !font-medium">{t('competition.details.showQr')}</span></span>
           <ChevronRight aria-hidden="true" className={`sp-chev h-4 w-4 transition-transform ${showQr ? 'rotate-90' : ''}`} strokeWidth={2.5} />
         </button>
         {showQr && (
           <div className="flex items-center gap-3 border-t border-[rgb(var(--mg-rule-soft))] px-4 py-3">
             <QrCode
               value={shareUrl}
-              label={`QR code for ${competitionName}`}
+              label={t('competition.details.qrFor', { name: competitionName })}
               className="w-36 rounded-lg border border-[rgb(var(--mg-rule))] bg-white p-2"
             />
             <p className="m-0 text-xs text-[rgb(var(--mg-muted))]">
-              Point another phone’s camera here to open {competitionName}.
+              {t('competition.details.qrHint', { name: competitionName })}
             </p>
           </div>
         )}
@@ -279,6 +287,7 @@ interface MatchingEntry {
 interface MatchingSignup { id: number; competitionSectionId: number; teamId?: number | null; lookingForPair?: boolean; status: number }
 
 function MatchmakingBoard({ competitionId, section }: { competitionId: number; section: CompetitionSection }) {
+  const t = useT();
   const { user } = useAuth();
   const userId = user?.id;
   const [entries, setEntries] = useState<MatchingEntry[]>([]);
@@ -297,7 +306,7 @@ function MatchmakingBoard({ competitionId, section }: { competitionId: number; s
   async function requestPair(targetSignupId: number) {
     if (!own || busy) return;
     setBusy(true); setFailed(false);
-    try { await api.post(`/my/signups/${own.id}/pair-request`, { targetSignupId }); toast.show('Pair-up request sent'); }
+    try { await api.post(`/my/signups/${own.id}/pair-request`, { targetSignupId }); toast.show(t('competition.match.sent')); }
     catch { setFailed(true); }
     finally { setBusy(false); }
   }
@@ -305,13 +314,13 @@ function MatchmakingBoard({ competitionId, section }: { competitionId: number; s
     <div className="mt-2 flex flex-col gap-2 rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] p-2.5 text-sm">
       <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-heading))]">
         <Users className="h-3.5 w-3.5" aria-hidden="true" />
-        <span>Pair Partner &amp; Guest Rider Matchmaker</span>
+        <span>{t('competition.match.title')}</span>
       </div>
       {seekers.filter((e) => e.lookingForPair && !e.teamId).map((e) => (
         <div key={e.signupId} className="flex flex-col gap-1.5 rounded border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] p-2">
           <div className="flex flex-wrap items-center justify-between gap-1.5">
             <span className="inline-flex items-center rounded bg-[rgb(var(--mg-tint))] px-2 py-0.5 text-[11px] font-bold text-[rgb(var(--mg-heading))]">
-              Looking for a Pair Partner (50% share)
+              {t('competition.match.lookingPair')}
             </span>
             <span className="font-semibold text-[rgb(var(--mg-ink))]">
               {e.fullName}{e.ponyClubName ? ` · ${e.ponyClubName}` : ''}
@@ -319,7 +328,7 @@ function MatchmakingBoard({ competitionId, section }: { competitionId: number; s
           </div>
           {own && own.id !== e.signupId && (
             <button type="button" className="mg-btn mg-btn-secondary !min-h-11" disabled={busy} onClick={() => void requestPair(e.signupId)}>
-              Request pair-up with {e.fullName}
+              {t('competition.match.request', { name: e.fullName })}
             </button>
           )}
         </div>
@@ -327,7 +336,7 @@ function MatchmakingBoard({ competitionId, section }: { competitionId: number; s
       {seekers.filter((e) => e.lookingForGuestRiders).map((e) => (
         <div key={e.signupId} className="flex flex-wrap items-center justify-between gap-1.5 rounded border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] p-2">
           <span className="inline-flex items-center rounded bg-[rgb(var(--mg-tint))] px-2 py-0.5 text-[11px] font-bold text-[rgb(var(--mg-heading))]">
-            Guest rider spot available
+            {t('competition.match.guestAvailable')}
           </span>
           <span className="font-semibold text-[rgb(var(--mg-ink))]">
             {e.teamName || e.fullName}{e.ponyClubName ? ` · ${e.ponyClubName}` : ''}
@@ -337,20 +346,21 @@ function MatchmakingBoard({ competitionId, section }: { competitionId: number; s
       {seekers.filter((e) => e.waitingForGuestSpot && !e.teamId).map((e) => (
         <div key={e.signupId} className="flex flex-wrap items-center justify-between gap-1.5 rounded border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] p-2">
           <span className="inline-flex items-center rounded bg-[rgb(var(--mg-tint))] px-2 py-0.5 text-[11px] font-bold text-[rgb(var(--mg-heading))]">
-            Guest rider spot wanted
+            {t('competition.match.guestWanted')}
           </span>
           <span className="font-semibold text-[rgb(var(--mg-ink))]">
             {e.fullName}{e.ponyClubName ? ` · ${e.ponyClubName}` : ''}
           </span>
         </div>
       ))}
-      {failed && <Notice>Couldn’t send the pair-up request. Check your signal and try again.</Notice>}
+      {failed && <Notice>{t('competition.match.failed')}</Notice>}
       {toast.node}
     </div>
   ) : null;
 }
 
 function EquipmentBlock({ competitionId }: { competitionId: number }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<{ lines: EquipmentLine[]; sessions: number; racesCounted: number } | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -372,20 +382,20 @@ function EquipmentBlock({ competitionId }: { competitionId: number }) {
   return (
     <div className="ev-flat border-t border-[rgb(var(--mg-rule-soft))]">
       <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="sp-row">
-        <span className="sp-grow"><span className="sp-t1 !font-medium">Equipment required</span></span>
+        <span className="sp-grow"><span className="sp-t1 !font-medium">{t('competition.equipment.title')}</span></span>
         <ChevronRight aria-hidden="true" className={`sp-chev h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`} strokeWidth={2.5} />
       </button>
       {open && (
         loadError ? (
-          <Notice className="mx-4 my-2" actionLabel="Try again" onAction={() => setLoadError(false)}>Couldn’t load the equipment. Check your signal and try again.</Notice>
+          <Notice className="mx-4 my-2" actionLabel={t('common.tryAgain')} onAction={() => setLoadError(false)}>{t('competition.equipment.failed')}</Notice>
         ) : data == null ? (
-          <p className="sp-note !mx-4">Loading…</p>
+          <p className="sp-note !mx-4">{t('common.loading')}</p>
         ) : data.lines.length === 0 ? (
-          <p className="sp-note !mx-4 italic">No races set up yet, so nothing to count.</p>
+          <p className="sp-note !mx-4 italic">{t('competition.equipment.empty')}</p>
         ) : (
           <div className="flex flex-col gap-3 px-4 py-3">
             <p className="sp-note !m-0">
-              Sized for the biggest heat. {data.sessions} session{data.sessions === 1 ? '' : 's'} · {data.racesCounted} unique race{data.racesCounted === 1 ? '' : 's'} counted
+              {t('competition.equipment.sizing', { sessions: t('competition.equipment.sessions', { count: data.sessions }), races: t('competition.equipment.races', { count: data.racesCounted }) })}
             </p>
             {bucketOrder.filter((b) => byBucket.has(b)).map((b) => (
               <div key={b}>

@@ -1,3 +1,4 @@
+// Unused in web UI yet — reserved for iOS / upcoming wiring
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
 import { EMPTY_DRAW_UNDO_STATUS, parseDrawUndoResult, parseDrawUndoStatus } from '../lib/drawUndo';

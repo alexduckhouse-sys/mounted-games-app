@@ -38,7 +38,7 @@ describe('WeatherAt', () => {
     expect(screen.queryByText(/°/)).not.toBeInTheDocument();
     await settled();
     expect(screen.getByText('18°')).toBeInTheDocument();
-    expect(container.firstElementChild!.getAttribute('title')).toBe(`Forecast for ${new Date('2026-06-01T10:00:00.000Z').toLocaleString()}`);
+    expect(container.firstElementChild!.getAttribute('title')).toBe(`Forecast for ${new Date('2026-06-01T10:00:00.000Z').toLocaleString('en-GB')}`);
   });
 
   it('uses the fallback forecast when there is no live one', async () => {

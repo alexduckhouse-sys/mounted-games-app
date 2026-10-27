@@ -1,4 +1,5 @@
 import { Check } from 'lucide-react';
+import { useT } from '../i18n/LanguageContext';
 import './eventPages.css';
 
 /**
@@ -7,10 +8,11 @@ import './eventPages.css';
  * step, the current circle pops and finished steps get a tick. Both stop moving with reduced motion or lite mode.
  */
 export function EntryStepper({ labels, current }: { labels: string[]; current: number }) {
+  const t = useT();
   const count = labels.length;
   const progress = count > 1 ? Math.round((100 * (Math.min(current, count) - 1)) / (count - 1)) : 0;
   return (
-    <ol className="ev-stepper" aria-label="Entry steps" style={{ gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` }}>
+    <ol className="ev-stepper" aria-label={t('entries.stepper.label')} style={{ gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` }}>
       <span className="ev-line" aria-hidden="true" style={{ left: `${50 / count}%`, right: `${50 / count}%` }}>
         <span className="ev-fill" style={{ width: `${progress}%` }} />
       </span>
@@ -19,7 +21,7 @@ export function EntryStepper({ labels, current }: { labels: string[]; current: n
         const state = number < current ? 'done' : number === current ? 'cur' : 'todo';
         return (
           <li key={label} className="ev-step" data-state={state} aria-current={state === 'cur' ? 'step' : undefined}>
-            <span className="ev-dot">{state === 'done' ? <Check className="h-4 w-4" strokeWidth={3} aria-label="Done" /> : number}</span>
+            <span className="ev-dot">{state === 'done' ? <Check className="h-4 w-4" strokeWidth={3} aria-label={t('entries.stepper.done')} /> : number}</span>
             <span className="ev-step-label">{label}</span>
           </li>
         );

@@ -27,8 +27,25 @@ describe('elimination reasons', () => {
     expect(statusFor('dnf')).toBe(3);
     expect(statusFor('retired')).toBe(4);
     expect(statusFor('flag')).toBe(1);
+    expect(statusFor('obstruction')).toBe(1);
+    expect(statusFor('hatband')).toBe(1);
     expect(statusFor('unknown')).toBe(1);
     expect(ELIM_REASONS.map((r) => r.label)).toContain('Wrong course');
+    expect(ELIM_REASONS.map((r) => r.label)).toEqual(expect.arrayContaining([
+      'Obstruction',
+      'Hatband on wrong rider',
+      'Prop not replaced',
+      'Handover fault',
+      'Foot on ground',
+      'Mount / dismount line',
+      'Not mounted at finish',
+      'Outside assistance',
+      '5th rider in ring',
+      'Broken equipment',
+      'Dangerous riding',
+    ]));
+    expect(noteFor('obstruction', '')).toBe('Obstruction');
+    expect(reasonKeyOf('Hatband on wrong rider')).toBe('hatband');
   });
 });
 

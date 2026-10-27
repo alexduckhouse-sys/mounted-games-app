@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { BarChart3, ChevronLeft, Download, Mic, Monitor, Printer, QrCode as QrCodeIcon } from 'lucide-react';
 import { api } from '../../api';
 import type { PrintableDraw, PrintableResults, PrintableScoreSheets } from '../eventTools/eventToolsTypes';
@@ -12,8 +12,10 @@ import { statusLetter } from '../../lib/resultStatus';
 import '../eventTools/printEvent.css';
 import { formatPoints } from '../../lib/formatPoints';
 import { downloadCsv, safeFilename, toCsv } from '../../lib/csv';
-import { SPONSOR_TIERS, hasPlacement, logoSrc } from '../../lib/sponsors';
-import type { CompetitionDetail, ScorerLink, SponsorAdmin, SponsorTier } from '../../types';
+import { formatDurationHms, logoSrc } from '../../lib/sponsors';
+import { drawForSession, parseSessionId, scoreSheetsForSession } from './sessionPrint';
+import { SPONSOR_CSV_HEADER, buildSponsorReportRows, placeFiguresText, sponsorCsvRows, type SponsorReportRow } from './sponsorReport';
+import type { CompetitionDetail, ScorerLink } from '../../types';
 import { PageProblem } from '../../components/PageProblem';
 import { QrCode } from '../../components/QrCode';
 import { getStoredCards } from '../competition/ScoringParts';
@@ -57,136 +59,12 @@ export default function PrintEventPage() {
   return <PrintView key={`${competitionId}:${view}:${initialSponsorMode ? 'sponsors' : 'prog'}`} competitionId={competitionId} view={view} initialSponsorMode={initialSponsorMode} />;
 }
 
-interface SponsorValueRow {
-  id: number;
-  name: string;
-  logoUrl: string | null;
-  linkUrl: string | null;
-  tier: SponsorTier;
-  tierLabel: string;
-  scopeLabel: 'Event' | 'Section' | 'Arena' | 'Race' | string;
-  totalImpressions: number;
-  videoSeconds: number;
-  placements: {
-    Header: number;
-    Livestream: number;
-    Standings: number;
-    Bib: number;
-    Programme: number;
-  };
-  sponsoredTargets: string;
-}
-
-function normalizeSponsorRows(
-  rawStats: unknown,
-  rawSponsors: unknown,
-  compDetail: CompetitionDetail | null,
-): SponsorValueRow[] {
-  const statsArray: Record<string, unknown>[] = Array.isArray(rawStats)
-    ? (rawStats as Record<string, unknown>[])
-    : rawStats && typeof rawStats === 'object' && Array.isArray((rawStats as { sponsors?: unknown }).sponsors)
-      ? ((rawStats as { sponsors: Record<string, unknown>[] }).sponsors)
-      : [];
-
-  const sponsorsArray: Partial<SponsorAdmin>[] = Array.isArray(rawSponsors)
-    ? (rawSponsors as Partial<SponsorAdmin>[])
-    : [];
-
-  const byId = new Map<number, Record<string, unknown>>();
-  for (const s of sponsorsArray) {
-    if (typeof s.id === 'number') byId.set(s.id, { ...s });
-  }
-  for (const st of statsArray) {
-    const id = typeof st.id === 'number' ? st.id : typeof st.sponsorId === 'number' ? st.sponsorId : null;
-    if (id != null) {
-      byId.set(id, { ...(byId.get(id) ?? {}), ...st, id });
-    }
-  }
-
-  const sectionNames = compDetail?.sections.map((s) => s.displayName) ?? [];
-  const raceNames = Array.from(
-    new Set(
-      (compDetail?.sessions ?? [])
-        .flatMap((s) => s.heats)
-        .flatMap((h) => h.races)
-        .map((r) => r.name.trim())
-        .filter(Boolean),
-    ),
-  );
-
-  const out: SponsorValueRow[] = [];
-  for (const item of byId.values()) {
-    const id = Number(item.id ?? 0);
-    const name = String(item.name ?? 'Sponsor').trim();
-    if (!name) continue;
-    const tier: SponsorTier = item.tier === 1 || item.tier === 2 ? item.tier : 0;
-    const tierLabel = SPONSOR_TIERS.find((t) => t.tier === tier)?.label ?? 'Headline';
-    const rawScope = typeof item.scope === 'string' && item.scope.trim() ? item.scope.trim() : null;
-    const scopeLabel = rawScope ?? (tier === 0 ? 'Event' : tier === 1 ? 'Section / Arena' : 'Arena / Race');
-
-    const totalViews = typeof item.totalImpressions === 'number'
-      ? item.totalImpressions
-      : typeof item.impressions === 'number'
-        ? item.impressions
-        : typeof item.views === 'number'
-          ? item.views
-          : 0;
-    const videoSeconds = typeof item.seconds === 'number' ? item.seconds : 0;
-    const showOn = typeof item.showOn === 'number' ? item.showOn : 63;
-
-    const rawPlacements = (item.placements ?? item.placementBreakdown ?? null) as Record<string, number> | null;
-    const onHeader = hasPlacement(showOn, 'Timetable') || hasPlacement(showOn, 'Details');
-    const onLivestream = hasPlacement(showOn, 'Stream') || hasPlacement(showOn, 'BreakStream');
-    const onStandings = hasPlacement(showOn, 'Results');
-    const onProgramme = hasPlacement(showOn, 'SponsorPage');
-    const activeCount = Math.max(1, [onHeader, onLivestream, onStandings, true, onProgramme].filter(Boolean).length);
-    const baseShare = Math.floor(totalViews / activeCount);
-    const remainder = totalViews - baseShare * activeCount;
-
-    const placements = {
-      Header: rawPlacements?.Header ?? rawPlacements?.header ?? rawPlacements?.Timetable ?? (onHeader ? baseShare + remainder : 0),
-      Livestream: rawPlacements?.Livestream ?? rawPlacements?.livestream ?? rawPlacements?.Stream ?? (onLivestream ? baseShare : 0),
-      Standings: rawPlacements?.Standings ?? rawPlacements?.standings ?? rawPlacements?.Results ?? (onStandings ? baseShare : 0),
-      Bib: rawPlacements?.Bib ?? rawPlacements?.bib ?? baseShare,
-      Programme: rawPlacements?.Programme ?? rawPlacements?.programme ?? rawPlacements?.SponsorPage ?? (onProgramme ? baseShare : 0),
-    };
-
-    const matchedRaces = raceNames.filter((r) => r.toLowerCase().includes(name.toLowerCase()));
-    const explicitTargets = Array.isArray(item.sponsoredRaces)
-      ? (item.sponsoredRaces as string[]).join(', ')
-      : typeof item.sponsoredSections === 'string'
-        ? item.sponsoredSections
-        : null;
-    const sponsoredTargets = explicitTargets
-      || (matchedRaces.length > 0 ? matchedRaces.join(', ') : null)
-      || (tier === 0
-        ? `All sections (${sectionNames.length || 'Event-wide'})`
-        : sectionNames.slice(0, 2).join(', ') || 'Main Arena & Programme');
-
-    out.push({
-      id,
-      name,
-      logoUrl: typeof item.logoUrl === 'string' ? item.logoUrl : null,
-      linkUrl: typeof item.linkUrl === 'string' ? item.linkUrl : null,
-      tier,
-      tierLabel,
-      scopeLabel,
-      totalImpressions: totalViews,
-      videoSeconds,
-      placements,
-      sponsoredTargets,
-    });
-  }
-
-  return out.sort((a, b) => a.tier - b.tier || b.totalImpressions - a.totalImpressions || a.id - b.id);
-}
-
 function PrintView({ competitionId, view, initialSponsorMode = false }: { competitionId: string; view: View; initialSponsorMode?: boolean }) {
   const [data, setData] = useState<PrintableDraw | PrintableScoreSheets | PrintableResults | ResultsBook | PrintableEntries | PrintableTackCheck | { competition: CompetitionDetail } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [sponsorMode, setSponsorMode] = useState(initialSponsorMode);
-  const [sponsorRows, setSponsorRows] = useState<SponsorValueRow[]>([]);
+  const [sponsorRows, setSponsorRows] = useState<SponsorReportRow[]>([]);
   const [compDetail, setCompDetail] = useState<CompetitionDetail | null>(null);
   const [sponsorLoadedId, setSponsorLoadedId] = useState<string | null>(null);
   const loadingSponsors = sponsorMode && sponsorLoadedId !== String(competitionId ?? '');
@@ -194,6 +72,8 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
   const [linksLoadedId, setLinksLoadedId] = useState<string | null>(null);
   const loadingLinks = view === 'posters' && linksLoadedId !== String(competitionId ?? '');
   const [exportingResults, setExportingResults] = useState(false);
+  const [searchParams] = useSearchParams();
+  const sessionId = view === 'draw' || view === 'score-sheets' || view === 'results' ? parseSessionId(searchParams.get('sessionId')) : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -209,11 +89,22 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
       return () => { cancelled = true; };
     }
 
-    api.get(`/event-tools/competitions/${competitionId}/${VIEWS[view].path}`)
-      .then((response) => { if (!cancelled) setData(response.data); })
+    const base = `/event-tools/competitions/${competitionId}`;
+    if (sessionId && view === 'score-sheets') {
+      // Score sheets name their session but carry no id, so the draw says which names belong to this one.
+      Promise.all([api.get<PrintableScoreSheets>(`${base}/${VIEWS[view].path}`), api.get<PrintableDraw>(`${base}/print/draw`)])
+        .then(([sheets, draw]) => { if (!cancelled) setData(scoreSheetsForSession(sheets.data, draw.data, sessionId)); })
+        .catch((caught) => { if (!cancelled) setError(message(caught)); });
+      return () => { cancelled = true; };
+    }
+    const request = sessionId && view === 'results'
+      ? api.get(`${base}/${VIEWS[view].path}`, { params: { sessionId } })
+      : api.get(`${base}/${VIEWS[view].path}`);
+    request
+      .then((response) => { if (!cancelled) setData(sessionId && view === 'draw' ? drawForSession(response.data as PrintableDraw, sessionId) : response.data); })
       .catch((caught) => { if (!cancelled) setError(message(caught)); });
     return () => { cancelled = true; };
-  }, [competitionId, view, attempt]);
+  }, [competitionId, view, attempt, sessionId]);
 
   useEffect(() => {
     if (view !== 'posters' || !competitionId) return;
@@ -248,7 +139,7 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
       .then(([rawStats, rawSponsors, comp]) => {
         if (cancelled) return;
         setCompDetail(comp);
-        setSponsorRows(normalizeSponsorRows(rawStats, rawSponsors, comp));
+        setSponsorRows(buildSponsorReportRows(rawStats, rawSponsors));
       })
       .finally(() => {
         if (!cancelled) setSponsorLoadedId(String(competitionId));
@@ -271,33 +162,7 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
       : 0);
 
   function exportSponsorCsv() {
-    const header = [
-      'Sponsor',
-      'Tier',
-      'Scope (Event / Section / Arena / Race)',
-      'Total Impressions (SponsorExposure)',
-      'Video Seconds',
-      'Header Impressions',
-      'Livestream Impressions',
-      'Standings Impressions',
-      'Bib Impressions',
-      'Programme Impressions',
-      'Sponsored Races / Sections',
-    ];
-    const rows = sponsorRows.map((row) => [
-      row.name,
-      row.tierLabel,
-      row.scopeLabel,
-      row.totalImpressions,
-      row.videoSeconds,
-      row.placements.Header,
-      row.placements.Livestream,
-      row.placements.Standings,
-      row.placements.Bib,
-      row.placements.Programme,
-      row.sponsoredTargets,
-    ]);
-    downloadCsv(`${safeFilename(competition.name || 'competition')}-sponsor-proof-of-value.csv`, toCsv(header, rows));
+    downloadCsv(`${safeFilename(competition.name || 'competition')}-sponsor-report.csv`, toCsv(SPONSOR_CSV_HEADER, sponsorCsvRows(sponsorRows)));
   }
 
   async function exportOfficialResultsCsv() {
@@ -309,7 +174,16 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
         api.get<PrintableScoreSheets>(`/event-tools/competitions/${competitionId}/print/score-sheets`).catch(() => null),
       ]);
 
-      const storedCards = getStoredCards(Number(competitionId));
+      const storedCards: Record<number, 'yellow' | 'red' | null> = { ...getStoredCards(Number(competitionId)) };
+      const teamMap = new Map<number, string>();
+      if (compDetail?.teams) {
+        for (const t of compDetail.teams) {
+          teamMap.set(t.id, t.displayName);
+          if (t.refereeCard === 'yellow' || t.refereeCard === 'red') {
+            storedCards[t.id] = t.refereeCard;
+          }
+        }
+      }
       const header = [
         'Section',
         'Session',
@@ -324,11 +198,6 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
         'Notes',
       ];
       const rows: (string | number)[][] = [];
-
-      const teamMap = new Map<number, string>();
-      if (compDetail?.teams) {
-        for (const t of compDetail.teams) teamMap.set(t.id, t.displayName);
-      }
 
       if (resultsRes?.data?.sections) {
         for (const section of resultsRes.data.sections) {
@@ -430,9 +299,15 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
           onClick={() => setSponsorMode((v) => !v)}
           className="mg-btn mg-btn-secondary"
         >
-          <BarChart3 className="h-4 w-4" />Sponsor value report
+          <BarChart3 className="h-4 w-4" />Sponsor report
         </button>
         <button className="mg-btn mg-btn-primary" onClick={() => window.print()}><Printer className="h-4 w-4" />Print</button>
+        {sessionId && !sponsorMode && (
+          <span className="flex items-center gap-2 text-sm text-[rgb(var(--mg-muted))]">
+            One session only.
+            <Link className="mg-btn mg-btn-secondary" to={`/event-tools/${competitionId}/print/${view}`} replace>Show every session</Link>
+          </span>
+        )}
       </div>
       <header className="event-print-header">
         <div className="event-print-header-text">
@@ -440,7 +315,7 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
           <h1>{competition.name}</h1>
           <p>{date(competition.startDate)}{competition.location ? ` · ${competition.location}` : ''}</p>
           {reference && <p className="event-print-ref">Reference: {reference}</p>}
-          <p className="event-print-kind">{sponsorMode ? 'Sponsor Proof-of-Value Report' : VIEWS[view].title}</p>
+          <p className="event-print-kind">{sponsorMode ? 'Sponsor report' : VIEWS[view].title}</p>
         </div>
         {showQr && <div className="event-print-qr-box">
           <QrCode value={`${window.location.origin}/competitions/${competition.id}/toplists`} label="QR code for the live scores" className="event-print-qr-small" />
@@ -498,81 +373,75 @@ function SponsorProofOfValueSection({
   venue: string;
   totalTeams: number;
   totalSections: number;
-  rows: SponsorValueRow[];
+  rows: SponsorReportRow[];
   loading: boolean;
   onPrint: () => void;
   onExportCsv: () => void;
 }) {
-  const totalImpressions = useMemo(
-    () => rows.reduce((sum, r) => sum + r.totalImpressions, 0),
-    [rows],
-  );
+  const totalViews = useMemo(() => rows.reduce((sum, r) => sum + r.totalViews, 0), [rows]);
+  const totalSeconds = useMemo(() => rows.reduce((sum, r) => sum + r.totalSeconds, 0), [rows]);
 
   return (
-    <section aria-label="Sponsor Proof-of-Value Report" className="event-print-section">
+    <section aria-label="Sponsor report" className="event-print-section">
       <div className="event-print-controls mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] p-3">
         <div>
           <strong className="block text-sm font-bold text-[rgb(var(--mg-heading))]">
-            1-Click Sponsor Proof-of-Value Report
+            Sponsor report
           </strong>
           <span className="text-xs text-[rgb(var(--mg-muted))]">
-            Verified SponsorExposure impressions across Header, Livestream, Standings, Bib &amp; Programme placements.
+            How often each sponsor was shown, and for how long on the live video.
           </span>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" className="mg-btn mg-btn-secondary" onClick={onExportCsv}>
-            <Download className="h-4 w-4" aria-hidden="true" /> Export Sponsor CSV
+            <Download className="h-4 w-4" aria-hidden="true" /> Download as CSV
           </button>
           <button type="button" className="mg-btn mg-btn-primary" onClick={onPrint}>
-            <Printer className="h-4 w-4" aria-hidden="true" /> Print / Save PDF
+            <Printer className="h-4 w-4" aria-hidden="true" /> Print or save as PDF
           </button>
         </div>
       </div>
 
-      {/* Event Summary Grid */}
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-lg border border-[rgb(var(--mg-rule-soft))] p-3">
-          <span className="block text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">Competition &amp; Date</span>
+          <span className="block text-xs font-bold text-[rgb(var(--mg-muted))]">Event and date</span>
           <strong className="mt-0.5 block text-sm font-bold text-[rgb(var(--mg-ink))]">{competitionName}</strong>
           <span className="block text-xs text-[rgb(var(--mg-body))]">{startDate}</span>
         </div>
         <div className="rounded-lg border border-[rgb(var(--mg-rule-soft))] p-3">
-          <span className="block text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">Venue</span>
+          <span className="block text-xs font-bold text-[rgb(var(--mg-muted))]">Venue</span>
           <strong className="mt-0.5 block text-sm font-bold text-[rgb(var(--mg-ink))]">{venue}</strong>
         </div>
         <div className="rounded-lg border border-[rgb(var(--mg-rule-soft))] p-3">
-          <span className="block text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">Teams &amp; Sections</span>
+          <span className="block text-xs font-bold text-[rgb(var(--mg-muted))]">Teams and sections</span>
           <strong className="mt-0.5 block text-sm font-bold text-[rgb(var(--mg-ink))]">
             {totalTeams} teams · {totalSections} sections
           </strong>
         </div>
         <div className="rounded-lg border border-[rgb(var(--mg-rule-soft))] p-3">
-          <span className="block text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">Total Impressions</span>
+          <span className="block text-xs font-bold text-[rgb(var(--mg-muted))]">Total views</span>
           <strong className="mt-0.5 block text-lg font-bold tabular-nums text-[rgb(var(--mg-heading))]">
-            {totalImpressions.toLocaleString('en-GB')}
+            {totalViews.toLocaleString('en-GB')}
           </strong>
-          <span className="block text-xs text-[rgb(var(--mg-muted))]">SponsorExposure views</span>
+          <span className="block text-xs text-[rgb(var(--mg-muted))]">{formatDurationHms(totalSeconds)} on video</span>
         </div>
       </div>
 
       {loading ? (
-        <p role="status" className="event-print-note">Loading sponsor proof-of-value metrics…</p>
+        <p role="status" className="event-print-note">Loading the sponsor figures…</p>
       ) : rows.length === 0 ? (
-        <p className="event-print-empty">No sponsors recorded for this competition yet.</p>
+        <p className="event-print-empty">No sponsors have been added to this event yet.</p>
       ) : (
         <div className="event-print-table-wrap">
           <table>
             <thead>
               <tr>
                 <th>Sponsor</th>
-                <th>Tier &amp; Scope (Event / Section / Arena / Race)</th>
-                <th className="event-print-cell">Total Impressions</th>
-                <th className="event-print-cell">Header</th>
-                <th className="event-print-cell">Livestream</th>
-                <th className="event-print-cell">Standings</th>
-                <th className="event-print-cell">Bib</th>
-                <th className="event-print-cell">Programme</th>
-                <th>Sponsored Races &amp; Sections</th>
+                <th>Level</th>
+                <th className="event-print-cell">Views</th>
+                <th className="event-print-cell">On video</th>
+                <th>Switched on for</th>
+                <th>Views by place</th>
               </tr>
             </thead>
             <tbody>
@@ -593,23 +462,11 @@ function SponsorProofOfValueSection({
                       </div>
                     </div>
                   </td>
-                  <td>
-                    <span className="font-semibold">{row.tierLabel}</span> · <span>{row.scopeLabel}</span>
-                  </td>
-                  <td className="event-print-cell">
-                    <strong>{row.totalImpressions.toLocaleString('en-GB')}</strong>
-                    {row.videoSeconds >= 60 && (
-                      <span className="block text-xs text-[rgb(var(--mg-muted))]">
-                        {Math.round(row.videoSeconds / 60)}m video
-                      </span>
-                    )}
-                  </td>
-                  <td className="event-print-cell">{row.placements.Header.toLocaleString('en-GB')}</td>
-                  <td className="event-print-cell">{row.placements.Livestream.toLocaleString('en-GB')}</td>
-                  <td className="event-print-cell">{row.placements.Standings.toLocaleString('en-GB')}</td>
-                  <td className="event-print-cell">{row.placements.Bib.toLocaleString('en-GB')}</td>
-                  <td className="event-print-cell">{row.placements.Programme.toLocaleString('en-GB')}</td>
-                  <td>{row.sponsoredTargets}</td>
+                  <td>{row.tierLabel}</td>
+                  <td className="event-print-cell"><strong>{row.totalViews.toLocaleString('en-GB')}</strong></td>
+                  <td className="event-print-cell">{row.totalSeconds > 0 ? formatDurationHms(row.totalSeconds) : 'None'}</td>
+                  <td>{row.switchedOn.join(', ') || 'Not recorded'}</td>
+                  <td>{placeFiguresText(row)}</td>
                 </tr>
               ))}
             </tbody>

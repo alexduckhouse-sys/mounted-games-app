@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useT } from '../i18n/LanguageContext';
 
 /** A ring of pleats: points alternating between the outer and inner radius. */
 function pleats(cx: number, cy: number, outer: number, inner: number, count: number): string {
@@ -44,12 +45,13 @@ export function Rosette({ width, tails, year }: { width: number; tails?: [string
  * "You're entered". The swing is CSS, so lite mode and reduced motion still it.
  */
 export function EntryRosette({ team, section, year, children }: { team: string; section: string; year: number; children?: ReactNode }) {
+  const t = useT();
   // Long names are cut so they fit on a ribbon.
   const fit = (text: string) => (text.length > 18 ? `${text.slice(0, 17)}…` : text);
   return (
     <div className="mg-entry-rosette" role="status">
       <span className="mg-entry-rosette-hang"><Rosette width={120} tails={[fit(team), fit(section)]} year={year} /></span>
-      <strong>You're entered</strong>
+      <strong>{t('entries.rosette.entered')}</strong>
       <span className="sr-only">{team}, {section}</span>
       {children && <span className="mg-entry-rosette-note">{children}</span>}
     </div>

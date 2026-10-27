@@ -1,4 +1,11 @@
 import { ALL_BOTTOM_TAB_OPTIONS, DEFAULT_BOTTOM_TABS, MAX_BOTTOM_TABS, MIN_BOTTOM_TABS, type BottomTabId } from './userPrefs';
+import { activeLocale, tr } from '../i18n/translate';
+import type { MessageKey } from '../i18n/en';
+
+/** The name of a bottom bar tab in the language in use. */
+export function tabLabel(id: BottomTabId): string {
+  return tr(`shell.tab.${id}` as MessageKey);
+}
 
 /** The shortest and longest heat reminder, and the size of each step, in minutes. */
 export const REMINDER_MIN = 5;
@@ -37,9 +44,10 @@ export function tabsFromItems(items: readonly TabItem[]): BottomTabId[] {
  */
 export function tabCountFlag(count: number): string | null {
   if (count < MIN_BOTTOM_TABS) {
-    const usual = DEFAULT_BOTTOM_TABS.map((id) => ALL_BOTTOM_TAB_OPTIONS.find((option) => option.id === id)?.label ?? id);
-    return `Pick at least ${MIN_BOTTOM_TABS} tabs. With fewer, the bottom bar shows ${usual.slice(0, -1).join(', ')} and ${usual[usual.length - 1]}.`;
+    const usual = DEFAULT_BOTTOM_TABS.map((id) => (ALL_BOTTOM_TAB_OPTIONS.some((option) => option.id === id) ? tabLabel(id) : id));
+    const tabs = new Intl.ListFormat(activeLocale(), { style: 'long', type: 'conjunction' }).format(usual);
+    return tr('shell.settings.tooFewTabs', { min: MIN_BOTTOM_TABS, tabs });
   }
-  if (count > MAX_BOTTOM_TABS) return `Only the first ${MAX_BOTTOM_TABS} tabs that are on will fit.`;
+  if (count > MAX_BOTTOM_TABS) return tr('shell.settings.tooManyTabs', { max: MAX_BOTTOM_TABS });
   return null;
 }

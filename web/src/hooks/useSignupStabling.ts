@@ -1,3 +1,4 @@
+// Unused in web UI yet — reserved for iOS / upcoming wiring
 import { useCallback, useState } from 'react';
 import { api } from '../api';
 import type { SectionSignup, StablingSummary, UpdateSignupStablingInput } from '../types';

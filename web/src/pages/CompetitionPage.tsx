@@ -29,6 +29,7 @@ import { displaySectionName } from '../lib/section';
 import { LIVE_SAVED_COPY_NOTICE_AFTER_MS, lastUpdatedText, readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, shouldNoticeSavedCopy, writeSavedCopy } from '../offline/savedCopies';
 import { PageSkeleton, TimetableSkeleton, ToplistSkeleton } from '../components/Skeletons';
 import { competitionPhase } from '../lib/competitionPhase';
+import { useLanguage, useT } from '../i18n/LanguageContext';
 
 const BANNER_TAG = 'banner';
 
@@ -48,13 +49,15 @@ function addAnnouncement(current: ChatMessage[], message: ChatMessage) {
 export function CompetitionPage() {
   const { id } = useParams<{ id: string }>();
   const competitionId = id ? Number(id) : null;
+  const t = useT();
   if (competitionId == null || !Number.isSafeInteger(competitionId) || competitionId < 1) {
-    return <p className="pt-6"><Link className="mg-text-link" to="/events">Select a competition</Link></p>;
+    return <p className="pt-6"><Link className="mg-text-link" to="/events">{t('competition.page.select')}</Link></p>;
   }
   return <CompetitionContent key={competitionId} competitionId={competitionId} />;
 }
 
 function CompetitionContent({ competitionId }: { competitionId: number }) {
+  const t = useT();
   const savedKey = savedCopyKeys.competition(competitionId);
   // Open straight away on the copy this phone saw last, then refresh it from the server.
   const [initial] = useState(() => readSavedCopy<CompetitionDetail>(savedKey));
@@ -174,6 +177,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   }, [competitionId, setExtras, clear]);
 
   const { setItems, setWatchCompetitionId } = useTicker();
+  const { lang } = useLanguage();
   const [ready, setReady] = useState(0);
   const streamState = useCompetitionStreams(competitionId, ready);
   const overlayState = useStreamOverlay(competitionId, ready);
@@ -216,7 +220,8 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
       : announcements;
     setItems(data ? tickerItems(data.sessions, tickerAnnouncements, now) : []);
     return () => setItems([]);
-  }, [data, announcements, now, setItems]);
+    // The lines are worded in the chosen language, so a change of language rebuilds them.
+  }, [data, announcements, now, setItems, lang]);
 
   const { connected, invoke, reconnect } = useLiveHub(competitionId, {
     onReady: () => {
@@ -322,8 +327,8 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   useEffect(() => () => setStatus(null), [setStatus]);
 
   if (error && !data) return (
-    <PageProblem title="Couldn’t load this competition" primaryLabel="Try again" onPrimary={load} secondaryLabel="Competitions" secondaryTo="/events">
-      Check your signal and try again, or pick another competition.
+    <PageProblem title={t('competition.page.loadFailed.title')} primaryLabel={t('common.tryAgain')} onPrimary={load} secondaryLabel={t('competition.page.competitions')} secondaryTo="/events">
+      {t('competition.page.loadFailed.body')}
     </PageProblem>
   );
   if (!data) {
@@ -338,13 +343,13 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
     <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamTelemetry, lastStreamCommand, streamingEnabled: streamState.streamingEnabled, streamingChecked: streamState.streamingChecked, invoke, ready, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save, scoreCards, sponsors: sponsorFeed.sponsors, reloadSponsors: sponsorFeed.reloadSponsors, sponsorSkip: sponsorFeed.sponsorSkip }}>
       {/* The page fades in over its loading placeholder rather than snapping into place. */}
       <div className="mg-settle flex flex-col gap-4">
-        <div className="pt-4 empty:hidden -mb-4 has-[+.rf-page]:mb-0"><ScoreOutboxPanel competitionId={data.id} /></div>
+        <div className="pt-4 empty:hidden -mb-4 has-[+.rf-page]:mb-0"><ScoreOutboxPanel competitionId={data.id} viaLink={false} /></div>
         <Outlet />
-        {partial && <Notice tone="info" className="mx-auto w-full max-w-xl">Loading the rest of the timetable…</Notice>}
+        {partial && <Notice tone="info" className="mx-auto w-full max-w-xl">{t('competition.page.loadingRest')}</Notice>}
         {/* Connection trouble is shown by the pill in the header; this only explains a saved copy. */}
         {showSavedNotice && (
-          <Notice tone="info" icon={Clock} className="mx-auto w-full max-w-xl" actionLabel="Refresh" onAction={load}>
-            {`${lastUpdatedText(savedAt)}. ${refreshing ? 'Checking for changes…' : 'We’ll refresh when you’re back online.'}`}
+          <Notice tone="info" icon={Clock} className="mx-auto w-full max-w-xl" actionLabel={t('common.refresh')} onAction={load}>
+            {`${lastUpdatedText(savedAt)}. ${refreshing ? t('competition.page.checking') : t('competition.page.willRefresh')}`}
           </Notice>
         )}
       </div>

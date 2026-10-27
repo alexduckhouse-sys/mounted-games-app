@@ -20,6 +20,7 @@ import type { DeclarationForm, Heat, Session, StandingRow, Team } from '../../ty
 import { useCompetition } from './context';
 import { Notice } from '../../components/Notice';
 import { DeskOverlays } from './streamControls/DeskOverlays';
+import { CommentatorBriefingCard } from './CommentatorBriefingCard';
 
 type DeskMode = 'split' | 'lanes' | 'standings';
 
@@ -558,6 +559,21 @@ export function CommentaryDeskPage() {
               </ol>
             )}
           </section>
+
+          {activeHeatItem && (
+            <CommentatorBriefingCard
+              competitionId={competition.id}
+              session={activeHeatItem.session}
+              heat={activeHeatItem.heat}
+              allSessions={competition.sessions}
+              standings={standings}
+              teams={competition.teams}
+              declarations={declarations}
+              finalistCount={section?.finalistCount}
+              laneOrder={activeLanes?.lanes.map((l) => ({ teamId: l.entry.teamId, lane: l.lane, sitting: l.sitting }))}
+              refreshTick={refreshTick}
+            />
+          )}
 
           <section aria-label="Up next" className="mg-card overflow-hidden">
             <div className="border-b-2 border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-ground))] px-4 py-3">

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Info, TriangleAlert, X, type LucideIcon } from 'lucide-react';
+import { useT } from '../i18n/LanguageContext';
 
 export interface NoticeProps {
   /** `info` for something worth knowing (blue-grey); `problem` for something that went wrong or needs care (amber). */
@@ -29,7 +30,8 @@ export interface NoticeProps {
  * (saved copies, loading, closed entries, deadlines); a problem is amber and should say what to do next, with
  * "Try again" where a retry exists. Any action is a small outlined pill in the strip's own colour.
  */
-export function Notice({ tone = 'problem', icon, actionLabel, onAction, actionTo, actionDisabled, onDismiss, dismissLabel = 'Dismiss', role, extra, className = '', id, children }: NoticeProps) {
+export function Notice({ tone = 'problem', icon, actionLabel, onAction, actionTo, actionDisabled, onDismiss, dismissLabel, role, extra, className = '', id, children }: NoticeProps) {
+  const t = useT();
   const Icon = icon ?? (tone === 'info' ? Info : TriangleAlert);
   const live = role === undefined ? (tone === 'info' ? 'status' : 'alert') : role ?? undefined;
   return (
@@ -41,7 +43,7 @@ export function Notice({ tone = 'problem', icon, actionLabel, onAction, actionTo
         {actionLabel && !actionTo && <button type="button" className="kit-strip-act" onClick={onAction} disabled={actionDisabled}>{actionLabel}</button>}
         {extra}
       </div>
-      {onDismiss && <button type="button" className="kit-strip-x" aria-label={dismissLabel} onClick={onDismiss}><X aria-hidden="true" /></button>}
+      {onDismiss && <button type="button" className="kit-strip-x" aria-label={dismissLabel ?? t('shell.notice.dismiss')} onClick={onDismiss}><X aria-hidden="true" /></button>}
     </div>
   );
 }

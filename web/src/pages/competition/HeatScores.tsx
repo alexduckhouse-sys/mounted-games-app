@@ -14,12 +14,14 @@ import { timetableRows } from '../../lib/timetableRows';
 import { useCompactPageBar } from '../../components/CompactPageBarContext';
 import { RaceRulesButton } from '../../components/RaceRulesButton';
 import { parseBibAndFlag } from '../../lib/bib';
-import { statusLabel, statusLetter } from '../../lib/resultStatus';
+import { statusLetter } from '../../lib/resultStatus';
 import { useFavourites } from '../../hooks/useFavourites';
 import { displayLaneFor, lanesOf, sitsOutOf, type LaneRules } from './laneRules';
 import { TeamCardBadge, getStoredCards, parseRefereeCard, useCardsEnabled, type RefereeCard } from './ScoringParts';
 import './heat.css';
 import { formatPoints } from '../../lib/formatPoints';
+import { useLanguage } from '../../i18n/LanguageContext';
+import { resultStatusText } from '../../lib/toplistText';
 
 interface Cell {
   points: number;
@@ -60,6 +62,7 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
   /** Tint this team's row and mark it with a bar on the left. */
   highlightTeamId?: number | null;
 }) {
+  const { t, locale } = useLanguage();
   const { competition, streams } = useCompetition();
   const [showRules, setShowRules] = useState(false);
   const [cardsTick, setCardsTick] = useState(0);
@@ -130,19 +133,19 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
   const heatLabel = heat
     ? isRaceFinals
       ? (columns.length === 1 ? columns[0].label : session.name)
-      : heat.label || `Heat ${index + 1}`
+      : heat.label || t('competition.timetable.heat', { n: index + 1 })
     : session.name;
   const status = row?.status ?? (session.status === 2 ? 'finished' : session.status === 1 ? 'live' : 'on-time');
   const finished = status === 'finished';
   const runningIndex = status === 'live' ? columns.findIndex((col) => col.roundHeats ? col.roundHeats.some((h) => h.races.some((r) => !r.isComplete)) : !col.race.isComplete) : -1;
-  const time = row?.effective ? row.effective.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : null;
+  const time = row?.effective ? row.effective.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : null;
   const runningRace = runningIndex >= 0 ? columns[runningIndex].race : null;
   const tableMeta = status === 'live' && runningRace
-    ? `Race ${runningIndex + 1} of ${columns.length} · ${runningRace.name}`
+    ? t('competition.heat.raceOf', { n: runningIndex + 1, total: columns.length, name: runningRace.name })
     : finished
-      ? [time, 'Final result'].filter(Boolean).join(' · ')
-      : time ? `Starts ${time}${status === 'late' && row ? ` · running ${formatDelayDuration(row.delayMinutes)} late` : ''}` : 'Start time to be confirmed';
-  const compactSubtitle = [section ? `${section} heats` : 'Heats', session.arenaName?.trim()].filter(Boolean).join(' · ');
+      ? [time, t('competition.heat.finalResult')].filter(Boolean).join(' · ')
+      : time ? (status === 'late' && row ? t('competition.heat.startsLate', { time, delay: formatDelayDuration(row.delayMinutes) }) : t('competition.heat.starts', { time })) : t('competition.heat.startTbc');
+  const compactSubtitle = [section ? t('competition.heat.sectionHeats', { section }) : t('competition.scoring.heats'), session.arenaName?.trim()].filter(Boolean).join(' · ');
   const compactBadge = status === 'live' ? 'live' : finished ? 'finished' : 'next';
 
   const laneRules = useMemo<LaneRules>(
@@ -158,6 +161,9 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
   const carriedForwardByTeam = useMemo(() => {
     const map = new Map<number, number>();
     if (!isFinalHeat) return map;
+    // A section that starts its finals from zero adds nothing, so the heat table agrees with the official standings.
+    const section = competition.sections?.find((x) => x.id === session.competitionSectionId);
+    if (section?.carryPointsIntoFinal === false) return map;
     for (const s of competition.sessions) {
       if ((s.kind ?? (s.isBreak ? 1 : 0)) !== 0) continue;
       if (session.competitionSectionId != null && s.competitionSectionId != null && s.competitionSectionId !== session.competitionSectionId) continue;
@@ -172,7 +178,7 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
       }
     }
     return map;
-  }, [competition.sessions, heat?.id, isFinalHeat, session.competitionSectionId]);
+  }, [competition.sections, competition.sessions, heat?.id, isFinalHeat, session.competitionSectionId]);
 
   const showCarriedForward = useMemo(
     () => isFinalHeat && [...carriedForwardByTeam.values()].some((pts) => pts > 0),
@@ -217,10 +223,10 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
             const pts = finalResults.reduce((s, r) => s + r.points, 0);
             const elim = finalResults.some((r) => r.eliminated && r.points === 0);
             const stat = finalResults.find((r) => r.eliminated)?.status;
-            cells.set(cellKey, { points: pts, eliminated: elim, sitOut: false, status: stat, scored: true, stageBadge: 'Final' });
+            cells.set(cellKey, { points: pts, eliminated: elim, sitOut: false, status: stat, scored: true, stageBadge: t('competition.heat.stageFinal') });
           } else if (finalHeat?.entries.some((e) => e.teamId === team.id)) {
             const qPts = qualResults.reduce((s, r) => s + r.points, 0);
-            cells.set(cellKey, { points: qPts, eliminated: false, sitOut: false, scored: false, stageBadge: 'Final' });
+            cells.set(cellKey, { points: qPts, eliminated: false, sitOut: false, scored: false, stageBadge: t('competition.heat.stageFinal') });
           } else if (qualResults.length > 0) {
             const pts = qualResults.reduce((s, r) => s + r.points, 0);
             const elim = qualResults.some((r) => r.eliminated && r.points === 0);
@@ -278,9 +284,9 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
       let laneLabel: string | null = null;
       if (!isRaceFinals && team.entry) {
         const d = displayLaneFor(heat, team.entry, activeRaceIdx, laneRules);
-        laneLabel = d === 'S' ? 'Sit out' : `Lane ${d}`;
+        laneLabel = d === 'S' ? t('competition.heat.sitOut') : t('competition.toplist.lane', { n: d });
       } else if (team.lane > 0 && team.lane < Number.MAX_SAFE_INTEGER) {
-        laneLabel = `Lane ${team.lane}`;
+        laneLabel = t('competition.toplist.lane', { n: team.lane });
       }
 
       let card: RefereeCard = cardsEnabled ? (storedCards[team.id] ?? null) : null;
@@ -323,7 +329,7 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
       position: sortByPoints ? 1 + list.findIndex((other) => other.total === team.total) : i + 1,
     }));
     return { teams: ranked, cells, anyScored };
-  }, [heat, heats, isRaceFinals, columns, finished, runningIndex, laneRules, competition.id, favHook, showCarriedForward, carriedForwardByTeam, cardsTick, cardsEnabled]);
+  }, [heat, heats, isRaceFinals, columns, finished, runningIndex, laneRules, competition.id, favHook, showCarriedForward, carriedForwardByTeam, cardsTick, cardsEnabled, t]);
 
   const manyRaces = columns.length >= 6;
   // When a race re-ranks the heat, climbers swell and lift and big climbs sparkle.
@@ -340,11 +346,11 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
           badge={compactBadge}
         />
       )}
-      {!embedded && <h1 className="sr-only">{section ? `${section} ${heatLabel} scores` : `${heatLabel} scores`}</h1>}
+      {!embedded && <h1 className="sr-only">{t('competition.heat.scoresTitle', { name: section ? `${section} ${heatLabel}` : heatLabel })}</h1>}
 
-      {!heat ? <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">No heats in this session yet.</p> : (
-        <section aria-label="Scores" className={bare ? 'overflow-hidden' : 'mg-card overflow-hidden'}>
-          {grid.teams.length === 0 ? <p className="p-4 text-[rgb(var(--mg-muted))]">No teams in this heat yet.</p> : (
+      {!heat ? <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">{t('competition.heat.noHeats')}</p> : (
+        <section aria-label={t('competition.scoring.scores')} className={bare ? 'overflow-hidden' : 'mg-card overflow-hidden'}>
+          {grid.teams.length === 0 ? <p className="p-4 text-[rgb(var(--mg-muted))]">{t('competition.heat.noTeams')}</p> : (
             <div className="overflow-x-auto">
               <table className={`heat-grid${manyRaces ? ' heat-grid-many' : ''}`} style={{ minWidth }}>
                 <thead>
@@ -356,22 +362,22 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
                         <span className="heat-title-name">{heatLabel}</span>
                         <span className={`heat-title-meta ${status === 'live' ? 'heat-title-meta-live' : status === 'late' ? 'heat-title-meta-late' : ''}`}>{tableMeta}</span>
                       </div>
-                      <span>Team</span>
+                      <span>{t('competition.toplist.team')}</span>
                     </th>
                     {showCarriedForward && (
-                      <th scope="col" className="heat-race heat-cf-head" title="Carried forward">
-                        <span className="heat-name">CF<span className="sr-only"> (Carried forward)</span></span>
+                      <th scope="col" className="heat-race heat-cf-head" title={t('competition.heat.carried')}>
+                        <span className="heat-name">CF<span className="sr-only"> ({t('competition.heat.carried')})</span></span>
                       </th>
                     )}
                     {columns.map(({ key, race, label }, i) => (
                       <th key={key} scope="col" className="heat-race" title={label}>
                         {(i > 0 || showCarriedForward) && <span aria-hidden="true" className="heat-sep" />}
-                        <RaceRulesButton raceName={race.name} className={`heat-name ${i === runningIndex ? 'heat-name-running' : ''}`} label={<>{label}{i === runningIndex && <span className="sr-only"> (running)</span>}</>} />
+                        <RaceRulesButton raceName={race.name} className={`heat-name ${i === runningIndex ? 'heat-name-running' : ''}`} label={<>{label}{i === runningIndex && <span className="sr-only"> ({t('competition.heat.running')})</span>}</>} />
                       </th>
                     ))}
                     <th scope="col" className="heat-pts">
                       {(columns.length > 0 || showCarriedForward) && <span aria-hidden="true" className="heat-sep" />}
-                      Pts
+                      {t('competition.toplist.pts')}
                     </th>
                   </tr>
                 </thead>
@@ -381,7 +387,7 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
                     return (
                       // Rows slide to their new places when a race result re-ranks the heat.
                       <motion.tr key={team.id} layout="position" transition={{ layout: { duration: 0.5, ease: EASE_OUT } }} data-rank-id={team.id} className={[team.isFav ? 'heat-row-fav' : '', team.id === highlightTeamId ? 'heat-row-me' : ''].filter(Boolean).join(' ') || undefined} data-followed={team.isFav ? 'true' : undefined} aria-current={team.id === highlightTeamId ? 'true' : undefined}>
-                        {finished && <td className="heat-rank-cell"><span className="sr-only">Position </span>{team.position}</td>}
+                        {finished && <td className="heat-rank-cell"><span className="sr-only">{t('competition.heat.position')} </span>{team.position}</td>}
                         <th scope="row" className="heat-team" title={team.name}>
                           <Link to={`/competitions/${competition.id}/teams/${team.id}`} className="heat-team-link">
                             <span data-grow="start" className={`heat-team-name${team.name.length > 16 || manyRaces ? ' heat-team-name-long' : ''}`}>
@@ -394,15 +400,15 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
                           </Link>
                         </th>
                         {showCarriedForward && (
-                          <td className="heat-cell heat-cell-first heat-cf" title="Carried forward">{formatPoints(team.carriedForward)}</td>
+                          <td className="heat-cell heat-cell-first heat-cf" title={t('competition.heat.carried')}>{formatPoints(team.carriedForward)}</td>
                         )}
                         {columns.map((col, i) => {
                           const cell = grid.cells.get(`${team.id}|${col.key}`);
                           return <td key={col.key} className={`heat-cell ${i === 0 && !showCarriedForward ? 'heat-cell-first' : ''}`}>
-                            {cell == null ? <><span aria-hidden="true" className="heat-dash">–</span><span className="sr-only">Not raced yet</span></>
-                              : cell.sitOut ? <><span aria-hidden="true" className="heat-dash sitout">S</span><span className="sr-only">Sat out this race</span></>
+                            {cell == null ? <><span aria-hidden="true" className="heat-dash">–</span><span className="sr-only">{t('competition.heat.notRaced')}</span></>
+                              : cell.sitOut ? <><span aria-hidden="true" className="heat-dash sitout">S</span><span className="sr-only">{t('competition.heat.satOut')}</span></>
                               : !cell.scored && cell.stageBadge ? <span className="heat-stage-badge">{cell.stageBadge}</span>
-                              : cell.eliminated ? <><span aria-hidden="true" className="heat-elim">{statusLetter(true, cell.status)}</span><span className="sr-only">{statusLabel(true, cell.status)}</span></>
+                              : cell.eliminated ? <><span aria-hidden="true" className="heat-elim">{statusLetter(true, cell.status)}</span><span className="sr-only">{resultStatusText(true, cell.status, t)}</span></>
                               : formatPoints(cell.points)}
                           </td>;
                         })}
@@ -419,15 +425,15 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
 
       {!embedded && (finished ? (
         <div className="grid grid-cols-2 gap-2.5">
-          {session.competitionSectionId != null && <Link to={`/competitions/${competition.id}/toplists?section=${session.competitionSectionId}`} className="mg-btn mg-btn-primary">Toplist</Link>}
+          {session.competitionSectionId != null && <Link to={`/competitions/${competition.id}/toplists?section=${session.competitionSectionId}`} className="mg-btn mg-btn-primary">{t('competition.scoring.toplist')}</Link>}
           {nextHeat
-            ? <Link to={`/competitions/${competition.id}/session/${session.id}?heat=${nextHeat.id}`} className="mg-btn mg-btn-secondary">{nextHeat.label || `Heat ${index + 2}`}<ChevronRight aria-hidden="true" className="h-4 w-4" /></Link>
-            : <Link to={`/competitions/${competition.id}`} className="mg-btn mg-btn-secondary">Timetable</Link>}
+            ? <Link to={`/competitions/${competition.id}/session/${session.id}?heat=${nextHeat.id}`} className="mg-btn mg-btn-secondary">{nextHeat.label || t('competition.timetable.heat', { n: index + 2 })}<ChevronRight aria-hidden="true" className="h-4 w-4" /></Link>
+            : <Link to={`/competitions/${competition.id}`} className="mg-btn mg-btn-secondary">{t('competition.timetable.title')}</Link>}
         </div>
       ) : (
         <div className="flex gap-2.5">
-          {canWatch && <Link to={`/competitions/${competition.id}/chat`} className="mg-btn mg-btn-primary flex-1">Watch stream</Link>}
-          {session.competitionSectionId != null && <Link to={`/competitions/${competition.id}/toplists?section=${session.competitionSectionId}`} className={`mg-btn flex-1 ${canWatch ? 'mg-btn-secondary' : 'mg-btn-primary'}`}>{section ? `${section} toplist` : 'Toplist'}</Link>}
+          {canWatch && <Link to={`/competitions/${competition.id}/chat`} className="mg-btn mg-btn-primary flex-1">{t('competition.heat.watch')}</Link>}
+          {session.competitionSectionId != null && <Link to={`/competitions/${competition.id}/toplists?section=${session.competitionSectionId}`} className={`mg-btn flex-1 ${canWatch ? 'mg-btn-secondary' : 'mg-btn-primary'}`}>{section ? t('competition.heat.sectionToplist', { section }) : t('competition.scoring.toplist')}</Link>}
         </div>
       ))}
 
@@ -438,16 +444,16 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
           aria-expanded={showRules}
           onClick={() => setShowRules((open) => !open)}
         >
-          {showRules ? 'Close race rules and setup' : 'Race rules and arena setup'}
+          {showRules ? t('competition.heat.rulesClose') : t('competition.heat.rulesOpen')}
         </button>
       )}
 
       {!embedded && heat && columns.length > 0 && showRules && (
-        <section aria-label="Races in this heat" className="mg-card px-3">
+        <section aria-label={t('competition.heat.racesInHeat')} className="mg-card px-3">
           <ol className="divide-y divide-[rgb(var(--mg-rule-soft))]">
             {columns.map(({ key, race, label }, i) => (
               <li key={key} className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate py-2">{label}{i === runningIndex && <span className="mg-meta"> · running</span>}</span>
+                <span className="min-w-0 flex-1 truncate py-2">{label}{i === runningIndex && <span className="mg-meta"> · {t('competition.heat.running')}</span>}</span>
                 <RaceRulesButton raceName={race.name} className="!h-11 !w-11" />
               </li>
             ))}

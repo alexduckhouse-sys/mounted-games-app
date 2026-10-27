@@ -46,8 +46,6 @@ export function competitionPhase(competition: PhaseInput): CompetitionPhase {
   return 'entry';
 }
 
-export const detectPhase = competitionPhase;
-
 /** True when this viewer should see the entry page as the home landing page. Organisers always see the timetable. */
 export function entryPhaseOnly(competition: PhaseInput, canOrganise: boolean): boolean {
   return !canOrganise && competitionPhase(competition) === 'entry';

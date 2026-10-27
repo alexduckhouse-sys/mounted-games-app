@@ -5,6 +5,10 @@ import {
   filterEmergencyContacts,
   filterVolunteerShifts,
   lorryGateLinks,
+  missingStewardShifts,
+  myTeamAssignedDuties,
+  sessionStewardDutySummary,
+  STEWARD_DUTY_ROLE_PRESETS,
   telHref,
   VOLUNTEER_ROLE_PRESETS,
   volunteerShiftSummary,
@@ -159,5 +163,79 @@ describe('lorryAndVolunteers helpers', () => {
     expect(filterEmergencyContacts(entries, 'elm blue').map((e) => e.riderEntryId)).toEqual([11]);
     expect(filterEmergencyContacts(entries, 'robin rocket').map((e) => e.riderEntryId)).toEqual([11]);
     expect(filterEmergencyContacts(entries, 'nonexistent')).toEqual([]);
+  });
+
+  it('tracks team-assigned steward duties, check-in status, and missing stewards (#7)', () => {
+    expect(STEWARD_DUTY_ROLE_PRESETS.some((p) => p.dutyCategory === 'ArenaCrew')).toBe(true);
+    expect(STEWARD_DUTY_ROLE_PRESETS.some((p) => p.laneNumber === 1)).toBe(true);
+
+    const duties: VolunteerShift[] = [
+      {
+        id: 101,
+        competitionId: 7,
+        sessionId: 20,
+        role: 'Arena Crew (Centre Props)',
+        dutyCategory: 'ArenaCrew',
+        assignedTeamId: 1,
+        assignedTeamName: 'Kent A',
+        assignedClubName: 'Kent',
+        attendanceStatus: 'Here',
+        checkedInAt: '2026-07-10T09:05:00Z',
+        checkedInByName: 'Sam Coach',
+        requiredCount: 2,
+        claimedCount: 0,
+        remainingCount: 0,
+        isFilled: true,
+        claims: [],
+      },
+      {
+        id: 102,
+        competitionId: 7,
+        sessionId: 20,
+        role: 'Start/Finish Line Steward — Lane 1',
+        dutyCategory: 'LineSteward',
+        laneNumber: 1,
+        assignedTeamId: 2,
+        assignedTeamName: 'Surrey A',
+        assignedClubName: 'Surrey',
+        attendanceStatus: 'Missing',
+        requiredCount: 1,
+        claimedCount: 0,
+        remainingCount: 0,
+        isFilled: true,
+        claims: [],
+      },
+      {
+        id: 103,
+        competitionId: 7,
+        sessionId: 20,
+        role: 'Start/Finish Line Steward — Lane 2',
+        dutyCategory: 'LineSteward',
+        laneNumber: 2,
+        assignedTeamId: 3,
+        assignedTeamName: 'Essex A',
+        assignedClubName: 'Essex',
+        attendanceStatus: 'Assigned',
+        requiredCount: 1,
+        claimedCount: 0,
+        remainingCount: 0,
+        isFilled: true,
+        claims: [],
+      },
+    ];
+
+    expect(missingStewardShifts(duties, 20).map((d) => d.id)).toEqual([102, 103]);
+    expect(myTeamAssignedDuties(duties, [2]).map((d) => d.id)).toEqual([102]);
+    expect(myTeamAssignedDuties(duties, [], ' essex ').map((d) => d.id)).toEqual([103]);
+
+    const summary = sessionStewardDutySummary(duties, 20);
+    expect(summary).toEqual({
+      totalDuties: 3,
+      hereCount: 1,
+      missingCount: 1,
+      assignedAwaitingCheckInCount: 1,
+      allHere: false,
+      readinessLabel: '1/3 here · 2 not checked in',
+    });
   });
 });

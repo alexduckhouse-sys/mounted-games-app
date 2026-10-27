@@ -12,6 +12,8 @@ import type { CompetitionDetail, PassportCheckBoard, TackCheckBoard, TackCheckMo
 import { useCompetition } from '../competition/context';
 import { RefineChoiceRow, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection } from '../refine/Refine';
 import { apiMessage } from './types';
+import { confirmDialog } from '../../components/ConfirmDialog';
+import { horseboxEntrance, isValidWhat3Words, parseCoordinates } from './lorryEntrance';
 import './operations.css';
 
 /** An ISO instant as the `YYYY-MM-DDTHH:mm` a datetime-local box wants, in the device's zone. */
@@ -77,7 +79,7 @@ export function EventDetailsPage() {
     finally { setSaving((n) => n - 1); }
   }, [showSaved]);
 
-  const saveBasics = (what: string, patch: Record<string, string | boolean | null>) =>
+  const saveBasics = (what: string, patch: Record<string, string | number | boolean | null>) =>
     track(what, async () => {
       await api.put(`/competitions/${competition.id}`, competitionUpdateBody(competition, patch));
       reload();
@@ -111,6 +113,29 @@ export function EventDetailsPage() {
     void saveTack(section, { isEnabled: true, mode: MODE_OF[choice] });
   }
 
+  const lorryPin = competition.lorryLatitude != null && competition.lorryLongitude != null ? `${competition.lorryLatitude}, ${competition.lorryLongitude}` : '';
+
+  async function saveLorryWords(value: string): Promise<boolean> {
+    if (value && !isValidWhat3Words(value)) { setError('A what3words address is three words with dots between, like filled.count.soap.'); return false; }
+    // A new address replaces the pin, so a pin for the old place can't stay behind.
+    return saveBasics('the horsebox gate', { lorryWhat3Words: value.replace(/^\/+/, ''), lorryLatitude: null, lorryLongitude: null });
+  }
+
+  async function saveLorryPin(value: string): Promise<boolean> {
+    if (!value) {
+      if (lorryPin) setError('To clear the pin, remove the whole horsebox entrance.');
+      return false;
+    }
+    const pin = parseCoordinates(value);
+    if (!pin) { setError('Enter the pin as latitude, longitude, like 52.1234, -1.5678.'); return false; }
+    return saveBasics('the horsebox pin', { lorryLatitude: pin.lat, lorryLongitude: pin.lon });
+  }
+
+  async function removeLorryEntrance() {
+    if (!(await confirmDialog({ title: 'Remove the horsebox entrance?', message: 'The Horsebox entrance card disappears from the event page.', confirmLabel: 'Remove entrance', destructive: true }))) return;
+    await saveBasics('the horsebox entrance', { lorryWhat3Words: '', lorryLatitude: null, lorryLongitude: null, lorryDirectionsNote: '' });
+  }
+
   return (
     <RefinePage>
       <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel="Back to preparations" context={competition.name} title="Event details" />
@@ -135,6 +160,20 @@ export function EventDetailsPage() {
           {/* Blank is sent as blank, not null: the API leaves a value alone on null and clears it on blank. */}
           <TextField key={`pc-${competition.postcode ?? ''}`} label="Postcode" value={competition.postcode ?? ''} onSave={(value) => saveBasics('the postcode', { postcode: value })} />
         </div>
+
+        <RefineSection title="Horsebox entrance" />
+        <div className="ops-fields">
+          <TextField key={`lw-${competition.lorryWhat3Words ?? ''}`} label="what3words for the horsebox gate (optional)" value={competition.lorryWhat3Words ? `///${competition.lorryWhat3Words.replace(/^\/+/, '')}` : ''} onSave={saveLorryWords} />
+          <TextField key={`lc-${competition.lorryLatitude ?? ''}-${competition.lorryLongitude ?? ''}`} label="Pin for the gate: latitude, longitude (optional)" value={lorryPin} onSave={saveLorryPin} />
+          <TextField key={`ln-${competition.lorryDirectionsNote ?? ''}`} label="Directions for lorries (optional)" value={competition.lorryDirectionsNote ?? ''} multiline onSave={(value) => saveBasics('the horsebox directions', { lorryDirectionsNote: value })} />
+        </div>
+        <RefineNote>Fill this in only if lorries and horseboxes use a different gate. Entrants then see a Horsebox entrance card with map links. Changing the words replaces the pin with one that matches them.</RefineNote>
+        {horseboxEntrance(competition) && (
+          <RefineList as="div">
+            <div className="rf-row"><span className="rf-grow rf-t1">Everyone uses the same gate</span>
+              <button type="button" className="ops-danger-link" onClick={() => void removeLorryEntrance()}>Remove the horsebox entrance</button></div>
+          </RefineList>
+        )}
 
         <RefineSection title="Entries" />
         <div className="ops-fields">

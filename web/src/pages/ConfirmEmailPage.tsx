@@ -4,6 +4,8 @@ import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { apiErrorMessage } from '../lib/apiError';
 import { PageProblem } from '../components/PageProblem';
+import { useT } from '../i18n/LanguageContext';
+import { tr } from '../i18n/translate';
 import '../components/sitePages.css';
 
 type Phase = 'working' | 'done' | 'failed' | 'incomplete';
@@ -13,6 +15,7 @@ type Phase = 'working' | 'done' | 'failed' | 'incomplete';
  * the same answer, and the page points to the resend button on the profile.
  */
 export function ConfirmEmailPage() {
+  const t = useT();
   const [params] = useSearchParams();
   const userId = params.get('userId')?.trim() ?? '';
   const token = params.get('token')?.trim() ?? '';
@@ -27,7 +30,7 @@ export function ConfirmEmailPage() {
       setPhase('done');
       await refreshUser();
     } catch (err) {
-      setMessage(apiErrorMessage(err, 'We couldn’t confirm your email address. Check your signal and try again.'));
+      setMessage(apiErrorMessage(err, tr('shell.confirmEmail.fallback')));
       setPhase('failed');
     }
   }, [userId, token, refreshUser]);
@@ -41,15 +44,15 @@ export function ConfirmEmailPage() {
 
   if (phase === 'failed') {
     return (
-      <PageProblem title="Couldn’t confirm your email" primaryLabel="Try again" onPrimary={() => void run()} secondaryLabel="Back to the app" secondaryTo="/">
-        {message} If the link has expired, sign in and use the “Send it again” button on your profile.
+      <PageProblem title={t('shell.confirmEmail.failedTitle')} primaryLabel={t('common.tryAgain')} onPrimary={() => void run()} secondaryLabel={t('shell.page.backToApp')} secondaryTo="/">
+        {t('shell.confirmEmail.failedBody', { message })}
       </PageProblem>
     );
   }
   if (phase === 'incomplete') {
     return (
-      <PageProblem title="This link looks incomplete" secondaryLabel="Back to the app" secondaryTo="/">
-        Use the link in the email we sent you.
+      <PageProblem title={t('shell.page.incompleteTitle')} secondaryLabel={t('shell.page.backToApp')} secondaryTo="/">
+        {t('shell.page.incompleteBody')}
       </PageProblem>
     );
   }
@@ -57,12 +60,12 @@ export function ConfirmEmailPage() {
   return (
     <div className="skin mx-auto w-full max-w-[560px]">
       <div className="sp-small">
-        <h1>Confirm your email</h1>
-        {phase === 'working' && <p role="status">One moment…</p>}
+        <h1>{t('shell.confirmEmail.title')}</h1>
+        {phase === 'working' && <p role="status">{t('shell.page.oneMoment')}</p>}
         {phase === 'done' && (
           <>
-            <p role="status">Thanks, your email address is confirmed.</p>
-            <Link to={user ? '/me' : '/login'} className="sp-pill sp-pill-fill">{user ? 'Go to my profile' : 'Sign in'}</Link>
+            <p role="status">{t('shell.confirmEmail.done')}</p>
+            <Link to={user ? '/me' : '/login'} className="sp-pill sp-pill-fill">{user ? t('shell.confirmEmail.toProfile') : t('common.signIn')}</Link>
           </>
         )}
       </div>

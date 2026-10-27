@@ -1,3 +1,4 @@
+import { ArchiveDownload } from './ArchiveDownload';
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Upload } from 'lucide-react';
 import { Link, Navigate, useParams } from 'react-router-dom';
@@ -185,6 +186,8 @@ export function PrintSheetsPanel({ competitionId }: { competitionId: string }) {
           <span className="rf-grow"><span className="rf-t1">{sheet.title}</span><span className="rf-t2">{sheet.detail}</span></span><Chevron />
         </Link>)}
       </RefineList></nav>
+      <RefineSection title="Keep a copy" />
+      <RefineList as="div"><ArchiveDownload competitionId={Number(competitionId)} /></RefineList>
     </section>
   );
 }

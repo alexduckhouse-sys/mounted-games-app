@@ -115,4 +115,20 @@ public class OperationsController(
         catch (DrawChangedException ex) { return Conflict(new { message = ex.Message }); }
         catch (DrawValidationException ex) { return Conflict(new { message = ex.Message }); }
     }
+
+    [HttpGet("arena-crew-sheet")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ArenaCrewPropSheetDto>> GetArenaCrewSheet(
+        int competitionId,
+        [FromQuery] int? sessionId = null,
+        [FromQuery] int? heatId = null,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await new ArenaCrewSheetService(db)
+                .GetAsync(competitionId, sessionId, heatId, cancellationToken);
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+    }
 }

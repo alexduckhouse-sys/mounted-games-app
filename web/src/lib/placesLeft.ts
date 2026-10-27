@@ -1,7 +1,9 @@
 import type { CompetitionSection } from '../types';
+import type { MessageKey } from '../i18n/en';
+import { tr } from '../i18n/translate';
 import { remainingPlaces } from './entryOptions';
 
-const NOUN: Record<number, string> = { 1: 'pair', 2: 'team', 3: 'rider' };
+const PLACES: Record<number, MessageKey> = { 1: 'entries.places.pair', 2: 'entries.places.team', 3: 'entries.places.rider' };
 
 /**
  * "6 team places left", "1 pair place left". Null when there is nothing helpful to say: entries are closed or
@@ -12,7 +14,5 @@ export function placesLeftText(section: Pick<CompetitionSection, 'format' | 'max
   if (closed) return null;
   const left = remainingPlaces(section);
   if (left == null || left === 0) return null;
-  const noun = NOUN[section.format] ?? 'entry';
-  const place = left === 1 ? 'place' : 'places';
-  return `${left} ${noun === 'entry' ? '' : `${noun} `}${place} left`.replace('  ', ' ');
+  return tr(PLACES[section.format] ?? 'entries.places.entry', { count: left });
 }

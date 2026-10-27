@@ -1,3 +1,5 @@
+import { activeLocale } from '../i18n/translate.ts';
+
 const ukDateParts = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Europe/London',
   year: 'numeric',
@@ -31,8 +33,8 @@ const dayOf = (iso: string | null | undefined) => {
   return date;
 };
 const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-const weekday = (d: Date) => d.toLocaleDateString('en-GB', { weekday: 'short' });
-const month = (d: Date) => d.toLocaleDateString('en-GB', { month: 'short' });
+const weekday = (d: Date) => d.toLocaleDateString(activeLocale(), { weekday: 'short' });
+const month = (d: Date) => d.toLocaleDateString(activeLocale(), { month: 'short' });
 
 /** "Sat 17 Oct", "Sat 17 – Sun 18 Oct" or "Sat 31 Oct – Sun 1 Nov"; the year is added when asked for. */
 export function competitionDateText(start: string, end?: string | null, withYear = false): string {

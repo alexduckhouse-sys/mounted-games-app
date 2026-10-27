@@ -18,7 +18,11 @@ export function useExitDelay<A extends unknown[]>(onDone: (...args: A) => void):
     if (still) { onDone(...args); return; }
     if (timer.current) return;
     setClosing(true);
-    timer.current = setTimeout(() => onDone(...args), EXIT_MS);
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      setClosing(false);
+      onDone(...args);
+    }, EXIT_MS);
   }, [still, onDone]);
   return { closing, close };
 }

@@ -1,3 +1,5 @@
+import type { MessageKey } from '../i18n/en';
+import { tr } from '../i18n/translate';
 import type { CompetitionSection } from '../types';
 import { displaySectionName } from './section';
 
@@ -26,31 +28,31 @@ export function parseEntryKind(value: string | null | undefined): EntryKind | nu
 
 /** "£15", "£15.50" or "Free". */
 export function feeText(priceMinor: number | null | undefined): string {
-  if (!priceMinor || priceMinor <= 0) return 'Free';
+  if (!priceMinor || priceMinor <= 0) return tr('entries.fee.free');
   const pounds = priceMinor / 100;
   return `£${Number.isInteger(pounds) ? pounds : pounds.toFixed(2)}`;
 }
 
-const STANDARD_LABEL: Record<number, string> = { 1: 'Pair', 2: 'Team', 3: 'Individual' };
+const STANDARD_LABEL: Record<number, MessageKey> = { 1: 'entries.kind.pair', 2: 'entries.kind.team', 3: 'entries.kind.individual' };
 
 /** The choices for one age group, in the order they are shown. A full section only offers the waiting list. */
 export function entryOptions(section: Pick<CompetitionSection, 'format' | 'priceMinor'>, full = false): EntryOption[] {
   const price = section.priceMinor ?? 0;
-  const guest: EntryOption = { kind: 'guest', label: 'Guest rider', sub: 'Looking for a team', priceMinor: 0 };
-  const waitlist: EntryOption = { kind: 'waitlist', label: 'Join the waiting list', sub: 'This age group is full', priceMinor: 0 };
+  const guest: EntryOption = { kind: 'guest', label: tr('entries.kind.guest'), sub: tr('entries.kind.guestSub'), priceMinor: 0 };
+  const waitlist: EntryOption = { kind: 'waitlist', label: tr('entries.kind.waitlist'), sub: tr('entries.kind.waitlistSub'), priceMinor: 0 };
   if (full) return section.format === 2 ? [waitlist, guest] : [waitlist];
-  const standard: EntryOption = { kind: 'standard', label: STANDARD_LABEL[section.format] ?? 'Entry', priceMinor: price };
+  const standard: EntryOption = { kind: 'standard', label: tr(STANDARD_LABEL[section.format] ?? 'entries.kind.entry'), priceMinor: price };
   if (section.format === 2) return [standard, guest];
   if (section.format === 1) {
-    return [standard, { kind: 'partner', label: 'Solo rider', sub: 'Looking for a pair partner', priceMinor: Math.floor(price / 2) }];
+    return [standard, { kind: 'partner', label: tr('entries.kind.solo'), sub: tr('entries.kind.soloSub'), priceMinor: Math.floor(price / 2) }];
   }
   return [standard];
 }
 
 /** The fees on one line, for example "Team £15 · Guest rider Free". A full age group says so first. */
 export function feesLine(section: Pick<CompetitionSection, 'format' | 'priceMinor'>, full = false): string {
-  const line = entryOptions(section, full).map((option) => (option.kind === 'waitlist' ? 'Waiting list' : `${option.label} ${feeText(option.priceMinor)}`)).join(' · ');
-  return full ? `Full · ${line}` : line;
+  const line = entryOptions(section, full).map((option) => (option.kind === 'waitlist' ? tr('entries.fees.waitingList') : `${option.label} ${feeText(option.priceMinor)}`)).join(' · ');
+  return full ? tr('entries.fees.full', { line }) : line;
 }
 
 /** True when every place is taken. Only known when the API sent the count with the section. */
@@ -71,10 +73,10 @@ export function needsPayStep(priceMinor: number): boolean {
   return priceMinor > 0;
 }
 
-const STANDARD_NOUN: Record<number, string> = { 1: 'pair', 2: 'team', 3: 'rider' };
+const STANDARD_NOUN: Record<number, MessageKey> = { 1: 'entries.noun.pair', 2: 'entries.noun.team', 3: 'entries.noun.rider' };
 
 /** The title of the details step: "Juniors · team", "Under 12 · guest rider". */
 export function entryTitle(section: Pick<CompetitionSection, 'format' | 'displayName'>, kind: EntryKind): string {
-  const noun = kind === 'guest' ? 'guest rider' : kind === 'partner' ? 'solo rider' : kind === 'waitlist' ? 'waiting list' : STANDARD_NOUN[section.format] ?? 'entry';
+  const noun = tr(kind === 'guest' ? 'entries.noun.guest' : kind === 'partner' ? 'entries.noun.solo' : kind === 'waitlist' ? 'entries.noun.waitlist' : STANDARD_NOUN[section.format] ?? 'entries.noun.entry');
   return `${displaySectionName(section.displayName)} · ${noun}`;
 }

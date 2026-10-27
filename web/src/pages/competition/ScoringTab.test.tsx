@@ -409,6 +409,8 @@ describe('personalisation, instant optimistic standings and section score finger
 
   it('keeps official standings during live refresh and invalidates combined-session and HC changes', async () => {
     setCompetition([qualifier]);
+    // The server sends the resolved order for tied totals; array order alone is not a tie-break.
+    state.get.mockResolvedValueOnce({ data: [standing(3, 7, { tieBreakOrder: 1 }), standing(1, 7, { tieBreakOrder: 2 }), standing(2, 4)], headers: {} });
     const view = renderTab('/?section=9', { startOn: 'toplist' });
     await screen.findByRole('region', { name: 'Totals' });
     expect(state.get).toHaveBeenCalledTimes(1);

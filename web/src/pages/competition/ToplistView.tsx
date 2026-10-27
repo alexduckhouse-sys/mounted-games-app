@@ -3,7 +3,9 @@ import { Link, useInRouterContext } from 'react-router-dom';
 import { ChevronRight, Star, Trophy } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { CompetitionSection, Team } from '../../types';
-import { ordinal, toplistNote, type FinalGroup, type Toplist } from '../../lib/toplist';
+import type { FinalGroup, Toplist } from '../../lib/toplist';
+import { ordinalText, sessionColumnTitle, toplistNoteText } from '../../lib/toplistText';
+import { useLanguage } from '../../i18n/LanguageContext';
 import { useFavourites } from '../../hooks/useFavourites';
 import { CompetitionContext } from './context';
 import { parseBibAndFlag } from '../../lib/bib';
@@ -17,6 +19,7 @@ import { ScoreFlash } from '../../components/ScoreFlash';
 import { TickerNumber } from '../../components/TickerNumber';
 import { useRankMotion } from '../../hooks/useRankMotion';
 import { EASE_OUT } from '../../lib/motion';
+import type { Lang, Translate } from '../../i18n/translate';
 
 // When a result moves teams, their rows slide to the new places rather than jumping.
 const RESORT = { layout: { duration: 0.5, ease: EASE_OUT } };
@@ -52,6 +55,7 @@ export function ToplistView({
   /** The age group's heat tables, offered as "Heats" in the Show row. */
   heatTables?: ReactNode;
 }) {
+  const { t, lang } = useLanguage();
   const compCtx = useContext(CompetitionContext);
   const inRouter = useInRouterContext();
   const teams = suppliedTeams ?? compCtx?.competition.teams ?? [];
@@ -99,10 +103,10 @@ export function ToplistView({
   const currentSectionId = section?.id ?? null;
   const activeOpenTeam = openTeam?.sectionId === currentSectionId ? openTeam.teamId : null;
   const tabs: [View, string][] = [
-    ...(hasFinals ? ([['finals', 'Finals']] as [View, string][]) : []),
-    ['totals', 'Totals'],
-    ...(hasSessions ? ([['sessions', 'By session']] as [View, string][]) : []),
-    ...(heatTables ? ([['heats', 'Heats']] as [View, string][]) : []),
+    ...(hasFinals ? ([['finals', t('competition.toplist.finals')]] as [View, string][]) : []),
+    ['totals', t('competition.toplist.totals')],
+    ...(hasSessions ? ([['sessions', t('competition.toplist.bySession')]] as [View, string][]) : []),
+    ...(heatTables ? ([['heats', t('competition.toplist.heats')]] as [View, string][]) : []),
   ];
   const view: View = tabs.some(([id]) => id === chosen) ? chosen! : tabs[0][0];
   const places = section?.finalistCount ?? null;
@@ -122,7 +126,7 @@ export function ToplistView({
 
   // "Show  Totals ›": one settings row that opens the list of views.
   const viewRow = tabs.length > 1 && (
-    <DropdownRow label="Show" value={view} options={tabs.map(([value, label]) => ({ value, label }))} onChange={(next) => setChosen(next as View)} />
+    <DropdownRow label={t('competition.toplist.show')} value={view} options={tabs.map(([value, label]) => ({ value, label }))} onChange={(next) => setChosen(next as View)} />
   );
 
   return (
@@ -132,6 +136,8 @@ export function ToplistView({
         {view === 'finals' && (
           <FinalsList
             groups={list.finals}
+            t={t}
+            lang={lang}
             onOpen={open}
             teamHref={teamHref}
             isFav={isFav}
@@ -140,11 +146,11 @@ export function ToplistView({
         )}
 
         {view === 'totals' && <>
-          {places != null && places > 0 && <p className="text-sm font-medium leading-snug text-[rgb(var(--mg-body))]">Top {places} make the final</p>}
-          <section aria-label="Totals" className="mg-card overflow-hidden">
+          {places != null && places > 0 && <p className="text-sm font-medium leading-snug text-[rgb(var(--mg-body))]">{t('competition.toplist.topMake', { places })}</p>}
+          <section aria-label={t('competition.toplist.totals')} className="mg-card overflow-hidden">
             <ol ref={totalsRef}>
               {list.rows.map((row, index) => {
-                const note = toplistNote(row);
+                const note = toplistNoteText(row, t, lang);
                 const lastInRunoff = row.runoff && list.rows[index + 1]?.runoff;
                 const openRow = open(row.teamId);
                 const fav = isFav(row.teamId);
@@ -153,14 +159,14 @@ export function ToplistView({
                   ? Number(formatPoints(leaderPoints)) - Number(formatPoints(row.points))
                   : 0;
                 const content = <>
-                  <span className="mg-display w-7 shrink-0 text-xl font-bold leading-none">{list.started ? row.position : '—'}<span className="sr-only">{list.started && row.joint ? ' (joint)' : ''}</span></span>
+                  <span className="mg-display w-7 shrink-0 text-xl font-bold leading-none">{list.started ? row.position : '—'}<span className="sr-only">{list.started && row.joint ? <>{' '}{t('competition.toplist.joint')}</> : ''}</span></span>
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-1">
                     <span data-grow="start" className="truncate text-base font-semibold leading-tight">{renderTeamName(row.teamId, row.teamName, fav, false)}</span>
                     {note && <span className="text-[13.5px] font-medium leading-none text-[rgb(var(--mg-body))]">{note}</span>}
                   </span>
                   <span data-grow="end" className="flex shrink-0 flex-col items-end gap-0.5">
-                    <ScoreFlash value={row.points} className="mg-display text-xl font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]"><TickerNumber value={row.points} /><span className="sr-only"> points</span></ScoreFlash>
-                    {gap > 0 && <span className="text-[11px] font-semibold leading-none tabular-nums text-[rgb(var(--mg-muted))]" title={`${formatPoints(gap)} behind leader`}>−{formatPoints(gap)}</span>}
+                    <ScoreFlash value={row.points} className="mg-display text-xl font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]"><TickerNumber value={row.points} /><span className="sr-only">{' '}{t('competition.toplist.points')}</span></ScoreFlash>
+                    {gap > 0 && <span className="text-[11px] font-semibold leading-none tabular-nums text-[rgb(var(--mg-muted))]" title={t('competition.toplist.behindLeader', { points: formatPoints(gap) })}>−{formatPoints(gap)}</span>}
                   </span>
                 </>;
                 return (
@@ -175,8 +181,8 @@ export function ToplistView({
                       <RowBox open={openRow} href={teamHref(row.teamId)}>{content}</RowBox>
                     </motion.li>
                     {list.cutAfter === index && index < list.rows.length - 1 && (
-                      <motion.li layout="position" transition={RESORT} role="separator" aria-label="Final cut-off" className={`${separatorLabel} !py-1.5 !text-[rgb(var(--mg-muted))]`}>
-                        {dashes}Final cut-off{dashes}
+                      <motion.li layout="position" transition={RESORT} role="separator" aria-label={t('competition.toplist.cutoff')} className={`${separatorLabel} !py-1.5 !text-[rgb(var(--mg-muted))]`}>
+                        {dashes}{t('competition.toplist.cutoff')}{dashes}
                       </motion.li>
                     )}
                   </Fragment>
@@ -194,9 +200,9 @@ export function ToplistView({
                         <span className="mg-display w-7 shrink-0 text-xl font-bold leading-none text-[rgb(var(--mg-faint))]">HC</span>
                         <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-1">
                           <span className="truncate text-base font-semibold leading-tight">{renderTeamName(team.teamId, team.teamName, fav, false)}</span>
-                          {team.racesLeft > 0 && <span className="text-[13.5px] font-medium leading-none">{team.racesLeft} {team.racesLeft === 1 ? 'race' : 'races'} left</span>}
+                          {team.racesLeft > 0 && <span className="text-[13.5px] font-medium leading-none">{t('competition.toplist.racesLeft', { count: team.racesLeft })}</span>}
                         </span>
-                        <span className="mg-display shrink-0 text-xl font-bold leading-none tabular-nums">{formatPoints(team.points)}<span className="sr-only"> points</span></span>
+                        <span className="mg-display shrink-0 text-xl font-bold leading-none tabular-nums">{formatPoints(team.points)}<span className="sr-only">{' '}{t('competition.toplist.points')}</span></span>
                       </RowBox>
                     </li>
                   );
@@ -207,15 +213,15 @@ export function ToplistView({
         </>}
 
         {view === 'sessions' && (
-          <section aria-label="Points by session" className="mg-card overflow-x-auto">
+          <section aria-label={t('competition.toplist.sessionPoints')} className="mg-card overflow-x-auto">
             <table className="w-full border-collapse">
               <thead>
                 <tr className="mg-display border-b border-[rgb(var(--mg-rule))] text-xs font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-muted))]">
                   <th scope="col" className="w-9 py-1.5 pl-3 text-left font-bold">#</th>
-                  <th scope="col" className="py-1.5 text-left font-bold">Team</th>
-                  {list.bySession.sessions.map((s) => <th key={s.id} scope="col" className="w-9 py-1.5 text-center font-bold"><abbr title={s.title} className="no-underline">{s.label}</abbr></th>)}
-                  <th scope="col" className="w-11 py-1.5 pr-3 text-right font-bold text-[rgb(var(--mg-heading))]">Pts</th>
-                  <th scope="col" className="w-6"><span className="sr-only">Open</span></th>
+                  <th scope="col" className="py-1.5 text-left font-bold">{t('competition.toplist.team')}</th>
+                  {list.bySession.sessions.map((s) => <th key={s.id} scope="col" className="w-9 py-1.5 text-center font-bold"><abbr title={sessionColumnTitle(s.title, t)} className="no-underline">{s.label}</abbr></th>)}
+                  <th scope="col" className="w-11 py-1.5 pr-3 text-right font-bold text-[rgb(var(--mg-heading))]">{t('competition.toplist.pts')}</th>
+                  <th scope="col" className="w-6"><span className="sr-only">{t('competition.toplist.open')}</span></th>
                 </tr>
               </thead>
               <tbody ref={sessionsRef}>
@@ -235,7 +241,7 @@ export function ToplistView({
                       </th>
                       {list.bySession.sessions.map((s, i) => (
                         <td key={s.id} className="mg-display text-center text-base font-semibold tabular-nums">
-                          {cells ? formatPoints(cells[i]) : <><span aria-hidden="true" className="text-[rgb(var(--mg-dash))]">–</span><span className="sr-only">No points yet</span></>}
+                          {cells ? formatPoints(cells[i]) : <><span aria-hidden="true" className="text-[rgb(var(--mg-dash))]">–</span><span className="sr-only">{t('competition.toplist.noPoints')}</span></>}
                         </td>
                       ))}
                       <td className="mg-display pr-3 text-right text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]"><span data-grow="end"><ScoreFlash value={row.points}><TickerNumber value={row.points} /></ScoreFlash></span></td>
@@ -253,18 +259,18 @@ export function ToplistView({
         {list.runoff && view === 'totals' && (
           <section aria-labelledby="runoff-title" className="mg-card flex flex-col gap-3 p-3.5">
             <div className="flex items-baseline gap-2.5">
-              <h2 id="runoff-title" className="mg-h2 flex-1">Run-off for {ordinal(list.runoff.place)}</h2>
-              <span className="text-xs font-semibold text-[rgb(var(--mg-muted))]">Pending</span>
+              <h2 id="runoff-title" className="mg-h2 flex-1">{t('competition.toplist.runoffFor', { place: ordinalText(list.runoff.place, lang) })}</h2>
+              <span className="text-xs font-semibold text-[rgb(var(--mg-muted))]">{t('competition.toplist.pending')}</span>
             </div>
             <p className="text-sm font-medium leading-snug text-[rgb(var(--mg-body))]">
-              {[section?.runoffRaceName?.trim() || 'Run-off race', list.sessionsDone < list.sessionsTotal ? `after session ${list.sessionsTotal}, if still tied` : 'to be run'].join(' · ')}
+              {[section?.runoffRaceName?.trim() || t('competition.toplist.runoffRace'), list.sessionsDone < list.sessionsTotal ? t('competition.toplist.runoffAfter', { n: list.sessionsTotal }) : t('competition.toplist.runoffToRun')].join(' · ')}
             </p>
             <ol className="overflow-hidden rounded-[10px] border border-[rgb(var(--mg-rule-soft))]">
               {list.runoff.teams.map((row, i) => (
                 <li key={row.teamId} className="flex min-h-12 items-center gap-3 border-b border-[rgb(var(--mg-rule-soft))] px-3 last:border-b-0">
-                  <span className="mg-display w-12 shrink-0 text-base font-bold text-[rgb(var(--mg-muted))]">Lane {i + 1}</span>
+                  <span className="mg-display w-12 shrink-0 text-base font-bold text-[rgb(var(--mg-muted))]">{t('competition.toplist.lane', { n: i + 1 })}</span>
                   <span className="min-w-0 flex-1 truncate text-base font-semibold">{renderTeamName(row.teamId, row.teamName, isFav(row.teamId), true)}</span>
-                  <span className="shrink-0 text-sm font-semibold text-[rgb(var(--mg-body))]">{formatPoints(row.points)} pts</span>
+                  <span className="shrink-0 text-sm font-semibold text-[rgb(var(--mg-body))]">{t('competition.toplist.ptsValue', { points: formatPoints(row.points) })}</span>
                 </li>
               ))}
             </ol>
@@ -297,15 +303,17 @@ function RowBox({ open, href, children }: { open?: () => void; href: string | nu
   return <div className={box}>{children}</div>;
 }
 
-function FinalsList({ groups, onOpen, teamHref, isFav, renderTeamName }: {
+function FinalsList({ groups, t, lang, onOpen, teamHref, isFav, renderTeamName }: {
   groups: FinalGroup[];
+  t: Translate;
+  lang: Lang;
   onOpen: (teamId: number) => (() => void) | undefined;
   teamHref: (teamId: number) => string | null;
   isFav: (teamId: number) => boolean;
   renderTeamName: (teamId: number, teamName: string, fav: boolean, asLink?: boolean) => React.ReactNode;
 }) {
   return (
-    <section aria-label="Finals" className="mg-card overflow-hidden">
+    <section aria-label={t('competition.toplist.finals')} className="mg-card overflow-hidden">
       {groups.map((group, index) => (
         <Fragment key={group.id}>
           <h3 className={`${separatorLabel} ${index > 0 ? 'border-t' : ''}`}>{dashes}{group.label}{dashes}</h3>
@@ -319,14 +327,14 @@ function FinalsList({ groups, onOpen, teamHref, isFav, renderTeamName }: {
               return (
                 <li key={row.teamId} data-followed={fav ? 'true' : undefined} className={`flex min-h-11 items-center pr-1 border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0 ${champion ? 'mg-champion' : fav ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_3px_0_0_#C08308]' : ''}`}>
                   <RowBox open={openRow} href={teamHref(row.teamId)}>
-                    <span className={`mg-display w-9 shrink-0 text-lg font-bold leading-none ${winner ? 'text-[rgb(var(--mg-late-time))]' : ''}`}>{row.place != null ? ordinal(row.place) : <span aria-hidden="true">–</span>}</span>
+                    <span className={`mg-display w-9 shrink-0 text-lg font-bold leading-none ${winner ? 'text-[rgb(var(--mg-late-time))]' : ''}`}>{row.place != null ? ordinalText(row.place, lang) : <span aria-hidden="true">–</span>}</span>
                     <span className="flex min-w-0 flex-1 items-center gap-1.5">
                       <span className="truncate text-base font-semibold leading-tight">{renderTeamName(row.teamId, row.teamName, fav, false)}</span>
-                      {winner && <Trophy aria-label="Winner" role="img" className="h-[13px] w-[13px] shrink-0 text-[rgb(var(--mg-late-time))]" />}
-                      {champion && <span className="mg-champion-label">Champions</span>}
+                      {winner && <Trophy aria-label={t('competition.toplist.winner')} role="img" className="h-[13px] w-[13px] shrink-0 text-[rgb(var(--mg-late-time))]" />}
+                      {champion && <span className="mg-champion-label">{t('competition.toplist.champions')}</span>}
                     </span>
                     {champion && <span className="mg-champion-rosette"><Rosette width={26} /></span>}
-                    <span className="mg-display shrink-0 text-xl font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]">{row.points != null ? formatPoints(row.points) : '–'}<span className="sr-only"> points</span></span>
+                    <span className="mg-display shrink-0 text-xl font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]">{row.points != null ? formatPoints(row.points) : '–'}<span className="sr-only">{' '}{t('competition.toplist.points')}</span></span>
                   </RowBox>
                 </li>
               );

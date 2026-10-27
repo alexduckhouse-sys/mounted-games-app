@@ -174,7 +174,8 @@ public static class Mappings
         s.MinutesPerHeat, s.RaceOrderAlternating,
         s.Heats.OrderBy(h => h.OrderIndex).Select(h => h.ToDto()).ToList(),
         s.LaneRotationMode, s.QualifiersPerHeat, PlannedRaceList.Read(s.PlannedRaces),
-        PlannedFinalRaceLists.Read(s.PlannedFinalRaces));
+        PlannedFinalRaceLists.Read(s.PlannedFinalRaces),
+        s.ProvisionalUntil, s.OfficialConfirmedAt);
 
     public static RiderEntryDto ToDto(this RiderEntry r) => new(
         r.Id, r.SavedRiderId, r.FullName, r.DateOfBirth, r.HorseName, r.BibColour,
@@ -208,7 +209,7 @@ public static class Mappings
         includePrivate ? d.SubmittedBy?.PhoneNumber : null,
         d.SubmittedAt, includePrivate ? d.Notes : null, d.IsLocked,
         d.Riders.OrderBy(r => r.OrderIndex).Select(r => includePrivate ? r.ToDto() : r.ToPublicDto()).ToList(),
-        d.Team?.BibDescription,
+        ResultStatuses.PublicBibDescription(d.Team?.BibDescription),
         includePrivate ? d.TrainerName : null,
         includePrivate ? d.TermsAcceptedAt : null,
         entryTeamName,

@@ -113,7 +113,7 @@ export function useScoreOutbox(): QueuedScore[] {
   const [list, setList] = useState(readOutbox);
   useEffect(() => {
     const refresh = () => setList(readOutbox());
-    const onStorage = (e: StorageEvent) => { if (e.key === KEY) refresh(); };
+    const onStorage = (e: StorageEvent) => { if (e.key === KEY || e.key === null) refresh(); };
     window.addEventListener(CHANGED, refresh);
     window.addEventListener('storage', onStorage);
     return () => {
@@ -124,6 +124,7 @@ export function useScoreOutbox(): QueuedScore[] {
   return list;
 }
 
+// Unused in web UI yet — reserved for iOS / upcoming offline outbox backup UI wiring
 /** Serialise a competition's queued offline scores into a shareable JSON backup string. */
 export function exportCompetitionOutbox(competitionId: number, now?: string): string {
   return serializeOutboxBackup(readOutbox(), competitionId, now);
@@ -139,7 +140,13 @@ export function importCompetitionOutbox(
   const viaLinkOverride =
     options?.viaLink !== undefined
       ? options.viaLink
-      : Boolean(localStorage.getItem('mg.scorer.token'));
+      : (() => {
+          try {
+            return Boolean(localStorage.getItem('mg.scorer.token')?.trim());
+          } catch {
+            return false;
+          }
+        })();
   const parsed = parseOutboxBackup(raw, options?.fallbackCompetitionId, viaLinkOverride);
   if (!parsed) return { ok: false, error: OUTBOX_IMPORT_ERROR };
   if (!updateOutbox((current) => mergeOutboxBackup(current, parsed))) {

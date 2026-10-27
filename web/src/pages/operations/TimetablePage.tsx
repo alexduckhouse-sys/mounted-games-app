@@ -13,6 +13,10 @@ import { defaultEventStart, heatSizes, planTimetable } from '../../lib/formatPla
 import { SessionKind, type Session } from '../../types';
 import { useCompetition } from '../competition/context';
 import { RefineChoiceRow, RefineHeader, RefineList, RefineMenu, RefinePage, RefineSwitchRow, type ChoiceOption } from '../refine/Refine';
+import { DrawUndoBanner } from './DrawUndoBanner';
+import { TimetableClashes } from './TimetableClashes';
+import { ShareTextButtons } from './ShareTextButtons';
+import { timetableShareText } from './shareText';
 import type { DrawPreview } from './types';
 import './operations.css';
 
@@ -48,6 +52,7 @@ export function TimetablePage() {
   const [follow, setFollow] = useState(true);
   const [editing, setEditing] = useState<number | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
+  const [undoVersion, setUndoVersion] = useState(0);
 
   const items = useMemo<Item[]>(() => {
     const teamsIn = (sectionId: number | null) => competition.teams.filter((t) => t.competitionSectionId === sectionId && !t.isWithdrawn).length;
@@ -191,6 +196,7 @@ export function TimetablePage() {
   const applyDraw = () => preview && run('Couldn’t apply the draw.', async () => {
     await api.post(`/competitions/${competition.id}/sections/${preview.sectionId}/draw/apply`, { seed: preview.seed, fingerprint: preview.fingerprint });
     setNotice('Draw applied. The timetable has these lanes.');
+    setUndoVersion((n) => n + 1);
     setPreview(null);
   });
   const heatOne = preview?.sessions[0]?.heats[0];
@@ -200,6 +206,8 @@ export function TimetablePage() {
       {savedToast.node}
       <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel="Back to preparations" context={competition.name} title="Timetable and draw" />
       <div className="ops-cards ops-tt" aria-busy={busy}>
+        <DrawUndoBanner competitionId={competition.id} version={undoVersion} onRestored={reload} />
+        <TimetableClashes competition={competition} />
         {error && <Notice>{error}</Notice>}
         {notice && <Notice tone="info" onDismiss={() => setNotice(null)}>{notice}</Notice>}
 
@@ -218,6 +226,10 @@ export function TimetablePage() {
             </span>
           </div>
           <RefineSwitchRow label="Each one follows on from the one before" on={follow} onChange={setFollow} />
+          <div className="rf-row ops-wrap">
+            <span className="rf-grow rf-t1">Send the timetable</span>
+            <ShareTextButtons title="Share timetable" name="Timetable" text={timetableShareText(competition, `${window.location.origin}/competitions/${competition.id}`)} />
+          </div>
         </RefineList>
 
         {groups.map((group) => {

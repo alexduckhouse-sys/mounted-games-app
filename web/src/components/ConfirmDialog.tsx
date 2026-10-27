@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useDialogFocus } from './useDialogFocus';
+import { tr } from '../i18n/translate';
 
 export interface ConfirmOptions {
   /** What is about to happen, as a short question: "Delete this competition?". */
@@ -22,14 +23,14 @@ export interface ConfirmOptions {
  * answer puts Cancel (outlined, sized to its text) beside the delete (filled red, filling the row), and Cancel has
  * focus first. A go-ahead has the filled navy action first and the outlined choice beside it. Escape cancels.
  */
-export function ConfirmDialog({ title, message, confirmLabel = 'Confirm', cancelLabel, destructive = false, requireText, onAnswer }: ConfirmOptions & { onAnswer: (confirmed: boolean) => void }) {
+export function ConfirmDialog({ title, message, confirmLabel = tr('shell.confirm.confirm'), cancelLabel, destructive = false, requireText, onAnswer }: ConfirmOptions & { onAnswer: (confirmed: boolean) => void }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const bodyId = useId();
   useDialogFocus(dialogRef, () => onAnswer(false), destructive ? '[data-confirm-cancel]' : '[data-confirm-yes]');
   const [typed, setTyped] = useState('');
   const blocked = requireText != null && typed.trim() !== requireText;
-  const no = <button type="button" data-confirm-cancel className="kit-pill" onClick={() => onAnswer(false)}>{cancelLabel ?? (destructive ? 'Cancel' : 'Not now')}</button>;
+  const no = <button type="button" data-confirm-cancel className="kit-pill" onClick={() => onAnswer(false)}>{cancelLabel ?? (destructive ? tr('shell.confirm.cancel') : tr('shell.confirm.notNow'))}</button>;
   const yes = <button type="button" data-confirm-yes className={`kit-pill ${destructive ? 'kit-pill-del' : 'kit-pill-fill'}`} disabled={blocked} onClick={() => onAnswer(true)}>{confirmLabel}</button>;
   return (
     <div className="mg-confirm-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) onAnswer(false); }}>
@@ -39,7 +40,7 @@ export function ConfirmDialog({ title, message, confirmLabel = 'Confirm', cancel
         <p id={bodyId} className="mg-confirm-body">{message}</p>
         {requireText != null && (
           <label className="mg-confirm-type">
-            <span>Type <strong>{requireText}</strong> to confirm</span>
+            <span>{tr('shell.confirm.type', { text: '{text}' }).split('{text}').flatMap((part, index) => (index === 0 ? [part] : [<strong key="text">{requireText}</strong>, part]))}</span>
             <input value={typed} onChange={(event) => setTyped(event.target.value)} autoComplete="off" spellCheck={false} />
           </label>
         )}

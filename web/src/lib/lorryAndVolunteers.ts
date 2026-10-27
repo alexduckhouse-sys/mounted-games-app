@@ -1,3 +1,4 @@
+// Unused in web UI yet — reserved for iOS / upcoming wiring
 import type { CompetitionDetail, EmergencyContactEntry, VolunteerShift } from '../types';
 
 export const VOLUNTEER_ROLE_PRESETS = [
@@ -7,6 +8,21 @@ export const VOLUNTEER_ROLE_PRESETS = [
   'Tack Steward',
   'Gate Steward',
   'First Aid Liaison',
+] as const;
+
+export const STEWARD_DUTY_ROLE_PRESETS = [
+  { role: 'Arena Crew (Centre Props)', dutyCategory: 'ArenaCrew', laneNumber: null },
+  { role: 'Start/Finish Line Steward — Lane 1', dutyCategory: 'LineSteward', laneNumber: 1 },
+  { role: 'Start/Finish Line Steward — Lane 2', dutyCategory: 'LineSteward', laneNumber: 2 },
+  { role: 'Start/Finish Line Steward — Lane 3', dutyCategory: 'LineSteward', laneNumber: 3 },
+  { role: 'Start/Finish Line Steward — Lane 4', dutyCategory: 'LineSteward', laneNumber: 4 },
+  { role: 'Start/Finish Line Steward — Lane 5', dutyCategory: 'LineSteward', laneNumber: 5 },
+  { role: 'Changeover Line Steward — Lane 1', dutyCategory: 'ChangeoverSteward', laneNumber: 1 },
+  { role: 'Changeover Line Steward — Lane 2', dutyCategory: 'ChangeoverSteward', laneNumber: 2 },
+  { role: 'Changeover Line Steward — Lane 3', dutyCategory: 'ChangeoverSteward', laneNumber: 3 },
+  { role: 'Changeover Line Steward — Lane 4', dutyCategory: 'ChangeoverSteward', laneNumber: 4 },
+  { role: 'Changeover Line Steward — Lane 5', dutyCategory: 'ChangeoverSteward', laneNumber: 5 },
+  { role: 'Collecting Ring Steward', dutyCategory: 'General', laneNumber: null },
 ] as const;
 
 export interface LorryGateLinks {
@@ -124,4 +140,85 @@ export function filterEmergencyContacts(
 
     return tokens.every((token) => haystack.includes(token));
   });
+}
+
+export interface SessionStewardDutySummary {
+  totalDuties: number;
+  hereCount: number;
+  missingCount: number;
+  assignedAwaitingCheckInCount: number;
+  allHere: boolean;
+  readinessLabel: string;
+}
+
+export function isShiftCheckedInHere(shift: Pick<VolunteerShift, 'attendanceStatus'>): boolean {
+  return (shift.attendanceStatus ?? 'Assigned').toLowerCase() === 'here';
+}
+
+export function isShiftMarkedMissing(shift: Pick<VolunteerShift, 'attendanceStatus'>): boolean {
+  return (shift.attendanceStatus ?? 'Assigned').toLowerCase() === 'missing';
+}
+
+export function missingStewardShifts(
+  shifts: readonly VolunteerShift[],
+  sessionId?: number | null,
+): VolunteerShift[] {
+  return shifts.filter((shift) => {
+    if (sessionId != null && shift.sessionId !== sessionId) return false;
+    return !isShiftCheckedInHere(shift);
+  });
+}
+
+export function myTeamAssignedDuties(
+  shifts: readonly VolunteerShift[],
+  myTeamIds: readonly number[],
+  myClubName?: string | null,
+): VolunteerShift[] {
+  const teamSet = new Set(myTeamIds);
+  const cleanClub = myClubName?.trim().toLowerCase() || null;
+  return shifts.filter((shift) => {
+    if (shift.canViewerCheckIn) return true;
+    if (shift.assignedTeamId != null && teamSet.has(shift.assignedTeamId)) return true;
+    if (cleanClub && (shift.assignedClubName?.trim().toLowerCase() ?? '') === cleanClub) return true;
+    return false;
+  });
+}
+
+export function sessionStewardDutySummary(
+  shifts: readonly VolunteerShift[],
+  sessionId?: number | null,
+): SessionStewardDutySummary {
+  const relevant = sessionId == null ? shifts : shifts.filter((s) => s.sessionId === sessionId);
+  let hereCount = 0;
+  let missingCount = 0;
+  let assignedAwaitingCheckInCount = 0;
+
+  for (const s of relevant) {
+    if (isShiftCheckedInHere(s)) {
+      hereCount += 1;
+    } else if (isShiftMarkedMissing(s)) {
+      missingCount += 1;
+    } else {
+      assignedAwaitingCheckInCount += 1;
+    }
+  }
+
+  const totalDuties = relevant.length;
+  const allHere = totalDuties > 0 && hereCount === totalDuties;
+  const notHereCount = totalDuties - hereCount;
+  const readinessLabel =
+    totalDuties === 0
+      ? 'No duties assigned'
+      : allHere
+        ? `All ${totalDuties} stewards here`
+        : `${hereCount}/${totalDuties} here · ${notHereCount} not checked in`;
+
+  return {
+    totalDuties,
+    hereCount,
+    missingCount,
+    assignedAwaitingCheckInCount,
+    allHere,
+    readinessLabel,
+  };
 }

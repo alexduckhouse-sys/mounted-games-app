@@ -1,3 +1,4 @@
+// Unused in web UI yet — reserved for iOS / upcoming wiring
 import { api } from '../api';
 import type { ResultsBook } from '../pages/eventTools/resultsBookTypes';
 import type { CompetitionDetail, DeclarationForm, EventArchiveDto, StandingRow } from '../types';

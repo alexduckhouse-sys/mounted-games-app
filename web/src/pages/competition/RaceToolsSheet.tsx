@@ -180,7 +180,25 @@ export function RaceToolsSheet({
             </button>
           ))}
         </div>
+        <section className="rt-keys" aria-labelledby="rt-keys-title">
+          <h3 id="rt-keys-title" className="rt-keys-title">Using a keypad</h3>
+          <p className="rt-link-sub">Pair a Bluetooth keypad, page-turner or foot pedal with your phone, then:</p>
+          <dl className="rt-keys-list">
+            {KEY_GUIDE.map(([keys, does]) => (
+              <div key={keys} className="contents"><dt>{keys}</dt><dd>{does}</dd></div>
+            ))}
+          </dl>
+        </section>
       </div>
     </div>
   );
 }
+
+/** The keys from lib/scoringKeys.ts, in words. */
+const KEY_GUIDE: Array<[string, string]> = [
+  ['1 to 9', 'That lane is next over the line'],
+  ['. or - then the lane', 'Eliminate that lane'],
+  ['Enter', 'Save scores'],
+  ['Backspace, Z, ← or Page Up', 'Undo'],
+  ['→ or Page Down', 'Save, or go to the next race once saved'],
+];

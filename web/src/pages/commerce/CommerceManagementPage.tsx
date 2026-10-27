@@ -10,7 +10,6 @@ import { Chip, FormSheet, SheetField, type ChipTone } from '../clubShop/ui';
 import { LoadError } from './commerceUi';
 import { errorMessage, orderLineText, pounds } from './commerceFormat';
 import type { CommerceOrderStatus, CompetitionListing, EventCommerceSettings, EventOrder } from './types';
-import './commerce.css';
 import '../../components/sitePages.css';
 import '../clubShop/clubShop.css';
 

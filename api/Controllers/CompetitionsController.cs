@@ -557,11 +557,12 @@ public class CompetitionsController : ControllerBase
     /// <summary>Entries that count towards a section's cap (paid and pending), by section id.</summary>
     private async Task<Dictionary<int, int>> ActiveSignupCountsAsync(int competitionId)
     {
+        var now = DateTime.UtcNow;
         var rows = await _db.SectionSignups.AsNoTracking()
             .Where(s => s.Section!.CompetitionId == competitionId
                 && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending)
                 && !_db.Set<SignupMatchmaking>().Any(m => m.SignupId == s.Id && m.WaitingForGuestSpot)
-                && !_db.Set<SignupExtras>().Any(x => x.SignupId == s.Id && (x.IsWithdrawn || x.IsWaitlist)))
+                && !_db.Set<SignupExtras>().Any(x => x.SignupId == s.Id && (x.IsWithdrawn || (x.IsWaitlist && (x.WaitlistOfferExpiresAt == null || x.WaitlistOfferExpiresAt <= now)))))
             .Select(s => new { s.CompetitionSectionId,
                 Count = _db.Set<SignupExtras>().Where(x => x.SignupId == s.Id).Select(x => (int?)x.TeamsCount).FirstOrDefault() ?? 1 })
             .ToListAsync();
@@ -716,20 +717,37 @@ public class CompetitionsController : ControllerBase
     public async Task<ActionResult<CompetitionDetail>> ShiftDay(int id, [FromQuery] int days = 1)
     {
         var c = await _db.Competitions
-            .Include(c => c.Sessions)
+            .Include(c => c.Sessions).ThenInclude(s => s.Heats)
             .FirstOrDefaultAsync(c => c.Id == id);
         if (c is null) return NotFound();
         var shift = TimeSpan.FromDays(days);
 
         // Only push sessions that haven't started yet — preserves history.
+        var shiftedSessionIds = new List<int>();
         foreach (var s in c.Sessions.Where(s => s.StartedAt is null && s.Status != SessionStatus.Finished))
         {
+            var changed = false;
             if (s.ScheduledStart.HasValue)
+            {
                 s.ScheduledStart = s.ScheduledStart.Value.Add(shift);
+                changed = true;
+            }
+            foreach (var h in s.Heats.Where(h => !h.StartedAt.HasValue && !h.FinishedAt.HasValue && h.ScheduledStart.HasValue))
+            {
+                h.ScheduledStart = h.ScheduledStart!.Value.Add(shift);
+                changed = true;
+            }
+            if (changed) shiftedSessionIds.Add(s.Id);
         }
         if (c.EndDate.HasValue) c.EndDate = c.EndDate.Value.Add(shift);
         await _db.SaveChangesAsync();
-        return await Get(id);
+        var detailResult = await Get(id);
+        if (shiftedSessionIds.Count > 0 && detailResult.Value is { } detail)
+        {
+            foreach (var sessionDto in detail.Sessions.Where(s => shiftedSessionIds.Contains(s.Id)))
+                await _live.SessionUpdated(id, sessionDto);
+        }
+        return detailResult;
     }
 
     [HttpGet("{id:int}/finals/boundary")]
@@ -845,6 +863,7 @@ public class CompetitionsController : ControllerBase
         for (var i = 0; i < teamIds.Count; i++)
             _db.FinalsTieOrders.Add(new FinalsTieOrder { CompetitionId = id, TeamId = teamIds[i], Points = total, Position = i + 1, SetByUserId = userId });
         await _db.SaveChangesAsync();
+        StandingsService.Invalidate(id);
         return NoContent();
     }
 
@@ -1155,7 +1174,7 @@ public class CompetitionsController : ControllerBase
 
         foreach (var section in sections)
         {
-            var sectionTeams = comp.Teams.Where(t => t.CompetitionSectionId == section.Id).Select(t => t.Id).ToList();
+            var sectionTeams = comp.Teams.Where(t => t.CompetitionSectionId == section.Id && t.EntryStatus == TeamEntryStatus.Active).Select(t => t.Id).ToList();
             if (sectionTeams.Count == 0) continue;
 
             for (var sIdx = 1; sIdx <= sessionsPerSection; sIdx++)

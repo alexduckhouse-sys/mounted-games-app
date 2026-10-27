@@ -12,6 +12,9 @@ import { CompetitionTeamCard } from '../competition/CompetitionTeamCard';
 import { ScorerLinksCard } from '../competition/ScorerLinksCard';
 import { Chevron, RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineSheet } from '../refine/Refine';
 import { DrawResult, DrawSettingsForm } from './DrawPreviewView';
+import { DrawUndoBanner } from './DrawUndoBanner';
+import { EmergencySearch } from './EmergencySearch';
+import { VolunteerRota } from './VolunteerRota';
 import { EntriesPanel } from './EntriesPanel';
 import { equipmentLines } from './equipment';
 import { buildIssueGroups, clock, drawSubtitle, type IssueGroup } from './readiness';
@@ -48,10 +51,10 @@ export function OperationsPage() {
   return <OperationsPageContent key={`${competition.id}:${user.id}`} />;
 }
 
-type View = 'checks' | 'draw' | 'entries' | 'scorers' | 'tack' | 'passport' | 'import' | 'print' | 'results' | 'duplicate';
+type View = 'checks' | 'draw' | 'entries' | 'scorers' | 'volunteers' | 'safety' | 'tack' | 'passport' | 'import' | 'print' | 'results' | 'duplicate';
 type Sheet = 'draw' | null;
 
-const VALID_VIEWS = new Set<View>(['checks', 'draw', 'entries', 'scorers', 'tack', 'passport', 'import', 'print', 'results', 'duplicate']);
+const VALID_VIEWS = new Set<View>(['checks', 'draw', 'entries', 'scorers', 'volunteers', 'safety', 'tack', 'passport', 'import', 'print', 'results', 'duplicate']);
 
 function OperationsPageContent() {
   const canWrite = true; // anyone who can organise this competition may change it; the API decides
@@ -78,6 +81,7 @@ function OperationsPageContent() {
   const toast = useToast();
   const [previewing, setPreviewing] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [undoVersion, setUndoVersion] = useState(0);
 
   const loadReadiness = useCallback(async () => {
     setLoadingReadiness(true);
@@ -139,6 +143,7 @@ function OperationsPageContent() {
         { seed: preview.seed, fingerprint: preview.fingerprint },
       );
       toast.show('Draw applied');
+      setUndoVersion((n) => n + 1);
       reloadCompetition();
       void loadReadiness();
     } catch (error) {
@@ -185,6 +190,12 @@ function OperationsPageContent() {
   } else if (shownView === 'scorers') {
     title = 'Scorers & team';
     actions = null;
+  } else if (shownView === 'volunteers') {
+    title = 'Volunteers';
+    actions = null;
+  } else if (shownView === 'safety') {
+    title = 'Emergency contacts';
+    actions = null;
   } else if (shownView === 'tack') {
     title = 'Tack check';
     actions = null;
@@ -218,6 +229,8 @@ function OperationsPageContent() {
     { label: 'Draw', active: shownView === 'draw', onSelect: () => setView('draw') },
     { label: 'Entries', active: shownView === 'entries', onSelect: () => setView('entries') },
     { label: 'Scorers & team', active: shownView === 'scorers', onSelect: () => setView('scorers') },
+    { label: 'Volunteers', active: shownView === 'volunteers', onSelect: () => setView('volunteers') },
+    { label: 'Emergency contacts', active: shownView === 'safety', onSelect: () => setView('safety') },
     { label: 'Tack check', active: shownView === 'tack', onSelect: () => setView('tack') },
     { label: 'Passport check', active: shownView === 'passport', onSelect: () => setView('passport') },
     { label: 'Import teams', active: shownView === 'import', onSelect: () => setView('import') },
@@ -232,6 +245,8 @@ function OperationsPageContent() {
     <RefinePage className={wide ? 'ops-wide' : ''}>
       {toast.node}
       <RefineHeader back={back} backLabel="Back to event" context={context} actions={actions} title={title} subtitle={subtitle} tabs={tabs} tabsLabel="Event tools" tabsKind="tablist" />
+
+      <DrawUndoBanner competitionId={competition.id} version={undoVersion} onRestored={() => { reloadCompetition(); void loadReadiness(); }} />
 
       {loadError && (!readiness || shownView !== 'checks') && <Notice actionLabel="Try again" onAction={() => void loadReadiness()}>{loadError}</Notice>}
       {loadingReadiness && !readiness && <p role="status" className="rf-note">Checking competition details…</p>}
@@ -248,6 +263,9 @@ function OperationsPageContent() {
           <CompetitionTeamCard competitionId={competition.id} canWrite={canWrite} />
         </div>
       )}
+
+      {shownView === 'volunteers' && <VolunteerRota competition={competition} manage={canWrite} />}
+      {shownView === 'safety' && <EmergencySearch competitionId={competition.id} />}
 
       {shownView === 'tack' && <div className="ops-tools ops-flat"><TackCheckTab competitionId={String(competition.id)} /></div>}
       {shownView === 'passport' && <div className="ops-tools ops-flat"><PassportCheckTab competitionId={String(competition.id)} /></div>}
