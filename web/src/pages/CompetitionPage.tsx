@@ -34,6 +34,7 @@ import { lastUpdatedText, readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, wr
 import { PageSkeleton, TimetableSkeleton, ToplistSkeleton } from '../components/Skeletons';
 import { competitionPhase } from '../lib/competitionPhase';
 import { useLanguage, useT } from '../i18n/LanguageContext';
+import { FollowBarPrompt } from './competition/FollowBarPrompt';
 
 function addAnnouncement(current: ChatMessage[], message: ChatMessage) {
   const withoutSame = current.filter((item) => item.id !== message.id);
@@ -352,6 +353,8 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
         )}
       </div>
       <WeatherAlert competition={data} reload={load} />
+      {/* A sheet, so it sits outside the page's flex column. */}
+      <FollowBarPrompt />
     </CompetitionContext.Provider>
   );
 }
