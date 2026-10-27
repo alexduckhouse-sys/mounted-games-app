@@ -104,6 +104,9 @@ builder.Services
 builder.Services.AddAuthorizationWithCompetitionStaff();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<LiveAccounts>();
+builder.Services.AddHttpClient(OidcExternalTokenValidator.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(10))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddSingleton<IExternalTokenValidator, OidcExternalTokenValidator>();
 
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<ScoringService>();

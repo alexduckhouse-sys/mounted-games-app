@@ -45,6 +45,23 @@ export interface AuthResponse {
   user: UserProfile;
 }
 
+export interface ExternalProvider {
+  id: string;
+  name: string;
+  clientId: string;
+  authorizeEndpoint: string;
+  scope: string;
+  responseMode?: string;
+}
+
+export interface ExternalAuthResponse {
+  needsSignup: boolean;
+  auth: AuthResponse | null;
+  email?: string | null;
+  suggestedName?: string | null;
+  provider?: string | null;
+}
+
 export interface TrainerRequest {
   userId: string;
   fullName: string;

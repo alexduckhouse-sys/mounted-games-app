@@ -1,14 +1,16 @@
-import { useEffect, useId, useMemo, useState, type FormEvent } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useCallback, useEffect, useId, useMemo, useState, type FormEvent } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Plus, Send } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { Notice } from '../components/Notice';
 import { PasswordChecklist } from '../components/PasswordChecklist';
+import { SocialLoginButtons } from '../components/SocialLoginButtons';
 import { isRealisticEmail, suggestEmailFix } from '../lib/emailCheck';
 import { friendlyPasswordErrors, passwordMeetsRules } from '../lib/passwordRules';
 import type { Club } from '../types';
 import { AuthFrame } from './auth/AuthFrame';
+import { ExternalOnboardingForm, type PendingExternalSignup } from './auth/ExternalOnboardingForm';
 import { Field } from './auth/Field';
 
 type RoleId = 'member' | 'trainer' | 'manager';
@@ -34,8 +36,9 @@ function problemsFrom(err: unknown): { status?: number; message?: string; code?:
 
 /** Create an account, then show who will approve it. */
 export function SignUpPage() {
-  const { signupTrainer, loading } = useAuth();
+  const { signupTrainer, loginWithExternal, loading } = useAuth();
   const loc = useLocation();
+  const nav = useNavigate();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -48,6 +51,34 @@ export function SignUpPage() {
   const [clubs, setClubs] = useState<Club[]>([]);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [sentTo, setSentTo] = useState<{ club: string; role: RoleId } | null>(null);
+  const [pendingExternal, setPendingExternal] = useState<PendingExternalSignup | null>(null);
+
+  const from = (loc.state as { from?: string } | null)?.from;
+
+  const handleExternalToken = useCallback(async (provider: string, idToken: string, nonce?: string) => {
+    setErrors({});
+    try {
+      const res = await loginWithExternal(provider, idToken, { nonce });
+      if (res.needsSignup) {
+        setPendingExternal({
+          provider: res.provider,
+          idToken,
+          nonce,
+          email: res.email,
+          suggestedName: res.suggestedName,
+        });
+      } else {
+        nav(from ?? '/', { replace: true });
+      }
+    } catch (err: unknown) {
+      const { message } = problemsFrom(err);
+      setErrors({ form: message ?? 'Could not verify that sign-in. Try again.' });
+    }
+  }, [from, loginWithExternal, nav]);
+
+  const handleExternalError = useCallback((msg: string) => {
+    setErrors({ form: msg });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,8 +122,6 @@ export function SignUpPage() {
     }
   }
 
-  // Where they were headed when they chose to sign up, e.g. a competition's entry page.
-  const from = (loc.state as { from?: string } | null)?.from;
   if (sentTo) {
     const sent = ROLES.find((r) => r.id === sentTo.role)!;
     return (
@@ -116,10 +145,25 @@ export function SignUpPage() {
     );
   }
 
+  if (pendingExternal) {
+    return (
+      <AuthFrame>
+        <ExternalOnboardingForm
+          pending={pendingExternal}
+          initialClubs={clubs}
+          onComplete={(res) => setSentTo(res)}
+          onCancel={() => { setPendingExternal(null); setErrors({}); }}
+        />
+      </AuthFrame>
+    );
+  }
+
   return (
     <AuthFrame>
       <form onSubmit={submit} className="flex flex-1 flex-col gap-[18px]" noValidate>
         <h1 className="mg-h1 !text-[34px] !leading-none">Create an account</h1>
+
+        <SocialLoginButtons disabled={loading} onToken={handleExternalToken} onError={handleExternalError} />
 
         <Field label="Your name">
           {({ id }) => <div className="mg-field"><input id={id} value={name} autoComplete="name" autoFocus onChange={(e) => setName(e.target.value)} /></div>}

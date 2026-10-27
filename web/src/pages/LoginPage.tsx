@@ -1,17 +1,19 @@
-import { useId, useState, type FormEvent } from 'react';
+import { useCallback, useId, useState, type FormEvent } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { ArrowLeft, Eye, EyeOff, KeyRound } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { PasswordChecklist } from '../components/PasswordChecklist';
+import { SocialLoginButtons } from '../components/SocialLoginButtons';
 import { friendlyPasswordErrors, passwordMeetsRules } from '../lib/passwordRules';
 import { AuthFrame } from './auth/AuthFrame';
+import { ExternalOnboardingForm, type PendingExternalSignup } from './auth/ExternalOnboardingForm';
 import { Field } from './auth/Field';
 
 interface NavState { from?: string }
 
-/** Sign in with an email and password, or swap to the organiser's shared key. */
+/** Sign in with an email and password, an external provider, or swap to the organiser's shared key. */
 export function LoginPage() {
-  const { login, loginWithAdminKey, loading } = useAuth();
+  const { login, loginWithAdminKey, loginWithExternal, loading } = useAuth();
   const nav = useNavigate();
   const loc = useLocation();
   const rulesId = useId();
@@ -26,6 +28,32 @@ export function LoginPage() {
   const [organiserKey, setOrganiserKey] = useState('');
   const [showOrganiserKey, setShowOrganiserKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingExternal, setPendingExternal] = useState<PendingExternalSignup | null>(null);
+
+  const handleExternalToken = useCallback(async (provider: string, idToken: string, nonce?: string) => {
+    setError(null);
+    try {
+      const res = await loginWithExternal(provider, idToken, { nonce });
+      if (res.needsSignup) {
+        setPendingExternal({
+          provider: res.provider,
+          idToken,
+          nonce,
+          email: res.email,
+          suggestedName: res.suggestedName,
+        });
+      } else {
+        nav((loc.state as NavState | null)?.from ?? '/', { replace: true });
+      }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setError(msg || 'Could not verify that sign-in. Try again.');
+    }
+  }, [loc.state, loginWithExternal, nav]);
+
+  const handleExternalError = useCallback((msg: string) => {
+    setError(msg);
+  }, []);
 
   const ready = useKey
     ? organiserTitle.trim().length > 0 && organiserEmail.trim().includes('@') && passwordMeetsRules(organiserPassword) && organiserKey.trim().length > 0
@@ -62,10 +90,26 @@ export function LoginPage() {
     setError(null);
   }
 
+  if (pendingExternal) {
+    return (
+      <AuthFrame>
+        <ExternalOnboardingForm
+          pending={pendingExternal}
+          onComplete={() => nav((loc.state as NavState | null)?.from ?? '/', { replace: true })}
+          onCancel={() => { setPendingExternal(null); setError(null); }}
+        />
+      </AuthFrame>
+    );
+  }
+
   return (
     <AuthFrame>
       <form onSubmit={submit} className="flex flex-1 flex-col gap-[18px]" noValidate>
         <h1 className="mg-h1 !text-[34px] !leading-none">{useKey ? 'Organiser sign in' : 'Sign in'}</h1>
+
+        {!useKey && (
+          <SocialLoginButtons disabled={loading} onToken={handleExternalToken} onError={handleExternalError} />
+        )}
 
         {useKey ? (
           <>

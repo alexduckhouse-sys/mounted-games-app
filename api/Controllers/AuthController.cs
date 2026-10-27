@@ -72,6 +72,169 @@ public class AuthController : ControllerBase
 
     private const string AccessStoppedMessage = "This account can't sign in right now. Contact an organiser or administrator.";
 
+    [HttpGet("providers")]
+    [AllowAnonymous]
+    public ActionResult<IReadOnlyList<ExternalProviderDto>> GetProviders([FromServices] IExternalTokenValidator externalValidator)
+        => Ok(externalValidator.GetEnabledProviders());
+
+    [EnableRateLimiting("auth")]
+    [HttpPost("external")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ExternalAuthResultDto>> ExternalLogin(
+        ExternalAuthRequest req,
+        [FromServices] IExternalTokenValidator externalValidator,
+        [FromServices] IConfiguration config,
+        [FromServices] AccountIpRecorder ipRecorder)
+    {
+        if (await _db.IsIpBlockedAsync(HttpContext, HttpContext.RequestAborted))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Sign-in from this network is blocked." });
+
+        var providerKey = (req.Provider ?? string.Empty).Trim().ToLowerInvariant();
+        if (providerKey.Length == 0 || string.IsNullOrWhiteSpace(req.IdToken))
+            return Unauthorized(new { message = "Could not verify that sign-in. Try again." });
+
+        var identity = await externalValidator.ValidateIdTokenAsync(providerKey, req.IdToken, req.Nonce, HttpContext.RequestAborted);
+        if (identity is null || string.IsNullOrWhiteSpace(identity.Subject) || string.IsNullOrWhiteSpace(identity.Email))
+            return Unauthorized(new { message = "Could not verify that sign-in. Try again." });
+
+        if (!EmailValidation.TryNormalise(identity.Email, out var email))
+            return EmailRejected(EmailProblem.Format);
+        if (string.Equals(email, "admin@mg.local", StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { message = "Choose your own email address." });
+        if (EmailValidation.IsDisposable(EmailValidation.DomainOf(email)))
+            return EmailRejected(EmailProblem.Disposable);
+
+        var providerDisplayName = externalValidator.GetEnabledProviders()
+            .FirstOrDefault(p => string.Equals(p.Id, providerKey, StringComparison.OrdinalIgnoreCase))?.Name
+            ?? ExternalProviders.DisplayNameFor(providerKey, config);
+
+        var linkedUser = await _users.FindByLoginAsync(providerKey, identity.Subject);
+        if (linkedUser is not null)
+        {
+            if (linkedUser.IsAccessStopped)
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = AccessStoppedMessage, code = "account_stopped" });
+
+            if (!linkedUser.EmailConfirmed && identity.EmailVerified
+                && string.Equals(linkedUser.Email, email, StringComparison.OrdinalIgnoreCase))
+            {
+                linkedUser.EmailConfirmed = true;
+                await _users.UpdateAsync(linkedUser);
+            }
+
+            await ipRecorder.RecordAsync(linkedUser.Id, HttpContext.Connection.RemoteIpAddress?.ToString(), HttpContext.RequestAborted);
+            var (linkedToken, linkedExpires, linkedRoles) = await _tokens.CreateTokenAsync(linkedUser);
+            var linkedClub = linkedUser.ClubId.HasValue ? await _db.Clubs.FindAsync(linkedUser.ClubId.Value) : null;
+            return new ExternalAuthResultDto(
+                NeedsSignup: false,
+                Auth: new AuthResponse(linkedToken, linkedExpires,
+                    new UserProfile(linkedUser.Id, linkedUser.Email!, linkedUser.FullName, linkedUser.ClubId, linkedClub?.Name, linkedRoles.ToList(), linkedUser.EmailConfirmed)));
+        }
+
+        var existingUser = await _users.FindByEmailAsync(email);
+        if (existingUser is not null)
+        {
+            if (!identity.EmailVerified)
+                return Unauthorized(new { message = "Confirm your email address with your sign-in provider first, or sign in with your password." });
+            if (existingUser.IsAccessStopped)
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = AccessStoppedMessage, code = "account_stopped" });
+
+            var linked = await _users.AddLoginAsync(existingUser, new UserLoginInfo(providerKey, identity.Subject, providerDisplayName));
+            if (!linked.Succeeded)
+                return BadRequest(new { message = "Could not link that sign-in provider to your account." });
+
+            if (!existingUser.EmailConfirmed)
+            {
+                existingUser.EmailConfirmed = true;
+                await _users.UpdateAsync(existingUser);
+            }
+
+            await ipRecorder.RecordAsync(existingUser.Id, HttpContext.Connection.RemoteIpAddress?.ToString(), HttpContext.RequestAborted);
+            var (existingToken, existingExpires, existingRoles) = await _tokens.CreateTokenAsync(existingUser);
+            var existingClub = existingUser.ClubId.HasValue ? await _db.Clubs.FindAsync(existingUser.ClubId.Value) : null;
+            return new ExternalAuthResultDto(
+                NeedsSignup: false,
+                Auth: new AuthResponse(existingToken, existingExpires,
+                    new UserProfile(existingUser.Id, existingUser.Email!, existingUser.FullName, existingUser.ClubId, existingClub?.Name, existingRoles.ToList(), existingUser.EmailConfirmed)));
+        }
+
+        if (!identity.EmailVerified)
+            return Unauthorized(new { message = "Confirm your email address with your sign-in provider first." });
+
+        var suggestedName = !string.IsNullOrWhiteSpace(identity.FullName) ? identity.FullName.Trim() : email.Split('@')[0];
+        if (suggestedName.Length > 100)
+            suggestedName = suggestedName[..100];
+
+        if (string.IsNullOrWhiteSpace(req.ClubName))
+        {
+            return new ExternalAuthResultDto(
+                NeedsSignup: true,
+                Auth: null,
+                Email: email,
+                SuggestedName: suggestedName,
+                Provider: providerKey);
+        }
+
+        var clubName = req.ClubName.Trim();
+        if (clubName.Length > 100)
+            return BadRequest(new { message = "Pony Club or team name must be 100 characters or fewer." });
+
+        var givenName = (req.FullName ?? string.Empty).Trim();
+        if (givenName.Length > 100)
+            return BadRequest(new { message = "Your name must be 100 characters or fewer." });
+        var fullName = givenName.Length > 0 ? givenName : suggestedName;
+
+        var requested = (req.Role ?? Roles.Trainer).Trim();
+        var role = requested.Equals(Roles.Manager, StringComparison.OrdinalIgnoreCase) ? Roles.Manager
+                 : requested.Equals(Roles.Member, StringComparison.OrdinalIgnoreCase) ? Roles.Member
+                 : Roles.Trainer;
+
+        var createdAccount = await CreateAccountAsync(config, async (ipHash, accountId) =>
+        {
+            var club = await _db.Clubs.FirstOrDefaultAsync(c => c.Name.ToLower() == clubName.ToLower());
+            club ??= new Club { Name = clubName, Region = "Custom" };
+
+            var user = new AppUser
+            {
+                Id = accountId,
+                UserName = email,
+                Email = email,
+                FullName = fullName,
+                Club = club.Id == 0 ? club : null,
+                ClubId = club.Id == 0 ? null : club.Id,
+                EmailConfirmed = true
+            };
+            var created = await _users.CreateAsync(user);
+            if (!created.Succeeded)
+                return PasswordProblems(created);
+
+            var recordedIp = await _users.AddClaimAsync(user, new Claim(CreatedIpClaimType, ipHash));
+            if (!recordedIp.Succeeded)
+                return PasswordProblems(recordedIp);
+
+            var loginAdded = await _users.AddLoginAsync(user, new UserLoginInfo(providerKey, identity.Subject, providerDisplayName));
+            if (!loginAdded.Succeeded)
+                return PasswordProblems(loginAdded);
+
+            var assignedRoles = role == Roles.Trainer ? new[] { Roles.Member, Roles.TrainerRequest }
+                : role == Roles.Manager ? new[] { Roles.Member, Roles.ManagerRequest }
+                : new[] { role };
+            var assigned = await _users.AddToRolesAsync(user, assignedRoles);
+            if (!assigned.Succeeded)
+                return BadRequest(new { errors = assigned.Errors.Select(e => e.Description) });
+
+            var (token, expiresAt, rolesOut) = await _tokens.CreateTokenAsync(user);
+            return new AuthResponse(token, expiresAt,
+                new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club.Name, rolesOut.ToList(), user.EmailConfirmed));
+        });
+
+        if (createdAccount.Result is not null)
+            return createdAccount.Result;
+
+        var signedUp = createdAccount.Value!;
+        await ipRecorder.RecordAsync(signedUp.User.Id, HttpContext.Connection.RemoteIpAddress?.ToString(), HttpContext.RequestAborted);
+        return new ExternalAuthResultDto(NeedsSignup: false, Auth: signedUp);
+    }
+
     [EnableRateLimiting("auth")]
     [HttpPost("admin-key")]
     [AllowAnonymous]

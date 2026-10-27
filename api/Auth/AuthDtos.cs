@@ -60,3 +60,32 @@ public record TrainerRequestDto(
     string? ClubName,
     DateTime RequestedAt,
     string RequestedRole = Roles.Trainer);
+
+/// <summary>An external OAuth/OIDC sign-in provider configured on the API.</summary>
+public record ExternalProviderDto(
+    string Id,
+    string Name,
+    string ClientId,
+    string AuthorizeEndpoint,
+    string Scope,
+    string ResponseMode = "fragment");
+
+/// <summary>Signs in or completes onboarding using an external OIDC provider's ID token.</summary>
+public record ExternalAuthRequest(
+    string Provider,
+    string IdToken,
+    string? Nonce = null,
+    string? FullName = null,
+    string? ClubName = null,
+    string? Role = null);
+
+/// <summary>
+/// Result of <c>POST /api/auth/external</c>. When <c>NeedsSignup</c> is true, the caller is a new person who
+/// needs to pick their club and role before the account is created.
+/// </summary>
+public record ExternalAuthResultDto(
+    bool NeedsSignup,
+    AuthResponse? Auth,
+    string? Email = null,
+    string? SuggestedName = null,
+    string? Provider = null);
