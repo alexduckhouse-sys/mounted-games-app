@@ -76,6 +76,19 @@ export const account = {
   'account.delete.noWayToConfirm': 'Your account has no password or sign-in to confirm with, so it can’t be deleted here. Ask an administrator.',
   'account.delete.failed': 'We couldn\'t delete your account. Check your connection and try again.',
 
+  // Ways to sign in (My account)
+  'account.signIns.heading': 'Ways to sign in',
+  'account.signIns.onlyWayIn': 'Only way in',
+  'account.signIns.onlyWayInNote': 'Your account has no password, so this is the only way you can sign in.',
+  'account.signIns.add': 'Add one so you can sign in with it too.',
+  'account.signIns.remove': 'Remove',
+  'account.signIns.removeAria': 'Remove {name} sign-in',
+  'account.signIns.removeTitle': 'Remove {name} sign-in?',
+  'account.signIns.removeMessage': 'You won’t be able to sign in with {name} any more. You can add it again later.',
+  'account.signIns.added': '{name} added',
+  'account.signIns.removed': '{name} removed',
+  'account.signIns.failed': 'Couldn’t change that. Check your signal and try again.',
+
   // My entries
   'account.signups.title': 'My entries',
   'account.signups.refunded': 'Refunded',

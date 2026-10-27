@@ -72,9 +72,9 @@ export function SignUpPage() {
         nav(from ?? '/', { replace: true });
       }
     } catch (err: unknown) {
-      setExternalError(externalErrorMessage(err, 'Couldn’t sign in. Check your signal and try again.'));
+      setExternalError(externalErrorMessage(err, t('auth.login.noSignal')));
     }
-  }, [from, loginWithExternal, nav]);
+  }, [from, loginWithExternal, nav, t]);
 
   useEffect(() => {
     let cancelled = false;

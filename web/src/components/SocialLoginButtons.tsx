@@ -4,6 +4,8 @@ import {
   FACEBOOK_GRAPH_VERSION, loadApple, loadFacebook, loadGoogle, makeNonce, randomState,
   type AppleAuthApi, type FacebookApi, type SignInNonce,
 } from '../auth/socialSdk';
+import { useLanguage, useT } from '../i18n/LanguageContext';
+import type { Lang } from '../i18n/translate';
 import type { ExternalProvider } from '../types';
 
 /** What a provider hands back, ready for `POST /auth/external`. */
@@ -28,15 +30,11 @@ export interface SocialLoginButtonsProps {
   label?: 'signin' | 'continue';
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
-export const SOCIAL_COPY = {
-  googleUnavailable: 'Google sign-in didn’t load. Check your signal, or use your email and password.',
-  appleUnavailable: 'Apple sign-in didn’t load. Check your signal, or use your email and password.',
-  googleFailed: 'Google sign-in didn’t work. Try again, or use your email and password.',
-  appleFailed: 'Apple sign-in didn’t work. Try again, or use your email and password.',
-  facebookUnavailable: 'Facebook sign-in didn’t load. Check your signal, or use your email and password.',
-  notChecked: 'We couldn’t check that sign-in. Try again.',
-};
+/**
+ * Google draws its own button and words it in the language we pass. Welsh and French use the plain language code;
+ * English stays British.
+ */
+const GOOGLE_LOCALE: Record<Lang, string> = { en: 'en-GB', cy: 'cy', fr: 'fr' };
 
 let cachedProviders: ExternalProvider[] | null = null;
 let pendingFetch: Promise<ExternalProvider[]> | null = null;
@@ -89,13 +87,16 @@ function useLatest<T>(value: T) {
 interface ButtonProps extends Omit<SocialLoginButtonsProps, 'only' | 'divider'> { clientId: string }
 
 /**
- * Google's own "Sign in with Google" button (Google Identity Services), so its branding is Google's. It opens Google's
+ * Google's own "Sign in with Google" button (Google Identity Services), so its branding and wording are Google's, in
+ * the app's language (`locale`). It opens Google's
  * pop-up and hands the ID token to a callback here; nothing is put in the address bar.
  */
 function GoogleButton({ clientId, disabled, label, onCredential, onError }: ButtonProps) {
   const slot = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'failed'>('loading');
-  const latest = useLatest({ onCredential, onError });
+  const { t, lang } = useLanguage();
+  const latest = useLatest({ onCredential, onError, t });
+  const locale = GOOGLE_LOCALE[lang];
 
   useEffect(() => {
     let live = true;
@@ -111,7 +112,7 @@ function GoogleButton({ clientId, disabled, label, onCredential, onError }: Butt
         callback: (response) => {
           if (!live) return;
           if (response.credential) void latest.current.onCredential({ provider: 'google', idToken: response.credential, nonce: nonce.raw });
-          else latest.current.onError(SOCIAL_COPY.googleFailed);
+          else latest.current.onError(latest.current.t('auth.social.googleFailed'));
         },
       });
       const width = Math.round(slot.current.getBoundingClientRect().width) || 320;
@@ -123,15 +124,15 @@ function GoogleButton({ clientId, disabled, label, onCredential, onError }: Butt
         shape: 'rectangular',
         logo_alignment: 'center',
         width: Math.min(400, Math.max(200, width)),
-        locale: 'en-GB',
+        locale,
       });
       setStatus('ready');
     }).catch(() => { if (live) setStatus('failed'); });
     return () => { live = false; };
-  }, [clientId, label, latest]);
+  }, [clientId, label, locale, latest]);
 
   if (status === 'failed') {
-    return <p role="status" className="m-0 text-center text-sm text-[rgb(var(--mg-muted))]">{SOCIAL_COPY.googleUnavailable}</p>;
+    return <p role="status" className="m-0 text-center text-sm text-[rgb(var(--mg-muted))]">{t('auth.social.googleUnavailable')}</p>;
   }
   return (
     <div className="relative flex min-h-[44px] justify-center" aria-busy={status === 'loading'}>
@@ -157,6 +158,7 @@ function FacebookLogo() {
  * access token (no ID token and no nonce); the API checks it with Facebook.
  */
 function FacebookButton({ clientId, disabled, onCredential }: ButtonProps) {
+  const t = useT();
   const sdk = useRef<FacebookApi | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'failed'>('loading');
 
@@ -181,7 +183,7 @@ function FacebookButton({ clientId, disabled, onCredential }: ButtonProps) {
   }
 
   if (status === 'failed') {
-    return <p role="status" className="m-0 text-center text-sm text-[rgb(var(--mg-muted))]">{SOCIAL_COPY.facebookUnavailable}</p>;
+    return <p role="status" className="m-0 text-center text-sm text-[rgb(var(--mg-muted))]">{t('auth.social.facebookUnavailable')}</p>;
   }
   return (
     <button
@@ -191,7 +193,7 @@ function FacebookButton({ clientId, disabled, onCredential }: ButtonProps) {
       className="mg-btn w-full !min-h-[44px] border-[#1877F2] bg-[#1877F2] text-white"
     >
       <FacebookLogo />
-      <span>Continue with Facebook</span>
+      <span>{t('auth.social.facebookContinue')}</span>
     </button>
   );
 }
@@ -205,10 +207,12 @@ function AppleLogo() {
 }
 
 /**
- * "Sign in with Apple" in Apple's black style (white on the dark theme), opening Apple's pop-up. `signIn` runs straight
+ * "Sign in with Apple" in Apple's black style (white on the dark theme), opening Apple's pop-up. The words are Apple's
+ * own titles: French uses Apple's French ones, and Welsh keeps the English because Apple has none. `signIn` runs straight
  * from the tap so Safari lets the pop-up open, which is why Apple's script is loaded and set up before the button is enabled.
  */
 function AppleButton({ clientId, disabled, label, onCredential, onError }: ButtonProps) {
+  const t = useT();
   const session = useRef<{ apple: AppleAuthApi; nonce: SignInNonce; state: string } | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'failed'>('loading');
 
@@ -232,7 +236,7 @@ function AppleButton({ clientId, disabled, label, onCredential, onError }: Butto
       (data) => {
         const idToken = data.authorization?.id_token;
         if (!idToken || data.authorization?.state !== current.state) {
-          onError(SOCIAL_COPY.notChecked);
+          onError(t('auth.social.notChecked'));
           return;
         }
         const name = [data.user?.name?.firstName, data.user?.name?.lastName].map((part) => part?.trim()).filter(Boolean).join(' ');
@@ -242,13 +246,13 @@ function AppleButton({ clientId, disabled, label, onCredential, onError }: Butto
         const code = (err as { error?: string } | null)?.error;
         // Closing Apple's window is a change of mind, not a fault.
         if (code === 'popup_closed_by_user' || code === 'user_cancelled_authorize') return;
-        onError(SOCIAL_COPY.appleFailed);
+        onError(t('auth.social.appleFailed'));
       },
     );
   }
 
   if (status === 'failed') {
-    return <p role="status" className="m-0 text-center text-sm text-[rgb(var(--mg-muted))]">{SOCIAL_COPY.appleUnavailable}</p>;
+    return <p role="status" className="m-0 text-center text-sm text-[rgb(var(--mg-muted))]">{t('auth.social.appleUnavailable')}</p>;
   }
   return (
     <button
@@ -259,7 +263,7 @@ function AppleButton({ clientId, disabled, label, onCredential, onError }: Butto
       className="mg-btn w-full !min-h-[44px] border-black bg-black text-white [[data-theme=dark]_&]:border-white [[data-theme=dark]_&]:bg-white [[data-theme=dark]_&]:text-black"
     >
       <AppleLogo />
-      <span>{label === 'continue' ? 'Continue with Apple' : 'Sign in with Apple'}</span>
+      <span>{t(label === 'continue' ? 'auth.social.appleContinue' : 'auth.social.appleSignIn')}</span>
     </button>
   );
 }
@@ -269,6 +273,7 @@ function AppleButton({ clientId, disabled, label, onCredential, onError }: Butto
  * "or" above the email and password form. Shows nothing when none is on (or none of `only`) or the list can't be fetched.
  */
 export function SocialLoginButtons({ only, divider = true, ...props }: SocialLoginButtonsProps) {
+  const t = useT();
   const providers = useSocialProviders();
   const shown = only ? providers.filter((p) => only.includes(p.id)) : providers;
   if (shown.length === 0) return null;
@@ -282,7 +287,7 @@ export function SocialLoginButtons({ only, divider = true, ...props }: SocialLog
       {divider && (
         <div className="my-1 flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
           <span className="h-px flex-1 bg-[rgb(var(--mg-control))]" />
-          <span>or</span>
+          <span>{t('auth.social.or')}</span>
           <span className="h-px flex-1 bg-[rgb(var(--mg-control))]" />
         </div>
       )}

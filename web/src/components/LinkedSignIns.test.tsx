@@ -6,7 +6,8 @@ import { loadApple, loadGoogle, makeNonce, randomState, type AppleAuthApi, type 
 import type { LinkedSignInsState } from '../hooks/useLinkedSignIns';
 import { autoConfirm } from '../test/confirm';
 import type { LinkedSignIns as Info } from '../types';
-import { LINKED_SIGN_INS_COPY, LinkedSignIns } from './LinkedSignIns';
+import { en } from '../i18n/en';
+import { LinkedSignIns } from './LinkedSignIns';
 import { clearSocialProvidersCache } from './SocialLoginButtons';
 
 vi.mock('../api', async (importOriginal) => ({
@@ -48,7 +49,7 @@ describe('LinkedSignIns', () => {
 
   it('lists linked sign-ins with Remove, and offers the others with the providers’ own buttons', async () => {
     mount({ hasPassword: true, logins: [{ provider: 'google', name: 'Google' }] });
-    expect(screen.getByRole('heading', { name: LINKED_SIGN_INS_COPY.heading })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: en['account.signIns.heading'] })).toBeInTheDocument();
     expect(screen.getByText('Google')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Remove Google sign-in' })).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Continue with Apple' })).toBeInTheDocument();
@@ -59,8 +60,8 @@ describe('LinkedSignIns', () => {
   it('never offers to remove the only way into an account with no password', () => {
     mount({ hasPassword: false, logins: [{ provider: 'google', name: 'Google' }] });
     expect(screen.queryByRole('button', { name: /Remove/ })).not.toBeInTheDocument();
-    expect(screen.getByText(LINKED_SIGN_INS_COPY.onlyWayIn)).toBeInTheDocument();
-    expect(screen.getByText(LINKED_SIGN_INS_COPY.onlyWayInNote)).toBeInTheDocument();
+    expect(screen.getByText(en['account.signIns.onlyWayIn'])).toBeInTheDocument();
+    expect(screen.getByText(en['account.signIns.onlyWayInNote'])).toBeInTheDocument();
   });
 
   it('adds a provider and says so, or shows why not', async () => {
@@ -88,7 +89,7 @@ describe('LinkedSignIns', () => {
 
     const asked = autoConfirm(false);
     await user.click(screen.getByRole('button', { name: 'Remove Google sign-in' }));
-    await waitFor(() => expect(asked).toHaveBeenCalledWith(LINKED_SIGN_INS_COPY.removeMessage('Google')));
+    await waitFor(() => expect(asked).toHaveBeenCalledWith(en['account.signIns.removeMessage'].replace('{name}', 'Google')));
     expect(remove).not.toHaveBeenCalled();
 
     autoConfirm(true);
@@ -97,7 +98,7 @@ describe('LinkedSignIns', () => {
     expect(onChanged).toHaveBeenCalledWith('Google removed');
 
     await user.click(screen.getByRole('button', { name: 'Remove Apple sign-in' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent(LINKED_SIGN_INS_COPY.failed);
+    expect(await screen.findByRole('alert')).toHaveTextContent(en['account.signIns.failed']);
   });
 
   it('names a provider from the list it was linked under when it is no longer switched on', async () => {

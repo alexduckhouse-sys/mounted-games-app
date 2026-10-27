@@ -1,23 +1,11 @@
 import { useState } from 'react';
 import type { LinkedSignInsState } from '../hooks/useLinkedSignIns';
+import { useT } from '../i18n/LanguageContext';
 import { externalErrorMessage } from '../lib/externalAuthError';
 import { confirmDialog } from './ConfirmDialog';
 import { Notice } from './Notice';
 import { SocialLoginButtons, useSocialProviders, type SocialCredential } from './SocialLoginButtons';
 import './sitePages.css';
-
-// eslint-disable-next-line react-refresh/only-export-components
-export const LINKED_SIGN_INS_COPY = {
-  heading: 'Ways to sign in',
-  onlyWayIn: 'Only way in',
-  onlyWayInNote: 'Your account has no password, so this is the only way you can sign in.',
-  add: 'Add one so you can sign in with it too.',
-  removeTitle: (name: string) => `Remove ${name} sign-in?`,
-  removeMessage: (name: string) => `You won’t be able to sign in with ${name} any more. You can add it again later.`,
-  added: (name: string) => `${name} added`,
-  removed: (name: string) => `${name} removed`,
-  failed: 'Couldn’t change that. Check your signal and try again.',
-};
 
 interface LinkedSignInsProps extends LinkedSignInsState {
   /** A short "Google added" for the page's toast. */
@@ -30,6 +18,7 @@ interface LinkedSignInsProps extends LinkedSignInsState {
  * removed (the API refuses too). Adding one emails the account's address.
  */
 export function LinkedSignIns({ info, connect, remove, onChanged }: LinkedSignInsProps) {
+  const t = useT();
   const providers = useSocialProviders();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,9 +35,9 @@ export function LinkedSignIns({ info, connect, remove, onChanged }: LinkedSignIn
     try {
       await connect(credential);
       // The button came from this list, so the provider is in it.
-      onChanged(LINKED_SIGN_INS_COPY.added(addable.find((p) => p.id === credential.provider)!.name));
+      onChanged(t('account.signIns.added', { name: addable.find((p) => p.id === credential.provider)!.name }));
     } catch (e) {
-      setError(externalErrorMessage(e, LINKED_SIGN_INS_COPY.failed));
+      setError(externalErrorMessage(e, t('account.signIns.failed')));
     } finally {
       setBusy(false);
     }
@@ -56,9 +45,9 @@ export function LinkedSignIns({ info, connect, remove, onChanged }: LinkedSignIn
 
   async function removeOne(provider: string, name: string) {
     const sure = await confirmDialog({
-      title: LINKED_SIGN_INS_COPY.removeTitle(name),
-      message: LINKED_SIGN_INS_COPY.removeMessage(name),
-      confirmLabel: 'Remove',
+      title: t('account.signIns.removeTitle', { name }),
+      message: t('account.signIns.removeMessage', { name }),
+      confirmLabel: t('account.signIns.remove'),
       destructive: true,
     });
     if (!sure) return;
@@ -66,9 +55,9 @@ export function LinkedSignIns({ info, connect, remove, onChanged }: LinkedSignIn
     setError(null);
     try {
       await remove(provider);
-      onChanged(LINKED_SIGN_INS_COPY.removed(name));
+      onChanged(t('account.signIns.removed', { name }));
     } catch (e) {
-      setError(externalErrorMessage(e, LINKED_SIGN_INS_COPY.failed));
+      setError(externalErrorMessage(e, t('account.signIns.failed')));
     } finally {
       setBusy(false);
     }
@@ -76,28 +65,28 @@ export function LinkedSignIns({ info, connect, remove, onChanged }: LinkedSignIn
 
   return (
     <section aria-labelledby="ways-to-sign-in">
-      <h2 id="ways-to-sign-in" className="sp-sec">{LINKED_SIGN_INS_COPY.heading}</h2>
+      <h2 id="ways-to-sign-in" className="sp-sec">{t('account.signIns.heading')}</h2>
       {info.logins.length > 0 && (
         <div className="sp-card">
           {info.logins.map((login) => (
             <div key={login.provider} className="sp-row">
               <span className="sp-t1 sp-grow">{login.name}</span>
               {lastWayIn
-                ? <span className="sp-t2">{LINKED_SIGN_INS_COPY.onlyWayIn}</span>
+                ? <span className="sp-t2">{t('account.signIns.onlyWayIn')}</span>
                 : (
                   <button type="button" className="sp-red" disabled={busy} onClick={() => removeOne(login.provider, login.name)}
-                    aria-label={`Remove ${login.name} sign-in`}>
-                    Remove
+                    aria-label={t('account.signIns.removeAria', { name: login.name })}>
+                    {t('account.signIns.remove')}
                   </button>
                 )}
             </div>
           ))}
         </div>
       )}
-      {lastWayIn && <p className="sp-note">{LINKED_SIGN_INS_COPY.onlyWayInNote}</p>}
+      {lastWayIn && <p className="sp-note">{t('account.signIns.onlyWayInNote')}</p>}
       {addable.length > 0 && (
         <div className="mt-3 flex flex-col gap-2.5">
-          <p className="sp-note !mt-0">{LINKED_SIGN_INS_COPY.add}</p>
+          <p className="sp-note !mt-0">{t('account.signIns.add')}</p>
           <SocialLoginButtons only={addable.map((p) => p.id)} divider={false} label="continue" disabled={busy} onCredential={add} onError={setError} />
         </div>
       )}

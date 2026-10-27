@@ -45,9 +45,9 @@ export function LoginPage() {
         nav((loc.state as NavState | null)?.from ?? '/', { replace: true });
       }
     } catch (err: unknown) {
-      setExternalError(externalErrorMessage(err, 'Couldn’t sign in. Check your signal and try again.'));
+      setExternalError(externalErrorMessage(err, t('auth.login.noSignal')));
     }
-  }, [loc.state, loginWithExternal, nav]);
+  }, [loc.state, loginWithExternal, nav, t]);
 
   const ready = useKey
     ? organiserTitle.trim().length > 0 && organiserEmail.trim().includes('@') && passwordMeetsRules(organiserPassword) && organiserKey.trim().length > 0

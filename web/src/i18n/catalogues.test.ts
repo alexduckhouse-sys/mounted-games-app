@@ -5,7 +5,12 @@ import { AREAS as FR_AREAS, fr } from './fr';
 import type { Message } from './messages';
 
 /** Keys that deliberately stay in English in a language (and so fall back). Keep this list short and explain each entry. */
-const DELIBERATE_FALLBACK: Record<'cy' | 'fr', string[]> = { cy: [], fr: [] };
+const DELIBERATE_FALLBACK: Record<'cy' | 'fr', string[]> = {
+  // Apple's and Facebook's own button wording. They publish no Welsh version we could check, and their brand rules ask
+  // for their exact text, so Welsh shows the English (see REVIEW.md).
+  cy: ['auth.social.appleSignIn', 'auth.social.appleContinue', 'auth.social.facebookContinue'],
+  fr: [],
+};
 
 const placeholders = (text: string) => new Set([...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]));
 const forms = (message: Message): string[] => (typeof message === 'string' ? [message] : Object.values(message).filter((form): form is string => typeof form === 'string'));
