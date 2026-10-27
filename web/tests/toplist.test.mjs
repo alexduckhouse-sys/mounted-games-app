@@ -30,7 +30,7 @@ test('the line sits under the last finalist and teams below it see what they nee
   assert.equal(list.runoff, null);
   assert.equal(list.rows[2].out, true);
   assert.equal(list.rows[2].needed, 6);
-  assert.equal(toplistNote(list.rows[2]), '6 needed to make the final (normal finishes)');
+  assert.equal(toplistNote(list.rows[2]), '6 pts needed for the A Final (normal finishes)');
 });
 
 test('a tie across the line becomes a run-off and the line moves below the tied teams', () => {
