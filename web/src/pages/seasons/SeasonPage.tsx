@@ -7,7 +7,7 @@ import { useToast } from '../../components/Toast';
 import { useAuth } from '../../auth/AuthContext';
 import { SectionFormatLabel, type CompetitionDetail, type CompetitionSummary } from '../../types';
 import { Chevron, RefineList, RefineNote, RefinePage, RefineSection, RefineStatus } from '../refine/Refine';
-import { filterStandingsByDivision, positionLabels, roundDivision, roundStatus, seasonDivisions, shortDate } from './seasonModel';
+import { filterStandingsByDivision, positionLabels, teamNameForAge, roundDivision, roundStatus, seasonDivisions, shortDate } from './seasonModel';
 import { SeasonSettingsForm } from './SeasonSettingsForm';
 import { EmbedCard } from '../competition/EmbedCard';
 import { seasonError, type PublicationView, type SeasonRoundView, type SeasonView, type StandingsView } from './seasonViewTypes';
@@ -71,7 +71,7 @@ function SeasonDetail({ id }: { id: string }) {
     </nav>
     {error && <Notice className="sv-msg" actionLabel="Try again" onAction={reload}>{error}</Notice>}
     <div key={tab} className="mg-settle">
-    {tab === 'standings' && <Standings season={season} table={table} />}
+    {tab === 'standings' && <Standings season={season} table={table} canManage={canManage} />}
     {tab === 'rounds' && <>
       {canManage && <div className="sp-gap"><AddBar onClick={() => setAddingRound((open) => !open)}>{addingRound ? 'Close add round' : 'Add a round'}</AddBar></div>}
       {addingRound && canManage && <AddRound season={season} onChanged={() => { setAddingRound(false); reload(); }} />}
@@ -86,7 +86,7 @@ function SeasonDetail({ id }: { id: string }) {
   </RefinePage>;
 }
 
-function Standings({ season, table }: { season: SeasonView; table: StandingsView }) {
+function Standings({ season, table, canManage }: { season: SeasonView; table: StandingsView; canManage: boolean }) {
   const formats = [...new Set(season.rounds.filter((round) => round.isIncluded).map((round) => round.format ?? season.format))];
   const [selectedFormat, setSelectedFormat] = useState(season.format);
   const activeFormat = formats.includes(selectedFormat) ? selectedFormat : formats[0] ?? season.format;
@@ -149,13 +149,13 @@ function Standings({ season, table }: { season: SeasonView; table: StandingsView
         )}
       </Sheet>
     )}
-    {stale && <Notice className="sv-msg" role={null}>Results or rules changed since publication. Republish to update the table.</Notice>}
+    {stale && canManage && <Notice className="sv-msg" role={null}>Results or rules changed since publication. Republish to update the table.</Notice>}
     {!visibleStandings.length ? <div className="sv-empty"><h2>No standings yet</h2><p>Results will appear after the first round is published.</p></div> : <>
-      <div className="rf-table-wrap sp-gap"><table className="rf-table sv-table">
+      <div className="rf-table-wrap sp-gap"><table className="rf-table sv-table sv-standings">
         <caption className="sr-only">Season standings. Struck-through points fall outside the best results that count.</caption>
         <thead>
           <tr>
-            <th scope="col" className="sv-pos">Pos</th>
+            <th scope="col" className="sv-pos"><span className="sr-only">Position</span></th>
             <th scope="col">{activeFormat === 1 ? 'Rider' : 'Team'}</th>
             {publishedRounds.map((round) => (
               <th key={round.id} scope="col" className="sv-mid" title={round.competitionName}>R{round.orderIndex}</th>
@@ -165,7 +165,7 @@ function Standings({ season, table }: { season: SeasonView; table: StandingsView
         </thead>
         <tbody>{visibleStandings.map((row) => <tr key={row.teamProfileId}>
           <td className="rf-num">{labels.get(row.teamProfileId)}</td>
-          <td><Link to={`/team-profiles/${row.teamProfileId}`} className="sv-team">{row.teamName}</Link></td>
+          <td><Link to={`/team-profiles/${row.teamProfileId}`} className="sv-team">{teamNameForAge(row.teamName, ageLabel)}</Link></td>
           {publishedRounds.map((round) => {
             const cell = row.rounds.find((r) => r.roundId === round.id);
             if (!cell) return <td key={round.id} className="sv-mid sv-dim">–</td>;

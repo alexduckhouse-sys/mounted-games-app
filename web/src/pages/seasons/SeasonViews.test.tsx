@@ -115,12 +115,28 @@ describe('SeasonSettingsForm', () => {
 });
 
 describe('SeasonPage', () => {
+  it('shows the republish warning only to people who can republish, and drops a matching age suffix from team names', async () => {
+    const stale = { ...season, ageGroup: 'Under 14', rounds: [{ ...season.rounds[0], ageGroup: 'Under 14', publicationIsCurrent: false }] };
+    const table = { standings: [{ ...standings.standings[0], teamName: 'Atherstone U14' }, { ...standings.standings[1], teamName: 'Dorset U12' }] };
+    const load = (canManage: boolean) => vi.mocked(api.get).mockImplementation(async (url) => ({ data: url.endsWith('/standings') ? table : { ...stale, canManage } }));
+    load(false);
+    const view = render(<MemoryRouter initialEntries={['/seasons/example-season']}><Routes><Route path="/seasons/:seasonId" element={<SeasonPage />} /></Routes></MemoryRouter>);
+    expect(await screen.findByRole('link', { name: 'Atherstone' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Dorset U12' })).toBeInTheDocument();
+    expect(screen.queryByText(/Republish to update the table/)).not.toBeInTheDocument();
+    view.unmount();
+    load(true);
+    render(<MemoryRouter initialEntries={['/seasons/example-season']}><Routes><Route path="/seasons/:seasonId" element={<SeasonPage />} /></Routes></MemoryRouter>);
+    expect(await screen.findByText(/Republish to update the table/)).toBeInTheDocument();
+  });
   it('shows standings first with shared places, per-round columns, dropped scores crossed out and profile links, and no management controls', async () => {
     mount();
     expect(await screen.findByRole('heading', { name: 'Example Summer League' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Standings' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getAllByText('=1')).toHaveLength(2);
-    expect(screen.getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['Pos', 'Team', 'R1', 'Pts']);
+    expect(screen.getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['Position', 'Team', 'R1', 'Pts']);
+    // The position column has no visible heading; screen readers still get one.
+    expect(screen.getByText('Position')).toHaveClass('sr-only');
     const droppedScore = screen.getByText('8');
     expect(droppedScore).toHaveClass('line-through', 'opacity-55');
     expect(screen.getByRole('link', { name: 'Example Blue' })).toHaveAttribute('href', '/team-profiles/team-a');

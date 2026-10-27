@@ -15,6 +15,25 @@ export function positionLabels(standings: StandingView[]): Map<string, string> {
   return new Map(standings.map((row) => [row.teamProfileId, (sizes.get(row.rank) ?? 0) > 1 ? `=${row.rank}` : String(row.rank)]));
 }
 
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * "Atherstone U14" shown under Under 14 is just "Atherstone": the age group is already on the page.
+ * Only a trailing suffix that matches the chosen age group is removed, and never the whole name.
+ */
+export function teamNameForAge(name: string, ageGroup: string): string {
+  const group = ageGroup.trim();
+  if (!group || group.toLowerCase() === 'all age groups') return name;
+  const forms = new Set([group]);
+  const under = /^(?:u|under)\s*(\d+)$/i.exec(group);
+  if (under) { forms.add(`U${under[1]}`); forms.add(`U ${under[1]}`); forms.add(`Under ${under[1]}`); forms.add(`Under${under[1]}`); }
+  for (const form of forms) {
+    const stripped = name.replace(new RegExp(`\\s+\\(?${escapeRegExp(form)}\\)?$`, 'i'), '').trim();
+    if (stripped && stripped !== name.trim()) return stripped;
+  }
+  return name;
+}
+
 export function roundDivision(round: SeasonRoundView, fallbackAgeGroup = ''): string {
   return round.ageGroup?.trim() || round.sectionName?.trim() || fallbackAgeGroup.trim() || 'All age groups';
 }
