@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
+import { useEffect } from 'react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, Link, useLocation } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
@@ -13,6 +14,7 @@ import { AppShell } from './AppShell';
 import { CompactPageBarProvider } from './CompactPageBarContext';
 import { CompetitionMetaProvider } from './CompetitionMetaContext';
 import { NavExtrasProvider } from './NavExtrasContext';
+import { useSetWeatherLine, WeatherLineProvider, type WeatherLineModel } from './WeatherLineContext';
 
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
@@ -25,25 +27,29 @@ vi.mock('./TopBarTicker', () => ({ TopBarTicker: () => null }));
 const spring = { id: 4, name: 'Spring Games' };
 const remembered = () => { document.cookie = `mg.competition=${encodeURIComponent(JSON.stringify(spring))}; Path=/`; };
 
+let weatherLine: WeatherLineModel | null = null;
 function Probe() {
   const { pathname, hash } = useLocation();
+  const setWeatherLine = useSetWeatherLine();
+  useEffect(() => { setWeatherLine(weatherLine); }, [setWeatherLine]);
   return <><span data-testid="probe">{pathname}{hash}</span><Link to="/competitions/4/broadcast">Film test</Link><Link to="/events">Leave filming test</Link></>;
 }
 function mount(path: string) {
   return render(
     <MotionConfig reducedMotion="always"><MemoryRouter initialEntries={[path]}>
-      <LiteModeProvider><AuthProvider><ThemeProvider><CurrentCompetitionProvider><NavExtrasProvider><AgeGroupsProvider><CompetitionMetaProvider><CompactPageBarProvider>
+      <LiteModeProvider><WeatherLineProvider><AuthProvider><ThemeProvider><CurrentCompetitionProvider><NavExtrasProvider><AgeGroupsProvider><CompetitionMetaProvider><CompactPageBarProvider>
         <Routes>
           <Route element={<AppShell />}>
             <Route path="*" element={<Probe />} />
           </Route>
         </Routes>
-      </CompactPageBarProvider></CompetitionMetaProvider></AgeGroupsProvider></NavExtrasProvider></CurrentCompetitionProvider></ThemeProvider></AuthProvider></LiteModeProvider>
+      </CompactPageBarProvider></CompetitionMetaProvider></AgeGroupsProvider></NavExtrasProvider></CurrentCompetitionProvider></ThemeProvider></AuthProvider></WeatherLineProvider></LiteModeProvider>
     </MemoryRouter></MotionConfig>,
   );
 }
 
 beforeEach(() => {
+  weatherLine = null;
   vi.mocked(api.get).mockResolvedValue({ data: {} });
 });
 
@@ -131,4 +137,16 @@ it('resumes observing the header after leaving filming mode', async () => {
     await userEvent.click(screen.getByRole('link', { name: 'Leave filming test' }));
     expect(observe.mock.calls.length).toBeGreaterThan(initial);
   } finally { vi.unstubAllGlobals(); }
+});
+
+describe('AppShell: the weather line', () => {
+  it('shows the organiser’s weather line under the ticker on an event page, and not elsewhere', () => {
+    weatherLine = { tone: 'warn', icon: 'thunder', text: 'Thunder likely from about 14:00', actionLabel: 'What to do', onOpen: vi.fn() };
+    remembered();
+    const view = mount('/competitions/4');
+    expect(screen.getByRole('button', { name: /Thunder likely from about 14:00/ })).toBeInTheDocument();
+    view.unmount();
+    mount('/events');
+    expect(screen.queryByRole('button', { name: /Thunder likely/ })).toBeNull();
+  });
 });

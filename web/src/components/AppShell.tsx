@@ -14,6 +14,7 @@ import { NavigationDrawer } from './NavigationDrawer';
 import { TopBarTicker } from './TopBarTicker';
 import { TickerFeed } from './TickerFeed';
 import { useOptionalTicker } from './TickerContext';
+import { WeatherLine } from './WeatherLine';
 import { ConnectionPill } from './ConnectionPill';
 import { BottomTabs } from './BottomTabs';
 import { GlobalTabs } from './GlobalTabs';
@@ -141,6 +142,7 @@ function Shell({ width }: { width: PageWidth }) {
             </div>
           )}
         </header>
+        {competitionId != null && <WeatherLine />}
       </div>
       )}
       <main ref={mainRef} className={publicPage
