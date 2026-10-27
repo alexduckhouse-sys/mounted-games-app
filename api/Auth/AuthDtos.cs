@@ -60,3 +60,35 @@ public record TrainerRequestDto(
     string? ClubName,
     DateTime RequestedAt,
     string RequestedRole = Roles.Trainer);
+
+/// <summary>
+/// A sign-in provider that is switched on (Google, Apple). <c>ClientId</c> is the public web client ID the browser
+/// passes to the provider's own script; it is not a secret.
+/// </summary>
+public record ExternalProviderDto(string Id, string Name, string ClientId);
+
+/// <summary>
+/// Signs in, or finishes creating an account, with a provider's ID token. <c>Nonce</c> is the raw nonce whose SHA-256
+/// the provider put in the token. <c>ProviderName</c> is the name Apple hands the page on the first sign-in only (it is
+/// not in the token); it is used as the suggested name for a new account and for nothing else. <c>FullName</c>,
+/// <c>ClubName</c> and <c>Role</c> complete a new account, as in <see cref="SignupTrainerRequest"/>.
+/// </summary>
+public record ExternalAuthRequest(
+    string Provider,
+    string IdToken,
+    string? Nonce = null,
+    string? FullName = null,
+    string? ClubName = null,
+    string? Role = null,
+    string? ProviderName = null);
+
+/// <summary>
+/// Result of <c>POST /api/auth/external</c>. When <c>NeedsSignup</c> is true, the caller is a new person who
+/// needs to pick their club and role before the account is created.
+/// </summary>
+public record ExternalAuthResultDto(
+    bool NeedsSignup,
+    AuthResponse? Auth,
+    string? Email = null,
+    string? SuggestedName = null,
+    string? Provider = null);

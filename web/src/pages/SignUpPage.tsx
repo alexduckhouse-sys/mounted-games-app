@@ -1,16 +1,19 @@
-import { useEffect, useId, useMemo, useState, type FormEvent } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useCallback, useEffect, useId, useMemo, useState, type FormEvent } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Plus, Send } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { useT } from '../i18n/LanguageContext';
 import { Notice } from '../components/Notice';
 import { PasswordChecklist } from '../components/PasswordChecklist';
+import { SocialLoginButtons, type SocialCredential } from '../components/SocialLoginButtons';
 import { isRealisticEmail, suggestEmailFix } from '../lib/emailCheck';
+import { externalErrorMessage } from '../lib/externalAuthError';
 import { friendlyPasswordErrors, passwordMeetsRules } from '../lib/passwordRules';
 import type { MessageKey } from '../i18n/en';
 import type { Club } from '../types';
 import { AuthFrame } from './auth/AuthFrame';
+import { ExternalOnboardingForm, type PendingExternalSignup } from './auth/ExternalOnboardingForm';
 import { Field } from './auth/Field';
 
 type RoleId = 'member' | 'trainer' | 'manager';
@@ -37,8 +40,9 @@ function problemsFrom(err: unknown): { status?: number; message?: string; code?:
 /** Create an account, then show who will approve it. */
 export function SignUpPage() {
   const t = useT();
-  const { signupTrainer, loading } = useAuth();
+  const { signupTrainer, loginWithExternal, loading } = useAuth();
   const loc = useLocation();
+  const nav = useNavigate();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -50,7 +54,27 @@ export function SignUpPage() {
   const [role, setRole] = useState<RoleId | null>(null);
   const [clubs, setClubs] = useState<Club[]>([]);
   const [errors, setErrors] = useState<FieldErrors>({});
-  const [sentTo, setSentTo] = useState<{ club: string; role: RoleId } | null>(null);
+  // `emailed` is false for a Google or Apple sign-up: the provider has already confirmed the address, so nothing is sent.
+  const [sentTo, setSentTo] = useState<{ club: string; role: RoleId; emailed: boolean } | null>(null);
+  const [pendingExternal, setPendingExternal] = useState<PendingExternalSignup | null>(null);
+  const [externalError, setExternalError] = useState<string | null>(null);
+
+  // Where they were headed when they chose to sign up, e.g. a competition's entry page.
+  const from = (loc.state as { from?: string } | null)?.from;
+
+  const handleCredential = useCallback(async ({ provider, idToken, nonce, providerName }: SocialCredential) => {
+    setExternalError(null);
+    try {
+      const res = await loginWithExternal(provider, idToken, { nonce, providerName });
+      if (res.needsSignup) {
+        setPendingExternal({ provider: res.provider, idToken, nonce, providerName, email: res.email, suggestedName: res.suggestedName });
+      } else {
+        nav(from ?? '/', { replace: true });
+      }
+    } catch (err: unknown) {
+      setExternalError(externalErrorMessage(err, 'Couldn’t sign in. Check your signal and try again.'));
+    }
+  }, [from, loginWithExternal, nav]);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,7 +107,7 @@ export function SignUpPage() {
       // The email is the sign-in name. The API makes the club if it is new, insists on one, and holds a team
       // manager for an admin and a trainer for the club's manager.
       await signupTrainer(email.trim(), password, chosenRole.api, typed, name.trim());
-      setSentTo({ club: typed, role: chosenRole.id });
+      setSentTo({ club: typed, role: chosenRole.id, emailed: true });
     } catch (err) {
       const { status, message, code, passwordErrors } = problemsFrom(err);
       if (status === 409) setErrors({ email: t('auth.signup.emailTaken') });
@@ -94,8 +118,6 @@ export function SignUpPage() {
     }
   }
 
-  // Where they were headed when they chose to sign up, e.g. a competition's entry page.
-  const from = (loc.state as { from?: string } | null)?.from;
   if (sentTo) {
     const sent = ROLES.find((r) => r.id === sentTo.role)!;
     return (
@@ -106,9 +128,11 @@ export function SignUpPage() {
           <p className="text-[17px] leading-[1.45] text-[rgb(var(--mg-body))]">
             {t(sent.byAdmins ? 'auth.signup.sentAdmins' : 'auth.signup.sentManager', { role: t(sent.sentence) })}
           </p>
-          <p className="text-[15px] leading-[1.45] text-[rgb(var(--mg-body))]">
-            {t('auth.signup.sentEmail')}
-          </p>
+          {sentTo.emailed && (
+            <p className="text-[15px] leading-[1.45] text-[rgb(var(--mg-body))]">
+              {t('auth.signup.sentEmail')}
+            </p>
+          )}
           <div className="mt-auto flex flex-col gap-2.5">
             {from && <Link to={from} className="mg-btn mg-btn-primary">{t('auth.signup.backToCompetition')}</Link>}
             <Link to="/events" className={`mg-btn ${from ? 'mg-btn-secondary' : 'mg-btn-primary'}`}>{t('auth.signup.followCompetition')}</Link>
@@ -119,10 +143,26 @@ export function SignUpPage() {
     );
   }
 
+  if (pendingExternal) {
+    return (
+      <AuthFrame>
+        <ExternalOnboardingForm
+          pending={pendingExternal}
+          initialClubs={clubs}
+          onComplete={(res) => setSentTo({ ...res, emailed: false })}
+          onCancel={() => { setPendingExternal(null); setExternalError(null); }}
+        />
+      </AuthFrame>
+    );
+  }
+
   return (
     <AuthFrame>
       <form onSubmit={submit} className="flex flex-1 flex-col gap-[18px]" noValidate>
         <h1 className="mg-h1 !text-[34px] !leading-none">{t('auth.createAccount')}</h1>
+
+        <SocialLoginButtons disabled={loading} onCredential={handleCredential} onError={setExternalError} />
+        {externalError && <Notice>{externalError}</Notice>}
 
         <Field label={t('auth.field.yourName')}>
           {({ id }) => <div className="mg-field"><input id={id} value={name} autoComplete="name" autoFocus onChange={(e) => setName(e.target.value)} /></div>}

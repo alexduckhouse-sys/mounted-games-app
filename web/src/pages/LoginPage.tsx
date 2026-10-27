@@ -1,19 +1,23 @@
-import { useId, useState, type FormEvent } from 'react';
+import { useCallback, useId, useState, type FormEvent } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { ArrowLeft, Eye, EyeOff, KeyRound } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { useT } from '../i18n/LanguageContext';
+import { Notice } from '../components/Notice';
 import { PasswordChecklist } from '../components/PasswordChecklist';
+import { SocialLoginButtons, type SocialCredential } from '../components/SocialLoginButtons';
+import { externalErrorMessage } from '../lib/externalAuthError';
 import { friendlyPasswordErrors, passwordMeetsRules } from '../lib/passwordRules';
 import { AuthFrame } from './auth/AuthFrame';
+import { ExternalOnboardingForm, type PendingExternalSignup } from './auth/ExternalOnboardingForm';
 import { Field } from './auth/Field';
 
 interface NavState { from?: string }
 
-/** Sign in with an email and password, or swap to the organiser's shared key. */
+/** Sign in with Google or Apple (when switched on), an email and password, or swap to the organiser's shared key. */
 export function LoginPage() {
   const t = useT();
-  const { login, loginWithAdminKey, loading } = useAuth();
+  const { login, loginWithAdminKey, loginWithExternal, loading } = useAuth();
   const nav = useNavigate();
   const loc = useLocation();
   const rulesId = useId();
@@ -28,6 +32,22 @@ export function LoginPage() {
   const [organiserKey, setOrganiserKey] = useState('');
   const [showOrganiserKey, setShowOrganiserKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingExternal, setPendingExternal] = useState<PendingExternalSignup | null>(null);
+  const [externalError, setExternalError] = useState<string | null>(null);
+
+  const handleCredential = useCallback(async ({ provider, idToken, nonce, providerName }: SocialCredential) => {
+    setExternalError(null);
+    try {
+      const res = await loginWithExternal(provider, idToken, { nonce, providerName });
+      if (res.needsSignup) {
+        setPendingExternal({ provider: res.provider, idToken, nonce, providerName, email: res.email, suggestedName: res.suggestedName });
+      } else {
+        nav((loc.state as NavState | null)?.from ?? '/', { replace: true });
+      }
+    } catch (err: unknown) {
+      setExternalError(externalErrorMessage(err, 'Couldn’t sign in. Check your signal and try again.'));
+    }
+  }, [loc.state, loginWithExternal, nav]);
 
   const ready = useKey
     ? organiserTitle.trim().length > 0 && organiserEmail.trim().includes('@') && passwordMeetsRules(organiserPassword) && organiserKey.trim().length > 0
@@ -64,10 +84,29 @@ export function LoginPage() {
     setError(null);
   }
 
+  if (pendingExternal) {
+    return (
+      <AuthFrame>
+        <ExternalOnboardingForm
+          pending={pendingExternal}
+          onComplete={() => nav((loc.state as NavState | null)?.from ?? '/', { replace: true })}
+          onCancel={() => { setPendingExternal(null); setExternalError(null); }}
+        />
+      </AuthFrame>
+    );
+  }
+
   return (
     <AuthFrame>
       <form onSubmit={submit} className="flex flex-1 flex-col gap-[18px]" noValidate>
         <h1 className="mg-h1 !text-[34px] !leading-none">{useKey ? t('auth.login.organiserTitle') : t('common.signIn')}</h1>
+
+        {!useKey && (
+          <>
+            <SocialLoginButtons disabled={loading} onCredential={handleCredential} onError={setExternalError} />
+            {externalError && <Notice>{externalError}</Notice>}
+          </>
+        )}
 
         {useKey ? (
           <>

@@ -64,6 +64,21 @@ export interface PasswordResetProblem {
   errorCodes?: string[] | null;
 }
 
+/** A sign-in provider switched on in the API (`GET /auth/providers`). `clientId` is the public web client ID. */
+export interface ExternalProvider {
+  id: 'google' | 'apple';
+  name: string;
+  clientId: string;
+}
+
+export interface ExternalAuthResponse {
+  needsSignup: boolean;
+  auth: AuthResponse | null;
+  email?: string | null;
+  suggestedName?: string | null;
+  provider?: string | null;
+}
+
 export interface TrainerRequest {
   userId: string;
   fullName: string;

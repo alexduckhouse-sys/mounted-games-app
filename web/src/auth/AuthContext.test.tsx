@@ -132,6 +132,85 @@ describe('signing in', () => {
     expect(result.current.loading).toBe(false);
   });
 
+  it('signs in with an external provider when the account already exists, or asks for signup details when new', async () => {
+    post.mockResolvedValueOnce({
+      data: { needsSignup: true, auth: null, email: 'new@example.com', suggestedName: 'New Rider', provider: 'google' },
+    });
+    const { result } = mount();
+    let step1!: Awaited<ReturnType<typeof result.current.loginWithExternal>>;
+    await act(async () => {
+      step1 = await result.current.loginWithExternal('google', 'id-tok-1', { nonce: 'n-1' });
+    });
+    expect(post).toHaveBeenCalledWith('/auth/external', { provider: 'google', idToken: 'id-tok-1', nonce: 'n-1' });
+    expect(step1).toEqual({ needsSignup: true, email: 'new@example.com', suggestedName: 'New Rider', provider: 'google' });
+    expect(result.current.user).toBeNull();
+
+    // Fallback defaults when server omits optional fields on needsSignup
+    post.mockResolvedValueOnce({ data: { needsSignup: true, auth: null } });
+    await act(async () => {
+      step1 = await result.current.loginWithExternal('apple', 'id-tok-2');
+    });
+    expect(step1).toEqual({ needsSignup: true, email: '', suggestedName: '', provider: 'apple' });
+
+    // Completing signup with clubName & role stores the session and sets trainerNotice for TrainerRequest
+    post.mockResolvedValueOnce({
+      data: { needsSignup: false, auth: stored(['Member', 'TrainerRequest']) },
+    });
+    get.mockResolvedValue({ data: stored(['Member', 'TrainerRequest']).user });
+    let step2!: Awaited<ReturnType<typeof result.current.loginWithExternal>>;
+    await act(async () => {
+      step2 = await result.current.loginWithExternal('google', 'id-tok-1', {
+        nonce: 'n-1',
+        fullName: 'Ann Smith',
+        clubName: 'Ashdown',
+        role: 'Trainer',
+      });
+    });
+    expect(post).toHaveBeenCalledWith('/auth/external', {
+      provider: 'google',
+      idToken: 'id-tok-1',
+      nonce: 'n-1',
+      fullName: 'Ann Smith',
+      clubName: 'Ashdown',
+      role: 'Trainer',
+    });
+    expect(step2).toEqual({ needsSignup: false });
+    expect(result.current.user?.email).toBe('ann@example.com');
+    expect(result.current.trainerNotice).toBe('requested');
+
+    // Member external login clears trainerNotice
+    post.mockResolvedValueOnce({ data: { needsSignup: false, auth: stored(['Member']) } });
+    await act(async () => {
+      await result.current.loginWithExternal('google', 'id-tok-1');
+    });
+    expect(result.current.trainerNotice).toBeNull();
+  });
+
+  it('passes Apple’s first-sign-in name along and refuses a sign-in reply with no session', async () => {
+    post.mockResolvedValueOnce({ data: { needsSignup: true, auth: null, email: 'x@privaterelay.appleid.com', suggestedName: 'Sam Taylor', provider: 'apple' } });
+    const { result } = mount();
+    await act(async () => {
+      await result.current.loginWithExternal('apple', 'apple-tok', { nonce: 'raw-nonce', providerName: 'Sam Taylor' });
+    });
+    expect(post).toHaveBeenCalledWith('/auth/external', { provider: 'apple', idToken: 'apple-tok', nonce: 'raw-nonce', providerName: 'Sam Taylor' });
+
+    post.mockResolvedValueOnce({ data: { needsSignup: false, auth: null } });
+    await act(async () => {
+      await expect(result.current.loginWithExternal('apple', 'apple-tok', { nonce: 'raw-nonce' })).rejects.toThrow('no session');
+    });
+    expect(result.current.user).toBeNull();
+    expect(result.current.loading).toBe(false);
+  });
+
+  it('clears loading when external sign-in fails', async () => {
+    post.mockRejectedValue(new Error('invalid token'));
+    const { result } = mount();
+    await act(async () => {
+      await expect(result.current.loginWithExternal('google', 'bad')).rejects.toThrow('invalid token');
+    });
+    expect(result.current.loading).toBe(false);
+  });
+
   it('signs up a pending trainer as a member and shows the request notice', async () => {
     post.mockResolvedValue({ data: stored(['Member', 'TrainerRequest']) });
     get.mockResolvedValue({ data: stored(['Member', 'TrainerRequest']).user });
