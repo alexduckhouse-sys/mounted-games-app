@@ -14,10 +14,12 @@ import { seasonError, type PublicationView, type SeasonRoundView, type SeasonVie
 import './seasonViews.css';
 import { SelectField } from '../../components/SelectField';
 import { NumberField } from '../../components/NumberField';
-import { CardDropdownRow } from '../../components/CardDropdownRow';
+import { Sheet } from '../../components/Sheet';
+import { ChevronDown } from 'lucide-react';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { AddBar } from '../admin/creator/controls';
 import '../../components/sitePages.css';
+import '../../components/filterKit.css';
 
 type SeasonTab = 'standings' | 'rounds' | 'settings';
 
@@ -92,6 +94,7 @@ function Standings({ season, table }: { season: SeasonView; table: StandingsView
   const divisions = seasonDivisions(formatRounds, season.ageGroup);
   const hasMultipleDivisions = divisions.length > 1;
   const [selectedDivision, setSelectedDivision] = useState<string>('all');
+  const [sheetOpen, setSheetOpen] = useState(false);
   const activeDivision = hasMultipleDivisions && divisions.includes(selectedDivision) ? selectedDivision : 'all';
   const divisionRounds = formatRounds.filter((round) => activeDivision === 'all' || roundDivision(round, season.ageGroup) === activeDivision);
   const included = divisionRounds.filter((round) => round.isIncluded);
@@ -103,12 +106,49 @@ function Standings({ season, table }: { season: SeasonView; table: StandingsView
     ? [{ value: 'all', label: 'All age groups' }, ...divisions.map((div) => ({ value: div, label: div }))]
     : [{ value: 'all', label: season.ageGroup }];
   const formatOptions = (formats.length ? formats : [activeFormat]).map((format) => ({ value: String(format), label: SectionFormatLabel[format] }));
+  const ageLabel = ageOptions.find((option) => option.value === activeDivision)?.label ?? season.ageGroup;
+  const formatLabel = SectionFormatLabel[activeFormat];
+  const changeable = hasMultipleDivisions || formats.length > 1;
   return <>
-    <div className="sp-card sp-gap">
-      <CardDropdownRow label="Age group" value={activeDivision} options={ageOptions} onChange={setSelectedDivision} disabled={!hasMultipleDivisions} />
-      <CardDropdownRow label="Show" value={String(activeFormat)} options={formatOptions} disabled={formats.length < 2}
-        onChange={(value) => { setSelectedFormat(Number(value) as typeof activeFormat); setSelectedDivision('all'); }} />
-    </div>
+    <button type="button" className="fk-where sp-gap" disabled={!changeable} aria-haspopup={changeable ? 'dialog' : undefined}
+      aria-label={changeable ? `${ageLabel}, ${formatLabel}. Change age group or what to show` : `${ageLabel}, ${formatLabel}`} onClick={() => setSheetOpen(true)}>
+      <span>{ageLabel}<small>· {formatLabel}</small></span>
+      {changeable && <ChevronDown aria-hidden="true" className="h-[18px] w-[18px] shrink-0" strokeWidth={2.2} />}
+    </button>
+    {sheetOpen && changeable && (
+      <Sheet title="Age group and what to show" className="fk-sheet" onClose={() => setSheetOpen(false)}>
+        {({ close }) => (
+          <>
+            {hasMultipleDivisions && (
+              <div className="fk-group" role="group" aria-label="Age group">
+                <span className="fk-label" aria-hidden="true">Age group</span>
+                <div className="fk-tiles">
+                  {ageOptions.map((option) => (
+                    <button key={option.value} type="button" className="fk-tile" aria-pressed={activeDivision === option.value} onClick={() => setSelectedDivision(option.value)}>
+                      <strong>{option.label}</strong>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {formats.length > 1 && (
+              <div className="fk-group" role="group" aria-label="Show">
+                <span className="fk-label" aria-hidden="true">Show</span>
+                <div className="fk-tiles">
+                  {formatOptions.map((option) => (
+                    <button key={option.value} type="button" className="fk-tile" aria-pressed={String(activeFormat) === option.value}
+                      onClick={() => { setSelectedFormat(Number(option.value) as typeof activeFormat); setSelectedDivision('all'); }}>
+                      <strong>{option.label}</strong>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <button type="button" className="kit-pill kit-pill-fill fk-show" onClick={() => close()}>Done</button>
+          </>
+        )}
+      </Sheet>
+    )}
     {stale && <Notice className="sv-msg" role={null}>Results or rules changed since publication. Republish to update the table.</Notice>}
     {!visibleStandings.length ? <div className="sv-empty"><h2>No standings yet</h2><p>Results will appear after the first round is published.</p></div> : <>
       <div className="rf-table-wrap sp-gap"><table className="rf-table sv-table">
