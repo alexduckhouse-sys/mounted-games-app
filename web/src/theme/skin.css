@@ -36,6 +36,11 @@
   --mg-info-ink: 23 56 95;
   --mg-problem-bg: 251 238 208;
   --mg-problem-ink: 94 64 0;
+  /* The organiser's weather line: pale blue-grey for a warning, pale green for all clear. Red stays for live and destructive. */
+  --mg-weather-bg: 232 238 246;
+  --mg-weather-ink: 23 56 95;
+  --mg-clear-bg: 230 242 234;
+  --mg-clear-ink: 31 107 67;
   --mg-toast-bg: var(--mg-header-deep);
   --mg-toast-ink: 255 255 255;
   --mg-toast-tick: 31 107 67;
@@ -126,6 +131,10 @@
   --mg-info-ink: 191 210 235;
   --mg-problem-bg: 74 56 10;
   --mg-problem-ink: 253 224 150;
+  --mg-weather-bg: 30 46 72;
+  --mg-weather-ink: 191 210 235;
+  --mg-clear-bg: 24 52 38;
+  --mg-clear-ink: 134 214 168;
   --mg-toast-bg: 40 58 90;
 }
 
@@ -190,6 +199,18 @@ body, body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-i
 }
 .mg-strip-next:hover { background: rgb(255 255 255 / .08); }
 .mg-strip-bar :focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+/* The organiser's weather line sits under the ticker: one quiet line, no motion of its own beyond the ticker's entrance. */
+.mg-weather-bar { background: rgb(var(--mg-weather-bg)); color: rgb(var(--mg-weather-ink)); border-top: 1px solid rgb(var(--mg-rule)); }
+.mg-weather-bar-clear { background: rgb(var(--mg-clear-bg)); color: rgb(var(--mg-clear-ink)); }
+.mg-weather-line {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 6px 16px; border: 0; background: transparent;
+  color: inherit; font: 700 14px/1.2 var(--mg-font); text-align: left;
+}
+button.mg-weather-line { cursor: pointer; }
+.mg-weather-line > svg { flex: none; width: 16px; height: 16px; }
+.mg-weather-text { flex: 1 1 auto; min-width: 0; }
+.mg-weather-act { flex: none; font: 700 12px/1 var(--mg-font); text-decoration: underline; }
+.mg-weather-bar :focus-visible { outline: 2px solid currentColor; outline-offset: -3px; }
 .mg-strip-panel {
   position: absolute; inset: auto 0 calc(100% + 8px) 0; z-index: 35; max-height: 60vh; overflow-y: auto; border-radius: 14px; background: rgb(var(--mg-header-deep));
   box-shadow: 0 12px 24px rgb(0 0 0 / .25); color: #fff;

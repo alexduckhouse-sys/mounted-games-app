@@ -512,7 +512,8 @@ public class ScoringServiceTests : IClassFixture<ApiFactory>
             new HoldCompetitionRequest(ResumeTime: "14:30", PostAnnouncement: true));
         holdResp.EnsureSuccessStatusCode();
         var heldSessions = await holdResp.Content.ReadFromJsonAsync<List<SessionDto>>();
-        Assert.Equal(14, heldSessions!.Single(s => s.Id == a.SessionId).ScheduledStart!.Value.Hour);
+        // 14:30 is UK time, and on 1 June the UK is on BST, so it is 13:30 UTC.
+        Assert.Equal(13, heldSessions!.Single(s => s.Id == a.SessionId).ScheduledStart!.Value.Hour);
         Assert.Equal(30, heldSessions!.Single(s => s.Id == a.SessionId).ScheduledStart!.Value.Minute);
 
         // 5. Toggle combined scoring mode on session and combine heats
