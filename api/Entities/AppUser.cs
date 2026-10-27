@@ -28,6 +28,12 @@ public class AppUser : IdentityUser
     /// <summary>Why the account was blocked. For admins only: it is never in a DTO a non-admin can read, and never shown to the blocked person.</summary>
     public string? BlockReason { get; set; }
 
+    /// <summary>
+    /// Goes up by one whenever every existing sign-in for the account must end (a password reset). Each token carries the
+    /// value it was issued under (<c>LiveAccounts.SessionVersionClaim</c>), and <c>LiveAccounts</c> turns away older ones.
+    /// </summary>
+    public int SessionVersion { get; set; }
+
     /// <summary>True while an admin lock or block stops this account signing in.</summary>
     public bool IsAccessStopped => LockedAt is not null || BlockedAt is not null;
 

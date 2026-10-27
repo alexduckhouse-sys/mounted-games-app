@@ -31,6 +31,16 @@ public static class RequestLimits
     public const string ScorerReadPolicy = "scorer-read";
 
     /// <summary>
+    /// "Email me a reset link": per IP (<c>RateLimits:PasswordResetRequestsPerMinute</c>, 5), on its own budget so a forgotten
+    /// password doesn't use up the venue's sign-in allowance. Each account also has its own cap in the database
+    /// (<c>PasswordResetService</c>), which holds across instances whatever this allows.
+    /// </summary>
+    public const string PasswordResetRequestPolicy = "password-reset-request";
+
+    /// <summary>Checking and using a reset link: per IP (<c>RateLimits:PasswordResetLinksPerMinute</c>, 20).</summary>
+    public const string PasswordResetLinkPolicy = "password-reset-link";
+
+    /// <summary>
     /// Per-minute limits for sign-in (per IP), geocoding (per IP), API writes (per user, or per IP when anonymous), the public
     /// calendar and link-preview reads (per IP) and sponsor "shown" counts (per IP). <c>RateLimits:AuthPerMinute</c>,
     /// <c>RateLimits:GeocodePerMinute</c>, <c>RateLimits:WritesPerMinute</c>, <c>RateLimits:PublicReadsPerMinute</c> and
@@ -53,6 +63,8 @@ public static class RequestLimits
         var reportPermits = configuration.GetValue("RateLimits:ShopReportsPerMinute", 10);
         var unsubscribePermits = configuration.GetValue("RateLimits:UnsubscribePerMinute", 10);
         var scorerReadPermits = configuration.GetValue("RateLimits:ScorerReadsPerMinute", 120);
+        var resetRequestPermits = configuration.GetValue("RateLimits:PasswordResetRequestsPerMinute", 5);
+        var resetLinkPermits = configuration.GetValue("RateLimits:PasswordResetLinksPerMinute", 20);
         return services.AddRateLimiter(options =>
         {
             Configure(options, authPermits, writePermits, geocodePermits, scorerPermits, publicReadPermits, exposurePermits);
@@ -63,6 +75,8 @@ public static class RequestLimits
             options.AddPolicy(ShopReportPolicy, context => Partition(context, $"shop-report:{context.Connection.RemoteIpAddress}", reportPermits));
             options.AddPolicy(UnsubscribePolicy, context => Partition(context, $"unsubscribe:{context.Connection.RemoteIpAddress}", unsubscribePermits));
             options.AddPolicy(ScorerReadPolicy, context => Partition(context, $"scorer-read:{ScorerPartition(context)}", scorerReadPermits));
+            options.AddPolicy(PasswordResetRequestPolicy, context => Partition(context, $"password-reset-request:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}", resetRequestPermits));
+            options.AddPolicy(PasswordResetLinkPolicy, context => Partition(context, $"password-reset-link:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}", resetLinkPermits));
         });
     }
 
