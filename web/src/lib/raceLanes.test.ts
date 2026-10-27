@@ -66,6 +66,7 @@ describe('finishingReview', () => {
       { teamId: 1, place: 2, eliminated: false },
     ], new Set([1]));
     expect(lines.map((l) => l.text)).toEqual(['Lilac · Test B · 1st', 'Red · Test A · 2nd (HC)', 'Blue · Test C · Did not finish']);
+    expect(lines.map((l) => l.short)).toEqual(['1st Test B', '2nd (HC) Test A', 'Did not finish Test C']);
     expect(lines.map((l) => l.out)).toEqual([false, false, true]);
   });
 

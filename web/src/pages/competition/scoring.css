@@ -522,8 +522,15 @@ button.sc-done-name { background: none; border: 0; padding: 0; text-align: left;
 .sc-hint.sc-hint-quiet { text-align: center; }
 
 /* The finishing order to check before saving: "Red · Test A · 1st". */
-.sc-review { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: rgb(var(--mg-subtle)); }
-.sc-review-title { margin: 0 0 4px; font: 700 13px/1.3 var(--mg-font); color: rgb(var(--mg-heading)); }
-.sc-review ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
-.sc-review li { font: 600 14px/1.4 var(--mg-font); color: rgb(var(--mg-ink)); font-variant-numeric: tabular-nums; }
+.sc-review { margin: 8px 0 0; padding: 8px 12px; border-radius: 10px; background: rgb(var(--mg-subtle)); }
+.sc-review-title { display: inline; margin: 0 6px 0 0; font: 700 13px/1.4 var(--mg-font); color: rgb(var(--mg-heading)); }
+.sc-review ol { display: inline; margin: 0; padding: 0; list-style: none; }
+.sc-review li { display: inline; font: 600 13px/1.4 var(--mg-font); color: rgb(var(--mg-ink)); font-variant-numeric: tabular-nums; }
+.sc-review li + li::before { content: ' · '; color: rgb(var(--mg-muted)); }
 .sc-review li.is-out { color: rgb(var(--mg-muted)); }
+
+/* Scoring fills the screen: the lanes stretch, the tools and Save sit just above the bottom tabs. */
+.sc-fit .sc-rows { flex: 1 1 auto; }
+.sc-fit .sc-row { flex: 1 1 0; min-height: 44px; max-height: 84px; }
+.sc-fit .sc-bottom { margin-top: auto; padding-top: 10px; }
+body:has(.sc-fit) main.skin { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useExitDelay } from '../hooks/useExitDelay';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { CalendarDays, X, Settings, History, SlidersHorizontal, CloudSun, Star, ShoppingBag, ChevronRight, ChevronDown, BarChart3, Trophy, QrCode, Users, IdCard } from 'lucide-react';
+import { CalendarDays, X, Settings, History, SlidersHorizontal, CloudSun, Star, ShoppingBag, ChevronRight, ChevronDown, BarChart3, Trophy, QrCode, Users, IdCard, Mic, Monitor } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { useLiteMode } from '../lite/LiteModeContext';
@@ -13,6 +13,7 @@ import { WeatherBadge } from './WeatherBadge';
 import { useAgeGroups, type AgeGroupLink } from './AgeGroupsContext';
 import { useCompetitionMeta } from './competitionMeta';
 import { QrPermissionScannerModal } from './QrPermissionScannerModal';
+import { QrAccessModal } from './QrAccessModal';
 
 const WEATHER_KEY = 'mg.showWeather';
 const itemClass = (active: boolean) => `flex min-h-12 w-full items-center gap-3 rounded-[10px] px-3 text-left text-base !no-underline hover:!no-underline ${active
@@ -26,7 +27,7 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
   // Closing slides the drawer back out before it is removed; links navigate underneath as it goes.
   const { closing, close } = useExitDelay(onClose);
   const { current } = useCurrentCompetition();
-  const { user, hasRole } = useAuth();
+  const { user, hasRole, canOrganise } = useAuth();
   const { extras } = useNavExtras();
   const { meta } = useCompetitionMeta();
   const ageGroups = useAgeGroups();
@@ -34,6 +35,7 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const { lite } = useLiteMode();
   const [qrOpen, setQrOpen] = useState(false);
+  const [accessOpen, setAccessOpen] = useState(false);
   const showWeather = (() => { try { return localStorage.getItem(WEATHER_KEY) === '1'; } catch { return false; } })();
   // The Seasons link goes straight to the season when the followed competition is in one, or the season list otherwise.
   const [seasonLinks, setSeasonLinks] = useState<{ competitionId: number; seasons: { id: string }[] } | null>(null);
@@ -88,6 +90,13 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
   ].filter((item) => item.show);
   const onGroupPage = location.pathname === `${base}/scoring` || location.pathname === `${base}/toplists`;
   const selectedSection = onGroupPage ? new URLSearchParams(location.search).get('section') : null;
+  // On the day: organiser screens for this competition, first in the menu.
+  const organiser = shown != null && canOrganise(shown);
+  const sectionQuery = selectedSection ? `?section=${selectedSection}` : '';
+  const dayLinks = [
+    { to: `${base}/commentary${sectionQuery}`, label: 'PA desk', icon: Mic },
+    { to: `${base}/tv${sectionQuery}`, label: 'TV kiosk', icon: Monitor },
+  ];
   return (
     <dialog ref={ref} onCancel={(e) => { e.preventDefault(); close(); }} onClick={(e) => { if (e.target === e.currentTarget) close(); }} aria-labelledby="navigation-title" className={`mg-drawer${closing ? ' is-closing' : ''} mg-font fixed inset-y-0 left-auto right-0 m-0 h-dvh max-h-none w-[min(88vw,20rem)] max-w-none bg-[rgb(var(--mg-surface))] p-0 text-[rgb(var(--mg-ink))] shadow-xl backdrop:bg-[rgb(var(--mg-overlay)/0.55)]`}>
       <div className="flex min-h-full flex-col" onClick={(e) => e.stopPropagation()}>
@@ -104,6 +113,18 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
         {groupList.length > 0 && <AgeGroupMenu groups={groupList} base={base} selectedSection={selectedSection} onPick={close} />}
 
         <div className="flex flex-1 flex-col gap-5 p-4">
+          {organiser && (
+            <nav aria-label="On the day" className="flex flex-col">
+              <h3 className={sectionHeading}>On the day</h3>
+              <button type="button" onClick={() => setAccessOpen(true)} className={itemClass(false)}><QrCode className={iconClass(false)} />Scorer and screen QR codes</button>
+              {dayLinks.map((item) => (
+                <NavLink key={item.label} to={item.to} end onClick={close} className={({ isActive }) => itemClass(isActive)}>
+                  {({ isActive }) => <><item.icon className={iconClass(isActive)} />{item.label}</>}
+                </NavLink>
+              ))}
+            </nav>
+          )}
+
           {current && (
             <nav aria-label="This competition" className="flex flex-col">
               <h3 className={sectionHeading}>This competition</h3>
@@ -153,6 +174,16 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
           )}
         </div>
 
+        {organiser && shown && (
+          <QrAccessModal
+            open={accessOpen}
+            onClose={() => setAccessOpen(false)}
+            competitionId={shown.id}
+            competitionName={shown.name}
+            sectionId={selectedSection ? Number(selectedSection) : null}
+            canWrite
+          />
+        )}
         <QrPermissionScannerModal
           open={qrOpen}
           onClose={() => setQrOpen(false)}
