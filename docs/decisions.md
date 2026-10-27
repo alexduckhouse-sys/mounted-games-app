@@ -91,7 +91,17 @@
 - Privacy text to update (not changed here): the sign-up record now holds an optional email address; the confirmation email is sent through an outside email service (Resend) that sees the address and message; people on the opt-in list are held until they unsubscribe, with the date and wording they agreed to.
 - Files: `api/Services/Email/`, `api/Controllers/SignupController.cs`, `api/Controllers/EmailOptInsController.cs`, `api/Entities/EmailOptIn.cs`, `web/src/components/EntryEmailFields.tsx`, `web/src/pages/UnsubscribePage.tsx`, `web/src/pages/admin/EmailOptInExportSection.tsx`, `tests/MountedGames.Api.Tests/Signups/EntryEmailTests.cs`.
 
+## 2026-10-27: Chat reporting, personal blocking and account-content deletion
+- Source: owner-approved iPhone plan, followed by the request to bring deferred work forward. This is local implementation; publishing and production migrations remain separate.
+- Any signed-in person may report a chat message they can already see. A report cannot expose another person's private message. Reports are reviewed and resolved by site admins, preserving the existing private-chat access rule.
+- Personal chat blocks hide that author's messages in the caller's REST feed. Explicit private replies are refused when either person has blocked the other. Blocks do not suspend accounts or ban networks. Public broadcasts remain public; clients must filter live events and already-rendered messages using the caller's block list. That client work belongs to the shared web interface package.
+- Account deletion now removes authored chat messages, announcements and marketplace comments outright. Marketplace posts become hidden, empty records: title, description, image, club, price and contact details are cleared. This retains other people's comments and reports without retaining the deleted person's post content. Their report reasons are cleared; their chat reports and blocks are removed, even where accounting links require an empty account record to remain.
+- Other people's private messages remain private when their link to the deleted recipient is cleared. Existing payment, event-history, password and last-admin rules remain in place.
+- Limits: this change does not erase previously delivered content from another person's device, or implement deletion after backup restoration. Those remain separate operational and client requirements.
+- Files: `api/Controllers/ChatModerationController.cs`, `api/Controllers/ChatController.cs`, `api/Services/ChatModeration.cs`, `api/Entities/ChatModeration.cs`, `api/Services/AccountDeletionService.cs`, associated schema and tests.
+
 ## 2026-10-22: Deleting your own account
+- Updated 27 October for the iPhone readiness work, at the owner's request: remove authored chat messages and marketplace text/images instead of keeping their text under an anonymous name. The detailed 27 October entry below supersedes the content-retention choices in this original entry.
 - Why: people must be able to remove themselves, and the privacy page promises it. `DELETE /api/auth/me` with the current password in the body does it (the same lockout as sign-in applies to wrong guesses).
 - Refused: the shared admin account and any account with no password (admin-key sessions), with a message to ask an administrator; the last account in the Admin role.
 - Rule: private data goes, event history stays with the person removed, ownership links are cleared. Each step is explicit in `AccountDeletionService`, not left to foreign-key cascades.

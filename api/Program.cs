@@ -124,6 +124,7 @@ builder.Services.AddScoped<MountedGames.Api.Services.EventTools.EventArchiveServ
 builder.Services.AddSingleton<ILiveBroadcaster, LiveBroadcaster>();
 builder.Services.AddSingleton<VapidKeyService>();
 builder.Services.AddScoped<PushNotifier>();
+builder.Services.AddScoped<MountedGames.Api.Services.Notifications.ReminderRunner>();
 builder.Services.AddScoped<EquipmentCalculator>();
 builder.Services.AddHostedService<NotificationScheduler>();
 builder.Services.AddScoped<IpRetention>();

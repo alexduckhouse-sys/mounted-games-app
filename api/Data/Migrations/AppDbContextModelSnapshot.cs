@@ -515,6 +515,60 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("ChatMessages");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.ChatReport", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MessageId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("ReporterUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReporterUserId");
+
+                    b.HasIndex("MessageId", "ReporterUserId")
+                        .IsUnique();
+
+                    b.ToTable("ChatReports");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.ChatUserBlock", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("BlockedUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId", "BlockedUserId");
+
+                    b.HasIndex("BlockedUserId");
+
+                    b.ToTable("ChatUserBlocks");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.Club", b =>
                 {
                     b.Property<int>("Id")
@@ -1855,6 +1909,66 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("LiveStreams");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.NotificationDelivery", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("AcceptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ClaimToken")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime?>("ClaimedUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("PushSubscriptionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RecoveredLeases")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ScheduledNotificationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TimetableVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PushSubscriptionId");
+
+                    b.HasIndex("ScheduledNotificationId", "PushSubscriptionId")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "NextAttemptAt", "ClaimedUntil");
+
+                    b.ToTable("NotificationDeliveries");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.Operations.DrawChange", b =>
                 {
                     b.Property<int>("Id")
@@ -2782,6 +2896,45 @@ namespace MountedGames.Api.Data.Migrations
                     b.HasIndex("ClubId");
 
                     b.ToTable("SavedRiders");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.ScheduledNotification", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("DueAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReminderKey")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("TimetableVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompetitionId");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("ReminderKey")
+                        .IsUnique();
+
+                    b.ToTable("ScheduledNotifications");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.ScorerLink", b =>
@@ -4180,6 +4333,38 @@ namespace MountedGames.Api.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.ChatReport", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.ChatMessage", "Message")
+                        .WithMany()
+                        .HasForeignKey("MessageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MountedGames.Api.Entities.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("ReporterUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Message");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.ChatUserBlock", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("BlockedUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MountedGames.Api.Entities.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.ClubPayoutAccount", b =>
                 {
                     b.HasOne("MountedGames.Api.Entities.Club", "Club")
@@ -4454,6 +4639,25 @@ namespace MountedGames.Api.Data.Migrations
                     b.Navigation("Competition");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.NotificationDelivery", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.PushSubscription", "Subscription")
+                        .WithMany()
+                        .HasForeignKey("PushSubscriptionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MountedGames.Api.Entities.ScheduledNotification", "Notification")
+                        .WithMany()
+                        .HasForeignKey("ScheduledNotificationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Notification");
+
+                    b.Navigation("Subscription");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.Operations.EquipmentAcknowledgement", b =>
                 {
                     b.HasOne("MountedGames.Api.Entities.Competition", "Competition")
@@ -4649,6 +4853,15 @@ namespace MountedGames.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Club");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.ScheduledNotification", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Competition", null)
+                        .WithMany()
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.ScorerLink", b =>

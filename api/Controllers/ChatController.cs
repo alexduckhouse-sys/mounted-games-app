@@ -34,15 +34,10 @@ public class ChatController : ControllerBase
     public async Task<IEnumerable<ChatMessageDto>> Recent(int competitionId, [FromQuery] int take = 100)
     {
         take = Math.Clamp(take, 1, 500);
-        var query = _db.ChatMessages.Where(m => m.CompetitionId == competitionId);
-        // Private messages to the organisers: admins see them all; anyone else sees only their own
-        // and the organisers' replies to them.
-        if (!User.IsInRole(Roles.Admin))
-        {
-            var userId = _users.GetUserId(User);
-            query = query.Where(m => !m.AdminOnly
-                || (userId != null && (m.UserId == userId || m.RecipientUserId == userId)));
-        }
+        var userId = _users.GetUserId(User);
+        var query = _db.ChatMessages.Where(m => m.CompetitionId == competitionId)
+            .VisibleTo(userId, User.IsInRole(Roles.Admin))
+            .WithoutBlockedAuthors(_db, userId);
         var messages = await query
             .OrderByDescending(m => m.CreatedAt)
             .Take(take)
@@ -64,7 +59,8 @@ public class ChatController : ControllerBase
         if (!await _db.Competitions.AnyAsync(c => c.Id == competitionId)) return NotFound();
 
         var user = await _users.GetUserAsync(User);
-        if (user is null) return Unauthorized();
+        if (user is null || user.LockoutEnd == DateTimeOffset.MaxValue
+            || user.LockedAt != null || user.BlockedAt != null) return Unauthorized();
         var isAdmin = User.IsInRole(Roles.Admin);
         var replyTo = string.IsNullOrWhiteSpace(req.ReplyToUserId) ? null : req.ReplyToUserId.Trim();
         if (replyTo is not null)
@@ -74,6 +70,8 @@ public class ChatController : ControllerBase
             var hasThread = await _db.ChatMessages.AnyAsync(m =>
                 m.CompetitionId == competitionId && m.AdminOnly && m.UserId == replyTo);
             if (!hasThread) return BadRequest(new { message = "That person hasn't messaged the organisers." });
+            if (await ChatModeration.IsDirectMessageBlockedAsync(_db, user.Id, replyTo, HttpContext.RequestAborted))
+                return StatusCode(403, new { message = "You can't send a private reply to this person." });
         }
 
         if (!isAdmin)
@@ -157,7 +155,9 @@ public class ChatController : ControllerBase
         var tag = req.Tag?.Trim();
         var body = ProfanityFilter.Clean(req.Body.Trim());
         var user = await _users.GetUserAsync(User);
-        var claimName = string.Equals(user?.Email, "admin@mg.local", StringComparison.OrdinalIgnoreCase)
+        if (user is null || user.LockoutEnd == DateTimeOffset.MaxValue
+            || user.LockedAt != null || user.BlockedAt != null) return Unauthorized();
+        var claimName = string.Equals(user.Email, "admin@mg.local", StringComparison.OrdinalIgnoreCase)
             ? User.FindFirstValue("fullName") : null;
         var authorName = !string.IsNullOrWhiteSpace(claimName) ? claimName : (user?.FullName ?? "Organiser");
         ChatMessage msg;
