@@ -11,14 +11,31 @@ import { usePageWidth } from '../../components/pageWidthState';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { SponsorStrip } from '../../components/SponsorStrip';
 import { useFavourites } from '../../hooks/useFavourites';
-import { computeTimings, formatShiftDelta, formatTime, parsePausedAtMs, predictMinutesPerRace } from '../../lib/time';
+import { computeTimings, formatDelayDuration, formatShiftDelta, formatTime, parsePausedAtMs, predictMinutesPerRace } from '../../lib/time';
 import { displaySectionName } from '../../lib/section';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
-import { arenaDelays, delayInWords, lastFinishedRow, sessionOrdinals, statusLabel, TIMETABLE_COLOURS, timetableRows, type TimetableRow, type TimetableStatus } from '../../lib/timetableRows';
+import { arenaDelays, lastFinishedRow, sessionOrdinals, TIMETABLE_COLOURS, timetableRows, type TimetableRow, type TimetableStatus } from '../../lib/timetableRows';
 import { HeatRing } from '../../components/HeatRing';
+import { useLanguage, useT } from '../../i18n/LanguageContext';
+import type { Translate } from '../../i18n/translate';
 import './timetable.css';
 
-const STATUS_KEY: ReadonlyArray<[TimetableStatus, string]> = [['on-time', 'On time'], ['late', 'Late'], ['live', 'On now'], ['finished', 'Finished']];
+const STATUS_KEY: ReadonlyArray<[TimetableStatus, 'competition.timetable.statusOnTime' | 'competition.timetable.statusLate' | 'competition.timetable.statusLive' | 'common.finished']> = [
+  ['on-time', 'competition.timetable.statusOnTime'], ['late', 'competition.timetable.statusLate'], ['live', 'competition.timetable.statusLive'], ['finished', 'common.finished'],
+];
+
+/** A delay as it reads in a sentence: "10 minutes", or "1h 34m" from an hour up. */
+function delayText(minutes: number, t: Translate): string {
+  const m = Math.max(0, Math.round(minutes));
+  return m >= 60 ? formatDelayDuration(m) : t('competition.timetable.minutes', { count: m });
+}
+
+/** The words on a row's status: "On now", "+8 min", "On time" or "Finished". */
+function statusText(status: TimetableStatus, delayMinutes: number, t: Translate): string {
+  if (status === 'finished') return t('common.finished');
+  if (status === 'live') return t('competition.timetable.statusLive');
+  return status === 'late' ? `+${formatDelayDuration(delayMinutes)}` : t('competition.timetable.statusOnTime');
+}
 
 /**
  * The public timetable: three small dropdowns (day, arena, age group) on one navy line under the app header, one
@@ -26,7 +43,7 @@ const STATUS_KEY: ReadonlyArray<[TimetableStatus, string]> = [['on-time', 'On ti
  * recent finished heat shows (greyed); the rest come back with "Show full timetable". The page title, competition
  * name, update time and refresh button live in the app header. `bandExtra`, `lead` and `footer` let a page add its own controls.
  */
-export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtra, lead, footer }: {
+export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, lead, footer }: {
   sectionId?: number | null;
   title?: string;
   bandExtra?: ReactNode;
@@ -34,6 +51,9 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   footer?: ReactNode;
 } = {}) {
   usePageWidth('wide');
+  const t = useT();
+  const { locale } = useLanguage();
+  const title = titleProp ?? t('competition.timetable.title');
   const { competition, reload, updatedAt } = useCompetition();
   const { canOrganise } = useAuth();
   const favHook = useFavourites() as {
@@ -202,25 +222,25 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
       })
       .map((group) => ({
         key: group.key,
-        title: group.race ? `${displaySectionName(group.session.sectionName || group.session.name)} · Session ${ordinals.get(group.session.id) ?? 1}` : null,
-        noun: ['heat', 'heats'] as const,
+        title: group.race ? t('competition.timetable.sessionTitle', { name: displaySectionName(group.session.sectionName || group.session.name), n: ordinals.get(group.session.id) ?? 1 }) : null,
+        noun: 'heats' as const,
         rows: group.rows,
       }));
   })();
-  const finalGroups = finalsByAgeGroup(shownRows).map((group) => ({ ...group, noun: ['final', 'finals'] as const }));
+  const finalGroups = finalsByAgeGroup(shownRows).map((group) => ({ ...group, title: t('competition.timetable.finalsTitle', { name: group.name }), noun: 'finals' as const }));
   const groups = [...sessionGroups, ...finalGroups].sort((a, b) => {
     const aStart = (a.rows[0]?.effective ?? a.rows[0]?.scheduled)?.getTime() ?? Infinity;
     const bStart = (b.rows[0]?.effective ?? b.rows[0]?.scheduled)?.getTime() ?? Infinity;
     return aStart - bStart || (a.rows[0]?.session.orderIndex ?? 0) - (b.rows[0]?.session.orderIndex ?? 0) || (a.rows[0]?.session.id ?? 0) - (b.rows[0]?.session.id ?? 0);
   });
-  const updated = updatedAt ? updatedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : null;
-  usePageHeader({ title, subtitle: updated ? `${competition.name} · ${updated}` : competition.name, onRefresh: reload, refreshLabel: 'Refresh timetable' });
+  const updated = updatedAt ? updatedAt.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : null;
+  usePageHeader({ title, subtitle: updated ? `${competition.name} · ${updated}` : competition.name, onRefresh: reload, refreshLabel: t('competition.timetable.refresh') });
 
   function renderGroup(group: typeof groups[number]) {
     const heading = group.title ?? group.rows[0]?.session.name;
     const groupArenas = [...new Set(group.rows.map((row) => row.session.arenaName?.trim() ?? ''))];
     const sharedArena = groupArenas.length === 1 ? groupArenas[0] : '';
-    const count = `${group.rows.length} ${group.rows.length === 1 ? group.noun[0] : group.noun[1]}`;
+    const count = t(group.noun === 'heats' ? 'competition.timetable.heats' : 'competition.timetable.finals', { count: group.rows.length });
     return <section key={group.key} aria-label={heading} className="tt-group">
       {group.title && <div className="tt-group-title">
         <h2>{group.title}</h2>
@@ -253,7 +273,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
       {lateArenas.map((late) => (
         <p key={late.arena} className="tt-late-line" role="status">
           <Clock aria-hidden="true" size={17} />
-          {late.arena ? `${late.arena} is running ${delayInWords(late.minutes)} late` : `Running ${delayInWords(late.minutes)} late`}
+          {late.arena ? t('competition.timetable.lateArena', { arena: late.arena, delay: delayText(late.minutes, t) }) : t('competition.timetable.late', { delay: delayText(late.minutes, t) })}
         </p>
       ))}
       {showQualifiers && (
@@ -311,15 +331,15 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
       <div className="tt-body">
         {lead}
         {visibleRows.some(isProvisionalRow) && (
-          <p className="tt-provisional-note" role="note">Provisional timetable: times are estimates until teams and races are confirmed.</p>
+          <p className="tt-provisional-note" role="note">{t('competition.timetable.provisional')}</p>
         )}
         {groups.map(renderGroup)}
         {visibleRows.length > 0 && (
-          <ul className="tt-key" aria-label="Status colours">
-            {STATUS_KEY.map(([status, label]) => <li key={status}><span className="tt-dot" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />{label}</li>)}
+          <ul className="tt-key" aria-label={t('competition.timetable.statusColours')}>
+            {STATUS_KEY.map(([status, key]) => <li key={status}><span className="tt-dot" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />{t(key)}</li>)}
           </ul>
         )}
-        {visibleRows.length === 0 && <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">Nothing scheduled for this day.</p>}
+        {visibleRows.length === 0 && <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">{t('competition.timetable.empty')}</p>}
         {(hiddenFinished > 0 || showFinished || Boolean(footer)) && (
           <button
             type="button"
@@ -327,7 +347,7 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
             aria-expanded={showFinished}
             onClick={() => setShowFinished((open) => !open)}
           >
-            {showFinished ? 'Hide finished heats' : 'Show full timetable'}
+            {showFinished ? t('competition.timetable.hideFinished') : t('competition.timetable.showFull')}
           </button>
         )}
         {showFinished && footer}
@@ -344,15 +364,17 @@ const chevron = <ChevronDown aria-hidden="true" className="tt-arena-chevron" siz
 
 /** The day menu: "Mon 26" on the strip, "Mon 26 Oct" in the list. */
 function DaySelect({ days, selectedDay, today, onChoose }: { days: string[]; selectedDay: string; today: string; onChoose: (day: string) => void }) {
+  const t = useT();
+  const { locale } = useLanguage();
   const at = (day: string) => new Date(`${day}T12:00:00`);
   const options = days.map((day) => ({
     value: day,
-    label: at(day).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
-    hint: day === today ? 'Today' : undefined,
+    label: at(day).toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' }),
+    hint: day === today ? t('common.today') : undefined,
   }));
   return (
-    <Dropdown label="Day" value={selectedDay} options={options} onChange={onChoose} className="tt-arena-wrap" buttonClassName="tt-arena">
-      <span className="tt-arena-text">{at(selectedDay).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })}</span>
+    <Dropdown label={t('competition.timetable.day')} value={selectedDay} options={options} onChange={onChoose} className="tt-arena-wrap" buttonClassName="tt-arena">
+      <span className="tt-arena-text">{at(selectedDay).toLocaleDateString(locale, { weekday: 'short', day: 'numeric' })}</span>
       {chevron}
     </Dropdown>
   );
@@ -365,11 +387,12 @@ function ArenaSelect({ arenas, selectedArena, dayRows, onChoose }: {
   dayRows: TimetableRow[];
   onChoose: (name: string) => void;
 }) {
+  const t = useT();
   const isLive = (name: string) => dayRows.some((row) => row.status === 'live' && (!name || row.session.arenaName?.trim() === name));
-  const options = [{ value: '', label: 'All arenas' }, ...arenas.map((name) => ({ value: name, label: name, live: isLive(name) }))];
+  const options = [{ value: '', label: t('competition.timetable.allArenas') }, ...arenas.map((name) => ({ value: name, label: name, live: isLive(name) }))];
   return (
-    <Dropdown label="Arena" value={selectedArena} options={options} onChange={onChoose} className="tt-arena-wrap" buttonClassName="tt-arena">
-      <span className="tt-arena-text">{selectedArena || 'All arenas'}</span>
+    <Dropdown label={t('competition.timetable.arena')} value={selectedArena} options={options} onChange={onChoose} className="tt-arena-wrap" buttonClassName="tt-arena">
+      <span className="tt-arena-text">{selectedArena || t('competition.timetable.allArenas')}</span>
       {isLive(selectedArena) && <span className="tt-arena-live" aria-hidden="true" />}
       {chevron}
     </Dropdown>
@@ -382,11 +405,12 @@ function SectionSelect({ sections, selectedSection, onChoose }: {
   selectedSection: string;
   onChoose: (id: string) => void;
 }) {
+  const t = useT();
   const current = sections.find((s) => String(s.id) === selectedSection);
-  const options = [{ value: '', label: 'All ages' }, ...sections.map((s) => ({ value: String(s.id), label: s.label }))];
+  const options = [{ value: '', label: t('competition.timetable.allAges') }, ...sections.map((s) => ({ value: String(s.id), label: s.label }))];
   return (
-    <Dropdown label="Age group" value={selectedSection} options={options} onChange={onChoose} className="tt-arena-wrap" buttonClassName="tt-arena">
-      <span className="tt-arena-text">{current?.label ?? 'All ages'}</span>
+    <Dropdown label={t('competition.timetable.ageGroup')} value={selectedSection} options={options} onChange={onChoose} className="tt-arena-wrap" buttonClassName="tt-arena">
+      <span className="tt-arena-text">{current?.label ?? t('competition.timetable.allAges')}</span>
       {chevron}
     </Dropdown>
   );
@@ -394,10 +418,10 @@ function SectionSelect({ sections, selectedSection, onChoose }: {
 
 /** Final heats, one block per age group (in running order), after all the sessions. */
 function finalsByAgeGroup(rows: TimetableRow[]) {
-  const groups = new Map<string, { key: string; title: string; rows: TimetableRow[] }>();
+  const groups = new Map<string, { key: string; name: string; rows: TimetableRow[] }>();
   for (const row of rows.filter((item) => item.group === 'Finals')) {
     const key = row.session.competitionSectionId != null ? `id-${row.session.competitionSectionId}` : `name-${row.session.sectionName ?? row.session.name}`;
-    const group = groups.get(key) ?? { key, title: `${displaySectionName(row.session.sectionName || row.session.name)} · Finals`, rows: [] };
+    const group = groups.get(key) ?? { key, name: displaySectionName(row.session.sectionName || row.session.name), rows: [] };
     group.rows.push(row);
     groups.set(key, group);
   }
@@ -411,6 +435,7 @@ function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false
   showArena: boolean;
   hasFollowedTeam?: boolean;
 }) {
+  const t = useT();
   const { session, heat, status, delayMinutes } = row;
   // A heat that goes live while you're looking lights up once; the "On now" label glides over from the heat before.
   const live = status === 'live';
@@ -423,9 +448,9 @@ function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false
   if (timeSeen.at !== at) setTimeSeen({ at, shifts: timeSeen.shifts + 1 });
   const shifts = timeSeen.at === at ? timeSeen.shifts : timeSeen.shifts + 1;
   const race = (session.kind ?? (session.isBreak ? 1 : 0)) === 0;
-  const heatName = heat ? heat.label || `Heat ${row.heatIndex + 1}` : 'Heats to follow';
+  const heatName = heat ? heat.label || t('competition.timetable.heat', { n: row.heatIndex + 1 }) : t('competition.timetable.heatsToFollow');
   const name = race ? heatName : session.name;
-  const label = race ? (heat ? '' : 'Provisional') : session.kind === 2 ? 'Briefing' : session.isBreak || session.kind === 1 ? 'Break' : session.location || '';
+  const label = race ? (heat ? '' : t('competition.timetable.provisionalLabel')) : session.kind === 2 ? t('competition.timetable.briefing') : session.isBreak || session.kind === 1 ? t('competition.timetable.break') : session.location || '';
   const sub = [label, showArena ? session.arenaName?.trim() : ''].filter(Boolean).join(' · ');
   const rawDrift = row.scheduled && row.effective
     ? Math.round((row.effective.getTime() - row.scheduled.getTime()) / 60_000)
@@ -437,11 +462,11 @@ function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false
   const orderedRaces = heat ? heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex) : [];
   const runningRaceIndex = orderedRaces.findIndex((r) => !r.isComplete);
   const currentRaceNum = runningRaceIndex >= 0 ? runningRaceIndex + 1 : orderedRaces.length;
-  const onNowText = orderedRaces.length > 0 ? `ON NOW · Race ${currentRaceNum} of ${orderedRaces.length}` : 'ON NOW';
+  const onNowText = orderedRaces.length > 0 ? t('competition.timetable.onNowRace', { n: currentRaceNum, total: orderedRaces.length }) : t('competition.timetable.onNow');
   const timeColourClass = showShift ? (shiftMinutes > 0 ? ' tt-time-late' : ' tt-time-early') : '';
   const dot = <span className="tt-dot" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />;
   const content = <>
-    <span className={`tt-time${timeColourClass}`}>{showShift && <span className="sr-only">Planned {formatTime(row.scheduled)}, now </span>}{formatTime(row.effective)}</span>
+    <span className={`tt-time${timeColourClass}`}>{showShift && <span className="sr-only">{t('competition.timetable.plannedNow', { time: formatTime(row.scheduled) })}{' '}</span>}{formatTime(row.effective)}</span>
     <span className="tt-event">
       <strong>
         {hasFollowedTeam && <Star aria-hidden="true" className="tt-fav-star" size={12} />}
@@ -457,7 +482,7 @@ function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false
     {hasFollowedTeam && race && heat && status !== 'finished'
       ? <HeatRing at={row.effective} live={live} fallback={dot} />
       : dot}
-    <span className="sr-only">{statusLabel(status, delayMinutes)}</span>
+    <span className="sr-only">{statusText(status, delayMinutes, t)}</span>
     {race ? <ChevronRight className="tt-chevron" size={14} aria-hidden="true" /> : <span className="tt-chevron" aria-hidden="true" />}
     {live && lit > 0 && <span key={lit} className="tt-lit" aria-hidden="true" />}
     {shifts > 0 && !live && <span key={`shift-${shifts}`} className="tt-shifted" aria-hidden="true" />}

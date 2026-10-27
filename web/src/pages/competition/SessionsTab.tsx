@@ -6,8 +6,10 @@ import { computeTimings } from '../../lib/time';
 import { exportTimetableCsv } from '../../lib/timetableCsv';
 import { useCompetition } from './context';
 import { TimetableBoard } from './TimetableBoard';
+import { useT } from '../../i18n/LanguageContext';
 
 export function SessionsTab() {
+  const t = useT();
   const { canManage } = useAuth();
   const { competition } = useCompetition();
   const ordered = useMemo(
@@ -23,7 +25,7 @@ export function SessionsTab() {
   );
   const showManage = canManage(competition);
   const footer = (ordered.length > 0 || showManage) ? (
-    <nav aria-label="Timetable tools" className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 pt-1 text-xs text-[rgb(var(--mg-muted))]">
+    <nav aria-label={t('competition.timetable.tools')} className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 pt-1 text-xs text-[rgb(var(--mg-muted))]">
       {ordered.length > 0 && (
         <button
           type="button"
@@ -31,7 +33,7 @@ export function SessionsTab() {
           onClick={() => exportTimetableCsv(competition.name, ordered, computeTimings(competition.sessions))}
         >
           <Download aria-hidden="true" className="h-3.5 w-3.5" />
-          Download timetable
+          {t('competition.timetable.download')}
         </button>
       )}
       {showManage && (

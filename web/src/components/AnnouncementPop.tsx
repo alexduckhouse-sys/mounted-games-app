@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronRight, Megaphone, X } from 'lucide-react';
 import type { ChatMessage } from '../types';
 import { useStillMotion } from '../lite/useStillMotion';
+import { useT } from '../i18n/LanguageContext';
 
 /** How long a new announcement stays at the top of the page. */
 export const ANNOUNCEMENT_POP_MS = 7000;
@@ -14,6 +15,7 @@ export const ANNOUNCEMENT_POP_MS = 7000;
  */
 export function AnnouncementPop({ message, to, onDismiss }: { message: ChatMessage | null; to: string; onDismiss: () => void }) {
   const still = useStillMotion();
+  const t = useT();
   const id = message?.id ?? null;
   useEffect(() => {
     if (id === null) return;
@@ -43,12 +45,12 @@ export function AnnouncementPop({ message, to, onDismiss }: { message: ChatMessa
               <Megaphone />
             </motion.span>
             <span className="mg-announce-pop-text">
-              <b>Announcement</b>
+              <b>{t('competition.announce.title')}</b>
               <span>{message.body}</span>
             </span>
             <ChevronRight className="mg-announce-pop-go" aria-hidden="true" />
           </Link>
-          <button type="button" className="mg-announce-pop-close" aria-label="Dismiss announcement" onClick={onDismiss}>
+          <button type="button" className="mg-announce-pop-close" aria-label={t('competition.announce.dismiss')} onClick={onDismiss}>
             <X aria-hidden="true" />
           </button>
         </motion.div>

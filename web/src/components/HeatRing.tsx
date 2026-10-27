@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useNow } from '../hooks/useNow';
 import { ringLabel, ringState } from '../lib/heatRing';
 import { useStillMotion } from '../lite/useStillMotion';
+import { useT } from '../i18n/LanguageContext';
 
 const R = 11;
 const LENGTH = 2 * Math.PI * R;
@@ -13,13 +14,14 @@ const LENGTH = 2 * Math.PI * R;
  * out (or with no time yet) it shows `fallback` instead, if given.
  */
 export function HeatRing({ at, live, fallback = null }: { at: Date | null | undefined; live: boolean; fallback?: ReactNode }) {
+  const t = useT();
   const now = useNow(15_000);
   const still = useStillMotion();
   const state = ringState(at, live, now);
   if (!state) return <>{fallback}</>;
   const offset = LENGTH * (1 - state.fill);
   return (
-    <span className="mg-heat-ring" data-tone={state.tone} role="img" aria-label={ringLabel(state)}>
+    <span className="mg-heat-ring" data-tone={state.tone} role="img" aria-label={ringLabel(state, t)}>
       <svg viewBox="0 0 28 28" aria-hidden="true">
         <circle className="mg-heat-ring-track" cx="14" cy="14" r={R} />
         {/* It draws round to where it stands as it appears, then eases down each time the clock moves on. */}
@@ -27,7 +29,7 @@ export function HeatRing({ at, live, fallback = null }: { at: Date | null | unde
           initial={still ? false : { strokeDashoffset: LENGTH }} animate={{ strokeDashoffset: offset }}
           transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }} />
       </svg>
-      <span className="mg-heat-ring-text" aria-hidden="true">{state.tone === 'live' ? 'On' : state.tone === 'due' ? 'Due' : state.minutes}</span>
+      <span className="mg-heat-ring-text" aria-hidden="true">{state.tone === 'live' ? t('competition.ring.on') : state.tone === 'due' ? t('competition.ring.due') : state.minutes}</span>
     </span>
   );
 }
