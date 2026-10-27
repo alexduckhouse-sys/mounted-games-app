@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { CardDropdownRow } from '../components/CardDropdownRow';
 import { usePageHeader } from '../components/CompactPageBarContext';
@@ -82,6 +83,11 @@ function PrivacyPolicy() {
             never as text.
           </li>
           <li className="mg-lede">
+            <strong>Google, Apple or Facebook sign-in.</strong> If you sign in with one of them, we keep the ID it uses
+            for you, so we know it’s you next time. When you first sign in, it can also give us your name and email
+            address. We don’t get your password or anything else from your account there.
+          </li>
+          <li className="mg-lede">
             <strong>Entries and declarations.</strong> Public competition pages can show team and club names, rider
             display names, pony names and heights, bib details, team roles and results. A declaration can also show
             the submitter’s name. The surname-initial option changes how rider names appear publicly. Team tack-and-turnout
@@ -138,7 +144,8 @@ function PrivacyPolicy() {
           <Link to="/me/account" className="font-semibold text-[rgb(var(--mg-heading))] underline">
             My account
           </Link>{' '}
-          and choose “Delete my account”. You’ll be asked for your password. Your notes, saved riders, push
+          and choose “Delete my account”. You’ll be asked for your password. If you only use Google, Apple or
+          Facebook to sign in, you’ll sign in with it once more instead. Your notes, saved riders, push
           notifications and private marketplace messages are deleted. Chat messages, marketplace posts and comments
           you wrote stay, but your name, IP address and contact details are taken off them. Declarations and signups
           stay as the competition’s record (a signup keeps the payer’s name because it’s also a payment record, but
@@ -155,7 +162,45 @@ function PrivacyPolicy() {
           ask us to fix mistakes, or complain to the UK Information Commissioner’s Office (ico.org.uk).
         </p>
       </div>
+
+      <DataDeletion />
     </>
+  );
+}
+
+/**
+ * How to remove what a sign-in provider gave us. Also its own address, `/data-deletion`, which Facebook asks for and which
+ * its deletion callback (`POST /api/auth/facebook/data-deletion`) links to with a confirmation code.
+ */
+function DataDeletion() {
+  const location = useLocation();
+  const atAddress = location.pathname.replace(/\/$/, '') === '/data-deletion';
+  const code = new URLSearchParams(location.search).get('code');
+  const shownCode = code && /^[0-9a-f]{16}$/.test(code) ? code : null;
+  useEffect(() => {
+    if (atAddress) document.getElementById('data-deletion')?.scrollIntoView?.();
+  }, [atAddress]);
+
+  return (
+    <section id="data-deletion" className="mg-card space-y-2 p-4">
+      <h3 className="mg-h2">Removing Google, Apple or Facebook</h3>
+      {shownCode && (
+        <p className="mg-lede">
+          <strong>Request {shownCode}:</strong> we’ve removed the link between your Facebook account and Mounted Games.
+        </p>
+      )}
+      <p className="mg-lede">
+        To stop signing in with one of them, go to{' '}
+        <Link to="/me/account" className="font-semibold text-[rgb(var(--mg-heading))] underline">My account</Link>{' '}
+        and choose Remove under “Ways to sign in”. We then delete the ID it uses for you. If it’s your only way to sign
+        in, set a password first, or delete your account instead.
+      </p>
+      <p className="mg-lede">
+        If you remove Mounted Games in your Facebook settings, Facebook tells us and we delete that link straight away.
+        Your Mounted Games account stays, with the name and email address on it. To remove those too, delete your
+        account from My account first, as described above, or email us.
+      </p>
+    </section>
   );
 }
 

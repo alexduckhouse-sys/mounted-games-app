@@ -3,6 +3,7 @@ import { ArrowLeft, Plus } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { Notice } from '../../components/Notice';
+import { isRealisticEmail } from '../../lib/emailCheck';
 import { externalErrorMessage } from '../../lib/externalAuthError';
 import type { Club } from '../../types';
 import { Field } from './Field';
@@ -21,12 +22,13 @@ const SIGNUP_ROLE_CHOICES: {
   { id: 'manager', label: 'Team manager', api: 'Manager', sentence: 'team manager', byAdmins: true },
 ];
 
-/** A provider sign-in that found no account yet: the token is sent again, with the club and role, to create one. */
+/**
+ * A provider sign-in that found no account yet. The token has been used; the ten-minute sign-up ticket finishes the
+ * account with the club and role. `email` is empty when the provider gave none, and the form asks for one.
+ */
 export interface PendingExternalSignup {
   provider: string;
-  idToken: string;
-  nonce: string;
-  providerName?: string;
+  ticket: string;
   email: string;
   suggestedName: string;
 }
@@ -34,12 +36,13 @@ export interface PendingExternalSignup {
 interface ExternalOnboardingFormProps {
   pending: PendingExternalSignup;
   initialClubs?: Club[];
-  onComplete: (result: { club: string; role: SignupRoleId }) => void;
+  /** `emailConfirmed` is false when a confirmation email has gone out. */
+  onComplete: (result: { club: string; role: SignupRoleId; emailConfirmed: boolean }) => void;
   onCancel: () => void;
 }
 
 /**
- * In-page completion step shown when someone signs in with Google or Apple for the first time and needs to pick their
+ * In-page completion step shown when someone signs in with a provider for the first time and needs to pick their
  * Pony Club / team and role. The API makes the account the same way as the email sign-up.
  */
 export function ExternalOnboardingForm({
@@ -48,7 +51,9 @@ export function ExternalOnboardingForm({
   onComplete,
   onCancel,
 }: ExternalOnboardingFormProps) {
-  const { loginWithExternal, loading } = useAuth();
+  const { completeExternalSignup, loading } = useAuth();
+  const askEmail = pending.email === '';
+  const [email, setEmail] = useState('');
   const [name, setName] = useState(pending.suggestedName);
   const [club, setClub] = useState('');
   const [clubPicked, setClubPicked] = useState(false);
@@ -72,7 +77,7 @@ export function ExternalOnboardingForm({
   }, [clubs, typed]);
   const exact = clubs.some((c) => c.name.toLowerCase() === typed.toLowerCase());
   const chosenRole = SIGNUP_ROLE_CHOICES.find((r) => r.id === role) ?? null;
-  const ready = name.trim() !== '' && typed !== '' && clubPicked && chosenRole !== null;
+  const ready = name.trim() !== '' && typed !== '' && clubPicked && chosenRole !== null && (!askEmail || isRealisticEmail(email));
   const approver = chosenRole?.byAdmins ? 'Mounted Games admins' : `${typed}'s team manager`;
 
   function pickClub(value: string) {
@@ -86,14 +91,13 @@ export function ExternalOnboardingForm({
     if (!ready || !chosenRole || loading) return;
     setError(null);
     try {
-      await loginWithExternal(pending.provider, pending.idToken, {
-        nonce: pending.nonce,
-        providerName: pending.providerName,
+      const profile = await completeExternalSignup(pending.ticket, {
         fullName: name.trim(),
         clubName: typed,
         role: chosenRole.api,
+        ...(askEmail ? { email: email.trim() } : {}),
       });
-      onComplete({ club: typed, role: chosenRole.id });
+      onComplete({ club: typed, role: chosenRole.id, emailConfirmed: profile.emailConfirmed !== false });
     } catch (err: unknown) {
       setError(externalErrorMessage(err, 'Couldn’t create the account. Check your signal and try again.'));
     }
@@ -123,6 +127,22 @@ export function ExternalOnboardingForm({
           </div>
         )}
       </Field>
+
+      {askEmail && (
+        <Field label="Email">
+          {({ id }) => (
+            <div className="mg-field">
+              <input
+                id={id}
+                type="email"
+                value={email}
+                autoComplete="email"
+                onChange={(e) => { setEmail(e.target.value); setError(null); }}
+              />
+            </div>
+          )}
+        </Field>
+      )}
 
       <div className="flex flex-col gap-1.5">
         <Field label="Club / team name">

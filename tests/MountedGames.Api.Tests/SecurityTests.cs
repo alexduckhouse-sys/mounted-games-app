@@ -346,7 +346,7 @@ public class SecurityTests
             .ToDictionary(d => d.Split(' ', 2)[0], d => d);
         Assert.Equal("default-src 'none'", directives["default-src"]);
         // Besides our own bundle, only the two sign-in scripts, each by its exact file.
-        Assert.Equal("script-src 'self' https://accounts.google.com/gsi/client https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_GB/appleid.auth.js",
+        Assert.Equal("script-src 'self' https://accounts.google.com/gsi/client https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_GB/appleid.auth.js https://connect.facebook.net/en_GB/sdk.js https://connect.facebook.net/en_GB/bundle/sdk.js/",
             directives["script-src"]);
         Assert.Equal("script-src-attr 'none'", directives["script-src-attr"]);
         Assert.Equal("style-src-elem 'self' https://accounts.google.com/gsi/style", directives["style-src-elem"]);

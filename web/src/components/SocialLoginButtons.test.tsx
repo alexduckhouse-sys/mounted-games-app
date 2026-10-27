@@ -2,8 +2,8 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
-import type { AppleAuthApi, AppleSignInResponse, GoogleCredentialResponse, GoogleIdApi } from '../auth/socialSdk';
-import { loadApple, loadGoogle, makeNonce, randomState } from '../auth/socialSdk';
+import type { AppleAuthApi, AppleSignInResponse, FacebookApi, GoogleCredentialResponse, GoogleIdApi } from '../auth/socialSdk';
+import { loadApple, loadFacebook, loadGoogle, makeNonce, randomState } from '../auth/socialSdk';
 import { SOCIAL_COPY, SocialLoginButtons, clearSocialProvidersCache } from './SocialLoginButtons';
 
 vi.mock('../api', async (importOriginal) => ({
@@ -11,8 +11,10 @@ vi.mock('../api', async (importOriginal) => ({
   api: { get: vi.fn(), post: vi.fn() },
 }));
 vi.mock('../auth/socialSdk', () => ({
+  FACEBOOK_GRAPH_VERSION: 'v23.0',
   loadGoogle: vi.fn(),
   loadApple: vi.fn(),
+  loadFacebook: vi.fn(),
   makeNonce: vi.fn(),
   randomState: vi.fn(),
 }));
@@ -90,6 +92,30 @@ describe('which buttons show', () => {
   });
 });
 
+describe('choosing which buttons, the wording and the “or”', () => {
+  it('shows only the providers asked for, and nothing when none of them is on', async () => {
+    const appleOnly = mount({ only: ['apple'] });
+    expect(await screen.findByRole('button', { name: 'Sign in with Apple' })).toBeInTheDocument();
+    expect(screen.queryByTestId('google-signin')).not.toBeInTheDocument();
+    appleOnly.unmount();
+
+    get.mockResolvedValue({ data: [both[0]] });
+    clearSocialProvidersCache();
+    const { container } = mount({ only: ['apple'] });
+    await waitFor(() => expect(get).toHaveBeenCalled());
+    await act(async () => { await Promise.resolve(); });
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('says “Continue with …” for adding a provider, and can leave out the “or”', async () => {
+    mount({ label: 'continue', divider: false });
+    expect(await screen.findByRole('button', { name: 'Continue with Apple' })).toBeInTheDocument();
+    await waitFor(() => expect(google.renderButton).toHaveBeenCalled());
+    expect(google.renderButton.mock.calls[0][1]).toEqual(expect.objectContaining({ text: 'continue_with' }));
+    expect(screen.queryByText('or')).not.toBeInTheDocument();
+  });
+});
+
 describe('Sign in with Google', () => {
   beforeEach(() => get.mockResolvedValue({ data: [both[0]] }));
 
@@ -164,6 +190,77 @@ describe('Sign in with Google', () => {
     vi.mocked(loadGoogle).mockReturnValue(new Promise((_, reject) => { failLoading = reject; }));
     const failedLate = mount();
     await waitFor(() => expect(loadGoogle).toHaveBeenCalledTimes(3));
+    failedLate.unmount();
+    await act(async () => { failLoading(new Error('blocked')); await Promise.resolve(); });
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+});
+
+describe('Continue with Facebook', () => {
+  const facebook = { init: vi.fn(), login: vi.fn() } satisfies FacebookApi;
+  const facebookProvider = { id: 'facebook', name: 'Facebook', clientId: '1234567890123456' };
+
+  beforeEach(() => {
+    get.mockResolvedValue({ data: [facebookProvider] });
+    vi.mocked(loadFacebook).mockResolvedValue(facebook);
+  });
+
+  async function ready() {
+    const view = mount();
+    const button = await screen.findByRole('button', { name: 'Continue with Facebook' });
+    await waitFor(() => expect(button).toBeEnabled());
+    return { ...view, button };
+  }
+
+  it('sets up Facebook’s SDK for the pop-up alone, then hands back the access token from a tap', async () => {
+    const user = userEvent.setup();
+    const { button, onCredential, onError } = await ready();
+    expect(facebook.init).toHaveBeenCalledWith({
+      appId: '1234567890123456', version: 'v23.0', cookie: false, xfbml: false, status: false, localStorage: false, fedCM: false,
+    });
+
+    facebook.login.mockImplementationOnce((callback) => callback({ status: 'connected', authResponse: { accessToken: 'EAAT-token', userID: '1' } }));
+    await user.click(button);
+    expect(facebook.login).toHaveBeenCalledWith(expect.any(Function), { scope: 'public_profile,email' });
+    expect(onCredential).toHaveBeenCalledWith({ provider: 'facebook', idToken: 'EAAT-token' });
+
+    // Closing Facebook's window, or saying no, is a change of mind.
+    facebook.login.mockImplementationOnce((callback) => callback({ status: 'unknown', authResponse: null }));
+    await user.click(button);
+    expect(onCredential).toHaveBeenCalledTimes(1);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('is disabled while loading or while a sign-in is under way', async () => {
+    let finishLoading!: (api: FacebookApi) => void;
+    vi.mocked(loadFacebook).mockReturnValue(new Promise((resolve) => { finishLoading = resolve; }));
+    const { rerender, onCredential, onError } = mount();
+    const button = await screen.findByRole('button', { name: 'Continue with Facebook' });
+    expect(button).toBeDisabled();
+    await act(async () => { finishLoading(facebook); });
+    expect(button).toBeEnabled();
+    rerender(<SocialLoginButtons onCredential={onCredential} onError={onError} disabled />);
+    expect(button).toBeDisabled();
+  });
+
+  it('says so when Facebook’s SDK can’t load, and does nothing if the page has gone first', async () => {
+    vi.mocked(loadFacebook).mockRejectedValue(new Error('blocked'));
+    const failed = mount();
+    expect(await screen.findByRole('status')).toHaveTextContent(SOCIAL_COPY.facebookUnavailable);
+    failed.unmount();
+
+    let finishLoading!: (api: FacebookApi) => void;
+    vi.mocked(loadFacebook).mockReturnValue(new Promise((resolve) => { finishLoading = resolve; }));
+    const early = mount();
+    await screen.findByRole('button', { name: 'Continue with Facebook' });
+    early.unmount();
+    await act(async () => { finishLoading(facebook); });
+    expect(facebook.init).not.toHaveBeenCalled();
+
+    let failLoading!: (reason: Error) => void;
+    vi.mocked(loadFacebook).mockReturnValue(new Promise((_, reject) => { failLoading = reject; }));
+    const failedLate = mount();
+    await screen.findByRole('button', { name: 'Continue with Facebook' });
     failedLate.unmount();
     await act(async () => { failLoading(new Error('blocked')); await Promise.resolve(); });
     expect(screen.queryByRole('status')).not.toBeInTheDocument();

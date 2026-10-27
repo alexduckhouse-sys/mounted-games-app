@@ -40,7 +40,7 @@ export function LoginPage() {
     try {
       const res = await loginWithExternal(provider, idToken, { nonce, providerName });
       if (res.needsSignup) {
-        setPendingExternal({ provider: res.provider, idToken, nonce, providerName, email: res.email, suggestedName: res.suggestedName });
+        setPendingExternal({ provider: res.provider, ticket: res.ticket, email: res.email, suggestedName: res.suggestedName });
       } else {
         nav((loc.state as NavState | null)?.from ?? '/', { replace: true });
       }

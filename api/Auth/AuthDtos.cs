@@ -27,8 +27,12 @@ public record SignupTrainerRequest(
     string? ClubName = null,
     string? FullName = null);
 
-/// <summary>Deleting your own account needs the current password again, so a stolen session can't do it.</summary>
-public record DeleteAccountRequest(string Password);
+/// <summary>
+/// Deleting your own account needs the current password again, so a stolen session can't do it. An account with no
+/// password (made with Google or Apple) confirms with a fresh sign-in instead: one of its linked providers' ID tokens and
+/// the raw nonce, as in <see cref="ExternalAuthRequest"/>.
+/// </summary>
+public record DeleteAccountRequest(string? Password = null, string? Provider = null, string? IdToken = null, string? Nonce = null);
 
 /// <summary>Changing your own password needs the current one, so a stolen session can't lock the owner out.</summary>
 public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
@@ -68,27 +72,40 @@ public record TrainerRequestDto(
 public record ExternalProviderDto(string Id, string Name, string ClientId);
 
 /// <summary>
-/// Signs in, or finishes creating an account, with a provider's ID token. <c>Nonce</c> is the raw nonce whose SHA-256
-/// the provider put in the token. <c>ProviderName</c> is the name Apple hands the page on the first sign-in only (it is
-/// not in the token); it is used as the suggested name for a new account and for nothing else. <c>FullName</c>,
-/// <c>ClubName</c> and <c>Role</c> complete a new account, as in <see cref="SignupTrainerRequest"/>.
+/// Signs in with a provider's ID token. <c>Nonce</c> is the raw nonce whose SHA-256 the provider put in the token; the
+/// pair works once. <c>ProviderName</c> is the name Apple hands the page on the first sign-in only (it is not in the
+/// token); it is only ever the suggested name for a new account.
 /// </summary>
 public record ExternalAuthRequest(
     string Provider,
     string IdToken,
     string? Nonce = null,
-    string? FullName = null,
-    string? ClubName = null,
-    string? Role = null,
     string? ProviderName = null);
 
 /// <summary>
-/// Result of <c>POST /api/auth/external</c>. When <c>NeedsSignup</c> is true, the caller is a new person who
-/// needs to pick their club and role before the account is created.
+/// Result of <c>POST /api/auth/external</c>. When <c>NeedsSignup</c> is true, the caller is a new person who needs to
+/// pick their club and role: <c>SignupTicket</c> finishes the account through <c>POST /api/auth/external/signup</c>
+/// within ten minutes.
 /// </summary>
 public record ExternalAuthResultDto(
     bool NeedsSignup,
     AuthResponse? Auth,
     string? Email = null,
     string? SuggestedName = null,
-    string? Provider = null);
+    string? Provider = null,
+    string? SignupTicket = null);
+
+/// <summary>
+/// Finishes a provider sign-up: the ticket from <see cref="ExternalAuthResultDto"/> plus the same details as
+/// <see cref="SignupTrainerRequest"/>. <c>Email</c> is used only when the provider gave no address.
+/// </summary>
+public record ExternalSignupRequest(string Ticket, string? FullName = null, string? ClubName = null, string? Role = null, string? Email = null);
+
+/// <summary>Adds Google or Apple sign-in to the signed-in account: a fresh ID token and its raw nonce.</summary>
+public record ExternalConnectRequest(string Provider, string IdToken, string? Nonce = null);
+
+/// <summary>One provider sign-in linked to the account. The provider's own id for the person is never sent.</summary>
+public record LinkedSignInDto(string Provider, string Name);
+
+/// <summary>How the signed-in person can sign in: whether there is a password, and which providers are linked.</summary>
+public record LinkedSignInsDto(bool HasPassword, IReadOnlyList<LinkedSignInDto> Logins);

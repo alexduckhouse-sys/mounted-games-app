@@ -39,6 +39,10 @@ const profile = {
   emailConfirmed: true,
 };
 const signedIn = (token: string) => ({ data: { needsSignup: false, auth: { token, expiresAt: '2099-01-01T00:00:00Z', user: profile } } });
+/** The reply to `POST /auth/external/signup`: a plain session. */
+const created = (token: string, emailConfirmed = true) => ({ data: { token, expiresAt: '2099-01-01T00:00:00Z', user: { ...profile, emailConfirmed } } });
+const needsSignup = (email: string, suggestedName: string, provider: string) =>
+  ({ data: { needsSignup: true, auth: null, email, suggestedName, provider, signupTicket: `ticket-${provider}` } });
 
 const google = { initialize: vi.fn(), renderButton: vi.fn() } satisfies GoogleIdApi;
 const apple = { init: vi.fn(), signIn: vi.fn() } satisfies AppleAuthApi;
@@ -109,11 +113,11 @@ describe('Sign in with Google or Apple', () => {
     expect(post).toHaveBeenCalledWith('/auth/external', { provider: 'google', idToken: 'google-id-token', nonce: 'raw-nonce' });
   });
 
-  it('asks a new person for their club and role, then makes the account with the same token', async () => {
+  it('asks a new person for their club and role, then makes the account with the sign-up ticket', async () => {
     const user = userEvent.setup();
     post
-      .mockResolvedValueOnce({ data: { needsSignup: true, auth: null, email: 'alex@gmail.com', suggestedName: 'Alex Rider', provider: 'google' } })
-      .mockResolvedValueOnce(signedIn('jwt-created'));
+      .mockResolvedValueOnce(needsSignup('alex@gmail.com', 'Alex Rider', 'google'))
+      .mockResolvedValueOnce(created('jwt-created'));
     mount('/login');
 
     await googleReturns('new-google-token');
@@ -130,25 +134,24 @@ describe('Sign in with Google or Apple', () => {
     await user.click(submit);
 
     expect(await screen.findByText('Home page')).toBeInTheDocument();
-    expect(post).toHaveBeenLastCalledWith('/auth/external', {
-      provider: 'google',
-      idToken: 'new-google-token',
-      nonce: 'raw-nonce',
+    // The token was spent on the first call; the ticket finishes the account.
+    expect(post).toHaveBeenLastCalledWith('/auth/external/signup', {
+      ticket: 'ticket-google',
       fullName: 'Alex Rider',
       clubName: 'Stockport Pony Club',
       role: 'Trainer',
     });
   });
 
-  it('carries Apple’s first-sign-in name through to the new account on sign up, without promising an email', async () => {
+  it('carries Apple’s first-sign-in name into the form on sign up, and says an email went out when one did', async () => {
     const user = userEvent.setup();
     apple.signIn.mockResolvedValueOnce({
       authorization: { id_token: 'apple-id-token', state: 'state-1' },
       user: { email: 'x7@privaterelay.appleid.com', name: { firstName: 'Sam', lastName: 'Taylor' } },
     });
     post
-      .mockResolvedValueOnce({ data: { needsSignup: true, auth: null, email: 'x7@privaterelay.appleid.com', suggestedName: 'Sam Taylor', provider: 'apple' } })
-      .mockResolvedValueOnce(signedIn('jwt-apple'));
+      .mockResolvedValueOnce(needsSignup('x7@privaterelay.appleid.com', 'Sam Taylor', 'apple'))
+      .mockResolvedValueOnce(created('jwt-apple', false));
     mount('/signup');
 
     const button = await screen.findByRole('button', { name: 'Sign in with Apple' });
@@ -164,15 +167,36 @@ describe('Sign in with Google or Apple', () => {
     await user.click(screen.getByRole('button', { name: 'Create account' }));
 
     expect(await screen.findByRole('heading', { name: 'Request sent to New Valley MG' })).toBeInTheDocument();
-    expect(screen.queryByText(/emailed you a link/)).not.toBeInTheDocument();
-    expect(post).toHaveBeenLastCalledWith('/auth/external', {
-      provider: 'apple',
-      idToken: 'apple-id-token',
-      nonce: 'raw-nonce',
-      providerName: 'Sam Taylor',
+    // A hidden Apple address starts unconfirmed, so the confirmation email went out.
+    expect(screen.getByText(/emailed you a link/)).toBeInTheDocument();
+    expect(post).toHaveBeenLastCalledWith('/auth/external/signup', {
+      ticket: 'ticket-apple',
       fullName: 'Sam Taylor',
       clubName: 'New Valley MG',
       role: 'Manager',
+    });
+  });
+
+  it('asks for an email address when the provider gave none, then makes the account with it', async () => {
+    const user = userEvent.setup();
+    post.mockResolvedValueOnce(needsSignup('', 'Sam Rider', 'facebook')).mockResolvedValueOnce(created('jwt-fb', false));
+    mount('/login');
+
+    await googleReturns('provider-token');
+    await screen.findByRole('heading', { name: 'Finish creating your account' });
+    expect(screen.queryByText(/Signed in as/)).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText('Club / team name'), 'Warwickshire Hunt');
+    await user.click(await screen.findByRole('button', { name: 'Warwickshire Hunt' }));
+    await user.click(screen.getByRole('radio', { name: 'Rider or parent' }));
+    const submit = screen.getByRole('button', { name: 'Create account' });
+    expect(submit).toBeDisabled();
+    await user.type(screen.getByLabelText('Email'), 'sam@example.org');
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+
+    expect(await screen.findByText('Home page')).toBeInTheDocument();
+    expect(post).toHaveBeenLastCalledWith('/auth/external/signup', {
+      ticket: 'ticket-facebook', fullName: 'Sam Rider', clubName: 'Warwickshire Hunt', role: 'Member', email: 'sam@example.org',
     });
   });
 
@@ -194,7 +218,7 @@ describe('Sign in with Google or Apple', () => {
   it('shows a provider’s own failure, and lets a new person back out of finishing the account', async () => {
     const user = userEvent.setup();
     post
-      .mockResolvedValueOnce({ data: { needsSignup: true, auth: null, email: 'sam@gmail.com', suggestedName: 'Sam', provider: 'google' } })
+      .mockResolvedValueOnce(needsSignup('sam@gmail.com', 'Sam', 'google'))
       .mockRejectedValueOnce({ response: { status: 429, data: {} } });
     mount('/login');
 
@@ -219,7 +243,7 @@ describe('Sign in with Google or Apple', () => {
   it('lets a new person on sign up back out to the sign-up form, and signs an existing one straight in', async () => {
     const user = userEvent.setup();
     post
-      .mockResolvedValueOnce({ data: { needsSignup: true, auth: null, email: 'sam@gmail.com', suggestedName: 'Sam', provider: 'google' } })
+      .mockResolvedValueOnce(needsSignup('sam@gmail.com', 'Sam', 'google'))
       .mockResolvedValueOnce(signedIn('jwt-existing'));
     mount({ pathname: '/signup', state: { from: '/teams' } });
 

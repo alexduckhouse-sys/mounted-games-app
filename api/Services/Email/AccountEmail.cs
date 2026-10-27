@@ -226,6 +226,40 @@ public class AccountEmailService(
         }
     }
 
+    /// <summary>
+    /// Tells the account's own address that Google or Apple sign-in was added to it, so a link nobody asked for doesn't
+    /// go unnoticed. Sent for every link (by a matching email at sign-in, or by Connect on My account). Like every sender
+    /// here it never throws, and the address is never logged.
+    /// </summary>
+    public Task<EmailDeliveryStatus> SendSignInAddedAsync(AppUser user, string providerName)
+    {
+        if (string.IsNullOrEmpty(user.Email) || user.Email.EndsWith(".mg.local", StringComparison.OrdinalIgnoreCase))
+            return Task.FromResult(EmailDeliveryStatus.NotSent);
+        var site = EmailSite.Origin(options.Value, configuration);
+        var account = site is null ? null : $"{site}/me/account";
+        var where = account is null ? "under My account" : $"under My account: {account}";
+        var text = $"""
+            Hello,
+
+            {providerName} sign-in has been added to your Mounted Games account. You can now sign in with {providerName}.
+
+            If you did this, there's nothing more to do.
+
+            If you didn't, remove it straight away {where}. If you have a password, change it too.
+
+            Mounted Games
+            """;
+        var html = EmailHtml.Wrap($"""
+            <p style="margin:0 0 12px;">Hello,</p>
+            <p style="margin:0 0 12px;">{EmailHtml.Encode(providerName)} sign-in has been added to your Mounted Games account. You can now sign in with {EmailHtml.Encode(providerName)}.</p>
+            <p style="margin:0 0 12px;">If you did this, there's nothing more to do.</p>
+            <p style="margin:0;">If you didn't, remove it straight away under My account. If you have a password, change it too.</p>
+            {(account is null ? "" : EmailHtml.Button(account, "Open My account"))}
+            """);
+        return sender.SendAsync(new EmailMessage(user.Email, $"{providerName} sign-in added to your account", text, html,
+            $"sign-in-added-{user.Id}-{Guid.NewGuid():N}"));
+    }
+
     /// <summary>Takes one of the account's sends in a single guarded UPDATE, so parallel requests can't slip past the cap.</summary>
     private async Task<ConfirmationResult> ReserveAsync(string userId)
     {

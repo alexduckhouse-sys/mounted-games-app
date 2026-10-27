@@ -72,6 +72,8 @@ export const account = {
   'account.delete.password': 'Your password',
   'account.delete.keep': 'Keep my account',
   'account.delete.deleting': 'Deleting…',
+  'account.delete.confirmWithProvider': 'Your account has no password, so sign in again to confirm it’s you.',
+  'account.delete.noWayToConfirm': 'Your account has no password or sign-in to confirm with, so it can’t be deleted here. Ask an administrator.',
   'account.delete.failed': 'We couldn\'t delete your account. Check your connection and try again.',
 
   // My entries

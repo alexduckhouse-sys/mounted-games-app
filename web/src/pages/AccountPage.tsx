@@ -7,13 +7,15 @@ import { useT } from '../i18n/LanguageContext';
 import { ChangePasswordSheet } from '../components/ChangePasswordSheet';
 import { usePageHeader } from '../components/CompactPageBarContext';
 import { DeleteAccountPanel } from '../components/DeleteAccountPanel';
+import { LinkedSignIns } from '../components/LinkedSignIns';
 import { Notice } from '../components/Notice';
+import { useLinkedSignIns } from '../hooks/useLinkedSignIns';
 import { useToast } from '../components/Toast';
 import { apiErrorMessage } from '../lib/apiError';
 import { roleLabel } from '../lib/profile';
 import '../components/sitePages.css';
 
-/** The signed-in person's own details: name (editable in place), email, club, role, password and deleting the account. */
+/** The signed-in person's own details: name (editable in place), email, club, role, password, ways to sign in and deleting the account. */
 export function AccountPage() {
   const t = useT();
   const { user, refreshUser } = useAuth();
@@ -22,6 +24,7 @@ export function AccountPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const signIns = useLinkedSignIns();
   const toast = useToast();
   usePageHeader({ title: t('account.account.title'), plain: true, backTo: '/me', backLabel: t('account.backToMe') });
   if (!user) return null;
@@ -75,14 +78,21 @@ export function AccountPage() {
         <div className="sp-row"><span className="sp-t1 sp-grow">{t('account.account.email')}</span><span className="sp-t2 break-all text-right">{user.email}</span></div>
         {user.clubName && <div className="sp-row"><span className="sp-t1 sp-grow">{t('account.account.club')}</span><span className="sp-t2 text-right">{user.clubName}</span></div>}
         <div className="sp-row"><span className="sp-t1 sp-grow">{t('account.account.role')}</span><span className="sp-t2 text-right">{roleLabel(user.roles)}</span></div>
-        <button type="button" className="sp-row" onClick={() => setPasswordOpen(true)} aria-label={t('account.account.passwordAria')}>
-          <span className="sp-t1 sp-grow">{t('account.account.password')}</span>
-          <span className="sp-val">{t('account.account.change')}</span>
-          <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
-        </button>
+        {signIns.info?.hasPassword === false ? (
+          <div className="sp-row"><span className="sp-t1 sp-grow">{t('account.account.password')}</span><span className="sp-t2 text-right">{t('account.account.notSet')}</span></div>
+        ) : (
+          <button type="button" className="sp-row" onClick={() => setPasswordOpen(true)} aria-label={t('account.account.passwordAria')}>
+            <span className="sp-t1 sp-grow">{t('account.account.password')}</span>
+            <span className="sp-val">{t('account.account.change')}</span>
+            <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
+          </button>
+        )}
       </div>
+      <LinkedSignIns {...signIns} onChanged={(message) => toast.show(message)} />
       <p className="sp-note">{t('account.account.privacyBefore')}<Link to="/privacy" className="font-semibold text-[rgb(var(--mg-heading))] underline">{t('account.account.privacyLink')}</Link>{t('account.account.privacyAfter')}</p>
-      <div className="mt-4"><DeleteAccountPanel /></div>
+      <div className="mt-4">
+        <DeleteAccountPanel hasPassword={signIns.info?.hasPassword ?? true} linkedProviders={signIns.info?.logins.map((l) => l.provider) ?? []} />
+      </div>
       {passwordOpen && <ChangePasswordSheet onClose={() => setPasswordOpen(false)} onChanged={() => { setPasswordOpen(false); toast.show(t('account.account.passwordChanged')); }} />}
       {toast.node}
     </div>

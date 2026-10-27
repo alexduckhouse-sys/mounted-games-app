@@ -54,7 +54,7 @@ export function SignUpPage() {
   const [role, setRole] = useState<RoleId | null>(null);
   const [clubs, setClubs] = useState<Club[]>([]);
   const [errors, setErrors] = useState<FieldErrors>({});
-  // `emailed` is false for a Google or Apple sign-up: the provider has already confirmed the address, so nothing is sent.
+  // `emailed` is false when a provider sign-up started confirmed (the provider runs the mailbox), so no email went out.
   const [sentTo, setSentTo] = useState<{ club: string; role: RoleId; emailed: boolean } | null>(null);
   const [pendingExternal, setPendingExternal] = useState<PendingExternalSignup | null>(null);
   const [externalError, setExternalError] = useState<string | null>(null);
@@ -67,7 +67,7 @@ export function SignUpPage() {
     try {
       const res = await loginWithExternal(provider, idToken, { nonce, providerName });
       if (res.needsSignup) {
-        setPendingExternal({ provider: res.provider, idToken, nonce, providerName, email: res.email, suggestedName: res.suggestedName });
+        setPendingExternal({ provider: res.provider, ticket: res.ticket, email: res.email, suggestedName: res.suggestedName });
       } else {
         nav(from ?? '/', { replace: true });
       }
@@ -149,7 +149,7 @@ export function SignUpPage() {
         <ExternalOnboardingForm
           pending={pendingExternal}
           initialClubs={clubs}
-          onComplete={(res) => setSentTo({ ...res, emailed: false })}
+          onComplete={({ club, role, emailConfirmed }) => setSentTo({ club, role, emailed: !emailConfirmed })}
           onCancel={() => { setPendingExternal(null); setExternalError(null); }}
         />
       </AuthFrame>
