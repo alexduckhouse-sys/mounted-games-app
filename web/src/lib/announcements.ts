@@ -36,6 +36,21 @@ export function sentAnnouncements(messages: ChatMessage[]): ChatMessage[] {
   return sent.filter((m) => m !== pinnedSource).reverse();
 }
 
+/** The announcements the ticker shows: every one in the list, with only the newest banner copy, which goes last. */
+export function tickerAnnouncements(messages: ChatMessage[]): ChatMessage[] {
+  const announcements = messages.filter((message) => message.type === 2);
+  const activeBanner = announcements.filter((message) => message.tag === BANNER_TAG).at(-1);
+  return [...announcements.filter((message) => message.tag !== BANNER_TAG), ...(activeBanner ? [activeBanner] : [])];
+}
+
+/** The pinned banner stays on the ticker for as long as it is pinned, so it counts as just sent. */
+export function bannerAsNew(announcements: ChatMessage[], now: Date): ChatMessage[] {
+  const activeBanner = announcements.filter((message) => message.tag === BANNER_TAG).at(-1);
+  return activeBanner
+    ? announcements.map((message) => message.id === activeBanner.id ? { ...message, createdAt: now.toISOString() } : message)
+    : announcements;
+}
+
 export function sentLabel(message: ChatMessage, justSentId: number | null): string {
   return message.id === justSentId ? 'Sent just now' : `Sent ${clockTime(message.createdAt)}`;
 }

@@ -157,6 +157,7 @@ body, body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-i
 .mg-strip-bar { display: flex; align-items: stretch; overflow: hidden; border-radius: 14px; background: rgb(var(--mg-header-deep)); color: #fff; box-shadow: 0 6px 18px rgb(15 42 74 / .3); }
 /* The ticker dock: just above the tab bar on every competition page, with room for one page button beside it. */
 .mg-dock { position: fixed; inset: auto 0 calc(76px + env(safe-area-inset-bottom)) 0; z-index: 31; padding: 0 10px; pointer-events: none; }
+.mg-dock-low { bottom: calc(12px + env(safe-area-inset-bottom)); }
 .mg-dock-row { display: flex; align-items: flex-end; justify-content: flex-end; gap: 8px; }
 .mg-dock-row > * { pointer-events: auto; }
 .mg-dock-wrap { position: relative; flex: 1; min-width: 0; }
