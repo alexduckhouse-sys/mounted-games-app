@@ -1,4 +1,5 @@
 import type { CompetitionDetail, Session } from '../types';
+import { tr } from '../i18n/translate';
 import { displaySectionName } from './section';
 import { computeTimings, formatDelayDuration, formatTime } from './time';
 import { timetableRows } from './timetableRows';
@@ -50,7 +51,7 @@ export function nextHeats(competition: CompetitionDetail, teamIds: ReadonlySet<n
 
 /** "Heat 3", or the label the organiser gave the heat. */
 export function heatName(row: Pick<FollowedHeat, 'heat' | 'heatIndex'>): string {
-  return row.heat!.label || `Heat ${row.heatIndex + 1}`;
+  return row.heat!.label || tr('teams.team.heatN', { number: row.heatIndex + 1 });
 }
 
 export interface NextSummary {
@@ -70,19 +71,17 @@ export function summariseNext(team: { sectionName?: string | null }, next: TeamN
   if (next?.kind === 'heat') {
     const { row, lane } = next;
     const arena = arenaToShow(row.session, arenas);
-    const where = `${heatName(row)}, lane ${lane}${arena ? ` · ${arena}` : ''}`;
+    const where = `${heatName(row)}, ${tr('teams.following.laneLower', { number: lane })}${arena ? ` · ${arena}` : ''}`;
     const tone = row.status === 'live' ? 'live' : row.status === 'late' ? 'late' : 'ok';
-    const label = tone === 'live' ? 'On now' : tone === 'late' ? `+${formatDelayDuration(row.delayMinutes)}` : 'Next heat';
+    const label = tone === 'live' ? tr('teams.team.onNow') : tone === 'late' ? `+${formatDelayDuration(row.delayMinutes)}` : tr('teams.following.nextHeat');
     return { sub: lead(where), time: formatTime(row.effective), label, tone };
   }
-  if (next?.kind === 'done') return { sub: lead('finished'), time: '–', label: 'Heats done', tone: 'wait' };
-  return { sub: lead('not drawn yet'), time: '–', label: 'Heats TBC', tone: 'wait' };
+  if (next?.kind === 'done') return { sub: lead(tr('teams.following.finishedLower')), time: '–', label: tr('teams.following.heatsDone'), tone: 'wait' };
+  return { sub: lead(tr('teams.following.notDrawnLower')), time: '–', label: tr('teams.following.heatsTbc'), tone: 'wait' };
 }
 
 /** The arena to show on a heat row: only when the competition runs more than one. */
 export function arenaToShow(session: Session, arenas: readonly string[]): string | null {
   return arenas.length > 1 ? session.arenaName?.trim() || null : null;
 }
-
-export { nextUpAcrossTeams, type NextUpRide } from './timetableClashes';
 

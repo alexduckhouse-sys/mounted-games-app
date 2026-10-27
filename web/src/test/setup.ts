@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
 import { afterEach } from 'vitest';
+import { setActiveLang } from '../i18n/translate';
 
 // A few files opt into the node environment (service-worker helpers), where there is no DOM to reset.
 if (typeof window !== 'undefined') {
@@ -12,6 +13,8 @@ if (typeof window !== 'undefined') {
       document.cookie = `${cookie.split('=')[0]}=; Max-Age=0; Path=/`;
     }
     document.documentElement.removeAttribute('data-theme');
+    document.documentElement.lang = 'en';
+    setActiveLang('en');
   });
 
   // jsdom does not implement the modal <dialog> API.

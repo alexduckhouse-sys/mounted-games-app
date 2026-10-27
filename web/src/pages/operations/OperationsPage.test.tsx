@@ -21,6 +21,8 @@ vi.mock('../../auth/AuthContext', () => ({
   }),
 }));
 vi.mock('../../api', () => ({ api: { get: vi.fn(), put: vi.fn(), post: vi.fn() } }));
+// The undo banner has its own tests; here it would only add a second GET to the mocked API.
+vi.mock('./DrawUndoBanner', () => ({ DrawUndoBanner: () => null }));
 
 const readiness = {
   competitionId: 7,

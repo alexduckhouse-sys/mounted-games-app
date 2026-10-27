@@ -34,6 +34,7 @@ public record UpdateSavedRiderRequest(
     bool? NoFilming = null
 );
 
+// Unused in web UI yet — reserved for iOS / upcoming wiring
 [ApiController]
 [Authorize]
 public class RosterController(AppDbContext db) : ControllerBase

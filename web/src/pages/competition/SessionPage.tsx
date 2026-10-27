@@ -1,3 +1,14 @@
+import { arenaCrewPath } from './crewDutyHelpers';
+import { SessionSharePrint } from '../operations/SessionSharePrint';
+import { SessionDutyBoard } from './SessionDutyBoard';
+import { OutboxTransfer } from '../../components/OutboxTransfer';
+import { ArenaHelpSheet } from './ArenaHelpSheet';
+import { setHeatEntryBibOverride } from '../../lib/heatBibOverride';
+import { useWakeLock } from '../../hooks/useWakeLock';
+import { stripInternalSessionNotes } from '../../lib/gateCheck';
+import { ConfirmOfficialButton, ProvisionalBadge } from '../../components/ProvisionalStatus';
+import { useProvisionalState } from '../../hooks/useProvisionalState';
+import { getSessionProvisionalState } from '../../lib/provisionalResults';
 import { usePageWidth } from '../../components/pageWidthState';
 import { NumberField } from '../../components/NumberField';
 import { Notice } from '../../components/Notice';
@@ -123,6 +134,8 @@ function SessionScoring() {
     () => competition.sessions.find((s) => s.id === sid) ?? null,
     [competition, sid]
   );
+  // Finished sessions show whether their results are still open to queries (15 minutes) or official.
+  const provisional = useProvisionalState((now) => (session ? getSessionProvisionalState(session, now) : null));
 
   const sessionBase = useMemo(() => {
     if (!session) return 0;
@@ -158,6 +171,7 @@ function SessionScoring() {
   const [showTransition, setShowTransition] = useState(false);
   const [showGenerator, setShowGenerator] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [commentatorPreference, setCommentatorPreference] = useState(() => ({
     competitionId: competition.id, choice: readCommentatorChoice(competition.id, searchParams.get('commentator') === '1'),
   }));
@@ -228,6 +242,8 @@ function SessionScoring() {
   if (activeHeatId == null && firstIncompleteHeatId != null) setActiveHeatId(firstIncompleteHeatId);
 
   const activeHeat = orderedHeats.find((h) => h.id === activeHeatId) ?? null;
+  // Keep the screen on while staff are scoring a heat.
+  useWakeLock(Boolean(session && activeHeat && view === 'score' && canManage(competition)));
 
   const orderedRaces = useMemo(
     () => (activeHeat?.races ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex),
@@ -346,8 +362,9 @@ function SessionScoring() {
           {session.location && (
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">{session.location}</p>
           )}
-          {session.notes && (
-            <p className="mt-3 text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap">{session.notes}</p>
+          {/* Notes can carry internal tags (pause, shift, gate check-ins, point tables); spectators only see the words. */}
+          {stripInternalSessionNotes(session.notes) && (
+            <p className="mt-3 text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap">{stripInternalSessionNotes(session.notes)}</p>
           )}
         </div>
       </div>
@@ -645,6 +662,12 @@ function SessionScoring() {
     <div className="space-y-3 pt-3">
       {saveError && <Notice>{saveError}</Notice>}
       <ScoreClashBanner clashes={clashes} teamNamesById={teamNamesById} onResolve={resolveClash} />
+      {provisional && provisional.status !== 'in-progress' && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2" aria-label="Results status">
+          <ProvisionalBadge state={provisional} />
+          {canOrganise(competition) && <ConfirmOfficialButton competitionId={competition.id} sessionId={session.id} state={provisional} onDone={reload} />}
+        </div>
+      )}
 
       {canManage(competition) ? (
         <>
@@ -699,6 +722,14 @@ function SessionScoring() {
               backLabel={`Back to ${activeHeat ? heatName(activeHeat, Math.max(0, orderedHeats.findIndex((h) => h.id === activeHeat.id))) : 'the heat'}`}
               onStart={() => startNext(nextRef)}
               onBack={() => setView('score')}
+              onBibOverride={canOrganise(competition) ? async (teamId, colour) => {
+                try {
+                  await setHeatEntryBibOverride(competition.id, nextRef.session.id, nextRef.heat.id, teamId, colour);
+                  reload();
+                } catch {
+                  setSaveError('Couldn’t change that bib colour. Check your signal and try again.');
+                }
+              } : undefined}
             />
           )}
 
@@ -829,6 +860,8 @@ function SessionScoring() {
                 { key: 'qr', label: 'QR access', sub: 'Let another scorer in', onSelect: () => setShowQrModal(true) },
                 { key: 'pa', label: 'PA desk', sub: 'Read-outs for the announcer', onSelect: () => navigate(`/competitions/${competition.id}/commentary${sectionQuery}`) },
                 { key: 'tv', label: 'TV kiosk', sub: 'Big screen for the arena', onSelect: () => navigate(`/competitions/${competition.id}/tv${sectionQuery}`) },
+                { key: 'help', label: 'Call for help', sub: 'Farrier, vet or first aid', onSelect: () => setShowHelp(true) },
+                { key: 'crew', label: 'Arena crew sheet', sub: 'Props to bring in, clear and keep', onSelect: () => navigate(arenaCrewPath(competition.id, session.id, activeHeat?.id)) },
               ]}
               onAddRace={canOrganise(competition) ? async (raceName) => {
                 const programme = viewRaces.map((r) => r.name);
@@ -869,6 +902,8 @@ function SessionScoring() {
 
           <details className="mg-card p-3">
             <summary className="cursor-pointer font-semibold">Organiser tools</summary>
+            <div className="mt-2"><OutboxTransfer competitionId={competition.id} competitionName={competition.name} viaLink={false} /></div>
+            <SessionSharePrint competition={competition} session={session} />
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <LaneRotationControl session={session} onChanged={reload} />
               {orderedHeats.some((h) => h.raceRoundStage) && <QualifiersControl session={session} onChanged={reload} />}
@@ -888,6 +923,9 @@ function SessionScoring() {
                 onRaceCleared={clearRaceDraft}
               />
             )}
+            <div className="mt-4 border-t border-[rgb(var(--mg-rule-soft))] pt-3">
+              <SessionDutyBoard competitionId={competition.id} session={session} />
+            </div>
             <div className="mt-4 border-t border-[rgb(var(--mg-rule-soft))] pt-3">
               <ScorerLinksCard competitionId={competition.id} canWrite={canManage(competition)} />
             </div>
@@ -927,6 +965,10 @@ function SessionScoring() {
       )}
 
       {ringToast.node}
+
+      {showHelp && (
+        <ArenaHelpSheet competitionId={competition.id} sessionId={session.id} arenaName={mine || arenaOf(session)} onClose={() => setShowHelp(false)} />
+      )}
 
       <QrAccessModal
         open={showQrModal}
@@ -1702,6 +1744,7 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
   const [lanes, setLanes] = useState<number>(session.lanesPerHeat ?? 6);
   const [replace, setReplace] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   function toggle(id: number) {
     setSelected((cur) => {
@@ -1715,6 +1758,7 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
     const raceNames = races.split('\n').map((r) => r.trim()).filter(Boolean);
     if (selected.size === 0 || raceNames.length === 0) return;
     setBusy(true);
+    setSubmitError(null);
     try {
       await api.post(`/competitions/${competition.id}/sessions/${session.id}/generate-heats`, {
         teamIds: Array.from(selected),
@@ -1723,6 +1767,9 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
         replaceExisting: replace,
       });
       onDone();
+    } catch (err) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setSubmitError(msg || 'Couldn’t generate heats. Check your signal and try again.');
     } finally {
       setBusy(false);
     }
@@ -1844,6 +1891,7 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
                 </>
             }
           </div>
+          {submitError && <Notice>{submitError}</Notice>}
         </div>
 
         <div className="flex items-center gap-2 p-3 border-t border-slate-200 dark:border-slate-800">

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { CheckCircle2, ArrowRight, Coffee, X, Users, Phone } from 'lucide-react';
 import { api } from '../../api';
+import { Notice } from '../../components/Notice';
 import { useAuth } from '../../auth/AuthContext';
 import type { CompetitionDetail, DeclarationForm, Heat, Session } from '../../types';
 import { displaySectionName } from '../../lib/section';
@@ -95,6 +96,7 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
   const { canManage } = useAuth();
   const [allForms, setAllForms] = useState<DeclarationForm[]>([]);
   const [busy, setBusy] = useState(false);
+  const [advanceError, setAdvanceError] = useState<string | null>(null);
   const [awards, setAwards] = useState<SpecialAward[]>([]);
   const [awardsFailed, setAwardsFailed] = useState(false);
 
@@ -159,6 +161,7 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
       return;
     }
     setBusy(true);
+    setAdvanceError(null);
     try {
       if (finishedSession.status !== 2) {
         await markFinished(finishedSession);
@@ -172,6 +175,9 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
         }
       }
       onAdvanced();
+    } catch (err) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setAdvanceError(msg || "Couldn't move to the next session. Check your signal and try again.");
     } finally {
       setBusy(false);
     }
@@ -198,6 +204,7 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
         </div>
 
         <div className="space-y-4 p-4">
+          {advanceError && <Notice>{advanceError}</Notice>}
           {completedFinalHeats.length > 0 && (
             <div className="space-y-3" aria-label="Prize giving">
               <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[rgb(var(--mg-late-ink))]">

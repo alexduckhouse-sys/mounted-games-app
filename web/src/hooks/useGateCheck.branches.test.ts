@@ -39,15 +39,15 @@ describe('useGateCheck branches', () => {
     expect(result.current.savingKey).toBeNull();
   });
 
-  it('works with default options and shows the optimistic status for entries missing from the heat list', async () => {
-    vi.mocked(api.put).mockRejectedValueOnce(new Error('offline'));
+  it('does not send or optimistically apply a change without a competition or scorer link', async () => {
     const { result } = renderHook(() => useGateCheck());
     await act(async () => {
       expect(await result.current.setStatus({ id: 1, notes: null }, 10, 101, 'missing')).toBeNull();
     });
-    expect(api.put).toHaveBeenCalledWith('/competitions/undefined/sessions/1/heats/10/gate-check', { teamId: 101, status: 'missing' });
-    expect(result.current.getStatus({ notes: null }, 10, 101)).toBe('missing');
-    // other lane in the heat is unaffected by the optimistic value
+    expect(api.put).not.toHaveBeenCalled();
+    expect(scorerApi.put).not.toHaveBeenCalled();
+    expect(result.current.getStatus({ notes: null }, 10, 101)).toBeNull();
+    expect(result.current.savingKey).toBeNull();
     expect(result.current.getStatus({ notes: null }, 10, 102)).toBeNull();
   });
 

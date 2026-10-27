@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
@@ -26,6 +26,25 @@ beforeEach(() => {
 });
 
 describe('ScoreOutboxPanel', () => {
+  it.each([
+    { viaLink: false, hasQueued: false },
+    { viaLink: false, hasQueued: true },
+    { viaLink: true, hasQueued: false },
+    { viaLink: true, hasQueued: true },
+  ])('imports with the screen mode (viaLink=$viaLink, hasQueued=$hasQueued)', async ({ viaLink, hasQueued }) => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    if (!viaLink) localStorage.setItem('mg.scorer.token', 'synthetic-old-scorer-token');
+    if (hasQueued) seed(item(1));
+    render(<ScoreOutboxPanel competitionId={1} viaLink={viaLink} alwaysImport />);
+    await userEvent.click(screen.getByText('Import scores from another phone'));
+    fireEvent.change(screen.getByLabelText('Backup'), { target: { value: JSON.stringify([item(3, { viaLink: !viaLink })]) } });
+    await userEvent.click(screen.getByRole('button', { name: 'Add scores' }));
+
+    const imported = stored().find((q) => q.raceId === 3);
+    expect(imported).toBeDefined();
+    expect(Boolean(imported?.viaLink)).toBe(viaLink);
+  });
+
   it('shows nothing when there is nothing waiting for this competition', () => {
     seed(item(1, { competitionId: 2 }));
     const { container } = render(<ScoreOutboxPanel competitionId={1} />);

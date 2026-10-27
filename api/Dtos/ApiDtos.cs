@@ -348,7 +348,13 @@ public record SessionDto(
     LaneRotationMode LaneRotationMode = LaneRotationMode.MoveUp,
     int? QualifiersPerHeat = null,
     IReadOnlyList<string>? PlannedRaces = null,
-    IReadOnlyDictionary<string, IReadOnlyList<string>>? PlannedFinalRaces = null);
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? PlannedFinalRaces = null,
+    DateTime? ProvisionalUntil = null,
+    DateTime? OfficialConfirmedAt = null);
+
+public record ConfirmSessionOfficialRequest(
+    bool ReopenQueries = false,
+    [Range(1, 120)] int? ProvisionalMinutes = 15);
 
 public record UpdateSessionSettingsRequest(int? MinutesPerHeat, bool? RaceOrderAlternating,
     LaneRotationMode? LaneRotationMode = null, [Range(1, 20)] int? QualifiersPerHeat = null);
@@ -505,6 +511,27 @@ public record DeclarationFormDto(
     // How many riders on the form were flagged for a broken rule. Staff and the submitter only; 0 for everyone else.
     int FlagCount = 0,
     // The coach's phone number for this team. Staff and the submitter only.
+    string? TrainerPhone = null);
+
+public record SavedTeamDeclarationDto(
+    int FormId,
+    int TeamId,
+    string TeamName,
+    int ClubId,
+    string ClubName,
+    int CompetitionId,
+    string CompetitionName,
+    DateTime CompetitionStartDate,
+    int SectionId,
+    string SectionName,
+    SectionFormat Format,
+    string AgeGroup,
+    DateTime SubmittedAt,
+    DeclarationFormDto Form,
+    IReadOnlyList<RiderEntryDto> Riders,
+    string? EntryTeamName = null,
+    string? BibDescription = null,
+    string? TrainerName = null,
     string? TrainerPhone = null);
 
 public record RiderEntryDto(

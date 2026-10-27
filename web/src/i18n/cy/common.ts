@@ -1,0 +1,33 @@
+import type { AreaCatalogue } from '../messages';
+import type { common as en } from '../en/common';
+
+export const common: AreaCatalogue<typeof en> = {
+  'common.back': 'Yn ôl',
+  'common.close': 'Cau',
+  'common.cancel': 'Canslo',
+  'common.confirm': 'Cadarnhau',
+  'common.notNow': 'Nid nawr',
+  'common.save': 'Cadw',
+  'common.saving': 'Yn cadw…',
+  'common.delete': 'Dileu',
+  'common.edit': 'Golygu',
+  'common.done': 'Wedi gorffen',
+  'common.next': 'Nesaf',
+  'common.continue': 'Parhau',
+  'common.search': 'Chwilio',
+  'common.loading': 'Yn llwytho…',
+  'common.tryAgain': 'Rhowch gynnig arall arni',
+  'common.refresh': 'Adnewyddu',
+  'common.reload': 'Ail-lwytho’r dudalen',
+  'common.goBack': 'Mynd yn ôl',
+  'common.yes': 'Ie',
+  'common.no': 'Na',
+  'common.live': 'Yn fyw',
+  'common.finished': 'Wedi gorffen',
+  'common.today': 'Heddiw',
+  'common.tomorrow': 'Yfory',
+  'common.signIn': 'Mewngofnodi',
+  'common.signOut': 'Allgofnodi',
+  'common.mountedGames': 'Mounted Games',
+  'common.somethingWrong': 'Aeth rhywbeth o’i le. Rhowch gynnig arall arni.',
+};

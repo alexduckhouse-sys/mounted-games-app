@@ -1,3 +1,4 @@
+import { lineTitle } from '../../lib/shopOptions';
 import type { CommerceItemCategory, CommerceListingStatus, CommerceOrderStatus } from './types';
 
 export const CATEGORY_LABEL: Record<CommerceItemCategory, string> = {
@@ -27,10 +28,10 @@ export function pounds(minor: number): string {
   return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(minor / 100);
 }
 
-/** "Shavings × 2", with what the buyer answered after it: "Shavings × 2 (B12)". */
-export function orderLineText(line: { title: string; quantity: number; detail?: string | null }): string {
+/** "Hoodie · M × 2", with what the buyer answered after it: "Shavings × 2 (B12)". */
+export function orderLineText(line: { title: string; optionLabel?: string | null; quantity: number; detail?: string | null }): string {
   const detail = line.detail?.trim();
-  return `${line.title} × ${line.quantity}${detail ? ` (${detail})` : ''}`;
+  return `${lineTitle(line)} × ${line.quantity}${detail ? ` (${detail})` : ''}`;
 }
 
 export function errorMessage(error: unknown, fallback: string): string {

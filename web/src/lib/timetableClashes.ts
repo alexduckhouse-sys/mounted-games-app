@@ -1,3 +1,4 @@
+// Unused in web UI yet — reserved for iOS / upcoming wiring
 import type { CompetitionDetail, RiderEntry, Team } from '../types';
 import { arenaNames, arenaToShow, heatName, nextHeats } from './following';
 import { computeTimings, formatTime } from './time';
@@ -209,7 +210,7 @@ export function detectTimetableClashes(
       if (!bothFollowed && !sharedTrainer && !sharedPony) continue;
 
       const reason: TimetableClashReason = sharedPony ? 'pony' : sharedTrainer ? 'trainer' : 'followed';
-      const sharedDetail = sharedPony ?? (sharedTrainer ? a.team.trainerName?.trim() || a.team.trainerUserId! : null);
+      const sharedDetail = sharedPony ?? (sharedTrainer ? a.team.trainerName?.trim() || b.team.trainerName?.trim() || 'Shared trainer' : null);
 
       const [first, second] =
         a.effectiveStart.getTime() < b.effectiveStart.getTime() ||

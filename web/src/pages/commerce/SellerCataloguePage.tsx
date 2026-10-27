@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ChevronRight, Minus, Plus } from 'lucide-react';
+import { ChevronRight, Minus, Plus, X } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { CardDropdownRow } from '../../components/CardDropdownRow';
@@ -9,12 +9,15 @@ import { confirmDialog } from '../../components/ConfirmDialog';
 import { LazyImage } from '../../components/LazyImage';
 import { NumberField } from '../../components/NumberField';
 import { initialsOf } from '../../lib/profile';
+import { optionInputsFrom, optionsBody, optionsFromText, optionsProblem } from '../../lib/shopOptions';
+import type { CatalogueItemOptionInput } from '../../types';
 import { Chip, FormSheet, SheetField, type ChipTone } from '../clubShop/ui';
 import { LoadError } from './commerceUi';
 import { errorMessage, pounds } from './commerceFormat';
 import type { CatalogueItem, CommerceItemCategory, CommerceListingStatus, CompetitionChoice, CompetitionChoicePage, CompetitionListing } from './types';
 import '../../components/sitePages.css';
 import '../clubShop/clubShop.css';
+import './commerce.css';
 
 interface ItemForm {
   title: string;
@@ -29,9 +32,13 @@ interface ItemForm {
   /** What the buyer is asked for with this item ("Stable number"), and the example shown in the box. */
   detailPrompt: string;
   detailHint: string;
+  /** The item's options (sizes). Existing ones keep their id so their sales stay with them. */
+  options: CatalogueItemOptionInput[];
+  /** Options typed but not added yet; they are added on save too. */
+  optionText: string;
 }
 
-const EMPTY_FORM: ItemForm = { title: '', description: '', price: '', category: 0, stock: 0, soldOut: false, imageUrl: '', detailPrompt: '', detailHint: '' };
+const EMPTY_FORM: ItemForm = { title: '', description: '', price: '', category: 0, stock: 0, soldOut: false, imageUrl: '', detailPrompt: '', detailHint: '', options: [], optionText: '' };
 const PICKER_PAGE_SIZE = 50;
 const MAX_PICKER_PAGES = 10_000;
 
@@ -152,6 +159,9 @@ function SellerCatalogueContent() {
     if (!form.title.trim() || !form.description.trim() || form.price.trim() === '' || !Number.isFinite(price) || price < 0) {
       return 'Add a name and description, then check the price.';
     }
+    const options = optionsFromText(form.optionText, form.options);
+    const optionIssue = optionsProblem(options);
+    if (optionIssue) return optionIssue;
     const body = {
       title: form.title.trim(),
       description: form.description.trim(),
@@ -162,6 +172,7 @@ function SellerCatalogueContent() {
       detailPrompt: form.detailPrompt.trim() || null,
       // A hint with no question has nowhere to show.
       detailHint: form.detailPrompt.trim() ? form.detailHint.trim() || null : null,
+      options: optionsBody(options),
       isActive: editing?.isActive ?? true,
       expectedVersion: editing?.version,
     };
@@ -216,6 +227,9 @@ function SellerCatalogueContent() {
           <div className="sp-row"><span className="sp-t1 sp-grow">Price</span><span className="sp-val">{pounds(active.priceMinor)}</span></div>
           <div className="sp-row"><span className="sp-t1 sp-grow">Category</span><span className="sp-val">{categoryName(active.category)}</span></div>
           <div className="sp-row"><span className="sp-t1 sp-grow">Stock</span><span className="sp-val">{stockText(active)}</span></div>
+          {(active.options?.length ?? 0) > 0 && (
+            <div className="sp-row"><span className="sp-t1 sp-grow">Options</span><span className="sp-val">{active.options?.map((option) => option.label).join(', ')}</span></div>
+          )}
           <button type="button" className="sp-add cs-addbar cs-addbar-plain" disabled={busy} onClick={() => setSheet('edit')}>Edit details</button>
         </div>
 
@@ -315,6 +329,8 @@ function formFor(item: CatalogueItem | null): ItemForm {
     imageUrl: item.imageUrl ?? '',
     detailPrompt: item.detailPrompt ?? '',
     detailHint: item.detailHint ?? '',
+    options: optionInputsFrom(item.options),
+    optionText: '',
   };
 }
 
@@ -330,6 +346,13 @@ function ItemSheet({ item, onSave, onClose }: { item: CatalogueItem | null; onSa
     const found = STABLING_PRESETS.find((p) => p.label === label);
     if (found) change({ title: found.title, category: found.category, description: found.description, price: form.price.trim() || found.defaultPrice });
   }
+
+  function addTyped() {
+    if (!form.optionText.trim()) return;
+    change({ options: optionsFromText(form.optionText, form.options), optionText: '' });
+  }
+
+  const optionsIssue = form.options.length > 0 || form.optionText.trim() ? optionsProblem(optionsFromText(form.optionText, form.options)) : null;
 
   const stockLabel = form.soldOut ? 'Sold out' : form.stock === 0 ? 'No limit' : String(form.stock);
   return (
@@ -369,6 +392,27 @@ function ItemSheet({ item, onSave, onClose }: { item: CatalogueItem | null; onSa
           <input maxLength={80} placeholder="e.g. B12" value={form.detailHint} onChange={(event) => change({ detailHint: event.target.value })} />
         </SheetField>
       )}
+      <SheetField label="Options (optional)" hint="Sizes or choices, such as XS, S, M, L. Separate them with commas.">
+        <input maxLength={400} placeholder="e.g. XS, S, M, L, XL" value={form.optionText} aria-describedby="option-chips"
+          onChange={(event) => change({ optionText: event.target.value })}
+          onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addTyped(); } }} />
+      </SheetField>
+      <div className="seller-opt-add">
+        <button type="button" className="kit-pill cs-pill-s" disabled={!form.optionText.trim()} onClick={addTyped}>Add options</button>
+      </div>
+      {form.options.length > 0 && (
+        <ul id="option-chips" className="seller-opt-chips" aria-label="Options for this item">
+          {form.options.map((option, index) => (
+            <li key={option.id ?? `new-${index}`} className="seller-opt-chip">
+              <span>{option.label}{option.stockQuantity != null ? ` · ${option.stockQuantity} left` : ''}</span>
+              <button type="button" aria-label={`Remove ${option.label}`} onClick={() => change({ options: form.options.filter((_, i) => i !== index) })}>
+                <X aria-hidden="true" className="h-4 w-4" strokeWidth={2.5} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {optionsIssue && <p role="alert" className="cs-field-error m-0">{optionsIssue}</p>}
       <SheetField label="Image link (optional)">
         <input type="url" placeholder="https://…" value={form.imageUrl} onChange={(event) => change({ imageUrl: event.target.value })} />
       </SheetField>

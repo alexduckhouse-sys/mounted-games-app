@@ -1,3 +1,4 @@
+// Unused in web UI yet — reserved for iOS / upcoming wiring
 export const TV_STANDINGS_PAGE_SIZE = 10;
 export const TV_STANDINGS_PAGE_INTERVAL_MS = 10_000;
 

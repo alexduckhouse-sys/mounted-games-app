@@ -9,11 +9,11 @@ import { downloadCsv, toCsv } from '../../lib/csv';
 import { RefineFoot } from '../refine/Refine';
 import { Chip, type ChipTone } from '../clubShop/ui';
 import { LoadError, TestReceipt } from './commerceUi';
+import { lineTitle } from '../../lib/shopOptions';
 import { errorMessage, newIdempotencyKey, orderLineText, pounds } from './commerceFormat';
 import { OutcomeState } from './DemoPaymentFlow';
 import { DemoOrderCheckout } from './EventShopPage';
 import type { CommerceOrderStatus, DemoOrderPaymentResult, EventOrder, EventOrderLine, SellerSale, TestPayment } from './types';
-import './commerce.css';
 import '../../components/sitePages.css';
 import '../clubShop/clubShop.css';
 
@@ -223,7 +223,7 @@ function SalesList({ sales }: { sales: SellerSale[] | null }) {
       } else {
         for (const line of sale.lines) {
           const category = STABLING_LINE_PATTERN.test(line.title) ? 'Stabling & Hook-up' : 'Other items';
-          rows.push([sale.orderId, sale.createdAt, line.title, category, line.quantity, line.detail ?? '', statusText, sale.isTestOrder ? 'Yes' : 'No', (line.lineTotalMinor / 100).toFixed(2)]);
+          rows.push([sale.orderId, sale.createdAt, lineTitle(line), category, line.quantity, line.detail ?? '', statusText, sale.isTestOrder ? 'Yes' : 'No', (line.lineTotalMinor / 100).toFixed(2)]);
         }
       }
     }

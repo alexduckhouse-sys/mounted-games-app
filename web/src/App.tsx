@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { PageLoadBoundary } from './components/PageLoadBoundary';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { LanguageProvider } from './i18n/LanguageContext';
 import { AuthProvider } from './auth/AuthContext';
 import { NeedsYouProvider } from './pages/profile/NeedsYouProvider';
 import { ThemeProvider } from './theme/ThemeContext';
@@ -19,7 +20,7 @@ import { StartPage } from './pages/StartPage';
 import { CompetitionPage } from './pages/CompetitionPage';
 import { AfterDrawOnly, CompetitionHome } from './pages/competition/CompetitionHome';
 import { ScrollToTop } from './components/ScrollToTop';
-import './App.css';
+import { useT } from './i18n/LanguageContext';
 
 const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })));
 const SignUpPage = lazy(() => import('./pages/SignUpPage').then((module) => ({ default: module.SignUpPage })));
@@ -58,6 +59,8 @@ const InvitePage = lazy(() => import('./pages/InvitePage').then((module) => ({ d
 const CompetitionEditor = lazy(() => import('./pages/admin/CompetitionEditor').then((module) => ({ default: module.CompetitionEditor })));
 const FormatPage = lazy(() => import('./pages/admin/FormatPage').then((module) => ({ default: module.FormatPage })));
 const RulesLibraryPage = lazy(() => import('./pages/admin/RulesLibraryPage').then((module) => ({ default: module.RulesLibraryPage })));
+const ArenaCrewPage = lazy(() => import('./pages/competition/ArenaCrewPage').then((module) => ({ default: module.ArenaCrewPage })));
+const VolunteerRotaPage = lazy(() => import('./pages/competition/VolunteerRotaPage').then((module) => ({ default: module.VolunteerRotaPage })));
 const ArenaPage = lazy(() => import('./pages/competition/ArenaPage').then((module) => ({ default: module.ArenaPage })));
 const WeatherPage = lazy(() => import('./pages/competition/WeatherPage').then((module) => ({ default: module.WeatherPage })));
 const OperationsPage = lazy(() => import('./pages/operations/OperationsPage').then((module) => ({ default: module.OperationsPage })));
@@ -89,8 +92,14 @@ const TestEntryPaymentPage = lazy(() => import('./pages/commerce/TestEntryPaymen
 const MySignupsPage = lazy(() => import('./pages/MySignupsPage').then((module) => ({ default: module.MySignupsPage })));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then((module) => ({ default: module.NotFoundPage })));
 
+function OpeningPage() {
+  const t = useT();
+  return <p role="status" className="p-4 text-sm">{t('shell.header.openingPage')}</p>;
+}
+
 export default function App() {
   return (
+    <LanguageProvider>
     <LiteModeProvider>
     <LiteMotionConfig>
     <ThemeProvider>
@@ -106,7 +115,7 @@ export default function App() {
         <BrowserRouter>
           <ScrollToTop />
           <PageLoadBoundary page="app">
-          <Suspense fallback={<p role="status" className="p-4 text-sm">Opening page…</p>}>
+          <Suspense fallback={<OpeningPage />}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignUpPage />} />
@@ -128,7 +137,9 @@ export default function App() {
                 <Route path="commentary" element={<CommentaryDeskPage />} />
                 <Route path="session/:sessionId" element={<AfterDrawOnly><SessionPage /></AfterDrawOnly>} />
                 <Route path="arena" element={<ArenaPage />} />
+                <Route path="arena-crew" element={<ArenaCrewPage />} />
                 <Route path="weather" element={<WeatherPage />} />
+                <Route path="volunteers" element={<VolunteerRotaPage />} />
                 <Route path="standings" element={<Navigate to="../scoring" replace />} />
                 <Route path="timetable" element={<Navigate to=".." replace />} />
                 <Route path="teams" element={<TeamsTab />} />
@@ -238,5 +249,6 @@ export default function App() {
     </ThemeProvider>
     </LiteMotionConfig>
     </LiteModeProvider>
+    </LanguageProvider>
   );
 }

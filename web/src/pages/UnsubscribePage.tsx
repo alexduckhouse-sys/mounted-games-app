@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { PageProblem } from '../components/PageProblem';
+import { useT } from '../i18n/LanguageContext';
 import '../components/sitePages.css';
 
 type Phase = 'working' | 'done' | 'failed' | 'incomplete';
@@ -11,6 +12,7 @@ type Phase = 'working' | 'done' | 'failed' | 'incomplete';
  * address was on the list, so it can't be used to find out who is.
  */
 export function UnsubscribePage() {
+  const t = useT();
   const [params] = useSearchParams();
   const token = params.get('token')?.trim() ?? '';
   const [phase, setPhase] = useState<Phase>(token ? 'working' : 'incomplete');
@@ -34,15 +36,15 @@ export function UnsubscribePage() {
 
   if (phase === 'failed') {
     return (
-      <PageProblem title="Couldn’t update your choice" primaryLabel="Try again" onPrimary={() => void run()} secondaryLabel="Back to the app" secondaryTo="/">
-        Something went wrong. Check your signal and try again.
+      <PageProblem title={t('shell.unsubscribe.failedTitle')} primaryLabel={t('common.tryAgain')} onPrimary={() => void run()} secondaryLabel={t('shell.page.backToApp')} secondaryTo="/">
+        {t('shell.unsubscribe.failedBody')}
       </PageProblem>
     );
   }
   if (phase === 'incomplete') {
     return (
-      <PageProblem title="This link looks incomplete" secondaryLabel="Back to the app" secondaryTo="/">
-        Use the link in the email we sent you.
+      <PageProblem title={t('shell.page.incompleteTitle')} secondaryLabel={t('shell.page.backToApp')} secondaryTo="/">
+        {t('shell.page.incompleteBody')}
       </PageProblem>
     );
   }
@@ -50,13 +52,13 @@ export function UnsubscribePage() {
   return (
     <div className="skin mx-auto w-full max-w-[560px]">
       <div className="sp-small">
-        <h1>Competition emails</h1>
-        {phase === 'working' && <p role="status">One moment…</p>}
+        <h1>{t('shell.unsubscribe.title')}</h1>
+        {phase === 'working' && <p role="status">{t('shell.page.oneMoment')}</p>}
         {phase === 'done' && (
           <>
-            <p role="status">That's done. We won't email you when new competitions open.</p>
-            <p>If you change your mind, tick the box next time you enter a competition.</p>
-            <Link to="/" className="sp-pill">Back to the app</Link>
+            <p role="status">{t('shell.unsubscribe.done')}</p>
+            <p>{t('shell.unsubscribe.changeMind')}</p>
+            <Link to="/" className="sp-pill">{t('shell.page.backToApp')}</Link>
           </>
         )}
       </div>

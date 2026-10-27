@@ -10,13 +10,20 @@ public class VolunteerShiftConfiguration : IEntityTypeConfiguration<VolunteerShi
     {
         b.ToTable("VolunteerShift");
         b.Property(x => x.Role).HasMaxLength(80).IsRequired();
+        b.Property(x => x.DutyCategory).HasMaxLength(40).HasDefaultValue("Custom").IsRequired();
+        b.Property(x => x.AssignedClubName).HasMaxLength(150);
+        b.Property(x => x.AttendanceStatus).HasMaxLength(20).HasDefaultValue("Assigned").IsRequired();
+        b.Property(x => x.CheckedInByName).HasMaxLength(160);
+        b.Property(x => x.CheckedInByUserId).HasMaxLength(120);
         b.Property(x => x.ArenaName).HasMaxLength(80);
         b.Property(x => x.StartTimeLabel).HasMaxLength(80);
         b.Property(x => x.Notes).HasMaxLength(500);
         b.HasIndex(x => x.CompetitionId);
         b.HasIndex(x => x.SessionId);
+        b.HasIndex(x => x.AssignedTeamId);
         b.HasOne(x => x.Competition).WithMany().HasForeignKey(x => x.CompetitionId).OnDelete(DeleteBehavior.Cascade);
         b.HasOne(x => x.Session).WithMany().HasForeignKey(x => x.SessionId).OnDelete(DeleteBehavior.SetNull);
+        b.HasOne(x => x.AssignedTeam).WithMany().HasForeignKey(x => x.AssignedTeamId).OnDelete(DeleteBehavior.SetNull);
     }
 }
 

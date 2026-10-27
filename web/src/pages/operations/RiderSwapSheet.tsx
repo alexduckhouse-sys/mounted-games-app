@@ -14,6 +14,9 @@ function when(iso: string): string {
 
 function swapLine(swap: RiderSwap): string {
   const out = swap.before.find((rider) => rider.riderEntryId === swap.outRiderEntryId)?.fullName ?? 'A rider';
+  if (swap.outRiderEntryId === swap.inRiderEntryId) {
+    return `${out} (${swap.reason})`;
+  }
   const incoming = swap.before.find((rider) => rider.riderEntryId === swap.inRiderEntryId)?.fullName
     ?? swap.after.find((rider) => rider.riderEntryId === swap.inRiderEntryId)?.fullName
     ?? 'a reserve';
@@ -83,9 +86,10 @@ export function RiderSwapSheet({ competitionId, team, canWrite, onClose, onSwapp
       setError('Enter the replacement rider name or replacement pony name.');
       return;
     }
-    const formattedReason = isEmergency
+    const rawReason = isEmergency
       ? `[Emergency: ${replacementRider.trim()}${replacementPony.trim() ? ` | ${replacementPony.trim()}` : ''}] ${reason.trim()}`
       : (reason.trim() || null);
+    const formattedReason = rawReason && rawReason.length > 500 ? rawReason.slice(0, 500) : rawReason;
     setBusy(true);
     setError(null);
     try {

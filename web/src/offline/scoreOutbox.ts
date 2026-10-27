@@ -1,5 +1,6 @@
 import type { Heat, ResultRow } from '../types';
 import { effectiveStatus, statusLetter } from '../lib/resultStatus.ts';
+import { ordinal } from '../lib/toplist.ts';
 
 /**
  * Race results saved on a scorer's phone, sent in order whenever there's
@@ -140,12 +141,6 @@ export function describePlacings(places: Placing[], names: Record<number, string
     .sort((a, b) => Number(a.eliminated) - Number(b.eliminated) || a.place - b.place)
     .map((p) => p.eliminated ? `${name(p.teamId)} ${statusLetter(true, p.status) === 'E' ? 'out' : statusLetter(true, p.status)}` : `${ordinal(p.place)} ${name(p.teamId)}`)
     .join(' · ');
-}
-
-function ordinal(n: number): string {
-  const tens = n % 100;
-  if (tens >= 11 && tens <= 13) return `${n}th`;
-  return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
 }
 
 export interface OutboxBackupPayload {

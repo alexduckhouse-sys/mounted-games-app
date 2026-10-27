@@ -140,33 +140,25 @@ scoring to post-event standings — on phones in a field.
   24h cache fallback; `/hubs/*` NetworkOnly.
 
 ### Themes
-- Meadow, Stable Night, Ocean, Sunset.
+- `EGUK` (default), `Meadow`, `Stable Night`, `Ocean`, `Sunset`.
 
-## What v2 deliberately doesn't ship
+## What is deliberately out of scope right now
 
-- **Real online payments.** The Pay button is a confirmed placeholder —
-  shows the modal, records a Pending signup, organiser confirms manually.
-  Stripe Connect drops into that same flow without UI changes.
-- **Drag-to-reorder team formation.** Auto-bin commits in one shot; manual
-  edits happen via the Teams tab after.
-- **Per-individual admin accounts.** Shared admin key only.
+- **Real online payment card processing.** Real events record Pending entries for manual BACS/direct organiser confirmation; demo events (`EventCommerceSettings.IsDemo`) use the labelled no-card test payment flow (`/me/signups/:id/test-payment`).
+- **Drag-to-reorder team formation.** Auto-bin commits in one shot; manual edits happen via the Teams / Timetable & draw pages after.
 
 ## Stack notes for engineers
 
-- SQLite migrations are additive: `DbInitializer.SeedAsync` calls
-  `EnsureColumnAsync` for every v2 column rather than relying on EF
-  migration files — letting existing DBs upgrade without touching `mg.db`.
-- The frontend talks to the API at `/api` (Vite dev-server proxy in
-  development; same-origin in production).
-- All public endpoints respect the `IpBlocks` table.
-- New since v1: shop/, signups/, push subscriptions,
-  supporter join keys, per-race timing clocks, multi-arena timetable,
-  PWA, push notifications, equipment calculator.
+- Postgres (Neon) in production with EF Core migrations (`npm run db:migrate`); SQLite locally and in tests with additive startup guards in `DbInitializer` / `*SqliteSchema.cs`.
+- The frontend talks to the API at `/api` (Vite dev-server proxy in development; Vercel rewrite to `mounted-games-api` in production, forwarding client IP via `MG_PROXY_KEY`).
+- All public endpoints respect `IpBlocking.IsIpBlockedAsync` (raw IPs and keyed HMAC network hashes from blocked accounts).
+- Visual house style, Refine controls, button hierarchy and copywriting rules are defined in [`docs/designs/design-decisions.md`](./docs/designs/design-decisions.md).
 
-## v3 additions (October 2026)
+## v3 & v4 additions (23–26 October 2026)
 
-- **Stepped competition creator & entry-first public view:** competitions are set up in a stepped wizard (`/admin/competitions/new` and `:id`) covering structure, timing, heat-heat-final, hatbands and race lists up front, with a provisional timetable. Until teams are drawn, visitors see the entry-first view and competition details; **On the day** (`/admin/competitions/:id/format`) handles closing signups, forming teams and generating the exact timetable.
-- **Configurable declaration forms & checks:** new competitions start with a minimal dec form (rider name, pony name, trainer name and trainer phone), with optional rider/pony fields and custom number rules configured per competition. Organisers run **Tack check** and **Passport check** directly from `/competitions/:id/operations`.
-- **Scorer QR links (`/score#t=...`):** organisers issue revocable, time-limited QR codes and links from Operations (`Scorers & team`), On the day, the session scoring page, Details or Site admin so volunteers can score every arena in the competition from their phones without an account.
-- **Live camera streaming, overlays & low-signal support:** organisers broadcast from phone or laptop cameras via Cloudflare Realtime SFU at `/competitions/:id/broadcast`, which also integrates the **Overlays & banners** producer controls. Lite mode and adaptive polling keep the app responsive on weak venue signal, and clubs can embed live standings, results and timetables on their own websites via `/embed/*`.
-- **Seasons, team profiles, statistics & shops:** organisers publish multi-round league tables at `/seasons`, teams keep cross-competition history at `/team-profiles`, and `/stats` and `/competitions/past` share a top switcher for exploring rider, pony, team and club records. Every event has its own **Event shop** (`/competitions/:id/shop`) alongside the community **Tack & kit classifieds** (`/shop`), with club payout onboarding at `/me/payouts`.
+- **10-step competition creator, saved starting points & entry-first public view:** competitions are set up in the redesigned 10-step wizard (`/admin/competitions/new` and `:id`) from scratch, copied from a past event, or loaded from a saved `StartingPoint` (`CompetitionSetup`: setup only, never teams/scores/entrants). Includes searchable nation/flag icons, structure, timing, HHF, hatband colours, per-final race lists (`A/B/C Final`), final scoring switches (`HasFinal`, `CarryPointsIntoFinal`, `DoublePointsInFinal`), and adaptive `"Dec form questions"`.
+- **Redesigned Set-Up & Organiser Pages (`/competitions/:id/*`):** `Preparations` (`operations`), `Event details` (`event-details` with save-as-you-go cards look, Yellow/Red card switches and per-section tack scoring table), `Sections & races` (`sections`), `Entries & dec forms` (`entries`, grouped by section with Paid status pop, stabling, waitlists, Pair matchmaking and Guest Rider spots), `Timetable & draw` (`timetable-and-draw` with steppers, hatband colour helper and `⋯` menu), `Equipment` (`equipment`), and `Sponsors & sharing` (`sponsors-and-sharing`).
+- **Full-screen phone scoring & volunteer Scorer QR links (`/score#t=...`):** full-screen scoring (`ScoringSection` + `ScoringParts`) with heat picker bar (`HeatViews`), race `‹ ›` switcher, `10px` solid left hatband bars, tap-to-place, press-and-hold to eliminate (`250 ms` → `600 ms`), `⋯` race tools (`RaceToolsSheet`: per-team HC, Yellow/Red cards, points override/adjustment), saved tick, climbing standings rows, and `BetweenHeats` next-heat view.
+- **Stream controls (`Overlay · Auto · Replay · Camera`), Follow-Cam & Commentary Desk:** `/competitions/:id/stream-controls` provides 2-column overlay choice tiles, auto rules, a 30-minute IndexedDB circular replay buffer (`replayBuffer.ts`) with Follow-Cam keyframe editing (`ReplayInspector.tsx`) and `Cancel clip`, and multi-phone camera management, paired with `/competitions/:id/commentary` (PA Desk) and `/competitions/:id/tv` (TV Kiosk).
+- **Announcements, WhatsApp-style message threads & swear filter:** `/competitions/:id/announcements` manages pinned notices and sent announcements; `/competitions/:id/messages/:userId` provides per-person message threads with `Block` in the header and server-side swear filtering (`SwearFilter`).
+- **Site admin, Master Admin, invitations & custom audience emails:** `/admin` (`Needs you / Competitions / Manage the site`), `/admin/users`, `/admin/blocked` (account blocks + hashed `AccountIps`), `/invite#t=...` one-time 7-day email invitations (`AccountInvite`), `MasterAdmin` lock/block hierarchy, and batch-sent custom emails (`/admin/email`, `CustomEmailService`) with RFC 8058 one-click unsubscribe.

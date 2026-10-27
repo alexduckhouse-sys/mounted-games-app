@@ -1,4 +1,6 @@
+// Unused in web UI yet — reserved for iOS / upcoming race-lineup UI wiring
 import type { Race, RiderEntry, RiderRaceRole, SectionFormat } from '../types';
+import { publicRiderName } from './riderNames';
 
 export interface RaceLineupWarning {
   kind: 'too-few-riders' | 'too-many-riders' | 'unbalanced-sit-outs';
@@ -15,9 +17,11 @@ export interface RiderRideSummary {
   sitOutsCount: number;
 }
 
-/** Stable key for a rider in the lineup plan. */
-export function riderLineupKey(rider: Pick<RiderEntry, 'id' | 'fullName'>): string {
-  return rider.id > 0 ? String(rider.id) : rider.fullName.trim();
+/** Stable key for a rider in the lineup plan. Uses `publicRiderName` when `id` is absent so `useInitialOnly` minors never expose their surname in lineup keys. */
+export function riderLineupKey(rider: Pick<RiderEntry, 'id' | 'fullName'> & { useInitialOnly?: boolean }): string {
+  return rider.id > 0
+    ? String(rider.id)
+    : publicRiderName({ fullName: rider.fullName, useInitialOnly: Boolean(rider.useInitialOnly) });
 }
 
 /** Stable key for a race inside a heat in the lineup plan. */

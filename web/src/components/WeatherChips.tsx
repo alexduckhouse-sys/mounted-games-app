@@ -3,6 +3,7 @@ import { Cloud, CloudRain, CloudSnow, Sun, CloudFog, CloudLightning, Moon } from
 import { getWeather } from '../weather/weather';
 import { forecastHour, WEATHER_REFRESH_MS } from '../weather/requestCache';
 import { useLiteMode } from '../lite/LiteModeContext';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface AtResponse {
   hour?: string;
@@ -37,6 +38,7 @@ export function WeatherAt({
   className?: string;
 }) {
   const { lite } = useLiteMode();
+  const { t: tr, locale } = useLanguage();
   const iso = when ? forecastHour(when) : null;
   // Each answer is stored with the request it belongs to, so a change of venue or time
   // shows nothing until the new answer arrives, with no state reset inside the effect.
@@ -60,7 +62,7 @@ export function WeatherAt({
   return (
     <span
       className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[10px] text-slate-600 dark:text-slate-300 bg-slate-100/70 dark:bg-slate-800/60 ${className}`}
-      title={`Forecast for ${new Date(iso).toLocaleString()}`}
+      title={tr('teams.weather.forecastFor', { when: new Date(iso).toLocaleString(locale) })}
     >
       {weatherIcon('w-3 h-3', code, isDay)}
       {t != null && <span className="font-semibold tabular-nums">{Math.round(t)}°</span>}
@@ -77,6 +79,7 @@ export function WeatherNow({
   className?: string;
 }) {
   const { lite } = useLiteMode();
+  const { t: tr } = useLanguage();
   const requestKey = `${lat}|${lon}`;
   const [result, setResult] = useState<{ key: string; data: CurrentResponse | null } | null>(null);
   const data = result?.key === requestKey ? result.data : null;
@@ -104,7 +107,7 @@ export function WeatherNow({
   return (
     <span
       className={`inline-flex items-center gap-1 px-1.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-xs ${className}`}
-      title="Current weather at the venue"
+      title={tr('teams.weather.currentAtVenue')}
     >
       {weatherIcon('w-3.5 h-3.5', code, isDay)}
       {t != null && <span className="font-semibold tabular-nums">{Math.round(t)}°</span>}

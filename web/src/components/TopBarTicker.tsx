@@ -2,7 +2,9 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { Link, useLocation } from 'react-router-dom';
 import { ChevronDown, Video } from 'lucide-react';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
-import { tickerFocusAfterChange, type TickerItem, type TickerKind } from '../lib/ticker';
+import { nowPrefixLength, tickerFocusAfterChange, type TickerItem, type TickerKind } from '../lib/ticker';
+import { useT } from '../i18n/LanguageContext';
+import type { MessageKey } from '../i18n/en';
 import { useTicker } from './TickerContext';
 import { PAGE_WIDTH_CLASS, usePageWidthValue } from './pageWidthState';
 
@@ -11,23 +13,23 @@ const ANNOUNCEMENT_HOLD_MS = 10_000;
 const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
 
 /** The badge in front of each line; the dark strip keeps every badge readable in every theme. */
-const KIND_BADGES: Record<TickerKind, { label: string; className: string; srLabel?: string } | null> = {
-  live: { label: 'Live', className: 'mg-badge-live' },
-  next: { label: 'Next', className: 'mg-badge-soft' },
-  late: { label: 'Late', className: 'mg-badge-late' },
-  ontime: { label: 'On time', className: 'mg-badge-soft' },
-  break: { label: 'Break', className: 'mg-badge-soft' },
-  finals: { label: 'Finals', className: 'mg-badge-soft' },
-  result: { label: 'Result', className: 'mg-badge-soft', srLabel: 'Result' },
-  announcement: { label: 'Notice', className: 'mg-badge-notice', srLabel: 'Announcement' },
+const KIND_BADGES: Record<TickerKind, { label: MessageKey; className: string; srLabel?: MessageKey } | null> = {
+  live: { label: 'shell.ticker.badge.live', className: 'mg-badge-live' },
+  next: { label: 'shell.ticker.badge.next', className: 'mg-badge-soft' },
+  late: { label: 'shell.ticker.badge.late', className: 'mg-badge-late' },
+  ontime: { label: 'shell.ticker.badge.ontime', className: 'mg-badge-soft' },
+  break: { label: 'shell.ticker.badge.break', className: 'mg-badge-soft' },
+  finals: { label: 'shell.ticker.badge.finals', className: 'mg-badge-soft' },
+  result: { label: 'shell.ticker.badge.result', className: 'mg-badge-soft', srLabel: 'shell.ticker.badge.result' },
+  announcement: { label: 'shell.ticker.badge.notice', className: 'mg-badge-notice', srLabel: 'shell.ticker.badge.announcement' },
   info: null,
 };
 
 /** A final that is on now gets the live badge; the "Now:" prefix is dropped because the badge says it. */
 function badgeFor(item: TickerItem) {
-  const now = item.text.startsWith('Now: ');
-  const badge = item.kind === 'finals' && now ? KIND_BADGES.live : KIND_BADGES[item.kind];
-  return { badge, text: now && badge?.className === 'mg-badge-live' ? item.text.slice(5) : item.text };
+  const nowLength = nowPrefixLength(item.text);
+  const badge = item.kind === 'finals' && nowLength > 0 ? KIND_BADGES.live : KIND_BADGES[item.kind];
+  return { badge, text: nowLength > 0 && badge?.className === 'mg-badge-live' ? item.text.slice(nowLength) : item.text };
 }
 
 function subscribeReducedMotion(onChange: () => void) {
@@ -39,6 +41,7 @@ const prefersReducedMotion = () => window.matchMedia?.(REDUCED_MOTION).matches ?
 
 /** One line that rolls through what is on now, delays, what is next and organiser announcements. Tap for the live feed. */
 export function TopBarTicker() {
+  const t = useT();
   const cap = PAGE_WIDTH_CLASS[usePageWidthValue()];
   const { current } = useCurrentCompetition();
   // The header already shows the competition name, so the strip only appears when there is news.
@@ -72,7 +75,7 @@ export function TopBarTicker() {
     return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('pointerdown', onPointer); };
   }, [open]);
 
-  const active = items[index] ?? (watchCompetitionId ? { key: 'stream', kind: 'info' as const, text: 'Live video' } : undefined);
+  const active = items[index] ?? (watchCompetitionId ? { key: 'stream', kind: 'info' as const, text: t('shell.ticker.liveVideo') } : undefined);
   const holdMs = active?.kind === 'announcement' ? ANNOUNCEMENT_HOLD_MS : ROTATE_MS;
   useEffect(() => {
     if (reduceMotion || open || items.length < 2) return;
@@ -90,12 +93,13 @@ export function TopBarTicker() {
     if (item.sessionId != null) return `${timetable}/session/${item.sessionId}`;
     return item.kind === 'late' || item.kind === 'ontime' ? timetable : feed;
   };
-  const labelFor = (item: TickerItem) => (item.sessionId != null ? 'Open this session' : item.kind === 'late' || item.kind === 'ontime' ? 'Open the timetable' : 'Open the live feed');
+  const labelFor = (item: TickerItem) => (item.sessionId != null ? t('shell.ticker.openSession') : item.kind === 'late' || item.kind === 'ontime' ? t('shell.ticker.openTimetable') : t('shell.ticker.openFeed'));
   return (
     <div ref={barRef} className="relative">
-      <ul className="sr-only" aria-label="Event updates">
+      <ul className="sr-only" aria-label={t('shell.ticker.updates')}>
         {items.map((item) => {
-          const label = KIND_BADGES[item.kind]?.srLabel;
+          const srLabel = KIND_BADGES[item.kind]?.srLabel;
+          const label = srLabel ? t(srLabel) : undefined;
           return <li key={item.key}>{label ? `${label}: ${item.text}` : item.text}</li>;
         })}
       </ul>
@@ -103,17 +107,17 @@ export function TopBarTicker() {
         <div className={`mx-auto flex w-full ${cap} items-stretch`}>
           <Link to={linkFor(active)} aria-label={labelFor(active)} title={labelFor(active)} className="mg-strip min-w-0 flex-1">
             <span key={active.key} aria-hidden="true" className="ticker-line flex w-full min-w-0 items-center gap-2.5 pl-4 pr-1">
-              {badge && <span className={`mg-badge ${badge.className}`}>{badge.label}</span>}
+              {badge && <span className={`mg-badge ${badge.className}`}>{t(badge.label)}</span>}
               <span className="min-w-0 flex-1 truncate">{text}</span>
             </span>
           </Link>
           {watchCompetitionId === current.id && (
-            <Link to={`/competitions/${current.id}/chat`} aria-label="Watch the live video" className="mg-strip-watch mg-badge-live">
-              <Video aria-hidden="true" className="h-4 w-4" /> Watch
+            <Link to={`/competitions/${current.id}/chat`} aria-label={t('shell.ticker.watchLabel')} className="mg-strip-watch mg-badge-live">
+              <Video aria-hidden="true" className="h-4 w-4" /> {t('shell.ticker.watch')}
             </Link>
           )}
           {items.length > 1 && (
-            <button type="button" className="mg-strip-next" aria-expanded={open} aria-controls={panelId} aria-label={`All updates (${items.length})`} onClick={() => { setOpen((v) => !v); setOpenedAt(pathname); }}>
+            <button type="button" className="mg-strip-next" aria-expanded={open} aria-controls={panelId} aria-label={t('shell.ticker.allUpdates', { count: items.length })} onClick={() => { setOpen((v) => !v); setOpenedAt(pathname); }}>
               <ChevronDown aria-hidden="true" className={`h-[18px] w-[18px] transition-transform motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} strokeWidth={2.2} />
             </button>
           )}
@@ -127,7 +131,7 @@ export function TopBarTicker() {
               return (
                 <li key={item.key}>
                   <Link to={linkFor(item)} className="mg-strip-item" onClick={() => setOpen(false)}>
-                    {line.badge ? <span className={`mg-badge ${line.badge.className}`}>{line.badge.label}</span> : <span className="mg-badge mg-badge-soft">Info</span>}
+                    {line.badge ? <span className={`mg-badge ${line.badge.className}`}>{t(line.badge.label)}</span> : <span className="mg-badge mg-badge-soft">{t('shell.ticker.badge.info')}</span>}
                     <span className="min-w-0 flex-1">{line.text}</span>
                   </Link>
                 </li>
@@ -135,7 +139,7 @@ export function TopBarTicker() {
             })}
           </ul>
           <div className={`mx-auto ${cap} px-4 pb-3 pt-1`}>
-            <Link to={`/competitions/${current.id}/chat`} className="mg-btn mg-btn-secondary w-full !min-h-11" onClick={() => setOpen(false)}>Open the live feed</Link>
+            <Link to={`/competitions/${current.id}/chat`} className="mg-btn mg-btn-secondary w-full !min-h-11" onClick={() => setOpen(false)}>{t('shell.ticker.openFeed')}</Link>
           </div>
         </div>
       )}

@@ -12,13 +12,21 @@ const KEY = 'mg.theme';
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeName>(() => {
-    const stored = localStorage.getItem(KEY);
-    return THEMES.some((t) => t.id === stored) ? (stored as ThemeName) : 'eguk';
+    try {
+      const stored = localStorage.getItem(KEY);
+      return THEMES.some((t) => t.id === stored) ? (stored as ThemeName) : 'eguk';
+    } catch {
+      return 'eguk';
+    }
   });
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem(KEY, theme);
+    try {
+      localStorage.setItem(KEY, theme);
+    } catch {
+      // Storage may be blocked in private/restricted contexts.
+    }
   }, [theme]);
 
   return (

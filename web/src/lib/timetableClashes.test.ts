@@ -218,7 +218,7 @@ describe('detectTimetableClashes', () => {
     expect(clashes[0].summary).toContain('at the same time in different arenas');
     expect(clashes[1]).toMatchObject({
       reason: 'trainer',
-      sharedDetail: 'trainer-2',
+      sharedDetail: 'Shared trainer',
     });
     expect(clashes[2]).toMatchObject({
       reason: 'pony',

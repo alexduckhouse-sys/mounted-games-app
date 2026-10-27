@@ -2,8 +2,9 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Clock, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import { useConnectionStatus } from '../live/ConnectionStatusContext';
 import { liveState } from '../live/connectionStatus';
+import { useLanguage } from '../i18n/LanguageContext';
 
-const time = (date: Date) => date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+const time = (date: Date, locale: string) => date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
 /** How long "Back online" shows once the live link returns after the pill had appeared. */
 export const BACK_ONLINE_MS = 2600;
@@ -19,6 +20,7 @@ export function ConnectionPill({ fallback = null }: { fallback?: ReactNode }) {
 }
 
 function useConnectionPill(): ReactNode {
+  const { t, locale } = useLanguage();
   const { status } = useConnectionStatus();
   const down = status != null && !status.connected;
   // Ticks while the live link is down, so the pill moves from hidden to reconnecting to checking.
@@ -48,38 +50,38 @@ function useConnectionPill(): ReactNode {
   if (!status) return null;
   if (!shown) {
     if (returns > cleared && status.connected) {
-      return <span role="status" className="mg-conn-pill mg-conn-back"><Wifi aria-hidden="true" />Back online</span>;
+      return <span role="status" className="mg-conn-pill mg-conn-back"><Wifi aria-hidden="true" />{t('shell.conn.backOnline')}</span>;
     }
     return null;
   }
 
   if (status.retrying) {
     return (
-      <button type="button" className="mg-conn-pill mg-conn-polling" disabled aria-label="Trying now">
-        <RefreshCw className="mg-conn-spin" aria-hidden="true" />Trying now…
+      <button type="button" className="mg-conn-pill mg-conn-polling" disabled aria-label={t('shell.conn.tryingNow')}>
+        <RefreshCw className="mg-conn-spin" aria-hidden="true" />{t('shell.conn.tryingNowShort')}
       </button>
     );
   }
   if (state === 'reconnecting') {
     return (
-      <button type="button" className="mg-conn-pill mg-conn-reconnecting" onClick={status.retry} aria-label="Reconnecting. Tap to retry now">
-        <RefreshCw className="mg-conn-spin" aria-hidden="true" />Reconnecting…
+      <button type="button" className="mg-conn-pill mg-conn-reconnecting" onClick={status.retry} aria-label={t('shell.conn.reconnectingLabel')}>
+        <RefreshCw className="mg-conn-spin" aria-hidden="true" />{t('shell.conn.reconnecting')}
       </button>
     );
   }
   if (state === 'polling') {
     const seconds = Math.round(status.intervalMs / 1000);
     return (
-      <button type="button" className="mg-conn-pill mg-conn-polling" onClick={status.retry} aria-label={`Checking every ${seconds} seconds. Tap to check now`}>
-        <Clock aria-hidden="true" />Checking every {seconds} s
+      <button type="button" className="mg-conn-pill mg-conn-polling" onClick={status.retry} aria-label={t('shell.conn.pollingLabel', { seconds })}>
+        <Clock aria-hidden="true" />{t('shell.conn.polling', { seconds })}
       </button>
     );
   }
-  const updated = status.updatedAt ? time(status.updatedAt) : null;
+  const updated = status.updatedAt ? time(status.updatedAt, locale) : null;
   return (
     <button type="button" className="mg-conn-pill mg-conn-offline" onClick={status.retry}
-      aria-label={updated ? `Offline, last updated ${updated}. Tap to retry` : 'Offline. Tap to retry'}>
-      <WifiOff aria-hidden="true" />{updated ? `Offline · updated ${updated}` : 'Offline'}
+      aria-label={updated ? t('shell.conn.offlineUpdatedLabel', { time: updated }) : t('shell.conn.offlineLabel')}>
+      <WifiOff aria-hidden="true" />{updated ? t('shell.conn.offlineUpdated', { time: updated }) : t('shell.conn.offline')}
     </button>
   );
 }

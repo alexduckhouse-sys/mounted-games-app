@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useExitDelay } from '../hooks/useExitDelay';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { CalendarDays, X, Settings, History, SlidersHorizontal, CloudSun, Star, ShoppingBag, ChevronRight, ChevronDown, BarChart3, Trophy, QrCode, Users, IdCard } from 'lucide-react';
+import { CalendarDays, Languages, X, Settings, History, SlidersHorizontal, CloudSun, Star, ShoppingBag, ChevronRight, ChevronDown, BarChart3, Trophy, QrCode, Users, IdCard } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { useLiteMode } from '../lite/LiteModeContext';
@@ -13,6 +13,8 @@ import { WeatherBadge } from './WeatherBadge';
 import { useAgeGroups, type AgeGroupLink } from './AgeGroupsContext';
 import { useCompetitionMeta } from './competitionMeta';
 import { QrPermissionScannerModal } from './QrPermissionScannerModal';
+import { useLanguage, useT } from '../i18n/LanguageContext';
+import { LANGUAGES } from '../i18n/translate';
 
 const WEATHER_KEY = 'mg.showWeather';
 const itemClass = (active: boolean) => `flex min-h-12 w-full items-center gap-3 rounded-[10px] px-3 text-left text-base !no-underline hover:!no-underline ${active
@@ -22,6 +24,7 @@ const sectionHeading = 'mb-1 px-3 text-lg font-bold leading-tight text-[rgb(var(
 const iconClass = (active: boolean) => `h-5 w-5 shrink-0 ${active ? '' : 'text-[rgb(var(--mg-muted))]'}`;
 
 export function NavigationDrawer({ onClose }: { onClose: () => void }) {
+  const { t, lang, setLang } = useLanguage();
   const ref = useRef<HTMLDialogElement>(null);
   // Closing slides the drawer back out before it is removed; links navigate underneath as it goes.
   const { closing, close } = useExitDelay(onClose);
@@ -60,31 +63,31 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
   const subtitle = shown ? [competitionDateText(shown.startDate, shown.endDate), shown.location?.trim()].filter(Boolean).join(' · ') : '';
   // This competition: only shown while one is open.
   const links = [
-    { to: `${base}/teams`, label: 'Teams', icon: Users, end: true },
-    { to: `${base}/following`, label: 'Following', icon: Star, end: true },
-    { to: `${base}/shop`, label: 'Event shop', icon: ShoppingBag, end: true },
+    { to: `${base}/teams`, label: t('shell.menu.teams'), icon: Users, end: true },
+    { to: `${base}/following`, label: t('shell.menu.following'), icon: Star, end: true },
+    { to: `${base}/shop`, label: t('shell.menu.eventShop'), icon: ShoppingBag, end: true },
   ];
   // General: the same rows everywhere, in the same style; away from a competition Following sits in it and the competition section is gone.
   const generalLinks = [
-    { to: '/events', label: 'Competitions', icon: CalendarDays, end: true },
-    ...(current ? [] : [{ to: '/following', label: 'Following', icon: Star, end: false }]),
+    { to: '/events', label: t('shell.menu.competitions'), icon: CalendarDays, end: true },
+    ...(current ? [] : [{ to: '/following', label: t('shell.menu.following'), icon: Star, end: false }]),
     ...(current
-      ? [{ to: seasonsTo, label: 'Seasons', icon: Trophy, end: false }, { to: '/competitions/past', label: 'Past competitions', icon: History, end: false }]
-      : [{ to: '/competitions/past', label: 'Past competitions', icon: History, end: false }, { to: seasonsTo, label: 'Seasons', icon: Trophy, end: false }]),
-    { to: '/stats', label: 'Rider and team stats', icon: BarChart3, end: false },
-    ...(current ? [] : [{ to: '/team-profiles', label: 'Team profiles', icon: IdCard, end: false }]),
-    { to: '/shop', label: 'Tack and kit shop', icon: ShoppingBag, end: false },
+      ? [{ to: seasonsTo, label: t('shell.menu.seasons'), icon: Trophy, end: false }, { to: '/competitions/past', label: t('shell.menu.pastCompetitions'), icon: History, end: false }]
+      : [{ to: '/competitions/past', label: t('shell.menu.pastCompetitions'), icon: History, end: false }, { to: seasonsTo, label: t('shell.menu.seasons'), icon: Trophy, end: false }]),
+    { to: '/stats', label: t('shell.menu.stats'), icon: BarChart3, end: false },
+    ...(current ? [] : [{ to: '/team-profiles', label: t('shell.menu.teamProfiles'), icon: IdCard, end: false }]),
+    { to: '/shop', label: t('shell.menu.tackShop'), icon: ShoppingBag, end: false },
   ];
   // Weather shows with a competition open, or away from one only when switched on in Settings.
   const weatherRow = (current != null || showWeather) && !lite && (
     <Link to={current ? `${base}/weather` : '/events'} onClick={close} className={`${itemClass(false)} hover:!bg-[rgb(var(--mg-subtle))]`}>
-      <CloudSun className={iconClass(false)} /><span className="font-medium text-[rgb(var(--mg-ink))]">Weather</span>{showWeather && <span className="ml-auto"><WeatherBadge /></span>}
+      <CloudSun className={iconClass(false)} /><span className="font-medium text-[rgb(var(--mg-ink))]">{t('shell.menu.weather')}</span>{showWeather && <span className="ml-auto"><WeatherBadge /></span>}
     </Link>
   );
   const groupList = current && ageGroups.competitionId === current.id ? ageGroups.groups : [];
   // Account and club links (teams, dec forms, signups, shop, sign out) live on the profile page now.
   const accountLinks = [
-    { to: '/admin', label: 'Site admin', icon: Settings, show: hasRole('Admin') },
+    { to: '/admin', label: t('shell.menu.siteAdmin'), icon: Settings, show: hasRole('Admin') },
   ].filter((item) => item.show);
   const onGroupPage = location.pathname === `${base}/scoring` || location.pathname === `${base}/toplists`;
   const selectedSection = onGroupPage ? new URLSearchParams(location.search).get('section') : null;
@@ -96,17 +99,17 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
             {current ? <>
               <h2 id="navigation-title" className="mg-display break-words text-xl font-bold leading-tight">{current.name}</h2>
               {subtitle && <span className="mg-header-sub text-[13px] leading-tight">{subtitle}</span>}
-            </> : <h2 id="navigation-title" className="mg-display text-xl font-bold leading-tight">Menu</h2>}
+            </> : <h2 id="navigation-title" className="mg-display text-xl font-bold leading-tight">{t('shell.menu.title')}</h2>}
           </div>
-          <button autoFocus onClick={close} className="mg-nav-btn !px-0" aria-label="Close menu"><X className="h-5 w-5" /></button>
+          <button autoFocus onClick={close} className="mg-nav-btn !px-0" aria-label={t('shell.menu.close')}><X className="h-5 w-5" /></button>
         </div>
 
         {groupList.length > 0 && <AgeGroupMenu groups={groupList} base={base} selectedSection={selectedSection} onPick={close} />}
 
         <div className="flex flex-1 flex-col gap-5 p-4">
           {current && (
-            <nav aria-label="This competition" className="flex flex-col">
-              <h3 className={sectionHeading}>This competition</h3>
+            <nav aria-label={t('shell.menu.thisCompetition')} className="flex flex-col">
+              <h3 className={sectionHeading}>{t('shell.menu.thisCompetition')}</h3>
               {weatherRow}
               {links.map((item) => (
                 <NavLink key={item.label} to={item.to} end={item.end} onClick={close} className={({ isActive }) => itemClass(isActive)}>
@@ -118,20 +121,28 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
             </nav>
           )}
 
-          <nav aria-label="General" className="flex flex-col">
-            <h3 className={sectionHeading}>General</h3>
+          <nav aria-label={t('shell.menu.general')} className="flex flex-col">
+            <h3 className={sectionHeading}>{t('shell.menu.general')}</h3>
             {!current && weatherRow}
             {generalLinks.map((item) => (
               <NavLink key={item.label} to={item.to} end={item.end} onClick={close} className={({ isActive }) => itemClass(isActive)}>
                 {({ isActive }) => <><item.icon className={iconClass(isActive)} />{item.label}</>}
               </NavLink>
             ))}
-            <button type="button" onClick={() => setQrOpen(true)} className={itemClass(false)}><QrCode className={iconClass(false)} />Scan a QR code</button>
-            <NavLink to="/settings" onClick={close} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><SlidersHorizontal className={iconClass(isActive)} />Settings</>}</NavLink>
+            <button type="button" onClick={() => setQrOpen(true)} className={itemClass(false)}><QrCode className={iconClass(false)} />{t('shell.menu.scanQr')}</button>
+            <NavLink to="/settings" onClick={close} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><SlidersHorizontal className={iconClass(isActive)} />{t('shell.menu.settings')}</>}</NavLink>
+            <div role="group" aria-label={t('shell.menu.language')} className="mt-1 flex min-h-12 items-center gap-2 px-3">
+              <Languages className={iconClass(false)} aria-hidden="true" />
+              <span className="sr-only">{t('shell.menu.language')}</span>
+              {LANGUAGES.map((option) => (
+                <button key={option.id} type="button" lang={option.id} aria-pressed={lang === option.id} onClick={() => setLang(option.id)}
+                  className={`min-h-9 rounded-full border px-3 text-sm ${lang === option.id ? 'border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-tint))] font-semibold text-[rgb(var(--mg-heading))]' : 'border-[rgb(var(--mg-rule-soft))] font-medium text-[rgb(var(--mg-ink))]'}`}>{option.name}</button>
+              ))}
+            </div>
           </nav>
 
           {(accountLinks.length > 0 || extras.length > 0) && (
-            <nav aria-label="Account and management" className="flex flex-col border-t border-[rgb(var(--mg-rule-soft))] pt-4">
+            <nav aria-label={t('shell.menu.account')} className="flex flex-col border-t border-[rgb(var(--mg-rule-soft))] pt-4">
               {accountLinks.map((item) => <NavLink key={item.to} to={item.to} onClick={close} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><item.icon className={iconClass(isActive)} />{item.label}</>}</NavLink>)}
               {extras.map((item) => <NavLink key={item.to} to={item.to} end={item.end} onClick={close} className={({ isActive }) => itemClass(isActive)}>{({ isActive }) => <><item.icon className={iconClass(isActive)} />{item.label}</>}</NavLink>)}
             </nav>
@@ -148,7 +159,7 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
             </Link>
           ) : (
             <div className="mt-auto border-t border-[rgb(var(--mg-rule-soft))] pt-3">
-              <NavLink to="/login" onClick={close} className="mg-btn mg-btn-primary w-full !min-h-12 !text-base">Sign in</NavLink>
+              <NavLink to="/login" onClick={close} className="mg-btn mg-btn-primary w-full !min-h-12 !text-base">{t('common.signIn')}</NavLink>
             </div>
           )}
         </div>
@@ -169,6 +180,7 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
 
 /** The age group as a full-width navy row under the header. It opens downwards and pushes the menu down. */
 function AgeGroupMenu({ groups, base, selectedSection, onPick }: { groups: AgeGroupLink[]; base: string; selectedSection: string | null; onPick: () => void }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const selected = groups.find((group) => String(group.id) === selectedSection) ?? groups[0];
   return (
@@ -176,21 +188,21 @@ function AgeGroupMenu({ groups, base, selectedSection, onPick }: { groups: AgeGr
       <button type="button" aria-expanded={open} aria-controls="menu-age-groups" onClick={() => setOpen((value) => !value)}
         className="mg-header flex min-h-[54px] w-full items-center gap-3 border-t border-[rgb(var(--mg-header-line))] px-5 text-left">
         <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-          <span className="mg-header-sub text-[12.5px] font-medium leading-none">Age group</span>
+          <span className="mg-header-sub text-[12.5px] font-medium leading-none">{t('shell.menu.ageGroup')}</span>
           <b className="truncate text-[17px] font-bold leading-tight">{selected.name}</b>
         </span>
         <ChevronDown aria-hidden="true" className={`h-[18px] w-[18px] shrink-0 ${open ? 'rotate-180' : ''}`} strokeWidth={2.4} />
       </button>
       {open && (
-        <nav id="menu-age-groups" aria-label="Age groups" className="border-b-2 border-[rgb(var(--mg-heading))]">
+        <nav id="menu-age-groups" aria-label={t('shell.menu.ageGroups')} className="border-b-2 border-[rgb(var(--mg-heading))]">
           {groups.map((group) => {
             const active = group.id === selected.id;
             return (
               <Link key={group.id} to={`${base}/scoring?section=${group.id}`} onClick={onPick} aria-current={active ? 'page' : undefined}
                 className={`flex min-h-[50px] items-center gap-3 border-b border-[rgb(var(--mg-rule-soft))] px-5 text-base !no-underline last:border-b-0 hover:!no-underline ${active ? 'bg-[rgb(var(--mg-tint))] font-bold text-[rgb(var(--mg-heading))]' : 'text-[rgb(var(--mg-ink))]'}`}>
                 <span className="min-w-0 flex-1 truncate">{group.name}</span>
-                {group.live ? <span className="mg-badge mg-badge-live">Live</span>
-                  : group.next ? <span className="shrink-0 text-[12.5px] text-[rgb(var(--mg-muted))]">Next {group.next}</span> : null}
+                {group.live ? <span className="mg-badge mg-badge-live">{t('shell.menu.live')}</span>
+                  : group.next ? <span className="shrink-0 text-[12.5px] text-[rgb(var(--mg-muted))]">{t('shell.menu.nextAt', { time: group.next })}</span> : null}
               </Link>
             );
           })}

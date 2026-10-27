@@ -9,7 +9,45 @@ public static class OperationsSqliteSchema
     {
         await MakeRulebooksGlobalAsync(db);
         await EnsureHeatEntryColumnsAsync(db);
+        await EnsureSessionColumnsAsync(db);
+        await EnsureVolunteerShiftColumnsAsync(db);
         await CreateAsync(db);
+    }
+
+    private static async Task EnsureSessionColumnsAsync(AppDbContext db)
+    {
+        var tableExists = await db.Database.SqlQueryRaw<int>("""SELECT COUNT(*) AS "Value" FROM sqlite_master WHERE type = 'table' AND name = 'Sessions'""").SingleAsync();
+        if (tableExists == 0) return;
+        if (await db.Database.SqlQueryRaw<int>("""SELECT COUNT(*) AS "Value" FROM pragma_table_info('Sessions') WHERE name = 'ProvisionalUntil'""").SingleAsync() == 0)
+            await db.Database.ExecuteSqlRawAsync("""ALTER TABLE "Sessions" ADD COLUMN "ProvisionalUntil" TEXT NULL;""");
+        if (await db.Database.SqlQueryRaw<int>("""SELECT COUNT(*) AS "Value" FROM pragma_table_info('Sessions') WHERE name = 'OfficialConfirmedAt'""").SingleAsync() == 0)
+            await db.Database.ExecuteSqlRawAsync("""ALTER TABLE "Sessions" ADD COLUMN "OfficialConfirmedAt" TEXT NULL;""");
+    }
+
+    private static async Task EnsureVolunteerShiftColumnsAsync(AppDbContext db)
+    {
+        var tableExists = await db.Database.SqlQueryRaw<int>("""SELECT COUNT(*) AS "Value" FROM sqlite_master WHERE type = 'table' AND name = 'VolunteerShift'""").SingleAsync();
+        if (tableExists == 0) return;
+        var columns = new (string Name, string TypeSql)[]
+        {
+            ("DutyCategory", "TEXT NOT NULL DEFAULT 'Custom'"),
+            ("AssignedTeamId", "INTEGER NULL"),
+            ("AssignedClubName", "TEXT NULL"),
+            ("LaneNumber", "INTEGER NULL"),
+            ("AttendanceStatus", "TEXT NOT NULL DEFAULT 'Assigned'"),
+            ("CheckedInAt", "TEXT NULL"),
+            ("CheckedInByName", "TEXT NULL"),
+            ("CheckedInByUserId", "TEXT NULL"),
+            ("CheckedInByStaffOverride", "INTEGER NOT NULL DEFAULT 0"),
+        };
+        foreach (var (name, typeSql) in columns)
+        {
+#pragma warning disable EF1002
+            var hasCol = await db.Database.SqlQueryRaw<int>($"SELECT COUNT(*) AS \"Value\" FROM pragma_table_info('VolunteerShift') WHERE name = '{name}'").SingleAsync();
+            if (hasCol == 0)
+                await db.Database.ExecuteSqlRawAsync($"ALTER TABLE \"VolunteerShift\" ADD COLUMN \"{name}\" {typeSql};");
+#pragma warning restore EF1002
+        }
     }
 
     private static async Task EnsureHeatEntryColumnsAsync(AppDbContext db)
@@ -160,17 +198,29 @@ public static class OperationsSqliteSchema
             "SessionId" INTEGER NULL,
             "ArenaName" TEXT NULL,
             "Role" TEXT NOT NULL,
+            "DutyCategory" TEXT NOT NULL DEFAULT 'Custom',
+            "AssignedTeamId" INTEGER NULL,
+            "AssignedClubName" TEXT NULL,
+            "LaneNumber" INTEGER NULL,
+            "AttendanceStatus" TEXT NOT NULL DEFAULT 'Assigned',
+            "CheckedInAt" TEXT NULL,
+            "CheckedInByName" TEXT NULL,
+            "CheckedInByUserId" TEXT NULL,
+            "CheckedInByStaffOverride" INTEGER NOT NULL DEFAULT 0,
             "StartTimeLabel" TEXT NULL,
             "Notes" TEXT NULL,
             "RequiredCount" INTEGER NOT NULL DEFAULT 1,
             "CreatedAt" TEXT NOT NULL,
             CONSTRAINT "FK_VolunteerShift_Competitions_CompetitionId" FOREIGN KEY ("CompetitionId") REFERENCES "Competitions" ("Id") ON DELETE CASCADE,
-            CONSTRAINT "FK_VolunteerShift_Sessions_SessionId" FOREIGN KEY ("SessionId") REFERENCES "Sessions" ("Id") ON DELETE SET NULL
+            CONSTRAINT "FK_VolunteerShift_Sessions_SessionId" FOREIGN KEY ("SessionId") REFERENCES "Sessions" ("Id") ON DELETE SET NULL,
+            CONSTRAINT "FK_VolunteerShift_Teams_AssignedTeamId" FOREIGN KEY ("AssignedTeamId") REFERENCES "Teams" ("Id") ON DELETE SET NULL
         );
 
         CREATE INDEX IF NOT EXISTS "IX_VolunteerShift_CompetitionId" ON "VolunteerShift" ("CompetitionId");
 
         CREATE INDEX IF NOT EXISTS "IX_VolunteerShift_SessionId" ON "VolunteerShift" ("SessionId");
+
+        CREATE INDEX IF NOT EXISTS "IX_VolunteerShift_AssignedTeamId" ON "VolunteerShift" ("AssignedTeamId");
 
         CREATE TABLE IF NOT EXISTS "VolunteerClaim" (
             "Id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,

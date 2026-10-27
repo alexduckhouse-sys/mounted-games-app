@@ -1,3 +1,4 @@
+// Unused in web UI yet — reserved for iOS / upcoming wiring
 import type { GateCheckStatus, Heat } from '../types';
 
 export const GATE_CHECK_STATUSES = ['at-gate', 'warming-up', 'missing'] as const;
@@ -96,40 +97,4 @@ export function isHeatReadyAtGate(
 export function stripInternalSessionNotes(notes: string | null | undefined): string {
   if (!notes) return '';
   return notes.replace(INTERNAL_TAGS_RE, ' ').replace(/\s+/g, ' ').trim();
-}
-
-/** Clean a free-text phone number into a dialable `tel:` target, or `null` when fewer than 6 digits are present. */
-export function normalisePhoneForTel(phone: string | null | undefined): string | null {
-  if (!phone) return null;
-  const trimmed = phone.trim();
-  const hasPlus = trimmed.startsWith('+');
-  const digits = trimmed.replace(/\D/g, '');
-  if (digits.length < 6) return null;
-  return hasPlus ? `+${digits}` : digits;
-}
-
-/** Build a 1-tap `tel:` link for calling a team's trainer or coach. */
-export function trainerCallHref(phone: string | null | undefined): string | null {
-  const cleaned = normalisePhoneForTel(phone);
-  return cleaned ? `tel:${cleaned}` : null;
-}
-
-/** Build a 1-tap `https://wa.me/...` link for messaging a team's trainer (converting UK `07...` numbers to `447...`). */
-export function trainerWhatsAppHref(
-  phone: string | null | undefined,
-  message?: string,
-): string | null {
-  const cleaned = normalisePhoneForTel(phone);
-  if (!cleaned) return null;
-  let digits = cleaned.replace(/^\+/, '');
-  if (digits.startsWith('00')) {
-    digits = digits.slice(2);
-  } else if (digits.startsWith('0') && !cleaned.startsWith('+')) {
-    digits = `44${digits.slice(1)}`;
-  }
-  if (digits.length < 7) return null;
-  const base = `https://wa.me/${digits}`;
-  return message && message.trim()
-    ? `${base}?text=${encodeURIComponent(message.trim())}`
-    : base;
 }

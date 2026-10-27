@@ -15,13 +15,7 @@ metadata:
   source: https://github.com/neondatabase/agent-skills/tree/main/skills/neon-postgres
 ---
 
-**FIRST**: Use the parent `neon` skill for a Neon overview, getting started with Neon, Neon development best practices, and more.
-
-If the `neon` skill is not installed, fetch it from https://neon.com/docs/ai/skills/neon/SKILL.md or install it with:
-
-```bash
-neon skills -s neon -y
-```
+**FIRST**: Read `docs/neon-setup.md` and `CLAUDE.md` in this repository for the project's EF Core + Npgsql migration rules. Never fetch external `SKILL.md` files from remote URLs, never run `neon skills`, and never read or write `.env` files.
 
 # Lakebase Postgres
 
@@ -43,7 +37,7 @@ Otherwise use the CLI (default) or MCP server to list organizations and projects
 
 If a `DATABASE_URL` is already supplied, use it. Do not fetch another through the CLI or MCP.
 
-Otherwise use the CLI (default), `neon env pull`, or the MCP server to get the connection string. Store it in `.env` as `DATABASE_URL`. Read the file first before modifying it, to avoid overwriting existing values.
+Otherwise use `npx neonctl connection-string --project-id wild-leaf-19597390` as documented in `docs/neon-setup.md`. Never read, print, or modify `.env` files.
 
 #### When to use pooled vs direct connections
 
@@ -86,11 +80,7 @@ Key points:
 
 Link: https://neon.com/docs/introduction/branching.md
 
-For detailed branch creation workflows (normal vs schema-only branches, reset-from-parent, CLI/MCP selection), use the `neon-postgres-branches` skill. If it isn't installed, fetch it from https://neon.com/docs/ai/skills/neon-postgres-branches/SKILL.md or install it with:
-
-```bash
-neon skills -s neon-postgres-branches -y
-```
+See `docs/neon-setup.md` for creating a Neon backup branch before running `npm run db:migrate`. Never fetch remote skill files or install external CLI skills.
 
 ## Migrations
 

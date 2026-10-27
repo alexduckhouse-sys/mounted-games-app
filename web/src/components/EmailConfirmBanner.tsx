@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { apiErrorStatus } from '../lib/apiError';
 import { Notice } from './Notice';
 import { useToast } from './Toast';
+import { useT } from '../i18n/LanguageContext';
 
 type Phase = 'idle' | 'sending' | 'sent' | 'notSent' | 'failed' | 'slow';
 
@@ -13,6 +14,7 @@ type Phase = 'idle' | 'sending' | 'sent' | 'notSent' | 'failed' | 'slow';
  * when the email couldn't be sent (sending switched off, or the provider was down) instead of pretending it went.
  */
 export function EmailConfirmBanner() {
+  const t = useT();
   const { user, refreshUser } = useAuth();
   const [phase, setPhase] = useState<Phase>('idle');
   const toast = useToast();
@@ -23,7 +25,7 @@ export function EmailConfirmBanner() {
     try {
       const { data } = await api.post<{ status?: string }>('/auth/resend-confirmation');
       if (data?.status === 'AlreadyConfirmed') { await refreshUser(); return; }
-      if (data?.status === 'Sent') { setPhase('sent'); toast.show('New link sent. Check your spam too.'); return; }
+      if (data?.status === 'Sent') { setPhase('sent'); toast.show(t('shell.emailBanner.sent')); return; }
       setPhase(data?.status === 'NotSent' ? 'notSent' : 'failed');
     } catch (err) {
       setPhase(apiErrorStatus(err) === 429 ? 'slow' : 'failed');
@@ -31,9 +33,9 @@ export function EmailConfirmBanner() {
   }
 
   const problem: Partial<Record<Phase, string>> = {
-    notSent: 'We couldn’t send the email just now, because email isn’t switched on here. Try again later.',
-    failed: 'We couldn’t send the email just now. Try again in a few minutes.',
-    slow: 'You’ve asked a few times in a row. Wait a minute, then try again.',
+    notSent: t('shell.emailBanner.notSent'),
+    failed: t('shell.emailBanner.failed'),
+    slow: t('shell.emailBanner.slow'),
   };
 
   return (
@@ -41,11 +43,11 @@ export function EmailConfirmBanner() {
       <Notice
         tone="info"
         icon={MailCheck}
-        actionLabel={phase === 'sending' ? 'Sending…' : 'Send it again'}
+        actionLabel={phase === 'sending' ? t('shell.emailBanner.sending') : t('shell.emailBanner.sendAgain')}
         actionDisabled={phase === 'sending'}
         onAction={() => void resend()}
       >
-        Confirm your email address. We sent a link to <span className="font-semibold">{user.email}</span>.
+        {t('shell.emailBanner.confirm', { email: '{email}' }).split('{email}').flatMap((part, index) => (index === 0 ? [part] : [<span key="email" className="font-semibold">{user.email}</span>, part]))}
       </Notice>
       {problem[phase] && <Notice>{problem[phase]}</Notice>}
       {toast.node}

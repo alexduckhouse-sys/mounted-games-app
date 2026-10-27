@@ -1,3 +1,4 @@
+// Unused in web UI yet — reserved for iOS / upcoming wiring
 import type { SignupGuestDetails, SignupGuestDetailsInput } from '../types';
 import { blankRider, dobText, parseDob, type DecRider } from './decForm';
 import { normalisePhone, PHONE_HELP } from './decFormConfig';

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { competition, heat, race, result, session, standing, team } from '../../test/factories';
 import type { HeatEntry } from '../../types';
-import type { CompetitionDetail, DeclarationForm, StandingRow } from '../../types';
+import type { CompetitionDetail, Session, DeclarationForm, StandingRow } from '../../types';
 import { CompetitionContext } from './context';
 import { SessionPage } from './SessionPage';
 import { formatPoints } from '../../lib/formatPoints';
@@ -83,6 +83,24 @@ describe('SessionPage', () => {
   beforeEach(() => { saveOverlay.mockResolvedValue('saved'); auth.manage = true; vi.mocked(api.get).mockResolvedValue({ data: [] }); });
   afterEach(() => { vi.useRealTimers(); });
 
+  it('imports a backup using staff credentials despite a stored scorer link', async () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    localStorage.setItem('mg.scorer.token', 'synthetic-old-scorer-token');
+    mount(scoringData());
+    await opened('Bending');
+    await userEvent.click(screen.getByText('Organiser tools'));
+    await userEvent.click(screen.getByText('Import scores from another phone'));
+    fireEvent.change(screen.getByLabelText('Backup'), { target: { value: JSON.stringify([{
+      raceId: 1, competitionId: 1, sessionId: 1, label: 'Synthetic race',
+      places: [{ teamId: 1, place: 1, eliminated: false }], expected: [], teamNames: { 1: 'Synthetic Team' },
+      queuedAt: '2026-06-01T10:00:00Z', state: 'waiting', viaLink: true,
+    }]) } });
+    await userEvent.click(screen.getByRole('button', { name: 'Add scores' }));
+
+    expect(outbox()).toEqual([expect.objectContaining({ raceId: 1 })]);
+    expect(outbox()[0]).not.toHaveProperty('viaLink', true);
+  });
+
   describe('who may score', () => {
     const open = () => competition({ teams, sessions: [session(1, { status: 1, heats: [heat(1, { races: [race(1, { name: 'Bending' })] })] })] });
 
@@ -103,6 +121,45 @@ describe('SessionPage', () => {
       expect(screen.queryByRole('button', { name: /Set up heats/ })).not.toBeInTheDocument();
       expect(api.get).not.toHaveBeenCalledWith('/races/1/score');
     });
+  });
+
+  it('shows a break’s notes without the internal tags', () => {
+    mount(competition({ teams, sessions: [session(1, { kind: 1, isBreak: true, name: 'Lunch', notes: 'Burgers by the lorry park [paused:2026-06-01T12:00:00Z] [gate:12:4=at-gate] [pts:6]', heats: [] })] }));
+    expect(screen.getByText('Burgers by the lorry park')).toBeInTheDocument();
+    expect(screen.queryByText(/\[gate:/)).not.toBeInTheDocument();
+  });
+
+  describe('results status', () => {
+    const finished = (extra: Partial<Session> = {}) => competition({ teams, sessions: [session(1, {
+      status: 2, finishedAt: new Date(Date.now() - 60_000).toISOString(), heats: [heat(1, { races: [race(1, { isComplete: true })] })], ...extra,
+    })] });
+
+    it('shows provisional results with the time left, and lets staff confirm them official', async () => {
+      const reload = vi.fn();
+      vi.mocked(api.post).mockResolvedValue({ data: {} });
+      mount(finished({ provisionalUntil: new Date(Date.now() + 10 * 60_000).toISOString() }), [], reload);
+      expect(screen.getByRole('status', { name: /Results provisional, 10 minutes left for queries/ })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Confirm official now' }));
+      expect(api.post).toHaveBeenCalledWith('/competitions/1/sessions/1/confirm-official', {});
+      await waitFor(() => expect(reload).toHaveBeenCalled());
+    });
+
+    it('shows Official once confirmed, and nothing while the session runs', () => {
+      const { unmount } = mount(finished({ officialConfirmedAt: new Date().toISOString(), provisionalUntil: new Date().toISOString() }));
+      expect(screen.getByRole('status', { name: 'Results official' })).toBeInTheDocument();
+      unmount();
+      mount(competition({ teams, sessions: [session(1, { status: 1, heats: [heat(1, { races: [race(1, { name: 'Bending' })] })] })] }));
+      expect(screen.queryByLabelText('Results status')).not.toBeInTheDocument();
+    });
+  });
+
+  it('links the arena crew sheet from race tools and puts the duty board in the organiser tools', async () => {
+    mount(competition({ teams, sessions: [session(1, { status: 1, heats: [heat(1, { races: [race(1, { name: 'Bending' })] })] })] }));
+    expect(await screen.findByText(/No duties are set for/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Race tools' }));
+    const sheet = screen.getByRole('dialog', { name: 'Race tools' });
+    expect(within(sheet).getByText('Arena crew sheet')).toBeInTheDocument();
+    expect(within(sheet).getByText('Props to bring in, clear and keep')).toBeInTheDocument();
   });
 
   it('selects the first unfinished heat when none is requested', () => {

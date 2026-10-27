@@ -15,6 +15,7 @@ namespace MountedGames.Api.Controllers;
 /// new competitions from. Private to the organiser who saved it; admins see and manage all. Someone else's starting point is
 /// a 404, never a 403, so its existence isn't revealed.
 /// </summary>
+// Unused in web UI yet — reserved for iOS / upcoming wiring
 [ApiController]
 [Authorize(Roles = Roles.Organiser)]
 public sealed class StartingPointsController(AppDbContext db) : ControllerBase

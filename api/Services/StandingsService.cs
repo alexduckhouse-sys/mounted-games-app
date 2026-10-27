@@ -52,7 +52,24 @@ public sealed class StandingsService(AppDbContext db, IMemoryCache? cache = null
         return await ComputeRowsAsync(competitionId, sectionId, ct);
     }
 
-    private async Task<List<StandingRow>> ComputeRowsAsync(int competitionId, int? sectionId, CancellationToken ct)
+    /// <summary>Standings from sessions before the given timetable position, using the same totals and tie-breaks as the current table.</summary>
+    public async Task<List<StandingRow>> RowsBeforeSessionAsync(
+        int competitionId, int beforeSessionId, int? sectionId = null, CancellationToken ct = default)
+    {
+        var boundary = await db.Sessions.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == beforeSessionId && s.CompetitionId == competitionId, ct)
+            ?? throw new KeyNotFoundException("Session not found in this competition.");
+        var priorSessions = await db.Sessions.AsNoTracking()
+            .Where(s => s.CompetitionId == competitionId
+                && (s.OrderIndex < boundary.OrderIndex || (s.OrderIndex == boundary.OrderIndex && s.Id < boundary.Id)))
+            .Include(s => s.Heats).ThenInclude(h => h.Entries)
+            .Include(s => s.Heats).ThenInclude(h => h.Races)
+            .ToListAsync(ct);
+        return await ComputeRowsAsync(competitionId, sectionId, ct, priorSessions);
+    }
+
+    private async Task<List<StandingRow>> ComputeRowsAsync(
+        int competitionId, int? sectionId, CancellationToken ct, IReadOnlyList<Session>? priorSessions = null)
     {
         var teamsQ = db.Teams
             .AsNoTracking()
@@ -62,7 +79,15 @@ public sealed class StandingsService(AppDbContext db, IMemoryCache? cache = null
         if (sectionId.HasValue) teamsQ = teamsQ.Where(t => t.CompetitionSectionId == sectionId.Value);
 
         var teams = await teamsQ.ToListAsync(ct);
-        var tiers = await FinalsTiers.LoadAsync(db, competitionId, ct);
+        if (priorSessions is not null)
+        {
+            var includedRaceIds = priorSessions.SelectMany(s => s.Heats).SelectMany(h => h.Races).Select(r => r.Id).ToHashSet();
+            foreach (var team in teams)
+                team.Results = team.Results.Where(r => includedRaceIds.Contains(r.RaceId)).ToList();
+        }
+        var tiers = priorSessions is null
+            ? await FinalsTiers.LoadAsync(db, competitionId, ct)
+            : FinalsTiers.From(priorSessions);
         var ties = await TieBreaker.LoadAsync(db, competitionId, ct);
         var sections = await db.CompetitionSections.AsNoTracking()
             .Where(x => x.CompetitionId == competitionId).ToDictionaryAsync(x => x.Id, ct);

@@ -24,6 +24,9 @@ const competition = {
 };
 vi.mock('../competition/context', () => ({ useCompetition: () => ({ competition, reload }) }));
 vi.mock('../../api', () => ({ api: { get: vi.fn(), put: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
+// The undo banner and clash list have their own tests and each makes a GET this page's tests don't answer.
+vi.mock('./DrawUndoBanner', () => ({ DrawUndoBanner: () => null }));
+vi.mock('./TimetableClashes', () => ({ TimetableClashes: () => null }));
 
 const preview = {
   sectionId: 11, seed: 12345, fingerprint: 'fp',
@@ -52,6 +55,17 @@ describe('TimetablePage', () => {
     expect(screen.getByRole('button', { name: /Lunch/ })).toHaveTextContent('Break · 30 min');
     expect(screen.getAllByText(/min gap/)).toHaveLength(2);
     expect(screen.queryByLabelText(/Draw number/i)).not.toBeInTheDocument();
+  });
+
+  it('offers to send the timetable on, with the arena order and a link, and nothing is sent by itself', async () => {
+    show();
+    const link = await screen.findByRole('link', { name: 'Send on WhatsApp' });
+    const text = decodeURIComponent(link.getAttribute('href') ?? '');
+    expect(text).toContain('Spring Open');
+    expect(text).toContain('Main arena');
+    expect(text.indexOf('Under 12 · Session 1')).toBeLessThan(text.indexOf('Under 12 · Session 2'));
+    expect(text).toContain('/competitions/7');
+    expect(screen.getByRole('button', { name: 'Copy timetable' })).toBeInTheDocument();
   });
 
   it('moves everything earlier or later by the chosen minutes', async () => {

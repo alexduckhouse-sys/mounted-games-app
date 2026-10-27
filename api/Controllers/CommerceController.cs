@@ -801,11 +801,18 @@ public class CommerceController(AppDbContext db) : ControllerBase
         var settings = await db.Set<EventCommerceSettings>().AsNoTracking()
             .SingleOrDefaultAsync(x => x.CompetitionId == competitionId.Value, cancellationToken);
         var locked = await IsDemoClassificationLockedAsync(competitionId.Value, cancellationToken);
+        var capacity = await VenueCapacity.GetCapacityAsync(db, competitionId.Value, ct: cancellationToken);
         return new EventCommerceSettingsDto(
             competitionId.Value,
             settings?.IsDemo ?? false,
             locked,
-            settings?.UpdatedAt);
+            settings?.UpdatedAt,
+            capacity.MaxStables,
+            capacity.MaxHookups,
+            capacity.StablesBooked,
+            capacity.HookupsBooked,
+            capacity.StablesRemaining,
+            capacity.HookupsRemaining);
     }
 
     [HttpPost("signups/{id:int}/demo-refund")]

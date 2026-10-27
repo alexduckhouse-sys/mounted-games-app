@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSavedToast } from '../../components/SavedTick';
 import { Notice } from '../../components/Notice';
-import { ChevronLeft, ChevronRight, CloudOff, MoreHorizontal, Printer, Trash2, Undo2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CloudOff, Keyboard, MoreHorizontal, Printer, Trash2, Undo2 } from 'lucide-react';
+import { useScoringKeys } from '../../hooks/useScoringKeys';
+import type { ScoringKeyAction } from '../../lib/scoringKeys';
+import { ordinal } from '../../lib/toplist';
 import { hatbandFor, inLaneOrder } from '../../lib/laneOrder';
 import { describePlacings, type QueuedScore } from '../../offline/scoreOutbox';
 import type { NextLanes } from '../../lib/nextRoundLanes';
@@ -14,7 +17,7 @@ import { finishingReview, lastLaneLeft, raceLanes } from '../../lib/raceLanes';
 import { TieBreakRule, type Heat, type Race } from '../../types';
 import { displayLaneFor, sitsOutOf, type LaneRules } from './laneRules';
 import {
-  EliminationSheet, HOLD_ELIMINATE_MS, HeatGrid, NextLanesCard, RaceControlsPanel, ScoreRow, SummaryCard,
+  EliminationSheet, HOLD_ELIMINATE_MS, HeatGrid, NextLanesCard, RaceControlsPanel, ScoreRow, SummaryCard, tapHaptic,
   type ScoreOverrideValue,
 } from './ScoringParts';
 import { RaceToolsSheet, type ToolLink, type ToolTeam } from './RaceToolsSheet';
@@ -262,6 +265,54 @@ export function ScoringSection({
     onOverridePoints(teamId, stepPoints(pointsOf(teamId, false), by));
   }
 
+  // A Bluetooth keypad, page-turner or pedal does what the buttons do (keys in lib/scoringKeys.ts). Nothing scores
+  // from the keys while race tools, organiser tools or the elimination sheet is open.
+  const [keyed, setKeyed] = useState<{ raceId: number; teamId: number } | null>(null);
+  function onKey(action: ScoringKeyAction): boolean {
+    switch (action.kind) {
+      case 'place':
+      case 'eliminate': {
+        if (!live || !activeRace) return false;
+        const team = racingRows.find((e) => displayLaneFor(heat, e, laneIdx, laneRules) === String(action.lane));
+        if (!team) return false;
+        tapHaptic();
+        if (action.kind === 'place') onClickTeam(team.teamId);
+        else onToggleElim(team.teamId);
+        setKeyed({ raceId: activeRace.id, teamId: team.teamId });
+        return true;
+      }
+      case 'arm': return live;
+      case 'disarm': return true;
+      case 'save':
+        if (!live || !canSave) return false;
+        complete();
+        return true;
+      case 'undo':
+        if (!live || !onUndo) return false;
+        onUndo();
+        return true;
+      case 'advance':
+        if (live) {
+          if (!canSave) return false;
+          complete();
+          return true;
+        }
+        if (activeIdx < 0 || activeIdx >= races.length - 1) return false;
+        onSelectRace(races[activeIdx + 1].id);
+        return true;
+    }
+  }
+  const keypad = useScoringKeys(canScore && Boolean(activeRace) && !sheet && !toolsOpen && !controlsOpen, onKey);
+
+  // What the last keypad press did, for screen readers: "Bravo, lane 2, 1st".
+  let keyedSays = '';
+  const keyedEntry = keyed && keyed.raceId === activeRace?.id ? heat.entries.find((e) => e.teamId === keyed.teamId) : undefined;
+  if (keyedEntry) {
+    const st = pendingByTeam.get(keyedEntry.teamId);
+    const outcome = st?.eliminated ? 'out' : st?.place ? ordinal(st.place) : 'no place';
+    keyedSays = `${keyedEntry.teamName}, lane ${displayLaneFor(heat, keyedEntry, laneIdx, laneRules)}, ${outcome}`;
+  }
+
   return (
     <section className="space-y-3">
       <div className="sc-main">
@@ -328,6 +379,13 @@ export function ScoringSection({
                 );
               })}
             </ul>
+
+            {keypad && (
+              <p className="sc-keypad-chip">
+                <Keyboard className="h-3.5 w-3.5" aria-hidden="true" /> Keypad connected
+              </p>
+            )}
+            <p className="sr-only" aria-live="polite">{keyedSays}</p>
 
             {live && <p className="sc-hint sc-hint-quiet">Hold a lane for {HOLD_ELIMINATE_MS / 1000} s to eliminate</p>}
             {live && editing && <p className="sc-hint">Saving again replaces this race’s points.</p>}

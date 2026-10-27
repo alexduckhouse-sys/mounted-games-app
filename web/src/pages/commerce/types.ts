@@ -1,3 +1,5 @@
+import type { CatalogueItemOption, EventOrderLineOption } from '../../types';
+
 export type CommerceItemCategory = 0 | 1 | 2 | 3;
 export type CommerceListingStatus = 0 | 1 | 2 | 3;
 export type CommerceOrderStatus = 0 | 1 | 2 | 3 | 4 | 5;
@@ -17,6 +19,8 @@ export interface CatalogueItem {
   detailPrompt?: string | null;
   /** An example shown inside that box, such as "e.g. B12". */
   detailHint?: string | null;
+  /** The seller's options (sizes), in their order. Empty or missing when the item has none. */
+  options?: CatalogueItemOption[] | null;
   isActive: boolean;
   version: number;
   createdAt: string;
@@ -53,6 +57,8 @@ export interface PublicCompetitionListing {
   detailPrompt?: string | null;
   /** An example for the box, such as "e.g. B12". */
   detailHint?: string | null;
+  /** The seller's options (sizes), in their order. Empty or missing when the item has none. */
+  options?: CatalogueItemOption[] | null;
 }
 
 export interface EventCommerceSettings {
@@ -60,9 +66,15 @@ export interface EventCommerceSettings {
   isDemo: boolean;
   isLocked: boolean;
   updatedAt: string | null;
+  maxStables?: number | null;
+  maxHookups?: number | null;
+  stablesBooked?: number;
+  hookupsBooked?: number;
+  stablesRemaining?: number | null;
+  hookupsRemaining?: number | null;
 }
 
-export interface EventOrderLine {
+export interface EventOrderLine extends EventOrderLineOption {
   id: number;
   listingId: number;
   catalogueItemId: number;
@@ -71,6 +83,8 @@ export interface EventOrderLine {
   unitPriceMinor: number;
   quantity: number;
   lineTotalMinor: number;
+  optionId?: number | null;
+  optionLabel?: string | null;
   /** What the buyer answered for the item's prompt (a stable number, a number plate). */
   detail?: string | null;
 }

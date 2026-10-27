@@ -1,3 +1,4 @@
+// Unused in web UI yet — reserved for iOS / upcoming collecting-ring gate-check UI wiring
 import { useCallback, useState } from 'react';
 import { api } from '../api';
 import { applyGateCheckTag, getGateCheckStatus, isHeatReadyAtGate, nextGateCheckStatus } from '../lib/gateCheck';
@@ -47,6 +48,7 @@ export function useGateCheck(options: UseGateCheckOptions = {}) {
       teamId: number,
       status: GateCheckStatus,
     ): Promise<Session | null> => {
+      if (!viaLink && !competitionId) return null;
       const key = `${heatId}:${teamId}`;
       setOptimistic((prev) => ({ ...prev, [key]: status }));
       setSavingKey(key);
@@ -65,6 +67,7 @@ export function useGateCheck(options: UseGateCheckOptions = {}) {
         onSessionUpdated?.(res.data);
         return res.data;
       } catch {
+        // Keep optimistic state if offline so the steward still sees lanes ready at the gate
         return null;
       } finally {
         setSavingKey((curr) => (curr === key ? null : curr));
