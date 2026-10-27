@@ -15,6 +15,7 @@ import { CompetitionTeamCard } from './CompetitionTeamCard';
 import { EmbedCard } from './EmbedCard';
 import { HorseboxEntranceCard } from './HorseboxEntranceCard';
 import { ScorerLinksCard } from './ScorerLinksCard';
+import { StoryImageRow } from './StoryImageRow';
 import { EventSponsorsSection } from './SponsorsCard';
 import { usePageWidth } from '../../components/pageWidthState';
 import type { CompetitionDetail, CompetitionSection, EquipmentLine, SectionSignup } from '../../types';
@@ -145,6 +146,7 @@ export function DetailsTab() {
       <div className="ev-flat" role="list" aria-label={t('competition.details.sharePrint')}>
         <LinkRow href={competitionCalendarUrl(competition.id, window.location.origin)} label={t('competition.details.calendar')} />
         <EventShareRows competitionId={competition.id} competitionName={competition.name} />
+        <StoryImageRow competition={competition} />
         <LinkRow to={`/event-tools/${competition.id}/print/draw`} label={t('competition.details.printDraw')} />
         <LinkRow to={`/event-tools/${competition.id}/print/results`} label={t('competition.details.printResults')} />
         {mayOrganise && <LinkRow to={`/event-tools/${competition.id}/print/poster`} label="Print venue poster" />}

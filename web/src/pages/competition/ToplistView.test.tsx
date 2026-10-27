@@ -29,12 +29,12 @@ describe('ToplistView positions', () => {
     render(<ToplistView list={list([6, 6, 2])} section={null} />);
     expect(positions()).toEqual(['1', '1', '3']);
     expect(screen.getAllByText('(joint)', { exact: false })).toHaveLength(2);
-    expect(screen.getByText('−4')).toHaveAttribute('title', '4 behind leader');
+    expect(screen.getByText('4 behind')).toHaveAttribute('title', '4 behind leader');
   });
 
   it('does not show a zero-point gap for a hidden run-off tie-breaker', () => {
     render(<ToplistView list={list([24.01, 24])} section={null} />);
-    expect(screen.queryByText('−0')).not.toBeInTheDocument();
+    expect(screen.queryByText('0 behind')).not.toBeInTheDocument();
     expect(screen.queryByTitle(/behind leader/)).not.toBeInTheDocument();
   });
 
