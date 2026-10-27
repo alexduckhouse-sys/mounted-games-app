@@ -16,6 +16,8 @@ import { useTheme } from '../theme/ThemeContext';
 import { RefineSwitchRow } from './refine/Refine';
 import { Notice } from '../components/Notice';
 import { useTeamNotifications } from '../hooks/useTeamNotifications';
+import { usePwaInstall } from '../hooks/usePwaInstall';
+import { InstallAppSheet } from '../components/InstallAppSheet';
 import type { Team } from '../types';
 import '../components/sitePages.css';
 
@@ -49,10 +51,15 @@ export function SettingsPage() {
   const { theme, setTheme } = useTheme();
   // The same push subscribe and unsubscribe the Me page used to have; heat reminders for teams are set up elsewhere.
   const notify = useTeamNotifications(NO_TEAMS);
-  const pushBlocked = notify.permission === 'denied' || notify.permission === 'unsupported';
-  const pushNote = notify.permission === 'denied' ? t('shell.settings.pushBlocked')
-    : notify.permission === 'unsupported' ? t('shell.settings.pushUnsupported')
-      : t('shell.settings.pushOk');
+  // On an iPhone that hasn't added the app to its Home Screen the switch stays live and explains how.
+  const pushBlocked = !notify.needsInstall && (notify.permission === 'denied' || notify.permission === 'unsupported');
+  const pushNote = notify.needsInstall ? t('shell.settings.pushInstall')
+    : notify.permission === 'denied' ? t('shell.settings.pushBlocked')
+      : notify.permission === 'unsupported' ? t('shell.settings.pushUnsupported')
+        : t('shell.settings.pushOk');
+  const install = usePwaInstall();
+  const [installOpen, setInstallOpen] = useState(false);
+  const offerInstall = install.way !== 'installed' && install.way !== 'none';
   const navigate = useNavigate();
   const location = useLocation();
   const [showWeather, setShowWeather] = useState(() => {
@@ -169,6 +176,12 @@ export function SettingsPage() {
 
       <h2 className="sp-sec">{t('shell.settings.compDays')}</h2>
       <div className="sp-card">
+        {offerInstall && (
+          <button type="button" className="sp-row" onClick={() => setInstallOpen(true)}>
+            <span className="sp-grow"><span className="sp-t1">{t('shell.install.title')}</span><span className="sp-t2">{t('shell.settings.installNote')}</span></span>
+            <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
+          </button>
+        )}
         <div className="sp-row">
           <span className="sp-grow"><span className="sp-t1">{t('shell.settings.notifications')}</span><span className="sp-t2">{pushNote}</span></span>
           <button type="button" role="switch" aria-checked={notify.enabled} aria-label={t('shell.settings.notifications')} disabled={pushBlocked} className="rf-sw" onClick={() => { void notify.setEnabled(!notify.enabled); }}><span aria-hidden="true" /></button>
@@ -195,6 +208,8 @@ export function SettingsPage() {
           <li key={policy.to}><Link to={policy.to} className="sp-row"><span className="sp-t1 sp-grow !font-medium">{t(policy.label)}</span><ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} /></Link></li>
         ))}
       </ul>
+      {installOpen && <InstallAppSheet onClose={() => setInstallOpen(false)} />}
+      {notify.installGuide && <InstallAppSheet forNotifications onClose={notify.closeInstallGuide} />}
     </div>
   );
 }

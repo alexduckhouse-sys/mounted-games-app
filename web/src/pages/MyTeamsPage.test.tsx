@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { competition, heat, race, session, team } from '../test/factories';
 import type { CompetitionDetail, Team } from '../types';
@@ -11,13 +11,14 @@ import { MyTeamsPage } from './MyTeamsPage';
 import { chooseOption, optionLabels } from '../test/select';
 
 import { autoConfirm } from '../test/confirm';
+import { fakeDevice, resetDevice, UA } from '../test/device';
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }));
 const auth = vi.hoisted(() => ({ roles: [] as string[], clubName: 'Stockport Pony Club' as string | null }));
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ user: { id: 'u1', clubName: auth.clubName }, hasRole: (role: string) => auth.roles.includes(role) }) }));
-const notify = vi.hoisted(() => ({ enabled: false, permission: 'default', setEnabled: vi.fn(), problem: null as string | null }));
+const notify = vi.hoisted(() => ({ enabled: false, permission: 'default', setEnabled: vi.fn(), problem: null as string | null, needsInstall: false, installGuide: false, closeInstallGuide: () => {} }));
 vi.mock('../hooks/useTeamNotifications', () => ({ useTeamNotifications: () => notify }));
 
 const entries = [{ id: 1, teamId: 1, teamName: 'Example Blue', laneIndex: 4 }];
@@ -29,10 +30,12 @@ function mount() {
   return render(<MemoryRouter><MyTeamsPage /></MemoryRouter>);
 }
 
+afterEach(resetDevice);
+
 beforeEach(() => {
   auth.roles = [];
   auth.clubName = 'Stockport Pony Club';
-  Object.assign(notify, { enabled: false, permission: 'default', setEnabled: vi.fn(), problem: null });
+  Object.assign(notify, { enabled: false, permission: 'default', setEnabled: vi.fn(), problem: null, needsInstall: false, installGuide: false });
   myTeams = [team(1, { displayName: 'Example Blue', relationship: 'supporter' })];
   forms = [];
   detail = competition();
@@ -198,6 +201,15 @@ describe('MyTeamsPage layout', () => {
     notify.problem = 'This browser can’t show notifications. Try Chrome or Safari.';
     rerender(<MemoryRouter><MyTeamsPage /></MemoryRouter>);
     expect(await screen.findByRole('alert')).toHaveTextContent('This browser can’t show notifications. Try Chrome or Safari.');
+  });
+
+  it('on an iPhone without the app on its Home Screen, says so and shows the steps', async () => {
+    Object.assign(notify, { permission: 'unsupported', needsInstall: true, installGuide: true });
+    fakeDevice({ userAgent: UA.iphoneSafari });
+    mount();
+    expect(await screen.findByText('Add the app to your Home Screen to turn these on')).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Heat alerts' })).toBeEnabled();
+    expect(screen.getByRole('heading', { name: 'Add to your Home Screen' })).toBeInTheDocument();
   });
 
   it('says when alerts are on', async () => {

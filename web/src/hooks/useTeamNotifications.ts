@@ -6,6 +6,8 @@ import { computeTimings } from '../lib/time';
 import { subscribeForPush, unsubscribeFromPush } from '../lib/push';
 import { hatbandName } from '../lib/hatbands';
 import { formatNotifyLeadReminder, getNotifyMinutesBefore } from '../lib/userPrefs';
+import { isIosDevice, needsHomeScreenForPush } from '../lib/pwaInstall';
+import { tr } from '../i18n/translate';
 
 const ENABLED_KEY = 'mg.notify.enabled';
 const FIRED_PREFIX = 'mg.notify.fired:';
@@ -53,6 +55,9 @@ export function useTeamNotifications(teams: Team[]) {
   const [enabled, setEnabledState] = useState<boolean>(() => readEnabled());
   const [permission, setPermission] = useState<NotificationPermissionState>(permState());
   const [problem, setProblem] = useState<string | null>(null);
+  // An iPhone or iPad gets notifications only once the app is on its Home Screen, so switching on shows how instead.
+  const needsInstall = needsHomeScreenForPush();
+  const [installGuide, setInstallGuide] = useState(false);
   const [comps, setComps] = useState<Map<number, CompetitionDetail>>(new Map());
 
   useEffect(() => writeEnabled(enabled), [enabled]);
@@ -112,9 +117,15 @@ export function useTeamNotifications(teams: Team[]) {
   }, [enabled, permission, teams, comps]);
 
   async function setEnabled(v: boolean) {
+    if (v && needsInstall) {
+      setProblem(null);
+      setInstallGuide(true);
+      return;
+    }
     if (v && permission !== 'granted') {
       if (permission === 'unsupported') {
-        setProblem(NOT_SUPPORTED);
+        // On an iPhone or iPad already running from the Home Screen, only an older iOS lacks notifications.
+        setProblem(isIosDevice() ? tr('shell.install.iosTooOld') : NOT_SUPPORTED);
         return;
       }
       const res = await Notification.requestPermission();
@@ -130,7 +141,7 @@ export function useTeamNotifications(teams: Team[]) {
     else await unsubscribeFromPush();
   }
 
-  return { enabled, setEnabled, permission, problem };
+  return { enabled, setEnabled, permission, problem, needsInstall, installGuide, closeInstallGuide: () => setInstallGuide(false) };
 }
 
 function maybeFire(

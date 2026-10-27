@@ -247,4 +247,5 @@ export const account: AreaCatalogue<typeof en> = {
   'account.needs.payoutsTitle': 'Les versements ne sont pas configurés',
   'account.needs.payoutsSub': 'L’argent des inscriptions ne peut pas être versé tant que ce n’est pas fait',
   'account.needs.setUp': 'Configurer',
+  'account.teams.alertsInstall': 'Ajoutez l’appli à votre écran d’accueil pour les activer',
 };
