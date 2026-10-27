@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { ChevronRight } from 'lucide-react';
 import { api } from '../../api';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { usePageWidth } from '../../components/pageWidthState';
@@ -10,6 +11,7 @@ import {
   type ArenaCrewZoneFilter,
 } from '../../lib/arenaCrewSheet';
 import type { ArenaCrewPropSheet, ArenaCrewRaceCard, RaceTemplate } from '../../types';
+import { PickSheet, type PickOption } from '../clubShop/ui';
 import { useCompetition } from './context';
 import { defaultChoice, heatDone, heatName, isRaceSession } from './crewDutyHelpers';
 
@@ -36,6 +38,23 @@ function Group({ title, items, tone }: { title: string; items: string[]; tone: '
         ? <p className="mt-1 text-lg text-[rgb(var(--mg-muted))]">Nothing</p>
         : <ul className="mt-1 space-y-1.5">{items.map((item) => <li key={item} className="text-xl font-semibold leading-snug text-[rgb(var(--mg-ink))]">{item}</li>)}</ul>}
     </section>
+  );
+}
+
+/** A settings row (label, current choice, ›) that opens a bottom sheet of choices. */
+function PickRow({ label, value, options, onPick }: { label: string; value: string; options: PickOption[]; onPick: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const current = options.find((option) => option.value === value)?.label ?? '';
+  return (
+    <>
+      <button type="button" className="flex min-h-14 w-full items-center gap-3 bg-[rgb(var(--mg-surface))] px-4 text-left disabled:opacity-60"
+        aria-label={`${label}: ${current}`} aria-haspopup="dialog" disabled={options.length === 0} onClick={() => setOpen(true)}>
+        <span className="flex-1 text-base font-semibold text-[rgb(var(--mg-ink))]">{label}</span>
+        <span className="max-w-[60%] truncate text-base text-[rgb(var(--mg-heading))]">{current}</span>
+        <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-[rgb(var(--mg-muted))]" strokeWidth={2.5} />
+      </button>
+      {open && <PickSheet title={label} options={options} value={value} onPick={onPick} onClose={() => setOpen(false)} />}
+    </>
   );
 }
 
@@ -127,37 +146,20 @@ export function ArenaCrewPage() {
     setParams(merged, { replace: true });
   }
 
-  const pill = (active: boolean) =>
-    `min-h-11 shrink-0 rounded-full border px-4 text-base font-semibold ${active
-      ? 'border-[rgb(var(--mg-button))] bg-[rgb(var(--mg-button))] text-[rgb(var(--mg-button-ink))]'
-      : 'border-[rgb(var(--mg-control))] bg-[rgb(var(--mg-surface))] text-[rgb(var(--mg-ink))]'}`;
-  const select = 'mt-1 min-h-11 w-full rounded-[10px] border border-[rgb(var(--mg-control))] bg-[rgb(var(--mg-surface))] px-3 text-base text-[rgb(var(--mg-ink))]';
-
   if (raceSessions.length === 0) {
     return <p className="mg-card p-4 text-base">There are no race sessions to set up yet.</p>;
   }
 
   return (
     <div className="space-y-4 pb-8">
-      <div className="grid gap-2 sm:grid-cols-2">
-        <label className="block text-sm font-semibold text-[rgb(var(--mg-muted))]">
-          Session
-          <select className={select} value={session?.id ?? ''} onChange={(e) => choose({ session: Number(e.target.value) })}>
-            {raceSessions.map((s) => <option key={s.id} value={s.id}>{s.name}{s.arenaName ? ` · ${s.arenaName}` : ''}</option>)}
-          </select>
-        </label>
-        <label className="block text-sm font-semibold text-[rgb(var(--mg-muted))]">
-          Heat
-          <select className={select} value={heat?.id ?? ''} onChange={(e) => choose({ heat: Number(e.target.value) })} disabled={heats.length === 0}>
-            {heats.map((h) => <option key={h.id} value={h.id}>{heatName(h)}</option>)}
-          </select>
-        </label>
-      </div>
-
-      <div role="group" aria-label="Zone" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
-        {ZONE_FILTERS.map((z) => (
-          <button key={z.key} type="button" className={pill(filter === z.key)} aria-pressed={filter === z.key} onClick={() => setFilter(z.key)}>{z.label}</button>
-        ))}
+      {/* Three settings rows, each opening a bottom sheet: one control per choice rather than boxes and a row of pills. */}
+      <div className="mg-card overflow-hidden divide-y divide-[rgb(var(--mg-rule-soft))]">
+        <PickRow label="Session" value={String(session?.id ?? '')} onPick={(id) => choose({ session: Number(id) })}
+          options={raceSessions.map((s) => ({ value: String(s.id), label: `${s.name}${s.arenaName ? ` · ${s.arenaName}` : ''}` }))} />
+        <PickRow label="Heat" value={String(heat?.id ?? '')} onPick={(id) => choose({ heat: Number(id) })}
+          options={heats.map((h) => ({ value: String(h.id), label: heatName(h) }))} />
+        <PickRow label="Zone" value={filter} onPick={(key) => setFilter(key as ArenaCrewZoneFilter)}
+          options={ZONE_FILTERS.map((z) => ({ value: z.key, label: z.label }))} />
       </div>
 
       {offline && <p role="status" className="rounded-[10px] bg-[rgb(var(--mg-info-bg))] px-3 py-2 text-sm text-[rgb(var(--mg-info-ink))]">Couldn’t reach the server. This sheet is built from the timetable on your phone.</p>}
