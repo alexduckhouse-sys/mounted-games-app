@@ -27,7 +27,7 @@ vi.mock('../weather/weather', () => ({ getWeather: vi.fn() }));
 
 beforeEach(() => {
   vi.mocked(api.get).mockResolvedValue({ data: {} });
-  vi.mocked(useTeamNotifications).mockReturnValue({ enabled: false, setEnabled: vi.fn(), permission: 'default', problem: null });
+  vi.mocked(useTeamNotifications).mockReturnValue({ enabled: false, setEnabled: vi.fn(), permission: 'default', problem: null, needsInstall: false, installGuide: false, closeInstallGuide: vi.fn() });
 });
 
 describe('language picker in the menu', () => {
