@@ -147,19 +147,19 @@ describe('SessionPage', () => {
       status: 2, finishedAt: new Date(Date.now() - 60_000).toISOString(), heats: [heat(1, { races: [race(1, { isComplete: true })] })], ...extra,
     })] });
 
-    it('shows provisional results with the time left, and lets staff confirm them official', async () => {
+    it('keeps the Confirm official button for staff but shows no results badge', async () => {
       const reload = vi.fn();
       vi.mocked(api.post).mockResolvedValue({ data: {} });
       mount(finished({ provisionalUntil: new Date(Date.now() + 10 * 60_000).toISOString() }), [], reload);
-      expect(screen.getByRole('status', { name: /Results provisional, 10 minutes left for queries/ })).toBeInTheDocument();
+      expect(screen.queryByRole('status', { name: /Results provisional/ })).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Confirm official now' }));
       expect(api.post).toHaveBeenCalledWith('/competitions/1/sessions/1/confirm-official', {});
       await waitFor(() => expect(reload).toHaveBeenCalled());
     });
 
-    it('shows Official once confirmed, and nothing while the session runs', () => {
+    it('does not show the Official mark once confirmed, nor anything while the session runs', () => {
       const { unmount } = mount(finished({ officialConfirmedAt: new Date().toISOString(), provisionalUntil: new Date().toISOString() }));
-      expect(screen.getByRole('status', { name: 'Results official' })).toBeInTheDocument();
+      expect(screen.queryByRole('status', { name: 'Results official' })).not.toBeInTheDocument();
       unmount();
       mount(competition({ teams, sessions: [session(1, { status: 1, heats: [heat(1, { races: [race(1, { name: 'Bending' })] })] })] }));
       expect(screen.queryByLabelText('Results status')).not.toBeInTheDocument();

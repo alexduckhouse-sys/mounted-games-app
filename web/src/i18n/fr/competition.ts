@@ -163,8 +163,6 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.heat.position': 'Position',
   'competition.heat.notRaced': 'Pas encore couru',
   'competition.heat.sectionToplist': 'Classement {section}',
-  'competition.heat.earlier': 'Manche précédente',
-  'competition.heat.later': 'Manche suivante',
   'competition.heat.watch': 'Regarder le direct',
   'competition.heat.rulesClose': 'Fermer les règles et la mise en place',
   'competition.heat.rulesOpen': 'Règles des courses et plan de l’arène',

@@ -17,6 +17,8 @@
 .heat-grid thead th:first-child { padding-left: 12px; }
 .heat-grid thead th.heat-rank + th { padding-left: 0; }
 .heat-grid thead th.heat-team-head { padding: 7px 4px 8px 12px; }
+/* "#" sits on the same line as "Team". */
+.heat-grid thead th.heat-rank { padding-bottom: 8px; }
 .heat-grid thead th.heat-rank + th.heat-team-head { padding-left: 4px; }
 .heat-title { display: flex; min-width: 0; flex-direction: column; padding-bottom: 7px; text-transform: none; }
 .heat-title-section {
@@ -31,13 +33,6 @@
   overflow: hidden; padding-top: 3px; color: rgb(var(--mg-muted)); font: 500 13px/1 var(--mg-font);
   letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap;
 }
-/* Change heat: step to the earlier or later heat of the session either side of the heat name. */
-.heat-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.heat-step {
-  width: 28px; height: 28px; flex: none; display: flex; align-items: center; justify-content: center;
-  border: 1px solid rgb(var(--mg-line)); border-radius: 8px; color: rgb(var(--mg-heading)); background: rgb(var(--mg-surface));
-}
-.heat-step[aria-disabled="true"] { color: rgb(var(--mg-line)); pointer-events: none; }
 .heat-title-meta-live { color: rgb(var(--mg-elim)); font-weight: 600; }
 .heat-title-meta-late { color: rgb(var(--mg-late-time)); font-weight: 600; }
 
@@ -53,7 +48,7 @@
 .heat-name-running,
 .race-rules-btn.heat-name.heat-name-running { color: rgb(var(--mg-red)); }
 .heat-sep {
-  position: absolute; left: 0; bottom: 0; width: 64px; height: 1px; background: rgb(var(--mg-ink));
+  position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: rgb(var(--mg-ink));
   transform-origin: 0 50%; transform: rotate(-55deg);
 }
 

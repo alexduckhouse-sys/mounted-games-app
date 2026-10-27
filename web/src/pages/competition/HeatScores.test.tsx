@@ -361,30 +361,3 @@ it('marks one team\'s row, drops the card and ignores ?heat= when told to', () =
   expect(screen.queryByText('Ash C')).toBeNull();
   expect(screen.getByRole('region', { name: 'Scores' })).not.toHaveClass('mg-card');
 });
-
-it('steps to the earlier and later heat of the session, faded and inert at the ends', () => {
-  const heats = [1, 2, 3].map((n) => heat(n, { sessionId: 20, orderIndex: n, label: `Heat ${n}`, entries: [{ id: n, teamId: n, teamName: `Team ${n}`, laneIndex: 1 }] }));
-  const shownSession = session(20, { sectionName: 'Teams Seniors', heats });
-  state.competition = competition({ id: 7, name: 'Autumn Games', startDate: '2026-10-16', sessions: [shownSession] });
-  const view = render(<CompactPageBarProvider><MemoryRouter initialEntries={['/competitions/7/session/20?heat=2&mine=Main']}><HeatScores session={shownSession} heats={heats} activeHeatId={1} /></MemoryRouter></CompactPageBarProvider>);
-  expect(screen.getByRole('link', { name: 'Earlier heat' })).toHaveAttribute('href', '/competitions/7/session/20?heat=1&mine=Main');
-  expect(screen.getByRole('link', { name: 'Next heat' })).toHaveAttribute('href', '/competitions/7/session/20?heat=3&mine=Main');
-  view.unmount();
-
-  render(<CompactPageBarProvider><MemoryRouter initialEntries={['/competitions/7/session/20']}><HeatScores session={shownSession} heats={heats} activeHeatId={1} /></MemoryRouter></CompactPageBarProvider>);
-  expect(screen.queryByRole('link', { name: 'Earlier heat' })).toBeNull();
-  expect(screen.getByRole('link', { name: 'Next heat' })).toHaveAttribute('href', '/competitions/7/session/20?heat=2');
-  expect(document.querySelector('.heat-step[aria-disabled="true"]')).not.toBeNull();
-});
-
-it('has no change-heat buttons for a single heat or when embedded', () => {
-  const only = heat(30, { sessionId: 21, orderIndex: 0, label: 'Heat 1', entries: [{ id: 1, teamId: 1, teamName: 'Oak A', laneIndex: 1 }] });
-  const other = heat(31, { sessionId: 21, orderIndex: 1, label: 'Heat 2', entries: [{ id: 2, teamId: 2, teamName: 'Beech B', laneIndex: 1 }] });
-  const shownSession = session(21, { sectionName: 'Teams Seniors', heats: [only, other] });
-  state.competition = competition({ id: 7, name: 'Autumn Games', startDate: '2026-10-16', sessions: [shownSession] });
-  const single = render(<CompactPageBarProvider><MemoryRouter><HeatScores session={shownSession} heats={[only]} activeHeatId={30} /></MemoryRouter></CompactPageBarProvider>);
-  expect(document.querySelector('.heat-step')).toBeNull();
-  single.unmount();
-  render(<CompactPageBarProvider><MemoryRouter><HeatScores session={shownSession} heats={[only, other]} activeHeatId={30} embedded /></MemoryRouter></CompactPageBarProvider>);
-  expect(document.querySelector('.heat-step')).toBeNull();
-});
