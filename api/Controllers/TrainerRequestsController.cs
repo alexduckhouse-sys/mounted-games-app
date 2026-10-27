@@ -77,15 +77,9 @@ public class TrainerRequestsController(AppDbContext db, UserManager<AppUser> use
                 return NotFound();
         }
 
-        // Organisers and team managers can reset their password by email, so the address must be theirs before they get the role.
-        if (approve && !user.EmailConfirmed)
-            return Conflict(new
-            {
-                code = "email_unconfirmed",
-                message = "This person hasn't confirmed their email address yet. Ask them to open the confirmation email (they can send it again from their profile), then approve them.",
-            });
-
         var grant = requestedRole == Roles.ManagerRequest ? Roles.Manager : Roles.Trainer;
+        // Organisers and team managers can reset their password by email, so the address must be theirs before they get the role.
+        if (approve && ConfirmedAddress.Refuses(user, grant)) return ConfirmedAddress.Refusal();
         var removed = await users.RemoveFromRolesAsync(user,
             roles.Where(r => r == requestedRole || (approve && r == Roles.Member)));
         if (!removed.Succeeded)
@@ -190,6 +184,7 @@ public class AdminUsersController(AppDbContext db, UserManager<AppUser> users) :
             return Forbid();
         if (req.Grant && !currentRoles.Contains(req.Role))
         {
+            if (ConfirmedAddress.Refuses(user, req.Role)) return ConfirmedAddress.Refusal();
             var res = await users.AddToRoleAsync(user, req.Role);
             if (!res.Succeeded) return Conflict(new { message = "Could not add role." });
         }

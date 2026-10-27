@@ -19,7 +19,17 @@ public class LiveHub(ViewerRegistry viewers, LiveConnections connections, AppDbC
         connections.Add(Context);
         if (Context.User?.Identity?.IsAuthenticated == true && Context.UserIdentifier is { } userId)
         {
-            var state = await LiveAccounts.StateAsync(db, userId, Context.ConnectionAborted);
+            LiveAccounts.TokenState? state;
+            try
+            {
+                state = await LiveAccounts.StateAsync(db, userId, Context.ConnectionAborted);
+            }
+            catch
+            {
+                // The connection fails to open, so OnDisconnectedAsync may never run for it: don't leave it recorded.
+                connections.Remove(Context);
+                throw;
+            }
             if (state is null || !state.Accepts(LiveAccounts.SessionVersionOf(Context.User)))
             {
                 Context.Abort();

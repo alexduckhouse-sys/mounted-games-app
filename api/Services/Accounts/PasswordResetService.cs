@@ -126,13 +126,25 @@ public sealed class PasswordResetService(
     /// <summary>
     /// Emails a reset link if <paramref name="address"/> belongs to an account that may have one; silent either way. Takes
     /// exactly <see cref="MinimumResponse"/> whatever happened: the email gets the time left before then and is cancelled
-    /// (with a masked warning) if it needs longer, so nothing carries on after the answer.
+    /// (with a masked warning) if it needs longer, so nothing carries on after the answer. A failure while making the link
+    /// is logged (masked) and answered the same way, at the same time.
     /// </summary>
     public async Task RequestAsync(string address, string? ip, CancellationToken ct)
     {
         var started = time.GetTimestamp();
         var floor = MinimumResponse;
-        if (await PrepareAsync(address, ip, ct) is { } email)
+        OutgoingEmail? email = null;
+        try
+        {
+            email = await PrepareAsync(address, ip, ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            // A database hiccup must not answer faster (or differently) than a request that worked, or it gives away
+            // which addresses have accounts: log it, masked, and answer at the floor as usual.
+            log.LogWarning("A password reset link for {Recipient} could not be made: {Reason}.", EmailAddresses.Mask(address), ex.GetType().Name);
+        }
+        if (email is not null)
         {
             if (floor <= TimeSpan.Zero) await SendAsync(email, CancellationToken.None);
             else

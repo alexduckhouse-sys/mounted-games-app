@@ -555,10 +555,14 @@ public class AuthController : ControllerBase
         return cleaned.Length == 0 ? "user" : cleaned;
     }
 
+    /// <summary>
+    /// An admin makes an account for someone. The address is whatever the admin typed, so it starts unconfirmed and gets
+    /// the usual confirmation email: until its owner confirms it (signed in), it can't be used to reset the password.
+    /// </summary>
     [EnableRateLimiting("auth")]
     [HttpPost("register")]
     [Authorize(Roles = Roles.Admin)]
-    public async Task<ActionResult<AuthResponse>> Register(RegisterRequest req)
+    public async Task<ActionResult<AuthResponse>> Register(RegisterRequest req, [FromServices] AccountEmailService accountEmail)
     {
         if (await _db.IsIpBlockedAsync(HttpContext, HttpContext.RequestAborted))
             return StatusCode(StatusCodes.Status403Forbidden, new { message = "Registration from this network is blocked." });
@@ -572,7 +576,7 @@ public class AuthController : ControllerBase
             Email = req.Email,
             FullName = req.FullName,
             ClubId = req.ClubId,
-            EmailConfirmed = true
+            EmailConfirmed = false
         };
         var result = await _users.CreateAsync(user, req.Password);
         if (!result.Succeeded)
@@ -585,6 +589,7 @@ public class AuthController : ControllerBase
         if (!Roles.Assignable.Contains(role))
             role = Roles.Trainer;
         await _users.AddToRoleAsync(user, role);
+        await accountEmail.SendConfirmationAsync(user);
 
         var (token, expiresAt, roles) = await _tokens.CreateTokenAsync(user);
         var club = user.ClubId.HasValue ? await _db.Clubs.FindAsync(user.ClubId.Value) : null;

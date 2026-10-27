@@ -192,7 +192,8 @@ public class AccountEmailService(
             var reserved = await ReserveAsync(user.Id);
             if (reserved != ConfirmationResult.Sent) return reserved;
 
-            var link = $"{site}/confirm-email?userId={Uri.EscapeDataString(user.Id)}&token={Uri.EscapeDataString(tokens.Create(user))}";
+            // In the fragment, which browsers never send to a server, so the token stays out of server and proxy logs.
+            var link = $"{site}/confirm-email#u={Uri.EscapeDataString(user.Id)}&t={Uri.EscapeDataString(tokens.Create(user))}";
             var days = (int)EmailConfirmationTokens.Lifetime.TotalDays;
             var text = $"""
                 Hello,

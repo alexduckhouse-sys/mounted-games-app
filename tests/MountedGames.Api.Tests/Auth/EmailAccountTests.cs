@@ -42,7 +42,7 @@ public class EmailAccountTests : IClassFixture<EmailApiFactory>
 
     private static (string UserId, string Token) LinkIn(EmailApiFactory.SentMessage m)
     {
-        var match = Regex.Match(m.Text, @"https://mg\.example\.org/confirm-email\?userId=([^&\s]+)&token=(\S+)");
+        var match = Regex.Match(m.Text, @"https://mg\.example\.org/confirm-email#u=([^&\s]+)&t=(\S+)");
         Assert.True(match.Success, m.Text);
         return (Uri.UnescapeDataString(match.Groups[1].Value), Uri.UnescapeDataString(match.Groups[2].Value));
     }
@@ -220,7 +220,9 @@ public class EmailAccountTests : IClassFixture<EmailApiFactory>
         Assert.DoesNotContain("Sam Lee", mail.Html);
         Assert.Contains(EmailHtml.HeaderStyle, mail.Html);
         Assert.Contains(EmailHtml.CardStyle, mail.Html);
-        Assert.Contains("/confirm-email?userId=", mail.Html);
+        Assert.Contains("/confirm-email#u=", mail.Html);
+        // The token travels in the fragment only, never a query string a server or proxy could log.
+        Assert.DoesNotContain("/confirm-email?", mail.Text);
         Assert.StartsWith("confirm-email-", mail.IdempotencyKey);
         var (userId, _) = LinkIn(mail);
         Assert.Equal(auth.User.Id, userId);

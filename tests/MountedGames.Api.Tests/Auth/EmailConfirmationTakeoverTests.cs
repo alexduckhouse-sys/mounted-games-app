@@ -28,7 +28,7 @@ public class EmailConfirmationTakeoverTests(PasswordResetTests.Factory f) : ICla
         // The mailbox holder (not the organiser) opens the confirmation email: signed in as nobody, or as their own account.
         var mail = f.Mail(email, "Confirm your email address").Last();
         Assert.Contains("sign in to that account", mail.Text);
-        var link = Regex.Match(mail.Text, @"confirm-email\?userId=([^&\s]+)&token=([^\s]+)");
+        var link = Regex.Match(mail.Text, @"confirm-email#u=([^&\s]+)&t=([^\s]+)");
         Assert.True(link.Success, mail.Text);
         var request = new ConfirmEmailRequest(Uri.UnescapeDataString(link.Groups[1].Value), Uri.UnescapeDataString(link.Groups[2].Value));
         var (stranger, _) = await f.SignupAsync("Member");

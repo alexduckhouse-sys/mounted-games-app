@@ -193,8 +193,17 @@ describe('MembersPage: waiting for you', () => {
     const user = userEvent.setup();
     mount();
     await user.click(await (await waitingFor()).findByRole('button', { name: 'Approve Sam Lee' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t update this request. Check your signal and try again.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not approve this request. Check your connection and try again.');
     expect(group('Waiting for you').getByText('Sam Lee')).toBeInTheDocument();
+  });
+
+  it('shows the server’s reason, such as an address that isn’t confirmed yet', async () => {
+    const reason = 'This person hasn\'t confirmed their email address yet. Ask them to open the confirmation email (they can send it again from their profile), then try again.';
+    vi.mocked(api.post).mockRejectedValue({ response: { status: 409, data: { code: 'email_unconfirmed', message: reason } } });
+    const user = userEvent.setup();
+    mount();
+    await user.click(await (await waitingFor()).findByRole('button', { name: 'Approve Sam Lee' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(reason);
   });
 });
 
