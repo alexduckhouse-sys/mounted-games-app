@@ -23,6 +23,7 @@ On 27 October the owner reviewed a list of ideas:
 - Owner: "honestly a ios app could be worth it imma have a big debate on it".
 - The idea: a thin native iOS app, so a family sees "2 heats until your team" on the lock screen and Dynamic Island, with sharper notifications. A PWA can't do Live Activities. The owner also writes Swift (a side-project iOS app, MyYard).
 - To weigh: a native shell (SwiftUI with web views, or Capacitor) vs a full native app; App Store review and the cost of keeping two clients in step; how much of the value web push already gives (`web/src/lib` push helpers, `NotificationScheduler`, iOS 16.4+ home-screen PWA push); Live Activity updates need APNs push-to-start/update tokens from the API; offline score outbox parity; whether organisers or families would actually install it; Android (nothing like Live Activities, though ongoing notifications exist).
+- Also part of this debate: push notifications for a followed team's heat results ("Came 2nd in Heat 3, now 4th overall"). The owner wants them decided together with the app, not built for web push first (`docs/decisions.md`, 27 October).
 - The owner needs: build or not, and if so the smallest first version.
 
 ### 2. Saving whole live streams to watch back
