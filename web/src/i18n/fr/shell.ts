@@ -3,7 +3,7 @@ import type { shell as en } from '../en/shell';
 
 export const shell: AreaCatalogue<typeof en> = {
   // Header
-  'shell.header.backToTimetable': 'Retour aux horaires',
+  'shell.header.backToTimetable': 'Retour au programme',
   'shell.header.back': 'Retour',
   'shell.header.adminHome': 'Accueil administration',
   'shell.header.home': 'Accueil Mounted Games',
@@ -17,7 +17,7 @@ export const shell: AreaCatalogue<typeof en> = {
   // Tabs
   'shell.tabs.competition': 'Compétition',
   'shell.tabs.main': 'Principal',
-  'shell.tab.timetable': 'Horaires',
+  'shell.tab.timetable': 'Programme',
   'shell.tab.toplists': 'Classements',
   'shell.tab.following': 'Suivis',
   'shell.tab.chat': 'Direct',
@@ -59,7 +59,7 @@ export const shell: AreaCatalogue<typeof en> = {
   'shell.ticker.updates': 'Actualités de l’événement',
   'shell.ticker.liveVideo': 'Vidéo en direct',
   'shell.ticker.openSession': 'Ouvrir cette session',
-  'shell.ticker.openTimetable': 'Ouvrir les horaires',
+  'shell.ticker.openTimetable': 'Ouvrir le programme',
   'shell.ticker.openFeed': 'Ouvrir le fil en direct',
   'shell.ticker.watch': 'Regarder',
   'shell.ticker.watchLabel': 'Regarder la vidéo en direct',

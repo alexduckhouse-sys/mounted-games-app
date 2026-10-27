@@ -1,17 +1,11 @@
 import type { Lang, Translate } from '../i18n/translate';
 import type { ToplistRow } from './toplist';
 import { effectiveStatus, RESULT_STATUS, statusLabel } from './resultStatus';
-
-// Welsh ordinals up to twenty; past that the number takes "ain".
-const CY_ORDINALS = ['', '1af', '2il', '3ydd', '4ydd', '5ed', '6ed', '7fed', '8fed', '9fed', '10fed', '11eg', '12fed', '13eg', '14eg', '15fed', '16eg', '17eg', '18fed', '19eg', '20fed'];
+import { localOrdinal } from './ordinalText';
 
 /** A place as a short ordinal in the chosen language: "1st" / "1af" / "1er", "2nd" / "2il" / "2e". */
 export function ordinalText(n: number, lang: Lang): string {
-  if (lang === 'fr') return n === 1 ? '1er' : `${n}e`;
-  if (lang === 'cy') return CY_ORDINALS[n] ?? `${n}ain`;
-  const teen = n % 100 >= 11 && n % 100 <= 13;
-  const suffix = teen ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th';
-  return `${n}${suffix}`;
+  return localOrdinal(n, lang);
 }
 
 /** The small line under a team's name in the chosen language (the same rules as `toplistNote`), or null. */

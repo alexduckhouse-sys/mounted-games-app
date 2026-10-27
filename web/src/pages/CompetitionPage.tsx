@@ -30,7 +30,7 @@ import { LIVE_SAVED_COPY_NOTICE_AFTER_MS, lastUpdatedText, readSavedCopy, savedC
 import { PageSkeleton, TimetableSkeleton, ToplistSkeleton } from '../components/Skeletons';
 import { competitionPhase } from '../lib/competitionPhase';
 import { AnnouncementPop } from '../components/AnnouncementPop';
-import { useT } from '../i18n/LanguageContext';
+import { useLanguage, useT } from '../i18n/LanguageContext';
 
 const BANNER_TAG = 'banner';
 
@@ -178,6 +178,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   }, [competitionId, setExtras, clear]);
 
   const { setItems, setWatchCompetitionId } = useTicker();
+  const { lang } = useLanguage();
   const [ready, setReady] = useState(0);
   const streamState = useCompetitionStreams(competitionId, ready);
   const overlayState = useStreamOverlay(competitionId, ready);
@@ -226,7 +227,8 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
       : announcements;
     setItems(data ? tickerItems(data.sessions, tickerAnnouncements, now) : []);
     return () => setItems([]);
-  }, [data, announcements, now, setItems]);
+    // The lines are worded in the chosen language, so a change of language rebuilds them.
+  }, [data, announcements, now, setItems, lang]);
 
   const { connected, invoke, reconnect } = useLiveHub(competitionId, {
     onReady: () => {

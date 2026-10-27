@@ -84,17 +84,17 @@ describe('the timetable in Welsh and French', () => {
     setBoard();
     inLang('fr', <TimetableBoard />);
     expect(screen.getByRole('status')).toHaveTextContent('Main Arena a 6 minutes de retard');
-    expect(screen.getAllByText('Main Arena · 1 série').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Main Arena · 1 manche').length).toBeGreaterThan(0);
     expect(screen.getByText('EN COURS')).toBeInTheDocument();
-    expect(screen.getByText('Série 1')).toBeInTheDocument();
+    expect(screen.getByText('Manche 1')).toBeInTheDocument();
   });
 
   it('uses Welsh for the key, the heat name and the show-all button', async () => {
     setBoard();
     inLang('cy', <TimetableBoard />);
     expect(screen.getByRole('list', { name: 'Lliwiau statws' })).toBeInTheDocument();
-    expect(screen.getByText('Gwres 1')).toBeInTheDocument();
-    expect(screen.getAllByText('Main Arena · 1 gwres').length).toBeGreaterThan(0);
+    expect(screen.getByText('Rhagras 1')).toBeInTheDocument();
+    expect(screen.getAllByText('Main Arena · 1 rhagras').length).toBeGreaterThan(0);
   });
 
   it('keeps English with no provider', () => {

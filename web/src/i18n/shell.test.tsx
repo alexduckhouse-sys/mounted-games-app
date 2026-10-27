@@ -101,7 +101,7 @@ describe('helpers outside React in Welsh and French', () => {
 
   it('lists the usual tabs with the locale’s own “and”', () => {
     setActiveLang('fr');
-    expect(tabCountFlag(1)).toBe('Choisissez au moins 2 onglets. Avec moins, la barre du bas affiche Horaires, Classements, Direct et Infos.');
+    expect(tabCountFlag(1)).toBe('Choisissez au moins 2 onglets. Avec moins, la barre du bas affiche Programme, Classements, Direct et Infos.');
     setActiveLang('cy');
     expect(tabCountFlag(1)).toContain('Amserlen');
     expect(tabCountFlag(9)).toContain('6');

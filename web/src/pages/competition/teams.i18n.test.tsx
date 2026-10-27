@@ -40,9 +40,9 @@ describe('Following tab in Welsh and French', () => {
     const followed = screen.getByRole('heading', { name: 'Timau rydych chi’n eu dilyn' });
     const rows = within(followed.closest('section')!).getAllByRole('listitem');
     expect(rows[0]).toHaveTextContent('Example Blue');
-    expect(rows[0]).toHaveTextContent('Nesaf: Rhagbrawf 1 · Lôn 2 · ar y gweill');
+    expect(rows[0]).toHaveTextContent('Nesaf: Rhagras 1 · Lôn 2 · ar y gweill');
     expect(rows[1]).toHaveTextContent('Heb ei dynnu eto');
-    expect(screen.getByRole('heading', { name: 'Rhagbrofion nesaf' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Rhagrasys nesaf' })).toBeInTheDocument();
     expect(screen.getByText('AR Y GWEILL · Ras 2 o 2')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Dad-ddilyn Example Blue' })).toBeInTheDocument();
     expect(screen.getByText('4 pwynt')).toBeInTheDocument();
