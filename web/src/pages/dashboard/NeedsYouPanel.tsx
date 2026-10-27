@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { useT } from '../../i18n/LanguageContext';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
 import { priceLabel } from '../../lib/money';
@@ -62,6 +63,7 @@ function useAttention(events: CompetitionPickerItem[]): Attention {
  * payout set-up that need a look. Nothing shows when nothing is waiting.
  */
 export function NeedsYouPanel({ events = [], dueEntries = [] }: { events?: CompetitionPickerItem[]; dueEntries?: ExtendedMySignup[] }) {
+  const t = useT();
   const { requests, decForms, review, reviewError } = useNeedsYou();
   const attention = useAttention(events);
   const [failed, setFailed] = useState<string | null>(null);
@@ -69,45 +71,45 @@ export function NeedsYouPanel({ events = [], dueEntries = [] }: { events?: Compe
 
   async function decide(request: TrainerRequest, action: 'approve' | 'decline') {
     setFailed(null);
-    if (action === 'decline' && !(await confirmDialog({ title: `Decline ${request.fullName}’s request?`, message: 'Their account stays a member.', confirmLabel: 'Decline', destructive: true }))) return;
+    if (action === 'decline' && !(await confirmDialog({ title: t('account.needs.declineTitle', { name: request.fullName }), message: t('account.needs.declineMessage'), confirmLabel: t('account.signups.decline'), destructive: true }))) return;
     if (!(await review(request, action))) setFailed(request.userId);
   }
 
   if (count === 0) return null;
   return (
-    <section aria-label="Needs you">
-      <h2 className="sp-sec">Needs you<small>{count}</small></h2>
+    <section aria-label={t('account.needs.title')}>
+      <h2 className="sp-sec">{t('account.needs.title')}<small>{count}</small></h2>
       <div className="sp-card">
         {requests.map((request) => (
           <div key={request.userId}>
             <div className="sp-row flex-wrap">
               <span className="sp-grow">
                 <span className="sp-t1">{request.fullName}</span>
-                <span className="sp-t2">Wants to join as {request.requestedRole === 'Manager' ? 'a team manager' : 'a trainer'}</span>
+                <span className="sp-t2">{t(request.requestedRole === 'Manager' ? 'account.needs.wantsManager' : 'account.needs.wantsTrainer')}</span>
               </span>
               <span className="flex shrink-0 items-center gap-2">
-                <button type="button" className="sp-red" aria-label={`Decline ${request.fullName}`} onClick={() => decide(request, 'decline')}>Decline</button>
-                <button type="button" className="sp-pill sp-pill-fill sp-pill-sm" aria-label={`Approve ${request.fullName}`} onClick={() => decide(request, 'approve')}>Approve</button>
+                <button type="button" className="sp-red" aria-label={t('account.needs.declineAria', { name: request.fullName })} onClick={() => decide(request, 'decline')}>{t('account.signups.decline')}</button>
+                <button type="button" className="sp-pill sp-pill-fill sp-pill-sm" aria-label={t('account.needs.approveAria', { name: request.fullName })} onClick={() => decide(request, 'approve')}>{t('account.needs.approve')}</button>
               </span>
             </div>
-            {failed === request.userId && <div className="px-3.5 pb-3"><Notice>{reviewError ?? 'Couldn’t update this request. Check your signal and try again.'}</Notice></div>}
+            {failed === request.userId && <div className="px-3.5 pb-3"><Notice>{reviewError ?? t('account.needs.updateFailed')}</Notice></div>}
           </div>
         ))}
-        {decForms.map((t) => (
-          <NeedsRow key={`form-${t.id}`} count="1" title="Dec form to send" sub={t.displayName} act="Fill in" to={`/competitions/${t.competitionId}/declarations?team=${t.id}`} />
+        {decForms.map((team) => (
+          <NeedsRow key={`form-${team.id}`} count="1" title={t('account.needs.decToSend')} sub={team.displayName} act={t('account.needs.fillIn')} to={`/competitions/${team.competitionId}/declarations?team=${team.id}`} />
         ))}
         {dueEntries.map((entry) => (
-          <NeedsRow key={`due-${entry.id}`} count={priceLabel(entry.amountMinor)} title="Pay for your entry" sub={[entry.competitionName, displaySectionName(entry.sectionName)].filter(Boolean).join(' · ')}
-            act="How to pay" to={`/competitions/${entry.competitionId}/details`} />
+          <NeedsRow key={`due-${entry.id}`} count={priceLabel(entry.amountMinor)} title={t('account.needs.payTitle')} sub={[entry.competitionName, displaySectionName(entry.sectionName)].filter(Boolean).join(' · ')}
+            act={t('account.signups.howToPay')} to={`/competitions/${entry.competitionId}/details`} />
         ))}
         {attention.pendingEntries.map((entry) => (
-          <NeedsRow key={`entries-${entry.id}`} count={String(entry.count)} title={entry.count === 1 ? 'Entry not paid' : 'Entries not paid'} sub={entry.name} act="Open" to={`/competitions/${entry.id}/details`} />
+          <NeedsRow key={`entries-${entry.id}`} count={String(entry.count)} title={t('account.needs.entryUnpaid', { count: entry.count })} sub={entry.name} act={t('account.needs.open')} to={`/competitions/${entry.id}/details`} />
         ))}
         {attention.flaggedForms.map((entry) => (
-          <NeedsRow key={`flags-${entry.id}`} count={String(entry.count)} title={entry.count === 1 ? 'Dec form flagged' : 'Dec forms flagged'} sub={entry.name} act="Open" to={`/competitions/${entry.id}/declarations`} />
+          <NeedsRow key={`flags-${entry.id}`} count={String(entry.count)} title={t('account.needs.formFlagged', { count: entry.count })} sub={entry.name} act={t('account.needs.open')} to={`/competitions/${entry.id}/declarations`} />
         ))}
         {attention.payoutsNotReady && (
-          <NeedsRow count="!" warn title="Payouts aren’t set up" sub="Entry money can’t be paid out until this is done" act="Set up" to="/me/payouts" />
+          <NeedsRow count="!" warn title={t('account.needs.payoutsTitle')} sub={t('account.needs.payoutsSub')} act={t('account.needs.setUp')} to="/me/payouts" />
         )}
       </div>
     </section>
