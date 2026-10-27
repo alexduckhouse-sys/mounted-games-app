@@ -4,6 +4,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
+import { TickerProvider, useTicker } from '../../components/TickerContext';
 import { competition, heat, race, result, session, standing, team } from '../../test/factories';
 import type { CompetitionDetail, Heat, Session, StandingRow } from '../../types';
 import { ScoringTab } from './ScoringTab';
@@ -172,19 +173,19 @@ describe('the Show row inside Toplist', () => {
     await screen.findByRole('region', { name: 'Finals' });
     expect(await showRow()).toHaveTextContent('Finals');
     await user.click(await showRow());
-    expect(within(screen.getByRole('listbox', { name: 'Show' })).getAllByRole('option').map((o) => o.textContent)).toEqual(['Finals', 'Totals', 'By session', 'Heats']);
+    expect(within(screen.getByRole('listbox', { name: 'Show' })).getAllByRole('option').map((o) => o.textContent)).toEqual(['Totals', 'By session', 'Finals', 'Scores by heat']);
     expect(screen.queryByRole('option', { name: 'By game' })).toBeNull();
   });
 
-  it('offers Totals, By session and Heats without finals, opens on Totals, and Heats shows the heat tables', async () => {
+  it('offers Totals, By session and Scores by heat without finals, opens on Totals, and Scores by heat shows the heat tables', async () => {
     const user = userEvent.setup();
     setCompetition([qualifier]);
     renderTab();
     await screen.findByRole('region', { name: 'Totals' });
     expect(await showRow()).toHaveTextContent('Totals');
     await user.click(await showRow());
-    expect(within(screen.getByRole('listbox', { name: 'Show' })).getAllByRole('option').map((o) => o.textContent)).toEqual(['Totals', 'By session', 'Heats']);
-    await user.click(screen.getByRole('option', { name: 'Heats' }));
+    expect(within(screen.getByRole('listbox', { name: 'Show' })).getAllByRole('option').map((o) => o.textContent)).toEqual(['Totals', 'By session', 'Scores by heat']);
+    await user.click(screen.getByRole('option', { name: 'Scores by heat' }));
     expect(await screen.findByRole('region', { name: 'Section heat scores' })).toBeInTheDocument();
   });
 
@@ -202,10 +203,10 @@ describe('the Show row inside Toplist', () => {
     await pickView(user, 'Totals');
     const totals = screen.getByRole('region', { name: 'Totals' });
     expect(screen.getByText('Top 2 make the final')).toBeVisible();
-    expect(within(totals).getByRole('separator', { name: 'Final cut-off' })).toBeVisible();
+    expect(within(totals).getByRole('separator', { name: 'A Final cut-off' })).toBeVisible();
     await pickView(user, 'By session');
     const table = screen.getByRole('region', { name: 'Points by session' });
-    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['#', 'Team', 'S1', 'F', 'Pts', 'Open']);
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['#', 'Team', 'S1', 'F', 'Pts']);
     await pickView(user, 'Finals');
     expect(screen.getByRole('region', { name: 'Finals' })).toBeVisible();
   });
@@ -226,6 +227,46 @@ describe('the Show row inside Toplist', () => {
     await screen.findByText('Team 8');
     expect(await showRow()).toHaveTextContent('By session');
     expect(screen.getByRole('region', { name: 'Points by session' })).toBeVisible();
+  });
+});
+
+/** The ticker dock's page button, as AppShell draws it. */
+function DockButton() {
+  const { dockAction } = useTicker();
+  return dockAction ? <button type="button" data-icon={dockAction.icon ?? 'filters'} onClick={dockAction.onClick}>{dockAction.label}</button> : null;
+}
+
+describe('the Show sheet beside the ticker dock', () => {
+  const renderWithDock = (path = '/?section=9') => render(
+    <MemoryRouter initialEntries={[path]}><TickerProvider><CompactPageBarProvider><ScoringTab startOn="toplist" /><DockButton /></CompactPageBarProvider></TickerProvider></MemoryRouter>,
+  );
+
+  it('puts a "What to show" filters button by the dock instead of the Show row, and picks a view from a sheet', async () => {
+    const user = userEvent.setup();
+    renderWithDock();
+    await screen.findByRole('region', { name: 'Finals' });
+    expect(screen.queryByRole('combobox', { name: 'Show' })).toBeNull();
+    const button = await screen.findByRole('button', { name: 'What to show' });
+    expect(button).toHaveAttribute('data-icon', 'filters');
+    await user.click(button);
+    const sheet = await screen.findByRole('dialog', { name: 'Show' });
+    const choices = within(sheet).getAllByRole('radio');
+    expect(choices.map((c) => c.textContent)).toEqual(['Totals', 'By session', 'Finals', 'Scores by heat']);
+    expect(within(sheet).getByRole('radio', { name: 'Finals' })).toHaveAttribute('aria-checked', 'true');
+    expect(within(sheet).getByRole('radio', { name: 'Totals' })).toHaveAttribute('aria-checked', 'false');
+    await user.click(within(sheet).getByRole('radio', { name: 'Scores by heat' }));
+    expect(await screen.findByRole('region', { name: 'Section heat scores' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Show' })).toBeNull());
+    await user.click(screen.getByRole('button', { name: 'What to show' }));
+    expect(within(await screen.findByRole('dialog', { name: 'Show' })).getByRole('radio', { name: 'Scores by heat' })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('offers no button when Totals is the only thing to show', async () => {
+    setCompetition([], { sections: [{ id: 9, displayName: 'Under 12', finalistCount: 2 }] as never });
+    renderWithDock();
+    await screen.findByRole('region', { name: 'Totals' });
+    expect(screen.queryByRole('button', { name: 'What to show' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Show' })).toBeNull();
   });
 });
 
@@ -287,9 +328,14 @@ describe('the totals list', () => {
     });
     renderTab();
     const totals = await screen.findByRole('region', { name: 'Totals' });
-    expect(within(totals).getAllByText('Joint 2nd · run-off')).toHaveLength(2);
-    expect(within(totals).getByText('6 needed to make the final (normal finishes)')).toBeVisible();
-    expect(within(totals).getByRole('separator', { name: 'Final cut-off' })).toBeVisible();
+    // Tied teams share the number and a soft tint; no bar and no words.
+    const tied = totals.querySelectorAll('li[data-tied="true"]');
+    expect([...tied].map((li) => li.getAttribute('data-rank-id'))).toEqual(['2', '3']);
+    expect((tied[0] as HTMLElement).style.background).toBe('rgb(var(--mg-heading) / .07)');
+    expect(within(totals).queryByText(/Joint|run-off/)).toBeNull();
+    expect(within(totals).getByText('6 pts needed for the A Final (normal finishes)')).toBeVisible();
+    expect(within(totals).queryByText(/races? left/)).toBeNull();
+    expect(within(totals).getByRole('separator', { name: 'A Final cut-off' })).toBeVisible();
     expect(within(totals).getByText('Hors concours')).toBeVisible();
     expect(within(totals).getByText('Guest')).toBeVisible();
     expect(screen.getByRole('region', { name: 'Run-off for 2nd' })).toBeVisible();
@@ -339,25 +385,25 @@ describe('the age group page', () => {
     expect(screen.getByTestId('search')).toHaveTextContent('?section=10');
   });
 
-  it('opens on Toplist from the Toplists tab, with Toplist first and the toplist header', async () => {
+  it('shows only the toplist from the Toplists tab: the age group bar, no tab row, and the toplist header', async () => {
     renderTab();
-    const tabs = screen.getByRole('group', { name: 'Age group view' });
-    expect(within(tabs).getByRole('button', { name: 'Toplist' })).toHaveAttribute('aria-pressed', 'true');
-    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['Toplist', 'Heats', 'Scores']);
+    expect(screen.getByRole('combobox', { name: 'Age group' })).toBeVisible();
+    expect(screen.queryByRole('group', { name: 'Age group view' })).toBeNull();
     await showRow();
     expect(JSON.parse(screen.getByTestId('header').textContent!)).toMatchObject({ title: 'Toplist' });
   });
 
-  it('puts the tabs straight under the age group bar', () => {
-    renderTab();
+  it('puts the tabs straight under the age group bar on the page from the menu', () => {
+    renderTab('/?section=9', {});
     const bar = screen.getByRole('combobox', { name: 'Age group' });
     const tabs = screen.getByRole('group', { name: 'Age group view' });
     expect(bar.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('keeps the heat tables under Scores, not in the toplist', async () => {
+  it('keeps the heat tables under Scores, not in the toplist, on the page from the menu', async () => {
     const user = userEvent.setup();
-    renderTab();
+    renderTab('/?section=9', {});
+    await user.click(screen.getByRole('button', { name: 'Toplist' }));
     await showRow();
     expect(screen.queryByRole('region', { name: 'Heat tables' })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Scores' }));
