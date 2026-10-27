@@ -30,6 +30,7 @@ export function resultsBookToCsv(book: ResultsBook): string {
 
   blocks.push(toCsv(['Results book', 'Mounted Games'], [
     row(['Event', book.competition.name]),
+    ...(book.competition.competitionNumber?.trim() ? [row(['Competition reference', book.competition.competitionNumber.trim()])] : []),
     row(['Date', longDate(book.competition.startDate)]),
     row(['Venue', book.competition.location ?? '']),
     row(['Status', book.isProvisional ? 'Provisional: some races are not complete' : 'Final']),

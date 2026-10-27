@@ -58,6 +58,14 @@ export function sectionFull(section: Pick<CompetitionSection, 'maxParticipants' 
   return section.maxParticipants != null && section.activeSignupsCount != null && section.activeSignupsCount >= section.maxParticipants;
 }
 
+/** Remaining admission places from the API's paid/pending count; null means capacity is unknown or uncapped. */
+export function remainingPlaces(section: Pick<CompetitionSection, 'maxParticipants' | 'activeSignupsCount'>): number | null {
+  const cap = section.maxParticipants;
+  const taken = section.activeSignupsCount;
+  if (cap == null || taken == null || !Number.isSafeInteger(cap) || cap <= 0 || !Number.isSafeInteger(taken) || taken < 0) return null;
+  return Math.max(0, cap - taken);
+}
+
 /** Whether an entry has anything to pay, and so a third step. */
 export function needsPayStep(priceMinor: number): boolean {
   return priceMinor > 0;
