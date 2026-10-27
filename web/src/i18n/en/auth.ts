@@ -78,4 +78,7 @@ export const auth = {
   'auth.pw.err.upper': 'Your password needs a capital letter.',
   'auth.pw.err.special': 'Your password needs a special character (like ! ? # @ £).',
   'auth.pw.err.unique': 'Your password needs a wider mix of characters.',
+
+  'auth.reset.conflict': 'Your account changed while your new password was being saved, so nothing was changed. Try again.',
+  'auth.reset.failed': 'We couldn’t save your new password, so nothing was changed. Try again in a moment.',
 } satisfies Record<string, Message>;

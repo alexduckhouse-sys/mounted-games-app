@@ -78,4 +78,7 @@ export const auth: AreaCatalogue<typeof en> = {
   'auth.pw.err.upper': 'Mae angen priflythyren ar eich cyfrinair.',
   'auth.pw.err.special': 'Mae angen nod arbennig ar eich cyfrinair (fel ! ? # @ £).',
   'auth.pw.err.unique': 'Mae angen cymysgedd ehangach o nodau ar eich cyfrinair.',
+
+  'auth.reset.conflict': 'Newidiodd eich cyfrif tra oedd eich cyfrinair newydd yn cael ei gadw, felly ni newidiwyd dim. Rhowch gynnig arall arni.',
+  'auth.reset.failed': 'Methwyd cadw eich cyfrinair newydd, felly ni newidiwyd dim. Rhowch gynnig arall arni mewn munud.',
 };

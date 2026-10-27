@@ -96,6 +96,38 @@ describe('api client', () => {
     expect(localStorage.getItem(KEY)).toBeNull();
   });
 
+  it('keeps a newer login when a request sent with an older token is refused', async () => {
+    writeStoredAuth(auth({ token: 'old-token' }));
+    reply = async (config) => {
+      // The password was changed while this request was on its way, and the fresh token stored.
+      writeStoredAuth(auth({ token: 'fresh-token' }));
+      throw new AxiosError('Unauthorized', 'ERR_BAD_REQUEST', config, null, { status: 401, statusText: 'Unauthorized', headers: {}, config, data: null });
+    };
+    await expect(api.get('/auth/me')).rejects.toMatchObject({ response: { status: 401 } });
+    expect(readToken()).toBe('fresh-token');
+  });
+
+  it('leaves storage alone when a request that carried no token is refused', async () => {
+    reply = async (config) => {
+      writeStoredAuth(auth());
+      throw new AxiosError('Unauthorized', 'ERR_BAD_REQUEST', config, null, { status: 401, statusText: 'Unauthorized', headers: {}, config, data: null });
+    };
+    await expect(api.get('/auth/me')).rejects.toMatchObject({ response: { status: 401 } });
+    expect(readToken()).toBe('secret-token');
+  });
+
+  it('reads the token from plain header objects too', async () => {
+    writeStoredAuth(auth());
+    const handler = (api.interceptors.response as unknown as { handlers: { rejected: (e: unknown) => Promise<unknown> }[] }).handlers[0].rejected;
+    await expect(handler({ response: { status: 401 }, config: { headers: { Authorization: 'Bearer other-token' } } })).rejects.toBeTruthy();
+    expect(readToken()).toBe('secret-token');
+    await expect(handler({ response: { status: 401 }, config: { headers: { Authorization: 'Basic abc' } } })).rejects.toBeTruthy();
+    await expect(handler({ response: { status: 401 } })).rejects.toBeTruthy();
+    expect(readToken()).toBe('secret-token');
+    await expect(handler({ response: { status: 401 }, config: { headers: { Authorization: 'Bearer secret-token' } } })).rejects.toBeTruthy();
+    expect(readToken()).toBeNull();
+  });
+
   it('keeps the login for other failures, including a lost connection', async () => {
     writeStoredAuth(auth());
     reply = async (config) => { throw new AxiosError('Server error', 'ERR_BAD_RESPONSE', config, null, { status: 500, statusText: 'Error', headers: {}, config, data: null }); };

@@ -143,7 +143,12 @@ describe('ResetPasswordPage', () => {
 
     confirm.mockRejectedValueOnce({ response: { status: 409, data: { code: 'conflict', message: 'Your account changed while your new password was being saved, so nothing was changed. Try the link again.' } } });
     await save();
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Try the link again.'));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Your account changed while your new password was being saved, so nothing was changed. Try again.'));
+    expect(screen.getByLabelText('New password')).toBeInTheDocument();
+
+    confirm.mockRejectedValueOnce({ response: { status: 500, data: { code: 'failed', message: 'We couldn’t save your new password.' } } });
+    await save();
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('We couldn’t save your new password, so nothing was changed. Try again in a moment.'));
     expect(screen.getByLabelText('New password')).toBeInTheDocument();
 
     confirm.mockRejectedValueOnce({ response: { status: 403, data: { message: 'Password resets from this network are blocked.' } } });

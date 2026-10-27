@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
@@ -13,10 +13,20 @@ vi.mock('../api', async (importOriginal) => ({
 vi.mock('../auth/AuthContext', () => ({ useAuth: vi.fn() }));
 
 const refreshUser = vi.fn();
+const logout = vi.fn();
 
-function mount(search: string, signedIn = false) {
-  vi.mocked(useAuth).mockReturnValue({ user: signedIn ? { id: 'u1' } : null, refreshUser } as unknown as ReturnType<typeof useAuth>);
-  return render(<MemoryRouter initialEntries={[`/confirm-email${search}`]}><ConfirmEmailPage /></MemoryRouter>);
+/** Shows where the sign-in page would send the person back to. */
+function SignInPage() {
+  const from = (useLocation().state as { from?: string } | null)?.from;
+  return <p>Sign in page, then back to {from}</p>;
+}
+
+function mount(search: string, signedInAs: string | null = 'u1') {
+  vi.mocked(useAuth).mockReturnValue({ user: signedInAs ? { id: signedInAs } : null, refreshUser, logout } as unknown as ReturnType<typeof useAuth>);
+  return render(<MemoryRouter initialEntries={[`/confirm-email${search}`]}><Routes>
+    <Route path="/confirm-email" element={<ConfirmEmailPage />} />
+    <Route path="/login" element={<SignInPage />} />
+  </Routes></MemoryRouter>);
 }
 
 beforeEach(() => {
@@ -25,19 +35,33 @@ beforeEach(() => {
 });
 
 describe('ConfirmEmailPage', () => {
-  it('confirms straight from the link, without a sign-in, and offers to sign in', async () => {
+  it('confirms for the person signed in to the account the link is for', async () => {
     mount('?userId=u1&token=1.abc');
     expect(await screen.findByText(/your email address is confirmed/)).toBeInTheDocument();
     expect(api.post).toHaveBeenCalledWith('/auth/confirm-email', { userId: 'u1', token: '1.abc' });
-    expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login');
+    const profile = screen.getByRole('link', { name: 'Go to my profile' });
+    expect(profile).toHaveAttribute('href', '/me');
+    expect(profile).toHaveClass('sp-pill', 'sp-pill-fill');
     expect(refreshUser).toHaveBeenCalled();
   });
 
-  it('sends a signed-in person to their profile', async () => {
-    mount('?userId=u1&token=1.abc', true);
-    const profile = await screen.findByRole('link', { name: 'Go to my profile' });
-    expect(profile).toHaveAttribute('href', '/me');
-    expect(profile).toHaveClass('sp-pill', 'sp-pill-fill');
+  it('asks a signed-out person to sign in first, and keeps the link for when they come back', async () => {
+    const user = userEvent.setup();
+    mount('?userId=u1&token=1.abc', null);
+    expect(screen.getByRole('heading', { name: 'Confirm your email' })).toBeInTheDocument();
+    expect(screen.getByText(/Sign in to the account this email was sent to/)).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('link', { name: 'Sign in to confirm' }));
+    expect(screen.getByText('Sign in page, then back to /confirm-email?userId=u1&token=1.abc')).toBeInTheDocument();
+  });
+
+  it('won’t confirm for a different account, and offers to sign out', async () => {
+    const user = userEvent.setup();
+    mount('?userId=u1&token=1.abc', 'someone-else');
+    expect(screen.getByRole('alert')).toHaveTextContent('This link is for another account');
+    expect(api.post).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(logout).toHaveBeenCalled();
   });
 
   it('does not call the server when the link is incomplete', () => {
