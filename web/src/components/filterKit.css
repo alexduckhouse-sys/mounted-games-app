@@ -10,7 +10,7 @@
 .fk-fbtn:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
 .fk-count {
   position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; box-sizing: border-box;
-  background: rgb(var(--mg-heading)); color: #fff; font: 700 11px/18px var(--mg-font); text-align: center; box-shadow: 0 0 0 2px rgb(var(--mg-subtle));
+  background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); font: 700 11px/18px var(--mg-font); text-align: center; box-shadow: 0 0 0 2px rgb(var(--mg-subtle));
 }
 /* On the navy band under the app header (past competitions): see-through button, red count. */
 .fk-band .fk-fbtn { border: 1px solid rgb(var(--mg-header-line)); background: transparent; color: #fff; }
