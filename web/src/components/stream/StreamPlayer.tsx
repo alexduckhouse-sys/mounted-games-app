@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence } from 'framer-motion';
 import { Headphones, Maximize, PictureInPicture2, Play, Radio, RotateCcw, VolumeX, X } from 'lucide-react';
 import type { ChatMessage, LiveStream, StreamQualityRid } from '../../types';
+import type { MessageKey } from '../../i18n/en';
 import { useReplayPreparation } from '../../live/useReplayPreparation';
 import { ReplayPreparation } from './ReplayPreparation';
 import { createReplayBuffer, getSavedReplays, removeSavedReplay, type SavedReplayClip } from '../../live/replayBuffer';
@@ -11,12 +12,13 @@ import { ReplayInspector, SavedReplaysButton } from './ReplayInspector';
 import { StreamOverlays } from './StreamOverlays';
 import { useReplayWipe } from './ReplayWipe';
 import { useOverlay } from '../../hooks/useOverlay';
+import { useT } from '../../i18n/LanguageContext';
 
-const QUALITY_TIERS: { rid: StreamQualityRid; label: string; title: string }[] = [
-  { rid: 'f', label: 'HD', title: 'High definition (720p/1080p)' },
-  { rid: 'h', label: '540p', title: 'Balanced (540p)' },
-  { rid: 'q', label: '360p', title: 'Low signal saver (360p)' },
-];
+const QUALITY_TIERS = [
+  { rid: 'f', label: 'HD', title: 'teams.stream.qualityHd' },
+  { rid: 'h', label: '540p', title: 'teams.stream.qualityMid' },
+  { rid: 'q', label: '360p', title: 'teams.stream.qualityLow' },
+] as const satisfies readonly { rid: StreamQualityRid; label: string; title: MessageKey }[];
 
 export function StreamPlayer({ media, stream, label, reconnecting = false, message, announcement, captionBar = false, quality = 'f', onQuality, audioOnly, onAudioOnly, onSyncLive }: {
   media: MediaStream | null; stream: LiveStream; label: string | null; reconnecting?: boolean; message?: string | null;
@@ -24,6 +26,7 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
   quality?: StreamQualityRid; onQuality?: (rid: StreamQualityRid) => void;
   audioOnly?: boolean; onAudioOnly?: (audioOnly: boolean) => void; onSyncLive?: () => void;
 }) {
+  const t = useT();
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const openRef = useRef(false);
@@ -139,7 +142,7 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
     if (!full) return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    containerRef.current?.querySelector<HTMLButtonElement>('[aria-label="Close full screen"]')?.focus();
+    containerRef.current?.querySelector<HTMLButtonElement>('[data-stream-close]')?.focus();
     if (!/iPhone|iPod/.test(navigator.userAgent)) {
       void containerRef.current?.requestFullscreen?.().then(() => {
         const orientation = screen.orientation as ScreenOrientation & { lock?: (value: string) => Promise<void> };
@@ -154,25 +157,25 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
     window.history.pushState({ ...window.history.state, streamFullscreen: true }, '');
     openRef.current = true; setFull(true);
   }
-  const player = <div ref={containerRef} className={`mg-font overflow-hidden bg-[rgb(var(--mg-header-deep))] text-white ${full ? 'fixed inset-0 z-[100]' : `relative aspect-video ${captionBar ? '' : 'rounded-xl'}`}`} role={full ? 'dialog' : undefined} aria-modal={full || undefined} aria-label={full ? 'Live video' : undefined}>
+  const player = <div ref={containerRef} className={`mg-font overflow-hidden bg-[rgb(var(--mg-header-deep))] text-white ${full ? 'fixed inset-0 z-[100]' : `relative aspect-video ${captionBar ? '' : 'rounded-xl'}`}`} role={full ? 'dialog' : undefined} aria-modal={full || undefined} aria-label={full ? t('teams.stream.liveVideo') : undefined}>
     <video ref={videoRef} muted={soundOff} playsInline autoPlay className={`h-full w-full object-contain ${isAudioOnly ? 'opacity-0' : ''}`} onClick={open} aria-label={`${stream.arenaName}, ${stream.angleName}`} />
     {isAudioOnly && (
       <div role="status" className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-[rgb(var(--mg-header-deep)/0.92)] text-center">
         <Headphones className="h-7 w-7 text-amber-300" aria-hidden="true" />
-        <p className="text-sm font-bold">Audio only</p>
-        <p className="text-xs text-white/75">Video hidden. Audio continues.</p>
+        <p className="text-sm font-bold">{t('teams.stream.audioOnly')}</p>
+        <p className="text-xs text-white/75">{t('teams.stream.audioOnlyNote')}</p>
       </div>
     )}
     <StreamOverlays stream={stream} label={label} reconnecting={reconnecting} muted={muted} onSound={unmute} announcement={announcement} hideCaption={captionBar && !full}>
       <div className="pointer-events-auto absolute right-3 top-3 flex items-center gap-1.5">
         {onQuality && (
-          <div role="group" aria-label="Video quality" className="mg-stream-glass flex items-center gap-0.5 rounded-full p-0.5 text-[11px] font-bold">
+          <div role="group" aria-label={t('teams.stream.quality')} className="mg-stream-glass flex items-center gap-0.5 rounded-full p-0.5 text-[11px] font-bold">
             {QUALITY_TIERS.map((tier) => (
               <button
                 key={tier.rid}
                 type="button"
-                title={tier.title}
-                aria-label={`Quality ${tier.label}`}
+                title={t(tier.title)}
+                aria-label={t('teams.stream.qualityTier', { tier: tier.label })}
                 aria-pressed={quality === tier.rid}
                 className={`rounded-full px-2 py-0.5 transition-colors ${quality === tier.rid ? 'bg-amber-400 text-black' : 'text-white/85 hover:text-white'}`}
                 onClick={() => onQuality(tier.rid)}
@@ -185,31 +188,31 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
         {media && (
           <button
             type="button"
-            aria-label="Audio only"
+            aria-label={t('teams.stream.audioOnly')}
             aria-pressed={isAudioOnly}
             className={`mg-stream-control !min-h-8 !rounded-full px-2.5 text-xs font-bold ${isAudioOnly ? '!bg-amber-400 !text-black' : ''}`}
             onClick={toggleAudioOnly}
           >
             <Headphones className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>Audio only</span>
+            <span>{t('teams.stream.audioOnly')}</span>
           </button>
         )}
         {media && (
           <button
             type="button"
-            aria-label="Sync live"
+            aria-label={t('teams.stream.syncLive')}
             className="mg-stream-control !min-h-8 !rounded-full px-2.5 text-xs font-bold"
             onClick={handleSyncLive}
           >
             <Radio className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>Sync live</span>
+            <span>{t('teams.stream.syncLive')}</span>
           </button>
         )}
         {media && (
           <button
             type="button"
             className="mg-stream-control !min-h-8 !rounded-full px-2.5 text-xs font-bold"
-            aria-label="Instant 15 second replay"
+            aria-label={t('teams.stream.instantReplay')}
             onClick={triggerInstantReplay}
           >
             <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
@@ -225,15 +228,15 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
           <button
             type="button"
             className="mg-stream-control !min-h-8 !min-w-8"
-            aria-label="Picture in picture"
+            aria-label={t('teams.stream.pip')}
             onClick={togglePip}
           >
             <PictureInPicture2 className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
-        {(full || !captionBar) && <button className="mg-stream-control" aria-label={full ? 'Close full screen' : 'Open full screen'} onClick={full ? close : open}>{full ? <X /> : <Maximize />}</button>}
+        {(full || !captionBar) && <button className="mg-stream-control" data-stream-close={full || undefined} aria-label={full ? t('teams.stream.closeFull') : t('teams.stream.openFull')} onClick={full ? close : open}>{full ? <X /> : <Maximize />}</button>}
       </div>
-      {needsPlay && <button className="mg-stream-control pointer-events-auto absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 !rounded-xl px-4" onClick={() => { void videoRef.current!.play().then(() => setNeedsPlay(false)).catch(() => setNeedsPlay(true)); }}><Play /> Play</button>}
+      {needsPlay && <button className="mg-stream-control pointer-events-auto absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 !rounded-xl px-4" onClick={() => { void videoRef.current!.play().then(() => setNeedsPlay(false)).catch(() => setNeedsPlay(true)); }}><Play /> {t('teams.stream.play')}</button>}
       {message && (() => {
         const { title, body } = splitStreamMessage(message);
         return title
@@ -261,5 +264,5 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
     {wipeLayer}
   </div>;
   const showSound = stream.hasAudio && !stream.audioMuted && stream.status !== 1 && muted;
-  return full ? <><div className="aspect-video rounded-xl bg-[rgb(var(--mg-header-deep))]" />{createPortal(player, document.body)}</> : captionBar ? <div className="live-stream-frame mg-card overflow-hidden">{player}<div className="live-stream-caption"><span className="mg-badge mg-badge-live">Live</span><strong>{label || `${stream.arenaName} · ${stream.angleName}`}</strong>{showSound && <button type="button" className="live-caption-sound" aria-label="Tap for sound" onClick={unmute}><VolumeX aria-hidden="true" /></button>}<button type="button" onClick={open}>Full screen</button></div></div> : player;
+  return full ? <><div className="aspect-video rounded-xl bg-[rgb(var(--mg-header-deep))]" />{createPortal(player, document.body)}</> : captionBar ? <div className="live-stream-frame mg-card overflow-hidden">{player}<div className="live-stream-caption"><span className="mg-badge mg-badge-live">{t('common.live')}</span><strong>{label || `${stream.arenaName} · ${stream.angleName}`}</strong>{showSound && <button type="button" className="live-caption-sound" aria-label={t('teams.stream.tapForSound')} onClick={unmute}><VolumeX aria-hidden="true" /></button>}<button type="button" onClick={open}>{t('teams.stream.fullScreen')}</button></div></div> : player;
 }

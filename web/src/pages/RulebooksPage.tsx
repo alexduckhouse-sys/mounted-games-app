@@ -10,8 +10,10 @@ import {
 } from '../components/RaceRulesSheet';
 import { equipmentFromDiagram } from '../lib/raceEquipment';
 import type { RaceTemplate } from '../types';
+import { useT } from '../i18n/LanguageContext';
 
 export function RulebooksPage() {
+  const t = useT();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedRace = searchParams.get('race')?.trim() ?? '';
   const [raceNames, setRaceNames] = useState<string[] | null>(null);
@@ -24,10 +26,10 @@ export function RulebooksPage() {
   const loadingNames = raceNames === null;
 
   usePageHeader({
-    title: selectedRace ? `${selectedRace} · Rules` : 'Race rules & setup',
+    title: selectedRace ? t('teams.rulebooks.titleFor', { race: selectedRace }) : t('teams.rulebooks.title'),
     subtitle: 'EGUK · Pony Club · MGA · STRUK',
     backTo: '/',
-    backLabel: 'Back',
+    backLabel: t('common.back'),
     plain: true,
   });
 
@@ -97,14 +99,14 @@ export function RulebooksPage() {
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-3 pt-2 pb-10">
-      <h1 className="sr-only">{selectedRace ? `${selectedRace} rules and setup` : 'Race rules and setup'}</h1>
+      <h1 className="sr-only">{selectedRace ? t('teams.rulebooks.srTitleFor', { race: selectedRace }) : t('teams.rulebooks.srTitle')}</h1>
 
       {selectedRace ? (
         <div className="mg-card p-3 sm:p-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <div className="text-xs font-semibold uppercase tracking-wide text-[rgb(var(--mg-muted))]">
-                {activeTemplate?.category ?? 'Mounted Games Race'}
+                {activeTemplate?.category ?? t('teams.rulebooks.category')}
               </div>
               <h2 className="mg-display text-2xl font-bold text-[rgb(var(--mg-heading))]">
                 {activeTemplate?.name ?? selectedRace}
@@ -115,19 +117,19 @@ export function RulebooksPage() {
               onClick={() => chooseRace('')}
               className="mg-btn mg-btn-secondary !min-h-9 !px-3 !py-1 text-xs"
             >
-              All races ({raceNames?.length || 'A–Z'})
+              {t('teams.rulebooks.allRaces', { count: raceNames?.length || 'A–Z' })}
             </button>
           </div>
 
           {loadingRace && !activeTemplate && (
             <p role="status" className="text-sm text-[rgb(var(--mg-muted))]">
-              Loading rules for {selectedRace}…
+              {t('teams.rulebooks.loadingRules', { race: selectedRace })}
             </p>
           )}
 
           {!loadingRace && !activeTemplate && (
             <p className="text-sm text-[rgb(var(--mg-muted))]">
-              No rules found for &ldquo;{selectedRace}&rdquo;.
+              {t('teams.rulebooks.noRules', { race: selectedRace })}
             </p>
           )}
 
@@ -138,7 +140,7 @@ export function RulebooksPage() {
               )}
 
               {equipment.length > 0 && (
-                <div className="flex flex-wrap gap-1.5" aria-label="Equipment required">
+                <div className="flex flex-wrap gap-1.5" aria-label={t('teams.arena.equipment')}>
                   {equipment.map((item) => (
                     <span
                       key={item.label}
@@ -159,16 +161,16 @@ export function RulebooksPage() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-sm font-bold text-[rgb(var(--mg-heading))]">
               <BookOpen className="h-4 w-4" aria-hidden="true" />
-              <span>Select a race to view its setup &amp; rulebooks (EGUK · Pony Club · MGA · STRUK)</span>
+              <span>{t('teams.rulebooks.select')}</span>
             </div>
           </div>
 
           <label className="mg-field !min-h-10">
             <Search className="h-4 w-4 shrink-0 text-[rgb(var(--mg-faint))]" aria-hidden="true" />
-            <span className="sr-only">Search races</span>
+            <span className="sr-only">{t('teams.rulebooks.searchRaces')}</span>
             <input
               type="search"
-              placeholder="Search race name…"
+              placeholder={t('teams.rulebooks.searchPlaceholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -176,11 +178,11 @@ export function RulebooksPage() {
 
           {loadingNames && (
             <p role="status" className="text-sm text-[rgb(var(--mg-muted))]">
-              Loading race list…
+              {t('teams.rulebooks.loadingList')}
             </p>
           )}
 
-          <div className="grid gap-1.5 sm:grid-cols-2 md:grid-cols-3" role="list" aria-label="Races A to Z">
+          <div className="grid gap-1.5 sm:grid-cols-2 md:grid-cols-3" role="list" aria-label={t('teams.rulebooks.az')}>
             {filteredNames.map((name) => (
               <button
                 key={name}

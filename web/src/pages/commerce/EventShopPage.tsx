@@ -4,6 +4,7 @@ import { usePageHeader } from '../../components/CompactPageBarContext';
 import { Notice } from '../../components/Notice';
 import { RoundStepper } from '../../components/RoundStepper';
 import { feeText } from '../../lib/entryOptions';
+import { allOptionsSoldOut, hasOptions, isSoldOut, listingTotal, maxQuantity, optionsOf, orderLines, parseBasketKey, quantityIn, setQuantity, upgradeBasket, type OptionBasket } from '../../lib/shopOptions';
 import { usePageWidth } from '../../components/pageWidthState';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
@@ -39,7 +40,9 @@ function EventShopContent() {
   const { user } = useAuth();
   const [listings, setListings] = useState<PublicCompetitionListing[] | null>(null);
   const [settings, setSettings] = useState<EventCommerceSettings | null>(null);
-  const [basket, setBasket] = useState<Record<number, number>>({});
+  const [basket, setBasket] = useState<OptionBasket>({});
+  // The option pill chosen on each item that has options, by listing id.
+  const [picked, setPicked] = useState<Record<number, number>>({});
   // What an item asks for once it is in the order (a stable number, a number plate), by listing.
   const [details, setDetails] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +63,8 @@ function EventShopContent() {
       .then(([listingResponse, settingsResponse]) => {
         setError(null);
         setListings(listingResponse.data);
+        // Keep what is in the basket only where the shop still offers it, and no more than is left.
+        setBasket((current) => upgradeBasket(current, listingResponse.data));
         setSettings(settingsResponse.data);
       })
       .catch((requestError: unknown) => {
@@ -68,9 +73,11 @@ function EventShopContent() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const basketLines = useMemo(() => (listings ?? [])
-    .filter((listing) => (basket[listing.id] ?? 0) > 0)
-    .map((listing) => ({ listing, quantity: basket[listing.id] })), [basket, listings]);
+  const basketLines = useMemo(() => Object.entries(basket).flatMap(([key, quantity]) => {
+    const parsed = parseBasketKey(key);
+    const listing = parsed && (listings ?? []).find((l) => l.id === parsed.listingId);
+    return listing && quantity > 0 ? [{ listing, optionId: parsed.optionId, quantity }] : [];
+  }), [basket, listings]);
   const estimatedTotal = basketLines.reduce((total, line) => total + line.listing.priceMinor * line.quantity, 0);
   const basketCount = basketLines.reduce((total, line) => total + line.quantity, 0);
   const isDemo = settings?.isDemo ?? false;
@@ -92,11 +99,10 @@ function EventShopContent() {
     target.focus({ preventScroll: true });
   }
 
-  function changeQuantity(listing: PublicCompetitionListing, next: number) {
+  function changeQuantity(listing: PublicCompetitionListing, optionId: number | null, next: number) {
     if (busy) return;
     orderAttempt.current = null;
-    const clamped = Math.max(0, Math.min(listing.stockQuantity ?? 99, next));
-    setBasket({ ...basket, [listing.id]: clamped });
+    setBasket(setQuantity(basket, listing, optionId, next));
   }
 
   function changeDetail(listingId: number, value: string) {
@@ -108,9 +114,11 @@ function EventShopContent() {
   async function checkout() {
     if (!user || basketLines.length === 0) return;
     const detailFor = (listing: PublicCompetitionListing) => (listing.detailPrompt ? details[listing.id]?.trim() ?? '' : '');
-    const basketSignature = `${competition.id}|${basketLines
-      .map(({ listing, quantity }) => `${listing.id}:${quantity}:${detailFor(listing)}`)
-      .sort()
+    const detailsByListing: Record<number, string> = {};
+    for (const { listing } of basketLines) detailsByListing[listing.id] = detailFor(listing);
+    const lines = orderLines(basket, detailsByListing);
+    const basketSignature = `${competition.id}|${lines
+      .map((line) => `${line.listingId}:${line.optionId ?? ''}:${line.quantity}:${line.detail ?? ''}`)
       .join('|')}`;
     if (orderAttempt.current?.basketSignature !== basketSignature) {
       orderAttempt.current = { basketSignature, idempotencyKey: newIdempotencyKey('event-order') };
@@ -120,7 +128,7 @@ function EventShopContent() {
     try {
       const { data } = await api.post<EventOrder>(`/commerce/competitions/${competition.id}/orders`, {
         idempotencyKey: orderAttempt.current.idempotencyKey,
-        items: basketLines.map(({ listing, quantity }) => ({ listingId: listing.id, quantity, ...(detailFor(listing) ? { detail: detailFor(listing) } : {}) })),
+        items: lines,
       });
       setOrder(data);
       if (data.isTestOrder) {
@@ -197,8 +205,9 @@ function EventShopContent() {
           <h2 className="sp-sec">{CATEGORY_LABEL[category]}</h2>
           <ul className="sp-card m-0 list-none p-0" aria-label={`${CATEGORY_LABEL[category]} for sale`}>
             {items.map((listing) => {
-              const quantity = basket[listing.id] ?? 0;
-              const soldOut = listing.stockQuantity === 0;
+              const withOptions = hasOptions(listing);
+              const quantity = withOptions ? listingTotal(basket, listing.id) : quantityIn(basket, listing.id, null);
+              const soldOut = listing.stockQuantity === 0 || allOptionsSoldOut(listing);
               const note = [listing.description, listing.stockQuantity != null && !soldOut ? `${listing.stockQuantity} left` : null].filter(Boolean).join(' · ');
               return (
                 <li key={listing.id}>
@@ -208,8 +217,13 @@ function EventShopContent() {
                       <span className="sp-t2">{feeText(listing.priceMinor)}{note ? ` · ${note}` : ''}</span>
                     </span>
                     {soldOut ? <RefineStatus tone="warn">Sold out</RefineStatus>
-                      : <RoundStepper name={listing.title} value={quantity} max={listing.stockQuantity ?? 99} disabled={busy} onChange={(next) => changeQuantity(listing, next)} />}
+                      : !withOptions && <RoundStepper name={listing.title} value={quantity} max={maxQuantity(listing, null, basket)} disabled={busy} onChange={(next) => changeQuantity(listing, null, next)} />}
                   </div>
+                  {withOptions && !soldOut && (
+                    <OptionPicker listing={listing} basket={basket} picked={picked[listing.id] ?? null} disabled={busy}
+                      onPick={(optionId) => setPicked((current) => ({ ...current, [listing.id]: optionId }))}
+                      onChange={(optionId, next) => changeQuantity(listing, optionId, next)} />
+                  )}
                   {quantity > 0 && listing.detailPrompt && (
                     <div className="px-4 pb-3.5">
                       <label className="rf-fld">{listing.detailPrompt}
@@ -230,7 +244,7 @@ function EventShopContent() {
         <Link ref={(node) => { orderButton.current = node; }} className="ev-bar" to="/login" state={{ from: `/competitions/${competition.id}/shop` }}>Sign in to order</Link>
       ))}
       {orderError && <div className="mt-3"><Notice actionLabel="Try again" onAction={() => void checkout()} actionDisabled={busy}>{orderError}</Notice></div>}
-      {isDemo && basketLines.length > 0 && <p className="sp-note">This is a demo event. Next you will see a test payment page, and no money is taken.</p>}
+      {isDemo && hasBasket && <p className="sp-note">This is a demo event. Next you will see a test payment page, and no money is taken.</p>}
       {user && <div className="pt-1"><Link className="ev-text-btn" to="/me/orders">Your orders</Link></div>}
       <p className="sp-note">MG App connects buyers with independent sellers; your purchase contract is directly with the seller listed on each item.</p>
       {hasBasket && !orderVisible && (
@@ -242,6 +256,44 @@ function EventShopContent() {
           <button type="button" className="kit-pill kit-pill-fill" onClick={showOrderButton}>Checkout</button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** An item's options as pills, one row that wraps, with a stepper for whichever one is chosen. */
+function OptionPicker({ listing, basket, picked, disabled, onPick, onChange }: {
+  listing: PublicCompetitionListing;
+  basket: OptionBasket;
+  picked: number | null;
+  disabled: boolean;
+  onPick: (optionId: number) => void;
+  onChange: (optionId: number, next: number) => void;
+}) {
+  const options = optionsOf(listing);
+  const chosen = options.find((option) => option.id === picked && !isSoldOut(option)) ?? null;
+  return (
+    <div className="shop-opts-wrap">
+      <div className="shop-opts" role="radiogroup" aria-label={`Options for ${listing.title}`}>
+        {options.map((option) => {
+          const soldOut = isSoldOut(option);
+          const inBasket = quantityIn(basket, listing.id, option.id);
+          const name = soldOut ? `${option.label}, sold out` : inBasket > 0 ? `${option.label}, ${inBasket} in basket` : option.label;
+          return (
+            <button key={option.id} type="button" role="radio" aria-checked={chosen?.id === option.id} aria-label={name} disabled={soldOut || disabled}
+              className="shop-opt" data-sold-out={soldOut ? 'true' : undefined} onClick={() => onPick(option.id)}>
+              {option.label}
+              {inBasket > 0 && <span className="shop-opt-n" aria-hidden="true">{inBasket}</span>}
+            </button>
+          );
+        })}
+      </div>
+      {chosen ? (
+        <div className="shop-opt-step">
+          <span className="sp-t2">{chosen.label}{chosen.stockQuantity != null ? ` · ${chosen.stockQuantity} left` : ''}</span>
+          <RoundStepper name={`${listing.title} ${chosen.label}`} value={quantityIn(basket, listing.id, chosen.id)} max={maxQuantity(listing, chosen.id, basket)}
+            disabled={disabled} onChange={(next) => onChange(chosen.id, next)} />
+        </div>
+      ) : <p className="sp-t2 shop-opt-hint">Choose an option to add it.</p>}
     </div>
   );
 }

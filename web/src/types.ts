@@ -45,6 +45,40 @@ export interface AuthResponse {
   user: UserProfile;
 }
 
+/** A password reset link (`PasswordResetLinkState`): 0 usable, 1 expired or replaced by a newer link, 2 already used, 3 not valid. */
+export type PasswordResetLinkState = 0 | 1 | 2 | 3;
+
+/** `POST /api/auth/password-reset/check`. Says nothing about whose account the link is for. */
+export interface PasswordResetCheck {
+  state: PasswordResetLinkState;
+  /** Only for a usable link. */
+  expiresAt: string | null;
+}
+
+/** The body of a refused `POST /api/auth/password-reset/confirm` (400, 404 or 410). */
+export interface PasswordResetProblem {
+  code: 'expired' | 'used' | 'invalid' | 'password_rules' | 'password_required';
+  message: string;
+  /** Friendly wording per broken password rule, with Identity's codes in `errorCodes`. Only for `password_rules`. */
+  errors?: string[] | null;
+  errorCodes?: string[] | null;
+}
+
+/** A sign-in provider switched on in the API (`GET /auth/providers`). `clientId` is the public web client ID. */
+export interface ExternalProvider {
+  id: 'google' | 'apple';
+  name: string;
+  clientId: string;
+}
+
+export interface ExternalAuthResponse {
+  needsSignup: boolean;
+  auth: AuthResponse | null;
+  email?: string | null;
+  suggestedName?: string | null;
+  provider?: string | null;
+}
+
 export interface TrainerRequest {
   userId: string;
   fullName: string;
@@ -159,6 +193,18 @@ export interface CompetitionPickerPage {
   hasMore: boolean;
 }
 
+/** `GET /api/competitions/picker/near-you`: the upcoming list ordered for this viewer. Never cached or shared. */
+export interface CompetitionNearYouPage {
+  items: CompetitionPickerItem[];
+  hasMore: boolean;
+  /** We could tell roughly where the viewer is (without asking). When false there are no distances and no toggle. */
+  locationKnown: boolean;
+  /** The order used: nearest first, or soonest first. */
+  sort: 'nearest' | 'soonest';
+  /** Whole miles from the viewer, for the items on this page that have a known venue. */
+  distances: { id: number; miles: number }[];
+}
+
 export interface CompetitionSection {
   id: number;
   competitionId: number;
@@ -251,6 +297,8 @@ export interface ResultRow {
   isSitOut?: boolean;
   /** Why a team that did not finish (eliminated is true) did not: 1 E, 2 DNS, 3 DNF, 4 R. Missing on older data, meaning E. */
   status?: number;
+  refereeCard?: 'yellow' | 'red' | null;
+  underReview?: boolean;
 }
 
 export interface Race {
@@ -310,6 +358,10 @@ export interface Session {
   plannedRaces?: string[] | null;
   /** Finals sessions: the B, C... finals' own race lists, keyed by final letter; a final without one uses `plannedRaces`. */
   plannedFinalRaces?: Record<string, string[]> | null;
+  /** UTC timestamp until which a finished session's results remain in their 15-minute provisional query window. */
+  provisionalUntil?: string | null;
+  /** UTC timestamp when competition staff explicitly confirmed the session's results as official. */
+  officialConfirmedAt?: string | null;
   heats: Heat[];
 }
 
@@ -559,6 +611,7 @@ export interface FormedTeamPreview {
   suffix: string;
   signupIds: number[];
   riderNames: string[];
+  teamName?: string | null;
 }
 
 export interface FormTeamsResult {
@@ -834,13 +887,16 @@ export interface StandingRow {
   tieBreakOrder?: number | null;
   /** Plain-English explanation when two adjacent teams share the same total points. */
   tieBreakReason?: string | null;
+  refereeCard?: 'yellow' | 'red' | null;
+  flag?: string | null;
+  bibDescription?: string | null;
 }
 
 /** Matches `TackCheckMode`: 0 pass or fail only, 1 a separate Tack & Turnout table, 2 bonus points in the standings. */
 export type TackCheckMode = 0 | 1 | 2;
 
 export interface TackCheckSector { id: number; name: string }
-export interface TackCheckMark { sectorId: number; passed: boolean | null; points: number | null }
+export interface TackCheckMark { sectorId: number; passed: boolean | null; points: number | null; riderPoints?: (number | null)[] | null }
 
 export interface TackCheckTeam {
   teamId: number;
@@ -852,6 +908,7 @@ export interface TackCheckTeam {
   total: number;
   passed: number;
   failed: number;
+  riders?: string[] | null;
 }
 
 export interface TackCheckSection {
@@ -1038,6 +1095,31 @@ export interface DeclarationForm {
   flagCount?: number;
 }
 
+/** A previously declared team that the signed-in trainer, manager or entrant can pick to auto-fill a new dec form (`GET /declaration-forms/my-saved-teams`). */
+export interface SavedTeamDeclaration {
+  formId?: number;
+  declarationFormId?: number;
+  teamId: number;
+  teamName: string;
+  entryTeamName?: string | null;
+  clubId?: number;
+  clubName: string;
+  sectionId?: number;
+  sectionName: string;
+  ageGroup: string;
+  format: SectionFormat;
+  competitionId: number;
+  competitionName: string;
+  competitionStartDate?: string;
+  competitionStart?: string;
+  submittedAt: string;
+  bibDescription?: string | null;
+  trainerName?: string | null;
+  trainerPhone?: string | null;
+  form?: DeclarationForm;
+  riders: RiderEntry[];
+}
+
 export interface SavedRider {
   id: number;
   clubId: number;
@@ -1146,7 +1228,7 @@ export const DIAGRAM_TOOLS: DiagramTool[] = [
   { t: 'item', kind: 'box', label: 'Box' },
 ];
 
-export type LiveStreamStatus = 0 | 1 | 2;
+export type LiveStreamStatus = 0 | 1 | 2 | 3;
 export interface LiveStream {
   id: number;
   competitionId: number;
@@ -1519,6 +1601,9 @@ export interface VolunteerClaim {
   isMine?: boolean;
 }
 
+export type StewardDutyCategory = 'General' | 'ArenaCrew' | 'LineSteward' | 'ChangeoverSteward' | string;
+export type StewardAttendanceStatus = 'Assigned' | 'Here' | 'Missing' | string;
+
 export interface VolunteerShift {
   id: number;
   competitionId: number;
@@ -1533,6 +1618,16 @@ export interface VolunteerShift {
   remainingCount: number;
   isFilled: boolean;
   claims: VolunteerClaim[];
+  dutyCategory?: StewardDutyCategory;
+  assignedTeamId?: number | null;
+  assignedTeamName?: string | null;
+  assignedClubName?: string | null;
+  laneNumber?: number | null;
+  attendanceStatus?: StewardAttendanceStatus;
+  checkedInAt?: string | null;
+  checkedInByName?: string | null;
+  checkedInByStaffOverride?: boolean;
+  canViewerCheckIn?: boolean;
 }
 
 export interface CreateVolunteerShiftInput {
@@ -1542,12 +1637,108 @@ export interface CreateVolunteerShiftInput {
   startTimeLabel?: string | null;
   notes?: string | null;
   requiredCount?: number;
+  dutyCategory?: StewardDutyCategory | null;
+  assignedTeamId?: number | null;
+  assignedClubName?: string | null;
+  laneNumber?: number | null;
 }
 
 export interface ClaimVolunteerShiftInput {
   volunteerName?: string | null;
   clubName?: string | null;
   contactPhone?: string | null;
+}
+
+export interface SessionDutyRoleAssignmentInput {
+  role: string;
+  dutyCategory?: StewardDutyCategory;
+  assignedTeamId?: number | null;
+  assignedClubName?: string | null;
+  laneNumber?: number | null;
+  requiredCount?: number;
+  startTimeLabel?: string | null;
+  notes?: string | null;
+}
+
+export interface AssignSessionDutiesInput {
+  duties?: SessionDutyRoleAssignmentInput[] | null;
+  autoAssignNonRidingTeams?: boolean;
+  includeChangeoverLineStewards?: boolean;
+  replaceExistingSessionDuties?: boolean;
+}
+
+export interface CallMissingStewardResult {
+  shift: VolunteerShift;
+  announcement: ChatMessage;
+}
+
+// ---- Arena Crew & Line Steward Phone Prop Sheet (#4) ----
+
+export interface ArenaCrewZoneProps {
+  zoneKey: 'start' | 'centre' | 'top' | string;
+  zoneLabel: string;
+  items: string[];
+  summaryText: string;
+}
+
+export interface ArenaCrewRaceCard {
+  raceId?: number | null;
+  raceName: string;
+  orderIndex: number;
+  bendingPolesPerLane: number;
+  summary?: string | null;
+  zones: ArenaCrewZoneProps[];
+}
+
+export interface ArenaCrewTransitionDiff {
+  bringIn: string[];
+  clearOut: string[];
+  keepInRing: string[];
+  summaryText: string;
+}
+
+export interface ArenaCrewPropSheet {
+  competitionId: number;
+  sessionId?: number | null;
+  sessionName?: string | null;
+  arenaName?: string | null;
+  heatId?: number | null;
+  heatLabel?: string | null;
+  lanesPerHeat: number;
+  currentRace?: ArenaCrewRaceCard | null;
+  nextRace?: ArenaCrewRaceCard | null;
+  transition?: ArenaCrewTransitionDiff | null;
+  allHeatRaces: ArenaCrewRaceCard[];
+}
+
+// ---- Live Commentator Briefing Engine (#11) ----
+
+export interface CommentatorLaneSquad {
+  laneIndex: number;
+  teamId: number;
+  teamName: string;
+  clubName: string;
+  bibColour?: string | null;
+  bibDescription?: string | null;
+  flag?: string | null;
+  currentRank?: number | null;
+  totalPoints: number;
+  ridersAndPonies: string[];
+  stakesHeadline?: string | null;
+  gameSpecialistNote?: string | null;
+}
+
+export interface CommentatorBriefing {
+  competitionId: number;
+  sessionId: number;
+  sessionName: string;
+  heatId: number;
+  heatLabel: string;
+  currentRaceId?: number | null;
+  currentRaceName?: string | null;
+  talkingPoints: string[];
+  biggestMoverHeadline?: string | null;
+  lanes: CommentatorLaneSquad[];
 }
 
 // ---- Emergency contact quick search (#151, staff only) ----

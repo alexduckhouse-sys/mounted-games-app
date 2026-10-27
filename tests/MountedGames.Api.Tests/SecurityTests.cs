@@ -284,12 +284,19 @@ public class SecurityTests
         var embed = SecurityHeadersMiddleware.EmbedHeaders;
         Assert.DoesNotContain("X-Frame-Options", embed.Keys);
         Assert.Equal(strict.Keys.Where(k => k != "X-Frame-Options").OrderBy(k => k), embed.Keys.OrderBy(k => k));
-        foreach (var key in embed.Keys.Where(k => k is not ("Content-Security-Policy" or "Cross-Origin-Resource-Policy" or "Permissions-Policy")))
+        foreach (var key in embed.Keys.Where(k => k is not ("Content-Security-Policy" or "Cross-Origin-Resource-Policy" or "Permissions-Policy" or "Cross-Origin-Opener-Policy")))
             Assert.Equal(strict[key], embed[key]);
-        // Only frame-ancestors changes in the policy, and it names https pages, never a wildcard.
+        // The widget opens no sign-in pop-up, so it keeps the strictest opener policy.
+        Assert.Equal("same-origin", embed["Cross-Origin-Opener-Policy"]);
+        // Only frame-ancestors changes in the policy, and it names https pages, never a wildcard. The sign-in
+        // providers' sources are left out: nobody signs in inside the widget.
+        var strictWithoutSignIn = SecurityHeadersMiddleware.SignInSources
+            .Aggregate(SecurityHeadersMiddleware.ContentSecurityPolicy, (policy, source) => policy.Replace(" " + source, ""));
         Assert.Equal(
             SecurityHeadersMiddleware.EmbedContentSecurityPolicy,
-            SecurityHeadersMiddleware.ContentSecurityPolicy.Replace("frame-ancestors 'none'", "frame-ancestors https:"));
+            strictWithoutSignIn.Replace("frame-ancestors 'none'", "frame-ancestors https:"));
+        Assert.DoesNotContain("accounts.google.com", SecurityHeadersMiddleware.EmbedContentSecurityPolicy);
+        Assert.DoesNotContain("apple", SecurityHeadersMiddleware.EmbedContentSecurityPolicy);
         Assert.DoesNotContain("unsafe-eval", SecurityHeadersMiddleware.EmbedContentSecurityPolicy);
         Assert.DoesNotContain("*", SecurityHeadersMiddleware.EmbedContentSecurityPolicy);
         Assert.Equal("camera=(), microphone=(), geolocation=(), payment=(), browsing-topics=()", embed["Permissions-Policy"]);
@@ -338,14 +345,20 @@ public class SecurityTests
         var directives = SecurityHeadersMiddleware.ContentSecurityPolicy.Split("; ")
             .ToDictionary(d => d.Split(' ', 2)[0], d => d);
         Assert.Equal("default-src 'none'", directives["default-src"]);
-        Assert.Equal("script-src 'self'", directives["script-src"]);
+        // Besides our own bundle, only the two sign-in scripts, each by its exact file.
+        Assert.Equal("script-src 'self' https://accounts.google.com/gsi/client https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_GB/appleid.auth.js",
+            directives["script-src"]);
         Assert.Equal("script-src-attr 'none'", directives["script-src-attr"]);
-        Assert.Equal("style-src-elem 'self'", directives["style-src-elem"]);
+        Assert.Equal("style-src-elem 'self' https://accounts.google.com/gsi/style", directives["style-src-elem"]);
+        Assert.Equal("connect-src 'self' https://mounted-games-api.vercel.app wss://mounted-games-api.vercel.app https://accounts.google.com/gsi/", directives["connect-src"]);
         Assert.Equal("frame-ancestors 'none'", directives["frame-ancestors"]);
         Assert.Equal("object-src 'none'", directives["object-src"]);
         Assert.Equal("base-uri 'none'", directives["base-uri"]);
         // 'self' lets the organiser's embed preview load; every other page refuses framing, so only /embed/ pages can be shown.
-        Assert.Equal("frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://player.twitch.tv", directives["frame-src"]);
+        // The Google sign-in button and One Tap are frames under /gsi/.
+        Assert.Equal("frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://player.twitch.tv https://accounts.google.com/gsi/", directives["frame-src"]);
+        // The sign-in pop-ups must be able to answer the page that opened them; nothing that opens us keeps a handle.
+        Assert.Equal("same-origin-allow-popups", SecurityHeadersMiddleware.Headers["Cross-Origin-Opener-Policy"]);
         Assert.Equal("camera=(self), microphone=(self), geolocation=(), payment=(), browsing-topics=()",
             SecurityHeadersMiddleware.Headers["Permissions-Policy"]);
         Assert.DoesNotContain("unsafe-eval", SecurityHeadersMiddleware.ContentSecurityPolicy);

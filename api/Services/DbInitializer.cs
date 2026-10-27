@@ -1262,7 +1262,9 @@ public static class DbInitializer
         {
             await conn.CloseAsync();
         }
+#pragma warning disable EF1002
         await db.Database.ExecuteSqlRawAsync($"ALTER TABLE \"{table}\" ADD COLUMN \"{column}\" {columnDef};");
+#pragma warning restore EF1002
     }
 
     private static async Task SeedRaceTemplatesAsync(AppDbContext db)

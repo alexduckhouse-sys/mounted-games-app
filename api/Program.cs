@@ -82,7 +82,8 @@ builder.Services
             {
                 var uid = ctx.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
                 var accounts = ctx.HttpContext.RequestServices.GetRequiredService<LiveAccounts>();
-                if (uid is null || !await accounts.IsActiveAsync(uid, ctx.HttpContext.RequestAborted))
+                // A token issued before the account's sessions were ended (a password reset) is refused like a deleted account's.
+                if (uid is null || !await accounts.AcceptsTokenAsync(uid, LiveAccounts.SessionVersionOf(ctx.Principal), ctx.HttpContext.RequestAborted))
                 {
                     ctx.Fail("This account no longer exists.");
                     return;
@@ -104,6 +105,14 @@ builder.Services
 builder.Services.AddAuthorizationWithCompetitionStaff();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<LiveAccounts>();
+// Sign in with Google / Apple: fetches only the providers' fixed signing-key addresses (see ExternalProviders).
+builder.Services.AddHttpClient(ExternalTokenValidator.HttpClientName, c =>
+    {
+        c.Timeout = TimeSpan.FromSeconds(10);
+        c.MaxResponseContentBufferSize = 256 * 1024;
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddSingleton<IExternalTokenValidator, ExternalTokenValidator>();
 
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<ScoringService>();
@@ -150,11 +159,14 @@ builder.Services.AddSingleton<MountedGames.Api.Services.Email.IEmailSender, Moun
 builder.Services.AddScoped<MountedGames.Api.Services.Email.SignupConfirmationService>();
 builder.Services.AddScoped<MountedGames.Api.Services.Email.EmailOptInService>();
 builder.Services.AddScoped<MountedGames.Api.Services.Email.CustomEmailService>();
+builder.Services.AddScoped<MountedGames.Api.Services.Geo.LocationInference>();
+builder.Services.AddScoped<MountedGames.Api.Services.Email.EntriesDigestService>();
 builder.Services.AddSingleton<MountedGames.Api.Services.Email.EmailConfirmationTokens>();
 builder.Services.AddScoped<MountedGames.Api.Services.Email.AccountEmailService>();
 builder.Services.AddScoped<MountedGames.Api.Services.Accounts.AccountIpRecorder>();
 builder.Services.AddScoped<MountedGames.Api.Services.Accounts.AccountAccessService>();
 builder.Services.AddScoped<MountedGames.Api.Services.Accounts.AccountInviteService>();
+builder.Services.AddScoped<MountedGames.Api.Services.Accounts.PasswordResetService>();
 // Does an address's domain take mail? Short timeout, one retry; a DNS failure lets the sign-up through.
 builder.Services.AddSingleton<DnsClient.ILookupClient>(_ => new DnsClient.LookupClient(new DnsClient.LookupClientOptions
 {

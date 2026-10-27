@@ -1,3 +1,4 @@
+// Unused in web UI yet — reserved for iOS / upcoming wiring
 import { useCallback, useRef } from 'react';
 import { prefetchCompetition } from '../lib/competitionPrefetch';
 

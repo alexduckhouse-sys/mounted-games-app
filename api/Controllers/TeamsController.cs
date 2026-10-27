@@ -291,10 +291,11 @@ public class TeamsController : ControllerBase
     }
 
     [HttpPost("{teamId:int}/supporter-key")]
+    [HttpPost("/api/teams/{teamId:int}/supporter-key")]
     [Authorize]
-    public async Task<ActionResult<GenerateJoinKeyResponse>> RotateJoinKey(int teamId)
+    public async Task<ActionResult<GenerateJoinKeyResponse>> RotateJoinKey(int teamId, int? competitionId = null)
     {
-        var (team, err) = await LoadTeamForTrainerAsync(teamId);
+        var (team, err) = await LoadTeamForTrainerAsync(competitionId, teamId);
         if (err != null) return err;
         team!.SupporterJoinKey = GenerateKey();
         await _db.SaveChangesAsync();
@@ -306,10 +307,11 @@ public class TeamsController : ControllerBase
     /// unique within the team's competition so entrants can join unambiguously.
     /// </summary>
     [HttpPut("{teamId:int}/team-code")]
+    [HttpPut("/api/teams/{teamId:int}/team-code")]
     [Authorize]
-    public async Task<ActionResult<GenerateJoinKeyResponse>> SetTeamCode(int teamId, SetTeamCodeRequest req)
+    public async Task<ActionResult<GenerateJoinKeyResponse>> SetTeamCode(int teamId, SetTeamCodeRequest req, int? competitionId = null)
     {
-        var (team, err) = await LoadTeamForTrainerAsync(teamId);
+        var (team, err) = await LoadTeamForTrainerAsync(competitionId, teamId);
         if (err != null) return err;
         var code = (req.Code ?? string.Empty).Trim().ToUpperInvariant();
         if (code.Length < 3 || code.Length > 32)
@@ -328,10 +330,11 @@ public class TeamsController : ControllerBase
     }
 
     [HttpDelete("{teamId:int}/supporter-key")]
+    [HttpDelete("/api/teams/{teamId:int}/supporter-key")]
     [Authorize]
-    public async Task<IActionResult> RevokeJoinKey(int teamId)
+    public async Task<IActionResult> RevokeJoinKey(int teamId, int? competitionId = null)
     {
-        var (team, err) = await LoadTeamForTrainerAsync(teamId);
+        var (team, err) = await LoadTeamForTrainerAsync(competitionId, teamId);
         if (err != null) return err;
         team!.SupporterJoinKey = null;
         await _db.SaveChangesAsync();
@@ -339,10 +342,11 @@ public class TeamsController : ControllerBase
     }
 
     [HttpGet("{teamId:int}/supporters")]
+    [HttpGet("/api/teams/{teamId:int}/supporters")]
     [Authorize]
-    public async Task<ActionResult<IEnumerable<TeamSupporterDto>>> ListSupporters(int teamId)
+    public async Task<ActionResult<IEnumerable<TeamSupporterDto>>> ListSupporters(int teamId, int? competitionId = null)
     {
-        var (team, err) = await LoadTeamForTrainerAsync(teamId);
+        var (team, err) = await LoadTeamForTrainerAsync(competitionId, teamId);
         if (err != null) return err;
         var rows = await _db.TeamSupporters
             .Include(s => s.User).Include(s => s.Team)
@@ -354,6 +358,7 @@ public class TeamsController : ControllerBase
 
     private static readonly JsonSerializerOptions LineupJsonOptions = new(JsonSerializerDefaults.Web);
 
+    // Unused in web UI yet — reserved for iOS / upcoming race-lineup UI wiring
     [HttpGet("{teamId:int}/race-lineup")]
     [AllowAnonymous]
     public async Task<ActionResult<TeamRaceLineupPlanDto>> GetRaceLineup(int competitionId, int teamId)
@@ -375,25 +380,35 @@ public class TeamsController : ControllerBase
         return new TeamRaceLineupPlanDto(competitionId, teamId, assignments, record.CreatedAt);
     }
 
+    // Unused in web UI yet — reserved for iOS / upcoming race-lineup UI wiring
     [HttpPut("{teamId:int}/race-lineup")]
     [Authorize]
     public async Task<ActionResult<TeamRaceLineupPlanDto>> SaveRaceLineup(
         int competitionId, int teamId, SaveTeamRaceLineupRequest req)
     {
         var team = await _db.Teams.AsNoTracking()
-            .Include(t => t.Supporters)
             .FirstOrDefaultAsync(t => t.Id == teamId && t.CompetitionId == competitionId);
         if (team is null) return NotFound();
 
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userId)) return Unauthorized();
 
+        var hasEntrantAccess = await _db.SectionSignups.AsNoTracking()
+            .Where(s => s.TeamId == teamId
+                && s.UserId == userId
+                && s.Status != SignupPaymentStatus.Cancelled
+                && s.Status != SignupPaymentStatus.Refunded)
+            .Join(_db.Set<SignupMatchmaking>().AsNoTracking(),
+                s => s.Id,
+                m => m.SignupId,
+                (_, m) => m.DeclarationAccessGranted)
+            .AnyAsync(granted => granted);
+
         var canEdit = User.IsInRole(Roles.Admin)
             || team.TrainerUserId == userId
             || await _db.IsClubManagerAsync(User, team.ClubId)
-            || await _db.ClubIdOfAsync(User) == team.ClubId
-            || team.Supporters.Any(s => s.UserId == userId && s.Status == TeamSupporterStatus.Accepted)
-            || await _db.Competitions.AsNoTracking().AnyAsync(c => c.Id == competitionId && c.CreatedByUserId == userId);
+            || await _db.CanManageAsync(User, competitionId)
+            || hasEntrantAccess;
         if (!canEdit) return Forbid();
 
         var sanitized = new Dictionary<string, Dictionary<string, string>>();
@@ -401,14 +416,18 @@ public class TeamsController : ControllerBase
         {
             foreach (var (raceKey, riderMap) in req.Assignments.Take(200))
             {
-                if (string.IsNullOrWhiteSpace(raceKey) || riderMap is null) continue;
+                var trimmedRaceKey = raceKey?.Trim();
+                if (string.IsNullOrEmpty(trimmedRaceKey) || trimmedRaceKey.Length > 64 || riderMap is null) continue;
                 var inner = new Dictionary<string, string>();
                 foreach (var (riderKey, role) in riderMap.Take(20))
                 {
-                    if (string.IsNullOrWhiteSpace(riderKey) || string.IsNullOrWhiteSpace(role)) continue;
-                    inner[riderKey.Trim()] = role.Trim();
+                    var trimmedRiderKey = riderKey?.Trim();
+                    var trimmedRole = role?.Trim();
+                    if (string.IsNullOrEmpty(trimmedRiderKey) || trimmedRiderKey.Length > 64
+                        || string.IsNullOrEmpty(trimmedRole) || trimmedRole.Length > 20) continue;
+                    inner[trimmedRiderKey] = trimmedRole;
                 }
-                sanitized[raceKey.Trim()] = inner;
+                sanitized[trimmedRaceKey] = inner;
             }
         }
 
@@ -515,9 +534,9 @@ public class TeamsController : ControllerBase
     }
 
     /// <summary>Loads a team if the current viewer trains it (or is Admin).</summary>
-    private async Task<(Team? team, ActionResult? error)> LoadTeamForTrainerAsync(int teamId)
+    private async Task<(Team? team, ActionResult? error)> LoadTeamForTrainerAsync(int? competitionId, int teamId)
     {
-        var team = await _db.Teams.FirstOrDefaultAsync(t => t.Id == teamId);
+        var team = await _db.Teams.FirstOrDefaultAsync(t => t.Id == teamId && (!competitionId.HasValue || t.CompetitionId == competitionId.Value));
         if (team is null) return (null, NotFound());
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userId)) return (null, Unauthorized());

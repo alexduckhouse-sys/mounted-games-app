@@ -2,15 +2,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EMAIL_OPT_IN_TEXT, EMAIL_OPT_IN_VERSION, confirmationEmailLabel, looksLikeEmail, newRequestId } from './emailOptIn';
 
 describe('looksLikeEmail', () => {
-  it('accepts ordinary addresses, ignoring surrounding spaces', () => {
-    expect(looksLikeEmail('parent@example.org')).toBe(true);
-    expect(looksLikeEmail('  first.last+pc@mail.example.co.uk ')).toBe(true);
-  });
-
-  it('refuses typos and anything that is not a single plain address', () => {
-    for (const bad of ['', 'parent', 'parent@', '@example.org', 'parent@example', 'a b@example.org', 'a@b.org, c@d.org', 'Name <a@b.org>']) {
-      expect(looksLikeEmail(bad)).toBe(false);
-    }
+  it('accepts normal addresses and rejects blanks, spaces, or missing domains', () => {
+    expect(looksLikeEmail('rider@example.co.uk')).toBe(true);
+    expect(looksLikeEmail('  rider@example.com ')).toBe(true);
+    expect(looksLikeEmail('')).toBe(false);
+    expect(looksLikeEmail('rider@example')).toBe(false);
+    expect(looksLikeEmail('rider@.com')).toBe(false);
+    expect(looksLikeEmail('rider@example.')).toBe(false);
+    expect(looksLikeEmail('@example.com')).toBe(false);
+    expect(looksLikeEmail('a@b@c.com')).toBe(false);
+    expect(looksLikeEmail('rider @example.com')).toBe(false);
+    expect(looksLikeEmail(`${'a'.repeat(250)}@example.com`)).toBe(false);
   });
 });
 

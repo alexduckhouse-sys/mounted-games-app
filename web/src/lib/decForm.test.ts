@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { DeclarationForm, RiderEntry, SavedRider } from '../types';
+import type { DeclarationForm, RiderEntry, SavedRider, SavedTeamDeclaration } from '../types';
 import {
-  blankRider, buildSubmitBody, canSubmit, decDraftKey, dobText, emptySlots, firstEmpty, heightText, isReserveSlot, normaliseSlotsForFormat, panelTitle,
-  parseDob, parseDraft, parseHeight, riderFromSaved, riderReady, ridersAdded, ridersRequired, savedChoices, slotLabel, slotMeta,
+  applySavedTeamToForm, blankRider, buildSubmitBody, canSubmit, decDraftKey, dobText, emptySlots, firstEmpty, heightText, isReserveSlot, normaliseSlotsForFormat, panelTitle,
+  parseAgeGroupMaxAge, parseDob, parseDraft, parseHeight, riderFromSaved, riderReady, ridersAdded, ridersRequired, savedChoices, savedTeamSummaryLabel, slotLabel, slotMeta,
   slotsFromForm, sendReason, ridersCount, addLabel, subtitleOf, teamIsFull, type DecRider, type Slot,
 } from './decForm';
 
@@ -314,5 +314,64 @@ describe('subtitleOf', () => {
   it('joins what is there', () => {
     expect(subtitleOf(['U10', ' Cheshire Area MG ', 'Sat 24 Oct'])).toBe('U10 · Cheshire Area MG · Sat 24 Oct');
     expect(subtitleOf([undefined, '', null, 'Sat 24 Oct'])).toBe('Sat 24 Oct');
+  });
+});
+
+describe('multi-team saved declaration auto-fill (#8)', () => {
+  const sampleSavedTeam: SavedTeamDeclaration = {
+    declarationFormId: 42,
+    teamId: 12,
+    teamName: 'Kent A',
+    entryTeamName: 'Kent Invicta A',
+    clubName: 'Kent',
+    sectionName: 'U15 Teams',
+    ageGroup: 'U15',
+    format: 2,
+    competitionId: 9,
+    competitionName: 'Spring Friendly',
+    competitionStart: '2026-05-10T09:00:00Z',
+    submittedAt: '2026-05-08T18:30:00Z',
+    bibDescription: '[flag:gb-eng] Red with white star',
+    trainerName: 'Sam Coach',
+    trainerPhone: '07700 900456',
+    riders: [
+      entry(1, { orderIndex: 0, fullName: 'Ella Hughes', dateOfBirth: '2012-03-14', horseName: 'Pickle', ponyHeightHands: 13.2, isCaptain: true }),
+      entry(2, { orderIndex: 1, fullName: 'Oliver Smith', dateOfBirth: '2015-07-22', horseName: 'Bramble', ponyHeightHands: 12.2 }),
+      entry(3, { orderIndex: 5, fullName: 'Reserve Rider', dateOfBirth: '2014-11-02', isReserve: true }),
+    ],
+  };
+
+  it('parses max age from age-group strings', () => {
+    expect(parseAgeGroupMaxAge('U12')).toBe(12);
+    expect(parseAgeGroupMaxAge('Under 14 Teams')).toBe(14);
+    expect(parseAgeGroupMaxAge('Junior')).toBe(15);
+    expect(parseAgeGroupMaxAge('Open')).toBeNull();
+  });
+
+  it('builds a readable summary label for the saved-team picker', () => {
+    expect(savedTeamSummaryLabel(sampleSavedTeam)).toBe('Kent Invicta A · U15 · Spring Friendly (2 riders + reserve)');
+  });
+
+  it('copies riders, reserve, parsed bib/flag, and trainer contact and flags riders over the target section age', () => {
+    const applied = applySavedTeamToForm(sampleSavedTeam, 2, undefined, {
+      targetAgeGroup: 'U12',
+      competitionYear: 2026,
+    });
+    expect(applied.teamName).toBe('Kent Invicta A');
+    expect(applied.bibs).toBe('Red with white star');
+    expect(applied.flag).toBe('gb-eng');
+    expect(applied.trainerName).toBe('Sam Coach');
+    expect(applied.phone).toBe('07700 900456');
+    expect(applied.slots[0]?.fullName).toBe('Ella Hughes');
+    expect(applied.slots[0]?.pony).toBe('Pickle');
+    expect(applied.slots[5]?.fullName).toBe('Reserve Rider');
+    expect(applied.ageWarnings).toHaveLength(1);
+    expect(applied.ageWarnings[0]).toMatchObject({
+      slotIndex: 0,
+      riderName: 'Ella Hughes',
+      birthYear: 2012,
+      ageInCompetitionYear: 14,
+      maxAge: 12,
+    });
   });
 });

@@ -1,17 +1,23 @@
-import { useId, useState, type FormEvent } from 'react';
+import { useCallback, useId, useState, type FormEvent } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { ArrowLeft, Eye, EyeOff, KeyRound } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
+import { useT } from '../i18n/LanguageContext';
+import { Notice } from '../components/Notice';
 import { PasswordChecklist } from '../components/PasswordChecklist';
+import { SocialLoginButtons, type SocialCredential } from '../components/SocialLoginButtons';
+import { externalErrorMessage } from '../lib/externalAuthError';
 import { friendlyPasswordErrors, passwordMeetsRules } from '../lib/passwordRules';
 import { AuthFrame } from './auth/AuthFrame';
+import { ExternalOnboardingForm, type PendingExternalSignup } from './auth/ExternalOnboardingForm';
 import { Field } from './auth/Field';
 
 interface NavState { from?: string }
 
-/** Sign in with an email and password, or swap to the organiser's shared key. */
+/** Sign in with Google or Apple (when switched on), an email and password, or swap to the organiser's shared key. */
 export function LoginPage() {
-  const { login, loginWithAdminKey, loading } = useAuth();
+  const t = useT();
+  const { login, loginWithAdminKey, loginWithExternal, loading } = useAuth();
   const nav = useNavigate();
   const loc = useLocation();
   const rulesId = useId();
@@ -26,6 +32,22 @@ export function LoginPage() {
   const [organiserKey, setOrganiserKey] = useState('');
   const [showOrganiserKey, setShowOrganiserKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingExternal, setPendingExternal] = useState<PendingExternalSignup | null>(null);
+  const [externalError, setExternalError] = useState<string | null>(null);
+
+  const handleCredential = useCallback(async ({ provider, idToken, nonce, providerName }: SocialCredential) => {
+    setExternalError(null);
+    try {
+      const res = await loginWithExternal(provider, idToken, { nonce, providerName });
+      if (res.needsSignup) {
+        setPendingExternal({ provider: res.provider, idToken, nonce, providerName, email: res.email, suggestedName: res.suggestedName });
+      } else {
+        nav((loc.state as NavState | null)?.from ?? '/', { replace: true });
+      }
+    } catch (err: unknown) {
+      setExternalError(externalErrorMessage(err, 'Couldn’t sign in. Check your signal and try again.'));
+    }
+  }, [loc.state, loginWithExternal, nav]);
 
   const ready = useKey
     ? organiserTitle.trim().length > 0 && organiserEmail.trim().includes('@') && passwordMeetsRules(organiserPassword) && organiserKey.trim().length > 0
@@ -43,14 +65,14 @@ export function LoginPage() {
       const res = (err as { response?: { status?: number; data?: { message?: string; errors?: unknown; errorCodes?: unknown } } })?.response;
       const status = res?.status;
       if (status === 429) {
-        setError(res?.data?.message || 'Too many tries. Wait a minute and try again.');
+        setError(res?.data?.message || t('auth.login.tooMany'));
       } else if (useKey) {
         const pwErrors = friendlyPasswordErrors(res?.data);
-        if (status === 400) setError(pwErrors[0] || res?.data?.message || 'Check your details and key.');
-        else if (status === 401) setError(res?.data?.message && res.data.message !== 'Invalid admin key.' ? res.data.message : 'That key or password didn’t work.');
-        else setError('That key or password didn’t work.');
+        if (status === 400) setError(pwErrors[0] || res?.data?.message || t('auth.login.checkDetails'));
+        else if (status === 401) setError(res?.data?.message && res.data.message !== 'Invalid admin key.' ? res.data.message : t('auth.login.keyFailed'));
+        else setError(t('auth.login.keyFailed'));
       } else {
-        setError(status === 401 || status === 400 ? 'Email or password is wrong.' : 'Couldn’t sign in. Check your signal and try again.');
+        setError(status === 401 || status === 400 ? t('auth.login.wrong') : t('auth.login.noSignal'));
       }
     }
   }
@@ -62,22 +84,41 @@ export function LoginPage() {
     setError(null);
   }
 
+  if (pendingExternal) {
+    return (
+      <AuthFrame>
+        <ExternalOnboardingForm
+          pending={pendingExternal}
+          onComplete={() => nav((loc.state as NavState | null)?.from ?? '/', { replace: true })}
+          onCancel={() => { setPendingExternal(null); setExternalError(null); }}
+        />
+      </AuthFrame>
+    );
+  }
+
   return (
     <AuthFrame>
       <form onSubmit={submit} className="flex flex-1 flex-col gap-[18px]" noValidate>
-        <h1 className="mg-h1 !text-[34px] !leading-none">{useKey ? 'Organiser sign in' : 'Sign in'}</h1>
+        <h1 className="mg-h1 !text-[34px] !leading-none">{useKey ? t('auth.login.organiserTitle') : t('common.signIn')}</h1>
+
+        {!useKey && (
+          <>
+            <SocialLoginButtons disabled={loading} onCredential={handleCredential} onError={setExternalError} />
+            {externalError && <Notice>{externalError}</Notice>}
+          </>
+        )}
 
         {useKey ? (
           <>
-            <Field label="Title or role">
+            <Field label={t('auth.login.titleLabel')}>
               {({ id }) => (
                 <div className="mg-field">
-                  <input id={id} type="text" value={organiserTitle} placeholder="e.g. Chief Steward, Show Secretary" autoFocus
+                  <input id={id} type="text" value={organiserTitle} placeholder={t('auth.login.titlePlaceholder')} autoFocus
                     onChange={(e) => { setOrganiserTitle(e.target.value); setError(null); }} />
                 </div>
               )}
             </Field>
-            <Field label="Email">
+            <Field label={t('auth.field.email')}>
               {({ id }) => (
                 <div className="mg-field">
                   <input id={id} type="email" value={organiserEmail} autoComplete="email"
@@ -86,7 +127,7 @@ export function LoginPage() {
               )}
             </Field>
             <div className="flex flex-col gap-1.5">
-              <Field label="Password">
+              <Field label={t('auth.field.password')}>
                 {({ id }) => (
                   <div className="mg-field">
                     <input id={id} type={showOrganiserPassword ? 'text' : 'password'} value={organiserPassword}
@@ -95,7 +136,7 @@ export function LoginPage() {
                     <button
                       type="button"
                       onClick={() => setShowOrganiserPassword((v) => !v)}
-                      aria-label={showOrganiserPassword ? 'Hide password' : 'Show password'}
+                      aria-label={showOrganiserPassword ? t('auth.password.hide') : t('auth.password.show')}
                       aria-pressed={showOrganiserPassword}
                       className="-mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[rgb(var(--mg-muted))] hover:text-[rgb(var(--mg-ink))]"
                     >
@@ -106,10 +147,10 @@ export function LoginPage() {
               </Field>
               <PasswordChecklist password={organiserPassword} id={rulesId} />
               <p className="m-0 text-xs text-[rgb(var(--mg-muted))]">
-                Sets your account password the first time so you can sign in normally next time.
+                {t('auth.login.setsPassword')}
               </p>
             </div>
-            <Field label="Organiser key" error={error}>
+            <Field label={t('auth.login.organiserKey')} error={error}>
               {({ id, invalid, describedBy }) => (
                 <div className="mg-field" data-invalid={invalid}>
                   <input id={id} type={showOrganiserKey ? 'text' : 'password'} value={organiserKey}
@@ -118,7 +159,7 @@ export function LoginPage() {
                     onChange={(e) => { setOrganiserKey(e.target.value); setError(null); }} />
                   <button type="button" className="flex min-h-11 min-w-11 items-center justify-center text-[rgb(var(--mg-muted))]"
                     onClick={() => setShowOrganiserKey((shown) => !shown)} aria-pressed={showOrganiserKey}
-                    aria-label={showOrganiserKey ? 'Hide key' : 'Show key'}>
+                    aria-label={showOrganiserKey ? t('auth.login.keyHide') : t('auth.login.keyShow')}>
                     {showOrganiserKey ? <EyeOff className="h-5 w-5" aria-hidden="true" /> : <Eye className="h-5 w-5" aria-hidden="true" />}
                   </button>
                 </div>
@@ -127,7 +168,7 @@ export function LoginPage() {
           </>
         ) : (
           <>
-            <Field label="Email">
+            <Field label={t('auth.field.email')}>
               {({ id }) => (
                 <div className="mg-field">
                   <input id={id} type="email" value={email} autoComplete="email" autoFocus
@@ -135,7 +176,7 @@ export function LoginPage() {
                 </div>
               )}
             </Field>
-            <Field label="Password" error={error}>
+            <Field label={t('auth.field.password')} error={error}>
               {({ id, invalid, describedBy }) => (
                 <div className="mg-field" data-invalid={invalid}>
                   <input id={id} type={showPassword ? 'text' : 'password'} value={password} autoComplete="current-password" aria-invalid={invalid} aria-describedby={describedBy}
@@ -143,7 +184,7 @@ export function LoginPage() {
                   <button
                     type="button"
                     onClick={() => setShowPassword((v) => !v)}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-label={showPassword ? t('auth.password.hide') : t('auth.password.show')}
                     aria-pressed={showPassword}
                     className="-mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[rgb(var(--mg-muted))] hover:text-[rgb(var(--mg-ink))]"
                   >
@@ -152,21 +193,22 @@ export function LoginPage() {
                 </div>
               )}
             </Field>
+            <Link to="/forgot-password" className="-mt-2 self-end text-sm font-semibold text-[rgb(var(--mg-heading))] !underline">Forgot your password?</Link>
           </>
         )}
 
-        <button type="submit" disabled={!ready || loading} className="mg-btn mg-btn-primary w-full">Sign in</button>
+        <button type="submit" disabled={!ready || loading} className="mg-btn mg-btn-primary w-full">{t('common.signIn')}</button>
 
         {!useKey && (
           <p className="text-center text-[15px] font-medium text-[rgb(var(--mg-body))]">
-            New here? <Link to="/signup" state={loc.state} className="font-semibold text-[rgb(var(--mg-heading))] !underline">Create an account</Link>
+            {t('auth.login.newHere')} <Link to="/signup" state={loc.state} className="font-semibold text-[rgb(var(--mg-heading))] !underline">{t('auth.createAccount')}</Link>
           </p>
         )}
 
         <div className="flex-1" />
         <button type="button" onClick={swap} className="mx-auto flex min-h-11 items-center gap-2 text-[15px] font-semibold text-[rgb(var(--mg-muted))]">
           {useKey ? <ArrowLeft aria-hidden="true" className="h-4 w-4" /> : <KeyRound aria-hidden="true" className="h-4 w-4" />}
-          {useKey ? 'Back to sign in' : 'Organiser with a shared key'}
+          {useKey ? t('auth.login.backToSignIn') : t('auth.login.sharedKey')}
         </button>
       </form>
     </AuthFrame>

@@ -33,7 +33,9 @@ public class TokenService
             new(JwtRegisteredClaimNames.Sub, user.Id),
             new(JwtRegisteredClaimNames.Email, !string.IsNullOrWhiteSpace(emailOverride) ? emailOverride : (user.Email ?? string.Empty)),
             new("fullName", !string.IsNullOrWhiteSpace(fullNameOverride) ? fullNameOverride : user.FullName),
-            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            // A password reset raises the account's version, and LiveAccounts then refuses tokens made under an older one.
+            new(LiveAccounts.SessionVersionClaim, user.SessionVersion.ToString(System.Globalization.CultureInfo.InvariantCulture))
         };
         if (user.ClubId.HasValue)
             claims.Add(new Claim("clubId", user.ClubId.Value.ToString()));

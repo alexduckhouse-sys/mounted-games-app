@@ -1,3 +1,4 @@
+// Unused in web UI yet — reserved for iOS / upcoming wiring
 /**
  * Link previews. WhatsApp, Facebook, iMessage and friends fetch a shared link without running JavaScript,
  * so the tags they show have to be in the HTML we send them. `web/middleware.ts` uses this module to answer

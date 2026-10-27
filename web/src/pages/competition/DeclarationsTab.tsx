@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Check } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
+import { useLanguage } from '../../i18n/LanguageContext';
 import { api } from '../../api';
 import type { DeclarationForm, SectionSignup, Team } from '../../types';
 import { downloadCsv, safeFilename } from '../../lib/csv';
@@ -26,6 +27,7 @@ function readDraft(competitionId: number, teamId: number, required: number): Dec
 }
 
 export function DeclarationsTab() {
+  const { t, locale } = useLanguage();
   usePageWidth('wide');
   const desktop = useIsDesktop();
   const { competition } = useCompetition();
@@ -143,13 +145,13 @@ export function DeclarationsTab() {
 
   async function remove(id: number) {
     const target = forms?.find((f) => f.id === id);
-    if (!(await confirmDialog({ title: 'Delete this dec form?', message: `The dec form for ${target?.teamName ?? 'this team'} goes for good.`, confirmLabel: 'Delete dec form', destructive: true }))) return;
+    if (!(await confirmDialog({ title: t('entries.tab.deleteTitle'), message: t('entries.tab.deleteMessage', { team: target?.teamName ?? t('entries.tab.thisTeam') }), confirmLabel: t('entries.tab.deleteConfirm'), destructive: true }))) return;
     setDeleteError('');
     try {
       await api.delete(`/declaration-forms/${id}`);
       setForms((cur) => cur?.filter((f) => f.id !== id) ?? cur);
     } catch {
-      setDeleteError('Couldn’t delete the dec form. Check your signal and try again.');
+      setDeleteError(t('entries.tab.deleteFailed'));
     }
   }
 
@@ -180,15 +182,15 @@ export function DeclarationsTab() {
     />
   );
   const rail = (
-    <nav aria-label="Teams" className="mg-card overflow-hidden">
-      <h2 className="mg-display border-b-2 border-[rgb(var(--mg-heading))] px-3 py-2 text-[15px] font-bold uppercase tracking-[0.05em] text-[rgb(var(--mg-heading))]">Your teams</h2>
+    <nav aria-label={t('entries.tab.teams')} className="mg-card overflow-hidden">
+      <h2 className="mg-display border-b-2 border-[rgb(var(--mg-heading))] px-3 py-2 text-[15px] font-bold uppercase tracking-[0.05em] text-[rgb(var(--mg-heading))]">{t('entries.tab.yourTeams')}</h2>
       <ul className="m-0 max-h-[70dvh] list-none overflow-y-auto p-0">
-        {myTeams.map((t) => (
-          <li key={t.id} className="border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0">
-            <button type="button" aria-pressed={team?.id === t.id} onClick={() => setChosen(t.id)}
-              className={`flex min-h-11 w-full items-center gap-2 px-3 text-left text-[15px] ${team?.id === t.id ? 'bg-[rgb(var(--mg-tint))] font-bold text-[rgb(var(--mg-heading))]' : 'font-medium text-[rgb(var(--mg-ink))] hover:bg-[rgb(var(--mg-subtle))]'}`}>
-              <span className="min-w-0 flex-1 truncate">{t.displayName}</span>
-              {forms?.some((f) => f.teamId === t.id) && <Check aria-label="Dec form sent" className="h-4 w-4 shrink-0" />}
+        {myTeams.map((item) => (
+          <li key={item.id} className="border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0">
+            <button type="button" aria-pressed={team?.id === item.id} onClick={() => setChosen(item.id)}
+              className={`flex min-h-11 w-full items-center gap-2 px-3 text-left text-[15px] ${team?.id === item.id ? 'bg-[rgb(var(--mg-tint))] font-bold text-[rgb(var(--mg-heading))]' : 'font-medium text-[rgb(var(--mg-ink))] hover:bg-[rgb(var(--mg-subtle))]'}`}>
+              <span className="min-w-0 flex-1 truncate">{item.displayName}</span>
+              {forms?.some((f) => f.teamId === item.id) && <Check aria-label={t('entries.tab.formSent')} className="h-4 w-4 shrink-0" />}
             </button>
           </li>
         ))}
@@ -215,11 +217,11 @@ export function DeclarationsTab() {
       {lockInfo?.declarationsCloseAt && declarationsClosed && (
         <Notice
           tone="info"
-          actionLabel={isOrganiser ? undefined : 'Message the organisers'}
+          actionLabel={isOrganiser ? undefined : t('entries.tab.messageOrganisers')}
           actionTo={isOrganiser ? undefined : `/competitions/${competition.id}/contact`}
         >
-          Dec forms closed on {new Date(lockInfo.declarationsCloseAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}.
-          {!isOrganiser && ' Contact the organiser for an emergency change.'}
+          {t('entries.tab.closedOn', { date: new Date(lockInfo.declarationsCloseAt).toLocaleDateString(locale, { day: 'numeric', month: 'short' }) })}
+          {!isOrganiser && t('entries.tab.contactOrganiser')}
         </Notice>
       )}
 
@@ -245,15 +247,15 @@ export function DeclarationsTab() {
 
       {!user ? (
         <div className="flex items-center gap-3">
-          <p className="ev-body m-0 flex-1 !text-[15px] !text-[rgb(var(--mg-ink))]">Trainers sign in to send dec forms for their teams.</p>
-          <Link to="/login" state={{ from: `/competitions/${competition.id}/declarations` }} className="sp-pill !min-h-9 !px-3.5 !text-sm">Sign in</Link>
+          <p className="ev-body m-0 flex-1 !text-[15px] !text-[rgb(var(--mg-ink))]">{t('entries.tab.signInPrompt')}</p>
+          <Link to="/login" state={{ from: `/competitions/${competition.id}/declarations` }} className="sp-pill !min-h-9 !px-3.5 !text-sm">{t('common.signIn')}</Link>
         </div>
       ) : declarationsClosed && !isOrganiser ? null : myTeams.length === 0 ? (
-        <p className="text-sm text-[rgb(var(--mg-muted))]">You have no teams in this competition.</p>
+        <p className="text-sm text-[rgb(var(--mg-muted))]">{t('entries.tab.noTeams')}</p>
       ) : (
         <>
           {myTeams.length > 1 && (
-            <div role="group" aria-label="Choose a team" className="mg-chips">
+            <div role="group" aria-label={t('entries.tab.chooseTeam')} className="mg-chips">
               {myTeams.map((t) => (
                 <button key={t.id} type="button" className="mg-chip" aria-pressed={team?.id === t.id} onClick={() => setChosen(t.id)}>
                   {forms?.some((f) => f.teamId === t.id) && <Check aria-hidden="true" className="h-4 w-4" />}

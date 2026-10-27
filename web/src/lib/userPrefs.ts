@@ -256,6 +256,7 @@ export function getTextSize(): TextSizePref {
 }
 
 export function syncTextSizeDom(size: TextSizePref = getTextSize()): void {
+  if (typeof document === 'undefined') return;
   if (size === 'large') {
     document.documentElement.setAttribute('data-text-size', 'large');
   } else {
@@ -343,7 +344,7 @@ export function useUserPrefs() {
   useEffect(() => {
     syncTextSizeDom(getTextSize());
     const handleStorage = (e: StorageEvent) => {
-      if (Object.values(STORAGE_KEYS).includes(e.key as (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS])) {
+      if (e.key === null || Object.values(STORAGE_KEYS).includes(e.key as (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS])) {
         refresh();
         syncTextSizeDom(getTextSize());
       }

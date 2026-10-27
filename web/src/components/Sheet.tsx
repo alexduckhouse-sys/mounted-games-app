@@ -43,15 +43,20 @@ export function Sheet({ title, description, onClose, dismissible = true, initial
     return () => { if (typeof dialog.close === 'function') dialog.close(); };
   }, [initialFocus]);
 
-  // A drag that starts in a field, or on a scrolled sheet, is the person typing or scrolling, not closing.
+  // A drag that starts in a field, button/link, or on a scrolled sheet, is the person typing, tapping or scrolling, not closing.
   function begin(y: number, target: EventTarget | null) {
     if (!dismissible || (ref.current?.scrollTop ?? 0) !== 0) return;
-    if (target instanceof Element && target.closest('input, textarea, select, [data-no-swipe]')) return;
+    if (target instanceof Element && target.closest('input, textarea, select, button, a, [data-no-swipe]')) return;
     startY.current = y;
   }
   function move(y: number) {
     if (startY.current === null) return;
     setDragY(Math.max(0, y - startY.current));
+  }
+  function cancel() {
+    if (startY.current === null) return;
+    startY.current = null;
+    setDragY(0);
   }
   function end(y?: number) {
     if (startY.current === null) return;
@@ -71,9 +76,11 @@ export function Sheet({ title, description, onClose, dismissible = true, initial
       onTouchStart={(event) => begin(event.touches[0].clientY, event.target)}
       onTouchMove={(event) => move(event.touches[0].clientY)}
       onTouchEnd={(event) => end(event.changedTouches[0]?.clientY)}
-      onPointerDown={(event) => begin(event.clientY, event.target)}
-      onPointerMove={(event) => move(event.clientY)}
+      onTouchCancel={cancel}
+      onPointerDown={(event) => { if (event.button === 0) begin(event.clientY, event.target); }}
+      onPointerMove={(event) => { if (event.buttons === 0 && event.pointerType === 'mouse') { cancel(); return; } move(event.clientY); }}
       onPointerUp={(event) => end(event.clientY)}
+      onPointerCancel={cancel}
       style={dragY > 0 ? { transform: `translateY(${dragY}px)`, '--drag': `${dragY}px` } as CSSProperties : undefined}
       className={`mg-sheet kit-sheet${closing ? ' is-closing' : ''} ${className}`.trim()}
     >

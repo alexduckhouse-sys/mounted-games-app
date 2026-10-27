@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { competition, heat, race, session, team } from '../test/factories';
-import { competitionPhase, detectPhase, entryPhaseOnly, entryFeeText } from './competitionPhase';
+import { competitionPhase, entryPhaseOnly, entryFeeText } from './competitionPhase';
 import type { CompetitionSection } from '../types';
 
 const section = { id: 5, competitionId: 1, format: 1, ageGroup: 'U12', displayName: 'Under 12', priceMinor: 0 } as CompetitionSection;
@@ -8,7 +8,6 @@ const section = { id: 5, competitionId: 1, format: 1, ageGroup: 'U12', displayNa
 describe('competitionPhase', () => {
   it('is the entry phase for a new competition with sections and nothing else', () => {
     expect(competitionPhase(competition({ sections: [section] }))).toBe('entry');
-    expect(detectPhase(competition({ sections: [section] }))).toBe('entry');
   });
 
   it('is not the entry phase with no sections, as there is nothing to enter', () => {

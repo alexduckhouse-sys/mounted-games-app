@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
-import PrintEventPage from './PrintEventPage';
+import PrintEventPage from '../operations/PrintEventPage';
 import { chooseOption } from '../../test/select';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn() } }));

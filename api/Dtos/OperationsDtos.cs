@@ -118,7 +118,17 @@ public record VolunteerShiftDto(
     int ClaimedCount,
     int RemainingCount,
     bool IsFilled,
-    IReadOnlyList<VolunteerClaimDto> Claims);
+    IReadOnlyList<VolunteerClaimDto> Claims,
+    string DutyCategory = "General",
+    int? AssignedTeamId = null,
+    string? AssignedTeamName = null,
+    string? AssignedClubName = null,
+    int? LaneNumber = null,
+    string AttendanceStatus = "Assigned",
+    DateTime? CheckedInAt = null,
+    string? CheckedInByName = null,
+    bool CheckedInByStaffOverride = false,
+    bool CanViewerCheckIn = false);
 
 public record CreateVolunteerShiftRequest(
     [Required, StringLength(80, MinimumLength = 1)] string Role,
@@ -126,7 +136,11 @@ public record CreateVolunteerShiftRequest(
     [StringLength(80)] string? ArenaName = null,
     [StringLength(80)] string? StartTimeLabel = null,
     [StringLength(500)] string? Notes = null,
-    [Range(1, 50)] int RequiredCount = 1);
+    [Range(1, 50)] int RequiredCount = 1,
+    [StringLength(40)] string? DutyCategory = null,
+    int? AssignedTeamId = null,
+    [StringLength(150)] string? AssignedClubName = null,
+    [Range(1, 20)] int? LaneNumber = null);
 
 public record UpdateVolunteerShiftRequest(
     [Required, StringLength(80, MinimumLength = 1)] string Role,
@@ -134,12 +148,109 @@ public record UpdateVolunteerShiftRequest(
     [StringLength(80)] string? ArenaName = null,
     [StringLength(80)] string? StartTimeLabel = null,
     [StringLength(500)] string? Notes = null,
-    [Range(1, 50)] int RequiredCount = 1);
+    [Range(1, 50)] int RequiredCount = 1,
+    [StringLength(40)] string? DutyCategory = null,
+    int? AssignedTeamId = null,
+    [StringLength(150)] string? AssignedClubName = null,
+    [Range(1, 20)] int? LaneNumber = null);
 
 public record ClaimVolunteerShiftRequest(
     [StringLength(160)] string? VolunteerName = null,
     [StringLength(150)] string? ClubName = null,
     [StringLength(40)] string? ContactPhone = null);
+
+public record SessionDutyRoleAssignmentInput(
+    [Required, StringLength(80, MinimumLength = 1)] string Role,
+    [StringLength(40)] string DutyCategory = "ArenaCrew",
+    int? AssignedTeamId = null,
+    [StringLength(150)] string? AssignedClubName = null,
+    [Range(1, 20)] int? LaneNumber = null,
+    [Range(1, 50)] int RequiredCount = 1,
+    [StringLength(80)] string? StartTimeLabel = null,
+    [StringLength(500)] string? Notes = null);
+
+public record AssignSessionDutiesRequest(
+    IReadOnlyList<SessionDutyRoleAssignmentInput>? Duties = null,
+    bool AutoAssignNonRidingTeams = false,
+    bool IncludeChangeoverLineStewards = false,
+    bool ReplaceExistingSessionDuties = true);
+
+public record CheckInVolunteerShiftRequest(
+    [StringLength(160)] string? CheckedInByName = null);
+
+public record UpdateVolunteerAttendanceRequest(
+    [Required, StringLength(24)] string Status,
+    [StringLength(160)] string? CheckedInByName = null);
+
+public record CallMissingStewardRequest(
+    [StringLength(400)] string? CustomMessage = null);
+
+public record CallMissingStewardResultDto(
+    VolunteerShiftDto Shift,
+    ChatMessageDto Announcement);
+
+// ---- Arena Crew & Line Steward Phone Prop Sheet (#4) ----
+
+public record ArenaCrewZonePropsDto(
+    string ZoneKey,
+    string ZoneLabel,
+    IReadOnlyList<string> Items,
+    string SummaryText);
+
+public record ArenaCrewRaceCardDto(
+    int? RaceId,
+    string RaceName,
+    int OrderIndex,
+    int BendingPolesPerLane,
+    string? Summary,
+    IReadOnlyList<ArenaCrewZonePropsDto> Zones);
+
+public record ArenaCrewTransitionDiffDto(
+    IReadOnlyList<string> BringIn,
+    IReadOnlyList<string> ClearOut,
+    IReadOnlyList<string> KeepInRing,
+    string SummaryText);
+
+public record ArenaCrewPropSheetDto(
+    int CompetitionId,
+    int? SessionId,
+    string? SessionName,
+    string? ArenaName,
+    int? HeatId,
+    string? HeatLabel,
+    int LanesPerHeat,
+    ArenaCrewRaceCardDto? CurrentRace,
+    ArenaCrewRaceCardDto? NextRace,
+    ArenaCrewTransitionDiffDto? Transition,
+    IReadOnlyList<ArenaCrewRaceCardDto> AllHeatRaces);
+
+// ---- Live Commentator Briefing Engine (#11) ----
+
+public record CommentatorLaneSquadDto(
+    int LaneIndex,
+    int TeamId,
+    string TeamName,
+    string ClubName,
+    string? BibColour,
+    string? BibDescription,
+    string? Flag,
+    int? CurrentRank,
+    double TotalPoints,
+    IReadOnlyList<string> RidersAndPonies,
+    string? StakesHeadline,
+    string? GameSpecialistNote);
+
+public record CommentatorBriefingDto(
+    int CompetitionId,
+    int SessionId,
+    string SessionName,
+    int HeatId,
+    string HeatLabel,
+    int? CurrentRaceId,
+    string? CurrentRaceName,
+    IReadOnlyList<string> TalkingPoints,
+    string? BiggestMoverHeadline,
+    IReadOnlyList<CommentatorLaneSquadDto> Lanes);
 
 // ---- Emergency contact quick search (#151, staff only) ----
 

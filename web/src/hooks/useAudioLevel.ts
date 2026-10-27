@@ -1,3 +1,4 @@
+// Unused in web UI yet — reserved for iOS / upcoming wiring
 import { useEffect, useRef, useState } from 'react';
 
 export const AUDIO_SILENCE_THRESHOLD = 0.015;

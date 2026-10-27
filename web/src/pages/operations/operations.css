@@ -5,9 +5,6 @@
 .rf-page > .kit-strip, .ops-cards > .kit-strip, .ops-prep > .kit-strip, section > .kit-strip { margin-top: 12px; }
 .ops-gap { margin-top: 12px; }
 .ops-warn { color: rgb(var(--mg-late-ink)); font-weight: 600; }
-.ops-num-bad { color: rgb(var(--mg-elim)); }
-.ops-of { font: 600 14px/1 var(--mg-font); color: rgb(var(--mg-muted)); }
-.ops-item-row { border-top: 1px solid rgb(var(--mg-rule-soft)); }
 .ops-done { margin: 0; padding: 0; list-style: none; border-top: 1px solid rgb(var(--mg-rule-soft)); }
 .ops-done > li + li, .ops-spread > li + li { border-top: 1px solid rgb(var(--mg-rule-soft)); }
 .ops-lane { min-height: 44px; }
@@ -24,13 +21,10 @@
 .ops-check:has(input:focus-visible) { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
 
 /* Draw preview */
-.ops-form { display: flex; flex-direction: column; gap: 12px; padding-top: 8px; }
 .ops-seed { display: block; font: 700 24px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); margin-top: 2px; }
 .ops-fair { padding: 0 16px 12px; font-size: 14px; display: flex; flex-direction: column; gap: 6px; }
 .ops-fair p { margin: 0; }
 .ops-quiet { color: rgb(var(--mg-muted)); }
-.ops-seg { margin-top: 12px; }
-.ops-seg > button { min-height: 44px; }
 .ops-session { margin: 14px 0 0; font: 700 15px/1.1 var(--mg-font-display); letter-spacing: .04em; text-transform: uppercase; color: rgb(var(--mg-heading)); }
 
 .rf-page.ops-wide { max-width: none; }
@@ -62,7 +56,7 @@
 .ops-elim input { width: 22px; height: 22px; accent-color: rgb(var(--mg-button)); }
 .ops-history { align-items: flex-start; }
 .ops-history .rf-t2 { margin-top: 2px; }
-.ops-reason { display: block; margin-top: 4px; }
+.ops-history .ops-reason { display: block; margin-top: 4px; padding: 0; background: transparent; }
 
 /* Entries: withdrawals, no-shows, swaps and the re-draw preview */
 .ops-entry { border-top: 1px solid rgb(var(--mg-rule-soft)); }
@@ -101,6 +95,7 @@
 .ops-outof { display: flex; align-items: center; gap: 10px; font: 600 14px/1.2 var(--mg-font); color: rgb(var(--mg-body)); }
 .ops-outof input { width: 64px; min-height: 44px; text-align: center; border: 1.5px solid rgb(var(--mg-border)); border-radius: 10px; font: 700 18px/1 var(--mg-font-display); background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); }
 .ops-dup { display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 16px; background: rgb(var(--mg-subtle)); border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.ops-call { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; font-weight: 600; color: rgb(var(--mg-heading)); text-decoration: underline; }
 .ops-danger-link { flex: none; min-height: 44px; padding: 0 4px; border: 0; background: transparent; color: rgb(var(--mg-elim)); font: 600 14px/1 var(--mg-font); text-decoration: underline; cursor: pointer; }
 
 /* Sections and races: cards with the section name above, navy bars between sections, even 52px rows. */
@@ -235,8 +230,8 @@
 .ops-acts { display: flex; align-items: center; gap: 10px; flex: none; }
 .ops-people .rf-grow { flex: 1 1 160px; min-width: 0; }
 .ops-people .rf-t2 { overflow-wrap: anywhere; }
-.ops-reason { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; padding: 4px 16px 14px; background: rgb(var(--mg-elim) / .07); }
-.ops-reason .rf-fld { flex: 1 1 200px; }
+.ops-people .ops-reason { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; padding: 4px 16px 14px; background: rgb(var(--mg-elim) / .07); }
+.ops-people .ops-reason .rf-fld { flex: 1 1 200px; }
 
 /* The final in the race editor */
 .ops-addbar-flat { margin-top: 0; }

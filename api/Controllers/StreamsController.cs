@@ -254,7 +254,7 @@ public sealed class StreamsController(AppDbContext db, ISfuClient sfu, IOptions<
             muteChanged = true;
         }
         await db.SaveChangesAsync(ct);
-        if (muteChanged)
+        if (muteChanged && stream.Status is LiveStreamStatus.Live or LiveStreamStatus.Paused)
         {
             var dto = stream.ToDto(await viewers.TotalAsync(streamId));
             await live.StreamUpdated(competitionId, dto);

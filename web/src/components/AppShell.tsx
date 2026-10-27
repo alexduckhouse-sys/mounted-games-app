@@ -24,12 +24,14 @@ import { LiteChip } from '../lite/LiteChip';
 import { initialsOf } from '../lib/profile';
 import { useNeedsYou } from '../pages/profile/needsYou';
 import { usePageFade } from '../hooks/usePageFade';
+import { useT } from '../i18n/LanguageContext';
 
 export function AppShell() {
   return <PageWidthProvider>{(width) => <Shell width={width} />}</PageWidthProvider>;
 }
 
 function Shell({ width }: { width: PageWidth }) {
+  const t = useT();
   const cap = PAGE_WIDTH_CLASS[width];
   const { user, canOrganise, hasRole } = useAuth();
   const { current, rememberChoice, storageError } = useCurrentCompetition();
@@ -83,24 +85,24 @@ function Shell({ width }: { width: PageWidth }) {
         <header className="mg-header">
           {compactBar ? (
             <div className={`mg-compact-bar mx-auto ${cap}`}>
-              <Link to={compactBar.backTo} className="mg-nav-btn !px-0" aria-label="Back to timetable"><ChevronLeft className="h-5 w-5" /></Link>
+              <Link to={compactBar.backTo} className="mg-nav-btn !px-0" aria-label={t('shell.header.backToTimetable')}><ChevronLeft className="h-5 w-5" /></Link>
               <div className="mg-compact-copy">
                 <span className="mg-compact-title">{compactBar.title}</span>
                 <span className="mg-compact-subtitle">{compactBar.subtitle}</span>
               </div>
               <ConnectionPill fallback={
                 <span className={`mg-badge ${compactBar.badge === 'live' ? 'mg-badge-live' : compactBar.badge === 'finished' ? 'mg-compact-finished' : 'mg-badge-soft'}`}>
-                  {compactBar.badge === 'live' ? 'On now' : compactBar.badge === 'finished' ? 'Finished' : 'Next'}
+                  {compactBar.badge === 'live' ? t('shell.header.onNow') : compactBar.badge === 'finished' ? t('common.finished') : t('shell.header.next')}
                 </span>
               } />
               <LiteChip onOpen={openLiteSettings} />
-              <button onClick={openMenu} className="mg-nav-btn !px-0" aria-label="Open menu" aria-haspopup="dialog" aria-expanded={menuOpen}><Menu className="h-5 w-5" /></button>
+              <button onClick={openMenu} className="mg-nav-btn !px-0" aria-label={t('shell.header.openMenu')} aria-haspopup="dialog" aria-expanded={menuOpen}><Menu className="h-5 w-5" /></button>
             </div>
           ) : (
             <div className={`mx-auto flex ${cap} items-center gap-2.5 py-1.5 pl-4 pr-3 sm:py-3`}>
               {pageHeader?.backTo
-                ? <Link to={pageHeader.backTo} className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center text-white" aria-label={pageHeader.backLabel ?? 'Back'}><ChevronLeft className="h-[22px] w-[22px]" strokeWidth={2.25} /></Link>
-                : <Link to={inAdminArea ? '/admin' : '/events'} className="mg-logo" aria-label={inAdminArea ? 'Site admin home' : 'Mounted Games home'}>MG</Link>}
+                ? <Link to={pageHeader.backTo} className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center text-white" aria-label={pageHeader.backLabel ?? t('shell.header.back')}><ChevronLeft className="h-[22px] w-[22px]" strokeWidth={2.25} /></Link>
+                : <Link to={inAdminArea ? '/admin' : '/events'} className="mg-logo" aria-label={inAdminArea ? t('shell.header.adminHome') : t('shell.header.home')}>MG</Link>}
               {pageHeader?.plain ? (
                 <div className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5">
                   <h1 className="mg-display truncate text-[22px] font-bold leading-none">{pageHeader.title}</h1>
@@ -110,26 +112,26 @@ function Shell({ width }: { width: PageWidth }) {
                 <Link to="/events" className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 text-left !text-inherit !no-underline">
                   <span className="mg-display truncate text-[22px] font-bold leading-none">{pageHeader.title}</span>
                   <span className="mg-header-sub flex items-center gap-1 text-[13px] leading-tight">
-                    <span className="truncate">{pageHeader.subtitle ?? title ?? 'Mounted Games'}</span>
+                    <span className="truncate">{pageHeader.subtitle ?? title ?? t('common.mountedGames')}</span>
                     <ChevronDown aria-hidden="true" className="h-3 w-3 shrink-0" />
                   </span>
-                  <span className="sr-only">. Events</span>
+                  <span className="sr-only">{t('shell.header.events')}</span>
                 </Link>
               ) : title ? (
                 <Link to="/events" className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 text-left !text-inherit !no-underline">
                   <span className="mg-display truncate text-lg font-bold leading-tight">{title}</span>
                   {subtitle && <span className="mg-header-sub truncate text-[13px] leading-tight">{subtitle}</span>}
-                  <span className="sr-only">. Events</span>
+                  <span className="sr-only">{t('shell.header.events')}</span>
                 </Link>
               ) : (
-                <span className="min-w-0 flex-1 truncate text-base font-semibold">Mounted Games</span>
+                <span className="min-w-0 flex-1 truncate text-base font-semibold">{t('common.mountedGames')}</span>
               )}
-              {pageHeader?.refresh && <button type="button" onClick={pageHeader.refresh} className="mg-nav-btn !px-0" aria-label={pageHeader.refreshLabel ?? 'Refresh'}><RotateCw className="h-[18px] w-[18px]" /></button>}
+              {pageHeader?.refresh && <button type="button" onClick={pageHeader.refresh} className="mg-nav-btn !px-0" aria-label={pageHeader.refreshLabel ?? t('shell.header.refresh')}><RotateCw className="h-[18px] w-[18px]" /></button>}
               {pageHeader?.edit && <button type="button" onClick={pageHeader.edit} className="mg-nav-btn !px-0" aria-label={pageHeader.editLabel ?? 'Edit'} aria-pressed={!!pageHeader.editing}><Pencil className="h-[18px] w-[18px]" /></button>}
               <ConnectionPill />
-              {!user && choosingCompetition && <Link to="/login" className="mg-nav-btn">Sign in</Link>}
+              {!user && choosingCompetition && <Link to="/login" className="mg-nav-btn">{t('common.signIn')}</Link>}
               <LiteChip onOpen={openLiteSettings} />
-              <button onClick={openMenu} className="mg-nav-btn !px-0" aria-label="Open menu" aria-haspopup="dialog" aria-expanded={menuOpen}><Menu className="h-5 w-5" /></button>
+              <button onClick={openMenu} className="mg-nav-btn !px-0" aria-label={t('shell.header.openMenu')} aria-haspopup="dialog" aria-expanded={menuOpen}><Menu className="h-5 w-5" /></button>
             </div>
           )}
         </header>

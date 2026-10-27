@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using MountedGames.Api.Security;
+using MountedGames.Api.Services.Geo;
 using MountedGames.Api.Tests.Infrastructure;
 
 namespace MountedGames.Api.Tests.Security;
@@ -63,6 +64,48 @@ public class ProxyClientIpTests
         var (context, _) = await InvokeAsync(Key, presented, "198.51.100.7");
         Assert.False(context.Request.Headers.ContainsKey(ProxyClientIpMiddleware.KeyHeader));
         Assert.False(context.Request.Headers.ContainsKey(ProxyClientIpMiddleware.ClientIpHeader));
+    }
+
+    private static async Task<HttpContext> InvokeWithPlaceAsync(string? presentedKey, string? lat, string? lon)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Security:ProxyKey"] = Key }).Build();
+        var middleware = new ProxyClientIpMiddleware(_ => Task.CompletedTask, configuration, NullLogger<ProxyClientIpMiddleware>.Instance);
+        var context = new DefaultHttpContext();
+        if (presentedKey is not null) context.Request.Headers[ProxyClientIpMiddleware.KeyHeader] = presentedKey;
+        if (lat is not null) context.Request.Headers[ProxyClientIpMiddleware.LatitudeHeader] = lat;
+        if (lon is not null) context.Request.Headers[ProxyClientIpMiddleware.LongitudeHeader] = lon;
+        await middleware.InvokeAsync(context);
+        return context;
+    }
+
+    [Fact]
+    public async Task TrustsTheRoughPlace_OnlyWithTheRightKey_AndRoundsItAgain()
+    {
+        var context = await InvokeWithPlaceAsync(Key, "51.4545", "-2.5879");
+        Assert.Equal(new GeoPoint(51.5, -2.6), VisitorGeo.Get(context));
+    }
+
+    [Theory]
+    [InlineData("wrong-key-0123456789-0123456789-0123456789", "51.4", "-2.6")]
+    [InlineData(null, "51.4", "-2.6")]
+    [InlineData("", "51.4", "-2.6")]
+    [InlineData(Key, "91", "-2.6")]       // not on the globe
+    [InlineData(Key, "51.4", "-181")]
+    [InlineData(Key, "abc", "-2.6")]
+    [InlineData(Key, "51.4", null)]
+    [InlineData(Key, null, null)]
+    public async Task IgnoresARoughPlaceThatIsUnvouchedForOrNotARealPlace(string? key, string? lat, string? lon)
+        => Assert.Null(VisitorGeo.Get(await InvokeWithPlaceAsync(key, lat, lon)));
+
+    [Theory]
+    [InlineData(Key)]
+    [InlineData("wrong-key-0123456789-0123456789-0123456789")]
+    public async Task AlwaysRemovesThePlaceHeaders_SoNothingDownstreamCanLogOrEchoThem(string presented)
+    {
+        var context = await InvokeWithPlaceAsync(presented, "51.4", "-2.6");
+        Assert.False(context.Request.Headers.ContainsKey(ProxyClientIpMiddleware.LatitudeHeader));
+        Assert.False(context.Request.Headers.ContainsKey(ProxyClientIpMiddleware.LongitudeHeader));
     }
 
     private sealed class ProxyKeyApiFactory : ApiFactory

@@ -73,46 +73,27 @@ public class CompetitionDrawService(AppDbContext db)
         foreach (var session in sessions)
         {
             var heats = session.Heats.OrderBy(h => h.OrderIndex).ThenBy(h => h.Id).ToList();
-            var sizes = BalancedSizes(teams.Count, heats.Count);
-            var maxHeatSize = sizes.DefaultIfEmpty(0).Max();
-            var available = teams.ToDictionary(t => t.Id);
-            var drawnHeats = new List<DrawHeatDto>();
+            var heatIds = heats.Select(h => h.Id).ToList();
+            var sessionAssignments = RunTwoPhaseSessionDraw(
+                teams,
+                heats.Count,
+                seed,
+                session.Id,
+                heatIds,
+                opponentCounts,
+                laneCounts,
+                smallHeatCounts);
 
+            var drawnHeats = new List<DrawHeatDto>(heats.Count);
             for (var heatIndex = 0; heatIndex < heats.Count; heatIndex++)
             {
-                var selected = new List<TeamInput>();
-                var isSmallerHeat = sizes[heatIndex] < maxHeatSize;
-                for (var lane = 1; lane <= sizes[heatIndex]; lane++)
-                {
-                    var candidate = available.Values
-                        .Select(team => new
-                        {
-                            Team = team,
-                            OpponentCost = selected.Sum(other => OpponentCount(opponentCounts, team.Id, other.Id)),
-                            ClubCost = selected.Count(other => other.ClubId == team.ClubId),
-                            SmallHeatCost = isSmallerHeat ? smallHeatCounts[team.Id] : 0,
-                            LaneCost = laneCounts[team.Id].GetValueOrDefault(lane),
-                            Tie = StableTie(seed, session.Id, heats[heatIndex].Id, lane, team.Id),
-                        })
-                        .OrderBy(x => x.OpponentCost)
-                        .ThenBy(x => x.ClubCost)
-                        .ThenBy(x => x.SmallHeatCost)
-                        .ThenBy(x => x.LaneCost)
-                        .ThenBy(x => x.Tie)
-                        .ThenBy(x => x.Team.Id)
-                        .First().Team;
-                    selected.Add(candidate);
-                    available.Remove(candidate.Id);
-                    laneCounts[candidate.Id][lane] = laneCounts[candidate.Id].GetValueOrDefault(lane) + 1;
-                    if (isSmallerHeat) smallHeatCounts[candidate.Id]++;
-                }
-
-                foreach (var pair in Pairs(selected.Select(t => t.Id)))
-                    opponentCounts[pair] = opponentCounts.GetValueOrDefault(pair) + 1;
-
                 var heat = heats[heatIndex];
-                drawnHeats.Add(new DrawHeatDto(heat.Id, heat.Label, heat.OrderIndex,
-                    selected.Select((team, index) =>
+                var assignedTeams = sessionAssignments[heatIndex];
+                drawnHeats.Add(new DrawHeatDto(
+                    heat.Id,
+                    heat.Label,
+                    heat.OrderIndex,
+                    assignedTeams.Select((team, index) =>
                         new DrawTeamAssignmentDto(team.Id, team.Name, index + 1)).ToList()));
             }
 
@@ -270,44 +251,295 @@ public class CompetitionDrawService(AppDbContext db)
             if (!smallHeatCounts.ContainsKey(t.TeamId)) smallHeatCounts[t.TeamId] = 0;
         }
 
-        var sizes = BalancedSizes(teams.Count, groupCount);
-        var maxHeatSize = sizes.DefaultIfEmpty(0).Max();
-        var available = teams.OrderBy(t => t.TeamId).ToDictionary(t => t.TeamId);
-        var groups = new List<List<int>>(groupCount);
+        var teamInputs = teams
+            .OrderBy(t => t.TeamId)
+            .Select(t => new TeamInput(t.TeamId, string.Empty, t.ClubId))
+            .ToList();
+        var heatIds = Enumerable.Range(1, groupCount).ToList();
+        var drawn = RunTwoPhaseSessionDraw(
+            teamInputs,
+            groupCount,
+            seed,
+            contextId,
+            heatIds,
+            opponentCounts,
+            laneCounts,
+            smallHeatCounts);
 
-        for (var heatIndex = 0; heatIndex < groupCount; heatIndex++)
+        return drawn.Select(h => h.Select(t => t.Id).ToList()).ToList();
+    }
+
+    private static List<List<TeamInput>> RunTwoPhaseSessionDraw(
+        IReadOnlyList<TeamInput> teams,
+        int heatCount,
+        int seed,
+        int sessionId,
+        IReadOnlyList<int> heatIds,
+        Dictionary<(int Low, int High), int> opponentCounts,
+        Dictionary<int, Dictionary<int, int>> laneCounts,
+        Dictionary<int, int> smallHeatCounts)
+    {
+        var sizes = BalancedSizes(teams.Count, heatCount);
+        var maxHeatSize = sizes.DefaultIfEmpty(0).Max();
+        var available = teams.OrderBy(t => t.Id).ToDictionary(t => t.Id);
+        var heatGroups = new List<List<TeamInput>>(heatCount);
+
+        // Phase 1a: Group teams into heats (decoupled from lane index) with lane-compatibility lookahead.
+        for (var heatIndex = 0; heatIndex < heatCount; heatIndex++)
         {
-            var selected = new List<(int TeamId, int ClubId)>();
+            var selected = new List<TeamInput>(sizes[heatIndex]);
             var isSmallerHeat = sizes[heatIndex] < maxHeatSize;
-            for (var lane = 1; lane <= sizes[heatIndex]; lane++)
+            var heatId = heatIds[heatIndex];
+
+            for (var slot = 1; slot <= sizes[heatIndex]; slot++)
             {
                 var candidate = available.Values
-                    .Select(team => new
+                    .Select(team =>
                     {
-                        Team = team,
-                        OpponentCost = selected.Sum(other => OpponentCount(opponentCounts, team.TeamId, other.TeamId)),
-                        ClubCost = selected.Count(other => other.ClubId == team.ClubId),
-                        SmallHeatCost = isSmallerHeat ? smallHeatCounts.GetValueOrDefault(team.TeamId) : 0,
-                        LaneCost = laneCounts[team.TeamId].GetValueOrDefault(lane),
-                        Tie = StableTie(seed, contextId, heatIndex + 1, lane, team.TeamId),
+                        var trial = new List<TeamInput>(selected.Count + 1);
+                        trial.AddRange(selected);
+                        trial.Add(team);
+
+                        var clubCost = selected.Count(other => other.ClubId == team.ClubId);
+                        var smallCost = isSmallerHeat ? smallHeatCounts.GetValueOrDefault(team.Id) : 0;
+                        var maxPair = selected.Select(other => OpponentCount(opponentCounts, team.Id, other.Id)).DefaultIfEmpty(0).Max();
+                        var oppSum = selected.Sum(other => OpponentCount(opponentCounts, team.Id, other.Id));
+                        var laneCompatCost = MinLaneRepeatCost(trial, laneCounts);
+                        var tie = StableTie(seed, sessionId, heatId, slot, team.Id);
+                        return new
+                        {
+                            Team = team,
+                            ClubCost = clubCost,
+                            SmallCost = smallCost,
+                            MaxPair = maxPair,
+                            OppSum = oppSum,
+                            LaneCompatCost = laneCompatCost,
+                            Tie = tie,
+                        };
                     })
-                    .OrderBy(x => x.OpponentCost)
-                    .ThenBy(x => x.ClubCost)
-                    .ThenBy(x => x.SmallHeatCost)
-                    .ThenBy(x => x.LaneCost)
+                    .OrderBy(x => x.ClubCost)
+                    .ThenBy(x => x.SmallCost)
+                    .ThenBy(x => x.MaxPair)
+                    .ThenBy(x => x.OppSum)
+                    .ThenBy(x => x.LaneCompatCost)
                     .ThenBy(x => x.Tie)
-                    .ThenBy(x => x.Team.TeamId)
+                    .ThenBy(x => x.Team.Id)
                     .First().Team;
+
                 selected.Add(candidate);
-                available.Remove(candidate.TeamId);
-                laneCounts[candidate.TeamId][lane] = laneCounts[candidate.TeamId].GetValueOrDefault(lane) + 1;
-                if (isSmallerHeat) smallHeatCounts[candidate.TeamId] = smallHeatCounts.GetValueOrDefault(candidate.TeamId) + 1;
+                available.Remove(candidate.Id);
             }
-            foreach (var pair in Pairs(selected.Select(t => t.TeamId)))
-                opponentCounts[pair] = opponentCounts.GetValueOrDefault(pair) + 1;
-            groups.Add(selected.Select(t => t.TeamId).ToList());
+
+            heatGroups.Add(selected);
         }
-        return groups;
+
+        // Phase 1b: 2-opt inter-heat swap pass to eliminate residual club clashes, lane bottlenecks, or repeat meetings.
+        var improved = true;
+        var guard = 0;
+        while (improved && guard++ < 40)
+        {
+            improved = false;
+            for (var h1 = 0; h1 < heatGroups.Count; h1++)
+            for (var h2 = h1 + 1; h2 < heatGroups.Count; h2++)
+            for (var i = 0; i < heatGroups[h1].Count; i++)
+            for (var j = 0; j < heatGroups[h2].Count; j++)
+            {
+                var before1 = HeatGroupScore(heatGroups[h1], sizes[h1] < maxHeatSize, opponentCounts, smallHeatCounts, laneCounts);
+                var before2 = HeatGroupScore(heatGroups[h2], sizes[h2] < maxHeatSize, opponentCounts, smallHeatCounts, laneCounts);
+                var beforeTotal = AddGroupScores(before1, before2);
+
+                (heatGroups[h1][i], heatGroups[h2][j]) = (heatGroups[h2][j], heatGroups[h1][i]);
+
+                var after1 = HeatGroupScore(heatGroups[h1], sizes[h1] < maxHeatSize, opponentCounts, smallHeatCounts, laneCounts);
+                var after2 = HeatGroupScore(heatGroups[h2], sizes[h2] < maxHeatSize, opponentCounts, smallHeatCounts, laneCounts);
+                var afterTotal = AddGroupScores(after1, after2);
+
+                if (CompareGroupScores(afterTotal, beforeTotal) < 0)
+                {
+                    improved = true;
+                }
+                else
+                {
+                    (heatGroups[h1][i], heatGroups[h2][j]) = (heatGroups[h2][j], heatGroups[h1][i]);
+                }
+            }
+        }
+
+        // Phase 2: Minimum-cost bipartite matching of teams in each heat to starting lanes 1..k.
+        var result = new List<List<TeamInput>>(heatCount);
+        for (var heatIndex = 0; heatIndex < heatCount; heatIndex++)
+        {
+            var group = heatGroups[heatIndex];
+            var isSmallerHeat = sizes[heatIndex] < maxHeatSize;
+            var heatId = heatIds[heatIndex];
+            var orderedByLane = AssignOptimalLanes(group, laneCounts, seed, sessionId, heatId);
+
+            for (var idx = 0; idx < orderedByLane.Count; idx++)
+            {
+                var team = orderedByLane[idx];
+                var lane = idx + 1;
+                if (!laneCounts.TryGetValue(team.Id, out var map))
+                    laneCounts[team.Id] = map = new Dictionary<int, int>();
+                map[lane] = map.GetValueOrDefault(lane) + 1;
+                if (isSmallerHeat)
+                    smallHeatCounts[team.Id] = smallHeatCounts.GetValueOrDefault(team.Id) + 1;
+            }
+
+            foreach (var pair in Pairs(orderedByLane.Select(t => t.Id)))
+                opponentCounts[pair] = opponentCounts.GetValueOrDefault(pair) + 1;
+
+            result.Add(orderedByLane);
+        }
+
+        return result;
+    }
+
+    private readonly record struct GroupScoreTuple(int ClubClashes, int LaneCost, int SmallCost, int MaxPair, int OppSum);
+
+    private static GroupScoreTuple AddGroupScores(GroupScoreTuple a, GroupScoreTuple b) => new(
+        a.ClubClashes + b.ClubClashes,
+        a.LaneCost + b.LaneCost,
+        a.SmallCost + b.SmallCost,
+        Math.Max(a.MaxPair, b.MaxPair),
+        a.OppSum + b.OppSum);
+
+    private static int CompareGroupScores(GroupScoreTuple a, GroupScoreTuple b)
+    {
+        var c = a.ClubClashes.CompareTo(b.ClubClashes);
+        if (c != 0) return c;
+        c = a.LaneCost.CompareTo(b.LaneCost);
+        if (c != 0) return c;
+        c = a.SmallCost.CompareTo(b.SmallCost);
+        if (c != 0) return c;
+        c = a.MaxPair.CompareTo(b.MaxPair);
+        if (c != 0) return c;
+        return a.OppSum.CompareTo(b.OppSum);
+    }
+
+    private static GroupScoreTuple HeatGroupScore(
+        IReadOnlyList<TeamInput> group,
+        bool isSmallerHeat,
+        Dictionary<(int Low, int High), int> opponentCounts,
+        Dictionary<int, int> smallHeatCounts,
+        Dictionary<int, Dictionary<int, int>> laneCounts)
+    {
+        var clubClashes = 0;
+        var maxPair = 0;
+        var oppSum = 0;
+        for (var i = 0; i < group.Count; i++)
+        for (var j = i + 1; j < group.Count; j++)
+        {
+            if (group[i].ClubId == group[j].ClubId) clubClashes++;
+            var c = OpponentCount(opponentCounts, group[i].Id, group[j].Id);
+            if (c > maxPair) maxPair = c;
+            oppSum += c;
+        }
+        var smallCost = isSmallerHeat ? group.Sum(t => smallHeatCounts.GetValueOrDefault(t.Id)) : 0;
+        var laneCost = MinLaneRepeatCost(group, laneCounts);
+        return new GroupScoreTuple(clubClashes, laneCost, smallCost, maxPair, oppSum);
+    }
+
+    private static int MinLaneRepeatCost(
+        IReadOnlyList<TeamInput> group,
+        Dictionary<int, Dictionary<int, int>> laneCounts)
+    {
+        var k = group.Count;
+        if (k == 0 || k > 12) return 0;
+
+        var totalMasks = 1 << k;
+        var dp = new int[totalMasks];
+        Array.Fill(dp, int.MaxValue / 4);
+        dp[0] = 0;
+
+        for (var mask = 0; mask < totalMasks; mask++)
+        {
+            var idx = System.Numerics.BitOperations.PopCount((uint)mask);
+            if (idx >= k) continue;
+            var team = group[idx];
+            laneCounts.TryGetValue(team.Id, out var teamLanes);
+
+            for (var laneIdx = 0; laneIdx < k; laneIdx++)
+            {
+                if ((mask & (1 << laneIdx)) != 0) continue;
+                var nextMask = mask | (1 << laneIdx);
+                var uses = teamLanes?.GetValueOrDefault(laneIdx + 1) ?? 0;
+                var cost = dp[mask] + uses * uses;
+                if (cost < dp[nextMask]) dp[nextMask] = cost;
+            }
+        }
+
+        return dp[totalMasks - 1];
+    }
+
+    private static List<TeamInput> AssignOptimalLanes(
+        IReadOnlyList<TeamInput> group,
+        Dictionary<int, Dictionary<int, int>> laneCounts,
+        int seed,
+        int sessionId,
+        int heatId)
+    {
+        var k = group.Count;
+        if (k <= 1) return group.ToList();
+        if (k > 12)
+        {
+            // Fallback for unusually large heats (> 12 lanes)
+            return group
+                .Select((t, idx) => (Team: t, Tie: StableTie(seed, sessionId, heatId, idx + 1, t.Id)))
+                .OrderBy(x => x.Tie)
+                .ThenBy(x => x.Team.Id)
+                .Select(x => x.Team)
+                .ToList();
+        }
+
+        var totalMasks = 1 << k;
+        var dpCost = new long[totalMasks];
+        var dpTie = new ulong[totalMasks];
+        var parentMask = new int[totalMasks];
+        var chosenTeamIdx = new int[totalMasks];
+
+        Array.Fill(dpCost, long.MaxValue / 4);
+        Array.Fill(dpTie, ulong.MaxValue);
+        dpCost[0] = 0;
+        dpTie[0] = 0;
+
+        for (var mask = 0; mask < totalMasks; mask++)
+        {
+            var laneIdx = System.Numerics.BitOperations.PopCount((uint)mask);
+            if (laneIdx >= k) continue;
+            var laneNumber = laneIdx + 1;
+
+            for (var tIdx = 0; tIdx < k; tIdx++)
+            {
+                if ((mask & (1 << tIdx)) != 0) continue;
+                var nextMask = mask | (1 << tIdx);
+                var team = group[tIdx];
+                var uses = laneCounts.TryGetValue(team.Id, out var map) ? map.GetValueOrDefault(laneNumber) : 0;
+                var candidateCost = dpCost[mask] + (long)uses * uses * 1000L + uses;
+                // Divide tie by k so summing across k lanes never overflows ulong
+                var tieStep = StableTie(seed, sessionId, heatId, laneNumber, team.Id) / (ulong)Math.Max(1, k);
+                var candidateTie = dpTie[mask] + tieStep;
+
+                if (candidateCost < dpCost[nextMask]
+                    || (candidateCost == dpCost[nextMask] && candidateTie < dpTie[nextMask]))
+                {
+                    dpCost[nextMask] = candidateCost;
+                    dpTie[nextMask] = candidateTie;
+                    parentMask[nextMask] = mask;
+                    chosenTeamIdx[nextMask] = tIdx;
+                }
+            }
+        }
+
+        var assigned = new TeamInput[k];
+        var cur = totalMasks - 1;
+        for (var laneIdx = k - 1; laneIdx >= 0; laneIdx--)
+        {
+            var tIdx = chosenTeamIdx[cur];
+            assigned[laneIdx] = group[tIdx];
+            cur = parentMask[cur];
+        }
+
+        return assigned.ToList();
     }
 
     public static void RecordExistingHeats(

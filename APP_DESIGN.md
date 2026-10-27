@@ -5,10 +5,12 @@
 ## What the app is for
 A live scoring, timetable and team-management tool for Mounted Games competitions. It must work well on phones for trainers and the public at the show, and be quick for admins to set up beforehand.
 
-## Audiences
-- **Public** (default — no login). Sees timetable, current heat, results, standings and the live feed (read-only). Can't enter a competition or see the equipment list.
-- **Trainer** (username + password, self-service signup at `/login` → Sign up tab). Submits dec forms for any team in the comp that isn't already claimed by another trainer. Manages their team's saved riders. Passwords hashed by ASP.NET Identity (PBKDF2).
-- **Admin** (shared key, no individual accounts). Sets up competitions, edits timetable, controls heat status, creates finals.
+## Audiences & Role Hierarchy
+- **Public / Spectators** (default — no login): Sees the entry-first view before the draw, then the live timetable, current heat, heat score tables, toplists, weather, arena setup diagrams, rulebooks, event shop, classifieds, and the live video stream with pinned announcements.
+- **Member / Rider** (self-service signup at `/signup`, naming a club): Enters Pairs (including 50%-fee `"Looking for a Pair / Partner"` matchmaking) and Individual sections, joins the free `"Waiting for a Guest Ride Spot"` list, submits declarations for their own trusted self-entries (`DeclarationAccessGranted`), joins teams as a Supporter via 8-char join code (`/teams?join=KEY`), and messages competition organisers (`/competitions/:id/contact`).
+- **Trainer** (`TrainerRequest` on signup until approved by an Admin or that club's Manager): Creates and organises their own competitions, manages their teams on `/teams`, submits declaration forms and manages the club's shared `SavedRiders` (`Rider + Horse` combinations).
+- **Team Manager** (`ManagerRequest` on signup until approved by an Admin): Runs their club (`ClubId`) — approves Trainer requests for their club, manages club members (`/me/members`) and club payouts (`/me/payouts`), enters whole teams (`1..N`) and stabling bookings, assigns trainers to club teams, and manages all declarations and saved riders for their club.
+- **Site Admin & Master Admin** (`Roles.Admin` & `Roles.MasterAdmin`): Invited via one-time email link (`/invite#t=...`) or created with a password-protected email via `POST /api/auth/admin-key`. Site admins manage all competitions, trainer/manager requests, users (`/admin/users`), blocked accounts (`/admin/blocked`), custom audience emails (`/admin/email`), and the global rules library (`/admin/rules`), and can lock/unlock organisers (`LockedAt`). Only a `MasterAdmin` (`POST /api/auth/master-admin` with `MasterAdmin__KeyHash`) can lock/unlock or block/unblock an `Admin` or grant/revoke the `Admin` role.
 
 ## Organiser access (15 October 2026)
 Admins can manage every competition. Trainers can create competitions and use organiser tools only for competitions they created. Manager and member roles do not grant organiser access. The API checks stored ownership on every organiser request; frontend controls reflect the same rule. Existing admin-only scoring, timetable and moderation operations stay admin-only.
@@ -77,14 +79,9 @@ Submitting scores moves the scorer to the next race only after the outbox has sa
 - Postcode is sent in requests as a transient field — not persisted to the DB. If/when persistence is needed, add a `Postcode` column to `Competition` and a migration.
 
 ## What we are deliberately *not* building (yet)
-- Team photo uploads (placeholder avatar uses bib colour + suffix letter; can be added when a photo URL field is added to Team).
-- Per-heat status endpoint (heat status is derived from session status + race completion until we need otherwise).
-- Per-individual-admin accounts (shared admin key only).
-
-## Open questions to confirm with the user
-- "Times for each section heat" — is this a single start time per session that cascades, or a manually-set start per heat? Current wizard uses cascading; user request implies admin should be able to set them.
-- "Add teams … and their _" (sentence cut off) — likely "and their riders/dec form", but confirm before building the rider-entry step inside the wizard.
-- Where do bibs live now that they're off teams? They stay on the club record (existing). Confirm no other place needs them.
+- Real online payment card processing (real events record Pending entries for manual BACS/direct organiser confirmation; demo events use the no-card `/me/signups/:id/test-payment` flow).
+- Team photo uploads (avatar uses hatband/bib colour swatch + flag/suffix).
+- Nest or RTMP external hardware camera ingestion (streaming uses browser/phone WebRTC cameras via Cloudflare Realtime SFU or a fallback YouTube/Twitch link).
 
 ## Teams
 - **Hors Concours (HC)**: teams can be flagged as HC. They still ride in heats but are excluded from standings + finals seeding. Admin toggles per team in the Teams tab.
@@ -127,7 +124,7 @@ Full spec: `docs/specs/live-stream.md`. Design: `docs/designs/live-stream-propos
 - **Relay.** Cloudflare Realtime SFU, driven only by the API (`Streaming:Cloudflare:*`), so the token never reaches a browser. Viewers negotiate through the SignalR hub (`WatchStream`/`AnswerStream`); broadcasters use `api/competitions/{id}/streams`. The feature is hidden while it isn't configured.
 - **Spectators.** Anyone can watch, with no account. A red Watch button in the ticker strip opens the Live & stream tab, where the player sits above the live feed. Tap it for full screen. The now-racing strip, announcements, viewer count and "Back soon" are drawn over the video by the app, never burned into it. Later overlays (score card after each race, admin banners, replays) go in the same layer.
 - **Quality and cost.** Up to 720p with simulcast. Viewer sessions are capped (`Streaming:MaxViewerSessions`), because each one uses paid Cloudflare bandwidth.
-- **Not yet:** recording or replays, Nest or RTMP cameras, a player that floats across pages.
+- **Recording, Instant Replay & Follow-Cam (`replayBuffer.ts`, `ReplayInspector.tsx`, `StreamControlsPage.tsx`):** A 30-minute circular IndexedDB buffer records the stream locally; producers cut instant replays on the `Replay` tab of `/competitions/:id/stream-controls` (or from `/competitions/:id/commentary`), add Follow-Cam keyframe pan/zoom paths, adjust start/end trim and slow-mo, and play clips on air (with `Cancel clip` for freshly created instant replays). Race recordings play the whole race video directly.
 - **Fallback link.** One YouTube or Twitch link per competition (`Competition.StreamUrl`) still shows when no camera is live. It loads only after a tap, using YouTube's no-cookie player; other URLs open as a plain link. Organisers set it from the chat tab's sidebar (`PUT /api/competitions/{id}/stream-url`).
 
 ## Chat moderation
@@ -207,11 +204,17 @@ Full spec: `docs/specs/live-stream.md`. Design: `docs/designs/live-stream-propos
 - **Dec form** drafts auto-save to `mg.draft.decform:{compId}` while the trainer is typing — riders, notes, phone. Restored on reload, cleared on submit or Cancel-with-confirmation. (Wizard auto-save was already in place for comp creation.)
 - **Scoring placings** per-race auto-save to `mg.draft.scoring:{heatId}:{raceId}` — the admin's pending placings survive a reload mid-scoring.
 
-## Per-race timing
-- `Race.StartedAt` and `Race.FinishedAt` are already in the schema. Two new admin endpoints expose them: `POST /api/races/:id/start` (idempotent — won't reset an already-running clock; clears FinishedAt if you're re-starting) and `POST /api/races/:id/stop` (sets FinishedAt = now).
-- `ScoringService.ApplyRaceResultsAsync` no longer overwrites a manually-set FinishedAt — admin's live-clock duration is preserved when results are submitted.
-- The active race tile in `SessionPage` renders a `RaceClock` chip: a pulsing rose mm:ss timer while running, plus a Start (green) / Stop (rose) button. After results are submitted the duration shows as a static slate badge.
-- Broadcasts via `resultsUpdated` so other admin tabs see the clock change in real time.
+## Heat & race start timestamps (no visible race clock)
+- `Race.StartedAt`, `Race.FinishedAt`, `Heat.StartedAt` and `Session.StartedAt` are recorded automatically when racing starts (`POST /api/races/:id/start` or first score save) to drive live status (`InArena`), ring-call auto-clearing, and automatic first-race / halfway-race timetable delay maths (`(timeTaken - 2m)` when `> 5m` late).
+- Per `docs/designs/design-decisions.md`, there is **no visible race clock** on the scoring screen (`ScoringSection.tsx`).
+
+### Redesigned Organiser, On-The-Day, Stream Controls, Public & Site Admin Pages (25–26 October 2026)
+
+Full visual and interaction rules live in [`docs/designs/design-decisions.md`](./docs/designs/design-decisions.md):
+- **Set up (before the day):** `/competitions/:id/operations` (`Preparations` checklist), `/competitions/:id/event-details` (save-as-you-go cards look, Yellow/Red card switches, per-section tack scoring table), `/competitions/:id/sections` (`Add a final` / `Remove the final`, `Carry points into the final`, `Double points in the final`, tie-break rules), `/competitions/:id/entries` (Entries & dec forms grouped by section with Paid/Not paid pop), `/competitions/:id/timetable-and-draw` (stepper controls, hatband colour helper & `⋯` menu, seeded draw), `/competitions/:id/equipment`, and `/competitions/:id/sponsors-and-sharing`.
+- **10-Step Create Competition Wizard (`/admin/competitions/new` & `:id`):** Start (from scratch / copy a past competition / saved `StartingPoint`), About (with searchable country/nation flag icon picker), When and where, Arenas, Sections, Structure and timing, Races (drag-by-grip reorder, per-final race lists for A/B/C finals), Dec form (`"Dec form questions"`), Payment and rules, Review, and Timetable offer.
+- **Full-screen Phone Scoring (`/competitions/:id/session/:sessionId` & `/score`):** Full-width heat picker bar (`HeatViews.tsx`), race `‹ ›` arrows, bordered lane cards with `10px` solid left hatband bar, **tap to place**, **press-and-hold to eliminate** (`250 ms` red fill start → `600 ms` eliminated), bottom bar (`progress`, `⋯` race tools menu for per-team HC/Yellow/Red/Change points, `undo`, `clear`, `SAVE SCORES`), read-only saved races with `Edit this race`, and `BetweenHeats` transition view.
+- **Stream Controls (`/competitions/:id/stream-controls`), Live Stream (`/competitions/:id/chat`) & Commentary Desk (`/competitions/:id/commentary`):** `End stream` in header; segmented tabs (`Overlay · Auto · Replay · Camera`) with 2-column choice tiles on `Overlay`; side-by-side `Control the stream` and `Commentary desk` buttons on the live stream page; pinned notice with `Unpin` at top of `/competitions/:id/announcements` and WhatsApp-style per-user threads on `/competitions/:id/messages/:userId` (with `Block` in the header and server-side swear filtering).
 
 ## Background push notifications
 - VAPID keypair lives in `api/vapid-keys.json` (gitignored — auto-generated on first run by `VapidKeyService`). Endpoint: `GET /api/push/vapid-public-key`.
@@ -281,11 +284,25 @@ Lifecycle the app supports today:
   on the signup and shown to the competition's staff. A failed or disabled send never fails the sign-up.
 - The form sends a `RequestId`; a retry from the same person for the same section returns the original entry and sends nothing more.
 - An **unticked** box, "Email me when new competitions open", records consent in `EmailOptIn` (address, time, wording
-  version, source `signup-form`, hash of a random unsubscribe token, unsubscribed time). No marketing is sent yet. The
+  version, source `signup-form`, hash of a random unsubscribe token, unsubscribed time). The only thing sent from it automatically is the daily **entries-open email** (below); admins can
+  also write custom emails to it. The
   token only goes into the confirmation email sent at opt-in. `/unsubscribe?token=...` (no sign-in) calls
   `POST /api/email/unsubscribe`, which answers the same way for any token. Site admins download the active list from
   Admin → Email opt-ins (`GET /api/admin/email-opt-ins.csv`).
 - Settings (`Email:*`): all off unless `Enabled`, `ApiKey` and `From` are set; the adapter is Resend's REST API.
+- **Entries-open email** (27 Oct 2026; plan in `docs/plans/2026-10-27-entries-open-emails.md`): once a day, between 18:00
+  and 22:59 UK time, everyone still opted in gets one email listing the competitions that have opened for entries since
+  the last one (not archived, not a demo event, not finished, has an age group, not locked, close time not passed). No
+  email if nothing is new. A competition is announced once ever. The day is claimed in the database
+  (`EntriesDigestRun.RunDate`, unique), so several API instances, restarts and a half-finished run are safe; the first
+  ever run only records what was already open. Site admins see the waiting events and the last run, and can Send now,
+  on Admin → Email. Where someone is known roughly (venues of events they entered, trained for or supported, never asked
+  for and never stored), the email lists the nearest first; otherwise by date.
+- **Events list near you:** `GET /api/competitions/picker/near-you` orders the upcoming list nearest first from the same
+  kind of rough place (a signed-in person's history, else the connection's position from Vercel's geolocation, one
+  decimal place, passed by `web/middleware.ts` under the proxy key and used for that request only). The web shows
+  "about 30 miles" and a Nearest first / Soonest first switch (remembered in `mg.eventsSort`); with no place there is
+  no switch and the order is by date. The public `/picker` is unchanged and still the cached, offline copy.
 
 ### Trainer-as-organiser
 Trainers can create + edit competitions (controllers'

@@ -33,11 +33,6 @@ export function raceCountFor(section: SectionDraft, session: SessionDraft): numb
   return session.races ? session.races.length : defaultRaceList('Zone', section.format, section.ageGroup).length;
 }
 
-/** Races in the section's final: the chosen list, or the standard one when left for later. */
-export function finalRaceCountFor(section: SectionDraft): number {
-  return section.finalRaces ? section.finalRaces.length : defaultRaceList('Zone', section.format, section.ageGroup).length;
-}
-
 export interface PlannedSession {
   /** Position in the plan (also its id for planTimetable). */
   key: number;

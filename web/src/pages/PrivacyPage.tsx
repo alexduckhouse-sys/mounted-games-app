@@ -2,6 +2,9 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { CardDropdownRow } from '../components/CardDropdownRow';
 import { usePageHeader } from '../components/CompactPageBarContext';
 import { POLICIES, policyForLocation } from '../lib/policies';
+import { useLanguage } from '../i18n/LanguageContext';
+import type { MessageKey } from '../i18n/en';
+import { Notice } from '../components/Notice';
 import '../components/sitePages.css';
 
 // Keep the published placeholder until the operator confirms a monitored address.
@@ -9,10 +12,11 @@ const CONTACT_EMAIL = '[contact email to be added]';
 
 /** One policy at a time, picked from the "Showing" row. Each policy has its own address (`/privacy`, `/terms`, `/refunds`, `/cookies`, `/safeguarding`). */
 export function PrivacyPage() {
+  const { t, lang } = useLanguage();
   usePageHeader({
-    title: 'Policies and legal',
+    title: t('shell.legal.title'),
     backTo: '/settings',
-    backLabel: 'Back to settings',
+    backLabel: t('shell.legal.backToSettings'),
     plain: true,
   });
   const location = useLocation();
@@ -22,13 +26,14 @@ export function PrivacyPage() {
 
   return (
     <div className="skin mx-auto w-full max-w-[560px] py-4">
-      <h1 className="sr-only">Policies and legal</h1>
+      <h1 className="sr-only">{t('shell.legal.title')}</h1>
+      {lang !== 'en' && <div className="mb-3"><Notice tone="info" role={null} className=""><span lang="en">{t('shell.legal.englishOnly')}</span></Notice></div>}
       <div className="sp-card">
-        <CardDropdownRow label="Showing" value={id} options={POLICIES.map((item) => ({ value: item.id, label: item.label }))}
+        <CardDropdownRow label={t('shell.legal.showing')} value={id} options={POLICIES.map((item) => ({ value: item.id, label: t(`shell.legal.${item.id}` as MessageKey) }))}
           onChange={(value) => navigate(POLICIES.find((item) => item.id === value)!.path)} />
       </div>
-      <h2 className="sp-policy-title">{policy.title}</h2>
-      <div className="space-y-3">
+      <h2 className="sp-policy-title" lang="en">{policy.title}</h2>
+      <div className="space-y-3" lang="en">
         {id === 'privacy' && <PrivacyPolicy />}
         {id === 'terms' && <TermsPolicy />}
         {id === 'refunds' && <RefundsPolicy />}
@@ -58,6 +63,10 @@ function PrivacyPolicy() {
           reaches our servers like it does for any website, and we use it to limit abuse (for example, how often one
           address can ask for a lookup). Those counters last about a minute. Our host, Vercel, keeps its own ordinary
           server logs.
+        </p>
+        <p className="mg-lede">
+          We use the rough location of your connection to put the events nearest you first. We never ask where you
+          are, and we don’t keep it.
         </p>
         <p className="mg-lede">
           If you watch a live stream, your connection goes through Cloudflare, which carries the video.

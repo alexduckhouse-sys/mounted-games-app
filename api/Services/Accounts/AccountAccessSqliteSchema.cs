@@ -3,7 +3,7 @@ using MountedGames.Api.Data;
 
 namespace MountedGames.Api.Services.Accounts;
 
-/// <summary>SQLite upgrade for account locking, blocking, remembered networks and invitations (Postgres uses the EF migration).</summary>
+/// <summary>SQLite upgrade for account locking, blocking, remembered networks, invitations and password resets (Postgres uses the EF migrations).</summary>
 public static class AccountAccessSqliteSchema
 {
     public static async Task EnsureAsync(AppDbContext db)
@@ -16,6 +16,7 @@ public static class AccountAccessSqliteSchema
         await DbInitializer.EnsureColumnAsync(db, "AspNetUsers", "LockedByMaster", "INTEGER NOT NULL DEFAULT 0");
         await DbInitializer.EnsureColumnAsync(db, "AspNetUsers", "BlockedByMaster", "INTEGER NOT NULL DEFAULT 0");
         await DbInitializer.EnsureColumnAsync(db, "IpBlocks", "BlockedAccountUserId", "TEXT NULL");
+        await DbInitializer.EnsureColumnAsync(db, "AspNetUsers", "SessionVersion", "INTEGER NOT NULL DEFAULT 0");
         await db.Database.ExecuteSqlRawAsync("""
             CREATE INDEX IF NOT EXISTS "IX_IpBlocks_BlockedAccountUserId" ON "IpBlocks" ("BlockedAccountUserId");
             CREATE TABLE IF NOT EXISTS "AccountIps" (
@@ -46,6 +47,20 @@ public static class AccountAccessSqliteSchema
             );
             CREATE UNIQUE INDEX IF NOT EXISTS "IX_AccountInvites_TokenHash" ON "AccountInvites" ("TokenHash");
             CREATE INDEX IF NOT EXISTS "IX_AccountInvites_Email" ON "AccountInvites" ("Email");
+            CREATE TABLE IF NOT EXISTS "PasswordResetTokens" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_PasswordResetTokens" PRIMARY KEY AUTOINCREMENT,
+                "UserId" TEXT NOT NULL,
+                "TokenHash" TEXT NOT NULL,
+                "CreatedAt" TEXT NOT NULL,
+                "ExpiresAt" TEXT NOT NULL,
+                "UsedAt" TEXT NULL,
+                "RequestedIpHash" TEXT NULL,
+                CONSTRAINT "FK_PasswordResetTokens_AspNetUsers_UserId" FOREIGN KEY ("UserId")
+                    REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_PasswordResetTokens_TokenHash" ON "PasswordResetTokens" ("TokenHash");
+            CREATE INDEX IF NOT EXISTS "IX_PasswordResetTokens_UserId_CreatedAt" ON "PasswordResetTokens" ("UserId", "CreatedAt");
+            CREATE INDEX IF NOT EXISTS "IX_PasswordResetTokens_CreatedAt" ON "PasswordResetTokens" ("CreatedAt");
             """);
     }
 }

@@ -1,3 +1,4 @@
+// Unused in web UI yet — reserved for iOS / upcoming wiring
 import { useCallback, useState } from 'react';
 import { requestArenaAssistance } from '../lib/arenaAssistance';
 import type { ArenaAssistanceService, ChatMessage } from '../types';

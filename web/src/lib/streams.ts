@@ -5,13 +5,13 @@ import { sessionOrdinals, sessionTitle, timetableRows } from './timetableRows';
 export function updateStreams(streams: LiveStream[], next: LiveStream): LiveStream[] {
   const previous = streams.find((stream) => stream.id === next.id);
   if (previous && previous.generation > next.generation) return streams;
-  return [...streams.filter((stream) => stream.id !== next.id), ...(next.status === 2 ? [] : [next])]
+  return [...streams.filter((stream) => stream.id !== next.id), ...(next.status === 2 || next.status === 3 ? [] : [next])]
     .sort((a, b) => a.arenaName.localeCompare(b.arenaName) || a.angleName.localeCompare(b.angleName));
 }
 /** The heat running in this arena, or null when nothing is racing there. */
 export function streamHeatLabel(sessions: Session[], arena: string): string | null {
   const row = timetableRows(sessions, computeTimings(sessions), true)
-    .find((row) => row.session.arenaName?.trim() === arena.trim() && row.status === 'live' && row.session.kind === 0);
+    .find((row) => row.session.arenaName?.trim() === arena.trim() && row.status === 'live' && (row.session.kind ?? (row.session.isBreak ? 1 : 0)) === 0);
   if (!row) return null;
   const parts = [sessionTitle(row.session, sessionOrdinals(sessions))];
   if (row.heat) {

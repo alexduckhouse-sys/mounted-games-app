@@ -65,6 +65,37 @@ public static class EmailSqliteSchema
                 "UsedByEmailId" INTEGER NULL
             );
             CREATE INDEX IF NOT EXISTS "IX_CustomEmailImages_UsedByEmailId" ON "CustomEmailImages" ("UsedByEmailId");
+            CREATE TABLE IF NOT EXISTS "EntriesDigestRuns" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_EntriesDigestRuns" PRIMARY KEY AUTOINCREMENT,
+                "RunDate" TEXT NOT NULL,
+                "ClaimedAt" TEXT NOT NULL,
+                "Status" INTEGER NOT NULL,
+                "Manual" INTEGER NOT NULL,
+                "Competitions" INTEGER NOT NULL,
+                "Total" INTEGER NOT NULL,
+                "CompletedAt" TEXT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_EntriesDigestRuns_RunDate" ON "EntriesDigestRuns" ("RunDate");
+            CREATE TABLE IF NOT EXISTS "EntriesDigestCompetitions" (
+                "CompetitionId" INTEGER NOT NULL CONSTRAINT "PK_EntriesDigestCompetitions" PRIMARY KEY,
+                "RunId" INTEGER NOT NULL,
+                CONSTRAINT "FK_EntriesDigestCompetitions_EntriesDigestRuns_RunId" FOREIGN KEY ("RunId")
+                    REFERENCES "EntriesDigestRuns" ("Id") ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS "IX_EntriesDigestCompetitions_RunId" ON "EntriesDigestCompetitions" ("RunId");
+            CREATE TABLE IF NOT EXISTS "EntriesDigestRecipients" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_EntriesDigestRecipients" PRIMARY KEY AUTOINCREMENT,
+                "RunId" INTEGER NOT NULL,
+                "OptInId" INTEGER NOT NULL,
+                "Status" INTEGER NOT NULL,
+                "ClaimedAt" TEXT NULL,
+                "ClaimToken" TEXT NULL,
+                "Attempts" INTEGER NOT NULL,
+                CONSTRAINT "FK_EntriesDigestRecipients_EntriesDigestRuns_RunId" FOREIGN KEY ("RunId")
+                    REFERENCES "EntriesDigestRuns" ("Id") ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_EntriesDigestRecipients_RunId_OptInId" ON "EntriesDigestRecipients" ("RunId", "OptInId");
+            CREATE INDEX IF NOT EXISTS "IX_EntriesDigestRecipients_RunId_Status" ON "EntriesDigestRecipients" ("RunId", "Status");
             """);
     }
 }

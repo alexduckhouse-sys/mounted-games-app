@@ -1,6 +1,20 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api, readStoredAuth, writeStoredAuth, type StoredAuth } from '../api';
-import type { CompetitionAccess, Role, UserProfile } from '../types';
+import type { CompetitionAccess, ExternalAuthResponse, Role, UserProfile } from '../types';
+
+export type ExternalAuthResult =
+  | { needsSignup: false }
+  | { needsSignup: true; email: string; suggestedName: string; provider: string };
+
+export interface ExternalAuthOptions {
+  /** The raw nonce whose hash the provider put in the token. */
+  nonce?: string;
+  /** Apple's first-sign-in name: a suggestion for a new account only. */
+  providerName?: string;
+  fullName?: string;
+  clubName?: string;
+  role?: string;
+}
 
 interface AuthContextValue {
   user: UserProfile | null;
@@ -9,6 +23,7 @@ interface AuthContextValue {
   trainerNotice: 'requested' | 'approved' | null;
   login: (email: string, password: string) => Promise<void>;
   loginWithAdminKey: (key: string, title?: string, email?: string, password?: string) => Promise<void>;
+  loginWithExternal: (provider: string, idToken: string, options?: ExternalAuthOptions) => Promise<ExternalAuthResult>;
   /** `username` is the email; `fullName` is the person's own name (without it the API uses the start of the email). */
   signupTrainer: (username: string, password: string, role?: string, clubName?: string, fullName?: string) => Promise<void>;
   /** Turns an emailed invitation into an account (`POST /auth/invites/accept`) and signs the person in. */
@@ -138,6 +153,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loginWithExternal = useCallback(async (
+    provider: string,
+    idToken: string,
+    options?: ExternalAuthOptions,
+  ): Promise<ExternalAuthResult> => {
+    setLoading(true);
+    try {
+      const { data } = await api.post<ExternalAuthResponse>('/auth/external', {
+        provider,
+        idToken,
+        ...(options?.nonce ? { nonce: options.nonce } : {}),
+        ...(options?.providerName ? { providerName: options.providerName } : {}),
+        ...(options?.fullName ? { fullName: options.fullName } : {}),
+        ...(options?.clubName ? { clubName: options.clubName } : {}),
+        ...(options?.role ? { role: options.role } : {}),
+      });
+      if (data.needsSignup) {
+        return {
+          needsSignup: true,
+          email: data.email ?? '',
+          suggestedName: data.suggestedName ?? '',
+          provider: data.provider ?? provider,
+        };
+      }
+      if (!data.auth) throw new Error('The sign-in reply had no session.');
+      writeStoredAuth(data.auth);
+      setAuth(data.auth);
+      setSignedOut(false);
+      setNotice(
+        data.auth.user.roles.some((role) => role === 'TrainerRequest' || role === 'ManagerRequest')
+          ? { token: data.auth.token, kind: 'requested' }
+          : null,
+      );
+      return { needsSignup: false };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const signupTrainer = useCallback(async (username: string, password: string, role?: string, clubName?: string, fullName?: string) => {
     setLoading(true);
     try {
@@ -216,6 +270,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     trainerNotice: notice && notice.token === token ? notice.kind : null,
     login,
     loginWithAdminKey,
+    loginWithExternal,
     signupTrainer,
     acceptInvite,
     logout,

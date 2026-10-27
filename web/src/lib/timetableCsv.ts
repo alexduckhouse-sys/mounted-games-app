@@ -29,11 +29,13 @@ export function exportTimetableCsv(
       continue;
     }
     const heats = s.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+    let foundLive = false;
     heats.forEach((h, i) => {
       const ht = t?.heats[i];
       const when = ht?.effective ?? ht?.scheduled ?? null;
-      const complete = h.races.length > 0 && h.races.every((r) => r.isComplete);
-      const isLive = s.status === 1 && !complete;
+      const complete = s.status === 2 || Boolean(h.finishedAt) || (h.races.length > 0 && h.races.every((r) => r.isComplete));
+      const isLive = s.status === 1 && !complete && !foundLive;
+      if (isLive) foundLive = true;
       rows.push([
         when ? when.toLocaleDateString() : '',
         when ? when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',

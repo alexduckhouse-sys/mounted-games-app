@@ -329,6 +329,9 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");
 
+                    b.Property<int>("SessionVersion")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("boolean");
 
@@ -1526,6 +1529,96 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("EmailOptIns");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.EntriesDigestCompetition", b =>
+                {
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RunId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("CompetitionId");
+
+                    b.HasIndex("RunId");
+
+                    b.ToTable("EntriesDigestCompetitions");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.EntriesDigestRecipient", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ClaimToken")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("OptInId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RunId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RunId", "OptInId")
+                        .IsUnique();
+
+                    b.HasIndex("RunId", "Status");
+
+                    b.ToTable("EntriesDigestRecipients");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.EntriesDigestRun", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Competitions")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Manual")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("RunDate")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Total")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RunDate")
+                        .IsUnique();
+
+                    b.ToTable("EntriesDigestRuns");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.FinalsTieOrder", b =>
                 {
                     b.Property<int>("Id")
@@ -2130,11 +2223,49 @@ namespace MountedGames.Api.Data.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
 
+                    b.Property<string>("AssignedClubName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<int?>("AssignedTeamId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AttendanceStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Assigned");
+
+                    b.Property<DateTime?>("CheckedInAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CheckedInByName")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<bool>("CheckedInByStaffOverride")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("CheckedInByUserId")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
                     b.Property<int>("CompetitionId")
                         .HasColumnType("integer");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DutyCategory")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasDefaultValue("Custom");
+
+                    b.Property<int?>("LaneNumber")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Notes")
                         .HasMaxLength(500)
@@ -2156,6 +2287,8 @@ namespace MountedGames.Api.Data.Migrations
                         .HasColumnType("character varying(80)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("AssignedTeamId");
 
                     b.HasIndex("CompetitionId");
 
@@ -2274,6 +2407,48 @@ namespace MountedGames.Api.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("PassportChecks", (string)null);
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.PasswordResetToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RequestedIpHash")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("UsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "CreatedAt");
+
+                    b.ToTable("PasswordResetTokens");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.PushSubscription", b =>
@@ -3086,6 +3261,9 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<string>("Notes")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("OfficialConfirmedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("OrderIndex")
                         .HasColumnType("integer");
 
@@ -3094,6 +3272,9 @@ namespace MountedGames.Api.Data.Migrations
 
                     b.Property<string>("PlannedRaces")
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("ProvisionalUntil")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int?>("QualifiersPerHeat")
                         .HasColumnType("integer");
@@ -4191,6 +4372,28 @@ namespace MountedGames.Api.Data.Migrations
                     b.Navigation("Team");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.EntriesDigestCompetition", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.EntriesDigestRun", "Run")
+                        .WithMany("CompetitionRows")
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Run");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.EntriesDigestRecipient", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.EntriesDigestRun", "Run")
+                        .WithMany("Recipients")
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Run");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.FinalsTieOrder", b =>
                 {
                     b.HasOne("MountedGames.Api.Entities.Competition", "Competition")
@@ -4327,6 +4530,11 @@ namespace MountedGames.Api.Data.Migrations
 
             modelBuilder.Entity("MountedGames.Api.Entities.Operations.VolunteerShift", b =>
                 {
+                    b.HasOne("MountedGames.Api.Entities.Team", "AssignedTeam")
+                        .WithMany()
+                        .HasForeignKey("AssignedTeamId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("MountedGames.Api.Entities.Competition", "Competition")
                         .WithMany()
                         .HasForeignKey("CompetitionId")
@@ -4337,6 +4545,8 @@ namespace MountedGames.Api.Data.Migrations
                         .WithMany()
                         .HasForeignKey("SessionId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("AssignedTeam");
 
                     b.Navigation("Competition");
 
@@ -4360,6 +4570,15 @@ namespace MountedGames.Api.Data.Migrations
                     b.Navigation("Competition");
 
                     b.Navigation("Team");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.PasswordResetToken", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.PushSubscription", b =>
@@ -4952,6 +5171,13 @@ namespace MountedGames.Api.Data.Migrations
             modelBuilder.Entity("MountedGames.Api.Entities.DeclarationForm", b =>
                 {
                     b.Navigation("Riders");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.EntriesDigestRun", b =>
+                {
+                    b.Navigation("CompetitionRows");
+
+                    b.Navigation("Recipients");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.Heat", b =>

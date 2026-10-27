@@ -25,6 +25,10 @@ import { PageGrid } from '../../components/PageGrid';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { formatPoints } from '../../lib/formatPoints';
+import { ProvisionalBadge } from '../../components/ProvisionalStatus';
+import { useProvisionalState } from '../../hooks/useProvisionalState';
+import { getSectionProvisionalState } from '../../lib/provisionalResults';
+import { useT } from '../../i18n/LanguageContext';
 
 /** The three tabs of the age group page: the draw (Heats), the heat tables (Scores) and the Toplist. */
 export type SectionSubTab = 'draw' | 'scores' | 'toplist';
@@ -95,14 +99,15 @@ function TabHeader({ title, subtitle, refreshLabel, onRefresh }: { title: string
 
 /** The age group menu, in the header band. */
 function AgeGroupSelect({ sections, value, teamCount, seamless = false, onChange }: { sections: { id: number; displayName: string }[]; value: number | null; teamCount: number; seamless?: boolean; onChange: (id: number) => void }) {
+  const t = useT();
   const current = sections.find((s) => s.id === value);
   const options = sections.map((sec) => ({ value: String(sec.id), label: displaySectionName(sec.displayName) }));
   return (
     <div className={`mg-band-header pt-2.5 ${seamless ? 'pb-1.5' : 'pb-2.5'}`}>
-      <Dropdown label="Age group" value={value == null ? '' : String(value)} options={options} onChange={(id) => onChange(Number(id))} buttonClassName="flex min-h-10 w-full items-stretch overflow-hidden rounded-lg border border-[rgb(var(--mg-header-line))] text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+      <Dropdown label={t('competition.timetable.ageGroup')} value={value == null ? '' : String(value)} options={options} onChange={(id) => onChange(Number(id))} buttonClassName="flex min-h-10 w-full items-stretch overflow-hidden rounded-lg border border-[rgb(var(--mg-header-line))] text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
         <span className="mg-display flex min-w-0 flex-1 items-baseline gap-2 self-center px-3 text-base font-bold uppercase leading-none tracking-[0.04em]">
           <span className="truncate">{displaySectionName(current?.displayName)}</span>
-          <span className="shrink-0 text-xs font-medium normal-case tracking-normal text-[rgb(var(--mg-header-sub))]">{teamCount} {teamCount === 1 ? 'team' : 'teams'}</span>
+          <span className="shrink-0 text-xs font-medium normal-case tracking-normal text-[rgb(var(--mg-header-sub))]">{t('competition.scoring.teamCount', { count: teamCount })}</span>
         </span>
         <span aria-hidden="true" className="flex w-11 shrink-0 items-center justify-center border-l border-[rgb(var(--mg-header-line))] bg-white/10"><ChevronDown className="h-[18px] w-[18px]" /></span>
       </Dropdown>
@@ -117,9 +122,10 @@ function AgeGroupRail({ sections, teams, value, onChange }: {
   value: number | null;
   onChange: (id: number) => void;
 }) {
+  const t = useT();
   return (
-    <nav aria-label="Age groups" className="mg-card overflow-hidden">
-      <h2 className="mg-display border-b-2 border-[rgb(var(--mg-heading))] px-3 py-2 text-[15px] font-bold uppercase tracking-[0.05em] text-[rgb(var(--mg-heading))]">Age groups</h2>
+    <nav aria-label={t('competition.scoring.ageGroups')} className="mg-card overflow-hidden">
+      <h2 className="mg-display border-b-2 border-[rgb(var(--mg-heading))] px-3 py-2 text-[15px] font-bold uppercase tracking-[0.05em] text-[rgb(var(--mg-heading))]">{t('competition.scoring.ageGroups')}</h2>
       <ul className="m-0 list-none p-0">
         {sections.map((sec) => {
           const count = teams.filter((t) => t.competitionSectionId === sec.id && !t.isHorsConcours).length;
@@ -145,6 +151,7 @@ function AgeGroupRail({ sections, teams, value, onChange }: {
  * the first tab there.
  */
 export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
+  const t = useT();
   const { competition, reload } = useCompetition();
   const { canManage } = useAuth();
   usePageWidth('wide');
@@ -179,6 +186,8 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   const standings = !standingsError && currentResult ? currentResult.rows : savedStandings?.data ?? NO_ROWS;
   const standingsStale = currentResult ? currentResult.savedCopy || currentResult.source !== refreshSource : savedStandings != null;
   const standingsLoading = sectionId != null && !currentResult && !savedStandings && standings.length === 0;
+  // Whether this age group's finished results are still open to queries, held for a review, or official.
+  const provisional = useProvisionalState((now) => getSectionProvisionalState(competition.sessions, sectionId, now));
   useEffect(() => {
     if (sectionId == null) return;
     let cancelled = false;
@@ -222,18 +231,18 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
     [standings, competition.sessions, competition.teams, sectionId, section?.finalistCount],
   );
   const progress = list.sessionsTotal === 0 ? null
-    : list.sessionsDone === list.sessionsTotal ? (list.sessionsTotal === 1 ? 'After session 1' : `After all ${list.sessionsTotal} sessions`)
-    : list.sessionsDone > 0 ? `After session ${list.sessionsDone} of ${list.sessionsTotal}` : null;
+    : list.sessionsDone === list.sessionsTotal ? (list.sessionsTotal === 1 ? t('competition.scoring.afterOne') : t('competition.scoring.afterAll', { n: list.sessionsTotal }))
+    : list.sessionsDone > 0 ? t('competition.scoring.afterSome', { done: list.sessionsDone, total: list.sessionsTotal }) : null;
   const chooseSection = (id: number) => setSearchParams({ section: String(id) }, { replace: true });
   const notices = (
     <>
       {standingsLoading && !savedStandings && <ToplistRowsSkeleton />}
-      {standingsStale && <Notice tone="info">Showing saved standings while results refresh.</Notice>}
-      {standingsError && <Notice actionLabel="Try again" onAction={() => { if (sectionId != null) setStandingsBySection((prev) => { const next = { ...prev }; delete next[sectionId]; return next; }); setRetry((n) => n + 1); }}>Couldn’t load the results. Check your signal and try again.</Notice>}
-      {sectionId != null && !standingsLoading && !standingsError && standings.length === 0 && <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">No results yet.</p>}
+      {standingsStale && <Notice tone="info">{t('competition.scoring.savedStandings')}</Notice>}
+      {standingsError && <Notice actionLabel={t('common.tryAgain')} onAction={() => { if (sectionId != null) setStandingsBySection((prev) => { const next = { ...prev }; delete next[sectionId]; return next; }); setRetry((n) => n + 1); }}>{t('competition.scoring.loadFailed')}</Notice>}
+      {sectionId != null && !standingsLoading && !standingsError && standings.length === 0 && <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">{t('competition.scoring.noResults')}</p>}
     </>
   );
-  const sectionLabel = `Toplist${sectionName ? `, ${sectionName}` : ''}`;
+  const sectionLabel = `${t('competition.scoring.toplist')}${sectionName ? `, ${sectionName}` : ''}`;
   const teamCount = competition.teams.filter((t) => t.competitionSectionId === sectionId && !t.isHorsConcours).length;
   const rail = desktop && competition.sections.length > 1
     ? <AgeGroupRail sections={competition.sections} teams={competition.teams} value={sectionId} onChange={chooseSection} /> : null;
@@ -270,24 +279,24 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   if (sectionId == null) {
     const empty = (
       <div className={`mx-auto flex w-full flex-col ${rail ? '' : 'max-w-[560px] lg:max-w-3xl'}`}>
-        <h1 className="mg-h1 mg-h1-sm py-3">Age groups</h1>
+        <h1 className="mg-h1 mg-h1-sm py-3">{t('competition.scoring.ageGroups')}</h1>
         {ageGroups}
-        <p className="mg-card mt-3 p-4 text-[rgb(var(--mg-muted))]">No age groups yet.</p>
+        <p className="mg-card mt-3 p-4 text-[rgb(var(--mg-muted))]">{t('competition.scoring.noAgeGroups')}</p>
         {finalsButton && <div className="pt-4">{finalsButton}</div>}
         {finalsModal}
       </div>
     );
-    return rail ? <PageGrid variant="left" aside={rail} asideLabel="Age groups" className="pt-3">{empty}</PageGrid> : empty;
+    return rail ? <PageGrid variant="left" aside={rail} asideLabel={t('competition.scoring.ageGroups')} className="pt-3">{empty}</PageGrid> : empty;
   }
 
   // The Toplists page leads with Toplist; from the menu Heats comes first.
   const subTabs: [SectionSubTab, string][] = startOn === 'toplist'
-    ? [['toplist', 'Toplist'], ['draw', 'Heats'], ['scores', 'Scores']]
-    : [['draw', 'Heats'], ['scores', 'Scores'], ['toplist', 'Toplist']];
+    ? [['toplist', t('competition.scoring.toplist')], ['draw', t('competition.scoring.heats')], ['scores', t('competition.scoring.scores')]]
+    : [['draw', t('competition.scoring.heats')], ['scores', t('competition.scoring.scores')], ['toplist', t('competition.scoring.toplist')]];
   // The tabs sit in the navy bar under the age group on phones; beside the age group rail on a laptop they are plain.
   const tabBar = (
     <div className={rail ? 'pb-3' : 'mg-band-header pb-2.5 pt-1'}>
-      <div className="mg-seg" role="group" aria-label="Age group view">
+      <div className="mg-seg" role="group" aria-label={t('competition.scoring.viewGroup')}>
         {subTabs.map(([id, label]) => (
           <button key={id} type="button" aria-pressed={subTab === id} onClick={() => setSubTab(id)}>{label}</button>
         ))}
@@ -297,7 +306,7 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   const band = <>{ageGroups}{tabBar}</>;
 
   const scores = (
-    <div className="flex flex-col gap-4 pt-3" role="region" aria-label="Section heat scores">
+    <div className="flex flex-col gap-4 pt-3" role="region" aria-label={t('competition.scoring.heatScoresRegion')}>
       {sectionSessions.flatMap((s) => {
         const heats = s.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
         if (heats.length === 0) return [];
@@ -310,7 +319,7 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
         ));
       })}
       {sectionSessions.every((s) => s.heats.length === 0) && (
-        <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">No heats drawn for this section yet.</p>
+        <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">{t('competition.scoring.noHeats')}</p>
       )}
     </div>
   );
@@ -318,17 +327,18 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   const toplist = (
     <section aria-label={sectionLabel} className="flex flex-col">
       <div className="flex flex-col gap-2.5 pt-3 empty:hidden">{notices}</div>
+      {standings.length > 0 && provisional && <div className="pt-3"><ProvisionalBadge state={provisional} /></div>}
       {standings.length > 0 && <ToplistView list={list} section={section} competitionId={competition.id} teams={competition.teams} chosenView={chosenView} onChooseView={chooseView} heatTables={scores} />}
       {sectionId != null && <div className="pt-3"><TackLeaderboard competitionId={competition.id} sectionId={sectionId} refresh={retry} /></div>}
     </section>
   );
   const board = subTab === 'draw' ? (
-    <TimetableBoard sectionId={sectionId} title={sectionName || 'Age group'} bandExtra={band} lead={finalsButton || undefined} />
+    <TimetableBoard sectionId={sectionId} title={sectionName || t('competition.timetable.ageGroup')} bandExtra={band} lead={finalsButton || undefined} />
   ) : (
     <div className={`mx-auto flex w-full flex-col ${rail ? '' : 'max-w-[560px] lg:max-w-3xl'}`}>
       {subTab === 'toplist'
-        ? <TabHeader title="Toplist" subtitle={[competition.name, progress].filter(Boolean).join(' · ')} refreshLabel="Refresh toplist" onRefresh={() => setRetry((n) => n + 1)} />
-        : <TabHeader title={sectionName || 'Age group'} subtitle={competition.name} refreshLabel="Refresh scores" onRefresh={reload} />}
+        ? <TabHeader title={t('competition.scoring.toplist')} subtitle={[competition.name, progress].filter(Boolean).join(' · ')} refreshLabel={t('competition.scoring.refreshToplist')} onRefresh={() => setRetry((n) => n + 1)} />
+        : <TabHeader title={sectionName || t('competition.timetable.ageGroup')} subtitle={competition.name} refreshLabel={t('competition.scoring.refreshScores')} onRefresh={reload} />}
       {band}
       {subTab === 'toplist' ? (
         <div className="flex flex-col gap-3">
@@ -347,7 +357,7 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
 
   return (
     <>
-      {rail ? <PageGrid variant="left" aside={rail} asideLabel="Age groups" className="pt-3">{board}</PageGrid> : board}
+      {rail ? <PageGrid variant="left" aside={rail} asideLabel={t('competition.scoring.ageGroups')} className="pt-3">{board}</PageGrid> : board}
       {finalsModal}
     </>
   );

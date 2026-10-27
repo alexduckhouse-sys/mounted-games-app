@@ -1,3 +1,4 @@
+// Unused in web UI yet — reserved for iOS / upcoming wiring
 import type { CompetitionDetail, MySignup, SectionSignup, SignupPaymentStatus } from '../types';
 
 export type PassPaymentBadge = 'PAID' | 'PENDING' | 'REFUNDED' | 'CANCELLED';

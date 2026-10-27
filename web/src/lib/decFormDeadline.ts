@@ -1,3 +1,5 @@
+import { activeLocale, tr } from '../i18n/translate';
+
 /** What `GET /declaration-forms/competition/{id}/lock-time` says: when dec forms close, and whether they already have. */
 export interface LockInfo {
   competitionId?: number;
@@ -9,8 +11,8 @@ export interface LockInfo {
 export function lockMoment(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
-  const day = date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-  const time = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const day = date.toLocaleDateString(activeLocale(), { weekday: 'short', day: 'numeric', month: 'short' });
+  const time = date.toLocaleTimeString(activeLocale(), { hour: '2-digit', minute: '2-digit', hour12: false });
   return `${day}, ${time}`;
 }
 
@@ -23,12 +25,12 @@ export function isLocked(info: LockInfo | null | undefined, now: number = Date.n
 /** The line next to a competition's name on the Dec forms list: "Locks Fri 23 Oct, 18:00", "Locked", or nothing when there is no deadline. */
 export function lockHeading(info: LockInfo | null | undefined, now: number = Date.now()): string | null {
   if (!info?.declarationsCloseAt) return null;
-  return isLocked(info, now) ? 'Locked' : `Locks ${lockMoment(info.declarationsCloseAt)}`;
+  return isLocked(info, now) ? tr('entries.deadline.locked') : tr('entries.deadline.locks', { when: lockMoment(info.declarationsCloseAt) });
 }
 
 /** The banner on a team's form: "Send by …" before it is sent, "Sent. You can change it until …" after. */
 export function formBanner(sent: boolean, info: LockInfo | null | undefined): { text: string; tone: 'warn' | 'good' } {
   const when = info?.declarationsCloseAt ? lockMoment(info.declarationsCloseAt) : '';
-  if (sent) return { text: when ? `Sent. You can change it until ${when}.` : 'Sent. You can still change it.', tone: 'good' };
-  return { text: when ? `Send by ${when}.` : 'Not sent yet.', tone: 'warn' };
+  if (sent) return { text: when ? tr('entries.deadline.sentUntil', { when }) : tr('entries.deadline.sentOpen'), tone: 'good' };
+  return { text: when ? tr('entries.deadline.sendBy', { when }) : tr('entries.deadline.notSent'), tone: 'warn' };
 }

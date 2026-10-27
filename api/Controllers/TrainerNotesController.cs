@@ -9,6 +9,7 @@ using MountedGames.Api.Services;
 
 namespace MountedGames.Api.Controllers;
 
+// Unused in web UI yet — reserved for iOS / upcoming wiring
 [ApiController]
 [Authorize(Roles = Roles.Trainer + "," + Roles.Admin)]
 [Route("api/trainer/notes")]

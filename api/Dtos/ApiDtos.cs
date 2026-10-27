@@ -19,6 +19,15 @@ public record CompetitionPickerItem(
     string? Location, int AgeGroupCount, PickerLiveHeat? Live, bool IsDemo = false, bool EntriesOpen = false);
 public record CompetitionPickerPage(IReadOnlyList<CompetitionPickerItem> Items, bool HasMore, IReadOnlyList<int>? Years = null, IReadOnlyList<string>? Locations = null);
 
+/// <summary>How far an event is from where we think the viewer is, in whole miles. Never the viewer's position itself.</summary>
+public record PickerDistance(int Id, int Miles);
+/// <summary>
+/// The upcoming list ordered for one viewer (<c>GET /api/competitions/picker/near-you</c>). <see cref="LocationKnown"/> says whether we could
+/// place them; <see cref="Sort"/> is the order actually used (<c>nearest</c> or <c>soonest</c>).
+/// </summary>
+public record CompetitionNearYouPage(
+    IReadOnlyList<CompetitionPickerItem> Items, bool HasMore, bool LocationKnown, string Sort, IReadOnlyList<PickerDistance> Distances);
+
 public static class CompetitionFields
 {
     public const int PostcodeMax = 12;
@@ -348,7 +357,13 @@ public record SessionDto(
     LaneRotationMode LaneRotationMode = LaneRotationMode.MoveUp,
     int? QualifiersPerHeat = null,
     IReadOnlyList<string>? PlannedRaces = null,
-    IReadOnlyDictionary<string, IReadOnlyList<string>>? PlannedFinalRaces = null);
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? PlannedFinalRaces = null,
+    DateTime? ProvisionalUntil = null,
+    DateTime? OfficialConfirmedAt = null);
+
+public record ConfirmSessionOfficialRequest(
+    bool ReopenQueries = false,
+    [Range(1, 120)] int? ProvisionalMinutes = 15);
 
 public record UpdateSessionSettingsRequest(int? MinutesPerHeat, bool? RaceOrderAlternating,
     LaneRotationMode? LaneRotationMode = null, [Range(1, 20)] int? QualifiersPerHeat = null);
@@ -505,6 +520,27 @@ public record DeclarationFormDto(
     // How many riders on the form were flagged for a broken rule. Staff and the submitter only; 0 for everyone else.
     int FlagCount = 0,
     // The coach's phone number for this team. Staff and the submitter only.
+    string? TrainerPhone = null);
+
+public record SavedTeamDeclarationDto(
+    int FormId,
+    int TeamId,
+    string TeamName,
+    int ClubId,
+    string ClubName,
+    int CompetitionId,
+    string CompetitionName,
+    DateTime CompetitionStartDate,
+    int SectionId,
+    string SectionName,
+    SectionFormat Format,
+    string AgeGroup,
+    DateTime SubmittedAt,
+    DeclarationFormDto Form,
+    IReadOnlyList<RiderEntryDto> Riders,
+    string? EntryTeamName = null,
+    string? BibDescription = null,
+    string? TrainerName = null,
     string? TrainerPhone = null);
 
 public record RiderEntryDto(
@@ -674,6 +710,20 @@ public record ScoreCardControlRequest(
 public record ScoreCardControlDto(
     int HeatId, int RaceId, string Action, IReadOnlyList<int> HiddenTeamIds,
     IReadOnlyDictionary<int, string> Names, int? Seconds);
+
+/// <summary>One place given at a prize-giving: the team, where it finished and its points (from the toplist).</summary>
+public record PrizeGivingPlaceRequest(int TeamId, [Range(1, 99)] int Place, [Range(0, 100000)] double Points);
+
+/// <summary>
+/// An organiser's step through a prize-giving: <c>show</c> with every place given so far, in the order given (the last
+/// is the one just read out), or <c>clear</c> to take it off the stream. <c>Champions</c> plays the winners' moment.
+/// </summary>
+public record PrizeGivingControlRequest(string Action, int? SectionId, IReadOnlyList<PrizeGivingPlaceRequest>? Places, bool Champions = false);
+
+public record PrizeGivingPlaceDto(int TeamId, int Place, string TeamName, string? ClubName, double Points);
+
+/// <summary>Sent to every viewer as <c>prizeGiving</c>. Names come from the event's teams, never from the request.</summary>
+public record PrizeGivingDto(string Action, int? SectionId, string? SectionName, IReadOnlyList<PrizeGivingPlaceDto> Places, bool Champions);
 
 /// <summary>A saved overlay look an organiser can apply to any of their events.</summary>
 public record OverlayLookDto(int Id, string Name, System.Text.Json.JsonElement Look, bool Mine, DateTime UpdatedAt);

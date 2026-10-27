@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import type { TackCheckBoard, TackCheckSection } from '../../types';
-import PrintEventPage from './PrintEventPage';
+import PrintEventPage from '../operations/PrintEventPage';
 import { TackCheckTab } from './TackCheckTab';
 import type { PrintableTackCheck } from './TackCheckPrint';
 import { chooseOption } from '../../test/select';

@@ -1,4 +1,5 @@
 import type { Heat, HeatEntry } from '../types';
+import { parseBibAndFlag } from './bib';
 import { positionFor, sitsOut } from './lanes';
 import type { LaneRules } from '../pages/competition/laneRules';
 
@@ -23,7 +24,7 @@ export function inLaneOrder(heat: Heat, raceIndex: number, rules: LaneRules): He
 
 /** The bib colour in words, for people who can't tell the swatch apart. */
 export function bibName(colour: string | null | undefined): string {
-  const text = colour?.trim();
+  const text = parseBibAndFlag(colour).bib?.trim();
   return text ? `${text} bib` : 'No bib colour';
 }
 

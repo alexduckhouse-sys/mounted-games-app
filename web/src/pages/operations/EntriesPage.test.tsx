@@ -78,16 +78,19 @@ describe('EntriesPage', () => {
 
   it('shows unpaid entries as pending payment with a quick Mark paid on the row', async () => {
     const user = userEvent.setup();
+    const asked = autoConfirm(true);
     show();
     await screen.findByRole('button', { name: /^Elm B/ });
     expect(screen.getAllByText('Pending payment')).toHaveLength(1);
     expect(screen.getByText('£10 by bank transfer')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Mark Elm B paid' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/7/signups/102/mark-paid'));
+    expect(asked.titles).toEqual(['Mark Elm B paid?']);
   });
 
   it('marks a team paid and not paid', async () => {
     const user = userEvent.setup();
+    autoConfirm(true);
     show();
     await user.click(await screen.findByRole('button', { name: /^Elm B/ }));
     await user.click(screen.getByRole('button', { name: 'Mark paid' }));

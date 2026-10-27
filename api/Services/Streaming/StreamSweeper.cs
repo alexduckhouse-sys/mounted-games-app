@@ -19,7 +19,7 @@ public sealed class StreamSweeper(IServiceScopeFactory scopes, CompetitionStream
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {
                 try { await SweepAsync(time.GetUtcNow().UtcDateTime, stoppingToken); }
-                catch (Exception) when (!stoppingToken.IsCancellationRequested) { log.LogWarning("Stream sweep could not complete."); }
+                catch (Exception ex) when (!stoppingToken.IsCancellationRequested) { log.LogWarning(ex, "Stream sweep could not complete."); }
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }

@@ -87,6 +87,15 @@
 .sc-tag { display: inline-flex; align-items: center; border-radius: 6px; padding: 2px 7px; font: 700 11px/1.2 var(--mg-font); letter-spacing: .04em; text-transform: uppercase; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); flex-shrink: 0; }
 .sc-tag-hc, .sc-tag-last { background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); }
 .sc-tag-manual { background: #FFF1D6; color: #7A4B00; }
+/* Shown once a Bluetooth keypad, page-turner or pedal has scored something. */
+.sc-keypad-chip { align-self: center; display: inline-flex; align-items: center; gap: 5px; margin: 8px 0 0; padding: 3px 10px; border-radius: 999px; background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); font: 600 12px/1.3 var(--mg-font); }
+
+/* Using a keypad, in race tools. */
+.rt-keys { flex: none; padding: 12px 14px; border: 1px solid rgb(var(--mg-line)); border-radius: 12px; background: rgb(var(--mg-surface)); }
+.rt-keys-title { margin: 0 0 6px; font: 600 15px/1.25 var(--mg-font); color: rgb(var(--mg-heading)); }
+.rt-keys-list { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; font: 400 13px/1.35 var(--mg-font); color: rgb(var(--mg-body)); }
+.rt-keys-list dt { font-weight: 700; color: rgb(var(--mg-ink)); }
+.rt-keys-list dd { margin: 0; }
 
 /* The race being scored. */
 .sc-open { display: flex; flex-direction: column; }
@@ -336,6 +345,12 @@ html[data-lite="true"] .sc-hold { animation-duration: 350ms !important; }
 .sc-choices { display: flex; flex-wrap: wrap; gap: 6px; }
 .sc-choice { min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1.5px solid rgb(var(--mg-control)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); font: 600 14px/1.1 var(--mg-font); cursor: pointer; }
 .sc-choice[aria-pressed="true"] { background: rgb(var(--mg-button)); border-color: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); }
+/* Elimination reasons: an even grid (two across on a phone) so the long official list stays tappable and scannable.
+   The non-finishes and Other start their own row. */
+.sc-reasons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sc-reasons .sc-choice { padding: 8px 10px; text-align: left; line-height: 1.2; overflow-wrap: anywhere; }
+.sc-reasons .sc-choice:not([data-kind]) + .sc-choice[data-kind="finish"] { grid-column-start: 1; margin-top: 6px; }
+@media (min-width: 560px) { .sc-reasons { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 button.sc-done-name { background: none; border: 0; padding: 0; text-align: left; cursor: pointer; }
 
 /* Score override sheet controls. */

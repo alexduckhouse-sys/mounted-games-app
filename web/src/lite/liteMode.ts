@@ -1,3 +1,4 @@
+import { tr } from '../i18n/translate';
 /** Pure rules for lite mode, kept apart from React so they are easy to test. */
 
 export type LiteSetting = 'auto' | 'on' | 'off';
@@ -65,8 +66,8 @@ export function writeSetting(setting: LiteSetting) {
 
 /** One plain line for the settings panel. */
 export function liteStatusText(lite: boolean, reason: LiteReason | null): string {
-  if (!lite) return 'Off';
-  if (reason === 'data-saver') return 'On because Data Saver is on';
-  if (reason === 'slow-connection') return 'On because your connection is slow';
-  return 'On because you chose it';
+  if (!lite) return tr('shell.liteMode.statusOff');
+  if (reason === 'data-saver') return tr('shell.liteMode.statusDataSaver');
+  if (reason === 'slow-connection') return tr('shell.liteMode.statusSlow');
+  return tr('shell.liteMode.statusChosen');
 }

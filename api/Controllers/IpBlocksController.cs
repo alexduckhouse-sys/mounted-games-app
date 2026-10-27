@@ -8,6 +8,7 @@ using MountedGames.Api.Entities;
 
 namespace MountedGames.Api.Controllers;
 
+// Unused in web UI yet — reserved for iOS / upcoming wiring
 [ApiController]
 [Route("api/ip-blocks")]
 [Authorize(Roles = Roles.Admin)]

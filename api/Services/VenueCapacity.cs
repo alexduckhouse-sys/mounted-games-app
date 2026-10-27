@@ -46,6 +46,7 @@ public static class VenueCapacity
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.CompetitionId == competitionId, ct);
 
+        var nowUtc = DateTime.UtcNow;
         var signupRows = await (
             from s in db.SectionSignups.AsNoTracking()
             join sec in db.CompetitionSections.AsNoTracking() on s.CompetitionSectionId equals sec.Id
@@ -56,7 +57,7 @@ public static class VenueCapacity
                 && (!excludeSignupId.HasValue || s.Id != excludeSignupId.Value)
                 && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending)
                 && !e.IsWithdrawn
-                && !e.IsWaitlist
+                && (!e.IsWaitlist || (e.WaitlistOfferExpiresAt != null && e.WaitlistOfferExpiresAt > nowUtc))
                 && (m == null || !m.WaitingForGuestSpot)
             select new { e.StablesCount, e.HookupsCount }
         ).ToListAsync(ct);

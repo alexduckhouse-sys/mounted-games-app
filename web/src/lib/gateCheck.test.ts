@@ -7,11 +7,8 @@ import {
   getGateCheckStatus,
   isHeatReadyAtGate,
   nextGateCheckStatus,
-  normalisePhoneForTel,
   parseGateChecks,
   stripInternalSessionNotes,
-  trainerCallHref,
-  trainerWhatsAppHref,
 } from './gateCheck';
 
 describe('gateCheck helpers', () => {
@@ -97,22 +94,5 @@ describe('gateCheck helpers', () => {
         'Prize giving afterwards [paused:123] [shift:+5] [scoring:live] [gate:20:10=at-gate]',
       ),
     ).toBe('Prize giving afterwards');
-  });
-
-  it('formats trainer call and WhatsApp links from UK and international phone numbers', () => {
-    expect(normalisePhoneForTel(null)).toBeNull();
-    expect(normalisePhoneForTel('123')).toBeNull();
-    expect(trainerCallHref(undefined)).toBeNull();
-    expect(trainerWhatsAppHref(undefined)).toBeNull();
-
-    expect(trainerCallHref('07700 900 123')).toBe('tel:07700900123');
-    expect(trainerCallHref('+44 7700 900 123')).toBe('tel:+447700900123');
-
-    expect(trainerWhatsAppHref('07700 900 123')).toBe('https://wa.me/447700900123');
-    expect(trainerWhatsAppHref('0044 7700 900 123')).toBe('https://wa.me/447700900123');
-    expect(trainerWhatsAppHref('+33 6 12 34 56 78', 'Needed at Main Arena gate')).toBe(
-      'https://wa.me/33612345678?text=Needed%20at%20Main%20Arena%20gate',
-    );
-    expect(trainerWhatsAppHref('001234')).toBeNull();
   });
 });

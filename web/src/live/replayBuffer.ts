@@ -184,39 +184,53 @@ async function persistClip(clip: SavedReplayClip): Promise<void> {
 }
 
 async function removePersistedClip(id: string): Promise<void> {
+  let db: IDBDatabase | null = null;
   try {
-    const db = await openReplayDb();
+    db = await openReplayDb();
     if (!db) return;
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    tx.objectStore(STORE_NAME).delete(id);
-    db.close();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db!.transaction(STORE_NAME, 'readwrite');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+      tx.objectStore(STORE_NAME).delete(id);
+    });
   } catch {
     // Ignore IndexedDB failures
+  } finally {
+    db?.close();
   }
 }
 
 async function clearPersistedClips(competitionId?: number): Promise<void> {
+  let db: IDBDatabase | null = null;
   try {
-    const db = await openReplayDb();
+    db = await openReplayDb();
     if (!db) return;
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    if (competitionId === undefined) {
-      store.clear();
-    } else {
-      const req = store.getAll();
-      req.onsuccess = () => {
-        const items = req.result as SavedReplayClip[];
-        for (const item of items) {
-          if (item.competitionId === competitionId) {
-            store.delete(item.id);
+    await new Promise<void>((resolve, reject) => {
+      const tx = db!.transaction(STORE_NAME, 'readwrite');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+      const store = tx.objectStore(STORE_NAME);
+      if (competitionId === undefined) {
+        store.clear();
+      } else {
+        const req = store.getAll();
+        req.onsuccess = () => {
+          const items = req.result as SavedReplayClip[];
+          for (const item of items) {
+            if (item.competitionId === competitionId) {
+              store.delete(item.id);
+            }
           }
-        }
-      };
-    }
-    db.close();
+        };
+      }
+    });
   } catch {
     // Ignore IndexedDB failures
+  } finally {
+    db?.close();
   }
 }
 

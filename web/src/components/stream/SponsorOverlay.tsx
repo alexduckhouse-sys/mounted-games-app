@@ -40,7 +40,7 @@ export function SponsorOverlay({ arenaName, track = true }: { arenaName: string;
     return () => clearInterval(timer);
   }, [track, competitionId, shownId, placement]);
 
-  const tier = sponsor ? SPONSOR_TIERS.find((t) => t.tier === sponsor.tier)!.label : '';
+  const tier = sponsor ? (SPONSOR_TIERS.find((t) => t.tier === sponsor.tier)?.label ?? 'Supporter') : '';
   // One sponsor hands over to the next: the old card drops away before the new one lifts in.
   return (
     <AnimatePresence mode="wait">

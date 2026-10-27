@@ -1,8 +1,8 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api } from '../api';
+
 import { readSavedCopy, savedCopyKeys, writeSavedCopy } from '../offline/savedCopies';
 import type { CompetitionPickerItem, CompetitionPickerPage } from '../types';
 import { CompetitionPicker } from './CompetitionPicker';
@@ -11,8 +11,14 @@ import { canCachePublicApi } from '../offline/cachePolicy';
 const authState = vi.hoisted(() => ({ user: { id: 'example-member' } as { id: string } | null }));
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ user: authState.user }) }));
 
-vi.mock('../api', () => ({ api: { get: vi.fn() } }));
-const get = vi.mocked(api.get);
+// Two kinds of answer: the public list (`get`, as before) and the list put in order for this viewer (`nearYou`).
+// By default the personal list is unavailable, so the public one is used.
+const mocks = vi.hoisted(() => ({ publicList: vi.fn(), nearYou: vi.fn() }));
+vi.mock('../api', () => ({
+  api: { get: (url: string, config?: unknown) => (url.endsWith('/near-you') ? mocks.nearYou(url, config) : mocks.publicList(url, config)) },
+}));
+const get = mocks.publicList;
+const nearYou = mocks.nearYou;
 
 const today: CompetitionPickerItem = {
   id: 1, name: 'Today Cup', startDate: '2026-10-17T09:00:00', endDate: '2026-10-18T17:00:00', icon: 'gb',
@@ -46,6 +52,7 @@ beforeEach(() => {
   authState.user = { id: 'example-member' };
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date(2026, 9, 17, 12, 0));
+  nearYou.mockRejectedValue(new Error('no personal list'));
   reply(page([today, autumn, festival]));
 });
 afterEach(() => { vi.useRealTimers(); });
@@ -56,6 +63,17 @@ describe('CompetitionPicker: the list', () => {
     await loaded('Autumn Open');
     expect(get).toHaveBeenCalledWith('/competitions/picker', { params: { past: false, page: 1 }, signal: expect.any(AbortSignal) });
     expect(screen.getByRole('heading', { level: 1, name: 'Competitions' })).toBeInTheDocument();
+  });
+
+  it('starts loading a competition when it is pointed at or pressed, once each', async () => {
+    renderPicker();
+    await loaded('Autumn Open');
+    const row = within(screen.getByRole('region', { name: 'Coming up' })).getAllByRole('button')[0];
+    fireEvent.mouseEnter(row);
+    fireEvent.pointerDown(row);
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Open competition: Today Cup' }));
+    const warmed = get.mock.calls.map(([url]) => url).filter((url) => /^\/competitions\/\d+$/.test(String(url)));
+    expect(warmed).toEqual([`/competitions/${autumn.id}`, `/competitions/${today.id}`]);
   });
 
   it('shows a placeholder while the first load is under way', () => {
@@ -382,7 +400,9 @@ describe('CompetitionPicker: problems', () => {
     expect(readSavedCopy(savedCopyKeys.picker(false))).toBeNull();
     let fail!: (reason: unknown) => void;
     get.mockReturnValue(new Promise((_resolve, reject) => { fail = reject; }));
-    renderPicker().unmount();
+    const view = renderPicker();
+    await act(async () => {}); // the personal list is tried first and gives up; then the public list is asked for
+    view.unmount();
     await act(async () => { fail(new Error('late')); });
   });
 });
@@ -504,5 +524,100 @@ describe('CompetitionPicker: demo events', () => {
     renderPicker();
     await loaded('Autumn Open');
     expect(screen.queryByText('Demo event')).not.toBeInTheDocument();
+  });
+});
+
+describe('CompetitionPicker: nearest first', () => {
+  const near = (items: CompetitionPickerItem[], distances: { id: number; miles: number }[], extra: Record<string, unknown> = {}) => nearYou.mockResolvedValue({
+    data: { items, hasMore: false, locationKnown: true, sort: 'nearest', distances, ...extra }, headers: {},
+  } as never);
+
+  it('asks for the list in this viewer’s order first, and shows how far each event is', async () => {
+    near([festival, today, autumn], [{ id: 3, miles: 8 }, { id: 1, miles: 28 }, { id: 2, miles: 263 }]);
+    renderPicker();
+    await loaded('Autumn Open');
+    expect(nearYou).toHaveBeenCalledWith('/competitions/picker/near-you', { params: { page: 1 }, signal: expect.any(AbortSignal) });
+    expect(get).not.toHaveBeenCalled();
+    expect(screen.getByText(/about 275 miles/)).toBeInTheDocument();
+    expect(screen.getByText(/about 10 miles/)).toBeInTheDocument();
+    // What is on today stays on top, with its distance too.
+    expect(within(screen.getByRole('region', { name: 'On today' })).getByText(/about 30 miles/)).toBeInTheDocument();
+    const rows = within(screen.getByRole('region', { name: 'Coming up' })).getAllByRole('button').map((b) => b.textContent);
+    expect(rows[0]).toContain('Weekend Fest');
+    expect(rows[1]).toContain('Autumn Open');
+  });
+
+  it('offers a way back to soonest first, remembers it, and starts again from the first page', async () => {
+    near([festival, autumn], [{ id: 3, miles: 8 }, { id: 2, miles: 40 }]);
+    renderPicker();
+    await loaded('Autumn Open');
+    expect(screen.getByRole('button', { name: 'Nearest first' })).toHaveAttribute('aria-pressed', 'true');
+    const soonest = screen.getByRole('button', { name: 'Soonest first' });
+    expect(soonest).toHaveAttribute('aria-pressed', 'false');
+
+    near([autumn, festival], [{ id: 2, miles: 40 }, { id: 3, miles: 8 }], { sort: 'soonest' });
+    await userEvent.click(soonest);
+    await waitFor(() => expect(nearYou).toHaveBeenLastCalledWith('/competitions/picker/near-you', { params: { page: 1, sort: 'soonest' }, signal: expect.any(AbortSignal) }));
+    expect(localStorage.getItem('mg.eventsSort')).toBe('soonest');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Soonest first' })).toHaveAttribute('aria-pressed', 'true'));
+    const rows = within(screen.getByRole('region', { name: 'Coming up' })).getAllByRole('button').map((b) => b.textContent);
+    expect(rows[0]).toContain('Autumn Open');
+
+    // Pressing the choice already in force does nothing more.
+    const calls = nearYou.mock.calls.length;
+    await userEvent.click(screen.getByRole('button', { name: 'Soonest first' }));
+    expect(nearYou.mock.calls.length).toBe(calls);
+  });
+
+  it('uses the remembered choice for the very first request', async () => {
+    localStorage.setItem('mg.eventsSort', 'soonest');
+    near([autumn], [{ id: 2, miles: 40 }], { sort: 'soonest' });
+    renderPicker();
+    await loaded('Autumn Open');
+    expect(nearYou).toHaveBeenCalledWith('/competitions/picker/near-you', { params: { page: 1, sort: 'soonest' }, signal: expect.any(AbortSignal) });
+    expect(screen.getByRole('button', { name: 'Soonest first' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('shows no toggle and no distances when nobody knows where the viewer is, and keeps the usual saved copy', async () => {
+    near([today, autumn, festival], [], { locationKnown: false, sort: 'soonest' });
+    renderPicker();
+    await loaded('Autumn Open');
+    expect(screen.queryByRole('button', { name: 'Nearest first' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/miles/)).not.toBeInTheDocument();
+    expect(readSavedCopy<CompetitionPickerPage>(savedCopyKeys.picker(false))?.data.items.map((i) => i.id)).toEqual([1, 2, 3]);
+  });
+
+  it('does not keep a list put in one person’s order as the public saved copy', async () => {
+    near([festival, autumn], [{ id: 3, miles: 8 }, { id: 2, miles: 40 }]);
+    renderPicker();
+    await loaded('Autumn Open');
+    expect(readSavedCopy(savedCopyKeys.picker(false))).toBeNull();
+  });
+
+  it('loads the next page of the same order and keeps the distances of both', async () => {
+    nearYou.mockResolvedValueOnce({ data: { items: [festival], hasMore: true, locationKnown: true, sort: 'nearest', distances: [{ id: 3, miles: 8 }] }, headers: {} } as never)
+      .mockResolvedValueOnce({ data: { items: [autumn], hasMore: false, locationKnown: true, sort: 'nearest', distances: [{ id: 2, miles: 40 }] }, headers: {} } as never);
+    renderPicker();
+    await loaded('Weekend Fest');
+    await userEvent.click(screen.getByRole('button', { name: 'Load more competitions' }));
+    await loaded('Autumn Open');
+    expect(nearYou).toHaveBeenLastCalledWith('/competitions/picker/near-you', { params: { page: 2 }, signal: expect.any(AbortSignal) });
+    expect(screen.getByText(/about 40 miles/)).toBeInTheDocument();
+    expect(screen.getByText(/about 10 miles/)).toBeInTheDocument();
+  });
+
+  it('falls back to the public list when the personal one is not a list', async () => {
+    nearYou.mockResolvedValue({ data: '<html>not json</html>', headers: {} } as never);
+    renderPicker();
+    await loaded('Autumn Open');
+    expect(get).toHaveBeenCalledWith('/competitions/picker', { params: { past: false, page: 1 }, signal: expect.any(AbortSignal) });
+    expect(screen.queryByRole('button', { name: 'Nearest first' })).not.toBeInTheDocument();
+  });
+
+  it('leaves the archive alone', async () => {
+    renderPicker({ past: true });
+    await loaded('Autumn Open');
+    expect(nearYou).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Nearest first' })).not.toBeInTheDocument();
   });
 });

@@ -5,6 +5,7 @@ import { equipmentFromDiagram } from '../lib/raceEquipment';
 import { loadRaceTemplates, raceNameKey } from '../lib/raceTemplates';
 import type { RaceTemplate } from '../types';
 import { Notice } from './Notice';
+import { useT } from '../i18n/LanguageContext';
 import { RaceDiagram } from './RaceDiagram';
 import './race-rules.css';
 
@@ -21,6 +22,7 @@ function ruleHighlights(template: RaceTemplate): string[] {
 
 /** An info button that opens a sheet with a race's rules and equipment. */
 export function RaceRulesButton({ raceName, className = '', label }: { raceName: string; className?: string; label?: ReactNode }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -71,7 +73,7 @@ export function RaceRulesButton({ raceName, className = '', label }: { raceName:
   const equipment = template ? equipmentFromDiagram(template.diagramJson) : [];
 
   return <>
-    <button ref={buttonRef} type="button" className={`race-rules-btn ${className}`} aria-label={`Rules for ${raceName}`} aria-haspopup="dialog" aria-expanded={open} onClick={(event) => { event.stopPropagation(); setOpen(true); }}>
+    <button ref={buttonRef} type="button" className={`race-rules-btn ${className}`} aria-label={t('competition.rules.for', { name: raceName })} aria-haspopup="dialog" aria-expanded={open} onClick={(event) => { event.stopPropagation(); setOpen(true); }}>
       {label ?? <Info aria-hidden="true" className="h-4 w-4" />}
     </button>
     {open && createPortal(
@@ -81,27 +83,27 @@ export function RaceRulesButton({ raceName, className = '', label }: { raceName:
           <div className="race-rules-head">
             <h2 id={titleId}>{raceName}</h2>
           </div>
-          {!current && <Notice tone="info">Loading rules…</Notice>}
-          {current && 'failed' in current && <Notice actionLabel="Try again" onAction={() => setAttempt(attempt + 1)}>Couldn’t load the rules. Check your signal and try again.</Notice>}
-          {current && 'template' in current && !template && <Notice tone="info" role={null}>No rules have been added for this race yet.</Notice>}
+          {!current && <Notice tone="info">{t('competition.rules.loading')}</Notice>}
+          {current && 'failed' in current && <Notice actionLabel={t('common.tryAgain')} onAction={() => setAttempt(attempt + 1)}>{t('competition.rules.failed')}</Notice>}
+          {current && 'template' in current && !template && <Notice tone="info" role={null}>{t('competition.rules.none')}</Notice>}
           {template && <div className="race-rules-body">
             {template.summary && <p>{template.summary}</p>}
             {template.diagramJson && <div className="race-rules-diagram"><RaceDiagram drop diagramJson={template.diagramJson} height={160} /></div>}
-            {template.rules && <section aria-label="Rules"><h3>Rules</h3><p className="whitespace-pre-wrap">{template.rules}</p></section>}
-            {equipment.length > 0 && <section aria-label="Equipment"><h3>Equipment</h3>
+            {template.rules && <section aria-label={t('competition.rules.link')}><h3>{t('competition.rules.link')}</h3><p className="whitespace-pre-wrap">{template.rules}</p></section>}
+            {equipment.length > 0 && <section aria-label={t('competition.rules.equipment')}><h3>{t('competition.rules.equipment')}</h3>
               <ul>{equipment.map((item) => <li key={item.label}>{item.count > 1 ? `${item.count} × ` : ''}{item.label}</li>)}</ul>
             </section>}
             {highlights.length > 0 && (
-              <section aria-label="How to win & common eliminations">
-                <h3>How to win &amp; common eliminations</h3>
+              <section aria-label={t('competition.rules.howToWin')}>
+                <h3>{t('competition.rules.howToWin')}</h3>
                 <ul>
                   {highlights.map((text) => <li key={text}>{text}</li>)}
                 </ul>
               </section>
             )}
-            {!template.summary && !template.rules && equipment.length === 0 && <Notice tone="info" role={null}>No rules have been added for this race yet.</Notice>}
+            {!template.summary && !template.rules && equipment.length === 0 && <Notice tone="info" role={null}>{t('competition.rules.none')}</Notice>}
           </div>}
-          <div className="kit-acts race-rules-acts"><button type="button" className="kit-pill kit-pill-fill" aria-label="Close rules" onClick={close}>Close</button></div>
+          <div className="kit-acts race-rules-acts"><button type="button" className="kit-pill kit-pill-fill" aria-label={t('competition.rules.close')} onClick={close}>{t('common.close')}</button></div>
         </div>
       </div>,
       document.body,

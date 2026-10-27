@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Maximize2, Mic, Monitor, Pause, Play, QrCode as QrCodeIcon, Radio, SlidersHorizontal, Trophy } from 'lucide-react';
@@ -12,6 +12,7 @@ import { SponsorStrip } from '../../components/SponsorStrip';
 import { StreamControlStrip } from '../../components/stream/StreamControlStrip';
 import { usePageWidth } from '../../components/pageWidthState';
 import { formatPoints } from '../../lib/formatPoints';
+import { advanceTvStandingsOrSlide, paginateTvStandings } from '../../lib/tvStandingsPagination';
 import { DIAGONAL_HIDDEN_LEFT, DIAGONAL_HIDDEN_RIGHT, DIAGONAL_SHOWN, EASE_IN, EASE_OUT } from '../../lib/motion';
 import { useStillMotion } from '../../lite/useStillMotion';
 import { statusLabel, statusLetter } from '../../lib/resultStatus';
@@ -32,6 +33,7 @@ const SLIDES: { id: TvSlide; label: string }[] = [
   { id: 'standings', label: 'Live Section Standings' },
 ];
 
+const SLIDE_IDS = SLIDES.map((s) => s.id);
 const CYCLE_INTERVAL_MS = 12_000;
 
 const isRaceSession = (s: Session) => (s.kind ?? (s.isBreak ? 1 : 0)) === 0;
@@ -77,6 +79,7 @@ export function TvKioskPage() {
   }, [autoFollowLive, liveSectionId, requestedSection, selectedSectionId, sectionIds, competition.sessions]);
 
   const [slide, setSlide] = useState<TvSlide>('lanes');
+  const [standingsPage, setStandingsPage] = useState(0);
   const still = useStillMotion();
   const [playing, setPlaying] = useState(true);
   const [standingsBySection, setStandingsBySection] = useState<Record<number, { rows: StandingRow[]; source: typeof refreshSource; failed?: boolean }>>({});
@@ -131,13 +134,17 @@ export function TvKioskPage() {
     return () => { cancelled = true; };
   }, [competition.id, sectionId, refreshSource]);
 
+  // The rotation stays on the standings slide until every page of teams has been shown.
+  const rotation = useRef({ slide, page: standingsPage, rows: 0 });
   useEffect(() => {
     if (!playing) return;
     const timer = window.setInterval(() => {
-      setSlide((current) => {
-        const idx = SLIDES.findIndex((s) => s.id === current);
-        return SLIDES[(idx + 1) % SLIDES.length].id;
+      const now = rotation.current;
+      const step = advanceTvStandingsOrSlide<TvSlide>({
+        currentSlide: now.slide, slides: SLIDE_IDS, standingsSlide: 'standings', currentPage: now.page, totalRows: now.rows,
       });
+      setStandingsPage(step.nextPage);
+      setSlide(step.nextSlide);
     }, CYCLE_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [playing]);
@@ -149,6 +156,7 @@ export function TvKioskPage() {
   };
 
   const stepSlide = (delta: -1 | 1) => {
+    setStandingsPage(0);
     setSlide((current) => {
       const idx = SLIDES.findIndex((s) => s.id === current);
       return SLIDES[(idx + delta + SLIDES.length) % SLIDES.length].id;
@@ -213,6 +221,11 @@ export function TvKioskPage() {
       totalPoints: 0,
     }));
   }, [toplist, teamById, standingByTeamId, competition.teams, sectionId]);
+
+  const standingsView = paginateTvStandings(orderedStandingRows, standingsPage);
+  useEffect(() => {
+    rotation.current = { slide, page: standingsView.pageIndex, rows: orderedStandingRows.length };
+  }, [slide, standingsView.pageIndex, orderedStandingRows.length]);
 
   // Heats in running order for the selected section (or all sections if none in selected section).
   const orderedHeats = useMemo(() => {
@@ -566,6 +579,7 @@ export function TvKioskPage() {
                   </div>
                   <span className="text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
                     {orderedStandingRows.length} {orderedStandingRows.length === 1 ? 'team' : 'teams'}
+                    {standingsView.hasMultiplePages && <span className="ml-2 font-semibold normal-case tracking-normal" data-testid="tv-standings-page">{standingsView.pageLabel}</span>}
                   </span>
                 </div>
 
@@ -585,7 +599,7 @@ export function TvKioskPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[rgb(var(--mg-rule-soft))]">
-                        {orderedStandingRows.map((row) => (
+                        {standingsView.rows.map((row) => (
                           <tr key={row.teamId} className="text-base">
                             <td className="mg-display py-3 pl-4 pr-2 text-xl font-bold text-[rgb(var(--mg-heading))]">
                               {row.rankLabel}

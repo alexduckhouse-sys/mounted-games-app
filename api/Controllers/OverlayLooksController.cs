@@ -14,6 +14,7 @@ namespace MountedGames.Api.Controllers;
 /// Saved overlay looks. Trainers and competition admins see and change their own; admins see and change everyone's, so a club's
 /// look can be shared by whoever runs the stream.
 /// </summary>
+// Unused in web UI yet — reserved for iOS / upcoming wiring
 [ApiController]
 [Route("api/overlay-looks")]
 [Authorize(Policy = CompetitionStaff.Policy)]

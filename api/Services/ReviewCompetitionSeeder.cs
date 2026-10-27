@@ -396,6 +396,7 @@ public static class ReviewCompetitionSeeder
     await db.Set<SignupMatchmaking>().Where(x => signupIds.Contains(x.SignupId)).ExecuteDeleteAsync();
     await db.Set<SignupExtras>().Where(x => signupIds.Contains(x.SignupId)).ExecuteDeleteAsync();
     await db.Set<SignupGuestDetails>().Where(x => signupIds.Contains(x.SignupId)).ExecuteDeleteAsync();
+    await db.Set<SignupTeamLink>().Where(x => signupIds.Contains(x.SignupId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
     await db.SectionSignups.Where(x => sectionIds.Contains(x.CompetitionSectionId)).ExecuteDeleteAsync();
     await db.Teams.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
     await db.Set<DrawChange>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
@@ -413,6 +414,7 @@ public static class ReviewCompetitionSeeder
     await db.Set<EquipmentAcknowledgement>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
     await db.Set<CompetitionEntrySettings>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
     await db.Set<CompetitionDeclarationLock>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.EntriesDigestCompetitions.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
     await db.Competitions.Where(x => ids.Contains(x.Id)).ExecuteDeleteAsync();
     }
 }

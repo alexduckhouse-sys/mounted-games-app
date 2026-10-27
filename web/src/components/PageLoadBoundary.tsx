@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from 'react';
 import { PageProblem } from './PageProblem';
+import { tr } from '../i18n/translate';
 
 export class PageLoadBoundary extends Component<{ children: ReactNode; page: string }, { failed: boolean }> {
   state = { failed: false };
@@ -9,8 +10,8 @@ export class PageLoadBoundary extends Component<{ children: ReactNode; page: str
   }
   render() {
     if (this.state.failed) return (
-      <PageProblem title="This page couldn’t open" primaryLabel="Reload page" onPrimary={() => window.location.reload()} secondaryLabel="Go back" onSecondary={() => window.history.back()}>
-        Check your signal, then reload.
+      <PageProblem title={tr('shell.pageProblem.title')} primaryLabel={tr('common.reload')} onPrimary={() => window.location.reload()} secondaryLabel={tr('common.goBack')} onSecondary={() => window.history.back()}>
+        {tr('shell.pageProblem.body')}
       </PageProblem>
     );
     return this.props.children;

@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CompetitionDetail, DeclarationForm, Role, SavedRider } from '../../types';
+import type { CompetitionDetail, DeclarationForm, Role, SavedRider, SavedTeamDeclaration } from '../../types';
 import { competition, team } from '../../test/factories';
 import { decDraftKey } from '../../lib/decForm';
 import { CompetitionContext } from './context';
@@ -40,6 +40,7 @@ const saved: SavedRider[] = [
 
 let forms: DeclarationForm[];
 let savedRiders: SavedRider[];
+let savedTeams: SavedTeamDeclaration[] | null;
 
 const comp = (extra: Partial<CompetitionDetail> = {}) => competition({
   id: 4, name: 'Cheshire Area MG', startDate: '2026-10-24', termsText: 'Hats must be worn.\nNo bare feet.',
@@ -85,8 +86,10 @@ beforeEach(() => {
   forms = [];
   state.organise = false;
   savedRiders = saved;
+  savedTeams = null;
   state.get.mockImplementation(async (url: string) => {
     if (url === '/declaration-forms') return { data: forms };
+    if (url.startsWith('/declaration-forms/my-saved-teams') && savedTeams) return { data: savedTeams };
     if (url === '/clubs/1/saved-riders') return { data: savedRiders };
     throw new Error(`unexpected ${url}`);
   });
@@ -817,4 +820,75 @@ it.each([true, false])('only opens a secondary signup team when the trusted gran
   await waitFor(() => expect(state.get).toHaveBeenCalledWith('/me/signups'));
   if (granted) expect(await screen.findByRole('heading', { name: 'Synthetic B' })).toBeInTheDocument();
   else expect(screen.queryByLabelText('Team name')).not.toBeInTheDocument();
+});
+
+const rider = (id: number, fullName: string, dateOfBirth: string, horseName: string, extra: Partial<SavedTeamDeclaration['riders'][number]> = {}) => ({
+  id, fullName, dateOfBirth, horseName, ponyHeightHands: 13, isCaptain: false, isReserve: false, orderIndex: id, ...extra,
+});
+
+const kentA: SavedTeamDeclaration = {
+  teamId: 90, teamName: 'Kent A', entryTeamName: 'Kent A', clubName: 'Kent PC', sectionName: 'U10', ageGroup: 'U10', format: 2,
+  competitionId: 30, competitionName: 'Spring Friendly', submittedAt: '2026-04-12T09:00:00Z', bibDescription: 'Red with white stars',
+  trainerName: 'Sam Lee', trainerPhone: '07700 900111',
+  riders: [
+    rider(1, 'Amy Fox', '2017-02-01T00:00:00', 'Biscuit'),
+    rider(2, 'Ben Fox', '2016-05-01T00:00:00', 'Cobweb'),
+    rider(3, 'Cara Hill', '2017-07-01T00:00:00', 'Dandy'),
+    rider(4, 'Dan Hill', '2010-09-01T00:00:00', 'Echo'),
+    rider(5, 'Eve Moss', '2018-01-01T00:00:00', 'Fudge', { isReserve: true }),
+  ],
+};
+
+describe('DeclarationsTab: copy a previous team', () => {
+  it('fills the riders, bibs and trainer from a team sent before, and warns about a rider too old for the section', async () => {
+    savedTeams = [kentA, { ...kentA, teamId: 91, competitionId: 31, riders: [] }];
+    const user = userEvent.setup();
+    mount();
+    await opened();
+    await user.click(await screen.findByRole('button', { name: /Copy a previous team/ }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Copy a previous team' }));
+    // A team with no riders is left out.
+    expect(sheet.getAllByRole('listitem')).toHaveLength(1);
+    expect(sheet.getByText('Sent 12 Apr 2026')).toBeInTheDocument();
+    await user.click(sheet.getByRole('button', { name: /Kent A · U10 · Spring Friendly \(4 riders \+ reserve\)/ }));
+
+    await waitFor(() => expect(riderRows()).toHaveLength(5));
+    expect(within(riderRows()[0]).getByText('Amy Fox')).toBeInTheDocument();
+    expect(screen.getByLabelText('Bibs')).toHaveValue('Red with white stars');
+    // The team keeps its own name for this competition.
+    expect(screen.getByLabelText('Team name')).toHaveValue('Stockport C');
+    expect(screen.getByRole('button', { name: /^Trainer: Sam Lee/ })).toBeInTheDocument();
+    expect(screen.getByText('Copied from Kent A. Check each rider before you send.')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Dan Hill turns 16 in 2026 (check U10 eligibility).');
+  });
+
+  it('asks before replacing riders already on the form, and lists every warning when there are several', async () => {
+    savedTeams = [{ ...kentA, riders: kentA.riders.map((r) => ({ ...r, dateOfBirth: '2009-01-01T00:00:00' })) }];
+    const user = userEvent.setup();
+    mount();
+    await opened();
+    await user.click(addBar());
+    await fillPanel(user, { name: 'Ella Hughes', dob: '05/04/2015', pony: 'Pickle', height: '13.2' });
+    await user.click(within(screen.getByRole('region', { name: 'Add a rider' })).getByRole('button', { name: 'Add rider' }));
+
+    autoConfirm(false);
+    await user.click(screen.getByRole('button', { name: /Copy a previous team/ }));
+    await user.click(within(await screen.findByRole('dialog', { name: 'Copy a previous team' })).getByRole('button', { name: /Kent A/ }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Copy a previous team' })).not.toBeInTheDocument());
+    expect(riderRows()).toHaveLength(1);
+
+    autoConfirm(true);
+    await user.click(screen.getByRole('button', { name: /Copy a previous team/ }));
+    await user.click(within(await screen.findByRole('dialog', { name: 'Copy a previous team' })).getByRole('button', { name: /Kent A/ }));
+    await waitFor(() => expect(riderRows()).toHaveLength(5));
+    expect(screen.getByRole('alert')).toHaveTextContent('Some riders may be too old for this section:');
+    expect(within(screen.getByRole('alert')).getAllByRole('listitem')).toHaveLength(5);
+  });
+
+  it('is not offered when there are no earlier teams', async () => {
+    savedTeams = [];
+    mount();
+    await opened();
+    expect(screen.queryByRole('button', { name: /Copy a previous team/ })).not.toBeInTheDocument();
+  });
 });

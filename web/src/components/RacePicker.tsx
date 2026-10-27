@@ -129,6 +129,9 @@ export function RaceSelect({
       setSelected(value ? (allRaces.includes(value) ? value : '__custom__') : '');
       setCustomName(value && !allRaces.includes(value) ? value : '');
     }
+  } else if (selected === '__custom__' && value && allRaces.includes(value) && customName.trim() === value) {
+    setSelected(value);
+    setCustomName('');
   }
 
   const filtered = useMemo(() => {

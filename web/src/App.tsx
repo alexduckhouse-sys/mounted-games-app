@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { PageLoadBoundary } from './components/PageLoadBoundary';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { LanguageProvider } from './i18n/LanguageContext';
 import { AuthProvider } from './auth/AuthContext';
 import { NeedsYouProvider } from './pages/profile/NeedsYouProvider';
 import { ThemeProvider } from './theme/ThemeContext';
@@ -19,7 +20,7 @@ import { StartPage } from './pages/StartPage';
 import { CompetitionPage } from './pages/CompetitionPage';
 import { AfterDrawOnly, CompetitionHome } from './pages/competition/CompetitionHome';
 import { ScrollToTop } from './components/ScrollToTop';
-import './App.css';
+import { useT } from './i18n/LanguageContext';
 
 const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })));
 const SignUpPage = lazy(() => import('./pages/SignUpPage').then((module) => ({ default: module.SignUpPage })));
@@ -35,6 +36,7 @@ const TeamsTab = lazy(() => import('./pages/competition/TeamsTab').then((module)
 const CompetitionTeamPage = lazy(() => import('./pages/competition/CompetitionTeamPage').then((module) => ({ default: module.CompetitionTeamPage })));
 const DeclarationsTab = lazy(() => import('./pages/competition/DeclarationsTab').then((module) => ({ default: module.DeclarationsTab })));
 const BroadcastPage = lazy(() => import('./pages/competition/BroadcastPage').then((module) => ({ default: module.BroadcastPage })));
+const PrizeGivingPage = lazy(() => import('./pages/competition/PrizeGivingPage').then((module) => ({ default: module.PrizeGivingPage })));
 const StreamControlsPage = lazy(() => import('./pages/competition/StreamControlsPage').then((module) => ({ default: module.StreamControlsPage })));
 const ProducePage = lazy(() => import('./pages/competition/ProducePage').then((module) => ({ default: module.ProducePage })));
 const ChatTab = lazy(() => import('./pages/competition/ChatTab').then((module) => ({ default: module.ChatTab })));
@@ -55,9 +57,13 @@ const UsersPage = lazy(() => import('./pages/admin/UsersPage').then((module) => 
 const EmailPage = lazy(() => import('./pages/admin/EmailPage').then((module) => ({ default: module.EmailPage })));
 const BlockedAccountsPage = lazy(() => import('./pages/admin/BlockedAccountsPage').then((module) => ({ default: module.BlockedAccountsPage })));
 const InvitePage = lazy(() => import('./pages/InvitePage').then((module) => ({ default: module.InvitePage })));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage').then((module) => ({ default: module.ForgotPasswordPage })));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage').then((module) => ({ default: module.ResetPasswordPage })));
 const CompetitionEditor = lazy(() => import('./pages/admin/CompetitionEditor').then((module) => ({ default: module.CompetitionEditor })));
 const FormatPage = lazy(() => import('./pages/admin/FormatPage').then((module) => ({ default: module.FormatPage })));
 const RulesLibraryPage = lazy(() => import('./pages/admin/RulesLibraryPage').then((module) => ({ default: module.RulesLibraryPage })));
+const ArenaCrewPage = lazy(() => import('./pages/competition/ArenaCrewPage').then((module) => ({ default: module.ArenaCrewPage })));
+const VolunteerRotaPage = lazy(() => import('./pages/competition/VolunteerRotaPage').then((module) => ({ default: module.VolunteerRotaPage })));
 const ArenaPage = lazy(() => import('./pages/competition/ArenaPage').then((module) => ({ default: module.ArenaPage })));
 const WeatherPage = lazy(() => import('./pages/competition/WeatherPage').then((module) => ({ default: module.WeatherPage })));
 const OperationsPage = lazy(() => import('./pages/operations/OperationsPage').then((module) => ({ default: module.OperationsPage })));
@@ -89,8 +95,14 @@ const TestEntryPaymentPage = lazy(() => import('./pages/commerce/TestEntryPaymen
 const MySignupsPage = lazy(() => import('./pages/MySignupsPage').then((module) => ({ default: module.MySignupsPage })));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then((module) => ({ default: module.NotFoundPage })));
 
+function OpeningPage() {
+  const t = useT();
+  return <p role="status" className="p-4 text-sm">{t('shell.header.openingPage')}</p>;
+}
+
 export default function App() {
   return (
+    <LanguageProvider>
     <LiteModeProvider>
     <LiteMotionConfig>
     <ThemeProvider>
@@ -106,11 +118,13 @@ export default function App() {
         <BrowserRouter>
           <ScrollToTop />
           <PageLoadBoundary page="app">
-          <Suspense fallback={<p role="status" className="p-4 text-sm">Opening page…</p>}>
+          <Suspense fallback={<OpeningPage />}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignUpPage />} />
             <Route path="/invite" element={<InvitePage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/score" element={<ScorerPage />} />
             <Route path="/event-tools/:competitionId/print/:view" element={<PrintEventPage />} />
             <Route element={<AppShell />}>
@@ -128,7 +142,9 @@ export default function App() {
                 <Route path="commentary" element={<CommentaryDeskPage />} />
                 <Route path="session/:sessionId" element={<AfterDrawOnly><SessionPage /></AfterDrawOnly>} />
                 <Route path="arena" element={<ArenaPage />} />
+                <Route path="arena-crew" element={<ArenaCrewPage />} />
                 <Route path="weather" element={<WeatherPage />} />
+                <Route path="volunteers" element={<VolunteerRotaPage />} />
                 <Route path="standings" element={<Navigate to="../scoring" replace />} />
                 <Route path="timetable" element={<Navigate to=".." replace />} />
                 <Route path="teams" element={<TeamsTab />} />
@@ -147,6 +163,7 @@ export default function App() {
                 <Route path="declarations" element={<DeclarationsTab />} />
                 <Route path="broadcast" element={<ProtectedRoute roles={['Admin', 'Trainer']}><BroadcastPage /></ProtectedRoute>} />
                 <Route path="stream-controls" element={<ProtectedRoute roles={['Admin', 'Trainer']}><StreamControlsPage /></ProtectedRoute>} />
+                <Route path="prize-giving" element={<ProtectedRoute roles={['Admin', 'Trainer']}><PrizeGivingPage /></ProtectedRoute>} />
                 <Route path="produce" element={<ProtectedRoute roles={['Admin', 'Trainer']}><ProducePage /></ProtectedRoute>} />
                 <Route path="chat" element={<AfterDrawOnly><ChatTab /></AfterDrawOnly>} />
                 <Route path="contact" element={<ContactOrganisersPage />} />
@@ -238,5 +255,6 @@ export default function App() {
     </ThemeProvider>
     </LiteMotionConfig>
     </LiteModeProvider>
+    </LanguageProvider>
   );
 }

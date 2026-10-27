@@ -144,7 +144,7 @@ public sealed class PrintableEventService(AppDbContext db)
                     {
                         var result = r.Results.SingleOrDefault(y => y.TeamId == e.TeamId);
                         return new PrintableScoreCellDto(e.TeamId, e.Team!.DisplayName, result?.Placing, result?.Eliminated ?? false, result?.Points,
-                            e.LaneIndex, !string.IsNullOrWhiteSpace(e.BibColourOverride) ? e.BibColourOverride : (e.Team.BibDescription ?? e.Team.BibColour), result?.IsSitOut ?? false,
+                            e.LaneIndex, !string.IsNullOrWhiteSpace(e.BibColourOverride) ? e.BibColourOverride : (ResultStatuses.PublicBibDescription(e.Team.BibDescription) ?? e.Team.BibColour), result?.IsSitOut ?? false,
                             result is null ? ResultStatus.Finished : ResultStatuses.Of(result));
                     }).ToArray())).ToArray(),
                 x.Session.Id))
@@ -170,7 +170,7 @@ public sealed class PrintableEventService(AppDbContext db)
                         .Select(r => new PrintableEntryRiderDto(r.FullName, string.IsNullOrWhiteSpace(r.HorseName) ? null : r.HorseName.Trim(),
                             r.IsCaptain, r.IsReserve, r.IsGuestRider)).ToArray();
                     return new PrintableEntryTeamDto(team.Id, team.DisplayName, team.Club?.Name ?? string.Empty,
-                        team.BibDescription ?? team.BibColour, team.EntryStatus != TeamEntryStatus.Active, team.IsHorsConcours, riders);
+                        ResultStatuses.PublicBibDescription(team.BibDescription) ?? team.BibColour, team.EntryStatus != TeamEntryStatus.Active, team.IsHorsConcours, riders);
                 }).ToArray())).ToArray();
         return new PrintableEntriesDto(ToCompetition(competition), sections);
     }

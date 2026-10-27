@@ -147,9 +147,20 @@ public class SessionsController : ControllerBase
             .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
         if (s is null) return NotFound();
 
+        var now = DateTime.UtcNow;
         s.Status = req.Status;
-        if (req.Status == SessionStatus.InArena && s.StartedAt is null) s.StartedAt = DateTime.UtcNow;
-        if (req.Status == SessionStatus.Finished && s.FinishedAt is null) s.FinishedAt = DateTime.UtcNow;
+        if (req.Status == SessionStatus.InArena && s.StartedAt is null) s.StartedAt = now;
+        if (req.Status == SessionStatus.Finished)
+        {
+            s.FinishedAt ??= now;
+            s.ProvisionalUntil = now.AddMinutes(15);
+            s.OfficialConfirmedAt = null;
+        }
+        else
+        {
+            s.ProvisionalUntil = null;
+            s.OfficialConfirmedAt = null;
+        }
         await _db.SaveChangesAsync();
 
         var dto = s.ToDto();
@@ -180,6 +191,59 @@ public class SessionsController : ControllerBase
         await _live.ChatMessage(competitionId, systemMessage.ToDto());
 
         return dto;
+    }
+
+    [HttpPost("{id:int}/confirm-official")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<SessionDto>> ConfirmOfficial(
+        int competitionId,
+        int id,
+        [FromBody] ConfirmSessionOfficialRequest? req = null)
+    {
+        var s = await SessionsWithDetail()
+            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+        if (s is null) return NotFound();
+        if (s.Status != SessionStatus.Finished)
+            return Conflict(new { message = "Only finished sessions can have their results confirmed." });
+
+        var now = DateTime.UtcNow;
+        if (req?.ReopenQueries == true)
+        {
+            var minutes = Math.Clamp(req.ProvisionalMinutes ?? 15, 1, 120);
+            s.OfficialConfirmedAt = null;
+            s.ProvisionalUntil = now.AddMinutes(minutes);
+        }
+        else
+        {
+            var hasUnderReview = s.Heats.Any(h => h.Races.Any(r => r.Results.Any(res => ScoringService.IsUnderReview(res.RefereeNote))));
+            if (hasUnderReview)
+                return Conflict(new { message = "Resolve or clear all results flagged under review before confirming official results." });
+
+            s.OfficialConfirmedAt = now;
+            s.ProvisionalUntil = now;
+        }
+
+        await _db.SaveChangesAsync();
+        var dto = s.ToDto();
+        await _live.SessionUpdated(competitionId, dto);
+        return dto;
+    }
+
+    [HttpGet("{id:int}/heats/{heatId:int}/commentator-briefing")]
+    [AllowAnonymous]
+    public async Task<ActionResult<CommentatorBriefingDto>> GetCommentatorBriefing(
+        int competitionId,
+        int id,
+        int heatId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await new CommentatorBriefingService(_db)
+                .GetAsync(competitionId, id, heatId, cancellationToken);
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
     }
 
     [HttpDelete("{id:int}")]
@@ -899,16 +963,22 @@ public class SessionsController : ControllerBase
     [HttpDelete("/api/sessions/races/{raceId:int}/results")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("raceId", CompetitionResource.Race)]
-    public async Task<ActionResult<RaceScoreDto>> ClearRaceResults(int raceId, CancellationToken cancellationToken = default)
+    public async Task<ActionResult<RaceScoreDto>> ClearRaceResults(
+        int raceId, int? competitionId = null, int? id = null, CancellationToken cancellationToken = default)
     {
         try
         {
-            var actor = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            var score = await _scoring.ClearRaceForRerunAsync(raceId, actor, "Cleared for re-run.", cancellationToken);
             var race = await _db.Races.AsNoTracking()
                 .Include(r => r.Heat).ThenInclude(h => h!.Session)
                 .FirstOrDefaultAsync(r => r.Id == raceId, cancellationToken);
-            if (race?.Heat?.Session is { } session)
+            if (race?.Heat?.Session is null) return NotFound();
+            if ((competitionId.HasValue && race.Heat.Session.CompetitionId != competitionId.Value)
+                || (id.HasValue && race.Heat.SessionId != id.Value))
+                return NotFound();
+
+            var actor = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var score = await _scoring.ClearRaceForRerunAsync(raceId, actor, "Cleared for re-run.", cancellationToken);
+            if (race.Heat.Session is { } session)
             {
                 var sessionDto = await SessionsWithDetail().FirstAsync(s => s.Id == session.Id, cancellationToken);
                 await _live.SessionUpdated(session.CompetitionId, sessionDto.ToDto());
@@ -925,10 +995,20 @@ public class SessionsController : ControllerBase
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("raceId", CompetitionResource.Race)]
     public async Task<ActionResult<RaceScoreDto>> SetUnderReview(
-        int raceId, int teamId, SetUnderReviewRequest req, CancellationToken cancellationToken = default)
+        int raceId, int teamId, SetUnderReviewRequest req, int? competitionId = null, int? id = null, CancellationToken cancellationToken = default)
     {
         try
         {
+            if (competitionId.HasValue || id.HasValue)
+            {
+                var race = await _db.Races.AsNoTracking()
+                    .Include(r => r.Heat).ThenInclude(h => h!.Session)
+                    .FirstOrDefaultAsync(r => r.Id == raceId, cancellationToken);
+                if (race?.Heat?.Session is null) return NotFound();
+                if ((competitionId.HasValue && race.Heat.Session.CompetitionId != competitionId.Value)
+                    || (id.HasValue && race.Heat.SessionId != id.Value))
+                    return NotFound();
+            }
             var actor = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             return await _scoring.SetUnderReviewAsync(raceId, teamId, req.UnderReview, req.Note, actor, cancellationToken);
         }
@@ -1088,15 +1168,28 @@ public class SessionsController : ControllerBase
             shift = TimeSpan.FromMinutes(req.DelayMinutes.Value);
         }
 
+        var shiftedSessions = new List<Session>();
         if (shift != TimeSpan.Zero)
         {
             foreach (var us in unstarted)
             {
+                var changed = false;
                 if (us.ScheduledStart.HasValue)
+                {
                     us.ScheduledStart = us.ScheduledStart.Value.Add(shift);
+                    changed = true;
+                }
                 foreach (var h in us.Heats.Where(h => h.ScheduledStart.HasValue))
+                {
                     h.ScheduledStart = h.ScheduledStart!.Value.Add(shift);
+                    changed = true;
+                }
+                if (changed) shiftedSessions.Add(us);
             }
+        }
+        else if (unstarted.Count > 0 && unstarted[0].ScheduledStart.HasValue)
+        {
+            shiftedSessions.Add(unstarted[0]);
         }
 
         if (req.PostAnnouncement)
@@ -1122,6 +1215,9 @@ public class SessionsController : ControllerBase
         {
             await _db.SaveChangesAsync();
         }
+
+        foreach (var shifted in shiftedSessions)
+            await _live.SessionUpdated(competitionId, shifted.ToDto());
 
         return sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList();
     }
@@ -1438,9 +1534,17 @@ public class SessionsController : ControllerBase
                 .Where(s => s.CompetitionId == competitionId && s.Status != SessionStatus.Finished)
                 .OrderBy(s => s.OrderIndex)
                 .ToListAsync();
+            var sessionArena = string.IsNullOrWhiteSpace(session.ArenaName) ? "Main Arena" : session.ArenaName.Trim();
             var targetSessions = arenaSessions
-                .Where(s => string.IsNullOrWhiteSpace(session.ArenaName)
-                    || string.Equals(s.ArenaName?.Trim(), arena, StringComparison.OrdinalIgnoreCase))
+                .Where(s => s.Id == session.Id
+                    || string.Equals(
+                        string.IsNullOrWhiteSpace(s.ArenaName) ? "Main Arena" : s.ArenaName.Trim(),
+                        sessionArena,
+                        StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(
+                        string.IsNullOrWhiteSpace(s.ArenaName) ? "Main Arena" : s.ArenaName.Trim(),
+                        arena,
+                        StringComparison.OrdinalIgnoreCase))
                 .ToList();
             var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             foreach (var target in targetSessions)

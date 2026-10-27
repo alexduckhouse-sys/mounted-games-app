@@ -73,6 +73,9 @@ public class DeclarationFormsController : ControllerBase
         var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
         var mySignupTeamIds = await SignedUpTeamIdsAsync(uid);
+        var myClubId = await _db.ClubIdOfAsync(User);
+        var isClubManager = myClubId.HasValue && await _db.IsClubManagerAsync(User, myClubId.Value);
+        var managedClubId = isClubManager ? myClubId : null;
         var q = _db.DeclarationForms
             .Include(d => d.Team).ThenInclude(t => t!.Competition)
             .Include(d => d.SubmittedBy)
@@ -82,6 +85,7 @@ public class DeclarationFormsController : ControllerBase
         // Public declarations omit private details; drafts are visible only to their owners.
         if (!isAdmin)
             q = q.Where(d => d.IsLocked || (uid != null && (d.SubmittedByUserId == uid || d.Team!.TrainerUserId == uid || mySignupTeamIds.Contains(d.TeamId)
+                || (managedClubId.HasValue && d.Team!.ClubId == managedClubId.Value)
                 || (User.IsInRole(Roles.Trainer) && d.Team.Competition!.CreatedByUserId == uid)
                 || _db.CompetitionCollaborators.Any(k => k.CompetitionId == d.Team.CompetitionId && k.UserId == uid))));
         if (competitionId.HasValue)
@@ -92,7 +96,82 @@ public class DeclarationFormsController : ControllerBase
         var helping = await HelpingAsync(uid);
         var forms = await q.OrderByDescending(d => d.SubmittedAt).ToListAsync();
         var entryNames = await EntryTeamNamesAsync(forms.Select(d => d.TeamId));
-        return forms.Select(d => d.ToDto(CanReadPrivate(d, helping, mySignupTeamIds), entryNames.GetValueOrDefault(d.TeamId)));
+        return forms.Select(d => d.ToDto(CanReadPrivate(d, helping, mySignupTeamIds, managedClubId), entryNames.GetValueOrDefault(d.TeamId)));
+    }
+
+    [HttpGet("my-saved-teams")]
+    [Authorize]
+    public async Task<ActionResult<IReadOnlyList<SavedTeamDeclarationDto>>> ListMySavedTeams(
+        [FromQuery] int? excludeTeamId = null,
+        CancellationToken ct = default)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(uid)) return Unauthorized();
+
+        var mySignupTeamIds = await SignedUpTeamIdsAsync(uid);
+        var myClubId = await _db.ClubIdOfAsync(User, ct);
+        var isClubManager = myClubId.HasValue && await _db.IsClubManagerAsync(User, myClubId.Value, ct);
+
+        var q = _db.DeclarationForms
+            .AsNoTracking()
+            .Include(d => d.Team).ThenInclude(t => t!.Club)
+            .Include(d => d.Team).ThenInclude(t => t!.Competition)
+            .Include(d => d.Team).ThenInclude(t => t!.Section)
+            .Include(d => d.SubmittedBy)
+            .Include(d => d.Riders)
+            .Where(d => d.Team != null && d.Riders.Count > 0)
+            .Where(d => d.SubmittedByUserId == uid
+                || d.Team!.TrainerUserId == uid
+                || mySignupTeamIds.Contains(d.TeamId)
+                || (isClubManager && d.Team!.ClubId == myClubId!.Value));
+
+        if (excludeTeamId.HasValue)
+            q = q.Where(d => d.TeamId != excludeTeamId.Value);
+
+        var forms = await q
+            .OrderByDescending(d => d.SubmittedAt)
+            .ThenByDescending(d => d.Id)
+            .ToListAsync(ct);
+
+        var entryNames = await EntryTeamNamesAsync(forms.Select(d => d.TeamId));
+        var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<SavedTeamDeclarationDto>();
+
+        foreach (var d in forms)
+        {
+            var team = d.Team!;
+            var section = team.Section;
+            var normName = (team.DisplayName ?? string.Empty).Trim().ToLowerInvariant();
+            var normAge = (section?.AgeGroup ?? string.Empty).Trim().ToLowerInvariant();
+            var format = section?.Format ?? SectionFormat.Teams;
+            var key = $"{team.ClubId}:{normName}:{(int)format}:{normAge}";
+            if (!seenKeys.Add(key)) continue;
+
+            var dto = d.ToDto(includePrivate: true, entryNames.GetValueOrDefault(d.TeamId));
+            result.Add(new SavedTeamDeclarationDto(
+                FormId: d.Id,
+                TeamId: team.Id,
+                TeamName: team.DisplayName ?? string.Empty,
+                ClubId: team.ClubId,
+                ClubName: team.Club?.Name ?? string.Empty,
+                CompetitionId: team.CompetitionId,
+                CompetitionName: team.Competition?.Name ?? string.Empty,
+                CompetitionStartDate: team.Competition?.StartDate ?? d.SubmittedAt,
+                SectionId: team.CompetitionSectionId,
+                SectionName: section?.DisplayName ?? string.Empty,
+                Format: format,
+                AgeGroup: section?.AgeGroup ?? string.Empty,
+                SubmittedAt: d.SubmittedAt,
+                Form: dto,
+                Riders: dto.Riders,
+                EntryTeamName: dto.EntryTeamName,
+                BibDescription: dto.BibDescription,
+                TrainerName: dto.TrainerName,
+                TrainerPhone: dto.TrainerPhone));
+        }
+
+        return result;
     }
 
     [HttpGet("{id:int}")]
@@ -105,7 +184,9 @@ public class DeclarationFormsController : ControllerBase
             .FirstOrDefaultAsync(d => d.Id == id);
         if (d is null) return NotFound();
         var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        var canRead = CanReadPrivate(d, await HelpingAsync(uid), await SignedUpTeamIdsAsync(uid));
+        var myClubId = await _db.ClubIdOfAsync(User);
+        var isClubManager = myClubId.HasValue && await _db.IsClubManagerAsync(User, myClubId.Value);
+        var canRead = CanReadPrivate(d, await HelpingAsync(uid), await SignedUpTeamIdsAsync(uid), isClubManager ? myClubId : null);
         if (!d.IsLocked && !canRead) return NotFound();
         return d.ToDto(canRead, (await EntryTeamNamesAsync([d.TeamId])).GetValueOrDefault(d.TeamId));
     }
@@ -117,10 +198,21 @@ public class DeclarationFormsController : ControllerBase
     private async Task<Dictionary<int, string>> EntryTeamNamesAsync(IEnumerable<int> teamIds)
     {
         var ids = teamIds.Distinct().ToArray();
-        var rows = await _db.SectionSignups.AsNoTracking()
+        if (ids.Length == 0) return [];
+        var directRows = await _db.SectionSignups.AsNoTracking()
             .Where(s => s.TeamId != null && ids.Contains(s.TeamId.Value) && s.TeamName != null && s.TeamName != "")
-            .OrderBy(s => s.CreatedAt).Select(s => new { TeamId = s.TeamId!.Value, s.TeamName }).ToListAsync();
-        return rows.GroupBy(r => r.TeamId).ToDictionary(g => g.Key, g => g.First().TeamName!);
+            .Select(s => new { TeamId = s.TeamId!.Value, s.TeamName, s.CreatedAt })
+            .ToListAsync();
+        var linkedRows = await (
+            from l in _db.Set<SignupTeamLink>().AsNoTracking()
+            join s in _db.SectionSignups.AsNoTracking() on l.SignupId equals s.Id
+            where ids.Contains(l.TeamId) && s.TeamName != null && s.TeamName != ""
+            select new { l.TeamId, s.TeamName, s.CreatedAt }
+        ).ToListAsync();
+        return directRows.Concat(linkedRows)
+            .OrderBy(r => r.CreatedAt)
+            .GroupBy(r => r.TeamId)
+            .ToDictionary(g => g.Key, g => g.First().TeamName!);
     }
 
     /// <summary>The competitions this user is a competition admin of.</summary>
@@ -148,12 +240,13 @@ public class DeclarationFormsController : ControllerBase
         : TrustedEntries(userId).AnyAsync(s => s.CompetitionSectionId == team.CompetitionSectionId
             && (s.TeamId == team.Id || _db.Set<SignupTeamLink>().Any(l => l.SignupId == s.Id && l.TeamId == team.Id)));
 
-    private bool CanReadPrivate(DeclarationForm form, HashSet<int> helping, HashSet<int> mySignupTeamIds)
+    private bool CanReadPrivate(DeclarationForm form, HashSet<int> helping, HashSet<int> mySignupTeamIds, int? managedClubId = null)
     {
         var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         return User.IsInRole(Roles.Admin) || (!string.IsNullOrEmpty(uid)
             && (form.SubmittedByUserId == uid || form.Team?.TrainerUserId == uid
                 || (form.Team is not null && mySignupTeamIds.Contains(form.Team.Id))
+                || (managedClubId.HasValue && form.Team?.ClubId == managedClubId.Value)
                 || (User.IsInRole(Roles.Trainer) && form.Team?.Competition?.CreatedByUserId == uid)
                 || (form.Team is not null && helping.Contains(form.Team.CompetitionId))));
     }

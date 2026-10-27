@@ -1,3 +1,4 @@
+// Unused in web UI yet — reserved for iOS / upcoming wiring
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
 import type { RiderRaceRole, TeamRaceLineupPlan } from '../types';
@@ -49,41 +50,60 @@ export interface UseTeamRaceLineupReturn {
  * Loads and syncs a team's 5-rider per-race lineup & sit-out plan via
  * `GET/PUT /competitions/:id/teams/:teamId/race-lineup` with `localStorage` fallback.
  */
+const EMPTY_ASSIGNMENTS: Record<string, Record<string, RiderRaceRole | string>> = {};
+
 export function useTeamRaceLineup(
   competitionId: number | null | undefined,
   teamId: number | null | undefined,
 ): UseTeamRaceLineupReturn {
-  const [assignments, setAssignments] = useState<Record<string, Record<string, RiderRaceRole | string>>>(() =>
-    competitionId && teamId ? readLocalPlan(competitionId, teamId) : {},
-  );
-  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const targetKey = competitionId && teamId ? `${competitionId}:${teamId}` : null;
+  const [state, setState] = useState<{
+    key: string | null;
+    assignments: Record<string, Record<string, RiderRaceRole | string>>;
+    updatedAt: string | null;
+    loaded: boolean;
+  }>(() => ({
+    key: targetKey,
+    assignments: competitionId && teamId ? readLocalPlan(competitionId, teamId) : EMPTY_ASSIGNMENTS,
+    updatedAt: null,
+    loaded: !targetKey,
+  }));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const assignments =
+    state.key === targetKey
+      ? state.assignments
+      : competitionId && teamId
+        ? readLocalPlan(competitionId, teamId)
+        : EMPTY_ASSIGNMENTS;
+  const updatedAt = state.key === targetKey ? state.updatedAt : null;
+  const loading = targetKey !== null && (state.key !== targetKey || !state.loaded);
+
   useEffect(() => {
     if (!competitionId || !teamId) return;
+    const key = `${competitionId}:${teamId}`;
     let cancelled = false;
     api
       .get<TeamRaceLineupPlan>(`/competitions/${competitionId}/teams/${teamId}/race-lineup`)
       .then((res) => {
+        if (cancelled) return;
         const payload = ((res as { data?: TeamRaceLineupPlan })?.data ?? res) as TeamRaceLineupPlan | undefined;
-        if (cancelled || !payload || typeof payload.assignments !== 'object' || payload.assignments === null) return;
-        if (Object.keys(payload.assignments).length > 0 || payload.updatedAt) {
-          setAssignments(payload.assignments);
-          writeLocalPlan(competitionId, teamId, payload.assignments);
-        } else {
-          setAssignments(readLocalPlan(competitionId, teamId));
+        if (!payload || typeof payload.assignments !== 'object' || payload.assignments === null) {
+          setState({ key, assignments: readLocalPlan(competitionId, teamId), updatedAt: null, loaded: true });
+          return;
         }
-        setUpdatedAt(payload.updatedAt ?? null);
+        const hasServerPlan = Object.keys(payload.assignments).length > 0 || Boolean(payload.updatedAt);
+        const nextAssignments = hasServerPlan ? payload.assignments : readLocalPlan(competitionId, teamId);
+        if (hasServerPlan) {
+          writeLocalPlan(competitionId, teamId, payload.assignments);
+        }
+        setState({ key, assignments: nextAssignments, updatedAt: payload.updatedAt ?? null, loaded: true });
       })
       .catch(() => {
         if (!cancelled) {
-          setAssignments(readLocalPlan(competitionId, teamId));
+          setState({ key, assignments: readLocalPlan(competitionId, teamId), updatedAt: null, loaded: true });
         }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
@@ -94,7 +114,12 @@ export function useTeamRaceLineup(
     async (
       next: Record<string, Record<string, RiderRaceRole | string>>,
     ): Promise<Record<string, Record<string, RiderRaceRole | string>>> => {
-      setAssignments(next);
+      setState((prev) => ({
+        key: targetKey,
+        assignments: next,
+        updatedAt: prev.key === targetKey ? prev.updatedAt : null,
+        loaded: true,
+      }));
       if (!competitionId || !teamId) return next;
       writeLocalPlan(competitionId, teamId, next);
       if (typeof api.put !== 'function') return next;
@@ -107,9 +132,13 @@ export function useTeamRaceLineup(
         );
         const saved = ((res as { data?: TeamRaceLineupPlan })?.data ?? res) as TeamRaceLineupPlan | undefined;
         if (saved?.assignments) {
-          setAssignments(saved.assignments);
+          setState({
+            key: targetKey,
+            assignments: saved.assignments,
+            updatedAt: saved.updatedAt ?? null,
+            loaded: true,
+          });
           writeLocalPlan(competitionId, teamId, saved.assignments);
-          setUpdatedAt(saved.updatedAt ?? null);
           return saved.assignments;
         }
         return next;
@@ -120,7 +149,7 @@ export function useTeamRaceLineup(
         setSaving(false);
       }
     },
-    [competitionId, teamId],
+    [competitionId, targetKey, teamId],
   );
 
   const setRaceRow = useCallback(

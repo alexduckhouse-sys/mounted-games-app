@@ -3,6 +3,7 @@
  * bib or number, trainer) is always there; everything in `DecFormConfig` is added to it by the organiser.
  * Mirrors `api/Services/DecForms/DecFormConfig.cs`; enums travel as numbers.
  */
+import { tr } from '../i18n/translate';
 
 /** Off, optional or required. */
 export type Requirement = 0 | 1 | 2;
@@ -179,14 +180,14 @@ export function breach(field: CustomField, text: string): 'over' | 'under' | nul
 
 /** The amber warning shown while a trainer types a number that breaks the rule. */
 export function breachWarning(kind: 'over' | 'under'): string {
-  return kind === 'over' ? 'Above the limit — will be flagged' : 'Below the minimum — will be flagged';
+  return kind === 'over' ? tr('entries.dec.over') : tr('entries.dec.under');
 }
 
 export function limitText(field: CustomField): string {
   const unit = field.unit?.trim() ? ` ${field.unit.trim()}` : '';
-  if (field.min != null && field.max != null) return `Expected ${field.min} to ${field.max}${unit}`;
-  if (field.max != null) return `No more than ${field.max}${unit}`;
-  if (field.min != null) return `At least ${field.min}${unit}`;
+  if (field.min != null && field.max != null) return tr('entries.dec.limitRange', { min: field.min, max: field.max, unit });
+  if (field.max != null) return tr('entries.dec.limitMax', { max: field.max, unit });
+  if (field.min != null) return tr('entries.dec.limitMin', { min: field.min, unit });
   return unit.trim();
 }
 
@@ -210,37 +211,37 @@ export function extraIssues(extras: ExtraAnswers, reserve: boolean, config: DecF
   const blank = (t: string) => t.trim() === '';
 
   if (asked(config.dob) && config.dobFormat === 1) {
-    if (blank(extras.birthYear)) { if (config.dob === REQUIRED) missing.push('year of birth'); }
-    else if (!/^\d{4}$/.test(extras.birthYear.trim()) || Number(extras.birthYear) < 1900 || Number(extras.birthYear) > today.getFullYear()) invalid.birthYear = 'Enter a four-digit year, like 2014.';
+    if (blank(extras.birthYear)) { if (config.dob === REQUIRED) missing.push(tr('entries.dec.missingYear')); }
+    else if (!/^\d{4}$/.test(extras.birthYear.trim()) || Number(extras.birthYear) < 1900 || Number(extras.birthYear) > today.getFullYear()) invalid.birthYear = tr('entries.dec.badYear');
   }
-  if (asked(config.dob) && config.dobFormat === 2 && blank(extras.ageGroup) && config.dob === REQUIRED) missing.push('age group');
+  if (asked(config.dob) && config.dobFormat === 2 && blank(extras.ageGroup) && config.dob === REQUIRED) missing.push(tr('entries.dec.missingAgeGroup'));
 
   if (asked(config.weight)) {
     const empty = blank(extras.weight) && (config.weightUnit === 0 || blank(extras.weightStone));
-    if (empty) { if (config.weight === REQUIRED) missing.push('weight'); }
-    else if (weightKg(extras, config.weightUnit) === null) invalid.weight = 'That doesn’t look like a weight.';
+    if (empty) { if (config.weight === REQUIRED) missing.push(tr('entries.dec.missingWeight')); }
+    else if (weightKg(extras, config.weightUnit) === null) invalid.weight = tr('entries.dec.badWeight');
   }
 
   if (!reserve) {
-    if (config.ponyPassport === REQUIRED && blank(extras.ponyPassport)) missing.push('pony passport or ID number');
+    if (config.ponyPassport === REQUIRED && blank(extras.ponyPassport)) missing.push(tr('entries.dec.missingPassport'));
     if (asked(config.ponyAge)) {
-      if (blank(extras.ponyAge)) { if (config.ponyAge === REQUIRED) missing.push('pony’s age'); }
-      else if (!/^\d{1,2}$/.test(extras.ponyAge.trim())) invalid.ponyAge = 'Enter the age in whole years.';
+      if (blank(extras.ponyAge)) { if (config.ponyAge === REQUIRED) missing.push(tr('entries.dec.missingPonyAge')); }
+      else if (!/^\d{1,2}$/.test(extras.ponyAge.trim())) invalid.ponyAge = tr('entries.dec.badPonyAge');
     }
   }
 
-  if (config.membershipNumber === REQUIRED && blank(extras.membershipNumber)) missing.push('membership number');
+  if (config.membershipNumber === REQUIRED && blank(extras.membershipNumber)) missing.push(tr('entries.dec.missingMembership'));
   if (asked(config.emergencyContact)) {
     const none = blank(extras.emergencyName) && blank(extras.emergencyPhone);
-    if (none) { if (config.emergencyContact === REQUIRED) missing.push('emergency contact name and phone'); }
-    else if (blank(extras.emergencyName) || blank(extras.emergencyPhone)) invalid.emergency = 'Give both a name and a phone number, or leave both blank.';
+    if (none) { if (config.emergencyContact === REQUIRED) missing.push(tr('entries.dec.missingEmergency')); }
+    else if (blank(extras.emergencyName) || blank(extras.emergencyPhone)) invalid.emergency = tr('entries.dec.badEmergency');
   }
-  if (config.medicalNotes === REQUIRED && blank(extras.medicalNotes)) missing.push('medical notes (write “none” if there aren’t any)');
+  if (config.medicalNotes === REQUIRED && blank(extras.medicalNotes)) missing.push(tr('entries.dec.missingMedical'));
 
   for (const field of config.customFields) {
     const text = extras.custom[field.id] ?? '';
     if (blank(text)) { if (field.required) missing.push(field.label.trim()); }
-    else if (field.type === NUMBER_FIELD && !isNumberText(text)) invalid[`custom:${field.id}`] = 'Enter a number.';
+    else if (field.type === NUMBER_FIELD && !isNumberText(text)) invalid[`custom:${field.id}`] = tr('entries.dec.badNumber');
   }
   return { missing, invalid };
 }
@@ -308,7 +309,9 @@ export function normalisePhone(text: string): string | null {
   return digits.length >= 7 && digits.length <= 10 ? prefix + digits : null;
 }
 
+/** Shown when a phone number can't be read, in the language in use. */
 export const PHONE_HELP = 'Enter a UK or Irish number, like 07123 456789.';
+export const phoneHelp = (): string => tr('entries.dec.phoneHelp');
 
 /** The words for a requirement, for the organiser's pickers. */
 export const REQUIREMENT_LABELS: Record<Requirement, string> = { 0: 'Off', 1: 'Optional', 2: 'Required' };

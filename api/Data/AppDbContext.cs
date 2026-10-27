@@ -34,6 +34,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<IpBlock> IpBlocks => Set<IpBlock>();
     public DbSet<AccountIp> AccountIps => Set<AccountIp>();
     public DbSet<AccountInvite> AccountInvites => Set<AccountInvite>();
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     public DbSet<RaceTemplate> RaceTemplates => Set<RaceTemplate>();
     public DbSet<TeamSupporter> TeamSupporters => Set<TeamSupporter>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
@@ -42,6 +43,9 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<CustomEmail> CustomEmails => Set<CustomEmail>();
     public DbSet<CustomEmailRecipient> CustomEmailRecipients => Set<CustomEmailRecipient>();
     public DbSet<CustomEmailImage> CustomEmailImages => Set<CustomEmailImage>();
+    public DbSet<EntriesDigestRun> EntriesDigestRuns => Set<EntriesDigestRun>();
+    public DbSet<EntriesDigestCompetition> EntriesDigestCompetitions => Set<EntriesDigestCompetition>();
+    public DbSet<EntriesDigestRecipient> EntriesDigestRecipients => Set<EntriesDigestRecipient>();
     public DbSet<ShopPost> ShopPosts => Set<ShopPost>();
     public DbSet<ShopComment> ShopComments => Set<ShopComment>();
     public DbSet<ShopReport> ShopReports => Set<ShopReport>();

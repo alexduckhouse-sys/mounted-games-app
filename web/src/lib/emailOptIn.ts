@@ -8,16 +8,21 @@ import type { EmailDeliveryStatus } from '../types';
 export const EMAIL_OPT_IN_VERSION = 'alerts-2026-10-22';
 export const EMAIL_OPT_IN_TEXT = 'Email me when new competitions open. I can unsubscribe at any time.';
 
-/** A loose check, only to catch typos before sending. The server does the real check. */
-export function looksLikeEmail(value: string): boolean {
-  return /^[^\s@<>",;()\\]+@[^\s@<>",;()\\]+\.[^\s@<>",;()\\]{2,}$/.test(value.trim());
-}
-
 /** One id per submit of the form, so a retry after a dropped connection can't enter someone twice. */
 export function newRequestId(): string {
   const c = globalThis.crypto;
   if (c && typeof c.randomUUID === 'function') return c.randomUUID();
   return `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
+}
+
+/** Light client-side check before the server validates the address. */
+export function looksLikeEmail(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 256 || /\s/.test(trimmed)) return false;
+  const at = trimmed.indexOf('@');
+  if (at <= 0 || at !== trimmed.lastIndexOf('@')) return false;
+  const domain = trimmed.slice(at + 1);
+  return domain.includes('.') && !domain.startsWith('.') && !domain.endsWith('.');
 }
 
 /** What an organiser sees about the entry confirmation email. */

@@ -6,7 +6,8 @@ import type { CompetitionDetail, Heat } from '../types';
  */
 export type ResultsUpdate =
   | { sessionId: number; heat: Heat }
-  | { sessionId: number; raceId: number; started?: string | null; finished?: string | null };
+  | { sessionId: number; raceId: number; started?: string | null; finished?: string | null }
+  | { teamId: number; refereeCard?: 'yellow' | 'red' | null };
 
 export function replaceHeat(competition: CompetitionDetail, sessionId: number, heat: Heat): CompetitionDetail {
   return {
@@ -20,6 +21,21 @@ export function replaceHeat(competition: CompetitionDetail, sessionId: number, h
 
 export function applyResultsUpdate(competition: CompetitionDetail, update: ResultsUpdate): CompetitionDetail {
   if ('heat' in update) return update.heat ? replaceHeat(competition, update.sessionId, update.heat) : competition;
+  if ('teamId' in update && !('sessionId' in update)) {
+    const card = update.refereeCard ?? null;
+    return {
+      ...competition,
+      teams: competition.teams.map((t) => (t.id === update.teamId ? { ...t, refereeCard: card } : t)),
+      sessions: competition.sessions.map((s) => ({
+        ...s,
+        heats: s.heats.map((h) => ({
+          ...h,
+          entries: h.entries.map((e) => (e.teamId === update.teamId ? { ...e, refereeCard: card } : e)),
+        })),
+      })),
+    };
+  }
+  if (!('raceId' in update) || typeof update.raceId !== 'number') return competition;
   const { raceId } = update;
   return {
     ...competition,

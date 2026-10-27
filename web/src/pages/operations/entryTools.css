@@ -1,0 +1,27 @@
+/* Organiser entry tools and per-entry detail. Tokens only, so every theme (incl. Stable Night) follows. */
+.et-detail { display: flex; flex-direction: column; gap: 12px; }
+.et-block { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.et-detail > .et-block:first-child { border-top: 0; padding-top: 0; }
+.et-h { margin: 0; font: 700 13px/1.2 var(--mg-font); letter-spacing: .04em; text-transform: uppercase; color: rgb(var(--mg-muted)); }
+.et-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.et-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.et-actions .rf-btn, .et-tool, .et-chip { min-height: 44px; }
+.et-link { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+.et-private { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 10px; border: 1px dashed rgb(var(--mg-border)); background: rgb(var(--mg-surface)); }
+.et-private-tag { align-self: flex-start; font: 700 11px/1 var(--mg-font); letter-spacing: .06em; text-transform: uppercase; color: rgb(var(--mg-late-ink)); background: rgb(var(--mg-late-bg)); border-radius: 999px; padding: 4px 8px; }
+.et-sheet { display: flex; flex-direction: column; gap: 12px; padding: 4px 16px 20px; }
+.et-tool { width: 100%; text-align: left; cursor: pointer; background: transparent; border: 0; }
+.et-pick { display: flex; align-items: center; gap: 12px; cursor: pointer; }
+.et-pick input[type="checkbox"] { flex: none; width: 24px; height: 24px; accent-color: rgb(var(--mg-button)); }
+.et-off { cursor: default; opacity: .65; }
+.et-check { display: flex; align-items: center; gap: 10px; min-height: 44px; font: 600 14px/1.3 var(--mg-font); color: rgb(var(--mg-body)); }
+.et-check input { width: 22px; height: 22px; accent-color: rgb(var(--mg-button)); }
+.et-card { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid rgb(var(--mg-rule-soft)); border-radius: 12px; background: rgb(var(--mg-surface)); }
+.et-preview { margin: 0; padding: 12px; border-radius: 10px; background: rgb(var(--mg-subtle)); color: rgb(var(--mg-ink)); font: 500 14px/1.45 var(--mg-font); white-space: pre-wrap; overflow-wrap: anywhere; }
+.et-chip[aria-pressed="true"] { background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); border-color: rgb(var(--mg-button)); }
+.et-filters { padding: 4px 0; }
+.et-cap { color: rgb(var(--mg-muted)); }
+.et-sub { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.et-sub:first-child { border-top: 0; padding-top: 0; }
+.et-sub-name { margin: 0; font: 700 14px/1.2 var(--mg-font); color: rgb(var(--mg-ink)); }
+@media (max-width: 479px) { .et-two { grid-template-columns: 1fr; } }

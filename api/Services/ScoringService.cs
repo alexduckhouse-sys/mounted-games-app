@@ -237,6 +237,8 @@ public class ScoringService
                 {
                     session.Status = SessionStatus.InArena;
                     session.FinishedAt = null;
+                    session.ProvisionalUntil = null;
+                    session.OfficialConfirmedAt = null;
                 }
             }
             state.Revision++;
@@ -257,6 +259,8 @@ public class ScoringService
             });
             await _db.SaveChangesAsync(cancellationToken);
             ActiveClashes.TryRemove(raceId, out _);
+            if (race.Heat?.Session is { } clearedSession)
+                StandingsService.Invalidate(clearedSession.CompetitionId);
             return ToDto(raceId, state.Revision, false, null, null, Array.Empty<ScorePlaceDto>());
         }, cancellationToken);
 
@@ -707,6 +711,8 @@ public class ScoringService
         await ClearMissingTeamCallsAsync(heat, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         ActiveClashes.TryRemove(raceId, out _);
+        if (heat.Session is { } scoredSession)
+            StandingsService.Invalidate(scoredSession.CompetitionId);
         if (fresh.Count > 0)
         {
             if (isQualifier && heat.RaceRoundId is not null)
@@ -721,6 +727,8 @@ public class ScoringService
                 {
                     session.Status = SessionStatus.Finished;
                     session.FinishedAt ??= now;
+                    session.ProvisionalUntil = now.AddMinutes(15);
+                    session.OfficialConfirmedAt = null;
                     await _db.SaveChangesAsync(cancellationToken);
                 }
             }

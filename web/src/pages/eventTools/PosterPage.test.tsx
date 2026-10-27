@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
-import PrintEventPage from './PrintEventPage';
+import PrintEventPage from '../operations/PrintEventPage';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn() } }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: vi.fn() }));

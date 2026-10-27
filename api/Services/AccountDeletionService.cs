@@ -47,6 +47,8 @@ public sealed class AccountDeletionService(AppDbContext db, UserManager<AppUser>
         // The networks it signed in from, and any it had blocked.
         await db.AccountIps.Where(a => a.UserId == id).ExecuteDeleteAsync(ct);
         await db.IpBlocks.Where(b => b.BlockedAccountUserId == id).ExecuteDeleteAsync(ct);
+        // Reset links, including the hashed network each was asked for from.
+        await db.PasswordResetTokens.Where(t => t.UserId == id).ExecuteDeleteAsync(ct);
         await db.PushSubscriptions.Where(p => p.UserId == id).ExecuteDeleteAsync(ct);
         await db.OverlayLooks.Where(l => l.OwnerUserId == id).ExecuteDeleteAsync(ct);
         await db.TeamSupporters.Where(s => s.UserId == id).ExecuteDeleteAsync(ct);

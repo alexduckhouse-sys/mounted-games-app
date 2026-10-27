@@ -10,6 +10,7 @@ using MountedGames.Api.Entities.Commerce;
 using MountedGames.Api.Hubs;
 using MountedGames.Api.Services;
 using MountedGames.Api.Services.Email;
+using MountedGames.Api.Services.Geo;
 using MountedGames.Api.Services.Payouts;
 using MountedGames.Api.Services.Streaming;
 
@@ -101,6 +102,30 @@ public class CompetitionsController : ControllerBase
         CancellationToken ct = default, [FromQuery] int? year = null,
         [FromQuery] string? location = null, [FromQuery] string? search = null)
         => await PickerPage(past, page, pageSize, year, location, search, null, ct);
+
+    /// <summary>
+    /// The upcoming list ordered for this viewer: nearest first when we can tell roughly where they are, without ever asking. The
+    /// place comes from a signed-in person's entry, team and supporter history, else from the rough position of their connection
+    /// that the website's proxy vouched for on this request. It is used for this call only and never stored or logged. The answer
+    /// differs per viewer, so (like <c>picker/mine</c>) it is outside the public-cache allowlists and sent <c>no-store</c>; the
+    /// plain <c>picker</c> stays the same for everyone and is what the app falls back to offline.
+    /// </summary>
+    [HttpGet("picker/near-you")]
+    [AllowAnonymous]
+    public async Task<ActionResult<CompetitionNearYouPage>> NearYou(
+        [FromServices] LocationInference locations, [FromQuery] int page = 1, [FromQuery] int pageSize = 24,
+        [FromQuery] string? sort = null, CancellationToken ct = default)
+    {
+        if (page is < 1 or > 10000 || pageSize is < 1 or > 50)
+            return Problem(statusCode: 400, title: "Invalid page", detail: "Use a page from 1 to 10000 and a page size from 1 to 50.");
+        Response.Headers.CacheControl = "private, no-store";
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var origin = userId is null ? null
+            : await locations.FromHistoryAsync(userId, User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value, ct);
+        origin ??= VisitorGeo.Get(HttpContext);
+        return await CompetitionPickerQuery.LoadNearYouAsync(_db, page, pageSize, DateTime.UtcNow.Date, origin,
+            nearest: !string.Equals(sort, CompetitionPickerQuery.SortSoonest, StringComparison.OrdinalIgnoreCase), ct);
+    }
 
     // Separate path deliberately excluded from both server and service-worker public-cache allowlists.
     [HttpGet("picker/mine")]
@@ -557,11 +582,12 @@ public class CompetitionsController : ControllerBase
     /// <summary>Entries that count towards a section's cap (paid and pending), by section id.</summary>
     private async Task<Dictionary<int, int>> ActiveSignupCountsAsync(int competitionId)
     {
+        var now = DateTime.UtcNow;
         var rows = await _db.SectionSignups.AsNoTracking()
             .Where(s => s.Section!.CompetitionId == competitionId
                 && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending)
                 && !_db.Set<SignupMatchmaking>().Any(m => m.SignupId == s.Id && m.WaitingForGuestSpot)
-                && !_db.Set<SignupExtras>().Any(x => x.SignupId == s.Id && (x.IsWithdrawn || x.IsWaitlist)))
+                && !_db.Set<SignupExtras>().Any(x => x.SignupId == s.Id && (x.IsWithdrawn || (x.IsWaitlist && (x.WaitlistOfferExpiresAt == null || x.WaitlistOfferExpiresAt <= now)))))
             .Select(s => new { s.CompetitionSectionId,
                 Count = _db.Set<SignupExtras>().Where(x => x.SignupId == s.Id).Select(x => (int?)x.TeamsCount).FirstOrDefault() ?? 1 })
             .ToListAsync();
@@ -716,20 +742,37 @@ public class CompetitionsController : ControllerBase
     public async Task<ActionResult<CompetitionDetail>> ShiftDay(int id, [FromQuery] int days = 1)
     {
         var c = await _db.Competitions
-            .Include(c => c.Sessions)
+            .Include(c => c.Sessions).ThenInclude(s => s.Heats)
             .FirstOrDefaultAsync(c => c.Id == id);
         if (c is null) return NotFound();
         var shift = TimeSpan.FromDays(days);
 
         // Only push sessions that haven't started yet — preserves history.
+        var shiftedSessionIds = new List<int>();
         foreach (var s in c.Sessions.Where(s => s.StartedAt is null && s.Status != SessionStatus.Finished))
         {
+            var changed = false;
             if (s.ScheduledStart.HasValue)
+            {
                 s.ScheduledStart = s.ScheduledStart.Value.Add(shift);
+                changed = true;
+            }
+            foreach (var h in s.Heats.Where(h => !h.StartedAt.HasValue && !h.FinishedAt.HasValue && h.ScheduledStart.HasValue))
+            {
+                h.ScheduledStart = h.ScheduledStart!.Value.Add(shift);
+                changed = true;
+            }
+            if (changed) shiftedSessionIds.Add(s.Id);
         }
         if (c.EndDate.HasValue) c.EndDate = c.EndDate.Value.Add(shift);
         await _db.SaveChangesAsync();
-        return await Get(id);
+        var detailResult = await Get(id);
+        if (shiftedSessionIds.Count > 0 && detailResult.Value is { } detail)
+        {
+            foreach (var sessionDto in detail.Sessions.Where(s => shiftedSessionIds.Contains(s.Id)))
+                await _live.SessionUpdated(id, sessionDto);
+        }
+        return detailResult;
     }
 
     [HttpGet("{id:int}/finals/boundary")]
@@ -845,6 +888,7 @@ public class CompetitionsController : ControllerBase
         for (var i = 0; i < teamIds.Count; i++)
             _db.FinalsTieOrders.Add(new FinalsTieOrder { CompetitionId = id, TeamId = teamIds[i], Points = total, Position = i + 1, SetByUserId = userId });
         await _db.SaveChangesAsync();
+        StandingsService.Invalidate(id);
         return NoContent();
     }
 
@@ -1155,7 +1199,7 @@ public class CompetitionsController : ControllerBase
 
         foreach (var section in sections)
         {
-            var sectionTeams = comp.Teams.Where(t => t.CompetitionSectionId == section.Id).Select(t => t.Id).ToList();
+            var sectionTeams = comp.Teams.Where(t => t.CompetitionSectionId == section.Id && t.EntryStatus == TeamEntryStatus.Active).Select(t => t.Id).ToList();
             if (sectionTeams.Count == 0) continue;
 
             for (var sIdx = 1; sIdx <= sessionsPerSection; sIdx++)
