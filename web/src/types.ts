@@ -1780,6 +1780,8 @@ export interface PublicResultsSummaryDto {
   isProvisional: boolean;
   generatedAt?: string;
   summaryText: string;
+}
+
 /** Where a protest stands (API `ProtestStatus`). Only Open blocks signing off. */
 export const ProtestStatus = { Open: 0, Upheld: 1, Dismissed: 2, Withdrawn: 3 } as const;
 export type ProtestStatus = typeof ProtestStatus[keyof typeof ProtestStatus];
