@@ -135,7 +135,7 @@ export function FollowingTab() {
         <Link to={`/competitions/${competition.id}/teams/${team.id}`} className="fc-name">
           {flag && <img src={`/flags/${flag}.png`} alt="" className="mr-1.5 inline-block h-3.5 w-5 shrink-0 rounded-[2px] object-cover align-middle" />}
           {team.displayName}
-          <small>{[displaySectionName(team.sectionName), bibs ? t('teams.following.bibs', { colour: bibs }) : null].filter(Boolean).join(' · ')}</small>
+          <small>{[displaySectionName(team.sectionName), bibs ? (/\bbibs?\b/i.test(bibs) ? bibs : t('teams.following.bibs', { colour: bibs })) : null].filter(Boolean).join(' · ')}</small>
         </Link>
         <button type="button" className="fc-star" aria-pressed="true" aria-label={t('teams.unfollow', { name: team.displayName })} onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}><FollowStar on className="h-[22px] w-[22px]" /></button>
       </div>

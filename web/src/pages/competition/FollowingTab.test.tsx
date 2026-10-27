@@ -52,6 +52,12 @@ describe('FollowingTab', () => {
     expect(within(upNext).getByText('Not drawn yet')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Done for today' })).not.toBeInTheDocument();
   });
+  it('says a bib description that already mentions bibs as it is', () => {
+    localStorage.setItem(FAVOURITES_KEY, '[{"competitionId":1,"teamId":1},{"competitionId":1,"teamId":2}]');
+    mount({}, competition({ teams: [team(1, { displayName: 'Example Blue', bibDescription: '[flag:gb-eng] Red bibs, numbered 1 to 5' }), team(2, { displayName: 'Example Red', bibDescription: 'Red' })], sessions: data.sessions }));
+    expect(screen.getByText('Seniors · Red bibs, numbered 1 to 5')).toBeInTheDocument();
+    expect(screen.getByText('Seniors · Red bibs')).toBeInTheDocument();
+  });
   it('shows the next heat with its time, how soon it is, the arena and the lane', () => {
     localStorage.setItem(FAVOURITES_KEY, '[{"competitionId":1,"teamId":1},{"competitionId":1,"teamId":2}]');
     const soon = new Date(Date.now() + 25 * 60_000).toISOString();
