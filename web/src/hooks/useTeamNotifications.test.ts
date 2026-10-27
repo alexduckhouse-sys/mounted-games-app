@@ -485,14 +485,40 @@ describe('useTeamNotifications: only on when the phone is registered', () => {
     expect(subscribeForPush).not.toHaveBeenCalled();
   });
 
-  it('checks a saved "on" against the server once, and shows it off if that fails', async () => {
+  it('keeps a saved "on", shows the reason, and tries again next time when the server check fails', async () => {
     enable();
     vi.mocked(subscribeForPush).mockResolvedValue('server');
     const view = renderHook(() => useTeamNotifications([]));
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     expect(subscribeForPush).toHaveBeenCalledTimes(1);
-    expect(view.result.current.enabled).toBe(false);
+    expect(view.result.current.enabled).toBe(true);
     expect(view.result.current.problem).toMatch(/couldn’t register this phone/);
+    expect(localStorage.getItem('mg.notify.enabled')).toBe('1');
+    view.unmount();
+    vi.mocked(subscribeForPush).mockResolvedValue('ok');
+    const again = renderHook(() => useTeamNotifications([]));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(subscribeForPush).toHaveBeenCalledTimes(2);
+    expect(again.result.current).toMatchObject({ enabled: true, problem: null });
+  });
+
+  it('keeps a saved "on" and says why when the browser is too slow to answer', async () => {
+    enable();
+    vi.mocked(subscribeForPush).mockResolvedValue('browser');
+    const view = renderHook(() => useTeamNotifications([]));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(view.result.current.enabled).toBe(true);
+    expect(view.result.current.problem).toMatch(/wouldn’t set up notifications/);
+    expect(localStorage.getItem('mg.notify.enabled')).toBe('1');
+  });
+
+  it.each(['denied', 'unsupported'] as const)('switches a saved "on" off and saves that when the check says %s', async (reason) => {
+    enable();
+    vi.mocked(subscribeForPush).mockResolvedValue(reason);
+    const view = renderHook(() => useTeamNotifications([]));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(view.result.current.enabled).toBe(false);
+    expect(localStorage.getItem('mg.notify.enabled')).not.toBe('1');
   });
 
   it('keeps a saved "on" when the check passes', async () => {

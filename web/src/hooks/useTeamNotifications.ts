@@ -73,7 +73,8 @@ export function useTeamNotifications(teams: Team[]) {
 
   useEffect(() => writeEnabled(enabled), [enabled]);
 
-  // A saved "on" is only true if this phone is still registered. Check once on load, and show it as off if not.
+  // Check a saved "on" once on load. Only a block or an unsupported browser turns it off for good; a failed call or a
+  // slow service worker (poor signal) keeps the saved "on", says why, and is tried again next time the app opens.
   const startedOn = useRef(enabled);
   useEffect(() => {
     if (!startedOn.current || !navigator.onLine) return;
@@ -81,7 +82,7 @@ export function useTeamNotifications(teams: Team[]) {
     void subscribeForPushResult().then((result) => {
       if (cancelled || result === 'ok') return;
       setProblem(pushProblem(result));
-      setEnabledState(false);
+      if (result === 'denied' || result === 'unsupported') setEnabledState(false);
     });
     return () => { cancelled = true; };
   }, []);
