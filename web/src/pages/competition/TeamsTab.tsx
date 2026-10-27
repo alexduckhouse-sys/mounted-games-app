@@ -327,7 +327,9 @@ export function TeamsTab() {
   );
   const shownCount = (id: number | 'all') => (id === 'all' ? competition.teams : competition.teams.filter((team) => team.competitionSectionId === id)).length;
 
+  // The sheet sits outside the spaced column: space-y's margin would otherwise pull the dialog to the top of the screen.
   return (
+    <>
     <div className="space-y-3 pt-2">
       {searchBar}
       {favouriteError && <Notice>{favouriteError}</Notice>}
@@ -350,6 +352,7 @@ export function TeamsTab() {
           {teamBlocks}
         </>
       )}
+    </div>
       {sheetOpen && !desktop && (
         <Sheet title={filterLabel} className="fk-sheet" onClose={() => setSheetOpen(false)}>
           {({ close }) => (
@@ -369,7 +372,7 @@ export function TeamsTab() {
           )}
         </Sheet>
       )}
-    </div>
+    </>
   );
 }
 
