@@ -3,8 +3,6 @@ import type { ConnectionInputs } from './connectionStatus';
 
 /** Published by the competition page so the header can show the connection pill. */
 export interface ConnectionStatus extends ConnectionInputs {
-  /** When the timetable was last brought up to date. */
-  updatedAt: Date | null;
   /** How often the page checks for changes while the live link is down. */
   intervalMs: number;
   /** A check is running because the user asked for one. */

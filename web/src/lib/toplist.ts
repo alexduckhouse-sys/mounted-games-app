@@ -14,10 +14,20 @@ export interface ToplistRow {
   out: boolean;
   /** Points to pass the last finalist, for teams below the line that still have races to ride. */
   needed: number | null;
-  /** The bounded exact search could not prove a minimum; null must not imply elimination. */
+  /** A bounded exact search (points needed below the line, or to stay above it) ran out of work; nothing is claimed. */
   neededUnavailable?: boolean;
   /** Only a tie at the cut-off is possible under normal finishes. */
   neededForRunoff?: boolean;
+  /**
+   * At or above the line with races left: no result can push this team below it, even if it scores nothing more
+   * (eliminated in every race) while its rivals finish as well as they can.
+   */
+  guaranteed?: boolean;
+  /**
+   * At or above the line with races left: scoring at least this many more points keeps the team above the line
+   * whatever anyone else does, and it can still drop out with fewer. Null when it can't make sure on its own.
+   */
+  toStay?: number | null;
   racesLeft: number;
   /** Withdrawn or no-show: what they scored stays, they ride no more. */
   withdrawn: boolean;
@@ -406,6 +416,120 @@ function assignPointsNeeded(
     }
     return visit(0);
   }
+
+  // The mirror case above the line has a budget of its own, so it never takes work from the teams below it.
+  let dropWorkLeft = 30_000;
+
+  /**
+   * Can the candidate end below the line having gained exactly `gain`? Rivals only ever finish here: a rival's
+   * elimination never raises anyone else's total (the finishers just move up a place, which some normal finish
+   * already gives them), so it can't help push the candidate out. The candidate may also be eliminated (0 points),
+   * which leaves its rivals the same places as finishing last. A rival level with the candidate counts against it,
+   * because countback may go its way.
+   */
+  function dropSearch(candidate: number) {
+    const ordered = [...races].sort((a, b) => Number(b.entrants.includes(candidate)) - Number(a.entrants.includes(candidate)));
+    // reach[i]: every gain the candidate can still make from race i on (nothing, or any one place in each race).
+    const reach: Set<number>[] = Array.from({ length: ordered.length + 1 }, () => new Set([0]));
+    // rivalMax[i][r]: the most rival r can still score from race i on (first place in every race it rides).
+    const rivalMax = Array.from({ length: ordered.length + 1 }, () => rows.map(() => 0));
+    for (let index = ordered.length - 1; index >= 0; index--) {
+      const race = ordered[index];
+      rivalMax[index] = [...rivalMax[index + 1]];
+      for (const entrant of race.entrants) if (entrant >= 0) rivalMax[index][entrant] += race.slots[0];
+      if (!race.entrants.includes(candidate)) { reach[index] = reach[index + 1]; continue; }
+      const next = new Set(reach[index + 1]);
+      for (const value of reach[index + 1]) for (const slot of race.slots) next.add(value + slot);
+      reach[index] = next;
+    }
+
+    function canDrop(gain: number): SearchResult {
+      if (tooLarge || dropWorkLeft <= 0) return 'unavailable';
+      const target = rows[candidate].points + gain;
+      const points = rows.map((row) => row.points);
+      const failed = new Set<string>();
+      // A rival already on the target stays there; one that can't reach it never will. Neither needs a place chosen.
+      const contested = (rival: number, index: number) => rival !== candidate && points[rival] < target && points[rival] + rivalMax[index][rival] >= target;
+
+      function visit(index: number): SearchResult {
+        if (--dropWorkLeft < 0) return 'unavailable';
+        if (!reach[index].has(target - points[candidate])) return false;
+        let sure = 0;
+        let possible = 0;
+        for (let rival = 0; rival < rows.length; rival++) {
+          if (rival === candidate) continue;
+          if (points[rival] >= target) sure++;
+          if (points[rival] + rivalMax[index][rival] >= target) possible++;
+        }
+        if (possible < places) return false;
+        // Enough rivals are already level or ahead, and the candidate can still make exactly `gain` on its own.
+        if (sure >= places) return true;
+        if (index === ordered.length) return false;
+        const key = `${index}:${points[candidate]}:${points.map((value, rival) => rival === candidate ? '' : value >= target ? 'S'
+          : value + rivalMax[index][rival] < target ? 'H' : value).join(',')}`;
+        if (failed.has(key)) return false;
+        const race = ordered[index];
+        const rivals = race.entrants.filter((entrant) => entrant >= 0 && contested(entrant, index))
+          .sort((a, b) => (target - points[a]) - (target - points[b]));
+        const entrants = race.entrants.includes(candidate) ? [candidate, ...rivals] : rivals;
+        const available = [...race.slots];
+
+        function assign(position: number): SearchResult {
+          if (--dropWorkLeft < 0) return 'unavailable';
+          // Everyone not listed is already sure or out of reach: they take the places left in any order.
+          if (position === entrants.length) return visit(index + 1);
+          const entrant = entrants[position];
+          const options: { slot: number; score: number }[] = [];
+          const values = [...new Set(available)];
+          if (entrant === candidate) {
+            for (const slot of values.sort((a, b) => b - a)) options.push({ slot, score: slot });
+            options.push({ slot: Math.min(...available), score: 0 });
+          } else {
+            const short = target - points[entrant];
+            // Just enough to reach the target first, keeping bigger places for the next rival; then the rest, biggest first.
+            for (const slot of values.filter((value) => value >= short).sort((a, b) => a - b)) options.push({ slot, score: slot });
+            for (const slot of values.filter((value) => value < short).sort((a, b) => b - a)) options.push({ slot, score: slot });
+          }
+          for (const { slot, score } of options) {
+            if (entrant === candidate && !reach[index + 1].has(target - points[candidate] - score)) continue;
+            const slotIndex = available.indexOf(slot);
+            available.splice(slotIndex, 1);
+            points[entrant] += score;
+            const result = assign(position + 1);
+            points[entrant] -= score;
+            available.splice(slotIndex, 0, slot);
+            if (result !== false) return result;
+          }
+          return false;
+        }
+        const result = assign(0);
+        if (result === false) failed.add(key);
+        return result;
+      }
+      return visit(0);
+    }
+    return { gains: [...reach[0]].sort((a, b) => b - a), rivalMax: rivalMax[0], canDrop };
+  }
+
+  rows.forEach((row, index) => {
+    if (index > cutAfter || row.racesLeft <= 0 || row.withdrawn) return;
+    if (tooLarge) { row.neededUnavailable = true; return; }
+    const { gains, rivalMax, canDrop } = dropSearch(index);
+    // The candidate can only be pushed out at a total that at least `places` rivals could still reach.
+    const ceilings = rows.flatMap((other, rival) => rival === index ? [] : [other.points + rivalMax[rival]]).sort((a, b) => b - a);
+    const ceiling = ceilings.length >= places ? ceilings[places - 1] : -Infinity;
+    let worst: number | null = null;
+    for (const gain of gains) {
+      if (row.points + gain > ceiling) continue;
+      const result = canDrop(gain);
+      if (result === 'unavailable') { row.neededUnavailable = true; return; }
+      if (result) { worst = gain; break; }
+    }
+    if (worst === null) { row.guaranteed = true; return; }
+    // The smallest gain it can actually make above the worst one that still lets it drop out.
+    const safe = gains.filter((gain) => gain > worst!);
+    row.toStay = safe.length ? safe[safe.length - 1] : null;
+  });
 
   rows.forEach((row, index) => {
     if (index <= cutAfter) return;
@@ -819,7 +943,11 @@ function standingNote(row: ToplistRow): string | null {
   if (row.withdrawn) return 'Withdrawn';
   if (row.runoff) return `Joint ${ordinal(row.position)} · run-off`;
   if (row.neededUnavailable) return 'Qualification calculation unavailable';
-  if (row.needed != null) return `${row.needed} needed ${row.neededForRunoff ? 'for a run-off' : 'to make the final'} (normal finishes)`;
+  if (row.guaranteed) return 'Guaranteed a place in the A Final';
+  if (row.toStay != null) return `${pts(row.toStay)} to stay in the A Final`;
+  if (row.needed != null) return `${pts(row.needed)} needed ${row.neededForRunoff ? 'for a run-off' : 'for the A Final'} (normal finishes)`;
   if (row.racesLeft > 0) return `${row.racesLeft} ${row.racesLeft === 1 ? 'race' : 'races'} left`;
   return null;
 }
+
+const pts = (n: number) => `${n} ${n === 1 ? 'pt' : 'pts'}`;

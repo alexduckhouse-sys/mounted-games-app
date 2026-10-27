@@ -589,3 +589,136 @@ it('restores the paused state when resuming is refused', async () => {
   request.mockRejectedValueOnce(new Error('Connection lost')); await expect(p.pause(false)).rejects.toThrow('Connection lost');
   expect(p.getSnapshot().state).toBe('paused'); expect(p.getSnapshot().media!.getAudioTracks()[0].enabled).toBe(false); p.dispose();
 });
+
+describe('plugging cameras in and out', () => {
+  it('refreshes the camera and microphone lists when a device changes, and stops listening when asked or disposed', async () => {
+    const { publisher: p, d } = setup();
+    let fire = () => {};
+    const stopListening = vi.fn();
+    d.deviceChanges = vi.fn((callback: () => void) => { fire = callback; return stopListening; });
+    const listener = vi.fn();
+    const stop = p.watchDevices(listener);
+    fire(); await flush();
+    expect(listener).toHaveBeenCalledWith([{ kind: 'videoinput', deviceId: 'usb' }], [{ kind: 'audioinput' }]);
+    vi.mocked(d.enumerateDevices).mockRejectedValueOnce(new Error('denied'));
+    fire(); await flush();
+    expect(listener).toHaveBeenCalledOnce();
+    stop(); stop();
+    expect(stopListening).toHaveBeenCalledOnce();
+    fire(); await flush();
+    expect(listener).toHaveBeenCalledOnce();
+
+    const other = vi.fn();
+    p.watchDevices(other);
+    const pending = deferred<MediaDeviceInfo[]>();
+    vi.mocked(d.enumerateDevices).mockReturnValueOnce(pending.promise);
+    fire();
+    p.dispose();
+    expect(stopListening).toHaveBeenCalledTimes(2);
+    pending.resolve([]); await flush();
+    expect(other).not.toHaveBeenCalled();
+  });
+
+  it('does nothing without a way to hear device changes', () => {
+    const { publisher: p } = setup();
+    const stop = p.watchDevices(vi.fn());
+    expect(() => stop()).not.toThrow();
+    p.dispose();
+  });
+
+  it('binds device changes to the browser and copes without them', () => {
+    vi.stubGlobal('RTCPeerConnection', fakePeerConstructor);
+    const add = vi.fn(), remove = vi.fn();
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { addEventListener: add, removeEventListener: remove } });
+    const callback = vi.fn();
+    const stop = browserPublisherDependencies().deviceChanges!(callback);
+    expect(add).toHaveBeenCalledWith('devicechange', callback);
+    stop();
+    expect(remove).toHaveBeenCalledWith('devicechange', callback);
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {} });
+    expect(() => browserPublisherDependencies().deviceChanges!(callback)()).not.toThrow();
+  });
+});
+
+describe('camera locks', () => {
+  const lockableTrack = (capabilities: Record<string, unknown>, settings: Record<string, unknown> = {}, apply = vi.fn(async () => {})) =>
+    Object.assign(new FakeTrack(), { getCapabilities: () => capabilities, getSettings: () => settings, applyConstraints: apply });
+
+  it('offers only the locks the camera reports, and says which are held', async () => {
+    const { publisher: p, getUserMedia } = setup();
+    getUserMedia.mockResolvedValueOnce(asMedia(new FakeMediaStream([lockableTrack(
+      { exposureMode: ['manual', 'continuous'], focusMode: ['single-shot', 'continuous'], whiteBalanceMode: ['continuous'] },
+      { exposureMode: 'manual', focusMode: 'continuous' },
+    )])));
+    await p.capture(false);
+    expect(p.getSnapshot().cameraLocks).toEqual({ exposure: true, focus: false });
+    p.dispose();
+  });
+
+  it('reports nothing for cameras without the capability calls (most iPhones) or without a continuous mode', async () => {
+    const { publisher: p, getUserMedia } = setup();
+    await p.capture(false);
+    expect(p.getSnapshot().cameraLocks).toEqual({});
+    getUserMedia.mockResolvedValueOnce(asMedia(new FakeMediaStream([lockableTrack({ focusMode: 'manual', exposureMode: ['none', 'continuous'] })])));
+    await p.capture(false);
+    expect(p.getSnapshot().cameraLocks).toEqual({});
+    getUserMedia.mockResolvedValueOnce(asMedia(new FakeMediaStream([lockableTrack({ focusMode: ['manual'] })])));
+    await p.capture(false);
+    expect(p.getSnapshot().cameraLocks).toEqual({});
+    p.dispose();
+  });
+
+  it('locks with manual or single-shot and unlocks back to continuous', async () => {
+    const { publisher: p, getUserMedia } = setup();
+    const apply = vi.fn(async () => {});
+    getUserMedia.mockResolvedValueOnce(asMedia(new FakeMediaStream([lockableTrack(
+      { exposureMode: ['manual', 'continuous'], focusMode: ['single-shot', 'continuous'], whiteBalanceMode: ['manual', 'continuous'] },
+      { exposureMode: 'continuous', focusMode: 'continuous', whiteBalanceMode: 'continuous' }, apply,
+    )])));
+    await p.capture(false);
+    await p.setCameraLock('exposure', true);
+    expect(apply).toHaveBeenLastCalledWith({ advanced: [{ exposureMode: 'manual' }] });
+    await p.setCameraLock('focus', true);
+    expect(apply).toHaveBeenLastCalledWith({ advanced: [{ focusMode: 'single-shot' }] });
+    expect(p.getSnapshot().cameraLocks).toEqual({ exposure: true, focus: true, whiteBalance: false });
+    await p.setCameraLock('exposure', false);
+    expect(apply).toHaveBeenLastCalledWith({ advanced: [{ exposureMode: 'continuous' }] });
+    expect(p.getSnapshot().cameraLocks?.exposure).toBe(false);
+    p.dispose();
+  });
+
+  it('leaves the lock alone when the camera refuses, has no such lock or has been swapped meanwhile', async () => {
+    const { publisher: p, getUserMedia } = setup();
+    const pending = deferred<void>();
+    const apply = vi.fn(() => pending.promise);
+    getUserMedia.mockResolvedValueOnce(asMedia(new FakeMediaStream([lockableTrack({ whiteBalanceMode: ['manual', 'continuous'] }, {}, apply)])));
+    await p.capture(false);
+    await p.setCameraLock('focus', true);
+    expect(apply).not.toHaveBeenCalled();
+    const locking = p.setCameraLock('whiteBalance', true);
+    await p.capture(false);
+    pending.resolve(); await locking;
+    expect(p.getSnapshot().cameraLocks).toEqual({});
+    apply.mockRejectedValueOnce(new Error('refused'));
+    getUserMedia.mockResolvedValueOnce(asMedia(new FakeMediaStream([lockableTrack({ whiteBalanceMode: ['manual', 'continuous'] }, {}, apply)])));
+    await p.capture(false);
+    await expect(p.setCameraLock('whiteBalance', true)).rejects.toThrow('refused');
+    expect(p.getSnapshot().cameraLocks).toEqual({ whiteBalance: false });
+    p.dispose();
+  });
+
+  it('checks the new camera when switching', async () => {
+    const { publisher: p, getUserMedia } = setup();
+    await p.capture(false);
+    getUserMedia.mockResolvedValueOnce(asMedia(new FakeMediaStream([lockableTrack({ focusMode: ['manual', 'continuous'] })])));
+    await p.switchCamera('usb');
+    expect(p.getSnapshot().cameraLocks).toEqual({ focus: false });
+    p.dispose();
+  });
+
+  it('does nothing before the camera is on', async () => {
+    const { publisher: p } = setup();
+    await expect(p.setCameraLock('focus', true)).resolves.toBeUndefined();
+    p.dispose();
+  });
+});

@@ -236,6 +236,7 @@ public static class SignupConfirmationEmail
         return new EmailMessage(toAddress, subject, sb.ToString(), EmailHtml.Wrap(html.ToString()));
     }
 
+    /// <summary>A club payment receipt for one contact. Pass only that contact's own entries and their total: one club payment can cover several families.</summary>
     public static EmailMessage BuildClubPaymentReceipt(
         string clubName, string clubBacsReference, Competition competition, string toAddress,
         IReadOnlyList<SectionSignup> signups, int totalAmountMinor, string? competitionUrl = null)
@@ -244,15 +245,15 @@ public static class SignupConfirmationEmail
         var sb = new StringBuilder();
         sb.AppendLine("Hello,");
         sb.AppendLine();
-        sb.AppendLine($"Payment has been received and allocated for {clubName} at {competition.Name}.");
+        sb.AppendLine($"We've received {clubName}'s payment for {competition.Name}. It covers your entries below.");
         sb.AppendLine();
         sb.AppendLine($"Event: {competition.Name}");
         sb.AppendLine($"Club: {clubName}");
         sb.AppendLine($"Club reference: {clubBacsReference}");
-        sb.AppendLine($"Entries paid: {signups.Count}");
-        sb.AppendLine($"Total allocated: {totalText}");
+        sb.AppendLine($"Your entries: {signups.Count}");
+        sb.AppendLine($"Your total: {totalText}");
         sb.AppendLine();
-        sb.AppendLine("Allocated entries:");
+        sb.AppendLine("Paid entries:");
         foreach (var s in signups)
         {
             var secName = s.Section?.DisplayName ?? "Section";
@@ -270,13 +271,13 @@ public static class SignupConfirmationEmail
 
         var html = new StringBuilder();
         html.Append("<p style=\"margin:0 0 12px;\">Hello,</p>");
-        html.Append($"<p style=\"margin:0 0 16px;\">Payment has been received and allocated for <strong>{EmailHtml.Encode(clubName)}</strong> at <strong>{EmailHtml.Encode(competition.Name)}</strong>.</p>");
+        html.Append($"<p style=\"margin:0 0 16px;\">We've received <strong>{EmailHtml.Encode(clubName)}</strong>'s payment for <strong>{EmailHtml.Encode(competition.Name)}</strong>. It covers your entries below.</p>");
         html.Append("<table role=\"presentation\" style=\"width:100%;border-collapse:collapse;margin:0 0 16px;\">");
         html.Append(EmailHtml.Row("Event", competition.Name));
         html.Append(EmailHtml.Row("Club", clubName));
         html.Append(EmailHtml.Row("Club reference", clubBacsReference));
-        html.Append(EmailHtml.Row("Entries paid", signups.Count.ToString(Uk)));
-        html.Append(EmailHtml.Row("Total allocated", totalText));
+        html.Append(EmailHtml.Row("Your entries", signups.Count.ToString(Uk)));
+        html.Append(EmailHtml.Row("Your total", totalText));
         foreach (var s in signups)
         {
             var secName = s.Section?.DisplayName ?? "Section";
