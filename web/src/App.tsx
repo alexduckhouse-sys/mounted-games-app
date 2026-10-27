@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { PageLoadBoundary } from './components/PageLoadBoundary';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { LanguageProvider } from './i18n/LanguageContext';
 import { AuthProvider } from './auth/AuthContext';
 import { NeedsYouProvider } from './pages/profile/NeedsYouProvider';
 import { ThemeProvider } from './theme/ThemeContext';
@@ -91,6 +92,7 @@ const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then((module) => 
 
 export default function App() {
   return (
+    <LanguageProvider>
     <LiteModeProvider>
     <LiteMotionConfig>
     <ThemeProvider>
@@ -238,5 +240,6 @@ export default function App() {
     </ThemeProvider>
     </LiteMotionConfig>
     </LiteModeProvider>
+    </LanguageProvider>
   );
 }
