@@ -638,9 +638,9 @@ public class PasswordResetTests : IClassFixture<PasswordResetTests.Factory>
 
         Assert.Equal(0, await _f.SignInsAsync(linked.User.Id));
         var notice = Assert.Single(_f.Mail(linked.User.Email, ResetSteps.ChangedSubject));
-        Assert.Contains("disconnected any Google or Apple sign-in", notice.Text);
+        Assert.Contains("disconnected any Google, Apple or Facebook sign-in", notice.Text);
         Assert.Contains("connect it again from your account page", notice.Text);
-        Assert.Contains("disconnected any Google or Apple sign-in", notice.Html);
+        Assert.Contains("disconnected any Google, Apple or Facebook sign-in", notice.Html);
         // Nothing to disconnect, nothing said about it.
         Assert.DoesNotContain("Google", Assert.Single(_f.Mail(plain.User.Email, ResetSteps.ChangedSubject)).Text);
     }
@@ -662,7 +662,7 @@ public class PasswordResetTests : IClassFixture<PasswordResetTests.Factory>
         Assert.Equal(0, await _f.SignInsAsync(account.User.Id));
         var notice = Assert.Single(_f.Mail(account.User.Email, "A password was set on your Mounted Games account"));
         Assert.Contains("A password has just been set for the Mounted Games account", notice.Text);
-        Assert.Contains("disconnected any Google or Apple sign-in", notice.Text);
+        Assert.Contains("disconnected any Google, Apple or Facebook sign-in", notice.Text);
     }
 
     [Fact]

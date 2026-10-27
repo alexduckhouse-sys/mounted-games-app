@@ -657,7 +657,7 @@ public class AuthController : ControllerBase
     /// Changes the signed-in person's own password. Needs the current one; a wrong guess counts towards the same
     /// lockout as signing in, so this can't be used to guess it. It also signs the account out everywhere else: the
     /// account's <c>SessionVersion</c> goes up with the new password, so <see cref="LiveAccounts"/> refuses every older
-    /// token at once and their live-hub connections close, and this device gets a fresh token back. Any Google or Apple
+    /// token at once and their live-hub connections close, and this device gets a fresh token back. Any Google, Apple or Facebook
     /// sign-in is disconnected in the same transaction, so one an intruder linked doesn't survive the change.
     /// </summary>
     [EnableRateLimiting("auth")]

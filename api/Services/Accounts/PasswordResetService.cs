@@ -54,7 +54,7 @@ public sealed record PasswordResetResult(PasswordResetOutcome Outcome, IReadOnly
 /// sets the new password under the usual Identity rules (or the first one, for an account that only signed in with Google
 /// or Apple), clears the wrong-password lockout, confirms the address (the link proved the mailbox), raises
 /// <see cref="AppUser.SessionVersion"/> so every existing sign-in stops working (<see cref="LiveAccounts"/>), disconnects
-/// any Google or Apple sign-in (one an intruder linked would otherwise survive), takes away <see cref="Roles.MasterAdmin"/> (the key holder gets it back with the key, so
+/// any Google, Apple or Facebook sign-in (one an intruder linked would otherwise survive), takes away <see cref="Roles.MasterAdmin"/> (the key holder gets it back with the key, so
 /// a stolen mailbox can't reach it), and sends a "your password was changed" notice. Emails never throw and never log the
 /// address or the link, and none outlives its request (the API scales to zero): see <see cref="RequestAsync"/>.
 /// </summary>
@@ -221,7 +221,7 @@ public sealed class PasswordResetService(
             // ConcurrencyStamp (AccountAccessService), so this fails rather than write LockedAt or BlockedAt back to empty;
             // the transaction then rolls back, the link included.
             if (await users.UpdateSecurityStampAsync(account) is { Succeeded: false } unsaved) return (SaveFailure(unsaved), null);
-            // A Google or Apple sign-in someone else linked would outlive the reset, so they all go; the owner can link
+            // A Google, Apple or Facebook sign-in someone else linked would outlive the reset, so they all go; the owner can link
             // theirs again once signed in.
             var signInsRemoved = await db.UserLogins.Where(l => l.UserId == userId).ExecuteDeleteAsync(ct);
             // Any other link still open for the account stops working too.
@@ -381,7 +381,7 @@ public sealed class PasswordResetService(
                 : "The password for the Mounted Games account that uses this email address has just been changed with a reset link.")
             + " We've signed the account out on every device, so the new password is needed to sign in again."
             + (SignInsRemoved
-                ? " We've also disconnected any Google or Apple sign-in. Once you've signed in with your password, you can connect it again from your account page."
+                ? " We've also disconnected any Google, Apple or Facebook sign-in. Once you've signed in with your password, you can connect it again from your account page."
                 : string.Empty);
 
         public string? Note => WasMaster ? FormerMasterNote : Admin ? AdminNote : null;
