@@ -6,7 +6,10 @@ import { CardDropdownRow } from '../components/CardDropdownRow';
 import { usePageHeader } from '../components/CompactPageBarContext';
 import { ALL_BOTTOM_TAB_OPTIONS, DEFAULT_BOTTOM_TABS, useUserPrefs, type BottomTabId, type TextSizePref } from '../lib/userPrefs';
 import { dropIndex, makeRoom, moveItem } from '../lib/creatorRaces';
-import { itemsFromTabs, REMINDER_MAX, REMINDER_MIN, stepReminder, tabCountFlag, tabsFromItems, type TabItem } from '../lib/settingsEdit';
+import { itemsFromTabs, REMINDER_MAX, REMINDER_MIN, stepReminder, tabCountFlag, tabLabel, tabsFromItems, type TabItem } from '../lib/settingsEdit';
+import { useLanguage } from '../i18n/LanguageContext';
+import { LANGUAGES } from '../i18n/translate';
+import type { MessageKey } from '../i18n/en';
 import { LiteModeSetting } from '../lite/LiteModeSetting';
 import { THEMES, type ThemeName } from '../theme/themes';
 import { useTheme } from '../theme/ThemeContext';
@@ -19,16 +22,14 @@ import '../components/sitePages.css';
 const WEATHER_KEY = 'mg.showWeather';
 const NO_TEAMS: Team[] = [];
 
-const TEXT_SIZES: { value: TextSizePref; label: string }[] = [{ value: 'normal', label: 'Normal' }, { value: 'large', label: 'Large' }];
-
 /** The policy pages, each at its own address. */
-const POLICIES = [
-  { to: '/privacy', label: 'Privacy' },
-  { to: '/terms', label: 'Terms of service' },
-  { to: '/refunds', label: 'Refunds and payments' },
-  { to: '/cookies', label: 'Cookies and storage' },
-  { to: '/safeguarding', label: 'Safeguarding and welfare' },
-] as const;
+const POLICIES: { to: string; label: MessageKey }[] = [
+  { to: '/privacy', label: 'shell.legal.privacy' },
+  { to: '/terms', label: 'shell.legal.terms' },
+  { to: '/refunds', label: 'shell.legal.refunds' },
+  { to: '/cookies', label: 'shell.legal.cookies' },
+  { to: '/safeguarding', label: 'shell.legal.safeguarding' },
+];
 
 /** Six dots: the grip for dragging a tab. */
 function GripIcon() {
@@ -42,15 +43,16 @@ function GripIcon() {
 interface Drag { id: BottomTabId; from: number; to: number; dy: number; height: number }
 
 export function SettingsPage() {
-  usePageHeader({ title: 'Settings', plain: true });
+  const { t, lang, setLang } = useLanguage();
+  usePageHeader({ title: t('shell.settings.title'), plain: true });
   const { current, rememberChoice, setRememberChoice, forget } = useCurrentCompetition();
   const { theme, setTheme } = useTheme();
   // The same push subscribe and unsubscribe the Me page used to have; heat reminders for teams are set up elsewhere.
   const notify = useTeamNotifications(NO_TEAMS);
   const pushBlocked = notify.permission === 'denied' || notify.permission === 'unsupported';
-  const pushNote = notify.permission === 'denied' ? 'Blocked in your browser’s settings'
-    : notify.permission === 'unsupported' ? 'This browser can’t show notifications'
-      : 'Heat calls and announcements on this phone';
+  const pushNote = notify.permission === 'denied' ? t('shell.settings.pushBlocked')
+    : notify.permission === 'unsupported' ? t('shell.settings.pushUnsupported')
+      : t('shell.settings.pushOk');
   const navigate = useNavigate();
   const location = useLocation();
   const [showWeather, setShowWeather] = useState(() => {
@@ -133,62 +135,64 @@ export function SettingsPage() {
 
   return (
     <div className="skin mx-auto w-full max-w-[560px] pb-4 pt-3">
-      <h1 className="sr-only">Settings</h1>
+      <h1 className="sr-only">{t('shell.settings.title')}</h1>
 
-      <h2 className="sp-sec sp-first">Look</h2>
+      <h2 className="sp-sec sp-first">{t('shell.settings.look')}</h2>
       <div className="sp-card">
-        <CardDropdownRow label="Colour theme" value={theme} options={THEMES.map((item) => ({ value: item.id, label: item.label }))}
+        <CardDropdownRow label={t('shell.settings.theme')} value={theme} options={THEMES.map((item) => ({ value: item.id, label: t(`shell.theme.${item.id}` as MessageKey) }))}
           swatch={(value) => THEMES.find((item) => item.id === value)?.swatch} onChange={(value) => setTheme(value as ThemeName)} />
-        <CardDropdownRow label="Text size" value={textSize} options={TEXT_SIZES} onChange={(value) => setTextSize(value as TextSizePref)} />
+        <CardDropdownRow label={t('shell.settings.textSize')} value={textSize} options={[{ value: 'normal', label: t('shell.settings.sizeNormal') }, { value: 'large', label: t('shell.settings.sizeLarge') }]} onChange={(value) => setTextSize(value as TextSizePref)} />
+        <CardDropdownRow label={t('shell.language.label')} hint={t('shell.language.hint')} value={lang} options={LANGUAGES.map((item) => ({ value: item.id, label: item.name }))} onChange={(value) => setLang(value as typeof lang)} />
         <div id="lite-mode" className="scroll-mt-20"><LiteModeSetting /></div>
       </div>
 
-      <h2 className="sp-sec">Bottom bar <small>2 to 6 tabs{!isDefaultTabs && <> · <button type="button" className="font-semibold text-[rgb(var(--mg-heading))] underline" onClick={reset}>Reset to default</button></>}</small></h2>
-      <ul className="sp-card m-0 list-none p-0" aria-label="Bottom bar tabs">
+      <h2 className="sp-sec">{t('shell.settings.bottomBar')} <small>{t('shell.settings.tabRange')}{!isDefaultTabs && <> · <button type="button" className="font-semibold text-[rgb(var(--mg-heading))] underline" onClick={reset}>{t('shell.settings.resetTabs')}</button></>}</small></h2>
+      <ul className="sp-card m-0 list-none p-0" aria-label={t('shell.settings.tabList')}>
         {items.map((item, index) => {
           const option = ALL_BOTTOM_TAB_OPTIONS.find((candidate) => candidate.id === item.id)!;
+          const optionLabel = tabLabel(item.id);
           const lifted = drag?.id === item.id;
           const shift = drag && !lifted ? makeRoom(index, drag.from, drag.to, drag.height) : 0;
           return (
             <li key={item.id} data-tab-row="" data-off={!item.on || undefined} data-dragging={lifted || undefined} className="sp-row sp-tab-row"
               style={lifted && drag ? { transform: `translateY(${drag.dy}px)`, position: 'relative', zIndex: 2 } : shift ? { transform: `translateY(${shift}px)` } : undefined}>
-              <button type="button" className="sp-grip" aria-label={`Move ${option.label}: drag, or use the up and down arrow keys`}
+              <button type="button" className="sp-grip" aria-label={t('shell.settings.moveTab', { label: optionLabel })}
                 onPointerDown={(event) => grab(event, index)} onKeyDown={(event) => keys(event, index)}><GripIcon /></button>
-              <span className="sp-t1 sp-grow">{option.label}</span>
-              {option.organiserOnly && <span className="sp-t2">Organisers</span>}
-              <button type="button" role="switch" aria-checked={item.on} aria-label={`Show ${option.label} in the bottom bar`} className="rf-sw" onClick={() => toggleTab(item.id)}><span aria-hidden="true" /></button>
+              <span className="sp-t1 sp-grow">{optionLabel}</span>
+              {option.organiserOnly && <span className="sp-t2">{t('shell.settings.organisers')}</span>}
+              <button type="button" role="switch" aria-checked={item.on} aria-label={t('shell.settings.showTab', { label: optionLabel })} className="rf-sw" onClick={() => toggleTab(item.id)}><span aria-hidden="true" /></button>
             </li>
           );
         })}
       </ul>
       {flag && <p role="status" className="sp-note sp-warn">{flag}</p>}
 
-      <h2 className="sp-sec">On competition days</h2>
+      <h2 className="sp-sec">{t('shell.settings.compDays')}</h2>
       <div className="sp-card">
         <div className="sp-row">
-          <span className="sp-grow"><span className="sp-t1">Notifications</span><span className="sp-t2">{pushNote}</span></span>
-          <button type="button" role="switch" aria-checked={notify.enabled} aria-label="Notifications" disabled={pushBlocked} className="rf-sw" onClick={() => { void notify.setEnabled(!notify.enabled); }}><span aria-hidden="true" /></button>
+          <span className="sp-grow"><span className="sp-t1">{t('shell.settings.notifications')}</span><span className="sp-t2">{pushNote}</span></span>
+          <button type="button" role="switch" aria-checked={notify.enabled} aria-label={t('shell.settings.notifications')} disabled={pushBlocked} className="rf-sw" onClick={() => { void notify.setEnabled(!notify.enabled); }}><span aria-hidden="true" /></button>
         </div>
         {notify.problem && <div className="px-3.5 py-3"><Notice>{notify.problem}</Notice></div>}
-        <RefineSwitchRow label="Show weather" on={showWeather} onChange={toggleWeather} />
-        <RefineSwitchRow label="Vibrate when I tap a score" on={scorerHaptics} onChange={setScorerHaptics} />
-        <RefineSwitchRow label="Order scoring teams by lane" on={sortByLaneOrder} onChange={setSortByLaneOrder} />
-        {current && <RefineSwitchRow label="Remember the competition I open" on={rememberChoice === 'remember'} onChange={(on) => setRememberChoice(on ? 'remember' : 'visit')} />}
+        <RefineSwitchRow label={t('shell.settings.showWeather')} on={showWeather} onChange={toggleWeather} />
+        <RefineSwitchRow label={t('shell.settings.vibrate')} on={scorerHaptics} onChange={setScorerHaptics} />
+        <RefineSwitchRow label={t('shell.settings.laneOrder')} on={sortByLaneOrder} onChange={setSortByLaneOrder} />
+        {current && <RefineSwitchRow label={t('shell.settings.remember')} on={rememberChoice === 'remember'} onChange={(on) => setRememberChoice(on ? 'remember' : 'visit')} />}
         <div className="sp-row">
-          <span className="sp-grow"><span className="sp-t1">Remind me before a heat</span><span className="sp-t2">While the app is open</span></span>
-          <span className="sp-stepper" role="group" aria-label="Heat reminder">
-            <button type="button" aria-label="5 minutes less" disabled={notifyLeadMins <= REMINDER_MIN} onClick={() => setNotifyMinutesBefore(stepReminder(notifyLeadMins, -1))}><Minus className="h-[18px] w-[18px]" aria-hidden="true" /></button>
-            <output aria-live="polite"><span key={notifyLeadMins} className="mg-num-pop">{notifyLeadMins} min</span></output>
-            <button type="button" aria-label="5 minutes more" disabled={notifyLeadMins >= REMINDER_MAX} onClick={() => setNotifyMinutesBefore(stepReminder(notifyLeadMins, 1))}><Plus className="h-[18px] w-[18px]" aria-hidden="true" /></button>
+          <span className="sp-grow"><span className="sp-t1">{t('shell.settings.remindBefore')}</span><span className="sp-t2">{t('shell.settings.whileOpen')}</span></span>
+          <span className="sp-stepper" role="group" aria-label={t('shell.settings.heatReminder')}>
+            <button type="button" aria-label={t('shell.settings.fiveLess')} disabled={notifyLeadMins <= REMINDER_MIN} onClick={() => setNotifyMinutesBefore(stepReminder(notifyLeadMins, -1))}><Minus className="h-[18px] w-[18px]" aria-hidden="true" /></button>
+            <output aria-live="polite"><span key={notifyLeadMins} className="mg-num-pop">{t('shell.settings.minutes', { n: notifyLeadMins })}</span></output>
+            <button type="button" aria-label={t('shell.settings.fiveMore')} disabled={notifyLeadMins >= REMINDER_MAX} onClick={() => setNotifyMinutesBefore(stepReminder(notifyLeadMins, 1))}><Plus className="h-[18px] w-[18px]" aria-hidden="true" /></button>
           </span>
         </div>
-        {current && <button type="button" className="sp-row" onClick={() => { forget(); navigate('/events'); }}><span className="sp-t1 sp-grow">Forget this competition</span></button>}
+        {current && <button type="button" className="sp-row" onClick={() => { forget(); navigate('/events'); }}><span className="sp-t1 sp-grow">{t('shell.settings.forget')}</span></button>}
       </div>
 
-      <h2 className="sp-sec">Policies</h2>
-      <ul className="sp-card m-0 list-none p-0" aria-label="Policies and legal">
+      <h2 className="sp-sec">{t('shell.settings.policies')}</h2>
+      <ul className="sp-card m-0 list-none p-0" aria-label={t('shell.settings.policiesLabel')}>
         {POLICIES.map((policy) => (
-          <li key={policy.to}><Link to={policy.to} className="sp-row"><span className="sp-t1 sp-grow !font-medium">{policy.label}</span><ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} /></Link></li>
+          <li key={policy.to}><Link to={policy.to} className="sp-row"><span className="sp-t1 sp-grow !font-medium">{t(policy.label)}</span><ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} /></Link></li>
         ))}
       </ul>
     </div>

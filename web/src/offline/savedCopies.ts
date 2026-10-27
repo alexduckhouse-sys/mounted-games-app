@@ -1,3 +1,4 @@
+import { activeLocale, tr } from '../i18n/translate';
 import { isLiteModeActive } from '../lite/liteMode';
 
 /**
@@ -146,11 +147,12 @@ export function shouldNoticeSavedCopy(savedAt: SavedAtLike, refreshFailed: boole
 /** "Last updated 14:05" for today, "Last updated 12 Oct, 14:05" for an earlier day, "Last updated earlier" when undated. */
 export function lastUpdatedText(savedAt: SavedAtLike, now: Date = new Date()): string {
   const ms = savedAtMs(savedAt);
-  if (ms == null) return 'Last updated earlier';
+  if (ms == null) return tr('shell.saved.earlier');
   const at = new Date(ms);
-  const time = at.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  if (at.toDateString() === now.toDateString()) return `Last updated ${time}`;
-  return `Last updated ${at.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}, ${time}`;
+  const locale = activeLocale();
+  const time = at.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+  if (at.toDateString() === now.toDateString()) return tr('shell.saved.today', { time });
+  return tr('shell.saved.day', { date: at.toLocaleDateString(locale, { day: 'numeric', month: 'short' }), time });
 }
 
 /** When the response is the service worker's fallback copy, the time it was saved; otherwise null. */

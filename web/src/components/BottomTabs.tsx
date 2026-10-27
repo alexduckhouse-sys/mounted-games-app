@@ -19,6 +19,8 @@ import {
   useUserPrefs,
   type BottomTabId,
 } from '../lib/userPrefs';
+import { useT } from '../i18n/LanguageContext';
+import type { MessageKey } from '../i18n/en';
 import { useCompetitionMeta } from './competitionMeta';
 
 /** The signed-in person's tab: their initials, and how many things are waiting on them. */
@@ -29,7 +31,7 @@ export interface MeTab {
 
 interface TabDef {
   id: BottomTabId;
-  label: string;
+  label: MessageKey;
   icon: LucideIcon;
   to: (base: string) => string;
   isActive: (section: string | undefined) => boolean;
@@ -39,7 +41,7 @@ interface TabDef {
 const TAB_DEFS: Record<BottomTabId, TabDef> = {
   timetable: {
     id: 'timetable',
-    label: 'Timetable',
+    label: 'shell.tab.timetable',
     icon: Clock,
     to: (base) => base,
     isActive: (section) =>
@@ -47,63 +49,63 @@ const TAB_DEFS: Record<BottomTabId, TabDef> = {
   },
   toplists: {
     id: 'toplists',
-    label: 'Toplists',
+    label: 'shell.tab.toplists',
     icon: Trophy,
     to: (base) => `${base}/toplists`,
     isActive: (section) => section === 'toplists',
   },
   following: {
     id: 'following',
-    label: 'Following',
+    label: 'shell.tab.following',
     icon: Star,
     to: (base) => `${base}/following`,
     isActive: (section) => section === 'following',
   },
   chat: {
     id: 'chat',
-    label: 'Live stream',
+    label: 'shell.tab.chat',
     icon: MessageSquare,
     to: (base) => `${base}/chat`,
     isActive: (section) => section === 'chat',
   },
   teams: {
     id: 'teams',
-    label: 'Teams',
+    label: 'shell.tab.teams',
     icon: Users,
     to: (base) => `${base}/teams`,
     isActive: (section) => section === 'teams',
   },
   arena: {
     id: 'arena',
-    label: 'Arena',
+    label: 'shell.tab.arena',
     icon: MapPin,
     to: (base) => `${base}/arena`,
     isActive: (section) => section === 'arena',
   },
   declarations: {
     id: 'declarations',
-    label: 'Dec forms',
+    label: 'shell.tab.declarations',
     icon: ClipboardList,
     to: (base) => `${base}/declarations`,
     isActive: (section) => section === 'declarations',
   },
   shop: {
     id: 'shop',
-    label: 'Shop',
+    label: 'shell.tab.shop',
     icon: ShoppingBag,
     to: (base) => `${base}/shop`,
     isActive: (section) => section === 'shop',
   },
   details: {
     id: 'details',
-    label: 'Details',
+    label: 'shell.tab.details',
     icon: Info,
     to: (base) => `${base}/details`,
     isActive: (section) => section === 'details' || section === 'sponsors',
   },
   operations: {
     id: 'operations',
-    label: 'Operations',
+    label: 'shell.tab.operations',
     icon: Sliders,
     organiserOnly: true,
     to: (base) => `${base}/operations`,
@@ -148,6 +150,7 @@ export function BottomTabs({
   entryOnly?: boolean;
   canOrganise?: boolean;
 }) {
+  const t = useT();
   const { pathname } = useLocation();
   const { bottomTabs } = useUserPrefs();
   const userCanOrganise = resolveCanOrganise(canOrganise);
@@ -167,13 +170,13 @@ export function BottomTabs({
     ? [
         {
           to: base,
-          label: 'Enter',
+          label: 'shell.tab.enter' as MessageKey,
           icon: Ticket,
           active: section === '' || section === 'enter',
         },
         {
           to: `${base}/details`,
-          label: 'Details',
+          label: 'shell.tab.details' as MessageKey,
           icon: Info,
           active: section === 'details' || section === 'sponsors',
         },
@@ -193,7 +196,7 @@ export function BottomTabs({
   const compactClass = totalCols >= 6 ? ' mg-tab-compact' : '';
 
   return (
-    <nav aria-label="Competition" className="mg-tabs">
+    <nav aria-label={t('shell.tabs.competition')} className="mg-tabs">
       <div className={`mx-auto grid max-w-xl ${gridColsClass}`}>
         {tabs.map((tab) => (
           <Link
@@ -207,7 +210,7 @@ export function BottomTabs({
               strokeWidth={tab.active ? 2.25 : 2}
               aria-hidden="true"
             />
-            {tab.label}
+            {t(tab.label)}
           </Link>
         ))}
         {me && (
@@ -232,8 +235,8 @@ export function BottomTabs({
                 </span>
               )}
             </span>
-            Me
-            {me.count > 0 && <span className="sr-only">, {me.count} to do</span>}
+            {t('shell.tab.me')}
+            {me.count > 0 && <span className="sr-only">{t('shell.tab.meCount', { count: me.count })}</span>}
           </Link>
         )}
       </div>

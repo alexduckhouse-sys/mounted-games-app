@@ -1,7 +1,7 @@
-import { cy } from './cy';
-import { en, type Catalogue, type MessageKey } from './en';
-import { fr } from './fr';
-import type { Message, MessageValues, PluralForms } from './messages';
+import { cy } from './cy/index.ts';
+import { en, type Catalogue, type MessageKey } from './en/index.ts';
+import { fr } from './fr/index.ts';
+import type { Message, MessageValues, PluralForms } from './messages.ts';
 
 /** The languages people can pick, each named in itself. English is the source and the fallback. */
 export const LANGUAGES = [

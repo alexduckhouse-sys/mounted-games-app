@@ -1,4 +1,5 @@
 import type { ChatMessage, Session } from '../types';
+import { activeLocale, LANGUAGES, translate, tr } from '../i18n/translate.ts';
 import { displaySectionName } from './section.ts';
 import { computeTimings, formatDelayDuration } from './time.ts';
 import { sessionOrdinals, sessionTitle, timetableRows, type TimetableRow } from './timetableRows.ts';
@@ -37,28 +38,29 @@ function sameDay(a: Date, b: Date) {
 
 /** "10:35" today, "Sat 10:35" this week, "14 Jun 10:35" further out. */
 export function tickerClock(date: Date, now: Date): string {
-  const time = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const locale = activeLocale();
+  const time = date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
   if (sameDay(date, now)) return time;
   const days = Math.abs(date.getTime() - now.getTime()) / (24 * 60 * MINUTE);
   const day = days < 6
-    ? date.toLocaleDateString('en-GB', { weekday: 'short' })
-    : date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    ? date.toLocaleDateString(locale, { weekday: 'short' })
+    : date.toLocaleDateString(locale, { day: 'numeric', month: 'short' });
   return `${day} ${time}`;
 }
 
 /** "Seniors Session 1 · Heat 2", or "Seniors Finals · Final A" for a final. */
 function raceName(row: TimetableRow, ordinals: Map<number, number>) {
-  const heat = row.heat ? row.heat.label || `Heat ${row.heatIndex + 1}` : '';
+  const heat = row.heat ? row.heat.label || tr('shell.ticker.heat', { n: row.heatIndex + 1 }) : '';
   let title = sessionTitle(row.session, ordinals);
   if (row.group === 'Finals') {
     const group = displaySectionName(row.session.sectionName || row.session.name);
-    title = /\bfinals?\b/i.test(group) ? group : `${group} Finals`;
+    title = /\bfinals?\b/i.test(group) ? group : tr('shell.ticker.groupFinals', { group });
   }
   const base = heat ? `${title} · ${heat}` : title;
   if (row.status === 'live' && row.heat && row.heat.races.length > 0) {
     const ordered = [...row.heat.races].sort((a, b) => a.orderIndex - b.orderIndex);
     const raceNum = ordered.findIndex((r) => !r.isComplete) + 1;
-    return `${base} · Race ${raceNum}/${ordered.length}`;
+    return `${base} · ${tr('shell.ticker.race', { n: raceNum, total: ordered.length })}`;
   }
   return base;
 }
@@ -66,10 +68,16 @@ function raceName(row: TimetableRow, ordinals: Map<number, number>) {
 /** "Lunch break", "Riders briefing"; custom items keep their own name. */
 function breakName(session: Session) {
   const kind = sessionKind(session);
-  const label = kind === 2 ? 'briefing' : kind === 1 ? 'break' : '';
   const name = oneLine(session.name);
-  if (!name) return label ? label[0].toUpperCase() + label.slice(1) : 'Break';
-  return label && !new RegExp(`\\b${label}`, 'i').test(name) ? `${name} ${label}` : name;
+  if (kind === 2) {
+    if (!name) return tr('shell.ticker.briefing');
+    return /\bbriefing/i.test(name) || name.toLowerCase().includes(tr('shell.ticker.briefingWord').toLowerCase()) ? name : tr('shell.ticker.namedBriefing', { name });
+  }
+  if (kind === 1) {
+    if (!name) return tr('shell.ticker.break');
+    return /\bbreak/i.test(name) || name.toLowerCase().includes(tr('shell.ticker.breakWord').toLowerCase()) ? name : tr('shell.ticker.namedBreak', { name });
+  }
+  return name || tr('shell.ticker.break');
 }
 
 function breakEnd(row: TimetableRow): Date | null {
@@ -87,7 +95,7 @@ function latestResult(sessions: Session[], now: number): TickerItem | null {
         if (!Number.isFinite(at) || now - at > RESULT_MAX_AGE_MS || at - now > MINUTE) continue;
         const winners = race.results.filter((result) => result.placing === 1 && !result.eliminated).map((result) => result.teamName);
         if (winners.length === 0 || (best && best.at >= at)) continue;
-        best = { at, id: race.id, text: `${winners.join(' & ')} won ${oneLine(race.name) || 'a race'}`, sessionId: session.id };
+        best = { at, id: race.id, text: tr('shell.ticker.won', { winners: winners.join(' & '), race: oneLine(race.name) || tr('shell.ticker.aRace') }), sessionId: session.id };
       }
     }
   }
@@ -132,31 +140,31 @@ export function tickerItems(sessions: Session[], announcements: ChatMessage[], n
   items.push(...recent.filter((item) => item.fresh).map(announcement));
 
   for (const row of liveRaces.slice(0, MAX_LIVE)) {
-    items.push({ key: `live-${row.key}`, kind: row.group === 'Finals' ? 'finals' : 'live', text: `Now: ${raceName(row, ordinals)}`, sessionId: row.session.id });
+    items.push({ key: `live-${row.key}`, kind: row.group === 'Finals' ? 'finals' : 'live', text: tr('shell.ticker.now', { race: raceName(row, ordinals) }), sessionId: row.session.id });
   }
   if (breakNow) {
     const end = breakEnd(breakNow);
-    items.push({ key: `break-${breakNow.key}`, kind: 'break', text: end ? `${breakName(breakNow.session)} until ${tickerClock(end, now)}` : `${breakName(breakNow.session)} now`, sessionId: breakNow.session.id });
+    items.push({ key: `break-${breakNow.key}`, kind: 'break', text: end ? tr('shell.ticker.breakUntil', { name: breakName(breakNow.session), time: tickerClock(end, now) }) : tr('shell.ticker.breakNow', { name: breakName(breakNow.session) }), sessionId: breakNow.session.id });
   }
 
   if (liveRaces.length > 0 || upcoming.length > 0) {
     let behind = Math.max(0, ...rows.filter((row) => row.status !== 'finished').map((row) => row.delayMinutes));
     const overdue = nextRace?.effective ? Math.round((t - nextRace.effective.getTime()) / MINUTE) : 0;
     if (overdue <= OVERDUE_LIMIT_MINUTES) behind = Math.max(behind, overdue);
-    if (behind >= LATE_AFTER_MINUTES) items.push({ key: 'late', kind: 'late', text: `Running ${formatDelayDuration(behind)} behind` });
-    else if (liveRaces.length > 0) items.push({ key: 'ontime', kind: 'ontime', text: 'On time' });
+    if (behind >= LATE_AFTER_MINUTES) items.push({ key: 'late', kind: 'late', text: tr('shell.ticker.behind', { duration: formatDelayDuration(behind) }) });
+    else if (liveRaces.length > 0) items.push({ key: 'ontime', kind: 'ontime', text: tr('shell.ticker.onTime') });
   }
 
   if (nextRace?.effective) {
-    items.push({ key: `next-${nextRace.key}`, kind: nextRace.group === 'Finals' ? 'finals' : 'next', text: `Next ${tickerClock(nextRace.effective, now)}: ${raceName(nextRace, ordinals)}`, sessionId: nextRace.session.id });
+    items.push({ key: `next-${nextRace.key}`, kind: nextRace.group === 'Finals' ? 'finals' : 'next', text: tr('shell.ticker.next', { time: tickerClock(nextRace.effective, now), race: raceName(nextRace, ordinals) }), sessionId: nextRace.session.id });
   }
   if (breakSoon?.effective) {
-    items.push({ key: `break-${breakSoon.key}`, kind: 'break', text: `${breakName(breakSoon.session)} ${tickerClock(breakSoon.effective, now)}`, sessionId: breakSoon.session.id });
+    items.push({ key: `break-${breakSoon.key}`, kind: 'break', text: tr('shell.ticker.breakAt', { name: breakName(breakSoon.session), time: tickerClock(breakSoon.effective, now) }), sessionId: breakSoon.session.id });
   }
 
   const races = rows.filter(isRaceRow);
   if (races.length > 0 && races.every((row) => row.status === 'finished')) {
-    items.push({ key: 'finished', kind: 'info', text: 'Racing finished' });
+    items.push({ key: 'finished', kind: 'info', text: tr('shell.ticker.finished') });
   }
 
   const result = latestResult(sessions, t);
@@ -173,6 +181,15 @@ export function tickerItems(sessions: Session[], announcements: ChatMessage[], n
     return true;
   });
   return unique.slice(0, MAX_TICKER_ITEMS);
+}
+
+/** True when a ticker line starts with "Now:" in any language (the badge says it, so the prefix is dropped). */
+export function nowPrefixLength(text: string): number {
+  for (const language of LANGUAGES) {
+    const prefix = translate(language.id, 'shell.ticker.now', { race: '' });
+    if (text.startsWith(prefix)) return prefix.length;
+  }
+  return 0;
 }
 
 /** True when both lists would show the same lines, so the ticker need not re-render. */

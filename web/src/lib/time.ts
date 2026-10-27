@@ -1,4 +1,5 @@
 import type { Heat, Session } from '../types';
+import { activeLocale, getActiveLang } from '../i18n/translate.ts';
 
 export function roundTo5Min(d: Date | null): Date | null {
   if (!d) return null;
@@ -8,7 +9,8 @@ export function roundTo5Min(d: Date | null): Date | null {
 
 export function formatTime(d: Date | null): string {
   if (!d) return '—';
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  // English keeps the device's own clock style; Welsh and French follow their own.
+  return d.toLocaleTimeString(getActiveLang() === 'en' ? [] : activeLocale(), { hour: '2-digit', minute: '2-digit' });
 }
 
 /**

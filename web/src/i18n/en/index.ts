@@ -1,11 +1,11 @@
 import type { Message } from '../messages';
-import { account } from './account';
-import { auth } from './auth';
-import { common } from './common';
-import { competition } from './competition';
-import { entries } from './entries';
-import { shell } from './shell';
-import { teams } from './teams';
+import { account } from './account.ts';
+import { auth } from './auth.ts';
+import { common } from './common.ts';
+import { competition } from './competition.ts';
+import { entries } from './entries.ts';
+import { shell } from './shell.ts';
+import { teams } from './teams.ts';
 
 /** The areas of the catalogue, one file each. Keys are `area.thing`; an area never reuses another's prefix. */
 export const AREAS = { common, shell, auth, account, entries, competition, teams } as const;

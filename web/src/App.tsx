@@ -20,6 +20,7 @@ import { StartPage } from './pages/StartPage';
 import { CompetitionPage } from './pages/CompetitionPage';
 import { AfterDrawOnly, CompetitionHome } from './pages/competition/CompetitionHome';
 import { ScrollToTop } from './components/ScrollToTop';
+import { useT } from './i18n/LanguageContext';
 import './App.css';
 
 const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })));
@@ -90,6 +91,11 @@ const TestEntryPaymentPage = lazy(() => import('./pages/commerce/TestEntryPaymen
 const MySignupsPage = lazy(() => import('./pages/MySignupsPage').then((module) => ({ default: module.MySignupsPage })));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then((module) => ({ default: module.NotFoundPage })));
 
+function OpeningPage() {
+  const t = useT();
+  return <p role="status" className="p-4 text-sm">{t('shell.header.openingPage')}</p>;
+}
+
 export default function App() {
   return (
     <LanguageProvider>
@@ -108,7 +114,7 @@ export default function App() {
         <BrowserRouter>
           <ScrollToTop />
           <PageLoadBoundary page="app">
-          <Suspense fallback={<p role="status" className="p-4 text-sm">Opening page…</p>}>
+          <Suspense fallback={<OpeningPage />}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignUpPage />} />
