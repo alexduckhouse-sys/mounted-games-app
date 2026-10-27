@@ -95,9 +95,51 @@ public class AccountProfileTests : IClassFixture<ApiFactory>
     {
         var (client, auth) = await _f.SignupAsync();
         using var r = await Change(client, Password, NewPassword);
-        Assert.Equal(HttpStatusCode.NoContent, r.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         Assert.False(await CanSignInAsync(auth.User.Email, Password));
         Assert.True(await CanSignInAsync(auth.User.Email, NewPassword));
+    }
+
+    [Fact]
+    public async Task Change_SignsEveryOtherDeviceOut_AndGivesThisOneAFreshToken()
+    {
+        var (client, auth) = await _f.SignupAsync();
+        var otherDevice = _f.WithToken((await _f.LoginAsync(auth.User.Email, Password)).Token);
+        Assert.Equal(HttpStatusCode.OK, (await otherDevice.GetAsync("/api/auth/me")).StatusCode);
+
+        using var r = await Change(client, Password, NewPassword);
+        var fresh = await r.ReadAsync<AuthResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        Assert.Equal((auth.User.Id, auth.User.Email), (fresh.User.Id, fresh.User.Email));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await otherDevice.GetAsync("/api/auth/me")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/auth/me")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await _f.WithToken(fresh.Token).GetAsync("/api/auth/me")).StatusCode);
+        Assert.Equal(1, await _f.WithDbAsync(db => db.Users.Where(u => u.Id == auth.User.Id).Select(u => u.SessionVersion).SingleAsync()));
+    }
+
+    [Fact]
+    public async Task Change_RefusedForTheRules_EndsNoSessions_AndKeepsSignIns()
+    {
+        var (client, auth) = await _f.SignupAsync();
+        await _f.AddSignInsAsync(auth.User.Id, "Google");
+        using var r = await Change(client, Password, "short1!");
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/auth/me")).StatusCode);
+        Assert.Equal(0, await _f.WithDbAsync(db => db.Users.Where(u => u.Id == auth.User.Id).Select(u => u.SessionVersion).SingleAsync()));
+        Assert.Equal(1, await _f.SignInsAsync(auth.User.Id));
+    }
+
+    [Fact]
+    public async Task Change_DisconnectsGoogleAndAppleSignIns()
+    {
+        var (client, auth) = await _f.SignupAsync();
+        await _f.AddSignInsAsync(auth.User.Id, "Google", "Apple");
+
+        using var r = await Change(client, Password, NewPassword);
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        Assert.Equal(0, await _f.SignInsAsync(auth.User.Id));
     }
 
     [Theory]

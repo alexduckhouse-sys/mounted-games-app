@@ -10,8 +10,8 @@ using MountedGames.Api.Services.Email;
 namespace MountedGames.Api.Controllers;
 
 /// <summary>
-/// "Forgot your password?" (see <see cref="PasswordResetService"/>). Asking for a link always gets the same 202 and takes
-/// at least the same time, so nobody can learn whether an address has an account. The token travels in the emailed page's
+/// "Forgot your password?" (see <see cref="PasswordResetService"/>). Asking for a link always gets the same 202 at the same
+/// moment (<see cref="PasswordResetService.MinimumResponse"/>), so nobody can learn whether an address has an account. The token travels in the emailed page's
 /// fragment and then in request bodies, never in a URL, so it stays out of server and proxy logs.
 /// </summary>
 [ApiController]
@@ -33,9 +33,22 @@ public sealed class PasswordResetController(AppDbContext db, PasswordResetServic
             return StatusCode(StatusCodes.Status403Forbidden, new { message = BlockedMessage });
 
         var started = time.GetTimestamp();
-        await resets.RequestAsync(address, HttpContext.Connection.RemoteIpAddress?.ToString(), ct);
-        var wait = resets.MinimumResponse - time.GetElapsedTime(started);
-        if (wait > TimeSpan.Zero) await Task.Delay(wait, time, ct);
+        var sending = await resets.RequestAsync(address, HttpContext.Connection.RemoteIpAddress?.ToString(), ct);
+        var floor = resets.MinimumResponse;
+        if (floor <= TimeSpan.Zero)
+        {
+            // No floor to answer at (tests and local runs), so wait for the email.
+            await sending;
+        }
+        else
+        {
+            // Answer at the floor whatever the email is doing, so a slow mail provider can't give a known address away.
+            var wait = floor - time.GetElapsedTime(started);
+            if (wait > TimeSpan.Zero) await Task.Delay(wait, time, ct);
+            // A send still going on finishes inside this request's lifetime: the server runs OnCompleted after the answer
+            // has gone, so the instance isn't idle (and free to scale to zero) while the email is on its way.
+            if (!sending.IsCompleted) Response.OnCompleted(() => sending);
+        }
         return Accepted(new PasswordResetRequestedResponse(RequestedMessage));
     }
 
@@ -69,6 +82,8 @@ public sealed class PasswordResetController(AppDbContext db, PasswordResetServic
                 new PasswordResetProblem("expired", "This link has expired. Ask for a new one.")),
             PasswordResetOutcome.Used => StatusCode(StatusCodes.Status410Gone,
                 new PasswordResetProblem("used", "This link has already been used. Ask for a new one if you still need to reset your password.")),
+            PasswordResetOutcome.Conflict => Conflict(
+                new PasswordResetProblem("conflict", "Your account changed while your new password was being saved, so nothing was changed. Try the link again.")),
             _ => NotFound(new PasswordResetProblem("invalid", "This link isn't valid. Ask for a new one.")),
         };
     }

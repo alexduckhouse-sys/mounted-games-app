@@ -28,8 +28,8 @@ public record PasswordResetCheckResponse(PasswordResetLinkState State, DateTime?
 public record PasswordResetDoneResponse(string Message);
 
 /// <summary>
-/// A refused confirm. <see cref="Code"/> is <c>invalid</c> (404), <c>expired</c> or <c>used</c> (410), or
-/// <c>password_required</c> or <c>password_rules</c> (400, with friendly <see cref="Errors"/> and Identity's
-/// <see cref="ErrorCodes"/>, as sign-up gives them).
+/// A refused confirm. <see cref="Code"/> is <c>invalid</c> (404), <c>expired</c> or <c>used</c> (410), <c>conflict</c> (409:
+/// the account changed while saving, nothing was saved and the link still works), or <c>password_required</c> or
+/// <c>password_rules</c> (400, with friendly <see cref="Errors"/> and Identity's <see cref="ErrorCodes"/>, as sign-up gives them).
 /// </summary>
 public record PasswordResetProblem(string Code, string Message, IReadOnlyList<string>? Errors = null, IReadOnlyList<string>? ErrorCodes = null);

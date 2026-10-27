@@ -13,10 +13,12 @@ public sealed class AccountAccessException(string message, int statusCode) : Exc
 }
 
 /// <summary>
-/// Locking (site admins for organisers; master admin for Admin accounts) and blocking (admins; any account). Both stop sign-in at once and make
-/// existing tokens stop working (<see cref="LiveAccounts"/>). Blocking also adds the networks the account has used to the IP
+/// Locking (site admins for organisers; master admin for Admin accounts) and blocking (admins; any account). Both stop sign-in at once, make
+/// existing tokens stop working (<see cref="LiveAccounts"/>, on the next request) and close the account's live-hub connections. Blocking also adds the networks the account has used to the IP
 /// block list, as hashes, and unblocking takes them off again. A lock is not the Identity lockout that a run of wrong
 /// passwords causes: the admin "unlock" endpoint only clears that one, so it can never undo a master admin's lock.
+/// Every change here also gives the account a new <c>ConcurrencyStamp</c>, so an Identity save that loaded the account
+/// before it (a password reset, a password change) fails instead of writing the old <c>LockedAt</c> or <c>BlockedAt</c> back.
 /// </summary>
 public sealed class AccountAccessService(
     AppDbContext db, UserManager<AppUser> users, IConfiguration configuration, LiveAccounts liveAccounts, TimeProvider time)
@@ -44,10 +46,11 @@ public sealed class AccountAccessService(
             throw new AccountAccessException("Only a master admin can lock an admin account.", 403);
         if (target.LockedAt is not null) return;
         var now = time.GetUtcNow().UtcDateTime;
+        var stamp = NewStamp();
         await db.Users.Where(u => u.Id == targetId)
             .ExecuteUpdateAsync(s => s.SetProperty(u => u.LockedAt, now).SetProperty(u => u.LockedByUserId, callerId)
-                .SetProperty(u => u.LockedByMaster, callerIsMaster), ct);
-        liveAccounts.Forget(targetId);
+                .SetProperty(u => u.LockedByMaster, callerIsMaster).SetProperty(u => u.ConcurrencyStamp, stamp), ct);
+        await liveAccounts.SessionsEndedAsync(targetId);
     }
 
     public async Task UnlockAsync(string targetId, bool callerIsMaster, CancellationToken ct)
@@ -57,10 +60,10 @@ public sealed class AccountAccessService(
             throw new AccountAccessException("Only a master admin can unlock an admin account.", 403);
         if (!callerIsMaster && target.LockedByMaster)
             throw new AccountAccessException("A master admin locked this account, so only a master admin can unlock it.", 403);
+        var stamp = NewStamp();
         await db.Users.Where(u => u.Id == targetId)
             .ExecuteUpdateAsync(s => s.SetProperty(u => u.LockedAt, (DateTime?)null).SetProperty(u => u.LockedByUserId, (string?)null)
-                .SetProperty(u => u.LockedByMaster, false), ct);
-        liveAccounts.Forget(targetId);
+                .SetProperty(u => u.LockedByMaster, false).SetProperty(u => u.ConcurrencyStamp, stamp), ct);
     }
 
     // ---- block (admins) ----
@@ -85,11 +88,13 @@ public sealed class AccountAccessService(
             db.ChangeTracker.Clear();
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
             var now = time.GetUtcNow().UtcDateTime;
+            var stamp = NewStamp();
             await db.Users.Where(u => u.Id == targetId).ExecuteUpdateAsync(s => s
                 .SetProperty(u => u.BlockedAt, u => u.BlockedAt ?? now)
                 .SetProperty(u => u.BlockedByUserId, u => u.BlockedAt == null ? callerId : u.BlockedByUserId)
                 .SetProperty(u => u.BlockedByMaster, u => u.BlockedAt == null ? callerIsMaster : (u.BlockedByMaster || callerIsMaster))
-                .SetProperty(u => u.BlockReason, string.IsNullOrEmpty(cleanReason) ? (string?)null : cleanReason), ct);
+                .SetProperty(u => u.BlockReason, string.IsNullOrEmpty(cleanReason) ? (string?)null : cleanReason)
+                .SetProperty(u => u.ConcurrencyStamp, stamp), ct);
 
             added = 0;
             foreach (var hash in await NetworksOfAsync(targetId, ct))
@@ -106,7 +111,7 @@ public sealed class AccountAccessService(
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
         });
-        liveAccounts.Forget(targetId);
+        await liveAccounts.SessionsEndedAsync(targetId);
         return added;
     }
 
@@ -122,10 +127,11 @@ public sealed class AccountAccessService(
         {
             db.ChangeTracker.Clear();
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
+            var stamp = NewStamp();
             await db.Users.Where(u => u.Id == targetId).ExecuteUpdateAsync(s => s
                 .SetProperty(u => u.BlockedAt, (DateTime?)null)
                 .SetProperty(u => u.BlockedByUserId, (string?)null).SetProperty(u => u.BlockedByMaster, false)
-                .SetProperty(u => u.BlockReason, (string?)null), ct);
+                .SetProperty(u => u.BlockReason, (string?)null).SetProperty(u => u.ConcurrencyStamp, stamp), ct);
 
             // A network another blocked account has also used stays blocked, now on that account's behalf.
             foreach (var row in await db.IpBlocks.Where(b => b.BlockedAccountUserId == targetId).ToListAsync(ct))
@@ -140,7 +146,6 @@ public sealed class AccountAccessService(
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
         });
-        liveAccounts.Forget(targetId);
     }
 
     /// <summary>
@@ -161,6 +166,8 @@ public sealed class AccountAccessService(
 
     private async Task<AppUser> FindAsync(string id)
         => await users.FindByIdAsync(id) ?? throw new AccountAccessException("Account not found.", 404);
+
+    private static string NewStamp() => Guid.NewGuid().ToString();
 
     private static bool IsSharedAdmin(AppUser user) => string.Equals(user.Email, SharedAdminEmail, StringComparison.OrdinalIgnoreCase);
 }

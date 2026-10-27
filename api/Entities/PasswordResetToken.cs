@@ -3,7 +3,7 @@ namespace MountedGames.Api.Entities;
 /// <summary>
 /// One emailed "choose a new password" link. The link carries 32 random bytes; only their SHA-256 is stored, so a database
 /// leak can't be used to reset anyone's password. A link works once, for <see cref="Lifetime"/>. Asking for a new link
-/// ends every earlier unused one for the account (their <see cref="ExpiresAt"/> is brought forward to that moment), and
+/// ends the account's earlier unused ones that are at least five minutes old (their <see cref="ExpiresAt"/> is brought forward to that moment), and
 /// so does a successful reset.
 /// </summary>
 /// <remarks>

@@ -118,6 +118,27 @@ describe('signing in', () => {
     expect(JSON.parse(localStorage.getItem('mg.auth') ?? '{}').token).toBe('tok-1');
   });
 
+  it('changes the password and swaps in the fresh sign-in the server sends back', async () => {
+    signIn();
+    const { result } = mount();
+    post.mockResolvedValueOnce({ data: { ...stored(), token: 'tok-2' } });
+    await act(async () => { await result.current.changePassword('old-Passw0rd!', 'New-passw0rd!'); });
+    expect(post).toHaveBeenCalledWith('/auth/change-password', { currentPassword: 'old-Passw0rd!', newPassword: 'New-passw0rd!' });
+    expect(result.current.token).toBe('tok-2');
+    expect(JSON.parse(localStorage.getItem('mg.auth') ?? '{}').token).toBe('tok-2');
+
+    // An older API's empty answer, or a reply without a sign-in, keeps the one this device has.
+    for (const data of [undefined, '', { token: 'tok-3' }, { user: stored().user }]) {
+      post.mockResolvedValueOnce({ data });
+      await act(async () => { await result.current.changePassword('a', 'b'); });
+      expect(result.current.token).toBe('tok-2');
+    }
+
+    post.mockRejectedValueOnce(new Error('wrong password'));
+    await act(async () => { await expect(result.current.changePassword('a', 'b')).rejects.toThrow('wrong password'); });
+    expect(result.current.token).toBe('tok-2');
+  });
+
   it('clears loading when an invitation is refused', async () => {
     post.mockRejectedValue(new Error('gone'));
     const { result } = mount();

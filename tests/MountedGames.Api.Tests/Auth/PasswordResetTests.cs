@@ -8,15 +8,17 @@ using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Controllers;
 using MountedGames.Api.Dtos;
+using MountedGames.Api.Data;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Security;
 using MountedGames.Api.Services;
+using MountedGames.Api.Services.Email;
 using MountedGames.Api.Services.Accounts;
 using MountedGames.Api.Tests.Infrastructure;
 
@@ -84,6 +86,34 @@ internal static class ResetSteps
 
     public static Task<AppUser> UserAsync(this ApiFactory f, string email)
         => f.WithDbAsync(db => db.Users.AsNoTracking().SingleAsync(u => u.NormalizedEmail == email.ToUpperInvariant()));
+
+    /// <summary>Links Google or Apple sign-ins to the account, as the social sign-in flow would.</summary>
+    public static Task AddSignInsAsync(this ApiFactory f, string userId, params string[] providers) => f.WithDbAsync(async db =>
+    {
+        foreach (var provider in providers)
+            db.UserLogins.Add(new IdentityUserLogin<string>
+            {
+                LoginProvider = provider, ProviderKey = $"{provider}-{Guid.NewGuid():N}", ProviderDisplayName = provider, UserId = userId,
+            });
+        await db.SaveChangesAsync();
+    });
+
+    public static Task<int> SignInsAsync(this ApiFactory f, string userId)
+        => f.WithDbAsync(db => db.UserLogins.CountAsync(l => l.UserId == userId));
+
+    public static Task ConfirmAddressAsync(this ApiFactory f, string userId)
+        => f.WithDbAsync(db => db.Users.Where(u => u.Id == userId).ExecuteUpdateAsync(s => s.SetProperty(u => u.EmailConfirmed, true)));
+
+    /// <summary>Waits for something an email send does after the request has been answered.</summary>
+    public static async Task EventuallyAsync(Func<bool> condition, string what)
+    {
+        for (var waited = TimeSpan.Zero; waited < TimeSpan.FromSeconds(30); waited += TimeSpan.FromMilliseconds(50))
+        {
+            if (condition()) return;
+            await Task.Delay(50);
+        }
+        Assert.Fail($"Timed out waiting for {what}.");
+    }
 }
 
 /// <summary>
@@ -93,6 +123,8 @@ internal static class ResetSteps
 /// </summary>
 public class PasswordResetTests : IClassFixture<PasswordResetTests.Factory>
 {
+    public const string MasterKey = "test-master-key-for-reset-tests";
+
     public sealed class Factory : EmailApiFactory
     {
         public ManualTimeProvider Clock { get; } = new();
@@ -101,6 +133,7 @@ public class PasswordResetTests : IClassFixture<PasswordResetTests.Factory>
         {
             base.ConfigureWebHost(builder);
             builder.UseSetting("PasswordReset:MinResponseMilliseconds", "0");
+            builder.UseSetting("MasterAdmin:KeyHash", MasterAdminKey.Hash(MasterKey));
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<TimeProvider>();
@@ -223,11 +256,30 @@ public class PasswordResetTests : IClassFixture<PasswordResetTests.Factory>
     }
 
     [Fact]
-    public async Task ANewLinkEndsTheEarlierOne()
+    public async Task ALinkUnderFiveMinutesOldOutlivesANewRequest()
     {
         var account = await _f.AccountAsync();
         var first = await _f.LinkAsync(account.User.Email);
+        // Someone asking again and again for this address can't keep killing the link its owner has just been sent.
         _f.Clock.Advance(TimeSpan.FromMinutes(2));
+        var second = await _f.LinkAsync(account.User.Email);
+        _f.Clock.Advance(TimeSpan.FromMinutes(2));
+        await _f.LinkAsync(account.User.Email);
+
+        Assert.NotEqual(first, second);
+        Assert.Equal(PasswordResetLinkState.Valid, (await _f.CheckAsync(first)).State);
+        Assert.Equal(PasswordResetLinkState.Valid, (await _f.CheckAsync(second)).State);
+        Assert.Equal(HttpStatusCode.OK, (await _f.ConfirmAsync(first)).StatusCode);
+        // Using one ends the rest.
+        Assert.Equal(PasswordResetLinkState.Expired, (await _f.CheckAsync(second)).State);
+    }
+
+    [Fact]
+    public async Task ANewLinkEndsOnesAtLeastFiveMinutesOld()
+    {
+        var account = await _f.AccountAsync();
+        var first = await _f.LinkAsync(account.User.Email);
+        _f.Clock.Advance(PasswordResetService.ProtectedFor);
         var second = await _f.LinkAsync(account.User.Email);
         Assert.NotEqual(first, second);
 
@@ -415,22 +467,16 @@ public class PasswordResetTests : IClassFixture<PasswordResetTests.Factory>
     }
 
     [Fact]
-    public async Task OtherInstancesCatchUpWithinAMinute_AndANewerTokenMakesThemReadAgain()
+    public async Task AResetOnAnotherInstanceIsRefusedHereAtOnce()
     {
         var account = await _f.AccountAsync();
-        // A second instance has its own memory cache but the same database.
-        var elsewhere = new LiveAccounts(_f.Services.GetRequiredService<IServiceScopeFactory>(), new MemoryCache(new MemoryCacheOptions()));
-        Assert.True(await elsewhere.AcceptsTokenAsync(account.User.Id, 0));
-        Assert.True(await elsewhere.IsActiveAsync(account.User.Id));
+        Assert.Equal(HttpStatusCode.OK, await _f.MeAsync(account.Token));
+        // What another instance's reset leaves in the shared database, with nothing said to this instance.
+        await _f.WithDbAsync(db => db.Users.Where(u => u.Id == account.User.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.SessionVersion, 1)));
 
-        Assert.Equal(HttpStatusCode.OK, (await _f.ConfirmAsync(await _f.LinkAsync(account.User.Email))).StatusCode);
-
-        // Until its entry expires, the other instance still remembers version 0...
-        Assert.True(await elsewhere.AcceptsTokenAsync(account.User.Id, 0));
-        // ...but a token made after the reset sends it back to the database, which also ends the old ones there.
-        Assert.True(await elsewhere.AcceptsTokenAsync(account.User.Id, 1));
-        Assert.False(await elsewhere.AcceptsTokenAsync(account.User.Id, 0));
-        Assert.False(await elsewhere.AcceptsTokenAsync("no-such-account", 0));
+        Assert.Equal(HttpStatusCode.Unauthorized, await _f.MeAsync(account.Token));
+        var fresh = await _f.LoginAsync(account.User.Email, ResetSteps.Password);
+        Assert.Equal(HttpStatusCode.OK, await _f.MeAsync(fresh.Token));
     }
 
     [Fact]
@@ -454,14 +500,16 @@ public class PasswordResetTests : IClassFixture<PasswordResetTests.Factory>
     }
 
     [Fact]
-    public async Task EveryoneIsToldTheirPasswordChanged_AndAdminsAreToldToGetTheAccountLocked()
+    public async Task EveryoneIsToldTheirPasswordChanged_AndAdminsAreToldToAskAMasterAdminForALock()
     {
         var member = await _f.AccountAsync();
         var adminEmail = ResetSteps.NewEmail();
         var admin = await _f.CreateClient().PostAsJsonAsync("/api/auth/admin-key",
             new AdminKeyRequest(ApiFactory.AdminKey, "Show Secretary", adminEmail, ResetSteps.Password));
         Assert.Equal(HttpStatusCode.OK, admin.StatusCode);
-        Assert.Contains(Roles.Admin, (await admin.ReadAsync<AuthResponse>()).User.Roles);
+        var adminAuth = await admin.ReadAsync<AuthResponse>();
+        Assert.Contains(Roles.Admin, adminAuth.User.Roles);
+        await _f.ConfirmAddressAsync(adminAuth.User.Id);
 
         Assert.Equal(HttpStatusCode.OK, (await _f.ConfirmAsync(await _f.LinkAsync(member.User.Email))).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await _f.ConfirmAsync(await _f.LinkAsync(adminEmail))).StatusCode);
@@ -476,10 +524,144 @@ public class PasswordResetTests : IClassFixture<PasswordResetTests.Factory>
             Assert.DoesNotContain("reset-password#t=", notice.Text);
         }
         Assert.DoesNotContain("site admin", memberNotice.Text);
+        Assert.DoesNotContain("master admin", memberNotice.Text);
         Assert.Contains("This is a site admin account", adminNotice.Text);
+        Assert.Contains("ask a master admin to lock the account", adminNotice.Text);
         Assert.Contains("This is a site admin account", adminNotice.Html);
         Assert.Equal(HttpStatusCode.OK, await _f.SignInAsync(adminEmail, ResetSteps.NewPassword));
     }
+
+    [Fact]
+    public async Task AResetTakesAwayMasterAdmin_WhichTheKeyGivesBack()
+    {
+        var account = await _f.AccountAsync();
+        using (var scope = _f.Services.CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+            var user = (await users.FindByIdAsync(account.User.Id))!;
+            Assert.True((await users.AddToRolesAsync(user, [Roles.Admin, Roles.MasterAdmin])).Succeeded);
+        }
+        await _f.ConfirmAddressAsync(account.User.Id);
+
+        Assert.Equal(HttpStatusCode.OK, (await _f.ConfirmAsync(await _f.LinkAsync(account.User.Email))).StatusCode);
+
+        var roles = await RolesAsync(account.User.Id);
+        Assert.Contains(Roles.Admin, roles);
+        Assert.DoesNotContain(Roles.MasterAdmin, roles);
+        var notice = Assert.Single(_f.Mail(account.User.Email, ResetSteps.ChangedSubject));
+        Assert.Contains("This account was a master admin", notice.Text);
+        Assert.Contains("enter the master admin key again", notice.Text);
+        Assert.Contains("This account was a master admin", notice.Html);
+        // Nobody can lock a master admin, so the notice doesn't suggest it.
+        Assert.DoesNotContain("lock", notice.Text, StringComparison.OrdinalIgnoreCase);
+
+        // The owner, who holds the key, gets the role back.
+        var signedIn = await _f.LoginAsync(account.User.Email, ResetSteps.NewPassword);
+        Assert.DoesNotContain(Roles.MasterAdmin, signedIn.User.Roles);
+        var restored = await _f.WithToken(signedIn.Token).PostAsJsonAsync("/api/auth/master-admin", new MasterAdminKeyRequest(MasterKey));
+        Assert.Equal(HttpStatusCode.OK, restored.StatusCode);
+        Assert.Contains(Roles.MasterAdmin, (await restored.ReadAsync<AuthResponse>()).User.Roles);
+    }
+
+    [Fact]
+    public async Task OrganisersAndAdminsGetALinkOnlyOnceTheirAddressIsConfirmed()
+    {
+        // An admin-key admin can type any address, so the mailbox may not be theirs.
+        var adminEmail = ResetSteps.NewEmail();
+        var admin = await (await _f.CreateClient().PostAsJsonAsync("/api/auth/admin-key",
+            new AdminKeyRequest(ApiFactory.AdminKey, "Show Secretary", adminEmail, ResetSteps.Password))).ReadAsync<AuthResponse>();
+        // A trainer request is still a member's access, so it gets a link until it is approved.
+        var trainerEmail = ResetSteps.NewEmail();
+        var signup = await _f.CreateClient().PostAsJsonAsync("/api/auth/signup-trainer",
+            new SignupTrainerRequest(trainerEmail, ResetSteps.Password, "Trainer", "Test Pony Club"));
+        var trainer = await signup.ReadAsync<AuthResponse>();
+        var earlyLink = await _f.LinkAsync(trainerEmail);
+        Assert.Equal(PasswordResetLinkState.Valid, (await _f.CheckAsync(earlyLink)).State);
+        (await (await _f.AdminAsync()).PostAsync($"/api/admin/trainer-requests/{trainer.User.Id}/approve", null)).EnsureSuccessStatusCode();
+        _f.Clock.Advance(TimeSpan.FromMinutes(2));
+        var before = _f.Sent.Count;
+
+        foreach (var email in new[] { adminEmail, trainerEmail })
+        {
+            var response = await _f.RequestResetAsync(email);
+            Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+            Assert.Equal(PasswordResetController.RequestedMessage, (await response.ReadAsync<PasswordResetRequestedResponse>()).Message);
+        }
+        Assert.Equal(before, _f.Sent.Count);
+        // The link sent while they were a member stops working once they organise.
+        Assert.Equal(PasswordResetLinkState.Invalid, (await _f.CheckAsync(earlyLink)).State);
+        Assert.Equal(HttpStatusCode.NotFound, (await _f.ConfirmAsync(earlyLink)).StatusCode);
+
+        await _f.ConfirmAddressAsync(admin.User.Id);
+        await _f.ConfirmAddressAsync(trainer.User.Id);
+        _f.Clock.Advance(TimeSpan.FromMinutes(2));
+        Assert.Equal(HttpStatusCode.OK, (await _f.ConfirmAsync(await _f.LinkAsync(adminEmail))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await _f.ConfirmAsync(await _f.LinkAsync(trainerEmail))).StatusCode);
+    }
+
+    [Fact]
+    public async Task AResetDisconnectsGoogleAndAppleSignIns_AndTheNoticeSaysSo()
+    {
+        var linked = await _f.AccountAsync();
+        var plain = await _f.AccountAsync();
+        await _f.AddSignInsAsync(linked.User.Id, "Google", "Apple");
+        await _f.AddSignInsAsync(plain.User.Id);
+
+        Assert.Equal(HttpStatusCode.OK, (await _f.ConfirmAsync(await _f.LinkAsync(linked.User.Email))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await _f.ConfirmAsync(await _f.LinkAsync(plain.User.Email))).StatusCode);
+
+        Assert.Equal(0, await _f.SignInsAsync(linked.User.Id));
+        var notice = Assert.Single(_f.Mail(linked.User.Email, ResetSteps.ChangedSubject));
+        Assert.Contains("disconnected any Google or Apple sign-in", notice.Text);
+        Assert.Contains("connect it again from your account page", notice.Text);
+        Assert.Contains("disconnected any Google or Apple sign-in", notice.Html);
+        // Nothing to disconnect, nothing said about it.
+        Assert.DoesNotContain("Google", Assert.Single(_f.Mail(plain.User.Email, ResetSteps.ChangedSubject)).Text);
+    }
+
+    [Fact]
+    public async Task AnAccountWithoutAPasswordSetsItsFirstOne_OnceItsAddressIsConfirmed()
+    {
+        var account = await _f.AccountAsync();
+        await _f.WithDbAsync(db => db.Users.Where(u => u.Id == account.User.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.PasswordHash, (string?)null)));
+        await _f.AddSignInsAsync(account.User.Id, "Google");
+        var before = _f.Sent.Count;
+        Assert.Equal(HttpStatusCode.Accepted, (await _f.RequestResetAsync(account.User.Email)).StatusCode);
+        Assert.Equal(before, _f.Sent.Count);
+
+        await _f.ConfirmAddressAsync(account.User.Id);
+        Assert.Equal(HttpStatusCode.OK, (await _f.ConfirmAsync(await _f.LinkAsync(account.User.Email))).StatusCode);
+
+        Assert.Equal(HttpStatusCode.OK, await _f.SignInAsync(account.User.Email, ResetSteps.NewPassword));
+        Assert.Equal(0, await _f.SignInsAsync(account.User.Id));
+        var notice = Assert.Single(_f.Mail(account.User.Email, "A password was set on your Mounted Games account"));
+        Assert.Contains("A password has just been set for the Mounted Games account", notice.Text);
+        Assert.Contains("disconnected any Google or Apple sign-in", notice.Text);
+    }
+
+    [Fact]
+    public async Task AnAdminWithoutAPasswordGetsNoLink_EvenWithAConfirmedAddress()
+    {
+        var account = await _f.AccountAsync();
+        using (var scope = _f.Services.CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+            Assert.True((await users.AddToRoleAsync((await users.FindByIdAsync(account.User.Id))!, Roles.Admin)).Succeeded);
+        }
+        await _f.ConfirmAddressAsync(account.User.Id);
+        await _f.WithDbAsync(db => db.Users.Where(u => u.Id == account.User.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.PasswordHash, (string?)null)));
+        var before = _f.Sent.Count;
+
+        var response = await _f.RequestResetAsync(account.User.Email);
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.Equal(PasswordResetController.RequestedMessage, (await response.ReadAsync<PasswordResetRequestedResponse>()).Message);
+        Assert.Equal(before, _f.Sent.Count);
+    }
+
+    private Task<List<string>> RolesAsync(string userId) => _f.WithDbAsync(db =>
+        (from membership in db.UserRoles join role in db.Roles on membership.RoleId equals role.Id
+         where membership.UserId == userId select role.Name!).ToListAsync());
 
     [Fact]
     public async Task AMailProviderFailureChangesNothingForThePerson_AndIsLoggedWithoutTheAddressOrLink()
@@ -541,7 +723,7 @@ public class PasswordResetTimingTests : IClassFixture<PasswordResetTimingTests.F
             Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
             Assert.True(clock.ElapsedMilliseconds >= FloorMilliseconds - 20, $"Answered in {clock.ElapsedMilliseconds} ms.");
         }
-        Assert.Single(_f.Mail(account.User.Email, ResetSteps.ResetSubject));
+        await ResetSteps.EventuallyAsync(() => _f.Mail(account.User.Email, ResetSteps.ResetSubject).Count == 1, "the reset email");
     }
 
     [Fact]
@@ -614,5 +796,157 @@ public class PasswordResetWithoutSiteTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         Assert.Equal(PasswordResetController.RequestedMessage, (await response.ReadAsync<PasswordResetRequestedResponse>()).Message);
         Assert.False(await _f.WithDbAsync(db => db.PasswordResetTokens.AnyAsync(t => t.UserId == account.User.Id)));
+    }
+}
+
+/// <summary>A mail provider slower than the floor: the answer still comes at the floor, and the email (and its failure) follow.</summary>
+public class PasswordResetSlowMailTests : IClassFixture<PasswordResetSlowMailTests.Factory>
+{
+    public const int FloorMilliseconds = 300;
+    public static readonly TimeSpan SendTakes = TimeSpan.FromSeconds(6);
+
+    /// <summary>Takes <see cref="SendTakes"/> and then fails, like a provider that times out.</summary>
+    public sealed class SlowSender : IEmailSender
+    {
+        public System.Collections.Concurrent.ConcurrentQueue<EmailMessage> Finished { get; } = new();
+
+        public async Task<EmailDeliveryStatus> SendAsync(EmailMessage message, CancellationToken ct = default)
+        {
+            await Task.Delay(SendTakes, ct);
+            Finished.Enqueue(message);
+            return EmailDeliveryStatus.Failed;
+        }
+    }
+
+    public sealed class Factory : EmailApiFactory
+    {
+        public SlowSender Slow { get; } = new();
+
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.UseSetting("PasswordReset:MinResponseMilliseconds", FloorMilliseconds.ToString());
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IEmailSender>();
+                services.AddSingleton<IEmailSender>(Slow);
+            });
+        }
+    }
+
+    private readonly Factory _f;
+    public PasswordResetSlowMailTests(Factory f) => _f = f;
+
+    [Fact]
+    public async Task ASlowSendDoesntStretchTheAnswer_AndItsFailureIsStillLogged()
+    {
+        var account = await _f.AccountAsync();
+        // Warm the host up first, so the timing below is the request's own.
+        Assert.Equal(HttpStatusCode.Accepted, (await _f.RequestResetAsync(ResetSteps.NewEmail())).StatusCode);
+
+        var clock = Stopwatch.StartNew();
+        var response = await _f.RequestResetAsync(account.User.Email);
+        clock.Stop();
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.True(clock.Elapsed < SendTakes - TimeSpan.FromSeconds(2), $"Answered in {clock.ElapsedMilliseconds} ms, so it waited for the email.");
+        Assert.True(clock.ElapsedMilliseconds >= FloorMilliseconds - 20, $"Answered in {clock.ElapsedMilliseconds} ms, before the floor.");
+        Assert.DoesNotContain(_f.Slow.Finished, m => m.Subject == ResetSteps.ResetSubject);
+
+        // The send carries on after the answer, then its failure is logged with a masked address only.
+        await ResetSteps.EventuallyAsync(() => _f.Slow.Finished.Any(m => m.Subject == ResetSteps.ResetSubject), "the slow send to finish");
+        await ResetSteps.EventuallyAsync(() => _f.Logs.Any(l => l.Contains("password reset link") && l.Contains("not delivered")), "the failure to be logged");
+        Assert.DoesNotContain(_f.Logs, l => l.Contains(account.User.Email));
+    }
+}
+
+/// <summary>
+/// The reset saving over an account that something else changed after the reset read it (a lock or block, which now give
+/// the account a new ConcurrencyStamp). The race is staged by changing the stamp just before the reset's own save.
+/// </summary>
+public class PasswordResetRaceTests : IClassFixture<PasswordResetRaceTests.Factory>
+{
+    public sealed class RaceTrigger
+    {
+        private string? _armed;
+        public void Arm(string userId) => Volatile.Write(ref _armed, userId);
+        /// <summary>Fires once. CompareExchange compares references, so it swaps out the armed instance itself.</summary>
+        public bool Take(string userId)
+        {
+            var armed = Volatile.Read(ref _armed);
+            return armed == userId && ReferenceEquals(Interlocked.CompareExchange(ref _armed, null, armed), armed);
+        }
+    }
+
+    public sealed class RacingUserStore(AppDbContext context, RaceTrigger trigger, IdentityErrorDescriber? describer = null)
+        : Microsoft.AspNetCore.Identity.EntityFrameworkCore.UserStore<AppUser, IdentityRole, AppDbContext>(context, describer)
+    {
+        public override async Task<IdentityResult> UpdateAsync(AppUser user, CancellationToken cancellationToken = default)
+        {
+            if (trigger.Take(user.Id))
+                await Context.Database.ExecuteSqlInterpolatedAsync(
+                    $"UPDATE \"AspNetUsers\" SET \"ConcurrencyStamp\" = {Guid.NewGuid().ToString()} WHERE \"Id\" = {user.Id}", cancellationToken);
+            return await base.UpdateAsync(user, cancellationToken);
+        }
+    }
+
+    public sealed class Factory : EmailApiFactory
+    {
+        public RaceTrigger Trigger { get; } = new();
+
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.UseSetting("PasswordReset:MinResponseMilliseconds", "0");
+            builder.ConfigureServices(services =>
+            {
+                services.AddSingleton(Trigger);
+                services.RemoveAll<IUserStore<AppUser>>();
+                services.AddScoped<IUserStore<AppUser>, RacingUserStore>();
+            });
+        }
+    }
+
+    private readonly Factory _f;
+    public PasswordResetRaceTests(Factory f) => _f = f;
+
+    [Fact]
+    public async Task AnAccountChangedDuringTheSave_GetsAConflictAndNothingIsSaved()
+    {
+        var account = await _f.AccountAsync();
+        var token = await _f.LinkAsync(account.User.Email);
+        _f.Trigger.Arm(account.User.Id);
+
+        var response = await _f.ConfirmAsync(token);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var problem = await response.ReadAsync<PasswordResetProblem>();
+        Assert.Equal("conflict", problem.Code);
+        Assert.Contains("Try the link again", problem.Message);
+        // Rolled back: the link still works, so does the old password and the existing sign-in.
+        Assert.Equal(PasswordResetLinkState.Valid, (await _f.CheckAsync(token)).State);
+        Assert.Equal(HttpStatusCode.OK, await _f.SignInAsync(account.User.Email, ResetSteps.Password));
+        Assert.Equal(HttpStatusCode.OK, await _f.MeAsync(account.Token));
+        Assert.Equal(0, (await _f.UserAsync(account.User.Email)).SessionVersion);
+
+        Assert.Equal(HttpStatusCode.OK, (await _f.ConfirmAsync(token)).StatusCode);
+    }
+
+    [Fact]
+    public async Task AMasterAdminChangedDuringTheSave_KeepsTheRole()
+    {
+        var account = await _f.AccountAsync();
+        using (var scope = _f.Services.CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+            Assert.True((await users.AddToRolesAsync((await users.FindByIdAsync(account.User.Id))!, [Roles.Admin, Roles.MasterAdmin])).Succeeded);
+        }
+        await _f.ConfirmAddressAsync(account.User.Id);
+        var token = await _f.LinkAsync(account.User.Email);
+        _f.Trigger.Arm(account.User.Id);
+
+        Assert.Equal(HttpStatusCode.Conflict, (await _f.ConfirmAsync(token)).StatusCode);
+        Assert.True(await _f.WithDbAsync(db => (from m in db.UserRoles join r in db.Roles on m.RoleId equals r.Id
+                                                 where m.UserId == account.User.Id && r.Name == Roles.MasterAdmin select m).AnyAsync()));
     }
 }
