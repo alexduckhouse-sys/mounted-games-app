@@ -61,3 +61,13 @@ it('defers the update prompt and reload while broadcasting', async () => {
   await userEvent.click(await screen.findByRole('button', { name: 'Reload now' }));
   await waitFor(() => expect(updateSW).toHaveBeenCalledWith(true));
 });
+
+it('registers no service worker inside the iPhone app', async () => {
+  vi.resetModules();
+  vi.doMock('./native/platform', () => ({ isNativeApp: () => true }));
+  registerSW.mockClear();
+  const { registerPwa: registerInApp } = await import('./pwa');
+  registerInApp();
+  expect(registerSW).not.toHaveBeenCalled();
+  vi.doUnmock('./native/platform');
+});
