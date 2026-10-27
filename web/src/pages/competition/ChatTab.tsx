@@ -14,6 +14,8 @@ import type { ChatMessage, LiveStream } from '../../types';
 import './chat.css';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
+import { useLanguage } from '../../i18n/LanguageContext';
+import { activeLocale, tr } from '../../i18n/translate';
 
 const LAST_CHAT_COMP_KEY = 'mg.lastChatComp';
 const BANNER_TAG = 'banner';
@@ -33,7 +35,7 @@ function saveLastChatComp(value: LastChatComp) {
   try { localStorage.setItem(LAST_CHAT_COMP_KEY, JSON.stringify(value)); } catch { /* storage blocked */ }
 }
 
-const messageTime = (message: ChatMessage) => new Date(message.createdAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+const messageTime = (message: ChatMessage) => new Date(message.createdAt).toLocaleTimeString(activeLocale(), { hour: '2-digit', minute: '2-digit' });
 
 export function ChatTab() {
   // Remount on sign-in, sign-out or a role change so private messages, drafts and
@@ -44,6 +46,7 @@ export function ChatTab() {
 }
 
 function ChatTabSession() {
+  const { t } = useLanguage();
   const { competition, reload, streams, streamingEnabled, streamingChecked = true, invoke, ready, streamMessages } = useCompetition();
   const { user, canEdit, hasRole, canOrganise } = useAuth();
   const isAdmin = hasRole('Admin');
@@ -77,7 +80,7 @@ function ChatTabSession() {
   const requestMessages = useCallback((controller: AbortController) => {
     void api.get<ChatMessage[]>(`/competitions/${competition.id}/chat`, { signal: controller.signal })
       .then((response) => { if (!controller.signal.aborted) setMessages(response.data); })
-      .catch(() => { if (!controller.signal.aborted) setMessagesError('Couldn’t load the announcements. Check your signal and try again.'); })
+      .catch(() => { if (!controller.signal.aborted) setMessagesError(tr('teams.chat.loadError')); })
       .finally(() => { if (!controller.signal.aborted) setMessagesLoading(false); });
   }, [competition.id]);
   const loadMessages = useCallback(() => {
@@ -246,7 +249,7 @@ function ChatTabSession() {
     <>
       <section className="live-announcements" aria-labelledby="announcements-title">
         <div className="mg-section-head">
-          <h2 id="announcements-title">Announcements</h2>
+          <h2 id="announcements-title">{t('teams.chat.announcements')}</h2>
           {isAdmin && (
             <Link to={`/competitions/${competition.id}/announcements`} className="text-xs font-semibold text-[rgb(var(--mg-heading))] underline">
               Manage announcements
@@ -257,13 +260,13 @@ function ChatTabSession() {
               Organiser messages{privateCount > 0 ? ` (${privateCount})` : ''}
             </Link>
           )}
-          {!desktop && listed.length > 0 && <button ref={announcementsTriggerRef} type="button" onClick={() => setAllOpen(true)}>All {listed.length}</button>}
+          {!desktop && listed.length > 0 && <button ref={announcementsTriggerRef} type="button" onClick={() => setAllOpen(true)}>{t('teams.chat.all', { count: listed.length })}</button>}
         </div>
         {banner && (
-          <div className="live-pinned" role="status" aria-label="Pinned announcement">
-            <span className="live-pinned-label"><Pin aria-hidden="true" />Pinned</span>
+          <div className="live-pinned" role="status" aria-label={t('teams.chat.pinnedAria')}>
+            <span className="live-pinned-label"><Pin aria-hidden="true" />{t('teams.chat.pinned')}</span>
             <strong>{banner.body}</strong>
-            <span className="live-pinned-meta">Organisers · {messageTime(banner)}</span>
+            <span className="live-pinned-meta">{t('teams.chat.organisers')} · {messageTime(banner)}</span>
             {canModerate && <button type="button" className="live-pinned-unpin" onClick={() => void unpinBanners()}>Unpin</button>}
           </div>
         )}
@@ -272,9 +275,9 @@ function ChatTabSession() {
             Your last post was for {lastChatComp.name}. Check you’re posting to the right one.
           </Notice>
         )}
-        {messagesError && <Notice actionLabel="Try again" onAction={loadMessages}>{messagesError}</Notice>}
+        {messagesError && <Notice actionLabel={t('common.tryAgain')} onAction={loadMessages}>{messagesError}</Notice>}
         {messagesLoading && messages.length === 0
-          ? <div className="live-feed-state mg-card" role="status">Loading announcements…</div>
+          ? <div className="live-feed-state mg-card" role="status">{t('teams.chat.loading')}</div>
           : messagesError && messages.length === 0
             ? null
             : (
@@ -318,10 +321,10 @@ function ChatTabSession() {
         privateMessagingAvailable ? (
           <Link to={`/competitions/${competition.id}/contact`} className="mg-btn mg-btn-secondary">
             <MessageSquare className="h-4 w-4" aria-hidden="true" />
-            Message organisers
+            {t('teams.chat.messageOrganisers')}
           </Link>
         ) : (
-          <Notice tone="info" icon={Lock}>Messaging the organisers isn’t available for this event yet.</Notice>
+          <Notice tone="info" icon={Lock}>{t('teams.chat.messagingUnavailable')}</Notice>
         )
       )}
     </>
@@ -330,8 +333,8 @@ function ChatTabSession() {
   return (
     <div className={`live-page ${canPost ? 'live-page-staff' : 'live-page-public'}`}>
       <div className="live-page-band mg-band">
-        <h1 className="mg-h1 mg-h1-sm">Live stream</h1>
-        {canPost ? <span className="live-role-badge">Organiser</span> : liveNow && <span className="mg-badge mg-badge-live">Live</span>}
+        <h1 className="mg-h1 mg-h1-sm">{t('teams.chat.liveStream')}</h1>
+        {canPost ? <span className="live-role-badge">Organiser</span> : liveNow && <span className="mg-badge mg-badge-live">{t('common.live')}</span>}
       </div>
 
       {actionError && !allOpen && <Notice className="live-page-notice" onDismiss={() => setActionError(null)} dismissLabel="Dismiss error">{actionError}</Notice>}
@@ -340,7 +343,7 @@ function ChatTabSession() {
       {canPost ? (
         <>
           <div className="live-col live-col-rail">
-            <div className="mg-section-head live-stream-head"><h2>Stream</h2></div>
+            <div className="mg-section-head live-stream-head"><h2>{t('teams.stream.stream')}</h2></div>
             <StaffStreamCard key={canManageStream ? 'editable' : 'read-only'} active={activeStreams[0] ?? null} fallback={competition.streamUrl ?? null} competitionId={competition.id} canBroadcast={canBroadcast} canEditStream={canManageStream} streamingNotSetUp={canManageStream && streamingChecked && !streamingEnabled} onSaved={reload} />
             {activeStreams.length > 0 && <LiveVideo competitionId={competition.id} streams={streams} sessions={competition.sessions} invoke={invoke} ready={ready} messages={streamMessages} canBroadcast={false} fallback={null} competitionName={competition.name} publicLayout />}
           </div>
@@ -351,7 +354,7 @@ function ChatTabSession() {
       ) : (
         <>
           <div className="live-col live-col-main">
-            <div className="mg-section-head live-stream-head"><h2>Stream</h2></div>
+            <div className="mg-section-head live-stream-head"><h2>{t('teams.stream.stream')}</h2></div>
             <LiveVideo competitionId={competition.id} streams={streams} sessions={competition.sessions} invoke={invoke} ready={ready} messages={streamMessages} canBroadcast={false} fallback={competition.streamUrl} competitionName={competition.name} publicLayout showPlaceholder />
           </div>
           <div className="live-col live-col-rail">
@@ -392,6 +395,7 @@ function AnnouncementList({ messages, staff, canModerate, pinnedId, onPin, onUnp
   full?: boolean;
 }) {
   const reduceMotion = useReducedMotion();
+  const { t } = useLanguage();
   return <div className={`live-announcement-list mg-card mg-list ${full ? 'live-announcement-list-full' : ''}`}>
     <AnimatePresence initial={false}>
       {messages.map((message) => (
@@ -409,7 +413,7 @@ function AnnouncementList({ messages, staff, canModerate, pinnedId, onPin, onUnp
         />
       ))}
     </AnimatePresence>
-    {messages.length === 0 && <p className="live-empty">Nothing posted yet.</p>}
+    {messages.length === 0 && <p className="live-empty">{t('teams.chat.empty')}</p>}
   </div>;
 }
 
@@ -467,11 +471,12 @@ function AnnouncementsOverlay({ messages, staff, canModerate, pinnedId, error, o
   returnFocusRef: RefObject<HTMLElement | null>;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
-  useDialogFocus(dialogRef, onClose, '[aria-label="Close announcements"]', returnFocusRef);
+  const { t } = useLanguage();
+  useDialogFocus(dialogRef, onClose, '[data-close-announcements]', returnFocusRef);
   return <div className="live-overlay" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div ref={dialogRef} className="live-all-dialog" role="dialog" aria-modal="true" aria-label="All announcements">
+    <div ref={dialogRef} className="live-all-dialog" role="dialog" aria-modal="true" aria-label={t('teams.chat.allAria')}>
       <span aria-hidden="true" className="kit-sheet-grip" />
-      <div className="live-all-head"><h2>All announcements</h2><button type="button" className="mg-icon-btn" aria-label="Close announcements" onClick={onClose}><X aria-hidden="true" /></button></div>
+      <div className="live-all-head"><h2>{t('teams.chat.allAria')}</h2><button type="button" className="mg-icon-btn" data-close-announcements aria-label={t('teams.chat.close')} onClick={onClose}><X aria-hidden="true" /></button></div>
       {error && <Notice onDismiss={onDismissError} dismissLabel="Dismiss error">{error}</Notice>}
       <AnnouncementList messages={messages} staff={staff} canModerate={canModerate} pinnedId={pinnedId} onPin={onPin} onUnpin={onUnpin} onDelete={onDelete} onBlock={onBlock} full />
     </div>

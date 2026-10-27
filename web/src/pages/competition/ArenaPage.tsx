@@ -15,6 +15,7 @@ import { displaySectionName } from '../../lib/section';
 import { formatTime, roundTo5Min, computeTimings } from '../../lib/time';
 import '../../components/sitePages.css';
 import '../../components/eventPages.css';
+import { useT } from '../../i18n/LanguageContext';
 
 function heatIsComplete(h: Heat): boolean {
   return h.races.length > 0 && h.races.every((r) => r.isComplete);
@@ -47,12 +48,13 @@ function currentChoice(choices: HeatChoice[]): HeatChoice | null {
 export function ArenaPage() {
   usePageWidth('narrow');
   const desktop = useIsDesktop();
+  const t = useT();
   const { competition } = useCompetition();
   usePageHeader({
-    title: 'Arena setup',
+    title: t('teams.arena.title'),
     subtitle: competition.name,
     backTo: `/competitions/${competition.id}`,
-    backLabel: 'Timetable',
+    backLabel: t('teams.team.timetable'),
   });
   const [templates, setTemplates] = useState<RaceTemplate[]>([]);
   const [byNameDetails, setByNameDetails] = useState<Record<string, RaceTemplateDetail>>({});
@@ -75,7 +77,7 @@ export function ArenaPage() {
 
   const tmplByName = useMemo(() => {
     const m = new Map<string, RaceTemplate>();
-    for (const t of templates) m.set(t.name.toLowerCase().trim(), t);
+    for (const template of templates) m.set(template.name.toLowerCase().trim(), template);
     return m;
   }, [templates]);
 
@@ -119,7 +121,7 @@ export function ArenaPage() {
   }, [activeRaceName, activeKey, byNameDetails]);
 
   const arenaTabs = arenas.length > 1 ? (
-    <div className="sp-seg mb-3" role="tablist" aria-label="Arena">
+    <div className="sp-seg mb-3" role="tablist" aria-label={t('teams.arena.arena')}>
       {arenas.map((name) => (
         <button key={name} type="button" role="tab" aria-selected={selectedArena === name} onClick={() => chooseArena(name)}>{name}</button>
       ))}
@@ -128,7 +130,7 @@ export function ArenaPage() {
 
   const shell = (children: ReactNode) => (
     <div className="rf-page mx-auto flex w-full max-w-xl flex-col pb-6 pt-3">
-      <h1 className="sr-only">Arena setup</h1>
+      <h1 className="sr-only">{t('teams.arena.title')}</h1>
       {arenaTabs}
       {children}
     </div>
@@ -138,7 +140,7 @@ export function ArenaPage() {
     return shell(
       <div className="ev-card p-6 text-center">
         <Activity className="mx-auto mb-2 h-10 w-10 text-[rgb(var(--mg-faint))]" aria-hidden="true" />
-        <p className="ev-body">Nothing currently in the arena.</p>
+        <p className="ev-body">{t('teams.arena.nothing')}</p>
       </div>,
     );
   }
@@ -148,7 +150,7 @@ export function ArenaPage() {
     const when = timing ? roundTo5Min(timing.effective ?? timing.scheduled) : null;
     return when ? formatTime(when) : '';
   };
-  const heatLabel = (c: HeatChoice) => [displaySectionName(c.session.sectionName ?? c.session.name), c.heat.label ?? `Heat ${c.heatIndex + 1}`, timeOf(c)].filter(Boolean).join(' · ');
+  const heatLabel = (c: HeatChoice) => [displaySectionName(c.session.sectionName ?? c.session.name), c.heat.label ?? t('teams.team.heatN', { number: c.heatIndex + 1 }), timeOf(c)].filter(Boolean).join(' · ');
   const heatOptions = choices.map((c) => ({ value: String(c.heat.id), label: heatLabel(c) }));
 
   const template = activeRace ? (byNameDetails[activeKey] ?? tmplByName.get(activeKey) ?? null) : null;
@@ -159,18 +161,18 @@ export function ArenaPage() {
 
   return shell(
     <>
-      <DropdownRow label="Heat" value={String(target.heat.id)} options={heatOptions} onChange={(value) => setPickedHeat(Number(value))} />
+      <DropdownRow label={t('teams.arena.heat')} value={String(target.heat.id)} options={heatOptions} onChange={(value) => setPickedHeat(Number(value))} />
 
       <div className="ev-card mt-3 overflow-hidden">
         <div className="flex items-center gap-1.5 border-b border-[rgb(var(--mg-rule-soft))] px-1.5 py-2">
-          <button type="button" className="ev-arrow" aria-label="Previous race" disabled={activeIdx === 0} onClick={() => goToRace(activeIdx - 1)}>
+          <button type="button" className="ev-arrow" aria-label={t('teams.arena.previous')} disabled={activeIdx === 0} onClick={() => goToRace(activeIdx - 1)}>
             <ChevronLeft className="h-[22px] w-[22px]" aria-hidden="true" strokeWidth={2.5} />
           </button>
           <div className="flex min-w-0 flex-1 flex-col items-center text-center">
-            <span className="sp-t2">Race {activeRace ? activeIdx + 1 : 0} of {orderedRaces.length}{activeRace?.isComplete ? ' · Done' : ''}</span>
-            <h2 className="m-0 max-w-full truncate mg-display text-2xl font-extrabold leading-[1.05] text-[rgb(var(--mg-heading))]">{activeRace?.name ?? 'No race'}</h2>
+            <span className="sp-t2">{t('teams.arena.raceOf', { current: activeRace ? activeIdx + 1 : 0, total: orderedRaces.length })}{activeRace?.isComplete ? ` · ${t('teams.arena.done')}` : ''}</span>
+            <h2 className="m-0 max-w-full truncate mg-display text-2xl font-extrabold leading-[1.05] text-[rgb(var(--mg-heading))]">{activeRace?.name ?? t('teams.arena.noRace')}</h2>
           </div>
-          <button type="button" className="ev-arrow" aria-label="Next race" disabled={activeIdx >= orderedRaces.length - 1} onClick={() => goToRace(activeIdx + 1)}>
+          <button type="button" className="ev-arrow" aria-label={t('teams.arena.next')} disabled={activeIdx >= orderedRaces.length - 1} onClick={() => goToRace(activeIdx + 1)}>
             <ChevronRight className="h-[22px] w-[22px]" aria-hidden="true" strokeWidth={2.5} />
           </button>
         </div>
@@ -190,27 +192,27 @@ export function ArenaPage() {
             </div>
             {template.summary && <p className="ev-body !text-[15px]">{template.summary}</p>}
             {equipment.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5" aria-label="Equipment required">
-                <span className="sp-t2 mr-1">Each lane</span>
+              <div className="flex flex-wrap items-center gap-1.5" aria-label={t('teams.arena.equipment')}>
+                <span className="sp-t2 mr-1">{t('teams.arena.eachLane')}</span>
                 {equipment.map((item) => <span key={item.label} className="ev-chip">{item.count > 1 ? `${item.count} × ` : ''}{item.label}</span>)}
               </div>
             )}
             <p className="m-0 text-center">
-              <button type="button" className="ev-text-btn !no-underline" onClick={() => setRulesFor(activeRaceName)}>Full rules</button>
+              <button type="button" className="ev-text-btn !no-underline" onClick={() => setRulesFor(activeRaceName)}>{t('teams.arena.fullRules')}</button>
             </p>
           </div>
         ) : (
           <div className="px-4 py-6 text-center">
             <Flag className="mx-auto mb-2 h-8 w-8 text-[rgb(var(--mg-faint))]" aria-hidden="true" />
-            <p className="ev-body !text-[15px]">{activeRace ? `No setup diagram for “${activeRace.name}” yet.` : 'This heat has no races yet.'}</p>
-            {activeRace && <button type="button" className="ev-text-btn !no-underline" onClick={() => setRulesFor(activeRaceName)}>Full rules</button>}
+            <p className="ev-body !text-[15px]">{activeRace ? t('teams.arena.noDiagram', { name: activeRace.name }) : t('teams.arena.noRaces')}</p>
+            {activeRace && <button type="button" className="ev-text-btn !no-underline" onClick={() => setRulesFor(activeRaceName)}>{t('teams.arena.fullRules')}</button>}
           </div>
         )}
       </div>
 
       {crew.length > 0 && (
-        <section aria-label="Ring crew before this race">
-          <h2 className="sp-sec">Ring crew before this race</h2>
+        <section aria-label={t('teams.arena.crew')}>
+          <h2 className="sp-sec">{t('teams.arena.crew')}</h2>
           <div className="ev-card flex flex-col gap-1 px-4 py-3 text-[15px] leading-snug">
             {crew.map((line) => <p key={line} className="m-0">{line}</p>)}
           </div>

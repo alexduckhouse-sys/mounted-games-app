@@ -11,6 +11,7 @@ import { lookStyle } from '../../lib/overlays';
 import type { ChatMessage, Heat, LiveStream } from '../../types';
 import { ENTER, LEAVE, ROW_STAGGER_S, SPRING, WIPE_HIDDEN_LEFT, WIPE_SHOWN } from '../../lib/motion';
 import { useStillMotion } from '../../lite/useStillMotion';
+import { useT } from '../../i18n/LanguageContext';
 
 /** A broadcast bib swatch accepting colour/color and optional size, rendering nothing when no bib color exists. */
 export function BibSwatch({
@@ -91,6 +92,7 @@ export function StreamOverlays({ stream, label, reconnecting, muted, onSound, an
   currentHeat?: Heat | HeatLike | null; children?: ReactNode;
 }) {
   const still = useStillMotion();
+  const t = useT();
   const compCtx = useContext(CompetitionContext);
   const competition = compCtx?.competition;
   const { overlay, look, scoreCards } = useOverlay();
@@ -171,7 +173,7 @@ export function StreamOverlays({ stream, label, reconnecting, muted, onSound, an
                 className="mg-stream-glass pointer-events-auto flex min-h-11 shrink-0 items-center gap-1 px-2"
                 onClick={onSound}
               >
-                <VolumeX aria-hidden="true" className="h-4 w-4" />Tap for sound
+                <VolumeX aria-hidden="true" className="h-4 w-4" />{t('teams.stream.tapForSound')}
               </button>
             )}
           </div>
@@ -206,8 +208,8 @@ export function StreamOverlays({ stream, label, reconnecting, muted, onSound, an
     <SponsorOverlay arenaName={stream.arenaName} track={stream.id !== 0} />
     {announcement && <div className="absolute left-3 right-3 top-14 flex justify-center"><StreamNotice key={`${announcement.message.id}-${announcement.receivedAt}`} {...announcement} /></div>}
     <AnimatePresence>
-      {reconnecting && stream.status !== 1 && <motion.div key="reconnecting" role="status" {...fadeCover(still)} className="absolute inset-0 flex flex-col items-center justify-center bg-[rgb(var(--mg-header-deep)/0.7)]"><h3 className="text-2xl font-bold">Reconnecting…</h3><p className="text-sm">The signal dropped. Trying again.</p></motion.div>}
-      {stream.status === 1 && <motion.div key="back-soon" role="status" {...fadeCover(still)} className="absolute inset-0 flex flex-col items-center justify-center bg-[rgb(var(--mg-header-deep))]"><span className="mg-logo mb-3">MG</span><h3 className="text-3xl font-bold">Back soon</h3><p>The camera is being moved.</p><p className="mt-3 text-xs">{stream.arenaName} · {stream.angleName}</p></motion.div>}
+      {reconnecting && stream.status !== 1 && <motion.div key="reconnecting" role="status" {...fadeCover(still)} className="absolute inset-0 flex flex-col items-center justify-center bg-[rgb(var(--mg-header-deep)/0.7)]"><h3 className="text-2xl font-bold">{t('teams.stream.reconnecting')}</h3><p className="text-sm">{t('teams.stream.signalDropped')}</p></motion.div>}
+      {stream.status === 1 && <motion.div key="back-soon" role="status" {...fadeCover(still)} className="absolute inset-0 flex flex-col items-center justify-center bg-[rgb(var(--mg-header-deep))]"><span className="mg-logo mb-3">MG</span><h3 className="text-3xl font-bold">{t('teams.stream.backSoon')}</h3><p>{t('teams.stream.cameraMoved')}</p><p className="mt-3 text-xs">{stream.arenaName} · {stream.angleName}</p></motion.div>}
     </AnimatePresence>
     {children}
   </OverlayLayer>;

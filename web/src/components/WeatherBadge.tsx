@@ -4,6 +4,7 @@ import { useCurrentCompetition } from '../competition/CurrentCompetitionContext'
 import { getWeather } from '../weather/weather';
 import { WEATHER_REFRESH_MS } from '../weather/requestCache';
 import { useLiteMode } from '../lite/LiteModeContext';
+import { useT } from '../i18n/LanguageContext';
 
 interface CurrentWeather { current?: { temperature_2m?: number; weather_code?: number } }
 
@@ -21,6 +22,7 @@ function weatherIcon(className: string, code?: number) {
 export function WeatherBadge({ lat: latProp, lon: lonProp }: { lat?: number; lon?: number } = {}) {
   const { venue } = useCurrentCompetition();
   const { lite } = useLiteMode();
+  const t = useT();
   const lat = latProp ?? venue?.lat;
   const lon = lonProp ?? venue?.lon;
   // The reading is stored with the venue it belongs to, so moving to another venue
@@ -52,8 +54,8 @@ export function WeatherBadge({ lat: latProp, lon: lonProp }: { lat?: number; lon
 
   if (lite) return null;
   const temperature = data?.current?.temperature_2m;
-  return <div className="flex min-h-11 items-center gap-1.5 px-2 py-1 rounded-xl bg-white/60 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700" title={temperature == null ? 'Venue weather unavailable' : 'Venue weather · updated every 30 minutes'}>
+  return <div className="flex min-h-11 items-center gap-1.5 px-2 py-1 rounded-xl bg-white/60 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700" title={temperature == null ? t('teams.weather.badgeUnavailable') : t('teams.weather.badgeTitle')}>
     {weatherIcon('w-5 h-5 text-brand-700 dark:text-brand-300', data?.current?.weather_code)}
-    <div className="leading-tight"><div className="text-sm font-medium">{temperature == null ? '—' : `${Math.round(temperature)}°C`}</div><div className="text-[9px] text-slate-500 dark:text-slate-400">Weather</div></div>
+    <div className="leading-tight"><div className="text-sm font-medium">{temperature == null ? '—' : `${Math.round(temperature)}°C`}</div><div className="text-[9px] text-slate-500 dark:text-slate-400">{t('teams.weather.badgeLabel')}</div></div>
   </div>;
 }
