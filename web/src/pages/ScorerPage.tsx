@@ -21,6 +21,7 @@ import { nextRoundLanes } from '../lib/nextRoundLanes';
 import { sessionPointsBase, withQueuedResults } from '../lib/queuedView';
 import { dropDrafts, pushUndo, undoSave, type UndoEntry } from '../lib/scoreUndo';
 import { clearDeadHeat, markDeadHeat, overridePoints, nextRaceToScore, placesFromResults, tapTeam, toggleEliminated } from '../lib/raceScoring';
+import { inLaneOrder } from '../lib/laneOrder';
 import { displayLaneFor, lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './competition/laneRules';
 import { HEAT_SAVED, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
 import { browserPublisherDependencies, createStreamPublisher, type PublisherSnapshot } from '../live/streamPublisher';
@@ -888,9 +889,7 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
           </div>
           {viewHeat.entries.length > 0 && (
             <ul className="m-0 grid grid-cols-1 gap-2 list-none p-0 sm:grid-cols-2">
-              {viewHeat.entries
-                .slice()
-                .sort((a, b) => a.laneIndex - b.laneIndex)
+              {inLaneOrder(viewHeat, Math.max(0, races.findIndex((r) => r.id === activeRace?.id)), laneRules)
                 .map((entry) => {
                   const row = availableTotals.get(entry.teamId);
                   const heatPts = viewHeat.races.reduce(
@@ -926,6 +925,7 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
 
       {viewHeat && (
         <ScoringSection
+          competitionId={session.competitionId}
           key={`${viewHeat.id}:${activeRace?.id}`}
           heat={viewHeat}
           races={viewRaces}

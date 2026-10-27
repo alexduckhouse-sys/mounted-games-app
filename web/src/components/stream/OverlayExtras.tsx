@@ -15,6 +15,8 @@ import { computeTimings } from '../../lib/time';
 import { timetableRows } from '../../lib/timetableRows';
 import { EASE_OUT, ENTER, LEAVE, previousSlots, ROW_STAGGER_S, SHUFFLE_DELAY_S, SHUFFLE_S, SPRING, WIPE_HIDDEN_BOTTOM, WIPE_HIDDEN_LEFT, WIPE_HIDDEN_RIGHT, WIPE_SHOWN } from '../../lib/motion';
 import { useStillMotion } from '../../lite/useStillMotion';
+import { currentLanes, type RaceLane } from '../../lib/raceLanes';
+import { hatbandName } from '../../lib/hatbands';
 import { CountUp } from './CountUp';
 import { TickerNumber } from '../TickerNumber';
 import { playRankMoves, useRankMotion } from '../../hooks/useRankMotion';
@@ -402,16 +404,16 @@ function LiveToplistCard({ competition, sectionId }: { competition: CompetitionD
 }
 
 export function LanesBody({
-  entries,
+  lanes,
   competition,
 }: {
-  entries: HeatEntry[];
+  lanes: RaceLane[];
   competition: CompetitionDetail;
 }) {
   const still = useStillMotion();
   return (
     <ol>
-      {entries.map((entry, idx) => {
+      {lanes.map(({ entry, lane, sitting, hatband }, idx) => {
         const team = competition.teams.find((t) => t.id === entry.teamId || t.displayName === entry.teamName);
         const bibColor = team?.bibColour ?? (team as BibColourHolder | undefined)?.bibColor ?? entry.bibColour;
         return (
@@ -421,13 +423,13 @@ export function LanesBody({
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: still ? 0 : idx * ROW_STAGGER_S, layout: { duration: SHUFFLE_S, ease: EASE_OUT } }}
           >
-            <span className="mg-ov-card-place">L{entry.laneIndex}</span>
+            <span className="mg-ov-card-place">{sitting ? 'S' : `L${lane}`}</span>
             <span className="mg-ov-card-team">
               {entry.teamName}
               {bibColor && <BibSwatch color={bibColor} size={10} />}
             </span>
             <span />
-            <span className="mg-ov-card-added">Lane {entry.laneIndex}</span>
+            <span className="mg-ov-card-added">{sitting ? 'Sits out' : hatband ? `${hatbandName(hatband)} hatband` : `Lane ${lane}`}</span>
             <span />
           </motion.li>
         );
@@ -548,17 +550,18 @@ function liveDataCard(competition: CompetitionDetail, arenaName: string, overlay
 
   if (mode === 'lanes' || mode === 'next') {
     const entries = [...heat.entries].sort((a, b) => a.laneIndex - b.laneIndex);
+    const lanes = mode === 'lanes' ? currentLanes(competition, heat) : null;
     return (
       <CentreCard
         key={`${mode}-${heat.id}`}
         label={`${mode === 'next' ? 'Up next' : 'Starting lanes'}: ${heading}`}
         heading={heading}
-        subtitle={mode === 'next' ? 'Up next in collecting ring' : 'Starting lanes'}
+        subtitle={mode === 'next' ? 'Up next in collecting ring' : lanes?.raceName ? `Lanes for ${lanes.raceName}` : 'Starting lanes'}
       >
         {mode === 'next' ? (
           <NextBody entries={entries} competition={competition} />
         ) : (
-          <LanesBody entries={entries} competition={competition} />
+          <LanesBody lanes={lanes?.lanes ?? entries.map((entry) => ({ entry, lane: String(entry.laneIndex), sitting: false, hatband: null }))} competition={competition} />
         )}
       </CentreCard>
     );

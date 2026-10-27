@@ -155,5 +155,5 @@ public sealed class PrintableEventService(AppDbContext db)
             .SingleOrDefaultAsync(x => x.Id == competitionId, ct);
 
     private static PrintableCompetitionDto ToCompetition(Competition x)
-        => new(x.Id, x.Name, x.Location, x.StartDate, x.EndDate);
+        => new(x.Id, x.Name, x.Location, x.StartDate, x.EndDate, x.CompetitionNumber);
 }

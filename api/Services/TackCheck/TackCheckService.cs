@@ -213,7 +213,7 @@ public sealed class TackCheckService(AppDbContext db)
                     setup?.Mode ?? TackCheckMode.PassFail, setup?.MaxPoints ?? DefaultMaxPoints, sectors, teams);
             }).ToArray();
         return new PrintableTackCheckDto(new PrintableCompetitionDto(competition.Id, competition.Name, competition.Location,
-            competition.StartDate, competition.EndDate), sections);
+            competition.StartDate, competition.EndDate, competition.CompetitionNumber), sections);
     }
 
     /// <summary>The riders on the team's latest declaration, reserves last.</summary>

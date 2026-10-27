@@ -195,10 +195,11 @@ describe('LiveDataCardOverlay and StreamOverlays data cards', () => {
   it('renders starting lanes and up next cards in lane order', () => {
     const { unmount } = renderWithComp({ look: { liveCard: 'lanes' } });
     const lanes = screen.getByRole('region', { name: 'Starting lanes: Seniors · Heat 1' });
-    expect(lanes).toHaveTextContent('Starting lanes');
+    // Race 1 is done, so the card shows the lanes for race 2 (Mug Race), moved up one lane from the draw, as the scorer does.
+    expect(lanes).toHaveTextContent('Lanes for Mug Race');
     expect(within(lanes).getAllByRole('listitem').map((el) => el.textContent)).toEqual([
-      'L1Oak SeniorsLane 1',
-      'L2Ash SeniorsLane 2',
+      'L1Ash SeniorsLane 1',
+      'L2Oak SeniorsLane 2',
     ]);
     unmount();
 
@@ -207,6 +208,39 @@ describe('LiveDataCardOverlay and StreamOverlays data cards', () => {
     expect(nextCard).toHaveTextContent('Up next in collecting ring');
     expect(within(nextCard).getByRole('listitem')).toHaveTextContent('L1Oak SeniorsLane 1');
     nextView.unmount();
+  });
+
+  it('names each lane’s hatband, gives a team sitting out no colour, and leaves it off the now-racing strip', () => {
+    const comp = sampleCompetition({ laneHatbands: ['Red', 'Lilac #B79CED'] });
+    comp.sessions[0] = { ...comp.sessions[0], lanesPerHeat: 1 };
+    const { unmount } = renderWithComp({ look: { liveCard: 'lanes' } }, comp);
+    const lanes = screen.getByRole('region', { name: 'Starting lanes: Seniors · Heat 1' });
+    expect(within(lanes).getAllByRole('listitem').map((el) => el.textContent)).toEqual([
+      'L1Ash SeniorsRed hatband',
+      'SOak SeniorsSits out',
+    ]);
+    expect(lanes.textContent).not.toContain('#B79CED');
+    unmount();
+
+    render(
+      <CompetitionContext.Provider value={{ competition: comp, reload: vi.fn(), streams: [], streamingEnabled: true, invoke: vi.fn(), ready: 1, streamMessages: [], overlay: DEFAULT_OVERLAY }}>
+        <StreamOverlays stream={liveStream({ arenaName: 'Arena 1' })} label="Seniors Heat 1" reconnecting={false} muted={false} onSound={vi.fn()} currentHeat={comp.sessions[0].heats[0]} />
+      </CompetitionContext.Provider>,
+    );
+    const ticker = screen.getByTestId('now-racing-lanes');
+    expect(ticker).toHaveTextContent('L1Ash Seniors');
+    expect(ticker).not.toHaveTextContent('Oak Seniors');
+  });
+
+  it('falls back to the drawn lanes when the heat is not in the event', () => {
+    const comp = sampleCompetition();
+    const stray = { ...comp.sessions[0].heats[0], id: 404 };
+    render(
+      <CompetitionContext.Provider value={{ competition: comp, reload: vi.fn(), streams: [], streamingEnabled: true, invoke: vi.fn(), ready: 1, streamMessages: [], overlay: DEFAULT_OVERLAY }}>
+        <StreamOverlays stream={liveStream({ arenaName: 'Arena 1' })} label="Seniors Heat 1" reconnecting={false} muted={false} onSound={vi.fn()} currentHeat={stray} />
+      </CompetitionContext.Provider>,
+    );
+    expect(screen.getByTestId('now-racing-lanes').textContent).toMatch(/^L1.*Oak Seniors.*L2.*Ash Seniors/);
   });
 
   it('uses the live heat after a completed heat, and shows the next unfinished heat', () => {
@@ -681,7 +715,7 @@ describe('LiveDataCardOverlay and StreamOverlays data cards', () => {
     expect(heatBody.container.querySelector('li')).toBeInTheDocument();
     heatBody.unmount();
 
-    const lanesBody = render(<LanesBody entries={[{ id: 10, teamId: 1, teamName: 'Team 1', laneIndex: 1 }]} competition={comp} />);
+    const lanesBody = render(<LanesBody lanes={[{ entry: { id: 10, teamId: 1, teamName: 'Team 1', laneIndex: 1 }, lane: '1', sitting: false, hatband: null }]} competition={comp} />);
     expect(lanesBody.container.querySelector('li')).toBeInTheDocument();
     lanesBody.unmount();
 

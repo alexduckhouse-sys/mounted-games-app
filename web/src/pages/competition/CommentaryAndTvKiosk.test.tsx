@@ -264,6 +264,37 @@ describe('CommentaryDeskPage', () => {
   });
 });
 
+describe('CommentaryDeskPage lanes', () => {
+  it('shows the current race’s rotated lanes with each lane’s hatband and the team’s bib words, as the scorer does', async () => {
+    const comp = makeComp();
+    comp.laneHatbands = ['Red', 'Blue', 'Lilac #B79CED'];
+    comp.teams[0] = { ...comp.teams[0], bibDescription: '[flag:gb] Red with white spots' };
+    renderWithCompetition('/competitions/1/commentary?section=9', comp);
+    const lanes = await screen.findByRole('region', { name: 'Current Heat — Lanes in Order' });
+    expect(within(lanes).getByText(/Lanes for Mug/)).toBeInTheDocument();
+    // Race 2 moves everyone up one lane: East C 1, North A 2, South B 3.
+    const rows = within(lanes).getAllByRole('listitem').filter((li) => li.parentElement?.parentElement === lanes);
+    expect(rows.map((li) => within(li).getAllByText(/^Lane \d$/)[0].textContent)).toEqual(['Lane 1', 'Lane 2', 'Lane 3']);
+    expect(within(rows[0]).getByText('East C')).toBeInTheDocument();
+    expect(within(rows[0]).getByText('Red hatband')).toBeInTheDocument();
+    expect(within(rows[1]).getByText('North A')).toBeInTheDocument();
+    expect(within(rows[1]).getByText('Blue hatband')).toBeInTheDocument();
+    expect(within(rows[1]).getByText('Bibs: Red with white spots')).toBeInTheDocument();
+    expect(within(rows[2]).getByText('Lilac hatband')).toBeInTheDocument();
+    expect(lanes.textContent).not.toMatch(/flag:|#B79CED/);
+  });
+
+  it('says a team sits out rather than giving it a lane colour', async () => {
+    const comp = makeComp();
+    comp.laneHatbands = ['Red', 'Blue', 'Green'];
+    comp.sessions[0] = { ...comp.sessions[0], lanesPerHeat: 2 };
+    renderWithCompetition('/competitions/1/commentary?section=9', comp);
+    const lanes = await screen.findByRole('region', { name: 'Current Heat — Lanes in Order' });
+    const sitting = within(lanes).getByText('Sits out').closest('li')!;
+    expect(within(sitting).queryByText(/hatband/)).toBeNull();
+  });
+});
+
 describe('TvKioskPage', () => {
   it('supports Current Heat Table slide, removes redundant Club columns, and offers Auto-follow live section, Full screen, Stream Controls & QR Access', async () => {
     const user = userEvent.setup();

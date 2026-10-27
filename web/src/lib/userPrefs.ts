@@ -272,7 +272,7 @@ export function setTextSize(size: TextSizePref): void {
 
 export function getScorerHaptics(): boolean {
   const raw = readStorage(STORAGE_KEYS.scorerHaptics);
-  if (raw === 'false') return false;
+  if (raw === 'false' || raw === '0') return false;
   return true;
 }
 
@@ -292,11 +292,15 @@ export function setSortByLaneOrder(enabled: boolean): void {
   notifyPrefsChanged();
 }
 
-export function triggerScorerHaptic(durationMs = 10): boolean {
+/** Two short pulses when a team is put out, so it feels different from the single tap of placing one. */
+export const ELIMINATED_HAPTIC: readonly number[] = [40, 60, 40];
+
+/** Buzzes once (or in a pattern) when the scorer has haptics on. A phone that can't or won't vibrate is ignored. */
+export function triggerScorerHaptic(pattern: number | readonly number[] = 10): boolean {
   if (!getScorerHaptics()) return false;
   if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
     try {
-      return navigator.vibrate(durationMs);
+      return navigator.vibrate(typeof pattern === 'number' ? pattern : [...pattern]);
     } catch {
       return false;
     }

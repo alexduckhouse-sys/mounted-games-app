@@ -67,4 +67,12 @@ describe('the print button', () => {
     expect(print).toHaveBeenCalled();
     print.mockRestore();
   });
+
+  it('prints a QR code to the public scores only when it knows the event', () => {
+    const { rerender } = render(<HeatPrintSheet heat={h} races={h.races} rules={rules} hcTeamIds={new Set()} tieRule={TieBreakRule.Countback} />);
+    expect(screen.queryByRole('img', { name: 'QR code for the live scores' })).not.toBeInTheDocument();
+    rerender(<HeatPrintSheet heat={h} races={h.races} rules={rules} hcTeamIds={new Set()} tieRule={TieBreakRule.Countback} competitionId={9} />);
+    expect(screen.getByRole('img', { name: 'QR code for the live scores' })).toBeInTheDocument();
+    expect(screen.getByText('Live scores')).toBeInTheDocument();
+  });
 });

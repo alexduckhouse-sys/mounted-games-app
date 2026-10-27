@@ -18,6 +18,7 @@ import { EventSponsorsSection } from './SponsorsCard';
 import { usePageWidth } from '../../components/pageWidthState';
 import type { CompetitionDetail, CompetitionSection, EquipmentLine, SectionSignup } from '../../types';
 import { feesLine, sectionFull } from '../../lib/entryOptions';
+import { placesLeftText } from '../../lib/placesLeft';
 import '../../components/sitePages.css';
 import '../../components/eventPages.css';
 import { usePageHeader } from '../../components/CompactPageBarContext';
@@ -152,7 +153,7 @@ export function DetailsTab() {
           <div className="ev-flat" role="list" aria-label="Age groups and fees">
             {competition.sections.map((section) => (
               <div key={section.id} className="sp-row" role="listitem">
-                <span className="sp-grow"><span className="sp-t1">{section.displayName}</span></span>
+                <span className="sp-grow"><span className="sp-t1">{section.displayName}</span>{!closed && placesLeftText(section) && <span className="sp-t2">{placesLeftText(section)}</span>}</span>
                 <span className="sp-t2 !text-[15px] text-right">{feesLine(section, sectionFull(section))}</span>
               </div>
             ))}

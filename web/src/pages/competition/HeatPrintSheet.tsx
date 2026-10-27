@@ -7,18 +7,21 @@ import type { Heat, HeatEntry, Race, TieBreakRule } from '../../types';
 import { displayLaneFor, type LaneRules } from './laneRules';
 import './scoring.css';
 import { formatPoints } from '../../lib/formatPoints';
+import { QrCode } from '../../components/QrCode';
 
 /**
  * A clean one-page copy of the heat for printing: lanes in each race, teams with their bib and hatband colours,
  * every race's place and points, totals and position. It is hidden on screen and is all that prints.
  */
-export function HeatPrintSheet({ heat, races, rules, hcTeamIds, tieRule, hatbands }: {
+export function HeatPrintSheet({ heat, races, rules, hcTeamIds, tieRule, hatbands, competitionId }: {
   heat: Heat;
   races: Race[];
   rules: LaneRules;
   hcTeamIds: ReadonlySet<number>;
   tieRule: TieBreakRule;
   hatbands?: string[] | null;
+  /** When given, a small QR code on the sheet opens the public standings. It never carries a scorer link. */
+  competitionId?: number | null;
 }) {
   const done = races.reduce((last, r, i) => (r.isComplete ? i : last), -1);
   const totals = new Map(heatTotals(heat, races, Math.max(done, 0), hcTeamIds, tieRule).map((t) => [t.teamId, t]));
@@ -30,7 +33,15 @@ export function HeatPrintSheet({ heat, races, rules, hcTeamIds, tieRule, hatband
   };
   return (
     <section className="sc-print" aria-label="Printable heat table">
-      <h2>{heat.label ?? 'Heat'}</h2>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12pt', marginBottom: '8pt' }}>
+        <h2 style={{ margin: 0 }}>{heat.label ?? 'Heat'}</h2>
+        {competitionId != null && (
+          <div style={{ flex: 'none', width: '22mm', textAlign: 'center', fontSize: '8pt', lineHeight: 1.2 }}>
+            <QrCode value={`${window.location.origin}/competitions/${competitionId}/toplists`} label="QR code for the live scores" />
+            <span>Live scores</span>
+          </div>
+        )}
+      </div>
       <table>
         <thead>
           <tr>
