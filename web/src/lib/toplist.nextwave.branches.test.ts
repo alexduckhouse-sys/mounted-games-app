@@ -426,7 +426,7 @@ describe('toplistNote variants', () => {
     expect(toplistNote(row({ neededUnavailable: true }))).toBe('Qualification calculation unavailable');
     expect(toplistNote(row({ racesLeft: 1 }))).toBe('1 race left');
     expect(toplistNote(row({ racesLeft: 3, tieBreakReason: 'Ahead' }))).toBe('3 races left · Ahead');
-    expect(toplistNote(row({ needed: 2 }))).toBe('2 needed to make the final (normal finishes)');
+    expect(toplistNote(row({ needed: 2 }))).toBe('2 pts needed for the A Final (normal finishes)');
   });
 });
 

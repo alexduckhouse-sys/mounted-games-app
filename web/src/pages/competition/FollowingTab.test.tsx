@@ -88,9 +88,9 @@ describe('FollowingTab', () => {
     mount({ isStale: true, updatedAt: new Date(Date.now() - 2 * 60_000) });
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
-  it('says when the copy is old and not refreshing', () => {
+  it('says when the copy is old and not refreshing', async () => {
     mount({ isStale: true, updatedAt: new Date(Date.now() - 20 * 60_000) });
-    expect(screen.getByRole('status')).toHaveTextContent(/Last updated \d\d:\d\d\. Times may have changed\./);
+    expect(await screen.findByRole('status')).toHaveTextContent(/Last updated \d\d:\d\d\. Times may have changed\./);
   });
   it('lets a visitor remove a deleted team without knowing private records', async () => {
     localStorage.setItem(FAVOURITES_KEY, '[{"competitionId":1,"teamId":99}]');
