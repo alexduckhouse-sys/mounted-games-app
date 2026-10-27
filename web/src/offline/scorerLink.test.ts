@@ -2,8 +2,8 @@ import { AxiosHeaders, type InternalAxiosRequestConfig } from 'axios';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../test/factories';
 import {
-  clearScorerToken, parseScorerSession, readSavedScorerSession, readScorerToken, scorerApi, scorerFailure,
-  scorerLinkUrl, tokenFromHash, writeSavedScorerSession, writeScorerToken,
+  angleFromHash, cleanAngle, clearScorerToken, parseScorerSession, readSavedScorerSession, readScorerAngle, readScorerToken, scorerApi, scorerFailure,
+  scorerLinkUrl, tokenFromHash, writeSavedScorerSession, writeScorerAngle, writeScorerToken,
 } from './scorerLink';
 
 const valid = {
@@ -28,6 +28,49 @@ describe('scorerLinkUrl', () => {
     expect(url.pathname).toBe('/score');
     expect(url.search).toBe('');
     expect(url.hash).toBe('#t=mgs_abc');
+  });
+
+  it('adds a camera position beside the token, still in the fragment', () => {
+    const url = new URL(scorerLinkUrl('https://mg.example', 'mgs_abc', 'Finish line'));
+    expect(url.search).toBe('');
+    expect(url.hash).toBe('#t=mgs_abc&angle=Finish%20line');
+    expect(tokenFromHash(url.hash)).toBe('mgs_abc');
+    expect(angleFromHash(url.hash)).toBe('Finish line');
+    expect(scorerLinkUrl('', 'mgs_abc', '   ')).toBe('/score#t=mgs_abc');
+    expect(scorerLinkUrl('', 'mgs_abc', null)).toBe('/score#t=mgs_abc');
+  });
+});
+
+describe('camera positions', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('tidies what a link carries', () => {
+    expect(cleanAngle('  Finish\u0007 \n line ')).toBe('Finish line');
+    expect(cleanAngle('x'.repeat(80))).toHaveLength(60);
+    expect(cleanAngle('\u007f')).toBeNull();
+    expect(cleanAngle(undefined)).toBeNull();
+    expect(angleFromHash('#t=mgs_abc')).toBeNull();
+    expect(angleFromHash('angle=Main%20stand&t=mgs_abc')).toBe('Main stand');
+  });
+
+  it('is kept on the phone, replaced or forgotten with the link', () => {
+    expect(readScorerAngle()).toBeNull();
+    writeScorerAngle('Finish line');
+    expect(readScorerAngle()).toBe('Finish line');
+    writeScorerAngle(null);
+    expect(readScorerAngle()).toBeNull();
+    writeScorerAngle('Main stand');
+    clearScorerToken();
+    expect(readScorerAngle()).toBeNull();
+  });
+
+  it('copes with storage that refuses', () => {
+    const set = Storage.prototype.setItem;
+    Storage.prototype.setItem = () => { throw new Error('full'); };
+    try { expect(() => writeScorerAngle('Finish line')).not.toThrow(); } finally { Storage.prototype.setItem = set; }
+    const get = Storage.prototype.getItem;
+    Storage.prototype.getItem = () => { throw new Error('denied'); };
+    try { expect(readScorerAngle()).toBeNull(); } finally { Storage.prototype.getItem = get; }
   });
 });
 
