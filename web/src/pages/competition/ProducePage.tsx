@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Camera, Layers, Megaphone, QrCode, Radio, Sliders, Sparkles, Video } from 'lucide-react';
 import { Notice } from '../../components/Notice';
+import { PageProblem } from '../../components/PageProblem';
 import { QrCode as QrCodeImage } from '../../components/QrCode';
 import { useToast } from '../../components/Toast';
 import { api } from '../../api';
@@ -54,14 +55,12 @@ export function ProducePage() {
     return `${origin}/competitions/${competition.id}/broadcast?arena=${encodeURIComponent(targetArena)}&angle=${encodeURIComponent(secondAngle)}`;
   }, [competition.id, targetArena, secondAngle]);
 
+  // Any signed-in account reaches this page (a competition team member may produce); the API makes the real check.
   if (!allowed) {
     return (
-      <div className="mg-card p-6">
-        <h2 className="text-xl font-bold">Remote stream controller</h2>
-        <p className="mt-1 text-sm text-[rgb(var(--mg-muted))]">
-          Only the competition organiser or team can control the live stream.
-        </p>
-      </div>
+      <PageProblem title="Only the organiser’s team can control the stream" secondaryLabel="Back to competition" secondaryTo={`/competitions/${competition.id}`}>
+        Ask the organiser to add you to the competition team.
+      </PageProblem>
     );
   }
 
