@@ -2144,12 +2144,28 @@ public class SignupController : ControllerBase
     [HttpPost("api/competitions/{competitionId:int}/signups/mark-club-paid")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
-    public Task<ActionResult<MarkClubPaidResultDto>> MarkClubPaid(
-        int competitionId, MarkClubPaidInput req, [FromServices] SignupConfirmationService confirmation) =>
-        InEntryTransactionAsync(() => MarkClubPaidOnceAsync(competitionId, req, confirmation));
+    public async Task<ActionResult<MarkClubPaidResultDto>> MarkClubPaid(
+        int competitionId, MarkClubPaidInput req, [FromServices] SignupConfirmationService confirmation)
+    {
+        // Receipts go out only once the payment has committed, so a retried transaction
+        // can't send twice and a rolled-back one can't send at all.
+        var receipts = new List<PendingClubReceipt>();
+        var result = await InEntryTransactionAsync(() =>
+        {
+            receipts.Clear();
+            return MarkClubPaidOnceAsync(competitionId, req, receipts);
+        });
+        foreach (var r in receipts)
+            await confirmation.SendClubPaymentReceiptAsync(r.Email, r.ClubName, r.ClubBacsReference, r.Competition, r.Signups, r.TotalAmountMinor);
+        return result;
+    }
+
+    private sealed record PendingClubReceipt(
+        string Email, string ClubName, string ClubBacsReference, Competition Competition,
+        IReadOnlyList<SectionSignup> Signups, int TotalAmountMinor);
 
     private async Task<ActionResult<MarkClubPaidResultDto>> MarkClubPaidOnceAsync(
-        int competitionId, MarkClubPaidInput req, SignupConfirmationService confirmation)
+        int competitionId, MarkClubPaidInput req, List<PendingClubReceipt> receipts)
     {
         var comp = await _db.Competitions.AsNoTracking().FirstOrDefaultAsync(c => c.Id == competitionId);
         if (comp is null) return NotFound();
@@ -2222,14 +2238,14 @@ public class SignupController : ControllerBase
         var clubBacsRef = BuildClubBacsReference(competitionId, resolvedClubName);
         if (req.SendReceiptEmail)
         {
-            var recipientEmails = matching
+            // One club payment can cover several families: each contact sees only their own entries.
+            foreach (var own in matching
                 .Where(s => !string.IsNullOrWhiteSpace(s.ContactEmail))
-                .Select(s => s.ContactEmail!.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            foreach (var email in recipientEmails)
+                .GroupBy(s => s.ContactEmail!.Trim(), StringComparer.OrdinalIgnoreCase))
             {
-                await confirmation.SendClubPaymentReceiptAsync(email, resolvedClubName, clubBacsRef, comp, matching, totalAmountMinor);
+                var signups = own.ToList();
+                receipts.Add(new PendingClubReceipt(
+                    own.Key, resolvedClubName, clubBacsRef, comp, signups, signups.Sum(s => s.AmountMinor)));
             }
         }
 
