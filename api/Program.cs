@@ -12,6 +12,7 @@ using MountedGames.Api.Data;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Hubs;
 using MountedGames.Api.Services;
+using MountedGames.Api.Services.EventTools;
 using MountedGames.Api.Services.Streaming;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -245,6 +246,37 @@ if (args.Contains("--seed-history"))
         + $"({history.Teams} teams, {history.Races} races, {history.Results} results), {history.Clubs} clubs, {history.Riders} riders, "
         + $"{history.Ponies} ponies, {history.Seasons} season with {history.TeamProfiles} team profiles, {history.ShopPosts} shop posts "
         + $"and {history.CatalogueItems} event shop items.");
+    return;
+}
+
+if (args.Contains("--import-competition"))
+{
+    // A real event from a JSON file kept outside the repo (riders' names never go in source control). Refuses an event that exists.
+    var path = args.SkipWhile(a => a != "--import-competition").Skip(1).FirstOrDefault();
+    if (string.IsNullOrWhiteSpace(path) || path.StartsWith("--") || !File.Exists(path))
+    {
+        Console.Error.WriteLine(string.IsNullOrWhiteSpace(path) || path.StartsWith("--")
+            ? "Give the event file after --import-competition, for example --import-competition /full/path/west-mids-pairs.json"
+            : $"Can't find {Path.GetFullPath(path)}.");
+        Environment.ExitCode = 1;
+        return;
+    }
+    await DbInitializer.SeedAsync(app.Services);
+    using var scope = app.Services.CreateScope();
+    try
+    {
+        var file = CompetitionFileImport.Parse(await File.ReadAllTextAsync(path));
+        var imported = await CompetitionFileImport.ImportAsync(
+            scope.ServiceProvider.GetRequiredService<AppDbContext>(), file, dryRun: args.Contains("--dry-run"));
+        Console.WriteLine($"{(imported.DryRun ? "Checked (nothing saved)" : $"Imported competition {imported.CompetitionId}")}: "
+            + $"{imported.Sections} sections, {imported.Sessions} sessions, {imported.Heats} heats, {imported.Teams} teams, "
+            + $"{imported.Riders} riders, {imported.Races} races.");
+    }
+    catch (CompetitionImportException ex)
+    {
+        Console.Error.WriteLine(ex.Message);
+        Environment.ExitCode = 1;
+    }
     return;
 }
 
