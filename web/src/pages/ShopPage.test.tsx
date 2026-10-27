@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -67,6 +67,46 @@ describe('the shop', () => {
     await userEvent.clear(box);
     await userEvent.type(box, 'zzz');
     expect(screen.getByText('Nothing matches that search.')).toBeInTheDocument();
+  });
+
+  it('filters the listings from a sheet beside the search bar, shows what is set as chips, and clears them one by one', async () => {
+    mount();
+    await screen.findByText('Grey saddle');
+    expect(screen.getByRole('group', { name: 'Shop sections' })).toHaveClass('w-full');
+    const open = screen.getByRole('button', { name: 'Filter the shop' });
+    expect(open).toHaveClass('fk-fbtn');
+    await userEvent.click(open);
+    const sheet = screen.getByRole('dialog', { name: 'Filter the shop' });
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Under £25' }));
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Past week' }));
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    // £45 poles are over the £25 line and the £120 saddle is too: nothing is left.
+    expect(screen.getByText('Nothing matches that search and those filters.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Filter the shop, 2 set' })).toHaveTextContent('2');
+    expect(screen.getByRole('button', { name: 'Remove Under £25' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Under £25' }));
+    expect(screen.getByText('Grey saddle')).toBeInTheDocument();
+    expect(screen.getByText('Bending poles')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Filter the shop, 1 set' }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '£25 to £100' }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'With a photo' }));
+    expect(within(screen.getByRole('dialog')).getByRole('button', { name: 'With a photo' })).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'With a photo' }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.queryByText('Grey saddle')).not.toBeInTheDocument();
+    expect(screen.getByText('Bending poles')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Remove £25 to £100' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Past week' }));
+    expect(screen.queryByRole('group', { name: 'Filters set' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Filter the shop' })).toBeInTheDocument();
+  });
+
+  it('has no filter button on the event shops tab', async () => {
+    mount();
+    await userEvent.click(screen.getByRole('button', { name: 'Event shops' }));
+    expect(screen.queryByRole('button', { name: /Filter the shop/ })).not.toBeInTheDocument();
   });
 
   it('switches to the event shops, which skip archived events and can be searched', async () => {

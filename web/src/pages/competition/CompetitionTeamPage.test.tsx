@@ -485,3 +485,43 @@ it('says stats show once the team has raced, and that it is not placed yet', asy
   expect(facts()).toHaveTextContent('0pts');
   expect(facts()).toHaveTextContent('No races left');
 });
+
+function mountNext(sessionStatus: 0 | 1, scored: boolean) {
+  vi.mocked(api.get).mockResolvedValue({ data: [] });
+  const entries = [{ id: 1, teamId: 1, teamName: 'Oak A', laneIndex: 3 }];
+  const comp = competition({
+    teams: [team(1, { competitionSectionId: 9, displayName: 'Oak A' })],
+    sections: [{ id: 9, competitionId: 1, format: 2, ageGroup: 'Open', displayName: 'Open', finalistCount: 2 }],
+    sessions: [session(1, { competitionSectionId: 9, name: 'Open', arenaName: 'Arena 2', status: sessionStatus, scheduledStart: '2026-07-01T10:00:00Z', heats: [
+      heat(11, { sessionId: 1, orderIndex: 0, label: 'Heat 4', entries, races: [race(101, { name: 'Bending', isComplete: scored, results: scored ? [result(1, 1, { points: 4 })] : [] })] }),
+      heat(12, { sessionId: 1, orderIndex: 1, label: 'Heat 5', entries, races: [race(102, { name: 'Mug' })] }),
+    ] })],
+  });
+  render(<MemoryRouter initialEntries={['/competitions/1/teams/1']}><CompactPageBarProvider>
+    <CompetitionContext.Provider value={{ competition: comp, reload: vi.fn(), streams: [], streamingEnabled: false, invoke: vi.fn(), ready: 1, streamMessages: [] }}>
+      <Routes><Route path="/competitions/:id/teams/:teamId" element={<CompetitionTeamPage />} /></Routes>
+    </CompetitionContext.Provider>
+  </CompactPageBarProvider></MemoryRouter>);
+}
+
+describe('CompetitionTeamPage: next heat', () => {
+  it('puts the next heat, lane and arena first while there are no stats', async () => {
+    mountNext(0, false);
+    const next = await screen.findByRole('region', { name: 'Next heat' });
+    expect(within(next).getByText('Open · Heat 4 · Lane 1')).toBeInTheDocument();
+    expect(within(next).getByText('Arena 2')).toBeInTheDocument();
+    expect(next.compareDocumentPosition(screen.getByRole('region', { name: 'Stats' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('shows it once the event is under way even when stats exist, and calls it On now', async () => {
+    mountNext(1, true);
+    expect(await screen.findByRole('region', { name: 'On now' })).toBeInTheDocument();
+  });
+
+  it('leaves it out when stats exist and nothing is under way', async () => {
+    mountNext(0, true);
+    await screen.findByRole('region', { name: 'Stats' });
+    expect(screen.queryByRole('region', { name: 'Next heat' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'On now' })).toBeNull();
+  });
+});

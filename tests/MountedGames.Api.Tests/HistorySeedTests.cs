@@ -237,12 +237,12 @@ public class HistorySeedTests
         await using var db = await Database();
         await HistorySeeder.SeedAsync(db, Today);
         // Someone replaced one of the seeded events with their own: no demo mark.
-        var id = await db.Competitions.Where(c => c.Name == "Westfield Finals Day").Select(c => c.Id).SingleAsync();
+        var id = await db.Competitions.Where(c => c.Name == "British Pairs Championships").Select(c => c.Id).SingleAsync();
         await db.Set<EventCommerceSettings>().Where(x => x.CompetitionId == id).ExecuteDeleteAsync();
         var before = await CountsAsync(db);
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => HistorySeeder.SeedAsync(db, Today));
-        Assert.Contains("Westfield Finals Day", error.Message);
+        Assert.Contains("British Pairs Championships", error.Message);
         Assert.Equal(before, await CountsAsync(db));
     }
 
@@ -270,7 +270,8 @@ public class HistorySeedTests
         await ReviewCompetitionSeeder.SeedAsync(db, Today, now);
         await HistorySeeder.SeedAsync(db, Today);
         db.ChangeTracker.Clear();
-        var historyNames = await db.Competitions.Where(c => !c.Name.StartsWith("Demo ")).Select(c => c.Name).OrderBy(n => n).ToListAsync();
+        var reviewNames = ReviewCompetitionSeeder.EventNames;
+        var historyNames = await db.Competitions.Where(c => !reviewNames.Contains(c.Name)).Select(c => c.Name).OrderBy(n => n).ToListAsync();
         Assert.Equal(9, historyNames.Count);
 
         // The history events are in a season, but they aren't among the review names, so the guard isn't hit.
@@ -279,7 +280,7 @@ public class HistorySeedTests
         Assert.Equal(8, result.Created);
         Assert.Empty(result.Skipped);
         db.ChangeTracker.Clear();
-        Assert.Equal(historyNames, await db.Competitions.Where(c => !c.Name.StartsWith("Demo ")).Select(c => c.Name).OrderBy(n => n).ToListAsync());
+        Assert.Equal(historyNames, await db.Competitions.Where(c => !reviewNames.Contains(c.Name)).Select(c => c.Name).OrderBy(n => n).ToListAsync());
         Assert.Equal(1, await db.Set<Season>().CountAsync());
         Assert.Equal(4, await db.Set<SeasonRound>().CountAsync());
         Assert.Equal(17, await db.Competitions.CountAsync());
@@ -338,7 +339,7 @@ public class HistorySeedEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal(15, ours.Count);
         Assert.All(ours, p => Assert.True(string.IsNullOrEmpty(p.ImageBase64) && p.PriceMinor > 0));
 
-        var eventId = await _f.WithDbAsync(db => db.Competitions.Where(c => c.Name == "Fernhill Winter Showdown").Select(c => c.Id).SingleAsync());
+        var eventId = await _f.WithDbAsync(db => db.Competitions.Where(c => c.Name == "EGUK Winter Indoor Classic").Select(c => c.Id).SingleAsync());
         var listings = await (await anon.GetAsync($"/api/commerce/competitions/{eventId}/listings")).ReadAsync<List<PublicCompetitionListingDto>>();
         Assert.Equal(10, listings.Count);
         Assert.All(listings, l => Assert.True(string.IsNullOrEmpty(l.ImageUrl) && l.PriceMinor > 0));
@@ -373,7 +374,7 @@ public class HistorySeedEndpointsTests : IClassFixture<ApiFactory>
         Assert.NotEmpty(search.Riders);
         Assert.All(search.Riders, h => Assert.Contains(surname, h.Name, StringComparison.OrdinalIgnoreCase));
         Assert.True(search.Riders.Sum(h => h.Competitions) >= 1);
-        var clubs = await (await _f.CreateClient().GetAsync("/api/stats/search?q=Hollowbrook")).ReadAsync<StatsSearchDto>();
+        var clubs = await (await _f.CreateClient().GetAsync("/api/stats/search?q=Central%20Warwickshire")).ReadAsync<StatsSearchDto>();
         Assert.NotEmpty(clubs.Clubs);
         Assert.NotEmpty(clubs.Teams);
     }
