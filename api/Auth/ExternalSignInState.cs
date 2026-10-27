@@ -10,7 +10,8 @@ namespace MountedGames.Api.Auth;
 
 /// <summary>
 /// Remembers each Google or Apple sign-in (provider, subject and the nonce hash) until its token expires, so a token and
-/// nonce pair is accepted once. Shared through Redis when it's configured, so every API instance agrees; otherwise, or
+/// nonce pair is accepted once. The same store keeps Facebook tokens used to confirm it's the owner or to add Facebook,
+/// and Facebook's signed data deletion requests, so each of those works once too. Shared through Redis when it's configured, so every API instance agrees; otherwise, or
 /// if Redis fails, this instance's memory, the same fallback the rate limits and viewer counts use.
 /// </summary>
 public sealed class ExternalTokenReplayGuard(RedisConnection redis, TimeProvider time, ILogger<ExternalTokenReplayGuard> log)
@@ -65,9 +66,12 @@ public sealed class ExternalTokenReplayGuard(RedisConnection redis, TimeProvider
 }
 
 /// <summary>Who a provider said signed in, carried by a sign-up ticket while they pick their club and role.</summary>
-/// <param name="Email">Null when the provider gave none (Facebook can't always); the person types one in.</param>
-/// <param name="EmailVouched"><see cref="ExternalIdentity.MayLinkByEmail"/>: the new account starts with its email confirmed.</param>
-public sealed record ExternalSignupTicket(string Provider, string Subject, string? Email, bool EmailVouched, string SuggestedName);
+/// <param name="Email">The provider's address. A sign-in that gave none (Facebook can withhold it) never gets a ticket.</param>
+/// <param name="EmailVouched">
+/// The new account starts with its email confirmed: the provider runs the mailbox (<see cref="ExternalIdentity.MayLinkByEmail"/>),
+/// or it is a verified Apple "Hide My Email" relay, which Apple controls.
+/// </param>
+public sealed record ExternalSignupTicket(string Provider, string Subject, string Email, bool EmailVouched, string SuggestedName);
 
 /// <summary>
 /// The short-lived pass returned when a provider sign-in finds no account. Finishing the sign-up presents this instead
@@ -80,7 +84,7 @@ public sealed class ExternalSignupTickets(IConfiguration configuration, TimeProv
     public static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(10);
     private const int MaxLength = 4096;
 
-    private sealed record Payload(string P, string S, string? E, bool V, string N, long X);
+    private sealed record Payload(string P, string S, string E, bool V, string N, long X);
 
     private byte[] Key()
     {
@@ -110,6 +114,8 @@ public sealed class ExternalSignupTickets(IConfiguration configuration, TimeProv
         // The signature matched, so the body is one this API wrote.
         var payload = JsonSerializer.Deserialize<Payload>(WebEncoders.Base64UrlDecode(body))!;
         if (clock.GetUtcNow().ToUnixTimeSeconds() > payload.X) return null;
+        // A ticket from before every ticket carried an address.
+        if (string.IsNullOrEmpty(payload.E)) return null;
         return new ExternalSignupTicket(payload.P, payload.S, payload.E, payload.V, payload.N);
     }
 }

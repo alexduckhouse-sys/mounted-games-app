@@ -15,7 +15,7 @@ public sealed partial class FacebookApp(IConfiguration config)
 {
     public const string DefaultGraphVersion = "v23.0";
 
-    [GeneratedRegex(@"^v\d{1,2}\.\d$")]
+    [GeneratedRegex("^v[0-9]{1,2}\\.[0-9]$")]
     private static partial Regex VersionShape();
 
     public string? AppId => NonEmpty(config["Auth:Facebook:AppId"]);
@@ -42,9 +42,12 @@ public sealed partial class FacebookApp(IConfiguration config)
 /// Checks a Facebook Login access token. Web Facebook Login gives no ID token to check offline, so the API asks Facebook:
 /// <c>debug_token</c> (with our app's own token) must say it is valid, for our app, for a user, unexpired and with
 /// <c>public_profile</c>; then <c>/me</c> gives the id, name and email (which may be missing, and is never treated as
-/// verified). Both calls go to the fixed <c>graph.facebook.com</c> at a pinned version, carry <c>appsecret_proof</c>, and
-/// use the <c>external-auth</c> client (short timeout, small replies, no redirects, no request logging). A token works
-/// once (<see cref="ExternalTokenReplayGuard"/>). Nothing from either reply is logged.
+/// verified). Both calls go to the fixed <c>graph.facebook.com</c> at a pinned version, carry <c>appsecret_proof</c>, send
+/// their own access token in the <c>Authorization</c> header rather than the address (only the token being checked is a
+/// parameter, as <c>debug_token</c> requires), and use the <c>external-auth</c> client (short timeout, small replies, no
+/// redirects, no request logging). Nothing from either reply is logged.
+/// <para>Signing in may present the same token again, because Facebook's SDK keeps handing back the one it has.
+/// Confirming it's the owner, or adding Facebook to an account, uses a token once (<see cref="ExternalTokenReplayGuard"/>).</para>
 /// </summary>
 public sealed class FacebookTokenVerifier(
     FacebookApp app, IHttpClientFactory http, ExternalTokenReplayGuard replay, TimeProvider time, ILogger<FacebookTokenVerifier> log)
@@ -69,7 +72,8 @@ public sealed class FacebookTokenVerifier(
         [property: System.Text.Json.Serialization.JsonPropertyName("name")] string? Name,
         [property: System.Text.Json.Serialization.JsonPropertyName("email")] string? Email);
 
-    public async Task<ExternalTokenResult> VerifyAsync(string accessToken, CancellationToken ct)
+    /// <param name="singleUse">Refuse a token that has been presented before for something that also used it once.</param>
+    public async Task<ExternalTokenResult> VerifyAsync(string accessToken, bool singleUse, CancellationToken ct)
     {
         if (!app.IsConfigured) return ExternalTokenResult.Fail(ExternalTokenFailure.UnknownProvider);
         if (string.IsNullOrWhiteSpace(accessToken) || accessToken.Length > ExternalTokenValidator.MaxTokenLength || accessToken.Any(char.IsWhiteSpace))
@@ -77,8 +81,7 @@ public sealed class FacebookTokenVerifier(
 
         var appToken = $"{app.AppId}|{app.AppSecret}";
         var debug = await GetAsync<DebugReply>(
-            $"debug_token?input_token={Uri.EscapeDataString(accessToken)}&access_token={Uri.EscapeDataString(appToken)}&appsecret_proof={FacebookApp.Proof(appToken, app.AppSecret!)}",
-            ct);
+            $"debug_token?input_token={Uri.EscapeDataString(accessToken)}&appsecret_proof={FacebookApp.Proof(appToken, app.AppSecret!)}", appToken, ct);
         if (debug.Failure is { } debugFailure) return Refuse(debugFailure);
         var data = debug.Value?.Data;
         if (data is null || !data.IsValid) return Refuse(ExternalTokenFailure.Invalid);
@@ -89,14 +92,12 @@ public sealed class FacebookTokenVerifier(
             || data.Scopes?.Contains("public_profile") != true)
             return Refuse(ExternalTokenFailure.MissingClaims);
 
-        var me = await GetAsync<Me>(
-            $"me?fields=id,name,email&access_token={Uri.EscapeDataString(accessToken)}&appsecret_proof={FacebookApp.Proof(accessToken, app.AppSecret!)}",
-            ct);
+        var me = await GetAsync<Me>($"me?fields=id,name,email&appsecret_proof={FacebookApp.Proof(accessToken, app.AppSecret!)}", accessToken, ct);
         if (me.Failure is { } meFailure) return Refuse(meFailure);
         if (me.Value?.Id != data.UserId) return Refuse(ExternalTokenFailure.MissingClaims);
 
         // There's no nonce in this flow, so the token itself (hashed) is what can't be used twice.
-        if (!await replay.TryUseAsync(ExternalProviders.Facebook, data.UserId, Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(accessToken))), expires))
+        if (singleUse && !await replay.TryUseAsync(ExternalProviders.Facebook, data.UserId, Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(accessToken))), expires))
             return Refuse(ExternalTokenFailure.Replayed);
 
         var email = string.IsNullOrWhiteSpace(me.Value.Email) ? null : me.Value.Email.Trim();
@@ -119,12 +120,13 @@ public sealed class FacebookTokenVerifier(
     /// One Graph call. Facebook answers a bad token with a 4xx, which is a refusal; no answer, a 5xx or a garbled reply
     /// means Facebook couldn't be asked.
     /// </summary>
-    private async Task<(T? Value, ExternalTokenFailure? Failure)> GetAsync<T>(string pathAndQuery, CancellationToken ct) where T : class
+    private async Task<(T? Value, ExternalTokenFailure? Failure)> GetAsync<T>(string pathAndQuery, string accessToken, CancellationToken ct) where T : class
     {
         try
         {
-            using var response = await http.CreateClient(ExternalTokenValidator.HttpClientName)
-                .GetAsync($"{GraphHost}/{app.GraphVersion}/{pathAndQuery}", ct);
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{GraphHost}/{app.GraphVersion}/{pathAndQuery}");
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+            using var response = await http.CreateClient(ExternalTokenValidator.HttpClientName).SendAsync(request, ct);
             if ((int)response.StatusCode is >= 400 and < 500) return (null, ExternalTokenFailure.Invalid);
             if (!response.IsSuccessStatusCode) return (null, ExternalTokenFailure.ProviderUnavailable);
             return (JsonSerializer.Deserialize<T>(await response.Content.ReadAsStringAsync(ct)), null);
@@ -136,20 +138,27 @@ public sealed class FacebookTokenVerifier(
     }
 }
 
+/// <summary>A data deletion request Facebook signed for our app: who it is about, and when Facebook made it.</summary>
+public sealed record FacebookDeletionRequest(string UserId, DateTimeOffset IssuedAt);
+
 /// <summary>
 /// Facebook's data deletion callback request: <c>signed_request</c> is two base64url parts, the HMAC-SHA256 of the second
-/// (keyed with the app secret) and a JSON payload naming the Facebook user. Anything not signed by our secret is refused.
+/// (keyed with the app secret) and a JSON payload naming the Facebook user and when it was issued. Anything not signed
+/// by our secret is refused, and so is one issued more than <see cref="MaxAge"/> ago or in the future (allowing
+/// <see cref="ExternalTokenValidator.ClockSkew"/>), so an old request can't be sent again later.
 /// </summary>
 public static class FacebookSignedRequest
 {
     private const int MaxLength = 4096;
+    public static readonly TimeSpan MaxAge = TimeSpan.FromHours(24);
 
     private sealed record Payload(
         [property: System.Text.Json.Serialization.JsonPropertyName("algorithm")] string? Algorithm,
+        [property: System.Text.Json.Serialization.JsonPropertyName("issued_at")] long? IssuedAt,
         [property: System.Text.Json.Serialization.JsonPropertyName("user_id")] string? UserId);
 
-    /// <summary>The Facebook user id, or null when the request isn't one Facebook signed for our app.</summary>
-    public static string? UserIdFrom(string? signedRequest, string appSecret)
+    /// <summary>The request, or null when it isn't one Facebook signed for our app, or it is too old or from the future.</summary>
+    public static FacebookDeletionRequest? Read(string? signedRequest, string appSecret, DateTimeOffset now)
     {
         if (string.IsNullOrEmpty(signedRequest) || signedRequest.Length > MaxLength) return null;
         var parts = signedRequest.Split('.');
@@ -159,10 +168,12 @@ public static class FacebookSignedRequest
             var expected = HMACSHA256.HashData(Encoding.UTF8.GetBytes(appSecret), Encoding.ASCII.GetBytes(parts[1]));
             if (!CryptographicOperations.FixedTimeEquals(WebEncoders.Base64UrlDecode(parts[0]), expected)) return null;
             var payload = JsonSerializer.Deserialize<Payload>(WebEncoders.Base64UrlDecode(parts[1]));
-            if (!string.Equals(payload?.Algorithm, "HMAC-SHA256", StringComparison.OrdinalIgnoreCase)) return null;
-            return string.IsNullOrWhiteSpace(payload.UserId) ? null : payload.UserId;
+            if (payload is null || !string.Equals(payload.Algorithm, "HMAC-SHA256", StringComparison.OrdinalIgnoreCase)) return null;
+            if (string.IsNullOrWhiteSpace(payload.UserId) || payload.IssuedAt is not { } seconds) return null;
+            if (seconds < now.Add(-MaxAge).ToUnixTimeSeconds() || seconds > now.Add(ExternalTokenValidator.ClockSkew).ToUnixTimeSeconds()) return null;
+            return new FacebookDeletionRequest(payload.UserId, DateTimeOffset.FromUnixTimeSeconds(seconds));
         }
-        catch (Exception ex) when (ex is FormatException or JsonException)
+        catch (Exception ex) when (ex is FormatException or JsonException or ArgumentOutOfRangeException)
         {
             return null;
         }

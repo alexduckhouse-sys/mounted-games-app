@@ -10,6 +10,8 @@ public static class SecurityConfiguration
         if (environment.IsDevelopment()) return;
         RequireExternalSecret(configuration, "Jwt:Key", 32, required: true);
         RequireExternalSecret(configuration, "Admin:Key", 20, required: false);
+        // Optional (Facebook sign-in is off without it). Facebook issues 32-character app secrets.
+        RequireExternalSecret(configuration, "Auth:Facebook:AppSecret", 32, required: false);
         // Optional. When set it must be the SHA-256 of the master admin key in hex, so a typo can't silently disable it.
         var masterHash = configuration["MasterAdmin:KeyHash"];
         if (!string.IsNullOrWhiteSpace(masterHash) && !MasterAdminKey.IsValidHash(masterHash))

@@ -227,7 +227,7 @@ public class AccountEmailService(
     }
 
     /// <summary>
-    /// Tells the account's own address that Google or Apple sign-in was added to it, so a link nobody asked for doesn't
+    /// Tells the account's own address that Google, Apple or Facebook sign-in was added to it, so a link nobody asked for doesn't
     /// go unnoticed. Sent for every link (by a matching email at sign-in, or by Connect on My account). Like every sender
     /// here it never throws, and the address is never logged.
     /// </summary>
@@ -258,6 +258,39 @@ public class AccountEmailService(
             """);
         return sender.SendAsync(new EmailMessage(user.Email, $"{providerName} sign-in added to your account", text, html,
             $"sign-in-added-{user.Id}-{Guid.NewGuid():N}"));
+    }
+
+    /// <summary>
+    /// Tells the account's own address that a Google, Apple or Facebook sign-in was taken off it (from My account), so a
+    /// change nobody asked for doesn't go unnoticed. Never throws, and the address is never logged.
+    /// </summary>
+    public Task<EmailDeliveryStatus> SendSignInRemovedAsync(AppUser user, string providerName)
+    {
+        if (string.IsNullOrEmpty(user.Email) || user.Email.EndsWith(".mg.local", StringComparison.OrdinalIgnoreCase))
+            return Task.FromResult(EmailDeliveryStatus.NotSent);
+        var site = EmailSite.Origin(options.Value, configuration);
+        var account = site is null ? null : $"{site}/me/account";
+        var where = account is null ? "under My account" : $"under My account: {account}";
+        var text = $"""
+            Hello,
+
+            {providerName} sign-in has been removed from your Mounted Games account. You can't sign in with {providerName} any more.
+
+            If you did this, there's nothing more to do.
+
+            If you didn't, someone else may be using your account. Check how you sign in {where}, and change your password if you have one.
+
+            Mounted Games
+            """;
+        var html = EmailHtml.Wrap($"""
+            <p style="margin:0 0 12px;">Hello,</p>
+            <p style="margin:0 0 12px;">{EmailHtml.Encode(providerName)} sign-in has been removed from your Mounted Games account. You can't sign in with {EmailHtml.Encode(providerName)} any more.</p>
+            <p style="margin:0 0 12px;">If you did this, there's nothing more to do.</p>
+            <p style="margin:0;">If you didn't, someone else may be using your account. Check how you sign in under My account, and change your password if you have one.</p>
+            {(account is null ? "" : EmailHtml.Button(account, "Open My account"))}
+            """);
+        return sender.SendAsync(new EmailMessage(user.Email, $"{providerName} sign-in removed from your account", text, html,
+            $"sign-in-removed-{user.Id}-{Guid.NewGuid():N}"));
     }
 
     /// <summary>Takes one of the account's sends in a single guarded UPDATE, so parallel requests can't slip past the cap.</summary>

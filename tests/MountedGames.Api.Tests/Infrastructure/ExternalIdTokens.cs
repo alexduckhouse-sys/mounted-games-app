@@ -86,7 +86,8 @@ public sealed class IdTokenSigner : IDisposable
 /// <summary>
 /// Plays Facebook's Graph API: <c>debug_token</c> and <c>/me</c> for the access tokens it has issued. Like the real one
 /// with "Require App Secret" on, it refuses a call without the right <c>appsecret_proof</c>, and <c>debug_token</c>
-/// without our app's own token. The App ID and secret are made up.
+/// without our app's own token. It reads the caller's token only from the <c>Authorization</c> header, so a token put in
+/// the address is refused. The App ID and secret are made up.
 /// </summary>
 public sealed class FakeFacebookGraph
 {
@@ -127,7 +128,10 @@ public sealed class FakeFacebookGraph
         var url = request.RequestUri!;
         var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(url.Query);
         string Q(string key) => query.TryGetValue(key, out var v) ? v.ToString() : "";
-        var accessToken = Q("access_token");
+        if (query.ContainsKey("access_token")) return Error(400);
+        var header = request.Headers.Authorization;
+        if (header?.Scheme != "Bearer" || string.IsNullOrEmpty(header.Parameter)) return Error(400);
+        var accessToken = header.Parameter;
         if (Q("appsecret_proof") != MountedGames.Api.Auth.FacebookApp.Proof(accessToken, AppSecret)) return Error(400);
 
         if (url.AbsolutePath.EndsWith("/debug_token", StringComparison.Ordinal))
@@ -185,6 +189,14 @@ public class ExternalAuthFactory : EmailApiFactory
 
     private static HttpResponseMessage Json(string body)
         => new(System.Net.HttpStatusCode.OK) { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") };
+
+    /// <summary>A verified Google sign-in for the web client: its ID token, the raw nonce and the subject.</summary>
+    public (string Token, string Nonce, string Subject) GoogleSignIn(string email, string? subject = null)
+    {
+        var nonce = IdTokenSigner.NewNonce();
+        subject ??= $"g-{Guid.NewGuid():N}";
+        return (Google.Sign(IdTokenSigner.GoogleIssuer, GoogleWebClient, subject, email, nonce, true), nonce, subject);
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {

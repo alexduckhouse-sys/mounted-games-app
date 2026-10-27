@@ -374,6 +374,12 @@ public class SecurityTests
             await File.WriteAllTextAsync(path, JsonSerializer.Serialize(new { Jwt = new { Key = new string('x', 40) } }));
             var config = new ConfigurationBuilder().AddJsonFile(path).Build();
             Assert.Throws<InvalidOperationException>(() => SecurityConfiguration.Validate(config, new TestEnvironment()));
+
+            // The same goes for Facebook's app secret.
+            await File.WriteAllTextAsync(path, JsonSerializer.Serialize(new { Auth = new { Facebook = new { AppSecret = new string('f', 32) } } }));
+            var facebook = new ConfigurationBuilder().AddJsonFile(path)
+                .AddInMemoryCollection([new("Jwt:Key", new string('x', 40))]).Build();
+            Assert.Throws<InvalidOperationException>(() => SecurityConfiguration.Validate(facebook, new TestEnvironment()));
         }
         finally { File.Delete(path); }
     }
@@ -389,6 +395,12 @@ public class SecurityTests
         }).Build();
         Assert.Throws<InvalidOperationException>(() => SecurityConfiguration.Validate(config, environment));
         config["Database:SeedDemoData"] = "false";
+        SecurityConfiguration.Validate(config, environment);
+
+        // Facebook's app secret is optional, but when it's set it must be a real one.
+        config["Auth:Facebook:AppSecret"] = "too-short";
+        Assert.Throws<InvalidOperationException>(() => SecurityConfiguration.Validate(config, environment));
+        config["Auth:Facebook:AppSecret"] = new string('f', 32);
         SecurityConfiguration.Validate(config, environment);
     }
 

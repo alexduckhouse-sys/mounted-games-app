@@ -119,8 +119,25 @@ public class ExternalAuthTests : IClassFixture<ExternalAuthFactory>
         Assert.Equal(code, await CodeAsync(response));
     }
 
-    private static Task<HttpResponseMessage> ConnectAsync(HttpClient client, Attempt a)
-        => client.PostAsJsonAsync("/api/auth/logins", new ExternalConnectRequest(a.Provider, a.Token, a.Nonce));
+    /// <summary>Connect, confirming with the test password unless told otherwise.</summary>
+    private static Task<HttpResponseMessage> ConnectAsync(HttpClient client, Attempt a, ReauthRequest? confirm = null)
+        => client.PostAsJsonAsync("/api/auth/logins", new ExternalConnectRequest(a.Provider, a.Token, a.Nonce, confirm ?? new ReauthRequest(Password)));
+
+    private static Task<HttpResponseMessage> RemoveAsync(HttpClient client, string provider, ReauthRequest? confirm)
+        => client.SendAsync(new HttpRequestMessage(HttpMethod.Delete, $"/api/auth/logins/{provider}")
+        {
+            Content = confirm is null ? null : JsonContent.Create(confirm),
+        });
+
+    /// <summary>Confirming with a fresh sign-in: the provider's token and raw nonce.</summary>
+    private static ReauthRequest With(Attempt a) => new(Provider: a.Provider, IdToken: a.Token, Nonce: a.Nonce);
+
+    /// <summary>A client carrying the new sign-in that Connect or Remove sent back. The old one has stopped working.</summary>
+    private async Task<HttpClient> RenewedAsync(HttpResponseMessage changed)
+    {
+        Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
+        return _f.WithToken((await changed.ReadAsync<LinkedSignInsDto>()).Auth!.Token);
+    }
 
     // ---- GET /api/auth/providers ----
 
@@ -537,7 +554,7 @@ public class ExternalAuthTests : IClassFixture<ExternalAuthFactory>
     }
 
     [Fact]
-    public async Task AppleHiddenAddressesNeverLinkByEmailSuggestNoNameAndAreConfirmedByEmail()
+    public async Task AppleHiddenAddressesNeverLinkByEmailSuggestNoNameAndStartConfirmed()
     {
         var relay = $"{Guid.NewGuid():N}"[..10] + "@privaterelay.appleid.com";
         var (id, _) = await PasswordAccountAsync(relay, confirmed: true);
@@ -551,8 +568,9 @@ public class ExternalAuthTests : IClassFixture<ExternalAuthFactory>
         var created = await FinishAsync(asked.SignupTicket, fullName: "Robin Hidden");
         Assert.Equal(HttpStatusCode.OK, created.StatusCode);
         var user = (await created.ReadAsync<AuthResponse>()).User;
-        Assert.Equal(("Robin Hidden", false), (user.FullName, user.EmailConfirmed));
-        Assert.Contains(SentTo(freshRelay), m => m.Subject == "Confirm your email address");
+        // Apple runs the relay and made it for this person, so the new account starts confirmed and no email goes out.
+        Assert.Equal(("Robin Hidden", true), (user.FullName, user.EmailConfirmed));
+        Assert.DoesNotContain(SentTo(freshRelay), m => m.Subject == "Confirm your email address");
     }
 
     [Fact]
@@ -581,6 +599,7 @@ public class ExternalAuthTests : IClassFixture<ExternalAuthFactory>
         var before = await (await client.GetAsync("/api/auth/logins")).ReadAsync<LinkedSignInsDto>();
         Assert.True(before.HasPassword);
         Assert.Empty(before.Logins);
+        Assert.Null(before.Auth);
 
         var attempt = Google("someone.else@gmail.com");
         var connected = await ConnectAsync(client, attempt);
@@ -588,13 +607,21 @@ public class ExternalAuthTests : IClassFixture<ExternalAuthFactory>
         var list = await connected.ReadAsync<LinkedSignInsDto>();
         Assert.True(list.HasPassword);
         Assert.Equal(new LinkedSignInDto("google", "Google"), Assert.Single(list.Logins));
+        Assert.Equal(id, list.Auth!.User.Id);
         Assert.Single(SentTo(email), m => m.Subject == "Google sign-in added to your account");
+
+        // Every older session ended; this device carries on with the sign-in that came back.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/auth/me")).StatusCode);
+        client = _f.WithToken(list.Auth.Token);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/auth/me")).StatusCode);
 
         // It now signs in to this account, though the addresses differ.
         Assert.Equal(id, (await SignInAsync(Google("someone.else@gmail.com", attempt.Subject))).User.Id);
 
         // Connecting the same one again changes nothing; a used token, a second Google or someone else's is refused.
-        Assert.Equal(HttpStatusCode.OK, (await ConnectAsync(client, Google("someone.else@gmail.com", attempt.Subject))).StatusCode);
+        var again = await ConnectAsync(client, Google("someone.else@gmail.com", attempt.Subject));
+        Assert.Equal(HttpStatusCode.OK, again.StatusCode);
+        Assert.Null((await again.ReadAsync<LinkedSignInsDto>()).Auth);
         await AssertRefusedAsync(await ConnectAsync(client, attempt), HttpStatusCode.Unauthorized, "external_token");
         await AssertRefusedAsync(await ConnectAsync(client, Google(Gmail())), HttpStatusCode.Conflict, "external_other_login");
         var (_, otherEmail) = await PasswordAccountAsync(Gmail(), confirmed: true);
@@ -607,30 +634,76 @@ public class ExternalAuthTests : IClassFixture<ExternalAuthFactory>
     }
 
     [Fact]
-    public async Task ALinkCanBeRemovedButNeverTheLastWayIn()
+    public async Task ConnectingNeedsThePasswordOrAFreshSignInWithALinkedProvider_NotJustTheSession()
     {
-        // A password account with Google: Google can go.
         var (id, email) = await PasswordAccountAsync(Gmail(), confirmed: true);
         var client = await PasswordClientAsync(email);
-        await ConnectAsync(client, Google(email));
-        var removed = await client.DeleteAsync("/api/auth/logins/google");
-        Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
-        Assert.Empty((await removed.ReadAsync<LinkedSignInsDto>()).Logins);
+        var attempt = Google(Gmail());
+        await AssertRefusedAsync(await ConnectAsync(client, attempt, new ReauthRequest()), HttpStatusCode.BadRequest, "confirm_with_password");
+        await AssertRefusedAsync(await client.PostAsJsonAsync("/api/auth/logins", new ExternalConnectRequest(attempt.Provider, attempt.Token, attempt.Nonce)),
+            HttpStatusCode.BadRequest, "confirm_with_password");
+        await AssertRefusedAsync(await ConnectAsync(client, attempt, new ReauthRequest("Wrong-passw0rd!")), HttpStatusCode.BadRequest, "wrong_password");
+        // A password account can't confirm with a provider sign-in instead.
+        await AssertRefusedAsync(await ConnectAsync(client, attempt, With(Google(Gmail()))), HttpStatusCode.BadRequest, "confirm_with_password");
         Assert.Empty(await LoginsAsync(id));
-        Assert.Equal(HttpStatusCode.NotFound, (await client.DeleteAsync("/api/auth/logins/google")).StatusCode);
+        Assert.DoesNotContain(SentTo(email), m => m.Subject.Contains("sign-in added"));
+        // The refusals didn't use the token up.
+        Assert.Equal(HttpStatusCode.OK, (await ConnectAsync(client, attempt)).StatusCode);
+
+        // A passwordless account confirms with a fresh sign-in from a provider it already has, and only that.
+        var first = Google(Gmail());
+        var social = _f.WithToken((await CreateAsync(first)).Token);
+        var apple = Apple(ICloud());
+        await AssertRefusedAsync(await ConnectAsync(social, apple, new ReauthRequest(Password)), HttpStatusCode.BadRequest, "confirm_with_provider");
+        await AssertRefusedAsync(await ConnectAsync(social, apple, With(Google(Gmail()))), HttpStatusCode.BadRequest, "external_wrong_account");
+        await AssertRefusedAsync(await ConnectAsync(social, apple, With(Apple(ICloud()))), HttpStatusCode.BadRequest, "external_wrong_account");
+        var confirm = Google(Gmail(), first.Subject);
+        social = await RenewedAsync(await ConnectAsync(social, apple, With(confirm)));
+        // That confirmation works once.
+        await AssertRefusedAsync(await RemoveAsync(social, "apple", With(confirm)), HttpStatusCode.BadRequest, "external_token");
+        Assert.Equal(2, (await (await social.GetAsync("/api/auth/logins")).ReadAsync<LinkedSignInsDto>()).Logins.Count);
+    }
+
+    [Fact]
+    public async Task ALinkCanBeRemovedButNeverTheLastWayIn()
+    {
+        // A password account with Google: Google can go, with the password, and the address is told.
+        var (id, email) = await PasswordAccountAsync(Gmail(), confirmed: true);
+        var client = await RenewedAsync(await ConnectAsync(await PasswordClientAsync(email), Google(email)));
+        await AssertRefusedAsync(await RemoveAsync(client, "google", null), HttpStatusCode.BadRequest, "confirm_with_password");
+        await AssertRefusedAsync(await RemoveAsync(client, "google", new ReauthRequest()), HttpStatusCode.BadRequest, "confirm_with_password");
+        await AssertRefusedAsync(await RemoveAsync(client, "google", new ReauthRequest("Wrong-passw0rd!")), HttpStatusCode.BadRequest, "wrong_password");
+        Assert.Single(await LoginsAsync(id));
+        Assert.DoesNotContain(SentTo(email), m => m.Subject == "Google sign-in removed from your account");
+
+        var removed = await RemoveAsync(client, "google", new ReauthRequest(Password));
+        Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
+        var afterRemove = await removed.ReadAsync<LinkedSignInsDto>();
+        Assert.Empty(afterRemove.Logins);
+        Assert.Empty(await LoginsAsync(id));
+        Assert.Single(SentTo(email), m => m.Subject == "Google sign-in removed from your account");
+        // Every older session ended; this device carries on with the sign-in that came back.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/auth/me")).StatusCode);
+        client = _f.WithToken(afterRemove.Auth!.Token);
+        Assert.Equal(HttpStatusCode.NotFound, (await RemoveAsync(client, "google", new ReauthRequest(Password))).StatusCode);
 
         // A Google-only account can't remove Google, but can once Apple is there too.
-        var googleOnly = await CreateAsync(Google(Gmail()));
+        var first = Google(Gmail());
+        var googleOnly = await CreateAsync(first);
         var social = _f.WithToken(googleOnly.Token);
         Assert.False((await (await social.GetAsync("/api/auth/logins")).ReadAsync<LinkedSignInsDto>()).HasPassword);
-        var last = await social.DeleteAsync("/api/auth/logins/google");
+        var last = await RemoveAsync(social, "google", With(Google(Gmail(), first.Subject)));
         await AssertRefusedAsync(last, HttpStatusCode.Conflict, "last_sign_in");
         Assert.Contains("only way you can sign in", await last.Content.ReadAsStringAsync());
 
-        Assert.Equal(HttpStatusCode.OK, (await ConnectAsync(social, Apple(ICloud()))).StatusCode);
-        var afterApple = await (await social.DeleteAsync("/api/auth/logins/google")).ReadAsync<LinkedSignInsDto>();
+        var apple = Apple(ICloud());
+        social = await RenewedAsync(await ConnectAsync(social, apple, With(Google(Gmail(), first.Subject))));
+        await AssertRefusedAsync(await RemoveAsync(social, "google", null), HttpStatusCode.BadRequest, "confirm_with_provider");
+        // Confirmed with Apple, the other way in.
+        var afterApple = await (await RemoveAsync(social, "google", With(Apple(ICloud(), apple.Subject)))).ReadAsync<LinkedSignInsDto>();
         Assert.Equal("apple", Assert.Single(afterApple.Logins).Provider);
-        await AssertRefusedAsync(await social.DeleteAsync("/api/auth/logins/apple"), HttpStatusCode.Conflict, "last_sign_in");
+        social = _f.WithToken(afterApple.Auth!.Token);
+        await AssertRefusedAsync(await RemoveAsync(social, "apple", With(Apple(ICloud(), apple.Subject))), HttpStatusCode.Conflict, "last_sign_in");
     }
 
     // ---- Deleting a passwordless account ----
@@ -670,7 +743,7 @@ public class ExternalAuthTests : IClassFixture<ExternalAuthFactory>
         var (_, email) = await PasswordAccountAsync(Gmail(), confirmed: true);
         var client = await PasswordClientAsync(email);
         var google = Google(email);
-        await ConnectAsync(client, google);
+        client = await RenewedAsync(await ConnectAsync(client, google));
 
         var confirm = Google(email, google.Subject);
         var refused = await DeleteAsync(client, new DeleteAccountRequest(Provider: "google", IdToken: confirm.Token, Nonce: confirm.Nonce));

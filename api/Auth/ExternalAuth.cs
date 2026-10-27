@@ -50,6 +50,21 @@ public enum ExternalTokenFailure
     Invalid,
 }
 
+/// <summary>What a provider token is being used for, which decides whether it may be presented again.</summary>
+public enum ExternalTokenUse
+{
+    /// <summary>
+    /// Confirming it's the owner (deleting the account, adding or removing a sign-in) or adding a provider: the token works
+    /// once. The default.
+    /// </summary>
+    Confirm,
+    /// <summary>
+    /// Signing in. Google and Apple tokens still work once (each carries its own nonce). Facebook's SDK hands back the same
+    /// access token for an hour or two, so a Facebook token may sign in again within its life.
+    /// </summary>
+    SignIn,
+}
+
 public sealed record ExternalTokenResult(ExternalIdentity? Identity, ExternalTokenFailure Failure)
 {
     public static ExternalTokenResult Fail(ExternalTokenFailure failure) => new(null, failure);
@@ -65,7 +80,9 @@ public interface IExternalTokenValidator
     /// its SHA-256 (see <see cref="ExternalNonce"/>), so the token alone isn't enough to sign in: whoever presents it must
     /// also hold the raw value, which never leaves the page that asked.
     /// </param>
-    Task<ExternalTokenResult> ValidateAsync(string provider, string idToken, string? rawNonce, CancellationToken ct = default);
+    /// <param name="use">Whether a Facebook token may be used again (<see cref="ExternalTokenUse.SignIn"/>) or only once.</param>
+    Task<ExternalTokenResult> ValidateAsync(string provider, string idToken, string? rawNonce, ExternalTokenUse use = ExternalTokenUse.Confirm,
+        CancellationToken ct = default);
 }
 
 /// <summary>
@@ -205,9 +222,10 @@ public sealed class ExternalTokenValidator : IExternalTokenValidator
     }
 
     /// <remarks>For Facebook, <paramref name="idToken"/> is the access token from its SDK and there is no nonce.</remarks>
-    public async Task<ExternalTokenResult> ValidateAsync(string provider, string idToken, string? rawNonce, CancellationToken ct = default)
+    public async Task<ExternalTokenResult> ValidateAsync(string provider, string idToken, string? rawNonce, ExternalTokenUse use = ExternalTokenUse.Confirm,
+        CancellationToken ct = default)
     {
-        if (provider == ExternalProviders.Facebook) return await _facebook.VerifyAsync(idToken, ct);
+        if (provider == ExternalProviders.Facebook) return await _facebook.VerifyAsync(idToken, singleUse: use != ExternalTokenUse.SignIn, ct);
         var spec = ExternalProviders.All.FirstOrDefault(s => s.Id == provider);
         var audiences = spec is null ? [] : ExternalProviders.ClientIds(_config, spec);
         if (spec is null || audiences.Length == 0) return ExternalTokenResult.Fail(ExternalTokenFailure.UnknownProvider);

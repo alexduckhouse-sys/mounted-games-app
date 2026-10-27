@@ -12,7 +12,7 @@ public class ExternalSignupTicketTests
     private ExternalSignupTickets Tickets(string jwtKey = "test-jwt-key-0123456789-0123456789-0123456789")
         => new(new ConfigurationBuilder().AddInMemoryCollection([new("Jwt:Key", jwtKey)]).Build(), _clock);
 
-    private static readonly ExternalSignupTicket Sample = new("apple", "001234.abc.5678", null, false, "Sam Taylor");
+    private static readonly ExternalSignupTicket Sample = new("apple", "001234.abc.5678", "sam@privaterelay.appleid.com", false, "Sam Taylor");
 
     [Fact]
     public void AFreshTicketReadsBackExactly()
@@ -50,5 +50,8 @@ public class ExternalSignupTicketTests
 
         foreach (var junk in new[] { null, "", "no-dot", ".starts-with-dot", new string('a', 5000) })
             Assert.Null(tickets.Read(junk));
+
+        // A correctly signed ticket from before every ticket carried an address makes no account.
+        Assert.Null(tickets.Read(tickets.Create(Sample with { Email = null! })));
     }
 }
