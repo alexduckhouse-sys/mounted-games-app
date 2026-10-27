@@ -65,6 +65,10 @@ function PrivacyPolicy() {
           server logs.
         </p>
         <p className="mg-lede">
+          We use the rough location of your connection to put the events nearest you first. We never ask where you
+          are, and we don’t keep it.
+        </p>
+        <p className="mg-lede">
           If you watch a live stream, your connection goes through Cloudflare, which carries the video.
         </p>
       </div>

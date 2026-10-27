@@ -284,11 +284,25 @@ Lifecycle the app supports today:
   on the signup and shown to the competition's staff. A failed or disabled send never fails the sign-up.
 - The form sends a `RequestId`; a retry from the same person for the same section returns the original entry and sends nothing more.
 - An **unticked** box, "Email me when new competitions open", records consent in `EmailOptIn` (address, time, wording
-  version, source `signup-form`, hash of a random unsubscribe token, unsubscribed time). No marketing is sent yet. The
+  version, source `signup-form`, hash of a random unsubscribe token, unsubscribed time). The only thing sent from it automatically is the daily **entries-open email** (below); admins can
+  also write custom emails to it. The
   token only goes into the confirmation email sent at opt-in. `/unsubscribe?token=...` (no sign-in) calls
   `POST /api/email/unsubscribe`, which answers the same way for any token. Site admins download the active list from
   Admin → Email opt-ins (`GET /api/admin/email-opt-ins.csv`).
 - Settings (`Email:*`): all off unless `Enabled`, `ApiKey` and `From` are set; the adapter is Resend's REST API.
+- **Entries-open email** (27 Oct 2026; plan in `docs/plans/2026-10-27-entries-open-emails.md`): once a day, between 18:00
+  and 22:59 UK time, everyone still opted in gets one email listing the competitions that have opened for entries since
+  the last one (not archived, not a demo event, not finished, has an age group, not locked, close time not passed). No
+  email if nothing is new. A competition is announced once ever. The day is claimed in the database
+  (`EntriesDigestRun.RunDate`, unique), so several API instances, restarts and a half-finished run are safe; the first
+  ever run only records what was already open. Site admins see the waiting events and the last run, and can Send now,
+  on Admin → Email. Where someone is known roughly (venues of events they entered, trained for or supported, never asked
+  for and never stored), the email lists the nearest first; otherwise by date.
+- **Events list near you:** `GET /api/competitions/picker/near-you` orders the upcoming list nearest first from the same
+  kind of rough place (a signed-in person's history, else the connection's position from Vercel's geolocation, one
+  decimal place, passed by `web/middleware.ts` under the proxy key and used for that request only). The web shows
+  "about 30 miles" and a Nearest first / Soonest first switch (remembered in `mg.eventsSort`); with no place there is
+  no switch and the order is by date. The public `/picker` is unchanged and still the cached, offline copy.
 
 ### Trainer-as-organiser
 Trainers can create + edit competitions (controllers'

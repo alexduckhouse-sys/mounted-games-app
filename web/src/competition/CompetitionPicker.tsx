@@ -6,12 +6,13 @@ import { ChevronRight, Clock, PinOff } from 'lucide-react';
 import { Notice } from '../components/Notice';
 import { PageProblem } from '../components/PageProblem';
 import { api } from '../api';
-import type { CompetitionPickerItem, CompetitionPickerPage } from '../types';
+import type { CompetitionNearYouPage, CompetitionPickerItem, CompetitionPickerPage } from '../types';
 import { useCurrentCompetition } from './CurrentCompetitionContext';
 import { CompetitionIcon } from './CompetitionIcon';
 import { competitionIcon } from './icons';
 import { competitionDateText, isOnToday } from '../lib/competitionDates';
 import { displaySectionName } from '../lib/section';
+import { distanceMap, distanceText, isNearYouPage, readEventsSort, writeEventsSort, type EventsSort } from '../lib/nearYou';
 import { lastUpdatedText, readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, shouldNoticeSavedCopy, writeSavedCopy } from '../offline/savedCopies';
 import { CompetitionListSkeleton } from '../components/Skeletons';
 import { usePageHeader } from '../components/CompactPageBarContext';
@@ -55,13 +56,15 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
   const [yearFilter, setYearFilter] = useState('all');
   const [locationFilter, setLocationFilter] = useState('all');
   const [mineOnly, setMineOnly] = useState(false);
+  const [sortChoice, setSortChoice] = useState<EventsSort>(readEventsSort);
   const serverSearch = past ? search.trim() : '';
-  const filterKey = past ? JSON.stringify([yearFilter, locationFilter, serverSearch, mineOnly]) : 'upcoming';
+  const filterKey = past ? JSON.stringify([yearFilter, locationFilter, serverSearch, mineOnly]) : `upcoming-${sortChoice}`;
   const unfiltered = !mineOnly && yearFilter === 'all' && locationFilter === 'all' && !serverSearch;
   // Only the unfiltered public page is kept on this device; personal results stay in memory.
   const [saved] = useState(() => readSavedCopy<CompetitionPickerPage>(savedCopyKeys.picker(past)));
   const [state, setState] = useState({ key: filterKey, items: saved?.data.items ?? [] as CompetitionPickerItem[], page: 0, hasMore: false, error: false, savedCopy: !!saved, savedAt: saved?.savedAt ?? null as string | null,
-    years: saved?.data.years ?? [] as number[], locations: saved?.data.locations ?? [] as string[] });
+    years: saved?.data.years ?? [] as number[], locations: saved?.data.locations ?? [] as string[],
+    distances: {} as Record<number, number>, locationKnown: false });
   const loading = state.page !== page || state.key !== filterKey;
   useEffect(() => {
     const controller = new AbortController();
@@ -70,21 +73,42 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
       ...(locationFilter !== 'all' ? { location: locationFilter } : {}),
       ...(serverSearch ? { search: serverSearch } : {}),
     } : {};
-    api.get<CompetitionPickerPage>(mineOnly ? '/competitions/picker/mine' : '/competitions/picker', { params: { past, page, ...filters }, signal: controller.signal })
-      .then(({ data, headers }) => {
+    // The upcoming list is asked for ordered for this viewer (nearest first when we can tell roughly where they are, without
+    // ever asking). That answer differs per person, so it is never cached; if it fails, the same public list as ever is used.
+    const load = async (): Promise<{ data: CompetitionPickerPage; headers: unknown; nearYou: CompetitionNearYouPage | null }> => {
+      if (!past && !mineOnly) {
+        try {
+          const response = await api.get<CompetitionNearYouPage>('/competitions/picker/near-you', {
+            params: { page, ...(sortChoice === 'soonest' ? { sort: 'soonest' } : {}) }, signal: controller.signal,
+          });
+          if (isNearYouPage(response.data)) return { data: response.data, headers: {}, nearYou: response.data };
+        } catch (error) {
+          if (controller.signal.aborted) throw error;
+        }
+      }
+      const response = await api.get<CompetitionPickerPage>(mineOnly ? '/competitions/picker/mine' : '/competitions/picker', { params: { past, page, ...filters }, signal: controller.signal });
+      return { data: response.data, headers: response.headers, nearYou: null };
+    };
+    load()
+      .then(({ data, headers, nearYou }) => {
         if (controller.signal.aborted) return;
-        const fallback = mineOnly ? null : serviceWorkerSavedAt(headers);
-        if (unfiltered && page === 1 && fallback === null) writeSavedCopy(savedCopyKeys.picker(past), data);
+        const fallback = mineOnly ? null : serviceWorkerSavedAt(headers as never);
+        const located = nearYou?.locationKnown === true;
+        // A list put in order for one person is not kept on the device as the public copy.
+        if (unfiltered && page === 1 && fallback === null && !located) writeSavedCopy(savedCopyKeys.picker(past), data);
         const keepSaved = unfiltered && page === 1 && fallback !== null && saved != null && (fallback === 'unknown' || Date.parse(saved.savedAt) >= fallback.getTime());
         const fresh = keepSaved ? saved.data : data;
         setState((previous) => {
-          const kept = page === 1 || previous.key !== filterKey ? [] : previous.items;
+          const reset = page === 1 || previous.key !== filterKey;
+          const kept = reset ? [] : previous.items;
           return {
             key: filterKey, items: [...kept, ...fresh.items.filter((item) => !kept.some((existing) => existing.id === item.id))],
             years: fresh.years ?? [], locations: fresh.locations ?? [],
             page, hasMore: fresh.hasMore, error: false,
             savedCopy: (page > 1 && previous.key === filterKey && previous.savedCopy) || fallback !== null,
             savedAt: fallback === null ? (page > 1 ? previous.savedAt : null) : keepSaved ? saved.savedAt : fallback === 'unknown' ? '' : fallback.toISOString(),
+            distances: nearYou ? { ...(reset ? {} : previous.distances), ...distanceMap(nearYou) } : {},
+            locationKnown: located,
           };
         });
       })
@@ -93,7 +117,7 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
           ...(previous.key !== filterKey ? { items: [], savedCopy: false, savedAt: null, hasMore: false } : {}), key: filterKey, page, error: true }));
       });
     return () => controller.abort();
-  }, [past, page, saved, filterKey, yearFilter, locationFilter, serverSearch, mineOnly, unfiltered, refresh]);
+  }, [past, page, saved, filterKey, sortChoice, yearFilter, locationFilter, serverSearch, mineOnly, unfiltered, refresh]);
 
   const query = search.trim().toLowerCase();
   const items = state.key === filterKey ? state.items : [];
@@ -115,6 +139,13 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
     : [{ heading: t('shell.events.comingUp'), items: later }];
   // Pointing at or pressing a competition starts loading it, so it opens straight away on a slow connection.
   const { handlersFor } = useCompetitionPrefetch();
+  const chooseSort = (next: EventsSort) => {
+    if (next === sortChoice) return;
+    writeEventsSort(next);
+    setSortChoice(next);
+    setPage(1);
+  };
+  const distanceOf = (competition: CompetitionPickerItem) => (state.key === filterKey && competition.id in state.distances ? distanceText(state.distances[competition.id]) : '');
   const choose = (competition: CompetitionPickerItem) => {
     setCurrent({ id: competition.id, name: competition.name });
     navigate(`/competitions/${competition.id}`);
@@ -130,6 +161,14 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
       <div className="mg-band mg-band-header pb-3 pt-0">
         <RoundSearch band label={t('shell.events.search')} placeholder={t('shell.events.searchPlaceholder')} value={search} onChange={(text) => { setSearch(text); if (past) setPage(1); }} />
       </div>
+      {!past && state.locationKnown && state.key === filterKey && (
+        <div role="group" aria-label="Order of the list" className="flex flex-wrap items-center gap-2">
+          <button type="button" aria-pressed={sortChoice === 'nearest'} onClick={() => chooseSort('nearest')}
+            className={`sp-pill sp-pill-sm ${sortChoice === 'nearest' ? 'sp-pill-fill' : ''}`}>Nearest first</button>
+          <button type="button" aria-pressed={sortChoice === 'soonest'} onClick={() => chooseSort('soonest')}
+            className={`sp-pill sp-pill-sm ${sortChoice === 'soonest' ? 'sp-pill-fill' : ''}`}>Soonest first</button>
+        </div>
+      )}
       {past && (
         <div role="group" aria-label={t('shell.events.archiveFilters')}>
           <div className="sp-card">
@@ -153,7 +192,7 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
           <section aria-label={t('shell.events.onToday')}>
             <h2 className="sp-sec sp-first">{t('shell.events.onToday')}</h2>
             <div className="mg-cards-grid flex flex-col gap-1.5">
-              {onToday.map((competition) => <TodayCard key={competition.id} competition={competition} selected={current?.id === competition.id} onChoose={() => choose(competition)} warm={handlersFor(competition.id)} />)}
+              {onToday.map((competition) => <TodayCard key={competition.id} competition={competition} distance={distanceOf(competition)} selected={current?.id === competition.id} onChoose={() => choose(competition)} warm={handlersFor(competition.id)} />)}
             </div>
           </section>
         )}
@@ -161,7 +200,7 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
           <section key={group.heading} aria-label={group.heading}>
             <h2 className="sp-sec sp-first">{group.heading}</h2>
             <div className="mg-lines mg-lines-grid">
-              {group.items.map((competition) => <CompetitionRow key={competition.id} competition={competition} past={past} selected={current?.id === competition.id} onChoose={() => choose(competition)} warm={handlersFor(competition.id)} />)}
+              {group.items.map((competition) => <CompetitionRow key={competition.id} competition={competition} past={past} distance={distanceOf(competition)} selected={current?.id === competition.id} onChoose={() => choose(competition)} warm={handlersFor(competition.id)} />)}
             </div>
           </section>
         ))}
@@ -190,9 +229,9 @@ function Tags({ competition }: { competition: CompetitionPickerItem }) {
 
 type WarmHandlers = ReturnType<ReturnType<typeof useCompetitionPrefetch>['handlersFor']>;
 
-function TodayCard({ competition, selected, onChoose, warm }: { competition: CompetitionPickerItem; selected: boolean; onChoose: () => void; warm: WarmHandlers }) {
+function TodayCard({ competition, distance, selected, onChoose, warm }: { competition: CompetitionPickerItem; distance: string; selected: boolean; onChoose: () => void; warm: WarmHandlers }) {
   const { t } = useLanguage();
-  const details = [competition.location?.trim(), competitionDateText(competition.startDate, competition.endDate)].filter(Boolean).join(' · ');
+  const details = [competition.location?.trim(), competitionDateText(competition.startDate, competition.endDate), distance].filter(Boolean).join(' · ');
   return (
     <div className={`mg-card flex flex-col gap-1.5 !rounded-[10px] py-3.5 pl-3.5 pr-3 ${competition.live ? 'shadow-[inset_3px_0_0_rgb(var(--mg-red))]' : ''}`}>
       <span className="flex min-w-0 items-center gap-2">
@@ -208,7 +247,7 @@ function TodayCard({ competition, selected, onChoose, warm }: { competition: Com
   );
 }
 
-function CompetitionRow({ competition, past, selected, onChoose, warm }: { competition: CompetitionPickerItem; past: boolean; selected: boolean; onChoose: () => void; warm: WarmHandlers }) {
+function CompetitionRow({ competition, past, distance, selected, onChoose, warm }: { competition: CompetitionPickerItem; past: boolean; distance: string; selected: boolean; onChoose: () => void; warm: WarmHandlers }) {
   const { t, locale } = useLanguage();
   const start = new Date(competition.startDate);
   const venue = competition.location?.trim();
@@ -226,7 +265,7 @@ function CompetitionRow({ competition, past, selected, onChoose, warm }: { compe
           {competitionIcon(competition.icon).id !== 'flag' && <CompetitionIcon id={competition.icon} labelled className="shrink-0 text-base" />}
         </span>
         <span className="flex min-w-0 items-center gap-1.5 text-xs text-[rgb(var(--mg-muted))]">
-          <span className="min-w-0 truncate">{[when, venue].filter(Boolean).join(' · ')}</span>
+          <span className="min-w-0 truncate">{[when, venue, distance].filter(Boolean).join(' · ')}</span>
           <Tags competition={competition} />
         </span>
       </span>

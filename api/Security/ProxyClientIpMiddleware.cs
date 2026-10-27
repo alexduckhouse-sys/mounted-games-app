@@ -1,6 +1,7 @@
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using MountedGames.Api.Services.Geo;
 
 namespace MountedGames.Api.Security;
 
@@ -8,12 +9,16 @@ namespace MountedGames.Api.Security;
 /// Vercel proxies <c>/api</c> to this API, so every visitor arrives from a Vercel address and would share
 /// one rate-limit bucket. Vercel's routing middleware (<c>web/middleware.ts</c>) sends the visitor's IP in
 /// <see cref="ClientIpHeader"/> with a shared secret in <see cref="KeyHeader"/>. The IP is trusted only
-/// when that secret matches <c>Security:ProxyKey</c>; both headers are always removed before the app runs.
+/// when that secret matches <c>Security:ProxyKey</c>; both headers are always removed before the app runs. The same holds for the
+/// rough position of the connection (<see cref="LatitudeHeader"/> and <see cref="LongitudeHeader"/>, one decimal place): it is
+/// believed only with the key, re-checked and re-rounded here, and lives only as long as the request.
 /// </summary>
 public sealed class ProxyClientIpMiddleware(RequestDelegate next, IConfiguration configuration, ILogger<ProxyClientIpMiddleware> log)
 {
     public const string KeyHeader = "X-MG-Proxy-Key";
     public const string ClientIpHeader = "X-MG-Client-IP";
+    public const string LatitudeHeader = "X-MG-Client-Lat";
+    public const string LongitudeHeader = "X-MG-Client-Lon";
     public const int MinimumKeyBytes = 32;
 
     private readonly byte[]? _key = LoadKey(configuration["Security:ProxyKey"], log);
@@ -23,12 +28,19 @@ public sealed class ProxyClientIpMiddleware(RequestDelegate next, IConfiguration
         var headers = context.Request.Headers;
         var presented = headers[KeyHeader].ToString();
         var claimed = headers[ClientIpHeader].ToString();
+        var latitude = headers[LatitudeHeader].ToString();
+        var longitude = headers[LongitudeHeader].ToString();
         headers.Remove(KeyHeader);
         headers.Remove(ClientIpHeader);
+        headers.Remove(LatitudeHeader);
+        headers.Remove(LongitudeHeader);
         if (_key is not null && presented.Length > 0
-            && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(presented), _key)
-            && IPAddress.TryParse(claimed, out var ip))
-            context.Connection.RemoteIpAddress = ip;
+            && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(presented), _key))
+        {
+            if (IPAddress.TryParse(claimed, out var ip)) context.Connection.RemoteIpAddress = ip;
+            // The rough place of the connection, for this request only: kept in the request's items, never stored or logged.
+            if (GeoPoint.TryParse(latitude, longitude, out var place)) context.Items[VisitorGeo.ItemKey] = place;
+        }
         return next(context);
     }
 

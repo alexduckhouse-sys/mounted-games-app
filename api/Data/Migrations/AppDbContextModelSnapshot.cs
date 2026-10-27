@@ -1526,6 +1526,96 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("EmailOptIns");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.EntriesDigestCompetition", b =>
+                {
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RunId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("CompetitionId");
+
+                    b.HasIndex("RunId");
+
+                    b.ToTable("EntriesDigestCompetitions");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.EntriesDigestRecipient", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ClaimToken")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("OptInId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RunId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RunId", "OptInId")
+                        .IsUnique();
+
+                    b.HasIndex("RunId", "Status");
+
+                    b.ToTable("EntriesDigestRecipients");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.EntriesDigestRun", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Competitions")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Manual")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("RunDate")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Total")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RunDate")
+                        .IsUnique();
+
+                    b.ToTable("EntriesDigestRuns");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.FinalsTieOrder", b =>
                 {
                     b.Property<int>("Id")
@@ -4237,6 +4327,28 @@ namespace MountedGames.Api.Data.Migrations
                     b.Navigation("Team");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.EntriesDigestCompetition", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.EntriesDigestRun", "Run")
+                        .WithMany("CompetitionRows")
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Run");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.EntriesDigestRecipient", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.EntriesDigestRun", "Run")
+                        .WithMany("Recipients")
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Run");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.FinalsTieOrder", b =>
                 {
                     b.HasOne("MountedGames.Api.Entities.Competition", "Competition")
@@ -5005,6 +5117,13 @@ namespace MountedGames.Api.Data.Migrations
             modelBuilder.Entity("MountedGames.Api.Entities.DeclarationForm", b =>
                 {
                     b.Navigation("Riders");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.EntriesDigestRun", b =>
+                {
+                    b.Navigation("CompetitionRows");
+
+                    b.Navigation("Recipients");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.Heat", b =>

@@ -3,6 +3,7 @@ using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Commerce;
+using MountedGames.Api.Services.Geo;
 
 namespace MountedGames.Api.Services;
 
@@ -49,6 +50,50 @@ public static class CompetitionPickerQuery
         var pageItems = items.Take(pageSize).ToList();
         if (!past) await AttachLiveAsync(db, pageItems, todayUtc, ct);
         return new CompetitionPickerPage(pageItems, items.Count > pageSize, years, locations);
+    }
+
+    /// <summary>The most upcoming events the near-you list will order. A season has far fewer; the cap only bounds the work.</summary>
+    public const int NearYouSetCap = 500;
+    public const string SortNearest = "nearest";
+    public const string SortSoonest = "soonest";
+
+    /// <summary>
+    /// The upcoming list for one viewer. The whole upcoming set is read, ordered and only then cut into pages, so page boundaries
+    /// are right whichever order is used. Events on today come first. With a known place and <paramref name="nearest"/>, the rest
+    /// run nearest first, events we couldn't place coming last by date; otherwise by date, as the plain picker does. The viewer's
+    /// place is used for this call only: the answer holds whole-mile distances for the page and nothing that locates the viewer.
+    /// </summary>
+    public static async Task<CompetitionNearYouPage> LoadNearYouAsync(
+        AppDbContext db, int page, int pageSize, DateTime todayUtc, GeoPoint? origin, bool nearest, CancellationToken ct = default)
+    {
+        var upcoming = db.Competitions.AsNoTracking().Where(c => !c.IsArchived && (c.EndDate ?? c.StartDate) >= todayUtc)
+            .OrderBy(c => c.StartDate).ThenBy(c => c.Id).Take(NearYouSetCap);
+        var items = await upcoming
+            .Select(c => new CompetitionPickerItem(c.Id, c.Name, c.StartDate, c.EndDate, c.Icon, c.Location, c.Sections.Count, null,
+                db.Set<EventCommerceSettings>().Any(x => x.CompetitionId == c.Id && x.IsDemo), !c.SignupsLocked && c.Sections.Any()))
+            .ToListAsync(ct);
+        var places = await upcoming.Where(c => c.Latitude != null && c.Longitude != null)
+            .Select(c => new { c.Id, Lat = c.Latitude!.Value, Lon = c.Longitude!.Value }).ToDictionaryAsync(c => c.Id, ct);
+
+        var useDistance = nearest && origin is not null;
+        var miles = new Dictionary<int, double>();
+        if (origin is { } here)
+            foreach (var (id, place) in places) miles[id] = here.MilesTo(place.Lat, place.Lon);
+
+        var today = todayUtc.Date;
+        IEnumerable<CompetitionPickerItem> ordered = items;
+        if (useDistance)
+            ordered = items.OrderBy(i => i.StartDate.Date <= today && today <= (i.EndDate ?? i.StartDate).Date ? 0 : 1)
+                .ThenBy(i => miles.ContainsKey(i.Id) ? 0 : 1)
+                .ThenBy(i => miles.GetValueOrDefault(i.Id))
+                .ThenBy(i => i.StartDate).ThenBy(i => i.Id);
+
+        var all = ordered.ToList();
+        var pageItems = all.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        await AttachLiveAsync(db, pageItems, todayUtc, ct);
+        var distances = origin is null ? [] : pageItems.Where(i => miles.ContainsKey(i.Id))
+            .Select(i => new PickerDistance(i.Id, (int)Math.Round(miles[i.Id]))).ToList();
+        return new CompetitionNearYouPage(pageItems, page * pageSize < all.Count, origin is not null, useDistance ? SortNearest : SortSoonest, distances);
     }
 
     /// <summary>One extra query for the competitions running today; mirrors the active-heat rule in web/src/lib/timetableRows.ts.</summary>

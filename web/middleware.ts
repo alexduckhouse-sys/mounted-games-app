@@ -4,13 +4,14 @@
 // 1. /api/*: runs before the rewrite to the API project in vercel.json and passes the visitor's IP with a
 //    shared key, so the API can apply rate limits per visitor rather than to everyone arriving from Vercel.
 //    Set MG_PROXY_KEY here and Security__ProxyKey on the API project to the same random value; without it
-//    nothing is added and the API behaves as before.
+//    nothing is added and the API behaves as before. The same headers carry the rough place of the connection
+//    (Vercel's geolocation, one decimal place) so the events list can put the nearest first.
 // 2. Competition, team-profile and home pages: when a link-preview crawler (WhatsApp, Facebook, iMessage,
 //    Slack and so on) asks for one, answer with a small page carrying the Open Graph tags instead of the
 //    app, because those crawlers don't run JavaScript. Everyone else gets the app, untouched.
 import { ipAddress, next } from '@vercel/functions';
 // Vercel runs this as Node ES modules without bundling, so relative imports need the .js extension.
-import { proxyRequestHeaders } from './src/lib/proxyHeaders.js';
+import { proxyRequestHeaders, roughPlaceFrom } from './src/lib/proxyHeaders.js';
 import {
   competitionCard, genericCard, isPreviewCrawler, readCompetition, readTeamProfile, renderCardPage,
   shareApiPath, sharePageFor, teamProfileCard,
@@ -28,7 +29,9 @@ const API_TIMEOUT_MS = 3000;
 export default async function middleware(request: Request) {
   const url = new URL(request.url);
   if (url.pathname.startsWith('/api/')) {
-    return next({ request: { headers: proxyRequestHeaders(request.headers, ipAddress(request), process.env.MG_PROXY_KEY) } });
+    // The rough place (one decimal place, from Vercel's own geolocation) goes along with the IP, under the same key, so the API
+    // can order events nearest first for this request. It is never asked of the visitor, stored or logged.
+    return next({ request: { headers: proxyRequestHeaders(request.headers, ipAddress(request), process.env.MG_PROXY_KEY, roughPlaceFrom(request.headers)) } });
   }
 
   if (request.method !== 'GET' && request.method !== 'HEAD') return next();

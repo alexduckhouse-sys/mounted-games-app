@@ -22,6 +22,8 @@ test('the lightweight picker is cacheable but its writes and unrelated routes ar
   assert.equal(canCachePublicApi('/api/competitions/picker'), true);
   assert.equal(canCachePublicApi('/api/competitions/picker', 'POST'), false);
   assert.equal(canCachePublicApi('/api/competitions/picker/private'), false);
+  // Ordered for one viewer from where they seem to be, so it must never be kept for anyone else.
+  assert.equal(canCachePublicApi('/api/competitions/picker/near-you'), false);
 });
 
 test('saved responses carry a timestamp and a saved-copy marker without changing the live response', async () => {

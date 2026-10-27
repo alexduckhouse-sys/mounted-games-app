@@ -42,6 +42,9 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<CustomEmail> CustomEmails => Set<CustomEmail>();
     public DbSet<CustomEmailRecipient> CustomEmailRecipients => Set<CustomEmailRecipient>();
     public DbSet<CustomEmailImage> CustomEmailImages => Set<CustomEmailImage>();
+    public DbSet<EntriesDigestRun> EntriesDigestRuns => Set<EntriesDigestRun>();
+    public DbSet<EntriesDigestCompetition> EntriesDigestCompetitions => Set<EntriesDigestCompetition>();
+    public DbSet<EntriesDigestRecipient> EntriesDigestRecipients => Set<EntriesDigestRecipient>();
     public DbSet<ShopPost> ShopPosts => Set<ShopPost>();
     public DbSet<ShopComment> ShopComments => Set<ShopComment>();
     public DbSet<ShopReport> ShopReports => Set<ShopReport>();

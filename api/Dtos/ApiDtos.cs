@@ -19,6 +19,15 @@ public record CompetitionPickerItem(
     string? Location, int AgeGroupCount, PickerLiveHeat? Live, bool IsDemo = false, bool EntriesOpen = false);
 public record CompetitionPickerPage(IReadOnlyList<CompetitionPickerItem> Items, bool HasMore, IReadOnlyList<int>? Years = null, IReadOnlyList<string>? Locations = null);
 
+/// <summary>How far an event is from where we think the viewer is, in whole miles. Never the viewer's position itself.</summary>
+public record PickerDistance(int Id, int Miles);
+/// <summary>
+/// The upcoming list ordered for one viewer (<c>GET /api/competitions/picker/near-you</c>). <see cref="LocationKnown"/> says whether we could
+/// place them; <see cref="Sort"/> is the order actually used (<c>nearest</c> or <c>soonest</c>).
+/// </summary>
+public record CompetitionNearYouPage(
+    IReadOnlyList<CompetitionPickerItem> Items, bool HasMore, bool LocationKnown, string Sort, IReadOnlyList<PickerDistance> Distances);
+
 public static class CompetitionFields
 {
     public const int PostcodeMax = 12;
