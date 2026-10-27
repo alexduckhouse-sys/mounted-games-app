@@ -22,7 +22,7 @@ beforeEach(() => {
 it('hides producer actions from viewers', () => {
   state.allowed = false; show();
   expect(screen.queryByRole('button', { name: '2x Zoom' })).toBeNull();
-  expect(screen.getByText(/Only the competition organiser/)).toBeVisible();
+  expect(screen.getByRole('heading', { name: 'Only the organiser’s team can control the stream' })).toBeVisible();
   expect(api.post).not.toHaveBeenCalled();
 });
 

@@ -1,10 +1,10 @@
 import { Fragment, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Link, useInRouterContext } from 'react-router-dom';
-import { ChevronRight, Star, Trophy } from 'lucide-react';
+import { Check, Star, Trophy } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { CompetitionSection, Team } from '../../types';
 import type { FinalGroup, Toplist } from '../../lib/toplist';
-import { ordinalText, sessionColumnTitle, toplistNoteText } from '../../lib/toplistText';
+import { ordinalText, sessionColumnTitle, toplistNoteText, toplistNoteTone } from '../../lib/toplistText';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { useFavourites } from '../../hooks/useFavourites';
 import { CompetitionContext } from './context';
@@ -14,6 +14,8 @@ import { api } from '../../api';
 import { publicRiderName } from '../../lib/riderNames';
 import type { DeclarationForm } from '../../types';
 import { DropdownRow } from '../../components/DropdownRow';
+import { Sheet } from '../../components/Sheet';
+import { useOptionalTicker } from '../../components/TickerContext';
 import { Rosette } from '../../components/Rosette';
 import { ScoreFlash } from '../../components/ScoreFlash';
 import { TickerNumber } from '../../components/TickerNumber';
@@ -31,11 +33,15 @@ type View = ToplistViewTab;
 
 const separatorLabel = 'flex items-center gap-2 border-b border-[rgb(var(--mg-rule-soft))] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-red))]';
 const dashes = <span aria-hidden="true" className="flex-1 border-t-2 border-dashed border-current" />;
+// Tied teams share a number and a soft tint, nothing more.
+const TIED = { background: 'rgb(var(--mg-heading) / .07)' };
+const NOTE_TONE = { safe: 'text-[rgb(var(--mg-ok))]', need: 'text-[rgb(var(--mg-late-time))]' } as const;
 
 /**
  * The age group's toplist: finals once they have results, totals with the final cut-off and any run-off,
- * points per session, or the heat tables. A "Show" row above the list switches between them (only when there is
- * more than one). Tapping anywhere on a team's row opens its team page (or its breakdown outside the app's pages).
+ * points per session, or the heat tables. A button beside the ticker dock opens a "Show" sheet to switch between them
+ * (only when there is more than one; outside the app's shell a "Show" row does it instead). Tapping anywhere on a
+ * team's row opens its team page (or its breakdown outside the app's pages).
  */
 export function ToplistView({
   list,
@@ -102,13 +108,14 @@ export function ToplistView({
   const sessionsRef = useRankMotion<HTMLTableSectionElement>(rankIds, list.cutAfter ?? null);
   const currentSectionId = section?.id ?? null;
   const activeOpenTeam = openTeam?.sectionId === currentSectionId ? openTeam.teamId : null;
+  // Listed in this order; finals are the default once they have results.
   const tabs: [View, string][] = [
-    ...(hasFinals ? ([['finals', t('competition.toplist.finals')]] as [View, string][]) : []),
     ['totals', t('competition.toplist.totals')],
     ...(hasSessions ? ([['sessions', t('competition.toplist.bySession')]] as [View, string][]) : []),
-    ...(heatTables ? ([['heats', t('competition.toplist.heats')]] as [View, string][]) : []),
+    ...(hasFinals ? ([['finals', t('competition.toplist.finals')]] as [View, string][]) : []),
+    ...(heatTables ? ([['heats', t('competition.toplist.scoresByHeat')]] as [View, string][]) : []),
   ];
-  const view: View = tabs.some(([id]) => id === chosen) ? chosen! : tabs[0][0];
+  const view: View = tabs.some(([id]) => id === chosen) ? chosen! : hasFinals ? 'finals' : 'totals';
   const places = section?.finalistCount ?? null;
   const sheet = activeOpenTeam == null ? null : list.detail.get(activeOpenTeam) ?? null;
   // A team's row opens its sheet (riders, ponies and heat-by-heat scores) so a spectator stays on Standings; the sheet links on to the team page.
@@ -124,8 +131,18 @@ export function ToplistView({
     return flag ? <img src={`/flags/${flag}.png`} alt="" className="mr-1.5 inline-block h-3.5 w-5 shrink-0 rounded-[2px] object-cover align-middle" /> : null;
   };
 
-  // "Show  Totals ›": one settings row that opens the list of views.
-  const viewRow = tabs.length > 1 && (
+  // "What to show" sits beside the ticker dock and opens the Show sheet. Without the app's dock (a page on its own),
+  // the old "Show  Totals ›" row does the same job.
+  const setDockAction = useOptionalTicker()?.setDockAction;
+  const [showOpen, setShowOpen] = useState(false);
+  const canShow = tabs.length > 1;
+  const showLabel = t('competition.toplist.whatToShow');
+  useEffect(() => {
+    if (!setDockAction || !canShow) return;
+    setDockAction({ label: showLabel, count: 0, onClick: () => setShowOpen(true) });
+    return () => setDockAction(null);
+  }, [setDockAction, canShow, showLabel]);
+  const viewRow = canShow && !setDockAction && (
     <DropdownRow label={t('competition.toplist.show')} value={view} options={tabs.map(([value, label]) => ({ value, label }))} onChange={(next) => setChosen(next as View)} />
   );
 
@@ -150,23 +167,20 @@ export function ToplistView({
           <section aria-label={t('competition.toplist.totals')} className="mg-card overflow-hidden">
             <ol ref={totalsRef}>
               {list.rows.map((row, index) => {
-                const note = toplistNoteText(row, t, lang);
+                const note = toplistNoteText(row, t);
+                const tone = toplistNoteTone(row);
                 const lastInRunoff = row.runoff && list.rows[index + 1]?.runoff;
                 const openRow = open(row.teamId);
                 const fav = isFav(row.teamId);
-                const leaderPoints = list.rows[0]?.points ?? 0;
-                const gap = list.started && index > 0
-                  ? Number(formatPoints(leaderPoints)) - Number(formatPoints(row.points))
-                  : 0;
+                const tied = list.started && row.joint;
                 const content = <>
                   <span className="mg-display w-7 shrink-0 text-xl font-bold leading-none">{list.started ? row.position : '—'}<span className="sr-only">{list.started && row.joint ? <>{' '}{t('competition.toplist.joint')}</> : ''}</span></span>
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-1">
                     <span data-grow="start" className="truncate text-base font-semibold leading-tight">{renderTeamName(row.teamId, row.teamName, fav, false)}</span>
-                    {note && <span className="text-[13.5px] font-medium leading-none text-[rgb(var(--mg-body))]">{note}</span>}
+                    {note && <span className={`text-[13.5px] font-medium leading-none ${tone ? NOTE_TONE[tone] : 'text-[rgb(var(--mg-body))]'}`}>{note}</span>}
                   </span>
                   <span data-grow="end" className="flex shrink-0 flex-col items-end gap-0.5">
                     <ScoreFlash value={row.points} className="mg-display text-xl font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]"><TickerNumber value={row.points} /><span className="sr-only">{' '}{t('competition.toplist.points')}</span></ScoreFlash>
-                    {gap > 0 && <span className="text-[11px] font-semibold leading-none tabular-nums text-[rgb(var(--mg-muted))]" title={t('competition.toplist.behindLeader', { points: formatPoints(gap) })}>−{formatPoints(gap)}</span>}
                   </span>
                 </>;
                 return (
@@ -176,12 +190,14 @@ export function ToplistView({
                       transition={RESORT}
                       data-rank-id={row.teamId}
                       data-followed={fav ? 'true' : undefined}
-                      className={`flex min-h-11 items-center pr-1 ${lastInRunoff ? 'border-b border-dashed border-[rgb(var(--mg-rule))]' : 'border-b border-[rgb(var(--mg-rule-soft))]'} ${row.runoff ? 'shadow-[inset_6px_0_0_rgb(var(--mg-ink))]' : fav ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_3px_0_0_#C08308]' : ''}`}
+                      data-tied={tied ? 'true' : undefined}
+                      style={tied ? TIED : undefined}
+                      className={`flex min-h-11 items-center pr-1 ${lastInRunoff ? 'border-b border-dashed border-[rgb(var(--mg-rule))]' : 'border-b border-[rgb(var(--mg-rule-soft))]'} ${fav ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_3px_0_0_#C08308]' : ''}`}
                     >
                       <RowBox open={openRow} href={teamHref(row.teamId)}>{content}</RowBox>
                     </motion.li>
                     {list.cutAfter === index && index < list.rows.length - 1 && (
-                      <motion.li layout="position" transition={RESORT} role="separator" aria-label={t('competition.toplist.cutoff')} className={`${separatorLabel} !py-1.5 !text-[rgb(var(--mg-muted))]`}>
+                      <motion.li layout="position" transition={RESORT} role="separator" aria-label={t('competition.toplist.cutoff')} className={`${separatorLabel} !py-1.5`}>
                         {dashes}{t('competition.toplist.cutoff')}{dashes}
                       </motion.li>
                     )}
@@ -200,7 +216,6 @@ export function ToplistView({
                         <span className="mg-display w-7 shrink-0 text-xl font-bold leading-none text-[rgb(var(--mg-faint))]">HC</span>
                         <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-1">
                           <span className="truncate text-base font-semibold leading-tight">{renderTeamName(team.teamId, team.teamName, fav, false)}</span>
-                          {team.racesLeft > 0 && <span className="text-[13.5px] font-medium leading-none">{t('competition.toplist.racesLeft', { count: team.racesLeft })}</span>}
                         </span>
                         <span className="mg-display shrink-0 text-xl font-bold leading-none tabular-nums">{formatPoints(team.points)}<span className="sr-only">{' '}{t('competition.toplist.points')}</span></span>
                       </RowBox>
@@ -221,7 +236,6 @@ export function ToplistView({
                   <th scope="col" className="py-1.5 text-left font-bold">{t('competition.toplist.team')}</th>
                   {list.bySession.sessions.map((s) => <th key={s.id} scope="col" className="w-9 py-1.5 text-center font-bold"><abbr title={sessionColumnTitle(s.title, t)} className="no-underline">{s.label}</abbr></th>)}
                   <th scope="col" className="w-11 py-1.5 pr-3 text-right font-bold text-[rgb(var(--mg-heading))]">{t('competition.toplist.pts')}</th>
-                  <th scope="col" className="w-6"><span className="sr-only">{t('competition.toplist.open')}</span></th>
                 </tr>
               </thead>
               <tbody ref={sessionsRef}>
@@ -245,7 +259,6 @@ export function ToplistView({
                         </td>
                       ))}
                       <td className="mg-display pr-3 text-right text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]"><span data-grow="end"><ScoreFlash value={row.points}><TickerNumber value={row.points} /></ScoreFlash></span></td>
-                      <td aria-hidden="true">{(openRow || teamHref(row.teamId)) && <ChevronRight className="mr-2 h-3.5 w-3.5 text-[rgb(var(--mg-dash))]" />}</td>
                     </motion.tr>
                   );
                 })}
@@ -287,19 +300,34 @@ export function ToplistView({
           onClose={() => setOpenTeam(null)}
         />
       )}
+      {showOpen && (
+        <Sheet title={t('competition.toplist.show')} onClose={() => setShowOpen(false)}>
+          {({ close }) => (
+            <div role="radiogroup" aria-label={t('competition.toplist.show')} className="-mx-5 flex flex-col">
+              {tabs.map(([id, label]) => (
+                <button key={id} type="button" role="radio" aria-checked={id === view}
+                  onClick={() => close(() => { setShowOpen(false); setChosen(id); })}
+                  className={`flex min-h-[52px] w-full items-center gap-3 border-t border-[rgb(var(--mg-rule-soft))] px-5 text-left text-[17px] font-medium text-[rgb(var(--mg-ink))] ${id === view ? 'bg-[rgb(var(--mg-tint))]' : ''}`}>
+                  <span className="min-w-0 flex-1">{label}</span>
+                  {id === view && <Check aria-hidden="true" className="h-5 w-5 shrink-0 text-[rgb(var(--mg-heading))]" strokeWidth={2.5} />}
+                </button>
+              ))}
+            </div>
+          )}
+        </Sheet>
+      )}
     </>
   );
 }
 
 /**
  * One team's row: a link to its team page inside the app, a button opening its breakdown when the list stands alone,
- * or plain text. The whole box is the target, with a chevron at the end.
+ * or plain text. The whole box is the target.
  */
 function RowBox({ open, href, children }: { open?: () => void; href: string | null; children: ReactNode }) {
   const box = 'flex min-h-11 min-w-0 flex-1 items-center gap-2.5 pl-3 pr-1 text-left';
-  const chevron = <ChevronRight aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-[rgb(var(--mg-dash))]" />;
-  if (open) return <button type="button" onClick={open} aria-haspopup="dialog" className={box}>{children}{chevron}</button>;
-  if (href) return <Link to={href} className={box}>{children}{chevron}</Link>;
+  if (open) return <button type="button" onClick={open} aria-haspopup="dialog" className={box}>{children}</button>;
+  if (href) return <Link to={href} className={box}>{children}</Link>;
   return <div className={box}>{children}</div>;
 }
 

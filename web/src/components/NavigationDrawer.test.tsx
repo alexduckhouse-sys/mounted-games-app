@@ -253,7 +253,7 @@ describe('NavigationDrawer: age groups', () => {
   const groups = [{ id: 11, name: 'Seniors', live: true }, { id: 12, name: 'Juniors', next: '09:05' }, { id: 13, name: 'Novices' }];
   const openGroups = () => userEvent.click(screen.getByRole('button', { name: /Age group/ }));
 
-  it('is a closed row under the header, labelled Age group over the current group', () => {
+  it('is a closed settings-style row at the top of the menu, Age group beside the current group', () => {
     mount({ competition: true, groups });
     const row = screen.getByRole('button', { name: /Age group/ });
     expect(row).toHaveAttribute('aria-expanded', 'false');

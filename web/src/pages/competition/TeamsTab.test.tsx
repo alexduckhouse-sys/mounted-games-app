@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,13 +7,17 @@ import { competition, team } from '../../test/factories';
 import { TeamsTab } from './TeamsTab';
 import { chooseOption, optionLabels } from '../../test/select';
 
-const state = vi.hoisted(() => ({ edit: true, many: false, toggle: vi.fn() }));
+const state = vi.hoisted(() => ({ edit: true, many: false, arenas: [] as string[], toggle: vi.fn() }));
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('./context', () => ({
   useCompetition: () => ({
     competition: state.many
       ? competition({
         sections: [{ id: 5, displayName: 'Teams Seniors' }, { id: 6, displayName: 'Teams Juniors' }] as never,
+        sessions: state.arenas.length ? [
+          { id: 1, competitionSectionId: 5, arenaName: state.arenas[0], isBreak: false },
+          { id: 2, competitionSectionId: 5, arenaName: state.arenas[1], isBreak: false },
+        ] as never : [],
         teams: [
           team(1, { displayName: 'Oak A', clubName: 'Oak Pony Club', clubId: 7, trainerUserId: null, trainerName: 'Pat Trainer' }),
           team(2, { displayName: 'Beech B', clubName: 'Beech Hunt', clubId: 8, competitionSectionId: 6, sectionName: 'Teams Juniors' }),
@@ -92,6 +96,7 @@ describe('TeamsTab list', () => {
   beforeEach(() => {
     state.edit = false;
     state.many = true;
+    state.arenas = [];
     state.toggle.mockReset();
     vi.mocked(api.get).mockResolvedValue({ data: [] });
   });
@@ -115,17 +120,34 @@ describe('TeamsTab list', () => {
     expect(screen.getByText(/No team or club matches/)).toBeVisible();
   });
 
-  it('picks the age group from one dropdown row, with one card per age group', async () => {
+  it('picks the age group in a sheet opened from the filter button, shown as a chip you can remove', async () => {
     const user = userEvent.setup();
     render(<MemoryRouter><TeamsTab /></MemoryRouter>);
     expect(screen.getAllByRole('region').map((r) => r.getAttribute('aria-label'))).toEqual(['Seniors', 'Juniors']);
-    expect(screen.queryByRole('button', { name: 'All sections' })).toBeNull();
-    const row = screen.getByRole('combobox', { name: 'Age group' });
-    expect(row).toHaveTextContent('All age groups');
-    await user.click(row);
-    await user.click(screen.getByRole('option', { name: 'Juniors' }));
+    expect(screen.queryByRole('combobox', { name: 'Age group' })).toBeNull();
+    const filter = screen.getByRole('button', { name: 'Age group' });
+    expect(filter.querySelector('.fk-count')).toBeNull();
+    await user.click(filter);
+    const sheet = await screen.findByRole('dialog');
+    expect(within(sheet).getByRole('button', { name: /All age groups/ })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(within(sheet).getByRole('button', { name: /Juniors/ }));
     expect(screen.getAllByRole('region').map((r) => r.getAttribute('aria-label'))).toEqual(['Juniors']);
     expect(screen.queryByText('Oak A')).toBeNull();
+    await user.click(within(sheet).getByRole('button', { name: 'Show 1 team' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('button', { name: 'Age group, 1 set' })).toHaveTextContent('1');
+    await user.click(screen.getByRole('button', { name: 'Remove Juniors' }));
+    expect(screen.getAllByRole('region').map((r) => r.getAttribute('aria-label'))).toEqual(['Seniors', 'Juniors']);
+    expect(screen.queryByRole('button', { name: 'Remove Juniors' })).toBeNull();
+  });
+
+  it('heads each age group with its team count and, when there is one, its arena', () => {
+    state.arenas = ['Main Arena', 'Main Arena'];
+    render(<MemoryRouter><TeamsTab /></MemoryRouter>);
+    const seniors = screen.getByRole('region', { name: 'Seniors' });
+    expect(within(seniors).getByText('1 team · Main Arena')).toBeVisible();
+    const juniors = screen.getByRole('region', { name: 'Juniors' });
+    expect(within(juniors).getByText('1 team')).toBeVisible();
   });
 
   it('shows the club under each team and no trainer or bib line', () => {

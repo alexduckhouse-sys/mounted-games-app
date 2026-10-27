@@ -17,6 +17,7 @@ import { parseBibAndFlag } from '../../lib/bib';
 import { statusLetter } from '../../lib/resultStatus';
 import { useFavourites } from '../../hooks/useFavourites';
 import { displayLaneFor, lanesOf, sitsOutOf, type LaneRules } from './laneRules';
+import { HeatChooser } from './HeatChooser';
 import { TeamCardBadge, getStoredCards, parseRefereeCard, useCardsEnabled, type RefereeCard } from './ScoringParts';
 import './heat.css';
 import { formatPoints } from '../../lib/formatPoints';
@@ -346,6 +347,7 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
           badge={compactBadge}
         />
       )}
+      {!embedded && heat && <HeatChooser competitionId={competition.id} sessions={competition.sessions} currentHeatId={heat.id} />}
       {!embedded && <h1 className="sr-only">{t('competition.heat.scoresTitle', { name: section ? `${section} ${heatLabel}` : heatLabel })}</h1>}
 
       {!heat ? <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">{t('competition.heat.noHeats')}</p> : (

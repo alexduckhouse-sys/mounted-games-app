@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { GRACE_MS, OFFLINE_GRACE_MS, RECONNECT_MS, isFocusPage, liveState, pollIntervalMs, type ConnectionInputs } from './connectionStatus';
+import { GRACE_MS, OFFLINE_GRACE_MS, UNREACHABLE_FAILURES, isFocusPage, liveState, pollIntervalMs, type ConnectionInputs } from './connectionStatus';
 
-const base: ConnectionInputs = { connected: false, online: true, failures: 0, downSince: 1_000_000, everConnected: true };
+const base: ConnectionInputs = { connected: false, online: true, failures: 0, downSince: 1_000_000 };
 
 describe('isFocusPage', () => {
   it('treats heat and scoring pages as needing fresh results', () => {
@@ -37,37 +37,29 @@ describe('liveState', () => {
   it('is offline once the device has had no network for a few seconds', () => {
     expect(liveState({ ...base, online: false }, base.downSince! + OFFLINE_GRACE_MS - 1)).toBe('connecting');
     expect(liveState({ ...base, online: false }, base.downSince! + OFFLINE_GRACE_MS)).toBe('offline');
-    expect(liveState({ ...base, online: false, everConnected: false }, base.downSince! + RECONNECT_MS)).toBe('offline');
+    expect(liveState({ ...base, online: false }, base.downSince! + GRACE_MS * 3)).toBe('offline');
   });
 
   it('does not call a failed timetable check offline while the live link is still within its grace', () => {
     expect(liveState({ ...base, failures: 1 }, base.downSince! + GRACE_MS - 1)).toBe('connecting');
-    expect(liveState({ ...base, failures: 2, everConnected: false }, base.downSince!)).toBe('connecting');
+    expect(liveState({ ...base, failures: 2 }, base.downSince!)).toBe('connecting');
   });
 
-  it('is offline when checks are failing and the live link has stayed down', () => {
-    expect(liveState({ ...base, failures: 1 }, base.downSince! + GRACE_MS)).toBe('offline');
-    expect(liveState({ ...base, failures: 3 }, base.downSince! + RECONNECT_MS)).toBe('offline');
+  it('says live updates are paused once the drop has lasted, and the checks are still working', () => {
+    expect(liveState(base, base.downSince! + GRACE_MS)).toBe('polling');
+    expect(liveState(base, base.downSince! + GRACE_MS * 10)).toBe('polling');
+    expect(liveState({ ...base, failures: UNREACHABLE_FAILURES - 1 }, base.downSince! + GRACE_MS)).toBe('polling');
   });
 
-  it('rides out routine reconnects and a cold start without a pill', () => {
-    expect(GRACE_MS).toBeGreaterThanOrEqual(10_000);
-    expect(RECONNECT_MS).toBeGreaterThan(GRACE_MS);
+  it('says the server is unreachable once checks keep failing and the live link has stayed down', () => {
+    expect(liveState({ ...base, failures: UNREACHABLE_FAILURES }, base.downSince! + GRACE_MS - 1)).toBe('connecting');
+    expect(liveState({ ...base, failures: UNREACHABLE_FAILURES }, base.downSince! + GRACE_MS)).toBe('unreachable');
+    expect(liveState({ ...base, failures: 5 }, base.downSince! + GRACE_MS * 10)).toBe('unreachable');
+  });
+
+  it('waits 15 seconds before showing anything, so a routine reconnect or cold start is quiet', () => {
+    expect(GRACE_MS).toBe(15_000);
     expect(liveState(base, base.downSince! + 9_000)).toBe('connecting');
-    expect(liveState({ ...base, everConnected: false }, base.downSince! + 9_000)).toBe('connecting');
-  });
-
-  it('stays quiet for a short drop or the first connect', () => {
-    expect(liveState(base, base.downSince! + GRACE_MS - 1)).toBe('connecting');
     expect(liveState({ ...base, downSince: null }, 0)).toBe('connecting');
-  });
-
-  it('says it is reconnecting after a drop, then that it is checking', () => {
-    expect(liveState(base, base.downSince! + GRACE_MS)).toBe('reconnecting');
-    expect(liveState(base, base.downSince! + RECONNECT_MS)).toBe('polling');
-  });
-
-  it('goes straight to checking when the live link never worked', () => {
-    expect(liveState({ ...base, everConnected: false }, base.downSince! + GRACE_MS)).toBe('polling');
   });
 });

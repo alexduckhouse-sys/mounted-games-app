@@ -24,7 +24,10 @@ vi.mock('../../auth/AuthContext', () => ({
   }),
 }));
 
-/** The value beside a label in the plain list (Bibs, Place, Points, Races left; Average per race ...). */
+/** The one line under the team's name: place, points, bibs and races left. */
+const facts = () => screen.getByRole('region', { name: 'Team summary' }).querySelector('p') as HTMLElement;
+
+/** The value beside a label in the plain list (Average per race ...). */
 const fact = (label: string) => screen.getByText(label, { selector: 'dt' }).nextElementSibling as HTMLElement;
 
 describe('CompetitionTeamPage', () => {
@@ -167,14 +170,14 @@ describe('CompetitionTeamPage', () => {
 
     expect(screen.getByRole('heading', { name: 'Oak A' })).toBeInTheDocument();
     expect(screen.getByText(/Oak Pony Club/)).toBeInTheDocument();
-    // Bibs in words only, with no colour dot.
-    expect(fact('Bibs')).toHaveTextContent('Royal Blue');
-    expect(screen.queryByText(/^Bibs: /)).toBeNull();
+    // Bibs: a colour square and the colour in words.
+    expect(facts()).toHaveTextContent('Royal Blue bibs');
+    expect(facts().querySelector('span[aria-hidden="true"]')).not.toBeNull();
 
     // Standings loaded: 1st with 24 points (the .01 tie-break is hidden), and the one race left
-    await waitFor(() => expect(fact('Place')).toHaveTextContent('1st'));
-    expect(fact('Points')).toHaveTextContent('24');
-    expect(fact('Races left')).toHaveTextContent('1');
+    await waitFor(() => expect(facts()).toHaveTextContent('1st'));
+    expect(facts()).toHaveTextContent('24pts');
+    expect(facts()).toHaveTextContent('1 race left');
     expect(screen.queryByText('Qualifying')).toBeNull();
     expect(screen.queryByText('Next on track')).toBeNull();
 
@@ -300,7 +303,7 @@ describe('CompetitionTeamPage detailed view', () => {
   it('shows the team header, flag, bib description, declared riders, heats with lanes, stats and race breakdown', async () => {
     mount(1);
     expect(await screen.findByRole('heading', { name: 'Oak A' })).toBeInTheDocument();
-    expect(fact('Bibs')).toHaveTextContent('Red with white stars');
+    expect(facts()).toHaveTextContent('Red with white stars bibs');
     expect(screen.getByText('Jo Coach')).toBeInTheDocument();
 
     const ridersSection = await screen.findByRole('region', { name: 'Declared riders and ponies' });
@@ -457,8 +460,8 @@ it('shows the current place and points from the toplist, finals included', async
       <Routes><Route path="/competitions/:id/teams/:teamId" element={<CompetitionTeamPage />} /></Routes>
     </CompetitionContext.Provider>
   </CompactPageBarProvider></MemoryRouter>);
-  await waitFor(() => expect(fact('Place')).toHaveTextContent('1st'));
-  expect(fact('Points')).toHaveTextContent('20');
+  await waitFor(() => expect(facts()).toHaveTextContent('1st'));
+  expect(facts()).toHaveTextContent('20pts');
   const heats = within(screen.getByRole('region', { name: 'Heats' }));
   expect(heats.getByText('Qualifier · Heat 1 · Lane 1')).toBeInTheDocument();
   expect(heats.getByText('Finals · A Final')).toBeInTheDocument();
@@ -478,7 +481,9 @@ it('says stats show once the team has raced, and that it is not placed yet', asy
   expect(await screen.findByText('Stats show once Oak A has raced.')).toBeInTheDocument();
   expect(screen.queryByText('Average per race')).toBeNull();
   expect(screen.queryByText('By race')).toBeNull();
-  expect(fact('Place')).toHaveTextContent('Not placed yet');
+  expect(facts()).toHaveTextContent('Not placed yet');
+  expect(facts()).toHaveTextContent('0pts');
+  expect(facts()).toHaveTextContent('No races left');
 });
 
 function mountNext(sessionStatus: 0 | 1, scored: boolean) {

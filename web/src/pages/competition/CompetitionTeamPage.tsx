@@ -11,6 +11,7 @@ import { useCompactPageBar, usePageHeader } from '../../components/CompactPageBa
 import { usePageWidth } from '../../components/pageWidthState';
 import { useFavourites } from '../../hooks/useFavourites';
 import { parseBibAndFlag } from '../../lib/bib';
+import { dotColour } from '../../lib/teamColours';
 import { heightText } from '../../lib/decForm';
 import { formatPoints } from '../../lib/formatPoints';
 import { statusLetter } from '../../lib/resultStatus';
@@ -286,6 +287,7 @@ export function CompetitionTeamPage() {
   const detail = list?.detail.get(team.id) ?? null;
   const toplistRow = list?.rows.find((r) => r.teamId === team.id) ?? null;
   const hcRow = list?.hc.find((r) => r.teamId === team.id) ?? null;
+  const placed = !team.isHorsConcours && !!toplistRow && !!list?.started;
   const placeText = team.isHorsConcours ? t('teams.team.horsConcoursLower')
     : toplistRow && list?.started ? `${toplistRow.joint ? '=' : ''}${ordinal(toplistRow.position)}` : t('teams.team.notPlaced');
   const pointsText = formatPoints(toplistRow?.points ?? hcRow?.points ?? detail?.qualifyingPoints ?? 0);
@@ -309,42 +311,51 @@ export function CompetitionTeamPage() {
 
       {/* The team: name with the follow star, then the plain facts */}
       <section aria-label={t('teams.team.summary')} className="flex flex-col gap-3">
-        <div className="mg-card flex items-start gap-2 py-3.5 pl-4 pr-2">
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <h1 className="mg-h1 flex items-center gap-2.5">
-              {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="h-6 w-9 shrink-0 rounded-sm object-cover" />}
-              <span>{team.displayName}</span>
-            </h1>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-[rgb(var(--mg-muted))]">
-              <span>{[sectionLabel, team.clubName].filter(Boolean).join(' · ')}</span>
-              {team.isHorsConcours && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
-                  <Ban aria-hidden="true" className="h-3 w-3" /> {t('teams.team.horsConcours')}
-                </span>
-              )}
-              {team.isWithdrawn && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
-                  {t('teams.withdrawn')}
-                </span>
-              )}
+        <div className="mg-card">
+          <div className="flex items-start gap-2 pb-0 pl-4 pr-2 pt-3.5">
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <h1 className="mg-h1 flex items-center gap-2.5">
+                {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="h-6 w-9 shrink-0 rounded-sm object-cover" />}
+                <span>{team.displayName}</span>
+              </h1>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-[rgb(var(--mg-muted))]">
+                <span>{[sectionLabel, team.clubName].filter(Boolean).join(' · ')}</span>
+                {team.isHorsConcours && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                    <Ban aria-hidden="true" className="h-3 w-3" /> {t('teams.team.horsConcours')}
+                  </span>
+                )}
+                {team.isWithdrawn && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                    {t('teams.withdrawn')}
+                  </span>
+                )}
+              </div>
             </div>
+            <button
+              type="button"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[rgb(var(--mg-heading))] hover:bg-[rgb(var(--mg-subtle))]"
+              aria-pressed={isFollowed}
+              aria-label={t(isFollowed ? 'teams.unfollow' : 'teams.follow', { name: team.displayName })}
+              onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}
+            >
+              <FollowStar on={isFollowed} className="h-[26px] w-[26px]" />
+            </button>
           </div>
-          <button
-            type="button"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[rgb(var(--mg-heading))] hover:bg-[rgb(var(--mg-subtle))]"
-            aria-pressed={isFollowed}
-            aria-label={t(isFollowed ? 'teams.unfollow' : 'teams.follow', { name: team.displayName })}
-            onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}
-          >
-            <FollowStar on={isFollowed} className="h-[26px] w-[26px]" />
-          </button>
+          {/* Place, points, bibs and races left on one line under the name */}
+          <p className="m-0 flex flex-wrap items-baseline gap-x-3.5 gap-y-1 px-4 pb-3.5 pt-1">
+            {placed
+              ? <b className="mg-display text-[26px] font-bold leading-none text-[rgb(var(--mg-heading))]">{placeText}</b>
+              : <span className="text-sm font-medium text-[rgb(var(--mg-muted))]">{placeText}</span>}
+            <b className="mg-display text-[26px] font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]">{pointsText}<small className="ml-[3px] font-[var(--mg-font)] text-sm font-semibold text-[rgb(var(--mg-muted))]">{t('teams.team.ptsUnit')}</small></b>
+            <span className="inline-flex items-center gap-1.5 text-sm font-medium text-[rgb(var(--mg-muted))]">
+              {parsedBib.bib
+                ? <><span aria-hidden="true" className="inline-block h-3 w-3 rounded-[3px]" style={{ background: dotColour(parsedBib.bib), boxShadow: '0 0 0 1px rgb(var(--mg-rule))' }} />{/\bbibs?\b/i.test(parsedBib.bib) ? parsedBib.bib : t('teams.team.bibsOf', { colour: parsedBib.bib })}</>
+                : t('teams.team.noBib')}
+            </span>
+            <span className="text-sm font-medium text-[rgb(var(--mg-muted))]">{racesLeft > 0 ? t('competition.toplist.racesLeft', { count: racesLeft }) : t('teams.team.noRacesLeft')}</span>
+          </p>
         </div>
-        <dl className="mg-card m-0 overflow-hidden">
-          <div className={row}><dt className="w-24 shrink-0 text-[rgb(var(--mg-muted))]">{t('teams.team.bibs')}</dt><dd className="m-0 min-w-0 flex-1">{parsedBib.bib || t('teams.team.noBib')}</dd></div>
-          <div className={row}><dt className="w-24 shrink-0 text-[rgb(var(--mg-muted))]">{t('teams.team.place')}</dt><dd className="m-0 min-w-0 flex-1">{placeText}</dd></div>
-          <div className={row}><dt className="w-24 shrink-0 text-[rgb(var(--mg-muted))]">{t('teams.team.points')}</dt><dd className="m-0 min-w-0 flex-1">{pointsText}</dd></div>
-          <div className={row}><dt className="w-24 shrink-0 text-[rgb(var(--mg-muted))]">{t('teams.team.racesLeft')}</dt><dd className="m-0 min-w-0 flex-1">{racesLeft}</dd></div>
-        </dl>
 
       </section>
 

@@ -17,6 +17,7 @@ vi.mock('../components/NavExtrasContext', () => ({ useNavExtras: () => ({ setExt
 vi.mock('../components/AgeGroupsContext', () => ({ useAgeGroups: () => ({ setGroups: vi.fn() }) }));
 vi.mock('../components/competitionMeta', () => ({ useCompetitionMeta: () => ({ setMeta: vi.fn() }) }));
 vi.mock('../components/ScoreOutboxPanel', () => ({ ScoreOutboxPanel: () => null }));
+vi.mock('../components/WeatherAlert', () => ({ WeatherAlert: () => null }));
 
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000);
 const renderPage = () => render(

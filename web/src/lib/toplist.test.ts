@@ -101,7 +101,7 @@ describe('buildToplist final cut-off', () => {
     expect(list.runoff).toBeNull();
     expect(list.rows.map((r) => r.out)).toEqual([false, false, true]);
     expect(list.rows[2]).toMatchObject({ needed: 6, racesLeft: 2 });
-    expect(toplistNote(list.rows[2])).toBe('6 needed to make the final (normal finishes)');
+    expect(toplistNote(list.rows[2])).toBe('6 pts needed for the A Final (normal finishes)');
   });
 
   it('does not say what a team below the line needs once it has no races left', () => {
@@ -336,7 +336,7 @@ describe('buildToplist finals and team detail', () => {
 describe('toplistNote', () => {
   it('prefers the run-off, then what is needed, then races left', () => {
     expect(toplistNote(row({ runoff: true, position: 3, needed: 2, racesLeft: 4 }))).toBe('Joint 3rd · run-off');
-    expect(toplistNote(row({ needed: 2, racesLeft: 4 }))).toBe('2 needed to make the final (normal finishes)');
+    expect(toplistNote(row({ needed: 2, racesLeft: 4 }))).toBe('2 pts needed for the A Final (normal finishes)');
     expect(toplistNote(row({ racesLeft: 1 }))).toBe('1 race left');
     expect(toplistNote(row({ racesLeft: 4 }))).toBe('4 races left');
     expect(toplistNote(row({ withdrawn: true, racesLeft: 4 }))).toBe('Withdrawn');
@@ -347,7 +347,7 @@ describe('toplistNote', () => {
   });
 
   it('still says how many are needed when the figure is zero', () => {
-    expect(toplistNote(row({ needed: 0 }))).toBe('0 needed to make the final (normal finishes)');
+    expect(toplistNote(row({ needed: 0 }))).toBe('0 pts needed for the A Final (normal finishes)');
   });
 });
 
@@ -516,7 +516,7 @@ describe('exact normal-finish qualification', () => {
     const list = buildToplist([standing(1, 8), { ...standing(2, 6), withdrawn: true }, standing(3, 3)],
       [session(1, [heat(1, [1, 2, 3], [race(1)])])], [], SECTION, 2);
     expect(list.rows[2]).toMatchObject({ needed: 3, neededForRunoff: true });
-    expect(toplistNote(list.rows[2])).toBe('3 needed for a run-off (normal finishes)');
+    expect(toplistNote(list.rows[2])).toBe('3 pts needed for a run-off (normal finishes)');
   });
 
   it('finds the minimum run-off gain when no outright finish is possible', () => {
