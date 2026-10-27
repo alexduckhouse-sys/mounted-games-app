@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
+import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
 import { RulebooksPage } from './RulebooksPage';
 
 const auth = vi.hoisted(() => ({ admin: true }));
@@ -195,6 +196,17 @@ describe('RulebooksPage', () => {
     await user.clear(screen.getByRole('searchbox', { name: 'Find a race' }));
     await user.type(screen.getByRole('searchbox', { name: 'Find a race' }), 'zzz');
     expect(screen.getByText('No race matches “zzz”.')).toBeInTheDocument();
+  });
+
+  it('puts Rules and the event name in the app header with a back arrow, not in a second band', async () => {
+    function Header() { const { header } = useCompactPageBarState(); return <output data-testid="header">{header ? `${header.title}|${header.subtitle}|${header.backTo}|${header.plain ? 'plain' : 'link'}` : 'none'}</output>; }
+    render(<MemoryRouter><CompactPageBarProvider><Header /><RulebooksPage /></CompactPageBarProvider></MemoryRouter>);
+    await screen.findByRole('button', { name: /^Event handbook/ });
+    expect(screen.getByTestId('header')).toHaveTextContent('Rules|Sample Games|/competitions/7|link');
+    expect(screen.queryByText('Back to event')).not.toBeInTheDocument();
+    expect(document.querySelector('.rf-hd')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Add rulebook' }));
+    expect(screen.getByTestId('header')).toHaveTextContent('New rulebook|');
   });
 
   it('loads the game rules again from the Try again button', async () => {
