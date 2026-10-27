@@ -1,3 +1,5 @@
+import { tr, type Translate } from '../i18n/translate';
+
 /** An hour out the ring is full; it empties as the heat comes closer. */
 export const RING_WINDOW_MIN = 60;
 /** From this many minutes out the ring turns amber. */
@@ -22,8 +24,8 @@ export function ringState(at: Date | null | undefined, live: boolean, now: Date)
 }
 
 /** What a screen reader hears for the ring. */
-export function ringLabel(state: RingState): string {
-  if (state.tone === 'live') return 'On now';
-  if (state.tone === 'due') return 'Due now';
-  return `Starts in ${state.minutes} ${state.minutes === 1 ? 'minute' : 'minutes'}`;
+export function ringLabel(state: RingState, t: Translate = tr): string {
+  if (state.tone === 'live') return t('competition.timetable.statusLive');
+  if (state.tone === 'due') return t('competition.ring.dueNow');
+  return t('competition.ring.starts', { minutes: t('competition.timetable.minutes', { count: state.minutes }) });
 }

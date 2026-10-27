@@ -1,6 +1,7 @@
 import type { Sponsor } from '../types';
 import { LazyImage } from './LazyImage';
 import { isHttpsLink, logoSrc } from '../lib/sponsors';
+import { useT } from '../i18n/LanguageContext';
 
 /** Where every sponsor link goes: a new tab, marked as paid and cut off from this page. */
 export const SPONSOR_LINK_REL = 'sponsored noopener noreferrer';
@@ -10,10 +11,11 @@ export const SPONSOR_LINK_REL = 'sponsored noopener noreferrer';
  * waits for a tap in lite mode, like every picture (`LazyImage`).
  */
 export function SponsorBadge({ sponsor, large = false }: { sponsor: Sponsor; large?: boolean }) {
+  const t = useT();
   const src = sponsor.logoUrl ? logoSrc(sponsor.logoUrl, import.meta.env.VITE_API_BASE) : null;
   const content = (
     <>
-      {src && <LazyImage src={src} alt={`${sponsor.name} logo`} compact className="mg-sponsor-logo" />}
+      {src && <LazyImage src={src} alt={t('competition.sponsors.logo', { name: sponsor.name })} compact className="mg-sponsor-logo" />}
       <span className="mg-sponsor-name">{sponsor.name}</span>
     </>
   );

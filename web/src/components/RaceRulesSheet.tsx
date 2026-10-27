@@ -8,6 +8,8 @@ import type { RaceTemplate } from '../types';
 import { Notice } from './Notice';
 import { RaceDiagram } from './RaceDiagram';
 
+import { useT } from '../i18n/LanguageContext';
+
 export const GOVERNING_BODIES = ['EGUK', 'Pony Club', 'MGA', 'STRUK'] as const;
 export type GoverningBody = (typeof GOVERNING_BODIES)[number];
 
@@ -122,18 +124,19 @@ export function RaceRulebookSection({
   showDiagram?: boolean;
   diagramHeight?: number;
 }) {
+  const t = useT();
   const [activeBody, setActiveBody] = useState<GoverningBody>('EGUK');
   const rulebooks = buildRaceRulebooks(template);
   const current = rulebooks.find((r) => r.body === activeBody) ?? rulebooks[0];
 
   return (
-    <div className="mt-3 space-y-3" aria-label={`Rulebooks for ${template.name}`}>
+    <div className="mt-3 space-y-3" aria-label={t('competition.rules.rulebooksFor', { name: template.name })}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 text-sm font-bold text-[rgb(var(--mg-heading))]">
           <BookOpen className="h-4 w-4" aria-hidden="true" />
-          <span>Rulebooks · {template.name}</span>
+          <span>{t('competition.rules.rulebooks', { name: template.name })}</span>
         </div>
-        <div role="tablist" aria-label="Rulebook governing body" className="flex flex-wrap gap-1.5">
+        <div role="tablist" aria-label={t('competition.rules.body')} className="flex flex-wrap gap-1.5">
           {GOVERNING_BODIES.map((body) => {
             const selected = activeBody === body;
             return (
@@ -164,7 +167,7 @@ export function RaceRulebookSection({
 
       <div
         role="tabpanel"
-        aria-label={`${current.body} rules`}
+        aria-label={t('competition.rules.bodyRules', { body: current.body })}
         className="rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-subtle))] p-3 space-y-2.5 text-sm"
       >
         <div className="flex flex-wrap items-baseline justify-between gap-1 border-b border-[rgb(var(--mg-rule-soft))] pb-2">
@@ -174,22 +177,22 @@ export function RaceRulebookSection({
 
         <div className="grid gap-2 sm:grid-cols-2">
           <div>
-            <div className="text-xs font-bold uppercase tracking-wide text-[rgb(var(--mg-muted))]">Equipment</div>
+            <div className="text-xs font-bold uppercase tracking-wide text-[rgb(var(--mg-muted))]">{t('competition.rules.equipment')}</div>
             <p className="text-[rgb(var(--mg-body))]">{current.equipment}</p>
           </div>
           <div>
-            <div className="text-xs font-bold uppercase tracking-wide text-[rgb(var(--mg-muted))]">Arena setup</div>
+            <div className="text-xs font-bold uppercase tracking-wide text-[rgb(var(--mg-muted))]">{t('competition.rules.setup')}</div>
             <p className="text-[rgb(var(--mg-body))]">{current.setup}</p>
           </div>
         </div>
 
         <div>
-          <div className="text-xs font-bold uppercase tracking-wide text-[rgb(var(--mg-muted))]">How the race is ridden</div>
+          <div className="text-xs font-bold uppercase tracking-wide text-[rgb(var(--mg-muted))]">{t('competition.rules.howRidden')}</div>
           <p className="whitespace-pre-wrap text-[rgb(var(--mg-body))]">{current.howToRide}</p>
         </div>
 
         <div>
-          <div className="text-xs font-bold uppercase tracking-wide text-[rgb(var(--mg-muted))]">Rules &amp; penalties</div>
+          <div className="text-xs font-bold uppercase tracking-wide text-[rgb(var(--mg-muted))]">{t('competition.rules.penalties')}</div>
           <p className="text-[rgb(var(--mg-body))]">{current.penalties}</p>
         </div>
       </div>
@@ -206,6 +209,7 @@ export function RaceRulesSheet({
   open: boolean;
   onClose: () => void;
 }) {
+  const t = useT();
   const titleId = useId();
   const [loaded, setLoaded] = useState<{ key: string; detail: RaceTemplateDetail | null } | null>(null);
   const activeKey = raceName?.trim().toLowerCase() ?? '';
@@ -243,8 +247,8 @@ export function RaceRulesSheet({
           {template?.name ?? raceName}
         </h2>
 
-        {loading && !template && <Notice tone="info">Loading race rules…</Notice>}
-        {!loading && !template && <Notice tone="info" role={null}>No rules have been added for this race yet.</Notice>}
+        {loading && !template && <Notice tone="info">{t('competition.rules.loadingRace')}</Notice>}
+        {!loading && !template && <Notice tone="info" role={null}>{t('competition.rules.none')}</Notice>}
         {template && (
           <div className="space-y-3">
             {template.summary && <p className="text-sm text-[rgb(var(--mg-body))]">{template.summary}</p>}
@@ -255,13 +259,13 @@ export function RaceRulesSheet({
                 onClick={onClose}
                 className="mg-text-link text-xs"
               >
-                Open race rulebook page
+                {t('competition.rules.openPage')}
               </Link>
             </div>
           </div>
         )}
         <div className="kit-acts">
-          <button type="button" className="kit-pill kit-pill-fill" aria-label="Close rules" onClick={onClose}>Close</button>
+          <button type="button" className="kit-pill kit-pill-fill" aria-label={t('competition.rules.close')} onClick={onClose}>{t('common.close')}</button>
         </div>
       </div>
     </div>
