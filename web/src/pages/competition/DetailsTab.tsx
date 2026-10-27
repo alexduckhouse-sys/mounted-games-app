@@ -13,6 +13,7 @@ import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { CompetitionTeamCard } from './CompetitionTeamCard';
 import { EmbedCard } from './EmbedCard';
+import { HorseboxEntranceCard } from './HorseboxEntranceCard';
 import { ScorerLinksCard } from './ScorerLinksCard';
 import { EventSponsorsSection } from './SponsorsCard';
 import { usePageWidth } from '../../components/pageWidthState';
@@ -122,6 +123,8 @@ export function DetailsTab() {
           )}
         </dl>
       </section>
+
+      <HorseboxEntranceCard competition={competition} />
 
       <h2 className="sp-sec">At the event</h2>
       <div className="ev-flat" role="list" aria-label="At the event">

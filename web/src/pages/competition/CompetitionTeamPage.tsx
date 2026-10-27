@@ -26,8 +26,15 @@ import { statsProfileHref } from '../../lib/stats';
 import { StatsSubjectKind } from '../../types';
 import type { TeamProfile, TeamProfileHistory } from '../seasons/teamProfileTypes';
 import { byDrawnLane } from './laneRules';
+import { StoryCardButton } from '../../components/StoryCardButton';
+import { getSectionProvisionalState } from '../../lib/provisionalResults';
 
-const isRaceSession = (session: Session) => (session.kind ?? (session.isBreak ? 1 : 0)) === 0;
+function storyDateLabel(iso: string | null | undefined): string | null {
+  const d = iso ? new Date(iso) : null;
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null;
+}
+
+const isRaceSession =(session: Session) => (session.kind ?? (session.isBreak ? 1 : 0)) === 0;
 const isHeatDone = (heat: Heat) => !!heat.finishedAt || (heat.races.length > 0 && heat.races.every((r) => r.isComplete));
 
 export function CompetitionTeamPage() {
@@ -330,6 +337,19 @@ export function CompetitionTeamPage() {
           <div className={row}><dt className="w-24 shrink-0 text-[rgb(var(--mg-muted))]">Points</dt><dd className="m-0 min-w-0 flex-1">{pointsText}</dd></div>
           <div className={row}><dt className="w-24 shrink-0 text-[rgb(var(--mg-muted))]">Races left</dt><dd className="m-0 min-w-0 flex-1">{racesLeft}</dd></div>
         </dl>
+        {standings.length > 0 && (
+          <StoryCardButton
+            input={{
+              competitionName: competition.name,
+              sectionName: sectionLabel,
+              standings,
+              featuredTeamId: team.id,
+              dateLabel: storyDateLabel(competition.startDate),
+              locationLabel: competition.location ?? null,
+              isProvisional: getSectionProvisionalState(competition.sessions, team.competitionSectionId)?.isProvisional ?? false,
+            }}
+          />
+        )}
       </section>
 
       {/* One Heats list: a heat shows its lane, a final doesn't (final lanes come from the rankings) */}

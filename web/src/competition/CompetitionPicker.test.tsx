@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -56,6 +56,17 @@ describe('CompetitionPicker: the list', () => {
     await loaded('Autumn Open');
     expect(get).toHaveBeenCalledWith('/competitions/picker', { params: { past: false, page: 1 }, signal: expect.any(AbortSignal) });
     expect(screen.getByRole('heading', { level: 1, name: 'Competitions' })).toBeInTheDocument();
+  });
+
+  it('starts loading a competition when it is pointed at or pressed, once each', async () => {
+    renderPicker();
+    await loaded('Autumn Open');
+    const row = within(screen.getByRole('region', { name: 'Coming up' })).getAllByRole('button')[0];
+    fireEvent.mouseEnter(row);
+    fireEvent.pointerDown(row);
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Open competition: Today Cup' }));
+    const warmed = get.mock.calls.map(([url]) => url).filter((url) => /^\/competitions\/\d+$/.test(String(url)));
+    expect(warmed).toEqual([`/competitions/${autumn.id}`, `/competitions/${today.id}`]);
   });
 
   it('shows a placeholder while the first load is under way', () => {

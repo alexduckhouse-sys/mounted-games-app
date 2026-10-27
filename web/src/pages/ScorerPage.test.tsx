@@ -156,6 +156,15 @@ describe('ScorerPage', () => {
     expect(region.querySelectorAll('.sc-band')).toHaveLength(3);
   });
 
+  it('opens on the session running in this arena, ahead of an earlier one left unfinished', async () => {
+    link.get.mockResolvedValue({ data: timetable({ sessions: [
+      session(1, { arenaName: 'Main', status: 0, heats: [heatWith({ races: [race(21, { name: 'Sack race' })] })] }),
+      session(2, { arenaName: 'Main', status: 1, heats: [heat(2, { label: 'Heat 1', entries, races: [race(31, { name: 'Mug race' })] })] }),
+    ] }) });
+    open();
+    expect(await opened('Mug race')).toBeInTheDocument();
+  });
+
   it('asks why an eliminated team is out and records the reason, while having no HC button', async () => {
     const user = userEvent.setup();
     open();
@@ -166,6 +175,12 @@ describe('ScorerPage', () => {
     await waitFor(() => expect(placed()).toBe(2));
     await user.click(screen.getByRole('button', { name: 'SAVE SCORES' }));
     const sheet = await screen.findByRole('dialog', { name: 'Why were teams eliminated?' });
+    // The official faults sit in a grid, with the non-finishes and Other in their own group after them.
+    const reasons = within(sheet).getByRole('group', { name: 'Reason for Team 2' });
+    expect(reasons).toHaveClass('sc-reasons');
+    expect(within(reasons).getByRole('button', { name: 'Hatband on wrong rider' })).not.toHaveAttribute('data-kind');
+    expect(within(reasons).getAllByRole('button').filter((b) => b.dataset.kind === 'finish').map((b) => b.textContent))
+      .toEqual(['Did not start', 'Did not finish', 'Retired', 'Other']);
     await user.click(within(sheet).getByRole('button', { name: 'Did not start' }));
     await user.click(within(sheet).getByRole('button', { name: 'Save race' }));
     expect(outbox()[0].places).toEqual([

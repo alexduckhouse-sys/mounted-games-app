@@ -26,6 +26,11 @@ import { PageGrid } from '../../components/PageGrid';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { formatPoints } from '../../lib/formatPoints';
+import { ProvisionalBadge } from '../../components/ProvisionalStatus';
+import { StoryCardButton } from '../../components/StoryCardButton';
+import { useProvisionalState } from '../../hooks/useProvisionalState';
+import { competitionDateText } from '../../lib/competitionDates';
+import { getSectionProvisionalState } from '../../lib/provisionalResults';
 
 /** The three tabs of the age group page: the draw (Heats), the heat tables (Scores) and the Toplist. */
 export type SectionSubTab = 'draw' | 'scores' | 'toplist';
@@ -181,6 +186,8 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   const standings = !standingsError && currentResult ? currentResult.rows : savedStandings?.data ?? NO_ROWS;
   const standingsStale = currentResult ? currentResult.savedCopy || currentResult.source !== refreshSource : savedStandings != null;
   const standingsLoading = sectionId != null && !currentResult && !savedStandings && standings.length === 0;
+  // Whether this age group's finished results are still open to queries, held for a review, or official.
+  const provisional = useProvisionalState((now) => getSectionProvisionalState(competition.sessions, sectionId, now));
   useEffect(() => {
     if (sectionId == null) return;
     let cancelled = false;
@@ -349,6 +356,19 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   const toplist = (
     <section aria-label={sectionLabel} className="flex flex-col">
       <div className="flex flex-col gap-2.5 pt-3 empty:hidden">{notices}</div>
+      {standings.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 pt-3">
+          <ProvisionalBadge state={provisional} />
+          <StoryCardButton className="ml-auto" input={{
+            competitionName: competition.name,
+            sectionName: sectionName || 'Age group',
+            standings,
+            dateLabel: competition.startDate ? competitionDateText(competition.startDate, competition.endDate) : null,
+            locationLabel: competition.location || null,
+            isProvisional: provisional?.isProvisional ?? false,
+          }} />
+        </div>
+      )}
       {standings.length > 0 && <ToplistView list={list} section={section} competitionId={competition.id} teams={competition.teams} chosenView={chosenView} onChooseView={chooseView} heatTables={scores} />}
       {sectionId != null && <div className="pt-3"><TackLeaderboard competitionId={competition.id} sectionId={sectionId} refresh={retry} /></div>}
     </section>

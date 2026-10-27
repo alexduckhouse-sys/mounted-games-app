@@ -6,6 +6,7 @@ import { streamHeatLabel, streamLink } from '../../lib/streams';
 import { SPECTATOR_NOTICE } from '../../lib/termsTick';
 import { browserViewerDependencies, createStreamViewer, type ViewerSnapshot } from '../../live/streamViewer';
 import type { StreamInvoke } from '../../live/streamRuntime';
+import { useShowgroundRadio } from '../../hooks/useShowgroundRadio';
 import { useLiteMode } from '../../lite/LiteModeContext';
 import { CompetitionContext } from '../../pages/competition/context';
 import { StreamChips } from './StreamChips';
@@ -64,7 +65,7 @@ export function LiveVideo({ competitionId, streams, sessions, invoke, ready, mes
       </div>
       {typeof RTCPeerConnection === 'undefined' ? <p role="status" className="mg-card p-4">Live video is not supported in this browser.</p>
         : lite && !tapped ? <TapToWatch stream={selected} captionBar={publicLayout} onTap={() => setTapped(true)} />
-        : <ConnectedPlayer key={selected.id} stream={selected} invoke={invoke} ready={ready} onMedia={onMedia} announcement={messages.filter((item) => item.message.type === 2).at(-1)} captionBar={publicLayout} label={label} />}
+        : <ConnectedPlayer key={selected.id} stream={selected} invoke={invoke} ready={ready} onMedia={onMedia} announcement={messages.filter((item) => item.message.type === 2).at(-1)} captionBar={publicLayout} label={label} competitionName={competitionName} />}
       <p className={`m-0 text-xs text-[rgb(var(--mg-muted))] ${publicLayout ? 'px-4 pt-2' : ''}`}>{SPECTATOR_NOTICE}</p>
     </> : fallback ? <CompStreamCard key={fallback} streamUrl={fallback} compName={competitionName} publicLayout={publicLayout} />
       : showPlaceholder ? <div className="live-stream-placeholder mg-card" role="status"><strong>The stream hasn’t started</strong></div> : null}
@@ -78,8 +79,8 @@ function TapToWatch({ stream, captionBar, onTap }: { stream: LiveStream; caption
     <small>{stream.arenaName} · {stream.angleName}. Video uses a lot of data, so it only starts when you tap.</small>
   </button>;
 }
-function ConnectedPlayer({ stream, invoke, ready, announcement, captionBar, label, onMedia }: {
-  stream: LiveStream; invoke: StreamInvoke; ready: number; onMedia?: (media: MediaStream | null) => void;
+function ConnectedPlayer({ stream, invoke, ready, announcement, captionBar, label, competitionName, onMedia }: {
+  stream: LiveStream; competitionName: string; invoke: StreamInvoke; ready: number; onMedia?: (media: MediaStream | null) => void;
   announcement?: { message: ChatMessage; receivedAt: number };
   captionBar?: boolean; label: string | null;
 }) {
@@ -95,6 +96,8 @@ function ConnectedPlayer({ stream, invoke, ready, announcement, captionBar, labe
     onMedia?.(snapshot.media);
     return () => onMedia?.(null);
   }, [snapshot.media, onMedia]);
+  // With the video hidden this is a radio: the lock screen names the event, the arena and the heat on air.
+  useShowgroundRadio(snapshot.audioOnly === true, { competitionName, arenaName: stream.arenaName, heatLabel: label });
   useEffect(() => { viewer.current!.sync(ready, stream.generation); }, [ready, stream.generation, stream.competitionId, stream.id, invoke]);
   return <StreamPlayer media={snapshot.media} stream={stream} label={label} reconnecting={snapshot.state === 'reconnecting'} message={snapshot.message || (snapshot.state === 'connecting' ? 'Connecting…' : null)} announcement={announcement} captionBar={captionBar} quality={snapshot.preferredRid ?? 'f'} onQuality={(rid) => viewer.current?.setQuality(rid)} audioOnly={snapshot.audioOnly} onAudioOnly={(enabled) => viewer.current?.setAudioOnly(enabled)} onSyncLive={() => viewer.current?.syncLive()} />;
 }

@@ -239,6 +239,30 @@ it('shows Carried Forward (CF) column on lettered Finals and includes CF in tota
   expect(formatPoints(24.51)).toBe('24.5');
 });
 
+it('adds no carried points to a final when the section starts its finals from zero', () => {
+  const qualHeat = heat(30, {
+    sessionId: 10, orderIndex: 0, label: 'Heat 1',
+    entries: [{ id: 1, teamId: 1, teamName: 'Oak A', laneIndex: 1 }],
+    races: [race(60, { name: 'Bending', isComplete: true, results: [{ id: 1, teamId: 1, teamName: 'Oak A', placing: 1, eliminated: false, points: 10 }] })],
+  });
+  const aFinalHeat = heat(31, {
+    sessionId: 11, orderIndex: 0, label: 'A Final',
+    entries: [{ id: 3, teamId: 1, teamName: 'Oak A', laneIndex: 1 }],
+    races: [race(61, { name: 'Flag', isComplete: true, results: [{ id: 3, teamId: 1, teamName: 'Oak A', placing: 1, eliminated: false, points: 6 }] })],
+  });
+  const qualSession = session(10, { competitionSectionId: 1, status: 2, heats: [qualHeat] });
+  const finalSession = session(11, { competitionSectionId: 1, status: 2, heats: [aFinalHeat] });
+  state.competition = competition({
+    id: 1, sessions: [qualSession, finalSession],
+    sections: [{ id: 1, competitionId: 1, format: 2, ageGroup: 'Seniors', displayName: 'Teams Seniors', carryPointsIntoFinal: false }],
+  });
+
+  render(<CompactPageBarProvider><MemoryRouter><HeatScores session={finalSession} heats={[aFinalHeat]} activeHeatId={31} /></MemoryRouter></CompactPageBarProvider>);
+
+  expect(screen.queryByRole('columnheader', { name: /CF/ })).not.toBeInTheDocument();
+  expect(within(screen.getByRole('row', { name: /Oak A/ })).getAllByRole('cell').map((c) => c.textContent)).not.toContain('16');
+});
+
 it('pre-fills S for a team scheduled to sit out an unscored race and links team names to the team page', () => {
   const entries = [1, 2, 3].map((id) => ({ id, teamId: id, teamName: `Team ${id}`, laneIndex: id }));
   const shownHeat = heat(17, {

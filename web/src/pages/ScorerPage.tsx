@@ -1,3 +1,4 @@
+import { useWakeLock } from '../hooks/useWakeLock';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, CloudOff, Eye, Film, Lock, Mic, MicOff, Pause, Play, RefreshCw, Square, Table2, Trophy, Video } from 'lucide-react';
 import { Notice } from '../components/Notice';
@@ -166,7 +167,7 @@ export function ScorerPage() {
         ) : (
           <>
             {session.scope === 2 && <RemoteStreamControlBar session={session} />}
-            <ScoreOutboxPanel competitionId={session.competitionId} />
+            <ScoreOutboxPanel competitionId={session.competitionId} competitionName={session.competitionName} alwaysImport />
             {raceSessions.length === 0
               ? <p className="mg-card p-4">Nothing is timetabled for this arena yet. It will appear here once the organiser adds it.</p>
               : <ArenaScoring key={session.competitionId} sessions={raceSessions} outbox={outbox} canStream={session.scope === 2} />}
@@ -604,8 +605,9 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
   const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Default to the first session with an unfinished heat, so the scorer lands where the action is.
+  // Default to this arena's running session, else the first with an unfinished heat, so the scorer lands where the action is.
   const session = sessions.find((s) => s.id === chosenSessionId)
+    ?? sessions.find((s) => s.status === 1 && s.heats.some((h) => !heatIsComplete(h)))
     ?? sessions.find((s) => s.heats.some((h) => !heatIsComplete(h))) ?? sessions[0];
 
   const [commentatorChoice, setCommentatorChoice] = useState<'yes' | 'no' | null>(() => {
@@ -637,6 +639,8 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
   const heat = heats.find((h) => h.id === chosenHeatId) ?? heats.find((h) => !heatIsComplete(h)) ?? heats[0] ?? null;
   const races = (heat?.races ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex);
   const activeRace = races.find((r) => r.id === chosenRaceId) ?? races.find((r) => !r.isComplete) ?? races[races.length - 1] ?? null;
+  // Keep the screen on while a race is open for scoring.
+  useWakeLock(Boolean(activeRace && !activeRace.isComplete));
   // A heat with more teams than lanes races only the lanes, so points are out of the lanes, not the teams.
   const sessionBase = sessionPointsBase(session.heats, session.lanesPerHeat);
   const laneRules = lanesOf(session);

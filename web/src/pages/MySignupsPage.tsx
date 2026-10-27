@@ -8,10 +8,13 @@ import { confirmDialog } from '../components/ConfirmDialog';
 import { Notice } from '../components/Notice';
 import { Sheet } from '../components/Sheet';
 import { priceLabel } from '../lib/money';
+import { guestRiderSummary } from '../lib/guestRider';
 import { groupSignups } from '../lib/mySignups';
+import { buildLorryStablingPassFromMySignup, downloadOfflineWalletPass } from '../lib/stablingPass';
 import { displaySectionName } from '../lib/section';
 import type { MySignup } from '../types';
 import { DemoEntryPayment } from './commerce/DemoEntryPayment';
+import { qrSvgMarkup, waitlistOfferState } from './operations/entryLogic';
 import '../components/sitePages.css';
 
 export interface ExtendedMySignup extends MySignup {
@@ -42,7 +45,7 @@ function statusOf(s: ExtendedMySignup): { label: string; due: boolean } {
   if (s.refundPending) return { label: 'Refund pending', due: false };
   if (s.isWithdrawn) return { label: 'Withdrawn', due: false };
   if (s.status === 3) return { label: 'Cancelled', due: false };
-  if (s.status === 0) return s.isWaitlist ? { label: 'Waiting list', due: false } : { label: 'Not paid', due: true };
+  if (s.status === 0) return s.isWaitlist ? { label: waitlistOfferState(s.waitlistOfferExpiresAt).state === 'open' ? 'Place offered' : 'Waiting list', due: false } : { label: 'Not paid', due: true };
   return { label: 'Paid', due: false };
 }
 
@@ -92,6 +95,24 @@ function SignupList() {
       setError(data?.code === 'draw-happened'
         ? data.message || 'You can’t withdraw once the draw has happened.'
         : 'Couldn’t withdraw this entry. Check your signal and try again.');
+    }
+  }
+
+  async function acceptSpot(signupId: number) {
+    const entry = signups?.find((item) => item.id === signupId);
+    if (!entry) return;
+    const fee = entry.amountMinor > 0
+      ? `The entry fee is ${priceLabel(entry.amountMinor)}, paid by bank transfer or the organiser’s payment link once you accept.`
+      : 'It’s free, so nothing to pay.';
+    if (!(await confirmDialog({ title: 'Take this place?', message: `${entry.competitionName}, ${displaySectionName(entry.sectionName)}. ${fee}`, confirmLabel: 'Accept the place' }))) return;
+    setError(null);
+    try {
+      const { data } = await api.post<ExtendedMySignup>(`/competitions/${entry.competitionId}/signups/${signupId}/accept-waitlist-spot`, {});
+      setSignups((cur) => cur?.map((item) => (item.id === signupId ? { ...item, ...data } : item)) ?? null);
+    } catch (caught) {
+      const data = (caught as { response?: { data?: { message?: string } | string } }).response?.data;
+      const message = typeof data === 'string' ? data : data?.message;
+      setError(message || 'Couldn’t accept the place. Check your signal and try again.');
     }
   }
 
@@ -170,14 +191,29 @@ function SignupList() {
         </section>
       ))}
 
-      {open && <EntrySheet signup={open} onClose={() => setOpenId(null)} onWithdraw={withdrawSignup} />}
+      {open && <EntrySheet signup={open} onClose={() => setOpenId(null)} onWithdraw={withdrawSignup} onAccept={acceptSpot} />}
     </div>
   );
 }
 
 /** One entry: what it is, then what can be done with it. Withdrawing closes the sheet first, then asks. */
-function EntrySheet({ signup: s, onClose, onWithdraw }: { signup: ExtendedMySignup; onClose: () => void; onWithdraw: (signupId: number) => Promise<void> }) {
+function EntrySheet({ signup: s, onClose, onWithdraw, onAccept }: { signup: ExtendedMySignup; onClose: () => void; onWithdraw: (signupId: number) => Promise<void>; onAccept: (signupId: number) => Promise<void> }) {
   const status = statusOf(s);
+  // Re-read every 30 seconds so the offer's countdown moves while the sheet is open.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    if (!s.waitlistOfferExpiresAt) return;
+    const timer = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, [s.waitlistOfferExpiresAt]);
+  const offer = s.isWaitlist && !s.isWithdrawn ? waitlistOfferState(s.waitlistOfferExpiresAt, now) : { state: 'none' as const };
+  const guestLine = guestRiderSummary(s.guest);
+  const hasPass = s.status === 1 && !s.isWaitlist && !s.isWithdrawn
+    && ((s.stablesCount ?? 0) > 0 || (s.hookupsCount ?? 0) > 0 || !!s.stableAssignment?.trim() || !!s.vehicleRegistration?.trim());
+  function savePass() {
+    const pass = buildLorryStablingPassFromMySignup(s);
+    downloadOfflineWalletPass(pass, qrSvgMarkup(pass.verificationUrl));
+  }
   const canWithdraw = (s.status === 0 || s.status === 1) && !s.isWithdrawn && !s.drawComplete;
   const declarationTeams = s.declarationAccessGranted && s.status < 2 && !s.isWithdrawn
     ? s.linkedTeams?.length ? s.linkedTeams : s.teamId ? [{ id: s.teamId, name: s.teamName || s.fullName }] : [] : [];
@@ -189,6 +225,7 @@ function EntrySheet({ signup: s, onClose, onWithdraw }: { signup: ExtendedMySign
     (s.stablesCount ?? 0) > 0 ? `Stabling: ${s.stablesCount} ${s.stablesCount === 1 ? 'stable' : 'stables'}${s.stablingClubOrTeam ? ` (${s.stablingClubOrTeam})` : ''}` : null,
     s.pairRequestToSignupId && s.pairRequestStatus === 'Pending' ? `Pair request sent to ${s.pairRequestToName ?? 'a rider'}, waiting for an answer` : null,
     s.ponyClubName ? `Pony Club: ${s.ponyClubName}` : null,
+    guestLine ? `Rider: ${guestLine}` : null,
   ].filter((note): note is string => note !== null);
   return (
     <Sheet title={s.competitionName} onClose={onClose}
@@ -196,7 +233,15 @@ function EntrySheet({ signup: s, onClose, onWithdraw }: { signup: ExtendedMySign
       {({ close }) => (
         <>
           {notes.map((note) => <p key={note} className="kit-sheet-text m-0">{note}</p>)}
+          {offer.state !== 'none' && (
+            <section aria-label="Place offered" className="flex flex-col gap-2 rounded-[14px] border-[1.5px] border-[rgb(var(--mg-button))] bg-[rgb(var(--mg-tint)/.55)] p-3.5">
+              <p className="kit-sheet-text m-0 font-semibold">{offer.state === 'open' ? 'A place has come up for you.' : 'The offer of a place has run out.'}</p>
+              <p className="kit-sheet-text m-0" role="status">{offer.state === 'open' ? `${offer.text}. Accept before then to keep it.` : 'You’re still on the waiting list. The organiser may offer you another place.'}</p>
+              {offer.state === 'open' && <button type="button" className="kit-pill kit-pill-fill" onClick={() => close(() => { onClose(); void onAccept(s.id); })}>Accept the place</button>}
+            </section>
+          )}
           <div className="flex flex-col gap-2">
+            {hasPass && <button type="button" className="kit-pill" onClick={savePass}>Save arrival pass</button>}
             {status.due && <Link to={`/competitions/${s.competitionId}/details`} className="kit-pill kit-pill-fill" aria-label={`How to pay for ${s.competitionName}`}>How to pay</Link>}
             {declarationTeams.map((t) => (
               <Link key={t.id} to={`/competitions/${s.competitionId}/declarations?team=${t.id}`} className="kit-pill">

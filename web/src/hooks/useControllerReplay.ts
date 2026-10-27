@@ -39,10 +39,17 @@ export function useControllerReplay({ competitionId, arena, streamId, media, sco
   const [justMadeId, setJustMadeId] = useState<string | null>(null);
   const preparation = useReplayPreparation();
   const prepare = preparation.prepare;
-  const hasMedia = Boolean(media);
+  // The buffer starts with the first video and then lives as long as the page (for this competition and arena).
+  // Switching camera remounts the player, which hands over no video for a moment; dropping the buffer then would
+  // lose the last 30 minutes, so a gap only pauses recording.
+  const live = Boolean(media);
+  const bufferKey = `${competitionId}:${arena}`;
+  const [armedKey, setArmedKey] = useState<string | null>(null);
+  if (media && armedKey !== bufferKey) setArmedKey(bufferKey);
+  const armed = armedKey === bufferKey;
 
   useEffect(() => {
-    if (!hasMedia) return;
+    if (!armed) return;
     const handle = createReplayBuffer({
       competitionId,
       streamId: streamIdRef.current ?? undefined,
@@ -55,12 +62,13 @@ export function useControllerReplay({ competitionId, arena, streamId, media, sco
       handle.dispose();
       if (buffer.current === handle) buffer.current = null;
     };
-  }, [hasMedia, competitionId, arena]);
+  }, [armed, competitionId, arena]);
 
   useEffect(() => {
-    if (!media || !buffer.current) return;
-    startPreservingSegments(buffer.current, media);
-  }, [media, competitionId, arena]);
+    if (!buffer.current) return;
+    if (media) startPreservingSegments(buffer.current, media);
+    else buffer.current.stop();
+  }, [media, armed, competitionId, arena]);
 
   // Keep a recording of each race when its result arrives. The first look only notes what is already there.
   const lastCard = useRef<string | null | undefined>(undefined);
@@ -71,9 +79,10 @@ export function useControllerReplay({ competitionId, arena, streamId, media, sco
     lastCard.current = latest.key;
     const sameArena = !latest.arenaName || latest.arenaName.trim().toLowerCase() === arena.trim().toLowerCase();
     const current = buffer.current;
-    if (!current || !sameArena) return;
+    // No video right now (between cameras): there is nothing of this race to keep.
+    if (!current || !sameArena || !live) return;
     void prepare((options) => current.saveClip(`${latest.heading} · ${latest.card.raceName}`, { ...options, durationSeconds: RACE_RECORDING_SECONDS }), (clip) => { tagSavedReplay(clip.id, 'race'); });
-  }, [scoreCards, arena, prepare]);
+  }, [scoreCards, arena, prepare, live]);
 
   const instant = useCallback((seconds: number, label: string, onSaved?: (clip: SavedReplayClip) => void) => {
     const current = buffer.current;

@@ -1,3 +1,4 @@
+import { useCompetitionPrefetch } from '../hooks/useCompetitionPrefetch';
 import { usePageWidth } from '../components/pageWidthState';
 import { useEffect, useId, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -108,6 +109,8 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
       return all;
     }, [])
     : [{ heading: 'Coming up', items: later }];
+  // Pointing at or pressing a competition starts loading it, so it opens straight away on a slow connection.
+  const { handlersFor } = useCompetitionPrefetch();
   const choose = (competition: CompetitionPickerItem) => {
     setCurrent({ id: competition.id, name: competition.name });
     navigate(`/competitions/${competition.id}`);
@@ -146,7 +149,7 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
           <section aria-label="On today">
             <h2 className="sp-sec sp-first">On today</h2>
             <div className="mg-cards-grid flex flex-col gap-1.5">
-              {onToday.map((competition) => <TodayCard key={competition.id} competition={competition} selected={current?.id === competition.id} onChoose={() => choose(competition)} />)}
+              {onToday.map((competition) => <TodayCard key={competition.id} competition={competition} selected={current?.id === competition.id} onChoose={() => choose(competition)} warm={handlersFor(competition.id)} />)}
             </div>
           </section>
         )}
@@ -154,7 +157,7 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
           <section key={group.heading} aria-label={group.heading}>
             <h2 className="sp-sec sp-first">{group.heading}</h2>
             <div className="mg-lines mg-lines-grid">
-              {group.items.map((competition) => <CompetitionRow key={competition.id} competition={competition} past={past} selected={current?.id === competition.id} onChoose={() => choose(competition)} />)}
+              {group.items.map((competition) => <CompetitionRow key={competition.id} competition={competition} past={past} selected={current?.id === competition.id} onChoose={() => choose(competition)} warm={handlersFor(competition.id)} />)}
             </div>
           </section>
         ))}
@@ -180,7 +183,9 @@ function Tags({ competition }: { competition: CompetitionPickerItem }) {
   return competition.entriesOpen ? <span className="mg-tag mg-tag-ok">Entries open</span> : null;
 }
 
-function TodayCard({ competition, selected, onChoose }: { competition: CompetitionPickerItem; selected: boolean; onChoose: () => void }) {
+type WarmHandlers = ReturnType<ReturnType<typeof useCompetitionPrefetch>['handlersFor']>;
+
+function TodayCard({ competition, selected, onChoose, warm }: { competition: CompetitionPickerItem; selected: boolean; onChoose: () => void; warm: WarmHandlers }) {
   const details = [competition.location?.trim(), competitionDateText(competition.startDate, competition.endDate)].filter(Boolean).join(' · ');
   return (
     <div className={`mg-card flex flex-col gap-1.5 !rounded-[10px] py-3.5 pl-3.5 pr-3 ${competition.live ? 'shadow-[inset_3px_0_0_rgb(var(--mg-red))]' : ''}`}>
@@ -190,20 +195,20 @@ function TodayCard({ competition, selected, onChoose }: { competition: Competiti
       </span>
       {details && <span className="mg-meta">{details}</span>}
       {competition.live && <span className="text-[15px]">{liveLine(competition.live)}</span>}
-      <button aria-pressed={selected} onClick={onChoose} className="sp-pill sp-pill-fill mt-1.5 self-start">
+      <button aria-pressed={selected} onClick={onChoose} {...warm} className="sp-pill sp-pill-fill mt-1.5 self-start">
         Open competition<span className="sr-only">: {competition.name}</span>
       </button>
     </div>
   );
 }
 
-function CompetitionRow({ competition, past, selected, onChoose }: { competition: CompetitionPickerItem; past: boolean; selected: boolean; onChoose: () => void }) {
+function CompetitionRow({ competition, past, selected, onChoose, warm }: { competition: CompetitionPickerItem; past: boolean; selected: boolean; onChoose: () => void; warm: WarmHandlers }) {
   const start = new Date(competition.startDate);
   const venue = competition.location?.trim();
   const multiDay = !!competition.endDate && competitionDateText(competition.startDate, competition.endDate) !== competitionDateText(competition.startDate, null);
   const when = past || multiDay || !venue ? competitionDateText(competition.startDate, competition.endDate, past) : null;
   return (
-    <button aria-pressed={selected} onClick={onChoose} className={`mg-line grid-cols-[44px_minmax(0,1fr)_14px] !min-h-[60px] !gap-x-3 !py-2 ${selected ? 'shadow-[inset_4px_0_0_rgb(var(--mg-heading))]' : ''}`}>
+    <button aria-pressed={selected} onClick={onChoose} {...warm} className={`mg-line grid-cols-[44px_minmax(0,1fr)_14px] !min-h-[60px] !gap-x-3 !py-2 ${selected ? 'shadow-[inset_4px_0_0_rgb(var(--mg-heading))]' : ''}`}>
       <span aria-hidden="true" className="flex flex-col items-center gap-0.5 text-[rgb(var(--mg-heading))]">
         <span className="mg-display text-[22px] font-bold leading-none">{Number.isNaN(start.getTime()) ? '–' : start.getDate()}</span>
         <span className="text-[11px] font-semibold uppercase leading-none tracking-[0.06em] text-[rgb(var(--mg-muted))]">{Number.isNaN(start.getTime()) ? '' : start.toLocaleDateString('en-GB', { month: 'short' })}</span>

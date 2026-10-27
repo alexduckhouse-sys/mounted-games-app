@@ -58,6 +58,8 @@ const InvitePage = lazy(() => import('./pages/InvitePage').then((module) => ({ d
 const CompetitionEditor = lazy(() => import('./pages/admin/CompetitionEditor').then((module) => ({ default: module.CompetitionEditor })));
 const FormatPage = lazy(() => import('./pages/admin/FormatPage').then((module) => ({ default: module.FormatPage })));
 const RulesLibraryPage = lazy(() => import('./pages/admin/RulesLibraryPage').then((module) => ({ default: module.RulesLibraryPage })));
+const ArenaCrewPage = lazy(() => import('./pages/competition/ArenaCrewPage').then((module) => ({ default: module.ArenaCrewPage })));
+const VolunteerRotaPage = lazy(() => import('./pages/competition/VolunteerRotaPage').then((module) => ({ default: module.VolunteerRotaPage })));
 const ArenaPage = lazy(() => import('./pages/competition/ArenaPage').then((module) => ({ default: module.ArenaPage })));
 const WeatherPage = lazy(() => import('./pages/competition/WeatherPage').then((module) => ({ default: module.WeatherPage })));
 const OperationsPage = lazy(() => import('./pages/operations/OperationsPage').then((module) => ({ default: module.OperationsPage })));
@@ -128,7 +130,9 @@ export default function App() {
                 <Route path="commentary" element={<CommentaryDeskPage />} />
                 <Route path="session/:sessionId" element={<AfterDrawOnly><SessionPage /></AfterDrawOnly>} />
                 <Route path="arena" element={<ArenaPage />} />
+                <Route path="arena-crew" element={<ArenaCrewPage />} />
                 <Route path="weather" element={<WeatherPage />} />
+                <Route path="volunteers" element={<VolunteerRotaPage />} />
                 <Route path="standings" element={<Navigate to="../scoring" replace />} />
                 <Route path="timetable" element={<Navigate to=".." replace />} />
                 <Route path="teams" element={<TeamsTab />} />

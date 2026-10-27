@@ -1,3 +1,5 @@
+import type { CatalogueItemOption, EventOrderLineOption } from '../../types';
+
 export type CommerceItemCategory = 0 | 1 | 2 | 3;
 export type CommerceListingStatus = 0 | 1 | 2 | 3;
 export type CommerceOrderStatus = 0 | 1 | 2 | 3 | 4 | 5;
@@ -17,6 +19,8 @@ export interface CatalogueItem {
   detailPrompt?: string | null;
   /** An example shown inside that box, such as "e.g. B12". */
   detailHint?: string | null;
+  /** The seller's options (sizes), in their order. Empty or missing when the item has none. */
+  options?: CatalogueItemOption[] | null;
   isActive: boolean;
   version: number;
   createdAt: string;
@@ -53,6 +57,8 @@ export interface PublicCompetitionListing {
   detailPrompt?: string | null;
   /** An example for the box, such as "e.g. B12". */
   detailHint?: string | null;
+  /** The seller's options (sizes), in their order. Empty or missing when the item has none. */
+  options?: CatalogueItemOption[] | null;
 }
 
 export interface EventCommerceSettings {
@@ -62,7 +68,7 @@ export interface EventCommerceSettings {
   updatedAt: string | null;
 }
 
-export interface EventOrderLine {
+export interface EventOrderLine extends EventOrderLineOption {
   id: number;
   listingId: number;
   catalogueItemId: number;

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronRight, CircleCheck, Plus } from 'lucide-react';
+import { ChevronRight, CircleCheck, Copy, Plus } from 'lucide-react';
+import { confirmDialog } from '../../../components/ConfirmDialog';
 import { Notice } from '../../../components/Notice';
 import { Sheet } from '../../../components/Sheet';
 import { useToast } from '../../../components/Toast';
@@ -11,12 +12,12 @@ import { parseBibAndFlag } from '../../../lib/bib';
 import { competitionDateText } from '../../../lib/competitionDates';
 import { formBanner, type LockInfo } from '../../../lib/decFormDeadline';
 import {
-  addLabel, blankRider, buildSubmitBody, canSubmit, decDraftKey, emptySlots, firstEmpty, isReserveSlot, normaliseSlotsForFormat, panelTitle, riderFromSaved,
-  phoneProblem, riderReady, ridersCount, ridersRequired, savedChoices, sendReason, slotFlagged, slotMeta, slotsFromForm, subtitleOf, teamIsFull,
-  type DecFormDraft, type DecRider, type Slot,
+  addLabel, applySavedTeamToForm, blankRider, buildSubmitBody, canSubmit, decDraftKey, emptySlots, firstEmpty, isReserveSlot, normaliseSlotsForFormat, panelTitle, riderFromSaved,
+  phoneProblem, riderReady, ridersCount, ridersRequired, savedChoices, savedTeamSummaryLabel, sendReason, slotFlagged, slotMeta, slotsFromForm, subtitleOf, teamIsFull,
+  type DecFormDraft, type DecRider, type SavedTeamAgeWarning, type Slot,
 } from '../../../lib/decForm';
 import { asked, STANDARD_CONFIG, type DecFormConfig } from '../../../lib/decFormConfig';
-import type { CompetitionDetail, DeclarationForm, SavedRider, Team } from '../../../types';
+import type { CompetitionDetail, DeclarationForm, SavedRider, SavedTeamDeclaration, Team } from '../../../types';
 import { RefineChoiceRow } from '../../refine/Refine';
 import { RiderPanel } from './RiderPanel';
 import { TermsDialog } from './TermsDialog';
@@ -79,6 +80,9 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
   const [termsOpen, setTermsOpen] = useState(false);
   const [trainerOpen, setTrainerOpen] = useState(false);
   const [trainerDraft, setTrainerDraft] = useState({ name: '', phone: '' });
+  const [savedTeams, setSavedTeams] = useState<SavedTeamDeclaration[]>([]);
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copied, setCopied] = useState<{ label: string; warnings: SavedTeamAgeWarning[] } | null>(null);
   const toast = useToast();
 
   // A form that was sent and then deleted starts again as not sent.
@@ -111,6 +115,19 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
       .catch(() => { if (!cancelled) setSaved([]); });
     return () => { cancelled = true; };
   }, [team.clubId]);
+
+  // Teams this person has declared before, for "Copy a previous team". Not offered once this form has been sent.
+  useEffect(() => {
+    if (sentBefore) return;
+    let cancelled = false;
+    Promise.resolve(api.get<SavedTeamDeclaration[]>(`/declaration-forms/my-saved-teams?excludeTeamId=${team.id}`))
+      .then((r) => {
+        if (cancelled || !Array.isArray(r?.data)) return;
+        setSavedTeams(r.data.filter((t) => Array.isArray(t?.riders) && t.riders.length > 0));
+      })
+      .catch(() => { /* the picker just doesn't show */ });
+    return () => { cancelled = true; };
+  }, [sentBefore, team.id]);
 
   // Keep the work in progress, so a dropped signal or a reload doesn't lose it. The tick is never kept.
   useEffect(() => {
@@ -200,6 +217,31 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
     }
   }
 
+  async function copyTeam(saved: SavedTeamDeclaration) {
+    if (slots.some(Boolean) && !(await confirmDialog({
+      title: 'Replace the riders?',
+      message: 'The riders already on this form will be swapped for the ones from that team.',
+      confirmLabel: 'Replace',
+    }))) return;
+    const year = competition.startDate ? new Date(competition.startDate).getFullYear() : null;
+    const applied = applySavedTeamToForm(saved, section?.format, config, {
+      targetAgeGroup: section?.ageGroup || section?.displayName,
+      competitionYear: year,
+    });
+    setSlots(applied.slots);
+    if (!teamName.trim() && applied.teamName) setTeamName(applied.teamName);
+    if (applied.bibs) setBibs(applied.bibs);
+    if (applied.flag) setFlag(applied.flag);
+    if (applied.trainerName) setTrainerName(applied.trainerName);
+    if (applied.phone) setPhone(applied.phone);
+    setSubmitted(false);
+    setTouched(true);
+    setError(null);
+    setActive(wide() ? firstEmpty(applied.slots) : null);
+    setForm(blankRider());
+    setCopied({ label: saved.entryTeamName || saved.teamName, warnings: applied.ageWarnings });
+  }
+
   const trainerPhoneBad = trainerDraft.phone.trim() !== '' && phoneProblem(trainerDraft.phone, config) !== null;
 
   return (
@@ -230,6 +272,31 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
           </div>
           {entryName && entryName.trim().toLowerCase() !== teamName.trim().toLowerCase() && (
             <p className="sp-note">Entered as “{entryName}”.</p>
+          )}
+
+          {!sentBefore && savedTeams.length > 0 && (
+            <div className="sp-card mt-3">
+              <button type="button" className="sp-row" onClick={() => setCopyOpen(true)}>
+                <Copy aria-hidden="true" className="h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-heading))]" strokeWidth={2.25} />
+                <span className="sp-grow">
+                  <span className="sp-t1">Copy a previous team</span>
+                  <span className="sp-t2">Fills in riders, ponies, bibs and trainer from a form you sent before</span>
+                </span>
+                <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
+              </button>
+            </div>
+          )}
+          {copied && (
+            <div className="mt-2 flex flex-col gap-2">
+              <p role="status" className="sp-note m-0">Copied from {copied.label}. Check each rider before you send.</p>
+              {copied.warnings.length > 0 && (
+                <Notice>
+                  {copied.warnings.length === 1 ? copied.warnings[0].message : (
+                    <>Some riders may be too old for this section:<ul className="m-0 mt-1 list-disc pl-5">{copied.warnings.map((w) => <li key={w.slotIndex}>{w.message}</li>)}</ul></>
+                  )}
+                </Notice>
+              )}
+            </div>
           )}
 
           <h3 className="sp-sec">Riders<small>{ridersCount(slots)}</small></h3>
@@ -324,6 +391,25 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
 
       {toast.node}
       {termsOpen && <TermsDialog termsText={competition.termsText} onClose={() => setTermsOpen(false)} />}
+      {copyOpen && (
+        <Sheet title="Copy a previous team" description="Pick a team you have declared before. You can change anything afterwards." onClose={() => setCopyOpen(false)}>
+          {({ close: closeSheet }) => (
+            <div className="sp-card" role="list" aria-label="Previous teams">
+              {savedTeams.map((saved) => (
+                <div key={`${saved.competitionId}-${saved.teamId}`} role="listitem">
+                  <button type="button" className="sp-row" onClick={() => closeSheet(() => { setCopyOpen(false); void copyTeam(saved); })}>
+                    <span className="sp-grow">
+                      <span className="sp-t1">{savedTeamSummaryLabel(saved)}</span>
+                      {saved.submittedAt && <span className="sp-t2">Sent {new Date(saved.submittedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+                    </span>
+                    <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </Sheet>
+      )}
       {trainerOpen && (
         <Sheet title="Trainer" onClose={() => setTrainerOpen(false)} initialFocus="#dec-trainer-name">
           {({ close: closeSheet }) => (

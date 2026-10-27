@@ -1,3 +1,4 @@
+import { useAudioLevel } from '../../hooks/useAudioLevel';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence } from 'framer-motion';
@@ -118,6 +119,7 @@ function BroadcastStudio() {
   const [showOverlays, setShowOverlays] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
   const live = ['starting', 'live', 'paused', 'reconnecting'].includes(snapshot.state);
+  const mic = useAudioLevel(snapshot.media, { isLive: live, muted: snapshot.audioMuted });
   const canControl = snapshot.state === 'live' || snapshot.state === 'paused';
   const currentStream = streams.find((stream) => stream.id === snapshot.streamId);
   const currentOverlay = overlay ?? DEFAULT_OVERLAY;
@@ -389,6 +391,24 @@ function BroadcastStudio() {
             {snapshot.audioMuted ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
             <span>{snapshot.audioMuted ? 'Muted' : 'Mic on'}</span>
           </button>
+          {live && snapshot.hasAudio && (
+            <span className="pointer-events-none flex items-center gap-1.5">
+              <span
+                role="meter"
+                aria-label="Microphone level"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(mic.level * 100)}
+                className="mg-stream-glass block h-1.5 w-16 overflow-hidden rounded-full"
+              >
+                <span
+                  className="block h-full w-full origin-left rounded-full bg-[rgb(var(--mg-ok))]"
+                  style={{ transform: `scaleX(${mic.isMuted ? 0 : mic.level})` }}
+                />
+              </span>
+              {mic.silentWarning && !snapshot.audioMuted && <span className="text-[11px] font-semibold text-white">No sound</span>}
+            </span>
+          )}
           <div role="group" aria-label="Stream quality" className="mg-stream-glass pointer-events-auto flex items-center gap-0.5 rounded-full p-0.5 text-xs font-bold">
             {ON_AIR_QUALITY_OPTIONS.map((opt) => (
               <button

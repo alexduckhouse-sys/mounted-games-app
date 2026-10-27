@@ -9,6 +9,7 @@ import { usePageWidth } from '../../components/pageWidthState';
 import { EntryRosette } from '../../components/Rosette';
 import { entryPhaseOnly } from '../../lib/competitionPhase';
 import { entryOptions, feeText, parseEntryKind, sectionFull, type EntryKind } from '../../lib/entryOptions';
+import { paymentLinkCtaLabel } from '../../lib/paymentLink';
 import { placesLeftText } from '../../lib/placesLeft';
 import { displaySectionName } from '../../lib/section';
 import { useCompetition } from './context';
@@ -74,6 +75,12 @@ export function EntryPage() {
         <h2 className="ev-title">Entry submitted</h2>
         <p className="ev-body">{sent.text}</p>
         {sent.bank && <BankDetailsCard details={sent.bank} />}
+        {sent.bank && sent.paymentLinkUrl && (
+          <div className="flex flex-col gap-1">
+            <p className="sp-note !m-0">Or pay online instead of by bank transfer. It opens the organiser’s payment page in a new tab.</p>
+            <a href={sent.paymentLinkUrl} target="_blank" rel="noopener noreferrer" className="sp-pill self-start">{paymentLinkCtaLabel()}</a>
+          </div>
+        )}
         {sent.enteredAs && (
           <EntryRosette team={sent.enteredAs} section={displaySectionName(section.displayName)} year={new Date(competition.startDate).getFullYear()} />
         )}

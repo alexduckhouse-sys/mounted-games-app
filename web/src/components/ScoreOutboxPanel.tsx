@@ -3,13 +3,14 @@ import { CloudOff } from 'lucide-react';
 import { describePlacings, discard, overrule, retry, type QueuedScore } from '../offline/scoreOutbox';
 import { flushOutbox, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
 import { confirmDialog } from './ConfirmDialog';
+import { OutboxTransfer } from './OutboxTransfer';
 import { Notice } from './Notice';
 import { Sheet } from './Sheet';
 import { useToast } from './Toast';
 import { TickerNumber } from './TickerNumber';
 
 /** Results saved on this phone that haven't reached the server yet, and any that need a decision. */
-export function ScoreOutboxPanel({ competitionId }: { competitionId: number }) {
+export function ScoreOutboxPanel({ competitionId, competitionName, alwaysImport = false }: { competitionId: number; competitionName?: string; alwaysImport?: boolean }) {
   const queued = useScoreOutbox().filter((q) => q.competitionId === competitionId);
   const [reasons, setReasons] = useState<Record<number, string>>({});
   const [storageError, setStorageError] = useState(false);
@@ -37,7 +38,7 @@ export function ScoreOutboxPanel({ competitionId }: { competitionId: number }) {
   const reasonOf = (q: QueuedScore) => reasons[q.raceId] ?? q.reason ?? '';
   const setReason = (q: QueuedScore, value: string) => setReasons((current) => ({ ...current, [q.raceId]: value }));
 
-  if (queued.length === 0 && !storageError) return <>{toast.node}</>;
+  if (queued.length === 0 && !storageError) return <>{alwaysImport && <OutboxTransfer competitionId={competitionId} competitionName={competitionName} />}{toast.node}</>;
 
   return (
     <div className="space-y-2">
@@ -84,6 +85,7 @@ export function ScoreOutboxPanel({ competitionId }: { competitionId: number }) {
           {waiting.length === 1 ? `${waiting[0].label} is` : <><TickerNumber value={waiting.length} format={String} /> races are</>} saved on this phone and will send when you have signal.
         </Notice>
       )}
+      {queued.length > 0 && <OutboxTransfer competitionId={competitionId} competitionName={competitionName} />}
       {toast.node}
     </div>
   );

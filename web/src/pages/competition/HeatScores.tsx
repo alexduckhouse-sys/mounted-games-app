@@ -158,6 +158,9 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
   const carriedForwardByTeam = useMemo(() => {
     const map = new Map<number, number>();
     if (!isFinalHeat) return map;
+    // A section that starts its finals from zero adds nothing, so the heat table agrees with the official standings.
+    const section = competition.sections?.find((x) => x.id === session.competitionSectionId);
+    if (section?.carryPointsIntoFinal === false) return map;
     for (const s of competition.sessions) {
       if ((s.kind ?? (s.isBreak ? 1 : 0)) !== 0) continue;
       if (session.competitionSectionId != null && s.competitionSectionId != null && s.competitionSectionId !== session.competitionSectionId) continue;
@@ -172,7 +175,7 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
       }
     }
     return map;
-  }, [competition.sessions, heat?.id, isFinalHeat, session.competitionSectionId]);
+  }, [competition.sections, competition.sessions, heat?.id, isFinalHeat, session.competitionSectionId]);
 
   const showCarriedForward = useMemo(
     () => isFinalHeat && [...carriedForwardByTeam.values()].some((pts) => pts > 0),

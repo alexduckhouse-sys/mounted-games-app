@@ -9,6 +9,7 @@ import { RaceSelect } from '../../components/RacePicker';
 import { Notice } from '../../components/Notice';
 import { Sheet } from '../../components/Sheet';
 import { ELIM_REASONS, OTHER_REASON, noteFor, reasonKeyOf, statusFor } from '../../lib/elimReasons';
+import { RESULT_STATUS } from '../../lib/resultStatus';
 import { hatbandFor, inLaneOrder } from '../../lib/laneOrder';
 import type { NextLanes } from '../../lib/nextRoundLanes';
 import type { PendingPlace } from '../../lib/raceScoring';
@@ -434,9 +435,11 @@ export function EliminationSheet({ places, names, onSave, onSkip, onCancel }: {
       {out.map((p) => (
         <div key={p.teamId} className="sc-field">
           <span className="sc-name">{names[p.teamId] ?? `Team ${p.teamId}`}</span>
-          <div className="sc-choices" role="group" aria-label={`Reason for ${names[p.teamId] ?? p.teamId}`}>
+          <div className="sc-choices sc-reasons" role="group" aria-label={`Reason for ${names[p.teamId] ?? p.teamId}`}>
             {ELIM_REASONS.map((r) => (
-              <button key={r.key} type="button" className="sc-choice" aria-pressed={choice[p.teamId]?.key === r.key}
+              // Faults come first; the non-finishes and Other start a new row of their own.
+              <button key={r.key} type="button" className="sc-choice" data-kind={r.status === RESULT_STATUS.Eliminated && r.key !== OTHER_REASON ? undefined : 'finish'}
+                aria-pressed={choice[p.teamId]?.key === r.key}
                 onClick={() => setChoice((c) => ({ ...c, [p.teamId]: { key: r.key, text: c[p.teamId]?.text ?? '' } }))}>
                 {r.label}
               </button>

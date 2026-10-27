@@ -71,6 +71,6 @@ describe('paymentLink', () => {
     expect(paymentProviderLabel('https://checkout.squareup.com/pay')).toBe('Square');
     expect(paymentProviderLabel('https://payments.example.org/checkout')).toBe('Card / Apple Pay');
     expect(paymentProviderLabel(null)).toBe('Card / Apple Pay');
-    expect(paymentLinkCtaLabel()).toBe('Pay Online by Card / Apple Pay →');
+    expect(paymentLinkCtaLabel()).toBe('Pay online');
   });
 });

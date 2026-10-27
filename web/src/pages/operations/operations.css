@@ -101,6 +101,7 @@
 .ops-outof { display: flex; align-items: center; gap: 10px; font: 600 14px/1.2 var(--mg-font); color: rgb(var(--mg-body)); }
 .ops-outof input { width: 64px; min-height: 44px; text-align: center; border: 1.5px solid rgb(var(--mg-border)); border-radius: 10px; font: 700 18px/1 var(--mg-font-display); background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); }
 .ops-dup { display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 16px; background: rgb(var(--mg-subtle)); border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.ops-call { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; font-weight: 600; color: rgb(var(--mg-heading)); text-decoration: underline; }
 .ops-danger-link { flex: none; min-height: 44px; padding: 0 4px; border: 0; background: transparent; color: rgb(var(--mg-elim)); font: 600 14px/1 var(--mg-font); text-decoration: underline; cursor: pointer; }
 
 /* Sections and races: cards with the section name above, navy bars between sections, even 52px rows. */

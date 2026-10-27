@@ -1,3 +1,4 @@
+import { HeatBibClash } from './HeatBibClash';
 import { useState } from 'react';
 import { ChevronRight, MoreHorizontal } from 'lucide-react';
 import { confirmDialog } from '../../components/ConfirmDialog';
@@ -97,7 +98,7 @@ function flagsOf(form: DeclarationForm | undefined): string[] {
 }
 
 /** Between heats: who is in the next heat, in which lane, with their dec forms, and the way to start scoring it. */
-export function BetweenHeats({ title, meta, heat, hatbands, decForms, startLabel, backLabel, onStart, onBack }: {
+export function BetweenHeats({ title, meta, heat, hatbands, decForms, startLabel, backLabel, onStart, onBack, onBibOverride }: {
   title: string;
   meta: string;
   heat: Heat;
@@ -107,6 +108,8 @@ export function BetweenHeats({ title, meta, heat, hatbands, decForms, startLabel
   backLabel: string;
   onStart: () => void;
   onBack: () => void;
+  /** Staff only: lets a bib colour clash in this heat be fixed. */
+  onBibOverride?: (teamId: number, colour: string | null) => Promise<void>;
 }) {
   const [openTeam, setOpenTeam] = useState<number | null>(null);
   const drawn = byDrawnLane(heat);
@@ -114,6 +117,7 @@ export function BetweenHeats({ title, meta, heat, hatbands, decForms, startLabel
     <div className="hv-page">
       <h2 className="hv-title">{title}</h2>
       <p className="hv-sub">{meta}</p>
+      {onBibOverride && <HeatBibClash heat={heat} onSet={onBibOverride} />}
       <div className="bh-list">
         {drawn.map((e, i) => {
           const lane = String(i + 1);

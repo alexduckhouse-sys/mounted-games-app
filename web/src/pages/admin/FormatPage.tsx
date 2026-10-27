@@ -23,6 +23,8 @@ import { useToast } from '../../components/Toast';
 import { usePageWidth } from '../../components/pageWidthState';
 import { DecFormConfigEditor } from './DecFormConfig';
 import { ScorerLinksCard } from '../competition/ScorerLinksCard';
+import { DrawUndoBanner } from '../operations/DrawUndoBanner';
+import { TimetableClashes } from '../operations/TimetableClashes';
 import { useCardsEnabled } from '../competition/ScoringParts';
 
 const DEFAULT_MINUTES = 10;
@@ -56,6 +58,7 @@ export function FormatPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [undoVersion, setUndoVersion] = useState(0);
   const toast = useToast();
   const [editing, setEditing] = useState<number | null>(null);
   const [cardsEnabled, toggleCardsEnabled] = useCardsEnabled(editingId ?? undefined);
@@ -218,6 +221,7 @@ export function FormatPage() {
         });
       }
     }, 'Couldn’t make the timetable. Check your signal and try again.');
+    if (ok) setUndoVersion((n) => n + 1);
     if (ok) setNotice(`Timetable generated for ${withTeams.length} ${withTeams.length === 1 ? 'session' : 'sessions'}.${skipped.length ? ` ${skipped.length} left alone because they had started.` : ''}`);
   }
 
@@ -296,6 +300,8 @@ export function FormatPage() {
       {error && <Notice>{error}</Notice>}
       {notice && <Notice tone="info">{notice}</Notice>}
       {toast.node}
+      {editingId != null && <DrawUndoBanner competitionId={editingId} version={undoVersion} onRestored={() => void reload()} />}
+      <TimetableClashes competition={competition} />
 
       <div className="flex flex-col gap-9 lg:grid lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:items-start lg:gap-7">
         <div className="flex min-w-0 flex-col gap-9">

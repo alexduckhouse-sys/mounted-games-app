@@ -336,6 +336,12 @@ html[data-lite="true"] .sc-hold { animation-duration: 350ms !important; }
 .sc-choices { display: flex; flex-wrap: wrap; gap: 6px; }
 .sc-choice { min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1.5px solid rgb(var(--mg-control)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); font: 600 14px/1.1 var(--mg-font); cursor: pointer; }
 .sc-choice[aria-pressed="true"] { background: rgb(var(--mg-button)); border-color: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); }
+/* Elimination reasons: an even grid (two across on a phone) so the long official list stays tappable and scannable.
+   The non-finishes and Other start their own row. */
+.sc-reasons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sc-reasons .sc-choice { padding: 8px 10px; text-align: left; line-height: 1.2; overflow-wrap: anywhere; }
+.sc-reasons .sc-choice:not([data-kind]) + .sc-choice[data-kind="finish"] { grid-column-start: 1; margin-top: 6px; }
+@media (min-width: 560px) { .sc-reasons { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 button.sc-done-name { background: none; border: 0; padding: 0; text-align: left; cursor: pointer; }
 
 /* Score override sheet controls. */

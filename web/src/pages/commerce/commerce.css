@@ -436,3 +436,33 @@ body:has(.mg-tabs) .shop-basket-bar { bottom: calc(84px + env(safe-area-inset-bo
 @keyframes shop-bar-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .shop-basket-bar { animation: none; } }
 html[data-lite="true"] .shop-basket-bar { animation: none; }
+
+/* Option pills on an event shop item: one row that wraps; chosen is a solid fill, sold out is struck through. */
+.shop-opts-wrap { padding: 0 16px 14px; }
+.shop-opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.shop-opt {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 44px; min-width: 44px; padding: 0 16px; box-sizing: border-box;
+  border: 1.5px solid rgb(var(--mg-button)); border-radius: 999px;
+  background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); font: 700 15px/1 var(--mg-font); cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.shop-opt:hover:not(:disabled) { background: rgb(var(--mg-subtle)); }
+.shop-opt[aria-checked="true"] { background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); }
+.shop-opt:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
+.shop-opt:disabled { cursor: not-allowed; }
+.shop-opt[data-sold-out="true"] { border-color: rgb(var(--mg-line)); color: rgb(var(--mg-muted)); text-decoration: line-through; background: transparent; }
+.shop-opt-n { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); font: 700 12px/1 var(--mg-font); }
+.shop-opt[aria-checked="true"] .shop-opt-n { background: rgb(var(--mg-button-ink)); color: rgb(var(--mg-button)); }
+.shop-opt-step { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; min-height: 44px; }
+.shop-opt-hint { margin: 10px 0 0; }
+@media (prefers-reduced-motion: reduce) { .shop-opt { transition: none; } }
+html[data-lite="true"] .shop-opt { transition: none; }
+
+/* Seller's option chips in the item sheet. */
+.seller-opt-add { display: flex; justify-content: flex-start; margin-top: -4px; }
+.seller-opt-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.seller-opt-chip { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 4px 0 14px; border-radius: 999px; background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); font: 700 15px/1 var(--mg-font); }
+.seller-opt-chip button { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: 0; padding: 0; border: 0; border-radius: 999px; background: transparent; color: rgb(var(--mg-muted)); cursor: pointer; }
+.seller-opt-chip button:hover { color: rgb(var(--mg-heading)); }
+.seller-opt-chip button:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }

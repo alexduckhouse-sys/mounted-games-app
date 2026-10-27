@@ -207,6 +207,21 @@ it('hands the live video to the page and takes it back when the player goes', as
   unmount(); expect(onMedia).toHaveBeenLastCalledWith(null);
 });
 
+it('shows the event and arena on the lock screen while the video is hidden, and clears it when it comes back', async () => {
+  vi.stubGlobal('RTCPeerConnection', fakePeerConstructor); vi.stubGlobal('MediaStream', fakeStreamConstructor);
+  const session = { metadata: null as unknown };
+  Object.defineProperty(navigator, 'mediaSession', { configurable: true, value: session });
+  vi.stubGlobal('MediaMetadata', class { constructor(init: object) { Object.assign(this, init); } });
+  render(<MemoryRouter><LiveVideo {...props()} canBroadcast={false} /></MemoryRouter>); await settle();
+  act(() => FakePeer.instances.at(-1)!.track()); await tick(2000);
+  expect(session.metadata).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Audio only' }));
+  expect(session.metadata).toMatchObject({ artist: 'Spring Games', title: expect.stringContaining('Main Arena') });
+  fireEvent.click(screen.getByRole('button', { name: 'Audio only' }));
+  expect(session.metadata).toBeNull();
+  Reflect.deleteProperty(navigator, 'mediaSession'); vi.unstubAllGlobals();
+});
+
 it('supports viewer quality switching, audio-only mode, sync live, picture-in-picture, and instant -15s replay on StreamPlayer', async () => {
   const onQuality = vi.fn();
   const onAudioOnly = vi.fn();

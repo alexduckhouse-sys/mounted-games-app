@@ -40,6 +40,19 @@ describe('storyResultCard (#10)', () => {
     expect(card.suggestedFileName).toBe('southern-championships-u15-teams-surrey-a-story.png');
   });
 
+  it('captions the podium in plain words, marked provisional when it is', () => {
+    const card = buildStoryResultCardData({
+      competitionName: 'Southern Championships',
+      sectionName: 'U15 Teams',
+      standings,
+      isProvisional: true,
+    });
+    const lines = card.captionText.split('\n');
+    expect(lines[0]).toBe('Southern Championships — U15 Teams (provisional)');
+    expect(lines[1]).toMatch(/^1st .+, [\d.]+ pts$/);
+    expect(card.captionText).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+
   it('renders onto a 1080x1920 canvas without throwing', () => {
     const card = buildStoryResultCardData({
       competitionName: 'Southern Championships',
