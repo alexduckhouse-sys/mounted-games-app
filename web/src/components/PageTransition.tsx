@@ -57,12 +57,13 @@ class PageTransitionHost extends Component<Props> {
   private cleanup: (() => void) | null = null;
 
   getSnapshotBeforeUpdate(prev: Props): Snapshot | null {
-    this.cleanup?.();
     const { mainRef, pathname, search, forced, popped, disabled } = this.props;
+    const samePath = prev.pathname === pathname;
+    // Any other re-render (the page finishing loading, a ticker update) must leave a running transition alone.
+    if (samePath && !(forced && !popped && prev.search !== search)) return null;
+    this.cleanup?.();
     const main = mainRef.current;
     if (disabled || !main || typeof main.animate !== 'function') return null;
-    const samePath = prev.pathname === pathname;
-    if (samePath && !(forced && !popped && prev.search !== search)) return null;
     const kind: PageTransitionKind | null = forced && !popped ? 'push' : transitionFor(prev.pathname, pathname, popped);
     if (!kind) return null;
     // A new page opens at the top; a move within the same page keeps the scroll it had.

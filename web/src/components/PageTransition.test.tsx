@@ -140,6 +140,16 @@ describe('PageTransition', () => {
     expect(animations).toHaveLength(0);
   });
 
+  it('keeps a slide running when the shell re-renders without a new page (the page loading, a ticker update)', () => {
+    mount('/competitions/4/teams');
+    act(() => go('/competitions/4/teams/9'));
+    expect(frames()).toHaveLength(2);
+    act(() => go('/competitions/4/teams/9?tab=stats'));
+    expect(frames()).toHaveLength(2);
+    expect(animations[0].cancel).not.toHaveBeenCalled();
+    expect(animations[1].cancel).not.toHaveBeenCalled();
+  });
+
   it('tidies up when the animation is cancelled, runs out of time, or another move starts', async () => {
     vi.useFakeTimers();
     mount('/competitions/4/teams');
