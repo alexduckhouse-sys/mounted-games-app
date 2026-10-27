@@ -1,8 +1,12 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Notice } from '../../components/Notice';
 import { useToast } from '../../components/Toast';
 import { Link } from 'react-router-dom';
-import { ChevronRight, ClipboardList, QrCode as QrCodeIcon, Sparkles, Users } from 'lucide-react';
+import { ChevronDown, ChevronRight, ClipboardList, Mail, MapPin, QrCode as QrCodeIcon, Sparkles, Users } from 'lucide-react';
+import { useStillMotion } from '../../lite/useStillMotion';
+import { activeLocale } from '../../i18n/translate';
+import { eventDetailRows, type DetailRow } from './eventDetailRows';
 import { useCompetition } from './context';
 import { EntryManagement } from './EntryManagement';
 import { useEntrySettings } from './entrySettings';
@@ -17,7 +21,7 @@ import { HorseboxEntranceCard } from './HorseboxEntranceCard';
 import { ScorerLinksCard } from './ScorerLinksCard';
 import { EventSponsorsSection } from './SponsorsCard';
 import { usePageWidth } from '../../components/pageWidthState';
-import type { CompetitionDetail, CompetitionSection, EquipmentLine, SectionSignup } from '../../types';
+import type { CompetitionSection, EquipmentLine, SectionSignup } from '../../types';
 import { feesLine, sectionFull } from '../../lib/entryOptions';
 import { placesLeftText } from '../../lib/placesLeft';
 import '../../components/sitePages.css';
@@ -36,17 +40,59 @@ function LinkRow({ to, href, label }: { to?: string; href?: string; label: strin
   return to ? <Link className="sp-row" to={to}>{inner}</Link> : <a className="sp-row" href={href}>{inner}</a>;
 }
 
-function Fact({ label, children }: { label: string; children: ReactNode }) {
-  return <div className="sp-fact"><dt>{label}</dt><dd className="break-words">{children}</dd></div>;
+const DETAIL_ICON_CLASS = 'h-5 w-5 shrink-0 text-[rgb(var(--mg-heading))]';
+
+function DetailLine({ row }: { row: DetailRow }) {
+  const icon = row.icon === 'pin' ? <MapPin aria-hidden="true" className={DETAIL_ICON_CLASS} />
+    : row.icon === 'mail' ? <Mail aria-hidden="true" className={DETAIL_ICON_CLASS} />
+      : row.icon === 'w3w' ? <span aria-hidden="true" className="w-5 shrink-0 text-center text-[15px] font-bold tracking-tighter text-[rgb(var(--mg-heading))]">{'///'}</span> : null;
+  const inner = (
+    <>
+      <span className="w-[7.25rem] shrink-0 text-[15.5px] leading-snug text-[rgb(var(--mg-muted))]">{row.label}</span>
+      <span className={`min-w-0 flex-1 break-words text-[16px] leading-snug ${row.href ? 'font-semibold text-[rgb(var(--mg-heading))]' : 'text-[rgb(var(--mg-ink))]'}`}>{row.value}</span>
+      {icon}
+    </>
+  );
+  const box = 'flex min-h-14 items-center gap-3 px-4 py-2.5 !no-underline hover:!no-underline';
+  return <li className="border-t border-[rgb(var(--mg-rule-soft))]">
+    {row.href
+      ? <a className={box} href={row.href} {...(row.href.startsWith('mailto:') ? {} : { target: '_blank', rel: 'noreferrer' })}>{inner}</a>
+      : <div className={box}>{inner}</div>}
+  </li>;
 }
 
-/** Where the venue is on a map: the organiser's own link, or a search for the pin when only its position is known. */
-function mapsUrl(competition: CompetitionDetail): string | null {
-  if (competition.appleMapsUrl) return competition.appleMapsUrl;
-  if (competition.latitude != null && competition.longitude != null) {
-    return `https://www.google.com/maps/search/?api=1&query=${competition.latitude},${competition.longitude}`;
-  }
-  return null;
+/** The foot of the title card: one row that opens, in the same card, everything the organiser has set. */
+function EventDetailsToggle({ rows, summary }: { rows: DetailRow[]; summary: string }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const still = useStillMotion();
+  const panelId = useId();
+  return (
+    <div className="border-t border-[rgb(var(--mg-rule-soft))]">
+      <button type="button" className="sp-row !min-h-16" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen((value) => !value)}>
+        <span className="sp-grow !gap-0.5">
+          <span className="text-[18px] font-semibold leading-tight text-[rgb(var(--mg-heading))]">{open ? t('competition.details.hideDetails') : t('competition.details.seeDetails')}</span>
+          {!open && <span className="sp-t2">{summary}</span>}
+        </span>
+        <ChevronDown aria-hidden="true" className={`h-5 w-5 shrink-0 text-[rgb(var(--mg-heading))] transition-transform duration-200 motion-reduce:transition-none [html[data-lite=true]_&]:transition-none ${open ? 'rotate-180' : ''}`} />
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="details"
+            id={panelId}
+            initial={still ? false : { height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={still ? undefined : { height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden"
+          >
+            <ul className="m-0 list-none p-0">{rows.map((row) => <DetailLine key={row.key} row={row} />)}</ul>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 }
 
 export function DetailsTab() {
@@ -83,66 +129,66 @@ export function DetailsTab() {
 
   const longDescription = (competition.description?.length ?? 0) > 140;
   const dates = competitionDateText(competition.startDate, competition.endDate, true);
-  const where = mapsUrl(competition);
-  const w3w = competition.what3Words?.replace(/^\/\/\//, '');
+  const lower = (key: Parameters<typeof t>[0]) => t(key).toLocaleLowerCase(activeLocale());
+  const detailRows = eventDetailRows(competition, {
+    venue: t('competition.details.venue'), postcode: t('competition.details.postcode'), lorryPark: t('competition.details.lorryPark'),
+    organiser: t('competition.details.organiser'), email: t('competition.details.email'), competitionNo: t('competition.details.compNo'),
+    summary: {
+      venue: lower('competition.details.venue'), postcode: lower('competition.details.postcode'), what3words: 'what3words', lorryPark: lower('competition.details.lorryPark'),
+      organiser: lower('competition.details.organiser'), email: lower('competition.details.email'), competitionNo: t('competition.details.compNoWords'),
+    },
+  });
+  const detailSummary = (() => {
+    const text = new Intl.ListFormat(activeLocale(), { style: 'long', type: 'conjunction' }).format(detailRows.map((row) => row.summaryName));
+    return text.charAt(0).toLocaleUpperCase(activeLocale()) + text.slice(1);
+  })();
+  // Dec forms are for the people who fill them in or run the event, not the public.
+  const showDecForms = !!user && (mayOrganise || hasRole('Trainer') || hasRole('Admin'));
   const enterLabel = !user ? t('competition.details.signInToEnter') : competition.sections.some((s) => s.format === 2) ? t('competition.details.enterTeam') : t('competition.details.enter');
   const enterTo = `/competitions/${competition.id}/enter`;
   const closed = entrySettings.closed && !mayOrganise;
 
   return (
-    <div className="ev-white rf-page mx-auto flex w-full max-w-xl flex-col pb-4 pt-3 lg:max-w-3xl">
+    <div className="rf-page mx-auto flex w-full max-w-xl flex-col pb-4 pt-3 lg:max-w-3xl">
       <h1 className="sr-only">{t('competition.details.heading')}</h1>
 
-      <section className="mg-card flex flex-col p-4" aria-label={t('competition.details.about')}>
-        <div className="flex flex-col gap-1 pb-3">
-          <h2 className="ev-title">{competition.name}</h2>
-          <span className="ev-sub">{[dates, competition.location].filter(Boolean).join(' · ')}</span>
-        </div>
-        {competition.description && (
-          <div>
-            <p className={`ev-body whitespace-pre-wrap ${longDescription && !descOpen ? 'line-clamp-2' : ''}`}>{competition.description}</p>
-            {longDescription && (
-              <button type="button" className="ev-text-btn" aria-expanded={descOpen} onClick={() => setDescOpen((open) => !open)}>
-                {descOpen ? t('competition.details.less') : t('competition.details.more')}
-              </button>
-            )}
+      <section className="mg-card flex flex-col overflow-hidden" aria-label={t('competition.details.about')}>
+        <div className="flex flex-col p-4">
+          <div className="flex flex-col gap-1 pb-3">
+            <h2 className="ev-title">{competition.name}</h2>
+            <span className="ev-sub">{[dates, competition.location].filter(Boolean).join(' · ')}</span>
           </div>
-        )}
-
-        <dl className="sp-facts ev-facts ev-card-facts mt-3" aria-label={t('competition.details.facts')}>
-          {competition.location && (
-            <Fact label={t('competition.details.venue')}>{competition.location}{where && <> <a className="ev-link whitespace-nowrap" href={where} target="_blank" rel="noreferrer">{t('competition.details.openMaps')}</a></>}</Fact>
+          {competition.description && (
+            <div>
+              <p className={`ev-body whitespace-pre-wrap ${longDescription && !descOpen ? 'line-clamp-2' : ''}`}>{competition.description}</p>
+              {longDescription && (
+                <button type="button" className="ev-text-btn" aria-expanded={descOpen} onClick={() => setDescOpen((open) => !open)}>
+                  {descOpen ? t('competition.details.less') : t('competition.details.more')}
+                </button>
+              )}
+            </div>
           )}
-          {competition.postcode && <Fact label={t('competition.details.postcode')}>{competition.postcode}</Fact>}
-          {w3w && (
-            <Fact label="what3words">
-              <a className="font-semibold text-[rgb(var(--mg-heading))] hover:underline" href={`https://what3words.com/${w3w}`} target="_blank" rel="noreferrer">{`///${w3w}`}</a>
-            </Fact>
-          )}
-          {competition.competitionNumber && <Fact label={t('competition.details.compNo')}>{competition.competitionNumber}</Fact>}
-          {competition.contactEmail && (
-            <Fact label={t('competition.details.email')}><a className="font-semibold text-[rgb(var(--mg-heading))] hover:underline" href={`mailto:${competition.contactEmail}`}>{competition.contactEmail}</a></Fact>
-          )}
-        </dl>
+        </div>
+        {detailRows.length > 0 && <EventDetailsToggle rows={detailRows} summary={detailSummary} />}
       </section>
 
       <HorseboxEntranceCard competition={competition} />
 
       <h2 className="sp-sec">{t('competition.details.atEvent')}</h2>
-      <div className="ev-flat" role="list" aria-label={t('competition.details.atEvent')}>
+      <div className="sp-card" role="list" aria-label={t('competition.details.atEvent')}>
         <LinkRow to="../teams" label={t('competition.details.teams')} />
-        <LinkRow to="../declarations" label={t('competition.details.decForms')} />
+        {showDecForms && <LinkRow to="../declarations" label={t('competition.details.decForms')} />}
         <LinkRow to="../shop" label={t('competition.details.shop')} />
         <LinkRow to="../shop" label={t('competition.details.stabling')} />
         <LinkRow to="../rulebooks" label={t('competition.details.rules')} />
         <LinkRow to="../arena" label={t('competition.details.arena')} />
         <LinkRow to="../weather" label={t('competition.details.weather')} />
         <LinkRow to="../contact" label={t('competition.details.contact')} />
+        {user && <EquipmentBlock competitionId={competition.id} />}
       </div>
-      {user && <EquipmentBlock competitionId={competition.id} />}
 
       <h2 className="sp-sec">{t('competition.details.sharePrint')}</h2>
-      <div className="ev-flat" role="list" aria-label={t('competition.details.sharePrint')}>
+      <div className="sp-card" role="list" aria-label={t('competition.details.sharePrint')}>
         <LinkRow href={competitionCalendarUrl(competition.id, window.location.origin)} label={t('competition.details.calendar')} />
         <EventShareRows competitionId={competition.id} competitionName={competition.name} />
         <LinkRow to={`/event-tools/${competition.id}/print/draw`} label={t('competition.details.printDraw')} />
@@ -155,7 +201,7 @@ export function DetailsTab() {
       {competition.sections.length > 0 && (
         <>
           <h2 className="sp-sec">{t('competition.details.enterHeading')}</h2>
-          <div className="ev-flat" role="list" aria-label={t('competition.details.ageGroups')}>
+          <div className="sp-card" role="list" aria-label={t('competition.details.ageGroups')}>
             {competition.sections.map((section) => (
               <div key={section.id} className="sp-row" role="listitem">
                 <span className="sp-grow"><span className="sp-t1">{section.displayName}</span>{!closed && placesLeftText(section) && <span className="sp-t2">{placesLeftText(section)}</span>}</span>
@@ -175,7 +221,7 @@ export function DetailsTab() {
       {mayOrganise && (
         <div className="mt-6 flex flex-col gap-3">
           <h2 className="sp-sec !mt-0">Organiser</h2>
-          <div className="ev-flat" role="list" aria-label="Organiser pages">
+          <div className="sp-card" role="list" aria-label="Organiser pages">
             <LinkRow to={`/competitions/${competition.id}/operations`} label="Manage entries and equipment" />
             <LinkRow to="../shop/manage" label="Manage event shop" />
             <LinkRow to="../operations" label="Operations, draw and tools" />
@@ -380,7 +426,7 @@ function EquipmentBlock({ competitionId }: { competitionId: number }) {
   const bucketOrder = ['Lane', 'Start', 'Mid', 'Top', 'Side', 'Other'];
 
   return (
-    <div className="ev-flat border-t border-[rgb(var(--mg-rule-soft))]">
+    <div>
       <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="sp-row">
         <span className="sp-grow"><span className="sp-t1 !font-medium">{t('competition.equipment.title')}</span></span>
         <ChevronRight aria-hidden="true" className={`sp-chev h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`} strokeWidth={2.5} />
