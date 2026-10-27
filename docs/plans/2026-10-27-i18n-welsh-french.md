@@ -36,3 +36,10 @@ Left in English for now: organiser, operations, creator wizard, scoring, stream 
 ## Review
 
 cy and fr are machine-drafted. `web/src/i18n/REVIEW.md` lists what needs a native speaker and the terms we were least sure of.
+
+## Outcome (first pass)
+
+- Also left in English: `SessionPage` and the heat picker and between-heats screens (scorer-facing), the team breakdown headings built in `lib/toplist.ts` (shared with the embed and TV kiosk), the on-video graphics, viewer connection messages from `live/streamViewer.ts`, the club shop and payouts pages, the flag picker's country names and the embed widget.
+- Consent wording (terms tick box, email opt-in) stays English because the English text is what is stored with each consent; Welsh and French show a reading beside it.
+- Bundle: all three catalogues sit in one shared `translate` chunk of 215 kB (57 kB gzip). The main `index` chunk went from 360.5 kB to 364.8 kB (gzip 107.91 to 107.94 kB). Loading Welsh and French on demand would take about two thirds of that off English visitors' first load; see the PR for the trade-off.
+- Checked at 390px wide in Chromium for the home, toplists, teams, team page, details, following, weather, entry, rulebooks, settings, login, sign-up and menu screens in both languages: no page scrolls sideways and no button, tab or chip is clipped.
