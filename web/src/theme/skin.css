@@ -253,7 +253,6 @@ body, body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-i
 .mg-conn-pill::after { content: ''; position: absolute; inset: -10px -6px; } /* 44 px tap target */
 .mg-conn-pill svg { width: 12px; height: 12px; }
 .mg-conn-pill:disabled { cursor: default; }
-.mg-conn-reconnecting { background: rgb(var(--mg-late-bg)); border-color: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); }
 .mg-conn-polling { background: rgb(var(--mg-surface)); border-color: rgb(var(--mg-control)); color: rgb(var(--mg-heading)); }
 /* Offline is grey, not red: losing signal isn't something the visitor did wrong. */
 .mg-conn-offline { background: rgb(var(--mg-surface)); border-color: rgb(var(--mg-dash)); color: rgb(var(--mg-body)); }
