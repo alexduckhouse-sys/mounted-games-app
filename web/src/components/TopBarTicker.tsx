@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ChevronDown, Video } from 'lucide-react';
+import { ChevronUp, SlidersHorizontal, Video } from 'lucide-react';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { tickerFocusAfterChange, type TickerItem, type TickerKind } from '../lib/ticker';
 import { useTicker } from './TickerContext';
@@ -10,7 +10,7 @@ const ROTATE_MS = 4500;
 const ANNOUNCEMENT_HOLD_MS = 10_000;
 const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
 
-/** The badge in front of each line; the dark strip keeps every badge readable in every theme. */
+/** The badge in front of each line; the dark dock keeps every badge readable in every theme. */
 const KIND_BADGES: Record<TickerKind, { label: string; className: string; srLabel?: string } | null> = {
   live: { label: 'Live', className: 'mg-badge-live' },
   next: { label: 'Next', className: 'mg-badge-soft' },
@@ -37,53 +37,68 @@ function subscribeReducedMotion(onChange: () => void) {
 }
 const prefersReducedMotion = () => window.matchMedia?.(REDUCED_MOTION).matches ?? false;
 
-/** One line that rolls through what is on now, delays, what is next and organiser announcements. Tap for the live feed. */
+function Line({ item, className }: { item: TickerItem; className: string }) {
+  const { badge, text } = badgeFor(item);
+  return (
+    <span aria-hidden="true" className={className}>
+      {badge && <span className={`mg-badge ${badge.className}`}>{badge.label}</span>}
+      <span className="min-w-0 flex-1 truncate">{text}</span>
+    </span>
+  );
+}
+
+/**
+ * The ticker dock just above the tab bar: one line that rolls through what is on now, delays, what is next and
+ * organiser announcements, each new line pushing the last one up and out. The arrow opens every update above it;
+ * a tap anywhere else closes that list. A page can put one button beside it (the timetable's filters).
+ */
 export function TopBarTicker() {
   const cap = PAGE_WIDTH_CLASS[usePageWidthValue()];
   const { current } = useCurrentCompetition();
-  // The header already shows the competition name, so the strip only appears when there is news.
-  const { items, watchCompetitionId } = useTicker();
+  // The header already shows the competition name, so the line only appears when there is news.
+  const { items, watchCompetitionId, dockAction } = useTicker();
   const reduceMotion = useSyncExternalStore(subscribeReducedMotion, prefersReducedMotion, () => false);
 
   // Follow the list as it changes: keep the current line, or jump to an announcement that has just arrived.
-  const [view, setView] = useState<{ items: TickerItem[]; activeKey: string | null; flashed: boolean }>(() => ({ items, activeKey: items[0]?.key ?? null, flashed: false }));
+  const [view, setView] = useState<{ items: TickerItem[]; activeKey: string | null }>(() => ({ items, activeKey: items[0]?.key ?? null }));
   let activeKey = view.activeKey;
-  let flashed = view.flashed;
   if (view.items !== items) {
     activeKey = tickerFocusAfterChange(view.items, items, view.activeKey);
-    const seen = new Set(view.items.map((item) => item.key));
-    flashed = view.items.length > 0 && items.some((item) => item.key === activeKey && item.kind === 'announcement' && !seen.has(item.key));
-    setView({ items, activeKey, flashed });
+    setView({ items, activeKey });
   }
   // With reduced motion nothing rotates by itself; the full list is one tap away.
   const index = Math.max(0, items.findIndex((item) => item.key === activeKey));
   const [open, setOpen] = useState(false);
   const panelId = useId();
-  const barRef = useRef<HTMLDivElement>(null);
+  const dockRef = useRef<HTMLDivElement>(null);
   const { pathname } = useLocation();
   const [openedAt, setOpenedAt] = useState(pathname);
   if (open && openedAt !== pathname) setOpen(false);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
-    const onPointer = (e: PointerEvent) => { if (!barRef.current?.contains(e.target as Node)) setOpen(false); };
+    const onPointer = (e: PointerEvent) => { if (!dockRef.current?.contains(e.target as Node)) setOpen(false); };
     document.addEventListener('keydown', onKey);
     document.addEventListener('pointerdown', onPointer);
     return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('pointerdown', onPointer); };
   }, [open]);
 
   const active = items[index] ?? (watchCompetitionId ? { key: 'stream', kind: 'info' as const, text: 'Live video' } : undefined);
+  // The line that was showing before, so the new one can push it up and out.
+  const [shown, setShown] = useState<{ current: TickerItem | undefined; previous: TickerItem | null }>({ current: active, previous: null });
+  if (shown.current?.key !== active?.key) setShown({ current: active, previous: shown.current ?? null });
+  const previous = shown.current?.key === active?.key ? shown.previous : shown.current ?? null;
+
   const holdMs = active?.kind === 'announcement' ? ANNOUNCEMENT_HOLD_MS : ROTATE_MS;
   useEffect(() => {
     if (reduceMotion || open || items.length < 2) return;
     const timer = setTimeout(() => {
-      setView((cur) => (cur.items === items ? { items, activeKey: items[(index + 1) % items.length].key, flashed: false } : cur));
+      setView((cur) => (cur.items === items ? { items, activeKey: items[(index + 1) % items.length].key } : cur));
     }, holdMs);
     return () => clearTimeout(timer);
   }, [items, index, holdMs, reduceMotion, open]);
 
-  if (!current || !active) return null;
-  const { badge, text } = badgeFor(active);
+  if (!current || (!active && !dockAction)) return null;
   const feed = `/competitions/${current.id}/chat`;
   const timetable = `/competitions/${current.id}`;
   const linkFor = (item: TickerItem) => {
@@ -91,54 +106,65 @@ export function TopBarTicker() {
     return item.kind === 'late' || item.kind === 'ontime' ? timetable : feed;
   };
   const labelFor = (item: TickerItem) => (item.sessionId != null ? 'Open this session' : item.kind === 'late' || item.kind === 'ontime' ? 'Open the timetable' : 'Open the live feed');
+  const pushing = previous != null && !reduceMotion;
   return (
-    <div ref={barRef} className="relative">
-      <ul className="sr-only" aria-label="Event updates">
-        {items.map((item) => {
-          const label = KIND_BADGES[item.kind]?.srLabel;
-          return <li key={item.key}>{label ? `${label}: ${item.text}` : item.text}</li>;
-        })}
-      </ul>
-      <div className={`mg-strip-bar${flashed ? ' mg-strip-flash' : ''}`}>
-        <div className={`mx-auto flex w-full ${cap} items-stretch`}>
-          <Link to={linkFor(active)} aria-label={labelFor(active)} title={labelFor(active)} className="mg-strip min-w-0 flex-1">
-            <span key={active.key} aria-hidden="true" className="ticker-line flex w-full min-w-0 items-center gap-2.5 pl-4 pr-1">
-              {badge && <span className={`mg-badge ${badge.className}`}>{badge.label}</span>}
-              <span className="min-w-0 flex-1 truncate">{text}</span>
-            </span>
-          </Link>
-          {watchCompetitionId === current.id && (
-            <Link to={`/competitions/${current.id}/chat`} aria-label="Watch the live video" className="mg-strip-watch mg-badge-live">
-              <Video aria-hidden="true" className="h-4 w-4" /> Watch
-            </Link>
-          )}
-          {items.length > 1 && (
-            <button type="button" className="mg-strip-next" aria-expanded={open} aria-controls={panelId} aria-label={`All updates (${items.length})`} onClick={() => { setOpen((v) => !v); setOpenedAt(pathname); }}>
-              <ChevronDown aria-hidden="true" className={`h-[18px] w-[18px] transition-transform motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} strokeWidth={2.2} />
-            </button>
-          )}
-        </div>
-      </div>
-      {open && (
-        <div id={panelId} className="mg-strip-panel">
-          <ul className={`mx-auto flex ${cap} flex-col`}>
-            {items.map((item) => {
-              const line = badgeFor(item);
-              return (
-                <li key={item.key}>
-                  <Link to={linkFor(item)} className="mg-strip-item" onClick={() => setOpen(false)}>
-                    {line.badge ? <span className={`mg-badge ${line.badge.className}`}>{line.badge.label}</span> : <span className="mg-badge mg-badge-soft">Info</span>}
-                    <span className="min-w-0 flex-1">{line.text}</span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-          <div className={`mx-auto ${cap} px-4 pb-3 pt-1`}>
-            <Link to={`/competitions/${current.id}/chat`} className="mg-btn mg-btn-secondary w-full !min-h-11" onClick={() => setOpen(false)}>Open the live feed</Link>
+    <div className="mg-dock">
+      <div ref={dockRef} className={`mx-auto ${cap} mg-dock-row`}>
+        {active && (
+          <div className="mg-dock-wrap">
+            <ul className="sr-only" aria-label="Event updates">
+              {items.map((item) => {
+                const label = KIND_BADGES[item.kind]?.srLabel;
+                return <li key={item.key}>{label ? `${label}: ${item.text}` : item.text}</li>;
+              })}
+            </ul>
+            {open && (
+              <div id={panelId} className="mg-strip-panel">
+                <ul className="flex flex-col">
+                  {items.map((item) => {
+                    const line = badgeFor(item);
+                    return (
+                      <li key={item.key}>
+                        <Link to={linkFor(item)} className="mg-strip-item" onClick={() => setOpen(false)}>
+                          {line.badge ? <span className={`mg-badge ${line.badge.className}`}>{line.badge.label}</span> : <span className="mg-badge mg-badge-soft">Info</span>}
+                          <span className="min-w-0 flex-1">{line.text}</span>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="px-3 pb-3 pt-2">
+                  <Link to={feed} className="mg-btn mg-btn-secondary w-full !min-h-11" onClick={() => setOpen(false)}>Open the live feed</Link>
+                </div>
+              </div>
+            )}
+            <div className="mg-strip-bar">
+              <Link to={linkFor(active)} aria-label={labelFor(active)} title={labelFor(active)} className="mg-strip min-w-0 flex-1">
+                <span className="mg-dock-stage">
+                  {pushing && <Line key={`out-${active.key}`} item={previous} className="ticker-line ticker-out" />}
+                  <Line key={active.key} item={active} className={`ticker-line${pushing ? ' ticker-in' : ''}`} />
+                </span>
+              </Link>
+              {watchCompetitionId === current.id && (
+                <Link to={feed} aria-label="Watch the live video" className="mg-strip-watch mg-badge-live">
+                  <Video aria-hidden="true" className="h-4 w-4" /> Watch
+                </Link>
+              )}
+              {items.length > 1 && (
+                <button type="button" className="mg-strip-next" aria-expanded={open} aria-controls={panelId} aria-label={`All updates (${items.length})`} onClick={() => { setOpen((v) => !v); setOpenedAt(pathname); }}>
+                  <ChevronUp aria-hidden="true" className={`h-[18px] w-[18px] transition-transform motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} strokeWidth={2.2} />
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+        {dockAction && (
+          <button type="button" className="mg-dock-action" aria-label={dockAction.count > 0 ? `${dockAction.label}, ${dockAction.count} set` : dockAction.label} onClick={() => { setOpen(false); dockAction.onClick(); }}>
+            <SlidersHorizontal aria-hidden="true" className="h-5 w-5" />
+            {dockAction.count > 0 && <span className="mg-dock-count" aria-hidden="true">{dockAction.count}</span>}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

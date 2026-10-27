@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
+import { TickerProvider, useTicker } from '../../components/TickerContext';
 import { FAVOURITES_KEY } from '../../lib/favourites';
 import { competition, heat, race, session } from '../../test/factories';
 import { dayKey } from '../../lib/timetableDay';
@@ -30,6 +31,27 @@ function renderBoard(ui = <TimetableBoard />) {
   return render(<MemoryRouter>{ui}</MemoryRouter>);
 }
 
+function HeaderProbe() {
+  const { header } = useCompactPageBarState();
+  return <>
+    <output data-testid="header">{JSON.stringify({ title: header?.title, subtitle: header?.subtitle, label: header?.refreshLabel })}</output>
+    <button type="button" onClick={header?.refresh}>probe refresh</button>
+    {header?.edit && <button type="button" aria-pressed={!!header.editing} onClick={header.edit}>{header.editLabel}</button>}
+  </>;
+}
+/** Stands in for the ticker dock: the filter button the board puts beside it. */
+function DockProbe() {
+  const { dockAction } = useTicker();
+  return dockAction ? <button type="button" onClick={dockAction.onClick}>{`${dockAction.label} (${dockAction.count})`}</button> : null;
+}
+function renderWithDock(ui = <TimetableBoard />) {
+  return render(<MemoryRouter><CompactPageBarProvider><TickerProvider><HeaderProbe /><DockProbe />{ui}</TickerProvider></CompactPageBarProvider></MemoryRouter>);
+}
+const filterButton = () => screen.queryByRole('button', { name: /^Day, arena and age group/ });
+const openFilters = () => { fireEvent.click(filterButton()!); return screen.getByRole('dialog', { name: 'Day, arena and age group' }); };
+const header = () => JSON.parse(screen.getByTestId('header').textContent!) as { title: string; subtitle: string; label: string };
+const weekday = (key: string) => new Date(`${key}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long' });
+
 beforeEach(() => {
   // The fixture is a morning at the venue; pin the clock so the late-running maths doesn't depend on when the tests run.
   vi.useFakeTimers({ toFake: ['Date'] });
@@ -42,14 +64,14 @@ beforeEach(() => {
 
 afterEach(() => { vi.useRealTimers(); });
 
-it('shows a late row with its delay and the planned time struck through', () => {
+it('shows a late row with just "+6" beside it, no struck-out planned time', () => {
   // Delays cascade within an arena, so the second session shares the first one's arena.
   setCompetition({}, null, 'Main Arena');
   const { container } = renderBoard();
   const late = container.querySelector('.tt-late')!;
   expect(late).toHaveTextContent('Heat 2');
-  expect(late.querySelector('.tt-planned')).toHaveTextContent(/^\+6m · 11:00/);
-  expect(late.querySelector('.tt-planned s')).toHaveTextContent(/11:00/);
+  expect(late.querySelector('.tt-planned')!.textContent).toBe('+6');
+  expect(late.querySelector('.tt-planned s')).toBeNull();
   expect(late.querySelector('.tt-time')).toHaveClass('tt-time-late');
   expect(late.querySelector('.tt-shift-card')).toBeNull();
   // Screen readers get the planned time, the new time and the status in words.
@@ -117,82 +139,97 @@ it('hides earlier finished heats behind "Show full timetable", which becomes "Hi
   expect(screen.getByText('Latest heat')).toBeVisible();
 });
 
-it('filters by arena from the menu, flags the live arena and remembers the choice', () => {
-  renderBoard();
-  const select = screen.getByRole('combobox', { name: 'Arena' });
-  fireEvent.click(select);
-  expect(within(screen.getByRole('listbox', { name: 'Arena' })).getAllByRole('option').map((option) => option.textContent)).toEqual(['All arenas', 'Finished Arena', 'Main ArenaON NOW', 'Arena Two']);
+it('filters by arena from the slider in the filter sheet, shows it as a chip and remembers the choice', () => {
+  renderWithDock();
+  expect(filterButton()).toHaveTextContent('(0)');
+  const sheet = openFilters();
+  const arenas = within(within(sheet).getByRole('group', { name: 'Arena' })).getAllByRole('button');
+  expect(arenas.map((button) => button.textContent)).toEqual(['All arenas', 'Finished Arena', 'Main Arena', 'Arena Two']);
+  expect(arenas[0]).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByText('Heat 1')).toBeVisible();
 
-  fireEvent.click(screen.getByRole('option', { name: 'Arena Two' }));
-  expect(screen.queryByRole('listbox')).toBeNull();
+  fireEvent.click(arenas[3]);
   expect(localStorage.getItem('mg.tt.arena.1')).toBe('Arena Two');
+  expect(within(sheet).getByRole('button', { name: 'Arena Two' })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByText('Heat 2')).toBeVisible();
   expect(screen.queryByText('Heat 1')).toBeNull();
-  expect(select).toHaveTextContent('Arena Two');
+  expect(within(sheet).getByRole('button', { name: 'Show 1 heat' })).toBeVisible();
+  expect(header().subtitle).toBe(`${weekday(day)} · Arena Two`);
+  expect(filterButton()).toHaveTextContent('(1)');
 
-  fireEvent.click(select);
-  fireEvent.click(screen.getByRole('option', { name: 'All arenas' }));
+  // The chip under the header clears it again.
+  fireEvent.click(screen.getByRole('button', { name: 'Remove Arena Two' }));
   expect(localStorage.getItem('mg.tt.arena.1')).toBeNull();
   expect(screen.getByText('Heat 1')).toBeVisible();
+  expect(screen.queryByRole('button', { name: /^Remove/ })).toBeNull();
+});
+
+it('closes the filter sheet from "Show N heats"', async () => {
+  renderWithDock();
+  const sheet = openFilters();
+  fireEvent.click(within(sheet).getByRole('button', { name: 'Show 3 heats' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 });
 
 it('starts on the arena remembered on this phone', () => {
   localStorage.setItem('mg.tt.arena.1', 'Main Arena');
-  const { container } = renderBoard();
-  expect(screen.getByRole('combobox', { name: 'Arena' })).toHaveTextContent('Main Arena');
-  expect(container.querySelector('.tt-arena-live')).not.toBeNull();
+  renderBoard();
+  expect(screen.getByRole('button', { name: 'Remove Main Arena' })).toBeVisible();
   expect(screen.queryByText('Heat 2')).toBeNull();
 });
 
 it('ignores a remembered arena that is not on this day', () => {
   localStorage.setItem('mg.tt.arena.1', 'Gone Arena');
   renderBoard();
-  expect(screen.getByRole('combobox', { name: 'Arena' })).toHaveValue('');
+  expect(screen.queryByRole('button', { name: /^Remove/ })).toBeNull();
+  expect(screen.getByText('Heat 2')).toBeVisible();
 });
 
-it('hides the strip when there is one day and one arena', () => {
+it('puts no filter button beside the ticker when there is one day and one arena', () => {
   setCompetition({ sessions: [session(1, { arenaName: 'Main Arena', scheduledStart: `${day}T10:00:00`, heats: [heat(11, { sessionId: 1, label: 'Heat 1' })] })] });
-  const { container } = renderBoard();
-  expect(container.querySelector('.tt-strip')).toBeNull();
+  renderWithDock();
+  expect(filterButton()).toBeNull();
   expect(screen.getByText('Heat 1')).toBeVisible();
 });
 
-it('offers a day dropdown when the event runs over several days', () => {
+it('offers day tabs, named by weekday, when the event runs over several days, and slides the new day in from its side', () => {
   const tomorrow = dayKey(new Date(Date.now() + 86_400_000));
   setCompetition({ endDate: tomorrow });
-  const { container } = renderBoard();
-  const select = screen.getByRole('combobox', { name: 'Day' });
-  expect(select.textContent).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/);
-  // Day, arena and age group sit together on one navy line.
-  expect(container.querySelector('.tt-strip')!.querySelectorAll('[role="combobox"]').length).toBeGreaterThanOrEqual(2);
-  fireEvent.click(select);
-  const options = within(screen.getByRole('listbox', { name: 'Day' })).getAllByRole('option');
-  expect(options).toHaveLength(2);
-  expect(options[0]).toHaveTextContent('Today');
+  const { container } = renderWithDock();
+  const sheet = openFilters();
+  const days = within(within(sheet).getByRole('group', { name: 'Day' })).getAllByRole('button');
+  expect(days.map((button) => button.textContent)).toEqual([weekday(day), weekday(tomorrow)]);
+  expect(days[0]).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(days[0]);
+  expect(container.querySelector('.tt-body')!.className).toBe('tt-body');
 
-  fireEvent.click(options[1]);
+  fireEvent.click(days[1]);
   expect(screen.getByText('Nothing scheduled for this day.')).toBeVisible();
-  fireEvent.click(select);
-  fireEvent.click(screen.getAllByRole('option')[0]);
+  expect(container.querySelector('.tt-body')).toHaveClass('tt-in-right-1');
+  expect(header().subtitle).toBe(weekday(tomorrow));
+  fireEvent.click(days[0]);
   expect(screen.getByText('Heat 1')).toBeVisible();
+  expect(container.querySelector('.tt-body')).toHaveClass('tt-in-left-0');
 });
 
-it('has no day dropdown on a one-day event', () => {
-  renderBoard();
-  expect(screen.queryByRole('combobox', { name: 'Day' })).toBeNull();
+it('names days by short weekday over a long event, and adds the date when two share a name', () => {
+  const plus = (n: number) => dayKey(new Date(Date.now() + n * 86_400_000));
+  setCompetition({ endDate: plus(3) });
+  const { unmount } = renderWithDock();
+  expect(within(openFilters()).getAllByRole('button', { pressed: false })[0].textContent).toMatch(/^[A-Z][a-z]{2}$/);
+  unmount();
+  setCompetition({ endDate: plus(7) });
+  renderWithDock();
+  expect(within(openFilters()).getAllByRole('button', { pressed: false })[0].textContent).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/);
 });
 
-function HeaderProbe() {
-  const { header } = useCompactPageBarState();
-  return <>
-    <output data-testid="header">{JSON.stringify({ title: header?.title, subtitle: header?.subtitle, label: header?.refreshLabel })}</output>
-    <button type="button" onClick={header?.refresh}>probe refresh</button>
-  </>;
-}
+it('has no day tabs on a one-day event', () => {
+  renderWithDock();
+  expect(within(openFilters()).queryByRole('group', { name: 'Day' })).toBeNull();
+});
 
-it('publishes its title, competition and update time, and the refresh, to the app header', () => {
-  setCompetition({}, new Date(2026, 5, 1, 10, 54));
+it('publishes its title, competition and update time, and the refresh, to the app header when there is nothing to filter', () => {
+  setCompetition({ sessions: [session(1, { arenaName: 'Main Arena', scheduledStart: `${day}T10:00:00`, heats: [heat(11, { sessionId: 1, label: 'Heat 1' })] })] }, new Date(2026, 5, 1, 10, 54));
   const { container } = render(<MemoryRouter><CompactPageBarProvider><HeaderProbe /><TimetableBoard title="Seniors" /></CompactPageBarProvider></MemoryRouter>);
   expect(JSON.parse(screen.getByTestId('header').textContent!)).toEqual({ title: 'Seniors', subtitle: 'Spring Games · 10:54', label: 'Refresh timetable' });
   fireEvent.click(screen.getByRole('button', { name: 'probe refresh' }));
@@ -204,8 +241,18 @@ it('publishes its title, competition and update time, and the refresh, to the ap
 });
 
 it('defaults the header title to Timetable and leaves the time out until loaded', () => {
+  setCompetition({ sessions: [] });
   render(<MemoryRouter><CompactPageBarProvider><HeaderProbe /><TimetableBoard /></CompactPageBarProvider></MemoryRouter>);
   expect(JSON.parse(screen.getByTestId('header').textContent!)).toMatchObject({ title: 'Timetable', subtitle: 'Spring Games' });
+});
+
+it('says in the header line what is showing once there is something to filter', () => {
+  setCompetition({ sections: [
+    { id: 10, competitionId: 1, format: 2, ageGroup: 'Under 12', displayName: 'Teams Under 12' },
+    { id: 20, competitionId: 1, format: 2, ageGroup: 'Under 15', displayName: 'Teams Under 15' },
+  ] }, new Date(2026, 5, 1, 10, 54));
+  renderWithDock();
+  expect(header().subtitle).toBe(`${weekday(day)} · All ages`);
 });
 
 it('renders the bandExtra and lead slots, places Status colours above Show full timetable, and reveals footer inside Show full timetable', () => {
@@ -222,15 +269,18 @@ it('renders the bandExtra and lead slots, places Status colours above Show full 
   expect(screen.getByText('page footer')).toBeVisible();
 });
 
-it('lists break and briefing rows with their label and no chevron link', () => {
+it('gives a break its own heading line with how long it lasts, and lists briefings with their label and no chevron link', () => {
   setCompetition({ sessions: [
     session(1, { kind: 1, isBreak: true, name: 'Lunch', arenaName: 'Main Arena', scheduledStart: `${day}T12:00:00`, durationMinutes: 30 }),
     session(2, { kind: 2, name: 'Managers meeting', location: "Secretary's tent", scheduledStart: `${day}T12:30:00`, durationMinutes: 15 }),
   ] });
-  renderBoard();
+  const { container } = renderBoard();
   expect(screen.getByText('Lunch')).toBeVisible();
-  expect(screen.getByText('Break')).toBeVisible();
-  expect(screen.getByText('Briefing')).toBeVisible();
+  expect(screen.getByRole('heading', { level: 2, name: 'Break' })).toBeVisible();
+  expect(screen.getByText('Main Arena · 30 minutes')).toBeVisible();
+  // The heading says it is a break, so the row underneath doesn't repeat it.
+  expect(container.querySelector('.tt-sub')).toHaveTextContent('Briefing');
+  expect(container.querySelectorAll('.tt-sub')).toHaveLength(1);
   expect(screen.queryAllByRole('link')).toHaveLength(0);
 });
 
@@ -326,33 +376,57 @@ it('filters the timetable by age group (section) when the competition has multip
       }),
     ],
   });
-  renderBoard();
-  expect(screen.queryByRole('combobox', { name: 'Team' })).toBeNull();
-  expect(screen.queryByRole('searchbox', { name: 'Search timetable' })).toBeNull();
+  const { container } = renderWithDock();
+  const sheet = openFilters();
+  const tiles = within(within(sheet).getByRole('group', { name: 'Age group' })).getAllByRole('button');
+  // No "All ages" tile: with none chosen you see every age.
+  expect(tiles.map((tile) => tile.querySelector('strong')!.textContent)).toEqual(['Under 12', 'Under 15']);
+  expect(tiles[0].querySelector('span')).toHaveTextContent(/^1 heat · next 10:00/);
+  expect(tiles[1].querySelector('span')).toHaveTextContent(/^1 heat · next 10:30/);
 
-  const select = screen.getByRole('combobox', { name: 'Age group' });
-  fireEvent.click(select);
-  expect(within(screen.getByRole('listbox', { name: 'Age group' })).getAllByRole('option').map((o) => o.textContent))
-    .toEqual(['All ages', 'Under 12', 'Under 15']);
-
-  fireEvent.click(screen.getByRole('option', { name: 'Under 15' }));
+  fireEvent.click(tiles[1]);
+  expect(tiles[1]).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByText('U15 Heat 1')).toBeVisible();
   expect(screen.queryByText('U12 Heat 1')).toBeNull();
+  expect(header().subtitle).toBe(`${weekday(day)} · Under 15`);
+  expect(screen.getByRole('button', { name: 'Remove Under 15' })).toBeVisible();
 
-  fireEvent.click(select);
-  fireEvent.click(screen.getByRole('option', { name: 'All ages' }));
+  // Tapping the chosen tile again goes back to every age.
+  fireEvent.click(tiles[1]);
   expect(screen.getByText('U12 Heat 1')).toBeVisible();
+  expect(container.querySelector('.tt-tiles')).toBeInTheDocument();
+
+  fireEvent.click(tiles[0]);
+  fireEvent.click(screen.getByRole('button', { name: 'Remove Under 12' }));
+  expect(screen.getByText('U15 Heat 1')).toBeVisible();
 });
 
-it('hides the arena selector when viewing a specific section', () => {
+it('says on an age group tile when it is on now, when it has finished, or that it has nothing that day', () => {
+  setCompetition({
+    sections: [
+      { id: 10, competitionId: 1, format: 2, ageGroup: 'Under 12', displayName: 'Teams Under 12' },
+      { id: 20, competitionId: 1, format: 2, ageGroup: 'Under 15', displayName: 'Teams Under 15' },
+      { id: 30, competitionId: 1, format: 2, ageGroup: 'Open', displayName: 'Open' },
+    ],
+    sessions: [
+      session(1, { competitionSectionId: 10, status: 1, arenaName: 'Main Arena', scheduledStart: `${day}T10:00:00`, startedAt: `${day}T10:00:00`, heats: [heat(11, { sessionId: 1, label: 'U12 Heat 1' }), heat(12, { sessionId: 1, orderIndex: 1, label: 'U12 Heat 2' })] }),
+      session(2, { competitionSectionId: 20, status: 2, arenaName: 'Main Arena', scheduledStart: `${day}T08:00:00`, heats: [heat(21, { sessionId: 2, label: 'U15 Heat 1', finishedAt: `${day}T08:20:00` })] }),
+    ],
+  });
+  renderWithDock();
+  const tiles = within(within(openFilters()).getByRole('group', { name: 'Age group' })).getAllByRole('button');
+  expect(tiles.map((tile) => tile.querySelector('span')!.textContent)).toEqual(['2 heats · on now', '1 heat', 'Nothing this day']);
+});
+
+it('has nothing to filter when viewing a specific section on one day', () => {
   setCompetition({
     sessions: [
       session(1, { competitionSectionId: 9, arenaName: 'Main Arena', scheduledStart: `${day}T10:00:00`, heats: [heat(11, { sessionId: 1, label: 'Heat 1' })] }),
       session(2, { competitionSectionId: 9, arenaName: 'Arena Two', scheduledStart: `${day}T11:00:00`, heats: [heat(22, { sessionId: 2, label: 'Heat 2' })] }),
     ],
   });
-  renderBoard(<TimetableBoard sectionId={9} title="Under 12" />);
-  expect(screen.queryByRole('combobox', { name: 'Arena' })).toBeNull();
+  renderWithDock(<TimetableBoard sectionId={9} title="Under 12" />);
+  expect(filterButton()).toBeNull();
 });
 
 it('links heat rows directly to the heat without a lanes dropdown and shows a single shift note and coloured time on moved upcoming sessions', () => {
@@ -411,10 +485,9 @@ it('links heat rows directly to the heat without a lanes dropdown and shows a si
       }),
     ],
   });
-  const { container } = renderBoard();
+  const { container } = renderWithDock();
   expect(screen.queryByRole('button', { name: /Lanes for/i })).toBeNull();
   expect(screen.getByRole('link', { name: /Heat 1/ })).toHaveAttribute('href', '/competitions/1/session/1?heat=11');
-  expect(container.querySelector('.tt-strip')).not.toHaveClass('tt-strip-stacked');
   expect(container.querySelectorAll('.tt-shift-card')).toHaveLength(0);
 
   // Live session rows do not show how late they are running.
@@ -425,21 +498,21 @@ it('links heat rows directly to the heat without a lanes dropdown and shows a si
 
   // Subsequent session in the same arena shows how late it is running and colours the time.
   const upcomingLateRow = screen.getByRole('link', { name: /Upcoming Late Heat/ });
-  expect(upcomingLateRow.querySelector('.tt-planned')).toHaveTextContent(/^\+15m · 10:00|^\+15m · 11:00/);
+  expect(upcomingLateRow.querySelector('.tt-planned')!.textContent).toBe('+15');
   expect(upcomingLateRow.querySelector('.tt-time')).toHaveClass('tt-time-late');
 
   // Early-shifted session shows negative shift and colours the time green.
   const earlyRow = screen.getByRole('link', { name: /Early Heat 3/ });
-  expect(earlyRow.querySelector('.tt-planned')).toHaveTextContent(/^-15m · 11:00/);
+  expect(earlyRow.querySelector('.tt-planned')!.textContent).toBe('−15');
   expect(earlyRow.querySelector('.tt-time')).toHaveClass('tt-time-early');
 
-  // Switching to Day 2 in a 2-day, 2-arena competition keeps the Arena selector available.
-  fireEvent.click(screen.getByRole('combobox', { name: 'Day' }));
-  fireEvent.click(screen.getAllByRole('option')[1]);
-  expect(screen.getByRole('combobox', { name: 'Arena' })).toBeInTheDocument();
+  // Switching to Day 2 in a 2-day, 2-arena competition keeps the arena slider available.
+  const sheet = openFilters();
+  fireEvent.click(within(within(sheet).getByRole('group', { name: 'Day' })).getAllByRole('button')[1]);
+  expect(within(sheet).getByRole('group', { name: 'Arena' })).toBeInTheDocument();
 });
 
-it('formats delays of an hour or more as hours and minutes, and lets organisers move times, pause, resume and see pace from the timing sheet', async () => {
+it('formats delays of an hour or more as hours and minutes, and lets organisers move the times by typed minutes from the timing sheet behind the pencil', async () => {
   const postSpy = vi.spyOn(api, 'post').mockResolvedValue({ data: [] } as never);
   auth.organise = true;
   const completedRaces = [1, 2, 3, 4, 5].map((id) => race(id, { isComplete: true }));
@@ -480,30 +553,31 @@ it('formats delays of an hour or more as hours and minutes, and lets organisers 
     ],
   });
 
-  const { unmount } = renderBoard();
+  const { unmount } = renderWithDock();
   const lateRow = screen.getByRole('link', { name: /Very Late Heat/ });
-  expect(lateRow.querySelector('.tt-planned')).toHaveTextContent('+1h 34m · 10:00');
-  expect(lateRow).toHaveTextContent('+1h 34m');
-  // For an organiser the late line is a button that opens the timing sheet; the old shift row is gone.
-  expect(screen.queryByRole('group', { name: 'Delay timetable' })).toBeNull();
-  expect(screen.queryByRole('spinbutton', { name: 'Custom delay minutes' })).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: /Main Arena is running 1h 34m late/ }));
-  const sheet = screen.getByRole('dialog', { name: 'Main Arena timing' });
+  expect(lateRow.querySelector('.tt-planned')!.textContent).toBe('+1h 34m');
+  expect(screen.getByText('Main Arena is running 1h 34m late')).toHaveClass('tt-late-line');
+
+  // The timing sheet stays out of the way until the pencil in the header opens it.
+  expect(screen.queryByRole('dialog')).toBeNull();
+  const pencil = screen.getByRole('button', { name: 'Change the timing' });
+  fireEvent.click(pencil);
+  expect(pencil).toHaveAttribute('aria-pressed', 'true');
+  const sheet = screen.getByRole('dialog', { name: 'Timing' });
   expect(sheet).toHaveTextContent('Running 1h 34m late');
   expect(within(sheet).getByText('Races are taking about 4.0 minutes each.')).toBeInTheDocument();
+  // There is no Pause any more, and nothing is paused to continue.
+  expect(within(sheet).queryByRole('switch')).toBeNull();
+  expect(within(sheet).queryByRole('button', { name: 'Continue the timetable' })).toBeNull();
 
-  fireEvent.click(within(sheet).getByRole('switch', { name: 'Pause the timetable' }));
-  await waitFor(() => expect(postSpy).toHaveBeenCalledWith('/competitions/1/sessions/pause', { arenaName: 'Main Arena' }));
-
-  fireEvent.click(within(sheet).getByRole('button', { name: '5 minutes later' }));
-  fireEvent.click(within(sheet).getByRole('button', { name: '5 minutes later' }));
-  fireEvent.click(within(sheet).getByRole('button', { name: 'Done' }));
-  await waitFor(() => expect(postSpy).toHaveBeenCalledWith('/competitions/1/sessions/shift-times', { deltaMinutes: 10, arenaName: 'Main Arena' }));
-  await waitFor(() => expect(reload).toHaveBeenCalled());
-  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Main Arena timing' })).toBeNull());
+  fireEvent.change(within(sheet).getByRole('spinbutton', { name: 'Move times by' }), { target: { value: '95' } });
+  fireEvent.click(within(sheet).getByRole('button', { name: 'Shift' }));
+  await waitFor(() => expect(postSpy).toHaveBeenCalledWith('/competitions/1/sessions/shift-times', { deltaMinutes: 95, arenaName: undefined }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  expect(pencil).toHaveAttribute('aria-pressed', 'false');
   unmount();
 
-  // When a session has a [paused:...] tag, the link says so, the sheet's switch is on, and switching it off posts to /resume.
+  // A timetable paused before Pause went can still be set going again from the sheet.
   setCompetition({
     sessions: [
       session(2, {
@@ -516,16 +590,31 @@ it('formats delays of an hour or more as hours and minutes, and lets organisers 
       }),
     ],
   });
-  renderBoard();
-  fireEvent.click(screen.getByRole('button', { name: 'Timetable paused' }));
-  const pausedSheet = screen.getByRole('dialog', { name: 'Timing' });
-  const pauseSwitch = within(pausedSheet).getByRole('switch', { name: 'Pause the timetable' });
-  expect(pauseSwitch).toBeChecked();
-  fireEvent.click(pauseSwitch);
+  renderWithDock();
+  fireEvent.click(screen.getByRole('button', { name: 'Change the timing' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Continue the timetable' }));
   await waitFor(() => expect(postSpy).toHaveBeenCalledWith('/competitions/1/sessions/resume', { arenaName: undefined }));
   postSpy.mockRestore();
 });
 
+it('gives everyone else no pencil', () => {
+  renderWithDock();
+  expect(screen.queryByRole('button', { name: 'Change the timing' })).toBeNull();
+});
+
+it('moves only the arena being shown', async () => {
+  auth.organise = true;
+  localStorage.setItem('mg.tt.arena.1', 'Arena Two');
+  const post = vi.spyOn(api, 'post').mockResolvedValue({ data: [] } as never);
+  renderWithDock();
+  fireEvent.click(screen.getByRole('button', { name: 'Change the timing' }));
+  const sheet = screen.getByRole('dialog', { name: 'Arena Two timing' });
+  expect(sheet).toHaveTextContent('Running on time');
+  fireEvent.change(within(sheet).getByRole('spinbutton', { name: 'Move times by' }), { target: { value: '-10' } });
+  fireEvent.click(within(sheet).getByRole('button', { name: 'Shift' }));
+  await waitFor(() => expect(post).toHaveBeenCalledWith('/competitions/1/sessions/shift-times', { deltaMinutes: -10, arenaName: 'Arena Two' }));
+  post.mockRestore();
+});
 
 it('updates the paused timetable as time passes without requiring a competition reload', () => {
   vi.useFakeTimers();
@@ -543,51 +632,30 @@ it('updates the paused timetable as time passes without requiring a competition 
   expect(vi.getTimerCount()).toBe(0);
 });
 
-it('reports pause and shift failures, keeps the sheet open for a failed move, and offers a retry', async () => {
+it('reports continue and shift failures, keeping the sheet open with the minutes typed', async () => {
   auth.organise = true;
-  setCompetition({}, null, 'Main Arena');
+  setCompetition({ sessions: [session(2, {
+    arenaName: 'Main Arena', scheduledStart: `${day}T10:00:00`, notes: '[paused:1700000000000]',
+    heats: [heat(21, { sessionId: 2, label: 'Paused Heat' })],
+  })] });
   const post = vi.spyOn(api, 'post').mockRejectedValue(new Error('offline'));
-  renderBoard();
-  fireEvent.click(screen.getByRole('button', { name: /Main Arena is running 6 minutes late/ }));
-  const sheet = screen.getByRole('dialog', { name: 'Main Arena timing' });
-  fireEvent.click(within(sheet).getByRole('switch', { name: 'Pause the timetable' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t pause the timetable');
-  fireEvent.click(within(sheet).getByRole('button', { name: '5 minutes earlier' }));
-  fireEvent.click(within(sheet).getByRole('button', { name: 'Done' }));
-  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t shift the timetable'));
-  expect(post).toHaveBeenLastCalledWith('/competitions/1/sessions/shift-times', { deltaMinutes: -5, arenaName: 'Main Arena' });
-  // The sheet stays so the move isn't lost, and Try again sends it once more.
-  expect(screen.getByRole('dialog', { name: 'Main Arena timing' })).toBeInTheDocument();
-  expect(within(screen.getByRole('dialog', { name: 'Main Arena timing' })).getByText('-5 min')).toBeInTheDocument();
+  renderWithDock();
+  fireEvent.click(screen.getByRole('button', { name: 'Change the timing' }));
+  const sheet = screen.getByRole('dialog', { name: 'Timing' });
+  fireEvent.click(within(sheet).getByRole('button', { name: 'Continue the timetable' }));
+  await waitFor(() => expect(post).toHaveBeenCalledWith('/competitions/1/sessions/resume', { arenaName: undefined }));
+  expect(await screen.findByText('Couldn’t continue the timetable. Check your signal and try again.')).toBeInTheDocument();
+  const input = within(sheet).getByRole('spinbutton', { name: 'Move times by' });
+  fireEvent.change(input, { target: { value: '12' } });
+  fireEvent.click(within(sheet).getByRole('button', { name: 'Shift' }));
+  expect(await within(sheet).findByRole('alert')).toHaveTextContent('Couldn’t move the times');
+  expect(screen.getByText('Couldn’t shift the timetable. Check your signal and try again.')).toBeInTheDocument();
+  expect(input).toHaveValue(12);
+
+  // "Try again" on the page's notice sends the same move again.
   fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
   await waitFor(() => expect(post).toHaveBeenCalledTimes(3));
   post.mockRestore();
-});
-
-it('gives organisers a Running late? link when nothing is late, and nobody else', async () => {
-  const post = vi.spyOn(api, 'post').mockResolvedValue({ data: [] } as never);
-  setCompetition({ sessions: [session(1, { status: 0, arenaName: 'Main Arena', scheduledStart: `${day}T10:00:00`, heats: [heat(11, { sessionId: 1, label: 'Heat 1' })] })] });
-  const spectator = renderBoard();
-  expect(screen.queryByRole('button', { name: 'Running late?' })).toBeNull();
-  spectator.unmount();
-
-  auth.organise = true;
-  renderBoard();
-  fireEvent.click(screen.getByRole('button', { name: 'Running late?' }));
-  const sheet = screen.getByRole('dialog', { name: 'Timing' });
-  expect(sheet).toHaveTextContent('Running on time');
-  // Done with no move closes the sheet without posting anything.
-  fireEvent.click(within(sheet).getByRole('button', { name: 'Done' }));
-  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Timing' })).toBeNull());
-  expect(post).not.toHaveBeenCalled();
-  post.mockRestore();
-});
-
-it('shows spectators the late line as plain text, not a button', () => {
-  setCompetition({}, null, 'Main Arena');
-  renderBoard();
-  expect(screen.getByRole('status')).toHaveTextContent('Main Arena is running 6 minutes late');
-  expect(screen.queryByRole('button', { name: /is running/ })).toBeNull();
 });
 
 it('warms a row once when a delay moves its start time while you watch, but not on first draw', () => {

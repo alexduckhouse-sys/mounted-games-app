@@ -1,24 +1,79 @@
 /* Public timetable (TimetableBoard). Colours come from the theme tokens in theme/skin.css. */
 .timetable-board { width: 100%; max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; font-family: var(--mg-font); }
 
-/* Day, arena and age group: three small dropdowns on one slim navy strip, full width and sticky below the header. */
-.tt-strip {
-  position: sticky; top: var(--mg-shell-h, 0px); z-index: 20; display: flex; align-items: center; gap: 6px; padding: 2px 0 6px;
-  border-image: conic-gradient(rgb(var(--mg-header)) 0 0) fill 0 // 0 100vmax; color: #fff;
+/* Arena or age group set from the filter sheet: a chip each, tapped to clear. */
+.tt-chips { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 10px; }
+.tt-chip {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 0 8px 0 12px; border: 0; border-radius: 16px;
+  background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); font: 600 13px/1 var(--mg-font); cursor: pointer;
 }
-/* Under the age-group band the two navy bars read as one: no second gap between the dropdowns. */
-.mg-band-header + .tt-strip { padding-top: 0; }
-.tt-strip :focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-.tt-arena {
-  display: flex; width: 100%; min-width: 0; align-items: center; gap: 6px; min-height: 36px; padding: 0 28px 0 10px; text-align: left;
-  border: 1px solid rgb(var(--mg-header-line)); border-radius: 10px; color: #fff; font: 600 13px/1 var(--mg-font);
+
+/* The timing sheet (DelaySheet): minutes to move the times by, typed. */
+.tt-delay-form { display: flex; flex-direction: column; gap: 10px; }
+.tt-delay-row { display: flex; align-items: center; gap: 10px; color: rgb(var(--mg-ink)); font: 600 16px/1.2 var(--mg-font); }
+.tt-delay-row > label { flex: 1; }
+.tt-delay-input {
+  width: 88px; min-height: 44px; padding: 0 12px; border: 1px solid rgb(var(--mg-control)); border-radius: 10px;
+  background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); font: 700 18px/1 var(--mg-font); font-variant-numeric: tabular-nums; text-align: right;
 }
-.tt-arena-wrap { flex: 1 1 0; min-width: 0; }
-.tt-arena { position: relative; }
-.tt-arena:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-.tt-arena-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tt-arena-live { flex: none; width: 8px; height: 8px; border-radius: 50%; background: rgb(var(--mg-red)); }
-.tt-arena-chevron { position: absolute; right: 10px; top: 50%; margin-top: -7px; }
+.tt-delay-error { margin: 0; color: rgb(var(--mg-red)); font: 600 14px/1.35 var(--mg-font); }
+
+/* The filter sheet: day tabs across the top, age group tiles, then the arena slider. */
+.tt-sheet .kit-sheet-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.tt-days { position: relative; display: flex; margin: 0 -20px; border-bottom: 1px solid rgb(var(--mg-rule-soft)); }
+.tt-days button {
+  flex: 1; min-width: 0; min-height: 50px; padding: 0 6px; border: 0; background: transparent; color: rgb(var(--mg-muted));
+  font: 700 19px/1 var(--mg-font-display); cursor: pointer;
+}
+.tt-days button[aria-pressed="true"] { color: rgb(var(--mg-heading)); }
+.tt-days-bar {
+  position: absolute; left: 0; bottom: -1px; width: calc(100% / var(--n)); height: 3px; background: rgb(var(--mg-heading)); pointer-events: none;
+  transform: translateX(calc(var(--i) * 100%)); transition: transform 300ms var(--mg-ease-out);
+}
+.tt-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.tt-tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-height: 62px; padding: 10px 12px; text-align: left;
+  border: 1px solid rgb(var(--mg-line)); border-radius: 12px; background: rgb(var(--mg-surface)); cursor: pointer;
+}
+.tt-tile > strong { font: 700 19px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
+.tt-tile > span { font: 500 13px/1.2 var(--mg-font); color: rgb(var(--mg-muted)); }
+.tt-tile[aria-pressed="true"] { border-color: rgb(var(--mg-button)); background: rgb(var(--mg-button)); }
+.tt-tile[aria-pressed="true"] > strong, .tt-tile[aria-pressed="true"] > span { color: rgb(var(--mg-button-ink)); }
+.tt-arena-line { display: flex; align-items: center; gap: 10px; }
+.tt-arena-line > span { font: 600 14px/1 var(--mg-font); color: rgb(var(--mg-body)); }
+.tt-seg { position: relative; flex: 1; min-width: 0; display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: rgb(var(--mg-rule-soft)); }
+.tt-seg button {
+  position: relative; z-index: 1; flex: 1; min-width: 0; min-height: 36px; padding: 0 4px; border: 0; border-radius: 8px; background: transparent;
+  color: rgb(var(--mg-body)); font: 600 13px/1.1 var(--mg-font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
+}
+.tt-seg button[aria-pressed="true"] { color: rgb(var(--mg-heading)); font-weight: 700; }
+.tt-seg-thumb {
+  position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px - (var(--n) - 1) * 2px) / var(--n)); border-radius: 8px;
+  background: rgb(var(--mg-surface)); box-shadow: 0 1px 3px rgb(15 42 74 / .2);
+  transform: translateX(calc(var(--i) * (100% + 2px))); transition: transform 300ms var(--mg-ease-out);
+}
+.tt-show { width: 100%; }
+
+/* Motion as elsewhere on the site: colours ease, a press shrinks a little and springs back, markers glide, and a new
+   day slides in from the side of the tab you tapped. */
+:is(.tt-chip, .tt-days button, .tt-tile, .tt-seg button) {
+  transition: background-color var(--mg-dur-fast) var(--mg-ease-out), border-color var(--mg-dur-fast) var(--mg-ease-out), color var(--mg-dur-fast) var(--mg-ease-out), scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1);
+}
+:is(.tt-chip, .tt-tile, .tt-seg button):active:not(:disabled) { --mg-press-t: 90ms; scale: .96; }
+.tt-days button:active { --mg-press-t: 90ms; scale: .98; }
+.tt-in-right-0 { animation: tt-in-right-0 260ms var(--mg-ease-out); }
+.tt-in-right-1 { animation: tt-in-right-1 260ms var(--mg-ease-out); }
+.tt-in-left-0 { animation: tt-in-left-0 260ms var(--mg-ease-out); }
+.tt-in-left-1 { animation: tt-in-left-1 260ms var(--mg-ease-out); }
+@keyframes tt-in-right-0 { from { opacity: 0; transform: translateX(18px); } }
+@keyframes tt-in-right-1 { from { opacity: 0; transform: translateX(18px); } }
+@keyframes tt-in-left-0 { from { opacity: 0; transform: translateX(-18px); } }
+@keyframes tt-in-left-1 { from { opacity: 0; transform: translateX(-18px); } }
+@media (prefers-reduced-motion: reduce) {
+  .tt-days-bar, .tt-seg-thumb, :is(.tt-chip, .tt-days button, .tt-tile, .tt-seg button) { transition: none; }
+  :is(.tt-in-right-0, .tt-in-right-1, .tt-in-left-0, .tt-in-left-1) { animation: none; }
+}
+html[data-lite="true"] :is(.tt-in-right-0, .tt-in-right-1, .tt-in-left-0, .tt-in-left-1) { animation: none; }
 
 .tt-body { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; }
 .tt-group { display: flex; flex-direction: column; gap: 4px; }
@@ -83,16 +138,7 @@ a.tt-live:hover { background: rgb(var(--mg-live-row)); filter: brightness(.98); 
 /* Laptop: the board uses the page width, and session blocks sit two across. Everything else spans the row. */
 @media (min-width: 1024px) {
   .timetable-board { max-width: none; }
-  .tt-strip {
-    border-image: none;
-    background: rgb(var(--mg-header));
-    border-radius: var(--mg-radius, var(--mg-radius-card, 12px));
-    padding: 10px 12px;
-  }
   .tt-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 14px 24px; padding-top: 16px; }
   .tt-body > * { grid-column: 1 / -1; }
   .tt-body > .tt-group, .tt-body > .tt-cell { grid-column: auto; }
 }
-/* Organisers tap the late line (or "Running late?") to move or pause the times. */
-.tt-late-btn { width: 100%; border: 0; cursor: pointer; text-align: left; }
-.tt-late-link { display: block; margin: 8px 2px 0 auto; padding: 4px 2px; border: 0; background: none; color: rgb(var(--mg-heading)); font: 600 13.5px/1.3 var(--mg-font); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }

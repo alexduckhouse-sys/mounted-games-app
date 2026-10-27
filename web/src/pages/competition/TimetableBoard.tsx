@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ChevronDown, ChevronRight, Clock, Star } from 'lucide-react';
+import { ChevronRight, Clock, Star, X } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
-import { Dropdown } from '../../components/Dropdown';
 import { Notice } from '../../components/Notice';
+import { Sheet } from '../../components/Sheet';
+import { useOptionalTicker } from '../../components/TickerContext';
 import { usePageWidth } from '../../components/pageWidthState';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { SponsorStrip } from '../../components/SponsorStrip';
@@ -22,10 +23,12 @@ import './timetable.css';
 const STATUS_KEY: ReadonlyArray<[TimetableStatus, string]> = [['on-time', 'On time'], ['late', 'Late'], ['live', 'On now'], ['finished', 'Finished']];
 
 /**
- * The public timetable: three small dropdowns (day, arena, age group) on one navy line under the app header, one
- * amber line when an arena is running late, then one block per session and per age group's finals. Only the most
- * recent finished heat shows (greyed); the rest come back with "Show full timetable". The page title, competition
- * name, update time and refresh button live in the app header. `bandExtra`, `lead` and `footer` let a page add its own controls.
+ * The public timetable: one amber line when an arena is running late, then one block per session, break and age
+ * group's finals. Day, arena and age group are chosen in a sheet opened from the filter button beside the ticker
+ * dock; the header line says what is showing ("Tuesday · All ages") and any arena or age group set shows as a chip
+ * you can clear. Only the most recent finished heat shows (greyed); the rest come back with "Show full timetable".
+ * Organisers get a pencil in the header that opens the timing sheet, to move the times by a number of minutes.
+ * `bandExtra`, `lead` and `footer` let a page add its own controls.
  */
 export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtra, lead, footer }: {
   sectionId?: number | null;
@@ -68,44 +71,40 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   const [showFinished, setShowFinished] = useState(false);
   const [arena, setArena] = useState(() => { try { return localStorage.getItem(arenaKey) ?? ''; } catch { return ''; } });
   const [sectionFilter, setSectionFilter] = useState('');
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [delayOpen, setDelayOpen] = useState(false);
+  // Which way the list slides in after the day changes, and a counter that restarts the slide.
+  const [dayMove, setDayMove] = useState<{ count: number; dir: 'left' | 'right' }>({ count: 0, dir: 'right' });
   const [shifting, setShifting] = useState(false);
-  // The arena whose timing sheet is open ('' for every arena), or null when it is shut.
-  const [delayArena, setDelayArena] = useState<string | null>(null);
   const [actionError, setActionError] = useState<{ text: string; retry?: () => void } | null>(null);
   const pace = useMemo(() => predictMinutesPerRace(competition.sessions ?? []), [competition.sessions]);
 
-  async function shiftTimes(deltaMinutes: number, arenaName: string) {
+  async function shiftTimes(deltaMinutes: number) {
     setShifting(true);
     setActionError(null);
     try {
       await api.post(`/competitions/${competition.id}/sessions/shift-times`, {
         deltaMinutes,
-        arenaName: arenaName || undefined,
+        arenaName: selectedArena || undefined,
       });
       reload();
       return true;
     } catch {
-      setActionError({ text: 'Couldn’t shift the timetable. Check your signal and try again.', retry: () => void shiftTimes(deltaMinutes, arenaName) });
+      setActionError({ text: 'Couldn’t shift the timetable. Check your signal and try again.', retry: () => void shiftTimes(deltaMinutes) });
       return false;
     } finally {
       setShifting(false);
     }
   }
-  async function togglePause(currentlyPaused: boolean, arenaName: string) {
+  // Pause has gone; this only sets going again a timetable that was paused before.
+  async function resume() {
     setShifting(true);
     setActionError(null);
     try {
-      await api.post(`/competitions/${competition.id}/sessions/${currentlyPaused ? 'resume' : 'pause'}`, {
-        arenaName: arenaName || undefined,
-      });
+      await api.post(`/competitions/${competition.id}/sessions/resume`, { arenaName: selectedArena || undefined });
       reload();
     } catch {
-      setActionError({
-        text: currentlyPaused
-          ? 'Couldn’t resume the timetable. Check your signal and try again.'
-          : 'Couldn’t pause the timetable. Check your signal and try again.',
-        retry: () => void togglePause(currentlyPaused, arenaName),
-      });
+      setActionError({ text: 'Couldn’t continue the timetable. Check your signal and try again.', retry: () => void resume() });
     } finally {
       setShifting(false);
     }
@@ -131,9 +130,9 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   const arenas = [...new Set(rows.map((row) => row.session.arenaName?.trim()).filter((name): name is string => !!name))];
   const showArenaSelect = sectionId == null && arenas.length > 1;
   const selectedArena = showArenaSelect && arenas.includes(arena) ? arena : '';
-  const pausedIn = (arenaName: string) => (competition.sessions ?? []).some(
+  const isPaused = (competition.sessions ?? []).some(
     (s) => s.status !== 2
-      && (!arenaName || s.arenaName?.trim() === arenaName)
+      && (!selectedArena || s.arenaName?.trim() === selectedArena)
       && parsePausedAtMs(s.notes) != null,
   );
   const sections = useMemo(
@@ -153,18 +152,13 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
     }
     return map;
   }, [competition.teams]);
-  const visibleRows = dayRows
-    .filter((row) => !selectedArena || row.session.arenaName?.trim() === selectedArena || !row.session.arenaName?.trim())
-    .filter((row) => {
-      if (selectedSectionId == null) return true;
-      if (row.session.competitionSectionId != null) {
-        return row.session.competitionSectionId === selectedSectionId;
-      }
-      if (row.heat) {
-        return row.heat.entries.some((e) => teamSectionById.get(e.teamId) === selectedSectionId);
-      }
-      return row.session.heats.some((h) => h.entries.some((e) => teamSectionById.get(e.teamId) === selectedSectionId));
-    });
+  const inSection = (row: TimetableRow, id: number) => {
+    if (row.session.competitionSectionId != null) return row.session.competitionSectionId === id;
+    if (row.heat) return row.heat.entries.some((e) => teamSectionById.get(e.teamId) === id);
+    return row.session.heats.some((h) => h.entries.some((e) => teamSectionById.get(e.teamId) === id));
+  };
+  const arenaRows = dayRows.filter((row) => !selectedArena || row.session.arenaName?.trim() === selectedArena || !row.session.arenaName?.trim());
+  const visibleRows = arenaRows.filter((row) => selectedSectionId == null || inSection(row, selectedSectionId));
 
   // Only the latest finished heat stays on show; the rest wait behind "Show full timetable".
   const latestFinished = lastFinishedRow(visibleRows);
@@ -196,25 +190,57 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
       })
       .map((group) => ({
         key: group.key,
-        title: group.race ? `${displaySectionName(group.session.sectionName || group.session.name)} · Session ${ordinals.get(group.session.id) ?? 1}` : null,
+        title: group.race
+          ? `${displaySectionName(group.session.sectionName || group.session.name)} · Session ${ordinals.get(group.session.id) ?? 1}`
+          : isBreakSession(group.session) ? 'Break' : null,
         noun: ['heat', 'heats'] as const,
+        // A break's line says how long it lasts instead of counting heats.
+        length: !group.race && group.session.durationMinutes ? delayInWords(group.session.durationMinutes) : null,
         rows: group.rows,
       }));
   })();
-  const finalGroups = finalsByAgeGroup(shownRows).map((group) => ({ ...group, noun: ['final', 'finals'] as const }));
+  const finalGroups = finalsByAgeGroup(shownRows).map((group) => ({ ...group, noun: ['final', 'finals'] as const, length: null }));
   const groups = [...sessionGroups, ...finalGroups].sort((a, b) => {
     const aStart = (a.rows[0]?.effective ?? a.rows[0]?.scheduled)?.getTime() ?? Infinity;
     const bStart = (b.rows[0]?.effective ?? b.rows[0]?.scheduled)?.getTime() ?? Infinity;
     return aStart - bStart || (a.rows[0]?.session.orderIndex ?? 0) - (b.rows[0]?.session.orderIndex ?? 0) || (a.rows[0]?.session.id ?? 0) - (b.rows[0]?.session.id ?? 0);
   });
   const updated = updatedAt ? updatedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : null;
-  usePageHeader({ title, subtitle: updated ? `${competition.name} · ${updated}` : competition.name, onRefresh: reload, refreshLabel: 'Refresh timetable' });
+  const filterable = days.length > 1 || showArenaSelect || showSectionSelect;
+  const dayLabel = dayLabels(days);
+  const sectionLabel = sections.find((s) => String(s.id) === selectedSection)?.label;
+  // With filters the header line says what is showing; otherwise it keeps the competition and update time.
+  const summary = [dayLabel(selectedDay), selectedArena, showSectionSelect ? sectionLabel ?? 'All ages' : ''].filter(Boolean).join(' · ');
+  usePageHeader({
+    title,
+    subtitle: filterable ? summary : updated ? `${competition.name} · ${updated}` : competition.name,
+    onRefresh: reload,
+    refreshLabel: 'Refresh timetable',
+    onEdit: showQualifiers ? () => setDelayOpen(true) : undefined,
+    editLabel: 'Change the timing',
+    editing: delayOpen,
+  });
+  const ticker = useOptionalTicker();
+  const setDockAction = ticker?.setDockAction;
+  const filterCount = (selectedArena ? 1 : 0) + (selectedSection ? 1 : 0);
+  useEffect(() => {
+    if (!setDockAction || !filterable) return;
+    setDockAction({ label: 'Day, arena and age group', count: filterCount, onClick: () => setSheetOpen(true) });
+    return () => setDockAction(null);
+  }, [setDockAction, filterable, filterCount]);
+  function pickDay(day: string) {
+    if (day === selectedDay) return;
+    setDayMove((move) => ({ count: move.count + 1, dir: days.indexOf(day) > days.indexOf(selectedDay) ? 'right' : 'left' }));
+    setPickedDay(day);
+  }
+  const swapClass = dayMove.count > 0 ? ` tt-in-${dayMove.dir}-${dayMove.count % 2}` : '';
+  const heatCount = visibleRows.filter(isRaceRow).length;
 
   function renderGroup(group: typeof groups[number]) {
     const heading = group.title ?? group.rows[0]?.session.name;
     const groupArenas = [...new Set(group.rows.map((row) => row.session.arenaName?.trim() ?? ''))];
     const sharedArena = groupArenas.length === 1 ? groupArenas[0] : '';
-    const count = `${group.rows.length} ${group.rows.length === 1 ? group.noun[0] : group.noun[1]}`;
+    const count = group.title === 'Break' ? group.length : `${group.rows.length} ${group.rows.length === 1 ? group.noun[0] : group.noun[1]}`;
     return <section key={group.key} aria-label={heading} className="tt-group">
       {group.title && <div className="tt-group-title">
         <h2>{group.title}</h2>
@@ -237,47 +263,32 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   return (
     <div className="timetable-board">
       {bandExtra}
-      {(days.length > 1 || showArenaSelect || showSectionSelect) && (
-        <div className="tt-strip">
-          {days.length > 1 && <DaySelect days={days} selectedDay={selectedDay} today={today} onChoose={setPickedDay} />}
-          {showArenaSelect && <ArenaSelect arenas={arenas} selectedArena={selectedArena} dayRows={dayRows} onChoose={chooseArena} />}
-          {showSectionSelect && <SectionSelect sections={sections} selectedSection={selectedSection} onChoose={setSectionFilter} />}
-        </div>
-      )}
-      {lateArenas.map((late) => {
-        const text = late.arena ? `${late.arena} is running ${delayInWords(late.minutes)} late` : `Running ${delayInWords(late.minutes)} late`;
-        return showQualifiers ? (
-          <button key={late.arena} type="button" className="tt-late-line tt-late-btn" onClick={() => setDelayArena(late.arena)}>
-            <Clock aria-hidden="true" size={17} />
-            <span className="flex-1 text-left">{text}</span>
-            <ChevronRight aria-hidden="true" size={17} />
-          </button>
-        ) : (
-          <p key={late.arena} className="tt-late-line" role="status">
-            <Clock aria-hidden="true" size={17} />
-            {text}
-          </p>
-        );
-      })}
-      {showQualifiers && lateArenas.length === 0 && (
-        <button type="button" className="tt-late-link" onClick={() => setDelayArena(selectedArena)}>
-          {pausedIn(selectedArena) ? 'Timetable paused' : 'Running late?'}
-        </button>
-      )}
-      {delayArena != null && (
+      {lateArenas.map((late) => (
+        <p key={late.arena} className="tt-late-line" role="status">
+          <Clock aria-hidden="true" size={17} />
+          {late.arena ? `${late.arena} is running ${delayInWords(late.minutes)} late` : `Running ${delayInWords(late.minutes)} late`}
+        </p>
+      ))}
+      {showQualifiers && delayOpen && (
         <DelaySheet
-          arena={delayArena}
-          lateMinutes={lateArenas.find((late) => late.arena === delayArena)?.minutes ?? 0}
-          paused={pausedIn(delayArena)}
+          arena={selectedArena}
+          lateMinutes={Math.max(0, ...lateArenas.filter((late) => !selectedArena || late.arena === selectedArena).map((late) => late.minutes))}
+          paused={isPaused}
           busy={shifting}
           pace={pace.avgMinutesPerRace != null && (pace.sampleHeats >= 2 || pace.sampleRaces >= 5) ? pace.avgMinutesPerRace : null}
-          onShift={(minutes) => shiftTimes(minutes, delayArena)}
-          onPause={() => void togglePause(pausedIn(delayArena), delayArena)}
-          onClose={() => setDelayArena(null)}
+          onShift={shiftTimes}
+          onContinue={() => void resume()}
+          onClose={() => setDelayOpen(false)}
         />
       )}
+      {(selectedArena || sectionLabel) && (
+        <div className="tt-chips">
+          {selectedArena && <button type="button" className="tt-chip" aria-label={`Remove ${selectedArena}`} onClick={() => chooseArena('')}>{selectedArena}<X aria-hidden="true" size={15} strokeWidth={2.2} /></button>}
+          {sectionLabel && <button type="button" className="tt-chip" aria-label={`Remove ${sectionLabel}`} onClick={() => setSectionFilter('')}>{sectionLabel}<X aria-hidden="true" size={15} strokeWidth={2.2} /></button>}
+        </div>
+      )}
       {actionError && <Notice className="mx-4 my-2" actionLabel={actionError.retry ? 'Try again' : undefined} onAction={actionError.retry}>{actionError.text}</Notice>}
-      <div className="tt-body">
+      <div className={`tt-body${swapClass}`}>
         {lead}
         {visibleRows.some(isProvisionalRow) && (
           <p className="tt-provisional-note" role="note">Provisional timetable: times are estimates until teams and races are confirmed.</p>
@@ -302,64 +313,79 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
         {showFinished && footer}
         <SponsorStrip placement="Timetable" />
       </div>
+      {sheetOpen && (
+        <Sheet title="Day, arena and age group" className="tt-sheet" onClose={() => setSheetOpen(false)}>
+          {({ close }) => (
+            <>
+              {days.length > 1 && (
+                <div className="tt-days" role="group" aria-label="Day" style={{ '--n': days.length, '--i': days.indexOf(selectedDay) } as CSSProperties}>
+                  {days.map((day) => (
+                    <button key={day} type="button" aria-pressed={day === selectedDay} onClick={() => pickDay(day)}>{dayLabel(day)}</button>
+                  ))}
+                  <span className="tt-days-bar" aria-hidden="true" />
+                </div>
+              )}
+              {showSectionSelect && (
+                <div className={`tt-tiles${swapClass}`} role="group" aria-label="Age group">
+                  {sections.map((section) => {
+                    const chosen = String(section.id) === selectedSection;
+                    return (
+                      <button key={section.id} type="button" className="tt-tile" aria-pressed={chosen} onClick={() => setSectionFilter(chosen ? '' : String(section.id))}>
+                        <strong>{section.label}</strong>
+                        <span>{whatsOn(arenaRows.filter((row) => isRaceRow(row) && inSection(row, section.id)))}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {showArenaSelect && (
+                <div className="tt-arena-line">
+                  <span>Arena</span>
+                  <div className="tt-seg" role="group" aria-label="Arena" style={{ '--n': arenas.length + 1, '--i': selectedArena ? arenas.indexOf(selectedArena) + 1 : 0 } as CSSProperties}>
+                    <span className="tt-seg-thumb" aria-hidden="true" />
+                    {['', ...arenas].map((name) => (
+                      <button key={name || 'all'} type="button" aria-pressed={name === selectedArena} onClick={() => chooseArena(name)}>{name || 'All arenas'}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <button type="button" className="kit-pill kit-pill-fill tt-show" onClick={() => close()}>
+                Show {heatCount} {heatCount === 1 ? 'heat' : 'heats'}
+              </button>
+            </>
+          )}
+        </Sheet>
+      )}
     </div>
   );
 }
 
+/** A heat line (or a session still waiting for heats), as opposed to a break or a briefing. */
+const isRaceRow = (row: TimetableRow) => (row.session.kind ?? (row.session.isBreak ? 1 : 0)) === 0;
+const isBreakSession = (session: TimetableRow['session']) => session.kind === 1 || (session.kind == null && session.isBreak);
+
+/** "3 heats · on now", "2 heats · next 10:30" or "Nothing this day", for an age group's tile. */
+function whatsOn(rows: TimetableRow[]) {
+  if (rows.length === 0) return 'Nothing this day';
+  const count = `${rows.length} ${rows.length === 1 ? 'heat' : 'heats'}`;
+  if (rows.some((row) => row.status === 'live')) return `${count} · on now`;
+  const next = rows.find((row) => row.status !== 'finished');
+  return next ? `${count} · next ${formatTime(next.effective)}` : count;
+}
+
+/** Day names for the tabs: "Tuesday" for up to three days, "Tue" for more, with the date when two share a name. */
+function dayLabels(days: string[]) {
+  const at = (day: string) => new Date(`${day}T12:00:00`);
+  const weekday = days.length > 3 ? 'short' : 'long';
+  const names = days.map((day) => at(day).toLocaleDateString('en-GB', { weekday }));
+  const repeated = names.some((name, index) => names.indexOf(name) !== index);
+  return (day: string) => repeated
+    ? at(day).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })
+    : at(day).toLocaleDateString('en-GB', { weekday });
+}
+
 /** A race session with no heats yet: its time is an estimate. */
 const isProvisionalRow = (row: TimetableRow) => !row.heat && (row.session.kind ?? (row.session.isBreak ? 1 : 0)) === 0;
-
-const chevron = <ChevronDown aria-hidden="true" className="tt-arena-chevron" size={14} />;
-
-/** The day menu: "Mon 26" on the strip, "Mon 26 Oct" in the list. */
-function DaySelect({ days, selectedDay, today, onChoose }: { days: string[]; selectedDay: string; today: string; onChoose: (day: string) => void }) {
-  const at = (day: string) => new Date(`${day}T12:00:00`);
-  const options = days.map((day) => ({
-    value: day,
-    label: at(day).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
-    hint: day === today ? 'Today' : undefined,
-  }));
-  return (
-    <Dropdown label="Day" value={selectedDay} options={options} onChange={onChoose} className="tt-arena-wrap" buttonClassName="tt-arena">
-      <span className="tt-arena-text">{at(selectedDay).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })}</span>
-      {chevron}
-    </Dropdown>
-  );
-}
-
-/** The arena menu: "All arenas", then each arena (with "on now" when one is running). */
-function ArenaSelect({ arenas, selectedArena, dayRows, onChoose }: {
-  arenas: string[];
-  selectedArena: string;
-  dayRows: TimetableRow[];
-  onChoose: (name: string) => void;
-}) {
-  const isLive = (name: string) => dayRows.some((row) => row.status === 'live' && (!name || row.session.arenaName?.trim() === name));
-  const options = [{ value: '', label: 'All arenas' }, ...arenas.map((name) => ({ value: name, label: name, live: isLive(name) }))];
-  return (
-    <Dropdown label="Arena" value={selectedArena} options={options} onChange={onChoose} className="tt-arena-wrap" buttonClassName="tt-arena">
-      <span className="tt-arena-text">{selectedArena || 'All arenas'}</span>
-      {isLive(selectedArena) && <span className="tt-arena-live" aria-hidden="true" />}
-      {chevron}
-    </Dropdown>
-  );
-}
-
-/** Filter the day's timetable down to a single age group (section). */
-function SectionSelect({ sections, selectedSection, onChoose }: {
-  sections: { id: number; label: string }[];
-  selectedSection: string;
-  onChoose: (id: string) => void;
-}) {
-  const current = sections.find((s) => String(s.id) === selectedSection);
-  const options = [{ value: '', label: 'All ages' }, ...sections.map((s) => ({ value: String(s.id), label: s.label }))];
-  return (
-    <Dropdown label="Age group" value={selectedSection} options={options} onChange={onChoose} className="tt-arena-wrap" buttonClassName="tt-arena">
-      <span className="tt-arena-text">{current?.label ?? 'All ages'}</span>
-      {chevron}
-    </Dropdown>
-  );
-}
 
 /** Final heats, one block per age group (in running order), after all the sessions. */
 function finalsByAgeGroup(rows: TimetableRow[]) {
@@ -373,7 +399,7 @@ function finalsByAgeGroup(rows: TimetableRow[]) {
   return [...groups.values()];
 }
 
-/** One timetable line: time, name with a small sub-line, "+N · planned time" when late, status colour dot. */
+/** One timetable line: time, name with a small sub-line, "+N" or "−N" when moved, status colour dot. */
 function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false }: {
   row: TimetableRow;
   competitionId: number;
@@ -394,7 +420,8 @@ function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false
   const race = (session.kind ?? (session.isBreak ? 1 : 0)) === 0;
   const heatName = heat ? heat.label || `Heat ${row.heatIndex + 1}` : 'Heats to follow';
   const name = race ? heatName : session.name;
-  const label = race ? (heat ? '' : 'Provisional') : session.kind === 2 ? 'Briefing' : session.isBreak || session.kind === 1 ? 'Break' : session.location || '';
+  // A break has its own heading line, so its row needs no "Break" label.
+  const label = race ? (heat ? '' : 'Provisional') : session.kind === 2 ? 'Briefing' : isBreakSession(session) ? '' : session.location || '';
   const sub = [label, showArena ? session.arenaName?.trim() : ''].filter(Boolean).join(' · ');
   const rawDrift = row.scheduled && row.effective
     ? Math.round((row.effective.getTime() - row.scheduled.getTime()) / 60_000)
@@ -402,7 +429,8 @@ function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false
   const shiftMinutes = Math.abs(rawDrift) >= 5 ? rawDrift : 0;
   const moved = shiftMinutes !== 0 && !!row.scheduled;
   const showShift = moved && status !== 'live' && status !== 'finished' && session.status !== 1;
-  const shiftText = formatShiftDelta(shiftMinutes);
+  // Just "+10" or "−5" next to the heat: no struck-out planned time.
+  const shiftText = Math.abs(shiftMinutes) < 60 ? `${shiftMinutes > 0 ? '+' : '−'}${Math.abs(shiftMinutes)}` : formatShiftDelta(shiftMinutes);
   const orderedRaces = heat ? heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex) : [];
   const runningRaceIndex = orderedRaces.findIndex((r) => !r.isComplete);
   const currentRaceNum = runningRaceIndex >= 0 ? runningRaceIndex + 1 : orderedRaces.length;
@@ -418,7 +446,7 @@ function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false
       </strong>
       {sub && <span className="tt-sub">{sub}</span>}
       {showShift && (
-        <span className={`tt-planned${shiftMinutes < 0 ? ' tt-planned-early' : ''}`} aria-hidden="true">{shiftText} · <s>{formatTime(row.scheduled)}</s></span>
+        <span className={`tt-planned${shiftMinutes < 0 ? ' tt-planned-early' : ''}`} aria-hidden="true">{shiftText}</span>
       )}
       {status === 'live' && <motion.span layoutId={`tt-onnow-${session.arenaName?.trim() ?? ''}`} layout="position" className="tt-onnow" aria-hidden="true">{onNowText}</motion.span>}
     </span>

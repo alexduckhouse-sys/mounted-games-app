@@ -1,6 +1,6 @@
 import { Suspense, useLayoutEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronLeft, Menu, RotateCw } from 'lucide-react';
+import { ChevronDown, ChevronLeft, Menu, Pencil, RotateCw } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { RememberCompetitionDialog } from '../competition/RememberCompetitionDialog';
@@ -47,6 +47,9 @@ function Shell({ width }: { width: PageWidth }) {
   const choosingCompetition = ['/', '/events', '/competitions', '/competitions/past'].includes(location.pathname);
   const competitionId = competitionIdFromPath(location.pathname);
   const filmingMode = /\/competitions\/\d+\/broadcast\/?$/.test(location.pathname);
+  const onLiveFeed = /\/competitions\/\d+\/chat\/?$/.test(location.pathname);
+  // The ticker docks above the tab bar on a competition's pages; the live feed already lists the same news.
+  const tickerDock = !filmingMode && !onLiveFeed && competitionId != null;
   // Public pages get the EGUK look; signed-in tools (dashboard, teams, admin) keep their own.
   const globalTabs = hasGlobalTabs(location.pathname);
   const publicPage = choosingCompetition || competitionId != null || onProfile || globalTabs || location.pathname === '/me/members' || location.pathname === '/settings';
@@ -122,6 +125,7 @@ function Shell({ width }: { width: PageWidth }) {
                 <span className="min-w-0 flex-1 truncate text-base font-semibold">Mounted Games</span>
               )}
               {pageHeader?.refresh && <button type="button" onClick={pageHeader.refresh} className="mg-nav-btn !px-0" aria-label={pageHeader.refreshLabel ?? 'Refresh'}><RotateCw className="h-[18px] w-[18px]" /></button>}
+              {pageHeader?.edit && <button type="button" onClick={pageHeader.edit} className="mg-nav-btn !px-0" aria-label={pageHeader.editLabel ?? 'Edit'} aria-pressed={!!pageHeader.editing}><Pencil className="h-[18px] w-[18px]" /></button>}
               <ConnectionPill />
               {!user && choosingCompetition && <Link to="/login" className="mg-nav-btn">Sign in</Link>}
               <LiteChip onOpen={openLiteSettings} />
@@ -129,11 +133,10 @@ function Shell({ width }: { width: PageWidth }) {
             </div>
           )}
         </header>
-        {competitionId != null && <TopBarTicker />}
       </div>
       )}
       <main ref={mainRef} className={publicPage
-        ? `skin mx-auto w-full ${cap} flex-1 px-4 ${filmingMode || /\/competitions\/\d+\/chat\/?$/.test(location.pathname) ? 'pb-0' : tabsCompetitionId != null || globalTabs ? 'pb-28' : 'pb-10'}`
+        ? `skin mx-auto w-full ${cap} flex-1 px-4 ${filmingMode || onLiveFeed ? 'pb-0' : tickerDock ? 'pb-44' : tabsCompetitionId != null || globalTabs ? 'pb-28' : 'pb-10'}`
         : `skin mx-auto w-full ${cap} flex-1 px-4 py-3 sm:py-5`}>
         {storageError && <Notice role="status" className={publicPage ? 'mt-4' : 'mb-3'}>{storageError}</Notice>}
         {onProfile && <TrainerAccountNotice />}
@@ -141,6 +144,7 @@ function Shell({ width }: { width: PageWidth }) {
           <Suspense fallback={<PageSkeleton />}><Outlet /></Suspense>
         </PageLoadBoundary>
       </main>
+      {tickerDock && <TopBarTicker />}
       {!filmingMode && globalTabs && <GlobalTabs meCount={user ? needsYou : 0} />}
       {!filmingMode && tabsCompetitionId != null && <BottomTabs competitionId={tabsCompetitionId} entryOnly={meta?.id === tabsCompetitionId && !!meta.entryPhase && !canOrganise({ id: meta.id, createdByUserId: meta.createdByUserId })} me={user ? { initials: initialsOf(user.fullName, user.email), count: needsYou } : undefined} />}
       {menuOpen && <NavigationDrawer onClose={() => setMenuOpen(false)} />}
