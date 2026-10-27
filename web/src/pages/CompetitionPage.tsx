@@ -7,6 +7,7 @@ import { useStreamOverlay } from '../hooks/useStreamOverlay';
 import { useSponsorFeed } from '../hooks/useSponsorFeed';
 import { appendStreamMessage } from '../lib/streams';
 import { tickerItems } from '../lib/ticker';
+import { BANNER_TAG, bannerAsNew, tickerAnnouncements } from '../lib/announcements';
 import { useTicker } from '../components/TickerContext';
 import { useLiveHub } from '../live/useLiveHub';
 import { useConnectionStatus } from '../live/ConnectionStatusContext';
@@ -31,14 +32,6 @@ import { LIVE_SAVED_COPY_NOTICE_AFTER_MS, lastUpdatedText, readSavedCopy, savedC
 import { PageSkeleton, TimetableSkeleton, ToplistSkeleton } from '../components/Skeletons';
 import { competitionPhase } from '../lib/competitionPhase';
 import { useLanguage, useT } from '../i18n/LanguageContext';
-
-const BANNER_TAG = 'banner';
-
-function currentAnnouncements(messages: ChatMessage[]) {
-  const announcements = messages.filter((message) => message.type === 2);
-  const activeBanner = announcements.filter((message) => message.tag === BANNER_TAG).at(-1);
-  return [...announcements.filter((message) => message.tag !== BANNER_TAG), ...(activeBanner ? [activeBanner] : [])];
-}
 
 function addAnnouncement(current: ChatMessage[], message: ChatMessage) {
   const withoutSame = current.filter((item) => item.id !== message.id);
@@ -210,17 +203,13 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   useEffect(() => {
     const controller = new AbortController();
     api.get<ChatMessage[]>(`/competitions/${competitionId}/chat`, { signal: controller.signal })
-      .then((r) => setAnnouncements(currentAnnouncements(r.data)))
+      .then((r) => setAnnouncements(tickerAnnouncements(r.data)))
       .catch(() => {});
     return () => controller.abort();
   }, [competitionId, attempt]);
   useEffect(() => {
     // No name fallback: the header already shows it, so the strip stays hidden when there is no news.
-    const activeBanner = announcements.filter((message) => message.tag === BANNER_TAG).at(-1);
-    const tickerAnnouncements = activeBanner
-      ? announcements.map((message) => message.id === activeBanner.id ? { ...message, createdAt: now.toISOString() } : message)
-      : announcements;
-    setItems(data ? tickerItems(data.sessions, tickerAnnouncements, now) : []);
+    setItems(data ? tickerItems(data.sessions, bannerAsNew(announcements, now), now) : []);
     return () => setItems([]);
     // The lines are worded in the chosen language, so a change of language rebuilds them.
   }, [data, announcements, now, setItems, lang]);

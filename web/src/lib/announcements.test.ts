@@ -1,13 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { chat } from '../test/factories';
 import {
-  bannerMessages, clockTime, initials, markSeen, messageThreads, pinnedAnnouncement, readSeen, sentAnnouncements, sentLabel, threadMessages,
+  bannerAsNew, bannerMessages, clockTime, initials, markSeen, messageThreads, pinnedAnnouncement, readSeen, sentAnnouncements, sentLabel, threadMessages, tickerAnnouncements,
 } from './announcements';
 
 const at = (minutes: number) => new Date(Date.UTC(2026, 5, 1, 12, minutes)).toISOString();
 
 describe('announcements', () => {
   beforeEach(() => localStorage.clear());
+
+  it('gives the ticker every announcement, with only the newest banner copy and that one last', () => {
+    const messages = [chat(1, { tag: 'banner' }), chat(2), chat(3, { type: 0 }), chat(4, { tag: 'banner' }), chat(5)];
+    expect(tickerAnnouncements(messages).map((m) => m.id)).toEqual([2, 5, 4]);
+    expect(tickerAnnouncements([chat(2)]).map((m) => m.id)).toEqual([2]);
+  });
+
+  it('counts the pinned banner as just sent, leaving the others as they were', () => {
+    const now = new Date(at(30));
+    const fresh = bannerAsNew([chat(1, { createdAt: at(0) }), chat(2, { tag: 'banner', createdAt: at(1) })], now);
+    expect(fresh.map((m) => m.createdAt)).toEqual([at(0), now.toISOString()]);
+    const plain = [chat(1, { createdAt: at(0) })];
+    expect(bannerAsNew(plain, now)).toBe(plain);
+  });
 
   it('finds the newest pinned banner and lists every banner copy', () => {
     const messages = [chat(1, { tag: 'banner', createdAt: at(0) }), chat(2, { tag: 'banner', createdAt: at(5) }), chat(3, { createdAt: at(9) }), chat(4, { tag: 'banner', adminOnly: true })];

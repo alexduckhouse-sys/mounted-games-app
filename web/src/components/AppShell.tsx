@@ -12,6 +12,8 @@ import { Notice } from './Notice';
 import { PageLoadBoundary } from './PageLoadBoundary';
 import { NavigationDrawer } from './NavigationDrawer';
 import { TopBarTicker } from './TopBarTicker';
+import { TickerFeed } from './TickerFeed';
+import { useOptionalTicker } from './TickerContext';
 import { ConnectionPill } from './ConnectionPill';
 import { BottomTabs } from './BottomTabs';
 import { GlobalTabs } from './GlobalTabs';
@@ -50,13 +52,18 @@ function Shell({ width }: { width: PageWidth }) {
   const competitionId = competitionIdFromPath(location.pathname);
   const filmingMode = /\/competitions\/\d+\/broadcast\/?$/.test(location.pathname);
   const onLiveFeed = /\/competitions\/\d+\/chat\/?$/.test(location.pathname);
-  // The ticker docks above the tab bar on a competition's pages; the live feed already lists the same news.
-  const tickerDock = !filmingMode && !onLiveFeed && competitionId != null;
+  // The ticker docks above the tab bar on every page but filming. An event's own pages feed it; elsewhere it follows
+  // the event last opened, and it only shows when there is news (or a page button such as the timetable's filters).
+  const ticker = useOptionalTicker();
+  const feedCompetitionId = !filmingMode && competitionId == null && ticker ? current?.id ?? null : null;
+  const dockShown = !filmingMode && current != null && ticker != null
+    && (ticker.items.length > 0 || ticker.watchCompetitionId != null || ticker.dockAction != null);
   // Public pages get the EGUK look; signed-in tools (dashboard, teams, admin) keep their own.
   const globalTabs = hasGlobalTabs(location.pathname);
   const publicPage = choosingCompetition || competitionId != null || onProfile || globalTabs || location.pathname === '/me/members' || location.pathname === '/settings';
   // The tabs belong to a competition. The profile borrows the one being followed, if any.
   const tabsCompetitionId = competitionId ?? (onProfile ? current?.id ?? null : null);
+  const hasTabs = !filmingMode && (globalTabs || tabsCompetitionId != null);
   const shown = meta && meta.id === competitionId ? meta : null;
   const title = shown?.name ?? (current && current.id === competitionId ? current.name : null);
   const subtitle = shown ? [competitionDateText(shown.startDate, shown.endDate), shown.location?.trim()].filter(Boolean).join(' · ') : '';
@@ -137,8 +144,8 @@ function Shell({ width }: { width: PageWidth }) {
       </div>
       )}
       <main ref={mainRef} className={publicPage
-        ? `skin mx-auto w-full ${cap} flex-1 px-4 ${filmingMode || onLiveFeed ? 'pb-0' : tickerDock ? 'pb-44' : tabsCompetitionId != null || globalTabs ? 'pb-28' : 'pb-10'}`
-        : `skin mx-auto w-full ${cap} flex-1 px-4 py-3 sm:py-5`}>
+        ? `skin mx-auto w-full ${cap} flex-1 px-4 ${filmingMode ? 'pb-0' : onLiveFeed ? (dockShown ? 'pb-14' : 'pb-0') : dockShown ? (hasTabs ? 'pb-44' : 'pb-24') : hasTabs ? 'pb-28' : 'pb-10'}`
+        : `skin mx-auto w-full ${cap} flex-1 px-4 pt-3 sm:pt-5 ${dockShown ? (hasTabs ? 'pb-44' : 'pb-24') : 'pb-3 sm:pb-5'}`}>
         {storageError && <Notice role="status" className={publicPage ? 'mt-4' : 'mb-3'}>{storageError}</Notice>}
         {onProfile && <TrainerAccountNotice />}
         <PageLoadBoundary page={location.pathname}>
@@ -146,7 +153,8 @@ function Shell({ width }: { width: PageWidth }) {
         </PageLoadBoundary>
       </main>
       <PageTransition mainRef={mainRef} disabled={filmingMode} />
-      {tickerDock && <TopBarTicker />}
+      {feedCompetitionId != null && <TickerFeed key={feedCompetitionId} competitionId={feedCompetitionId} />}
+      {!filmingMode && <TopBarTicker low={!hasTabs} />}
       {!filmingMode && globalTabs && <GlobalTabs meCount={user ? needsYou : 0} />}
       {!filmingMode && tabsCompetitionId != null && <BottomTabs competitionId={tabsCompetitionId} entryOnly={meta?.id === tabsCompetitionId && !!meta.entryPhase && !canOrganise({ id: meta.id, createdByUserId: meta.createdByUserId })} me={user ? { initials: initialsOf(user.fullName, user.email), count: needsYou } : undefined} />}
       {menuOpen && <NavigationDrawer onClose={() => setMenuOpen(false)} />}
