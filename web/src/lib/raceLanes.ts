@@ -62,6 +62,8 @@ export interface ReviewLine {
   /** "Red · Test A · 1st". */
   text: string;
   out: boolean;
+  /** The result and team only ("1st Cotswold A"), for the one-line check above Save. */
+  short: string;
 }
 
 /**
@@ -83,7 +85,7 @@ export function finishingReview(lanes: RaceLane[], pending: readonly PendingPlac
     const result = state.eliminated
       ? statusLabel(true, state.status)
       : `${ordinal(state.place)}${hcTeamIds.has(lane.entry.teamId) ? ' (HC)' : ''}`;
-    return { teamId: lane.entry.teamId, text: `${laneWords(lane)} · ${lane.entry.teamName} · ${result}`, out: state.eliminated };
+    return { teamId: lane.entry.teamId, text: `${laneWords(lane)} · ${lane.entry.teamName} · ${result}`, short: `${result} ${lane.entry.teamName}`, out: state.eliminated };
   });
 }
 

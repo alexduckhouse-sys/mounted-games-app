@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSavedToast } from '../../components/SavedTick';
 import { Notice } from '../../components/Notice';
 import { ChevronLeft, ChevronRight, CloudOff, MoreHorizontal, Printer, Trash2, Undo2 } from 'lucide-react';
@@ -60,6 +60,8 @@ interface ScoringProps {
   onSetCard?: (teamId: number, card: CardMark) => Promise<void> | void;
   /** Called when a scorer changes a team's points by hand in race tools. */
   onOverridePoints?: (teamId: number, points: number | undefined, reason?: string) => void;
+  /** Heat set-up, adjustments and scorer links, shown in the Organiser tools sheet under the race controls. */
+  heatTools?: ReactNode;
   /** Mark these teams as a dead heat (same place, shared points). Without it race tools has no Dead heat switch. */
   onDeadHeat?: (teamIds: number[]) => void;
   /** Split a dead heat that the team is part of. */
@@ -93,6 +95,30 @@ const NO_TEAMS: ReadonlySet<number> = new Set();
 const NO_LINKS: ToolLink[] = [];
 
 /** Runs a change made from race tools. A refusal is already explained by the page, so it is not raised again here. */
+/**
+ * Stretches the race being scored down to just above the bottom tabs, so the lanes, tools and Save fill one screen.
+ * The lanes grow to take the room; with more lanes than fit, the page scrolls as before.
+ */
+function useFillScreen(active: boolean, raceId: number | undefined) {
+  const ref = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!active || !el) return;
+    const fit = () => {
+      const tabs = document.querySelector('.mg-tabs');
+      const bottom = tabs ? tabs.getBoundingClientRect().top - 10 : window.innerHeight - 12;
+      const top = el.getBoundingClientRect().top;
+      el.style.minHeight = `${Math.max(0, Math.floor(bottom - top))}px`;
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(fit);
+    if (el.parentElement) observer?.observe(el.parentElement.closest('main') ?? el.parentElement);
+    return () => { window.removeEventListener('resize', fit); observer?.disconnect(); el.style.minHeight = ''; };
+  }, [active, raceId]);
+  return ref;
+}
+
 async function attempt(action: () => Promise<void> | void): Promise<void> {
   try { await action(); } catch { /* the page says why */ }
 }
@@ -103,13 +129,14 @@ export function ScoringSection({
   onUndo, undoLabel = 'Undo', allowReasons = false, hcTeamIds = NO_TEAMS, onSetHc, cards, onSetCard, onOverridePoints, onDeadHeat, onClearDeadHeat,
   tieRule = TieBreakRule.Countback, notes = {}, nextLanes = null, laneHatbands = null, onRefresh,
   teamFacts, factsOn, onToggleFacts, toolLinks = NO_LINKS,
-  onAddRace, onRenameRace, onRerunRace, runoffTeams, onPickRunoffWinner,
+  onAddRace, onRenameRace, onRerunRace, runoffTeams, onPickRunoffWinner, heatTools,
 }: ScoringProps) {
   const [sheet, setSheet] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [auditRaceId, setAuditRaceId] = useState<number | null>(null);
+  // The read-outs that used to sit under the race now open from race tools, so scoring fits one screen.
+  const [infoSheet, setInfoSheet] = useState<'summary' | 'lanes' | 'history' | null>(null);
   const [sortByLane, setSortByLane] = useState(() => getSortByLaneOrder());
 
   useEffect(() => {
@@ -203,7 +230,7 @@ export function ScoringSection({
   // A saved race is read only until the scorer chooses to edit it.
   const live = canScore && (!saved || editing);
   const canSave = racingRows.length > 0 && (doneCount >= racingRows.length || (isQualifier && placedCount >= Math.min(qualifiers, racingRows.length)));
-  const auditOpen = Boolean(activeRace && auditRaceId === activeRace.id);
+  const fillRef = useFillScreen(Boolean(activeRace) && !allComplete, activeRace?.id);
   const lanes = activeRace ? raceLanes(heat, laneIdx, laneRules, laneHatbands) : [];
   const lastTeamId = live ? lastLaneLeft(lanes, pending, new Set(Object.keys(activeOverrides).map(Number))) : null;
   const review = live && canSave ? finishingReview(lanes, pending, hcTeamIds) : [];
@@ -251,10 +278,16 @@ export function ScoringSection({
     };
   });
 
-  const hasControls = Boolean(onAddRace || onRenameRace || onRerunRace || (onPickRunoffWinner && runoffTeams && runoffTeams.length > 0));
+  const hasControls = Boolean(heatTools || onAddRace || onRenameRace || onRerunRace || (onPickRunoffWinner && runoffTeams && runoffTeams.length > 0));
+  const infoLinks: ToolLink[] = [
+    ...(summary && summaryIdx >= 0 ? [{ key: 'summary', label: 'Last race', sub: `Placings after ${summary.raceName}`, onSelect: () => setInfoSheet('summary') }] : []),
+    ...(nextLanes ? [{ key: 'lanes', label: nextLanes.title, sub: 'Lanes for the next round', onSelect: () => setInfoSheet('lanes') }] : []),
+    ...(canScore && allowAudit && activeRace?.isComplete ? [{ key: 'history', label: 'Score history', sub: 'Every save and correction for this race', onSelect: () => setInfoSheet('history') }] : []),
+  ];
   const links: ToolLink[] = [
+    ...infoLinks.map((l) => ({ ...l, onSelect: () => { setToolsOpen(false); l.onSelect(); } })),
     ...toolLinks.map((l) => ({ ...l, onSelect: () => { setToolsOpen(false); l.onSelect(); } })),
-    ...(hasControls ? [{ key: 'organiser', label: 'Organiser tools', sub: 'Rerun, change or cancel a race', onSelect: () => { setToolsOpen(false); setControlsOpen(true); } }] : []),
+    ...(hasControls ? [{ key: 'organiser', label: 'Organiser tools', sub: 'Races, heats, lanes and adjustments', onSelect: () => { setToolsOpen(false); setControlsOpen(true); } }] : []),
   ];
 
   function stepTeam(teamId: number, by: 1 | -1) {
@@ -267,7 +300,7 @@ export function ScoringSection({
       <div className="sc-main">
         {races.length === 0 && <p className="sc-card sc-pad sc-sub">No races in this heat yet.</p>}
         {activeRace && (
-          <section key={activeRace.id} className="sc-open" aria-label={`Scoring ${activeRace.name}`}>
+          <section key={activeRace.id} ref={fillRef} className="sc-open sc-fit" aria-label={`Scoring ${activeRace.name}`}>
             <div className="sc-race-bar">
               <button
                 type="button"
@@ -329,7 +362,7 @@ export function ScoringSection({
               })}
             </ul>
 
-            {live && <p className="sc-hint sc-hint-quiet">Hold a lane for {HOLD_ELIMINATE_MS / 1000} s to eliminate</p>}
+            {live && review.length === 0 && <p className="sc-hint sc-hint-quiet">Hold a lane for {HOLD_ELIMINATE_MS / 1000} s to eliminate</p>}
             {live && editing && <p className="sc-hint">Saving again replaces this race’s points.</p>}
             {live && isQualifier && <p className="sc-hint">The first {qualifiers} home go through; the rest score 1 point each.</p>}
 
@@ -341,15 +374,18 @@ export function ScoringSection({
             )}
 
             {canScore && saved && !editing && (
-              <div className="sc-bottom">
+              <div className="sc-bottom sc-bottom-saved">
                 <button type="button" className="mg-btn mg-btn-secondary sc-wide-btn" onClick={() => setEditing(true)}>Edit this race</button>
+                <button type="button" className="sc-tool-btn" aria-label="Race tools" onClick={() => setToolsOpen(true)}>
+                  <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
+                </button>
               </div>
             )}
 
             {review.length > 0 && (
               <section className="sc-review" aria-label="Finishing order">
-                <h4 className="sc-review-title">Check the order before saving</h4>
-                <ol>{review.map((line) => <li key={line.teamId} className={line.out ? 'is-out' : undefined}>{line.text}</li>)}</ol>
+                <h4 className="sc-review-title">Check the order</h4>
+                <ol>{review.map((line) => <li key={line.teamId} className={line.out ? 'is-out' : undefined} title={line.text}>{line.short}</li>)}</ol>
               </section>
             )}
 
@@ -387,26 +423,6 @@ export function ScoringSection({
           </section>
         )}
 
-        {canScore && allowAudit && activeRace?.isComplete && (
-          <div className="sc-card sc-pad">
-            <button
-              type="button"
-              className="mg-btn mg-btn-secondary text-xs"
-              aria-expanded={auditOpen}
-              onClick={() => setAuditRaceId(auditOpen ? null : activeRace.id)}
-            >
-              Score history &amp; correction
-            </button>
-            {auditOpen && (
-              <div className="mt-3">
-                <ScoreAuditPanel raceId={activeRace.id} onChanged={onRefresh} />
-              </div>
-            )}
-          </div>
-        )}
-
-        {summary && summaryIdx >= 0 && <SummaryCard summary={summary} raceNumber={summaryIdx + 1} />}
-        {nextLanes && <NextLanesCard lanes={nextLanes} />}
       </div>
 
       {allComplete && races.length > 0 && (
@@ -461,6 +477,20 @@ export function ScoringSection({
           onClose={() => setToolsOpen(false)}
         />
       )}
+      {infoSheet && (
+        <div className="rt-overlay">
+          <button type="button" className="rt-scrim" aria-label="Close" onClick={() => setInfoSheet(null)} />
+          <div role="dialog" aria-modal="true" aria-label={infoSheet === 'summary' ? 'Last race' : infoSheet === 'lanes' ? 'Next round lanes' : 'Score history'} className="rt-sheet">
+            <div className="rt-head">
+              <span className="rt-title">{infoSheet === 'summary' ? 'Last race' : infoSheet === 'lanes' ? (nextLanes?.title ?? 'Next round') : 'Score history'}</span>
+              <button type="button" className="sc-link" onClick={() => setInfoSheet(null)}>Close</button>
+            </div>
+            {infoSheet === 'summary' && summary && <SummaryCard summary={summary} raceNumber={summaryIdx + 1} />}
+            {infoSheet === 'lanes' && nextLanes && <NextLanesCard lanes={nextLanes} />}
+            {infoSheet === 'history' && activeRace && <ScoreAuditPanel raceId={activeRace.id} onChanged={onRefresh} />}
+          </div>
+        </div>
+      )}
       {controlsOpen && activeRace && (
         <div className="rt-overlay">
           <button type="button" className="rt-scrim" aria-label="Close organiser tools" onClick={() => setControlsOpen(false)} />
@@ -477,6 +507,7 @@ export function ScoringSection({
               runoffTeams={runoffTeams}
               onPickRunoffWinner={onPickRunoffWinner}
             />
+            {heatTools}
           </div>
         </div>
       )}

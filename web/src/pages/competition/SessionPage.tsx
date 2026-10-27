@@ -158,6 +158,7 @@ function SessionScoring() {
   const [showTransition, setShowTransition] = useState(false);
   const [showGenerator, setShowGenerator] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
+  const [callSheetOpen, setCallSheetOpen] = useState(false);
   const [commentatorPreference, setCommentatorPreference] = useState(() => ({
     competitionId: competition.id, choice: readCommentatorChoice(competition.id, searchParams.get('commentator') === '1'),
   }));
@@ -641,6 +642,13 @@ function SessionScoring() {
     }
   }
 
+  const lateToRing = canOrganise(competition) && view === 'score' && !!activeHeat
+    && activeHeat.entries.length > 0 && !activeHeat.startedAt && !activeHeat.races.some((r) => r.isComplete)
+    && (() => {
+      const scheduledStart = heatStartTime(session, activeHeat, Math.max(0, orderedHeats.findIndex((h) => h.id === activeHeat.id)));
+      return scheduledStart != null && nowMs > scheduledStart.getTime();
+    })();
+
   return (
     <div className="space-y-3 pt-3">
       {saveError && <Notice>{saveError}</Notice>}
@@ -720,16 +728,14 @@ function SessionScoring() {
             </Notice>
           )}
 
-          {view === 'score' && canOrganise(competition) &&
-            activeHeat &&
-            activeHeat.entries.length > 0 &&
-            !activeHeat.startedAt &&
-            !activeHeat.races.some((r) => r.isComplete) && (() => {
-              const scheduledStart = heatStartTime(session, activeHeat, Math.max(0, orderedHeats.findIndex((h) => h.id === activeHeat.id)));
-              return scheduledStart != null && nowMs > scheduledStart.getTime();
-            })() && (
-              <div className="mg-card flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs">
-                <span className="font-semibold text-[rgb(var(--mg-muted))]">Late to ring — call missing team:</span>
+          {lateToRing && activeHeat && (
+            <Notice role={null} actionLabel="Call teams" onAction={() => setCallSheetOpen(true)}>
+              {activeHeat.label ?? 'This heat'} is late to the ring
+            </Notice>
+          )}
+          {callSheetOpen && lateToRing && activeHeat && (
+            <Sheet title="Call teams to the ring" onClose={() => setCallSheetOpen(false)}>
+              <div className="flex flex-col gap-3 text-xs">
                 <div className="flex flex-wrap items-center gap-1.5">
                   {activeHeat.entries
                     .slice()
@@ -772,8 +778,9 @@ function SessionScoring() {
                     </div>
                   );
                 })()}
-              </div>
-            )}
+                            </div>
+            </Sheet>
+          )}
 
           {view === 'score' && (viewHeat ? (
             <ScoringSection
@@ -830,6 +837,32 @@ function SessionScoring() {
                 { key: 'pa', label: 'PA desk', sub: 'Read-outs for the announcer', onSelect: () => navigate(`/competitions/${competition.id}/commentary${sectionQuery}`) },
                 { key: 'tv', label: 'TV kiosk', sub: 'Big screen for the arena', onSelect: () => navigate(`/competitions/${competition.id}/tv${sectionQuery}`) },
               ]}
+              heatTools={(
+                <div className="mt-4 space-y-3 border-t border-[rgb(var(--mg-rule-soft))] pt-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <LaneRotationControl session={session} onChanged={reload} />
+                    {orderedHeats.some((h) => h.raceRoundStage) && <QualifiersControl session={session} onChanged={reload} />}
+                    <button className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => setShowGenerator(true)}>
+                      <Wand2 className="w-3.5 h-3.5" /> Set up heats
+                    </button>
+                  </div>
+                  {viewHeat && (
+                    <ScoreAdjustmentsPanel
+                      session={session}
+                      heat={viewHeat}
+                      activeRaceId={activeRaceId}
+                      hcTeamIds={hcTeamIds}
+                      raceNotes={{ ...savedNotes, ...summaryNotes }}
+                      onChanged={reload}
+                      onError={setSaveError}
+                      onRaceCleared={clearRaceDraft}
+                    />
+                  )}
+                  <div className="mt-4 border-t border-[rgb(var(--mg-rule-soft))] pt-3">
+                    <ScorerLinksCard competitionId={competition.id} canWrite={canManage(competition)} />
+                  </div>
+                </div>
+              )}
               onAddRace={canOrganise(competition) ? async (raceName) => {
                 const programme = viewRaces.map((r) => r.name);
                 try {
@@ -841,57 +874,16 @@ function SessionScoring() {
                   setSaveError('Couldn’t add race. Check your signal and try again.');
                 }
               } : undefined}
-              onRenameRace={canOrganise(competition) && activeRace ? async (newName) => {
-                try {
-                  await api.put(`/competitions/${competition.id}/sessions/${session.id}/races/${activeRace.id}`, {
-                    newName,
-                    applyToAllHeats: true,
-                  });
-                  reload();
-                } catch {
-                  setSaveError('Couldn’t change race. Check your signal and try again.');
-                }
-              } : undefined}
-              onRerunRace={canOrganise(competition) && activeRace ? async () => {
-                try {
-                  await api.delete(`/sessions/races/${activeRace.id}/results`);
-                  if (activeHeat) { writeScoringDraft(draftKeyFor(activeHeat.id, activeRace.id), []); clearRaceDraft(activeRace.id, activeHeat.id); }
-                  updateOutbox((list) => list.filter((q) => q.raceId !== activeRace.id));
-                  reload();
-                } catch {
-                  setSaveError('Couldn’t clear race for re-run. Check your signal and try again.');
-                }
-              } : undefined}
             />
           ) : (
-            <div className="card p-3 text-slate-500 dark:text-slate-300 text-sm">No heats in this session yet.</div>
-          ))}
-
-          <details className="mg-card p-3">
-            <summary className="cursor-pointer font-semibold">Organiser tools</summary>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <LaneRotationControl session={session} onChanged={reload} />
-              {orderedHeats.some((h) => h.raceRoundStage) && <QualifiersControl session={session} onChanged={reload} />}
+            <div className="card flex flex-wrap items-center justify-between gap-2 p-3 text-sm text-slate-500 dark:text-slate-300">
+              No heats in this session yet.
               <button className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => setShowGenerator(true)}>
                 <Wand2 className="w-3.5 h-3.5" /> Set up heats
               </button>
             </div>
-            {viewHeat && (
-              <ScoreAdjustmentsPanel
-                session={session}
-                heat={viewHeat}
-                activeRaceId={activeRaceId}
-                hcTeamIds={hcTeamIds}
-                raceNotes={{ ...savedNotes, ...summaryNotes }}
-                onChanged={reload}
-                onError={setSaveError}
-                onRaceCleared={clearRaceDraft}
-              />
-            )}
-            <div className="mt-4 border-t border-[rgb(var(--mg-rule-soft))] pt-3">
-              <ScorerLinksCard competitionId={competition.id} canWrite={canManage(competition)} />
-            </div>
-          </details>
+          ))}
+
         </>
       ) : (
         <HeatScores session={session} heats={orderedHeats} activeHeatId={activeHeatId} />
@@ -1734,7 +1726,7 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm grid place-items-center p-3"
+      className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-sm grid place-items-center p-3"
       onClick={onClose}
     >
       <motion.div

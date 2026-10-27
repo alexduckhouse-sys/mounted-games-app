@@ -49,9 +49,10 @@ interface Extra {
   correctionReason?: string;
   onDeadHeat?: (teamIds: number[]) => void;
   onClearDeadHeat?: (teamId: number) => void;
+  heatTools?: React.ReactNode;
 }
 
-function Harness({ allowAudit = false, activeIdx = 1, heatOverride = h, queued = [], onSelectRace = vi.fn(), onSubmit = () => {}, allowReasons, onSetHc, hcTeamIds, onUndo, initial = [], lanes = null, hatbands, cards, onSetCard, teamFacts, factsOn, onToggleFacts, toolLinks, onAddRace, onRerunRace, correctionReason = '', onDeadHeat, onClearDeadHeat }: Extra) {
+function Harness({ allowAudit = false, activeIdx = 1, heatOverride = h, queued = [], onSelectRace = vi.fn(), onSubmit = () => {}, allowReasons, onSetHc, hcTeamIds, onUndo, initial = [], lanes = null, hatbands, cards, onSetCard, teamFacts, factsOn, onToggleFacts, toolLinks, onAddRace, onRerunRace, correctionReason = '', onDeadHeat, onClearDeadHeat, heatTools }: Extra) {
   const rules = { lanesPerHeat: lanes, mode: LaneRotationMode.MoveUp };
   const [pending, setPending] = useState<PendingPlace[]>(initial);
   return (
@@ -63,10 +64,16 @@ function Harness({ allowAudit = false, activeIdx = 1, heatOverride = h, queued =
       onOverridePoints={(id, points, reason) => setPending((current) => overridePoints(current, id, points, reason))}
       onReset={() => setPending([])} onSubmit={onSubmit} onUndo={onUndo} allowReasons={allowReasons} onSetHc={onSetHc} hcTeamIds={hcTeamIds} laneHatbands={hatbands}
       cards={cards} onSetCard={onSetCard} teamFacts={teamFacts} factsOn={factsOn} onToggleFacts={onToggleFacts} toolLinks={toolLinks}
-      onAddRace={onAddRace} onRerunRace={onRerunRace} onDeadHeat={onDeadHeat} onClearDeadHeat={onClearDeadHeat}
+      onAddRace={onAddRace} onRerunRace={onRerunRace} heatTools={heatTools} onDeadHeat={onDeadHeat} onClearDeadHeat={onClearDeadHeat}
       correctionReason={correctionReason} onCorrectionReason={() => {}}
     />
   );
+}
+
+async function openLastRace(user: ReturnType<typeof userEvent.setup>) {
+  const sheet = await openTools(user);
+  await user.click(within(sheet).getByRole('button', { name: /Last race/ }));
+  return screen.getByRole('dialog', { name: 'Last race' });
 }
 
 const allPlaced: PendingPlace[] = [{ teamId: 2, place: 1, eliminated: false }, { teamId: 3, place: 2, eliminated: false }, { teamId: 1, place: 3, eliminated: false }];
@@ -151,12 +158,17 @@ describe('the race stack', () => {
 });
 
 describe('the announcer summary', () => {
-  it('appears after the finished race with placings, who is out and the totals', () => {
+  it('is not under the race, and opens from Last race in race tools with placings, who is out and the totals', async () => {
+    const user = userEvent.setup();
     render(<Harness allowReasons />);
-    const card = screen.getByRole('region', { name: 'Announcer summary for Race 1' });
+    expect(screen.queryByRole('region', { name: 'Announcer summary for Race 1' })).toBeNull();
+    const dialog = await openLastRace(user);
+    const card = within(dialog).getByRole('region', { name: 'Announcer summary for Race 1' });
     expect(card).toHaveTextContent('1st Bravo, 3 points');
     expect(card).toHaveTextContent('Alpha: Eliminated');
     expect(card).toHaveTextContent('1st Bravo: 3 points');
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog', { name: 'Last race' })).toBeNull();
   });
 });
 
@@ -303,9 +315,11 @@ describe('hors concours', () => {
     expect(within(menu).getByRole('menuitem', { name: 'Change points' })).toBeInTheDocument();
   });
 
-  it('treats the team as HC in the summary straight away', () => {
+  it('treats the team as HC in the summary straight away', async () => {
+    const user = userEvent.setup();
     render(<Harness hcTeamIds={new Set([2])} />);
-    const card = screen.getByRole('region', { name: 'Announcer summary for Race 1' });
+    const dialog = await openLastRace(user);
+    const card = within(dialog).getByRole('region', { name: 'Announcer summary for Race 1' });
     expect(card).toHaveTextContent('Bravo (HC), 3 points');
     expect(card).toHaveTextContent('Bravo: HC, 3 points');
     expect(card).toHaveTextContent('1st Charlie: 2 points');
@@ -421,6 +435,15 @@ describe('race tools', () => {
     expect(screen.queryByRole('dialog', { name: 'Organiser tools' })).toBeNull();
   });
 
+  it('shows the heat tools inside organiser tools', async () => {
+    const user = userEvent.setup();
+    render(<Harness heatTools={<p>Heat tools content</p>} />);
+    expect(screen.queryByText('Heat tools content')).toBeNull();
+    const sheet = await openTools(user);
+    await user.click(within(sheet).getByRole('button', { name: /Organiser tools/ }));
+    expect(within(screen.getByRole('dialog', { name: 'Organiser tools' })).getByText('Heat tools content')).toBeInTheDocument();
+  });
+
   it('has no organiser tools row without any race controls', async () => {
     const user = userEvent.setup();
     render(<Harness />);
@@ -467,7 +490,8 @@ describe('a saved race', () => {
     expect(screen.getByText('Race 1 of 3 · Scored')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Bravo, lane/ })).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'SAVE SCORES' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Race tools' })).toBeNull();
+    // Race tools stay reachable on a saved race, for run-offs, overrides and the score history.
+    expect(screen.getByRole('button', { name: 'Race tools' })).toBeInTheDocument();
     expect(screen.queryByText(/replaces this race/)).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Edit this race' }));
@@ -539,10 +563,14 @@ describe('team colours and hatbands', () => {
   it('toggles the score history and correction panel when the active race is completed', async () => {
     const user = userEvent.setup();
     render(<Harness activeIdx={0} allowAudit />);
-    const toggle = screen.getByRole('button', { name: 'Score history & correction' });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.queryByRole('dialog', { name: 'Score history' })).toBeNull();
+    // The tools button only shows while the race is being edited.
+    await user.click(screen.getByRole('button', { name: 'Edit this race' }));
+    const sheet = await openTools(user);
+    await user.click(within(sheet).getByRole('button', { name: /Score history/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Score history' });
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog', { name: 'Score history' })).toBeNull();
   });
 });
 
@@ -698,13 +726,18 @@ describe('checking the finishing order', () => {
     const review = screen.getByRole('region', { name: 'Finishing order' });
     const lines = within(review).getAllByRole('listitem').map((li) => li.textContent);
     // Race 2 moves everyone up a lane from the draw: Alpha 1, Bravo 2, Charlie 3.
-    expect(lines).toEqual(['Lilac · Charlie · 1st (HC)', 'Blue · Bravo · 2nd', 'Red · Alpha · Eliminated']);
+    expect(lines).toEqual(['1st (HC) Charlie', '2nd Bravo', 'Eliminated Alpha']);
+    expect(within(review).getByRole('heading', { name: 'Check the order' })).toBeInTheDocument();
+    // The long form (hatband, team, place) is kept in each item's title.
+    expect(within(review).getAllByRole('listitem').map((li) => li.getAttribute('title'))).toEqual(['Lilac · Charlie · 1st (HC)', 'Blue · Bravo · 2nd', 'Red · Alpha · Eliminated']);
+    expect(screen.queryByText('Hold a lane for 0.6 s to eliminate')).toBeNull();
   });
 
   it('names the lane number when the event sets no hatbands', () => {
     render(<Harness initial={allPlaced} />);
-    const lines = within(screen.getByRole('region', { name: 'Finishing order' })).getAllByRole('listitem').map((li) => li.textContent);
-    expect(lines[0]).toMatch(/^Lane \d · Bravo · 1st$/);
+    const items = within(screen.getByRole('region', { name: 'Finishing order' })).getAllByRole('listitem');
+    expect(items[0]).toHaveTextContent('1st Bravo');
+    expect(items[0].getAttribute('title')).toMatch(/^Lane \d · Bravo · 1st$/);
   });
 });
 
@@ -719,9 +752,13 @@ it('shows an existing half-point score when a scorer link cannot read its privat
   expect(within(sheet).getByLabelText('2.5 points')).toBeInTheDocument();
 });
 
-it('does not offer organiser score history through a scoring-only surface', () => {
+it('does not offer organiser score history through a scoring-only surface', async () => {
+  const user = userEvent.setup();
   render(<Harness activeIdx={0} />);
-  expect(screen.queryByRole('button', { name: 'Score history & correction' })).toBeNull();
+  expect(screen.queryByRole('dialog', { name: 'Score history' })).toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Edit this race' }));
+  const sheet = await openTools(user);
+  expect(within(sheet).queryByRole('button', { name: /Score history/ })).toBeNull();
 });
 
 it('cancels a pending hold when the active race changes', () => {

@@ -2,10 +2,9 @@ import { Dropdown } from '../../components/Dropdown';
 import { displaySectionName } from '../../lib/section';
 import { TimetableBoard } from './TimetableBoard';
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Sparkles, X, Mic, Monitor, QrCode as QrCodeIcon } from 'lucide-react';
-import { QrAccessModal } from '../../components/QrAccessModal';
+import { ChevronDown, ChevronRight, Sparkles, X } from 'lucide-react';
 import { RaceListPicker } from '../../components/RacePicker';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
@@ -156,7 +155,6 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   const sectionId = competition.sections.find((s) => s.id === requestedSection)?.id ?? defaultSectionId(competition);
   const [subTab, setSubTab] = useState<SectionSubTab>(startOn);
   const [showFinals, setShowFinals] = useState(false);
-  const [showQrModal, setShowQrModal] = useState(false);
   const [chosenView, setChosenView] = useState<ToplistViewTab | null>(readPreferredToplistView);
   const chooseView = (view: ToplistViewTab) => {
     setChosenView(view);
@@ -239,34 +237,13 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   const teamCount = competition.teams.filter((t) => t.competitionSectionId === sectionId && !t.isHorsConcours).length;
   const rail = desktop && competition.sections.length > 1
     ? <AgeGroupRail sections={competition.sections} teams={competition.teams} value={sectionId} onChange={chooseSection} /> : null;
-  const sectionQuery = sectionId != null ? `?section=${sectionId}` : '';
-  const finalsButton = canManage(competition) && (
-    <div className="flex flex-wrap items-center gap-2" role="region" aria-label="Organiser quick actions">
-      {sectionId != null && (
-        <button type="button" onClick={() => setShowFinals(true)} className="mg-btn mg-btn-primary">
-          <Sparkles className="h-4 w-4" /> Create finals
-        </button>
-      )}
-      <button
-        type="button"
-        onClick={() => setShowQrModal(true)}
-        className="mg-btn mg-btn-secondary"
-      >
-        <QrCodeIcon className="h-4 w-4" aria-hidden="true" /> QR Access
-      </button>
-      <Link
-        to={`/competitions/${competition.id}/commentary${sectionQuery}`}
-        className="mg-btn mg-btn-secondary"
-      >
-        <Mic className="h-4 w-4" aria-hidden="true" /> PA Commentator
-      </Link>
-      <Link
-        to={`/competitions/${competition.id}/tv${sectionQuery}`}
-        className="mg-btn mg-btn-secondary"
-      >
-        <Monitor className="h-4 w-4" aria-hidden="true" /> TV Kiosk
-      </Link>
-    </div>
+  // Finals are due once every session in the age group is done. The PA desk, TV kiosk and QR codes are in the menu.
+  const finalsDue = list.sessionsTotal > 0 && list.sessionsDone === list.sessionsTotal;
+  const finalsButton = canManage(competition) && sectionId != null && finalsDue && (
+    <button type="button" onClick={() => setShowFinals(true)} className="mg-card flex min-h-14 w-full items-center gap-3 px-4 text-left">
+      <span className="flex-1 font-semibold text-[rgb(var(--mg-heading))]">Create finals</span>
+      <ChevronRight className="h-[18px] w-[18px] text-[rgb(var(--mg-muted))]" aria-hidden="true" />
+    </button>
   );
   const finalsModal = (
     <>
@@ -279,14 +256,6 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
           />
         )}
       </AnimatePresence>
-      <QrAccessModal
-        open={showQrModal}
-        onClose={() => setShowQrModal(false)}
-        competitionId={competition.id}
-        competitionName={competition.name}
-        sectionId={sectionId}
-        canWrite={canManage(competition)}
-      />
     </>
   );
 

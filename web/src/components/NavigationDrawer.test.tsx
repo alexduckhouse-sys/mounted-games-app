@@ -211,6 +211,44 @@ describe('NavigationDrawer: following a competition', () => {
   });
 });
 
+describe('NavigationDrawer: On the day', () => {
+  it('gives the organiser the PA desk, TV kiosk and QR codes, first in the menu', async () => {
+    mount({ competition: true, roles: ['Trainer'], meta: { createdByUserId: 'u1' } });
+    const day = screen.getByRole('navigation', { name: 'On the day' });
+    expect(screen.getByRole('heading', { name: 'On the day' })).toBeInTheDocument();
+    expect(links('On the day')).toEqual([['PA desk', '/competitions/4/commentary'], ['TV kiosk', '/competitions/4/tv']]);
+    // It comes before the competition's own pages.
+    expect(day.compareDocumentPosition(screen.getByRole('navigation', { name: 'This competition' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await userEvent.click(within(day).getByRole('link', { name: 'TV kiosk' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('probe')).toHaveTextContent('/competitions/4/tv');
+  });
+
+  it('opens the QR codes sheet from Scorer and screen QR codes', async () => {
+    mount({ competition: true, roles: ['Admin'], meta: {} });
+    expect(screen.queryByRole('dialog', { name: 'Share with QR codes' })).toBeNull();
+    await userEvent.click(within(screen.getByRole('navigation', { name: 'On the day' })).getByRole('button', { name: 'Scorer and screen QR codes' }));
+    expect(await screen.findByRole('dialog', { name: 'Share with QR codes' })).toBeInTheDocument();
+  });
+
+  it('carries the chosen age group to the PA desk and TV kiosk', () => {
+    mount({ competition: true, roles: ['Admin'], meta: {}, path: '/competitions/4/scoring?section=7', groups: [{ id: 7, name: 'Under 12' }] });
+    expect(links('On the day')).toEqual([['PA desk', '/competitions/4/commentary?section=7'], ['TV kiosk', '/competitions/4/tv?section=7']]);
+  });
+
+  it('is not there for a spectator, a signed-out visitor, or a trainer who does not run this competition', () => {
+    const { unmount } = mount({ competition: true, roles: ['Member'], meta: { createdByUserId: 'u1' } });
+    expect(screen.queryByRole('navigation', { name: 'On the day' })).toBeNull();
+    unmount();
+    const signedOut = mount({ competition: true, meta: {} });
+    expect(screen.queryByRole('navigation', { name: 'On the day' })).toBeNull();
+    signedOut.unmount();
+    mount({ competition: true, roles: ['Trainer'], meta: { createdByUserId: 'someone-else' } });
+    expect(screen.queryByRole('navigation', { name: 'On the day' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Scorer and screen QR codes' })).toBeNull();
+  });
+});
+
 describe('NavigationDrawer: age groups', () => {
   const groups = [{ id: 11, name: 'Seniors', live: true }, { id: 12, name: 'Juniors', next: '09:05' }, { id: 13, name: 'Novices' }];
   const openGroups = () => userEvent.click(screen.getByRole('button', { name: /Age group/ }));

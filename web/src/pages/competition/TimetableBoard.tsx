@@ -16,6 +16,7 @@ import { displaySectionName } from '../../lib/section';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
 import { arenaDelays, delayInWords, lastFinishedRow, sessionOrdinals, statusLabel, TIMETABLE_COLOURS, timetableRows, type TimetableRow, type TimetableStatus } from '../../lib/timetableRows';
 import { HeatRing } from '../../components/HeatRing';
+import { DelaySheet } from './DelaySheet';
 import './timetable.css';
 
 const STATUS_KEY: ReadonlyArray<[TimetableStatus, string]> = [['on-time', 'On time'], ['late', 'Late'], ['live', 'On now'], ['finished', 'Finished']];
@@ -68,33 +69,34 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   const [arena, setArena] = useState(() => { try { return localStorage.getItem(arenaKey) ?? ''; } catch { return ''; } });
   const [sectionFilter, setSectionFilter] = useState('');
   const [shifting, setShifting] = useState(false);
-  const [customDelay, setCustomDelay] = useState('');
+  // The arena whose timing sheet is open ('' for every arena), or null when it is shut.
+  const [delayArena, setDelayArena] = useState<string | null>(null);
   const [actionError, setActionError] = useState<{ text: string; retry?: () => void } | null>(null);
   const pace = useMemo(() => predictMinutesPerRace(competition.sessions ?? []), [competition.sessions]);
 
-  async function shiftTimes(deltaMinutes: number) {
+  async function shiftTimes(deltaMinutes: number, arenaName: string) {
     setShifting(true);
     setActionError(null);
     try {
       await api.post(`/competitions/${competition.id}/sessions/shift-times`, {
         deltaMinutes,
-        arenaName: selectedArena || undefined,
+        arenaName: arenaName || undefined,
       });
       reload();
       return true;
     } catch {
-      setActionError({ text: 'Couldn’t shift the timetable. Check your signal and try again.', retry: () => void shiftTimes(deltaMinutes) });
+      setActionError({ text: 'Couldn’t shift the timetable. Check your signal and try again.', retry: () => void shiftTimes(deltaMinutes, arenaName) });
       return false;
     } finally {
       setShifting(false);
     }
   }
-  async function togglePause(currentlyPaused: boolean) {
+  async function togglePause(currentlyPaused: boolean, arenaName: string) {
     setShifting(true);
     setActionError(null);
     try {
       await api.post(`/competitions/${competition.id}/sessions/${currentlyPaused ? 'resume' : 'pause'}`, {
-        arenaName: selectedArena || undefined,
+        arenaName: arenaName || undefined,
       });
       reload();
     } catch {
@@ -102,19 +104,11 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
         text: currentlyPaused
           ? 'Couldn’t resume the timetable. Check your signal and try again.'
           : 'Couldn’t pause the timetable. Check your signal and try again.',
-        retry: () => void togglePause(currentlyPaused),
+        retry: () => void togglePause(currentlyPaused, arenaName),
       });
     } finally {
       setShifting(false);
     }
-  }
-  async function applyCustomDelay() {
-    const parsed = Number(customDelay);
-    if (!Number.isInteger(parsed) || parsed === 0 || parsed < -720 || parsed > 720) {
-      setActionError({ text: 'Enter a whole number from -720 to 720, excluding zero.' });
-      return;
-    }
-    if (await shiftTimes(parsed)) setCustomDelay('');
   }
   function chooseArena(name: string) {
     setArena(name);
@@ -137,9 +131,9 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
   const arenas = [...new Set(rows.map((row) => row.session.arenaName?.trim()).filter((name): name is string => !!name))];
   const showArenaSelect = sectionId == null && arenas.length > 1;
   const selectedArena = showArenaSelect && arenas.includes(arena) ? arena : '';
-  const isPaused = (competition.sessions ?? []).some(
+  const pausedIn = (arenaName: string) => (competition.sessions ?? []).some(
     (s) => s.status !== 2
-      && (!selectedArena || s.arenaName?.trim() === selectedArena)
+      && (!arenaName || s.arenaName?.trim() === arenaName)
       && parsePausedAtMs(s.notes) != null,
   );
   const sections = useMemo(
@@ -250,62 +244,37 @@ export function TimetableBoard({ sectionId = null, title = 'Timetable', bandExtr
           {showSectionSelect && <SectionSelect sections={sections} selectedSection={selectedSection} onChoose={setSectionFilter} />}
         </div>
       )}
-      {lateArenas.map((late) => (
-        <p key={late.arena} className="tt-late-line" role="status">
-          <Clock aria-hidden="true" size={17} />
-          {late.arena ? `${late.arena} is running ${delayInWords(late.minutes)} late` : `Running ${delayInWords(late.minutes)} late`}
-        </p>
-      ))}
-      {showQualifiers && (
-        <div className="flex flex-wrap items-center gap-1.5 px-1 text-xs" role="group" aria-label="Delay timetable">
-          <span className="font-semibold text-[rgb(var(--mg-muted))]">
-            Shift {selectedArena || 'all arenas'}:
-          </span>
-          {([15, 30, -15] as const).map((delta) => (
-            <button
-              key={delta}
-              type="button"
-              disabled={shifting}
-              onClick={() => void shiftTimes(delta)}
-              className="rounded-md border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] px-2 py-1 text-xs font-semibold hover:bg-[rgb(var(--mg-tint))]"
-            >
-              {delta > 0 ? `+${delta}m` : `${delta}m`}
-            </button>
-          ))}
-          <button
-            type="button"
-            disabled={shifting}
-            onClick={() => void togglePause(isPaused)}
-            className={isPaused
-              ? 'rounded-md border border-amber-500/40 bg-amber-500/15 px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-500/25 dark:text-amber-300'
-              : 'rounded-md border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] px-2 py-1 text-xs font-semibold hover:bg-[rgb(var(--mg-tint))]'}
-          >
-            {isPaused ? 'Continue' : 'Pause'}
+      {lateArenas.map((late) => {
+        const text = late.arena ? `${late.arena} is running ${delayInWords(late.minutes)} late` : `Running ${delayInWords(late.minutes)} late`;
+        return showQualifiers ? (
+          <button key={late.arena} type="button" className="tt-late-line tt-late-btn" onClick={() => setDelayArena(late.arena)}>
+            <Clock aria-hidden="true" size={17} />
+            <span className="flex-1 text-left">{text}</span>
+            <ChevronRight aria-hidden="true" size={17} />
           </button>
-          <input
-            type="number"
-            min={-720}
-            max={720}
-            value={customDelay}
-            onChange={(e) => setCustomDelay(e.target.value)}
-            placeholder="±min"
-            aria-label="Custom delay minutes"
-            className="w-16 rounded-md border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] px-2 py-1 text-xs"
-          />
-          <button
-            type="button"
-            disabled={shifting || !customDelay.trim()}
-            onClick={() => void applyCustomDelay()}
-            className="rounded-md border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-surface))] px-2 py-1 text-xs font-semibold hover:bg-[rgb(var(--mg-tint))] disabled:opacity-50"
-          >
-            Apply
-          </button>
-          {pace.avgMinutesPerRace != null && (pace.sampleHeats >= 2 || pace.sampleRaces >= 5) && (
-            <span className="ml-auto rounded-full bg-[rgb(var(--mg-tint))] px-2 py-0.5 text-[11px] font-medium text-[rgb(var(--mg-muted))]">
-              Pace: ~{pace.avgMinutesPerRace.toFixed(1)}m/race
-            </span>
-          )}
-        </div>
+        ) : (
+          <p key={late.arena} className="tt-late-line" role="status">
+            <Clock aria-hidden="true" size={17} />
+            {text}
+          </p>
+        );
+      })}
+      {showQualifiers && lateArenas.length === 0 && (
+        <button type="button" className="tt-late-link" onClick={() => setDelayArena(selectedArena)}>
+          {pausedIn(selectedArena) ? 'Timetable paused' : 'Running late?'}
+        </button>
+      )}
+      {delayArena != null && (
+        <DelaySheet
+          arena={delayArena}
+          lateMinutes={lateArenas.find((late) => late.arena === delayArena)?.minutes ?? 0}
+          paused={pausedIn(delayArena)}
+          busy={shifting}
+          pace={pace.avgMinutesPerRace != null && (pace.sampleHeats >= 2 || pace.sampleRaces >= 5) ? pace.avgMinutesPerRace : null}
+          onShift={(minutes) => shiftTimes(minutes, delayArena)}
+          onPause={() => void togglePause(pausedIn(delayArena), delayArena)}
+          onClose={() => setDelayArena(null)}
+        />
       )}
       {actionError && <Notice className="mx-4 my-2" actionLabel={actionError.retry ? 'Try again' : undefined} onAction={actionError.retry}>{actionError.text}</Notice>}
       <div className="tt-body">

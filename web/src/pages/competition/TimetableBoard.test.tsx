@@ -439,7 +439,7 @@ it('links heat rows directly to the heat without a lanes dropdown and shows a si
   expect(screen.getByRole('combobox', { name: 'Arena' })).toBeInTheDocument();
 });
 
-it('formats delays of an hour or more as hours and minutes, and lets organisers pause, resume, apply custom delays, and see pace', async () => {
+it('formats delays of an hour or more as hours and minutes, and lets organisers move times, pause, resume and see pace from the timing sheet', async () => {
   const postSpy = vi.spyOn(api, 'post').mockResolvedValue({ data: [] } as never);
   auth.organise = true;
   const completedRaces = [1, 2, 3, 4, 5].map((id) => race(id, { isComplete: true }));
@@ -484,19 +484,26 @@ it('formats delays of an hour or more as hours and minutes, and lets organisers 
   const lateRow = screen.getByRole('link', { name: /Very Late Heat/ });
   expect(lateRow.querySelector('.tt-planned')).toHaveTextContent('+1h 34m · 10:00');
   expect(lateRow).toHaveTextContent('+1h 34m');
-  expect(screen.getByRole('status')).toHaveTextContent('Main Arena is running 1h 34m late');
-  expect(screen.getByText('Pace: ~4.0m/race')).toBeInTheDocument();
+  // For an organiser the late line is a button that opens the timing sheet; the old shift row is gone.
+  expect(screen.queryByRole('group', { name: 'Delay timetable' })).toBeNull();
+  expect(screen.queryByRole('spinbutton', { name: 'Custom delay minutes' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: /Main Arena is running 1h 34m late/ }));
+  const sheet = screen.getByRole('dialog', { name: 'Main Arena timing' });
+  expect(sheet).toHaveTextContent('Running 1h 34m late');
+  expect(within(sheet).getByText('Races are taking about 4.0 minutes each.')).toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
-  await waitFor(() => expect(postSpy).toHaveBeenCalledWith('/competitions/1/sessions/pause', { arenaName: undefined }));
+  fireEvent.click(within(sheet).getByRole('switch', { name: 'Pause the timetable' }));
+  await waitFor(() => expect(postSpy).toHaveBeenCalledWith('/competitions/1/sessions/pause', { arenaName: 'Main Arena' }));
 
-  const input = screen.getByRole('spinbutton', { name: 'Custom delay minutes' });
-  fireEvent.change(input, { target: { value: '95' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
-  await waitFor(() => expect(postSpy).toHaveBeenCalledWith('/competitions/1/sessions/shift-times', { deltaMinutes: 95, arenaName: undefined }));
+  fireEvent.click(within(sheet).getByRole('button', { name: '5 minutes later' }));
+  fireEvent.click(within(sheet).getByRole('button', { name: '5 minutes later' }));
+  fireEvent.click(within(sheet).getByRole('button', { name: 'Done' }));
+  await waitFor(() => expect(postSpy).toHaveBeenCalledWith('/competitions/1/sessions/shift-times', { deltaMinutes: 10, arenaName: 'Main Arena' }));
+  await waitFor(() => expect(reload).toHaveBeenCalled());
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Main Arena timing' })).toBeNull());
   unmount();
 
-  // When a session has a [paused:...] tag, the button switches to Continue and posts to /resume.
+  // When a session has a [paused:...] tag, the link says so, the sheet's switch is on, and switching it off posts to /resume.
   setCompetition({
     sessions: [
       session(2, {
@@ -510,7 +517,11 @@ it('formats delays of an hour or more as hours and minutes, and lets organisers 
     ],
   });
   renderBoard();
-  fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Timetable paused' }));
+  const pausedSheet = screen.getByRole('dialog', { name: 'Timing' });
+  const pauseSwitch = within(pausedSheet).getByRole('switch', { name: 'Pause the timetable' });
+  expect(pauseSwitch).toBeChecked();
+  fireEvent.click(pauseSwitch);
   await waitFor(() => expect(postSpy).toHaveBeenCalledWith('/competitions/1/sessions/resume', { arenaName: undefined }));
   postSpy.mockRestore();
 });
@@ -532,22 +543,51 @@ it('updates the paused timetable as time passes without requiring a competition 
   expect(vi.getTimerCount()).toBe(0);
 });
 
-it('reports pause and shift failures and keeps the entered custom delay for retry', async () => {
+it('reports pause and shift failures, keeps the sheet open for a failed move, and offers a retry', async () => {
   auth.organise = true;
+  setCompetition({}, null, 'Main Arena');
   const post = vi.spyOn(api, 'post').mockRejectedValue(new Error('offline'));
   renderBoard();
-  fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+  fireEvent.click(screen.getByRole('button', { name: /Main Arena is running 6 minutes late/ }));
+  const sheet = screen.getByRole('dialog', { name: 'Main Arena timing' });
+  fireEvent.click(within(sheet).getByRole('switch', { name: 'Pause the timetable' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t pause the timetable');
-  const input = screen.getByRole('spinbutton', { name: 'Custom delay minutes' });
-  fireEvent.change(input, { target: { value: '12' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+  fireEvent.click(within(sheet).getByRole('button', { name: '5 minutes earlier' }));
+  fireEvent.click(within(sheet).getByRole('button', { name: 'Done' }));
   await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t shift the timetable'));
-  expect(input).toHaveValue(12);
-  fireEvent.change(input, { target: { value: '1.5' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
-  expect(screen.getByRole('alert')).toHaveTextContent('whole number');
-  expect(post).toHaveBeenCalledTimes(2);
+  expect(post).toHaveBeenLastCalledWith('/competitions/1/sessions/shift-times', { deltaMinutes: -5, arenaName: 'Main Arena' });
+  // The sheet stays so the move isn't lost, and Try again sends it once more.
+  expect(screen.getByRole('dialog', { name: 'Main Arena timing' })).toBeInTheDocument();
+  expect(within(screen.getByRole('dialog', { name: 'Main Arena timing' })).getByText('-5 min')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(3));
   post.mockRestore();
+});
+
+it('gives organisers a Running late? link when nothing is late, and nobody else', async () => {
+  const post = vi.spyOn(api, 'post').mockResolvedValue({ data: [] } as never);
+  setCompetition({ sessions: [session(1, { status: 0, arenaName: 'Main Arena', scheduledStart: `${day}T10:00:00`, heats: [heat(11, { sessionId: 1, label: 'Heat 1' })] })] });
+  const spectator = renderBoard();
+  expect(screen.queryByRole('button', { name: 'Running late?' })).toBeNull();
+  spectator.unmount();
+
+  auth.organise = true;
+  renderBoard();
+  fireEvent.click(screen.getByRole('button', { name: 'Running late?' }));
+  const sheet = screen.getByRole('dialog', { name: 'Timing' });
+  expect(sheet).toHaveTextContent('Running on time');
+  // Done with no move closes the sheet without posting anything.
+  fireEvent.click(within(sheet).getByRole('button', { name: 'Done' }));
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Timing' })).toBeNull());
+  expect(post).not.toHaveBeenCalled();
+  post.mockRestore();
+});
+
+it('shows spectators the late line as plain text, not a button', () => {
+  setCompetition({}, null, 'Main Arena');
+  renderBoard();
+  expect(screen.getByRole('status')).toHaveTextContent('Main Arena is running 6 minutes late');
+  expect(screen.queryByRole('button', { name: /is running/ })).toBeNull();
 });
 
 it('warms a row once when a delay moves its start time while you watch, but not on first draw', () => {
