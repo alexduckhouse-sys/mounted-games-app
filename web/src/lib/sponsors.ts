@@ -1,4 +1,12 @@
-import type { Session, Sponsor, SponsorAdmin, SponsorTier } from '../types';
+import type {
+  Session,
+  Sponsor,
+  SponsorAdmin,
+  SponsorPlacementStat,
+  SponsorTier,
+  SponsorValueReport,
+  SponsorValueReportItem,
+} from '../types';
 
 /**
  * Every place a sponsor can appear. This is the web's one list: the organiser's "Show on" boxes and every
@@ -117,6 +125,217 @@ export function parseSponsorControl(raw: unknown): 'skip' | null {
 export function shownText(views: number, seconds: number): string {
   const times = `Shown ${views.toLocaleString('en-GB')} ${views === 1 ? 'time' : 'times'}`;
   return seconds >= 60 ? `${times} · ${Math.round(seconds / 60).toLocaleString('en-GB')} min on video` : times;
+}
+
+/** Formats seconds on screen as `Xh Ym Zs` for sponsor proof-of-value reports and CSV exports. */
+export function formatDurationHms(seconds: number): string {
+  const total = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return `${h}h ${m}m ${s}s`;
+}
+
+/** Human-friendly placement categories used in the Sponsor Value Report and CSV exports. */
+export const SPONSOR_REPORT_PLACEMENTS = [
+  { key: 'overview', label: 'Overview', mask: 4 },
+  { key: 'standings', label: 'Standings', mask: 2 },
+  { key: 'timetable', label: 'Timetable', mask: 1 },
+  { key: 'liveStreamOverlay', label: 'Live Stream Overlay', mask: 8 | 16 },
+  { key: 'sponsorPage', label: 'Sponsor Page', mask: 32 },
+] as const;
+
+export type SponsorReportPlacementLabel = (typeof SPONSOR_REPORT_PLACEMENTS)[number]['label'];
+
+/** Maps a raw placement bit or enum name to a human-friendly placement label. */
+export function sponsorReportPlacementLabel(placement: number | string): SponsorReportPlacementLabel | string {
+  if (typeof placement === 'number') {
+    const found = SPONSOR_REPORT_PLACEMENTS.find((p) => (p.mask & placement) !== 0);
+    return found ? found.label : 'Overview';
+  }
+  const norm = placement.trim().toLowerCase();
+  if (norm === 'details' || norm === 'overview') return 'Overview';
+  if (norm === 'results' || norm === 'standings') return 'Standings';
+  if (norm === 'timetable') return 'Timetable';
+  if (norm === 'stream' || norm === 'breakstream' || norm === 'livestreamoverlay' || norm === 'live stream overlay' || norm === 'sponsorexposure') {
+    return 'Live Stream Overlay';
+  }
+  if (norm === 'sponsorpage' || norm === 'sponsor page') return 'Sponsor Page';
+  return placement;
+}
+
+/** Human-friendly placement labels for a `showOn` bitmask (never raw numbers or `'SponsorExposure'`). */
+export function sponsorReportPlacementLabels(showOn: number): SponsorReportPlacementLabel[] {
+  const mask = Number.isInteger(showOn) ? showOn : 0;
+  return SPONSOR_REPORT_PLACEMENTS.filter((p) => (mask & p.mask) !== 0).map((p) => p.label);
+}
+
+/** Builds a SponsorValueReportItem for a sponsor when only SponsorAdmin totals are available, or merges with API report item. */
+export function toSponsorValueReportItem(
+  sponsor: SponsorAdmin,
+  reportItem?: SponsorValueReportItem | null,
+): SponsorValueReportItem {
+  if (reportItem) {
+    return {
+      ...reportItem,
+      placementLabels: reportItem.placementLabels?.length
+        ? reportItem.placementLabels
+        : sponsorReportPlacementLabels(sponsor.showOn),
+      formattedOnScreenTime: reportItem.formattedOnScreenTime || formatDurationHms(reportItem.totalSeconds),
+    };
+  }
+  const tierLabel = SPONSOR_TIERS.find((t) => t.tier === sponsor.tier)?.label ?? 'Supporter';
+  const enabledLabels = sponsorReportPlacementLabels(sponsor.showOn);
+  const nonStreamCount = enabledLabels.filter((l) => l !== 'Live Stream Overlay').length;
+  const placements: SponsorPlacementStat[] = SPONSOR_REPORT_PLACEMENTS.map((p) => {
+    const isEnabledHere = (sponsor.showOn & p.mask) !== 0;
+    if (p.label === 'Live Stream Overlay') {
+      const streamSeconds = isEnabledHere ? sponsor.seconds : 0;
+      const streamViews = isEnabledHere && nonStreamCount === 0 ? sponsor.views : 0;
+      return {
+        key: p.key,
+        label: p.label,
+        views: streamViews,
+        seconds: streamSeconds,
+        formattedOnScreenTime: formatDurationHms(streamSeconds),
+      };
+    }
+    const views = isEnabledHere && nonStreamCount > 0 ? Math.floor(sponsor.views / nonStreamCount) : 0;
+    return {
+      key: p.key,
+      label: p.label,
+      views,
+      seconds: 0,
+      formattedOnScreenTime: formatDurationHms(0),
+    };
+  });
+
+  return {
+    sponsorId: sponsor.id,
+    sponsorName: sponsor.name,
+    linkUrl: sponsor.linkUrl,
+    logoUrl: sponsor.logoUrl,
+    tier: sponsor.tier,
+    tierLabel,
+    showOn: sponsor.showOn,
+    placementLabels: enabledLabels,
+    isEnabled: sponsor.isEnabled,
+    totalViews: sponsor.views,
+    totalSeconds: sponsor.seconds,
+    formattedOnScreenTime: formatDurationHms(sponsor.seconds),
+    placements,
+  };
+}
+
+/** Builds a complete SponsorValueReport from SponsorAdmin rows and optional API SponsorValueReport. */
+export function buildSponsorProofOfValueReport(
+  competitionId: number,
+  sponsors: readonly SponsorAdmin[],
+  apiReport?: SponsorValueReport | null,
+): SponsorValueReport {
+  if (apiReport && Array.isArray(apiReport.sponsors) && apiReport.sponsors.length > 0) {
+    const byId = new Map(apiReport.sponsors.map((item) => [item.sponsorId, item]));
+    const items = sponsors.length > 0
+      ? sponsors.map((s) => toSponsorValueReportItem(s, byId.get(s.id)))
+      : apiReport.sponsors;
+    const totalViews = items.reduce((sum, i) => sum + i.totalViews, 0);
+    const totalSeconds = items.reduce((sum, i) => sum + i.totalSeconds, 0);
+    return {
+      competitionId,
+      totalViews,
+      totalSeconds,
+      formattedTotalOnScreenTime: formatDurationHms(totalSeconds),
+      sponsors: items,
+    };
+  }
+  const items = sponsors.map((s) => toSponsorValueReportItem(s, null));
+  const totalViews = items.reduce((sum, i) => sum + i.totalViews, 0);
+  const totalSeconds = items.reduce((sum, i) => sum + i.totalSeconds, 0);
+  return {
+    competitionId,
+    totalViews,
+    totalSeconds,
+    formattedTotalOnScreenTime: formatDurationHms(totalSeconds),
+    sponsors: items,
+  };
+}
+
+const escapeCsvCell = (value: string | number): string => {
+  const text = String(value ?? '');
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+
+/**
+ * Generates the corrected Sponsor Proof-of-Value CSV report with human-friendly placement labels
+ * (`Overview`, `Standings`, `Timetable`, `Live Stream Overlay`, `Sponsor Page`), `Views (Impressions)`,
+ * and `Seconds` (`Xh Ym Zs` Live Stream On-Screen Time) per sponsor and per placement.
+ */
+export function buildSponsorReportCsv(
+  competitionName: string,
+  sponsors: readonly SponsorAdmin[],
+  apiReport?: SponsorValueReport | null,
+): string {
+  const report = buildSponsorProofOfValueReport(apiReport?.competitionId ?? 0, sponsors, apiReport);
+  const headers = [
+    'Competition',
+    'Sponsor',
+    'Tier',
+    'Status',
+    'Placements',
+    'Total Views (Impressions)',
+    'Total Live Stream Seconds',
+    'Live Stream On-Screen Time',
+    'Placement',
+    'Placement Views (Impressions)',
+    'Placement Seconds',
+    'Placement On-Screen Time',
+  ];
+  const rows: string[][] = [headers];
+
+  for (const item of report.sponsors) {
+    const placementList = item.placementLabels.length > 0 ? item.placementLabels.join(', ') : 'None';
+    const status = item.isEnabled ? 'Active' : 'Disabled';
+    const activePlacements = item.placements.filter(
+      (p) => item.placementLabels.includes(p.label) || p.views > 0 || p.seconds > 0,
+    );
+
+    if (activePlacements.length === 0) {
+      rows.push([
+        competitionName,
+        item.sponsorName,
+        item.tierLabel,
+        status,
+        placementList,
+        String(item.totalViews),
+        String(item.totalSeconds),
+        item.formattedOnScreenTime,
+        'None',
+        '0',
+        '0',
+        formatDurationHms(0),
+      ]);
+      continue;
+    }
+
+    for (const p of activePlacements) {
+      rows.push([
+        competitionName,
+        item.sponsorName,
+        item.tierLabel,
+        status,
+        placementList,
+        String(item.totalViews),
+        String(item.totalSeconds),
+        item.formattedOnScreenTime,
+        p.label,
+        String(p.views),
+        String(p.seconds),
+        p.formattedOnScreenTime || formatDurationHms(p.seconds),
+      ]);
+    }
+  }
+
+  return rows.map((row) => row.map(escapeCsvCell).join(',')).join('\n');
 }
 
 // ---- dates ----

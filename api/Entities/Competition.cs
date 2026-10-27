@@ -21,6 +21,14 @@ public class Competition
     public string? CompetitionNumber { get; set; }
     /// <summary>Where entrants write to the organiser (a plain address, at most 254 characters). Shown on the public Details tab.</summary>
     public string? ContactEmail { get; set; }
+    /// <summary>Optional what3words address for the horsebox / lorry entrance gate (at most 120 characters).</summary>
+    public string? LorryWhat3Words { get; set; }
+    /// <summary>Optional latitude of the horsebox / lorry entrance gate.</summary>
+    public double? LorryLatitude { get; set; }
+    /// <summary>Optional longitude of the horsebox / lorry entrance gate.</summary>
+    public double? LorryLongitude { get; set; }
+    /// <summary>Optional approach notes for horseboxes and lorries (at most 1000 characters).</summary>
+    public string? LorryDirectionsNote { get; set; }
     /// <summary>One live-stream URL for the whole competition (YouTube, Twitch, etc).</summary>
     public string? StreamUrl { get; set; }
 
@@ -36,6 +44,12 @@ public class Competition
     /// Connect account id when real payments land.
     /// </summary>
     public string? PaymentDestination { get; set; }
+
+    /// <summary>
+    /// Optional external payment link (Stripe Payment Link, SumUp, PayPal, etc., at most 500 characters, must be https://).
+    /// Shown alongside BACS details so entrants can pay online by card or Apple Pay.
+    /// </summary>
+    public string? PaymentLinkUrl { get; set; }
 
     /// <summary>
     /// When true, the public signup form is hidden on the comp Details tab

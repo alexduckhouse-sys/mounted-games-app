@@ -73,9 +73,10 @@ public sealed class EventToolsController(AppDbContext db) : ControllerBase
 
     [HttpGet("print/results")]
     [AllowAnonymous]
-    public async Task<ActionResult<PrintableResultsDto>> PrintableResults(int competitionId, CancellationToken ct)
+    public async Task<ActionResult<PrintableResultsDto>> PrintableResults(
+        int competitionId, [FromQuery] int? sessionId = null, CancellationToken ct = default)
     {
-        var result = await new PrintableEventService(db).ResultsAsync(competitionId, ct);
+        var result = await new PrintableEventService(db).ResultsAsync(competitionId, ct, sessionId);
         return result is null ? NotFound() : result;
     }
 
@@ -96,6 +97,34 @@ public sealed class EventToolsController(AppDbContext db) : ControllerBase
         if (!await CanManageCompetitionAsync(competitionId, ct)) return NotFound();
         var result = await book.BuildAsync(competitionId, includePrivate: true, ct);
         return result is null ? NotFound() : result;
+    }
+
+    /// <summary>Public-safe formatted results summary text ready to copy/paste for social media or press releases.</summary>
+    [HttpGet("results-summary")]
+    [AllowAnonymous]
+    public async Task<ActionResult<PublicResultsSummaryDto>> ResultsSummary(int competitionId, [FromServices] ResultsBookService book, CancellationToken ct)
+    {
+        var result = await book.BuildPublicSummaryAsync(competitionId, ct);
+        return result is null ? NotFound() : result;
+    }
+
+    /// <summary>Complete self-contained organiser archive bundle (CSV + JSON snapshot, or ZIP download).</summary>
+    [HttpGet("archive")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    public async Task<IActionResult> Archive(
+        int competitionId,
+        [FromServices] EventArchiveService archiveService,
+        [FromQuery] string? format = null,
+        CancellationToken ct = default)
+    {
+        if (!await CanManageCompetitionAsync(competitionId, ct)) return NotFound();
+        var archive = await archiveService.BuildArchiveAsync(competitionId, ct);
+        if (archive is null) return NotFound();
+        if (string.Equals(format, "zip", StringComparison.OrdinalIgnoreCase))
+        {
+            return File(EventArchiveService.BuildZipBytes(archive), "application/zip", archive.FileName);
+        }
+        return Ok(archive);
     }
 
     /// <summary>The entry list with riders and ponies. Staff only, because it shows full rider names.</summary>

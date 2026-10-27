@@ -78,6 +78,111 @@ public class SponsorsController(AppDbContext db, ILiveBroadcaster live, TimeProv
         return sponsors.Select(s => ToAdminDto(s, totals.GetValueOrDefault(s.Id)?.Views ?? 0, totals.GetValueOrDefault(s.Id)?.Seconds ?? 0)).ToList();
     }
 
+    [HttpGet("stats")]
+    [HttpGet("/api/competitions/{competitionId:int}/sponsor-stats")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<SponsorValueReportDto>> Stats(int competitionId)
+    {
+        if (!await db.Competitions.AsNoTracking().AnyAsync(c => c.Id == competitionId))
+            return NotFound();
+
+        var sponsors = await db.Sponsors.AsNoTracking()
+            .Where(s => s.CompetitionId == competitionId)
+            .OrderBy(s => s.Tier).ThenBy(s => s.SortOrder).ThenBy(s => s.Id)
+            .ToListAsync();
+
+        var exposures = await db.SponsorExposures.AsNoTracking()
+            .Where(e => e.Sponsor!.CompetitionId == competitionId)
+            .GroupBy(e => new { e.SponsorId, e.Placement })
+            .Select(g => new
+            {
+                g.Key.SponsorId,
+                g.Key.Placement,
+                Views = g.Sum(e => e.Views),
+                Seconds = g.Sum(e => e.Seconds),
+            })
+            .ToListAsync();
+
+        var exposureBySponsor = exposures
+            .GroupBy(e => e.SponsorId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var items = sponsors.Select(s =>
+        {
+            var rows = exposureBySponsor.GetValueOrDefault(s.Id) ?? [];
+            long ViewsFor(SponsorPlacement mask) => rows.Where(r => (r.Placement & mask) != 0).Sum(r => r.Views);
+            long SecondsFor(SponsorPlacement mask) => rows.Where(r => (r.Placement & mask) != 0).Sum(r => r.Seconds);
+
+            var placementStats = new List<SponsorPlacementStatDto>
+            {
+                BuildPlacementStat("overview", "Overview", ViewsFor(SponsorPlacement.Details), SecondsFor(SponsorPlacement.Details)),
+                BuildPlacementStat("standings", "Standings", ViewsFor(SponsorPlacement.Results), SecondsFor(SponsorPlacement.Results)),
+                BuildPlacementStat("timetable", "Timetable", ViewsFor(SponsorPlacement.Timetable), SecondsFor(SponsorPlacement.Timetable)),
+                BuildPlacementStat("liveStreamOverlay", "Live Stream Overlay",
+                    ViewsFor(SponsorPlacement.Stream | SponsorPlacement.BreakStream),
+                    SecondsFor(SponsorPlacement.Stream | SponsorPlacement.BreakStream)),
+                BuildPlacementStat("sponsorPage", "Sponsor Page", ViewsFor(SponsorPlacement.SponsorPage), SecondsFor(SponsorPlacement.SponsorPage)),
+            };
+
+            var totalViews = rows.Sum(r => r.Views);
+            var totalSeconds = rows.Sum(r => r.Seconds);
+            return new SponsorValueReportItemDto(
+                s.Id,
+                s.Name,
+                s.LinkUrl,
+                LogoUrl(s),
+                s.Tier,
+                TierLabel(s.Tier),
+                s.ShowOn,
+                PlacementLabels(s.ShowOn),
+                s.IsEnabled,
+                totalViews,
+                totalSeconds,
+                FormatDurationHms(totalSeconds),
+                placementStats);
+        }).ToList();
+
+        var grandViews = items.Sum(i => i.TotalViews);
+        var grandSeconds = items.Sum(i => i.TotalSeconds);
+        return new SponsorValueReportDto(
+            competitionId,
+            grandViews,
+            grandSeconds,
+            FormatDurationHms(grandSeconds),
+            items);
+    }
+
+    public static string FormatDurationHms(long seconds)
+    {
+        var clamped = Math.Max(0, seconds);
+        var h = clamped / 3600;
+        var m = (clamped % 3600) / 60;
+        var s = clamped % 60;
+        return $"{h}h {m}m {s}s";
+    }
+
+    public static IReadOnlyList<string> PlacementLabels(SponsorPlacement showOn)
+    {
+        var labels = new List<string>();
+        if ((showOn & SponsorPlacement.Details) != 0) labels.Add("Overview");
+        if ((showOn & SponsorPlacement.Results) != 0) labels.Add("Standings");
+        if ((showOn & SponsorPlacement.Timetable) != 0) labels.Add("Timetable");
+        if ((showOn & (SponsorPlacement.Stream | SponsorPlacement.BreakStream)) != 0) labels.Add("Live Stream Overlay");
+        if ((showOn & SponsorPlacement.SponsorPage) != 0) labels.Add("Sponsor Page");
+        return labels;
+    }
+
+    private static string TierLabel(SponsorTier tier) => tier switch
+    {
+        SponsorTier.Headline => "Headline",
+        SponsorTier.Major => "Major",
+        _ => "Supporter",
+    };
+
+    private static SponsorPlacementStatDto BuildPlacementStat(string key, string label, long views, long seconds) =>
+        new(key, label, views, seconds, FormatDurationHms(seconds));
+
     [HttpPost]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]

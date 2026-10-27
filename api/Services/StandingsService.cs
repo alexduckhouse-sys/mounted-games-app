@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
@@ -11,9 +12,47 @@ namespace MountedGames.Api.Services;
 /// the age group's tie-break (<see cref="TieBreaker"/>). A finalist's total follows its section's final switches
 /// (<see cref="SectionScoring"/>): all its points when they carry into the final, its final's points alone when not.
 /// </summary>
-public sealed class StandingsService(AppDbContext db)
+public sealed class StandingsService(AppDbContext db, IMemoryCache? cache = null)
 {
+    private static long _version;
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, long> CompetitionVersions = new();
+
+    /// <summary>Invalidates all cached standings snapshots across competitions.</summary>
+    public static void BumpVersion() => Interlocked.Increment(ref _version);
+
+    /// <summary>Invalidates cached standings snapshots for a specific competition.</summary>
+    public static void Invalidate(int competitionId)
+    {
+        CompetitionVersions.AddOrUpdate(competitionId, 1, static (_, current) => current + 1);
+        Interlocked.Increment(ref _version);
+    }
+
     public async Task<List<StandingRow>> RowsAsync(int competitionId, int? sectionId = null, CancellationToken ct = default)
+    {
+        if (cache is not null)
+        {
+            var globalVersion = Interlocked.Read(ref _version);
+            var compVersion = CompetitionVersions.GetOrAdd(competitionId, 0);
+            var cacheKey = $"standings:v1:{competitionId}:{sectionId?.ToString() ?? "all"}:{globalVersion}:{compVersion}";
+            if (cache.TryGetValue<IReadOnlyList<StandingRow>>(cacheKey, out var cached) && cached is not null)
+                return cached.ToList();
+
+            var computed = await ComputeRowsAsync(competitionId, sectionId, ct);
+            cache.Set<IReadOnlyList<StandingRow>>(
+                cacheKey,
+                computed,
+                new MemoryCacheEntryOptions
+                {
+                    SlidingExpiration = TimeSpan.FromSeconds(2),
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(5),
+                });
+            return computed.ToList();
+        }
+
+        return await ComputeRowsAsync(competitionId, sectionId, ct);
+    }
+
+    private async Task<List<StandingRow>> ComputeRowsAsync(int competitionId, int? sectionId, CancellationToken ct)
     {
         var teamsQ = db.Teams
             .AsNoTracking()
@@ -37,20 +76,21 @@ public sealed class StandingsService(AppDbContext db)
         {
             var section = sections.GetValueOrDefault(t.CompetitionSectionId);
             var inFinal = tiers.TierOf(t.Id) is not null;
-            var finalResults = t.Results.Where(r => ties.IsFinalRace(r.RaceId)).ToList();
+            var effectiveResults = ties.EffectiveResults(t.Results);
+            var finalResults = effectiveResults.Where(r => ties.IsFinalRace(r.RaceId)).ToList();
             var finalPoints = finalResults.Sum(r => r.Points);
-            var earlier = t.Results.Sum(r => r.Points) - finalPoints;
+            var earlier = effectiveResults.Sum(r => r.Points) - finalPoints;
             var total = SectionScoring.Total(section, inFinal, earlier, finalPoints, bonus.GetValueOrDefault(t.Id));
             var alone = inFinal && !SectionScoring.CarriesIntoFinal(section);
             return (Total: total, Final: inFinal ? finalPoints : (double?)null, Earlier: inFinal ? earlier : (double?)null,
-                TieResults: alone ? finalResults : t.Results);
+                TieResults: alone ? finalResults : effectiveResults, Effective: effectiveResults);
         });
 
         var rows = teams.Select(t => new StandingRow(
                 t.Id, t.DisplayName, t.Club?.Name ?? string.Empty, t.BibColour,
                 scores[t.Id].Total,
-                t.Results.Count,
-                t.Results.Count(r => r.Placing == 1 && !r.Eliminated),
+                t.Results.Count(r => !r.IsSitOut),
+                scores[t.Id].Effective.Count(r => !r.IsSitOut && r.Placing == 1 && !r.Eliminated),
                 t.Results.Count(r => r.Eliminated && ResultStatuses.Of(r) == ResultStatus.Eliminated),
                 tiers.TierOf(t.Id),
                 t.EntryStatus != TeamEntryStatus.Active,
@@ -71,7 +111,29 @@ public sealed class StandingsService(AppDbContext db)
             .SelectMany(g =>
             {
                 var byTeam = g.ToDictionary(r => r.TeamId);
-                return ties.OrderLevel(g.Select(r => facts[r.TeamId]).ToList()).Select(f => byTeam[f.TeamId]);
+                var orderedFacts = ties.OrderLevel(g.Select(r => facts[r.TeamId]).ToList());
+                if (orderedFacts.Count < 2)
+                    return orderedFacts.Select(f => byTeam[f.TeamId]);
+
+                var groupRows = new List<StandingRow>(orderedFacts.Count);
+                for (var i = 0; i < orderedFacts.Count; i++)
+                {
+                    var row = byTeam[orderedFacts[i].TeamId];
+                    string? reason = null;
+                    if (i + 1 < orderedFacts.Count)
+                    {
+                        var belowRow = byTeam[orderedFacts[i + 1].TeamId];
+                        reason = ties.Explain(orderedFacts, orderedFacts[i], orderedFacts[i + 1], belowRow.TeamName);
+                    }
+                    else if (i > 0)
+                    {
+                        var prevReason = ties.Explain(orderedFacts, orderedFacts[i - 1], orderedFacts[i], row.TeamName);
+                        if (prevReason == "Level on points and countback — run-off if on cut-off")
+                            reason = prevReason;
+                    }
+                    groupRows.Add(reason is null ? row : row with { TieBreakReason = reason });
+                }
+                return groupRows;
             })
             .ToList();
     }

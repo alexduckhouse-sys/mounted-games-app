@@ -8,7 +8,17 @@ public static class OperationsSqliteSchema
     public static async Task EnsureAsync(AppDbContext db)
     {
         await MakeRulebooksGlobalAsync(db);
+        await EnsureHeatEntryColumnsAsync(db);
         await CreateAsync(db);
+    }
+
+    private static async Task EnsureHeatEntryColumnsAsync(AppDbContext db)
+    {
+        var tableExists = await db.Database.SqlQueryRaw<int>("""SELECT COUNT(*) AS "Value" FROM sqlite_master WHERE type = 'table' AND name = 'HeatEntries'""").SingleAsync();
+        if (tableExists == 0) return;
+        var hasColumn = await db.Database.SqlQueryRaw<int>("""SELECT COUNT(*) AS "Value" FROM pragma_table_info('HeatEntries') WHERE name = 'BibColourOverride'""").SingleAsync();
+        if (hasColumn == 0)
+            await db.Database.ExecuteSqlRawAsync("""ALTER TABLE "HeatEntries" ADD COLUMN "BibColourOverride" TEXT NULL;""");
     }
 
     /// <summary>Rulebooks used to belong to one competition. Keep the newest copy of each title and edition as a shared rulebook.</summary>
@@ -143,6 +153,40 @@ public static class OperationsSqliteSchema
         CREATE INDEX IF NOT EXISTS "IX_RiderSwapEvent_CompetitionId" ON "RiderSwapEvent" ("CompetitionId");
 
         CREATE UNIQUE INDEX IF NOT EXISTS "IX_RiderSwapEvent_DeclarationFormId_RequestId" ON "RiderSwapEvent" ("DeclarationFormId", "RequestId");
+
+        CREATE TABLE IF NOT EXISTS "VolunteerShift" (
+            "Id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            "CompetitionId" INTEGER NOT NULL,
+            "SessionId" INTEGER NULL,
+            "ArenaName" TEXT NULL,
+            "Role" TEXT NOT NULL,
+            "StartTimeLabel" TEXT NULL,
+            "Notes" TEXT NULL,
+            "RequiredCount" INTEGER NOT NULL DEFAULT 1,
+            "CreatedAt" TEXT NOT NULL,
+            CONSTRAINT "FK_VolunteerShift_Competitions_CompetitionId" FOREIGN KEY ("CompetitionId") REFERENCES "Competitions" ("Id") ON DELETE CASCADE,
+            CONSTRAINT "FK_VolunteerShift_Sessions_SessionId" FOREIGN KEY ("SessionId") REFERENCES "Sessions" ("Id") ON DELETE SET NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS "IX_VolunteerShift_CompetitionId" ON "VolunteerShift" ("CompetitionId");
+
+        CREATE INDEX IF NOT EXISTS "IX_VolunteerShift_SessionId" ON "VolunteerShift" ("SessionId");
+
+        CREATE TABLE IF NOT EXISTS "VolunteerClaim" (
+            "Id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            "ShiftId" INTEGER NOT NULL,
+            "UserId" TEXT NOT NULL,
+            "VolunteerName" TEXT NOT NULL,
+            "ClubName" TEXT NULL,
+            "ContactPhone" TEXT NULL,
+            "ClaimedAt" TEXT NOT NULL,
+            CONSTRAINT "FK_VolunteerClaim_VolunteerShift_ShiftId" FOREIGN KEY ("ShiftId") REFERENCES "VolunteerShift" ("Id") ON DELETE CASCADE,
+            CONSTRAINT "FK_VolunteerClaim_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS "IX_VolunteerClaim_ShiftId" ON "VolunteerClaim" ("ShiftId");
+
+        CREATE INDEX IF NOT EXISTS "IX_VolunteerClaim_ShiftId_UserId" ON "VolunteerClaim" ("ShiftId", "UserId");
         """);
     }
 }

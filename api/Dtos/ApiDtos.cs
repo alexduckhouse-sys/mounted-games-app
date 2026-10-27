@@ -23,6 +23,9 @@ public static class CompetitionFields
 {
     public const int PostcodeMax = 12;
     public const int CompetitionNumberMax = 40;
+    public const int LorryWhat3WordsMax = 120;
+    public const int LorryDirectionsNoteMax = 1000;
+    public const int PaymentLinkUrlMax = 500;
 
     /// <summary>Trimmed and upper-cased; blank becomes null.</summary>
     public static string? Postcode(string? value)
@@ -36,6 +39,44 @@ public static class CompetitionFields
     {
         var t = value?.Trim();
         return string.IsNullOrEmpty(t) ? null : t;
+    }
+
+    /// <summary>Validates that a non-blank payment link is a valid https:// URL within 500 characters.</summary>
+    public static bool TryNormalisePaymentLinkUrl(string? value, out string? url)
+    {
+        var t = Trimmed(value);
+        if (t is null)
+        {
+            url = null;
+            return true;
+        }
+        if (t.Length <= PaymentLinkUrlMax
+            && Uri.TryCreate(t, UriKind.Absolute, out var uri)
+            && string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(uri.Host))
+        {
+            url = t;
+            return true;
+        }
+        url = null;
+        return false;
+    }
+
+    /// <summary>Returns the configured https:// payment link, or extracts one from free-text payment instructions.</summary>
+    public static string? ResolvePaymentLinkUrl(string? paymentLinkUrl, string? paymentDestination)
+    {
+        if (TryNormalisePaymentLinkUrl(paymentLinkUrl, out var direct) && direct is not null)
+            return direct;
+        if (string.IsNullOrWhiteSpace(paymentDestination))
+            return null;
+        var match = System.Text.RegularExpressions.Regex.Match(
+            paymentDestination,
+            @"https://[^\s<>""')]+",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (!match.Success)
+            return null;
+        var candidate = match.Value.TrimEnd('.', ',', ';', ':', ')', ']', '!', '?');
+        return TryNormalisePaymentLinkUrl(candidate, out var extracted) ? extracted : null;
     }
 }
 
@@ -74,7 +115,16 @@ public record CompetitionDetail(
     bool UseRefereeCards = false,
     string? Postcode = null,
     string? CompetitionNumber = null,
-    string? ContactEmail = null);
+    string? ContactEmail = null,
+    string? LorryWhat3Words = null,
+    double? LorryLatitude = null,
+    double? LorryLongitude = null,
+    string? LorryDirectionsNote = null,
+    string? PaymentLinkUrl = null,
+    int? MaxStables = null,
+    int? MaxHookups = null,
+    int? StablesRemaining = null,
+    int? HookupsRemaining = null);
 
 public record CreateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -90,7 +140,14 @@ public record CreateCompetitionRequest(
     IReadOnlyList<string>? LaneHatbands = null,
     bool UseRefereeCards = false,
     [MaxLength(CompetitionFields.CompetitionNumberMax)] string? CompetitionNumber = null,
-    [MaxLength(EmailAddresses.MaxLength)] string? ContactEmail = null);
+    [MaxLength(EmailAddresses.MaxLength)] string? ContactEmail = null,
+    [MaxLength(CompetitionFields.LorryWhat3WordsMax)] string? LorryWhat3Words = null,
+    [Range(-90, 90)] double? LorryLatitude = null,
+    [Range(-180, 180)] double? LorryLongitude = null,
+    [MaxLength(CompetitionFields.LorryDirectionsNoteMax)] string? LorryDirectionsNote = null,
+    [MaxLength(CompetitionFields.PaymentLinkUrlMax)] string? PaymentLinkUrl = null,
+    [Range(0, 2000)] int? MaxStables = null,
+    [Range(0, 2000)] int? MaxHookups = null);
 
 public record UpdateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -107,9 +164,16 @@ public record UpdateCompetitionRequest(
     /// <summary>Null leaves the hatbands as they are; an empty list clears them.</summary>
     IReadOnlyList<string>? LaneHatbands = null,
     bool? UseRefereeCards = null,
-    /// <summary>On an update, null leaves these three as they are and a blank value clears them.</summary>
+    /// <summary>On an update, null leaves these fields as they are and a blank value clears them.</summary>
     [MaxLength(CompetitionFields.CompetitionNumberMax)] string? CompetitionNumber = null,
-    [MaxLength(EmailAddresses.MaxLength)] string? ContactEmail = null);
+    [MaxLength(EmailAddresses.MaxLength)] string? ContactEmail = null,
+    [MaxLength(CompetitionFields.LorryWhat3WordsMax)] string? LorryWhat3Words = null,
+    [Range(-90, 90)] double? LorryLatitude = null,
+    [Range(-180, 180)] double? LorryLongitude = null,
+    [MaxLength(CompetitionFields.LorryDirectionsNoteMax)] string? LorryDirectionsNote = null,
+    [MaxLength(CompetitionFields.PaymentLinkUrlMax)] string? PaymentLinkUrl = null,
+    [Range(0, 2000)] int? MaxStables = null,
+    [Range(0, 2000)] int? MaxHookups = null);
 
 public record SetSignupsLockedRequest(bool Locked);
 
@@ -202,7 +266,9 @@ public record CreateSectionSignupRequest(
     string? TeamName = null, bool WholeTeam = false,
     IReadOnlyList<string>? TeamMembers = null,
     [Range(0, 100)] int StablesCount = 0, [StringLength(200)] string? StablingClubOrTeam = null,
-    [StringLength(20)] string? PaymentMethod = null, bool IsWaitlist = false, [Range(1, 20)] int TeamsCount = 1);
+    [StringLength(20)] string? PaymentMethod = null, bool IsWaitlist = false, [Range(1, 20)] int TeamsCount = 1,
+    [StringLength(40)] string? VehicleRegistration = null, [StringLength(500)] string? ArrivalNotes = null,
+    [Range(0, 100)] int HookupsCount = 0);
 
 public record UpdateSignupStatusRequest(SignupPaymentStatus Status);
 
@@ -377,7 +443,9 @@ public record UpdateHeatDurationRequest(int? DurationMinutes);
 public record RaceClockRequest(DateTime? At);
 
 public record HeatEntryDto(int Id, int TeamId, string TeamName, string? BibColour, int LaneIndex,
-    string? RefereeCard = null, string? Flag = null, string? BibDescription = null);
+    string? RefereeCard = null, string? Flag = null, string? BibDescription = null, string? BibColourOverride = null);
+
+public record SetBibOverrideRequest(string? BibColourOverride);
 
 /// <summary>A result as everyone sees it. Status says why a team that did not finish (Eliminated is true) did not. The referee note is never here.</summary>
 public record ResultDto(int Id, int TeamId, string TeamName, int? Placing, bool Eliminated, double Points, bool IsSitOut = false,
@@ -420,7 +488,8 @@ public record StandingRow(
     double TotalPoints, int RacesRun, int Wins, int Eliminations, int? FinalTier = null,
     bool Withdrawn = false, int BonusPoints = 0, string? RefereeCard = null,
     string? Flag = null, string? BibDescription = null,
-    double? FinalPoints = null, double? EarlierPoints = null);
+    double? FinalPoints = null, double? EarlierPoints = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? TieBreakReason = null);
 
 public record DeclarationFormDto(
     int Id, int TeamId, string TeamName, int CompetitionId, string CompetitionName,

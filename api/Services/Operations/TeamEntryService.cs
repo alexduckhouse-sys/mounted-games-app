@@ -35,7 +35,8 @@ public class TeamEntryService(AppDbContext db)
             .ToListAsync(ct);
         var latest = events.GroupBy(e => e.TeamId).ToDictionary(g => g.Key, g => g.OrderBy(e => e.Id).Last());
         var draws = await db.Set<DrawChange>().AsNoTracking()
-            .Where(d => d.CompetitionId == competitionId)
+            .Where(d => d.CompetitionId == competitionId
+                && (d.Kind == DrawChangeKind.SectionDraw || d.Kind == DrawChangeKind.Redraw))
             .Select(d => new { d.SectionId, d.CreatedAt })
             .ToListAsync(ct);
         var sectionsWithOut = teams.Where(t => t.EntryStatus != TeamEntryStatus.Active)
@@ -61,8 +62,7 @@ public class TeamEntryService(AppDbContext db)
         var reason = (request.Reason ?? string.Empty).Trim();
         if (reason.Length > MaxReasonLength)
             throw new EntryValidationException($"The reason must be {MaxReasonLength} characters or fewer.");
-        if (request.Status == TeamEntryStatus.Withdrawn && reason.Length == 0)
-            throw new EntryValidationException("Say why the team is withdrawing.");
+        if (request.Status == TeamEntryStatus.Withdrawn && reason.Length == 0) reason = "Withdrawn by organiser";
         if (request.Status == TeamEntryStatus.NoShow && reason.Length == 0) reason = "Did not arrive";
 
         var strategy = db.Database.CreateExecutionStrategy();
@@ -95,7 +95,9 @@ public class TeamEntryService(AppDbContext db)
             else if (request.Status == TeamEntryStatus.Active)
             {
                 var draws = await db.Set<DrawChange>().AsNoTracking()
-                    .Where(d => d.CompetitionId == competitionId && d.SectionId == team.CompetitionSectionId)
+                    .Where(d => d.CompetitionId == competitionId
+                        && d.SectionId == team.CompetitionSectionId
+                        && (d.Kind == DrawChangeKind.SectionDraw || d.Kind == DrawChangeKind.Redraw))
                     .Select(d => d.CreatedAt).ToListAsync(ct);
                 if (previous is not null && DrawDependsOn(draws, previous))
                     throw new DrawValidationException(

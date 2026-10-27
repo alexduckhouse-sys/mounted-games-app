@@ -1,6 +1,34 @@
-const dayOf = (iso: string) => {
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? null : date;
+const ukDateParts = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Europe/London',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+const dayOf = (iso: string | null | undefined) => {
+  if (typeof iso !== 'string') return null;
+  const trimmed = iso.trim();
+  if (!trimmed) return null;
+  const midnightMatch = /^(\d{4})-(\d{2})-(\d{2})(?:T00:00(?::00(?:\.0+)?)?Z?)?$/i.exec(trimmed);
+  if (midnightMatch) {
+    const y = Number(midnightMatch[1]);
+    const m = Number(midnightMatch[2]);
+    const d = Number(midnightMatch[3]);
+    const date = new Date(y, m - 1, d, 12, 0, 0);
+    return Number.isNaN(date.getTime()) || date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d
+      ? null
+      : date;
+  }
+  const date = new Date(trimmed);
+  if (Number.isNaN(date.getTime())) return null;
+  if (/(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed)) {
+    const parts = ukDateParts.formatToParts(date);
+    const y = Number(parts.find((p) => p.type === 'year')?.value);
+    const m = Number(parts.find((p) => p.type === 'month')?.value);
+    const d = Number(parts.find((p) => p.type === 'day')?.value);
+    if (y && m && d) return new Date(y, m - 1, d, 12, 0, 0);
+  }
+  return date;
 };
 const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 const weekday = (d: Date) => d.toLocaleDateString('en-GB', { weekday: 'short' });

@@ -338,6 +338,18 @@ public static class ReviewCompetitionSeeder
                 .SetProperty(x => x.StockQuantity, x => x.StockQuantity + line.ReservedStockQuantity)
                 .SetProperty(x => x.Version, x => x.Version + 1)
                 .SetProperty(x => x.UpdatedAt, DateTime.UtcNow));
+    // ...and a line for one option (a size) gives that option its stock back too.
+    var reservedOptions = await db.Set<EventOrderLine>()
+        .Where(l => orderIds.Contains(l.EventOrderId) && l.ReservedOptionStockQuantity > 0 && l.CatalogueItemOptionId != null
+            && db.Set<EventOrder>().Any(o => o.Id == l.EventOrderId && o.HasStockReservation))
+        .Select(l => new { OptionId = l.CatalogueItemOptionId!.Value, l.ReservedOptionStockQuantity })
+        .ToListAsync();
+    foreach (var line in reservedOptions)
+        await db.Set<CatalogueItemOption>()
+            .Where(x => x.Id == line.OptionId && x.StockQuantity != null)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(x => x.StockQuantity, x => x.StockQuantity + line.ReservedOptionStockQuantity)
+                .SetProperty(x => x.Version, x => x.Version + 1));
 
     // Shop: payments, order lines, orders, listings, the demo mark.
     await db.Set<TestPaymentRecord>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
@@ -347,6 +359,9 @@ public static class ReviewCompetitionSeeder
     await db.Set<EventCommerceSettings>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
 
     // Timetable and scoring, deepest first.
+    var shiftIds = db.Set<VolunteerShift>().Where(x => ids.Contains(x.CompetitionId)).Select(x => x.Id);
+    await db.Set<VolunteerClaim>().Where(x => shiftIds.Contains(x.ShiftId)).ExecuteDeleteAsync();
+    await db.Set<VolunteerShift>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
     await db.Set<RaceScoreEvent>().Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();
     await db.Set<RaceScoreState>().Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();
     await db.Results.Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();
@@ -380,6 +395,7 @@ public static class ReviewCompetitionSeeder
         .ExecuteUpdateAsync(set => set.SetProperty(x => x.PairRequestToSignupId, (int?)null));
     await db.Set<SignupMatchmaking>().Where(x => signupIds.Contains(x.SignupId)).ExecuteDeleteAsync();
     await db.Set<SignupExtras>().Where(x => signupIds.Contains(x.SignupId)).ExecuteDeleteAsync();
+    await db.Set<SignupGuestDetails>().Where(x => signupIds.Contains(x.SignupId)).ExecuteDeleteAsync();
     await db.SectionSignups.Where(x => sectionIds.Contains(x.CompetitionSectionId)).ExecuteDeleteAsync();
     await db.Teams.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
     await db.Set<DrawChange>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();

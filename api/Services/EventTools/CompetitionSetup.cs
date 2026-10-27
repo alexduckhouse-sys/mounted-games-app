@@ -18,7 +18,8 @@ public sealed record CompetitionSetup(
     string? What3Words, string? AppleMapsUrl, string? TermsText, string? DecFormConfigJson,
     string? LaneHatbands, bool EnablePassportCheck, string? PaymentDestination,
     IReadOnlyList<CompetitionSetup.SectionSetup> Sections,
-    IReadOnlyList<CompetitionSetup.SessionSetup> Sessions)
+    IReadOnlyList<CompetitionSetup.SessionSetup> Sessions,
+    string? PaymentLinkUrl = null)
 {
     public sealed record SectionSetup(
         SectionFormat Format, string AgeGroup, string DisplayName, string? RunoffRaceName, TieBreakRule TieBreakRule,
@@ -57,6 +58,43 @@ public sealed record CompetitionSetup(
         catch (JsonException) { return null; }
     }
 
+    internal static readonly TimeZoneInfo UkTimeZone = ResolveUkTimeZone();
+
+    static TimeZoneInfo ResolveUkTimeZone()
+    {
+        try { return TimeZoneInfo.FindSystemTimeZoneById("Europe/London"); }
+        catch { return TimeZoneInfo.FindSystemTimeZoneById("GMT Standard Time"); }
+    }
+
+    internal static DateTime ToLondonWallClock(DateTime value)
+    {
+        var utc = value.Kind == DateTimeKind.Local ? value.ToUniversalTime() : DateTime.SpecifyKind(value, DateTimeKind.Utc);
+        return TimeZoneInfo.ConvertTimeFromUtc(utc, UkTimeZone);
+    }
+
+    internal static DateTime AnchorWallClock(DateTime eventStart)
+    {
+        var utc = eventStart.Kind == DateTimeKind.Local ? eventStart.ToUniversalTime() : DateTime.SpecifyKind(eventStart, DateTimeKind.Utc);
+        return utc.TimeOfDay == TimeSpan.Zero
+            ? DateTime.SpecifyKind(utc.Date, DateTimeKind.Unspecified)
+            : TimeZoneInfo.ConvertTimeFromUtc(utc, UkTimeZone);
+    }
+
+    internal static DateTime FromLondonWallClock(DateTime wallClock)
+    {
+        var unspecified = DateTime.SpecifyKind(wallClock, DateTimeKind.Unspecified);
+        if (UkTimeZone.IsInvalidTime(unspecified))
+            unspecified = unspecified.AddHours(1);
+        var offset = UkTimeZone.GetUtcOffset(unspecified);
+        return DateTime.SpecifyKind(unspecified - offset, DateTimeKind.Utc);
+    }
+
+    internal static double OffsetMinutesFromStart(DateTime scheduledStart, DateTime eventStart) =>
+        (ToLondonWallClock(scheduledStart) - AnchorWallClock(eventStart)).TotalMinutes;
+
+    internal static DateTime ApplyOffsetMinutes(DateTime eventStart, double offsetMinutes) =>
+        FromLondonWallClock(AnchorWallClock(eventStart).AddMinutes(offsetMinutes));
+
     /// <summary>Reads the set-up from a competition. Needs sections, and sessions with their heats and races, loaded.</summary>
     public static CompetitionSetup From(Competition source)
     {
@@ -66,7 +104,7 @@ public sealed record CompetitionSetup(
             var index = s.CompetitionSectionId is { } sectionId ? sections.FindIndex(x => x.Id == sectionId) : -1;
             return new SessionSetup(
                 index >= 0 ? index : null, s.Name, s.ArenaName,
-                s.ScheduledStart.HasValue ? (s.ScheduledStart.Value - source.StartDate).TotalMinutes : null,
+                s.ScheduledStart.HasValue ? OffsetMinutesFromStart(s.ScheduledStart.Value, source.StartDate) : null,
                 s.OrderIndex, CleanNotes(s.Notes), s.IsBreak, s.DurationMinutes, s.Kind, s.Location, s.LanesPerHeat,
                 s.MinutesPerHeat, s.RaceOrderAlternating, s.LaneRotationMode, s.QualifiersPerHeat, RaceList(s),
                 FinalHeatsOf(s, source.StartDate), s.PlannedFinalRaces);
@@ -78,14 +116,15 @@ public sealed record CompetitionSetup(
             sections.Select(s => new SectionSetup(s.Format, s.AgeGroup, s.DisplayName, s.RunoffRaceName, s.TieBreakRule,
                 s.FinalistCount, s.UsesRaceFinals, s.PriceMinor, s.MaxParticipants,
                 s.HasFinal, s.CarryPointsIntoFinal, s.DoublePointsInFinal)).ToList(),
-            sessions);
+            sessions,
+            source.PaymentLinkUrl);
     }
 
     static List<FinalHeatSetup>? FinalHeatsOf(Session session, DateTime eventStart)
     {
         var heats = session.Heats.Where(SectionScoringLabel).OrderBy(h => h.OrderIndex).ThenBy(h => h.Id)
             .Select(h => new FinalHeatSetup(h.Label ?? "", h.OrderIndex, h.DurationMinutes,
-                h.ScheduledStart.HasValue ? (h.ScheduledStart.Value - eventStart).TotalMinutes : null,
+                h.ScheduledStart.HasValue ? OffsetMinutesFromStart(h.ScheduledStart.Value, eventStart) : null,
                 h.Races.OrderBy(r => r.OrderIndex).ThenBy(r => r.Id).Select(r => new FinalRaceSetup(r.Name, r.OrderIndex)).ToList()))
             .ToList();
         return heats.Count == 0 ? null : heats;
@@ -102,11 +141,11 @@ public sealed record CompetitionSetup(
         return first is null ? null : PlannedRaceList.Write(first.Races.OrderBy(r => r.OrderIndex).Select(r => r.Name));
     }
 
-    // [paused:…] and [shift:…] describe a live arena, not the plan.
+    // [paused:…], [shift:…] and [gate:…] describe a live arena, not the plan.
     static string? CleanNotes(string? notes)
     {
         if (string.IsNullOrWhiteSpace(notes)) return null;
-        var cleaned = Regex.Replace(notes, @"\s*\[(paused|shift):[^\]]*\]\s*", " ").Trim();
+        var cleaned = Regex.Replace(notes, @"\s*\[(paused|shift|gate):[^\]]*\]\s*", " ").Trim();
         return cleaned.Length == 0 ? null : cleaned;
     }
 }
@@ -164,6 +203,7 @@ public sealed class CompetitionSetupService(AppDbContext db)
                 LaneHatbands = setup.LaneHatbands,
                 EnablePassportCheck = setup.EnablePassportCheck,
                 PaymentDestination = setup.PaymentDestination,
+                PaymentLinkUrl = setup.PaymentLinkUrl,
                 CreatedByUserId = creatorUserId,
             };
             db.Competitions.Add(clone);
@@ -191,7 +231,7 @@ public sealed class CompetitionSetupService(AppDbContext db)
                     CompetitionId = clone.Id,
                     CompetitionSectionId = s.SectionIndex is { } i && i >= 0 && i < sections.Count ? sections[i].Id : null,
                     Name = s.Name, ArenaName = s.ArenaName,
-                    ScheduledStart = s.StartOffsetMinutes.HasValue ? startDate.AddMinutes(s.StartOffsetMinutes.Value) : null,
+                    ScheduledStart = s.StartOffsetMinutes.HasValue ? CompetitionSetup.ApplyOffsetMinutes(startDate, s.StartOffsetMinutes.Value) : null,
                     Status = SessionStatus.Upcoming, OrderIndex = s.OrderIndex, Notes = s.Notes, IsBreak = s.IsBreak,
                     DurationMinutes = s.DurationMinutes, Kind = s.Kind, Location = s.Location, LanesPerHeat = s.LanesPerHeat,
                     MinutesPerHeat = s.MinutesPerHeat, RaceOrderAlternating = s.RaceOrderAlternating,
@@ -202,7 +242,7 @@ public sealed class CompetitionSetupService(AppDbContext db)
                     var heat = new Heat
                     {
                         Label = h.Label, OrderIndex = h.OrderIndex, DurationMinutes = h.DurationMinutes,
-                        ScheduledStart = h.StartOffsetMinutes.HasValue ? startDate.AddMinutes(h.StartOffsetMinutes.Value) : null,
+                        ScheduledStart = h.StartOffsetMinutes.HasValue ? CompetitionSetup.ApplyOffsetMinutes(startDate, h.StartOffsetMinutes.Value) : null,
                     };
                     foreach (var r in h.Races) heat.Races.Add(new Race { Name = r.Name, OrderIndex = r.OrderIndex });
                     session.Heats.Add(heat);

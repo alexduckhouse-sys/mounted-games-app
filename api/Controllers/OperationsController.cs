@@ -1,9 +1,11 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
+using MountedGames.Api.Hubs;
 using MountedGames.Api.Services;
 using MountedGames.Api.Services.Operations;
 
@@ -13,8 +15,43 @@ namespace MountedGames.Api.Controllers;
 [Route("api/competitions/{competitionId:int}")]
 [Authorize(Policy = CompetitionStaff.Policy)]
 public class OperationsController(
-    AppDbContext db, EquipmentCalculator equipmentCalculator) : ControllerBase
+    AppDbContext db, EquipmentCalculator equipmentCalculator, ILiveBroadcaster live) : ControllerBase
 {
+    [HttpGet("draw-undo")]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<DrawUndoStatusDto>> GetDrawUndo(
+        int competitionId, CancellationToken cancellationToken)
+    {
+        var exists = await db.Competitions.AsNoTracking()
+            .AnyAsync(c => c.Id == competitionId, cancellationToken);
+        if (!exists) return NotFound();
+        return await DrawUndoService.GetStatusAsync(db, competitionId, cancellationToken);
+    }
+
+    [HttpPost("draw-undo")]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<DrawUndoResultDto>> UndoDraw(
+        int competitionId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var (result, changedSessionIds) = await DrawUndoService.UndoAsync(db, competitionId, cancellationToken);
+            if (changedSessionIds.Count > 0)
+            {
+                var updatedSessions = await db.Sessions
+                    .Include(s => s.Section)
+                    .Include(s => s.Heats).ThenInclude(h => h.Entries).ThenInclude(e => e.Team)
+                    .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
+                    .Where(s => s.CompetitionId == competitionId && changedSessionIds.Contains(s.Id))
+                    .ToListAsync(cancellationToken);
+                foreach (var session in updatedSessions)
+                    await live.SessionUpdated(competitionId, session.ToDto());
+            }
+            return result;
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (InvalidOperationException ex) { return Conflict(new { message = ex.Message }); }
+    }
     [HttpPost("sections/{sectionId:int}/draw/preview")]
     [CompetitionAccess("competitionId")]
     public async Task<ActionResult<DrawPreviewDto>> PreviewDraw(

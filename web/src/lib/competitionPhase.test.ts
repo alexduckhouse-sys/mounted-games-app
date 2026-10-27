@@ -82,6 +82,26 @@ describe('competitionPhase', () => {
   it('is never the entry phase for an archived competition', () => {
     expect(competitionPhase(competition({ sections: [section], isArchived: true }))).toBe('running');
   });
+
+  it('stays running on multi-day events when Day 2 sessions are undrawn or only Day 1 sessions exist', () => {
+    const day1Final = session(1, {
+      name: 'Saturday Finals',
+      scheduledStart: '2026-06-01T15:00:00Z',
+      heats: [heat(1, { label: 'A Final', races: [race(1, { isComplete: true })] })],
+    });
+    const day2Undrawn = session(2, {
+      name: 'Sunday Heats',
+      scheduledStart: '2026-06-02T09:00:00Z',
+      heats: [],
+    });
+    expect(competitionPhase(competition({ sections: [section], sessions: [day1Final, day2Undrawn] }))).toBe('running');
+    expect(competitionPhase(competition({
+      sections: [section],
+      startDate: '2026-06-01',
+      endDate: '2026-06-02',
+      sessions: [day1Final],
+    }))).toBe('running');
+  });
 });
 
 describe('entryFeeText', () => {

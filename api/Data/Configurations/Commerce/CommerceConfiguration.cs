@@ -21,6 +21,17 @@ public sealed class CatalogueItemConfiguration : IEntityTypeConfiguration<Catalo
     }
 }
 
+public sealed class CatalogueItemOptionConfiguration : IEntityTypeConfiguration<CatalogueItemOption>
+{
+    public void Configure(EntityTypeBuilder<CatalogueItemOption> e)
+    {
+        e.Property(x => x.Label).HasMaxLength(CatalogueItemOption.MaxLabelLength).IsRequired();
+        e.Property(x => x.Version).HasDefaultValue(1L).IsConcurrencyToken();
+        e.HasOne(x => x.CatalogueItem).WithMany(x => x.Options).HasForeignKey(x => x.CatalogueItemId).OnDelete(DeleteBehavior.Cascade);
+        e.HasIndex(x => new { x.CatalogueItemId, x.SortOrder });
+    }
+}
+
 public sealed class CompetitionListingConfiguration : IEntityTypeConfiguration<CompetitionListing>
 {
     public void Configure(EntityTypeBuilder<CompetitionListing> e)
@@ -67,7 +78,9 @@ public sealed class EventOrderLineConfiguration : IEntityTypeConfiguration<Event
         e.Property(x => x.SellerUserId).HasMaxLength(450).IsRequired();
         e.Property(x => x.TitleSnapshot).HasMaxLength(200).IsRequired();
         e.Property(x => x.Detail).HasMaxLength(80);
+        e.Property(x => x.OptionLabel).HasMaxLength(CatalogueItemOption.MaxLabelLength);
         e.Property(x => x.ReservedStockQuantity).HasDefaultValue(0);
+        e.Property(x => x.ReservedOptionStockQuantity).HasDefaultValue(0);
         e.HasOne(x => x.Order).WithMany(x => x.Lines).HasForeignKey(x => x.EventOrderId).OnDelete(DeleteBehavior.Cascade);
         e.HasIndex(x => new { x.SellerUserId, x.EventOrderId });
     }

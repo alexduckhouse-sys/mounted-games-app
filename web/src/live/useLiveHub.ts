@@ -9,6 +9,22 @@ import { readToken } from '../api';
 
 export const LITE_HUB_COALESCE_MS = 1000;
 
+interface SharedHubSubscriber {
+  onStatus: (connected: boolean) => void;
+  onReady: () => void;
+  deliver: <A extends unknown[]>(fn: (handlers: LiveHandlers, ...args: A) => void, ...args: A) => void;
+  deliverCoalesced: <A extends unknown[]>(event: string, fn: (handlers: LiveHandlers, ...args: A) => void, ...args: A) => void;
+}
+
+interface SharedHubEntry {
+  conn: HubConnection;
+  recovery: { reconnect: () => void; dispose: () => void };
+  connected: boolean;
+  subscribers: Set<SharedHubSubscriber>;
+}
+
+const sharedHubs = new Map<string, SharedHubEntry>();
+
 export interface LiveHandlers {
   onStreamUpdated?: (stream: LiveStream) => void;
   onStreamViewers?: (payload: { streamId: number; count: number }) => void;
@@ -48,86 +64,126 @@ export function useLiveHub(competitionId: number | null, handlers: LiveHandlers)
   useEffect(() => {
     if (competitionId == null) return;
     let active = true;
-    const conn: HubConnection = new HubConnectionBuilder()
-      .withUrl(import.meta.env.VITE_LIVE_HUB_URL || '/hubs/live', {
-        accessTokenFactory: () => readToken() === token ? token ?? '' : '',
-        // The API can run as several instances with no sticky sessions, so connect straight over
-        // WebSockets: a separate negotiate request could reach a different instance.
-        skipNegotiation: true,
-        transport: HttpTransportType.WebSockets,
-      })
-      .withAutomaticReconnect()
-      .configureLogging(LogLevel.Warning)
-      .build();
-
-    connectionRef.current = conn;
+    const hubUrl = import.meta.env.VITE_LIVE_HUB_URL || '/hubs/live';
+    const hubKey = `${hubUrl}|${competitionId}|${token ?? ''}`;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const pending: { key?: string; deliver: () => void }[] = [];
-    // Events from a replaced connection never reach the current competition.
-    const forward = <A extends unknown[]>(deliver: (...args: A) => void) => (...args: A) => { if (active) deliver(...args); };
-    // Batch data changes in order: session and result events can contain partial updates.
-    // Only replace telemetry/viewer totals, and only for the same stream.
-    const forwardCoalesced = <A extends unknown[]>(event: string, deliver: (...args: A) => void) => forward((...args: A) => {
-      if (!isLiteModeActive()) {
-        if (timer !== undefined) clearTimeout(timer);
-        timer = undefined;
-        for (const item of pending.splice(0)) item.deliver();
-        deliver(...args);
-        return;
-      }
-      const payload = args[0] as { streamId?: unknown } | undefined;
-      const key = (event === 'streamTelemetry' || event === 'streamViewers') && typeof payload?.streamId === 'number'
-        ? `${event}:${payload.streamId}` : undefined;
-      if (key) {
-        const previous = pending.findIndex((item) => item.key === key);
-        if (previous >= 0) pending.splice(previous, 1);
-      }
-      pending.push({ key, deliver: () => deliver(...args) });
-      if (timer !== undefined) return;
-      timer = setTimeout(() => {
-        timer = undefined;
-        if (active) for (const item of pending.splice(0)) item.deliver();
-      }, LITE_HUB_COALESCE_MS);
-    });
-    conn.on('streamUpdated', forward((s) => handlersRef.current.onStreamUpdated?.(s as LiveStream)));
-    conn.on('streamTelemetry', forwardCoalesced('streamTelemetry', (t) => handlersRef.current.onStreamTelemetry?.(t as StreamTelemetry)));
-    conn.on('streamCommand', forward((c) => handlersRef.current.onStreamCommand?.(c as StreamCommand)));
-    conn.on('overlayUpdated', forward((o) => handlersRef.current.onOverlayUpdated?.(o)));
-    conn.on('scoreCardControl', forward((c) => handlersRef.current.onScoreCardControl?.(c)));
-    conn.on('sponsorControl', forward((c) => handlersRef.current.onSponsorControl?.(c)));
-    conn.on('streamViewers', forwardCoalesced('streamViewers', (p) => handlersRef.current.onStreamViewers?.(p as { streamId: number; count: number })));
-    conn.on('chatMessage', forward((m) => handlersRef.current.onChatMessage?.(m)));
-    conn.on('chatMessageDeleted', forward((p) => handlersRef.current.onChatMessageDeleted?.(p as { id: number })));
-    conn.on('sessionUpdated', forwardCoalesced('sessionUpdated', (s) => handlersRef.current.onSessionUpdated?.(s)));
-    conn.on('resultsUpdated', forwardCoalesced('resultsUpdated', (p) => handlersRef.current.onResultsUpdated?.(p)));
-    conn.on('announcement', forward((a) => handlersRef.current.onAnnouncement?.(a)));
 
-    const recovery = recoverConnection({
-      connection: conn,
-      competitionId,
-      online: () => navigator.onLine,
-      onStatus: forward((value: boolean) => {
+    const subscriber: SharedHubSubscriber = {
+      onStatus: (value: boolean) => {
+        if (!active) return;
         readyRef.current = value;
         setConnectionState({ competitionId, token, connected: value });
-      }),
-      onReady: forward(() => handlersRef.current.onReady?.()),
-      schedule: (callback, delay) => {
-        const timer = setTimeout(callback, delay);
-        return () => clearTimeout(timer);
       },
-    });
-    recoveryRef.current = recovery;
-    window.addEventListener('online', recovery.reconnect);
+      onReady: () => { if (active) handlersRef.current.onReady?.(); },
+      deliver: (fn, ...args) => { if (active) fn(handlersRef.current, ...args); },
+      deliverCoalesced: (event, fn, ...args) => {
+        if (!active) return;
+        if (!isLiteModeActive()) {
+          if (timer !== undefined) clearTimeout(timer);
+          timer = undefined;
+          for (const item of pending.splice(0)) item.deliver();
+          fn(handlersRef.current, ...args);
+          return;
+        }
+        const payload = args[0] as { streamId?: unknown } | undefined;
+        const key = (event === 'streamTelemetry' || event === 'streamViewers') && typeof payload?.streamId === 'number'
+          ? `${event}:${payload.streamId}` : undefined;
+        if (key) {
+          const previous = pending.findIndex((item) => item.key === key);
+          if (previous >= 0) pending.splice(previous, 1);
+        }
+        pending.push({ key, deliver: () => fn(handlersRef.current, ...args) });
+        if (timer !== undefined) return;
+        timer = setTimeout(() => {
+          timer = undefined;
+          if (active) for (const item of pending.splice(0)) item.deliver();
+        }, LITE_HUB_COALESCE_MS);
+      },
+    };
+
+    let entry = sharedHubs.get(hubKey);
+    if (!entry) {
+      const subscribers = new Set<SharedHubSubscriber>();
+      const conn: HubConnection = new HubConnectionBuilder()
+        .withUrl(hubUrl, {
+          accessTokenFactory: () => readToken() === token ? token ?? '' : '',
+          // The API can run as several instances with no sticky sessions, so connect straight over
+          // WebSockets: a separate negotiate request could reach a different instance.
+          skipNegotiation: true,
+          transport: HttpTransportType.WebSockets,
+        })
+        .withAutomaticReconnect()
+        .configureLogging(LogLevel.Warning)
+        .build();
+
+      const broadcast = <A extends unknown[]>(fn: (h: LiveHandlers, ...a: A) => void) => (...args: A) => {
+        for (const sub of subscribers) sub.deliver(fn, ...args);
+      };
+      const broadcastCoalesced = <A extends unknown[]>(event: string, fn: (h: LiveHandlers, ...a: A) => void) => (...args: A) => {
+        for (const sub of subscribers) sub.deliverCoalesced(event, fn, ...args);
+      };
+
+      conn.on('streamUpdated', broadcast((h, s) => h.onStreamUpdated?.(s as LiveStream)));
+      conn.on('streamTelemetry', broadcastCoalesced('streamTelemetry', (h, t) => h.onStreamTelemetry?.(t as StreamTelemetry)));
+      conn.on('streamCommand', broadcast((h, c) => h.onStreamCommand?.(c as StreamCommand)));
+      conn.on('overlayUpdated', broadcast((h, o) => h.onOverlayUpdated?.(o)));
+      conn.on('scoreCardControl', broadcast((h, c) => h.onScoreCardControl?.(c)));
+      conn.on('sponsorControl', broadcast((h, c) => h.onSponsorControl?.(c)));
+      conn.on('streamViewers', broadcastCoalesced('streamViewers', (h, p) => h.onStreamViewers?.(p as { streamId: number; count: number })));
+      conn.on('chatMessage', broadcast((h, m) => h.onChatMessage?.(m)));
+      conn.on('chatMessageDeleted', broadcast((h, p) => h.onChatMessageDeleted?.(p as { id: number })));
+      conn.on('sessionUpdated', broadcastCoalesced('sessionUpdated', (h, s) => h.onSessionUpdated?.(s)));
+      conn.on('resultsUpdated', broadcastCoalesced('resultsUpdated', (h, p) => h.onResultsUpdated?.(p)));
+      conn.on('announcement', broadcast((h, a) => h.onAnnouncement?.(a)));
+
+      const createdEntry: SharedHubEntry = {
+        conn,
+        connected: false,
+        subscribers,
+        recovery: null as unknown as { reconnect: () => void; dispose: () => void },
+      };
+      subscribers.add(subscriber);
+      const recovery = recoverConnection({
+        connection: conn,
+        competitionId,
+        online: () => navigator.onLine,
+        onStatus: (value: boolean) => {
+          createdEntry.connected = value;
+          for (const sub of subscribers) sub.onStatus(value);
+        },
+        onReady: () => {
+          for (const sub of subscribers) sub.onReady();
+        },
+        schedule: (callback, delay) => {
+          const retryTimer = setTimeout(callback, delay);
+          return () => clearTimeout(retryTimer);
+        },
+      });
+      createdEntry.recovery = recovery;
+      entry = createdEntry;
+      sharedHubs.set(hubKey, entry);
+      window.addEventListener('online', recovery.reconnect);
+    } else {
+      entry.subscribers.add(subscriber);
+      if (entry.connected) { subscriber.onStatus(true); subscriber.onReady(); }
+    }
+
+    connectionRef.current = entry.conn;
+    recoveryRef.current = entry.recovery;
     return () => {
       active = false;
       readyRef.current = false;
       if (timer !== undefined) clearTimeout(timer);
       pending.length = 0;
-      // React runs this before the next effect, so the refs always hold this connection here.
       connectionRef.current = null;
       recoveryRef.current = null;
-      window.removeEventListener('online', recovery.reconnect);
-      recovery.dispose();
+      entry.subscribers.delete(subscriber);
+      if (entry.subscribers.size === 0) {
+        sharedHubs.delete(hubKey);
+        window.removeEventListener('online', entry.recovery.reconnect);
+        entry.recovery.dispose();
+      }
     };
   }, [competitionId, token]);
 

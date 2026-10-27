@@ -9,6 +9,7 @@ namespace MountedGames.Api.Services;
 /// <param name="RecentPoints">Points per race, the most recent race first.</param>
 /// <param name="FinalPlacingCounts">Placing counts within lettered Final heats, when the team has raced in one.</param>
 /// <param name="FinalRecentPoints">Points per race in lettered Final heats, most recent first.</param>
+/// <param name="RecentRaces">Most recent race results first, with race name and placing for human-readable tie-break explanations.</param>
 public sealed record TieFacts(
     int TeamId,
     int? SectionId,
@@ -16,7 +17,8 @@ public sealed record TieFacts(
     int[] PlacingCounts,
     double[] RecentPoints,
     int[]? FinalPlacingCounts = null,
-    double[]? FinalRecentPoints = null)
+    double[]? FinalRecentPoints = null,
+    (string RaceName, int? Placing, double Points, bool Eliminated)[]? RecentRaces = null)
 {
     public int Wins => PlacingCounts.Length > 0 ? PlacingCounts[0] : 0;
 }
@@ -41,21 +43,29 @@ public enum TieSettlement
 /// </summary>
 public sealed class TieBreaker
 {
+    public sealed record RaceRoundMeta(int SessionId, RaceRoundStage Stage, int? RoundId, string RaceName);
+
     private readonly IReadOnlyDictionary<int, TieBreakRule> _rules;
     private readonly IReadOnlyDictionary<int, FinalsTieOrder> _orders;
     private readonly IReadOnlyDictionary<int, (int Session, int Race, int Heat)> _raceOrder;
     private readonly IReadOnlySet<int> _finalRaceIds;
+    private readonly IReadOnlyDictionary<int, RaceRoundMeta> _raceRounds;
+    private readonly IReadOnlyDictionary<int, string> _raceNames;
 
     public TieBreaker(
         IReadOnlyDictionary<int, TieBreakRule> rulesBySection,
         IReadOnlyDictionary<int, FinalsTieOrder> ordersByTeam,
         IReadOnlyDictionary<int, (int Session, int Race, int Heat)> raceOrder,
-        IReadOnlySet<int>? finalRaceIds = null)
+        IReadOnlySet<int>? finalRaceIds = null,
+        IReadOnlyDictionary<int, RaceRoundMeta>? raceRounds = null,
+        IReadOnlyDictionary<int, string>? raceNames = null)
     {
         _rules = rulesBySection;
         _orders = ordersByTeam;
         _raceOrder = raceOrder;
         _finalRaceIds = finalRaceIds ?? new HashSet<int>();
+        _raceRounds = raceRounds ?? new Dictionary<int, RaceRoundMeta>();
+        _raceNames = raceNames ?? new Dictionary<int, string>();
     }
 
     public static async Task<TieBreaker> LoadAsync(AppDbContext db, int competitionId, CancellationToken ct = default)
@@ -68,17 +78,67 @@ public sealed class TieBreaker
             .ToDictionaryAsync(o => o.TeamId, ct);
         var races = await db.Races.AsNoTracking()
             .Where(r => r.Heat!.Session!.CompetitionId == competitionId)
-            .Select(r => new { r.Id, Session = r.Heat!.Session!.OrderIndex, Race = r.OrderIndex, Heat = r.Heat.OrderIndex, HeatLabel = r.Heat.Label })
+            .Select(r => new
+            {
+                r.Id,
+                SessionId = r.Heat!.SessionId,
+                Session = r.Heat!.Session!.OrderIndex,
+                Race = r.OrderIndex,
+                Heat = r.Heat.OrderIndex,
+                HeatLabel = r.Heat.Label,
+                Stage = r.Heat.RaceRoundStage,
+                RoundId = r.Heat.RaceRoundId,
+                RaceName = r.Name,
+            })
             .ToListAsync(ct);
         var finalRaceIds = races
-            .Where(r => FinalsTiers.ParseLabel(r.HeatLabel) is not null)
+            .Where(r => r.Stage == RaceRoundStage.None && FinalsTiers.ParseLabel(r.HeatLabel) is not null)
             .Select(r => r.Id)
             .ToHashSet();
-        return new TieBreaker(rules, orders, races.ToDictionary(r => r.Id, r => (r.Session, r.Race, r.Heat)), finalRaceIds);
+        var raceRounds = races.ToDictionary(
+            r => r.Id,
+            r => new RaceRoundMeta(r.SessionId, r.Stage, r.RoundId, r.RaceName));
+        var raceNames = races.ToDictionary(r => r.Id, r => r.RaceName);
+        return new TieBreaker(rules, orders, races.ToDictionary(r => r.Id, r => (r.Session, r.Race, r.Heat)), finalRaceIds, raceRounds, raceNames);
     }
 
     /// <summary>True when the race belongs to a lettered final heat ("A Final").</summary>
     public bool IsFinalRace(int raceId) => _finalRaceIds.Contains(raceId);
+
+    /// <summary>
+    /// Filters out Heat-Heat-Final (<see cref="RaceRoundStage.Qualifier"/>) results when the same team also has a result
+    /// in the corresponding <see cref="RaceRoundStage.Final"/> heat of the same round, so the 1-point qualifier score
+    /// is replaced by the round final score rather than added on top of it.
+    /// </summary>
+    public List<Result> EffectiveResults(IEnumerable<Result> results)
+    {
+        var list = results.ToList();
+        if (list.Count <= 1) return list;
+
+        RaceRoundMeta? MetaOf(Result r)
+        {
+            if (_raceRounds.TryGetValue(r.RaceId, out var m)) return m;
+            if (r.Race?.Heat is { } h)
+                return new RaceRoundMeta(h.SessionId, h.RaceRoundStage, h.RaceRoundId, r.Race.Name ?? string.Empty);
+            return null;
+        }
+
+        static string RoundKey(RaceRoundMeta m)
+            => m.RoundId is { } id ? $"{m.SessionId}:id:{id}" : $"{m.SessionId}:name:{m.RaceName.Trim().ToLowerInvariant()}";
+
+        var finalRoundKeys = new HashSet<string>();
+        foreach (var r in list)
+        {
+            if (MetaOf(r) is { Stage: RaceRoundStage.Final } m)
+                finalRoundKeys.Add(RoundKey(m));
+        }
+
+        if (finalRoundKeys.Count == 0) return list;
+
+        return list
+            .Where(r => MetaOf(r) is not { Stage: RaceRoundStage.Qualifier } m || !finalRoundKeys.Contains(RoundKey(m)))
+            .ToList();
+    }
 
     public TieBreakRule RuleFor(int? sectionId)
         => sectionId is { } id && _rules.TryGetValue(id, out var rule) ? rule : TieBreakRule.Countback;
@@ -86,7 +146,7 @@ public sealed class TieBreaker
     /// <param name="total">The team's total when it isn't just the sum of its race points (bonus points).</param>
     public TieFacts Facts(int teamId, int? sectionId, IEnumerable<Result> results, double? total = null)
     {
-        var list = results.ToList();
+        var list = EffectiveResults(results).Where(r => !r.IsSitOut).ToList();
         var maxPlace = list.Where(r => !r.Eliminated && r.Placing > 0).Select(r => r.Placing!.Value).DefaultIfEmpty(0).Max();
         var counts = new int[maxPlace];
         foreach (var r in list.Where(r => !r.Eliminated && r.Placing > 0)) counts[r.Placing!.Value - 1]++;
@@ -95,7 +155,7 @@ public sealed class TieBreaker
             .Select(r => r.Points)
             .ToArray();
 
-        bool IsFinalResult(Result r) => FinalsTiers.ParseLabel(r.Race?.Heat?.Label) is not null || _finalRaceIds.Contains(r.RaceId);
+        bool IsFinalResult(Result r) => (r.Race?.Heat is { RaceRoundStage: RaceRoundStage.None } h && FinalsTiers.ParseLabel(h.Label) is not null) || _finalRaceIds.Contains(r.RaceId);
         var finalList = list.Where(IsFinalResult).ToList();
         var finalMaxPlace = finalList.Where(r => !r.Eliminated && r.Placing > 0).Select(r => r.Placing!.Value).DefaultIfEmpty(0).Max();
         var finalCounts = new int[finalMaxPlace];
@@ -105,7 +165,20 @@ public sealed class TieBreaker
             .Select(r => r.Points)
             .ToArray();
 
-        return new TieFacts(teamId, sectionId, total ?? list.Sum(r => r.Points), counts, recent, finalCounts, finalRecent);
+        var recentRaces = list
+            .OrderByDescending(r => _raceOrder.TryGetValue(r.RaceId, out var o) ? o : (int.MinValue, int.MinValue, int.MinValue))
+            .Select(r => (
+                RaceName: !string.IsNullOrWhiteSpace(r.Race?.Name)
+                    ? r.Race!.Name.Trim()
+                    : _raceNames.TryGetValue(r.RaceId, out var n) && !string.IsNullOrWhiteSpace(n)
+                        ? n.Trim()
+                        : $"Race {r.RaceId}",
+                r.Placing,
+                r.Points,
+                r.Eliminated))
+            .ToArray();
+
+        return new TieFacts(teamId, sectionId, total ?? list.Sum(r => r.Points), counts, recent, finalCounts, finalRecent, recentRaces);
     }
 
     public TieFacts Facts(Team team) => Facts(team.Id, team.CompetitionSectionId, team.Results);
@@ -140,6 +213,90 @@ public sealed class TieBreaker
         var rule = RuleOf(level);
         if (rule is TieBreakRule.RunOff or TieBreakRule.Manual) return TieSettlement.Open;
         return RuleKey(above, below, rule) != 0 ? TieSettlement.Rule : TieSettlement.Open;
+    }
+
+    /// <summary>True when neither organiser order nor the section's tie-break rule (nor countback) separates <paramref name="a"/> and <paramref name="b"/>.</summary>
+    public bool AreLevel(IReadOnlyList<TieFacts> level, TieFacts a, TieFacts b)
+    {
+        if (a.Total != b.Total) return false;
+        if (OrganiserOrdered(level)) return _orders[a.TeamId].Position == _orders[b.TeamId].Position;
+        var rule = RuleOf(level);
+        if (RuleKey(a, b, rule) != 0) return false;
+        return CompareCountback(a, b) == 0;
+    }
+
+    /// <summary>
+    /// Plain-English explanation of why <paramref name="above"/> sits above <paramref name="below"/> when they are
+    /// level on total points, or null before any races have been scored.
+    /// </summary>
+    public string? Explain(IReadOnlyList<TieFacts> level, TieFacts above, TieFacts below, string? belowTeamName = null)
+    {
+        if (above.Total <= 0 && above.PlacingCounts.Length == 0 && above.RecentPoints.Length == 0
+            && below.PlacingCounts.Length == 0 && below.RecentPoints.Length == 0)
+            return null;
+
+        if (OrganiserOrdered(level))
+            return "Settled by run-off / referee order";
+
+        var rule = RuleOf(level);
+        if (rule == TieBreakRule.LastRace)
+        {
+            var minRecent = Math.Min(above.RecentPoints.Length, below.RecentPoints.Length);
+            for (var i = 0; i < minRecent; i++)
+            {
+                if (above.RecentPoints[i] == below.RecentPoints[i]) continue;
+                if (above.RecentRaces is { } ar && i < ar.Length && below.RecentRaces is { } br && i < br.Length)
+                {
+                    var raceName = ar[i].RaceName;
+                    var aDesc = !ar[i].Eliminated && ar[i].Placing is > 0 ? Ordinal(ar[i].Placing!.Value) : $"{PointValues.Format(ar[i].Points)} pts";
+                    var bDesc = !br[i].Eliminated && br[i].Placing is > 0 ? Ordinal(br[i].Placing!.Value) : br[i].Eliminated ? "elim." : $"{PointValues.Format(br[i].Points)} pts";
+                    return $"Ahead on Last Race ({aDesc} in {raceName} vs {bDesc})";
+                }
+                return $"Ahead on Last Race ({PointValues.Format(above.RecentPoints[i])} pts vs {PointValues.Format(below.RecentPoints[i])} pts)";
+            }
+        }
+
+        if (rule is TieBreakRule.RunOff or TieBreakRule.Manual)
+            return "Level on points and countback — run-off if on cut-off";
+
+        var aHasFinals = above.FinalPlacingCounts is { Length: > 0 } || above.FinalRecentPoints is { Length: > 0 };
+        var bHasFinals = below.FinalPlacingCounts is { Length: > 0 } || below.FinalRecentPoints is { Length: > 0 };
+        if (aHasFinals && bHasFinals)
+        {
+            if (Lexicographic(above.FinalPlacingCounts ?? [], below.FinalPlacingCounts ?? [], padMissing: true) != 0
+                || Lexicographic(above.FinalRecentPoints ?? [], below.FinalRecentPoints ?? [], padMissing: false) != 0)
+            {
+                return "Ahead on A-Final placing";
+            }
+        }
+
+        var maxPlaceLen = Math.Max(above.PlacingCounts.Length, below.PlacingCounts.Length);
+        for (var i = 0; i < maxPlaceLen; i++)
+        {
+            var aCount = i < above.PlacingCounts.Length ? above.PlacingCounts[i] : 0;
+            var bCount = i < below.PlacingCounts.Length ? below.PlacingCounts[i] : 0;
+            if (aCount == bCount) continue;
+            var place = Ordinal(i + 1);
+            var aWord = aCount == 1 ? "place" : "places";
+            var bWord = bCount == 1 ? "place" : "places";
+            var target = !string.IsNullOrWhiteSpace(belowTeamName) ? $" of {belowTeamName}" : "";
+            return $"Ahead{target} on Countback ({aCount}× {place} {aWord} vs {bCount}× {place} {bWord})";
+        }
+
+        return "Level on points and countback — run-off if on cut-off";
+    }
+
+    public static string Ordinal(int n)
+    {
+        var mod100 = n % 100;
+        if (mod100 is >= 11 and <= 13) return $"{n}th";
+        return (n % 10) switch
+        {
+            1 => $"{n}st",
+            2 => $"{n}nd",
+            3 => $"{n}rd",
+            _ => $"{n}th",
+        };
     }
 
     /// <summary>The rule for a group: its age group's, or countback when the teams come from more than one.</summary>

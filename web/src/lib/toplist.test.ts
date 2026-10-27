@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Heat, Session } from '../types';
 import { heat as baseHeat, race, result, session as baseSession, standing, team as baseTeam } from '../test/factories';
-import { buildToplist, ordinal, sectionScoreVersion, toplistNote, type ToplistRow } from './toplist';
+import { buildToplist, explainTieBreak, ordinal, sectionScoreVersion, toplistNote, type ToplistRow } from './toplist';
 
 const SECTION = 9;
 const entries = (teamIds: number[]): Heat['entries'] => teamIds.map((teamId, lane) => ({ id: teamId, teamId, teamName: `Team ${teamId}`, laneIndex: lane }));
@@ -566,18 +566,79 @@ it('handles changed opponents across sessions, using complete allocations in eac
 });
 
 describe('sectionScoreVersion', () => {
-  it('ignores clocks but invalidates for combined and other-section scores', () => {
+  it('ignores clocks and unrelated other-section sessions, but invalidates for own or combined-section scores', () => {
     expect(sectionScoreVersion([], null)).toBe('');
     const s1 = session(1, [heat(1, [1, 2], [race(1, { startedAt: '2026-06-01T10:00:00Z' })])]);
     const s1ClockStopped = session(1, [heat(1, [1, 2], [race(1, { startedAt: '2026-06-01T10:00:00Z', finishedAt: '2026-06-01T10:03:00Z' })], { startedAt: '2026-06-01T10:00:00Z' })], { startedAt: '2026-06-01T10:00:00Z' });
     const otherSection = session(2, [heat(2, [8, 9], [scored(2, [8, 5], [9, 3])])], { competitionSectionId: SECTION + 1 });
+    const combinedSection = session(3, [heat(3, [1, 8], [scored(3, [1, 5], [8, 3])])], { competitionSectionId: SECTION + 1, notes: '[scoring:by-section]' });
 
     const v0 = sectionScoreVersion([s1], SECTION);
     expect(sectionScoreVersion([s1ClockStopped], SECTION)).toBe(v0);
-    expect(sectionScoreVersion([s1ClockStopped, otherSection], SECTION)).not.toBe(v0);
+    expect(sectionScoreVersion([s1ClockStopped, otherSection], SECTION)).toBe(v0);
+    expect(sectionScoreVersion([s1ClockStopped, combinedSection], SECTION)).not.toBe(v0);
 
     const s1Scored = session(1, [heat(1, [1, 2], [scored(1, [1, 5], [2, 3])])]);
     expect(sectionScoreVersion([s1Scored], SECTION)).not.toBe(v0);
+  });
+});
+
+describe('Heat-Heat-Final (UsesRaceFinals) and tie-breaker parity', () => {
+  it('replaces 1 pt qualifier score with round final score in S1 and does not treat HHF round finals as competition finals', () => {
+    const q1 = heat(1, [1, 2], [scored(1, [1, 1], [2, 1])], { label: 'Bending · Heat 1', raceRoundStage: 1, raceRoundId: 10 });
+    const q2 = heat(2, [3, 4], [scored(2, [3, 1], [4, 0])], { label: 'Bending · Heat 2', raceRoundStage: 1, raceRoundId: 10 });
+    const roundFinal = heat(3, [1, 3], [scored(3, [1, 3], [3, 2])], { label: 'Bending · Final', raceRoundStage: 2, raceRoundId: 10 });
+    const hhfSession = session(1, [q1, q2, roundFinal]);
+
+    const list = buildToplist(
+      [standing(1, 3), standing(3, 2), standing(2, 1), standing(4, 0)],
+      [hhfSession],
+      [],
+      SECTION,
+      2,
+    );
+    expect(list.finals).toEqual([]);
+    expect(list.bySession.sessions.map((s) => s.label)).toEqual(['S1']);
+    expect(list.bySession.cells.get(1)).toEqual([3]);
+    expect(list.bySession.cells.get(3)).toEqual([2]);
+    expect(list.bySession.cells.get(2)).toEqual([1]);
+    expect(list.detail.get(1)?.qualifyingPoints).toBe(3);
+  });
+
+  it('separates tied points when broken by countback wins or last race (excluding sit-outs) and suppresses false run-offs', () => {
+    const r1 = race(1, {
+      isComplete: true,
+      results: [
+        result(2, 1, { points: 5 }),
+        result(3, 2, { points: 4 }),
+      ],
+    });
+    const r2 = race(2, {
+      isComplete: true,
+      results: [
+        result(2, null, { points: 0, isSitOut: true }),
+        result(3, 4, { points: 1 }),
+      ],
+    });
+    const s1 = session(1, [heat(1, [2, 3], [r1, r2])]);
+    const list = buildToplist(
+      [
+        standing(1, 12),
+        { ...standing(3, 5), wins: 0 },
+        { ...standing(2, 5), wins: 1 },
+      ],
+      [s1],
+      [],
+      SECTION,
+      2,
+    );
+    expect(list.rows.map((r) => [r.teamId, r.position, r.joint])).toEqual([
+      [1, 1, false],
+      [2, 2, false],
+      [3, 3, false],
+    ]);
+    expect(list.runoff).toBeNull();
+    expect(list.cutAfter).toBe(1);
   });
 });
 
@@ -608,5 +669,133 @@ describe('projected qualifying cut-off and finals tie-breaking', () => {
     ]);
     const list = buildToplist(standings, [finals], [], SECTION, null);
     expect(list.finals[0].rows.map((r) => r.teamName)).toEqual(['Zebra', 'Alpha']);
+  });
+});
+
+describe('explainTieBreak and tieBreakReason (#71)', () => {
+  it('explains countback ties by the highest placing where the two teams differ', () => {
+    const r1 = race(1, {
+      name: 'Bending',
+      orderIndex: 1,
+      isComplete: true,
+      results: [
+        result(1, 1, { points: 4 }),
+        result(2, 2, { points: 3 }),
+      ],
+    });
+    const r2 = race(2, {
+      name: 'Flag',
+      orderIndex: 2,
+      isComplete: true,
+      results: [
+        result(1, 1, { points: 4 }),
+        result(2, 2, { points: 3 }),
+      ],
+    });
+    const r3 = race(3, {
+      name: 'Mug',
+      orderIndex: 3,
+      isComplete: true,
+      results: [
+        result(1, 4, { points: 1 }),
+        result(2, 2, { points: 3 }),
+      ],
+    });
+    const sessions = [session(1, [heat(1, [1, 2], [r1, r2, r3])])];
+    const standings = [
+      { ...standing(1, 9), teamName: 'Oakham A' },
+      { ...standing(2, 9), teamName: 'Belvoir A' },
+    ];
+    const list = buildToplist(standings, sessions, [], SECTION, null);
+    expect(list.rows[0].tieBreakReason).toBe('Ahead of Belvoir A on Countback (2× 1st places vs 0× 1st places)');
+    expect(toplistNote(list.rows[0])).toBe('Ahead of Belvoir A on Countback (2× 1st places vs 0× 1st places)');
+  });
+
+  it('explains last-race tie-breaks when countback is identical', () => {
+    const r1 = race(1, {
+      name: 'Bending',
+      orderIndex: 1,
+      isComplete: true,
+      results: [
+        result(1, 2, { points: 3 }),
+        result(2, 1, { points: 4 }),
+      ],
+    });
+    const r2 = race(2, {
+      name: 'Flag',
+      orderIndex: 2,
+      isComplete: true,
+      results: [
+        result(1, 1, { points: 4 }),
+        result(2, 2, { points: 3 }),
+      ],
+    });
+    const sessions = [session(1, [heat(1, [1, 2], [r1, r2])])];
+    const standings = [
+      { ...standing(1, 7), teamName: 'Oakham A' },
+      { ...standing(2, 7), teamName: 'Belvoir A' },
+    ];
+    const list = buildToplist(standings, sessions, [], SECTION, null);
+    expect(list.rows[0].tieBreakReason).toBe('Ahead on Last Race (1st in Flag vs 2nd)');
+  });
+
+  it('explains A-Final placing, referee order, and open ties', () => {
+    const finalSession = session(2, [
+      heat(2, [1, 2], [
+        race(10, {
+          name: 'Final Flag',
+          orderIndex: 1,
+          isComplete: true,
+          results: [
+            result(1, 1, { points: 5 }),
+            result(2, 2, { points: 4 }),
+          ],
+        }),
+      ], { label: 'A Final', raceRoundStage: 2 }),
+    ]);
+    expect(
+      explainTieBreak(
+        { ...standing(1, 12), teamName: 'Oakham A', finalTier: 0 },
+        { ...standing(2, 12), teamName: 'Belvoir A', finalTier: 0 },
+        [finalSession],
+        SECTION,
+      ),
+    ).toBe('Ahead on A-Final placing');
+
+    expect(
+      explainTieBreak(
+        { ...standing(1, 12), teamName: 'Oakham A', tieBreakOrder: 1 },
+        { ...standing(2, 12), teamName: 'Belvoir A', tieBreakOrder: 2 },
+        [],
+        SECTION,
+      ),
+    ).toBe('Settled by run-off / referee order');
+
+    expect(
+      explainTieBreak(
+        { ...standing(1, 12), teamName: 'Oakham A' },
+        { ...standing(2, 12), teamName: 'Belvoir A' },
+        [],
+        SECTION,
+      ),
+    ).toBe('Level on points and countback — run-off if on cut-off');
+
+    expect(
+      explainTieBreak(
+        { ...standing(1, 12), teamName: 'Oakham A' },
+        { ...standing(2, 10), teamName: 'Belvoir A' },
+        [],
+        SECTION,
+      ),
+    ).toBeNull();
+  });
+
+  it('preserves a backend-provided tieBreakReason on StandingRow', () => {
+    const standings = [
+      { ...standing(1, 10), tieBreakReason: 'Ahead of Belvoir A on Countback (3× 1st places vs 1× 1st place)' },
+      standing(2, 10),
+    ];
+    const list = buildToplist(standings, [], [], SECTION, null);
+    expect(list.rows[0].tieBreakReason).toBe('Ahead of Belvoir A on Countback (3× 1st places vs 1× 1st place)');
   });
 });

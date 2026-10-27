@@ -1,6 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ResultsBook } from '../pages/eventTools/resultsBookTypes';
-import { resultsBookFileName, resultsBookToCsv, safeCell } from './resultsBookCsv';
+import {
+  copyPublicResultsSummary,
+  formatPublicResultsSummary,
+  resultsBookFileName,
+  resultsBookToCsv,
+  safeCell,
+} from './resultsBookCsv';
 
 const book = (extra: Partial<ResultsBook> = {}): ResultsBook => ({
   competition: { id: 1, name: 'Spring Games', location: 'Oak Farm', startDate: '2031-05-04T09:00:00Z', endDate: null },
@@ -117,3 +123,94 @@ describe('resultsBookFileName', () => {
     expect(resultsBookFileName(book({ includesPrivate: true }))).toBe('Spring_Games_results_book_organiser.csv');
   });
 });
+
+describe('formatPublicResultsSummary and copyPublicResultsSummary (#300)', () => {
+  it('formats podiums, finalists, awards, and protects useInitialOnly minors via publicRiderName', () => {
+    const sample = book({
+      includesPrivate: true,
+      refereeNotes: [{ sectionName: 'Under 12 Teams', heatLabel: 'A Final', raceName: 'Bending', teamName: 'Beech B', statusLetter: 'DNF', note: 'Private vet note' }],
+      sections: [{
+        sectionId: 5,
+        sectionName: 'Under 12 Teams',
+        format: 2,
+        standings: [
+          { rank: 1, teamId: 1, teamName: 'Oak A', clubName: 'Oak Pony Club', finalLabel: 'A Final', totalPoints: 30, bonusPoints: 0, racesRun: 6, wins: 3, eliminations: 0, withdrawn: false },
+          { rank: 2, teamId: 2, teamName: 'Beech B', clubName: 'Beech', finalLabel: 'A Final', totalPoints: 24.5, bonusPoints: 0, racesRun: 6, wins: 1, eliminations: 0, withdrawn: false },
+          { rank: 3, teamId: 3, teamName: 'Elm', clubName: 'Elm', finalLabel: 'A Final', totalPoints: 1, bonusPoints: 0, racesRun: 6, wins: 0, eliminations: 0, withdrawn: false },
+          { rank: 4, teamId: 4, teamName: 'Ash', clubName: 'Ash', finalLabel: 'A Final', totalPoints: 12, bonusPoints: 0, racesRun: 6, wins: 0, eliminations: 0, withdrawn: false },
+          { rank: 5, teamId: 5, teamName: 'Withdrawn Team', clubName: 'Club', finalLabel: 'A Final', totalPoints: 20, bonusPoints: 0, racesRun: 2, wins: 1, eliminations: 0, withdrawn: true },
+        ],
+        finals: [],
+        awards: [{ id: 1, competitionSectionId: 5, title: 'Best turned out', recipient: 'Oak A', note: 'Gleaming' }],
+      }],
+    });
+
+    const summary = formatPublicResultsSummary(sample, {
+      ridersByTeamId: {
+        1: [
+          { fullName: 'Oliver Smith', useInitialOnly: true, horseName: 'Biscuit' },
+          { fullName: 'Ava Jones', useInitialOnly: false, horseName: 'Comet' },
+          { fullName: '   ', useInitialOnly: false },
+        ],
+        2: [{ fullName: 'Leo Brown', useInitialOnly: true, horseName: null }],
+      },
+    });
+
+    expect(summary).toContain('🏆 Spring Games · Oak Farm (4 May 2031)');
+    expect(summary).toContain('── Under 12 Teams ──');
+    expect(summary).toContain('🥇 1st: Oak A (Oak Pony Club) — A Final, 30 pts — Oliver S. (Biscuit), Ava Jones (Comet)');
+    expect(summary).not.toContain('Oliver Smith');
+    expect(summary).toContain('🥈 2nd: Beech B (Beech) — A Final, 24.5 pts — Leo B.');
+    expect(summary).toContain('🥉 3rd: Elm — A Final, 1 pt');
+    expect(summary).toContain('4th: Ash — A Final, 12 pts');
+    expect(summary).not.toContain('Withdrawn Team');
+    expect(summary).toContain('🎖️ Best turned out: Oak A (Gleaming)');
+    expect(summary).toContain('── Special Awards ──');
+    expect(summary).toContain('🎖️ Spirit of the Games: Everyone (Thank you)');
+    expect(summary).not.toContain('Private vet note');
+  });
+
+  it('supports Map-based rider rosters, provisional books, non-final sections, and clipboard copy', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+
+    const sample = book({
+      isProvisional: true,
+      competition: { id: 2, name: 'Autumn Friendly', location: null, startDate: '2031-10-12T09:00:00Z', endDate: null },
+      eventAwards: [],
+      sections: [
+        {
+          sectionId: 1,
+          sectionName: 'Empty Section',
+          format: 2,
+          standings: [],
+          finals: [],
+          awards: [],
+        },
+        {
+          sectionId: 2,
+          sectionName: 'Pairs',
+          format: 1,
+          standings: [
+            { rank: 1, teamId: 10, teamName: 'Alpha Pair', clubName: 'Alpha Pair', finalLabel: null, totalPoints: 18, bonusPoints: 0, racesRun: 5, wins: 2, eliminations: 0, withdrawn: false },
+          ],
+          finals: [],
+          awards: [{ id: 9, competitionSectionId: 2, title: 'Fastest Pair', recipient: 'Alpha Pair', note: null }],
+        },
+      ],
+    });
+
+    const map = new Map([[10, [{ fullName: 'Mia Clarke', useInitialOnly: true, horseName: 'Star' }]]]);
+    const copied = await copyPublicResultsSummary(sample, { ridersByTeamId: map });
+    expect(writeText).toHaveBeenCalledWith(copied);
+    expect(copied).toContain('🏆 Autumn Friendly (12 October 2031)');
+    expect(copied).toContain('(Provisional results)');
+    expect(copied).not.toContain('Empty Section');
+    expect(copied).toContain('🥇 1st: Alpha Pair — 18 pts — Mia C. (Star)');
+    expect(copied).toContain('🎖️ Fastest Pair: Alpha Pair');
+  });
+});
+

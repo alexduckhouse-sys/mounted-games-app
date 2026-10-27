@@ -6,6 +6,10 @@ public enum DrawChangeKind
     SectionDraw = 1,
     /// <summary>A re-draw of unscored heats after a withdrawal.</summary>
     Redraw = 2,
+    /// <summary>A pre-change snapshot of session heats, lanes, and races that can be restored within 30 minutes.</summary>
+    UndoSnapshot = 3,
+    /// <summary>A team's saved per-race rider line-up and sit-out plan.</summary>
+    TeamRaceLineup = 4,
 }
 
 /// <summary>

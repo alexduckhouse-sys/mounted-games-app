@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { session, sponsor } from '../test/factories';
 import {
-  FRESH_ROTATION, SPONSOR_PLACEMENTS, SPONSOR_TIERS, currentItem, datesText, dateToEnd, dateToStart, endToDate, fitWithin, groupByTier,
+  FRESH_ROTATION, SPONSOR_PLACEMENTS, SPONSOR_TIERS, buildSponsorProofOfValueReport, buildSponsorReportCsv, currentItem,
+  datesText, dateToEnd, dateToStart, endToDate, fitWithin, formatDurationHms, groupByTier,
   hasPlacement, isHttpsLink, logoSrc, msUntilNext, onBreak, parseSponsor, parseSponsorAdmin, parseSponsorAdmins, parseSponsorControl,
-  parseSponsors, placementBit, rotationIndex, shownText, skipRotation, sponsorStatus, sponsorsFor, startToDate, withPlacement,
+  parseSponsors, placementBit, rotationIndex, shownText, skipRotation, sponsorReportPlacementLabel, sponsorReportPlacementLabels,
+  sponsorStatus, sponsorsFor, startToDate, withPlacement,
 } from './sponsors';
 
 afterEach(() => { vi.unstubAllEnvs(); });
@@ -219,5 +221,59 @@ describe('shownText', () => {
     expect(shownText(0, 0)).toBe('Shown 0 times');
     expect(shownText(1, 59)).toBe('Shown 1 time');
     expect(shownText(1234, 600)).toBe('Shown 1,234 times · 10 min on video');
+  });
+});
+
+describe('sponsor proof-of-value report & CSV', () => {
+  it('formats live stream on-screen time as Xh Ym Zs', () => {
+    expect(formatDurationHms(0)).toBe('0h 0m 0s');
+    expect(formatDurationHms(-15)).toBe('0h 0m 0s');
+    expect(formatDurationHms(125)).toBe('0h 2m 5s');
+    expect(formatDurationHms(4530)).toBe('1h 15m 30s');
+  });
+
+  it('replaces raw enum names and bitmasks with human-friendly placement labels', () => {
+    expect(sponsorReportPlacementLabel('SponsorExposure')).toBe('Live Stream Overlay');
+    expect(sponsorReportPlacementLabel('Details')).toBe('Overview');
+    expect(sponsorReportPlacementLabel('Results')).toBe('Standings');
+    expect(sponsorReportPlacementLabel('Timetable')).toBe('Timetable');
+    expect(sponsorReportPlacementLabel('SponsorPage')).toBe('Sponsor Page');
+    expect(sponsorReportPlacementLabel(4)).toBe('Overview');
+    expect(sponsorReportPlacementLabel(2)).toBe('Standings');
+    expect(sponsorReportPlacementLabels(1 | 2 | 4 | 8 | 32)).toEqual([
+      'Overview',
+      'Standings',
+      'Timetable',
+      'Live Stream Overlay',
+      'Sponsor Page',
+    ]);
+  });
+
+  it('builds a proof-of-value summary and CSV with Views (Impressions) and Xh Ym Zs on-screen time per sponsor and per placement', () => {
+    const admins = [
+      {
+        ...sponsor(1, { name: 'Baileys Horse Feeds', tier: 0, showOn: 4 | 2 | 8 }),
+        isEnabled: true,
+        startsAt: null,
+        endsAt: null,
+        views: 420,
+        seconds: 3725,
+      },
+    ];
+    const report = buildSponsorProofOfValueReport(7, admins, null);
+    expect(report.totalViews).toBe(420);
+    expect(report.totalSeconds).toBe(3725);
+    expect(report.formattedTotalOnScreenTime).toBe('1h 2m 5s');
+    expect(report.sponsors[0].placementLabels).toEqual(['Overview', 'Standings', 'Live Stream Overlay']);
+
+    const csv = buildSponsorReportCsv('Spring Championships', admins, null);
+    expect(csv).not.toContain('SponsorExposure');
+    expect(csv).toContain('Total Views (Impressions)');
+    expect(csv).toContain('Live Stream On-Screen Time');
+    expect(csv).toContain('Baileys Horse Feeds');
+    expect(csv).toContain('1h 2m 5s');
+    expect(csv).toContain('Overview');
+    expect(csv).toContain('Standings');
+    expect(csv).toContain('Live Stream Overlay');
   });
 });

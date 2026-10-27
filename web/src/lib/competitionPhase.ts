@@ -9,18 +9,29 @@ import type { CompetitionDetail, Heat, Session } from '../types';
  */
 export type CompetitionPhase = 'entry' | 'running' | 'complete';
 
-type PhaseInput = Pick<CompetitionDetail, 'sections' | 'teams' | 'sessions' | 'isArchived'>;
+type PhaseInput = Pick<CompetitionDetail, 'sections' | 'teams' | 'sessions' | 'isArchived'> & {
+  startDate?: string | null;
+  endDate?: string | null;
+};
 
 const isRace = (s: Session) => (s.kind ?? (s.isBreak ? 1 : 0)) === 0;
-const isFinalHeat = (s: Session, h: Heat) => h.raceRoundStage === 2 || /\bfinals?\b/i.test(h.label ?? '') || /\bfinals?\b/i.test(s.name);
+const isFinalHeat = (s: Session, h: Heat) => (h.raceRoundStage === 2 && !h.raceRoundId) || /\bfinals?\b/i.test(h.label ?? '') || /\bfinals?\b/i.test(s.name);
 const isHeatComplete = (s: Session, h: Heat) => s.status === 2 || !!h.finishedAt || (h.races.length > 0 && h.races.every((r) => r.isComplete));
 
 export function competitionPhase(competition: PhaseInput): CompetitionPhase {
   const raceSessions = competition.sessions.filter(isRace);
   const finalHeats = raceSessions.flatMap((s) => (s.heats ?? []).filter((h) => isFinalHeat(s, h)).map((h) => ({ s, h })));
   const heatedSessions = raceSessions.filter((s) => (s.heats?.length ?? 0) > 0);
+  const hasUndrawnRaceSessions = raceSessions.some((s) => (s.heats?.length ?? 0) === 0 && s.status !== 2);
+  const startDay = competition.startDate?.slice(0, 10) ?? '';
+  const endDay = competition.endDate?.slice(0, 10) ?? '';
+  const isMultiDay = Boolean(startDay && endDay && endDay > startDay);
+  const hasScheduledSessions = raceSessions.some((s) => Boolean(s.scheduledStart));
+  const hasFinalDaySession = !isMultiDay || !hasScheduledSessions || raceSessions.some((s) => (s.scheduledStart?.slice(0, 10) ?? '') >= endDay);
   if (
     finalHeats.length > 0
+    && !hasUndrawnRaceSessions
+    && hasFinalDaySession
     && finalHeats.every(({ s, h }) => isHeatComplete(s, h))
     && heatedSessions.every((s) => s.status === 2 || s.heats.every((h) => isHeatComplete(s, h)))
   ) {

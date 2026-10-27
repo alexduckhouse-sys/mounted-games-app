@@ -206,6 +206,7 @@ public static class HistorySeeder
         // Listings on any event for the seeded sellers' items, then the items.
         var itemIds = db.Set<CatalogueItem>().Where(i => SellerIds.Contains(i.SellerUserId)).Select(i => i.Id);
         await db.Set<CompetitionListing>().Where(l => itemIds.Contains(l.CatalogueItemId)).ExecuteDeleteAsync();
+        await db.Set<CatalogueItemOption>().Where(o => itemIds.Contains(o.CatalogueItemId)).ExecuteDeleteAsync();
         await db.Set<CatalogueItem>().Where(i => SellerIds.Contains(i.SellerUserId)).ExecuteDeleteAsync();
 
         // Marketplace posts by the seeded sellers, with anything attached to them.
@@ -283,9 +284,9 @@ public static class HistorySeeder
                 {
                     var hands = age switch
                     {
-                        0 => 11.2m + rng.Next(0, 3) / 10m,
-                        1 => 12.2m + rng.Next(0, 3) / 10m,
-                        _ => 13.2m + rng.Next(0, 3) / 10m,
+                        0 => 11.1m + rng.Next(0, 3) / 10m,
+                        1 => 12.1m + rng.Next(0, 3) / 10m,
+                        _ => 13.1m + rng.Next(0, 3) / 10m,
                     };
                     riders.Add(new RiderDef
                     {
@@ -698,7 +699,20 @@ public static class HistorySeeder
         {
             SellerUserId = SellerIds[r.Seller], Title = r.Title, Description = r.Description, PriceMinor = r.Price,
             StockQuantity = r.Stock, Category = r.Category, ImageUrl = null, IsActive = true,
+            Options = SizesFor(r.Title),
         }).ToList();
+    }
+
+    /// <summary>Clothes in the back catalogue come in sizes, each with a little stock, so the size pills show.</summary>
+    private static List<CatalogueItemOption> SizesFor(string title)
+    {
+        string[] labels = title switch
+        {
+            "Event T-shirt" => ["Age 7-8", "Age 9-10", "Age 11-12", "S", "M", "L", "XL"],
+            "Club hoodie" => ["S", "M", "L", "XL"],
+            _ => [],
+        };
+        return labels.Select((label, i) => new CatalogueItemOption { Label = label, StockQuantity = 5 + i, SortOrder = i }).ToList();
     }
 
     // ----- helpers -----

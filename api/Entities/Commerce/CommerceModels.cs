@@ -73,6 +73,28 @@ public class CatalogueItem
     public long Version { get; set; } = 1;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    /// <summary>The choices the seller offers, such as sizes ("S", "M", "Age 9-10"). Empty means the item has no options.</summary>
+    public ICollection<CatalogueItemOption> Options { get; set; } = new List<CatalogueItemOption>();
+}
+
+/// <summary>
+/// One choice of a catalogue item (a size, usually), set by the seller. When it has stock, orders reserve and release it
+/// here, the same way as <see cref="CatalogueItem.StockQuantity"/>; null stock means no limit for this option.
+/// </summary>
+public class CatalogueItemOption
+{
+    /// <summary>The longest label a seller can give an option (matches the column).</summary>
+    public const int MaxLabelLength = 40;
+    /// <summary>The most options one item can have.</summary>
+    public const int MaxOptions = 30;
+
+    public int Id { get; set; }
+    public int CatalogueItemId { get; set; }
+    public CatalogueItem? CatalogueItem { get; set; }
+    public string Label { get; set; } = string.Empty;
+    public int? StockQuantity { get; set; }
+    public int SortOrder { get; set; }
+    public long Version { get; set; } = 1;
 }
 
 public class CompetitionListing
@@ -140,6 +162,12 @@ public class EventOrderLine
     public int LineTotalMinor { get; set; }
     /// <summary>What the buyer typed for the item's <see cref="CatalogueItem.DetailPrompt"/> (at most 80 characters). Null when nothing was asked.</summary>
     public string? Detail { get; set; }
+    /// <summary>The option the buyer chose (see <see cref="CatalogueItemOption"/>). Null when the item has no options.</summary>
+    public int? CatalogueItemOptionId { get; set; }
+    /// <summary>The option's label when the order was made ("M"), kept even if the seller later renames or removes it.</summary>
+    public string? OptionLabel { get; set; }
+    /// <summary>How much of the option's own stock this line holds; released back to that option on cancel or refund.</summary>
+    public int ReservedOptionStockQuantity { get; set; }
 }
 
 public class TestPaymentRecord

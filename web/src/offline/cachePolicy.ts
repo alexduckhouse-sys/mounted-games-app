@@ -1,9 +1,10 @@
 /** Only responses with the same public representation for every viewer. */
 export function canCachePublicApi(pathname: string, method = 'GET', headers?: Pick<Headers, 'get'>): boolean {
-  if (method !== 'GET' || headers?.get('Authorization')) return false;
-  return /^\/api\/competitions(?:\/picker|\/[1-9]\d*(?:\/(?:standings|first-view))?)?\/?$/.test(pathname)
-    || /^\/api\/competitions\/[1-9]\d*\/sponsors\/?$/.test(pathname)
-    || /^\/api\/(?:race-templates|weather\/(?:at|current))\/?$/.test(pathname);
+  if (method !== 'GET') return false;
+  if (headers?.get('Authorization') && /^\/api\/competitions\/[1-9]\d*(?:\/first-view)?\/?$/.test(pathname)) return false;
+  return /^\/api\/competitions(?:\/picker|\/[1-9]\d*(?:\/(?:standings|first-view|timetable|program|sponsors))?)?\/?$/.test(pathname)
+    || /^\/api\/(?:rules|race-templates|weather\/(?:at|current))\/?$/.test(pathname)
+    || /^\/api\/seasons\/[1-9]\d*(?:\/standings)?\/?$/.test(pathname);
 }
 
 /** Freshness window (2 minutes) in Lite Mode before a stamped public GET response needs network revalidation. */

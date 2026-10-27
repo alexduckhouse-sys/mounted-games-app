@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -239,13 +240,84 @@ public class SessionsController : ControllerBase
         return loaded.ToDto();
     }
 
+    [HttpDelete("{id:int}/heats/{heatId:int}")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<SessionDto>> DeleteHeat(int competitionId, int id, int heatId)
+    {
+        var s = await _db.Sessions
+            .Include(s => s.Heats).ThenInclude(h => h.Entries)
+            .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results)
+            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+        if (s is null) return NotFound();
+
+        var heat = s.Heats.FirstOrDefault(h => h.Id == heatId);
+        if (heat is null) return NotFound();
+        if (heat.Races.Any(r => r.IsComplete || r.Results.Count > 0))
+            return Conflict(new { message = "This heat already has race results, so it can't be deleted." });
+
+        var heatLabel = !string.IsNullOrWhiteSpace(heat.Label) ? heat.Label!.Trim() : $"Heat {heat.OrderIndex}";
+        DrawUndoService.RecordSessionSnapshot(
+            _db,
+            competitionId,
+            s,
+            "DeleteHeat",
+            $"Deleted {heatLabel} in {s.Name}",
+            User.FindFirstValue(ClaimTypes.NameIdentifier));
+
+        _db.Heats.Remove(heat);
+        s.Heats.Remove(heat);
+        var remaining = s.Heats.OrderBy(h => h.OrderIndex).ThenBy(h => h.Id).ToList();
+        for (var i = 0; i < remaining.Count; i++)
+            remaining[i].OrderIndex = i + 1;
+
+        await _db.SaveChangesAsync();
+        var reloaded = await SessionsWithDetail().FirstAsync(x => x.Id == id);
+        var dto = reloaded.ToDto();
+        await _live.SessionUpdated(competitionId, dto);
+        return dto;
+    }
+
+    [HttpDelete("{id:int}/heats")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<SessionDto>> ClearHeats(int competitionId, int id)
+    {
+        var s = await _db.Sessions
+            .Include(s => s.Heats).ThenInclude(h => h.Entries)
+            .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results)
+            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+        if (s is null) return NotFound();
+        if (s.Heats.Any(h => h.Races.Any(r => r.IsComplete || r.Results.Count > 0)))
+            return Conflict(new { message = "This session already has race results, so its heats can't be cleared." });
+
+        if (s.Heats.Count > 0)
+        {
+            DrawUndoService.RecordSessionSnapshot(
+                _db,
+                competitionId,
+                s,
+                "ClearHeats",
+                $"Cleared {s.Heats.Count} {(s.Heats.Count == 1 ? "heat" : "heats")} in {s.Name}",
+                User.FindFirstValue(ClaimTypes.NameIdentifier));
+            _db.Heats.RemoveRange(s.Heats);
+            await _db.SaveChangesAsync();
+        }
+
+        var reloaded = await SessionsWithDetail().FirstAsync(x => x.Id == id);
+        var dto = reloaded.ToDto();
+        await _live.SessionUpdated(competitionId, dto);
+        return dto;
+    }
+
     [HttpPost("{id:int}/generate-race-finals")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public async Task<ActionResult<SessionDto>> GenerateRaceFinals(int competitionId, int id, GenerateRaceFinalsRequest req)
     {
         var s = await _db.Sessions
-            .Include(s => s.Heats)
+            .Include(s => s.Heats).ThenInclude(h => h.Entries)
+            .Include(s => s.Heats).ThenInclude(h => h.Races)
             .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
         if (s is null) return NotFound();
         if (!await TeamsBelongAsync(competitionId, req.TeamIds)) return BadRequest(new { message = "Some of those teams aren't in this competition." });
@@ -264,6 +336,16 @@ public class SessionsController : ControllerBase
 
         if (req.ReplaceExisting)
         {
+            if (s.Heats.Count > 0)
+            {
+                DrawUndoService.RecordSessionSnapshot(
+                    _db,
+                    competitionId,
+                    s,
+                    "GenerateRaceFinals",
+                    $"Regenerated race finals in {s.Name}",
+                    User.FindFirstValue(ClaimTypes.NameIdentifier));
+            }
             _db.Heats.RemoveRange(s.Heats);
             await _db.SaveChangesAsync();
         }
@@ -432,10 +514,22 @@ public class SessionsController : ControllerBase
                 .ToList();
             if (locked.Count > 0)
                 return Conflict(new { message = $"Results are signed off for {string.Join(", ", locked)}, so the teams there can't be changed. Nothing was saved." });
+
+            DrawUndoService.RecordSessionSnapshot(
+                _db,
+                competitionId,
+                s,
+                "UpdateHeatAssignments",
+                $"Updated heat lanes in {s.Name}",
+                User.FindFirstValue(ClaimTypes.NameIdentifier));
         }
 
         foreach (var (heat, teamIds) in changed)
         {
+            var existingOverrides = heat.Entries
+                .Where(e => !string.IsNullOrWhiteSpace(e.BibColourOverride))
+                .GroupBy(e => e.TeamId)
+                .ToDictionary(g => g.Key, g => g.First().BibColourOverride);
             _db.HeatEntries.RemoveRange(heat.Entries);
             foreach (var race in heat.Races)
             {
@@ -453,7 +547,8 @@ public class SessionsController : ControllerBase
             var lane = 1;
             foreach (var tid in teamIds)
             {
-                _db.HeatEntries.Add(new HeatEntry { HeatId = heat.Id, TeamId = tid, LaneIndex = lane++ });
+                existingOverrides.TryGetValue(tid, out var bibOverride);
+                _db.HeatEntries.Add(new HeatEntry { HeatId = heat.Id, TeamId = tid, LaneIndex = lane++, BibColourOverride = bibOverride });
             }
         }
         await _db.SaveChangesAsync();
@@ -516,7 +611,8 @@ public class SessionsController : ControllerBase
     public async Task<ActionResult<SessionDto>> GenerateHeats(int competitionId, int id, GenerateHeatsRequest req)
     {
         var s = await _db.Sessions
-            .Include(s => s.Heats)
+            .Include(s => s.Heats).ThenInclude(h => h.Entries)
+            .Include(s => s.Heats).ThenInclude(h => h.Races)
             .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
         if (s is null) return NotFound();
         if (!await TeamsBelongAsync(competitionId, req.TeamIds)) return BadRequest(new { message = "Some of those teams aren't in this competition." });
@@ -532,6 +628,16 @@ public class SessionsController : ControllerBase
 
         if (req.ReplaceExisting)
         {
+            if (s.Heats.Count > 0)
+            {
+                DrawUndoService.RecordSessionSnapshot(
+                    _db,
+                    competitionId,
+                    s,
+                    "GenerateHeats",
+                    $"Regenerated heats in {s.Name}",
+                    User.FindFirstValue(ClaimTypes.NameIdentifier));
+            }
             _db.Heats.RemoveRange(s.Heats);
             await _db.SaveChangesAsync();
         }
@@ -1272,6 +1378,297 @@ public class SessionsController : ControllerBase
             pace.SampleHeats);
     }
 
+    /// <summary>Updates or clears a lane's collecting-ring gate check-in status (<c>at-gate</c>, <c>warming-up</c>, <c>missing</c>, or <c>null</c>).</summary>
+    [HttpPut("{id:int}/heats/{heatId:int}/gate-check")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<SessionDto>> UpdateGateCheck(
+        int competitionId, int id, int heatId, UpdateGateCheckRequest req)
+    {
+        if (!TryNormalizeGateCheckStatus(req.Status, out var normalizedStatus))
+            return BadRequest(new { message = "Status must be 'at-gate', 'warming-up', 'missing', or null." });
+
+        var session = await SessionsWithDetail()
+            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+        if (session is null) return NotFound();
+
+        var heat = session.Heats.FirstOrDefault(h => h.Id == heatId);
+        if (heat is null) return NotFound();
+
+        if (!heat.Entries.Any(e => e.TeamId == req.TeamId))
+            return BadRequest(new { message = "Team is not in this heat." });
+
+        session.Notes = ApplyGateCheckNote(session.Notes, heatId, req.TeamId, normalizedStatus);
+        await _db.SaveChangesAsync();
+
+        var dto = session.ToDto();
+        await _live.SessionUpdated(competitionId, dto);
+        return dto;
+    }
+
+    /// <summary>Sends a priority Farrier / Vet / First Aid call for an arena to competition notices and optionally pauses the arena.</summary>
+    [HttpPost("{id:int}/assistance")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<ChatMessageDto>> RequestArenaAssistance(
+        int competitionId, int id, RequestArenaAssistanceRequest req)
+    {
+        var (serviceKey, serviceTitle) = NormalizeAssistanceService(req.Service);
+        if (serviceKey is null || serviceTitle is null)
+            return BadRequest(new { message = "Service must be 'farrier', 'vet', or 'first-aid'." });
+        if (req.Note is { Length: > 300 })
+            return BadRequest(new { message = "Note must be 300 characters or fewer." });
+
+        var session = await SessionsWithDetail()
+            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+        if (session is null) return NotFound();
+
+        var arena = !string.IsNullOrWhiteSpace(req.ArenaName)
+            ? req.ArenaName.Trim()
+            : (!string.IsNullOrWhiteSpace(session.ArenaName) ? session.ArenaName.Trim() : "Main Arena");
+        var extraNote = req.Note?.Trim();
+        var body = !string.IsNullOrEmpty(extraNote)
+            ? $"{serviceTitle} needed at {arena} — {extraNote}"
+            : $"{serviceTitle} needed at {arena}";
+
+        var pausedSessions = new List<Session>();
+        if (req.HoldArena)
+        {
+            var arenaSessions = await SessionsWithDetail()
+                .Where(s => s.CompetitionId == competitionId && s.Status != SessionStatus.Finished)
+                .OrderBy(s => s.OrderIndex)
+                .ToListAsync();
+            var targetSessions = arenaSessions
+                .Where(s => string.IsNullOrWhiteSpace(session.ArenaName)
+                    || string.Equals(s.ArenaName?.Trim(), arena, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            foreach (var target in targetSessions)
+            {
+                if (!ParsePauseNoteMs(target.Notes).HasValue)
+                {
+                    target.Notes = ApplyPauseNote(target.Notes, nowMs);
+                    pausedSessions.Add(target);
+                }
+            }
+        }
+
+        var authorName = User.FindFirst("fullName")?.Value ?? "Organiser";
+        var msg = new ChatMessage
+        {
+            CompetitionId = competitionId,
+            UserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
+            AuthorName = authorName.Length > 60 ? authorName[..60] : authorName,
+            Body = body,
+            Type = ChatMessageType.Announcement,
+            Tag = $"assistance:{serviceKey}",
+        };
+        _db.ChatMessages.Add(msg);
+        await _db.SaveChangesAsync();
+
+        foreach (var paused in pausedSessions)
+            await _live.SessionUpdated(competitionId, paused.ToDto());
+
+        var msgDto = msg.ToDto();
+        await _live.Announcement(competitionId, msgDto);
+        await _live.ChatMessage(competitionId, msgDto);
+        return msgDto;
+    }
+
+    internal static bool TryNormalizeGateCheckStatus(string? raw, out string? normalized)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            normalized = null;
+            return true;
+        }
+        var trimmed = raw.Trim().ToLowerInvariant();
+        if (trimmed is "at-gate" or "warming-up" or "missing")
+        {
+            normalized = trimmed;
+            return true;
+        }
+        normalized = null;
+        return false;
+    }
+
+    internal static string? ApplyGateCheckNote(string? notes, int heatId, int teamId, string? status)
+    {
+        var raw = notes ?? string.Empty;
+        var pattern = $@"\s*\[gate:{heatId}:{teamId}=[^\]]*\]\s*";
+        var cleaned = System.Text.RegularExpressions.Regex.Replace(raw, pattern, " ").Trim();
+        if (string.IsNullOrEmpty(status))
+            return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;
+        var tag = $"[gate:{heatId}:{teamId}={status}]";
+        return string.IsNullOrWhiteSpace(cleaned) ? tag : $"{cleaned} {tag}";
+    }
+
+    private static (string? Key, string? Title) NormalizeAssistanceService(string? raw)
+    {
+        var key = raw?.Trim().ToLowerInvariant();
+        return key switch
+        {
+            "farrier" => ("farrier", "Farrier"),
+            "vet" => ("vet", "Vet"),
+            "first-aid" or "firstaid" or "first aid" => ("first-aid", "First Aid"),
+            _ => (null, null),
+        };
+    }
+
+    public static readonly IReadOnlyList<string> SpareBibColours =
+        ["red", "blue", "yellow", "green", "white", "orange", "purple", "pink"];
+
+    [HttpPut("/api/heats/{heatId:int}/entries/{teamId:int}/bib-override")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("heatId", CompetitionResource.Heat)]
+    public Task<ActionResult<HeatDto>> SetHeatEntryBibOverrideByHeat(
+        int heatId, int teamId, [FromBody] SetBibOverrideRequest? req)
+        => SetBibOverrideCoreAsync(heatId, teamId, req);
+
+    [HttpPut("/api/competitions/{competitionId:int}/heats/{heatId:int}/entries/{teamId:int}/bib-override")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public Task<ActionResult<HeatDto>> SetHeatEntryBibOverrideByCompetition(
+        int competitionId, int heatId, int teamId, [FromBody] SetBibOverrideRequest? req)
+        => SetBibOverrideCoreAsync(heatId, teamId, req, competitionId);
+
+    [HttpPut("{id:int}/heats/{heatId:int}/entries/{teamId:int}/bib-override")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public Task<ActionResult<HeatDto>> SetHeatEntryBibOverrideBySession(
+        int competitionId, int id, int heatId, int teamId, [FromBody] SetBibOverrideRequest? req)
+        => SetBibOverrideCoreAsync(heatId, teamId, req, competitionId, id);
+
+    private async Task<ActionResult<HeatDto>> SetBibOverrideCoreAsync(
+        int heatId, int teamId, SetBibOverrideRequest? req, int? competitionId = null, int? sessionId = null)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(req?.BibColourOverride) ? null : req!.BibColourOverride.Trim();
+        if (trimmed is not null && trimmed.Length > 80)
+            return BadRequest(new { message = "Bib colour must be 80 characters or fewer." });
+
+        var heat = await _db.Heats
+            .Include(h => h.Session)
+            .Include(h => h.Entries).ThenInclude(e => e.Team)
+            .Include(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
+            .FirstOrDefaultAsync(h => h.Id == heatId);
+        if (heat is null || heat.Session is null) return NotFound();
+        if (competitionId.HasValue && heat.Session.CompetitionId != competitionId.Value) return NotFound();
+        if (sessionId.HasValue && heat.SessionId != sessionId.Value) return NotFound();
+
+        var entry = heat.Entries.FirstOrDefault(e => e.TeamId == teamId);
+        if (entry is null) return NotFound(new { message = "That team is not in this heat." });
+
+        entry.BibColourOverride = trimmed;
+        await _db.SaveChangesAsync();
+
+        var sessionDto = await SessionsWithDetail().FirstAsync(s => s.Id == heat.SessionId);
+        await _live.SessionUpdated(heat.Session.CompetitionId, sessionDto.ToDto());
+        return heat.ToDto();
+    }
+
+    [HttpPost("/api/competitions/{competitionId:int}/heats/{heatId:int}/resolve-bib-clashes")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public Task<ActionResult<HeatDto>> ResolveHeatBibClashesByCompetition(int competitionId, int heatId)
+        => ResolveBibClashesCoreAsync(heatId, competitionId);
+
+    [HttpPost("/api/heats/{heatId:int}/resolve-bib-clashes")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("heatId", CompetitionResource.Heat)]
+    public Task<ActionResult<HeatDto>> ResolveHeatBibClashesByHeat(int heatId)
+        => ResolveBibClashesCoreAsync(heatId);
+
+    [HttpPost("{id:int}/heats/{heatId:int}/resolve-bib-clashes")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public Task<ActionResult<HeatDto>> ResolveHeatBibClashesBySession(int competitionId, int id, int heatId)
+        => ResolveBibClashesCoreAsync(heatId, competitionId, id);
+
+    private async Task<ActionResult<HeatDto>> ResolveBibClashesCoreAsync(
+        int heatId, int? competitionId = null, int? sessionId = null)
+    {
+        var heat = await _db.Heats
+            .Include(h => h.Session)
+            .Include(h => h.Entries).ThenInclude(e => e.Team)
+            .Include(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
+            .FirstOrDefaultAsync(h => h.Id == heatId);
+        if (heat is null || heat.Session is null) return NotFound();
+        if (competitionId.HasValue && heat.Session.CompetitionId != competitionId.Value) return NotFound();
+        if (sessionId.HasValue && heat.SessionId != sessionId.Value) return NotFound();
+
+        var orderedEntries = heat.Entries
+            .OrderBy(e => e.LaneIndex)
+            .ThenBy(e => e.Id)
+            .Select(e => new
+            {
+                Entry = e,
+                EffectiveKey = NormaliseBibColourKey(string.IsNullOrWhiteSpace(e.BibColourOverride) ? e.Team?.BibColour : e.BibColourOverride),
+                BaseKey = NormaliseBibColourKey(e.Team?.BibColour),
+            })
+            .Where(x => x.EffectiveKey is not null)
+            .ToList();
+
+        var groups = orderedEntries
+            .GroupBy(x => x.EffectiveKey!, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var usedColours = groups.Select(g => g.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var changed = false;
+
+        foreach (var g in groups.Where(g => g.Count() > 1))
+        {
+            var prioritised = g
+                .OrderBy(x => string.IsNullOrWhiteSpace(x.Entry.BibColourOverride) ? 0 : 1)
+                .ThenBy(x => x.Entry.LaneIndex)
+                .ThenBy(x => x.Entry.Id)
+                .ToList();
+
+            foreach (var item in prioritised.Skip(1))
+            {
+                string? chosen;
+                if (item.BaseKey is not null && !usedColours.Contains(item.BaseKey))
+                {
+                    chosen = item.BaseKey;
+                }
+                else
+                {
+                    chosen = SpareBibColours.FirstOrDefault(c => !usedColours.Contains(c));
+                }
+
+                if (chosen is null) continue;
+                usedColours.Add(chosen);
+                var nextOverride = string.Equals(chosen, item.BaseKey, StringComparison.OrdinalIgnoreCase) ? null : chosen;
+                if (!string.Equals(item.Entry.BibColourOverride, nextOverride, StringComparison.Ordinal))
+                {
+                    item.Entry.BibColourOverride = nextOverride;
+                    changed = true;
+                }
+            }
+        }
+
+        if (changed)
+        {
+            await _db.SaveChangesAsync();
+            var sessionDto = await SessionsWithDetail().FirstAsync(s => s.Id == heat.SessionId);
+            await _live.SessionUpdated(heat.Session.CompetitionId, sessionDto.ToDto());
+        }
+
+        return heat.ToDto();
+    }
+
+    public static string? NormaliseBibColourKey(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var stripped = System.Text.RegularExpressions.Regex.Replace(raw, @"^\[flag:[a-z0-9-]+\]\s*", string.Empty, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var collapsed = System.Text.RegularExpressions.Regex.Replace(stripped, @"\s+", " ").Trim().ToLowerInvariant();
+        if (collapsed.EndsWith(" bibs", StringComparison.Ordinal))
+            collapsed = collapsed[..^5].TrimEnd();
+        else if (collapsed.EndsWith(" bib", StringComparison.Ordinal))
+            collapsed = collapsed[..^4].TrimEnd();
+        collapsed = System.Text.RegularExpressions.Regex.Replace(collapsed, @"\bgray\b", "grey");
+        return string.IsNullOrEmpty(collapsed) ? null : collapsed;
+    }
+
     private static string ApplyPauseNote(string? notes, long timestampMs)
     {
         var cleaned = RemovePauseNote(notes);
@@ -1322,3 +1719,5 @@ public record ShiftSessionTimesRequest(int DeltaMinutes, string? ArenaName = nul
 public record PauseTimetableRequest(string? ArenaName = null);
 public record ResumeTimetableRequest(string? ArenaName = null);
 public record PacePredictionDto(double? AvgMinutesPerRace, int? RecommendedMinutesPer5RaceHeat, double Multiplier, int SampleHeats);
+public record UpdateGateCheckRequest(int TeamId, string? Status);
+public record RequestArenaAssistanceRequest(string Service, string? ArenaName = null, string? Note = null, bool HoldArena = true);

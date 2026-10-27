@@ -10,4 +10,5 @@ public class HeatEntry
     public Team? Team { get; set; }
 
     public int LaneIndex { get; set; }
+    public string? BibColourOverride { get; set; }
 }

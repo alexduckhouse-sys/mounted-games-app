@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Operations;
 
@@ -13,8 +14,26 @@ public record DrawFairnessDto(
     int MaximumOpponentMeetings, int RepeatedOpponentPairs,
     int MaximumLaneUseSpread, bool EveryTeamAppearsOncePerSession,
     IReadOnlyList<string> Warnings);
+public record DrawUndoStatusDto(
+    bool Available,
+    int? UndoId,
+    string? Kind,
+    string? Label,
+    int? SectionId,
+    int? SessionId,
+    DateTime? CreatedAt,
+    DateTime? ExpiresAt,
+    int AffectedHeats,
+    int AffectedSessions);
+public record DrawUndoResultDto(
+    bool Restored,
+    string Label,
+    int RestoredSessions,
+    int RestoredHeats,
+    DrawUndoStatusDto UndoStatus);
 public record DrawPreviewDto(int SectionId, int Seed, string Fingerprint,
-    IReadOnlyList<DrawSessionDto> Sessions, DrawFairnessDto Fairness);
+    IReadOnlyList<DrawSessionDto> Sessions, DrawFairnessDto Fairness,
+    DrawUndoStatusDto? DrawUndo = null);
 
 /// <summary>A result as staff see it: ResultDto plus the referee's private note.</summary>
 public record ScorePlaceDto(int TeamId, int Place, bool Eliminated, double Points, bool IsSitOut = false,
@@ -48,7 +67,17 @@ public record CompetitionReadinessDto(int CompetitionId, bool IsReady, string Eq
     IReadOnlyList<EquipmentChecklistItemDto> EquipmentChecklist,
     IReadOnlyList<EquipmentReadinessIssueDto> EquipmentIssues,
     IReadOnlyList<FlaggedDecFormDto> FlaggedDecForms,
-    IReadOnlyList<RaceListToChooseDto> RaceListsToChoose);
+    IReadOnlyList<RaceListToChooseDto> RaceListsToChoose,
+    DrawUndoStatusDto? DrawUndo = null);
+
+public record TeamRaceLineupPlanDto(
+    int CompetitionId,
+    int TeamId,
+    Dictionary<string, Dictionary<string, string>> Assignments,
+    DateTime? UpdatedAt = null);
+
+public record SaveTeamRaceLineupRequest(
+    Dictionary<string, Dictionary<string, string>>? Assignments);
 /// <summary>A team whose latest dec form has riders with flags (an answer outside the organiser's limits). Counts only: no rider details.</summary>
 public record FlaggedDecFormDto(int TeamId, string TeamName, int SectionId, string SectionName, int FlaggedRiders);
 /// <summary>
@@ -63,3 +92,71 @@ public record RulebookSummaryDto(int Id, string Title, string Edition, string? S
 public record RulebookDto(int Id, string Title, string Edition,
     string? SourceUrl, string Text, DateTime UpdatedAt);
 public record UpsertRulebookRequest(string Title, string Edition, string? SourceUrl, string Text);
+
+// ---- Volunteer shifts and claims (#16) ----
+
+public record VolunteerClaimDto(
+    int Id,
+    int ShiftId,
+    string UserId,
+    string VolunteerName,
+    string? ClubName,
+    string? ContactPhone,
+    DateTime ClaimedAt,
+    bool IsMine = false);
+
+public record VolunteerShiftDto(
+    int Id,
+    int CompetitionId,
+    int? SessionId,
+    string? SessionName,
+    string? ArenaName,
+    string Role,
+    string? StartTimeLabel,
+    string? Notes,
+    int RequiredCount,
+    int ClaimedCount,
+    int RemainingCount,
+    bool IsFilled,
+    IReadOnlyList<VolunteerClaimDto> Claims);
+
+public record CreateVolunteerShiftRequest(
+    [Required, StringLength(80, MinimumLength = 1)] string Role,
+    int? SessionId = null,
+    [StringLength(80)] string? ArenaName = null,
+    [StringLength(80)] string? StartTimeLabel = null,
+    [StringLength(500)] string? Notes = null,
+    [Range(1, 50)] int RequiredCount = 1);
+
+public record UpdateVolunteerShiftRequest(
+    [Required, StringLength(80, MinimumLength = 1)] string Role,
+    int? SessionId = null,
+    [StringLength(80)] string? ArenaName = null,
+    [StringLength(80)] string? StartTimeLabel = null,
+    [StringLength(500)] string? Notes = null,
+    [Range(1, 50)] int RequiredCount = 1);
+
+public record ClaimVolunteerShiftRequest(
+    [StringLength(160)] string? VolunteerName = null,
+    [StringLength(150)] string? ClubName = null,
+    [StringLength(40)] string? ContactPhone = null);
+
+// ---- Emergency contact quick search (#151, staff only) ----
+
+public record EmergencyContactLookupDto(
+    int RiderEntryId,
+    string RiderName,
+    string? PonyName,
+    int TeamId,
+    string TeamName,
+    int SectionId,
+    string SectionName,
+    string ClubName,
+    string? BibColour,
+    string? BibDescription,
+    bool IsReserve,
+    string? EmergencyContactName,
+    string? EmergencyContactPhone,
+    string? MedicalNotes,
+    string? TrainerName,
+    string? TrainerPhone);

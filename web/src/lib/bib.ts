@@ -77,3 +77,178 @@ export function bibAccent(text: string | null | undefined): string {
 export function bibLabel(text: string | null | undefined): string {
   return parseBibAndFlag(text).bib || 'No bib set';
 }
+
+export const SPARE_BIB_COLOURS = [
+  'red',
+  'blue',
+  'yellow',
+  'green',
+  'white',
+  'orange',
+  'purple',
+  'pink',
+] as const;
+
+export type SpareBibColour = (typeof SPARE_BIB_COLOURS)[number];
+
+export interface HeatBibEntryLike {
+  id?: number;
+  teamId: number;
+  teamName?: string;
+  laneIndex?: number;
+  bibColour?: string | null;
+  bibColourOverride?: string | null;
+}
+
+export interface HeatBibClash {
+  colourKey: string;
+  colourLabel: string;
+  swatch: string;
+  entries: HeatBibEntryLike[];
+}
+
+type TeamBibLookup =
+  | ReadonlyMap<number, string | null | undefined>
+  | Record<number, string | null | undefined>;
+
+function lookupTeamBib(teamId: number, lookup?: TeamBibLookup): string | null | undefined {
+  if (!lookup) return undefined;
+  if (lookup instanceof Map || typeof (lookup as ReadonlyMap<number, string | null | undefined>).get === 'function') {
+    return (lookup as ReadonlyMap<number, string | null | undefined>).get(teamId);
+  }
+  return (lookup as Record<number, string | null | undefined>)[teamId];
+}
+
+export function effectiveBibColour(
+  entry: Pick<HeatBibEntryLike, 'bibColour' | 'bibColourOverride'>,
+  fallbackTeamBibColour?: string | null,
+): string | null {
+  const override = entry.bibColourOverride?.trim();
+  if (override) return override;
+  const direct = entry.bibColour?.trim();
+  if (direct) return direct;
+  const fallback = fallbackTeamBibColour?.trim();
+  return fallback || null;
+}
+
+export function normaliseBibColourKey(raw: string | null | undefined): string | null {
+  const stripped = parseBibAndFlag(raw).bib;
+  if (!stripped) return null;
+  let collapsed = stripped.replace(/\s+/g, ' ').trim().toLowerCase();
+  if (collapsed.endsWith(' bibs')) {
+    collapsed = collapsed.slice(0, -5).trimEnd();
+  } else if (collapsed.endsWith(' bib')) {
+    collapsed = collapsed.slice(0, -4).trimEnd();
+  }
+  collapsed = collapsed.replace(/\bgray\b/g, 'grey');
+  return collapsed || null;
+}
+
+function orderEntries(entries: readonly HeatBibEntryLike[]): HeatBibEntryLike[] {
+  return [...entries].sort(
+    (a, b) => (a.laneIndex ?? 0) - (b.laneIndex ?? 0) || (a.id ?? 0) - (b.id ?? 0) || a.teamId - b.teamId,
+  );
+}
+
+export function detectHeatBibClashes(
+  entries: readonly HeatBibEntryLike[],
+  teamBibByTeamId?: TeamBibLookup,
+): HeatBibClash[] {
+  const ordered = orderEntries(entries);
+  const groups = new Map<string, HeatBibEntryLike[]>();
+
+  for (const entry of ordered) {
+    const effective = effectiveBibColour(entry, lookupTeamBib(entry.teamId, teamBibByTeamId));
+    const key = normaliseBibColourKey(effective);
+    if (!key) continue;
+    const list = groups.get(key);
+    if (list) {
+      list.push(entry);
+    } else {
+      groups.set(key, [entry]);
+    }
+  }
+
+  const clashes: HeatBibClash[] = [];
+  for (const [colourKey, groupEntries] of groups.entries()) {
+    if (groupEntries.length < 2) continue;
+    const colourLabel = colourKey.charAt(0).toUpperCase() + colourKey.slice(1);
+    clashes.push({
+      colourKey,
+      colourLabel,
+      swatch: bibAccent(colourKey),
+      entries: groupEntries,
+    });
+  }
+  return clashes;
+}
+
+export function hasHeatBibClash(
+  entries: readonly HeatBibEntryLike[],
+  teamBibByTeamId?: TeamBibLookup,
+): boolean {
+  return detectHeatBibClashes(entries, teamBibByTeamId).length > 0;
+}
+
+export function suggestSpareBibOverrides(
+  entries: readonly HeatBibEntryLike[],
+  teamBibByTeamId?: TeamBibLookup,
+): Record<number, string | null> {
+  const ordered = orderEntries(entries);
+  interface Item {
+    entry: HeatBibEntryLike;
+    effectiveKey: string;
+    baseKey: string | null;
+  }
+
+  const groups = new Map<string, Item[]>();
+  for (const entry of ordered) {
+    const baseRaw = lookupTeamBib(entry.teamId, teamBibByTeamId) ?? entry.bibColour;
+    const baseKey = normaliseBibColourKey(baseRaw);
+    const effectiveRaw = effectiveBibColour(entry, baseRaw);
+    const effectiveKey = normaliseBibColourKey(effectiveRaw);
+    if (!effectiveKey) continue;
+    const item: Item = { entry, effectiveKey, baseKey };
+    const list = groups.get(effectiveKey);
+    if (list) {
+      list.push(item);
+    } else {
+      groups.set(effectiveKey, [item]);
+    }
+  }
+
+  const usedColours = new Set<string>(groups.keys());
+  const updates: Record<number, string | null> = {};
+
+  for (const groupItems of groups.values()) {
+    if (groupItems.length < 2) continue;
+    const prioritised = [...groupItems].sort((a, b) => {
+      const aHasOverride = a.entry.bibColourOverride?.trim() ? 1 : 0;
+      const bHasOverride = b.entry.bibColourOverride?.trim() ? 1 : 0;
+      return (
+        aHasOverride - bHasOverride ||
+        (a.entry.laneIndex ?? 0) - (b.entry.laneIndex ?? 0) ||
+        (a.entry.id ?? 0) - (b.entry.id ?? 0) ||
+        a.entry.teamId - b.entry.teamId
+      );
+    });
+
+    for (const item of prioritised.slice(1)) {
+      let chosen: string | undefined;
+      if (item.baseKey && !usedColours.has(item.baseKey)) {
+        chosen = item.baseKey;
+      } else {
+        chosen = SPARE_BIB_COLOURS.find(c => !usedColours.has(c));
+      }
+      if (!chosen) continue;
+      usedColours.add(chosen);
+      const nextOverride = chosen === item.baseKey ? null : chosen;
+      const currentOverride = item.entry.bibColourOverride?.trim() || null;
+      if (currentOverride !== nextOverride) {
+        updates[item.entry.teamId] = nextOverride;
+      }
+    }
+  }
+
+  return updates;
+}

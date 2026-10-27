@@ -323,6 +323,28 @@ public class TieBreakTests : IClassFixture<ApiFactory>
         var standings = await Json(await admin.GetAsync($"/api/competitions/{comp}/standings?sectionId={section}"));
 
         Assert.Equal(new[] { t[1], t[0], t[2] }, standings.EnumerateArray().Select(r => r.GetProperty("teamId").GetInt32()));
+        Assert.Contains("Ahead on Last Race", standings[0].GetProperty("tieBreakReason").GetString());
+        // A null reason is left out of the JSON (WhenWritingNull), so absent and null both mean "no reason".
+        Assert.False(standings[1].TryGetProperty("tieBreakReason", out var reason) && reason.ValueKind != JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task Standings_PopulatePlainEnglishTieBreakReasons_ForCountbackRunOffAndOpenTies()
+    {
+        var (comp, section, t) = await CompAsync(3, TieBreakRule.Countback);
+        // T0 has 2 wins (4+4+0=8) and T1 has 1 win (4+2+2=8).
+        await RaceAsync(comp, section, 1, (t[0], 1, 4), (t[1], 1, 4), (t[2], 3, 1));
+        await RaceAsync(comp, section, 2, (t[0], 1, 4), (t[1], 2, 2), (t[2], 3, 1));
+        await RaceAsync(comp, section, 3, (t[0], 4, 0), (t[1], 2, 2), (t[2], 3, 1));
+        var admin = await _f.AdminAsync();
+
+        var standings = await Json(await admin.GetAsync($"/api/competitions/{comp}/standings?sectionId={section}"));
+        Assert.Contains("on Countback (2× 1st places vs 1× 1st place)", standings[0].GetProperty("tieBreakReason").GetString());
+
+        // When organiser sets a manual tie order, reason reflects organiser/run-off settlement
+        await admin.PutAsJsonAsync($"/api/competitions/{comp}/finals/tie-order", new { teamIds = new[] { t[1], t[0] } });
+        var orderedStandings = await Json(await admin.GetAsync($"/api/competitions/{comp}/standings?sectionId={section}"));
+        Assert.Equal("Settled by run-off / referee order", orderedStandings[0].GetProperty("tieBreakReason").GetString());
     }
 }
 
@@ -437,5 +459,50 @@ public class TieBreakerUnitTests
 
         var ranked = breaker.Rank([team1, team2]);
         Assert.Equal(new[] { 2, 1 }, ranked.Select(f => f.TeamId));
+        Assert.Equal("Ahead on A-Final placing", breaker.Explain(ranked, ranked[0], ranked[1], "Belvoir A"));
+    }
+
+    [Fact]
+    public void Explain_CoversCountbackLastRaceRunOffAndUnscoredCases()
+    {
+        var breaker = Breaker(TieBreakRule.Countback);
+        var emptyA = new TieFacts(1, 1, 0, [], []);
+        var emptyB = new TieFacts(2, 1, 0, [], []);
+        Assert.Null(breaker.Explain([emptyA, emptyB], emptyA, emptyB));
+
+        var countbackA = new TieFacts(1, 1, 64, [3, 1], [5, 4]);
+        var countbackB = new TieFacts(2, 1, 64, [1, 3], [4, 5]);
+        Assert.Equal(
+            "Ahead of Belvoir A on Countback (3× 1st places vs 1× 1st place)",
+            breaker.Explain([countbackA, countbackB], countbackA, countbackB, "Belvoir A"));
+
+        var openA = new TieFacts(1, 1, 64, [2, 1], [5]);
+        var openB = new TieFacts(2, 1, 64, [2, 1], [5]);
+        Assert.Equal(
+            "Level on points and countback — run-off if on cut-off",
+            breaker.Explain([openA, openB], openA, openB, "Belvoir A"));
+
+        var runoffBreaker = Breaker(TieBreakRule.RunOff);
+        Assert.Equal(
+            "Level on points and countback — run-off if on cut-off",
+            runoffBreaker.Explain([countbackA, countbackB], countbackA, countbackB, "Belvoir A"));
+
+        var lastRaceBreaker = Breaker(TieBreakRule.LastRace);
+        var lrA = new TieFacts(1, 1, 64, [1], [4, 2], null, null, [("Flag", 2, 4, false), ("Mug", 4, 2, false)]);
+        var lrB = new TieFacts(2, 1, 64, [2], [2, 4], null, null, [("Flag", 4, 2, false), ("Mug", 2, 4, false)]);
+        Assert.Equal("Ahead on Last Race (2nd in Flag vs 4th)", lastRaceBreaker.Explain([lrA, lrB], lrA, lrB));
+
+        var lrNoNamesA = new TieFacts(1, 1, 64, [], [5]);
+        var lrNoNamesB = new TieFacts(2, 1, 64, [], [3]);
+        Assert.Equal("Ahead on Last Race (5 pts vs 3 pts)", lastRaceBreaker.Explain([lrNoNamesA, lrNoNamesB], lrNoNamesA, lrNoNamesB));
+
+        Assert.Equal("1st", TieBreaker.Ordinal(1));
+        Assert.Equal("2nd", TieBreaker.Ordinal(2));
+        Assert.Equal("3rd", TieBreaker.Ordinal(3));
+        Assert.Equal("4th", TieBreaker.Ordinal(4));
+        Assert.Equal("11th", TieBreaker.Ordinal(11));
+        Assert.Equal("12th", TieBreaker.Ordinal(12));
+        Assert.Equal("13th", TieBreaker.Ordinal(13));
+        Assert.Equal("21st", TieBreaker.Ordinal(21));
     }
 }

@@ -102,7 +102,8 @@ public class WithdrawalTests : IClassFixture<ApiFactory>
         var unknown = await admin.PutAsJsonAsync(StatusUrl(s.Arena, s.Heats[1][0]),
             new SetTeamEntryStatusRequest((TeamEntryStatus)9, "x"));
 
-        Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, missing.StatusCode);
+        Assert.Equal("Withdrawn by organiser", (await missing.ReadAsync<SetTeamEntryStatusResult>()).Team.Reason);
         Assert.Equal(HttpStatusCode.OK, noShow.StatusCode);
         Assert.Equal("Did not arrive", (await noShow.ReadAsync<SetTeamEntryStatusResult>()).Team.Reason);
         Assert.Equal(HttpStatusCode.BadRequest, tooLong.StatusCode);

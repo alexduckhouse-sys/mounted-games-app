@@ -111,6 +111,7 @@ builder.Services.AddSingleton<ScorerTokenGuard>();
 builder.Services.AddScoped<RaceFinalService>();
 builder.Services.AddScoped<StandingsService>();
 builder.Services.AddScoped<MountedGames.Api.Services.EventTools.ResultsBookService>();
+builder.Services.AddScoped<MountedGames.Api.Services.EventTools.EventArchiveService>();
 builder.Services.AddSingleton<ILiveBroadcaster, LiveBroadcaster>();
 builder.Services.AddSingleton<VapidKeyService>();
 builder.Services.AddScoped<PushNotifier>();
@@ -204,6 +205,14 @@ if (RedisBackplane.Options(builder.Configuration) is { } redis)
 var app = builder.Build();
 if (!app.Environment.IsDevelopment() && string.IsNullOrWhiteSpace(app.Configuration["Privacy:IpHashKey"]))
     app.Logger.LogWarning("Privacy:IpHashKey is not set, so stored network hashes are keyed from Jwt:Key. Set Privacy__IpHashKey to a separate secret.");
+if (!app.Environment.IsDevelopment()
+    && (app.Configuration["VERCEL"] == "1" || app.Environment.IsProduction()
+        || app.Configuration.GetValue<bool>("Security:TrustProxyHeaders")
+        || (app.Configuration.GetSection("Security:KnownProxies").Get<string[]>()?.Length ?? 0) > 0)
+    && string.IsNullOrWhiteSpace(app.Configuration["Security:ProxyKey"]))
+{
+    app.Logger.LogWarning("Security:ProxyKey is not set. Set Security__ProxyKey so forwarded client IP headers can only come from the trusted edge proxy.");
+}
 
 if (args.Contains("--seed-review-competitions"))
 {

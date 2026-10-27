@@ -77,6 +77,7 @@ public static class DbInitializer
     private static async Task EnsureSqliteSchemaAsync(AppDbContext db)
     {
         await db.Database.EnsureCreatedAsync();
+        await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=5000;");
 
         await db.Database.ExecuteSqlRawAsync("""
             CREATE TABLE IF NOT EXISTS "LiveStreams" (
@@ -235,6 +236,7 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "Heats", "ScheduledStart", "TEXT NULL");
         await EnsureColumnAsync(db, "Heats", "RaceRoundId", "INTEGER NULL");
         await EnsureColumnAsync(db, "Heats", "RaceRoundStage", "INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "HeatEntries", "BibColourOverride", "TEXT NULL");
         await EnsureColumnAsync(db, "CompetitionSections", "RunoffRaceName", "TEXT NULL");
         await EnsureColumnAsync(db, "CompetitionSections", "TieBreakRule", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "CompetitionSections", "FinalistCount", "INTEGER NULL");
@@ -374,6 +376,11 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "Competitions", "Postcode", "TEXT NULL");
         await EnsureColumnAsync(db, "Competitions", "CompetitionNumber", "TEXT NULL");
         await EnsureColumnAsync(db, "Competitions", "ContactEmail", "TEXT NULL");
+        await EnsureColumnAsync(db, "Competitions", "LorryWhat3Words", "TEXT NULL");
+        await EnsureColumnAsync(db, "Competitions", "LorryLatitude", "REAL NULL");
+        await EnsureColumnAsync(db, "Competitions", "LorryLongitude", "REAL NULL");
+        await EnsureColumnAsync(db, "Competitions", "LorryDirectionsNote", "TEXT NULL");
+        await EnsureColumnAsync(db, "Competitions", "PaymentLinkUrl", "TEXT NULL");
         await EnsureColumnAsync(db, "SectionSignups", "TermsAccepted", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "SectionSignups", "TermsAcceptedAt", "TEXT NULL");
         await EnsureColumnAsync(db, "SectionSignups", "TermsAcceptedByUserId", "TEXT NULL");

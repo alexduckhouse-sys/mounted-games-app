@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
@@ -25,6 +27,11 @@ public sealed class ResultsBookService(AppDbContext db, StandingsService standin
             .Where(a => a.CompetitionId == competitionId).OrderBy(a => a.OrderIndex).ThenBy(a => a.Id).ToListAsync(ct);
         SpecialAwardDto ToDto(SpecialAward a) => new(a.Id, a.CompetitionSectionId, a.Title, a.Recipient, a.Note);
 
+        var ties = await TieBreaker.LoadAsync(db, competitionId, ct);
+        var teamResults = await db.Teams.AsNoTracking()
+            .Where(t => t.CompetitionId == competitionId && !t.IsHorsConcours)
+            .Include(t => t.Results)
+            .ToDictionaryAsync(t => t.Id, t => t.Results, ct);
         var raceSessions = competition.Sessions.Where(s => s.Kind == SessionKind.Race && !s.IsBreak).ToList();
         var sections = new List<ResultsBookSectionDto>();
         var notes = new List<ResultsBookNoteDto>();
@@ -32,9 +39,21 @@ public sealed class ResultsBookService(AppDbContext db, StandingsService standin
         {
             var rows = await standings.RowsAsync(competitionId, section.Id, ct);
             var sectionSessions = raceSessions.Where(s => s.CompetitionSectionId == section.Id).OrderBy(s => s.OrderIndex).ThenBy(s => s.Id).ToList();
+            var alone = !SectionScoring.CarriesIntoFinal(section);
+            var facts = rows.ToDictionary(
+                r => r.TeamId,
+                r =>
+                {
+                    var results = teamResults.GetValueOrDefault(r.TeamId) ?? [];
+                    var effective = ties.EffectiveResults(results);
+                    var tieResults = r.FinalTier is not null && alone
+                        ? effective.Where(x => ties.IsFinalRace(x.RaceId)).ToList()
+                        : effective;
+                    return ties.Facts(r.TeamId, section.Id, tieResults, r.TotalPoints);
+                });
             sections.Add(new ResultsBookSectionDto(
                 section.Id, section.DisplayName, (int)section.Format,
-                Rank(rows), FinalsOf(sectionSessions),
+                Rank(rows, ties, facts), FinalsOf(sectionSessions),
                 awards.Where(a => a.CompetitionSectionId == section.Id).Select(ToDto).ToList()));
             if (includePrivate) notes.AddRange(NotesOf(section.DisplayName, sectionSessions));
         }
@@ -48,8 +67,98 @@ public sealed class ResultsBookService(AppDbContext db, StandingsService standin
             awards.Where(a => a.CompetitionSectionId is null).Select(ToDto).ToList(), notes);
     }
 
-    /// <summary>Teams level on points inside the same final share a rank.</summary>
-    private static List<ResultsBookStandingDto> Rank(IReadOnlyList<StandingRow> rows)
+    /// <summary>
+    /// Formats a clean, public-safe plain-text results summary with podiums (🥇 1st, 🥈 2nd, 🥉 3rd),
+    /// finalists, points, riders formatted safely through <see cref="RiderNames.Display"/> so <c>UseInitialOnly</c>
+    /// minors never have their surname exposed, pony names, and special awards.
+    /// </summary>
+    public async Task<PublicResultsSummaryDto?> BuildPublicSummaryAsync(int competitionId, CancellationToken ct = default)
+    {
+        var book = await BuildAsync(competitionId, includePrivate: false, ct);
+        if (book is null) return null;
+
+        var teams = await db.Teams.AsNoTracking()
+            .Include(t => t.DeclarationForms).ThenInclude(f => f.Riders)
+            .Where(t => t.CompetitionId == competitionId)
+            .ToListAsync(ct);
+
+        var ridersByTeam = teams.ToDictionary(
+            t => t.Id,
+            t =>
+            {
+                var form = t.DeclarationForms.OrderByDescending(f => f.SubmittedAt).ThenByDescending(f => f.Id).FirstOrDefault();
+                return (IReadOnlyList<(string Name, string? Pony)>)(form?.Riders ?? [])
+                    .OrderBy(r => r.IsReserve)
+                    .ThenBy(r => r.OrderIndex)
+                    .ThenBy(r => r.Id)
+                    .Select(r => (
+                        Name: RiderNames.Display(r.FullName, r.UseInitialOnly, viewerSeesFullNames: false),
+                        Pony: string.IsNullOrWhiteSpace(r.HorseName) ? null : r.HorseName.Trim()))
+                    .Where(r => !string.IsNullOrWhiteSpace(r.Name))
+                    .ToList();
+            });
+
+        var sb = new StringBuilder();
+        var titleSuffix = book.IsProvisional ? "Provisional Results Summary" : "Results Summary";
+        sb.AppendLine($"🏆 {book.Competition.Name} — {titleSuffix}");
+        var dateStr = book.Competition.StartDate.ToString("d MMMM yyyy", CultureInfo.GetCultureInfo("en-GB"));
+        sb.AppendLine(string.IsNullOrWhiteSpace(book.Competition.Location)
+            ? dateStr
+            : $"{dateStr} · {book.Competition.Location}");
+
+        foreach (var section in book.Sections.Where(s => s.Standings.Count > 0))
+        {
+            sb.AppendLine();
+            sb.AppendLine($"=== {section.SectionName} ===");
+            foreach (var row in section.Standings)
+            {
+                var prefix = row.Rank switch
+                {
+                    1 => "🥇 1st:",
+                    2 => "🥈 2nd:",
+                    3 => "🥉 3rd:",
+                    _ => $"{TieBreaker.Ordinal(row.Rank)}:",
+                };
+                var finalPart = !string.IsNullOrWhiteSpace(row.FinalLabel) ? $", {row.FinalLabel}" : string.Empty;
+                sb.AppendLine($"{prefix} {row.TeamName} ({PointValues.Format(row.TotalPoints)} pts{finalPart})");
+
+                if (ridersByTeam.TryGetValue(row.TeamId, out var riders) && riders.Count > 0)
+                {
+                    var riderLine = string.Join(", ", riders.Select(r => r.Pony is not null ? $"{r.Name} ({r.Pony})" : r.Name));
+                    sb.AppendLine($"   Riders: {riderLine}");
+                }
+            }
+
+            foreach (var award in section.Awards)
+            {
+                var notePart = !string.IsNullOrWhiteSpace(award.Note) ? $" ({award.Note})" : string.Empty;
+                sb.AppendLine($"🎖️ {award.Title}: {award.Recipient}{notePart}");
+            }
+        }
+
+        if (book.EventAwards.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("=== Special Awards ===");
+            foreach (var award in book.EventAwards)
+            {
+                var notePart = !string.IsNullOrWhiteSpace(award.Note) ? $" ({award.Note})" : string.Empty;
+                sb.AppendLine($"🎖️ {award.Title}: {award.Recipient}{notePart}");
+            }
+        }
+
+        return new PublicResultsSummaryDto(
+            book.Competition.Id,
+            book.Competition.Name,
+            book.IsProvisional,
+            sb.ToString().TrimEnd());
+    }
+
+    /// <summary>Teams level on points inside the same final share a rank unless separated by a tie-break.</summary>
+    private static List<ResultsBookStandingDto> Rank(
+        IReadOnlyList<StandingRow> rows,
+        TieBreaker ties,
+        IReadOnlyDictionary<int, TieFacts> facts)
     {
         var result = new List<ResultsBookStandingDto>();
         (int Tier, double Total)? previous = null;
@@ -58,7 +167,21 @@ public sealed class ResultsBookService(AppDbContext db, StandingsService standin
         {
             var row = rows[i];
             var key = (row.FinalTier ?? FinalsTiers.NotInFinals, row.TotalPoints);
-            if (previous != key) rank = i + 1;
+            if (previous != key)
+            {
+                rank = i + 1;
+            }
+            else if (i > 0
+                && facts.TryGetValue(rows[i - 1].TeamId, out var prevF)
+                && facts.TryGetValue(row.TeamId, out var currF))
+            {
+                var levelGroup = rows
+                    .Where(r => (r.FinalTier ?? FinalsTiers.NotInFinals, r.TotalPoints) == key && facts.ContainsKey(r.TeamId))
+                    .Select(r => facts[r.TeamId])
+                    .ToList();
+                if (!ties.AreLevel(levelGroup, prevF, currF))
+                    rank = i + 1;
+            }
             previous = key;
             result.Add(new ResultsBookStandingDto(
                 rank, row.TeamId, row.TeamName, row.ClubName,

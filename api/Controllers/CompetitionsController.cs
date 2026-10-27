@@ -160,6 +160,7 @@ public class CompetitionsController : ControllerBase
             .FirstOrDefaultAsync(x => x.Id == id);
         if (c is null) return NotFound();
         var signupCounts = await ActiveSignupCountsAsync(id);
+        var capacity = await VenueCapacity.GetCapacityAsync(_db, id);
 
         return c.ToDto(
             c.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto(signupCounts.GetValueOrDefault(s.Id))).ToList(),
@@ -167,7 +168,11 @@ public class CompetitionsController : ControllerBase
             c.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
             isDemo: await IsDemoCompetitionAsync(c.Id),
             payoutsTo: await _db.PayoutsToAsync(c.CreatedByUserId, c.DecFormConfigJson),
-            includePaymentDetails: User.Identity?.IsAuthenticated == true);
+            includePaymentDetails: User.Identity?.IsAuthenticated == true,
+            maxStables: capacity.MaxStables,
+            maxHookups: capacity.MaxHookups,
+            stablesRemaining: capacity.StablesRemaining,
+            hookupsRemaining: capacity.HookupsRemaining);
     }
 
     /// <summary>
@@ -198,6 +203,7 @@ public class CompetitionsController : ControllerBase
             .Include(t => t.Club).Include(t => t.Section).Include(t => t.Trainer).Include(t => t.Results)
             .ToListAsync();
         var signupCounts = await ActiveSignupCountsAsync(id);
+        var capacity = await VenueCapacity.GetCapacityAsync(_db, id);
 
         return c.ToDto(
             c.Sections.OrderBy(s => s.DisplayName).Select(s => s.ToDto(signupCounts.GetValueOrDefault(s.Id))).ToList(),
@@ -205,7 +211,11 @@ public class CompetitionsController : ControllerBase
             sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
             isDemo: await IsDemoCompetitionAsync(c.Id),
             payoutsTo: await _db.PayoutsToAsync(c.CreatedByUserId, c.DecFormConfigJson),
-            includePaymentDetails: User.Identity?.IsAuthenticated == true);
+            includePaymentDetails: User.Identity?.IsAuthenticated == true,
+            maxStables: capacity.MaxStables,
+            maxHookups: capacity.MaxHookups,
+            stablesRemaining: capacity.StablesRemaining,
+            hookupsRemaining: capacity.HookupsRemaining);
     }
 
     internal sealed record SessionOutline(int Id, string? ArenaName, SessionStatus Status, int OrderIndex);
@@ -241,6 +251,7 @@ public class CompetitionsController : ControllerBase
     }
 
     private const string ContactEmailProblem = "That contact email doesn't look right. Check it, or leave it blank.";
+    private const string PaymentLinkProblem = "That payment link doesn't look right. Use a full https:// link, or leave it blank.";
 
     [HttpPost]
     [Authorize(Roles = Roles.Organiser)]
@@ -249,6 +260,8 @@ public class CompetitionsController : ControllerBase
         string? contactEmail = null;
         if (!string.IsNullOrWhiteSpace(req.ContactEmail) && !EmailAddresses.TryNormalise(req.ContactEmail, out contactEmail))
             return BadRequest(new { message = ContactEmailProblem });
+        if (!CompetitionFields.TryNormalisePaymentLinkUrl(req.PaymentLinkUrl, out var paymentLinkUrl))
+            return BadRequest(new { message = PaymentLinkProblem });
         var appleUrl = string.IsNullOrWhiteSpace(req.AppleMapsUrl) ? null : req.AppleMapsUrl.Trim();
         var lat = req.Latitude;
         var lon = req.Longitude;
@@ -265,6 +278,15 @@ public class CompetitionsController : ControllerBase
             lon ??= gLon;
         }
         var creatorClubId = await _db.ClubIdOfAsync(User);
+        var lorryW3w = CompetitionFields.Trimmed(req.LorryWhat3Words?.Trim().TrimStart('/'));
+        var lorryLat = req.LorryLatitude;
+        var lorryLon = req.LorryLongitude;
+        if ((lorryLat is null || lorryLon is null) && lorryW3w is not null)
+        {
+            var (lLat, lLon, _) = await _geocode.ResolveAsync(null, lorryW3w);
+            lorryLat ??= lLat;
+            lorryLon ??= lLon;
+        }
         var c = new Competition
         {
             Name = req.Name,
@@ -278,9 +300,14 @@ public class CompetitionsController : ControllerBase
             Postcode = CompetitionFields.Postcode(req.Postcode),
             CompetitionNumber = CompetitionFields.Trimmed(req.CompetitionNumber),
             ContactEmail = contactEmail,
+            LorryWhat3Words = lorryW3w,
+            LorryLatitude = lorryLat,
+            LorryLongitude = lorryLon,
+            LorryDirectionsNote = CompetitionFields.Trimmed(req.LorryDirectionsNote),
             StreamUrl = string.IsNullOrWhiteSpace(req.StreamUrl) ? null : req.StreamUrl.Trim(),
             OrganiserName = string.IsNullOrWhiteSpace(req.OrganiserName) ? null : req.OrganiserName.Trim(),
             PaymentDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim(),
+            PaymentLinkUrl = paymentLinkUrl,
             TermsText = string.IsNullOrWhiteSpace(req.TermsText) ? null : req.TermsText.Trim(),
             // New competitions start with the basic dec form and pin the creator's club for payouts; older ones with no setup keep the standard form.
             DecFormConfigJson = (MountedGames.Api.Services.DecForms.DecFormConfig.Basic with
@@ -295,6 +322,16 @@ public class CompetitionsController : ControllerBase
         };
         _db.Competitions.Add(c);
         await _db.SaveChangesAsync();
+        if (req.MaxStables is > 0 || req.MaxHookups is > 0)
+        {
+            _db.Add(new CompetitionEntrySettings
+            {
+                CompetitionId = c.Id,
+                MaxStables = req.MaxStables is > 0 ? req.MaxStables : null,
+                MaxHookups = req.MaxHookups is > 0 ? req.MaxHookups : null,
+            });
+            await _db.SaveChangesAsync();
+        }
         return CreatedAtAction(nameof(Get), new { id = c.Id }, c.ToSummary());
     }
 
@@ -306,6 +343,8 @@ public class CompetitionsController : ControllerBase
         string? contactEmail = null;
         if (!string.IsNullOrWhiteSpace(req.ContactEmail) && !EmailAddresses.TryNormalise(req.ContactEmail, out contactEmail))
             return BadRequest(new { message = ContactEmailProblem });
+        if (!CompetitionFields.TryNormalisePaymentLinkUrl(req.PaymentLinkUrl, out var paymentLinkUrl))
+            return BadRequest(new { message = PaymentLinkProblem });
         var c = await _db.Competitions
             .Include(c => c.Sections).Include(c => c.Teams).Include(c => c.Sessions)
             .FirstOrDefaultAsync(c => c.Id == id);
@@ -334,10 +373,29 @@ public class CompetitionsController : ControllerBase
         c.StreamUrl = string.IsNullOrWhiteSpace(req.StreamUrl) ? null : req.StreamUrl.Trim();
         c.What3Words = string.IsNullOrWhiteSpace(req.What3Words) ? null : req.What3Words.Trim();
         c.AppleMapsUrl = appleUrl;
-        // Null leaves these three as they are (older clients don't send them); a blank value clears them.
+        // Null leaves these fields as they are (older clients don't send them); a blank value clears them.
         if (req.Postcode is not null) c.Postcode = CompetitionFields.Postcode(req.Postcode);
         if (req.CompetitionNumber is not null) c.CompetitionNumber = CompetitionFields.Trimmed(req.CompetitionNumber);
         if (req.ContactEmail is not null) c.ContactEmail = contactEmail;
+        if (req.LorryWhat3Words is not null)
+        {
+            c.LorryWhat3Words = CompetitionFields.Trimmed(req.LorryWhat3Words.Trim().TrimStart('/'));
+            if (c.LorryWhat3Words is null && req.LorryLatitude is null && req.LorryLongitude is null)
+            {
+                c.LorryLatitude = null;
+                c.LorryLongitude = null;
+            }
+        }
+        if (req.LorryDirectionsNote is not null) c.LorryDirectionsNote = CompetitionFields.Trimmed(req.LorryDirectionsNote);
+        if (req.LorryLatitude.HasValue) c.LorryLatitude = req.LorryLatitude;
+        if (req.LorryLongitude.HasValue) c.LorryLongitude = req.LorryLongitude;
+        if ((c.LorryLatitude is null || c.LorryLongitude is null) && c.LorryWhat3Words is not null && req.LorryWhat3Words is not null)
+        {
+            var (lLat, lLon, _) = await _geocode.ResolveAsync(null, c.LorryWhat3Words);
+            c.LorryLatitude ??= lLat;
+            c.LorryLongitude ??= lLon;
+        }
+        if (req.PaymentLinkUrl is not null) c.PaymentLinkUrl = paymentLinkUrl;
         c.OrganiserName = string.IsNullOrWhiteSpace(req.OrganiserName) ? null : req.OrganiserName.Trim();
         c.PaymentDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim();
         c.TermsText = string.IsNullOrWhiteSpace(req.TermsText) ? null : req.TermsText.Trim();
@@ -353,6 +411,19 @@ public class CompetitionsController : ControllerBase
         c.EndDate = req.EndDate;
         c.IsActive = req.IsActive;
         c.IsArchived = req.IsArchived;
+        if (req.MaxStables.HasValue || req.MaxHookups.HasValue)
+        {
+            var settings = await _db.Set<CompetitionEntrySettings>().FindAsync(c.Id);
+            if (settings is null)
+            {
+                settings = new CompetitionEntrySettings { CompetitionId = c.Id };
+                _db.Add(settings);
+            }
+            if (req.MaxStables.HasValue)
+                settings.MaxStables = req.MaxStables.Value > 0 ? req.MaxStables.Value : null;
+            if (req.MaxHookups.HasValue)
+                settings.MaxHookups = req.MaxHookups.Value > 0 ? req.MaxHookups.Value : null;
+        }
         await _db.SaveChangesAsync();
         return c.ToSummary();
     }
@@ -419,6 +490,12 @@ public class CompetitionsController : ControllerBase
             _db.HeatEntries.RemoveRange(heat.Entries);
         }
         foreach (var session in c.Sessions) _db.Heats.RemoveRange(session.Heats);
+        var shiftIds = await _db.VolunteerShifts.Where(s => s.CompetitionId == id).Select(s => s.Id).ToListAsync();
+        if (shiftIds.Count > 0)
+        {
+            await _db.VolunteerClaims.Where(cl => shiftIds.Contains(cl.ShiftId)).ExecuteDeleteAsync();
+            await _db.VolunteerShifts.Where(s => s.CompetitionId == id).ExecuteDeleteAsync();
+        }
         _db.Sessions.RemoveRange(c.Sessions);
 
         var teamIds = c.Teams.Select(t => t.Id).ToList();
@@ -560,7 +637,7 @@ public class CompetitionsController : ControllerBase
 
     [HttpDelete("{id:int}/sections/{sectionId:int}")]
     [Authorize(Roles = Roles.Admin)]
-    public async Task<IActionResult> DeleteSection(int id, int sectionId)
+    public async Task<IActionResult> DeleteSection(int id, int sectionId, [FromQuery] bool force = false)
     {
         var section = await _db.CompetitionSections
             .Include(s => s.Teams)
@@ -568,6 +645,12 @@ public class CompetitionsController : ControllerBase
             .Include(s => s.Sessions).ThenInclude(ss => ss.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results)
             .FirstOrDefaultAsync(s => s.Id == sectionId && s.CompetitionId == id);
         if (section is null) return NotFound();
+
+        var hasPaidSignups = await _db.SectionSignups.AnyAsync(
+            s => s.CompetitionSectionId == sectionId && s.Status == SignupPaymentStatus.Paid);
+        var hasScoredResults = section.Sessions.Any(ss => ss.Heats.Any(h => h.Races.Any(r => r.Results.Count > 0)));
+        if (!force && (hasPaidSignups || section.Teams.Count > 0 || hasScoredResults))
+            return BadRequest(new { message = "This section already has paid entries, teams or scored results. Pass ?force=true to delete it anyway." });
 
         // Walk bottom-up so foreign keys don't complain.
         foreach (var ss in section.Sessions)
@@ -578,6 +661,13 @@ public class CompetitionsController : ControllerBase
             _db.HeatEntries.RemoveRange(heat.Entries);
         }
         foreach (var ss in section.Sessions) _db.Heats.RemoveRange(ss.Heats);
+        var sectionSessionIds = section.Sessions.Select(ss => ss.Id).ToList();
+        if (sectionSessionIds.Count > 0)
+        {
+            await _db.VolunteerShifts
+                .Where(s => s.SessionId != null && sectionSessionIds.Contains(s.SessionId.Value))
+                .ExecuteUpdateAsync(set => set.SetProperty(s => s.SessionId, (int?)null));
+        }
         _db.Sessions.RemoveRange(section.Sessions);
 
         var teamIds = section.Teams.Select(t => t.Id).ToList();
@@ -587,6 +677,9 @@ public class CompetitionsController : ControllerBase
             .ToListAsync();
         foreach (var d in decForms) _db.RiderEntries.RemoveRange(d.Riders);
         _db.DeclarationForms.RemoveRange(decForms);
+
+        var signups = await _db.SectionSignups.Where(s => s.CompetitionSectionId == sectionId).ToListAsync();
+        _db.SectionSignups.RemoveRange(signups);
 
         _db.Teams.RemoveRange(section.Teams);
         _db.CompetitionSections.Remove(section);
@@ -598,6 +691,24 @@ public class CompetitionsController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<StandingRow>>> Standings(int id,
         [FromServices] StandingsService standings, [FromQuery] int? sectionId = null)
         => await standings.RowsAsync(id, sectionId, HttpContext.RequestAborted);
+
+    [HttpGet("{id:int}/archive")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("id")]
+    public async Task<IActionResult> Archive(
+        int id,
+        [FromServices] MountedGames.Api.Services.EventTools.EventArchiveService archiveService,
+        [FromQuery] string? format = null,
+        CancellationToken ct = default)
+    {
+        var archive = await archiveService.BuildArchiveAsync(id, ct);
+        if (archive is null) return NotFound();
+        if (string.Equals(format, "zip", StringComparison.OrdinalIgnoreCase))
+        {
+            return File(MountedGames.Api.Services.EventTools.EventArchiveService.BuildZipBytes(archive), "application/zip", archive.FileName);
+        }
+        return Ok(archive);
+    }
 
     [HttpPost("{id:int}/shift-day")]
     [Authorize(Policy = CompetitionStaff.Policy)]
@@ -680,7 +791,11 @@ public class CompetitionsController : ControllerBase
         var ties = await TieBreaker.LoadAsync(_db, competitionId, HttpContext.RequestAborted);
         // Tack check bonus points count here as they do in the standings, so finals are seeded from the table people see.
         var bonus = await Services.TackCheck.TackCheckBonus.ForCompetitionAsync(_db, competitionId, HttpContext.RequestAborted);
-        var facts = teams.Select(t => ties.Facts(t.Id, t.CompetitionSectionId, t.Results, t.Results.Sum(r => r.Points) + bonus.GetValueOrDefault(t.Id)));
+        var facts = teams.Select(t =>
+        {
+            var effective = ties.EffectiveResults(t.Results);
+            return ties.Facts(t.Id, t.CompetitionSectionId, effective, effective.Sum(r => r.Points) + bonus.GetValueOrDefault(t.Id));
+        });
         return (ties, ties.Rank(facts), teams.ToDictionary(t => t.Id, t => t.DisplayName));
     }
 
@@ -740,6 +855,7 @@ public class CompetitionsController : ControllerBase
     public async Task<IActionResult> ClearTieOrder(int id, [FromQuery] int[] teamIds)
     {
         await _db.FinalsTieOrders.Where(o => o.CompetitionId == id && teamIds.Contains(o.TeamId)).ExecuteDeleteAsync();
+        StandingsService.Invalidate(id);
         return NoContent();
     }
 
@@ -1003,7 +1119,7 @@ public class CompetitionsController : ControllerBase
         var comp = await _db.Competitions
             .Include(c => c.Sections)
             .Include(c => c.Teams)
-            .Include(c => c.Sessions).ThenInclude(s => s.Heats)
+            .Include(c => c.Sessions).ThenInclude(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results)
             .FirstOrDefaultAsync(c => c.Id == id);
         if (comp is null) return NotFound();
 
@@ -1024,7 +1140,9 @@ public class CompetitionsController : ControllerBase
 
         if (req.ReplaceExisting)
         {
-            var raceSessions = comp.Sessions.Where(s => s.Kind == SessionKind.Race).ToList();
+            var raceSessions = comp.Sessions
+                .Where(s => s.Kind == SessionKind.Race && !s.Heats.Any(h => h.Races.Any(r => r.Results.Count > 0)))
+                .ToList();
             _db.Sessions.RemoveRange(raceSessions);
             await _db.SaveChangesAsync();
         }

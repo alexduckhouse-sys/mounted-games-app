@@ -8,6 +8,7 @@ using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Security;
 using MountedGames.Api.Services;
 using MountedGames.Api.Services.Accounts;
 using MountedGames.Api.Services.Email;
@@ -82,6 +83,9 @@ public sealed class AccountInvitesController(
     [EnableRateLimiting("auth")]
     public async Task<ActionResult<AuthResponse>> Accept(AcceptInviteRequest request, CancellationToken ct)
     {
+        if (await db.IsIpBlockedAsync(HttpContext, ct))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Sign-in from this network is blocked." });
+
         try
         {
             var (user, failure) = await invites.AcceptAsync(request.Token, request.FullName, request.Password, ct);

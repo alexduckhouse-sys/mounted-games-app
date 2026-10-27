@@ -8,6 +8,7 @@ using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Commerce;
+using MountedGames.Api.Services;
 using MountedGames.Api.Services.Commerce;
 
 namespace MountedGames.Api.Controllers;
@@ -26,6 +27,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
         var userId = CurrentUserId();
         if (userId is null) return Unauthorized();
         var items = await db.Set<CatalogueItem>()
+            .Include(x => x.Options)
             .Where(x => x.SellerUserId == userId)
             .OrderByDescending(x => x.UpdatedAt)
             .ToListAsync(cancellationToken);
@@ -52,6 +54,8 @@ public class CommerceController(AppDbContext db) : ControllerBase
             out var imageUrl,
             out var detailPrompt,
             out var detailHint);
+        var optionsError = ValidateOptions(request.Options, out var options);
+        error ??= optionsError;
         if (error is not null) return BadRequest(new { message = error });
         var now = DateTime.UtcNow;
         var item = new CatalogueItem
@@ -67,6 +71,12 @@ public class CommerceController(AppDbContext db) : ControllerBase
             DetailHint = detailHint,
             CreatedAt = now,
             UpdatedAt = now,
+            Options = (options ?? []).Select((x, i) => new CatalogueItemOption
+            {
+                Label = x.Label!,
+                StockQuantity = x.StockQuantity,
+                SortOrder = i,
+            }).ToList(),
         };
         db.Set<CatalogueItem>().Add(item);
         await db.SaveChangesAsync(cancellationToken);
@@ -94,22 +104,30 @@ public class CommerceController(AppDbContext db) : ControllerBase
             out var imageUrl,
             out var detailPrompt,
             out var detailHint);
+        var optionsError = ValidateOptions(request.Options, out var options);
+        error ??= optionsError;
         if (error is not null) return BadRequest(new { message = error });
         if (request.ExpectedVersion < 1)
             return BadRequest(new { message = "The current catalogue item version is required." });
         return await InSerializableTransactionAsync<CatalogueItemDto>(async () =>
         {
             var item = await db.Set<CatalogueItem>().AsNoTracking()
+                .Include(x => x.Options)
                 .SingleOrDefaultAsync(x => x.Id == id && x.SellerUserId == userId, cancellationToken);
             if (item is null) return NotFound();
             if (item.Version != request.ExpectedVersion)
                 return Conflict(new { message = "This item changed after you opened it. Refresh the catalogue and try again." });
+            if (options?.Any(x => x.Id is int optionId && item.Options.All(o => o.Id != optionId)) == true)
+                return BadRequest(new { message = "One of those options no longer exists. Refresh the catalogue and try again." });
 
             var title = request.Title!.Trim();
             var description = request.Description!.Trim();
+            // Offering different options (not just changing their stock) changes what is on sale, so it is checked again.
+            var optionsChanged = options is not null && !item.Options.OrderBy(x => x.SortOrder).ThenBy(x => x.Id)
+                .Select(x => x.Label).SequenceEqual(options.Select(x => x.Label!), StringComparer.Ordinal);
             var needsFreshApproval = item.Title != title || item.Description != description ||
                 item.PriceMinor != request.PriceMinor || item.Category != request.Category ||
-                item.ImageUrl != imageUrl || (!item.IsActive && request.IsActive);
+                item.ImageUrl != imageUrl || (!item.IsActive && request.IsActive) || optionsChanged;
             var now = DateTime.UtcNow;
             var updated = await db.Set<CatalogueItem>()
                 .Where(x => x.Id == id && x.SellerUserId == userId && x.Version == request.ExpectedVersion)
@@ -127,6 +145,8 @@ public class CommerceController(AppDbContext db) : ControllerBase
                     .SetProperty(x => x.UpdatedAt, now), cancellationToken);
             if (updated != 1)
                 return Conflict(new { message = "This item changed while you were saving it. Refresh the catalogue and try again." });
+            if (options is not null)
+                await SaveOptionsAsync(id, item.Options, options, cancellationToken);
 
             if (needsFreshApproval && !User.IsInRole(Roles.Admin))
             {
@@ -145,6 +165,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
 
             db.ChangeTracker.Clear();
             var saved = await db.Set<CatalogueItem>().AsNoTracking()
+                .Include(x => x.Options)
                 .SingleAsync(x => x.Id == id, cancellationToken);
             return saved.ToDto();
         }, cancellationToken);
@@ -177,13 +198,14 @@ public class CommerceController(AppDbContext db) : ControllerBase
         if (userId is null) return Unauthorized();
         if (!await db.Competitions.AnyAsync(x => x.Id == competitionId, cancellationToken)) return NotFound();
         var item = await db.Set<CatalogueItem>()
+            .Include(x => x.Options)
             .SingleOrDefaultAsync(x => x.Id == request.CatalogueItemId && x.SellerUserId == userId, cancellationToken);
         if (item is null) return NotFound();
         if (!item.IsActive) return Conflict(new { message = "Archived catalogue items cannot be submitted." });
         var autoApprove = await CanManageCompetitionAsync(competitionId, cancellationToken);
         var now = DateTime.UtcNow;
         var listing = await db.Set<CompetitionListing>()
-            .Include(x => x.CatalogueItem)
+            .Include(x => x.CatalogueItem).ThenInclude(x => x!.Options)
             .SingleOrDefaultAsync(x => x.CompetitionId == competitionId && x.CatalogueItemId == item.Id, cancellationToken);
         if (listing is null)
         {
@@ -221,7 +243,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
         var userId = CurrentUserId();
         if (userId is null) return Unauthorized();
         var listings = await db.Set<CompetitionListing>()
-            .Include(x => x.CatalogueItem)
+            .Include(x => x.CatalogueItem).ThenInclude(x => x!.Options)
             .Where(x => x.SellerUserId == userId)
             .OrderByDescending(x => x.UpdatedAt)
             .ToListAsync(cancellationToken);
@@ -254,7 +276,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
         if (!await db.Competitions.AnyAsync(x => x.Id == competitionId, cancellationToken)) return NotFound();
         var listings = await db.Set<CompetitionListing>()
             .AsNoTracking()
-            .Include(x => x.CatalogueItem)
+            .Include(x => x.CatalogueItem).ThenInclude(x => x!.Options)
             .Where(x => x.CompetitionId == competitionId &&
                 x.Status == CommerceListingStatus.Approved && x.CatalogueItem!.IsActive)
             .OrderBy(x => x.CatalogueItem!.Category)
@@ -271,7 +293,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
         CancellationToken cancellationToken)
     {
         var listings = await db.Set<CompetitionListing>()
-            .Include(x => x.CatalogueItem)
+            .Include(x => x.CatalogueItem).ThenInclude(x => x!.Options)
             .Where(x => x.CompetitionId == competitionId)
             .OrderBy(x => x.Status)
             .ThenByDescending(x => x.UpdatedAt)
@@ -310,7 +332,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
         if (request.Status is not (CommerceListingStatus.Approved or CommerceListingStatus.Rejected))
             return BadRequest(new { message = "A listing can only be approved or rejected." });
         var listing = await db.Set<CompetitionListing>()
-            .Include(x => x.CatalogueItem)
+            .Include(x => x.CatalogueItem).ThenInclude(x => x!.Options)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (listing is null || !await CanManageCompetitionAsync(listing.CompetitionId, cancellationToken)) return NotFound();
         if (listing.Status == CommerceListingStatus.Cancelled)
@@ -334,7 +356,18 @@ public class CommerceController(AppDbContext db) : ControllerBase
         var settings = await db.Set<EventCommerceSettings>().AsNoTracking()
             .SingleOrDefaultAsync(x => x.CompetitionId == competitionId, cancellationToken);
         var locked = await IsDemoClassificationLockedAsync(competitionId, cancellationToken);
-        return new EventCommerceSettingsDto(competitionId, settings?.IsDemo ?? false, locked, settings?.UpdatedAt);
+        var capacity = await VenueCapacity.GetCapacityAsync(db, competitionId, ct: cancellationToken);
+        return new EventCommerceSettingsDto(
+            competitionId,
+            settings?.IsDemo ?? false,
+            locked,
+            settings?.UpdatedAt,
+            capacity.MaxStables,
+            capacity.MaxHookups,
+            capacity.StablesBooked,
+            capacity.HookupsBooked,
+            capacity.StablesRemaining,
+            capacity.HookupsRemaining);
     }
 
     [HttpPut("competitions/{competitionId:int}/settings")]
@@ -366,7 +399,18 @@ public class CommerceController(AppDbContext db) : ControllerBase
             settings.UpdatedByUserId = CurrentUserId();
             settings.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync(cancellationToken);
-            return new EventCommerceSettingsDto(competitionId, settings.IsDemo, locked, settings.UpdatedAt);
+            var capacity = await VenueCapacity.GetCapacityAsync(db, competitionId, ct: cancellationToken);
+            return new EventCommerceSettingsDto(
+                competitionId,
+                settings.IsDemo,
+                locked,
+                settings.UpdatedAt,
+                capacity.MaxStables,
+                capacity.MaxHookups,
+                capacity.StablesBooked,
+                capacity.HookupsBooked,
+                capacity.StablesRemaining,
+                capacity.HookupsRemaining);
         }, cancellationToken);
     }
 
@@ -472,7 +516,11 @@ public class CommerceController(AppDbContext db) : ControllerBase
         return await InSerializableTransactionAsync<EventOrderDto>(async () =>
         {
             var order = await _orders.LoadAsync(id, cancellationToken);
-            if (order is null || order.BuyerUserId != userId) return NotFound();
+            if (order is null) return NotFound();
+            var isBuyer = order.BuyerUserId == userId;
+            var isSeller = order.Lines.Count > 0 && order.Lines.All(line => line.SellerUserId == userId);
+            var isOrganiser = await CanManageCompetitionAsync(order.CompetitionId, cancellationToken);
+            if (!isBuyer && !isSeller && !isOrganiser) return NotFound();
             if (order.Status == CommerceOrderStatus.Cancelled) return order.ToDto();
             if (order.Status is not (CommerceOrderStatus.AwaitingManualPayment or CommerceOrderStatus.AwaitingTestPayment or CommerceOrderStatus.Declined))
                 return Conflict(new { message = "This order can no longer be cancelled by the buyer." });
@@ -518,8 +566,9 @@ public class CommerceController(AppDbContext db) : ControllerBase
 
             if (request.Outcome == FakePaymentOutcome.Success && !order.HasStockReservation)
             {
-                if (!await _orders.ReserveExistingLinesAsync(order, cancellationToken))
-                    return Conflict(new { message = "An item no longer has enough stock for this retry." });
+                var stockProblem = await _orders.ReserveExistingLinesAsync(order, cancellationToken);
+                if (stockProblem is not null)
+                    return Conflict(new { message = stockProblem });
                 order.HasStockReservation = true;
             }
 
@@ -965,6 +1014,79 @@ public class CommerceController(AppDbContext db) : ControllerBase
             (!Uri.TryCreate(normalisedImageUrl, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps))
             return "Image URL must be an absolute HTTPS URL.";
         return null;
+    }
+
+    /// <summary>Checks the seller's options (sizes): labels 1 to 40 characters, no repeats, stock not negative.</summary>
+    private static string? ValidateOptions(
+        IReadOnlyList<CatalogueItemOptionInput>? input,
+        out List<CatalogueItemOptionInput>? normalised)
+    {
+        normalised = null;
+        if (input is null) return null;
+        if (input.Count > CatalogueItemOption.MaxOptions)
+            return $"An item can have at most {CatalogueItemOption.MaxOptions} options.";
+        var list = new List<CatalogueItemOptionInput>();
+        foreach (var option in input)
+        {
+            if (option is null) return "Each option needs a name.";
+            var label = option.Label?.Trim();
+            if (string.IsNullOrEmpty(label)) return "Each option needs a name, like M or Age 9-10.";
+            if (label.Length > CatalogueItemOption.MaxLabelLength)
+                return $"Option names can be at most {CatalogueItemOption.MaxLabelLength} characters.";
+            if (option.StockQuantity is < 0) return $"Stock for {label} cannot be negative.";
+            if (list.Any(x => string.Equals(x.Label, label, StringComparison.OrdinalIgnoreCase)))
+                return $"{label} is listed twice. Give each option a different name.";
+            if (option.Id is int optionId && list.Any(x => x.Id == optionId))
+                return "Each option can be sent only once.";
+            list.Add(option with { Label = label });
+        }
+        normalised = list;
+        return null;
+    }
+
+    /// <summary>
+    /// Replaces an item's options with the seller's list: options sent with their id keep it (so orders still point at
+    /// them and stock goes back to the right one), new ones are added and any left out are removed. Called inside the
+    /// item's version-checked transaction, so a buyer's reservation and a seller's edit can't cross.
+    /// </summary>
+    private async Task SaveOptionsAsync(
+        int itemId,
+        IEnumerable<CatalogueItemOption> existing,
+        IReadOnlyList<CatalogueItemOptionInput> options,
+        CancellationToken cancellationToken)
+    {
+        var keep = options.Where(x => x.Id.HasValue).Select(x => x.Id!.Value).ToList();
+        var removed = existing.Where(x => !keep.Contains(x.Id)).Select(x => x.Id).ToList();
+        if (removed.Count > 0)
+            await db.Set<CatalogueItemOption>()
+                .Where(x => x.CatalogueItemId == itemId && removed.Contains(x.Id))
+                .ExecuteDeleteAsync(cancellationToken);
+        for (var i = 0; i < options.Count; i++)
+        {
+            var option = options[i];
+            var sortOrder = i;
+            if (option.Id is int optionId)
+            {
+                await db.Set<CatalogueItemOption>()
+                    .Where(x => x.Id == optionId && x.CatalogueItemId == itemId)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(x => x.Label, option.Label!)
+                        .SetProperty(x => x.StockQuantity, option.StockQuantity)
+                        .SetProperty(x => x.SortOrder, sortOrder)
+                        .SetProperty(x => x.Version, x => x.Version + 1), cancellationToken);
+            }
+            else
+            {
+                db.Set<CatalogueItemOption>().Add(new CatalogueItemOption
+                {
+                    CatalogueItemId = itemId,
+                    Label = option.Label!,
+                    StockQuantity = option.StockQuantity,
+                    SortOrder = sortOrder,
+                });
+            }
+        }
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     private static string? TrimOrNull(string? value, int maxLength)

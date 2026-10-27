@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -6,6 +8,7 @@ using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Hubs;
 
 namespace MountedGames.Api.Controllers;
 
@@ -15,7 +18,7 @@ namespace MountedGames.Api.Controllers;
 /// </summary>
 [ApiController]
 [Authorize(Policy = CompetitionStaff.Policy)]
-public class ScorerLinksController(AppDbContext db, TimeProvider time) : ControllerBase
+public class ScorerLinksController(AppDbContext db, TimeProvider time, ILiveBroadcaster? live = null) : ControllerBase
 {
     private const int MaxActiveLinks = 100;
     private string UserId => User.FindFirstValue(ClaimTypes.NameIdentifier)!;
@@ -78,6 +81,92 @@ public class ScorerLinksController(AppDbContext db, TimeProvider time) : Control
             await db.SaveChangesAsync(ct);
         }
         return ToDto(link);
+    }
+
+    public record ScorerOverlayCardRequest(string? Card, int? LiveSectionId = null);
+
+    /// <summary>
+    /// Allows a scope = 2 ("Scorer + stream controller") link to trigger live stream overlay cards
+    /// (heat, toplist, lanes, next, clear/none) via the X-Scorer-Token header without granting global staff rights.
+    /// </summary>
+    [HttpPost("api/competitions/{competitionId:int}/scorer-links/overlay-card")]
+    [HttpPost("api/scorer/competitions/{competitionId:int}/overlay-card")]
+    [AllowAnonymous]
+    [ScorerLinkAccess]
+    public async Task<ActionResult<StreamOverlayDto>> TriggerOverlayCard(
+        int competitionId, ScorerOverlayCardRequest req, CancellationToken ct)
+    {
+        var link = ScorerLinkAccessAttribute.Current(HttpContext);
+        if (link.CompetitionId != competitionId) return NotFound();
+        if (link.Scope != ScorerLink.ScopeScoreAndStream)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden,
+                new { message = "This link cannot control stream overlays." });
+        }
+
+        var normalizedCard = (req.Card ?? "").Trim() switch
+        {
+            "clear" or "none" or "" => "none",
+            "upNext" or "next" => "next",
+            "heat" => "heat",
+            "toplist" => "toplist",
+            "lanes" => "lanes",
+            _ => null,
+        };
+        if (normalizedCard is null)
+        {
+            return BadRequest(new { message = "Unsupported overlay card." });
+        }
+
+        var overlay = await db.StreamOverlays.FirstOrDefaultAsync(o => o.CompetitionId == competitionId, ct);
+        if (overlay is null)
+        {
+            overlay = new StreamOverlay { CompetitionId = competitionId };
+            db.StreamOverlays.Add(overlay);
+        }
+
+        JsonObject lookObj;
+        try
+        {
+            lookObj = JsonNode.Parse(string.IsNullOrWhiteSpace(overlay.LookJson) ? "{}" : overlay.LookJson) as JsonObject
+                ?? new JsonObject();
+        }
+        catch
+        {
+            lookObj = new JsonObject();
+        }
+
+        lookObj["liveCard"] = normalizedCard;
+        if (req.LiveSectionId is not null)
+        {
+            lookObj["liveSectionId"] = req.LiveSectionId.Value;
+        }
+
+        overlay.LookJson = lookObj.ToJsonString();
+        overlay.Revision++;
+        overlay.UpdatedAt = time.GetUtcNow().UtcDateTime;
+        await db.SaveChangesAsync(ct);
+
+        using var lookDoc = JsonDocument.Parse(overlay.LookJson);
+        var dto = new StreamOverlayDto(
+            overlay.BannerText,
+            overlay.BannerStyle,
+            JsonSerializer.Deserialize<List<string>>(overlay.BannerArenas) ?? [],
+            overlay.StripMode,
+            overlay.ScoreCardMode,
+            overlay.ScoreCardDelaySeconds,
+            overlay.ScoreCardSeconds,
+            lookDoc.RootElement.Clone(),
+            overlay.Revision,
+            overlay.Revision == 0 ? null : overlay.UpdatedAt,
+            overlay.SponsorMode);
+
+        if (live is not null)
+        {
+            await live.OverlayUpdated(competitionId, dto);
+        }
+
+        return dto;
     }
 
     /// <summary>The end of the day after the competition's last day, so an event that runs late still works.</summary>

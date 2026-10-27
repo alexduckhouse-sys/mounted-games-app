@@ -48,6 +48,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<CalendarHeatVersion> CalendarHeatVersions => Set<CalendarHeatVersion>();
     public DbSet<SpecialAward> SpecialAwards => Set<SpecialAward>();
     public DbSet<FinalsTieOrder> FinalsTieOrders => Set<FinalsTieOrder>();
+    public DbSet<Entities.Operations.VolunteerShift> VolunteerShifts => Set<Entities.Operations.VolunteerShift>();
+    public DbSet<Entities.Operations.VolunteerClaim> VolunteerClaims => Set<Entities.Operations.VolunteerClaim>();
 
     private static string? StoredUtcTime(DateTime? value) => value is null ? null
         : (value.Value.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)
@@ -99,19 +101,20 @@ public class AppDbContext : IdentityDbContext<AppUser>
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // Existing API timestamps without an offset are interpreted as UTC.
+        // Browsers already submit scheduled times with an explicit UTC offset.
+        foreach (var property in b.Model.GetEntityTypes().SelectMany(e => e.GetProperties()))
+        {
+            if ((Nullable.GetUnderlyingType(property.ClrType) ?? property.ClrType) == typeof(DateTime)
+                && property.GetValueConverter() is null)
+                property.SetValueConverter(new UtcDateTimeConverter());
+        }
+        b.Entity<SavedRider>().Property(r => r.DateOfBirth).HasConversion(new CalendarDateTimeConverter());
+        b.Entity<RiderEntry>().Property(r => r.DateOfBirth).HasConversion(new CalendarDateTimeConverter());
         if (Database.IsNpgsql())
         {
-            // Existing API timestamps without an offset are interpreted as UTC.
-            // Browsers already submit scheduled times with an explicit UTC offset.
-            foreach (var property in b.Model.GetEntityTypes().SelectMany(e => e.GetProperties()))
-            {
-                if ((Nullable.GetUnderlyingType(property.ClrType) ?? property.ClrType) == typeof(DateTime))
-                    property.SetValueConverter(new UtcDateTimeConverter());
-            }
-            b.Entity<SavedRider>().Property(r => r.DateOfBirth)
-                .HasColumnType("timestamp without time zone").HasConversion(new CalendarDateTimeConverter());
-            b.Entity<RiderEntry>().Property(r => r.DateOfBirth)
-                .HasColumnType("timestamp without time zone").HasConversion(new CalendarDateTimeConverter());
+            b.Entity<SavedRider>().Property(r => r.DateOfBirth).HasColumnType("timestamp without time zone");
+            b.Entity<RiderEntry>().Property(r => r.DateOfBirth).HasColumnType("timestamp without time zone");
         }
 
         // These tables may already contain rows written by the original feature branches.
@@ -145,12 +148,39 @@ public class AppDbContext : IdentityDbContext<AppUser>
             e.HasKey(x => x.SignupId);
             e.Property(x => x.SignupId).ValueGeneratedNever();
             e.Property(x => x.StablesCount).HasDefaultValue(0);
+            e.Property(x => x.HookupsCount).HasDefaultValue(0);
             e.Property(x => x.TeamsCount).HasDefaultValue(1);
             e.Property(x => x.IsWaitlist).HasConversion<int>().HasDefaultValue(false);
             e.Property(x => x.IsWithdrawn).HasConversion<int>().HasDefaultValue(false);
             e.Property(x => x.RefundPending).HasConversion<int>().HasDefaultValue(false);
+            e.Property(x => x.FeeDisposition).HasDefaultValue("None");
+            e.Property(x => x.LastReminderSentAt).HasColumnType("text").HasConversion(
+                value => StoredUtcTime(value), value => ReadUtcTime(value));
+            e.Property(x => x.DispositionUpdatedAt).HasColumnType("text").HasConversion(
+                value => StoredUtcTime(value), value => ReadUtcTime(value));
+            e.Property(x => x.WaitlistOfferedAt).HasColumnType("text").HasConversion(
+                value => StoredUtcTime(value), value => ReadUtcTime(value));
+            e.Property(x => x.WaitlistOfferExpiresAt).HasColumnType("text").HasConversion(
+                value => StoredUtcTime(value), value => ReadUtcTime(value));
             e.HasOne<SectionSignup>().WithOne().HasForeignKey<SignupExtras>(x => x.SignupId)
                 .HasConstraintName("FK_SignupExtras_Signup").OnDelete(DeleteBehavior.Cascade);
+        });
+        b.Entity<SignupGuestDetails>(e =>
+        {
+            e.ToTable("SignupGuestDetails");
+            e.HasKey(x => x.SignupId);
+            e.Property(x => x.SignupId).ValueGeneratedNever();
+            e.Property(x => x.RiderName).HasMaxLength(SignupGuestDetails.MaxNameLength);
+            e.Property(x => x.PonyName).HasMaxLength(SignupGuestDetails.MaxNameLength);
+            e.Property(x => x.GuardianName).HasMaxLength(SignupGuestDetails.MaxNameLength);
+            e.Property(x => x.GuardianPhone).HasMaxLength(SignupGuestDetails.MaxPhoneLength);
+            e.Property(x => x.EmergencyContactName).HasMaxLength(SignupGuestDetails.MaxNameLength);
+            e.Property(x => x.EmergencyContactPhone).HasMaxLength(SignupGuestDetails.MaxPhoneLength);
+            e.Property(x => x.RiderDateOfBirth).HasConversion(new CalendarDateTimeConverter());
+            if (Database.IsNpgsql())
+                e.Property(x => x.RiderDateOfBirth).HasColumnType("timestamp without time zone");
+            e.HasOne<SectionSignup>().WithOne().HasForeignKey<SignupGuestDetails>(x => x.SignupId)
+                .HasConstraintName("FK_SignupGuestDetails_Signup").OnDelete(DeleteBehavior.Cascade);
         });
         b.Entity<CompetitionEntrySettings>(e =>
         {
@@ -235,6 +265,9 @@ public class AppDbContext : IdentityDbContext<AppUser>
             e.Property(c => c.Postcode).HasMaxLength(12);
             e.Property(c => c.CompetitionNumber).HasMaxLength(40);
             e.Property(c => c.ContactEmail).HasMaxLength(254);
+            e.Property(c => c.LorryWhat3Words).HasMaxLength(120);
+            e.Property(c => c.LorryDirectionsNote).HasMaxLength(1000);
+            e.Property(c => c.PaymentLinkUrl).HasMaxLength(500);
             e.HasOne(c => c.CreatedBy)
                 .WithMany()
                 .HasForeignKey(c => c.CreatedByUserId)
@@ -300,6 +333,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
 
         b.Entity<HeatEntry>(e =>
         {
+            e.Property(he => he.BibColourOverride).HasMaxLength(80);
             e.HasOne(he => he.Heat)
                 .WithMany(h => h.Entries)
                 .HasForeignKey(he => he.HeatId)
@@ -510,5 +544,21 @@ public class AppDbContext : IdentityDbContext<AppUser>
                 .HasForeignKey(r => r.ReporterUserId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        var count = base.SaveChanges(acceptAllChangesOnSuccess);
+        if (count > 0)
+            Services.StandingsService.BumpVersion();
+        return count;
+    }
+
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        var count = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        if (count > 0)
+            Services.StandingsService.BumpVersion();
+        return count;
     }
 }

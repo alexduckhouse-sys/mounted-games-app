@@ -234,6 +234,10 @@ export interface HeatEntry {
   laneIndex: number;
   /** The team's current disciplinary card ('yellow' or 'red'), or none. Set by staff on the scoring screen. */
   refereeCard?: 'yellow' | 'red' | null;
+  flag?: string | null;
+  bibDescription?: string | null;
+  /** Heat-specific spare bib colour when two teams in the heat share the same usual bib colour. */
+  bibColourOverride?: string | null;
 }
 
 export interface ResultRow {
@@ -259,6 +263,8 @@ export interface Race {
   finishedAt?: string | null;
   results: ResultRow[];
 }
+
+export type ReplayRaceMarker = Pick<Race, 'id' | 'name' | 'orderIndex' | 'startedAt' | 'finishedAt' | 'isComplete'>;
 
 export interface Heat {
   id: number;
@@ -307,6 +313,22 @@ export interface Session {
   heats: Heat[];
 }
 
+export type GateCheckStatus = 'at-gate' | 'warming-up' | 'missing' | null;
+
+export interface UpdateGateCheckRequest {
+  teamId: number;
+  status: GateCheckStatus;
+}
+
+export type ArenaAssistanceService = 'farrier' | 'vet' | 'first-aid';
+
+export interface RequestArenaAssistanceRequest {
+  service: ArenaAssistanceService;
+  arenaName?: string | null;
+  note?: string | null;
+  holdArena?: boolean;
+}
+
 export interface CompetitionDetail {
   id: number;
   createdByUserId?: string | null;
@@ -324,6 +346,14 @@ export interface CompetitionDetail {
   competitionNumber?: string | null;
   /** Where entrants write to the organiser. Shown on the public Details tab. */
   contactEmail?: string | null;
+  /** Optional what3words address for the horsebox / lorry entrance gate. */
+  lorryWhat3Words?: string | null;
+  /** Optional latitude of the horsebox / lorry entrance gate. */
+  lorryLatitude?: number | null;
+  /** Optional longitude of the horsebox / lorry entrance gate. */
+  lorryLongitude?: number | null;
+  /** Optional approach notes and low-bridge/narrow-lane warnings for horseboxes and lorries. */
+  lorryDirectionsNote?: string | null;
   startDate: string;
   endDate?: string | null;
   isActive: boolean;
@@ -334,6 +364,8 @@ export interface CompetitionDetail {
   streamUrl?: string | null;
   organiserName?: string | null;
   paymentDestination?: string | null;
+  /** Optional external https:// payment link (Stripe Payment Link, SumUp, PayPal) shown alongside BACS instructions. */
+  paymentLinkUrl?: string | null;
   /** When true the public signup form is hidden and the API rejects new signups. */
   signupsLocked?: boolean;
   /** Explicit capability from APIs that keep trainer messages private. Missing means unavailable. */
@@ -346,6 +378,26 @@ export interface CompetitionDetail {
   laneHatbands?: string[] | null;
   /** Where entry fees are paid out: the organiser's club and its masked account. Public, no personal data. */
   payoutsTo?: PayoutsTo | null;
+  /** Venue capacity limit for stables across entries and shop orders. Null when unlimited. */
+  maxStables?: number | null;
+  /** Venue capacity limit for electric hook-ups across entries and shop orders. Null when unlimited. */
+  maxHookups?: number | null;
+  /** Remaining stables available at this venue when `maxStables` is set. */
+  stablesRemaining?: number | null;
+  /** Remaining electric hook-ups available at this venue when `maxHookups` is set. */
+  hookupsRemaining?: number | null;
+}
+
+export interface CompetitionEntrySettings {
+  competitionId: number;
+  entriesCloseAt?: string | null;
+  entriesClosed: boolean;
+  maxStables?: number | null;
+  maxHookups?: number | null;
+  stablesBooked?: number;
+  hookupsBooked?: number;
+  stablesRemaining?: number | null;
+  hookupsRemaining?: number | null;
 }
 
 /** The public summary of a club's payouts. `maskedAccount` is like "••••1234" and only appears once `ready`. */
@@ -402,6 +454,9 @@ export interface ClubPayouts {
   updatedAt: string | null;
 }
 
+export type ArrivalWindow = 'FridayEvening' | 'SaturdayMorning' | 'Other';
+export type FeeDisposition = 'None' | 'RefundPending' | 'Refunded' | 'Retained' | 'CreditRollover';
+
 export interface MySignup {
   id: number;
   competitionId: number;
@@ -418,6 +473,84 @@ export interface MySignup {
   teamId?: number | null;
   teamName?: string | null;
   createdAt: string;
+  lookingForPair?: boolean;
+  lookingForGuestRiders?: boolean;
+  waitingForGuestSpot?: boolean;
+  pairRequestFromSignupId?: number | null;
+  pairRequestFromName?: string | null;
+  pairRequestFromClub?: string | null;
+  pairRequestToSignupId?: number | null;
+  pairRequestToName?: string | null;
+  pairRequestStatus?: string | null;
+  declarationAccessGranted?: boolean;
+  stablesCount?: number;
+  hookupsCount?: number;
+  stablingClubOrTeam?: string | null;
+  paymentMethod?: string | null;
+  isWaitlist?: boolean;
+  isWithdrawn?: boolean;
+  refundPending?: boolean;
+  teamsCount?: number;
+  drawComplete?: boolean;
+  linkedTeams?: { id: number; name: string }[];
+  /** Assigned barn / stable boxes, e.g. "Barn B, Boxes 14–18". */
+  stableAssignment?: string | null;
+  /** Assigned electric hook-up pitch, e.g. "Hook-up Post 4". */
+  hookupAssignment?: string | null;
+  /** Lorry or towing vehicle registration plate. */
+  vehicleRegistration?: string | null;
+  /** Arrival or stabling notes for the gate steward. */
+  arrivalNotes?: string | null;
+  /** Organiser's bank transfer / payment instructions for this competition. */
+  paymentDestination?: string | null;
+  /** Organiser's external https:// payment link (Stripe, SumUp, PayPal) for this competition. */
+  paymentLinkUrl?: string | null;
+  competitionEnd?: string | null;
+  competitionLocation?: string | null;
+  competitionPostcode?: string | null;
+  competitionWhat3Words?: string | null;
+  arrivalWindow?: ArrivalWindow | null;
+  feeDisposition?: FeeDisposition;
+  refundedAmountMinor?: number | null;
+  dispositionNote?: string | null;
+  dispositionUpdatedAt?: string | null;
+  waitlistOfferedAt?: string | null;
+  waitlistOfferExpiresAt?: string | null;
+  /** The rider, parent and emergency contact on your own guest or individual entry (`GET /me/signups`). */
+  guest?: SignupGuestDetails | null;
+}
+
+/**
+ * The rider on a guest or individual entry when an adult enters for a child, plus the parent or guardian and an
+ * emergency contact (`SignupGuestDetailsDto`). Personal data about a child: only the competition's staff
+ * (`GET /competitions/:id/signups`) and the person who made the entry (`GET /me/signups`, the create reply) get it.
+ * Never show it on a public page, share card or export.
+ */
+export interface SignupGuestDetails {
+  riderName: string | null;
+  /** A calendar date, `yyyy-MM-dd`. */
+  riderDateOfBirth: string | null;
+  ponyName: string | null;
+  guardianName: string | null;
+  /** Tidied by the server (`07700900123`, `+447700900123`). */
+  guardianPhone: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+}
+
+/**
+ * The guest rider fields of `POST /competitions/:id/sections/:sectionId/signups` (`CreateSectionSignupInput`).
+ * Names need their phone number and the reverse; phones must be UK or Irish; the date of birth is `yyyy-MM-dd` or
+ * `dd/mm/yyyy` and in the past. Whole-team entries drop them.
+ */
+export interface SignupGuestDetailsInput {
+  riderName?: string | null;
+  riderDateOfBirth?: string | null;
+  ponyName?: string | null;
+  guardianName?: string | null;
+  guardianPhone?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
 }
 
 export interface FormedTeamPreview {
@@ -462,6 +595,187 @@ export interface SectionSignup {
   teamName?: string | null;
   /** A team manager or trainer entering a whole team in one go. */
   isWholeTeam?: boolean;
+  lookingForPair?: boolean;
+  lookingForGuestRiders?: boolean;
+  waitingForGuestSpot?: boolean;
+  pairRequestFromSignupId?: number | null;
+  pairRequestToSignupId?: number | null;
+  pairRequestStatus?: string | null;
+  stablesCount?: number;
+  hookupsCount?: number;
+  stablingClubOrTeam?: string | null;
+  paymentMethod?: string | null;
+  isWaitlist?: boolean;
+  isWithdrawn?: boolean;
+  refundPending?: boolean;
+  teamsCount?: number;
+  /** Assigned barn / stable boxes, e.g. "Barn B, Boxes 14–18". */
+  stableAssignment?: string | null;
+  /** Assigned electric hook-up pitch, e.g. "Hook-up Post 4". */
+  hookupAssignment?: string | null;
+  /** Lorry or towing vehicle registration plate. */
+  vehicleRegistration?: string | null;
+  /** Arrival or stabling notes for the gate steward. */
+  arrivalNotes?: string | null;
+  lastReminderSentAt?: string | null;
+  arrivalWindow?: ArrivalWindow | null;
+  feeDisposition?: FeeDisposition;
+  refundedAmountMinor?: number | null;
+  dispositionNote?: string | null;
+  dispositionUpdatedAt?: string | null;
+  waitlistOfferedAt?: string | null;
+  waitlistOfferExpiresAt?: string | null;
+  /** Staff-only (and the entrant's own create reply): the guest rider, parent and emergency contact. */
+  guest?: SignupGuestDetails | null;
+}
+
+export interface UpdateSignupStablingInput {
+  stableAssignment?: string | null;
+  hookupAssignment?: string | null;
+  vehicleRegistration?: string | null;
+  arrivalNotes?: string | null;
+}
+
+export interface StablingBooking {
+  signupId: number;
+  sectionId: number;
+  sectionName: string;
+  fullName: string;
+  ponyClubOrTeam: string;
+  stablesCount: number;
+  hookupsCount?: number;
+  status: SignupPaymentStatus;
+  stableAssignment?: string | null;
+  hookupAssignment?: string | null;
+  vehicleRegistration?: string | null;
+  arrivalNotes?: string | null;
+  arrivalWindow?: ArrivalWindow | null;
+}
+
+export interface StablingSummary {
+  totalStables: number;
+  totalHookups?: number;
+  maxStables?: number | null;
+  maxHookups?: number | null;
+  stablesRemaining?: number | null;
+  hookupsRemaining?: number | null;
+  bookings: StablingBooking[];
+}
+
+export interface SendUnpaidRemindersInput {
+  signupIds: number[];
+  customNote?: string | null;
+}
+
+export interface SendUnpaidRemindersResult {
+  sentCount: number;
+  failedCount: number;
+  skippedCount: number;
+  sentAt: string;
+  signups: SectionSignup[];
+}
+
+export interface UpdateSignupArrivalInput {
+  arrivalWindow?: ArrivalWindow | null;
+  vehicleRegistration?: string | null;
+}
+
+export interface ArrivalManifestEntry {
+  signupId: number;
+  competitionSectionId: number;
+  sectionName: string;
+  fullName: string;
+  ponyClubName?: string | null;
+  teamName?: string | null;
+  teamsCount: number;
+  stablesCount: number;
+  stablingClubOrTeam?: string | null;
+  arrivalWindow: ArrivalWindow;
+  vehicleRegistration?: string | null;
+  status: SignupPaymentStatus;
+}
+
+export interface ArrivalManifest {
+  fridayEvening: ArrivalManifestEntry[];
+  saturdayMorning: ArrivalManifestEntry[];
+  other: ArrivalManifestEntry[];
+}
+
+export interface UpdateSignupDispositionInput {
+  feeDisposition: FeeDisposition;
+  refundedAmountMinor?: number | null;
+  dispositionNote?: string | null;
+}
+
+export interface FeeDispositionLedgerSummary {
+  totalRetainedMinor: number;
+  totalRefundedMinor: number;
+  refundsPendingMinor: number;
+  creditsRolledOverMinor: number;
+  rows: SectionSignup[];
+}
+
+export interface MarkClubPaidInput {
+  ponyClubName?: string | null;
+  signupIds?: number[] | null;
+}
+
+export interface MarkClubPaidResult {
+  ponyClubName: string;
+  clubBacsReference: string;
+  markedPaidCount: number;
+  totalAmountMinor: number;
+  signups: SectionSignup[];
+}
+
+export interface ClubInvoiceGroup {
+  clubName: string;
+  clubSlug: string;
+  clubBacsReference: string;
+  signupsCount: number;
+  teamsCount: number;
+  stablesCount: number;
+  totalAmountMinor: number;
+  totalDueMinor: number;
+  totalPaidMinor: number;
+  signups: SectionSignup[];
+}
+
+/**
+ * One choice a seller offers for a catalogue item, usually a size (`CatalogueItemOptionDto`). Sent as `options` on
+ * catalogue items and public listings. `stockQuantity` null means no limit for that option; 0 means sold out.
+ */
+export interface CatalogueItemOption {
+  id: number;
+  label: string;
+  stockQuantity: number | null;
+}
+
+/**
+ * An option in `POST`/`PUT /commerce/catalogue` (`CatalogueItemOptionInput`). Send an existing option's `id` to keep it
+ * (its sales and stock stay with it); leave `id` out for a new one. On `PUT`, omitting `options` leaves them alone and
+ * an empty list removes them. Labels are 1 to 40 characters, unique, at most 30 options.
+ */
+export interface CatalogueItemOptionInput {
+  id?: number | null;
+  label: string;
+  stockQuantity: number | null;
+}
+
+/** The option fields on an order line (`EventOrderLineDto`); both null when the item had no options. */
+export interface EventOrderLineOption {
+  optionId?: number | null;
+  /** The option's label when the order was made ("M"), kept even if the seller renames it later. */
+  optionLabel?: string | null;
+}
+
+/** A line of `POST /commerce/competitions/:id/orders` (`CreateEventOrderLineRequest`). */
+export interface CreateEventOrderLine {
+  listingId: number;
+  quantity: number;
+  detail?: string | null;
+  /** Required when the item has options, refused when it has none. */
+  optionId?: number | null;
 }
 
 export interface ShopPost {
@@ -516,6 +830,10 @@ export interface StandingRow {
   finalPoints?: number | null;
   /** Points scored before the final; null when it is in no lettered final. When the section doesn't carry points, `totalPoints` is `finalPoints` alone. */
   earlierPoints?: number | null;
+  /** Manual referee tie-break order when set. */
+  tieBreakOrder?: number | null;
+  /** Plain-English explanation when two adjacent teams share the same total points. */
+  tieBreakReason?: string | null;
 }
 
 /** Matches `TackCheckMode`: 0 pass or fail only, 1 a separate Tack & Turnout table, 2 bonus points in the standings. */
@@ -962,6 +1280,87 @@ export interface SponsorAdmin extends Sponsor {
   seconds: number;
 }
 
+/** Impressions and live stream on-screen time for one human-friendly sponsor placement. */
+export interface SponsorPlacementStat {
+  key: 'overview' | 'standings' | 'timetable' | 'liveStreamOverlay' | 'sponsorPage' | string;
+  label: 'Overview' | 'Standings' | 'Timetable' | 'Live Stream Overlay' | 'Sponsor Page' | string;
+  views: number;
+  seconds: number;
+  formattedOnScreenTime: string;
+}
+
+/** Proof-of-value impact summary for one sponsor across all placements. */
+export interface SponsorValueReportItem {
+  sponsorId: number;
+  sponsorName: string;
+  linkUrl: string | null;
+  logoUrl: string | null;
+  tier: SponsorTier;
+  tierLabel: string;
+  showOn: number;
+  placementLabels: string[];
+  isEnabled: boolean;
+  totalViews: number;
+  totalSeconds: number;
+  formattedOnScreenTime: string;
+  placements: SponsorPlacementStat[];
+}
+
+/** Competition-wide sponsor proof-of-value report (`GET /competitions/:id/sponsor-stats`). */
+export interface SponsorValueReport {
+  competitionId: number;
+  totalViews: number;
+  totalSeconds: number;
+  formattedTotalOnScreenTime: string;
+  sponsors: SponsorValueReportItem[];
+}
+
+/** Status of the 30-minute undo snapshot for the last section draw, heat deletion, or heat regeneration (`GET /competitions/:id/draw-undo`). */
+export interface DrawUndoStatus {
+  available: boolean;
+  undoId: number | null;
+  kind: string | null;
+  label: string | null;
+  sectionId: number | null;
+  sessionId: number | null;
+  createdAt: string | null;
+  expiresAt: string | null;
+  affectedHeats: number;
+  affectedSessions: number;
+}
+
+/** Result of restoring the latest draw or heat snapshot (`POST /competitions/:id/draw-undo`). */
+export interface DrawUndoResult {
+  restored: boolean;
+  label: string;
+  restoredSessions: number;
+  restoredHeats: number;
+  undoStatus: DrawUndoStatus;
+}
+
+/** Role assigned to a rider for a single race in the 5-rider Race Line-Up & Sit-Out Planner. */
+export type RiderRaceRole = '1' | '2' | '3' | '4' | 'sit-out';
+
+/** Shared race line-up and sit-out assignments for a team (`GET/PUT /competitions/:id/teams/:teamId/race-lineup`). */
+export interface TeamRaceLineupPlan {
+  competitionId: number;
+  teamId: number;
+  /** Keyed by race key (e.g. `String(race.id)` or `${heat.id}:${race.orderIndex}`), inner map keyed by rider key (`String(rider.id)` or rider name). */
+  assignments: Record<string, Record<string, RiderRaceRole | string>>;
+  updatedAt?: string | null;
+}
+
+/** Summary of a printable race session for the single-session noticeboard filter. */
+export interface PrintableSessionSummary {
+  sessionId: number;
+  sessionName: string;
+  sectionName: string;
+  orderIndex: number;
+  totalHeats: number;
+  completedHeats: number;
+  isCompleted: boolean;
+}
+
 /** What a statistics profile is about: 0 rider, 1 pony, 2 team, 3 club (`StatsSubjectKind` in the API). */
 export type StatsSubjectKind = 0 | 1 | 2 | 3;
 export const StatsSubjectKind = {
@@ -1104,4 +1503,86 @@ export interface StatsProfile {
   partnerships: StatsPartnership[] | null;
   clubs?: StatsClub[] | null;
   seasons?: StatsSeasonStanding[] | null;
+}
+
+// ---- Volunteer shifts and claims (#16) ----
+
+export interface VolunteerClaim {
+  id: number;
+  shiftId: number;
+  userId: string;
+  volunteerName: string;
+  clubName?: string | null;
+  /** Visible to competition staff only; null for public and ordinary signed-in viewers. */
+  contactPhone?: string | null;
+  claimedAt: string;
+  isMine?: boolean;
+}
+
+export interface VolunteerShift {
+  id: number;
+  competitionId: number;
+  sessionId?: number | null;
+  sessionName?: string | null;
+  arenaName?: string | null;
+  role: string;
+  startTimeLabel?: string | null;
+  notes?: string | null;
+  requiredCount: number;
+  claimedCount: number;
+  remainingCount: number;
+  isFilled: boolean;
+  claims: VolunteerClaim[];
+}
+
+export interface CreateVolunteerShiftInput {
+  role: string;
+  sessionId?: number | null;
+  arenaName?: string | null;
+  startTimeLabel?: string | null;
+  notes?: string | null;
+  requiredCount?: number;
+}
+
+export interface ClaimVolunteerShiftInput {
+  volunteerName?: string | null;
+  clubName?: string | null;
+  contactPhone?: string | null;
+}
+
+// ---- Emergency contact quick search (#151, staff only) ----
+
+export interface EmergencyContactEntry {
+  riderEntryId: number;
+  riderName: string;
+  ponyName?: string | null;
+  teamId: number;
+  teamName: string;
+  sectionId: number;
+  sectionName: string;
+  clubName: string;
+  bibColour?: string | null;
+  bibDescription?: string | null;
+  isReserve: boolean;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  medicalNotes?: string | null;
+  trainerName?: string | null;
+  trainerPhone?: string | null;
+}
+
+export interface EventArchiveDto {
+  competitionId: number;
+  competitionName: string;
+  fileName: string;
+  generatedAt: string;
+  files: Record<string, string>;
+}
+
+export interface PublicResultsSummaryDto {
+  competitionId: number;
+  competitionName: string;
+  isProvisional: boolean;
+  generatedAt?: string;
+  summaryText: string;
 }

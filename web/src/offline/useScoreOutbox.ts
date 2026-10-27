@@ -2,12 +2,34 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { scorerApi } from './scorerLink';
 import type { Heat } from '../types';
-import { nextToSend, outcomeOfError, settle, type QueuedScore, type SendOutcome } from './scoreOutbox';
+import {
+  mergeOutboxBackup,
+  nextToSend,
+  outcomeOfError,
+  parseOutboxBackup,
+  serializeOutboxBackup,
+  settle,
+  type QueuedScore,
+  type SendOutcome,
+} from './scoreOutbox';
 
 const KEY = 'mg.outbox.scores';
 const CHANGED = 'mg:outbox';
 /** Fired with `{ sessionId, heat }` when the server answers with a heat, so open pages can show it. */
 export const HEAT_SAVED = 'mg:heat-saved';
+export const IN_FLIGHT_GRACE_MS = 1500;
+
+const failedAttemptIds = new Set<string>();
+const itemKey = (item: Pick<QueuedScore, 'raceId' | 'saveId' | 'queuedAt'>) => `${item.raceId}@${item.saveId ?? item.queuedAt}`;
+
+/** Remaining ms to suppress the offline-waiting banner while an initial online save is in flight. */
+export function inFlightGraceRemainingMs(q: QueuedScore, now = Date.now()): number {
+  if (!navigator.onLine || failedAttemptIds.has(itemKey(q))) return 0;
+  const queuedAtMs = Date.parse(q.queuedAt);
+  if (!Number.isFinite(queuedAtMs)) return 0;
+  const ageMs = now - queuedAtMs;
+  return ageMs >= 0 && ageMs < IN_FLIGHT_GRACE_MS ? IN_FLIGHT_GRACE_MS - ageMs : 0;
+}
 
 export function readOutbox(): QueuedScore[] {
   try {
@@ -30,7 +52,7 @@ function writeOutbox(next: QueuedScore[]): boolean {
 }
 
 export function updateOutbox(change: (list: QueuedScore[]) => QueuedScore[]): boolean {
-  const next = change(readOutbox());
+  const next = change(readOutbox()).map((q) => (q.saveId ? q : { ...q, saveId: crypto.randomUUID() }));
   if (!writeOutbox(next)) return false;
   if (nextToSend(next)) void flushOutbox();
   return true;
@@ -63,13 +85,15 @@ async function sendWaiting() {
   // Each save is sent at most once per flush, even if storage can't record the result.
   const sent = new Set<string>();
   for (let item = nextToSend(readOutbox()); item && navigator.onLine; item = nextToSend(readOutbox())) {
-    const id = `${item.raceId}@${item.saveId ?? item.queuedAt}`;
+    const id = itemKey(item);
     if (sent.has(id)) return;
     sent.add(id);
     const outcome = await send(item);
     if (outcome.kind === 'saved' || outcome.kind === 'conflict') {
+      failedAttemptIds.delete(id);
       window.dispatchEvent(new CustomEvent(HEAT_SAVED, { detail: { sessionId: outcome.sessionId, heat: outcome.heat } }));
     }
+    if (outcome.kind === 'offline') failedAttemptIds.add(id);
     if (!writeOutbox(settle(readOutbox(), item, outcome))) return;
     if (outcome.kind === 'offline') return;
   }
@@ -98,4 +122,54 @@ export function useScoreOutbox(): QueuedScore[] {
     };
   }, []);
   return list;
+}
+
+/** Serialise a competition's queued offline scores into a shareable JSON backup string. */
+export function exportCompetitionOutbox(competitionId: number, now?: string): string {
+  return serializeOutboxBackup(readOutbox(), competitionId, now);
+}
+
+export const OUTBOX_IMPORT_ERROR = 'That backup could not be read. Check that the whole JSON backup was copied.';
+
+/** Validate and merge a JSON backup of offline scores into the active outbox, flushing immediately if online. */
+export function importCompetitionOutbox(
+  raw: string,
+  options?: { fallbackCompetitionId?: number; viaLink?: boolean },
+): { ok: true; count: number } | { ok: false; error: string } {
+  const viaLinkOverride =
+    options?.viaLink !== undefined
+      ? options.viaLink
+      : Boolean(localStorage.getItem('mg.scorer.token'));
+  const parsed = parseOutboxBackup(raw, options?.fallbackCompetitionId, viaLinkOverride);
+  if (!parsed) return { ok: false, error: OUTBOX_IMPORT_ERROR };
+  if (!updateOutbox((current) => mergeOutboxBackup(current, parsed))) {
+    return { ok: false, error: OUTBOX_STORAGE_ERROR };
+  }
+  return { ok: true, count: parsed.length };
+}
+
+/** Share a competition's offline outbox backup via the native share sheet, or copy it to the clipboard. */
+export async function shareOrCopyOutboxBackup(
+  competitionId: number,
+  competitionName?: string,
+): Promise<'shared' | 'copied' | 'unavailable'> {
+  const json = exportCompetitionOutbox(competitionId);
+  const title = competitionName ? `${competitionName} — offline score backup` : 'Offline score backup';
+  if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+    try {
+      await navigator.share({ title, text: json });
+      return 'shared';
+    } catch {
+      // Fall back to clipboard if the share sheet was dismissed or unsupported for text.
+    }
+  }
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(json);
+      return 'copied';
+    } catch {
+      return 'unavailable';
+    }
+  }
+  return 'unavailable';
 }

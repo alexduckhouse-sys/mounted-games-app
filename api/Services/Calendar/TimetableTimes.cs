@@ -98,24 +98,42 @@ public static class TimetableTimes
         var now = Utc(nowUtc) ?? DateTime.UtcNow;
         var hasArenas = ordered.Any(s => !string.IsNullOrWhiteSpace(s.ArenaName));
         var lanes = new Dictionary<string, Lane>();
+        var lastDayByArena = new Dictionary<string, string>();
+        var lastDayKey = "";
         foreach (var session in ordered)
         {
             var key = hasArenas ? session.ArenaName?.Trim() ?? "" : "";
+            var rawScheduled = Utc(session.ScheduledStart);
+            var match = System.Text.RegularExpressions.Regex.Match(session.Notes ?? "", @"\[shift:([+-]?\d+)\]");
+            var shift = match.Success && int.TryParse(match.Groups[1].Value, out var minutesShifted)
+                ? TimeSpan.FromMinutes(minutesShifted) : TimeSpan.Zero;
+            var scheduled = rawScheduled - shift;
+            var dayKey = scheduled.HasValue
+                ? scheduled.Value.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
+                : (lastDayByArena.TryGetValue(key, out var prevDay) ? prevDay : lastDayKey);
+            if (scheduled.HasValue)
+            {
+                lastDayByArena[key] = dayKey;
+                lastDayKey = dayKey;
+            }
+
             Lane lane;
             if (hasArenas && key.Length == 0)
             {
+                var dayPrefix = dayKey + "::";
+                var dayLanes = lanes.Where(kv => kv.Key.StartsWith(dayPrefix, StringComparison.Ordinal)).Select(kv => kv.Value).ToList();
                 lane = new Lane
                 {
-                    Offset = TimeSpan.FromTicks(Math.Max(0, lanes.Values.Select(l => (l.Offset + l.PauseOffset).Ticks).DefaultIfEmpty(0).Max()))
-                        - lanes.Values.Select(l => l.PauseOffset).DefaultIfEmpty(TimeSpan.Zero).Max(),
-                    PauseOffset = lanes.Values.Select(l => l.PauseOffset).DefaultIfEmpty(TimeSpan.Zero).Max(),
-                    LastEnd = lanes.Values.Select(l => l.LastEnd).Max(),
+                    Offset = TimeSpan.FromTicks(Math.Max(0, dayLanes.Select(l => (l.Offset + l.PauseOffset).Ticks).DefaultIfEmpty(0).Max()))
+                        - dayLanes.Select(l => l.PauseOffset).DefaultIfEmpty(TimeSpan.Zero).Max(),
+                    PauseOffset = dayLanes.Select(l => l.PauseOffset).DefaultIfEmpty(TimeSpan.Zero).Max(),
+                    LastEnd = dayLanes.Select(l => l.LastEnd).Max(),
                 };
             }
-            else if (!lanes.TryGetValue(key, out lane!))
+            else if (!lanes.TryGetValue($"{dayKey}::{key}", out lane!))
             {
                 lane = new Lane();
-                lanes[key] = lane;
+                lanes[$"{dayKey}::{key}"] = lane;
             }
             var previousPause = lane.PauseOffset;
             var pause = TimeSpan.Zero;
@@ -128,11 +146,6 @@ public static class TimetableTimes
             }
             if (hasArenas && key.Length == 0 && previousPause > pause) pause = previousPause;
             lane.PauseOffset = pause;
-            var rawScheduled = Utc(session.ScheduledStart);
-            var match = System.Text.RegularExpressions.Regex.Match(session.Notes ?? "", @"\[shift:([+-]?\d+)\]");
-            var shift = match.Success && int.TryParse(match.Groups[1].Value, out var minutesShifted)
-                ? TimeSpan.FromMinutes(minutesShifted) : TimeSpan.Zero;
-            var scheduled = rawScheduled - shift;
             DateTime? effective = null;
             if (session.StartedAt is { } started)
             {

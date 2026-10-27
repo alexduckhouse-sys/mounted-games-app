@@ -27,7 +27,11 @@ public static class Mappings
         IReadOnlyList<SessionDto> sessions,
         bool isDemo = false,
         PayoutsToDto? payoutsTo = null,
-        bool includePaymentDetails = true) => new(
+        bool includePaymentDetails = true,
+        int? maxStables = null,
+        int? maxHookups = null,
+        int? stablesRemaining = null,
+        int? hookupsRemaining = null) => new(
         c.Id, c.Name, c.Location, c.Description,
         c.Latitude, c.Longitude,
         c.What3Words, c.AppleMapsUrl,
@@ -40,7 +44,12 @@ public static class Mappings
         IsDemo: isDemo, TermsText: c.TermsText,
         PayoutsTo: payoutsTo, LaneHatbands: PlannedRaceList.Read(c.LaneHatbands),
         UseRefereeCards: DecFormConfig.For(c).UseRefereeCards,
-        Postcode: c.Postcode, CompetitionNumber: c.CompetitionNumber, ContactEmail: c.ContactEmail);
+        Postcode: c.Postcode, CompetitionNumber: c.CompetitionNumber, ContactEmail: c.ContactEmail,
+        LorryWhat3Words: c.LorryWhat3Words, LorryLatitude: c.LorryLatitude,
+        LorryLongitude: c.LorryLongitude, LorryDirectionsNote: c.LorryDirectionsNote,
+        PaymentLinkUrl: includePaymentDetails ? CompetitionFields.ResolvePaymentLinkUrl(c.PaymentLinkUrl, c.PaymentDestination) : null,
+        MaxStables: maxStables, MaxHookups: maxHookups,
+        StablesRemaining: stablesRemaining, HookupsRemaining: hookupsRemaining);
 
     /// <param name="activeSignups">Paid and pending entries: the ones that count towards <c>MaxParticipants</c>.</param>
     public static CompetitionSectionDto ToDto(this CompetitionSection s, int activeSignups = 0) =>
@@ -129,11 +138,12 @@ public static class Mappings
     public static HeatEntryDto ToDto(this HeatEntry he) => new(
         he.Id, he.TeamId,
         he.Team?.DisplayName ?? string.Empty,
-        he.Team?.BibColour,
+        string.IsNullOrWhiteSpace(he.BibColourOverride) ? he.Team?.BibColour : he.BibColourOverride,
         he.LaneIndex,
         ResultStatuses.TeamCardOf(he.Team),
         ResultStatuses.TeamFlagOf(he.Team?.BibDescription),
-        ResultStatuses.PublicBibDescription(he.Team?.BibDescription));
+        ResultStatuses.PublicBibDescription(he.Team?.BibDescription),
+        he.BibColourOverride);
 
     public static ResultDto ToDto(this Result r) => new(
         r.Id, r.TeamId,

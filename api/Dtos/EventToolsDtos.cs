@@ -39,8 +39,13 @@ public record PrintableScoreCellDto(int TeamId, string TeamName, int? Placing, b
 public record PrintableScoreRaceDto(int RaceId, string Name, IReadOnlyList<PrintableScoreCellDto> Teams);
 public record PrintableScoreHeatDto(
     int HeatId, string Label, string SectionName, string SessionName,
-    DateTime? ScheduledStart, IReadOnlyList<PrintableScoreRaceDto> Races);
+    DateTime? ScheduledStart, IReadOnlyList<PrintableScoreRaceDto> Races,
+    int SessionId = 0);
 public record PrintableScoreSheetsDto(PrintableCompetitionDto Competition, IReadOnlyList<PrintableScoreHeatDto> Heats);
+
+public record PrintableSessionSummaryDto(
+    int SessionId, string SessionName, string SectionName, int OrderIndex,
+    int TotalHeats, int CompletedHeats, bool IsCompleted);
 
 /// <summary><c>BonusPoints</c> (tack check bonus) is already inside <c>TotalPoints</c>.</summary>
 public record PrintableResultRowDto(
@@ -50,7 +55,9 @@ public record PrintableSectionResultsDto(
     int CompetitionSectionId, string SectionName, IReadOnlyList<PrintableResultRowDto> Results);
 public record PrintableResultsDto(
     PrintableCompetitionDto Competition, bool IsProvisional,
-    IReadOnlyList<PrintableSectionResultsDto> Sections);
+    IReadOnlyList<PrintableSectionResultsDto> Sections,
+    IReadOnlyList<PrintableScoreHeatDto>? Heats = null,
+    IReadOnlyList<PrintableSessionSummaryDto>? Sessions = null);
 
 /// <summary>A saved starting point. <c>OwnerName</c> is filled for admins only, who see everyone's.</summary>
 public record StartingPointDto(
@@ -59,3 +66,16 @@ public record StartingPointDto(
 public record SaveStartingPointRequest(string Name);
 public record RenameStartingPointRequest(string Name);
 public record CreateFromStartingPointRequest(string Name, DateTime StartDate, DateTime? EndDate);
+
+public record EventArchiveDto(
+    int CompetitionId,
+    string CompetitionName,
+    string FileName,
+    DateTime GeneratedAt,
+    IReadOnlyDictionary<string, string> Files);
+
+public record PublicResultsSummaryDto(
+    int CompetitionId,
+    string CompetitionName,
+    bool IsProvisional,
+    string SummaryText);

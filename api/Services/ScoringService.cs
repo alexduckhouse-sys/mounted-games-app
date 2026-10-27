@@ -524,10 +524,13 @@ public class ScoringService
             => teamSectionById.TryGetValue(teamId, out var sectionId) && doubledSectionIds.Contains(sectionId) ? 2 : 1;
         int EffectivePlace(FinishingPlace fp)
         {
-            if (fp.Eliminated || fp.Place < 1 || hcTeamIds.Count == 0) return fp.Place;
+            if (fp.Eliminated || fp.Place < 1 || hcTeamIds.Count == 0 || hcTeamIds.Contains(fp.TeamId)) return fp.Place;
             var hcAhead = accepted.Count(other =>
                 !other.Eliminated && !sitOut.Contains(other.TeamId) && hcTeamIds.Contains(other.TeamId)
-                && other.Place > 0 && other.Place < fp.Place);
+                && other.Place > 0 && other.Place < fp.Place
+                && !accepted.Any(nhc => !hcTeamIds.Contains(nhc.TeamId) && !nhc.Eliminated && !sitOut.Contains(nhc.TeamId)
+                    && nhc.Place == other.Place
+                    && (string.IsNullOrWhiteSpace(other.Note) || !other.Note.Contains("[dead-heat]", StringComparison.OrdinalIgnoreCase))));
             return Math.Max(1, fp.Place - hcAhead);
         }
         (int Place, int Base) EffectiveSectionScore(FinishingPlace fp)
@@ -577,7 +580,13 @@ public class ScoringService
             PointValues.Validate(points);
             return points;
         }
-        var incomingCore = accepted.Select(p => new CorePlace(p.TeamId, p.Eliminated ? null : p.Place, p.Eliminated,
+        int? StoredPlacing(FinishingPlace fp)
+        {
+            if (fp.Eliminated || sitOut.Contains(fp.TeamId)) return null;
+            if (fp.Place < 1) return fp.Place;
+            return EffectiveSectionScore(fp).Place;
+        }
+        var incomingCore = accepted.Select(p => new CorePlace(p.TeamId, StoredPlacing(p), p.Eliminated,
                 p.Status ?? ResultStatus.Finished, CleanNoteOrNull(p.Note), PointsFor(p)))
             .OrderBy(p => p.TeamId).ToList();
         var currentCore = current.Select(p => new CorePlace(p.TeamId, p.Eliminated ? null : p.Place, p.Eliminated,
@@ -630,7 +639,9 @@ public class ScoringService
             var unchanged = seen.Count == currentCore.Count && seen.Zip(currentCore).All(pair =>
                 pair.First.TeamId == pair.Second.TeamId
                 && pair.First.Eliminated == pair.Second.Eliminated
-                && (pair.First.Eliminated ? null : (int?)pair.First.Place) == pair.Second.Place
+                && (pair.First.Eliminated
+                    ? pair.Second.Place is null
+                    : pair.First.Place == pair.Second.Place || StoredPlacing(pair.First) == pair.Second.Place)
                 && (pair.First.Status is null
                     || ResultStatuses.Of(pair.First.Eliminated, pair.First.Status.Value) == pair.Second.Status));
             if (!unchanged)
@@ -644,7 +655,7 @@ public class ScoringService
         {
             RaceId = raceId,
             TeamId = fp.TeamId,
-            Placing = fp.Eliminated || sitOut.Contains(fp.TeamId) ? null : fp.Place,
+            Placing = StoredPlacing(fp),
             Eliminated = fp.Eliminated,
             Status = fp.Eliminated ? fp.Status ?? ResultStatus.Eliminated : ResultStatus.Finished,
             RefereeNote = CleanNoteOrNull(fp.Note),
@@ -661,6 +672,12 @@ public class ScoringService
         race.FinishedAt ??= now;
         if (fresh.Count > 0)
         {
+            var nextRace = heat.Races
+                .OrderBy(r => r.OrderIndex)
+                .ThenBy(r => r.Id)
+                .FirstOrDefault(r => r.Id != raceId && !r.IsComplete && (r.OrderIndex > race.OrderIndex || (r.OrderIndex == race.OrderIndex && r.Id > race.Id)));
+            if (nextRace is not null)
+                nextRace.StartedAt ??= now;
             heat.StartedAt ??= now;
             if (heat.Races.Count > 0 && heat.Races.All(r => r.Id == raceId || r.IsComplete))
                 heat.FinishedAt ??= now;
