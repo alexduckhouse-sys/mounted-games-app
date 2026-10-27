@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Minus, Plus } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { useT } from '../../i18n/LanguageContext';
 import { Notice } from '../../components/Notice';
 import { useToast } from '../../components/Toast';
 import { EntryEmailFields, type EntryEmail } from '../../components/EntryEmailFields';
@@ -38,6 +39,7 @@ export function EntryForm({ competition, section, kind, step, onSent, onConflict
   /** Called when the server refuses because the places changed (409), so the page can load the current counts. */
   onConflict?: () => void;
 }) {
+  const t = useT();
   const { hasRole, canOrganise } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -82,15 +84,15 @@ export function EntryForm({ competition, section, kind, step, onSent, onConflict
 
   // The pay step only makes sense once the details are in, so a direct link or a reload goes back to them.
   if (step === 'pay' && !ready) return <Navigate to={`${base}${query}`} replace />;
-  if (closed) return <Notice tone="info">Entries are closed for this competition.</Notice>;
+  if (closed) return <Notice tone="info">{t('entries.page.closed')}</Notice>;
   if (full && kind === 'standard') {
-    return <Notice tone="info" actionLabel="Join the waiting list" actionTo={`${base}?type=waitlist`}>{displaySectionName(section.displayName)} is full. You can join the waiting list.</Notice>;
+    return <Notice tone="info" actionLabel={t('entries.kind.waitlist')} actionTo={`${base}?type=waitlist`}>{t('entries.form.full', { section: displaySectionName(section.displayName) })}</Notice>;
   }
 
   async function submit() {
     if (!ready || busy) return;
     const emailText = entryEmail.email.trim();
-    if (emailText && !looksLikeEmail(emailText)) { setErr({ text: 'That email address doesn’t look right.', retry: false }); return; }
+    if (emailText && !looksLikeEmail(emailText)) { setErr({ text: t('entries.form.emailInvalid'), retry: false }); return; }
     requestId.current ??= newRequestId();
     setBusy(true);
     setErr(null);
@@ -120,13 +122,13 @@ export function EntryForm({ competition, section, kind, step, onSent, onConflict
         consentVersion: CONSENT_VERSION,
       });
       const lines = [
-        `${entryTitle(section, kind).replace(' · ', ' ')} at ${competition.name}.`,
-        signup.confirmationEmailStatus === 1 ? 'We’ve emailed you a copy.'
-          : signup.confirmationEmailStatus === 2 ? 'We couldn’t send the confirmation email, but your entry is saved.' : '',
-        isWaitlist ? 'You are on the waiting list. The organiser will contact you if a space opens up.'
-          : guestWaiting ? 'Teams looking for a guest rider can invite you, and the organiser will put you in a team.'
-            : signup.status === 1 ? 'Your entry is confirmed.'
-              : priceMinor > 0 ? 'The organiser marks it paid once your transfer arrives.' : '',
+        t('entries.form.sentTitle', { entry: entryTitle(section, kind).replace(' · ', ' '), competition: competition.name }),
+        signup.confirmationEmailStatus === 1 ? t('entries.form.emailedCopy')
+          : signup.confirmationEmailStatus === 2 ? t('entries.form.emailFailed') : '',
+        isWaitlist ? t('entries.form.onWaitlist')
+          : guestWaiting ? t('entries.form.guestWaiting')
+            : signup.status === 1 ? t('entries.form.confirmed')
+              : priceMinor > 0 ? t('entries.form.markedPaid') : '',
       ];
       requestId.current = null;
       const owesByBank = priceMinor > 0 && !isDemo && signup.status !== 1;
@@ -140,7 +142,7 @@ export function EntryForm({ competition, section, kind, step, onSent, onConflict
     } catch (e) {
       if ((e as { response?: { status?: number } }).response?.status === 409) onConflict?.();
       const msg = (e as { response?: { data?: { message?: string } | string } }).response?.data;
-      setErr({ text: typeof msg === 'string' ? msg : msg?.message ?? 'Couldn’t submit your entry. Check your signal and try again. Nothing was sent.', retry: true });
+      setErr({ text: typeof msg === 'string' ? msg : msg?.message ?? t('entries.form.submitFailed'), retry: true });
     } finally {
       setBusy(false);
     }
@@ -148,50 +150,50 @@ export function EntryForm({ competition, section, kind, step, onSent, onConflict
 
   async function copyBankDetails() {
     const text = bankDetailsText({ payTo: competition.paymentDestination ?? null, reference, amount: feeText(priceMinor) });
-    try { await navigator.clipboard.writeText(text); toast.show('Bank details copied'); } catch { /* the details are on screen to copy by hand */ }
+    try { await navigator.clipboard.writeText(text); toast.show(t('entries.form.bankCopied')); } catch { /* the details are on screen to copy by hand */ }
   }
 
   const error = err && (
-    <Notice className="mt-3" actionLabel={err.retry ? 'Try again' : undefined} onAction={err.retry ? () => void submit() : undefined} actionDisabled={busy}>{err.text}</Notice>
+    <Notice className="mt-3" actionLabel={err.retry ? t('common.tryAgain') : undefined} onAction={err.retry ? () => void submit() : undefined} actionDisabled={busy}>{err.text}</Notice>
   );
 
   if (step === 'pay') {
     return (
       <>
-        <h2 className="ev-step-title">{isDemo ? `Pay ${feeText(priceMinor)}` : `Pay ${feeText(priceMinor)} by bank transfer`}</h2>
+        <h2 className="ev-step-title">{isDemo ? t('entries.form.payAmount', { fee: feeText(priceMinor) }) : t('entries.form.payByTransfer', { fee: feeText(priceMinor) })}</h2>
         {isDemo ? (
-          <p className="ev-body">This is a demo event. After you submit, you will see a test payment page. No money is taken.</p>
+          <p className="ev-body">{t('entries.form.demoNote')}</p>
         ) : (
           <>
-            <dl className="sp-card sp-facts" aria-label="Bank details">
-              {competition.paymentDestination && <div className="sp-fact"><dt>Pay to</dt><dd className="whitespace-pre-line break-words font-mono">{competition.paymentDestination}</dd></div>}
-              <div className="sp-fact"><dt>Reference</dt><dd>{reference}</dd></div>
-              <div className="sp-fact"><dt>Amount</dt><dd className="font-bold">{feeText(priceMinor)}</dd></div>
+            <dl className="sp-card sp-facts" aria-label={t('entries.form.bankDetails')}>
+              {competition.paymentDestination && <div className="sp-fact"><dt>{t('entries.form.payTo')}</dt><dd className="whitespace-pre-line break-words font-mono">{competition.paymentDestination}</dd></div>}
+              <div className="sp-fact"><dt>{t('entries.form.reference')}</dt><dd>{reference}</dd></div>
+              <div className="sp-fact"><dt>{t('entries.form.amount')}</dt><dd className="font-bold">{feeText(priceMinor)}</dd></div>
             </dl>
-            {!competition.paymentDestination && <p className="sp-note">The organiser will send you their payment details.</p>}
+            {!competition.paymentDestination && <p className="sp-note">{t('entries.form.sendDetails')}</p>}
             <div className="pt-2.5">
               <button type="button" className="sp-pill !min-h-9 !px-3.5 !text-sm" onClick={() => void copyBankDetails()}>
-                Copy bank details
+                {t('entries.form.copyBank')}
               </button>
             </div>
           </>
         )}
-        <h2 className="sp-sec">You’re entering</h2>
-        <dl className="sp-card sp-facts" aria-label="Summary">
-          <div className="sp-fact"><dt>Age group</dt><dd>{entryTitle(section, kind)}</dd></div>
-          <div className="sp-fact"><dt>Contact</dt><dd>{[fullName.trim(), contact.trim()].filter(Boolean).join(' · ')}</dd></div>
-          {hasTeamFields && teamName.trim() && <div className="sp-fact"><dt>Team name</dt><dd>{teamName.trim()}</dd></div>}
-          {hasStables && stablesCount > 0 && <div className="sp-fact"><dt>Stables</dt><dd>{stablesCount}</dd></div>}
+        <h2 className="sp-sec">{t('entries.form.youreEntering')}</h2>
+        <dl className="sp-card sp-facts" aria-label={t('entries.form.summary')}>
+          <div className="sp-fact"><dt>{t('entries.form.ageGroup')}</dt><dd>{entryTitle(section, kind)}</dd></div>
+          <div className="sp-fact"><dt>{t('entries.form.contact')}</dt><dd>{[fullName.trim(), contact.trim()].filter(Boolean).join(' · ')}</dd></div>
+          {hasTeamFields && teamName.trim() && <div className="sp-fact"><dt>{t('entries.form.teamName')}</dt><dd>{teamName.trim()}</dd></div>}
+          {hasStables && stablesCount > 0 && <div className="sp-fact"><dt>{t('entries.form.stables')}</dt><dd>{stablesCount}</dd></div>}
         </dl>
-        <div className="pt-2"><Link to={`${base}${query}`} className="ev-text-btn">Edit</Link></div>
-        <button type="button" className="ev-bar" disabled={busy || !ready} onClick={() => void submit()}>{busy ? 'Submitting…' : 'Submit'}</button>
+        <div className="pt-2"><Link to={`${base}${query}`} className="ev-text-btn">{t('entries.form.edit')}</Link></div>
+        <button type="button" className="ev-bar" disabled={busy || !ready} onClick={() => void submit()}>{busy ? t('entries.form.submitting') : t('entries.form.submit')}</button>
         {error}
         {toast.node}
       </>
     );
   }
 
-  const nextLabel = priceMinor > 0 ? `Next: pay ${feeText(priceMinor)}` : 'Submit';
+  const nextLabel = priceMinor > 0 ? t('entries.form.nextPay', { fee: feeText(priceMinor) }) : t('entries.form.submit');
   const next = () => {
     if (priceMinor > 0) navigate(`${base}/pay${query}`, { state: location.state });
     else void submit();
@@ -203,46 +205,46 @@ export function EntryForm({ competition, section, kind, step, onSent, onConflict
         <span className="ev-price !text-2xl">{feeText(priceMinor)}</span>
       </div>
       <form className="ev-card flex flex-col gap-4 p-4" onSubmit={(event) => { event.preventDefault(); if (ready) next(); }}>
-        <label className="rf-fld">Your name<input autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} /></label>
-        <label className="rf-fld">Mobile (optional)<input type="tel" autoComplete="tel" value={contact} onChange={(e) => setContact(e.target.value)} /></label>
+        <label className="rf-fld">{t('entries.form.yourName')}<input autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} /></label>
+        <label className="rf-fld">{t('entries.form.mobile')}<input type="tel" autoComplete="tel" value={contact} onChange={(e) => setContact(e.target.value)} /></label>
         {hasTeamFields && (
-          <label className="rf-fld">{enteringWholeTeam ? 'Team name' : 'Team name (optional)'}
-            <input placeholder="As it should show on the scoreboard" value={teamName} onChange={(e) => setTeamName(e.target.value)} />
+          <label className="rf-fld">{enteringWholeTeam ? t('entries.form.teamName') : t('entries.form.teamNameOptional')}
+            <input placeholder={t('entries.form.teamNamePlaceholder')} value={teamName} onChange={(e) => setTeamName(e.target.value)} />
           </label>
         )}
-        <label className="rf-fld">Club (optional)<input value={club} onChange={(e) => setClub(e.target.value)} /></label>
+        <label className="rf-fld">{t('entries.form.club')}<input value={club} onChange={(e) => setClub(e.target.value)} /></label>
         <EntryEmailFields value={entryEmail} onChange={setEntryEmail} />
         {canEnterWholeTeam && (
           <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
             <input type="checkbox" checked={wholeTeam} onChange={(e) => setWholeTeam(e.target.checked)} />
-            Enter a whole team
+            {t('entries.form.wholeTeam')}
           </label>
         )}
         {enteringWholeTeam && (
           <>
-            <label className="rf-fld">Number of teams<NumberField min={1} max={20} value={teamsCount} onChange={(e) => setTeamsCount(e.target.value === '' ? '' : Math.max(1, Math.min(20, Number(e.target.value) || 1)))} /></label>
+            <label className="rf-fld">{t('entries.form.teamsCount')}<NumberField min={1} max={20} value={teamsCount} onChange={(e) => setTeamsCount(e.target.value === '' ? '' : Math.max(1, Math.min(20, Number(e.target.value) || 1)))} /></label>
             <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
               <input type="checkbox" checked={lookingForGuestRiders} onChange={(e) => setLookingForGuestRiders(e.target.checked)} />
-              Looking for guest riders
+              {t('entries.form.guestRiders')}
             </label>
           </>
         )}
         {hasStables && (
           <div className="flex flex-col gap-3">
             <div className="flex min-h-11 items-center gap-3">
-              <span className="sp-grow"><span className="sp-t1 !text-[15px]">Stables</span><span className="sp-t2">Need a hook-up, shavings or hay? <Link className="ev-link" to={`/competitions/${competition.id}/shop`}>Book in the event shop</Link></span></span>
+              <span className="sp-grow"><span className="sp-t1 !text-[15px]">{t('entries.form.stables')}</span><span className="sp-t2">{t('entries.form.stablesHelp')} <Link className="ev-link" to={`/competitions/${competition.id}/shop`}>{t('entries.form.bookShop')}</Link></span></span>
               <span className="sp-stepper">
-                <button type="button" aria-label="One fewer stable" disabled={stablesCount === 0} onClick={() => setStablesCount((n) => Math.max(0, n - 1))}><Minus className="h-4 w-4" aria-hidden="true" /></button>
+                <button type="button" aria-label={t('entries.form.fewerStable')} disabled={stablesCount === 0} onClick={() => setStablesCount((n) => Math.max(0, n - 1))}><Minus className="h-4 w-4" aria-hidden="true" /></button>
                 <output aria-live="polite" className="!min-w-[30px]">{stablesCount}</output>
-                <button type="button" aria-label="One more stable" disabled={stablesCount >= 100} onClick={() => setStablesCount((n) => Math.min(100, n + 1))}><Plus className="h-4 w-4" aria-hidden="true" /></button>
+                <button type="button" aria-label={t('entries.form.moreStable')} disabled={stablesCount >= 100} onClick={() => setStablesCount((n) => Math.min(100, n + 1))}><Plus className="h-4 w-4" aria-hidden="true" /></button>
               </span>
             </div>
-            {stablesCount > 0 && <label className="rf-fld">Stabling club or team<input value={stablingClubOrTeam} maxLength={200} onChange={(e) => setStablingClubOrTeam(e.target.value)} placeholder="Use your club or team name" /></label>}
+            {stablesCount > 0 && <label className="rf-fld">{t('entries.form.stablingClub')}<input value={stablingClubOrTeam} maxLength={200} onChange={(e) => setStablingClubOrTeam(e.target.value)} placeholder={t('entries.form.stablingPlaceholder')} /></label>}
           </div>
         )}
         <RiderPrivacyFields termsText={competition.termsText} value={privacy} onChange={(patch) => setPrivacy((cur) => ({ ...cur, ...patch }))} />
       </form>
-      <button type="button" className="ev-bar" disabled={busy || !ready} onClick={next}>{busy ? 'Submitting…' : nextLabel}</button>
+      <button type="button" className="ev-bar" disabled={busy || !ready} onClick={next}>{busy ? t('entries.form.submitting') : nextLabel}</button>
       {error}
     </>
   );

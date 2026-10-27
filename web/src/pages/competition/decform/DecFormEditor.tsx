@@ -5,6 +5,7 @@ import { Sheet } from '../../../components/Sheet';
 import { useToast } from '../../../components/Toast';
 import { api } from '../../../api';
 import { useAuth } from '../../../auth/AuthContext';
+import { useT } from '../../../i18n/LanguageContext';
 import { FLAG_COMPETITION_ICONS } from '../../../competition/icons';
 import { apiErrorMessage } from '../../../lib/apiError';
 import { parseBibAndFlag } from '../../../lib/bib';
@@ -42,15 +43,15 @@ interface Props {
 
 const wide = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 1024px)').matches;
 
-const FLAG_OPTIONS = [{ value: '', label: 'No flag' }, ...FLAG_COMPETITION_ICONS.map((f) => ({ value: f.id as string, label: f.label }))];
-
 /**
  * One team's dec form: a banner saying when to send it, the team's details, a row for each rider (tap to change one)
  * with one add bar for the next free slot, notes, the terms and Send. A phone shows the rider in a bottom sheet; a
  * laptop shows it beside the form. See docs/designs/dec-form-handoff.md.
  */
 export function DecFormEditor({ competition, team, existing, draft, priorPhone, onSaved, onDelete, lockInfo, config = STANDARD_CONFIG }: Props) {
+  const t = useT();
   const { user } = useAuth();
+  const flagOptions = [{ value: '', label: t('entries.dec.noFlag') }, ...FLAG_COMPETITION_ICONS.map((f) => ({ value: f.id as string, label: f.label }))];
   const section = competition.sections.find((s) => s.id === team.competitionSectionId);
   const required = ridersRequired(section?.format);
 
@@ -191,10 +192,10 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
       setSubmitted(true);
       setSentBefore(true);
       setActive(null);
-      toast.show('Dec form sent. You can still change it.');
+      toast.show(t('entries.dec.sentToast'));
       onSaved(data);
     } catch (err) {
-      setError(apiErrorMessage(err, 'Couldn’t send the dec form. Check your signal and try again.'));
+      setError(apiErrorMessage(err, t('entries.dec.sendFailed')));
     } finally {
       setBusy(false);
     }
@@ -204,36 +205,36 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
 
   return (
     <div className="flex flex-col gap-4">
-      <h2 className="sr-only">{teamName.trim() || 'Dec form'}</h2>
+      <h2 className="sr-only">{teamName.trim() || t('entries.dec.title')}</h2>
       <p role="status" className="sp-banner m-0" data-tone={banner.tone === 'good' ? 'good' : undefined}>{banner.text}</p>
 
       <div className="flex flex-col gap-2 lg:grid lg:grid-cols-2 lg:items-start lg:gap-7">
-        <section aria-label="Dec form" className="flex flex-col">
-          <h3 className="sp-sec sp-first">Team<small>{subtitleOf([section?.displayName, competition.name, when])}</small></h3>
+        <section aria-label={t('entries.dec.title')} className="flex flex-col">
+          <h3 className="sp-sec sp-first">{t('entries.dec.team')}<small>{subtitleOf([section?.displayName, competition.name, when])}</small></h3>
           <div className="sp-card">
             <label className="sp-field">
-              Team name
-              <input value={teamName} placeholder="e.g. Stockport C" maxLength={150} onChange={(e) => changed(setTeamName)(e.target.value)} />
+              {t('entries.dec.teamName')}
+              <input value={teamName} placeholder={t('entries.dec.teamNamePlaceholder')} maxLength={150} onChange={(e) => changed(setTeamName)(e.target.value)} />
             </label>
             {asked(config.bib) && (
               <label className="sp-field">
-                Bibs
-                <input value={bibs} placeholder="e.g. Yellow with navy stars" maxLength={200} onChange={(e) => changed(setBibs)(e.target.value)} />
+                {t('entries.dec.bibs')}
+                <input value={bibs} placeholder={t('entries.dec.bibsPlaceholder')} maxLength={200} onChange={(e) => changed(setBibs)(e.target.value)} />
               </label>
             )}
-            <RefineChoiceRow label="Flag" value={flag} options={FLAG_OPTIONS} onChange={changed(setFlag)} />
-            <button type="button" className="sp-row" onClick={openTrainer} aria-label={`Trainer: ${trainerLine || 'not set'}. Change it`}>
-              <span className="sp-t1 sp-grow">Trainer</span>
-              <span className="sp-val min-w-0 max-w-[60%] truncate">{trainerLine || 'Add'}</span>
+            <RefineChoiceRow label={t('entries.dec.flag')} value={flag} options={flagOptions} onChange={changed(setFlag)} />
+            <button type="button" className="sp-row" onClick={openTrainer} aria-label={t('entries.dec.trainerAria', { value: trainerLine || t('entries.dec.notSet') })}>
+              <span className="sp-t1 sp-grow">{t('entries.dec.trainer')}</span>
+              <span className="sp-val min-w-0 max-w-[60%] truncate">{trainerLine || t('entries.dec.add')}</span>
               <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
             </button>
           </div>
           {entryName && entryName.trim().toLowerCase() !== teamName.trim().toLowerCase() && (
-            <p className="sp-note">Entered as “{entryName}”.</p>
+            <p className="sp-note">{t('entries.dec.enteredAs', { name: entryName })}</p>
           )}
 
-          <h3 className="sp-sec">Riders<small>{ridersCount(slots)}</small></h3>
-          <div className="sp-card" role="list" aria-label="Riders">
+          <h3 className="sp-sec">{t('entries.dec.riders')}<small>{ridersCount(slots)}</small></h3>
+          <div className="sp-card" role="list" aria-label={t('entries.dec.riders')}>
             {slots.map((rider, index) => {
               if (!rider) return null;
               const isReserve = isReserveSlot(slots, index);
@@ -244,9 +245,9 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
                     <span className="sp-grow">
                       <span className="sp-t1">{rider.fullName}</span>
                       <span className="sp-t2">{slotMeta(rider, isReserve, config)}</span>
-                      {slotFlagged(rider, config) && <span className="sp-t2 font-semibold !text-[rgb(var(--mg-elim))]">An answer is outside the limits. The organisers will see a flag; you can still send the form.</span>}
+                      {slotFlagged(rider, config) && <span className="sp-t2 font-semibold !text-[rgb(var(--mg-elim))]">{t('entries.dec.outsideLimits')}</span>}
                     </span>
-                    {isReserve && <span className="sp-chip" data-tone="grey">Reserve</span>}
+                    {isReserve && <span className="sp-chip" data-tone="grey">{t('entries.dec.reserve')}</span>}
                     <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
                   </button>
                 </div>
@@ -259,28 +260,28 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
             )}
           </div>
 
-          <h3 className="sp-sec">For the organisers</h3>
+          <h3 className="sp-sec">{t('entries.dec.forOrganisers')}</h3>
           <div className="sp-card">
             <label className="sp-field">
-              Notes
-              <textarea value={notes} placeholder="Optional" onChange={(e) => changed(setNotes)(e.target.value)} />
+              {t('entries.dec.notes')}
+              <textarea value={notes} placeholder={t('entries.dec.optional')} onChange={(e) => changed(setNotes)(e.target.value)} />
             </label>
             <div className="sp-row">
-              <span className="sp-grow"><span className="sp-t1">I agree to the <button type="button" onClick={() => setTermsOpen(true)} className="inline min-h-0 p-0 align-baseline font-semibold text-[rgb(var(--mg-heading))] underline underline-offset-2">terms</button></span></span>
-              <button type="button" role="switch" aria-checked={agreed} aria-label="I agree to the terms" className="rf-sw" onClick={() => { setAgreed(!agreed); setSubmitted(false); }}><span aria-hidden="true" /></button>
+              <span className="sp-grow"><span className="sp-t1">{t('entries.dec.agreeBefore')}<button type="button" onClick={() => setTermsOpen(true)} className="inline min-h-0 p-0 align-baseline font-semibold text-[rgb(var(--mg-heading))] underline underline-offset-2">{t('entries.dec.agreeTerms')}</button></span></span>
+              <button type="button" role="switch" aria-checked={agreed} aria-label={t('entries.dec.agreeAria')} className="rf-sw" onClick={() => { setAgreed(!agreed); setSubmitted(false); }}><span aria-hidden="true" /></button>
             </div>
           </div>
 
           <div className="mt-4 flex flex-col items-stretch gap-2.5">
             <button type="button" className="kit-pill kit-pill-fill w-full" disabled={!ready || busy || submitted} onClick={() => { void submit(); }}>
-              {busy ? 'Sending…' : sentBefore ? 'Send changes' : 'Send dec form'}
+              {busy ? t('entries.dec.sending') : sentBefore ? t('entries.dec.sendChanges') : t('entries.dec.send')}
             </button>
             <p aria-live="polite" className="sp-t2 m-0 text-center">{sendReason(slots, agreed, teamName, phoneIssue, sentBefore, submitted)}</p>
             {sentBefore && existing && onDelete && (
-              <div className="flex justify-center"><button type="button" className="sp-red" onClick={() => onDelete(existing)}>Delete this dec form</button></div>
+              <div className="flex justify-center"><button type="button" className="sp-red" onClick={() => onDelete(existing)}>{t('entries.dec.deleteThis')}</button></div>
             )}
           </div>
-          {error && <Notice actionLabel="Try again" onAction={() => { void submit(); }} actionDisabled={busy}>{error}</Notice>}
+          {error && <Notice actionLabel={t('common.tryAgain')} onAction={() => { void submit(); }} actionDisabled={busy}>{error}</Notice>}
         </section>
 
         {active != null ? (
@@ -291,7 +292,7 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
             editing={editing}
             form={form}
             choices={choices}
-            addLabel={editing ? 'Save' : reserve ? 'Add reserve' : 'Add rider'}
+            addLabel={editing ? t('entries.dec.save') : reserve ? t('entries.dec.addReserveBtn') : t('entries.dec.addRiderBtn')}
             ready={riderReady(form, reserve, undefined, config)}
             config={config}
             competitionId={competition.id}
@@ -312,11 +313,11 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
             onRemove={() => clear(active)}
           />
         ) : (
-          <section aria-label="Next step" className="hidden flex-col items-start gap-3 rounded-xl border-[1.5px] border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-surface))] p-6 lg:flex">
+          <section aria-label={t('entries.dec.nextStep')} className="hidden flex-col items-start gap-3 rounded-xl border-[1.5px] border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-surface))] p-6 lg:flex">
             <CircleCheck aria-hidden="true" className="h-7 w-7 text-[rgb(var(--mg-heading))]" />
-            <h3 className="mg-display text-[28px] font-bold leading-none text-[rgb(var(--mg-heading))]">{full ? 'Team complete' : 'Pick a slot'}</h3>
+            <h3 className="mg-display text-[28px] font-bold leading-none text-[rgb(var(--mg-heading))]">{full ? t('entries.dec.teamComplete') : t('entries.dec.pickSlot')}</h3>
             <p className="text-base leading-snug text-[rgb(var(--mg-body))]">
-              {full ? 'Check the riders, agree to the terms, then send. You can come back and change it afterwards.' : 'Tap Add rider to fill the next slot.'}
+              {full ? t('entries.dec.teamCompleteHelp') : t('entries.dec.pickSlotHelp')}
             </p>
           </section>
         )}
@@ -325,23 +326,23 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
       {toast.node}
       {termsOpen && <TermsDialog termsText={competition.termsText} onClose={() => setTermsOpen(false)} />}
       {trainerOpen && (
-        <Sheet title="Trainer" onClose={() => setTrainerOpen(false)} initialFocus="#dec-trainer-name">
+        <Sheet title={t('entries.dec.trainer')} onClose={() => setTrainerOpen(false)} initialFocus="#dec-trainer-name">
           {({ close: closeSheet }) => (
             <form className="kit-sheet-inner" onSubmit={(e) => { e.preventDefault(); if (trainerDraft.name.trim() && !trainerPhoneBad) closeSheet(saveTrainer); }}>
               <label className="kit-sheet-field" htmlFor="dec-trainer-name">
-                Name
+                {t('entries.dec.trainerName')}
                 <input id="dec-trainer-name" value={trainerDraft.name} autoComplete="name" maxLength={200} onChange={(e) => setTrainerDraft({ ...trainerDraft, name: e.target.value })} />
               </label>
               {asked(config.trainerPhone) && (
                 <label className="kit-sheet-field" htmlFor="dec-trainer-phone">
-                  Phone
+                  {t('entries.dec.trainerPhone')}
                   <input id="dec-trainer-phone" type="tel" value={trainerDraft.phone} autoComplete="tel" placeholder="07700 900000" aria-invalid={trainerPhoneBad}
                     onChange={(e) => setTrainerDraft({ ...trainerDraft, phone: e.target.value })} />
                 </label>
               )}
               {trainerPhoneBad && <Notice>{phoneProblem(trainerDraft.phone, config)}</Notice>}
               <div className="kit-acts">
-                <button type="submit" className="kit-pill kit-pill-fill" disabled={!trainerDraft.name.trim() || trainerPhoneBad}>Done</button>
+                <button type="submit" className="kit-pill kit-pill-fill" disabled={!trainerDraft.name.trim() || trainerPhoneBad}>{t('entries.dec.done')}</button>
               </div>
             </form>
           )}
