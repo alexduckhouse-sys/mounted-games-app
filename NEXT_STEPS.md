@@ -6,24 +6,25 @@ The cross-chat to-do list, confirmed product specifications, code-verified bugs,
 
 ## Start here: end of 27 October — what's merged, what isn't, and where it's kept
 
-**Merged on 27 October:** #198–#203, #205–#208, #210, #211 (integration of #203–#209), #214 (password-reset security fixes). Neon `production` has the three #211 migrations (backup branch `backup-pre-integration-211-20261027`).
+**Merged on 27 October:** #198–#203, #205–#208, #210, #211 (integration of #203–#209), #212 (West Mids Pairs importer), #214 (password-reset security fixes). Neon `production` has the three #211 migrations (backup branch `backup-pre-integration-211-20261027`).
 
 **Tomorrow (28 October):** the owner is fixing organiser and site admin pages that didn't follow the house style. Every UI PR now ticks the checklist at the top of `docs/designs/design-decisions.md` ("Before you open a UI pull request"). Today's public-page decisions are in the same file under "Public pages, round 2".
 
 **Open PRs:**
 - #216 club receipts: each contact sees only their own entries. This is a live privacy fix from #202. Merge first.
 - #215 ticker dock on every page.
-- #212 West Mids Pairs JSON importer. Competition 44 is already on prod; riders' names stay in the database only.
 
-**Not on main yet. Nothing is lost:** every worktree's uncommitted work was snapshotted on 27 October into a local branch `backup/wip-20261027/<worktree>` in the main checkout. The branch's parent is the worktree's HEAD, so `git diff <branch>^ <branch>` shows the work. The repo is public, so these branches are **local only. Don't push them.** Some contain unreleased security fixes and audit reports. `/private/tmp/mg-*` is wiped on reboot, but its snapshots are safe in the repo.
+**Not on main yet. Nothing is lost:** on 27 October every worktree's uncommitted work was snapshotted into a local ref, `refs/backup/wip-20261027/<worktree>`, in the main checkout. The snapshot's parent is the worktree's HEAD, so `git diff refs/backup/wip-20261027/<name>^ refs/backup/wip-20261027/<name>` shows the work. The tip of every deleted local branch is kept at `refs/backup/branches-20261027/<branch>`; `git for-each-ref refs/backup/` lists them all. The repo is public, so these refs are **local only. Don't push them.** Some contain unreleased security fixes and audit reports.
+
+**Tidy-up done:** 44 stale worktrees and 44 local branches were removed, all backed up as above (71 worktrees down to 30). The worktrees that are left hold live or unmerged work (the table below). Neon `production` and `backup-pre-integration-211-20261027` stay; the three older 27 October branches (`validate-leftover-steward-20261027`, `backup-pre-leftover-steward-20261027`, `backup-pre-pr202-20261027`) can go once the owner agrees.
 
 | Work | Where | State / next step |
 | --- | --- | --- |
 | Public pages round 2 build | `demo/event-pages` + `demo/site-pages` → `demo/public-pages` | The "Public pages design improvements" session is building it now and raising the PRs |
 | Next-wave UI pass | `feat/next-wave-ui-pass` (worktree `next-wave-ui`, 4 local commits) | Handoff in `.claude/worktrees/next-wave-ui/HANDOFF-next-wave-ui-pass.md`. Next: coverage run, then PR |
 | Weather alerts | `feat/weather-alerts` (pushed, no PR) | Deliberately left out of #211. Needs a PR and a check against main |
-| Protest log v2 | backup `agent-a5f1aee4ea01d6c92` (40 new files, AddProtestLog migration) | Needs a branch, PR and a Neon migration |
-| Entries-digest security rework | backup `agent-a712dfa98b3866af7` | **Migration clash:** it regenerates AddEntriesDigest, which is already on prod. Redo it as a new incremental migration |
+| Protest log v2 | worktree and backup `agent-a5f1aee4ea01d6c92` (40 new files, AddProtestLog migration) | Needs a branch, PR and a Neon migration |
+| Entries-digest security rework | worktree and backup `agent-a712dfa98b3866af7` | **Migration clash:** it regenerates AddEntriesDigest, which is already on prod. Redo it as a new incremental migration |
 | Install guide v2 | backup `agent-ad6f499cd69e9a0fa` (older copy: `w-install-guide`) | Uncommitted. Needs a PR |
 | Camera connect and locks | backup `w-camera-connect` | Uncommitted. Needs a PR |
 | EGUK showcase names | backup `eguk-showcase` | Uncommitted. Needs a PR |
