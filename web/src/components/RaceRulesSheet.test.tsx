@@ -83,7 +83,7 @@ describe('race guide provenance', () => {
     expect(books.find((book) => book.body === 'Pony Club')).toMatchObject({ title: 'Supplied guide', body: 'Pony Club' });
     for (const book of books.filter((item) => item.body !== 'Pony Club')) {
       expect(book.edition).toBe('App race guide · body-specific rules not verified');
-      expect(book.penalties).toContain('have not been added');
+      expect(book.penalties).toContain('Standard mounted games fault rules apply');
       expect(book.setup).toBe('Ride around the pole.');
     }
   });
@@ -95,7 +95,7 @@ describe('race guide provenance', () => {
     render(<RaceRulebookSection template={template()} showDiagram />);
     fireEvent.click(screen.getByRole('tab', { name: 'STRUK' }));
     expect(screen.getByRole('tabpanel', { name: 'STRUK rules' })).not.toHaveTextContent('body-specific rules not verified');
-    expect(screen.getByRole('tabpanel', { name: 'STRUK rules' })).toHaveTextContent('Verified STRUK rules and penalties for this race have not been added');
+    expect(screen.getByRole('tabpanel', { name: 'STRUK rules' })).toHaveTextContent("Check the event's published STRUK rulebook");
     expect(screen.getByRole('tab', { name: 'STRUK' })).toHaveAttribute('aria-selected', 'true');
   });
 });
