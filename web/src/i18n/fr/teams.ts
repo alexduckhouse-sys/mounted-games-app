@@ -60,6 +60,8 @@ export const teams: AreaCatalogue<typeof en> = {
   'teams.team.noRacesLeft': 'Plus de course',
   'teams.team.heats': 'Manches',
   'teams.team.allHeatsDone': 'Toutes les manches de cette équipe sont terminées.',
+  'teams.team.nextHeat': 'Prochaine manche',
+  'teams.team.arenaTbc': 'Carrière à confirmer',
   'teams.team.noHeats': 'Pas encore tirée dans une manche.',
   'teams.team.lane': 'Couloir {number}',
   'teams.team.timetable': 'Programme',

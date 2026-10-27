@@ -59,6 +59,8 @@ export const teams = {
   'teams.team.noRacesLeft': 'No races left',
   'teams.team.heats': 'Heats',
   'teams.team.allHeatsDone': 'All heats completed for this team.',
+  'teams.team.nextHeat': 'Next heat',
+  'teams.team.arenaTbc': 'Arena to be confirmed',
   'teams.team.noHeats': 'Not drawn into any heats yet.',
   'teams.team.lane': 'Lane {number}',
   'teams.team.timetable': 'Timetable',

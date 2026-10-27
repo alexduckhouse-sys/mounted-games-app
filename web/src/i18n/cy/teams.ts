@@ -60,6 +60,8 @@ export const teams: AreaCatalogue<typeof en> = {
   'teams.team.noRacesLeft': 'Dim rasys ar ôl',
   'teams.team.heats': 'Rhagrasys',
   'teams.team.allHeatsDone': 'Mae’r holl ragrasys wedi’u cwblhau ar gyfer y tîm hwn.',
+  'teams.team.nextHeat': 'Y rhagras nesaf',
+  'teams.team.arenaTbc': 'Arena i’w chadarnhau',
   'teams.team.noHeats': 'Heb ei osod mewn unrhyw ragras eto.',
   'teams.team.lane': 'Lôn {number}',
   'teams.team.timetable': 'Amserlen',
