@@ -193,6 +193,8 @@ export const teams: AreaCatalogue<typeof en> = {
   'teams.arena.title': 'Préparation de la piste',
   'teams.arena.arena': 'Piste',
   'teams.arena.nothing': 'Rien en piste pour le moment.',
+  'teams.arena.where': 'Arène et manche',
+  'teams.arena.nextHere': 'prochaine sur cette arène',
   'teams.arena.heat': 'Manche',
   'teams.arena.previous': 'Course précédente',
   'teams.arena.next': 'Course suivante',

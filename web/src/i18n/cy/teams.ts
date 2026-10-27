@@ -193,6 +193,8 @@ export const teams: AreaCatalogue<typeof en> = {
   'teams.arena.title': 'Gosod y cylch',
   'teams.arena.arena': 'Cylch',
   'teams.arena.nothing': 'Dim byd yn y cylch ar hyn o bryd.',
+  'teams.arena.where': 'Arena a rhagras',
+  'teams.arena.nextHere': 'nesaf ar yr arena hon',
   'teams.arena.heat': 'Rhagras',
   'teams.arena.previous': 'Y ras flaenorol',
   'teams.arena.next': 'Y ras nesaf',

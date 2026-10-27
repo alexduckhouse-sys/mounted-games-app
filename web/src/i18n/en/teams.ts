@@ -192,6 +192,8 @@ export const teams = {
   'teams.arena.title': 'Arena setup',
   'teams.arena.arena': 'Arena',
   'teams.arena.nothing': 'Nothing currently in the arena.',
+  'teams.arena.where': 'Arena and heat',
+  'teams.arena.nextHere': 'next on this arena',
   'teams.arena.heat': 'Heat',
   'teams.arena.previous': 'Previous race',
   'teams.arena.next': 'Next race',
