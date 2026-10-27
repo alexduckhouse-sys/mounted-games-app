@@ -158,6 +158,10 @@ it('tells the ring crew what changes before the race, with no yellow pole label'
   const crew = await screen.findByRole('region', { name: 'Ring crew before this race' });
   expect(within(crew).getByText('Take out the 5th pole.')).toBeInTheDocument();
   expect(within(crew).getByText(/Bring in 2 × Mug/)).toBeInTheDocument();
+  // Grouped by where it happens in the arena; groups with nothing in them are left out.
+  expect(within(crew).getByRole('heading', { name: 'Middle' })).toBeInTheDocument();
+  expect(within(crew).queryByRole('heading', { name: 'Top' })).toBeNull();
+  expect(within(crew).queryByRole('heading', { name: 'Start line' })).toBeNull();
   expect(screen.queryByText(/poles stay out/)).toBeNull();
 });
 

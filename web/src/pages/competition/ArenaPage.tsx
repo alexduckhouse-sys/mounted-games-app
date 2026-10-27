@@ -10,7 +10,7 @@ import { RaceDiagram } from '../../components/RaceDiagram';
 import { RaceRulesSheet, buildRaceRulebooks, type RaceTemplateDetail } from '../../components/RaceRulesSheet';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
-import { crewLines, diffRaceEquipment, equipmentFromDiagram } from '../../lib/raceEquipment';
+import { crewGroups, diffRaceEquipment, equipmentFromDiagram } from '../../lib/raceEquipment';
 import { displaySectionName } from '../../lib/section';
 import { roundTo5Min, computeTimings } from '../../lib/time';
 import '../../components/sitePages.css';
@@ -186,7 +186,7 @@ export function ArenaPage() {
   const equipment = equipmentFromDiagram(template?.diagramJson);
   const prevRace = activeIdx > 0 ? orderedRaces[activeIdx - 1] : null;
   const prevTemplate = prevRace ? tmplByName.get(prevRace.name.toLowerCase().trim()) : null;
-  const crew = template ? crewLines(diffRaceEquipment(prevTemplate?.diagramJson, template.diagramJson)) : [];
+  const crew = template ? crewGroups(diffRaceEquipment(prevTemplate?.diagramJson, template.diagramJson)) : [];
 
   return shell(
     <>
@@ -239,8 +239,13 @@ export function ArenaPage() {
       {crew.length > 0 && (
         <section aria-label={t('teams.arena.crew')}>
           <h2 className="sp-sec">{t('teams.arena.crew')}</h2>
-          <div className="ev-card flex flex-col gap-1 px-4 py-3 text-[15px] leading-snug">
-            {crew.map((line) => <p key={line} className="m-0">{line}</p>)}
+          <div className="ev-card divide-y divide-[rgb(var(--mg-rule-soft))] text-[15px] leading-snug">
+            {crew.map((group) => (
+              <div key={group.place} className="flex flex-col gap-1 px-4 py-3">
+                <h3 className="m-0 text-xs font-bold uppercase tracking-[0.1em] text-[rgb(var(--mg-muted))]">{t(CREW_PLACE_KEY[group.place])}</h3>
+                {group.lines.map((line) => <p key={line} className="m-0">{line}</p>)}
+              </div>
+            ))}
           </div>
         </section>
       )}
@@ -249,6 +254,8 @@ export function ArenaPage() {
     </>,
   );
 }
+
+const CREW_PLACE_KEY = { top: 'teams.arena.crewTop', middle: 'teams.arena.crewMiddle', start: 'teams.arena.crewStart' } as const;
 
 const heatName = (c: HeatChoice, t: ReturnType<typeof useT>) => [displaySectionName(c.session.sectionName ?? c.session.name), c.heat.label ?? t('teams.team.heatN', { number: c.heatIndex + 1 })].filter(Boolean).join(' ');
 

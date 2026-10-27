@@ -189,13 +189,27 @@ const POLE_SENTENCE: Partial<Record<PoleAction, string>> = {
   'set-5': 'Put in 5 poles.',
 };
 
-const crewList = (items: ChangeoverItem[]) => items.map((item) => `${item.count > 1 ? `${item.count} × ` : ''}${item.label} (${item.zone})`).join(', ');
+const crewList = (items: ChangeoverItem[]) => items.map((item) => `${item.count > 1 ? `${item.count} × ` : ''}${item.label}`).join(', ');
 
-/** What the ring crew does before a race, as plain sentences: poles first, then what comes out and what goes in. */
-export function crewLines(diff: RaceChangeoverDiff): string[] {
-  return [
-    POLE_SENTENCE[diff.poleAction] ?? '',
-    diff.removeItems.length ? `Take out ${crewList(diff.removeItems)}.` : '',
-    diff.addItems.length ? `Bring in ${crewList(diff.addItems)}.` : '',
-  ].filter(Boolean);
+export type CrewPlace = 'top' | 'middle' | 'start';
+export interface CrewGroup { place: CrewPlace; lines: string[] }
+
+const ZONE_PLACE: Record<ChangeoverZone, CrewPlace> = { 'Start / Changeover': 'start', 'Poles P1–P5': 'middle', '2m Beyond / Top': 'top' };
+
+/**
+ * What the ring crew does before a race, grouped by where it happens in the arena: the top line (beyond the last pole),
+ * the middle (the poles) and the start line. Each group is plain sentences, poles first, then what comes out and what
+ * goes in. A place with nothing to do is left out.
+ */
+export function crewGroups(diff: RaceChangeoverDiff): CrewGroup[] {
+  const lines: Record<CrewPlace, string[]> = { top: [], middle: [], start: [] };
+  const pole = POLE_SENTENCE[diff.poleAction];
+  if (pole) lines.middle.push(pole);
+  for (const place of ['top', 'middle', 'start'] as const) {
+    const out = diff.removeItems.filter((item) => ZONE_PLACE[item.zone] === place);
+    const into = diff.addItems.filter((item) => ZONE_PLACE[item.zone] === place);
+    if (out.length) lines[place].push(`Take out ${crewList(out)}.`);
+    if (into.length) lines[place].push(`Bring in ${crewList(into)}.`);
+  }
+  return (['top', 'middle', 'start'] as const).filter((place) => lines[place].length > 0).map((place) => ({ place, lines: lines[place] }));
 }
