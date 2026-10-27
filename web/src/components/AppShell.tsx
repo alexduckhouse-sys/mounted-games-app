@@ -23,7 +23,7 @@ import { TrainerAccountNotice } from './TrainerAccountNotice';
 import { LiteChip } from '../lite/LiteChip';
 import { initialsOf } from '../lib/profile';
 import { useNeedsYou } from '../pages/profile/needsYou';
-import { usePageFade } from '../hooks/usePageFade';
+import { PageTransition } from './PageTransition';
 import { useT } from '../i18n/LanguageContext';
 
 export function AppShell() {
@@ -64,7 +64,6 @@ function Shell({ width }: { width: PageWidth }) {
   // Sticky bits further down the page sit under the header, whatever its height.
   const barRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
-  usePageFade(mainRef, location.pathname);
   useLayoutEffect(() => {
     const bar = barRef.current;
     if (!bar) {
@@ -146,6 +145,7 @@ function Shell({ width }: { width: PageWidth }) {
           <Suspense fallback={<PageSkeleton />}><Outlet /></Suspense>
         </PageLoadBoundary>
       </main>
+      <PageTransition mainRef={mainRef} pathname={location.pathname} disabled={filmingMode} />
       {tickerDock && <TopBarTicker />}
       {!filmingMode && globalTabs && <GlobalTabs meCount={user ? needsYou : 0} />}
       {!filmingMode && tabsCompetitionId != null && <BottomTabs competitionId={tabsCompetitionId} entryOnly={meta?.id === tabsCompetitionId && !!meta.entryPhase && !canOrganise({ id: meta.id, createdByUserId: meta.createdByUserId })} me={user ? { initials: initialsOf(user.fullName, user.email), count: needsYou } : undefined} />}
