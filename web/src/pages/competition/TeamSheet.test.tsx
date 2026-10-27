@@ -46,4 +46,12 @@ describe('TeamSheet', () => {
     render(<TeamSheet detail={detail} sectionName="Seniors" competitionId={4} onClose={vi.fn()} />);
     expect(screen.getByRole('link', { name: 'Full team page' })).toHaveAttribute('href', '/competitions/4/teams/7');
   });
+
+  it('tags a reserve rider', () => {
+    render(<MemoryRouter><TeamSheet detail={detail} sectionName="Seniors" riders={[{ fullName: 'Ella Hughes', horseName: 'Pickle' }, { fullName: 'Sam Reid', horseName: 'Biscuit', isReserve: true }]} onClose={vi.fn()} /></MemoryRouter>);
+    const riders = screen.getByRole('region', { name: 'Riders and ponies' });
+    expect(riders.querySelectorAll('li')).toHaveLength(2);
+    expect(riders.querySelectorAll('li')[1]).toHaveTextContent('Reserve');
+    expect(riders.querySelectorAll('li')[0]).not.toHaveTextContent('Reserve');
+  });
 });

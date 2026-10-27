@@ -14,6 +14,8 @@ const eyebrow = 'text-[10px] font-bold uppercase tracking-[0.08em]';
 export interface TeamSheetRider {
   fullName: string;
   horseName?: string | null;
+  /** A non-riding reserve, from the declaration form. */
+  isReserve?: boolean;
 }
 
 /**
@@ -84,6 +86,7 @@ export function TeamSheet({
                 {riders.map((r, i) => (
                   <li key={`${r.fullName}-${i}`} className="flex min-h-10 items-baseline justify-between gap-3 border-b border-[rgb(var(--mg-rule-soft))] px-3 py-2 text-sm last:border-b-0">
                     <a href={statsProfileHref(StatsSubjectKind.Rider, r.fullName.trim().toLowerCase())} className="min-w-0 font-semibold text-[rgb(var(--mg-heading))]">{r.fullName}</a>
+                    {r.isReserve && <span className="shrink-0 rounded-[4px] border border-[rgb(var(--mg-rule))] px-1.5 text-[11px] font-semibold text-[rgb(var(--mg-muted))]">Reserve</span>}
                     {r.horseName
                       ? <a href={statsProfileHref(StatsSubjectKind.Pony, r.horseName.trim().toLowerCase())} className="min-w-0 text-right text-[rgb(var(--mg-body))]">{r.horseName}</a>
                       : <span className="text-[rgb(var(--mg-faint))]">–</span>}

@@ -42,7 +42,8 @@ public sealed class ResultsBookService(AppDbContext db, StandingsService standin
         var races = raceSessions.SelectMany(s => s.Heats).SelectMany(h => h.Races).ToList();
         var provisional = races.Count == 0 || races.Any(r => !r.IsComplete);
         return new ResultsBookDto(
-            new PrintableCompetitionDto(competition.Id, competition.Name, competition.Location, competition.StartDate, competition.EndDate),
+            new PrintableCompetitionDto(competition.Id, competition.Name, competition.Location, competition.StartDate, competition.EndDate,
+                competition.CompetitionNumber),
             provisional, includePrivate, DateTime.UtcNow, sections,
             awards.Where(a => a.CompetitionSectionId is null).Select(ToDto).ToList(), notes);
     }

@@ -3,6 +3,7 @@ import { downloadCsv } from '../../lib/csv';
 import { resultsBookFileName, resultsBookToCsv } from '../../lib/resultsBookCsv';
 import type { PrintableEntries, ResultsBook, SpecialAward } from './resultsBookTypes';
 import { formatPoints } from '../../lib/formatPoints';
+import { CopyResults } from './CopyResults';
 
 function Awards({ awards }: { awards: SpecialAward[] }) {
   if (awards.length === 0) return null;
@@ -21,6 +22,7 @@ export function ResultsBookView({ data }: { data: ResultsBook }) {
       <button type="button" className="mg-btn mg-btn-secondary" onClick={() => downloadCsv(resultsBookFileName(data), resultsBookToCsv(data))}>
         <Download className="h-4 w-4" />Download CSV
       </button>
+      <CopyResults book={data} />
     </div>
     {data.isProvisional && <p className="event-print-provisional">Provisional results: some races are not complete.</p>}
     {data.includesPrivate && <p className="event-print-provisional">Organiser copy: this includes private referee notes. Print the public book for competitors.</p>}

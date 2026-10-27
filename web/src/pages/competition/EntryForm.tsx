@@ -29,12 +29,14 @@ export interface EntrySent {
 }
 
 /** Steps 2 and 3 of an entry: your details, then pay. Everything typed stays while you move between them. */
-export function EntryForm({ competition, section, kind, step, onSent }: {
+export function EntryForm({ competition, section, kind, step, onSent, onConflict }: {
   competition: CompetitionDetail;
   section: CompetitionSection;
   kind: EntryKind;
   step: 'details' | 'pay';
   onSent: (sent: EntrySent) => void;
+  /** Called when the server refuses because the places changed (409), so the page can load the current counts. */
+  onConflict?: () => void;
 }) {
   const { hasRole, canOrganise } = useAuth();
   const navigate = useNavigate();
@@ -136,6 +138,7 @@ export function EntryForm({ competition, section, kind, step, onSent }: {
       // Demo events only: straight on to the clearly labelled test payment page.
       if (isDemo && signup.status === 0 && signup.amountMinor > 0) navigate(`/me/signups/${signup.id}/test-payment`);
     } catch (e) {
+      if ((e as { response?: { status?: number } }).response?.status === 409) onConflict?.();
       const msg = (e as { response?: { data?: { message?: string } | string } }).response?.data;
       setErr({ text: typeof msg === 'string' ? msg : msg?.message ?? 'Couldn’t submit your entry. Check your signal and try again. Nothing was sent.', retry: true });
     } finally {

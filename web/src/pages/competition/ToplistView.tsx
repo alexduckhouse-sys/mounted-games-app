@@ -353,7 +353,7 @@ function useSheetRiders(competitionId: number | null, teamId: number | null): Te
           .filter((rider) => !(rider.isReserve && !rider.horseName))
           .slice()
           .sort((a, b) => a.orderIndex - b.orderIndex)
-          .map((rider) => ({ fullName: publicRiderName(rider), horseName: rider.horseName }));
+          .map((rider) => ({ fullName: publicRiderName(rider), horseName: rider.horseName, isReserve: rider.isReserve }));
         setLoaded({ key, riders });
       })
       .catch(() => { if (!cancelled) setLoaded({ key, riders: [] }); });

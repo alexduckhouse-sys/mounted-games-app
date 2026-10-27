@@ -7,6 +7,9 @@ import { useAuth } from '../../auth/AuthContext';
 import type { CompetitionDetail, DeclarationForm, Heat, Session } from '../../types';
 import { displaySectionName } from '../../lib/section';
 import { ordinal } from '../../lib/toplist';
+import type { SpecialAward } from '../eventTools/resultsBookTypes';
+
+const reserveTag = 'ml-1.5 inline-block rounded-[4px] border border-[rgb(var(--mg-rule))] px-1 text-[10px] font-semibold text-[rgb(var(--mg-muted))]';
 
 interface Props {
   competition: CompetitionDetail;
@@ -92,6 +95,8 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
   const { canManage } = useAuth();
   const [allForms, setAllForms] = useState<DeclarationForm[]>([]);
   const [busy, setBusy] = useState(false);
+  const [awards, setAwards] = useState<SpecialAward[]>([]);
+  const [awardsFailed, setAwardsFailed] = useState(false);
 
   // Arenas run side by side, so finishing a session moves on within its own arena only.
   // A session with no arena name counts as being in the one and only arena.
@@ -115,6 +120,25 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
       .then((r) => setAllForms(Array.isArray(r.data) ? r.data : []))
       .catch(() => setAllForms([]));
   }, [competition.id, nextRealSessionId, hasFinalHeats]);
+
+  // Event-wide awards belong to the end of the whole event, so they show once, on its last session.
+  const isLastSession = competition.sessions.every((s) => s.orderIndex <= finishedSession.orderIndex);
+  const wantAwards = hasFinalHeats || isLastSession;
+  useEffect(() => {
+    if (!wantAwards) return;
+    let cancelled = false;
+    api.get<SpecialAward[]>(`/event-tools/competitions/${competition.id}/awards`)
+      .then((r) => {
+        if (cancelled) return;
+        setAwardsFailed(false);
+        setAwards(Array.isArray(r.data) ? r.data.filter((a) => a && typeof a.title === 'string' && typeof a.recipient === 'string') : []);
+      })
+      .catch(() => { if (!cancelled) setAwardsFailed(true); });
+    return () => { cancelled = true; };
+  }, [competition.id, wantAwards]);
+  const sectionId = finishedSession.competitionSectionId;
+  const sectionAwards = hasFinalHeats && sectionId != null ? awards.filter((a) => a.competitionSectionId === sectionId) : [];
+  const eventAwards = isLastSession ? awards.filter((a) => a.competitionSectionId == null) : [];
 
   const nextSessionTeamIds = competition.teams
     .filter((t) => nextRealSectionId == null || t.competitionSectionId === nextRealSectionId)
@@ -236,6 +260,7 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
                                   <li key={r.id} className="text-xs text-[rgb(var(--mg-body))]">
                                     {r.fullName}
                                     {r.horseName?.trim() ? ` — ${r.horseName.trim()}` : ''}
+                                    {r.isReserve && <span className={reserveTag}>Reserve</span>}
                                   </li>
                                 ))}
                               </ul>
@@ -247,7 +272,12 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
                   </section>
                 );
               })}
+              <AwardList title="Special awards" awards={sectionAwards} />
             </div>
+          )}
+          {isLastSession && <AwardList title="Event awards" awards={eventAwards} />}
+          {awardsFailed && (hasFinalHeats || isLastSession) && (
+            <p role="status" className="text-xs italic text-[rgb(var(--mg-muted))]">Couldn’t load the special awards. Check your signal and reopen this.</p>
           )}
 
           {!next ? (
@@ -317,6 +347,7 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
                               {(r.bibColour ?? '—').slice(0, 2)}
                             </span>
                             <span className="truncate font-medium text-[rgb(var(--mg-ink))]">{r.fullName}</span>
+                            {r.isReserve && <span className={reserveTag}>Reserve</span>}
                             <span className="truncate text-[rgb(var(--mg-muted))]">{r.horseName ?? ''}</span>
                           </li>
                         ))}
@@ -342,6 +373,22 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
         </div>
       </motion.div>
     </motion.div>
+  );
+}
+
+function AwardList({ title, awards }: { title: string; awards: SpecialAward[] }) {
+  if (awards.length === 0) return null;
+  return (
+    <section aria-label={title} className="space-y-1.5 rounded-xl border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-subtle))] p-3">
+      <h4 className="text-sm font-bold text-[rgb(var(--mg-heading))]">{title}</h4>
+      <ul className="space-y-1">
+        {awards.map((award) => (
+          <li key={award.id} className="text-sm text-[rgb(var(--mg-ink))]">
+            <span className="font-semibold">{award.title}</span>: {award.recipient}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

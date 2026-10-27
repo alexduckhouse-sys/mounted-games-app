@@ -1,7 +1,7 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { dateToEnd, dateToStart } from '../../lib/sponsors';
 import { autoConfirm } from '../../test/confirm';
@@ -282,5 +282,66 @@ describe('the logos in the organiser’s list', () => {
     await screen.findByRole('img');
     shown.unmount();
     expect(URL.revokeObjectURL).toHaveBeenCalled();
+  });
+});
+
+
+describe('a sponsor’s schedule status', () => {
+  const start = Date.parse('2026-06-10T12:00:00Z');
+  let now = start;
+
+  beforeEach(() => { now = start; vi.spyOn(Date, 'now').mockImplementation(() => now); });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('says Active, Scheduled, Expired or Disabled in words beside the switch', async () => {
+    const cases: Array<[Record<string, unknown>, string]> = [
+      [{}, 'Active'],
+      [{ startsAt: '2026-06-11T00:00:00Z' }, 'Scheduled'],
+      [{ endsAt: '2026-06-10T11:00:00Z' }, 'Expired'],
+      [{ isEnabled: false }, 'Disabled'],
+    ];
+    for (const [extra, label] of cases) {
+      serve(wire(1, { name: 'Acme Feeds', ...extra }));
+      const { unmount } = render(<MemoryRouter><SponsorsSharingPage /></MemoryRouter>);
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit Acme Feeds' }));
+      const row = screen.getByLabelText('Status');
+      expect(row.querySelector('.ops-status')).toHaveTextContent(label);
+      unmount();
+    }
+  });
+
+  it('moves from Scheduled to Active on the timer without a reload, then stops the timer on leaving', async () => {
+    const callbacks: Array<() => void> = [];
+    const realSet = window.setInterval.bind(window);
+    vi.spyOn(window, 'setInterval').mockImplementation(((fn: () => void, ms?: number) => { callbacks.push(fn); return realSet(() => undefined, ms); }) as never);
+    const clear = vi.spyOn(window, 'clearInterval');
+    serve(wire(1, { name: 'Acme Feeds', startsAt: new Date(start + 90_000).toISOString() }));
+    const { unmount } = render(<MemoryRouter><SponsorsSharingPage /></MemoryRouter>);
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit Acme Feeds' }));
+    const row = screen.getByLabelText('Status');
+    expect(row).toHaveTextContent('Scheduled');
+    now = start + 120_000;
+    act(() => callbacks.forEach((fn) => fn()));
+    expect(row.querySelector('.ops-status')).toHaveTextContent('Active');
+    unmount();
+    expect(clear).toHaveBeenCalled();
+  });
+
+  it('recomputes when the tab becomes visible or the window regains focus, not while hidden', async () => {
+    serve(wire(1, { name: 'Acme Feeds', endsAt: new Date(start + 60_000).toISOString() }));
+    render(<MemoryRouter><SponsorsSharingPage /></MemoryRouter>);
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit Acme Feeds' }));
+    const pill = () => screen.getByLabelText('Status').querySelector('.ops-status');
+    expect(pill()).toHaveTextContent('Active');
+    now = start + 120_000;
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+    expect(pill()).toHaveTextContent('Active');
+    visibility.mockReturnValue('visible');
+    act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+    expect(pill()).toHaveTextContent('Expired');
+    now = start;
+    act(() => { fireEvent.focus(window); });
+    expect(pill()).toHaveTextContent('Active');
   });
 });
