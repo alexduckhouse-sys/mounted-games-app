@@ -58,6 +58,8 @@ beforeEach(() => {
   link.post.mockReset();
   link.get.mockResolvedValue({ data: timetable() });
   vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false); // keep the outbox from sending during these tests
+  // An earlier test's sheet saves its choice after the exit delay; start each test with the question unanswered.
+  localStorage.removeItem('mg.commentatorScoring.1');
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); window.history.replaceState(null, '', '/'); });
 
@@ -483,7 +485,7 @@ it('labels scoped scores honestly and keeps organiser and stream tools off a sco
   })] }) });
   open();
   await opened('Bending');
-  await userEvent.click(screen.getByRole('button', { name: 'Yes, show them' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Yes, show them' }));
   const facts = await screen.findByRole('region', { name: 'Live commentator facts' });
   expect(facts).toHaveTextContent('Available scores: 3 pts');
   expect(facts).not.toHaveTextContent('Rank');
