@@ -1,3 +1,4 @@
+import { tr } from '../i18n/translate';
 import type { CompetitionDetail, DeclarationForm, Heat, Session, Team } from '../types';
 import { arenaNames, arenaToShow } from './following';
 import { displaySectionName } from './section';
@@ -77,7 +78,7 @@ export function heatTime(row: Pick<TeamHeatRow, 'effective' | 'scheduled'>): str
 
 /** "Open · Heat 3, lane 2 · Arena 2", with "+6 min" added when the heat is running late. */
 export function heatSummary(row: TeamHeatRow, section: string | null | undefined): string {
-  const where = `${row.label}${row.lane != null ? `, lane ${row.lane}` : ''}${row.arenaName ? ` · ${row.arenaName}` : ''}`;
+  const where = `${row.label}${row.lane != null ? tr('account.teams.laneSuffix', { n: row.lane }) : ''}${row.arenaName ? ` · ${row.arenaName}` : ''}`;
   return [displaySectionName(section), where, row.delayMinutes > 0 ? `+${formatDelayDuration(row.delayMinutes)}` : ''].filter(Boolean).join(' · ');
 }
 

@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
+import { useLanguage } from '../i18n/LanguageContext';
+import { activeLocale, tr } from '../i18n/translate';
 import { usePageHeader } from '../components/CompactPageBarContext';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { useMyTeams } from '../hooks/useMyTeams';
@@ -18,16 +20,17 @@ interface Group { id: number; name: string; start: number; rows: Row[] }
 
 const sentOn = (iso: string) => {
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString(activeLocale(), { day: 'numeric', month: 'short' });
 };
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const ridersText = (n: number) => tr('entries.riders', { count: n });
 
 /**
  * Dec forms in one place: a row for each of my teams in a competition, with a Sent or Not sent chip and the lock time in
  * the heading. "All my forms" adds every competition I have teams in, and the locked, read-only forms of other clubs.
  */
 export function DeclarationsIndexPage() {
-  usePageHeader({ title: 'Dec forms', plain: true, backTo: '/me', backLabel: 'Back to Me' });
+  const { t } = useLanguage();
+  usePageHeader({ title: t('account.decs.title'), plain: true, backTo: '/me', backLabel: t('account.backToMe') });
   const { current } = useCurrentCompetition();
   const { user } = useAuth();
   const mine = useMyTeams();
@@ -44,7 +47,7 @@ export function DeclarationsIndexPage() {
       let g = byComp.get(id);
       if (!g) {
         const detail = mine.comps.get(id);
-        g = { id, name: detail?.name ?? name ?? `Competition ${id}`, start: detail?.startDate ? new Date(detail.startDate).getTime() : 0, rows: [] };
+        g = { id, name: detail?.name ?? name ?? tr('account.decs.competitionN', { id }), start: detail?.startDate ? new Date(detail.startDate).getTime() : 0, rows: [] };
         byComp.set(id, g);
       }
       return g;
@@ -53,7 +56,7 @@ export function DeclarationsIndexPage() {
       const form = mine.forms.find((f) => f.teamId === team.id) ?? null;
       group(team.competitionId).rows.push({
         key: `team-${team.id}`, to: `/competitions/${team.competitionId}/declarations?team=${team.id}`, team: team.displayName, form,
-        sub: form ? `Sent ${sentOn(form.submittedAt)} · ${plural(form.riders.length, 'rider')}` : displaySectionName(team.sectionName),
+        sub: form ? tr('account.decs.sentRiders', { date: sentOn(form.submittedAt), riders: ridersText(form.riders.length) }) : displaySectionName(team.sectionName),
       });
     }
     // Forms I sent for a team that isn't on my list (an organiser or manager sending for someone).
@@ -63,7 +66,7 @@ export function DeclarationsIndexPage() {
       if (user && form.submittedByUserId === user.id) {
         group(form.competitionId, form.competitionName).rows.push({
           key: `form-${form.id}`, to: `/competitions/${form.competitionId}/declarations?team=${form.teamId}`, team: form.teamName, form,
-          sub: `Sent ${sentOn(form.submittedAt)} · ${plural(form.riders.length, 'rider')}`,
+          sub: tr('account.decs.sentRiders', { date: sentOn(form.submittedAt), riders: ridersText(form.riders.length) }),
         });
       } else others.push(form);
     }
@@ -98,20 +101,20 @@ export function DeclarationsIndexPage() {
   }
 
   const tabs: { id: View; label: string; disabled?: boolean }[] = [
-    { id: 'current', label: current?.name ?? 'Current competition', disabled: !current },
-    { id: 'all', label: 'All my forms' },
+    { id: 'current', label: current?.name ?? t('account.decs.current'), disabled: !current },
+    { id: 'all', label: t('account.decs.all') },
   ];
   const empty = shown.length === 0 && (view === 'all' ? others.length === 0 : true);
 
   return (
     <div className="skin mx-auto w-full max-w-[560px] pb-4 pt-3">
-      <div className="sp-seg" role="tablist" aria-label="Which dec forms">
+      <div className="sp-seg" role="tablist" aria-label={t('account.decs.which')}>
         {tabs.map((tab) => (
           <button key={tab.id} type="button" role="tab" aria-selected={view === tab.id} disabled={tab.disabled} className="disabled:opacity-40" onClick={() => setView(tab.id)}>{tab.label}</button>
         ))}
       </div>
 
-      {!mine.loaded && <p role="status" className="sp-note">Loading…</p>}
+      {!mine.loaded && <p role="status" className="sp-note">{t('common.loading')}</p>}
 
       {mine.loaded && shown.map((g) => {
         const info = locks[g.id];
@@ -125,7 +128,7 @@ export function DeclarationsIndexPage() {
                 <li key={row.key}>
                   <Link to={row.to} className="sp-row">
                     <span className="sp-grow"><span className="sp-t1">{row.team}</span><span className="sp-t2">{row.sub}</span></span>
-                    <span className="sp-chip" data-tone={locked ? 'grey' : row.form ? 'good' : 'warn'}>{locked ? 'Locked' : row.form ? 'Sent' : 'Not sent'}</span>
+                    <span className="sp-chip" data-tone={locked ? 'grey' : row.form ? 'good' : 'warn'}>{locked ? t('entries.deadline.locked') : row.form ? t('account.decs.sent') : t('account.decs.notSent')}</span>
                     <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
                   </Link>
                 </li>
@@ -136,22 +139,22 @@ export function DeclarationsIndexPage() {
       })}
 
       {mine.loaded && view === 'all' && others.length > 0 && (
-        <section aria-label="Other clubs">
-          <h2 className="sp-sec">Other clubs<small>Locked, read only</small></h2>
+        <section aria-label={t('account.decs.otherClubs')}>
+          <h2 className="sp-sec">{t('account.decs.otherClubs')}<small>{t('account.decs.readOnly')}</small></h2>
           <ul className="sp-card m-0 list-none p-0">
             {others.map((form) => {
               const isOpen = open.has(form.id);
               return (
                 <li key={form.id}>
                   <button type="button" className="sp-row" aria-expanded={isOpen} onClick={() => toggle(form.id)}>
-                    <span className="sp-grow"><span className="sp-t1">{form.teamName}</span><span className="sp-t2">{[form.competitionName, plural(form.riders.length, 'rider')].join(' · ')}</span></span>
+                    <span className="sp-grow"><span className="sp-t1">{form.teamName}</span><span className="sp-t2">{[form.competitionName, ridersText(form.riders.length)].join(' · ')}</span></span>
                     {isOpen ? <ChevronDown aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} /> : <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />}
                   </button>
                   {isOpen && (
-                    <ol className="m-0 list-none bg-[rgb(var(--mg-subtle))] px-4 py-2 text-[15px]" aria-label={`Riders for ${form.teamName}`}>
+                    <ol className="m-0 list-none bg-[rgb(var(--mg-subtle))] px-4 py-2 text-[15px]" aria-label={t('account.decs.ridersFor', { team: form.teamName })}>
                       {form.riders.map((r) => (
                         <li key={r.id} className="flex items-baseline justify-between gap-2 py-1">
-                          <span className="font-semibold">{r.fullName}{r.isReserve && <span className="sp-t2"> · reserve</span>}</span>
+                          <span className="font-semibold">{r.fullName}{r.isReserve && <span className="sp-t2">{t('account.decs.reserveTag')}</span>}</span>
                           {r.horseName && <span className="sp-t2">{r.horseName}</span>}
                         </li>
                       ))}
@@ -166,8 +169,8 @@ export function DeclarationsIndexPage() {
 
       {mine.loaded && empty && (
         <p className="sp-note">
-          {view === 'current' && current ? `No dec forms for ${current.name} yet.` : 'No dec forms yet. Open a competition to start one.'}
-          {current && <> <Link to={`/competitions/${current.id}/declarations`} className="font-semibold text-[rgb(var(--mg-heading))] underline">Open {current.name}</Link></>}
+          {view === 'current' && current ? t('account.decs.noneFor', { name: current.name }) : t('account.decs.none')}
+          {current && <> <Link to={`/competitions/${current.id}/declarations`} className="font-semibold text-[rgb(var(--mg-heading))] underline">{t('account.decs.open', { name: current.name })}</Link></>}
         </p>
       )}
     </div>

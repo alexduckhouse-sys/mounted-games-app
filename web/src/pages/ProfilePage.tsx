@@ -4,6 +4,7 @@ import { ChevronRight, Plus } from 'lucide-react';
 import { api } from '../api';
 import { signOutDestination } from '../auth/signOutDestination';
 import { useAuth } from '../auth/AuthContext';
+import { useT } from '../i18n/LanguageContext';
 import { EmailConfirmBanner } from '../components/EmailConfirmBanner';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { useMyTeams } from '../hooks/useMyTeams';
@@ -33,6 +34,7 @@ interface SavedRiderRow {
  * under small headings. What shows depends on the role; there is no site admin on this page (it has its own).
  */
 export function ProfilePage() {
+  const t = useT();
   const { user, hasRole, canOrganise, logout } = useAuth();
   const { current } = useCurrentCompetition();
   const { teams } = useNeedsYou();
@@ -92,12 +94,12 @@ export function ProfilePage() {
   const showTeams = !isAdmin || (teams?.length ?? 0) > 0;
   const teamsHere = competitionId == null ? [] : (teams ?? NO_TEAMS).filter((t) => t.competitionId === competitionId);
   const submitted = teamsHere.filter((t) => forms?.some((f) => f.teamId === t.id)).length;
-  const decFormCount = forms && teamsHere.length > 0 ? `${submitted} of ${teamsHere.length}` : undefined;
+  const decFormCount = forms && teamsHere.length > 0 ? t('entries.dec.countOf', { added: submitted, total: teamsHere.length }) : undefined;
   const line = [roleLabel(user.roles), user.clubName].filter(Boolean).join(' · ');
 
   return (
     <div className="skin mx-auto w-full max-w-[560px] pb-4 pt-3">
-      <h1 className="sr-only">Me</h1>
+      <h1 className="sr-only">{t('account.profile.title')}</h1>
       <div className="sp-card">
         <div className="sp-row !min-h-[84px]">
           <div className="sp-ava" aria-hidden="true">{initialsOf(user.fullName, user.email)}</div>
@@ -105,7 +107,7 @@ export function ProfilePage() {
             <h2 className="m-0 truncate font-[family-name:var(--mg-font-display)] text-2xl font-extrabold leading-none text-[rgb(var(--mg-heading))]">{user.fullName || user.email}</h2>
             <span className="sp-t2">{line}</span>
           </div>
-          <Link to="/me/account" className="sp-pill sp-pill-sm" aria-label="Edit your account details">Edit</Link>
+          <Link to="/me/account" className="sp-pill sp-pill-sm" aria-label={t('account.profile.editAria')}>{t('account.profile.edit')}</Link>
         </div>
       </div>
 
@@ -114,12 +116,12 @@ export function ProfilePage() {
       <NeedsYouPanel events={events.upcoming} dueEntries={dueEntries} />
 
       {todays.length > 0 && (
-        <Section title="Your teams today">
+        <Section title={t('account.profile.teamsToday')}>
           {todays.map(({ team, row }) => (
             <Link key={`${team.id}-${row.heatId}`} to={`/competitions/${team.competitionId}/teams/${team.id}`} className="sp-row">
               <span className="sp-grow">
                 <span className="sp-t1">{team.displayName}</span>
-                <span className="sp-t2">{[displaySectionName(team.sectionName), row.sessionName, row.label, row.lane != null ? `Lane ${row.lane}` : '', row.delayMinutes > 0 ? `+${formatDelayDuration(row.delayMinutes)}` : ''].filter(Boolean).join(' · ')}</span>
+                <span className="sp-t2">{[displaySectionName(team.sectionName), row.sessionName, row.label, row.lane != null ? t('account.profile.lane', { n: row.lane }) : '', row.delayMinutes > 0 ? `+${formatDelayDuration(row.delayMinutes)}` : ''].filter(Boolean).join(' · ')}</span>
               </span>
               <span className="sp-num" data-tone={row.delayMinutes > 0 ? 'warn' : undefined}>{heatTime(row)}</span>
               <Chevron />
@@ -129,16 +131,16 @@ export function ProfilePage() {
       )}
 
       {events.today.length > 0 && (canCreate || todays.length === 0) && (
-        <Section title="Today">
+        <Section title={t('account.profile.today')}>
           {events.today.map((event) => (
             <Link key={event.id} to={`/competitions/${event.id}`} className="sp-row">
               <span className="sp-grow">
                 <span className="sp-t1">{event.name}</span>
                 <span className="sp-t2">{event.live
-                  ? `${[event.live.sectionName, event.live.heatLabel, event.live.arenaName].filter(Boolean).join(' · ')} on now`
+                  ? t('account.profile.onNow', { where: [event.live.sectionName, event.live.heatLabel, event.live.arenaName].filter(Boolean).join(' · ') })
                   : event.location ?? ''}</span>
               </span>
-              {event.live && <span className="sp-chip" data-tone="live">LIVE</span>}
+              {event.live && <span className="sp-chip" data-tone="live">{t('account.profile.liveChip')}</span>}
               <Chevron />
             </Link>
           ))}
@@ -146,39 +148,39 @@ export function ProfilePage() {
       )}
 
       {canCreate && (
-        <section aria-label="Organiser">
-          <h2 className="sp-sec">Organiser</h2>
+        <section aria-label={t('account.profile.organiser')}>
+          <h2 className="sp-sec">{t('account.profile.organiser')}</h2>
           <div className="sp-card">
             <Link to={isAdmin ? '/admin/competitions' : '/events'} className="sp-row">
               <span className="sp-grow">
-                <span className="sp-t1">Your competitions</span>
-                {comingUp > 0 && <span className="sp-t2">{comingUp} coming up</span>}
+                <span className="sp-t1">{t('account.profile.yourCompetitions')}</span>
+                {comingUp > 0 && <span className="sp-t2">{t('account.profile.comingUp', { count: comingUp })}</span>}
               </span>
               <Chevron />
             </Link>
             {isAdmin && (
               <Link to="/admin" className="sp-row">
-                <span className="sp-grow"><span className="sp-t1">Site admin</span><span className="sp-t2">Users, trainer requests, email</span></span>
+                <span className="sp-grow"><span className="sp-t1">{t('account.profile.siteAdmin')}</span><span className="sp-t2">{t('account.profile.siteAdminSub')}</span></span>
                 <Chevron />
               </Link>
             )}
-            <Link to="/admin/competitions/new" className="sp-add sp-add-row"><Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />Create a competition</Link>
+            <Link to="/admin/competitions/new" className="sp-add sp-add-row"><Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />{t('account.profile.create')}</Link>
           </div>
         </section>
       )}
 
       {showClub && (
-        <section aria-label="My club">
-          <h2 className="sp-sec">My club{user.clubName && <small>{user.clubName}</small>}</h2>
+        <section aria-label={t('account.profile.myClub')}>
+          <h2 className="sp-sec">{t('account.profile.myClub')}{user.clubName && <small>{user.clubName}</small>}</h2>
           <div className="sp-card">
-            {showTeams && <ListRow to="/teams" label="Teams" value={teams ? String(teams.length) : undefined} />}
+            {showTeams && <ListRow to="/teams" label={t('account.profile.teams')} value={teams ? String(teams.length) : undefined} />}
             {clubId != null && (
               <>
-                <ListRow label="Saved riders" value={savedRiders != null ? String(savedRiders.length) : undefined} expanded={ridersOpen} onClick={() => setRidersOpen((open) => !open)} />
+                <ListRow label={t('account.profile.savedRiders')} value={savedRiders != null ? String(savedRiders.length) : undefined} expanded={ridersOpen} onClick={() => setRidersOpen((open) => !open)} />
                 {ridersOpen && (
                   <div className="flex flex-col gap-2 bg-[rgb(var(--mg-subtle))] px-4 py-3 text-sm">
                     {savedRiders && savedRiders.length > 0 ? (
-                      <ul className="m-0 flex list-none flex-col gap-1.5 p-0" aria-label="Saved riders list">
+                      <ul className="m-0 flex list-none flex-col gap-1.5 p-0" aria-label={t('account.profile.savedRidersList')}>
                         {savedRiders.map((rider) => {
                           const pony = rider.ponyName ?? rider.horseName;
                           return (
@@ -190,31 +192,31 @@ export function ProfilePage() {
                         })}
                       </ul>
                     ) : (
-                      <p className="m-0 text-[rgb(var(--mg-muted))]">No saved riders yet.</p>
+                      <p className="m-0 text-[rgb(var(--mg-muted))]">{t('account.profile.noSavedRiders')}</p>
                     )}
-                    <Link to="/declarations" className="font-semibold text-[rgb(var(--mg-heading))] underline">Manage on dec forms</Link>
+                    <Link to="/declarations" className="font-semibold text-[rgb(var(--mg-heading))] underline">{t('account.profile.manageOnDec')}</Link>
                   </div>
                 )}
               </>
             )}
-            <ListRow to="/declarations" label="Dec forms" value={decFormCount} />
-            {runsClub && <ListRow to="/me/members" label="Members" />}
-            {runsClub && <ListRow to="/me/payouts" label="Payouts" />}
+            <ListRow to="/declarations" label={t('account.profile.decForms')} value={decFormCount} />
+            {runsClub && <ListRow to="/me/members" label={t('account.profile.members')} />}
+            {runsClub && <ListRow to="/me/payouts" label={t('account.profile.payouts')} />}
           </div>
         </section>
       )}
 
-      <Section title="Shop">
-        <ListRow to="/me/catalogue" label="Things I sell" value={itemCount != null ? String(itemCount) : undefined} />
-        <ListRow to="/me/orders" label="Orders and sales" />
+      <Section title={t('account.profile.shop')}>
+        <ListRow to="/me/catalogue" label={t('account.profile.thingsISell')} value={itemCount != null ? String(itemCount) : undefined} />
+        <ListRow to="/me/orders" label={t('account.profile.orders')} />
       </Section>
 
-      <Section title="Account">
-        {!isAdmin && <ListRow to="/me/signups" label="My entries" value={entries ? String(entries.length) : undefined} />}
-        <ListRow to="/me/account" label="My account" />
-        <ListRow to="/settings" label="Settings" sub="Notifications, theme, bottom bar" />
+      <Section title={t('account.profile.account')}>
+        {!isAdmin && <ListRow to="/me/signups" label={t('account.profile.myEntries')} value={entries ? String(entries.length) : undefined} />}
+        <ListRow to="/me/account" label={t('account.profile.myAccount')} />
+        <ListRow to="/settings" label={t('account.profile.settings')} sub={t('account.profile.settingsSub')} />
         <button type="button" className="sp-row" onClick={() => { logout(); navigate(signOutDestination(), { replace: true }); }}>
-          <span className="sp-grow"><span className="sp-t1">Sign out</span></span>
+          <span className="sp-grow"><span className="sp-t1">{t('common.signOut')}</span></span>
         </button>
       </Section>
     </div>

@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import { CircleAlert } from 'lucide-react';
+import { useLanguage } from '../i18n/LanguageContext';
 import { EMAIL_OPT_IN_TEXT, looksLikeEmail } from '../lib/emailOptIn';
 
 export interface EntryEmail { email: string; optIn: boolean }
@@ -13,17 +14,18 @@ export function EntryEmailFields({ value, onChange }: {
   onChange: (next: EntryEmail) => void;
 }) {
   const id = useId();
+  const { lang, t } = useLanguage();
   const trimmed = value.email.trim();
   const invalid = trimmed.length > 0 && !looksLikeEmail(trimmed);
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="rf-fld">Your email (optional)
+      <label className="rf-fld">{t('entries.email.label')}
         <input
           type="email"
           inputMode="email"
           autoComplete="email"
           maxLength={254}
-          placeholder="Your email (optional)"
+          placeholder={t('entries.email.label')}
           value={value.email}
           aria-invalid={invalid}
           aria-describedby={`${id}-why`}
@@ -34,9 +36,9 @@ export function EntryEmailFields({ value, onChange }: {
         />
       </label>
       <p id={`${id}-why`} className="m-0 text-xs text-slate-500 dark:text-slate-300">
-        We'll send you one email to confirm your entry. It goes to you, the adult entering, and never to a rider.
+        {t('entries.email.why')}
       </p>
-      {invalid && <p role="alert" className="mg-field-msg m-0 text-xs font-semibold text-[rgb(var(--mg-elim))]"><CircleAlert aria-hidden="true" />That email address doesn’t look right.</p>}
+      {invalid && <p role="alert" className="mg-field-msg m-0 text-xs font-semibold text-[rgb(var(--mg-elim))]"><CircleAlert aria-hidden="true" />{t('entries.form.emailInvalid')}</p>}
       <label className="flex items-start gap-2 text-xs">
         <input
           type="checkbox"
@@ -47,6 +49,7 @@ export function EntryEmailFields({ value, onChange }: {
         />
         <span>{EMAIL_OPT_IN_TEXT}</span>
       </label>
+      {lang !== 'en' && <p className="m-0 text-xs text-slate-500 dark:text-slate-300">{t('entries.consent.glossLead')} {t('entries.email.optInGloss')}</p>}
     </div>
   );
 }

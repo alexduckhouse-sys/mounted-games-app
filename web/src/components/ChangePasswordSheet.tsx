@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { api } from '../api';
+import { useT } from '../i18n/LanguageContext';
 import { apiErrorMessage } from '../lib/apiError';
 import { passwordMeetsRules } from '../lib/passwordRules';
 import { Notice } from './Notice';
@@ -8,6 +9,7 @@ import { Sheet } from './Sheet';
 
 /** Asks for the current password and a new one, then changes the signed-in person's own password. */
 export function ChangePasswordSheet({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
+  const t = useT();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [busy, setBusy] = useState(false);
@@ -23,28 +25,28 @@ export function ChangePasswordSheet({ onClose, onChanged }: { onClose: () => voi
       await api.post('/auth/change-password', { currentPassword: current, newPassword: next });
       onChanged();
     } catch (e) {
-      setError(apiErrorMessage(e, 'Couldn’t change your password. Check your signal and try again.'));
+      setError(apiErrorMessage(e, t('account.password.failed')));
       setBusy(false);
     }
   }
 
   return (
-    <Sheet title="Change password" onClose={onClose} dismissible={!busy} initialFocus="#change-password-current">
+    <Sheet title={t('account.password.title')} onClose={onClose} dismissible={!busy} initialFocus="#change-password-current">
       {({ close }) => (
         <form onSubmit={submit} className="kit-sheet-inner">
           <label className="kit-sheet-field" htmlFor="change-password-current">
-            Current password
+            {t('account.password.current')}
             <input id="change-password-current" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
           </label>
           <label className="kit-sheet-field" htmlFor="change-password-new">
-            New password
+            {t('account.password.new')}
             <input id="change-password-new" type="password" autoComplete="new-password" aria-describedby="change-password-rules" value={next} onChange={(e) => setNext(e.target.value)} />
           </label>
           <PasswordChecklist password={next} id="change-password-rules" />
           {error && <Notice>{error}</Notice>}
           <div className="kit-acts">
-            <button type="submit" className="kit-pill kit-pill-fill" disabled={!ready || busy}>{busy ? 'Changing…' : 'Change password'}</button>
-            <button type="button" className="kit-pill" onClick={() => close()} disabled={busy}>Cancel</button>
+            <button type="submit" className="kit-pill kit-pill-fill" disabled={!ready || busy}>{busy ? t('account.password.changing') : t('account.password.title')}</button>
+            <button type="button" className="kit-pill" onClick={() => close()} disabled={busy}>{t('common.cancel')}</button>
           </div>
         </form>
       )}

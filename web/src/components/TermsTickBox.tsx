@@ -1,5 +1,6 @@
 import { useId } from 'react';
-import { TERMS_PLACEHOLDER, TERMS_PLACEHOLDER_LABEL, TERMS_TICK, TERMS_TICK_HELP } from '../lib/termsTick';
+import { useLanguage } from '../i18n/LanguageContext';
+import { TERMS_TICK_HELP } from '../lib/termsTick';
 
 interface Props {
   /** The organiser's own terms; empty or missing shows the labelled placeholder instead. */
@@ -11,6 +12,7 @@ interface Props {
 /** The one required tick on the sign-up form: parental consent plus the event terms, readable beside it. */
 export function TermsTickBox({ termsText, checked, onChange }: Props) {
   const consentId = useId();
+  const { lang, t } = useLanguage();
   const terms = termsText?.trim() ?? '';
   return (
     <div className="flex flex-col gap-2">
@@ -22,21 +24,22 @@ export function TermsTickBox({ termsText, checked, onChange }: Props) {
           checked={checked}
           onChange={(event) => onChange(event.target.checked)}
         />
-        <span>{TERMS_TICK}</span>
+        <span>{t('entries.terms.agree')}</span>
       </label>
       <details className="text-sm">
         <summary className="flex min-h-11 cursor-pointer items-center font-semibold">
-          {terms ? 'Read the event terms' : 'Read the event terms (placeholder)'}
+          {terms ? t('entries.terms.read') : t('entries.terms.readPlaceholder')}
         </summary>
         {terms ? (
           <p className="m-0 whitespace-pre-wrap break-words">{terms}</p>
         ) : (
           <p className="m-0">
-            <strong>{TERMS_PLACEHOLDER_LABEL}.</strong> {TERMS_PLACEHOLDER}
+            <strong>{t('entries.terms.placeholderLabel')}.</strong> {t('entries.terms.placeholder')}
           </p>
         )}
       </details>
       <p id={consentId} className="rf-note !p-0">{TERMS_TICK_HELP}</p>
+      {lang !== 'en' && <p className="rf-note !p-0">{t('entries.consent.glossLead')} {t('entries.terms.helpGloss')}</p>}
     </div>
   );
 }
