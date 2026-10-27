@@ -84,10 +84,17 @@ export const account = {
   'account.signIns.remove': 'Remove',
   'account.signIns.removeAria': 'Remove {name} sign-in',
   'account.signIns.removeTitle': 'Remove {name} sign-in?',
-  'account.signIns.removeMessage': 'You won’t be able to sign in with {name} any more. You can add it again later.',
+  'account.signIns.removeMessage': 'You won’t be able to sign in with {name} any more. We’ll sign you out on your other devices.',
   'account.signIns.added': '{name} added',
   'account.signIns.removed': '{name} removed',
   'account.signIns.failed': 'Couldn’t change that. Check your signal and try again.',
+  'account.signIns.addTitle': 'Add {name} sign-in?',
+  'account.signIns.addMessage': 'You’ll be able to sign in with {name} too. We’ll sign you out on your other devices.',
+  'account.signIns.addButton': 'Add',
+  'account.signIns.adding': 'Adding…',
+  'account.signIns.removing': 'Removing…',
+  'account.signIns.password': 'Your password',
+  'account.signIns.confirmWithProvider': 'Your account has no password, so sign in again with one you already use to confirm it’s you.',
 
   // My entries
   'account.signups.title': 'My entries',

@@ -1,10 +1,9 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { loadApple, loadGoogle, makeNonce, randomState, type AppleAuthApi, type GoogleCredentialResponse, type GoogleIdApi } from '../auth/socialSdk';
 import type { LinkedSignInsState } from '../hooks/useLinkedSignIns';
-import { autoConfirm } from '../test/confirm';
 import type { LinkedSignIns as Info } from '../types';
 import { en } from '../i18n/en';
 import { LinkedSignIns } from './LinkedSignIns';
@@ -64,49 +63,93 @@ describe('LinkedSignIns', () => {
     expect(screen.getByText(en['account.signIns.onlyWayInNote'])).toBeInTheDocument();
   });
 
-  it('adds a provider and says so, or shows why not', async () => {
-    const connect = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce({ response: { status: 409, data: { message: 'That Google account is already linked to a different Mounted Games account.' } } });
+  const lastGoogleCallback = () => google.initialize.mock.calls.at(-1)![0].callback as (r: GoogleCredentialResponse) => void;
+  const sheet = (name: string) => within(screen.getByRole('dialog', { name }));
+
+  it('adds a provider once the password confirms it’s the owner, and says so, or shows why not', async () => {
+    const user = userEvent.setup();
+    const connect = vi.fn().mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce({ response: { status: 409, data: { message: 'That Google account is already linked to a different Mounted Games account.' } } });
     const { onChanged } = mount({ hasPassword: true, logins: [] }, { connect });
     await waitFor(() => expect(google.initialize).toHaveBeenCalled());
-    const callback = google.initialize.mock.calls.at(-1)![0].callback as (r: GoogleCredentialResponse) => void;
 
-    await act(async () => { callback({ credential: 'google-token' }); });
-    expect(connect).toHaveBeenCalledWith({ provider: 'google', idToken: 'google-token', nonce: 'raw-nonce' });
+    // Google's sign-in alone adds nothing: it opens the sheet, which wants the password.
+    await act(async () => { lastGoogleCallback()({ credential: 'google-token' }); });
+    const add = sheet('Add Google sign-in?');
+    expect(add.getByText(en['account.signIns.addMessage'].replace('{name}', 'Google'))).toBeInTheDocument();
+    expect(connect).not.toHaveBeenCalled();
+    expect(add.getByRole('button', { name: 'Add' })).toBeDisabled();
+    await user.type(add.getByLabelText('Your password'), 'Passw0rd!x');
+    await user.click(add.getByRole('button', { name: 'Add' }));
+    expect(connect).toHaveBeenCalledWith({ provider: 'google', idToken: 'google-token', nonce: 'raw-nonce' }, { password: 'Passw0rd!x' });
     expect(onChanged).toHaveBeenCalledWith('Google added');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
-    await act(async () => { callback({ credential: 'someone-elses' }); });
-    expect(await screen.findByRole('alert')).toHaveTextContent('already linked to a different');
+    // A refusal shows in the sheet, which stays open; Cancel closes it.
+    await waitFor(() => expect(google.initialize).toHaveBeenCalledTimes(2));
+    await act(async () => { lastGoogleCallback()({ credential: 'someone-elses' }); });
+    const again = sheet('Add Google sign-in?');
+    await user.type(again.getByLabelText('Your password'), 'Passw0rd!x');
+    await user.click(again.getByRole('button', { name: 'Add' }));
+    expect(await again.findByRole('alert')).toHaveTextContent('already linked to a different');
+    await user.click(again.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
     // The provider's own failure shows too.
-    await act(async () => { callback({}); });
+    await waitFor(() => expect(google.initialize).toHaveBeenCalledTimes(3));
+    await act(async () => { lastGoogleCallback()({}); });
     expect(screen.getByRole('alert')).toHaveTextContent('Google sign-in didn’t work');
   });
 
-  it('asks before removing, then removes and says so, or shows why not', async () => {
+  it('removes once the password confirms it’s the owner, and says so, or shows why not', async () => {
     const user = userEvent.setup();
     const remove = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('offline'));
     const { onChanged } = mount({ hasPassword: true, logins: [{ provider: 'google', name: 'Google' }, { provider: 'apple', name: 'Apple' }] }, { remove });
 
-    const asked = autoConfirm(false);
     await user.click(screen.getByRole('button', { name: 'Remove Google sign-in' }));
-    await waitFor(() => expect(asked).toHaveBeenCalledWith(en['account.signIns.removeMessage'].replace('{name}', 'Google')));
+    let asked = sheet('Remove Google sign-in?');
+    expect(asked.getByText(en['account.signIns.removeMessage'].replace('{name}', 'Google'))).toBeInTheDocument();
+    await user.click(asked.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(remove).not.toHaveBeenCalled();
 
-    autoConfirm(true);
     await user.click(screen.getByRole('button', { name: 'Remove Google sign-in' }));
-    await waitFor(() => expect(remove).toHaveBeenCalledWith('google'));
+    asked = sheet('Remove Google sign-in?');
+    await user.type(asked.getByLabelText('Your password'), 'Passw0rd!x');
+    await user.click(asked.getByRole('button', { name: 'Remove' }));
+    expect(remove).toHaveBeenCalledWith('google', { password: 'Passw0rd!x' });
     expect(onChanged).toHaveBeenCalledWith('Google removed');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
     await user.click(screen.getByRole('button', { name: 'Remove Apple sign-in' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent(en['account.signIns.failed']);
+    asked = sheet('Remove Apple sign-in?');
+    await user.type(asked.getByLabelText('Your password'), 'Passw0rd!x');
+    await user.click(asked.getByRole('button', { name: 'Remove' }));
+    expect(await asked.findByRole('alert')).toHaveTextContent(en['account.signIns.failed']);
+  });
+
+  it('asks an account with no password to confirm with a fresh sign-in from a provider it already has', async () => {
+    const remove = vi.fn().mockResolvedValue(undefined);
+    const { onChanged } = mount({ hasPassword: false, logins: [{ provider: 'google', name: 'Google' }, { provider: 'apple', name: 'Apple' }] }, { remove });
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Apple sign-in' }));
+    const asked = sheet('Remove Apple sign-in?');
+    expect(asked.getByText(en['account.signIns.confirmWithProvider'])).toBeInTheDocument();
+    expect(asked.queryByLabelText('Your password')).not.toBeInTheDocument();
+    await waitFor(() => expect(google.initialize).toHaveBeenCalled());
+
+    await act(async () => { lastGoogleCallback()({ credential: 'confirm-token' }); });
+    expect(remove).toHaveBeenCalledWith('apple', { provider: 'google', idToken: 'confirm-token', nonce: 'raw-nonce' });
+    expect(onChanged).toHaveBeenCalledWith('Apple removed');
   });
 
   it('names a provider from the list it was linked under when it is no longer switched on', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: [providers[0]] });
     const user = userEvent.setup();
     const { onChanged } = mount({ hasPassword: true, logins: [{ provider: 'apple', name: 'Apple' }] });
-    autoConfirm(true);
     await user.click(screen.getByRole('button', { name: 'Remove Apple sign-in' }));
+    const asked = sheet('Remove Apple sign-in?');
+    await user.type(asked.getByLabelText('Your password'), 'Passw0rd!x');
+    await user.click(asked.getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(onChanged).toHaveBeenCalledWith('Apple removed'));
   });
 });

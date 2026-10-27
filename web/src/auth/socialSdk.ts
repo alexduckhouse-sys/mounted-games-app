@@ -1,8 +1,9 @@
 /**
- * The two sign-in providers' own scripts (Google Identity Services, Sign in with Apple JS), loaded only when the sign-in
- * page shows their buttons, and the nonce we hand them.
+ * The sign-in providers' own scripts (Google Identity Services, Sign in with Apple JS, Facebook's JavaScript SDK), and the
+ * nonce we hand Google and Apple. Each loads only when a page shows its button: sign-in and sign-up, and on My account to
+ * add a way to sign in or to confirm it's you (adding or removing one, or deleting the account).
  *
- * Both script addresses are allowed by exact path in the Content-Security-Policy, in `web/vercel.json` and
+ * Every script address is allowed by exact path in the Content-Security-Policy, in `web/vercel.json` and
  * `api/Security/SecurityHeadersMiddleware.cs`. Change all three together.
  */
 export const GOOGLE_SCRIPT = 'https://accounts.google.com/gsi/client';
@@ -73,7 +74,8 @@ export interface FacebookApi {
     localStorage: boolean;
     fedCM: boolean;
   }): void;
-  login(callback: (response: FacebookLoginResponse) => void, options: { scope: string }): void;
+  /** `auth_type: 'reauthenticate'` makes Facebook ask for the password again, for confirming it's the owner. */
+  login(callback: (response: FacebookLoginResponse) => void, options: { scope: string; auth_type?: 'reauthenticate' }): void;
 }
 
 declare global {

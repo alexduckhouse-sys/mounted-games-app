@@ -18,13 +18,14 @@ import '../components/sitePages.css';
 /** The signed-in person's own details: name (editable in place), email, club, role, password, ways to sign in and deleting the account. */
 export function AccountPage() {
   const t = useT();
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, adoptSession } = useAuth();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [passwordOpen, setPasswordOpen] = useState(false);
-  const signIns = useLinkedSignIns();
+  // Adding or removing a sign-in ends every other session; this device keeps the fresh one the API sends back.
+  const signIns = useLinkedSignIns(adoptSession);
   const toast = useToast();
   usePageHeader({ title: t('account.account.title'), plain: true, backTo: '/me', backLabel: t('account.backToMe') });
   if (!user) return null;

@@ -170,7 +170,8 @@ function PrivacyPolicy() {
 
 /**
  * How to remove what a sign-in provider gave us. Also its own address, `/data-deletion`, which Facebook asks for and which
- * its deletion callback (`POST /api/auth/facebook/data-deletion`) links to with a confirmation code.
+ * its deletion callback (`POST /api/auth/facebook/data-deletion`) links to with a confirmation code. No record of a code
+ * is kept, so the page never says what happened to a particular request, only what happens to every one.
  */
 function DataDeletion() {
   const location = useLocation();
@@ -186,19 +187,22 @@ function DataDeletion() {
       <h3 className="mg-h2">Removing Google, Apple or Facebook</h3>
       {shownCode && (
         <p className="mg-lede">
-          <strong>Request {shownCode}:</strong> we’ve removed the link between your Facebook account and Mounted Games.
+          <strong>Your reference is {shownCode}.</strong> We deal with each request from Facebook as soon as it arrives,
+          as set out below. Quote this reference if you contact us about it.
         </p>
       )}
       <p className="mg-lede">
         To stop signing in with one of them, go to{' '}
         <Link to="/me/account" className="font-semibold text-[rgb(var(--mg-heading))] underline">My account</Link>{' '}
-        and choose Remove under “Ways to sign in”. We then delete the ID it uses for you. If it’s your only way to sign
-        in, set a password first, or delete your account instead.
+        and choose Remove under “Ways to sign in”. You’ll be asked for your password, or to sign in again if you don’t
+        have one. We then delete the ID it uses for you and email you to say so. If it’s your only way to sign in, you
+        can’t remove it, but you can delete your account.
       </p>
       <p className="mg-lede">
-        If you remove Mounted Games in your Facebook settings, Facebook tells us and we delete that link straight away.
-        Your Mounted Games account stays, with the name and email address on it. To remove those too, delete your
-        account from My account first, as described above, or email us.
+        If you remove Mounted Games in your Facebook settings, Facebook tells us. If Facebook was your only way to sign in
+        to Mounted Games, we delete your account straight away, as if you’d deleted it yourself (see above). Otherwise we
+        delete the link to Facebook, and your account stays, with your name and email address, for you to sign in the
+        other way. To remove those too, delete your account from My account, or email us.
       </p>
     </section>
   );

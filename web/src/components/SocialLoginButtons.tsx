@@ -28,6 +28,11 @@ export interface SocialLoginButtonsProps {
   divider?: boolean;
   /** "Sign in with …" (default), or "Continue with …" when adding a provider to an account. Both are the providers' own wording. */
   label?: 'signin' | 'continue';
+  /**
+   * Confirming it's the owner rather than signing in: Facebook is asked to check the person's password again, so the
+   * token it gives back is fresh (Google and Apple tokens are always fresh, with their own nonce).
+   */
+  confirm?: boolean;
 }
 
 /**
@@ -157,7 +162,7 @@ function FacebookLogo() {
  * only its two scripts. `FB.login` runs straight from the tap so the browser lets the pop-up open. Facebook gives an
  * access token (no ID token and no nonce); the API checks it with Facebook.
  */
-function FacebookButton({ clientId, disabled, onCredential }: ButtonProps) {
+function FacebookButton({ clientId, disabled, confirm, onCredential }: ButtonProps) {
   const t = useT();
   const sdk = useRef<FacebookApi | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'failed'>('loading');
@@ -179,7 +184,7 @@ function FacebookButton({ clientId, disabled, onCredential }: ButtonProps) {
       const token = response.authResponse?.accessToken;
       // No token means the person closed Facebook's window or said no: a change of mind, not a fault.
       if (token) void onCredential({ provider: 'facebook', idToken: token });
-    }, { scope: 'public_profile,email' });
+    }, confirm ? { scope: 'public_profile,email', auth_type: 'reauthenticate' } : { scope: 'public_profile,email' });
   }
 
   if (status === 'failed') {

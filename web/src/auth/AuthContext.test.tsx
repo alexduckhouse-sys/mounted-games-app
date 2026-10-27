@@ -139,6 +139,18 @@ describe('signing in', () => {
     expect(result.current.token).toBe('tok-2');
   });
 
+  it('adopts a fresh sign-in handed to it, and ignores anything that isn’t one', async () => {
+    signIn();
+    const { result } = mount();
+    act(() => result.current.adoptSession({ ...stored(), token: 'tok-9' } as never));
+    expect(result.current.token).toBe('tok-9');
+    expect(JSON.parse(localStorage.getItem('mg.auth') ?? '{}').token).toBe('tok-9');
+    for (const odd of [null, { token: 'tok-10' }, { user: stored().user }]) {
+      act(() => result.current.adoptSession(odd as never));
+      expect(result.current.token).toBe('tok-9');
+    }
+  });
+
   it('clears loading when an invitation is refused', async () => {
     post.mockRejectedValue(new Error('gone'));
     const { result } = mount();
@@ -189,12 +201,12 @@ describe('signing in', () => {
     expect(result.current.user?.email).toBe('ann@example.com');
     expect(result.current.trainerNotice).toBe('requested');
 
-    // A provider that gave no address sends the one typed in; a member sign-in clears the notice.
+    // A member sign-in clears the notice.
     post.mockResolvedValueOnce({ data: stored(['Member']) });
     await act(async () => {
-      await result.current.completeExternalSignup('ticket-3', { fullName: 'Ann', clubName: 'Ashdown', role: 'Member', email: 'ann@example.com' });
+      await result.current.completeExternalSignup('ticket-3', { fullName: 'Ann', clubName: 'Ashdown', role: 'Member' });
     });
-    expect(post).toHaveBeenLastCalledWith('/auth/external/signup', { ticket: 'ticket-3', fullName: 'Ann', clubName: 'Ashdown', role: 'Member', email: 'ann@example.com' });
+    expect(post).toHaveBeenLastCalledWith('/auth/external/signup', { ticket: 'ticket-3', fullName: 'Ann', clubName: 'Ashdown', role: 'Member' });
     expect(result.current.trainerNotice).toBeNull();
 
     post.mockResolvedValueOnce({ data: { needsSignup: false, auth: stored(['Member']) } });

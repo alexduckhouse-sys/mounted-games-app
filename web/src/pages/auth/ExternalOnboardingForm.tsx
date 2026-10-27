@@ -3,7 +3,6 @@ import { ArrowLeft, Plus } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { Notice } from '../../components/Notice';
-import { isRealisticEmail } from '../../lib/emailCheck';
 import { externalErrorMessage } from '../../lib/externalAuthError';
 import type { MessageKey } from '../../i18n/en';
 import { useT } from '../../i18n/LanguageContext';
@@ -25,7 +24,7 @@ const SIGNUP_ROLE_CHOICES: {
 
 /**
  * A provider sign-in that found no account yet. The token has been used; the ten-minute sign-up ticket finishes the
- * account with the club and role. `email` is empty when the provider gave none, and the form asks for one.
+ * account with the club and role. `email` is the provider's: a sign-in that didn't share one gets no ticket.
  */
 export interface PendingExternalSignup {
   provider: string;
@@ -54,8 +53,6 @@ export function ExternalOnboardingForm({
 }: ExternalOnboardingFormProps) {
   const t = useT();
   const { completeExternalSignup, loading } = useAuth();
-  const askEmail = pending.email === '';
-  const [email, setEmail] = useState('');
   const [name, setName] = useState(pending.suggestedName);
   const [club, setClub] = useState('');
   const [clubPicked, setClubPicked] = useState(false);
@@ -79,7 +76,7 @@ export function ExternalOnboardingForm({
   }, [clubs, typed]);
   const exact = clubs.some((c) => c.name.toLowerCase() === typed.toLowerCase());
   const chosenRole = SIGNUP_ROLE_CHOICES.find((r) => r.id === role) ?? null;
-  const ready = name.trim() !== '' && typed !== '' && clubPicked && chosenRole !== null && (!askEmail || isRealisticEmail(email));
+  const ready = name.trim() !== '' && typed !== '' && clubPicked && chosenRole !== null;
   const approvedBy = chosenRole?.byAdmins ? t('auth.signup.approvedByAdmins') : t('auth.signup.approvedByManager', { club: typed });
 
   function pickClub(value: string) {
@@ -97,7 +94,6 @@ export function ExternalOnboardingForm({
         fullName: name.trim(),
         clubName: typed,
         role: chosenRole.api,
-        ...(askEmail ? { email: email.trim() } : {}),
       });
       onComplete({ club: typed, role: chosenRole.id, emailConfirmed: profile.emailConfirmed !== false });
     } catch (err: unknown) {
@@ -129,22 +125,6 @@ export function ExternalOnboardingForm({
           </div>
         )}
       </Field>
-
-      {askEmail && (
-        <Field label={t('auth.field.email')}>
-          {({ id }) => (
-            <div className="mg-field">
-              <input
-                id={id}
-                type="email"
-                value={email}
-                autoComplete="email"
-                onChange={(e) => { setEmail(e.target.value); setError(null); }}
-              />
-            </div>
-          )}
-        </Field>
-      )}
 
       <div className="flex flex-col gap-1.5">
         <Field label={t('auth.signup.club')}>

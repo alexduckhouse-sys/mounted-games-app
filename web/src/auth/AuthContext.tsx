@@ -13,13 +13,11 @@ export interface ExternalAuthOptions {
   providerName?: string;
 }
 
-/** What a new Google or Apple account needs on top of its sign-up ticket. */
+/** What a new Google, Apple or Facebook account needs on top of its sign-up ticket. The email is always the provider's. */
 export interface ExternalSignupDetails {
   fullName: string;
   clubName: string;
   role: string;
-  /** Only when the provider gave no address. */
-  email?: string;
 }
 
 interface AuthContextValue {
@@ -41,6 +39,11 @@ interface AuthContextValue {
    * so the API sends back a fresh sign-in for this device, which replaces the old one here. Rejects as the request does.
    */
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  /**
+   * Swaps this device's sign-in for a fresh one the API sent after ending every other session (adding or removing a way
+   * to sign in). Ignores anything that isn't a sign-in.
+   */
+  adoptSession: (auth: AuthResponse) => void;
   logout: () => void;
   /** Re-reads the signed-in person's profile, e.g. after they confirm their email address. */
   refreshUser: () => Promise<void>;
@@ -213,7 +216,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         fullName: details.fullName,
         clubName: details.clubName,
         role: details.role,
-        ...(details.email ? { email: details.email } : {}),
       });
       startSession(data);
       return data.user;
@@ -249,14 +251,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
-    const { data } = await api.post<unknown>('/auth/change-password', { currentPassword, newPassword });
-    // An older API answered 204 with no body; this device then keeps the sign-in it has.
-    const fresh = data as Partial<StoredAuth> | null | undefined;
+  const adoptSession = useCallback((next: unknown) => {
+    const fresh = next as Partial<StoredAuth> | null | undefined;
     if (!fresh || typeof fresh.token !== 'string' || !fresh.user) return;
     writeStoredAuth(fresh as StoredAuth);
     setAuth(fresh as StoredAuth);
   }, []);
+
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    const { data } = await api.post<unknown>('/auth/change-password', { currentPassword, newPassword });
+    // An older API answered 204 with no body; this device then keeps the sign-in it has.
+    adoptSession(data);
+  }, [adoptSession]);
 
   const refreshUser = useCallback(async () => {
     try {
@@ -314,6 +320,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signupTrainer,
     acceptInvite,
     changePassword,
+    adoptSession,
     logout,
     refreshUser,
     signedOut,

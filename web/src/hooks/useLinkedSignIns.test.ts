@@ -48,27 +48,40 @@ describe('useLinkedSignIns', () => {
     expect(gone.result.current.info).toBeNull();
   });
 
-  it('connects with the provider’s token and raw nonce, and removes by provider', async () => {
-    const { result } = renderHook(() => useLinkedSignIns());
+  it('connects and removes with proof it’s the owner, and keeps the fresh sign-in that comes back', async () => {
+    const onSession = vi.fn();
+    const { result } = renderHook(() => useLinkedSignIns(onSession));
     await waitFor(() => expect(result.current.info).toEqual(withGoogle));
 
-    post.mockResolvedValueOnce({ data: { hasPassword: true, logins: [...withGoogle.logins, { provider: 'apple', name: 'Apple' }] } });
-    await act(async () => { await result.current.connect({ provider: 'apple', idToken: 'apple-token', nonce: 'raw' }); });
-    expect(post).toHaveBeenCalledWith('/auth/logins', { provider: 'apple', idToken: 'apple-token', nonce: 'raw' });
-    expect(result.current.info?.logins.map((l) => l.provider)).toEqual(['google', 'apple']);
+    const auth = { token: 'fresh', expiresAt: '2026-10-28T00:00:00Z', user: { id: 'u1' } };
+    post.mockResolvedValueOnce({ data: { hasPassword: true, logins: [...withGoogle.logins, { provider: 'apple', name: 'Apple' }], auth } });
+    await act(async () => { await result.current.connect({ provider: 'apple', idToken: 'apple-token', nonce: 'raw' }, { password: 'pw' }); });
+    expect(post).toHaveBeenCalledWith('/auth/logins', { provider: 'apple', idToken: 'apple-token', nonce: 'raw', confirm: { password: 'pw' } });
+    expect(result.current.info).toEqual({ hasPassword: true, logins: [...withGoogle.logins, { provider: 'apple', name: 'Apple' }] });
+    expect(onSession).toHaveBeenCalledWith(auth);
 
-    del.mockResolvedValueOnce({ data: none });
-    await act(async () => { await result.current.remove('google'); });
-    expect(del).toHaveBeenCalledWith('/auth/logins/google');
+    del.mockResolvedValueOnce({ data: { ...none, auth: null } });
+    await act(async () => { await result.current.remove('google', { provider: 'apple', idToken: 'a2', nonce: 'n2' }); });
+    expect(del).toHaveBeenCalledWith('/auth/logins/google', { data: { provider: 'apple', idToken: 'a2', nonce: 'n2' } });
     expect(result.current.info).toEqual(none);
+    // No fresh sign-in in that reply, so nothing to keep.
+    expect(onSession).toHaveBeenCalledTimes(1);
 
     // An odd reply leaves things as they were; a refusal is thrown for the page to show.
     post.mockResolvedValueOnce({ data: 'nope' });
-    await act(async () => { await result.current.connect({ provider: 'google', idToken: 't', nonce: 'n' }); });
+    await act(async () => { await result.current.connect({ provider: 'google', idToken: 't', nonce: 'n' }, { password: 'pw' }); });
     del.mockResolvedValueOnce({ data: 'nope' });
-    await act(async () => { await result.current.remove('apple'); });
+    await act(async () => { await result.current.remove('apple', { password: 'pw' }); });
     expect(result.current.info).toEqual(none);
     del.mockRejectedValueOnce({ response: { status: 409, data: { message: 'only way in' } } });
-    await act(async () => { await expect(result.current.remove('apple')).rejects.toEqual({ response: { status: 409, data: { message: 'only way in' } } }); });
+    await act(async () => { await expect(result.current.remove('apple', { password: 'pw' })).rejects.toEqual({ response: { status: 409, data: { message: 'only way in' } } }); });
+  });
+
+  it('works without anyone to hand a fresh sign-in to', async () => {
+    const { result } = renderHook(() => useLinkedSignIns());
+    await waitFor(() => expect(result.current.info).toEqual(withGoogle));
+    post.mockResolvedValueOnce({ data: { ...none, auth: { token: 'fresh', expiresAt: 'x', user: { id: 'u1' } } } });
+    await act(async () => { await result.current.connect({ provider: 'apple', idToken: 't' }, { password: 'pw' }); });
+    expect(result.current.info).toEqual(none);
   });
 });

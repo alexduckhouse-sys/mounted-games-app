@@ -98,7 +98,7 @@ export function DeleteAccountPanel({ hasPassword = true, linkedProviders = [] }:
             <div className="kit-sheet-inner">
               <p className="m-0">{confirmWith.length > 0 ? t('account.delete.confirmWithProvider') : t('account.delete.noWayToConfirm')}</p>
               {confirmWith.length > 0 && (
-                <SocialLoginButtons only={confirmWith} divider={false} disabled={busy} onCredential={confirmed} onError={setError} />
+                <SocialLoginButtons only={confirmWith} divider={false} confirm disabled={busy} onCredential={confirmed} onError={setError} />
               )}
               {error && <Notice>{error}</Notice>}
               <div className="kit-acts-del">

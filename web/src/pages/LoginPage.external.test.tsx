@@ -167,7 +167,7 @@ describe('Sign in with Google or Apple', () => {
     await user.click(screen.getByRole('button', { name: 'Create account' }));
 
     expect(await screen.findByRole('heading', { name: 'Request sent to New Valley MG' })).toBeInTheDocument();
-    // A hidden Apple address starts unconfirmed, so the confirmation email went out.
+    // The API said the new account's address isn't confirmed yet, so the confirmation email went out.
     expect(screen.getByText(/emailed you a link/)).toBeInTheDocument();
     expect(post).toHaveBeenLastCalledWith('/auth/external/signup', {
       ticket: 'ticket-apple',
@@ -177,27 +177,16 @@ describe('Sign in with Google or Apple', () => {
     });
   });
 
-  it('asks for an email address when the provider gave none, then makes the account with it', async () => {
-    const user = userEvent.setup();
-    post.mockResolvedValueOnce(needsSignup('', 'Sam Rider', 'facebook')).mockResolvedValueOnce(created('jwt-fb', false));
+  it('never asks for an email address: a provider that didn’t share one is turned away with the API’s reason', async () => {
+    post.mockRejectedValueOnce({ response: { status: 400, data: {
+      message: 'Facebook didn’t share your email address with us, so we can’t make an account from it. Sign up with your email and a password, then add Facebook from My account.',
+      code: 'external_email_missing',
+    } } });
     mount('/login');
 
     await googleReturns('provider-token');
-    await screen.findByRole('heading', { name: 'Finish creating your account' });
-    expect(screen.queryByText(/Signed in as/)).not.toBeInTheDocument();
-    await user.type(screen.getByLabelText('Club / team name'), 'Warwickshire Hunt');
-    await user.click(await screen.findByRole('button', { name: 'Warwickshire Hunt' }));
-    await user.click(screen.getByRole('radio', { name: 'Rider or parent' }));
-    const submit = screen.getByRole('button', { name: 'Create account' });
-    expect(submit).toBeDisabled();
-    await user.type(screen.getByLabelText('Email'), 'sam@example.org');
-    expect(submit).toBeEnabled();
-    await user.click(submit);
-
-    expect(await screen.findByText('Home page')).toBeInTheDocument();
-    expect(post).toHaveBeenLastCalledWith('/auth/external/signup', {
-      ticket: 'ticket-facebook', fullName: 'Sam Rider', clubName: 'Warwickshire Hunt', role: 'Member', email: 'sam@example.org',
-    });
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sign up with your email and a password, then add Facebook from My account.');
+    expect(screen.queryByRole('heading', { name: 'Finish creating your account' })).not.toBeInTheDocument();
   });
 
   it('shows the API’s reason when a sign-in is refused, and a signal message when there is no reply', async () => {

@@ -85,6 +85,8 @@ export interface ExternalAuthResponse {
 export interface LinkedSignIns {
   hasPassword: boolean;
   logins: { provider: string; name: string }[];
+  /** After adding or removing one: this device's new sign-in, because every other session has ended. */
+  auth?: AuthResponse | null;
 }
 
 export interface TrainerRequest {

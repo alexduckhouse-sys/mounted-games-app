@@ -234,6 +234,18 @@ describe('Continue with Facebook', () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it('asks Facebook to check the password again when confirming it’s the owner', async () => {
+    const user = userEvent.setup();
+    const onCredential = vi.fn();
+    render(<SocialLoginButtons confirm onCredential={onCredential} onError={vi.fn()} />);
+    const button = await screen.findByRole('button', { name: 'Continue with Facebook' });
+    await waitFor(() => expect(button).toBeEnabled());
+    facebook.login.mockImplementationOnce((callback) => callback({ status: 'connected', authResponse: { accessToken: 'EAAT-fresh' } }));
+    await user.click(button);
+    expect(facebook.login).toHaveBeenCalledWith(expect.any(Function), { scope: 'public_profile,email', auth_type: 'reauthenticate' });
+    expect(onCredential).toHaveBeenCalledWith({ provider: 'facebook', idToken: 'EAAT-fresh' });
+  });
+
   it('is disabled while loading or while a sign-in is under way', async () => {
     let finishLoading!: (api: FacebookApi) => void;
     vi.mocked(loadFacebook).mockReturnValue(new Promise((resolve) => { finishLoading = resolve; }));
