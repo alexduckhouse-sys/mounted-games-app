@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Minus, Plus } from 'lucide-react';
 import { api } from '../../api';
@@ -17,6 +17,7 @@ import { displaySectionName } from '../../lib/section';
 import { CONSENT_VERSION } from '../../lib/termsTick';
 import type { CompetitionDetail, CompetitionSection, SectionSignup } from '../../types';
 import { useEntrySettings } from './entrySettings';
+import { clearEntryDraft, entryDraftKey, readEntryDraft, saveEntryDraft } from './entryDraft';
 import { bankDetailsText, type BankDetails } from '../../lib/bankDetails';
 import '../../components/sitePages.css';
 import '../../components/eventPages.css';
@@ -34,7 +35,7 @@ export interface EntrySent {
 }
 
 /** Steps 2 and 3 of an entry: your details, then pay. Everything typed stays while you move between them. */
-export function EntryForm({ competition, section, kind, step, onSent, onConflict }: {
+interface EntryFormProps {
   competition: CompetitionDetail;
   section: CompetitionSection;
   kind: EntryKind;
@@ -42,31 +43,60 @@ export function EntryForm({ competition, section, kind, step, onSent, onConflict
   onSent: (sent: EntrySent) => void;
   /** Called when the server refuses because the places changed (409), so the page can load the current counts. */
   onConflict?: () => void;
-}) {
+}
+
+export function EntryForm(props: EntryFormProps) {
+  const { user } = useAuth();
+  if (!user) return null;
+  const draftKey = entryDraftKey(user.id, props.competition.id, props.section.id, props.kind);
+  return <EntryFormDetails key={draftKey} {...props} draftKey={draftKey} />;
+}
+
+function EntryFormDetails({ competition, section, kind, step, onSent, onConflict, draftKey }: EntryFormProps & { draftKey: string }) {
   const t = useT();
-  const { hasRole, canOrganise } = useAuth();
+  const { user, hasRole, canOrganise } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const entrySettings = useEntrySettings(competition);
 
-  const [fullName, setFullName] = useState('');
-  const [club, setClub] = useState('');
-  const [contact, setContact] = useState('');
-  const [entryEmail, setEntryEmail] = useState<EntryEmail>({ email: '', optIn: false });
+  // Read once per account/event/section/type; subsequent profile or live updates must not replace typing.
+  const [draft] = useState(() => readEntryDraft(draftKey));
+  const [fullName, setFullName] = useState(draft?.fullName ?? user?.fullName ?? '');
+  const [club, setClub] = useState(draft?.club ?? user?.clubName ?? '');
+  const [contact, setContact] = useState(draft?.contact ?? '');
+  const [entryEmail, setEntryEmail] = useState<EntryEmail>({ email: draft?.email ?? (user?.email && looksLikeEmail(user.email) && !/@(?:[^@]*\.)?mg\.local$/i.test(user.email) ? user.email : ''), optIn: false });
   // One id per attempt: if the connection drops and the form is sent again, the server returns the first entry.
-  const requestId = useRef<string | null>(null);
-  const [teamName, setTeamName] = useState('');
-  const [wholeTeam, setWholeTeam] = useState(false);
-  const [lookingForGuestRiders, setLookingForGuestRiders] = useState(false);
-  const [teamsCount, setTeamsCount] = useState<number | ''>(1);
-  const [stablesCount, setStablesCount] = useState(0);
-  const [stablingClubOrTeam, setStablingClubOrTeam] = useState('');
+  const [requestId] = useState(() => draft?.requestId ?? newRequestId());
+  const completed = useRef(false);
+  const mounted = useRef(false);
+  const [draftSaved, setDraftSaved] = useState(true);
+  const [teamName, setTeamName] = useState(draft?.teamName ?? '');
+  const [wholeTeam, setWholeTeam] = useState(draft?.wholeTeam ?? false);
+  const [lookingForGuestRiders, setLookingForGuestRiders] = useState(draft?.lookingForGuestRiders ?? false);
+  const [teamsCount, setTeamsCount] = useState<number | ''>(draft?.teamsCount ?? 1);
+  const [stablesCount, setStablesCount] = useState(draft?.stablesCount ?? 0);
+  const [stablingClubOrTeam, setStablingClubOrTeam] = useState(draft?.stablingClubOrTeam ?? '');
   const [guestFields, setGuestFields] = useState<GuestRiderFields>(blankGuestRider);
   const [showGuestProblem, setShowGuestProblem] = useState(false);
-  const [privacy, setPrivacy] = useState<RiderPrivacy>({ useInitialOnly: false, noFilming: false });
+  const [privacy, setPrivacy] = useState<RiderPrivacy>({ useInitialOnly: draft?.useInitialOnly ?? false, noFilming: draft?.noFilming ?? false });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<{ text: string; retry: boolean } | null>(null);
   const toast = useToast();
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
+  useEffect(() => {
+    if (completed.current) return;
+    setDraftSaved(saveEntryDraft(draftKey, {
+      fullName, club, contact, email: entryEmail.email, teamName, wholeTeam, lookingForGuestRiders,
+      teamsCount, stablesCount, stablingClubOrTeam, useInitialOnly: privacy.useInitialOnly,
+      noFilming: privacy.noFilming, requestId,
+    }));
+  }, [draftKey, fullName, club, contact, entryEmail.email, teamName, wholeTeam, lookingForGuestRiders,
+    teamsCount, stablesCount, stablingClubOrTeam, privacy.useInitialOnly, privacy.noFilming, requestId]);
 
   const isWaitlist = kind === 'waitlist';
   const guestWaiting = kind === 'guest' && section.format === 2;
@@ -109,7 +139,6 @@ export function EntryForm({ competition, section, kind, step, onSent, onConflict
     if (guestProblem) { setShowGuestProblem(true); return; }
     const emailText = entryEmail.email.trim();
     if (emailText && !looksLikeEmail(emailText)) { setErr({ text: t('entries.form.emailInvalid'), retry: false }); return; }
-    requestId.current ??= newRequestId();
     setBusy(true);
     setErr(null);
     try {
@@ -120,7 +149,7 @@ export function EntryForm({ competition, section, kind, step, onSent, onConflict
         contactEmail: emailText || null,
         emailOptIn: !!emailText && entryEmail.optIn,
         emailOptInVersion: emailText && entryEmail.optIn ? EMAIL_OPT_IN_VERSION : null,
-        requestId: requestId.current,
+        requestId,
         teamCode: null,
         teamName: !hasTeamFields ? null : teamName.trim() || (enteringWholeTeam && effectiveTeamsCount > 1 ? club.trim() : null) || null,
         lookingForPair: pairSeeking,
@@ -148,7 +177,9 @@ export function EntryForm({ competition, section, kind, step, onSent, onConflict
             : signup.status === 1 ? t('entries.form.confirmed')
               : priceMinor > 0 ? t('entries.form.markedPaid') : '',
       ];
-      requestId.current = null;
+      completed.current = true;
+      clearEntryDraft(draftKey);
+      if (!mounted.current) return;
       const owesByBank = priceMinor > 0 && !isDemo && signup.status !== 1;
       onSent({
         enteredAs: isWaitlist ? null : teamName.trim() || club.trim() || fullName.trim() || null,
@@ -159,11 +190,12 @@ export function EntryForm({ competition, section, kind, step, onSent, onConflict
       // Demo events only: straight on to the clearly labelled test payment page.
       if (isDemo && signup.status === 0 && signup.amountMinor > 0) navigate(`/me/signups/${signup.id}/test-payment`);
     } catch (e) {
+      if (!mounted.current) return;
       if ((e as { response?: { status?: number } }).response?.status === 409) onConflict?.();
       const msg = (e as { response?: { data?: { message?: string } | string } }).response?.data;
       setErr({ text: typeof msg === 'string' ? msg : msg?.message ?? t('entries.form.submitFailed'), retry: true });
     } finally {
-      setBusy(false);
+      if (mounted.current) setBusy(false);
     }
   }
 
@@ -224,6 +256,8 @@ export function EntryForm({ competition, section, kind, step, onSent, onConflict
         <h2 className="ev-step-title">{entryTitle(section, kind)}</h2>
         <span className="ev-price !text-2xl">{feeText(priceMinor)}</span>
       </div>
+      <p className="sp-note">{t('entries.form.forSomeoneElse')}</p>
+      {!draftSaved && <Notice tone="info">{t('entries.form.draftUnsaved')}</Notice>}
       <form className="ev-card flex flex-col gap-4 p-4" onSubmit={(event) => { event.preventDefault(); if (ready) next(); }}>
         <label className="rf-fld">{t('entries.form.yourName')}<input autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} /></label>
         <label className="rf-fld">{t('entries.form.mobile')}<input type="tel" autoComplete="tel" value={contact} onChange={(e) => setContact(e.target.value)} /></label>
@@ -287,6 +321,7 @@ export function EntryForm({ competition, section, kind, step, onSent, onConflict
         )}
         <RiderPrivacyFields termsText={competition.termsText} value={privacy} onChange={(patch) => setPrivacy((cur) => ({ ...cur, ...patch }))} />
       </form>
+      {draftSaved && <p className="sp-note">{t('entries.form.draftSaved')}</p>}
       <button type="button" className="ev-bar" disabled={busy || !ready} onClick={next}>{busy ? t('entries.form.submitting') : nextLabel}</button>
       {error}
     </>

@@ -34,6 +34,11 @@ interface SavedRiderRow {
  * under small headings. What shows depends on the role; there is no site admin on this page (it has its own).
  */
 export function ProfilePage() {
+  const { user } = useAuth();
+  return <ProfileDetails key={user?.id ?? 'signed-out'} />;
+}
+
+function ProfileDetails() {
   const t = useT();
   const { user, hasRole, canOrganise, logout } = useAuth();
   const { current } = useCurrentCompetition();
@@ -87,6 +92,7 @@ export function ProfilePage() {
   }).sort((a, b) => a.row.effective!.getTime() - b.row.effective!.getTime()).slice(0, 6);
 
   const dueEntries = (entries ?? []).filter((e) => e.status === 0 && !e.isWaitlist && !e.isWithdrawn);
+  const pairRequests = (entries ?? []).filter((e) => e.pairRequestFromSignupId && e.pairRequestStatus === 'Pending' && !e.isWithdrawn && (e.status === 0 || e.status === 1));
   const comingUp = events.upcoming.filter((event) => canOrganise({ id: event.id })).length;
 
   const runsClub = isAdmin || hasRole('Manager');
@@ -113,7 +119,7 @@ export function ProfilePage() {
 
       <EmailConfirmBanner />
 
-      <NeedsYouPanel events={events.upcoming} dueEntries={dueEntries} />
+      <NeedsYouPanel events={events.upcoming} dueEntries={dueEntries} pairRequests={pairRequests} />
 
       {todays.length > 0 && (
         <Section title={t('account.profile.teamsToday')}>

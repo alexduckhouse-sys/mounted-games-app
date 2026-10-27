@@ -62,12 +62,12 @@ function useAttention(events: CompetitionPickerItem[]): Attention {
  * still to fill in, entries of their own still to pay, and for organisers the unpaid entries, flagged dec forms and
  * payout set-up that need a look. Nothing shows when nothing is waiting.
  */
-export function NeedsYouPanel({ events = [], dueEntries = [] }: { events?: CompetitionPickerItem[]; dueEntries?: ExtendedMySignup[] }) {
+export function NeedsYouPanel({ events = [], dueEntries = [], pairRequests = [] }: { events?: CompetitionPickerItem[]; dueEntries?: ExtendedMySignup[]; pairRequests?: ExtendedMySignup[] }) {
   const t = useT();
   const { requests, decForms, review, reviewError } = useNeedsYou();
   const attention = useAttention(events);
   const [failed, setFailed] = useState<string | null>(null);
-  const count = requests.length + decForms.length + dueEntries.length + attention.pendingEntries.length + attention.flaggedForms.length + (attention.payoutsNotReady ? 1 : 0);
+  const count = pairRequests.length + requests.length + decForms.length + dueEntries.length + attention.pendingEntries.length + attention.flaggedForms.length + (attention.payoutsNotReady ? 1 : 0);
 
   async function decide(request: TrainerRequest, action: 'approve' | 'decline') {
     setFailed(null);
@@ -97,6 +97,10 @@ export function NeedsYouPanel({ events = [], dueEntries = [] }: { events?: Compe
         ))}
         {decForms.map((team) => (
           <NeedsRow key={`form-${team.id}`} count="1" title={t('account.needs.decToSend')} sub={team.displayName} act={t('account.needs.fillIn')} to={`/competitions/${team.competitionId}/declarations?team=${team.id}`} />
+        ))}
+        {pairRequests.map((entry) => (
+          <NeedsRow key={`pair-${entry.id}`} count="1" title={t('account.needs.pairRequest', { name: entry.pairRequestFromName || t('account.needs.pairRequestAnother') })}
+            sub={[entry.competitionName, displaySectionName(entry.sectionName)].filter(Boolean).join(' · ')} act={t('account.needs.review')} to="/me/signups" />
         ))}
         {dueEntries.map((entry) => (
           <NeedsRow key={`due-${entry.id}`} count={priceLabel(entry.amountMinor)} title={t('account.needs.payTitle')} sub={[entry.competitionName, displaySectionName(entry.sectionName)].filter(Boolean).join(' · ')}
