@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { subscribeForPushResult as subscribeForPush, unsubscribeFromPush } from '../lib/push';
+import { fakeDevice, resetDevice, UA } from '../test/device';
 import { competition, heat, session, team } from '../test/factories';
 import type { CompetitionDetail, Session, Team } from '../types';
 import { useTeamNotifications } from './useTeamNotifications';
@@ -49,7 +50,10 @@ beforeEach(() => {
   competitions = { 1: competition() };
   get.mockImplementation(async (url) => ({ data: competitions[Number(String(url).split('/').pop())] }));
 });
-afterEach(() => { vi.useRealTimers(); });
+afterEach(() => {
+  vi.useRealTimers();
+  resetDevice();
+});
 
 describe('useTeamNotifications: switching on and off', () => {
   it('starts off, and reports the browser’s permission', () => {
@@ -109,6 +113,36 @@ describe('useTeamNotifications: switching on and off', () => {
     expect(alertSpy).not.toHaveBeenCalled();
     expect(result.current.problem).toBe('This browser can’t show notifications. On iPhone, add Mounted Games to your Home Screen and open it from there.');
     expect(result.current.enabled).toBe(false);
+  });
+
+  it('on an iPhone that hasn’t added the app to its Home Screen, shows how instead of asking', async () => {
+    fakeDevice({ userAgent: UA.iphoneSafari });
+    Reflect.deleteProperty(globalThis, 'Notification');
+    const { result } = renderHook(() => useTeamNotifications([]));
+    expect(result.current).toMatchObject({ needsInstall: true, installGuide: false, permission: 'unsupported' });
+    await act(async () => { await result.current.setEnabled(true); });
+    expect(result.current).toMatchObject({ installGuide: true, problem: null, enabled: false });
+    expect(subscribeForPush).not.toHaveBeenCalled();
+    act(() => { result.current.closeInstallGuide(); });
+    expect(result.current.installGuide).toBe(false);
+  });
+
+  it('asks as usual on an iPhone running from the Home Screen', async () => {
+    fakeDevice({ userAgent: UA.iphoneSafari, iosStandalone: true });
+    FakeNotification.permission = 'default';
+    const { result } = renderHook(() => useTeamNotifications([]));
+    expect(result.current.needsInstall).toBe(false);
+    await act(async () => { await result.current.setEnabled(true); });
+    expect(FakeNotification.requestPermission).toHaveBeenCalledTimes(1);
+    expect(result.current).toMatchObject({ enabled: true, installGuide: false });
+  });
+
+  it('points an older iPhone at an iOS update when it has no notifications even from the Home Screen', async () => {
+    fakeDevice({ userAgent: UA.iphoneSafari, iosStandalone: true });
+    Reflect.deleteProperty(globalThis, 'Notification');
+    const { result } = renderHook(() => useTeamNotifications([]));
+    await act(async () => { await result.current.setEnabled(true); });
+    expect(result.current.problem).toBe('Notifications need iOS 16.4 or later. Update your device, then try again.');
   });
 
   it('switches off, forgets the setting and unregisters push', async () => {
