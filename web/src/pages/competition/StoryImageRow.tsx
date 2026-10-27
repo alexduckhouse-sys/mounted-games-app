@@ -23,13 +23,13 @@ type Provisional = 'unfinished' | 'queries' | null;
 interface Card { sectionName: string; data: StoryResultCardData; blob: Blob; url: string; provisional: Provisional }
 
 function raceSessions(competition: CompetitionDetail, sectionId: number) {
-  return competition.sessions.filter((session) =>
+  return (competition.sessions ?? []).filter((session) =>
     session.competitionSectionId === sectionId && !session.isBreak && (session.kind ?? 0) === 0);
 }
 
 /** Age groups with a race session under way or finished: the only ones a results picture can show anything for. */
 function sectionsWithResults(competition: CompetitionDetail): CompetitionSection[] {
-  return competition.sections.filter((section) => raceSessions(competition, section.id).some((session) => session.status !== 0));
+  return (competition.sections ?? []).filter((section) => raceSessions(competition, section.id).some((session) => session.status !== 0));
 }
 
 function wasCancelled(err: unknown): boolean {
