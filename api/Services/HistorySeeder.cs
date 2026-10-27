@@ -37,18 +37,25 @@ public static class HistorySeeder
 
     private static readonly ClubDef[] Clubs =
     {
-        new("Hollowbrook Pony Club", "Hollowbrook", "Wiltshire", "Red"),
-        new("Marlow Heath Pony Club", "Marlow Heath", "Berkshire", "Blue"),
-        new("Cranmere Riding Club", "Cranmere", "Devon", "Green"),
-        new("Carrowmore Pony Club", "Carrowmore", "Co. Cork", "Yellow"),
-        new("Longmoor Hunt Pony Club", "Longmoor", "Hampshire", "Orange"),
-        new("Ballymore Equestrian Club", "Ballymore", "Co. Kildare", "Purple"),
-        new("Thornbury Vale Pony Club", "Thornbury", "Gloucestershire", "Red"),
-        new("Westfield Riding Club", "Westfield", "Cheshire", "Blue"),
-        new("Glenmara Pony Club", "Glenmara", "Co. Wicklow", "Green"),
-        new("Ashgrove Pony Club", "Ashgrove", "Kent", "Yellow"),
-        new("Fernhill Equestrian Club", "Fernhill", "North Yorkshire", "Orange"),
-        new("Dunmore Pony Club", "Dunmore", "Co. Meath", "Purple"),
+        new("Central Warwickshire", "Central Warwickshire", "Warwickshire", "Red"),
+        new("North Warwickshire MGA", "North Warwickshire", "Warwickshire", "Blue"),
+        new("Atherstone MGA", "Atherstone", "Leicestershire", "Green"),
+        new("Rockwood Harriers MGA", "Rockwood Harriers", "West Yorkshire", "Yellow"),
+        new("Oakley West", "Oakley West", "Buckinghamshire", "Orange"),
+        new("Mid Glamorgan", "Mid Glamorgan", "South Wales", "Purple"),
+        new("Berwyn & Dee MGA", "Berwyn & Dee", "North Wales", "Red"),
+        new("Lancashire", "Lancashire", "Lancashire", "Blue"),
+        new("Lothian & Borders", "Lothian & Borders", "Scotland", "Green"),
+        new("Devon Daredevils", "Devon Daredevils", "Devon", "Yellow"),
+        new("Dorset", "Dorset", "Dorset", "Orange"),
+        new("Leicester Forest", "Leicester Forest", "Leicestershire", "Purple"),
+    };
+
+    private static readonly string[] LegacyClubNames =
+    {
+        "Hollowbrook Pony Club", "Marlow Heath Pony Club", "Cranmere Riding Club", "Carrowmore Pony Club",
+        "Longmoor Hunt Pony Club", "Ballymore Equestrian Club", "Thornbury Vale Pony Club", "Westfield Riding Club",
+        "Glenmara Pony Club", "Ashgrove Pony Club", "Fernhill Equestrian Club", "Dunmore Pony Club",
     };
 
     // Newest first. Offset is days back from today; the first four make up the series.
@@ -56,18 +63,24 @@ public static class HistorySeeder
 
     private static readonly EventDef[] PastEvents =
     {
-        new("Westfield Finals Day", "trophy", "Westfield Park, Cheshire", -16, new[] { "U14T", "U12T", "OT", "OP" }),
-        new("Thornbury Autumn Games", "gb", "Thornbury Vale Equestrian Centre, Gloucestershire", -30, new[] { "U14T", "U12T", "OT" }),
-        new("Ballymore Challenge", "ie", "Ballymore Showgrounds, Co. Kildare", -44, new[] { "U14T", "U12T", "OP" }),
-        new("Longmoor Summer Festival", "flag", "Longmoor Farm Arena, Hampshire", -58, new[] { "U14T", "OT", "U12T", "U12P" }),
-        new("Cranmere Open", "gb", "Cranmere Arena, Devon", -85, new[] { "U14T", "OT" }),
-        new("Marlow Heath Trophy", "trophy", "Marlow Heath Showground, Berkshire", -120, new[] { "U14T", "U12T", "OT", "OP" }),
-        new("Carrowmore Spring Games", "ie", "Carrowmore Equestrian Park, Co. Cork", -165, new[] { "U14T", "U12T", "OP" }),
-        new("Hartwell Park Cup", "world", "Hartwell Park Equestrian Centre, Oxfordshire", -230, new[] { "U14T", "OT", "U12T" }),
+        new("British Pairs Championships", "trophy", "Addington Equestrian, Buckinghamshire", -16, new[] { "U14T", "U12T", "OT", "OP" }),
+        new("English Team Championships", "gb", "Newark Showground, Nottinghamshire", -30, new[] { "U14T", "U12T", "OT" }),
+        new("Celtic Pairs Championship", "ie", "Necarne Castle, Co. Fermanagh", -44, new[] { "U14T", "U12T", "OP" }),
+        new("EGUK National Championships", "flag", "Dallas Burston Polo Club, Southam", -58, new[] { "U14T", "OT", "U12T", "U12P" }),
+        new("Scottish Open Championships", "gb", "SNEC, West Lothian", -85, new[] { "U14T", "OT" }),
+        new("Home International Trophy", "trophy", "Three Counties Showground, Malvern", -120, new[] { "U14T", "U12T", "OT", "OP" }),
+        new("Southwest Spring Open", "ie", "Bicton Arena, Devon", -165, new[] { "U14T", "U12T", "OP" }),
+        new("Heart of England Friendly", "world", "Solihull Riding Club, West Midlands", -230, new[] { "U14T", "OT", "U12T" }),
     };
 
     private static readonly EventDef UpcomingEvent =
-        new("Fernhill Winter Showdown", "flag", "Fernhill Indoor Arena, North Yorkshire", 24, new[] { "U14T", "OT" });
+        new("EGUK Winter Indoor Classic", "flag", "Aintree International Equestrian Centre, Liverpool", 24, new[] { "U14T", "OT" });
+
+    private static readonly string[] LegacyEventNames =
+    {
+        "Westfield Finals Day", "Thornbury Autumn Games", "Ballymore Challenge", "Longmoor Summer Festival",
+        "Cranmere Open", "Marlow Heath Trophy", "Carrowmore Spring Games", "Hartwell Park Cup", "Fernhill Winter Showdown",
+    };
 
     private const int SeasonEventCount = 4;
 
@@ -179,7 +192,7 @@ public static class HistorySeeder
 
     private static async Task<int> RemoveCoreAsync(AppDbContext db)
     {
-        var names = PastEvents.Append(UpcomingEvent).Select(e => e.Name).ToArray();
+        var names = PastEvents.Append(UpcomingEvent).Select(e => e.Name).Concat(LegacyEventNames).ToArray();
         var ids = await db.Competitions
             .Where(c => names.Contains(c.Name)
                 && db.Set<EventCommerceSettings>().Any(x => x.CompetitionId == c.Id && x.IsDemo))
@@ -224,7 +237,7 @@ public static class HistorySeeder
         await db.SavedRiders.Where(r => r.CreatedByUserId == OrganiserId
                 && !db.RiderEntries.Any(e => e.SavedRiderId == r.Id))
             .ExecuteDeleteAsync();
-        var clubNames = Clubs.Select(c => c.Name).ToArray();
+        var clubNames = Clubs.Select(c => c.Name).Concat(LegacyClubNames).ToArray();
         await db.Clubs
             .Where(c => clubNames.Contains(c.Name)
                 && !db.Teams.Any(t => t.ClubId == c.Id)
@@ -257,9 +270,9 @@ public static class HistorySeeder
 
         // Fictional accounts with no password: Identity refuses a sign-in without a password hash.
         await EnsureUserAsync(db, OrganiserId, "Series Organiser", "organiser");
-        await EnsureUserAsync(db, SellerIds[0], "Hollowbrook Tack Swap", "seller1");
-        await EnsureUserAsync(db, SellerIds[1], "Fernhill Rosettes and Prints", "seller2");
-        await EnsureUserAsync(db, SellerIds[2], "Glenmara Saddlery Spares", "seller3");
+        await EnsureUserAsync(db, SellerIds[0], "Warwickshire Tack Swap", "seller1");
+        await EnsureUserAsync(db, SellerIds[1], "Onley Rosettes and Prints", "seller2");
+        await EnsureUserAsync(db, SellerIds[2], "Malvern Saddlery Spares", "seller3");
 
         // Clubs.
         var clubs = new List<Club>();
@@ -346,7 +359,7 @@ public static class HistorySeeder
                 SignupsLocked = !upcoming,
                 OrganiserName = "Series Organiser",
                 CreatedByUserId = OrganiserId,
-                Description = "Mounted games for pony clubs and riding clubs, with timed heats and finals. All teams and results are fictional.",
+                Description = "Mounted games for clubs, pairs and individuals, with timed heats and finals.",
             };
             var arenaFree = new Dictionary<string, DateTime>
             {
@@ -654,26 +667,26 @@ public static class HistorySeeder
     {
         (string Seller, string Club, string Title, string Body, int Price)[] rows =
         {
-            ("Hollowbrook Tack Swap", "Hollowbrook Pony Club", "Jumping saddle, 16.5 inch, black", "Well looked after, medium tree. Recently reflocked. Sold as seen, buyer collects from Wiltshire.", 32000),
-            ("Hollowbrook Tack Swap", "Hollowbrook Pony Club", "Mounted games bibs, set of 12", "Mixed colours, a few faded. Ideal for a club starting out.", 4500),
-            ("Hollowbrook Tack Swap", "Hollowbrook Pony Club", "Navy numnah, full size", "Quilted, washed and good as new. Two available.", 1800),
-            ("Hollowbrook Tack Swap", "Hollowbrook Pony Club", "Skull cap, size 55, in date", "Worn for one season only. Collect or I can bring it to the next show.", 3500),
-            ("Hollowbrook Tack Swap", "Hollowbrook Pony Club", "Set of 8 plastic mugs for the mug game", "Bright colours. Handy for training days at home.", 1200),
-            ("Fernhill Rosettes and Prints", "Fernhill Equestrian Club", "Rosettes, 1st to 6th, pack of 60", "Ten of each place with gold lettering. Can add your event name for a small extra charge.", 6500),
-            ("Fernhill Rosettes and Prints", "Fernhill Equestrian Club", "Club hoodie, youth sizes", "Navy with embroidered logo. Sizes 7 to 14 years in stock.", 2400),
-            ("Fernhill Rosettes and Prints", "Fernhill Equestrian Club", "Number bibs, laminated, 1 to 20", "Wipe clean and hard wearing. Fits over a body protector.", 3800),
-            ("Fernhill Rosettes and Prints", "Fernhill Equestrian Club", "Trophy cup, silver plate, 25 cm", "Engraving available. Allow a week.", 2900),
-            ("Fernhill Rosettes and Prints", "Fernhill Equestrian Club", "Banner, 3 m, club colours", "Used at one show. Eyelets all intact.", 2200),
-            ("Glenmara Saddlery Spares", "Glenmara Pony Club", "Pair of leather reins, 5/8 inch", "Brown, rubber grip. Hardly used.", 1500),
-            ("Glenmara Saddlery Spares", "Glenmara Pony Club", "Gel pad and half pad", "Suits a 13.2 pony. Washed and dry.", 2600),
-            ("Glenmara Saddlery Spares", "Glenmara Pony Club", "Grooming kit in a carry box", "Brushes, hoof pick, sponge and sweat scraper. Good first kit.", 2000),
-            ("Glenmara Saddlery Spares", "Glenmara Pony Club", "Foal-safe lead rope, pair", "Heavy duty clips. Two colours available.", 900),
-            ("Glenmara Saddlery Spares", "Glenmara Pony Club", "Show jacket, ladies 10, navy", "Worn twice. Cleaned and pressed.", 4800),
+            ("Warwickshire Tack Swap", "Central Warwickshire", "Jumping saddle, 16.5 inch, black", "Well looked after, medium tree. Recently reflocked. Sold as seen, buyer collects from Warwickshire.", 32000),
+            ("Warwickshire Tack Swap", "Central Warwickshire", "Mounted games bibs, set of 12", "Mixed colours, a few faded. Ideal for a club starting out.", 4500),
+            ("Warwickshire Tack Swap", "Central Warwickshire", "Navy numnah, full size", "Quilted, washed and good as new. Two available.", 1800),
+            ("Warwickshire Tack Swap", "Central Warwickshire", "Skull cap, size 55, in date", "Worn for one season only. Collect or I can bring it to the next show.", 3500),
+            ("Warwickshire Tack Swap", "Central Warwickshire", "Set of 8 plastic mugs for the mug game", "Bright colours. Handy for training days at home.", 1200),
+            ("Onley Rosettes and Prints", "North Warwickshire", "Rosettes, 1st to 6th, pack of 60", "Ten of each place with gold lettering. Can add your event name for a small extra charge.", 6500),
+            ("Onley Rosettes and Prints", "North Warwickshire", "Club hoodie, youth sizes", "Navy with embroidered logo. Sizes 7 to 14 years in stock.", 2400),
+            ("Onley Rosettes and Prints", "North Warwickshire", "Number bibs, laminated, 1 to 20", "Wipe clean and hard wearing. Fits over a body protector.", 3800),
+            ("Onley Rosettes and Prints", "North Warwickshire", "Trophy cup, silver plate, 25 cm", "Engraving available. Allow a week.", 2900),
+            ("Onley Rosettes and Prints", "North Warwickshire", "Banner, 3 m, club colours", "Used at one show. Eyelets all intact.", 2200),
+            ("Malvern Saddlery Spares", "Atherstone", "Pair of leather reins, 5/8 inch", "Brown, rubber grip. Hardly used.", 1500),
+            ("Malvern Saddlery Spares", "Atherstone", "Gel pad and half pad", "Suits a 13.2 pony. Washed and dry.", 2600),
+            ("Malvern Saddlery Spares", "Atherstone", "Grooming kit in a carry box", "Brushes, hoof pick, sponge and sweat scraper. Good first kit.", 2000),
+            ("Malvern Saddlery Spares", "Atherstone", "Foal-safe lead rope, pair", "Heavy duty clips. Two colours available.", 900),
+            ("Malvern Saddlery Spares", "Atherstone", "Show jacket, ladies 10, navy", "Worn twice. Cleaned and pressed.", 4800),
         };
         var rng = new Random(77);
         return rows.Select((r, i) => new ShopPost
         {
-            AuthorUserId = SellerIds[Array.IndexOf(new[] { "Hollowbrook Tack Swap", "Fernhill Rosettes and Prints", "Glenmara Saddlery Spares" }, r.Seller)],
+            AuthorUserId = SellerIds[Array.IndexOf(new[] { "Warwickshire Tack Swap", "Onley Rosettes and Prints", "Malvern Saddlery Spares" }, r.Seller)],
             AuthorName = r.Seller, PonyClubName = r.Club, Title = r.Title, Body = r.Body, PriceMinor = r.Price,
             ContactInfo = "Message me through the shop.", ImageBase64 = null,
             CreatedAt = DateTime.SpecifyKind(today.AddDays(-(i * 2 + rng.Next(0, 2))).AddHours(8 + rng.Next(0, 10)), DateTimeKind.Utc),
