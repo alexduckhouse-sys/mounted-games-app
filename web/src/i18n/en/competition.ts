@@ -114,7 +114,6 @@ export const competition = {
   'competition.toplist.points': 'points',
   'competition.toplist.joint': '(joint)',
   'competition.toplist.behindLeader': '{points} behind leader',
-  'competition.toplist.behindShort': '{points} behind',
   'competition.toplist.cutoff': 'Final cut-off',
   'competition.toplist.sessionPoints': 'Points by session',
   'competition.toplist.team': 'Team',

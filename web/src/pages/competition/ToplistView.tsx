@@ -164,10 +164,9 @@ export function ToplistView({
                     <span data-grow="start" className="truncate text-base font-semibold leading-tight">{renderTeamName(row.teamId, row.teamName, fav, false)}</span>
                     {note && <span className="text-[13.5px] font-medium leading-none text-[rgb(var(--mg-body))]">{note}</span>}
                   </span>
-                  {/* `!flex`: the theme's `span[data-grow]` rule makes it inline-block, which put the gap on the points' line. */}
-                  <span data-grow="end" className="!flex shrink-0 flex-col items-end gap-1">
+                  <span data-grow="end" className="flex shrink-0 flex-col items-end gap-0.5">
                     <ScoreFlash value={row.points} className="mg-display text-xl font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]"><TickerNumber value={row.points} /><span className="sr-only">{' '}{t('competition.toplist.points')}</span></ScoreFlash>
-                    {gap > 0 && <span className="text-[11px] font-semibold leading-none tabular-nums text-[rgb(var(--mg-muted))]" title={t('competition.toplist.behindLeader', { points: formatPoints(gap) })}>{t('competition.toplist.behindShort', { points: formatPoints(gap) })}</span>}
+                    {gap > 0 && <span className="text-[11px] font-semibold leading-none tabular-nums text-[rgb(var(--mg-muted))]" title={t('competition.toplist.behindLeader', { points: formatPoints(gap) })}>−{formatPoints(gap)}</span>}
                   </span>
                 </>;
                 return (

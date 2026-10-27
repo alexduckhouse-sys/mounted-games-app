@@ -37,13 +37,13 @@ describe('the toplist in Welsh and French', () => {
     const totals = screen.getByRole('region', { name: 'Cyfansymiau' });
     expect(within(totals).getAllByRole('listitem')[0]).toHaveTextContent('Team 1');
     expect(screen.getAllByText('(cyfartal)', { exact: false })).toHaveLength(2);
-    expect(screen.getByText('4 y tu ôl')).toHaveAttribute('title', '4 y tu ôl i’r arweinydd');
+    expect(screen.getByText('−4')).toHaveAttribute('title', '4 y tu ôl i’r arweinydd');
   });
 
   it('uses French wording and a French sr-only points label', () => {
     inLang('fr', <ToplistView list={list} section={null} />);
     expect(screen.getByRole('region', { name: 'Totaux' })).toBeInTheDocument();
-    expect(screen.getByText('4 de retard')).toHaveAttribute('title', '4 derrière le leader');
+    expect(screen.getByText('−4')).toHaveAttribute('title', '4 derrière le leader');
     expect(screen.getAllByText('points', { exact: false }).length).toBeGreaterThan(0);
   });
 

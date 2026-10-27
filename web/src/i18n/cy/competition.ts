@@ -114,7 +114,6 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.toplist.points': 'pwynt',
   'competition.toplist.joint': '(cyfartal)',
   'competition.toplist.behindLeader': '{points} y tu ôl i’r arweinydd',
-  'competition.toplist.behindShort': '{points} y tu ôl',
   'competition.toplist.cutoff': 'Terfyn y rownd derfynol',
   'competition.toplist.sessionPoints': 'Pwyntiau fesul sesiwn',
   'competition.toplist.team': 'Tîm',

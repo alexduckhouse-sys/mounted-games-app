@@ -114,7 +114,6 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.toplist.points': 'points',
   'competition.toplist.joint': '(ex æquo)',
   'competition.toplist.behindLeader': '{points} derrière le leader',
-  'competition.toplist.behindShort': '{points} de retard',
   'competition.toplist.cutoff': 'Seuil de la finale',
   'competition.toplist.sessionPoints': 'Points par session',
   'competition.toplist.team': 'Équipe',
