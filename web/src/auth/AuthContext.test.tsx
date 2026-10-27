@@ -186,6 +186,22 @@ describe('signing in', () => {
     expect(result.current.trainerNotice).toBeNull();
   });
 
+  it('passes Apple’s first-sign-in name along and refuses a sign-in reply with no session', async () => {
+    post.mockResolvedValueOnce({ data: { needsSignup: true, auth: null, email: 'x@privaterelay.appleid.com', suggestedName: 'Sam Taylor', provider: 'apple' } });
+    const { result } = mount();
+    await act(async () => {
+      await result.current.loginWithExternal('apple', 'apple-tok', { nonce: 'raw-nonce', providerName: 'Sam Taylor' });
+    });
+    expect(post).toHaveBeenCalledWith('/auth/external', { provider: 'apple', idToken: 'apple-tok', nonce: 'raw-nonce', providerName: 'Sam Taylor' });
+
+    post.mockResolvedValueOnce({ data: { needsSignup: false, auth: null } });
+    await act(async () => {
+      await expect(result.current.loginWithExternal('apple', 'apple-tok', { nonce: 'raw-nonce' })).rejects.toThrow('no session');
+    });
+    expect(result.current.user).toBeNull();
+    expect(result.current.loading).toBe(false);
+  });
+
   it('clears loading when external sign-in fails', async () => {
     post.mockRejectedValue(new Error('invalid token'));
     const { result } = mount();

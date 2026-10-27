@@ -1,443 +1,462 @@
-using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Json;
-using System.Security.Claims;
-using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.IdentityModel.Tokens;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Tests.Infrastructure;
 
 namespace MountedGames.Api.Tests.Auth;
 
-public class ExternalAuthTests : IClassFixture<ApiFactory>
+/// <summary>
+/// Sign in with Google and Apple through <c>POST /api/auth/external</c>, with the real token checks: tokens are signed by
+/// <see cref="ExternalAuthFactory"/>'s local test keys, never by the providers.
+/// </summary>
+public class ExternalAuthTests : IClassFixture<ExternalAuthFactory>
 {
-    private readonly ApiFactory _f;
-    public ExternalAuthTests(ApiFactory f) => _f = f;
+    private const string Password = "Passw0rd!x";
+    private readonly ExternalAuthFactory _f;
 
-    private static string Unique(string prefix = "ext") => $"{prefix}-{Guid.NewGuid():N}"[..16];
+    public ExternalAuthTests(ExternalAuthFactory f) => _f = f;
 
-    private sealed class FakeExternalValidator : IExternalTokenValidator
+    private sealed record Attempt(string Provider, string Token, string Nonce, string Subject);
+
+    private static string Gmail() => $"rider.{Guid.NewGuid():N}"[..20] + "@gmail.com";
+
+    private Attempt Google(string email, string? subject = null, bool verified = true, string audience = ExternalAuthFactory.GoogleWebClient,
+        IDictionary<string, object>? extra = null)
     {
-        public List<ExternalProviderDto> Providers { get; } =
-        [
-            new ExternalProviderDto("google", "Google", "google-client-id", "https://accounts.google.com/o/oauth2/v2/auth", "openid email profile"),
-            new ExternalProviderDto("apple", "Apple", "apple.client.id", "https://appleid.apple.com/auth/authorize", "openid email name"),
-        ];
-
-        public Dictionary<(string Provider, string Token), (ExternalIdentity Identity, string? ExpectedNonce)> Tokens { get; } = new();
-
-        public void Register(string provider, string token, ExternalIdentity identity, string? expectedNonce = null)
-            => Tokens[(provider.ToLowerInvariant(), token)] = (identity, expectedNonce);
-
-        public IReadOnlyList<ExternalProviderDto> GetEnabledProviders() => Providers;
-
-        public Task<ExternalIdentity?> ValidateIdTokenAsync(string provider, string idToken, string? expectedNonce, CancellationToken ct = default)
-        {
-            if (!Tokens.TryGetValue((provider.ToLowerInvariant(), idToken), out var entry))
-                return Task.FromResult<ExternalIdentity?>(null);
-            if (entry.ExpectedNonce is not null && entry.ExpectedNonce != expectedNonce)
-                return Task.FromResult<ExternalIdentity?>(null);
-            return Task.FromResult<ExternalIdentity?>(entry.Identity);
-        }
+        var nonce = IdTokenSigner.NewNonce();
+        subject ??= $"g-{Guid.NewGuid():N}";
+        return new("google", _f.Google.Sign(IdTokenSigner.GoogleIssuer, audience, subject, email, nonce, verified, extra), nonce, subject);
     }
 
-    private (Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> Factory, FakeExternalValidator Validator) WithFakeValidator(
-        Action<IWebHostBuilder>? configure = null)
+    private Attempt Apple(string email, string? subject = null, bool relay = false)
     {
-        var validator = new FakeExternalValidator();
-        var factory = _f.WithWebHostBuilder(b =>
-        {
-            configure?.Invoke(b);
-            b.ConfigureServices(s =>
-            {
-                s.RemoveAll<IExternalTokenValidator>();
-                s.AddSingleton<IExternalTokenValidator>(validator);
-            });
-        });
-        return (factory, validator);
+        var nonce = IdTokenSigner.NewNonce();
+        subject ??= $"001{Guid.NewGuid():N}";
+        var extra = new Dictionary<string, object> { ["is_private_email"] = relay ? "true" : "false" };
+        return new("apple", _f.Apple.Sign(IdTokenSigner.AppleIssuer, ExternalAuthFactory.AppleServicesId, subject, email, nonce, "true", extra), nonce, subject);
+    }
+
+    private Task<HttpResponseMessage> PostAsync(Attempt a, string? club = null, string? role = null, string? fullName = null,
+        string? providerName = null, HttpClient? client = null)
+        => (client ?? _f.CreateClient()).PostAsJsonAsync("/api/auth/external",
+            new ExternalAuthRequest(a.Provider, a.Token, a.Nonce, fullName, club, role, providerName));
+
+    private async Task<AuthResponse> SignInAsync(Attempt a, string? providerName = null)
+    {
+        var response = await PostAsync(a, providerName: providerName);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.ReadAsync<ExternalAuthResultDto>();
+        Assert.False(result.NeedsSignup);
+        return result.Auth!;
+    }
+
+    private async Task<AuthResponse> CreateAsync(Attempt a, string role = Roles.Member, string? fullName = "Alex Rider", string? providerName = null)
+    {
+        var response = await PostAsync(a, $"External Club {Guid.NewGuid():N}"[..24], role, fullName, providerName);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return (await response.ReadAsync<ExternalAuthResultDto>()).Auth!;
+    }
+
+    private async Task<(string Id, string Email)> PasswordAccountAsync(string email, bool confirmed)
+    {
+        var response = await _f.CreateClient().PostAsJsonAsync("/api/auth/signup-trainer",
+            new SignupTrainerRequest(email, Password, Roles.Member, "Password Club", "Pat Password"));
+        response.EnsureSuccessStatusCode();
+        var auth = await response.ReadAsync<AuthResponse>();
+        await SetAsync(auth.User.Id, u => u.EmailConfirmed = confirmed);
+        return (auth.User.Id, email);
+    }
+
+    private Task SetAsync(string userId, Action<AppUser> change) => _f.InDbAsync(async db =>
+    {
+        change(await db.Users.SingleAsync(u => u.Id == userId));
+        await db.SaveChangesAsync();
+    });
+
+    private Task<List<IdentityUserLogin<string>>> LoginsAsync(string userId)
+        => _f.WithDbAsync(db => db.UserLogins.Where(l => l.UserId == userId).ToListAsync());
+
+    private static async Task<string?> CodeAsync(HttpResponseMessage response)
+    {
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return body.RootElement.TryGetProperty("code", out var code) ? code.GetString() : null;
+    }
+
+    private async Task AssertRefusedAsync(HttpResponseMessage response, HttpStatusCode status, string code)
+    {
+        Assert.Equal(status, response.StatusCode);
+        Assert.Equal(code, await CodeAsync(response));
     }
 
     // ---- GET /api/auth/providers ----
 
     [Fact]
-    public async Task GetProviders_ReturnsEmpty_WhenNoOAuthConfigured()
+    public async Task ProvidersListsOnlyTheConfiguredOnesWithTheirWebClientId()
     {
-        var client = _f.CreateClient();
-        var res = await client.GetAsync("/api/auth/providers");
+        var providers = await (await _f.CreateClient().GetAsync("/api/auth/providers")).ReadAsync<List<ExternalProviderDto>>();
+        Assert.Equal(
+            new List<ExternalProviderDto> { new("google", "Google", ExternalAuthFactory.GoogleWebClient), new("apple", "Apple", ExternalAuthFactory.AppleServicesId) },
+            providers);
 
-        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
-        var providers = await res.ReadAsync<List<ExternalProviderDto>>();
-        Assert.Empty(providers);
-    }
-
-    [Fact]
-    public async Task GetProviders_ReturnsConfiguredProviders_WithDefaultsAndCustomOidc()
-    {
-        using var factory = _f.WithWebHostBuilder(b =>
+        // Apple stays off until it has a Services ID; with nothing configured, nothing is offered.
+        using (var googleOnly = _f.WithWebHostBuilder(b => b.UseSetting("Auth:Apple:ClientIds:0", "")))
         {
-            b.UseSetting("OAuth:Google:ClientId", "g-client");
-            b.UseSetting("OAuth:Apple:ClientId", "a-client");
-            b.UseSetting("OAuth:Microsoft:ClientId", "m-client");
-            b.UseSetting("OAuth:Oidc:ClientId", "o-client");
-            b.UseSetting("OAuth:Oidc:Authority", "https://sso.example.org/");
-            b.UseSetting("OAuth:Oidc:DisplayName", "Pony Club SSO");
-        });
-        var client = factory.CreateClient();
-
-        var providers = await (await client.GetAsync("/api/auth/providers")).ReadAsync<List<ExternalProviderDto>>();
-
-        Assert.Equal(4, providers.Count);
-        Assert.Equal(("google", "Google", "g-client", "https://accounts.google.com/o/oauth2/v2/auth"),
-            (providers[0].Id, providers[0].Name, providers[0].ClientId, providers[0].AuthorizeEndpoint));
-        Assert.Equal(("apple", "Apple", "a-client", "https://appleid.apple.com/auth/authorize"),
-            (providers[1].Id, providers[1].Name, providers[1].ClientId, providers[1].AuthorizeEndpoint));
-        Assert.Equal(("microsoft", "Microsoft", "m-client", "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"),
-            (providers[2].Id, providers[2].Name, providers[2].ClientId, providers[2].AuthorizeEndpoint));
-        Assert.Equal(("oidc", "Pony Club SSO", "o-client", "https://sso.example.org/authorize"),
-            (providers[3].Id, providers[3].Name, providers[3].ClientId, providers[3].AuthorizeEndpoint));
-    }
-
-    // ---- OidcExternalTokenValidator cryptographic validation ----
-
-    [Fact]
-    public async Task OidcValidator_ValidatesSignedIdTokens_Nonce_Issuers_AndRejectsInvalidTokens()
-    {
-        using var rsa = RSA.Create(2048);
-        var key = new RsaSecurityKey(rsa) { KeyId = "test-key-1" };
-        var jwk = JsonWebKeyConverter.ConvertFromRSASecurityKey(key);
-        var jwksJson = JsonSerializer.Serialize(new { keys = new[] { jwk } });
-
-        _f.Http.RespondJson("accounts.google.com/.well-known/openid-configuration", JsonSerializer.Serialize(new
-        {
-            issuer = "https://accounts.google.com",
-            authorization_endpoint = "https://accounts.google.com/o/oauth2/v2/auth",
-            jwks_uri = "https://accounts.google.com/oauth2/v3/certs",
-        }));
-        _f.Http.RespondJson("accounts.google.com/oauth2/v3/certs", jwksJson);
-
-        _f.Http.RespondJson("login.microsoftonline.com/common/v2.0/.well-known/openid-configuration", JsonSerializer.Serialize(new
-        {
-            issuer = "https://login.microsoftonline.com/{tenantid}/v2.0",
-            authorization_endpoint = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
-            jwks_uri = "https://login.microsoftonline.com/common/discovery/v2.0/keys",
-        }));
-        _f.Http.RespondJson("login.microsoftonline.com/common/discovery/v2.0/keys", jwksJson);
-
-        using var factory = _f.WithWebHostBuilder(b =>
-        {
-            b.UseSetting("OAuth:Google:ClientId", "google-aud");
-            b.UseSetting("OAuth:Microsoft:ClientId", "ms-aud");
-        });
-        var validator = factory.Services.GetRequiredService<IExternalTokenValidator>();
-
-        string SignJwt(string issuer, string audience, IEnumerable<Claim> claims, DateTime? expires = null, SecurityKey? signingKey = null)
-        {
-            var exp = expires ?? DateTime.UtcNow.AddMinutes(10);
-            var creds = new SigningCredentials(signingKey ?? key, SecurityAlgorithms.RsaSha256);
-            var token = new JwtSecurityToken(
-                issuer: issuer,
-                audience: audience,
-                claims: claims,
-                notBefore: exp.AddMinutes(-15),
-                expires: exp,
-                signingCredentials: creds);
-            return new JwtSecurityTokenHandler().WriteToken(token);
+            var list = await (await googleOnly.CreateClient().GetAsync("/api/auth/providers")).ReadAsync<List<ExternalProviderDto>>();
+            Assert.Equal("google", Assert.Single(list).Id);
+            var apple = Apple($"{Guid.NewGuid():N}@icloud.com");
+            await AssertRefusedAsync(await PostAsync(apple, client: googleOnly.CreateClient()), HttpStatusCode.Unauthorized, "external_token");
         }
-
-        // 1. Valid Google token with full name and nonce
-        var validGoogle = SignJwt("https://accounts.google.com", "google-aud",
-        [
-            new Claim("sub", "g-sub-1"),
-            new Claim("email", "rider@example.com"),
-            new Claim("email_verified", "true"),
-            new Claim("name", "Alex Rider"),
-            new Claim("nonce", "n-123"),
-        ]);
-        var identity = await validator.ValidateIdTokenAsync("google", validGoogle, "n-123");
-        Assert.NotNull(identity);
-        Assert.Equal(("g-sub-1", "rider@example.com", true, "Alex Rider"),
-            (identity!.Subject, identity.Email, identity.EmailVerified, identity.FullName));
-
-        // 2. Wrong nonce is rejected
-        Assert.Null(await validator.ValidateIdTokenAsync("google", validGoogle, "wrong-nonce"));
-
-        // 3. Google alternate issuer ("accounts.google.com") + given_name / family_name fallback
-        var altGoogle = SignJwt("accounts.google.com", "google-aud",
-        [
-            new Claim("sub", "g-sub-2"),
-            new Claim("email", "sam@example.com"),
-            new Claim("email_verified", "1"),
-            new Claim("given_name", "Sam"),
-            new Claim("family_name", "Taylor"),
-        ]);
-        var altIdentity = await validator.ValidateIdTokenAsync("google", altGoogle, null);
-        Assert.NotNull(altIdentity);
-        Assert.Equal("Sam Taylor", altIdentity!.FullName);
-        Assert.True(altIdentity.EmailVerified);
-
-        // 4. Microsoft multi-tenant issuer validation
-        var validMs = SignJwt("https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0", "ms-aud",
-        [
-            new Claim("sub", "ms-sub-1"),
-            new Claim("email", "coach@example.com"),
-            new Claim("email_verified", "true"),
-        ]);
-        var msIdentity = await validator.ValidateIdTokenAsync("microsoft", validMs, null);
-        Assert.NotNull(msIdentity);
-        Assert.Equal("ms-sub-1", msIdentity!.Subject);
-        Assert.Null(msIdentity.FullName);
-
-        // 5. Invalid Microsoft issuer with extra slash in tenant segment
-        var badMsIssuer = SignJwt("https://login.microsoftonline.com/evil/tenant/v2.0", "ms-aud",
-        [
-            new Claim("sub", "ms-sub-2"),
-            new Claim("email", "coach@example.com"),
-        ]);
-        Assert.Null(await validator.ValidateIdTokenAsync("microsoft", badMsIssuer, null));
-
-        // 6. Wrong audience, expired token, wrong signature, missing claims, unknown provider
-        var wrongAud = SignJwt("https://accounts.google.com", "other-aud",
-            [new Claim("sub", "s"), new Claim("email", "a@b.com")]);
-        Assert.Null(await validator.ValidateIdTokenAsync("google", wrongAud, null));
-
-        var expired = SignJwt("https://accounts.google.com", "google-aud",
-            [new Claim("sub", "s"), new Claim("email", "a@b.com")], expires: DateTime.UtcNow.AddMinutes(-10));
-        Assert.Null(await validator.ValidateIdTokenAsync("google", expired, null));
-
-        using var otherRsa = RSA.Create(2048);
-        var wrongKey = new RsaSecurityKey(otherRsa) { KeyId = "other-key" };
-        var wrongSig = SignJwt("https://accounts.google.com", "google-aud",
-            [new Claim("sub", "s"), new Claim("email", "a@b.com")], signingKey: wrongKey);
-        Assert.Null(await validator.ValidateIdTokenAsync("google", wrongSig, null));
-
-        var missingEmail = SignJwt("https://accounts.google.com", "google-aud", [new Claim("sub", "s")]);
-        Assert.Null(await validator.ValidateIdTokenAsync("google", missingEmail, null));
-
-        Assert.Null(await validator.ValidateIdTokenAsync("unknown", validGoogle, null));
-        Assert.Null(await validator.ValidateIdTokenAsync("", validGoogle, null));
-        Assert.Null(await validator.ValidateIdTokenAsync("google", "", null));
+        using var neither = _f.WithWebHostBuilder(b => b
+            .UseSetting("Auth:Apple:ClientIds:0", "")
+            .UseSetting("Auth:Google:ClientIds:0", "")
+            .UseSetting("Auth:Google:ClientIds:1", ""));
+        Assert.Empty(await (await neither.CreateClient().GetAsync("/api/auth/providers")).ReadAsync<List<ExternalProviderDto>>());
     }
 
-    // ---- POST /api/auth/external ----
+    // ---- New accounts ----
 
     [Fact]
-    public async Task ExternalLogin_NewUser_ReturnsNeedsSignup_ThenCreatesAccountAndSignsInOnRepeat()
+    public async Task ANewGoogleUserPicksAClubThenGetsTheSameRolesAsAnyOtherSignUp()
     {
-        var (factory, validator) = WithFakeValidator();
-        using var _ = factory;
-        var email = $"{Unique()}@example.com";
-        var sub = $"google-{Guid.NewGuid():N}";
-        validator.Register("google", "valid-id-token", new ExternalIdentity(sub, email, true, "Jamie Carter"), "nonce-1");
+        var email = Gmail();
+        var attempt = Google(email, extra: new Dictionary<string, object> { ["name"] = "Jamie Carter" });
 
-        var client = factory.CreateClient();
+        var first = await PostAsync(attempt);
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        var asked = await first.ReadAsync<ExternalAuthResultDto>();
+        Assert.Equal((true, (AuthResponse?)null, email, "Jamie Carter", "google"), (asked.NeedsSignup, asked.Auth, asked.Email, asked.SuggestedName, asked.Provider));
+        Assert.Null(await _f.WithDbAsync(db => db.Users.SingleOrDefaultAsync(u => u.Email == email)));
 
-        // Step 1: Initial sign-in without a club returns NeedsSignup = true
-        var step1 = await client.PostAsJsonAsync("/api/auth/external",
-            new ExternalAuthRequest("google", "valid-id-token", Nonce: "nonce-1"));
-        Assert.Equal(HttpStatusCode.OK, step1.StatusCode);
-        var res1 = await step1.ReadAsync<ExternalAuthResultDto>();
-        Assert.True(res1.NeedsSignup);
-        Assert.Null(res1.Auth);
-        Assert.Equal(email, res1.Email);
-        Assert.Equal("Jamie Carter", res1.SuggestedName);
-        Assert.Equal("google", res1.Provider);
+        var club = $"Google Club {Guid.NewGuid():N}"[..24];
+        var created = await PostAsync(attempt, club, Roles.Trainer, "Jamie Carter");
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+        var auth = (await created.ReadAsync<ExternalAuthResultDto>()).Auth!;
+        Assert.Equal((email, "Jamie Carter", club, true), (auth.User.Email, auth.User.FullName, auth.User.ClubName, auth.User.EmailConfirmed));
+        Assert.Equal(new[] { Roles.Member, Roles.TrainerRequest }, auth.User.Roles.Order());
 
-        // Step 2: Completing sign-up with Club & Role creates the account and links the login
-        var clubName = $"OAuth Club {Guid.NewGuid():N}";
-        var step2 = await client.PostAsJsonAsync("/api/auth/external",
-            new ExternalAuthRequest("google", "valid-id-token", Nonce: "nonce-1", FullName: "Jamie Carter", ClubName: clubName, Role: Roles.Trainer));
-        Assert.Equal(HttpStatusCode.OK, step2.StatusCode);
-        var res2 = await step2.ReadAsync<ExternalAuthResultDto>();
-        Assert.False(res2.NeedsSignup);
-        Assert.NotNull(res2.Auth);
-        Assert.Equal(email, res2.Auth!.User.Email);
-        Assert.Equal("Jamie Carter", res2.Auth.User.FullName);
-        Assert.Equal(clubName, res2.Auth.User.ClubName);
-        Assert.True(res2.Auth.User.EmailConfirmed);
-        Assert.Equal(new[] { Roles.Member, Roles.TrainerRequest }, res2.Auth.User.Roles.Order());
-
-        // Step 3: Next sign-in with the same external account signs straight in without needing clubName
-        var step3 = await client.PostAsJsonAsync("/api/auth/external",
-            new ExternalAuthRequest("google", "valid-id-token", Nonce: "nonce-1"));
-        Assert.Equal(HttpStatusCode.OK, step3.StatusCode);
-        var res3 = await step3.ReadAsync<ExternalAuthResultDto>();
-        Assert.False(res3.NeedsSignup);
-        Assert.Equal(res2.Auth.User.Id, res3.Auth!.User.Id);
-    }
-
-    [Fact]
-    public async Task ExternalLogin_LinksExistingPasswordAccount_WhenEmailIsVerified_AndConfirmsEmail()
-    {
-        var (factory, validator) = WithFakeValidator();
-        using var _ = factory;
-        var (_, signedUp) = await _f.SignupAsync(Roles.Member, "Warwickshire Hunt");
-        var email = signedUp.User.Email;
-
-        // Ensure the account starts with EmailConfirmed = false
+        var login = Assert.Single(await LoginsAsync(auth.User.Id));
+        Assert.Equal(("google", attempt.Subject, "Google"), (login.LoginProvider, login.ProviderKey, login.ProviderDisplayName));
         await _f.InDbAsync(async db =>
         {
-            var u = await db.Users.SingleAsync(x => x.Id == signedUp.User.Id);
-            u.EmailConfirmed = false;
-            await db.SaveChangesAsync();
+            var user = await db.Users.SingleAsync(u => u.Id == auth.User.Id);
+            Assert.Null(user.PasswordHash);
+            // Counted by the per-network account limit like every other sign-up.
+            Assert.True(await db.UserClaims.AnyAsync(c => c.UserId == user.Id && c.ClaimType == "created_ip"));
         });
 
-        validator.Register("apple", "apple-tok", new ExternalIdentity("apple-sub-1", email, EmailVerified: true, "Member Name"));
-        var client = factory.CreateClient();
+        // Later sign-ins go straight in, and the token works like any other.
+        var again = await SignInAsync(Google(email, attempt.Subject));
+        Assert.Equal(auth.User.Id, again.User.Id);
+        (await _f.WithToken(again.Token).GetAsync("/api/auth/me")).EnsureSuccessStatusCode();
+    }
 
-        var res = await client.PostAsJsonAsync("/api/auth/external", new ExternalAuthRequest("apple", "apple-tok"));
-        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
-        var dto = await res.ReadAsync<ExternalAuthResultDto>();
-        Assert.False(dto.NeedsSignup);
-        Assert.Equal(signedUp.User.Id, dto.Auth!.User.Id);
-        Assert.True(dto.Auth.User.EmailConfirmed);
-
-        // Verify the external login is now linked in AspNetUserLogins
-        var logins = await _f.WithDbAsync(db => db.UserLogins.Where(l => l.UserId == signedUp.User.Id).ToListAsync());
-        Assert.Single(logins);
-        Assert.Equal(("apple", "apple-sub-1"), (logins[0].LoginProvider, logins[0].ProviderKey));
+    [Theory]
+    [InlineData(Roles.Manager, new[] { Roles.ManagerRequest, Roles.Member })]
+    [InlineData(Roles.Member, new[] { Roles.Member })]
+    [InlineData(Roles.Admin, new[] { Roles.Member, Roles.TrainerRequest })]
+    [InlineData(null, new[] { Roles.Member, Roles.TrainerRequest })]
+    public async Task NewExternalAccountsAskForRolesTheWaySignUpDoes(string? role, string[] expected)
+    {
+        var attempt = Google(Gmail());
+        var response = await PostAsync(attempt, "Role Club", role ?? "", "Role Tester");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(expected, (await response.ReadAsync<ExternalAuthResultDto>()).Auth!.User.Roles.Order());
     }
 
     [Fact]
-    public async Task ExternalLogin_RefusesToLinkExistingAccount_WhenExternalEmailIsNotVerified()
+    public async Task ATokenForTheSecondConfiguredClientIdIsAccepted()
     {
-        var (factory, validator) = WithFakeValidator();
-        using var _ = factory;
-        var (_, signedUp) = await _f.SignupAsync(Roles.Member, "Warwickshire Hunt");
+        var email = Gmail();
+        var created = await CreateAsync(Google(email));
+        var subject = (await LoginsAsync(created.User.Id)).Single().ProviderKey;
 
-        validator.Register("google", "unverified-tok",
-            new ExternalIdentity("google-unverified-sub", signedUp.User.Email, EmailVerified: false, "Impostor"));
-        var client = factory.CreateClient();
+        var fromIos = await SignInAsync(Google(email, subject, audience: ExternalAuthFactory.GoogleIosClient));
+        Assert.Equal(created.User.Id, fromIos.User.Id);
+    }
 
-        var res = await client.PostAsJsonAsync("/api/auth/external", new ExternalAuthRequest("google", "unverified-tok"));
-        Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
-        Assert.Empty(await _f.WithDbAsync(db => db.UserLogins.Where(l => l.UserId == signedUp.User.Id).ToListAsync()));
+    public static TheoryData<string> BadTokens => ["wrong-audience", "wrong-issuer", "expired", "bad-signature", "nonce-mismatch", "nonce-missing", "unknown-provider", "empty"];
+
+    [Theory]
+    [MemberData(nameof(BadTokens))]
+    public async Task BadTokensAreRefusedWithOneAnswerAndCreateNothing(string kind)
+    {
+        var email = Gmail();
+        var nonce = IdTokenSigner.NewNonce();
+        using var impostor = new IdTokenSigner("google-test-key");
+        string Sign(string issuer = IdTokenSigner.GoogleIssuer, string audience = ExternalAuthFactory.GoogleWebClient, DateTime? expires = null, IdTokenSigner? by = null)
+            => (by ?? _f.Google).Sign(issuer, audience, "g-bad", email, nonce, true, expires: expires);
+        var request = kind switch
+        {
+            "wrong-audience" => new ExternalAuthRequest("google", Sign(audience: "another-app.apps.googleusercontent.com"), nonce),
+            "wrong-issuer" => new ExternalAuthRequest("google", Sign(issuer: "https://accounts.example.com"), nonce),
+            "expired" => new ExternalAuthRequest("google", Sign(expires: DateTime.UtcNow.AddMinutes(-5)), nonce),
+            "bad-signature" => new ExternalAuthRequest("google", Sign(by: impostor), nonce),
+            "nonce-mismatch" => new ExternalAuthRequest("google", Sign(), IdTokenSigner.NewNonce()),
+            "nonce-missing" => new ExternalAuthRequest("google", Sign(), null),
+            "unknown-provider" => new ExternalAuthRequest("microsoft", Sign(), nonce),
+            _ => new ExternalAuthRequest("google", "", nonce),
+        };
+
+        var response = await _f.CreateClient().PostAsJsonAsync("/api/auth/external", request with { ClubName = "Bad Token Club", Role = Roles.Member, FullName = "Bad" });
+        await AssertRefusedAsync(response, HttpStatusCode.Unauthorized, "external_token");
+        Assert.Contains("couldn't check that sign-in", await response.Content.ReadAsStringAsync());
+        Assert.Null(await _f.WithDbAsync(db => db.Users.SingleOrDefaultAsync(u => u.Email == email)));
     }
 
     [Fact]
-    public async Task ExternalLogin_RefusesInvalidToken_UnverifiedNewUser_SharedAdmin_DisposableEmail_AndStoppedAccounts()
+    public async Task BadAddressesAndSignUpDetailsAreRefused()
     {
-        var (factory, validator) = WithFakeValidator();
-        using var _ = factory;
-        var client = factory.CreateClient();
+        await AssertRefusedAsync(await PostAsync(Google("not-an-email")), HttpStatusCode.BadRequest, "email_invalid");
+        // A throwaway inbox is refused before anyone fills in the form.
+        var disposable = Google("rider@mailinator.com", extra: new Dictionary<string, object> { ["hd"] = "mailinator.com" });
+        await AssertRefusedAsync(await PostAsync(disposable), HttpStatusCode.BadRequest, "email_disposable");
 
-        // 1. Missing/invalid token
-        Assert.Equal(HttpStatusCode.Unauthorized,
-            (await client.PostAsJsonAsync("/api/auth/external", new ExternalAuthRequest("google", "bad-token"))).StatusCode);
-        Assert.Equal(HttpStatusCode.Unauthorized,
-            (await client.PostAsJsonAsync("/api/auth/external", new ExternalAuthRequest("", "bad-token"))).StatusCode);
+        var attempt = Google(Gmail());
+        Assert.Equal(HttpStatusCode.BadRequest, (await PostAsync(attempt, new string('C', 101), Roles.Member, "Name")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await PostAsync(attempt, "Club", Roles.Member, new string('N', 101))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await PostAsync(attempt, "Club", Roles.Member, "Name")).StatusCode);
+    }
 
-        // 2. Unverified new user
-        validator.Register("google", "unverified-new", new ExternalIdentity("sub-u", $"{Unique()}@example.com", EmailVerified: false));
-        Assert.Equal(HttpStatusCode.Unauthorized,
-            (await client.PostAsJsonAsync("/api/auth/external", new ExternalAuthRequest("google", "unverified-new"))).StatusCode);
+    [Fact]
+    public async Task NewAccountsCountTowardsTheNetworksAccountLimit()
+    {
+        using var limited = _f.WithWebHostBuilder(b => b.UseSetting("RateLimits:AccountsPerIp", "1"));
+        var client = limited.CreateClient();
+        client.DefaultRequestHeaders.Add(TestIpStartupFilter.Header, "203.0.113.77");
 
-        // 3. Shared admin email refused
-        validator.Register("google", "admin-tok", new ExternalIdentity("sub-admin", "admin@mg.local", EmailVerified: true));
-        Assert.Equal(HttpStatusCode.BadRequest,
-            (await client.PostAsJsonAsync("/api/auth/external", new ExternalAuthRequest("google", "admin-tok"))).StatusCode);
+        var firstEmail = Gmail();
+        var first = Google(firstEmail);
+        Assert.Equal(HttpStatusCode.OK, (await PostAsync(first, "Limit Club", Roles.Member, "First", client: client)).StatusCode);
+        var second = Google(Gmail());
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await PostAsync(second, "Limit Club", Roles.Member, "Second", client: client)).StatusCode);
 
-        // 4. Disposable email refused
-        validator.Register("google", "disp-tok", new ExternalIdentity("sub-disp", "rider@mailinator.com", EmailVerified: true));
-        Assert.Equal(HttpStatusCode.BadRequest,
-            (await client.PostAsJsonAsync("/api/auth/external", new ExternalAuthRequest("google", "disp-tok"))).StatusCode);
+        // Signing in to the account already made isn't a new account.
+        Assert.Equal(HttpStatusCode.OK, (await PostAsync(Google(firstEmail, first.Subject), client: client)).StatusCode);
+    }
 
-        // 5. Malformed email refused
-        validator.Register("google", "bad-email-tok", new ExternalIdentity("sub-bad-email", "not-an-email", EmailVerified: true));
-        Assert.Equal(HttpStatusCode.BadRequest,
-            (await client.PostAsJsonAsync("/api/auth/external", new ExternalAuthRequest("google", "bad-email-tok"))).StatusCode);
+    // ---- Linking by email ----
 
-        // 6. Over-long clubName or fullName refused
-        validator.Register("google", "valid-new", new ExternalIdentity("sub-valid-new", $"{Unique()}@example.com", EmailVerified: true));
-        Assert.Equal(HttpStatusCode.BadRequest,
-            (await client.PostAsJsonAsync("/api/auth/external",
-                new ExternalAuthRequest("google", "valid-new", ClubName: new string('C', 101)))).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest,
-            (await client.PostAsJsonAsync("/api/auth/external",
-                new ExternalAuthRequest("google", "valid-new", ClubName: "Valid Club", FullName: new string('N', 101)))).StatusCode);
+    [Fact]
+    public async Task AnUnverifiedAddressNeverLinksAndGetsTheSameAnswerWhetherOrNotAnAccountUsesIt()
+    {
+        var (id, email) = await PasswordAccountAsync(Gmail(), confirmed: true);
 
-        // 7. Blocked / locked existing account refused both before and after linking
-        var (_, stoppedUser) = await _f.SignupAsync(Roles.Member, "Warwickshire Hunt");
+        var withAccount = await PostAsync(Google(email, verified: false));
+        await AssertRefusedAsync(withAccount, HttpStatusCode.Unauthorized, "external_email_unverified");
+        var withoutAccount = await PostAsync(Google(Gmail(), verified: false), "Club", Roles.Member, "Name");
+        await AssertRefusedAsync(withoutAccount, HttpStatusCode.Unauthorized, "external_email_unverified");
+        Assert.Equal(await withAccount.Content.ReadAsStringAsync(), await withoutAccount.Content.ReadAsStringAsync());
+
+        Assert.Empty(await LoginsAsync(id));
+    }
+
+    [Fact]
+    public async Task AVerifiedGmailAddressLinksToTheConfirmedAccountThatUsesIt()
+    {
+        var (id, email) = await PasswordAccountAsync(Gmail(), confirmed: true);
+        var attempt = Google(email);
+
+        var auth = await SignInAsync(attempt, providerName: "Not Used");
+        Assert.Equal((id, "Pat Password"), (auth.User.Id, auth.User.FullName));
+        Assert.Equal(("google", attempt.Subject), (await LoginsAsync(id)).Select(l => (l.LoginProvider, l.ProviderKey)).Single());
+
+        // The password still works, and the link is used next time.
+        (await _f.CreateClient().PostAsJsonAsync("/api/auth/login", new LoginRequest(email, Password))).EnsureSuccessStatusCode();
+        Assert.Equal(id, (await SignInAsync(Google(email, attempt.Subject))).User.Id);
+    }
+
+    [Fact]
+    public async Task AnUnconfirmedAccountIsNeverLinked_SoSomeoneWhoRegisteredYourAddressCantKeepAWayIn()
+    {
+        var (id, email) = await PasswordAccountAsync(Gmail(), confirmed: false);
+
+        await AssertRefusedAsync(await PostAsync(Google(email)), HttpStatusCode.Conflict, "external_link_refused");
+        await AssertRefusedAsync(await PostAsync(Google(email), "Club", Roles.Member, "Name"), HttpStatusCode.Conflict, "external_link_refused");
+        Assert.Empty(await LoginsAsync(id));
+        Assert.False(await _f.WithDbAsync(db => db.Users.Where(u => u.Id == id).Select(u => u.EmailConfirmed).SingleAsync()));
+    }
+
+    [Fact]
+    public async Task AGoogleAccountIsLinkedByEmailOnlyWhenGoogleHostsTheAddress()
+    {
+        var (id, email) = await PasswordAccountAsync($"{Guid.NewGuid():N}"[..12] + "@ponyclub.example", confirmed: true);
+
+        await AssertRefusedAsync(await PostAsync(Google(email)), HttpStatusCode.Conflict, "external_link_refused");
+        Assert.Empty(await LoginsAsync(id));
+
+        var workspace = Google(email, extra: new Dictionary<string, object> { ["hd"] = "ponyclub.example" });
+        Assert.Equal(id, (await SignInAsync(workspace)).User.Id);
+    }
+
+    [Fact]
+    public async Task ASecondGoogleIdentityWithTheSameAddressIsRefused()
+    {
+        var email = Gmail();
+        var created = await CreateAsync(Google(email));
+
+        await AssertRefusedAsync(await PostAsync(Google(email)), HttpStatusCode.Conflict, "external_other_login");
+        Assert.Single(await LoginsAsync(created.User.Id));
+    }
+
+    [Fact]
+    public async Task ALinkedAccountWithAnUnconfirmedAddressIsConfirmedByAGmailSignIn()
+    {
+        var email = Gmail();
+        var attempt = Google(email);
+        var created = await CreateAsync(attempt);
+        await SetAsync(created.User.Id, u => u.EmailConfirmed = false);
+
+        Assert.True((await SignInAsync(Google(email, attempt.Subject))).User.EmailConfirmed);
+    }
+
+    // ---- Accounts that may never sign in this way ----
+
+    [Fact]
+    public async Task AdminAccountsAreRefusedWhetherFoundByEmailOrByAnExistingLink()
+    {
+        // An organiser made through the admin key holds Admin.
+        var email = Gmail();
+        var made = await _f.CreateClient().PostAsJsonAsync("/api/auth/admin-key", new AdminKeyRequest(ApiFactory.AdminKey, "Show Secretary", email, Password));
+        made.EnsureSuccessStatusCode();
+        var adminId = (await made.ReadAsync<AuthResponse>()).User.Id;
+        await SetAsync(adminId, u => u.EmailConfirmed = true);
+
+        var byEmail = await PostAsync(Google(email));
+        await AssertRefusedAsync(byEmail, HttpStatusCode.Forbidden, "admin_password_only");
+        Assert.Contains("email and password", await byEmail.Content.ReadAsStringAsync());
+        Assert.Empty(await LoginsAsync(adminId));
+
+        // The shared admin account is refused by its role, not by its address.
+        var shared = Google(TestClients.AdminEmail, extra: new Dictionary<string, object> { ["hd"] = "mg.local" });
+        await AssertRefusedAsync(await PostAsync(shared), HttpStatusCode.Forbidden, "admin_password_only");
+
+        // An account linked before it became an admin can't use the link afterwards.
+        var memberEmail = Gmail();
+        var member = Google(memberEmail);
+        var created = await CreateAsync(member);
+        using (var scope = _f.Services.CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+            var promoted = await users.AddToRolesAsync((await users.FindByIdAsync(created.User.Id))!, [Roles.Admin, Roles.MasterAdmin]);
+            Assert.True(promoted.Succeeded);
+        }
+        await AssertRefusedAsync(await PostAsync(Google(memberEmail, member.Subject)), HttpStatusCode.Forbidden, "admin_password_only");
+    }
+
+    [Theory]
+    [InlineData("locked", "account_stopped")]
+    [InlineData("blocked", "account_stopped")]
+    [InlineData("deleted", "account_stopped")]
+    [InlineData("locked-out", "account_locked_out")]
+    public async Task StoppedAccountsAreRefusedWhetherFoundByEmailOrByAnExistingLink(string state, string code)
+    {
+        Action<AppUser> stop = state switch
+        {
+            "locked" => u => u.LockedAt = DateTime.UtcNow,
+            "blocked" => u => u.BlockedAt = DateTime.UtcNow,
+            "deleted" => u => u.LockoutEnd = DateTimeOffset.MaxValue,
+            _ => u => u.LockoutEnd = DateTimeOffset.UtcNow.AddMinutes(15),
+        };
+
+        var linkedEmail = Gmail();
+        var linked = Google(linkedEmail);
+        var created = await CreateAsync(linked);
+        await SetAsync(created.User.Id, stop);
+        await AssertRefusedAsync(await PostAsync(Google(linkedEmail, linked.Subject)), HttpStatusCode.Forbidden, code);
+
+        var (id, email) = await PasswordAccountAsync(Gmail(), confirmed: true);
+        await SetAsync(id, stop);
+        await AssertRefusedAsync(await PostAsync(Google(email)), HttpStatusCode.Forbidden, code);
+        Assert.Empty(await LoginsAsync(id));
+    }
+
+    [Fact]
+    public async Task ATokenFromAProviderSignInStopsWorkingWhenTheAccountIsBlocked()
+    {
+        var auth = await CreateAsync(Google(Gmail()));
+        var client = _f.WithToken(auth.Token);
+        (await client.GetAsync("/api/auth/me")).EnsureSuccessStatusCode();
+
+        await SetAsync(auth.User.Id, u => u.BlockedAt = DateTime.UtcNow);
+        _f.Services.GetRequiredService<LiveAccounts>().Forget(auth.User.Id);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/auth/me")).StatusCode);
+    }
+
+    [Fact]
+    public async Task ABlockedNetworkIsRefusedEvenWithAGoodToken()
+    {
+        const string blockedIp = "198.51.100.199";
         await _f.InDbAsync(async db =>
         {
-            var u = await db.Users.SingleAsync(x => x.Id == stoppedUser.User.Id);
-            u.BlockedAt = DateTime.UtcNow;
-            await db.SaveChangesAsync();
-        });
-        validator.Register("google", "stopped-email-tok", new ExternalIdentity("sub-stopped-1", stoppedUser.User.Email, EmailVerified: true));
-        Assert.Equal(HttpStatusCode.Forbidden,
-            (await client.PostAsJsonAsync("/api/auth/external", new ExternalAuthRequest("google", "stopped-email-tok"))).StatusCode);
-
-        // Also when already linked via AspNetUserLogins:
-        await _f.InDbAsync(async db =>
-        {
-            db.UserLogins.Add(new IdentityUserLogin<string>
+            db.IpBlocks.Add(new IpBlock
             {
-                LoginProvider = "google",
-                ProviderKey = "sub-stopped-linked",
-                ProviderDisplayName = "Google",
-                UserId = stoppedUser.User.Id,
+                IpAddress = MountedGames.Api.Services.IpRetention.HashFor(_f.Services.GetRequiredService<IConfiguration>(), blockedIp),
+                Reason = "Test block",
+                CreatedAt = DateTime.UtcNow,
             });
             await db.SaveChangesAsync();
         });
-        validator.Register("google", "stopped-linked-tok", new ExternalIdentity("sub-stopped-linked", stoppedUser.User.Email, EmailVerified: true));
-        Assert.Equal(HttpStatusCode.Forbidden,
-            (await client.PostAsJsonAsync("/api/auth/external", new ExternalAuthRequest("google", "stopped-linked-tok"))).StatusCode);
-    }
-
-    [Fact]
-    public async Task ExternalLogin_BlockedNetworkIp_Returns403()
-    {
-        var (factory, validator) = WithFakeValidator();
-        using var _ = factory;
-        var blockedIp = "198.51.100.199";
-        await _f.InDbAsync(async db =>
-        {
-            var hash = MountedGames.Api.Services.IpRetention.HashFor(
-                factory.Services.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>(), blockedIp);
-            db.IpBlocks.Add(new IpBlock { IpAddress = hash, Reason = "Test block", CreatedAt = DateTime.UtcNow });
-            await db.SaveChangesAsync();
-        });
-
-        var client = factory.CreateClient();
+        var client = _f.CreateClient();
         client.DefaultRequestHeaders.Add(TestIpStartupFilter.Header, blockedIp);
 
-        var res = await client.PostAsJsonAsync("/api/auth/external", new ExternalAuthRequest("google", "any"));
-        Assert.Equal(HttpStatusCode.Forbidden, res.StatusCode);
+        var response = await PostAsync(Google(Gmail()), "Club", Roles.Member, "Name", client: client);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Contains("network is blocked", await response.Content.ReadAsStringAsync());
+    }
+
+    // ---- Apple ----
+
+    [Fact]
+    public async Task ApplesFirstSignInNameIsOnlyASuggestionForANewAccount()
+    {
+        var email = $"{Guid.NewGuid():N}"[..12] + "@icloud.com";
+        var attempt = Apple(email);
+
+        var asked = await (await PostAsync(attempt, providerName: "  Sam \n Taylor ")).ReadAsync<ExternalAuthResultDto>();
+        Assert.Equal((true, "Sam Taylor"), (asked.NeedsSignup, asked.SuggestedName));
+
+        // Without a name typed in, the new account takes Apple's.
+        var created = await PostAsync(attempt, "Apple Club", Roles.Member, fullName: null, providerName: "Sam Taylor");
+        var auth = (await created.ReadAsync<ExternalAuthResultDto>()).Auth!;
+        Assert.Equal("Sam Taylor", auth.User.FullName);
+
+        // Afterwards a name sent with the token changes nothing and never picks the account.
+        var later = await SignInAsync(Apple(email, attempt.Subject), providerName: "Someone Else");
+        Assert.Equal((auth.User.Id, "Sam Taylor"), (later.User.Id, later.User.FullName));
+        Assert.Equal("Sam Taylor", await _f.WithDbAsync(db => db.Users.Where(u => u.Id == auth.User.Id).Select(u => u.FullName).SingleAsync()));
+        Assert.Equal(HttpStatusCode.OK, (await PostAsync(Apple($"{Guid.NewGuid():N}"[..12] + "@icloud.com"), providerName: "Sam Taylor")).StatusCode);
     }
 
     [Fact]
-    public async Task ExternalLogin_LinkedAccountWithUnconfirmedEmail_MarksConfirmedOnVerifiedLogin()
+    public async Task AppleHiddenAddressesNeverLinkByEmailAndSuggestNoName()
     {
-        var (factory, validator) = WithFakeValidator();
-        using var _ = factory;
-        var (_, userAuth) = await _f.SignupAsync(Roles.Member, "Warwickshire Hunt");
-        await _f.InDbAsync(async db =>
-        {
-            var u = await db.Users.SingleAsync(x => x.Id == userAuth.User.Id);
-            u.EmailConfirmed = false;
-            db.UserLogins.Add(new IdentityUserLogin<string>
-            {
-                LoginProvider = "google",
-                ProviderKey = "sub-confirm-on-login",
-                ProviderDisplayName = "Google",
-                UserId = u.Id,
-            });
-            await db.SaveChangesAsync();
-        });
+        var relay = $"{Guid.NewGuid():N}"[..10] + "@privaterelay.appleid.com";
+        var (id, _) = await PasswordAccountAsync(relay, confirmed: true);
+        await AssertRefusedAsync(await PostAsync(Apple(relay, relay: true)), HttpStatusCode.Conflict, "external_link_refused");
+        Assert.Empty(await LoginsAsync(id));
 
-        validator.Register("google", "confirm-tok", new ExternalIdentity("sub-confirm-on-login", userAuth.User.Email, EmailVerified: true));
-        var client = factory.CreateClient();
+        var fresh = Apple($"{Guid.NewGuid():N}"[..10] + "@privaterelay.appleid.com", relay: true);
+        var asked = await (await PostAsync(fresh)).ReadAsync<ExternalAuthResultDto>();
+        Assert.Equal((true, ""), (asked.NeedsSignup, asked.SuggestedName));
+        Assert.Equal(HttpStatusCode.BadRequest, (await PostAsync(fresh, "Relay Club", Roles.Member, fullName: "  ")).StatusCode);
+        var created = await PostAsync(fresh, "Relay Club", Roles.Member, fullName: "Robin Hidden");
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+        Assert.Equal("Robin Hidden", (await created.ReadAsync<ExternalAuthResultDto>()).Auth!.User.FullName);
+    }
 
-        var res = await client.PostAsJsonAsync("/api/auth/external", new ExternalAuthRequest("google", "confirm-tok"));
-        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
-        var dto = await res.ReadAsync<ExternalAuthResultDto>();
-        Assert.True(dto.Auth!.User.EmailConfirmed);
+    [Fact]
+    public async Task ARealAppleAddressLinksToTheConfirmedAccountThatUsesIt()
+    {
+        var (id, email) = await PasswordAccountAsync($"{Guid.NewGuid():N}"[..12] + "@icloud.com", confirmed: true);
+        Assert.Equal(id, (await SignInAsync(Apple(email))).User.Id);
+        Assert.Equal("apple", Assert.Single(await LoginsAsync(id)).LoginProvider);
     }
 }

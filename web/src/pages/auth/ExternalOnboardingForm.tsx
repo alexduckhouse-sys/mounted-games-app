@@ -3,6 +3,7 @@ import { ArrowLeft, Plus } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { Notice } from '../../components/Notice';
+import { externalErrorMessage } from '../../lib/externalAuthError';
 import type { Club } from '../../types';
 import { Field } from './Field';
 
@@ -20,10 +21,12 @@ const SIGNUP_ROLE_CHOICES: {
   { id: 'manager', label: 'Team manager', api: 'Manager', sentence: 'team manager', byAdmins: true },
 ];
 
+/** A provider sign-in that found no account yet: the token is sent again, with the club and role, to create one. */
 export interface PendingExternalSignup {
   provider: string;
   idToken: string;
-  nonce?: string;
+  nonce: string;
+  providerName?: string;
   email: string;
   suggestedName: string;
 }
@@ -36,8 +39,8 @@ interface ExternalOnboardingFormProps {
 }
 
 /**
- * In-page completion step shown when someone signs in with Google, Apple, Microsoft or OIDC
- * for the first time and needs to pick their Pony Club / team and role.
+ * In-page completion step shown when someone signs in with Google or Apple for the first time and needs to pick their
+ * Pony Club / team and role. The API makes the account the same way as the email sign-up.
  */
 export function ExternalOnboardingForm({
   pending,
@@ -85,14 +88,14 @@ export function ExternalOnboardingForm({
     try {
       await loginWithExternal(pending.provider, pending.idToken, {
         nonce: pending.nonce,
+        providerName: pending.providerName,
         fullName: name.trim(),
         clubName: typed,
         role: chosenRole.api,
       });
       onComplete({ club: typed, role: chosenRole.id });
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg || 'Couldn’t create the account. Check your signal and try again.');
+      setError(externalErrorMessage(err, 'Couldn’t create the account. Check your signal and try again.'));
     }
   }
 

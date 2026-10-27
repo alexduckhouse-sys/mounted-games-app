@@ -104,9 +104,14 @@ builder.Services
 builder.Services.AddAuthorizationWithCompetitionStaff();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<LiveAccounts>();
-builder.Services.AddHttpClient(OidcExternalTokenValidator.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(10))
+// Sign in with Google / Apple: fetches only the providers' fixed signing-key addresses (see ExternalProviders).
+builder.Services.AddHttpClient(ExternalTokenValidator.HttpClientName, c =>
+    {
+        c.Timeout = TimeSpan.FromSeconds(10);
+        c.MaxResponseContentBufferSize = 256 * 1024;
+    })
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
-builder.Services.AddSingleton<IExternalTokenValidator, OidcExternalTokenValidator>();
+builder.Services.AddSingleton<IExternalTokenValidator, ExternalTokenValidator>();
 
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<ScoringService>();

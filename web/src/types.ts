@@ -45,13 +45,11 @@ export interface AuthResponse {
   user: UserProfile;
 }
 
+/** A sign-in provider switched on in the API (`GET /auth/providers`). `clientId` is the public web client ID. */
 export interface ExternalProvider {
-  id: string;
+  id: 'google' | 'apple';
   name: string;
   clientId: string;
-  authorizeEndpoint: string;
-  scope: string;
-  responseMode?: string;
 }
 
 export interface ExternalAuthResponse {

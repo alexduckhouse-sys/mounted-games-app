@@ -72,11 +72,31 @@ public class AuthController : ControllerBase
 
     private const string AccessStoppedMessage = "This account can't sign in right now. Contact an organiser or administrator.";
 
+    /// <summary>The sign-in providers that are switched on (a provider with no client ID is left out).</summary>
     [HttpGet("providers")]
     [AllowAnonymous]
     public ActionResult<IReadOnlyList<ExternalProviderDto>> GetProviders([FromServices] IExternalTokenValidator externalValidator)
         => Ok(externalValidator.GetEnabledProviders());
 
+    private const string ExternalTokenRefused = "We couldn't check that sign-in. Try again.";
+    private const string AdminsUsePassword = "Admins need to sign in with their email and password, not Google or Apple.";
+    private const string AccountExistsUsePassword = "There's already an account with this email address. Sign in with your email and password.";
+    private const string LockedOutMessage = "Too many wrong passwords. Try again in a few minutes.";
+
+    /// <summary>
+    /// Signs in with a Google or Apple ID token, linking it to an existing account or, with a club and role, creating one.
+    /// <list type="bullet">
+    /// <item>The token must pass <see cref="IExternalTokenValidator"/> (signature, issuer, audience, expiry, nonce).</item>
+    /// <item>A provider sign-in already linked to an account signs in to that account.</item>
+    /// <item>Otherwise an account with the same email is linked only when the provider vouches for the address
+    /// (<see cref="ExternalIdentity.MayLinkByEmail"/>) and the account's own email is confirmed, so nobody can register
+    /// someone else's address with a password and wait for its owner to sign in with Google.</item>
+    /// <item>Admin accounts, locked or blocked accounts and accounts locked out after wrong passwords are never signed in
+    /// or linked this way.</item>
+    /// <item>A new account goes through the same path as <see cref="SignupTrainer"/>: the per-network account limit,
+    /// Member at once, a Trainer or Manager request awaiting approval.</item>
+    /// </list>
+    /// </summary>
     [EnableRateLimiting("auth")]
     [HttpPost("external")]
     [AllowAnonymous]
@@ -89,150 +109,119 @@ public class AuthController : ControllerBase
         if (await _db.IsIpBlockedAsync(HttpContext, HttpContext.RequestAborted))
             return StatusCode(StatusCodes.Status403Forbidden, new { message = "Sign-in from this network is blocked." });
 
-        var providerKey = (req.Provider ?? string.Empty).Trim().ToLowerInvariant();
-        if (providerKey.Length == 0 || string.IsNullOrWhiteSpace(req.IdToken))
-            return Unauthorized(new { message = "Could not verify that sign-in. Try again." });
+        var providerId = (req.Provider ?? string.Empty).Trim().ToLowerInvariant();
+        var provider = externalValidator.GetEnabledProviders().FirstOrDefault(p => p.Id == providerId);
+        if (provider is null)
+            return Unauthorized(new { message = ExternalTokenRefused, code = "external_token" });
 
-        var identity = await externalValidator.ValidateIdTokenAsync(providerKey, req.IdToken, req.Nonce, HttpContext.RequestAborted);
-        if (identity is null || string.IsNullOrWhiteSpace(identity.Subject) || string.IsNullOrWhiteSpace(identity.Email))
-            return Unauthorized(new { message = "Could not verify that sign-in. Try again." });
-
+        var checkedToken = await externalValidator.ValidateAsync(provider.Id, req.IdToken ?? string.Empty, req.Nonce, HttpContext.RequestAborted);
+        if (checkedToken.Identity is not { } identity)
+            return Unauthorized(new { message = ExternalTokenRefused, code = "external_token" });
         if (!EmailValidation.TryNormalise(identity.Email, out var email))
             return EmailRejected(EmailProblem.Format);
-        if (string.Equals(email, "admin@mg.local", StringComparison.OrdinalIgnoreCase))
-            return BadRequest(new { message = "Choose your own email address." });
-        if (EmailValidation.IsDisposable(EmailValidation.DomainOf(email)))
-            return EmailRejected(EmailProblem.Disposable);
 
-        var providerDisplayName = externalValidator.GetEnabledProviders()
-            .FirstOrDefault(p => string.Equals(p.Id, providerKey, StringComparison.OrdinalIgnoreCase))?.Name
-            ?? ExternalProviders.DisplayNameFor(providerKey, config);
-
-        var linkedUser = await _users.FindByLoginAsync(providerKey, identity.Subject);
+        var linkedUser = await _users.FindByLoginAsync(provider.Id, identity.Subject);
         if (linkedUser is not null)
         {
-            if (linkedUser.IsAccessStopped)
-                return StatusCode(StatusCodes.Status403Forbidden, new { message = AccessStoppedMessage, code = "account_stopped" });
-
-            if (!linkedUser.EmailConfirmed && identity.EmailVerified
-                && string.Equals(linkedUser.Email, email, StringComparison.OrdinalIgnoreCase))
+            if (await RefuseExternalSignInAsync(linkedUser) is { } refused) return refused;
+            if (!linkedUser.EmailConfirmed && identity.MayLinkByEmail && string.Equals(linkedUser.Email, email, StringComparison.OrdinalIgnoreCase))
             {
                 linkedUser.EmailConfirmed = true;
                 await _users.UpdateAsync(linkedUser);
             }
-
-            await ipRecorder.RecordAsync(linkedUser.Id, HttpContext.Connection.RemoteIpAddress?.ToString(), HttpContext.RequestAborted);
-            var (linkedToken, linkedExpires, linkedRoles) = await _tokens.CreateTokenAsync(linkedUser);
-            var linkedClub = linkedUser.ClubId.HasValue ? await _db.Clubs.FindAsync(linkedUser.ClubId.Value) : null;
-            return new ExternalAuthResultDto(
-                NeedsSignup: false,
-                Auth: new AuthResponse(linkedToken, linkedExpires,
-                    new UserProfile(linkedUser.Id, linkedUser.Email!, linkedUser.FullName, linkedUser.ClubId, linkedClub?.Name, linkedRoles.ToList(), linkedUser.EmailConfirmed)));
+            return await ExternalSignInAsync(linkedUser, ipRecorder);
         }
 
-        var existingUser = await _users.FindByEmailAsync(email);
-        if (existingUser is not null)
-        {
-            if (!identity.EmailVerified)
-                return Unauthorized(new { message = "Confirm your email address with your sign-in provider first, or sign in with your password." });
-            if (existingUser.IsAccessStopped)
-                return StatusCode(StatusCodes.Status403Forbidden, new { message = AccessStoppedMessage, code = "account_stopped" });
-
-            var linked = await _users.AddLoginAsync(existingUser, new UserLoginInfo(providerKey, identity.Subject, providerDisplayName));
-            if (!linked.Succeeded)
-                return BadRequest(new { message = "Could not link that sign-in provider to your account." });
-
-            if (!existingUser.EmailConfirmed)
-            {
-                existingUser.EmailConfirmed = true;
-                await _users.UpdateAsync(existingUser);
-            }
-
-            await ipRecorder.RecordAsync(existingUser.Id, HttpContext.Connection.RemoteIpAddress?.ToString(), HttpContext.RequestAborted);
-            var (existingToken, existingExpires, existingRoles) = await _tokens.CreateTokenAsync(existingUser);
-            var existingClub = existingUser.ClubId.HasValue ? await _db.Clubs.FindAsync(existingUser.ClubId.Value) : null;
-            return new ExternalAuthResultDto(
-                NeedsSignup: false,
-                Auth: new AuthResponse(existingToken, existingExpires,
-                    new UserProfile(existingUser.Id, existingUser.Email!, existingUser.FullName, existingUser.ClubId, existingClub?.Name, existingRoles.ToList(), existingUser.EmailConfirmed)));
-        }
-
+        // The same answer whether or not an account uses this address, so an unconfirmed address reveals nothing.
         if (!identity.EmailVerified)
-            return Unauthorized(new { message = "Confirm your email address with your sign-in provider first." });
+            return Unauthorized(new
+            {
+                message = $"{provider.Name} hasn't confirmed this email address yet. Confirm it in your {provider.Name} account, or sign in with your email and password.",
+                code = "external_email_unverified",
+            });
 
-        var suggestedName = !string.IsNullOrWhiteSpace(identity.FullName) ? identity.FullName.Trim() : email.Split('@')[0];
-        if (suggestedName.Length > 100)
-            suggestedName = suggestedName[..100];
-
-        if (string.IsNullOrWhiteSpace(req.ClubName))
+        var existing = await _users.FindByEmailAsync(email);
+        if (existing is not null)
         {
-            return new ExternalAuthResultDto(
-                NeedsSignup: true,
-                Auth: null,
-                Email: email,
-                SuggestedName: suggestedName,
-                Provider: providerKey);
+            if (!identity.MayLinkByEmail || !existing.EmailConfirmed)
+                return Conflict(new { message = AccountExistsUsePassword, code = "external_link_refused" });
+            if (await RefuseExternalSignInAsync(existing) is { } refused) return refused;
+            // One Google (or Apple) identity per account: a second one with the same address is someone else's.
+            if ((await _users.GetLoginsAsync(existing)).Any(l => l.LoginProvider == provider.Id))
+                return Conflict(new
+                {
+                    message = $"Your account here is already linked to a different {provider.Name} account. Sign in with that one, or with your email and password.",
+                    code = "external_other_login",
+                });
+            var linked = await _users.AddLoginAsync(existing, new UserLoginInfo(provider.Id, identity.Subject, provider.Name));
+            if (!linked.Succeeded)
+                return Conflict(new { message = AccountExistsUsePassword, code = "external_link_refused" });
+            return await ExternalSignInAsync(existing, ipRecorder);
         }
+
+        if (EmailValidation.IsDisposable(EmailValidation.DomainOf(email)))
+            return EmailRejected(EmailProblem.Disposable);
+
+        // Apple's name arrives beside the token, not in it, so it only ever suggests a name for a new account.
+        var suggestedName = SuggestedExternalName(identity, req.ProviderName, email);
+        if (string.IsNullOrWhiteSpace(req.ClubName))
+            return new ExternalAuthResultDto(NeedsSignup: true, Auth: null, Email: email, SuggestedName: suggestedName, Provider: provider.Id);
 
         var clubName = req.ClubName.Trim();
-        if (clubName.Length > 100)
-            return BadRequest(new { message = "Pony Club or team name must be 100 characters or fewer." });
-
+        if (ClubNameProblem(clubName) is { } clubProblem)
+            return BadRequest(new { message = clubProblem });
         var givenName = (req.FullName ?? string.Empty).Trim();
         if (givenName.Length > 100)
             return BadRequest(new { message = "Your name must be 100 characters or fewer." });
         var fullName = givenName.Length > 0 ? givenName : suggestedName;
+        if (fullName.Length == 0)
+            return BadRequest(new { message = "Enter your name." });
 
-        var requested = (req.Role ?? Roles.Trainer).Trim();
-        var role = requested.Equals(Roles.Manager, StringComparison.OrdinalIgnoreCase) ? Roles.Manager
-                 : requested.Equals(Roles.Member, StringComparison.OrdinalIgnoreCase) ? Roles.Member
-                 : Roles.Trainer;
-
-        var createdAccount = await CreateAccountAsync(config, async (ipHash, accountId) =>
-        {
-            var club = await _db.Clubs.FirstOrDefaultAsync(c => c.Name.ToLower() == clubName.ToLower());
-            club ??= new Club { Name = clubName, Region = "Custom" };
-
-            var user = new AppUser
-            {
-                Id = accountId,
-                UserName = email,
-                Email = email,
-                FullName = fullName,
-                Club = club.Id == 0 ? club : null,
-                ClubId = club.Id == 0 ? null : club.Id,
-                EmailConfirmed = true
-            };
-            var created = await _users.CreateAsync(user);
-            if (!created.Succeeded)
-                return PasswordProblems(created);
-
-            var recordedIp = await _users.AddClaimAsync(user, new Claim(CreatedIpClaimType, ipHash));
-            if (!recordedIp.Succeeded)
-                return PasswordProblems(recordedIp);
-
-            var loginAdded = await _users.AddLoginAsync(user, new UserLoginInfo(providerKey, identity.Subject, providerDisplayName));
-            if (!loginAdded.Succeeded)
-                return PasswordProblems(loginAdded);
-
-            var assignedRoles = role == Roles.Trainer ? new[] { Roles.Member, Roles.TrainerRequest }
-                : role == Roles.Manager ? new[] { Roles.Member, Roles.ManagerRequest }
-                : new[] { role };
-            var assigned = await _users.AddToRolesAsync(user, assignedRoles);
-            if (!assigned.Succeeded)
-                return BadRequest(new { errors = assigned.Errors.Select(e => e.Description) });
-
-            var (token, expiresAt, rolesOut) = await _tokens.CreateTokenAsync(user);
-            return new AuthResponse(token, expiresAt,
-                new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club.Name, rolesOut.ToList(), user.EmailConfirmed));
-        });
-
-        if (createdAccount.Result is not null)
-            return createdAccount.Result;
-
-        var signedUp = createdAccount.Value!;
+        var created = await CreateSelfServiceAccountAsync(config, email, fullName, clubName, SelfServiceRole(req.Role),
+            emailConfirmed: true, password: null, login: new UserLoginInfo(provider.Id, identity.Subject, provider.Name));
+        if (created.Value is not { } signedUp)
+            return created.Result!;
         await ipRecorder.RecordAsync(signedUp.User.Id, HttpContext.Connection.RemoteIpAddress?.ToString(), HttpContext.RequestAborted);
         return new ExternalAuthResultDto(NeedsSignup: false, Auth: signedUp);
+    }
+
+    /// <summary>
+    /// Why an account can't be signed in to or linked through a provider, or null if it can. Admins must use their
+    /// password; a lock, block, deletion or wrong-password lockout stops this route as it stops the password one.
+    /// </summary>
+    private async Task<ActionResult?> RefuseExternalSignInAsync(AppUser user)
+    {
+        var roles = await _users.GetRolesAsync(user);
+        if (roles.Contains(Roles.Admin) || roles.Contains(Roles.MasterAdmin))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = AdminsUsePassword, code = "admin_password_only" });
+        if (user.IsAccessStopped || user.LockoutEnd == DateTimeOffset.MaxValue)
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = AccessStoppedMessage, code = "account_stopped" });
+        if (await _users.IsLockedOutAsync(user))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = LockedOutMessage, code = "account_locked_out" });
+        return null;
+    }
+
+    private async Task<ActionResult<ExternalAuthResultDto>> ExternalSignInAsync(AppUser user, AccountIpRecorder ipRecorder)
+    {
+        await ipRecorder.RecordAsync(user.Id, HttpContext.Connection.RemoteIpAddress?.ToString(), HttpContext.RequestAborted);
+        var (token, expiresAt, roles) = await _tokens.CreateTokenAsync(user);
+        var club = user.ClubId.HasValue ? await _db.Clubs.FindAsync(user.ClubId.Value) : null;
+        return new ExternalAuthResultDto(NeedsSignup: false, Auth: new AuthResponse(token, expiresAt,
+            new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club?.Name, roles.ToList(), user.EmailConfirmed)));
+    }
+
+    /// <summary>
+    /// The name offered for a new account: the token's (Google), else the one Apple handed the page, else the start of a
+    /// real email address. An Apple relay address's start is random letters, so it suggests nothing.
+    /// </summary>
+    private static string SuggestedExternalName(ExternalIdentity identity, string? providerName, string email)
+    {
+        var name = identity.Name;
+        if (string.IsNullOrWhiteSpace(name)) name = providerName;
+        if (string.IsNullOrWhiteSpace(name)) name = identity.IsPrivateRelay ? string.Empty : email.Split('@')[0];
+        name = string.Join(' ', new string(name.Select(c => char.IsControl(c) ? ' ' : c).ToArray())
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        return name.Length > 100 ? name[..100].TrimEnd() : name;
     }
 
     [EnableRateLimiting("auth")]
@@ -427,24 +416,49 @@ public class AuthController : ControllerBase
         if (realEmail && await domains.CheckAsync(EmailValidation.DomainOf(email), HttpContext.RequestAborted) == DomainMail.NoMail)
             return EmailRejected(EmailProblem.NoMailServer);
 
-        // Trainer is the default request.
-        var requested = (req.Role ?? Roles.Trainer).Trim();
-        var role = requested.Equals(Roles.Manager, StringComparison.OrdinalIgnoreCase) ? Roles.Manager
-                 : requested.Equals(Roles.Member, StringComparison.OrdinalIgnoreCase) ? Roles.Member
-                 : Roles.Trainer;
-
-        // Everyone belongs to a club (Admin accounts are made separately). A name that matches an
-        // existing club (case-insensitive) joins it; a new name creates the club.
+        // Everyone belongs to a club (Admin accounts are made separately).
         var clubName = (req.ClubName ?? string.Empty).Trim();
-        if (clubName.Length == 0)
-            return BadRequest(new { message = "Pony Club or team name is required." });
-        if (clubName.Length > 100)
-            return BadRequest(new { message = "Pony Club or team name must be 100 characters or fewer." });
+        if (ClubNameProblem(clubName) is { } clubProblem)
+            return BadRequest(new { message = clubProblem });
 
-        var createdAccount = await CreateAccountAsync(config, async (ipHash, accountId) =>
+        // A made-up username address can't receive mail, so only a real one is left to confirm.
+        var createdAccount = await CreateSelfServiceAccountAsync(config, email, fullName, clubName, SelfServiceRole(req.Role),
+            emailConfirmed: !realEmail, password: req.Password, login: null);
+        // Send once, after the retryable database transaction has committed.
+        if (createdAccount.Value is { } signedUp)
+            await ipRecorder.RecordAsync(signedUp.User.Id, HttpContext.Connection.RemoteIpAddress?.ToString(), HttpContext.RequestAborted);
+        if (realEmail && createdAccount.Value is { } createdProfile)
+            await accountEmail.SendConfirmationAsync((await _users.FindByIdAsync(createdProfile.User.Id))!);
+        return createdAccount;
+    }
+
+    /// <summary>The role a self-service sign-up asks for: Trainer by default, or Manager or Member.</summary>
+    private static string SelfServiceRole(string? requested)
+    {
+        var value = (requested ?? Roles.Trainer).Trim();
+        return value.Equals(Roles.Manager, StringComparison.OrdinalIgnoreCase) ? Roles.Manager
+             : value.Equals(Roles.Member, StringComparison.OrdinalIgnoreCase) ? Roles.Member
+             : Roles.Trainer;
+    }
+
+    private static string? ClubNameProblem(string clubName) => clubName.Length switch
+    {
+        0 => "Pony Club or team name is required.",
+        > 100 => "Pony Club or team name must be 100 characters or fewer.",
+        _ => null,
+    };
+
+    /// <summary>
+    /// Makes a self-service account, the one way both sign-up routes create people: within the per-network account limit,
+    /// in the club of that name (joined case-insensitively, or created with the account so a failed sign-up leaves nothing
+    /// behind), with Member at once and a Trainer or Manager request awaiting approval (trainers by an admin or their club's
+    /// manager, managers by an admin). A password sign-up passes its password; a provider sign-up passes its login instead.
+    /// </summary>
+    private Task<ActionResult<AuthResponse>> CreateSelfServiceAccountAsync(IConfiguration config, string email, string fullName,
+        string clubName, string role, bool emailConfirmed, string? password, UserLoginInfo? login)
+        => CreateAccountAsync(config, async (ipHash, accountId) =>
         {
             var club = await _db.Clubs.FirstOrDefaultAsync(c => c.Name.ToLower() == clubName.ToLower());
-            // A new club is saved together with the account, so a failed signup leaves nothing behind.
             club ??= new Club { Name = clubName, Region = "Custom" };
 
             var user = new AppUser
@@ -455,17 +469,21 @@ public class AuthController : ControllerBase
                 FullName = fullName,
                 Club = club.Id == 0 ? club : null,
                 ClubId = club.Id == 0 ? null : club.Id,
-                // A made-up username address can't receive mail, so only a real one is left to confirm.
-                EmailConfirmed = !realEmail
+                EmailConfirmed = emailConfirmed
             };
-            var result = await _users.CreateAsync(user, req.Password);
+            var result = password is null ? await _users.CreateAsync(user) : await _users.CreateAsync(user, password);
             if (!result.Succeeded)
                 return PasswordProblems(result);
 
             var recordedIp = await _users.AddClaimAsync(user, new Claim(CreatedIpClaimType, ipHash));
             if (!recordedIp.Succeeded) return PasswordProblems(recordedIp);
 
-            // Organising access needs approval: trainers by an admin or their club's manager, managers by an admin.
+            if (login is not null)
+            {
+                var linked = await _users.AddLoginAsync(user, login);
+                if (!linked.Succeeded) return Conflict(new { message = AccountExistsUsePassword, code = "external_link_refused" });
+            }
+
             var assignedRoles = role == Roles.Trainer ? new[] { Roles.Member, Roles.TrainerRequest }
                 : role == Roles.Manager ? new[] { Roles.Member, Roles.ManagerRequest }
                 : new[] { role };
@@ -477,13 +495,6 @@ public class AuthController : ControllerBase
             return new AuthResponse(token, expiresAt,
                 new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club.Name, rolesOut.ToList(), user.EmailConfirmed));
         });
-        // Send once, after the retryable database transaction has committed.
-        if (createdAccount.Value is { } signedUp)
-            await ipRecorder.RecordAsync(signedUp.User.Id, HttpContext.Connection.RemoteIpAddress?.ToString(), HttpContext.RequestAborted);
-        if (realEmail && createdAccount.Value is { } createdProfile)
-            await accountEmail.SendConfirmationAsync((await _users.FindByIdAsync(createdProfile.User.Id))!);
-        return createdAccount;
-    }
 
     private Task<ActionResult<AuthResponse>> CreateAccountAsync(IConfiguration config, Func<string, string, Task<ActionResult<AuthResponse>>> create)
     {

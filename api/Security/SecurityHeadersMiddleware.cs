@@ -4,7 +4,22 @@ public sealed class SecurityHeadersMiddleware(RequestDelegate next, IWebHostEnvi
 {
     // The Vite build uses external scripts and self-hosted fonts. Keep this in
     // step with web/vercel.json; the parity test covers both deployment paths.
-    public const string ContentSecurityPolicy = "default-src 'none'; script-src 'self'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; style-src-elem 'self'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self' https://mounted-games-api.vercel.app wss://mounted-games-api.vercel.app; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://player.twitch.tv; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; upgrade-insecure-requests";
+    // Sign in with Google (Google Identity Services) needs its script, stylesheet, button/One Tap frames and status
+    // calls under https://accounts.google.com/gsi/; Sign in with Apple needs only its one script file (its pop-up is a
+    // window, not a frame, and answers by postMessage). Exactly the paths each provider documents, nothing wider.
+    public const string ContentSecurityPolicy = "default-src 'none'; script-src 'self' https://accounts.google.com/gsi/client https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_GB/appleid.auth.js; script-src-attr 'none'; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; style-src-elem 'self' https://accounts.google.com/gsi/style; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self' https://mounted-games-api.vercel.app wss://mounted-games-api.vercel.app https://accounts.google.com/gsi/; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://player.twitch.tv https://accounts.google.com/gsi/; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; upgrade-insecure-requests";
+
+    /// <summary>
+    /// The sign-in providers' sources in <see cref="ContentSecurityPolicy"/>, longest first. The embed policy leaves them
+    /// out: the framed results widget never signs anyone in.
+    /// </summary>
+    public static readonly IReadOnlyList<string> SignInSources =
+    [
+        "https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_GB/appleid.auth.js",
+        "https://accounts.google.com/gsi/client",
+        "https://accounts.google.com/gsi/style",
+        "https://accounts.google.com/gsi/",
+    ];
 
     public static readonly IReadOnlyDictionary<string, string> Headers = new Dictionary<string, string>
     {
@@ -12,7 +27,10 @@ public sealed class SecurityHeadersMiddleware(RequestDelegate next, IWebHostEnvi
         ["X-Content-Type-Options"] = "nosniff",
         ["X-Frame-Options"] = "DENY",
         ["Referrer-Policy"] = "strict-origin-when-cross-origin",
-        ["Cross-Origin-Opener-Policy"] = "same-origin",
+        // The Google and Apple sign-in pop-ups report back to the page that opened them. "same-origin" would cut that
+        // link (Safari and Firefox have no FedCM to fall back on), so pages we open keep their opener; pages that open
+        // us still get none.
+        ["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups",
         ["Cross-Origin-Resource-Policy"] = "same-origin",
         ["Origin-Agent-Cluster"] = "?1",
         ["X-Permitted-Cross-Domain-Policies"] = "none",
@@ -24,19 +42,21 @@ public sealed class SecurityHeadersMiddleware(RequestDelegate next, IWebHostEnvi
 
     // The embeddable results widget (/embed/...) is the one place the site may be framed. Only
     // frame-ancestors changes in the policy: any https page may frame it (a club's own site), nothing else.
+    // It also leaves out the sign-in providers (SignInSources), which the widget never uses.
     // The strict policy above still applies everywhere else. Keep in step with the /embed/ rule in web/vercel.json.
     public const string EmbedContentSecurityPolicy = "default-src 'none'; script-src 'self'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; style-src-elem 'self'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self' https://mounted-games-api.vercel.app wss://mounted-games-api.vercel.app; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://player.twitch.tv; frame-ancestors https:; base-uri 'none'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; upgrade-insecure-requests";
 
     /// <summary>
     /// Headers for /embed/ pages: no X-Frame-Options (it cannot name a list of parents and DENY would block the
     /// frame), a cross-origin resource policy so a host page that isolates itself can still load the frame,
-    /// and no camera or microphone, which the widget never uses.
+    /// no camera or microphone, which the widget never uses, and the strict opener policy, since it opens no sign-in.
     /// </summary>
     public static readonly IReadOnlyDictionary<string, string> EmbedHeaders = Headers
         .Where(h => h.Key != "X-Frame-Options")
         .ToDictionary(h => h.Key, h => h.Key switch
         {
             "Content-Security-Policy" => EmbedContentSecurityPolicy,
+            "Cross-Origin-Opener-Policy" => "same-origin",
             "Cross-Origin-Resource-Policy" => "cross-origin",
             "Permissions-Policy" => "camera=(), microphone=(), geolocation=(), payment=(), browsing-topics=()",
             _ => h.Value,

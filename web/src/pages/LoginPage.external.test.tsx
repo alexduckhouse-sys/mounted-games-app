@@ -1,14 +1,11 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { AuthProvider } from '../auth/AuthContext';
-import {
-  OAUTH_STATE_KEY,
-  clearSocialProvidersCache,
-  setSocialRedirectHandler,
-} from '../components/SocialLoginButtons';
+import { loadApple, loadGoogle, makeNonce, randomState, type AppleAuthApi, type GoogleCredentialResponse, type GoogleIdApi } from '../auth/socialSdk';
+import { clearSocialProvidersCache } from '../components/SocialLoginButtons';
 import type { ExternalProvider } from '../types';
 import { LoginPage } from './LoginPage';
 import { SignUpPage } from './SignUpPage';
@@ -17,55 +14,37 @@ vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
   api: { get: vi.fn(), post: vi.fn() },
 }));
+vi.mock('../auth/socialSdk', () => ({
+  loadGoogle: vi.fn(),
+  loadApple: vi.fn(),
+  makeNonce: vi.fn(),
+  randomState: vi.fn(),
+}));
 
 const providers: ExternalProvider[] = [
-  {
-    id: 'google',
-    name: 'Google',
-    clientId: 'google-client-123',
-    authorizeEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-    scope: 'openid email profile',
-  },
-  {
-    id: 'apple',
-    name: 'Apple',
-    clientId: 'apple.client.id',
-    authorizeEndpoint: 'https://appleid.apple.com/auth/authorize',
-    scope: 'openid email name',
-  },
-  {
-    id: 'microsoft',
-    name: 'Microsoft',
-    clientId: 'ms-client-456',
-    authorizeEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
-    scope: 'openid email profile',
-  },
-  {
-    id: 'oidc',
-    name: 'Pony Club SSO',
-    clientId: 'oidc-client-789',
-    authorizeEndpoint: 'https://sso.example.org/authorize',
-    scope: 'openid email profile',
-    responseMode: 'fragment',
-  },
+  { id: 'google', name: 'Google', clientId: 'web-client.apps.googleusercontent.com' },
+  { id: 'apple', name: 'Apple', clientId: 'uk.example.web' },
 ];
-
 const clubs = [
   { id: 1, name: 'Stockport Pony Club' },
   { id: 2, name: 'Warwickshire Hunt' },
 ];
-
 const profile = {
   id: 'u1',
-  email: 'alex@example.com',
+  email: 'alex@gmail.com',
   fullName: 'Alex Rider',
   clubId: 1,
   clubName: 'Stockport Pony Club',
   roles: ['Member'],
   emailConfirmed: true,
 };
+const signedIn = (token: string) => ({ data: { needsSignup: false, auth: { token, expiresAt: '2099-01-01T00:00:00Z', user: profile } } });
 
-function mount(entry: string | { pathname: string; hash?: string; state?: unknown } = '/login') {
+const google = { initialize: vi.fn(), renderButton: vi.fn() } satisfies GoogleIdApi;
+const apple = { init: vi.fn(), signIn: vi.fn() } satisfies AppleAuthApi;
+const post = vi.mocked(api.post);
+
+function mount(entry: string | { pathname: string; state?: unknown } = '/login') {
   return render(
     <AuthProvider>
       <MemoryRouter initialEntries={[entry]}>
@@ -74,11 +53,17 @@ function mount(entry: string | { pathname: string; hash?: string; state?: unknow
           <Route path="/signup" element={<SignUpPage />} />
           <Route path="/" element={<p>Home page</p>} />
           <Route path="/teams" element={<p>Teams page</p>} />
-          <Route path="/events" element={<p>Events page</p>} />
         </Routes>
       </MemoryRouter>
     </AuthProvider>,
   );
+}
+
+/** Plays Google: waits for its button, then calls the callback as its pop-up would. */
+async function googleReturns(credential: string) {
+  await waitFor(() => expect(google.initialize).toHaveBeenCalled());
+  const callback = google.initialize.mock.calls.at(-1)![0].callback as (r: GoogleCredentialResponse) => void;
+  await act(async () => { callback({ credential, select_by: 'btn' }); });
 }
 
 beforeEach(() => {
@@ -88,211 +73,162 @@ beforeEach(() => {
     if (url === '/clubs') return { data: clubs };
     return { data: profile };
   });
+  vi.mocked(loadGoogle).mockResolvedValue(google);
+  vi.mocked(loadApple).mockResolvedValue(apple);
+  vi.mocked(makeNonce).mockResolvedValue({ raw: 'raw-nonce', hashed: 'hashed-nonce' });
+  vi.mocked(randomState).mockReturnValue('state-1');
 });
 
-afterEach(() => {
-  clearSocialProvidersCache();
-});
+afterEach(() => clearSocialProvidersCache());
 
-describe('External social login & onboarding', () => {
-  it('renders configured provider buttons on /login, caches them, and hides them in organiser-key mode', async () => {
+describe('Sign in with Google or Apple', () => {
+  it('shows both buttons on sign in and sign up, but not for the organiser key', async () => {
     const user = userEvent.setup();
-    mount('/login');
+    const view = mount('/login');
+    expect(await screen.findByRole('button', { name: 'Sign in with Apple' })).toBeInTheDocument();
+    expect(screen.getByTestId('google-signin')).toBeInTheDocument();
 
-    expect(await screen.findByRole('button', { name: 'Continue with Google' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Continue with Apple' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Continue with Microsoft' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Continue with Pony Club SSO' })).toBeInTheDocument();
-
-    // Swapping to organiser key hides social login buttons
     await user.click(screen.getByRole('button', { name: 'Organiser with a shared key' }));
-    expect(screen.queryByRole('button', { name: 'Continue with Google' })).not.toBeInTheDocument();
-
-    // Swapping back uses cached providers immediately
+    expect(screen.queryByRole('button', { name: 'Sign in with Apple' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('google-signin')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Back to sign in' }));
-    expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign in with Apple' })).toBeInTheDocument();
+    view.unmount();
+
+    mount('/signup');
+    expect(await screen.findByRole('button', { name: 'Sign in with Apple' })).toBeInTheDocument();
   });
 
-  it('stores state and nonce in sessionStorage and redirects to the provider authorizeEndpoint', async () => {
-    const user = userEvent.setup();
-    let redirectedTo = '';
-    setSocialRedirectHandler((url) => { redirectedTo = url; });
+  it('signs in an existing account with the token and raw nonce, then goes where they were heading', async () => {
+    post.mockResolvedValueOnce(signedIn('jwt-google'));
+    mount({ pathname: '/login', state: { from: '/teams' } });
 
-    mount('/login');
-    await user.click(await screen.findByRole('button', { name: 'Continue with Google' }));
-
-    expect(redirectedTo).toContain('https://accounts.google.com/o/oauth2/v2/auth?');
-    const parsed = new URL(redirectedTo);
-    expect(parsed.searchParams.get('client_id')).toBe('google-client-123');
-    expect(parsed.searchParams.get('response_type')).toBe('id_token');
-    expect(parsed.searchParams.get('response_mode')).toBe('fragment');
-    expect(parsed.searchParams.get('scope')).toBe('openid email profile');
-
-    const stored = JSON.parse(sessionStorage.getItem(OAUTH_STATE_KEY) ?? '{}');
-    expect(stored.provider).toBe('google');
-    expect(stored.state).toBe(parsed.searchParams.get('state'));
-    expect(stored.nonce).toBe(parsed.searchParams.get('nonce'));
-  });
-
-  it('signs in an existing external user from the #id_token callback and navigates to the destination', async () => {
-    sessionStorage.setItem(OAUTH_STATE_KEY, JSON.stringify({ provider: 'google', state: 'st-ok', nonce: 'n-ok' }));
-    vi.mocked(api.post).mockResolvedValueOnce({
-      data: {
-        needsSignup: false,
-        auth: { token: 'jwt-ext', expiresAt: '2099-01-01T00:00:00Z', user: profile },
-      },
-    });
-
-    mount({ pathname: '/login', hash: '#id_token=google-jwt&state=st-ok', state: { from: '/teams' } });
+    await googleReturns('google-id-token');
 
     expect(await screen.findByText('Teams page')).toBeInTheDocument();
-    expect(api.post).toHaveBeenCalledWith('/auth/external', {
-      provider: 'google',
-      idToken: 'google-jwt',
-      nonce: 'n-ok',
-    });
+    expect(post).toHaveBeenCalledWith('/auth/external', { provider: 'google', idToken: 'google-id-token', nonce: 'raw-nonce' });
   });
 
-  it('prompts a new external user for their club and role on /login, then finishes creating the account', async () => {
+  it('asks a new person for their club and role, then makes the account with the same token', async () => {
     const user = userEvent.setup();
-    sessionStorage.setItem(OAUTH_STATE_KEY, JSON.stringify({ provider: 'google', state: 'st-new', nonce: 'n-new' }));
-    vi.mocked(api.post)
-      .mockResolvedValueOnce({
-        data: {
-          needsSignup: true,
-          auth: null,
-          email: 'alex@example.com',
-          suggestedName: 'Alex Rider',
-          provider: 'google',
-        },
-      })
-      .mockResolvedValueOnce({
-        data: {
-          needsSignup: false,
-          auth: { token: 'jwt-created', expiresAt: '2099-01-01T00:00:00Z', user: profile },
-        },
-      });
+    post
+      .mockResolvedValueOnce({ data: { needsSignup: true, auth: null, email: 'alex@gmail.com', suggestedName: 'Alex Rider', provider: 'google' } })
+      .mockResolvedValueOnce(signedIn('jwt-created'));
+    mount('/login');
 
-    mount({ pathname: '/login', hash: '#id_token=new-google-jwt&state=st-new' });
-
+    await googleReturns('new-google-token');
     expect(await screen.findByRole('heading', { name: 'Finish creating your account' })).toBeInTheDocument();
-    expect(screen.getByText('alex@example.com')).toBeInTheDocument();
+    expect(screen.getByText('alex@gmail.com')).toBeInTheDocument();
     expect(screen.getByLabelText('Your name')).toHaveValue('Alex Rider');
 
     const submit = screen.getByRole('button', { name: 'Create account' });
     expect(submit).toBeDisabled();
-
-    // Pick a club from suggestions and choose role
     await user.type(screen.getByLabelText('Club / team name'), 'Stoc');
-    const suggestions = within(await screen.findByRole('group', { name: 'Club suggestions' }));
-    await user.click(suggestions.getByRole('button', { name: 'Stockport Pony Club' }));
+    await user.click(within(await screen.findByRole('group', { name: 'Club suggestions' })).getByRole('button', { name: 'Stockport Pony Club' }));
     await user.click(screen.getByRole('radio', { name: 'Trainer' }));
     expect(screen.getByText("Approved by Stockport Pony Club's team manager.")).toBeInTheDocument();
-    expect(submit).toBeEnabled();
-
     await user.click(submit);
+
     expect(await screen.findByText('Home page')).toBeInTheDocument();
-    expect(api.post).toHaveBeenLastCalledWith('/auth/external', {
+    expect(post).toHaveBeenLastCalledWith('/auth/external', {
       provider: 'google',
-      idToken: 'new-google-jwt',
-      nonce: 'n-new',
+      idToken: 'new-google-token',
+      nonce: 'raw-nonce',
       fullName: 'Alex Rider',
       clubName: 'Stockport Pony Club',
       role: 'Trainer',
     });
   });
 
-  it('allows adding a custom club, shows errors on onboarding failure, and lets the user cancel back to sign in', async () => {
+  it('carries Apple’s first-sign-in name through to the new account on sign up, without promising an email', async () => {
     const user = userEvent.setup();
-    sessionStorage.setItem(OAUTH_STATE_KEY, JSON.stringify({ provider: 'apple', state: 'st-a', nonce: 'n-a' }));
-    vi.mocked(api.post)
-      .mockResolvedValueOnce({
-        data: {
-          needsSignup: true,
-          auth: null,
-          email: 'sam@example.com',
-          suggestedName: 'Sam',
-          provider: 'apple',
-        },
-      })
-      .mockRejectedValueOnce({
-        response: { status: 429, data: { message: 'Maximum registered accounts reached.' } },
-      });
+    apple.signIn.mockResolvedValueOnce({
+      authorization: { id_token: 'apple-id-token', state: 'state-1' },
+      user: { email: 'x7@privaterelay.appleid.com', name: { firstName: 'Sam', lastName: 'Taylor' } },
+    });
+    post
+      .mockResolvedValueOnce({ data: { needsSignup: true, auth: null, email: 'x7@privaterelay.appleid.com', suggestedName: 'Sam Taylor', provider: 'apple' } })
+      .mockResolvedValueOnce(signedIn('jwt-apple'));
+    mount('/signup');
 
-    mount({ pathname: '/login', hash: '#id_token=apple-jwt&state=st-a' });
-    expect(await screen.findByRole('heading', { name: 'Finish creating your account' })).toBeInTheDocument();
+    const button = await screen.findByRole('button', { name: 'Sign in with Apple' });
+    await waitFor(() => expect(button).toBeEnabled());
+    await user.click(button);
+    expect(post).toHaveBeenCalledWith('/auth/external', { provider: 'apple', idToken: 'apple-id-token', nonce: 'raw-nonce', providerName: 'Sam Taylor' });
 
-    await user.clear(screen.getByLabelText('Your name'));
-    await user.type(screen.getByLabelText('Your name'), 'Sam Taylor');
+    expect(await screen.findByLabelText('Your name')).toHaveValue('Sam Taylor');
     await user.type(screen.getByLabelText('Club / team name'), 'New Valley MG');
     await user.click(screen.getByRole('button', { name: 'Add "New Valley MG"' }));
     await user.click(screen.getByRole('radio', { name: 'Team manager' }));
     expect(screen.getByText('Approved by Mounted Games admins.')).toBeInTheDocument();
-
     await user.click(screen.getByRole('button', { name: 'Create account' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Maximum registered accounts reached.');
 
-    // Cancel returns to the normal sign-in form
-    await user.click(screen.getByRole('button', { name: 'Use a different account' }));
-    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Request sent to New Valley MG' })).toBeInTheDocument();
+    expect(screen.queryByText(/emailed you a link/)).not.toBeInTheDocument();
+    expect(post).toHaveBeenLastCalledWith('/auth/external', {
+      provider: 'apple',
+      idToken: 'apple-id-token',
+      nonce: 'raw-nonce',
+      providerName: 'Sam Taylor',
+      fullName: 'Sam Taylor',
+      clubName: 'New Valley MG',
+      role: 'Manager',
+    });
   });
 
-  it('completes external onboarding on /signup and shows the approval request confirmation', async () => {
+  it('shows the API’s reason when a sign-in is refused, and a signal message when there is no reply', async () => {
+    post.mockRejectedValueOnce({ response: { status: 403, data: { message: 'Admins need to sign in with their email and password, not Google or Apple.', code: 'admin_password_only' } } });
+    const first = mount('/login');
+    await googleReturns('admin-token');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Admins need to sign in with their email and password');
+    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+    first.unmount();
+
+    google.initialize.mockClear();
+    post.mockRejectedValueOnce(new Error('Network Error'));
+    mount('/signup');
+    await googleReturns('any-token');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t sign in. Check your signal and try again.');
+  });
+
+  it('shows a provider’s own failure, and lets a new person back out of finishing the account', async () => {
     const user = userEvent.setup();
-    sessionStorage.setItem(OAUTH_STATE_KEY, JSON.stringify({ provider: 'microsoft', state: 'st-ms', nonce: 'n-ms' }));
-    vi.mocked(api.post)
-      .mockResolvedValueOnce({
-        data: {
-          needsSignup: true,
-          auth: null,
-          email: 'coach@example.com',
-          suggestedName: 'Jamie Coach',
-          provider: 'microsoft',
-        },
-      })
-      .mockResolvedValueOnce({
-        data: {
-          needsSignup: false,
-          auth: { token: 'jwt-ms', expiresAt: '2099-01-01T00:00:00Z', user: profile },
-        },
-      });
+    post
+      .mockResolvedValueOnce({ data: { needsSignup: true, auth: null, email: 'sam@gmail.com', suggestedName: 'Sam', provider: 'google' } })
+      .mockRejectedValueOnce({ response: { status: 429, data: {} } });
+    mount('/login');
 
-    mount({ pathname: '/signup', hash: '#id_token=ms-jwt&state=st-ms' });
-    expect(await screen.findByRole('heading', { name: 'Finish creating your account' })).toBeInTheDocument();
+    await waitFor(() => expect(google.initialize).toHaveBeenCalled());
+    const callback = google.initialize.mock.calls.at(-1)![0].callback as (r: GoogleCredentialResponse) => void;
+    act(() => callback({}));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Google sign-in didn’t work');
 
+    await googleReturns('google-token');
+    await screen.findByRole('heading', { name: 'Finish creating your account' });
     await user.type(screen.getByLabelText('Club / team name'), 'Warwickshire Hunt');
     await user.click(await screen.findByRole('button', { name: 'Warwickshire Hunt' }));
     await user.click(screen.getByRole('radio', { name: 'Rider or parent' }));
     await user.click(screen.getByRole('button', { name: 'Create account' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Too many tries. Wait a minute and try again.');
 
-    expect(await screen.findByRole('heading', { name: 'Request sent to Warwickshire Hunt' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Use a different account' }));
+    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('reports provider cancellation, state mismatch, and token verification errors cleanly', async () => {
-    // 1. Provider returned #error=access_denied
-    const first = mount({ pathname: '/login', hash: '#error=access_denied' });
-    expect(await screen.findByRole('alert')).toHaveTextContent('Sign-in was cancelled or refused by the provider.');
-    first.unmount();
+  it('lets a new person on sign up back out to the sign-up form, and signs an existing one straight in', async () => {
+    const user = userEvent.setup();
+    post
+      .mockResolvedValueOnce({ data: { needsSignup: true, auth: null, email: 'sam@gmail.com', suggestedName: 'Sam', provider: 'google' } })
+      .mockResolvedValueOnce(signedIn('jwt-existing'));
+    mount({ pathname: '/signup', state: { from: '/teams' } });
 
-    // 2. State mismatch
-    sessionStorage.setItem(OAUTH_STATE_KEY, JSON.stringify({ provider: 'google', state: 'expected-st', nonce: 'n' }));
-    const second = mount({ pathname: '/login', hash: '#id_token=tok&state=wrong-st' });
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not verify that sign-in. Try again.');
-    second.unmount();
+    await googleReturns('google-token');
+    await screen.findByRole('heading', { name: 'Finish creating your account' });
+    await user.click(screen.getByRole('button', { name: 'Use a different account' }));
+    expect(screen.getByRole('heading', { name: 'Create an account' })).toBeInTheDocument();
 
-    // 3. Backend rejects token on /signup
-    sessionStorage.setItem(OAUTH_STATE_KEY, JSON.stringify({ provider: 'google', state: 'ok-st', nonce: 'n' }));
-    vi.mocked(api.post).mockRejectedValueOnce({
-      response: { status: 401, data: { message: 'Confirm your email address with your sign-in provider first.' } },
-    });
-    const third = mount({ pathname: '/signup', hash: '#id_token=unverified-tok&state=ok-st' });
-    expect(await screen.findByRole('alert')).toHaveTextContent('Confirm your email address with your sign-in provider first.');
-    third.unmount();
-
-    // 4. Unrelated hash and failed /auth/providers fetch are ignored gracefully
-    clearSocialProvidersCache();
-    vi.mocked(api.get).mockRejectedValueOnce(new Error('offline'));
-    mount({ pathname: '/login', hash: '#unrelated=1' });
-    expect(screen.queryByRole('button', { name: /Continue with/ })).not.toBeInTheDocument();
+    await googleReturns('existing-token');
+    expect(await screen.findByText('Teams page')).toBeInTheDocument();
   });
 });

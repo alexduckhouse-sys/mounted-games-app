@@ -5,8 +5,9 @@ import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { Notice } from '../components/Notice';
 import { PasswordChecklist } from '../components/PasswordChecklist';
-import { SocialLoginButtons } from '../components/SocialLoginButtons';
+import { SocialLoginButtons, type SocialCredential } from '../components/SocialLoginButtons';
 import { isRealisticEmail, suggestEmailFix } from '../lib/emailCheck';
+import { externalErrorMessage } from '../lib/externalAuthError';
 import { friendlyPasswordErrors, passwordMeetsRules } from '../lib/passwordRules';
 import type { Club } from '../types';
 import { AuthFrame } from './auth/AuthFrame';
@@ -50,35 +51,27 @@ export function SignUpPage() {
   const [role, setRole] = useState<RoleId | null>(null);
   const [clubs, setClubs] = useState<Club[]>([]);
   const [errors, setErrors] = useState<FieldErrors>({});
-  const [sentTo, setSentTo] = useState<{ club: string; role: RoleId } | null>(null);
+  // `emailed` is false for a Google or Apple sign-up: the provider has already confirmed the address, so nothing is sent.
+  const [sentTo, setSentTo] = useState<{ club: string; role: RoleId; emailed: boolean } | null>(null);
   const [pendingExternal, setPendingExternal] = useState<PendingExternalSignup | null>(null);
+  const [externalError, setExternalError] = useState<string | null>(null);
 
+  // Where they were headed when they chose to sign up, e.g. a competition's entry page.
   const from = (loc.state as { from?: string } | null)?.from;
 
-  const handleExternalToken = useCallback(async (provider: string, idToken: string, nonce?: string) => {
-    setErrors({});
+  const handleCredential = useCallback(async ({ provider, idToken, nonce, providerName }: SocialCredential) => {
+    setExternalError(null);
     try {
-      const res = await loginWithExternal(provider, idToken, { nonce });
+      const res = await loginWithExternal(provider, idToken, { nonce, providerName });
       if (res.needsSignup) {
-        setPendingExternal({
-          provider: res.provider,
-          idToken,
-          nonce,
-          email: res.email,
-          suggestedName: res.suggestedName,
-        });
+        setPendingExternal({ provider: res.provider, idToken, nonce, providerName, email: res.email, suggestedName: res.suggestedName });
       } else {
         nav(from ?? '/', { replace: true });
       }
     } catch (err: unknown) {
-      const { message } = problemsFrom(err);
-      setErrors({ form: message ?? 'Could not verify that sign-in. Try again.' });
+      setExternalError(externalErrorMessage(err, 'Couldn’t sign in. Check your signal and try again.'));
     }
   }, [from, loginWithExternal, nav]);
-
-  const handleExternalError = useCallback((msg: string) => {
-    setErrors({ form: msg });
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,7 +104,7 @@ export function SignUpPage() {
       // The email is the sign-in name. The API makes the club if it is new, insists on one, and holds a team
       // manager for an admin and a trainer for the club's manager.
       await signupTrainer(email.trim(), password, chosenRole.api, typed, name.trim());
-      setSentTo({ club: typed, role: chosenRole.id });
+      setSentTo({ club: typed, role: chosenRole.id, emailed: true });
     } catch (err) {
       const { status, message, code, passwordErrors } = problemsFrom(err);
       if (status === 409) setErrors({ email: 'There’s already an account with that email. Sign in instead?' });
@@ -132,9 +125,11 @@ export function SignUpPage() {
           <p className="text-[17px] leading-[1.45] text-[rgb(var(--mg-body))]">
             {sent.byAdmins ? 'Mounted Games admins' : 'Your team manager'} will approve you as {sent.sentence}. We'll let you know when it's done.
           </p>
-          <p className="text-[15px] leading-[1.45] text-[rgb(var(--mg-body))]">
-            We've also emailed you a link to confirm your address. You can carry on without it for now.
-          </p>
+          {sentTo.emailed && (
+            <p className="text-[15px] leading-[1.45] text-[rgb(var(--mg-body))]">
+              We've also emailed you a link to confirm your address. You can carry on without it for now.
+            </p>
+          )}
           <div className="mt-auto flex flex-col gap-2.5">
             {from && <Link to={from} className="mg-btn mg-btn-primary">Back to the competition</Link>}
             <Link to="/events" className={`mg-btn ${from ? 'mg-btn-secondary' : 'mg-btn-primary'}`}>Follow a competition</Link>
@@ -151,8 +146,8 @@ export function SignUpPage() {
         <ExternalOnboardingForm
           pending={pendingExternal}
           initialClubs={clubs}
-          onComplete={(res) => setSentTo(res)}
-          onCancel={() => { setPendingExternal(null); setErrors({}); }}
+          onComplete={(res) => setSentTo({ ...res, emailed: false })}
+          onCancel={() => { setPendingExternal(null); setExternalError(null); }}
         />
       </AuthFrame>
     );
@@ -163,7 +158,8 @@ export function SignUpPage() {
       <form onSubmit={submit} className="flex flex-1 flex-col gap-[18px]" noValidate>
         <h1 className="mg-h1 !text-[34px] !leading-none">Create an account</h1>
 
-        <SocialLoginButtons disabled={loading} onToken={handleExternalToken} onError={handleExternalError} />
+        <SocialLoginButtons disabled={loading} onCredential={handleCredential} onError={setExternalError} />
+        {externalError && <Notice>{externalError}</Notice>}
 
         <Field label="Your name">
           {({ id }) => <div className="mg-field"><input id={id} value={name} autoComplete="name" autoFocus onChange={(e) => setName(e.target.value)} /></div>}
