@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { DelaySheet } from './DelaySheet';
@@ -6,15 +6,16 @@ import { DelaySheet } from './DelaySheet';
 function setup(extra: Partial<React.ComponentProps<typeof DelaySheet>> = {}) {
   const props = {
     arena: 'Main Arena', lateMinutes: 0, paused: false, busy: false, pace: null,
-    onShift: vi.fn().mockResolvedValue(true), onPause: vi.fn(), onClose: vi.fn(), ...extra,
+    onShift: vi.fn().mockResolvedValue(true), onContinue: vi.fn(), onClose: vi.fn(), ...extra,
   };
   render(<DelaySheet {...props} />);
   return props;
 }
+const field = () => screen.getByRole('spinbutton', { name: 'Move times by' });
 
 describe('DelaySheet', () => {
   it('names the arena and says how late it is running, or that it is on time', () => {
-    const { unmount } = render(<DelaySheet arena="Main Arena" lateMinutes={94} paused={false} busy={false} pace={null} onShift={vi.fn()} onPause={vi.fn()} onClose={vi.fn()} />);
+    const { unmount } = render(<DelaySheet arena="Main Arena" lateMinutes={94} paused={false} busy={false} pace={null} onShift={vi.fn()} onContinue={vi.fn()} onClose={vi.fn()} />);
     const sheet = screen.getByRole('dialog', { name: 'Main Arena timing' });
     expect(sheet).toHaveTextContent('Running 1h 34m late');
     unmount();
@@ -22,71 +23,58 @@ describe('DelaySheet', () => {
     expect(screen.getByRole('dialog', { name: 'Timing' })).toHaveTextContent('Running on time');
   });
 
-  it('moves times in five-minute steps and sends the total on Done, then closes', async () => {
+  it('moves the times by the minutes typed as soon as Shift is tapped, then slides away', async () => {
     const user = userEvent.setup();
     const props = setup();
-    const later = screen.getByRole('button', { name: '5 minutes later' });
-    await user.click(later);
-    await user.click(later);
-    await user.click(later);
-    expect(screen.getByText('+15 min')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '5 minutes earlier' }));
-    expect(screen.getByText('+10 min')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Done' }));
-    expect(props.onShift).toHaveBeenCalledWith(10);
-    expect(props.onClose).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Shift' })).toBeDisabled();
+    await user.type(field(), '-10');
+    await user.click(screen.getByRole('button', { name: 'Shift' }));
+    expect(props.onShift).toHaveBeenCalledWith(-10);
+    await waitFor(() => expect(props.onClose).toHaveBeenCalledTimes(1));
   });
 
-  it('closes without sending anything when nothing was moved', async () => {
+  it('asks again for a whole number of minutes that is not 0', async () => {
     const user = userEvent.setup();
-    const quiet = setup();
-    await user.click(screen.getByRole('button', { name: 'Done' }));
-    expect(quiet.onShift).not.toHaveBeenCalled();
-    expect(quiet.onClose).toHaveBeenCalledTimes(1);
+    const props = setup();
+    for (const typed of ['1.5', '0', '721']) {
+      await user.clear(field());
+      await user.type(field(), typed);
+      await user.click(screen.getByRole('button', { name: 'Shift' }));
+      expect(screen.getByRole('alert')).toHaveTextContent('whole number of minutes');
+    }
+    expect(props.onShift).not.toHaveBeenCalled();
   });
 
-  it('keeps the sheet open when the move did not go through', async () => {
+  it('stays open and says so when the move did not go through', async () => {
     const user = userEvent.setup();
     const props = setup({ onShift: vi.fn().mockResolvedValue(false) });
-    await user.click(screen.getByRole('button', { name: '5 minutes earlier' }));
-    await user.click(screen.getByRole('button', { name: 'Done' }));
-    expect(props.onShift).toHaveBeenCalledWith(-5);
+    await user.type(field(), '15');
+    await user.click(screen.getByRole('button', { name: 'Shift' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t move the times');
     expect(props.onClose).not.toHaveBeenCalled();
   });
 
-  it('stops the stepper at an hour earlier and three hours later', async () => {
+  it('has no Pause, but offers Continue for a timetable paused before', async () => {
     const user = userEvent.setup();
-    setup();
-    const earlier = screen.getByRole('button', { name: '5 minutes earlier' });
-    for (let i = 0; i < 12; i++) await user.click(earlier);
-    expect(earlier).toBeDisabled();
-    expect(screen.getByText('-60 min')).toBeInTheDocument();
-    const later = screen.getByRole('button', { name: '5 minutes later' });
-    for (let i = 0; i < 48; i++) await user.click(later);
-    expect(later).toBeDisabled();
-    expect(screen.getByText('+180 min')).toBeInTheDocument();
-  });
-
-  it('pauses at once from the switch, and shows it on when already paused', async () => {
-    const user = userEvent.setup();
+    expect(screen.queryByRole('switch')).toBeNull();
     const props = setup({ paused: true });
-    const pause = screen.getByRole('switch', { name: 'Pause the timetable' });
-    expect(pause).toBeChecked();
-    await user.click(pause);
-    expect(props.onPause).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('switch', { name: /Pause/ })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Continue the timetable' }));
+    expect(props.onContinue).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the pace note only when there is one, and locks the controls while busy', () => {
+  it('shows the pace note only when there is one, and locks Shift while busy', async () => {
+    const user = userEvent.setup();
     setup({ pace: 4.04, busy: true });
     const sheet = screen.getByRole('dialog');
     expect(within(sheet).getByText('Races are taking about 4.0 minutes each.')).toBeInTheDocument();
-    expect(within(sheet).getByRole('button', { name: 'Done' })).toBeDisabled();
-    expect(within(sheet).getByRole('button', { name: '5 minutes later' })).toBeDisabled();
-    expect(within(sheet).getByRole('switch', { name: 'Pause the timetable' })).toBeDisabled();
+    await user.type(field(), '5');
+    expect(within(sheet).getByRole('button', { name: 'Shift' })).toBeDisabled();
   });
 
-  it('has no pace note without a pace', () => {
+  it('has no pace note and no Continue without them', () => {
     setup();
     expect(screen.queryByText(/Races are taking/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Continue the timetable' })).toBeNull();
   });
 });

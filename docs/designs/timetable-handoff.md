@@ -1,6 +1,6 @@
 # Timetable page: design handoff
 
-Settled on 27 October 2026. Nothing here is built yet. The source of truth is the **Decisions** board on the Design canvas, <https://claude.ai/artifact/4VPP38bJqE1Won4SW9hmAP>. Re-read it before building, because the user edits it there.
+Settled on 27 October 2026. Built on branch `claude/timetable-page-redesign-0230d3` the same day, except full edit mode. The source of truth is the **Decisions** board on the Design canvas, <https://claude.ai/artifact/4VPP38bJqE1Won4SW9hmAP>. Re-read it before building, because the user edits it there.
 
 On the canvas, the top row is the current design: Decisions, "Timetable with filter sheet · current design" (`Sheet-Working`), F4 and E. The rows below hold the earlier options and say which one was chosen.
 
@@ -21,8 +21,8 @@ Goal: more function with fewer and smaller buttons, so there is less chrome abov
 | Session headings | Same as the live site: 15px capitals, `.tt-group-title h2`. | `timetable.css` |
 | Breaks | Each break gets its own heading line above it, like a session: "BREAK" on the left and the arena and length on the right ("Main · 55 min"), then the time and name row underneath. Breaks are not counted as heats. | |
 | Late and early | Plain "+10" (amber `#8A5A00`) or "−5" (green `#1F6B43`) text beside the heat name. No crossed-out planned time and no box. | `TimetableBoard.tsx` |
-| Announcements | Shown once, in the ticker. The `AnnouncementPop` card goes. This is my reading of "don't double show"; the user can change it on the board. | `CompetitionPage.tsx` (pop-up plus ticker items) |
-| Delay row | The +15 / +30 / −15 / Pause / ±min / Apply row goes. A delay becomes a custom number of minutes typed in organiser edit mode, and it goes live straight away. | `TimetableBoard.tsx` shift row; `TimetableBoard.test.tsx` covers it and needs updating |
+| Announcements | Shown once, in the ticker. The `AnnouncementPop` card is gone (confirmed by the user). | `CompetitionPage.tsx` |
+| Delay row | The +15 / +30 / −15 / Pause / ±min / Apply row is gone. Organisers tap a pencil in the header to open the timing sheet (`DelaySheet`, first added in #208): type the minutes (a minus for earlier) and tap Shift, and it goes live straight away for the arena being shown, or all arenas. Pause is dropped; a timetable paused before shows "Continue the timetable" there. There is no amber bar. | `TimetableBoard.tsx`, `DelaySheet.tsx`, `CompactPageBarContext.tsx` (`onEdit`) |
 | Organiser edit mode | Organisers edit the timetable in place from a pencil on the page (board E): one amber bar at the top of the list where they type the minutes and tap Shift. **Paused: don't build yet.** | |
 
 ## Motion (match the live site)
@@ -33,10 +33,9 @@ Goal: more function with fewer and smaller buttons, so there is less chrome abov
 - Arena slider: the white thumb glides to the tapped arena (300 ms, ease-out).
 - With `prefers-reduced-motion` all of this is off.
 
-## Still open (ask before building)
+## Still open
 
-- Pause and continue: today's Pause goes with the delay row. Keep it in edit mode, or drop it?
-- Build order: the page first (ticker, filters and sheet), then edit mode.
+- Full organiser edit mode (board E) is still paused; only the timing sheet behind the pencil is built.
 
 ## Gotcha found on the canvas
 

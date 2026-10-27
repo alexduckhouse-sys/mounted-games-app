@@ -1,17 +1,14 @@
-import { useState } from 'react';
-import { Minus, Plus } from 'lucide-react';
+import { useId, useState, type FormEvent } from 'react';
 import { Sheet } from '../../components/Sheet';
-import { RefineSwitchRow } from '../refine/Refine';
 import { delayInWords } from '../../lib/timetableRows';
 import '../../components/sitePages.css';
 
-const STEP = 5;
-
 /**
- * Running late: move an arena's times later or earlier in steps of five minutes, or pause it. Opened by tapping the
- * "running late" line on the timetable. The move is sent on Done; pausing happens as soon as it's switched.
+ * Running late: move an arena's times by the minutes the organiser types (a minus for earlier). Opened from the
+ * pencil in the timetable's header; the move goes live as soon as Shift is tapped. There is no Pause, but a
+ * timetable paused before can be set going again from here.
  */
-export function DelaySheet({ arena, lateMinutes, paused, busy, pace, onShift, onPause, onClose }: {
+export function DelaySheet({ arena, lateMinutes, paused, busy, pace, onShift, onContinue, onClose }: {
   /** The arena being changed, or empty for every arena. */
   arena: string;
   lateMinutes: number;
@@ -20,39 +17,61 @@ export function DelaySheet({ arena, lateMinutes, paused, busy, pace, onShift, on
   /** Recent minutes per race, when there are enough races to say. */
   pace: number | null;
   onShift: (minutes: number) => Promise<boolean>;
-  onPause: () => void;
+  onContinue: () => void;
   onClose: () => void;
 }) {
-  const [move, setMove] = useState(0);
-
-  async function done() {
-    if (move !== 0 && !(await onShift(move))) return;
-    onClose();
-  }
+  const [minutes, setMinutes] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const fieldId = useId();
 
   return (
     <Sheet
       title={arena ? `${arena} timing` : 'Timing'}
       description={lateMinutes > 0 ? `Running ${delayInWords(lateMinutes)} late` : 'Running on time'}
+      initialFocus="input"
       onClose={onClose}
     >
-      <div className="rf-row">
-        <span className="rf-grow rf-t1">Move times</span>
-        <span className="sp-stepper" role="group" aria-label="Move times">
-          <button type="button" aria-label={`${STEP} minutes earlier`} disabled={busy || move <= -60} onClick={() => setMove(move - STEP)}>
-            <Minus className="h-4 w-4" aria-hidden="true" />
-          </button>
-          <output aria-live="polite" className="!min-w-[64px]">{move > 0 ? `+${move}` : move} min</output>
-          <button type="button" aria-label={`${STEP} minutes later`} disabled={busy || move >= 180} onClick={() => setMove(move + STEP)}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </span>
-      </div>
-      <RefineSwitchRow label="Pause the timetable" on={paused} disabled={busy} onChange={onPause} />
-      {pace != null && <p className="sp-note">Races are taking about {pace.toFixed(1)} minutes each.</p>}
-      <div className="kit-acts">
-        <button type="button" className="kit-pill kit-pill-fill" disabled={busy} onClick={() => void done()}>Done</button>
-      </div>
+      {({ close }) => {
+        async function shift(event: FormEvent) {
+          event.preventDefault();
+          const parsed = Number(minutes);
+          if (!Number.isInteger(parsed) || parsed === 0 || parsed < -720 || parsed > 720) {
+            setError('Enter a whole number of minutes from -720 to 720, but not 0.');
+            return;
+          }
+          setError(null);
+          // The page's own notice sits behind the sheet, so a failure is said here too.
+          if (await onShift(parsed)) close();
+          else setError('Couldn’t move the times. Check your signal and try again.');
+        }
+        return (
+          <form className="tt-delay-form" noValidate onSubmit={(event) => void shift(event)}>
+            <div className="tt-delay-row">
+              <label htmlFor={fieldId}>Move times by</label>
+              <input
+                id={fieldId}
+                type="number"
+                inputMode="numeric"
+                min={-720}
+                max={720}
+                value={minutes}
+                onChange={(e) => setMinutes(e.target.value)}
+                placeholder="0"
+                aria-describedby={`${fieldId}-hint`}
+                className="tt-delay-input"
+              />
+              <span aria-hidden="true">min</span>
+            </div>
+            <p id={`${fieldId}-hint`} className="sp-note">A minus moves them earlier, for example −10.</p>
+            {error && <p className="tt-delay-error" role="alert">{error}</p>}
+            {pace != null && <p className="sp-note">Races are taking about {pace.toFixed(1)} minutes each.</p>}
+            <div className="kit-acts">
+              <button type="submit" className="kit-pill kit-pill-fill" disabled={busy || !minutes.trim()}>Shift</button>
+              {paused && <button type="button" className="kit-pill" disabled={busy} onClick={onContinue}>Continue the timetable</button>}
+            </div>
+          </form>
+        );
+      }}
     </Sheet>
   );
 }

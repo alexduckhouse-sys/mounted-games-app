@@ -154,11 +154,23 @@ body, body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-i
 .mg-nav-btn:hover { background: rgb(255 255 255 / .08); }
 .mg-nav-btn[aria-pressed="true"] { background: #fff; color: rgb(var(--mg-header)); }
 .mg-header :focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-.mg-strip-bar { background: rgb(var(--mg-header-deep)); color: #fff; }
-.mg-strip-flash { animation: mg-strip-flash 1.4s ease-out; }
-@keyframes mg-strip-flash {
-  0%, 25% { background: rgb(var(--mg-warn, 217 119 6)); }
-  100% { background: rgb(var(--mg-header-deep)); }
+.mg-strip-bar { display: flex; align-items: stretch; overflow: hidden; border-radius: 14px; background: rgb(var(--mg-header-deep)); color: #fff; box-shadow: 0 6px 18px rgb(15 42 74 / .3); }
+/* The ticker dock: just above the tab bar on every competition page, with room for one page button beside it. */
+.mg-dock { position: fixed; inset: auto 0 calc(76px + env(safe-area-inset-bottom)) 0; z-index: 31; padding: 0 10px; pointer-events: none; }
+.mg-dock-row { display: flex; align-items: flex-end; justify-content: flex-end; gap: 8px; }
+.mg-dock-row > * { pointer-events: auto; }
+.mg-dock-wrap { position: relative; flex: 1; min-width: 0; }
+.mg-dock-stage { position: relative; flex: 1; min-width: 0; align-self: stretch; overflow: hidden; }
+.mg-dock-action {
+  position: relative; flex: none; display: flex; width: 46px; height: 44px; align-items: center; justify-content: center; border-radius: 14px;
+  background: rgb(var(--mg-header-deep)); color: #fff; box-shadow: 0 6px 18px rgb(15 42 74 / .3); cursor: pointer;
+  transition: background-color var(--mg-dur-fast) var(--mg-ease-out), scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1);
+}
+.mg-dock-action:active { --mg-press-t: 90ms; scale: .96; }
+.mg-dock-action:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
+.mg-dock-count {
+  position: absolute; top: -3px; right: -3px; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 8px; background: rgb(var(--mg-red)); color: #fff;
+  font: 700 10px/16px var(--mg-font); text-align: center; box-shadow: 0 0 0 2px rgb(var(--mg-header-deep)); box-sizing: border-box;
 }
 /* Points that have just changed light up in amber and fade back. */
 .mg-score-flash { border-radius: 4px; animation: mg-score-flash 1.6s var(--mg-ease-out); }
@@ -168,7 +180,7 @@ body, body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-i
 }
 @media (prefers-reduced-motion: reduce) { .mg-score-flash { animation: none; } }
 .mg-strip {
-  display: flex; align-items: center; gap: 10px; min-height: 44px;
+  display: flex; align-items: stretch; gap: 10px; min-height: 44px;
   color: #fff !important; font: 500 14px/1.2 var(--mg-font); text-decoration: none !important;
 }
 .mg-strip-next {
@@ -178,10 +190,11 @@ body, body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-i
 .mg-strip-next:hover { background: rgb(255 255 255 / .08); }
 .mg-strip-bar :focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
 .mg-strip-panel {
-  position: absolute; inset: 100% 0 auto 0; z-index: 35; max-height: 70vh; overflow-y: auto; background: rgb(var(--mg-header-deep));
-  border-top: 1px solid rgb(255 255 255 / .14); box-shadow: 0 12px 24px rgb(0 0 0 / .25); color: #fff;
-  animation: mg-pop-in 160ms var(--mg-ease-out); transform-origin: top center;
+  position: absolute; inset: auto 0 calc(100% + 8px) 0; z-index: 35; max-height: 60vh; overflow-y: auto; border-radius: 14px; background: rgb(var(--mg-header-deep));
+  box-shadow: 0 12px 24px rgb(0 0 0 / .25); color: #fff;
+  animation: mg-pop-up 160ms var(--mg-ease-out); transform-origin: bottom center;
 }
+@keyframes mg-pop-up { from { opacity: 0; transform: translateY(4px) scale(0.985); } to { opacity: 1; transform: none; } }
 .mg-strip-panel :focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
 .mg-strip-item {
   display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; border-bottom: 1px solid rgb(255 255 255 / .1);
@@ -543,18 +556,6 @@ html[data-lite="true"] dialog::backdrop { animation: none !important; }
 
 /* Content fades in over its loading placeholder. */
 .mg-settle { animation: mg-fade-in .26s ease-out; }
-/* A new announcement drops in under the header on any page. */
-.mg-announce-pop { position: fixed; z-index: 45; top: calc(var(--mg-shell-h, 64px) + 8px); left: max(12px, env(safe-area-inset-left, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); margin: 0 auto; max-width: 30rem; display: flex; align-items: stretch; border-radius: 16px; background: rgb(var(--mg-header-deep)); color: #fff; box-shadow: 0 12px 28px rgb(0 0 0 / .3); overflow: hidden; }
-.mg-announce-pop-link { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 54px; padding: 11px 6px 11px 12px; color: #fff !important; text-decoration: none !important; }
-.mg-announce-pop-icon { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 50%; background: rgb(245 184 46 / .18); color: #F5B82E; }
-.mg-announce-pop-icon svg { width: 18px; height: 18px; }
-.mg-announce-pop-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; font: 500 13.5px/1.35 var(--mg-font); }
-.mg-announce-pop-text b { font: 700 12.5px/1 var(--mg-font); color: rgb(var(--mg-header-sub)); }
-.mg-announce-pop-text span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.mg-announce-pop-go { flex: none; width: 18px; height: 18px; opacity: .7; }
-.mg-announce-pop-close { flex: none; width: 44px; display: grid; place-items: center; border: 0; background: transparent; color: rgb(255 255 255 / .8); cursor: pointer; }
-.mg-announce-pop-close svg { width: 18px; height: 18px; }
-.mg-announce-pop-link:focus-visible, .mg-announce-pop-close:focus-visible { outline: 3px solid #fff; outline-offset: -3px; }
 
 /* Payment outcomes: the disc pops, its mark draws in, a decline shakes, and the receipt rises in after. */
 .mg-outcome svg { transform-origin: center; animation: mg-outcome-pop 480ms cubic-bezier(.34, 1.56, .64, 1); }
@@ -670,7 +671,6 @@ html[data-lite="true"] *, html[data-lite="true"] *::before, html[data-lite="true
 html[data-lite="true"] .mg-badge-live::before,
 html[data-lite="true"] .mg-skel,
 html[data-lite="true"] .mg-conn-spin,
-html[data-lite="true"] .mg-strip-flash,
 html[data-lite="true"] .mg-score-flash,
 html[data-lite="true"] .mg-follow-burst i,
 html[data-lite="true"] .mg-strip-panel,
