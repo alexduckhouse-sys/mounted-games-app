@@ -63,8 +63,8 @@ function EntryFormDetails({ competition, section, kind, step, onSent, onConflict
   const [draft] = useState(() => readEntryDraft(draftKey));
   const [fullName, setFullName] = useState(draft?.fullName ?? user?.fullName ?? '');
   const [club, setClub] = useState(draft?.club ?? user?.clubName ?? '');
-  const [contact, setContact] = useState(draft?.contact ?? '');
-  const [entryEmail, setEntryEmail] = useState<EntryEmail>({ email: draft?.email ?? (user?.email && looksLikeEmail(user.email) && !/@(?:[^@]*\.)?mg\.local$/i.test(user.email) ? user.email : ''), optIn: false });
+  const [contact, setContact] = useState('');
+  const [entryEmail, setEntryEmail] = useState<EntryEmail>({ email: (user?.email && looksLikeEmail(user.email) && !/@(?:[^@]*\.)?mg\.local$/i.test(user.email) ? user.email : ''), optIn: false });
   // One id per attempt: if the connection drops and the form is sent again, the server returns the first entry.
   const [requestId] = useState(() => draft?.requestId ?? newRequestId());
   const completed = useRef(false);
@@ -91,11 +91,11 @@ function EntryFormDetails({ competition, section, kind, step, onSent, onConflict
   useEffect(() => {
     if (completed.current) return;
     setDraftSaved(saveEntryDraft(draftKey, {
-      fullName, club, contact, email: entryEmail.email, teamName, wholeTeam, lookingForGuestRiders,
+      fullName, club, teamName, wholeTeam, lookingForGuestRiders,
       teamsCount, stablesCount, stablingClubOrTeam, useInitialOnly: privacy.useInitialOnly,
       noFilming: privacy.noFilming, requestId,
     }));
-  }, [draftKey, fullName, club, contact, entryEmail.email, teamName, wholeTeam, lookingForGuestRiders,
+  }, [draftKey, fullName, club, teamName, wholeTeam, lookingForGuestRiders,
     teamsCount, stablesCount, stablingClubOrTeam, privacy.useInitialOnly, privacy.noFilming, requestId]);
 
   const isWaitlist = kind === 'waitlist';

@@ -3,12 +3,10 @@ import type { EntryKind } from '../../lib/entryOptions';
 const PREFIX = 'mg.draft.entry.v1.';
 export const ENTRY_DRAFT_LIFETIME = 7 * 24 * 60 * 60 * 1000;
 
-/** Consent is deliberately absent: reopening a draft always needs a fresh tick. */
+/** Phone numbers and email addresses are deliberately absent (the entry may be for someone else, such as a child), and so is consent: reopening a draft always needs a fresh tick. */
 export interface EntryDraft {
   fullName: string;
   club: string;
-  contact: string;
-  email: string;
   teamName: string;
   wholeTeam: boolean;
   lookingForGuestRiders: boolean;
@@ -27,7 +25,7 @@ export function entryDraftKey(userId: string, competitionId: number, sectionId: 
 function isDraft(value: unknown): value is EntryDraft {
   if (!value || typeof value !== 'object') return false;
   const d = value as Record<string, unknown>;
-  return ['fullName', 'club', 'contact', 'email', 'teamName', 'stablingClubOrTeam'].every((key) => typeof d[key] === 'string' && d[key].length <= 2000)
+  return ['fullName', 'club', 'teamName', 'stablingClubOrTeam'].every((key) => typeof d[key] === 'string' && d[key].length <= 2000)
     && ['wholeTeam', 'lookingForGuestRiders', 'useInitialOnly', 'noFilming'].every((key) => typeof d[key] === 'boolean')
     && typeof d.requestId === 'string' && d.requestId.length > 0 && d.requestId.length <= 100
     && (d.teamsCount === '' || (Number.isInteger(d.teamsCount) && Number(d.teamsCount) >= 1 && Number(d.teamsCount) <= 20))
@@ -57,10 +55,10 @@ export function readEntryDraft(key: string, now = Date.now()): EntryDraft | null
 export function saveEntryDraft(key: string, details: EntryDraft, now = Date.now()): boolean {
   try {
     // Whitelist fields rather than serialising state, which can also contain consent.
-    const { fullName, club, contact, email, teamName, wholeTeam, lookingForGuestRiders,
+    const { fullName, club, teamName, wholeTeam, lookingForGuestRiders,
       teamsCount, stablesCount, stablingClubOrTeam, useInitialOnly, noFilming, requestId } = details;
     localStorage.setItem(key, JSON.stringify({ savedAt: now, details: {
-      fullName, club, contact, email, teamName, wholeTeam, lookingForGuestRiders,
+      fullName, club, teamName, wholeTeam, lookingForGuestRiders,
       teamsCount, stablesCount, stablingClubOrTeam, useInitialOnly, noFilming, requestId,
     } }));
     return true;

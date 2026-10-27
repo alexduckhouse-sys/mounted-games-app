@@ -3,7 +3,7 @@ import { clearEntryDraft, ENTRY_DRAFT_LIFETIME, entryDraftKey, readEntryDraft, s
 
 const key = entryDraftKey('fictional-account', 1, 5, 'standard');
 const details: EntryDraft = {
-  fullName: 'Example Entrant', club: 'Fictional Pony Club', contact: '', email: 'example@example.test',
+  fullName: 'Example Entrant', club: 'Fictional Pony Club',
   teamName: 'Example Team', wholeTeam: false, lookingForGuestRiders: false, teamsCount: 1,
   stablesCount: 0, stablingClubOrTeam: '', useInitialOnly: false, noFilming: true, requestId: 'example-request',
 };
@@ -21,6 +21,13 @@ describe('entry drafts', () => {
   it('stores only form fields and the retry id, never terms or marketing consent', () => {
     saveEntryDraft(key, { ...details, agreed: true, acceptTerms: true, optIn: true } as EntryDraft);
     expect(JSON.parse(localStorage.getItem(key)!)).toEqual({ savedAt: expect.any(Number), details });
+  });
+
+  it('never stores phone or email, even if given them', () => {
+    saveEntryDraft(key, { ...details, contact: '07700 900123', email: 'child@example.test' } as EntryDraft);
+    const raw = localStorage.getItem(key)!;
+    expect(raw).not.toContain('07700');
+    expect(raw).not.toContain('child@example.test');
   });
 
   it('expires and removes abandoned drafts after seven days, including other accounts and events', () => {

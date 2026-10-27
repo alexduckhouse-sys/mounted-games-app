@@ -64,7 +64,10 @@ describe('entry form convenience and isolation', () => {
     mounted.unmount();
     render(view());
     expect(screen.getByLabelText('Your name')).toHaveValue('Example Entrant');
-    expect(screen.getByLabelText('Mobile (optional)')).toHaveValue('07700 900123');
+    // Phone and email are never kept on the device.
+    expect(screen.getByLabelText('Mobile (optional)')).toHaveValue('');
+    expect(localStorage.getItem(key)).not.toContain('07700');
+    expect(localStorage.getItem(key)).not.toContain('adult@example.test');
     expect(screen.getByLabelText('Team name')).toHaveValue('Example Team');
     expect(screen.getByLabelText('Number of teams')).toHaveValue(2);
     expect(screen.getByRole('checkbox', { name: 'Looking for guest riders' })).toBeChecked();
@@ -77,10 +80,10 @@ describe('entry form convenience and isolation', () => {
 
   it('keeps deliberately cleared prefills empty when reopened', () => {
     const mounted = render(view());
-    for (const label of ['Your name', 'Club (optional)', 'Your email (optional)']) fireEvent.change(screen.getByLabelText(label), { target: { value: '' } });
+    for (const label of ['Your name', 'Club (optional)']) fireEvent.change(screen.getByLabelText(label), { target: { value: '' } });
     mounted.unmount();
     render(view());
-    for (const label of ['Your name', 'Club (optional)', 'Your email (optional)']) expect(screen.getByLabelText(label)).toHaveValue('');
+    for (const label of ['Your name', 'Club (optional)']) expect(screen.getByLabelText(label)).toHaveValue('');
   });
 
   it('separates accounts, events, sections and entry types while the component stays mounted', () => {
