@@ -10,6 +10,7 @@ using MountedGames.Api.Entities.Commerce;
 using MountedGames.Api.Hubs;
 using MountedGames.Api.Services;
 using MountedGames.Api.Services.Email;
+using MountedGames.Api.Services.Geo;
 using MountedGames.Api.Services.Payouts;
 using MountedGames.Api.Services.Streaming;
 
@@ -101,6 +102,30 @@ public class CompetitionsController : ControllerBase
         CancellationToken ct = default, [FromQuery] int? year = null,
         [FromQuery] string? location = null, [FromQuery] string? search = null)
         => await PickerPage(past, page, pageSize, year, location, search, null, ct);
+
+    /// <summary>
+    /// The upcoming list ordered for this viewer: nearest first when we can tell roughly where they are, without ever asking. The
+    /// place comes from a signed-in person's entry, team and supporter history, else from the rough position of their connection
+    /// that the website's proxy vouched for on this request. It is used for this call only and never stored or logged. The answer
+    /// differs per viewer, so (like <c>picker/mine</c>) it is outside the public-cache allowlists and sent <c>no-store</c>; the
+    /// plain <c>picker</c> stays the same for everyone and is what the app falls back to offline.
+    /// </summary>
+    [HttpGet("picker/near-you")]
+    [AllowAnonymous]
+    public async Task<ActionResult<CompetitionNearYouPage>> NearYou(
+        [FromServices] LocationInference locations, [FromQuery] int page = 1, [FromQuery] int pageSize = 24,
+        [FromQuery] string? sort = null, CancellationToken ct = default)
+    {
+        if (page is < 1 or > 10000 || pageSize is < 1 or > 50)
+            return Problem(statusCode: 400, title: "Invalid page", detail: "Use a page from 1 to 10000 and a page size from 1 to 50.");
+        Response.Headers.CacheControl = "private, no-store";
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var origin = userId is null ? null
+            : await locations.FromHistoryAsync(userId, User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value, ct);
+        origin ??= VisitorGeo.Get(HttpContext);
+        return await CompetitionPickerQuery.LoadNearYouAsync(_db, page, pageSize, DateTime.UtcNow.Date, origin,
+            nearest: !string.Equals(sort, CompetitionPickerQuery.SortSoonest, StringComparison.OrdinalIgnoreCase), ct);
+    }
 
     // Separate path deliberately excluded from both server and service-worker public-cache allowlists.
     [HttpGet("picker/mine")]

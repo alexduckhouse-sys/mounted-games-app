@@ -14,6 +14,7 @@ import {
 import { EmailPicture } from './EmailPicture';
 import { pictureFrom, uploadPicture } from './emailUpload';
 import { EmailPreview } from './EmailPreview';
+import { EntriesDigestCard } from './EntriesDigestCard';
 import '../operations/operations.css';
 import './emailPage.css';
 
@@ -369,6 +370,8 @@ export function EmailPage() {
             </span>
           </div>
         )}
+
+        <EntriesDigestCard />
 
         <RefineSection title="Sent" />
         <RefineList as="div" label="Sent">

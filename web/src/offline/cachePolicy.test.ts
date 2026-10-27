@@ -23,6 +23,7 @@ describe('canCachePublicApi', () => {
     '/api/competitions/012x',
     '/api/competitions/12/teams',
     '/api/competitions/12/standings/extra',
+    '/api/competitions/picker/near-you',
     '/api/auth/me',
     '/api/weather/forecast',
     '/api/trainer/my-teams',

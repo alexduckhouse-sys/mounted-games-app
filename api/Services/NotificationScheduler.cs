@@ -63,9 +63,18 @@ public class NotificationScheduler : BackgroundService
         {
             try { await TickAsync(stoppingToken); }
             catch (Exception ex) { _log.LogError(ex, "Notification scheduler tick failed."); }
+            try { await DigestTickAsync(stoppingToken); }
+            catch (Exception ex) { _log.LogError(ex, "Entries digest tick failed."); }
             try { await Task.Delay(_interval, stoppingToken); }
             catch (TaskCanceledException) { break; }
         }
+    }
+
+    /// <summary>The daily "entries are open" email: continues an unfinished run and, in the UK evening, starts the day's. See <see cref="Email.EntriesDigestService"/>.</summary>
+    internal async Task DigestTickAsync(CancellationToken ct)
+    {
+        using var scope = _sp.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<Email.EntriesDigestService>().TickAsync(allowBaseline: true, ct);
     }
 
     internal async Task TickAsync(CancellationToken ct)

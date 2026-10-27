@@ -413,6 +413,7 @@ public static class ReviewCompetitionSeeder
     await db.Set<EquipmentAcknowledgement>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
     await db.Set<CompetitionEntrySettings>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
     await db.Set<CompetitionDeclarationLock>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.EntriesDigestCompetitions.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
     await db.Competitions.Where(x => ids.Contains(x.Id)).ExecuteDeleteAsync();
     }
 }
