@@ -11,6 +11,7 @@ import { lookStyle } from '../../lib/overlays';
 import type { ChatMessage, Heat, LiveStream } from '../../types';
 import { ENTER, LEAVE, ROW_STAGGER_S, SPRING, WIPE_HIDDEN_LEFT, WIPE_SHOWN } from '../../lib/motion';
 import { useStillMotion } from '../../lite/useStillMotion';
+import { PrizeGivingOverlay } from './PrizeGivingOverlay';
 
 /** A broadcast bib swatch accepting colour/color and optional size, rendering nothing when no bib color exists. */
 export function BibSwatch({
@@ -96,7 +97,9 @@ export function StreamOverlays({ stream, label, reconnecting, muted, onSound, an
   const { overlay, look, scoreCards } = useOverlay();
   const dueCard = useDueCard(scoreCards, stream.arenaName, overlay.scoreCardDelaySeconds * 1000, overlay.scoreCardSeconds * 1000);
   const liveCardMode = readLiveOverlayCard(overlay).mode;
+  const prizeGivingOn = Boolean(compCtx?.prizeGiving);
   const overlayPopupActive =
+    prizeGivingOn ||
     liveCardMode !== 'none' ||
     Boolean(dueCard && overlay.scoreCardMode !== 2 && look.elements.scoreCard.show);
 
@@ -204,6 +207,7 @@ export function StreamOverlays({ stream, label, reconnecting, muted, onSound, an
     <ScoreCardOverlay stream={stream} overlay={overlay} look={look} cards={scoreCards} teams={competition?.teams} />
     <LiveDataCardOverlay arenaName={stream.arenaName} overlay={overlay} />
     <SponsorOverlay arenaName={stream.arenaName} track={stream.id !== 0} />
+    <PrizeGivingOverlay />
     {announcement && <div className="absolute left-3 right-3 top-14 flex justify-center"><StreamNotice key={`${announcement.message.id}-${announcement.receivedAt}`} {...announcement} /></div>}
     <AnimatePresence>
       {reconnecting && stream.status !== 1 && <motion.div key="reconnecting" role="status" {...fadeCover(still)} className="absolute inset-0 flex flex-col items-center justify-center bg-[rgb(var(--mg-header-deep)/0.7)]"><h3 className="text-2xl font-bold">Reconnecting…</h3><p className="text-sm">The signal dropped. Trying again.</p></motion.div>}

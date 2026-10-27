@@ -767,3 +767,31 @@ html[data-lite="true"] .mg-kit-drop { animation: none !important; }
 @keyframes mg-heat-live { 0%, 100% { filter: none; scale: 1; } 50% { filter: drop-shadow(0 0 4px rgb(var(--mg-red) / .55)); scale: 1.08; } }
 @media (prefers-reduced-motion: reduce) { .mg-heat-ring[data-tone="live"] svg { animation: none; } }
 html[data-lite="true"] .mg-heat-ring[data-tone="live"] svg { animation: none !important; }
+
+/* The prize-giving on the live video (PrizeGivingOverlay), in the same look as the other overlays: navy cards with
+   the look's gold edge. Sizes are in em, so they follow the look's small, medium or large text. */
+.mg-pg-lower { position: absolute; left: 12px; bottom: 14px; z-index: 6; display: flex; align-items: center; gap: .9em; width: min(64%, 30em); padding: .75em 1.1em .75em .9em; border-radius: 12px; background: color-mix(in srgb, var(--ov-bg, #0F1E3D) 94%, transparent); box-shadow: inset .3em 0 0 var(--ov-accent, #F5B82E), 0 .8em 2em rgb(0 0 0 / .35); overflow: hidden; }
+.mg-pg-band { position: absolute; inset: 0; background: var(--ov-accent, #F5B82E); pointer-events: none; }
+.mg-pg-place { position: relative; flex: none; display: grid; place-items: center; min-width: 3.1em; height: 2.4em; padding: 0 .5em; border-radius: 8px; background: var(--ov-accent, #F5B82E); color: #111; font: 800 1.35em/1 var(--mg-font-display); white-space: nowrap; }
+.mg-pg-name { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .2em; }
+.mg-pg-name b { font: 800 1.6em/1 var(--mg-font-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mg-pg-name span { font-size: .82em; font-weight: 600; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mg-pg-pts { position: relative; flex: none; text-align: right; font: 800 1.8em/1 var(--mg-font-display); font-variant-numeric: tabular-nums; }
+.mg-pg-pts small { display: block; margin-top: .15em; font: 600 .4em/1 var(--mg-font); letter-spacing: .08em; text-transform: uppercase; opacity: .75; }
+.mg-pg-ladder { position: absolute; right: 10px; top: 48px; z-index: 5; width: min(42%, 17em); padding: .7em .85em .55em; border-radius: 12px; background: color-mix(in srgb, var(--ov-bg, #0F1E3D) 94%, transparent); font-size: .9em; }
+.mg-pg-ladder header { display: flex; flex-direction: column; gap: .1em; }
+.mg-pg-ladder header b { font: 800 1.15em/1 var(--mg-font-display); }
+.mg-pg-ladder header span { font-size: .8em; opacity: .8; }
+.mg-pg-rule { display: block; height: 3px; margin: .45em 0 .3em; border-radius: 2px; background: var(--ov-accent, #F5B82E); transform-origin: left center; }
+.mg-pg-ladder ol { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.mg-pg-ladder li { display: grid; grid-template-columns: 2.4em minmax(0, 1fr) auto; align-items: center; gap: .4em; padding: .28em .2em; border-radius: 4px; border-top: 1px solid rgb(255 255 255 / .1); }
+.mg-pg-ladder li:first-child { border-top: 0; }
+.mg-pg-ladder li i { font-style: normal; font-weight: 700; opacity: .85; }
+.mg-pg-ladder li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.mg-pg-ladder li b { font-variant-numeric: tabular-nums; }
+.mg-pg-champ { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; padding: 12px; }
+.mg-pg-champ-card { display: flex; flex-direction: column; align-items: center; gap: .35em; width: min(92%, 30em); padding: 1.2em 1.6em 1.4em; border-radius: 16px; background: color-mix(in srgb, var(--ov-bg, #0F1E3D) 96%, transparent); box-shadow: inset 0 .3em 0 var(--ov-accent, #F5B82E), 0 20px 50px rgb(0 0 0 / .6); text-align: center; }
+.mg-pg-rosette { display: block; transform-origin: 50% 0; }
+.mg-pg-kicker { font-size: .85em; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--ov-accent, #F5B82E); }
+.mg-pg-champ-name { font: 800 2.6em/.95 var(--mg-font-display); overflow-wrap: anywhere; }
+.mg-pg-champ-sub { font-size: .9em; font-weight: 600; opacity: .8; }

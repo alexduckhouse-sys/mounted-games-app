@@ -19,6 +19,7 @@ import { PageProblem } from '../components/PageProblem';
 import { ScoreOutboxPanel } from '../components/ScoreOutboxPanel';
 import { applyResultsUpdate, replaceHeat, type ResultsUpdate } from '../lib/liveUpdates';
 import { applyScoreCardControl, parseScoreCardControl, queueScoreCard, type QueuedScoreCard } from '../lib/scoreCard';
+import { parsePrizeGiving, type PrizeGiving } from '../lib/prizeGiving';
 import { CompetitionContext } from './competition/context';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { useNavExtras } from '../components/NavExtrasContext';
@@ -183,6 +184,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const latestData = useRef(data);
   useEffect(() => { latestData.current = data; }, [data]);
   const [scoreCards, setScoreCards] = useState<QueuedScoreCard[]>([]);
+  const [prizeGiving, setPrizeGiving] = useState<PrizeGiving | null>(null);
   const [streamTelemetry, setStreamTelemetry] = useState<Record<number, import('../types').StreamTelemetry>>({});
   const [lastStreamCommand, setLastStreamCommand] = useState<import('../types').StreamCommand | null>(null);
   const [streamMessages, setStreamMessages] = useState<{ message: ChatMessage; receivedAt: number }[]>([]);
@@ -240,6 +242,10 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
     onStreamCommand: (c) => setLastStreamCommand(c),
     onOverlayUpdated: overlayState.onOverlayUpdated,
     onSponsorControl: sponsorFeed.onSponsorControl,
+    onPrizeGiving: (raw) => {
+      const next = parsePrizeGiving(raw);
+      if (next) setPrizeGiving(next === 'clear' ? null : next);
+    },
     onScoreCardControl: (raw) => {
       const control = parseScoreCardControl(raw);
       if (control) setScoreCards((cards) => applyScoreCardControl(cards, control, Date.now(), overlayState.overlay.scoreCardDelaySeconds * 1000));
@@ -343,7 +349,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const showSavedNotice = savedAt !== null && (slowAttempt === attempt || !refreshing) && shouldNoticeSavedCopy(savedAt, !refreshing || savedAt === '', new Date(), LIVE_SAVED_COPY_NOTICE_AFTER_MS);
 
   return (
-    <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamTelemetry, lastStreamCommand, streamingEnabled: streamState.streamingEnabled, streamingChecked: streamState.streamingChecked, invoke, ready, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save, scoreCards, sponsors: sponsorFeed.sponsors, reloadSponsors: sponsorFeed.reloadSponsors, sponsorSkip: sponsorFeed.sponsorSkip }}>
+    <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamTelemetry, lastStreamCommand, streamingEnabled: streamState.streamingEnabled, streamingChecked: streamState.streamingChecked, invoke, ready, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save, scoreCards, sponsors: sponsorFeed.sponsors, reloadSponsors: sponsorFeed.reloadSponsors, sponsorSkip: sponsorFeed.sponsorSkip, prizeGiving }}>
       {/* The page fades in over its loading placeholder rather than snapping into place. */}
       <div className="mg-settle flex flex-col gap-4">
         <AnnouncementPop message={onLiveTab ? null : popped} to={`/competitions/${data.id}/chat`} onDismiss={dismissPopped} />

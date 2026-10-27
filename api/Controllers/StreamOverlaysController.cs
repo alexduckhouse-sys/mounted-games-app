@@ -13,7 +13,7 @@ namespace MountedGames.Api.Controllers;
 
 /// <summary>
 /// The overlays viewers see on a competition's live video: a producer's banner, the now-racing strip,
-/// score card timing and the event's look. Anyone can read them; the people who can broadcast can change them.
+/// score card timing, the prize-giving and the event's look. Anyone can read them; the people who can broadcast can change them.
 /// </summary>
 [ApiController]
 [Route("api/competitions/{competitionId:int}/overlays")]
@@ -108,6 +108,51 @@ public class StreamOverlaysController(AppDbContext db, ILiveBroadcaster live, Ti
             (req.HiddenTeamIds ?? []).Distinct().Take(MaxNames).ToList(), names, req.Seconds);
         await live.ScoreCardControl(competitionId, control);
         return control;
+    }
+
+    private static readonly string[] PrizeGivingActions = ["show", "clear"];
+    private const int MaxPlaces = 30;
+
+    /// <summary>
+    /// Steps a prize-giving on the stream: each call carries every place given so far, so a viewer who joins part-way
+    /// catches up at the next place. Team and club names are read from the event; nothing is stored.
+    /// </summary>
+    [HttpPost("prize-giving")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<PrizeGivingDto>> ControlPrizeGiving(int competitionId, PrizeGivingControlRequest req)
+    {
+        if (!PrizeGivingActions.Contains(req.Action)) return BadRequest(new { message = "Action must be show or clear." });
+        if (req.Action == "clear")
+        {
+            var cleared = new PrizeGivingDto("clear", null, null, [], false);
+            await live.PrizeGiving(competitionId, cleared);
+            return cleared;
+        }
+
+        var places = req.Places ?? [];
+        if (req.SectionId is null || places.Count == 0 || places.Count > MaxPlaces || places.Select(p => p.TeamId).Distinct().Count() != places.Count)
+            return BadRequest(new { message = "Choose an age group and up to 30 places, with each team once." });
+        if (req.Champions && places[^1].Place != 1)
+            return BadRequest(new { message = "The champions are the team in 1st place." });
+
+        var section = await db.CompetitionSections
+            .Where(s => s.Id == req.SectionId && s.CompetitionId == competitionId)
+            .Select(s => new { s.Id, s.DisplayName, s.AgeGroup })
+            .FirstOrDefaultAsync();
+        if (section is null) return NotFound();
+        var ids = places.Select(p => p.TeamId).ToList();
+        var teams = await db.Teams
+            .Where(t => ids.Contains(t.Id) && t.CompetitionSectionId == section.Id)
+            .Select(t => new { t.Id, t.DisplayName, Club = t.Club != null ? t.Club.Name : null })
+            .ToDictionaryAsync(t => t.Id);
+        if (teams.Count != ids.Count) return NotFound();
+
+        var given = new PrizeGivingDto("show", section.Id, string.IsNullOrWhiteSpace(section.DisplayName) ? section.AgeGroup : section.DisplayName,
+            places.Select(p => new PrizeGivingPlaceDto(p.TeamId, p.Place, teams[p.TeamId].DisplayName, teams[p.TeamId].Club, p.Points)).ToList(),
+            req.Champions);
+        await live.PrizeGiving(competitionId, given);
+        return given;
     }
 
     private static StreamOverlayDto ToDto(StreamOverlay o)

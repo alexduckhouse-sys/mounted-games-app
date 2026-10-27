@@ -829,6 +829,7 @@ function SessionScoring() {
                 { key: 'qr', label: 'QR access', sub: 'Let another scorer in', onSelect: () => setShowQrModal(true) },
                 { key: 'pa', label: 'PA desk', sub: 'Read-outs for the announcer', onSelect: () => navigate(`/competitions/${competition.id}/commentary${sectionQuery}`) },
                 { key: 'tv', label: 'TV kiosk', sub: 'Big screen for the arena', onSelect: () => navigate(`/competitions/${competition.id}/tv${sectionQuery}`) },
+                { key: 'prizes', label: 'Prize-giving', sub: 'Give the places on the live stream', onSelect: () => navigate(`/competitions/${competition.id}/prize-giving${sectionQuery}`) },
               ]}
               onAddRace={canOrganise(competition) ? async (raceName) => {
                 const programme = viewRaces.map((r) => r.name);

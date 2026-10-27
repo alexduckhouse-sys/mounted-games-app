@@ -675,6 +675,20 @@ public record ScoreCardControlDto(
     int HeatId, int RaceId, string Action, IReadOnlyList<int> HiddenTeamIds,
     IReadOnlyDictionary<int, string> Names, int? Seconds);
 
+/// <summary>One place given at a prize-giving: the team, where it finished and its points (from the toplist).</summary>
+public record PrizeGivingPlaceRequest(int TeamId, [Range(1, 99)] int Place, [Range(0, 100000)] double Points);
+
+/// <summary>
+/// An organiser's step through a prize-giving: <c>show</c> with every place given so far, in the order given (the last
+/// is the one just read out), or <c>clear</c> to take it off the stream. <c>Champions</c> plays the winners' moment.
+/// </summary>
+public record PrizeGivingControlRequest(string Action, int? SectionId, IReadOnlyList<PrizeGivingPlaceRequest>? Places, bool Champions = false);
+
+public record PrizeGivingPlaceDto(int TeamId, int Place, string TeamName, string? ClubName, double Points);
+
+/// <summary>Sent to every viewer as <c>prizeGiving</c>. Names come from the event's teams, never from the request.</summary>
+public record PrizeGivingDto(string Action, int? SectionId, string? SectionName, IReadOnlyList<PrizeGivingPlaceDto> Places, bool Champions);
+
 /// <summary>A saved overlay look an organiser can apply to any of their events.</summary>
 public record OverlayLookDto(int Id, string Name, System.Text.Json.JsonElement Look, bool Mine, DateTime UpdatedAt);
 
