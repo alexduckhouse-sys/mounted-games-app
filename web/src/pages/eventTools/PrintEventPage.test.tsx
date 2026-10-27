@@ -4,6 +4,7 @@ import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import PrintEventPage from './PrintEventPage';
+import { chooseOption } from '../../test/select';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn() } }));
 
@@ -158,5 +159,78 @@ describe('PrintEventPage', () => {
     expect(screen.getByText('Main Ring Tripod')).toBeInTheDocument();
     expect(screen.getByText('Tripod Camera')).toBeInTheDocument();
     expect(screen.queryByText(/offline/i)).not.toBeInTheDocument();
+  });
+
+  describe('headers, QR code and volunteer card', () => {
+    const draw = (extra = {}) => ({ data: {
+      competition: { id: 12, name: 'Spring event', location: null, startDate: '2031-05-04T09:00:00Z', endDate: null, ...extra },
+      sessions: [
+        { sessionId: 1, sectionName: 'Under 12', sessionName: 'Morning', arenaName: 'Ring 1', orderIndex: 1, heats: [
+          { heatId: 1, label: 'Heat 1', scheduledStart: null, teams: [], races: [{ raceId: 2, name: 'Mug', orderIndex: 2 }, { raceId: 1, name: 'Bending', orderIndex: 1 }] },
+          { heatId: 2, label: 'Heat 2', scheduledStart: null, teams: [], races: [{ raceId: 3, name: 'Bending', orderIndex: 1 }] },
+        ] },
+        { sessionId: 2, sectionName: 'Under 16', sessionName: 'Afternoon', arenaName: null, orderIndex: 2, heats: [] },
+      ],
+    } });
+    const open = (view: string) => render(<MemoryRouter initialEntries={[`/event-tools/12/print/${view}`]}><Routes><Route path="/event-tools/:competitionId/print/:view" element={<PrintEventPage />} /></Routes></MemoryRouter>);
+
+    it('prints a nonblank competition number and no empty label', async () => {
+      vi.mocked(api.get).mockResolvedValue(draw({ competitionNumber: ' MG-2031-04 ' }));
+      const { unmount } = open('draw');
+      expect(await screen.findByText('Reference: MG-2031-04')).toBeInTheDocument();
+      unmount();
+      vi.mocked(api.get).mockResolvedValue(draw({ competitionNumber: '   ' }));
+      open('draw');
+      await screen.findByRole('heading', { name: 'Spring event' });
+      expect(screen.queryByText(/Reference/)).not.toBeInTheDocument();
+    });
+
+    it('puts a public live-scores QR on the draw but not on results', async () => {
+      vi.mocked(api.get).mockResolvedValue(draw());
+      const { unmount } = open('draw');
+      expect(await screen.findByRole('img', { name: 'QR code for the live scores' })).toBeInTheDocument();
+      unmount();
+      vi.mocked(api.get).mockResolvedValue({ data: { competition: { id: 12, name: 'Spring event', startDate: '2031-05-04T09:00:00Z' }, isProvisional: false, sections: [] } });
+      open('results');
+      await screen.findByText('No sections are available yet.');
+      expect(screen.queryByRole('img', { name: 'QR code for the live scores' })).not.toBeInTheDocument();
+    });
+
+    it('builds a volunteer card with games in order and kit labelled as whole event', async () => {
+      vi.mocked(api.get).mockImplementation(async (url: string) => (String(url).endsWith('/equipment')
+        ? { data: { lines: [{ kind: 'Pole', bucket: 'a', count: 2 }, { kind: 'Pole', bucket: 'b', count: 3 }], sessions: 2, racesCounted: 4 } }
+        : draw()) as never);
+      open('volunteer-card');
+      const card = await screen.findByRole('region', { name: 'Volunteer card' });
+      expect(card).toHaveTextContent('Ring 1');
+      expect(Array.from(card.querySelectorAll('ol li')).map((li) => li.textContent)).toEqual(['Bending', 'Mug']);
+      expect(await within(card).findByText('5 × Pole')).toBeInTheDocument();
+      expect(card).toHaveTextContent('Kit for the whole event');
+      expect(card).toHaveTextContent('Totals for every session, not just this one.');
+      expect(api.get).toHaveBeenCalledWith('/competitions/12/equipment');
+    });
+
+    it('switches session', async () => {
+      vi.mocked(api.get).mockImplementation(async (url: string) => (String(url).endsWith('/equipment') ? { data: { lines: [] } } : draw()) as never);
+      open('volunteer-card');
+      const card = await screen.findByRole('region', { name: 'Volunteer card' });
+      chooseOption(screen.getByRole('combobox'), 'Under 16 · Afternoon');
+      expect(card).toHaveTextContent('Arena to be confirmed');
+      expect(card).toHaveTextContent('No games chosen yet.');
+      expect(card).toHaveTextContent('No kit listed yet.');
+    });
+
+    it('still builds the card when the kit list will not load', async () => {
+      vi.mocked(api.get).mockImplementation(async (url: string) => { if (String(url).endsWith('/equipment')) throw new Error('offline'); return draw() as never; });
+      open('volunteer-card');
+      expect(await screen.findByText(/The kit list didn’t load/)).toBeInTheDocument();
+      expect(screen.getByRole('region', { name: 'Volunteer card' })).toHaveTextContent('Bending');
+    });
+
+    it('says when there are no sessions', async () => {
+      vi.mocked(api.get).mockImplementation(async (url: string) => (String(url).endsWith('/equipment') ? { data: { lines: [] } } : { data: { competition: { id: 12, name: 'Spring event', startDate: '2031-05-04T09:00:00Z' }, sessions: [] } }) as never);
+      open('volunteer-card');
+      expect(await screen.findByText('No sessions have been set up yet.')).toBeInTheDocument();
+    });
   });
 });

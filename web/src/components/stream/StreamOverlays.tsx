@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Megaphone, VolumeX } from 'lucide-react';
 import { BibSwatch as BaseBibSwatch } from '../BibSwatch';
 import { LiveDataCardOverlay, OverlayChips, ProducerBanner, ScoreCardOverlay, activeArenaHeat, readLiveOverlayCard, useDueCard } from './OverlayExtras';
+import { currentLanes } from '../../lib/raceLanes';
 import { SponsorOverlay } from './SponsorOverlay';
 import { useOverlay } from '../../hooks/useOverlay';
 import { CompetitionContext } from '../../pages/competition/context';
@@ -80,6 +81,10 @@ interface HeatLike {
   [key: string]: unknown;
 }
 
+function isEventHeat(heat: HeatLike | null): heat is Heat & HeatLike {
+  return heat != null && typeof heat.id === 'number' && Array.isArray(heat.races) && Array.isArray(heat.entries);
+}
+
 export function StreamOverlays({ stream, label, reconnecting, muted, onSound, announcement, hideCaption = false, currentHeat: heatProp, children }: {
   stream: LiveStream; label: string | null; reconnecting: boolean; muted: boolean; onSound: () => void;
   announcement?: { message: ChatMessage; receivedAt: number }; hideCaption?: boolean;
@@ -108,7 +113,11 @@ export function StreamOverlays({ stream, label, reconnecting, muted, onSound, an
 
   const laneNum = (lane: HeatLaneLike, fallback: number) => Number(lane.laneNumber ?? lane.laneIndex ?? lane.lane ?? fallback);
   const heatObj = activeHeat as HeatLike | null;
-  const rawLanes: HeatLaneLike[] = heatObj?.lanes ?? heatObj?.entries ?? [];
+  // A real heat from the event gets the scorer's lanes for the race being run; teams sitting out are left off.
+  const scored = competition && isEventHeat(heatObj) ? currentLanes(competition, heatObj) : null;
+  const rawLanes: HeatLaneLike[] = scored
+    ? scored.lanes.filter((l) => !l.sitting).map((l) => ({ ...l.entry, laneIndex: Number(l.lane) }))
+    : heatObj?.lanes ?? heatObj?.entries ?? [];
   const nowRacingLanes = Array.isArray(rawLanes) && rawLanes.length > 0
     ? [...rawLanes]
         .sort((a, b) => laneNum(a, 0) - laneNum(b, 0))

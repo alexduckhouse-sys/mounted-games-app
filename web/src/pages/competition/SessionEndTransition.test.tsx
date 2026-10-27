@@ -170,4 +170,59 @@ describe('SessionEndTransition', () => {
     expect(items[2]).toHaveTextContent('Alice Rider — Starlight');
     expect(items[2]).toHaveTextContent('Ben Rider — Thunder');
   });
+
+  describe('special awards and reserves', () => {
+    const aFinal = () => heat(10, { label: 'A Final', orderIndex: 1, entries: [{ id: 1, teamId: 1, teamName: 'Rockwood A', laneIndex: 1 }], races: [race(100, { name: 'Flag', isComplete: true, results: [result(1, 1, { teamName: 'Rockwood A', points: 9 })] })] });
+    const awards = [
+      { id: 1, competitionSectionId: 5, title: 'Best turned out', recipient: 'Rockwood A', note: 'private note' },
+      { id: 2, competitionSectionId: 6, title: 'Other section prize', recipient: 'Nobody', note: null },
+      { id: 3, competitionSectionId: null, title: 'Spirit of the Games', recipient: 'Everyone', note: null },
+    ];
+    const serve = (forms: unknown = []) => vi.mocked(api.get).mockImplementation(async (url: string) => ({ data: url.includes('/awards') ? awards : forms }) as never);
+
+    it('adds the section awards to the prize giving and the event awards once, on the last session', async () => {
+      serve();
+      const last = session(1, { name: 'Finals', status: 2, competitionSectionId: 5, heats: [aFinal()] });
+      mount(last, [last], [team(1, { displayName: 'Rockwood A' })]);
+      const special = await screen.findByRole('region', { name: 'Special awards' });
+      expect(special).toHaveTextContent('Best turned out: Rockwood A');
+      expect(special).not.toHaveTextContent('Other section prize');
+      expect(special).not.toHaveTextContent('private note');
+      expect(screen.getByRole('region', { name: 'Event awards' })).toHaveTextContent('Spirit of the Games: Everyone');
+      expect(api.get).toHaveBeenCalledWith('/event-tools/competitions/1/awards');
+    });
+
+    it('leaves event awards for the last session', async () => {
+      serve();
+      const first = session(1, { name: 'Finals', status: 2, competitionSectionId: 5, orderIndex: 1, heats: [aFinal()] });
+      const later = session(2, { name: 'Later', orderIndex: 2 });
+      mount(first, [first, later], [team(1, { displayName: 'Rockwood A' })]);
+      await screen.findByRole('region', { name: 'Special awards' });
+      expect(screen.queryByRole('region', { name: 'Event awards' })).not.toBeInTheDocument();
+    });
+
+    it('shows nothing extra for a malformed list, and a note when awards will not load', async () => {
+      vi.mocked(api.get).mockImplementation(async (url: string) => ({ data: url.includes('/awards') ? 'oops' : [] }) as never);
+      const last = session(1, { name: 'Finals', status: 2, competitionSectionId: 5, heats: [aFinal()] });
+      const { unmount } = render(<MemoryRouter><SessionEndTransition competition={competition({ sessions: [last], teams: [] })} finishedSession={last} onClose={vi.fn()} onAdvanced={vi.fn()} /></MemoryRouter>);
+      await waitFor(() => expect(api.get).toHaveBeenCalledWith('/event-tools/competitions/1/awards'));
+      expect(screen.queryByRole('region', { name: 'Special awards' })).not.toBeInTheDocument();
+      unmount();
+      vi.mocked(api.get).mockImplementation(async (url: string) => { if (url.includes('/awards')) throw new Error('offline'); return { data: [] } as never; });
+      render(<MemoryRouter><SessionEndTransition competition={competition({ sessions: [last], teams: [] })} finishedSession={last} onClose={vi.fn()} onAdvanced={vi.fn()} /></MemoryRouter>);
+      expect(await screen.findByText(/Couldn’t load the special awards/)).toBeInTheDocument();
+    });
+
+    it('tags reserves in the prize giving and in the next session’s riders', async () => {
+      const form = (teamId: number, name: string): DeclarationForm => ({ id: teamId, teamId, teamName: name, competitionId: 1, competitionName: 'x', submittedAt: '2026-06-01T08:00:00Z', isLocked: false, riders: [
+        { id: teamId * 10, fullName: 'Reserve Rider', horseName: 'Biscuit', isCaptain: false, isReserve: true, orderIndex: 2 },
+        { id: teamId * 10 + 1, fullName: 'Main Rider', horseName: 'Pickle', isCaptain: false, isReserve: false, orderIndex: 1 },
+      ] });
+      serve([form(1, 'Rockwood A'), form(2, 'Next A')]);
+      const finals = session(1, { name: 'Finals', status: 2, competitionSectionId: 5, orderIndex: 1, heats: [aFinal()] });
+      const next = session(2, { name: 'Next up', orderIndex: 2, competitionSectionId: 5 });
+      mount(finals, [finals, next], [team(1, { displayName: 'Rockwood A', competitionSectionId: 5 }), team(2, { displayName: 'Next A', competitionSectionId: 5 })]);
+      await waitFor(() => expect(screen.getAllByText('Reserve')).toHaveLength(3));
+    });
+  });
 });

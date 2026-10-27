@@ -44,6 +44,28 @@ describe('safeCell', () => {
 });
 
 describe('resultsBookToCsv', () => {
+  it('includes the official reference only when supplied, safely escaped as spreadsheet text', () => {
+    const data = book();
+    expect(resultsBookToCsv(data)).not.toContain('Competition reference,');
+    data.competition.competitionNumber = 'TEST-42';
+    expect(resultsBookToCsv(data)).toContain('Competition reference,TEST-42');
+    data.competition.competitionNumber = '=1+1';
+    expect(resultsBookToCsv(data)).toContain("Competition reference,'=1+1");
+    data.competition.competitionNumber = '  ';
+    expect(resultsBookToCsv(data)).not.toContain('Competition reference,');
+  });
+
+  it('keeps missing venue, final labels and award notes blank', () => {
+    const data = book();
+    data.competition.location = null;
+    data.sections[0].standings[0].finalLabel = null;
+    data.eventAwards[0].note = null;
+    const csv = resultsBookToCsv(data);
+    expect(csv.split('\r\n')).toContain('Venue,');
+    expect(csv).toContain('1,Oak A,"Oak, Pony Club",,30,6,3,0,');
+    expect(csv).toContain('Spirit of the Games,Everyone,');
+  });
+
   it('writes the event, each age group’s standings, its finals and awards, then the event awards', () => {
     const csv = resultsBookToCsv(book());
     const lines = csv.split('\r\n');

@@ -250,3 +250,9 @@
 .ops-pending { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 0 16px 12px; background: rgb(var(--mg-surface)); }
 .ops-badge-pending { display: inline-flex; align-items: center; min-height: 26px; padding: 0 10px; border-radius: 999px; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); font: 700 12.5px/1 var(--mg-font); letter-spacing: .02em; white-space: nowrap; }
 .ops-markpaid { margin-left: auto; }
+
+/* A sponsor's schedule status: always a word, never colour alone. */
+.ops-status { flex: none; display: inline-flex; align-items: center; min-height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid rgb(var(--mg-border)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-muted)); font: 700 12.5px/1 var(--mg-font); letter-spacing: .02em; white-space: nowrap; }
+.ops-status-active { border-color: rgb(var(--mg-ok)); color: rgb(var(--mg-ok)); }
+.ops-status-scheduled { border-color: transparent; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); }
+.ops-status-disabled, .ops-status-expired { background: rgb(var(--mg-subtle)); color: rgb(var(--mg-muted)); }

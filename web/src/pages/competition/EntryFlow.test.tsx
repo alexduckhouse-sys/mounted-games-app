@@ -7,12 +7,12 @@ import { competition } from '../../test/factories';
 import type { CompetitionDetail, CompetitionSection, Role } from '../../types';
 import { EntryPage } from './EntryPage';
 
-const state = vi.hoisted(() => ({ user: { id: 'u1' } as { id: string } | null, roles: ['Member'] as string[], organise: false, detail: null as unknown }));
+const state = vi.hoisted(() => ({ user: { id: 'u1' } as { id: string } | null, roles: ['Member'] as string[], organise: false, detail: null as unknown, reload: vi.fn() }));
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('./context', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./context')>()),
-  useCompetition: () => ({ competition: state.detail, reload: vi.fn() }),
+  useCompetition: () => ({ competition: state.detail, reload: state.reload }),
 }));
 vi.mock('../../auth/AuthContext', () => ({
   useAuth: () => ({
@@ -359,6 +359,39 @@ describe('the entry form', () => {
     await fill();
     await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Section is full.');
+  });
+
+  it('reloads the event after an admission conflict so the counts are not stale', async () => {
+    mount('/competitions/1/enter/5', [section({ priceMinor: 0, maxParticipants: 5, activeSignupsCount: 3 })]);
+    vi.mocked(api.post).mockRejectedValueOnce({ response: { status: 409, data: { message: 'Section is full.' } } });
+    await fill();
+    await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Section is full.');
+    expect(state.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reload for other failures', async () => {
+    mount('/competitions/1/enter/5', [section({ priceMinor: 0 })]);
+    vi.mocked(api.post).mockRejectedValueOnce(new Error('offline'));
+    await fill();
+    await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    await screen.findByRole('alert');
+    expect(state.reload).not.toHaveBeenCalled();
+  });
+
+  describe('places left on step 1', () => {
+    it('says how many are left, singular and plural, and nothing when full, uncapped or closed', () => {
+      mount('/competitions/1/enter', [
+        section({ maxParticipants: 10, activeSignupsCount: 4 }),
+        section({ id: 6, displayName: 'Under 16', format: 1, maxParticipants: 4, activeSignupsCount: 3 }),
+        section({ id: 7, displayName: 'Under 8', maxParticipants: 4, activeSignupsCount: 4 }),
+        section({ id: 8, displayName: 'Open' }),
+      ]);
+      expect(within(screen.getByRole('region', { name: 'Under 12' })).getByText('6 team places left')).toBeInTheDocument();
+      expect(within(screen.getByRole('region', { name: 'Under 16' })).getByText('1 pair place left')).toBeInTheDocument();
+      expect(within(screen.getByRole('region', { name: 'Under 8' })).queryByText(/left/)).toBeNull();
+      expect(within(screen.getByRole('region', { name: 'Open' })).queryByText(/left/)).toBeNull();
+    });
   });
 
   it('does not send a malformed address', async () => {

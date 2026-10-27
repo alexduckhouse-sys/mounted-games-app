@@ -20,7 +20,9 @@ public record CsvTeamImportResultDto(
 public record CloneCompetitionRequest(string Name, DateTime StartDate, DateTime? EndDate);
 public record CloneCompetitionResultDto(int CompetitionId, string Name, int Sections, int Teams, int Sessions, int Heats, int Races);
 
-public record PrintableCompetitionDto(int Id, string Name, string? Location, DateTime StartDate, DateTime? EndDate);
+public record PrintableCompetitionDto(
+    int Id, string Name, string? Location, DateTime StartDate, DateTime? EndDate,
+    string? CompetitionNumber = null);
 public record PrintableTeamDto(int TeamId, string TeamName, string ClubName, string Suffix, int Lane);
 public record PrintableRaceDto(int RaceId, string Name, int OrderIndex);
 public record PrintableHeatDto(

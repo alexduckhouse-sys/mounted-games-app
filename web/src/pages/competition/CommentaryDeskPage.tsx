@@ -3,11 +3,14 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ClipboardCheck, Mic, Monitor, QrCode as QrCodeIcon, Radio, Sparkles, Trophy, Users } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
-import { BibSwatch } from '../../components/BibSwatch';
+import { BibSwatch, HatbandSwatch } from '../../components/BibSwatch';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { QrAccessModal } from '../../components/QrAccessModal';
 import { usePageWidth } from '../../components/pageWidthState';
 import { formatPoints } from '../../lib/formatPoints';
+import { parseBibAndFlag } from '../../lib/bib';
+import { currentRaceIndex, raceLanes, racesInOrder } from '../../lib/raceLanes';
+import { lanesOf } from './laneRules';
 import { statusLetter } from '../../lib/resultStatus';
 import { publicRiderName } from '../../lib/riderNames';
 import { displaySectionName } from '../../lib/section';
@@ -217,6 +220,16 @@ export function CommentaryDeskPage() {
     const nextOpen = sectionHeats.find(({ heat }) => !isHeatDone(heat));
     return nextOpen ?? sectionHeats[sectionHeats.length - 1];
   }, [sectionHeats, selectedHeatId]);
+
+  // The lanes for the race being run (or up next) in this heat, worked out as the scorer does: rotated, with the
+  // hatband of the lane each team actually rides in. Once every race is done, the last race's lanes.
+  const activeLanes = useMemo(() => {
+    if (!activeHeatItem) return null;
+    const { heat, session } = activeHeatItem;
+    const races = racesInOrder(heat);
+    const index = currentRaceIndex(heat) ?? Math.max(races.length - 1, 0);
+    return { race: races[index] ?? null, lanes: raceLanes(heat, index, lanesOf(session), competition.laneHatbands) };
+  }, [activeHeatItem, competition.laneHatbands]);
 
   // Every team in order (1st..Nth) for the Standings panel
   const orderedStandings = useMemo(() => {
@@ -478,7 +491,7 @@ export function CommentaryDeskPage() {
                 </h2>
               </div>
               <span className="text-xs font-bold text-[rgb(var(--mg-body))]">
-                {activeHeatItem ? `${activeHeatItem.label} · ` : ''}Heat / toplist
+                {activeHeatItem ? `${activeHeatItem.label} · ` : ''}{activeLanes?.race ? `Lanes for ${activeLanes.race.name} · ` : ''}Heat / toplist
               </span>
             </div>
 
@@ -486,11 +499,9 @@ export function CommentaryDeskPage() {
               <p className="p-4 text-sm text-[rgb(var(--mg-muted))]">No lane draw available for this heat yet.</p>
             ) : (
               <ol className="m-0 divide-y divide-[rgb(var(--mg-rule-soft))] list-none p-0">
-                {activeHeatItem.heat.entries
-                  .slice()
-                  .sort((a, b) => a.laneIndex - b.laneIndex)
-                  .map((entry) => {
+                {(activeLanes?.lanes ?? []).map(({ entry, lane, sitting, hatband }) => {
                     const team = teamById.get(entry.teamId);
+                    const bibWords = parseBibAndFlag(team?.bibDescription).bib;
                     const st = standingByTeamId.get(entry.teamId);
                     const dec = decByTeamId.get(entry.teamId);
                     const riders = (dec?.riders ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex);
@@ -502,12 +513,13 @@ export function CommentaryDeskPage() {
                     return (
                       <li key={entry.id} className="flex flex-col gap-1.5 px-4 py-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex min-w-0 items-center gap-2.5">
+                          <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
                             <span className="mg-display shrink-0 rounded bg-[rgb(var(--mg-tint))] px-2 py-0.5 text-base font-bold uppercase text-[rgb(var(--mg-heading))]">
-                              Lane {entry.laneIndex}
+                              {sitting ? 'Sits out' : `Lane ${lane}`}
                             </span>
+                            <HatbandSwatch colour={hatband} />
                             <BibSwatch colour={entry.bibColour ?? team?.bibColour ?? st?.bibColour} />
-                            <span className="truncate text-base font-bold text-[rgb(var(--mg-ink))]">
+                            <span className="text-base font-bold text-[rgb(var(--mg-ink))]">
                               {entry.teamName}
                             </span>
                             {team?.clubName && (
@@ -536,6 +548,7 @@ export function CommentaryDeskPage() {
                           </p>
                         )}
 
+                        {bibWords && <p className="m-0 truncate text-xs text-[rgb(var(--mg-muted))]">Bibs: {bibWords}</p>}
                         <div className="text-xs font-medium text-[rgb(var(--mg-muted))]">
                           Last race: <span className="font-semibold text-[rgb(var(--mg-body))]">{lastRace}</span>
                         </div>
@@ -620,6 +633,9 @@ export function CommentaryDeskPage() {
                       <p className="m-0 text-xs text-[rgb(var(--mg-muted))]">Trainer: {row.trainerName}</p>
                     ) : null}
 
+                    {parseBibAndFlag(teamById.get(row.teamId)?.bibDescription).bib && (
+                      <p className="m-0 truncate text-xs text-[rgb(var(--mg-muted))]">Bibs: {parseBibAndFlag(teamById.get(row.teamId)?.bibDescription).bib}</p>
+                    )}
                     <div className="text-xs font-semibold text-[rgb(var(--mg-muted))]">
                       {row.gapLabel}
                     </div>

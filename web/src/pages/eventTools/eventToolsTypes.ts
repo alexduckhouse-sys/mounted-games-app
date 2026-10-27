@@ -33,6 +33,8 @@ export interface PrintableCompetition {
   location: string | null;
   startDate: string;
   endDate: string | null;
+  /** The organiser's official event reference, when supplied. Optional for older cached packs. */
+  competitionNumber?: string | null;
 }
 
 export interface PrintableTeam {

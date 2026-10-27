@@ -17,6 +17,7 @@ import type { QueuedScore } from '../../offline/scoreOutbox';
 import { SessionEndTransition } from './SessionEndTransition';
 import { HeatScores } from './HeatScores';
 import { ScoringSection } from './ScoringSection';
+import { contactLinks, ringMessage } from '../../lib/contactLinks';
 import { ScoreClashBanner, TeamCardBadge, getStoredCards, playAlertChime, setStoredCard, useCardsEnabled, type ScoreClashItem } from './ScoringParts';
 import { RaceListPicker, RaceSelect } from '../../components/RacePicker';
 import { enqueue, placingsOf } from '../../offline/scoreOutbox';
@@ -746,11 +747,37 @@ function SessionScoring() {
                       </button>
                     ))}
                 </div>
+                {(() => {
+                  // Staff-only: the number comes from the private declaration response and is never sent anywhere by us.
+                  const heatLabel = activeHeat.label ?? `Heat ${Math.max(0, orderedHeats.findIndex((h) => h.id === activeHeat.id)) + 1}`;
+                  const arena = session?.arenaName?.trim() || 'Main Arena';
+                  const contacts = activeHeat.entries
+                    .slice()
+                    .sort((a, b) => a.laneIndex - b.laneIndex)
+                    .map((entry) => ({ entry, links: contactLinks(decFormByTeamId.get(entry.teamId)?.trainerPhone, ringMessage(heatLabel, arena, entry.teamName)) }))
+                    .filter((c) => c.links);
+                  if (contacts.length === 0) return null;
+                  return (
+                    <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-[rgb(var(--mg-line))] pt-2" aria-label="Phone the trainer">
+                      <span className="font-semibold text-[rgb(var(--mg-muted))]">Phone the trainer (opens your phone, nothing is sent):</span>
+                      {contacts.map(({ entry, links }) => (
+                        <span key={entry.teamId} className="inline-flex flex-wrap items-center gap-1.5">
+                          <span className="font-semibold">{entry.teamName}</span>
+                          <a href={links!.call!} className="mg-btn mg-btn-secondary !min-h-11 !px-3 text-xs font-semibold" aria-label={`Phone the trainer of ${entry.teamName}`}>Phone</a>
+                          {links!.whatsApp && (
+                            <a href={links!.whatsApp} target="_blank" rel="noopener noreferrer" className="mg-btn mg-btn-secondary !min-h-11 !px-3 text-xs font-semibold" aria-label={`WhatsApp the trainer of ${entry.teamName}`}>WhatsApp</a>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
           {view === 'score' && (viewHeat ? (
             <ScoringSection
+              competitionId={competition.id}
               key={`${viewHeat.id}:${activeRaceId}`}
               heat={viewHeat}
               races={viewRaces}

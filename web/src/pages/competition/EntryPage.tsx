@@ -9,6 +9,7 @@ import { usePageWidth } from '../../components/pageWidthState';
 import { EntryRosette } from '../../components/Rosette';
 import { entryPhaseOnly } from '../../lib/competitionPhase';
 import { entryOptions, feeText, parseEntryKind, sectionFull, type EntryKind } from '../../lib/entryOptions';
+import { placesLeftText } from '../../lib/placesLeft';
 import { displaySectionName } from '../../lib/section';
 import { useCompetition } from './context';
 import { EntryForm, type EntrySent } from './EntryForm';
@@ -25,7 +26,7 @@ import '../../components/eventPages.css';
  */
 export function EntryPage() {
   usePageWidth('narrow');
-  const { competition } = useCompetition();
+  const { competition, reload } = useCompetition();
   const { user, canOrganise } = useAuth();
   const location = useLocation();
   const [search] = useSearchParams();
@@ -87,7 +88,7 @@ export function EntryPage() {
       </div>
     );
   } else if (section) {
-    body = <EntryForm key={`${section.id}:${kind}`} competition={competition} section={section} kind={kind} step={stepPart === 'pay' ? 'pay' : 'details'} onSent={setSent} />;
+    body = <EntryForm key={`${section.id}:${kind}`} competition={competition} section={section} kind={kind} step={stepPart === 'pay' ? 'pay' : 'details'} onSent={setSent} onConflict={reload} />;
   } else if (sectionPart) {
     body = <Notice actionLabel="Choose an age group" actionTo={base}>Section not found.</Notice>;
   } else {
@@ -99,6 +100,7 @@ export function EntryPage() {
         {competition.sections.map((s) => (
           <section key={s.id} aria-label={s.displayName}>
             <h3 className="sp-sec">{displaySectionName(s.displayName)}</h3>
+            {!closed && placesLeftText(s) && <p className="sp-note !mt-0 !mb-1.5">{placesLeftText(s)}</p>}
             <div className="sp-card">
               {closed ? (
                 <div className="sp-row"><span className="sp-grow"><span className="sp-t1 !text-[var(--mg-muted)]">Entries closed</span></span></div>

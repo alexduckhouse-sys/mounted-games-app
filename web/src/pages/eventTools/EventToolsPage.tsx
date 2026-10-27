@@ -170,6 +170,7 @@ const PRINT_SHEETS = [
   { to: 'draw', title: 'Draw and lanes', detail: 'Sessions, heats, lanes and race order' },
   { to: 'score-sheets', title: 'Score sheets', detail: 'Blank placing, elimination and points columns' },
   { to: 'results', title: 'Results', detail: 'Current section standings, marked provisional when unfinished' },
+  { to: 'volunteer-card', title: 'Volunteer card', detail: 'A pocket card for one session: games in order and the kit' },
   { to: 'tack-check', title: 'Tack check forms', detail: 'One form per age group, with each team’s riders, ponies and a column per sector' },
   { to: 'poster', title: 'Venue poster', detail: 'Name, date, venue and a QR code to this event’s page' },
 ];
