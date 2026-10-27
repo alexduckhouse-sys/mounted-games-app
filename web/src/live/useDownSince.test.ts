@@ -18,18 +18,18 @@ afterEach(() => {
 describe('useDownSince', () => {
   it('counts from page open until the live link first connects', () => {
     const { result, rerender } = renderHook(({ connected }) => useDownSince(connected), { initialProps: { connected: false } });
-    expect(result.current).toEqual({ downSince: START, everConnected: false });
+    expect(result.current).toEqual({ downSince: START });
     vi.setSystemTime(START + 2_000);
     rerender({ connected: true });
-    expect(result.current).toEqual({ downSince: null, everConnected: true });
+    expect(result.current).toEqual({ downSince: null });
   });
 
-  it('starts a new count on each drop and remembers the link has worked', () => {
+  it('starts a new count on each drop', () => {
     const { result, rerender } = renderHook(({ connected }) => useDownSince(connected), { initialProps: { connected: true } });
-    expect(result.current).toEqual({ downSince: null, everConnected: true });
+    expect(result.current).toEqual({ downSince: null });
     vi.setSystemTime(START + 60_000);
     rerender({ connected: false });
-    expect(result.current).toEqual({ downSince: START + 60_000, everConnected: true });
+    expect(result.current).toEqual({ downSince: START + 60_000 });
     rerender({ connected: false });
     expect(result.current.downSince).toBe(START + 60_000);
   });
@@ -46,6 +46,6 @@ describe('useDownSince', () => {
   it('ignores the app coming back to the front while the link is up', () => {
     const { result } = renderHook(() => useDownSince(true));
     visibility('visible');
-    expect(result.current).toEqual({ downSince: null, everConnected: true });
+    expect(result.current).toEqual({ downSince: null });
   });
 });
