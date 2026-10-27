@@ -21,7 +21,7 @@ type Phase =
   | { kind: 'done' };
 
 const DEAD_WORDING: Record<'expired' | 'used' | 'invalid', string> = {
-  expired: 'This link has expired. Links work for 30 minutes, and only the newest one we sent you works. Ask for a new one.',
+  expired: 'This link has expired or a newer one has replaced it. Links work for 30 minutes. Ask for a new one.',
   used: 'This link has already been used. If you changed your password with it, sign in with the new one.',
   invalid: 'This link isn’t valid. Check you opened the whole link from the email, or ask for a new one.',
 };

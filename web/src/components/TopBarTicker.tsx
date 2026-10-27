@@ -53,9 +53,10 @@ function Line({ item, className }: { item: TickerItem; className: string }) {
 /**
  * The ticker dock just above the tab bar: one line that rolls through what is on now, delays, what is next and
  * organiser announcements, each new line pushing the last one up and out. The arrow opens every update above it;
- * a tap anywhere else closes that list. A page can put one button beside it (the timetable's filters).
+ * a tap anywhere else closes that list. A page can put one button beside it (the timetable's filters). On a page
+ * with no tab bar it sits at the bottom of the screen (`low`).
  */
-export function TopBarTicker() {
+export function TopBarTicker({ low = false }: { low?: boolean }) {
   const t = useT();
   const cap = PAGE_WIDTH_CLASS[usePageWidthValue()];
   const { current } = useCurrentCompetition();
@@ -112,7 +113,7 @@ export function TopBarTicker() {
   const labelFor = (item: TickerItem) => (item.sessionId != null ? t('shell.ticker.openSession') : item.kind === 'late' || item.kind === 'ontime' ? t('shell.ticker.openTimetable') : t('shell.ticker.openFeed'));
   const pushing = previous != null && !reduceMotion;
   return (
-    <div className="mg-dock">
+    <div className={`mg-dock${low ? ' mg-dock-low' : ''}`}>
       <div ref={dockRef} className={`mx-auto ${cap} mg-dock-row`}>
         {active && (
           <div className="mg-dock-wrap">

@@ -9,6 +9,7 @@
     "db:seed-review": "node scripts/api.mjs --seed-review",
     "db:reseed-review": "node scripts/api.mjs --reseed-review",
     "db:seed-history": "node scripts/api.mjs --seed-history",
+    "db:import-competition": "node scripts/api.mjs --import-competition",
     "test:neon": "node scripts/verify-neon.mjs",
     "test": "npm --prefix web test && dotnet test tests/MountedGames.Api.Tests/MountedGames.Api.Tests.csproj"
   },

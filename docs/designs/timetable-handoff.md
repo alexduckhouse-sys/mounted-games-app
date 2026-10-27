@@ -10,7 +10,7 @@ Goal: more function with fewer and smaller buttons, so there is less chrome abov
 
 | Area | Decision | Code today |
 | --- | --- | --- |
-| Ticker position | A dock just above the tab bar (layout C), on every competition page, not only the timetable. | `components/TopBarTicker.tsx`, `TickerContext.tsx`, `AppShell.tsx` |
+| Ticker position | A dock just above the tab bar (layout C), on every page including the live feed; only filming mode has none. Away from an event's own pages (events list, Following, Me, settings, admin) it follows the event last opened, refreshed each minute. On a page with no tab bar it sits at the bottom of the screen. It hides when there is no news. | `components/TopBarTicker.tsx`, `TickerContext.tsx`, `TickerFeed.tsx`, `AppShell.tsx` |
 | Ticker animation | Push up: the new line pushes the old one off the top (0.45 s, `cubic-bezier(.65,0,.35,1)`). It holds each line for 3.5 s, or 6 s for a notice, and stops while the list or the filter sheet is open. No progress line. No amber flash when a notice arrives. | `lib/ticker.ts` |
 | Ticker list | Tapping the ticker opens every update above it. Tapping anywhere else closes the list, and the ticker carries on. | |
 | Filters | One filter button beside the ticker (F4), with a count badge when an arena or age group is set. The chosen filters show as removable chips at the top of the list. The header subtitle says what you're looking at, for example "Tuesday · All ages". | `TimetableBoard.tsx` `.tt-strip` dropdowns go |

@@ -12,6 +12,7 @@ using MountedGames.Api.Data;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Hubs;
 using MountedGames.Api.Services;
+using MountedGames.Api.Services.EventTools;
 using MountedGames.Api.Services.Streaming;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -81,22 +82,20 @@ builder.Services
             OnTokenValidated = async ctx =>
             {
                 var uid = ctx.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
-                var accounts = ctx.HttpContext.RequestServices.GetRequiredService<LiveAccounts>();
-                // A token issued before the account's sessions were ended (a password reset) is refused like a deleted account's.
-                if (uid is null || !await accounts.AcceptsTokenAsync(uid, LiveAccounts.SessionVersionOf(ctx.Principal), ctx.HttpContext.RequestAborted))
+                var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                // One uncached round trip per request (and per live-hub connection): the account's state and its roles. A
+                // deleted, emptied, locked or blocked account, or a token from before its sessions were ended (a password
+                // reset or change), is refused at once on every instance.
+                var account = uid is null ? null : await LiveAccounts.StateAsync(db, uid, ctx.HttpContext.RequestAborted);
+                if (account is null || !account.Accepts(LiveAccounts.SessionVersionOf(ctx.Principal)))
                 {
                     ctx.Fail("This account no longer exists.");
                     return;
                 }
                 // Revoked roles stop working on existing tokens. Newly granted roles still require a fresh sign-in.
                 // Preserve the token's identity, including the shared-key display name.
-                var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
-                var roles = await (from membership in db.UserRoles
-                                   join role in db.Roles on membership.RoleId equals role.Id
-                                   where membership.UserId == uid && role.Name != null
-                                   select role.Name!).ToListAsync(ctx.HttpContext.RequestAborted);
                 foreach (var identity in ctx.Principal!.Identities)
-                    foreach (var claim in identity.FindAll(identity.RoleClaimType).Where(c => !roles.Contains(c.Value)).ToArray())
+                    foreach (var claim in identity.FindAll(identity.RoleClaimType).Where(c => !account.Roles.Contains(c.Value)).ToArray())
                         identity.RemoveClaim(claim);
             }
         };
@@ -113,6 +112,7 @@ builder.Services.AddHttpClient(ExternalTokenValidator.HttpClientName, c =>
     })
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton<IExternalTokenValidator, ExternalTokenValidator>();
+builder.Services.AddSingleton<LiveConnections>();
 
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<ScoringService>();
@@ -260,6 +260,37 @@ if (args.Contains("--seed-history"))
     return;
 }
 
+if (args.Contains("--import-competition"))
+{
+    // A real event from a JSON file kept outside the repo (riders' names never go in source control). Refuses an event that exists.
+    var path = args.SkipWhile(a => a != "--import-competition").Skip(1).FirstOrDefault();
+    if (string.IsNullOrWhiteSpace(path) || path.StartsWith("--") || !File.Exists(path))
+    {
+        Console.Error.WriteLine(string.IsNullOrWhiteSpace(path) || path.StartsWith("--")
+            ? "Give the event file after --import-competition, for example --import-competition /full/path/west-mids-pairs.json"
+            : $"Can't find {Path.GetFullPath(path)}.");
+        Environment.ExitCode = 1;
+        return;
+    }
+    await DbInitializer.SeedAsync(app.Services);
+    using var scope = app.Services.CreateScope();
+    try
+    {
+        var file = CompetitionFileImport.Parse(await File.ReadAllTextAsync(path));
+        var imported = await CompetitionFileImport.ImportAsync(
+            scope.ServiceProvider.GetRequiredService<AppDbContext>(), file, dryRun: args.Contains("--dry-run"));
+        Console.WriteLine($"{(imported.DryRun ? "Checked (nothing saved)" : $"Imported competition {imported.CompetitionId}")}: "
+            + $"{imported.Sections} sections, {imported.Sessions} sessions, {imported.Heats} heats, {imported.Teams} teams, "
+            + $"{imported.Riders} riders, {imported.Races} races.");
+    }
+    catch (CompetitionImportException ex)
+    {
+        Console.Error.WriteLine(ex.Message);
+        Environment.ExitCode = 1;
+    }
+    return;
+}
+
 if (migrateDatabase)
 {
     if (!DatabaseConfiguration.UsesPostgres(builder.Configuration))
@@ -315,7 +346,8 @@ if (Directory.Exists(wwwroot))
 }
 
 app.MapControllers();
-app.MapHub<LiveHub>("/hubs/live");
+// A connection signed in with a token closes when the token expires; ended sessions close theirs at once (LiveConnections).
+app.MapHub<LiveHub>("/hubs/live", options => options.CloseOnAuthenticationExpiration = true);
 
 // SPA fallback — anything that isn't an API/hub/static file falls through to index.html.
 if (Directory.Exists(wwwroot))

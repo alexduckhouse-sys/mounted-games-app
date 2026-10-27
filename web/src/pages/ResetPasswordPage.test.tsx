@@ -80,7 +80,7 @@ describe('ResetPasswordPage', () => {
   it('says plainly when the link has expired, was used or isn’t valid', async () => {
     answer(1);
     const { unmount } = mount();
-    expect(await screen.findByRole('alert')).toHaveTextContent('This link has expired.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('This link has expired or a newer one has replaced it.');
     expect(screen.getByRole('link', { name: 'Send a new link' })).toHaveAttribute('href', '/forgot-password');
     expect(screen.queryByLabelText('New password')).not.toBeInTheDocument();
     unmount();
@@ -141,6 +141,11 @@ describe('ResetPasswordPage', () => {
     await save();
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Too many tries.'));
 
+    confirm.mockRejectedValueOnce({ response: { status: 409, data: { code: 'conflict', message: 'Your account changed while your new password was being saved, so nothing was changed. Try the link again.' } } });
+    await save();
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Try the link again.'));
+    expect(screen.getByLabelText('New password')).toBeInTheDocument();
+
     confirm.mockRejectedValueOnce({ response: { status: 403, data: { message: 'Password resets from this network are blocked.' } } });
     await save();
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Password resets from this network are blocked.'));
@@ -165,7 +170,7 @@ describe('ResetPasswordPage', () => {
     const { unmount } = mount();
     await user.type(await screen.findByLabelText('New password'), STRONG);
     await user.click(screen.getByRole('button', { name: 'Save new password' }));
-    expect(await screen.findByText(/This link has expired\./)).toBeInTheDocument();
+    expect(await screen.findByText(/This link has expired or a newer one has replaced it\./)).toBeInTheDocument();
     unmount();
 
     answer(0, async () => { throw { response: { status: 404, data: { code: 'invalid', message: 'Invalid' } } }; });

@@ -2,6 +2,8 @@
 
 React 19 + TypeScript + Vite PWA, used mostly on phones in fields with one bar of signal. Treat slow or dropped connections as the normal case. Repo-wide rules are in `../CLAUDE.md`; terms are explained in `../api/CLAUDE.md`; visual house style, controls and per-page rules are in `../docs/designs/design-decisions.md`.
 
+**Any change to how a page looks follows `../docs/designs/design-decisions.md` and its "Before you open a UI pull request" checklist, ticked in the PR body.** Some organiser and site admin pages missed it (27 October 2026). If the design file, canvas and code disagree, stop and ask; don't choose.
+
 ## Where things live (beyond the root layout)
 
 - `src/lite/` and `src/theme/lite.ts`: lite mode (stored as `mg.lite`, with automatic detection for `navigator.connection.saveData` / `2g`). `useLiteMode()` / `isLite()` gates images (`components/LazyImage.tsx`), weather, the live video player, CSS blur/pulse animations and SignalR event batching. Use `LazyImage` for any remote picture.
