@@ -386,7 +386,7 @@ public class ExternalAuthTests : IClassFixture<ExternalAuthFactory>
         (await client.GetAsync("/api/auth/me")).EnsureSuccessStatusCode();
 
         await SetAsync(auth.User.Id, u => u.BlockedAt = DateTime.UtcNow);
-        _f.Services.GetRequiredService<LiveAccounts>().Forget(auth.User.Id);
+        // Token checks read the account on every request, so the block holds at once.
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/auth/me")).StatusCode);
     }
 

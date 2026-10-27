@@ -81,22 +81,20 @@ builder.Services
             OnTokenValidated = async ctx =>
             {
                 var uid = ctx.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
-                var accounts = ctx.HttpContext.RequestServices.GetRequiredService<LiveAccounts>();
-                // A token issued before the account's sessions were ended (a password reset) is refused like a deleted account's.
-                if (uid is null || !await accounts.AcceptsTokenAsync(uid, LiveAccounts.SessionVersionOf(ctx.Principal), ctx.HttpContext.RequestAborted))
+                var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                // One uncached round trip per request (and per live-hub connection): the account's state and its roles. A
+                // deleted, emptied, locked or blocked account, or a token from before its sessions were ended (a password
+                // reset or change), is refused at once on every instance.
+                var account = uid is null ? null : await LiveAccounts.StateAsync(db, uid, ctx.HttpContext.RequestAborted);
+                if (account is null || !account.Accepts(LiveAccounts.SessionVersionOf(ctx.Principal)))
                 {
                     ctx.Fail("This account no longer exists.");
                     return;
                 }
                 // Revoked roles stop working on existing tokens. Newly granted roles still require a fresh sign-in.
                 // Preserve the token's identity, including the shared-key display name.
-                var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
-                var roles = await (from membership in db.UserRoles
-                                   join role in db.Roles on membership.RoleId equals role.Id
-                                   where membership.UserId == uid && role.Name != null
-                                   select role.Name!).ToListAsync(ctx.HttpContext.RequestAborted);
                 foreach (var identity in ctx.Principal!.Identities)
-                    foreach (var claim in identity.FindAll(identity.RoleClaimType).Where(c => !roles.Contains(c.Value)).ToArray())
+                    foreach (var claim in identity.FindAll(identity.RoleClaimType).Where(c => !account.Roles.Contains(c.Value)).ToArray())
                         identity.RemoveClaim(claim);
             }
         };
@@ -113,6 +111,7 @@ builder.Services.AddHttpClient(ExternalTokenValidator.HttpClientName, c =>
     })
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton<IExternalTokenValidator, ExternalTokenValidator>();
+builder.Services.AddSingleton<LiveConnections>();
 
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<ScoringService>();
@@ -315,7 +314,8 @@ if (Directory.Exists(wwwroot))
 }
 
 app.MapControllers();
-app.MapHub<LiveHub>("/hubs/live");
+// A connection signed in with a token closes when the token expires; ended sessions close theirs at once (LiveConnections).
+app.MapHub<LiveHub>("/hubs/live", options => options.CloseOnAuthenticationExpiration = true);
 
 // SPA fallback — anything that isn't an API/hub/static file falls through to index.html.
 if (Directory.Exists(wwwroot))

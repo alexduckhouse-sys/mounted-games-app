@@ -1,10 +1,19 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { api } from '../api';
+import { api, type StoredAuth } from '../api';
+import { AuthProvider } from '../auth/AuthContext';
 import { ChangePasswordSheet } from './ChangePasswordSheet';
 
-vi.mock('../api', () => ({ api: { post: vi.fn() } }));
+vi.mock('../api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api')>()),
+  api: { get: vi.fn(), post: vi.fn() },
+}));
+
+const signedIn: StoredAuth = {
+  token: 'old-token', expiresAt: '2099-01-01T00:00:00Z',
+  user: { id: 'u1', email: 'sam@example.com', fullName: 'Sam Lee', clubId: null, clubName: null, roles: ['Member'] },
+};
 
 const onClose = vi.fn();
 const onChanged = vi.fn();
@@ -13,10 +22,12 @@ beforeEach(() => {
   onClose.mockReset();
   onChanged.mockReset();
   vi.mocked(api.post).mockResolvedValue({ status: 204 });
+  vi.mocked(api.get).mockResolvedValue({ data: signedIn.user });
+  localStorage.setItem('mg.auth', JSON.stringify(signedIn));
 });
 
 const mount = () => {
-  render(<ChangePasswordSheet onClose={onClose} onChanged={onChanged} />);
+  render(<AuthProvider><ChangePasswordSheet onClose={onClose} onChanged={onChanged} /></AuthProvider>);
   return within(screen.getByRole('dialog', { name: 'Change password' }));
 };
 
@@ -54,6 +65,18 @@ describe('ChangePasswordSheet', () => {
     await user.type(sheet.getByLabelText('New password'), 'Brand-new9pw{Enter}');
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/auth/change-password', { currentPassword: 'old-Passw0rd!', newPassword: 'Brand-new9pw' }));
     await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    // An answer with no new sign-in leaves this device's one alone.
+    expect(JSON.parse(localStorage.getItem('mg.auth') ?? '{}').token).toBe('old-token');
+  });
+
+  it('keeps this device signed in with the fresh token the server sends back', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce({ data: { ...signedIn, token: 'new-token' } });
+    const user = userEvent.setup();
+    const sheet = mount();
+    await user.type(sheet.getByLabelText('Current password'), 'old-Passw0rd!');
+    await user.type(sheet.getByLabelText('New password'), 'Brand-new9pw{Enter}');
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(localStorage.getItem('mg.auth') ?? '{}').token).toBe('new-token');
   });
 
   it('shows the server’s reason, keeps what was typed, and lets the person try again', async () => {
@@ -77,6 +100,25 @@ describe('ChangePasswordSheet', () => {
     await user.type(sheet.getByLabelText('New password'), 'Brand-new9pw');
     await user.click(sheet.getByRole('button', { name: 'Change password' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t change your password. Check your signal and try again.');
+  });
+
+  it('ignores a submit before both passwords are in, or while one is already being sent', async () => {
+    let finish: (value: unknown) => void = () => {};
+    vi.mocked(api.post).mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+    const user = userEvent.setup();
+    const sheet = mount();
+    const form = sheet.getByLabelText('New password').closest('form')!;
+    fireEvent.submit(form);
+    expect(api.post).not.toHaveBeenCalled();
+
+    await user.type(sheet.getByLabelText('Current password'), 'old-Passw0rd!');
+    await user.type(sheet.getByLabelText('New password'), 'Brand-new9pw');
+    fireEvent.submit(form);
+    await waitFor(() => expect(sheet.getByRole('button', { name: 'Changing…' })).toBeDisabled());
+    fireEvent.submit(form);
+    expect(api.post).toHaveBeenCalledTimes(1);
+    finish({ status: 204 });
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
   });
 
   it('closes from Cancel without sending anything', async () => {
