@@ -577,7 +577,10 @@ public class PasswordResetTests : IClassFixture<PasswordResetTests.Factory>
         var trainer = await signup.ReadAsync<AuthResponse>();
         var earlyLink = await _f.LinkAsync(trainerEmail);
         Assert.Equal(PasswordResetLinkState.Valid, (await _f.CheckAsync(earlyLink)).State);
+        // Approval needs a confirmed address now, so an unconfirmed organiser is an account approved before that rule.
+        await _f.ConfirmAddressAsync(trainer.User.Id);
         (await (await _f.AdminAsync()).PostAsync($"/api/admin/trainer-requests/{trainer.User.Id}/approve", null)).EnsureSuccessStatusCode();
+        await _f.WithDbAsync(db => db.Users.Where(u => u.Id == trainer.User.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.EmailConfirmed, false)));
         _f.Clock.Advance(TimeSpan.FromMinutes(2));
         var before = _f.Sent.Count;
 
@@ -597,6 +600,29 @@ public class PasswordResetTests : IClassFixture<PasswordResetTests.Factory>
         _f.Clock.Advance(TimeSpan.FromMinutes(2));
         Assert.Equal(HttpStatusCode.OK, (await _f.ConfirmAsync(await _f.LinkAsync(adminEmail))).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await _f.ConfirmAsync(await _f.LinkAsync(trainerEmail))).StatusCode);
+    }
+
+    [Fact]
+    public async Task ACompetitionAdminNeedsAConfirmedAddressToo()
+    {
+        // Running an event is staff access without a role, so it counts like one.
+        var account = await _f.AccountAsync();
+        var section = await _f.NewSectionAsync();
+        await _f.WithDbAsync(async db =>
+        {
+            db.CompetitionCollaborators.Add(new CompetitionCollaborator
+            {
+                CompetitionId = section.CompetitionId, UserId = account.User.Id, AddedByUserId = account.User.Id, AddedAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        });
+        var before = _f.Sent.Count;
+
+        Assert.Equal(HttpStatusCode.Accepted, (await _f.RequestResetAsync(account.User.Email)).StatusCode);
+        Assert.Equal(before, _f.Sent.Count);
+
+        await _f.ConfirmAddressAsync(account.User.Id);
+        Assert.Equal(HttpStatusCode.OK, (await _f.ConfirmAsync(await _f.LinkAsync(account.User.Email))).StatusCode);
     }
 
     [Fact]
@@ -697,7 +723,7 @@ public class PasswordResetTests : IClassFixture<PasswordResetTests.Factory>
 /// <summary>Every request takes at least the configured minimum, whether or not an email was sent.</summary>
 public class PasswordResetTimingTests : IClassFixture<PasswordResetTimingTests.Factory>
 {
-    public const int FloorMilliseconds = 400;
+    public const int FloorMilliseconds = 1500;
 
     public sealed class Factory : EmailApiFactory
     {
@@ -799,7 +825,7 @@ public class PasswordResetWithoutSiteTests : IClassFixture<ApiFactory>
     }
 }
 
-/// <summary>A mail provider slower than the floor: the answer still comes at the floor, and the email (and its failure) follow.</summary>
+/// <summary>A mail provider slower than the floor: the answer still comes at the floor, and the send is cancelled then, so nothing runs on after it.</summary>
 public class PasswordResetSlowMailTests : IClassFixture<PasswordResetSlowMailTests.Factory>
 {
     public const int FloorMilliseconds = 300;
@@ -810,9 +836,12 @@ public class PasswordResetSlowMailTests : IClassFixture<PasswordResetSlowMailTes
     {
         public System.Collections.Concurrent.ConcurrentQueue<EmailMessage> Finished { get; } = new();
 
+        public int Cancelled;
+
         public async Task<EmailDeliveryStatus> SendAsync(EmailMessage message, CancellationToken ct = default)
         {
-            await Task.Delay(SendTakes, ct);
+            try { await Task.Delay(SendTakes, ct); }
+            catch (OperationCanceledException) { Interlocked.Increment(ref Cancelled); throw; }
             Finished.Enqueue(message);
             return EmailDeliveryStatus.Failed;
         }
@@ -838,7 +867,7 @@ public class PasswordResetSlowMailTests : IClassFixture<PasswordResetSlowMailTes
     public PasswordResetSlowMailTests(Factory f) => _f = f;
 
     [Fact]
-    public async Task ASlowSendDoesntStretchTheAnswer_AndItsFailureIsStillLogged()
+    public async Task ASlowSendDoesntStretchTheAnswer_AndIsCancelledAndLoggedWithinTheRequest()
     {
         var account = await _f.AccountAsync();
         // Warm the host up first, so the timing below is the request's own.
@@ -851,12 +880,12 @@ public class PasswordResetSlowMailTests : IClassFixture<PasswordResetSlowMailTes
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         Assert.True(clock.Elapsed < SendTakes - TimeSpan.FromSeconds(2), $"Answered in {clock.ElapsedMilliseconds} ms, so it waited for the email.");
         Assert.True(clock.ElapsedMilliseconds >= FloorMilliseconds - 20, $"Answered in {clock.ElapsedMilliseconds} ms, before the floor.");
-        Assert.DoesNotContain(_f.Slow.Finished, m => m.Subject == ResetSteps.ResetSubject);
-
-        // The send carries on after the answer, then its failure is logged with a masked address only.
-        await ResetSteps.EventuallyAsync(() => _f.Slow.Finished.Any(m => m.Subject == ResetSteps.ResetSubject), "the slow send to finish");
-        await ResetSteps.EventuallyAsync(() => _f.Logs.Any(l => l.Contains("password reset link") && l.Contains("not delivered")), "the failure to be logged");
+        // Cancelled at the floor and logged before the answer went, with a masked address only; it never finishes later.
+        Assert.Contains(_f.Logs, l => l.Contains("password reset link") && l.Contains("cancelled before it was sent"));
         Assert.DoesNotContain(_f.Logs, l => l.Contains(account.User.Email));
+        Assert.Equal(1, _f.Slow.Cancelled);
+        await Task.Delay(SendTakes);
+        Assert.DoesNotContain(_f.Slow.Finished, m => m.Subject == ResetSteps.ResetSubject);
     }
 }
 
@@ -869,7 +898,13 @@ public class PasswordResetRaceTests : IClassFixture<PasswordResetRaceTests.Facto
     public sealed class RaceTrigger
     {
         private string? _armed;
-        public void Arm(string userId) => Volatile.Write(ref _armed, userId);
+        /// <summary>When set, the staged failure is an ordinary Identity error rather than a changed ConcurrencyStamp.</summary>
+        public bool OtherFailure { get; private set; }
+        public void Arm(string userId, bool otherFailure = false)
+        {
+            OtherFailure = otherFailure;
+            Volatile.Write(ref _armed, userId);
+        }
         /// <summary>Fires once. CompareExchange compares references, so it swaps out the armed instance itself.</summary>
         public bool Take(string userId)
         {
@@ -883,6 +918,8 @@ public class PasswordResetRaceTests : IClassFixture<PasswordResetRaceTests.Facto
     {
         public override async Task<IdentityResult> UpdateAsync(AppUser user, CancellationToken cancellationToken = default)
         {
+            if (trigger.OtherFailure && trigger.Take(user.Id))
+                return IdentityResult.Failed(new IdentityError { Code = "DuplicateEmail", Description = "Staged failure." });
             if (trigger.Take(user.Id))
                 await Context.Database.ExecuteSqlInterpolatedAsync(
                     $"UPDATE \"AspNetUsers\" SET \"ConcurrencyStamp\" = {Guid.NewGuid().ToString()} WHERE \"Id\" = {user.Id}", cancellationToken);
@@ -929,6 +966,23 @@ public class PasswordResetRaceTests : IClassFixture<PasswordResetRaceTests.Facto
         Assert.Equal(HttpStatusCode.OK, await _f.MeAsync(account.Token));
         Assert.Equal(0, (await _f.UserAsync(account.User.Email)).SessionVersion);
 
+        Assert.Equal(HttpStatusCode.OK, (await _f.ConfirmAsync(token)).StatusCode);
+    }
+
+    [Fact]
+    public async Task AFailureThatIsntAConflict_Gets500_IsLogged_AndSavesNothing()
+    {
+        var account = await _f.AccountAsync();
+        var token = await _f.LinkAsync(account.User.Email);
+        _f.Trigger.Arm(account.User.Id, otherFailure: true);
+
+        var response = await _f.ConfirmAsync(token);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Equal("failed", (await response.ReadAsync<PasswordResetProblem>()).Code);
+        Assert.Contains(_f.Logs, l => l.Contains("could not be saved: DuplicateEmail"));
+        Assert.Equal(PasswordResetLinkState.Valid, (await _f.CheckAsync(token)).State);
+        Assert.Equal(HttpStatusCode.OK, await _f.SignInAsync(account.User.Email, ResetSteps.Password));
         Assert.Equal(HttpStatusCode.OK, (await _f.ConfirmAsync(token)).StatusCode);
     }
 

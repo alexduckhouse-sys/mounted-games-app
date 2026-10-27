@@ -712,17 +712,26 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Opens the link from the confirmation email. No sign-in needed. A wrong user, a wrong or old token and an
-    /// expired one all get the same answer, so it can't be used to find out who has an account.
+    /// Opens the link from the confirmation email, for the person signed in to the account it was sent for. Whoever can read
+    /// a mailbox isn't necessarily its account's owner (an address can be mistyped, or belong to someone else), and a
+    /// confirmed address is what lets a staff account reset its password by email, so the link alone is not enough. Signed
+    /// in to a different account: 403 <c>other_account</c>. A wrong, old or expired token: the same 400 whatever the reason.
     /// </summary>
     [EnableRateLimiting("auth")]
     [HttpPost("confirm-email")]
-    [AllowAnonymous]
+    [Authorize]
     public async Task<IActionResult> ConfirmEmail(ConfirmEmailRequest req, [FromServices] EmailConfirmationTokens tokens)
     {
-        var user = string.IsNullOrWhiteSpace(req.UserId) ? null : await _users.FindByIdAsync(req.UserId);
-        if (user is null || !tokens.IsValid(user, req.Token))
-            return BadRequest(new { message = "This confirmation link has expired or isn't valid. Sign in and ask for a new one." });
+        var user = await _users.GetUserAsync(User);
+        if (user is null) return Unauthorized();
+        if (!string.IsNullOrWhiteSpace(req.UserId) && req.UserId != user.Id)
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                code = "other_account",
+                message = "This link is for a different account. Sign out, then sign in to the account the email was sent to.",
+            });
+        if (!tokens.IsValid(user, req.Token))
+            return BadRequest(new { message = "This confirmation link has expired or isn't valid. Ask for a new one from your profile." });
         if (!user.EmailConfirmed)
         {
             user.EmailConfirmed = true;

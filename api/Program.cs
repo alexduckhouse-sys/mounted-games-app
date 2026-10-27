@@ -113,6 +113,7 @@ builder.Services.AddHttpClient(ExternalTokenValidator.HttpClientName, c =>
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton<IExternalTokenValidator, ExternalTokenValidator>();
 builder.Services.AddSingleton<LiveConnections>();
+builder.Services.AddHostedService<LiveSessionSweeper>();
 
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<ScoringService>();

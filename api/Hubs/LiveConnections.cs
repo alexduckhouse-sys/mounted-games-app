@@ -39,6 +39,27 @@ public sealed class LiveConnections(RedisConnection redis, ILogger<LiveConnectio
 
     public void Remove(HubCallerContext context) => _connections.TryRemove(context.ConnectionId, out _);
 
+    /// <summary>The accounts with a signed-in connection open on this instance.</summary>
+    public IReadOnlyCollection<string> TrackedUserIds() => _connections.Values.Select(entry => entry.UserId).Distinct().ToList();
+
+    /// <summary>
+    /// Closes the connections of <paramref name="userIds"/> whose account no longer accepts the token they opened with (or no
+    /// longer exists). Connections of other accounts, including ones added since the ids were read, are left alone.
+    /// </summary>
+    public int CloseRefused(IReadOnlyCollection<string> userIds, IReadOnlyDictionary<string, LiveAccounts.TokenState> states)
+    {
+        var checkedIds = userIds as ISet<string> ?? userIds.ToHashSet();
+        var closed = 0;
+        foreach (var entry in _connections.Values)
+        {
+            if (!checkedIds.Contains(entry.UserId)) continue;
+            if (states.TryGetValue(entry.UserId, out var state) && state.Accepts(entry.SessionVersion)) continue;
+            entry.Context.Abort();
+            closed++;
+        }
+        return closed;
+    }
+
     /// <summary>How many open connections on this instance are signed in as the account.</summary>
     public int CountFor(string userId) => _connections.Values.Count(entry => entry.UserId == userId);
 
