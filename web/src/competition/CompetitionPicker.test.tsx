@@ -42,10 +42,10 @@ function renderPicker(props: Parameters<typeof CompetitionPicker>[0] = {}) {
   );
 }
 const loaded = (name: string | RegExp) => screen.findByText(name);
-/** Opens a dropdown row such as "Year" and picks one of its options. */
-async function choose(row: RegExp, option: string) {
-  await userEvent.click(screen.getByRole('combobox', { name: row }));
-  await userEvent.click(screen.getByRole('option', { name: option }));
+/** Opens the archive filter sheet (if it is not open) and picks a year or place in it. */
+async function choose(group: RegExp, option: string) {
+  if (!screen.queryByRole('dialog')) await userEvent.click(screen.getByRole('button', { name: /Archive filters/ }));
+  await userEvent.click(within(screen.getByRole('group', { name: group })).getByRole('button', { name: option }));
 }
 
 beforeEach(() => {
@@ -154,7 +154,14 @@ describe('CompetitionPicker: the list', () => {
     reply(page([autumn, { ...festival, startDate: '2025-11-14T09:00:00', endDate: null }]));
     renderPicker({ past: true });
     await loaded('Autumn Open');
-    expect(screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)).toEqual(['2026', '2025']);
+    expect(screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)).toEqual(['20261 competition', '20251 competition']);
+  });
+
+  it('counts the competitions under each year, but not in the last year while more pages are still to come', async () => {
+    reply(page([autumn, { ...festival, startDate: '2026-11-14T09:00:00' }, { ...today, id: 4, startDate: '2025-11-14T09:00:00', endDate: null }], true));
+    renderPicker({ past: true });
+    await loaded('Autumn Open');
+    expect(screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)).toEqual(['20262 competitions', '2025']);
   });
 
   it('shows a plain "Past competitions" link at the bottom of the list, not a bar, and no Upcoming/Past switch', async () => {
@@ -206,58 +213,27 @@ describe('CompetitionPicker: choosing', () => {
   });
 });
 
-describe('CompetitionPicker: forgetting', () => {
+describe('CompetitionPicker: no forget button', () => {
   const remember = () => { document.cookie = `mg.competition=${encodeURIComponent(JSON.stringify({ id: 2, name: 'Autumn Open' }))}; Path=/`; };
 
-  it('forgets the competition, clears what the device kept and stays on the events list', async () => {
+  it('leaves "Forget this competition" to Settings, on the upcoming list and on the past one', async () => {
     remember();
-    renderPicker();
+    const { unmount } = renderPicker();
     await loaded('Weekend Fest');
-    await userEvent.click(screen.getByRole('button', { name: /Forget this competition/ }));
-    expect(screen.getByTestId('probe')).toHaveTextContent('/events|none');
-    expect(document.cookie).not.toContain('mg.competition');
-    expect(sessionStorage.getItem('mg.competitionVisit')).toBeNull();
     expect(screen.queryByRole('button', { name: /Forget this competition/ })).not.toBeInTheDocument();
-  });
-
-  it('is also offered on the past list', async () => {
-    remember();
+    unmount();
     renderPicker({ past: true });
-    await loaded('Weekend Fest');
-    expect(screen.getByRole('button', { name: /Forget this competition/ })).toBeInTheDocument();
-  });
-
-  it('is not offered without a current competition', async () => {
-    renderPicker();
     await loaded('Weekend Fest');
     expect(screen.queryByRole('button', { name: /Forget this competition/ })).not.toBeInTheDocument();
   });
 });
 
 describe('CompetitionPicker: search and tags', () => {
-  it('finds a competition by name or by venue, and says so when nothing matches', async () => {
+  it('has no search bar on the upcoming list, and keeps it on the past one', async () => {
     renderPicker();
     await loaded('Autumn Open');
-    const box = screen.getByRole('searchbox', { name: 'Search competitions' });
-    expect(box).toHaveAttribute('placeholder', 'Name or venue');
-    await userEvent.type(box, 'hillside');
-    expect(screen.getByText('Autumn Open')).toBeInTheDocument();
-    expect(screen.queryByText('Weekend Fest')).not.toBeInTheDocument();
-    expect(screen.queryByText('Today Cup')).not.toBeInTheDocument();
-    await userEvent.clear(box);
-    await userEvent.type(box, 'weekend');
-    expect(screen.getByText('Weekend Fest')).toBeInTheDocument();
-    await userEvent.clear(box);
-    await userEvent.type(box, 'zzz');
-    expect(screen.getByText('No competitions match that search.')).toBeInTheDocument();
-  });
-
-  it('offers to load more when a search finds nothing and there are more pages', async () => {
-    reply(page([autumn], true));
-    renderPicker();
-    await loaded('Autumn Open');
-    await userEvent.type(screen.getByRole('searchbox'), 'zzz');
-    expect(screen.getByText(/Load more to search further back/)).toBeInTheDocument();
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Archive filters/ })).not.toBeInTheDocument();
   });
 
   it('tags a competition taking entries, and says nothing about a demo event', async () => {
@@ -265,7 +241,10 @@ describe('CompetitionPicker: search and tags', () => {
     renderPicker();
     await loaded('Autumn Open');
     const later = screen.getByRole('region', { name: 'Coming up' });
-    expect(within(later).getByRole('button', { name: /Autumn Open/ })).toHaveTextContent('Entries open');
+    const open = within(within(later).getByRole('button', { name: /Autumn Open/ })).getByText(/Entries open/);
+    expect(open).toHaveTextContent('· Entries open');
+    expect(open).not.toHaveClass('mg-tag');
+    expect(open).toHaveClass('text-[rgb(var(--mg-ok))]');
     expect(within(later).getByRole('button', { name: /Weekend Fest/ })).not.toHaveTextContent('Demo event');
     expect(within(later).getByRole('button', { name: /Weekend Fest/ })).not.toHaveTextContent('Entries open');
     const onToday = screen.getByRole('region', { name: 'On today' });
@@ -283,22 +262,31 @@ describe('CompetitionPicker: search and tags', () => {
     renderPicker({ past: true });
     await loaded('Autumn Open');
     expect(screen.queryByText('Summer Classic')).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('combobox', { name: /Year/ }));
-    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['All years', '2026', '2025']);
-    await userEvent.click(screen.getByRole('option', { name: '2025' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Archive filters' }));
+    expect(within(screen.getByRole('group', { name: 'Year' })).getAllByRole('button').map((option) => option.textContent)).toEqual(['All years', '2026', '2025']);
+    await choose(/Year/, '2025');
     await loaded('Summer Classic');
+    expect(screen.getByRole('button', { name: 'Archive filters, 1 set' })).toHaveTextContent('1');
+    expect(screen.getByRole('button', { name: 'Remove 2025' })).toBeInTheDocument();
     await choose(/Year/, 'All years');
     await loaded('Autumn Open');
+    expect(screen.queryByRole('button', { name: 'Remove 2025' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Done' }));
     await userEvent.click(screen.getByRole('button', { name: 'Load more competitions' }));
     await waitFor(() => expect(get).toHaveBeenLastCalledWith('/competitions/picker', expect.objectContaining({ params: { past: true, page: 2 } })));
     await choose(/Year/, '2025');
     await loaded('Summer Classic');
     expect(get).toHaveBeenLastCalledWith('/competitions/picker', expect.objectContaining({ params: { past: true, page: 1, year: 2025 } }));
+    expect(screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)).toContain('20251 competition');
     expect(screen.queryByText('Autumn Open')).not.toBeInTheDocument();
     await choose(/Location/, 'York');
     await waitFor(() => expect(get).toHaveBeenLastCalledWith('/competitions/picker', expect.objectContaining({ params: { past: true, page: 1, year: 2025, location: 'York' } })));
+    expect(screen.getByRole('button', { name: 'Archive filters, 2 set' })).toHaveTextContent('2');
+    await userEvent.click(screen.getByRole('button', { name: 'Done' }));
     await userEvent.type(screen.getByRole('searchbox'), 'Summer');
     await waitFor(() => expect(get).toHaveBeenLastCalledWith('/competitions/picker', expect.objectContaining({ params: { past: true, page: 1, year: 2025, location: 'York', search: 'Summer' } })));
+    await userEvent.click(screen.getByRole('button', { name: 'Remove York' }));
+    await waitFor(() => expect(get).toHaveBeenLastCalledWith('/competitions/picker', expect.objectContaining({ params: { past: true, page: 1, year: 2025, search: 'Summer' } })));
   });
 
   it('keeps Mine out of offline storage and clears it on sign-out', async () => {
@@ -306,8 +294,10 @@ describe('CompetitionPicker: search and tags', () => {
     get.mockImplementation(async (url) => ({ data: page(url.endsWith('/mine') ? [mine] : [autumn]), headers: {} }));
     const { rerender } = renderPicker({ past: true });
     await loaded('Autumn Open');
+    await userEvent.click(screen.getByRole('button', { name: 'Archive filters' }));
     await userEvent.click(screen.getByRole('switch', { name: 'My club / competitions I rode in' }));
     await loaded('Example member event');
+    expect(screen.getByRole('button', { name: 'Remove My club / competitions I rode in' })).toBeInTheDocument();
     expect(get).toHaveBeenLastCalledWith('/competitions/picker/mine', expect.objectContaining({ params: { past: true, page: 1 } }));
     expect(readSavedCopy<CompetitionPickerPage>(savedCopyKeys.picker(true))?.data.items).toEqual([autumn]);
     expect(canCachePublicApi('/api/competitions/picker/mine')).toBe(false);
@@ -315,6 +305,7 @@ describe('CompetitionPicker: search and tags', () => {
     get.mockReturnValue(new Promise(() => {}));
     rerender(<MemoryRouter><CurrentCompetitionProvider><CompetitionPicker past /></CurrentCompetitionProvider></MemoryRouter>);
     expect(screen.queryByText('Example member event')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Archive filters' }));
     expect(screen.getByRole('switch', { name: 'My club / competitions I rode in' })).toBeDisabled();
     expect(screen.getByText('Sign in to see your club’s competitions.')).toBeInTheDocument();
   });

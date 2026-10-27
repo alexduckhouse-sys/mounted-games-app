@@ -13,7 +13,8 @@ import { formatShiftDelta, formatTime } from '../../lib/time';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
 import { sessionOrdinals } from '../../lib/timetableRows';
 import { useCompetition } from './context';
-import { LIVE_SAVED_COPY_NOTICE_AFTER_MS, lastUpdatedText, shouldNoticeSavedCopy } from '../../offline/savedCopies';
+import { lastUpdatedText } from '../../offline/savedCopies';
+import { useIsOld } from '../../live/useIsOld';
 import { formatPoints } from '../../lib/formatPoints';
 import { HeatRing } from '../../components/HeatRing';
 import { useLanguage } from '../../i18n/LanguageContext';
@@ -53,6 +54,7 @@ export function FollowingTab() {
   }, [competition.teams]);
   const shownClubs = clubs.filter((club) => filtered.some((team) => team.clubId === club.id)).slice(0, query ? 8 : 3);
   const followClub = (teamIds: number[], follow: boolean) => setMany(teamIds.map((teamId) => ({ competitionId: competition.id, teamId })), follow);
+  const old = useIsOld(updatedAt);
   const updated = updatedAt ? updatedAt.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : null;
   usePageHeader({ title: t('teams.following.title'), subtitle: updated ? `${competition.name} · ${updated}` : competition.name, onRefresh: reload, refreshLabel: t('common.refresh') });
 
@@ -80,7 +82,7 @@ export function FollowingTab() {
 
   return <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-2 pt-3 lg:max-w-3xl">
     {error && <Notice>{error}</Notice>}
-    {isStale && shouldNoticeSavedCopy(updatedAt, true, new Date(), LIVE_SAVED_COPY_NOTICE_AFTER_MS) && <Notice tone="info" actionLabel={t('common.refresh')} onAction={reload}>{t('teams.following.timesChanged', { updated: lastUpdatedText(updatedAt) })}</Notice>}
+    {isStale && old && <Notice tone="info" actionLabel={t('common.refresh')} onAction={reload}>{t('teams.following.timesChanged', { updated: lastUpdatedText(updatedAt) })}</Notice>}
     {missing.map((teamId) => <Notice key={teamId} tone="info" role={null} actionLabel={t('teams.following.removeIt')} onAction={() => toggle({ competitionId: competition.id, teamId })}>{t('teams.following.goneOne')}</Notice>)}
 
     {teams.length > 0 && <section aria-labelledby="followed-teams-title" className="mg-sec">

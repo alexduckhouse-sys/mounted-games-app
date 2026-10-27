@@ -3,7 +3,7 @@ import { api } from '../api';
 import type { CompetitionDetail, Session, Team } from '../types';
 import { SessionKind } from '../types';
 import { computeTimings } from '../lib/time';
-import { subscribeForPush, unsubscribeFromPush } from '../lib/push';
+import { subscribeForPushResult, unsubscribeFromPush, type PushResult } from '../lib/push';
 import { hatbandName } from '../lib/hatbands';
 import { formatNotifyLeadReminder, getNotifyMinutesBefore } from '../lib/userPrefs';
 import { isIosDevice, needsHomeScreenForPush } from '../lib/pwaInstall';
@@ -12,8 +12,22 @@ import { tr } from '../i18n/translate';
 const ENABLED_KEY = 'mg.notify.enabled';
 const FIRED_PREFIX = 'mg.notify.fired:';
 
-/** What the page says when someone turns alerts on in a browser that can't show them. */
-export const NOT_SUPPORTED = 'This browser can’t show notifications. Try Chrome or Safari.';
+/** What the page says when someone turns alerts on in a browser that can't show them (on iPhone, Safari only can once the app is on the Home Screen). */
+export const NOT_SUPPORTED = 'This browser can’t show notifications. On iPhone, add Mounted Games to your Home Screen and open it from there.';
+export const DENIED = 'Notifications are blocked for this site. Allow them in your browser settings, then switch them on again.';
+export const BROWSER_REFUSED = 'Your browser wouldn’t set up notifications. Try again in a moment.';
+export const SERVER_REFUSED = 'We couldn’t register this phone for notifications. Check your signal and try again.';
+
+/** The plain sentence for a failed switch-on, or null when it worked. */
+export function pushProblem(result: PushResult): string | null {
+  switch (result) {
+    case 'ok': return null;
+    case 'unsupported': return NOT_SUPPORTED;
+    case 'denied': return DENIED;
+    case 'browser': return BROWSER_REFUSED;
+    case 'server': return SERVER_REFUSED;
+  }
+}
 
 export type NotificationPermissionState = 'default' | 'granted' | 'denied' | 'unsupported';
 
@@ -43,8 +57,9 @@ function fireOnce(key: string, title: string, body: string): void {
 }
 
 /**
- * Foreground-only browser notifications for trainers and supporters:
- *   - 1 hour before each of your team's sessions
+ * Foreground-only browser notifications for trainers and supporters (the server separately sends background
+ * pushes a fixed 60 minutes before each heat, and 30 minutes before a briefing):
+ *   - the chosen lead time before each of your team's sessions
  *   - 30 minutes before any briefing in the comp
  *   - When the live schedule has slipped 15+ minutes (then again at 25, 35, …)
  *
@@ -52,7 +67,8 @@ function fireOnce(key: string, title: string, body: string): void {
  * = no notifications. Add VAPID + service worker later for background push.
  */
 export function useTeamNotifications(teams: Team[]) {
-  const [enabled, setEnabledState] = useState<boolean>(() => readEnabled());
+  // On means the browser allows it. Whether the server accepted this phone is checked below.
+  const [enabled, setEnabledState] = useState<boolean>(() => readEnabled() && permState() === 'granted');
   const [permission, setPermission] = useState<NotificationPermissionState>(permState());
   const [problem, setProblem] = useState<string | null>(null);
   // An iPhone or iPad gets notifications only once the app is on its Home Screen, so switching on shows how instead.
@@ -61,6 +77,20 @@ export function useTeamNotifications(teams: Team[]) {
   const [comps, setComps] = useState<Map<number, CompetitionDetail>>(new Map());
 
   useEffect(() => writeEnabled(enabled), [enabled]);
+
+  // Check a saved "on" once on load. Only a block or an unsupported browser turns it off for good; a failed call or a
+  // slow service worker (poor signal) keeps the saved "on", says why, and is tried again next time the app opens.
+  const startedOn = useRef(enabled);
+  useEffect(() => {
+    if (!startedOn.current || !navigator.onLine) return;
+    let cancelled = false;
+    void subscribeForPushResult().then((result) => {
+      if (cancelled || result === 'ok') return;
+      setProblem(pushProblem(result));
+      if (result === 'denied' || result === 'unsupported') setEnabledState(false);
+    });
+    return () => { cancelled = true; };
+  }, []);
   useEffect(() => {
     const onFocus = () => setPermission(permState());
     window.addEventListener('focus', onFocus);
@@ -117,28 +147,36 @@ export function useTeamNotifications(teams: Team[]) {
   }, [enabled, permission, teams, comps]);
 
   async function setEnabled(v: boolean) {
-    if (v && needsInstall) {
+    if (!v) {
+      setProblem(null);
+      setEnabledState(false);
+      await unsubscribeFromPush();
+      return;
+    }
+    if (needsInstall) {
       setProblem(null);
       setInstallGuide(true);
       return;
     }
-    if (v && permission !== 'granted') {
-      if (permission === 'unsupported') {
-        // On an iPhone or iPad already running from the Home Screen, only an older iOS lacks notifications.
-        setProblem(isIosDevice() ? tr('shell.install.iosTooOld') : NOT_SUPPORTED);
-        return;
-      }
+    if (permission === 'unsupported') {
+      // On an iPhone or iPad already running from the Home Screen, only an older iOS lacks notifications.
+      setProblem(isIosDevice() ? tr('shell.install.iosTooOld') : NOT_SUPPORTED);
+      return;
+    }
+    if (permission !== 'granted') {
       const res = await Notification.requestPermission();
       setPermission(res as NotificationPermissionState);
-      if (res !== 'granted') return;
+      if (res !== 'granted') {
+        if (res === 'denied') setProblem(DENIED);
+        return;
+      }
     }
-    setProblem(null);
-    setEnabledState(v);
-    // Sync the browser's web-push subscription with the backend. The
-    // foreground hook continues to fire while the tab is open; this gives us
-    // background pushes too (1-hour-before-session etc.).
-    if (v) await subscribeForPush();
-    else await unsubscribeFromPush();
+    // Only show it as on once this phone is registered for background alerts.
+    const result = await subscribeForPushResult();
+    const problem = pushProblem(result);
+    setProblem(problem);
+    if (result === 'denied' || result === 'unsupported') setPermission(permState());
+    setEnabledState(problem === null);
   }
 
   return { enabled, setEnabled, permission, problem, needsInstall, installGuide, closeInstallGuide: () => setInstallGuide(false) };

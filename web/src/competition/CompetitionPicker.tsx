@@ -2,7 +2,7 @@ import { useCompetitionPrefetch } from '../hooks/useCompetitionPrefetch';
 import { usePageWidth } from '../components/pageWidthState';
 import { useEffect, useId, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronRight, Clock, PinOff } from 'lucide-react';
+import { ChevronRight, Clock, SlidersHorizontal, X } from 'lucide-react';
 import { Notice } from '../components/Notice';
 import { PageProblem } from '../components/PageProblem';
 import { api } from '../api';
@@ -17,12 +17,13 @@ import { lastUpdatedText, readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, sh
 import { CompetitionListSkeleton } from '../components/Skeletons';
 import { usePageHeader } from '../components/CompactPageBarContext';
 import { useAuth } from '../auth/AuthContext';
-import { CardDropdownRow } from '../components/CardDropdownRow';
+import { Sheet } from '../components/Sheet';
 import { RoundSearch } from '../components/RoundSearch';
 import { RefineSwitchRow } from '../pages/refine/Refine';
 import { useLanguage } from '../i18n/LanguageContext';
 import type { Translate } from '../i18n/translate';
 import '../components/sitePages.css';
+import '../components/filterKit.css';
 
 /** The events page: upcoming competitions, with the past ones a link away at the bottom. */
 export function CompetitionPicker({ past = false }: { past?: boolean }) {
@@ -48,7 +49,7 @@ function PlainHeader({ past }: { past: boolean }) {
 function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past: boolean; refresh: number }) {
   const { t } = useLanguage();
   const headingId = useId();
-  const { current, setCurrent, forget } = useCurrentCompetition();
+  const { current, setCurrent } = useCurrentCompetition();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
@@ -56,6 +57,7 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
   const [yearFilter, setYearFilter] = useState('all');
   const [locationFilter, setLocationFilter] = useState('all');
   const [mineOnly, setMineOnly] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [sortChoice, setSortChoice] = useState<EventsSort>(readEventsSort);
   const serverSearch = past ? search.trim() : '';
   const filterKey = past ? JSON.stringify([yearFilter, locationFilter, serverSearch, mineOnly]) : `upcoming-${sortChoice}`;
@@ -119,9 +121,9 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
     return () => controller.abort();
   }, [past, page, saved, filterKey, sortChoice, yearFilter, locationFilter, serverSearch, mineOnly, unfiltered, refresh]);
 
-  const query = search.trim().toLowerCase();
+  const filterCount = (yearFilter !== 'all' ? 1 : 0) + (locationFilter !== 'all' ? 1 : 0) + (mineOnly ? 1 : 0);
   const items = state.key === filterKey ? state.items : [];
-  const matches = !past && query ? items.filter((item) => `${item.name} ${item.location ?? ''}`.toLowerCase().includes(query)) : items;
+  const matches = items;
   const years = state.years;
   const locations = state.locations;
   const now = new Date();
@@ -150,17 +152,21 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
     setCurrent({ id: competition.id, name: competition.name });
     navigate(`/competitions/${competition.id}`);
   };
-  const forgetCurrent = () => {
-    forget();
-    navigate('/events');
-  };
   return (
     <section className="mg-font mx-auto flex w-full max-w-xl flex-col gap-3.5 pb-5 lg:max-w-none" aria-labelledby={headingId}>
       <PlainHeader past={past} />
       <h1 id={headingId} className="sr-only">{past ? t('shell.events.titlePast') : t('shell.events.title')}</h1>
-      <div className="mg-band mg-band-header pb-3 pt-0">
-        <RoundSearch band label={t('shell.events.search')} placeholder={t('shell.events.searchPlaceholder')} value={search} onChange={(text) => { setSearch(text); if (past) setPage(1); }} />
-      </div>
+      {past && (
+        <div className="mg-band mg-band-header pb-3 pt-0">
+          <div className="fk-find fk-band">
+            <RoundSearch band label={t('shell.events.search')} placeholder={t('shell.events.searchPlaceholder')} value={search} onChange={(text) => { setSearch(text); setPage(1); }} />
+            <button type="button" className="fk-fbtn" aria-label={filterCount ? `${t('shell.events.archiveFilters')}, ${filterCount} set` : t('shell.events.archiveFilters')} onClick={() => setSheetOpen(true)}>
+              <SlidersHorizontal aria-hidden="true" className="h-5 w-5" />
+              {filterCount > 0 && <span className="fk-count" aria-hidden="true">{filterCount}</span>}
+            </button>
+          </div>
+        </div>
+      )}
       {!past && state.locationKnown && state.key === filterKey && (
         <div role="group" aria-label="Order of the list" className="flex flex-wrap items-center gap-2">
           <button type="button" aria-pressed={sortChoice === 'nearest'} onClick={() => chooseSort('nearest')}
@@ -169,22 +175,12 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
             className={`sp-pill sp-pill-sm ${sortChoice === 'soonest' ? 'sp-pill-fill' : ''}`}>Soonest first</button>
         </div>
       )}
-      {past && (
-        <div role="group" aria-label={t('shell.events.archiveFilters')}>
-          <div className="sp-card">
-            <CardDropdownRow label={t('shell.events.year')} value={yearFilter} onChange={(value) => { setYearFilter(value); setPage(1); }}
-              options={[{ value: 'all', label: t('shell.events.allYears') }, ...years.map((y) => ({ value: String(y), label: String(y) }))]} />
-            <CardDropdownRow label={t('shell.events.location')} value={locationFilter} onChange={(value) => { setLocationFilter(value); setPage(1); }}
-              options={[{ value: 'all', label: t('shell.events.allLocations') }, ...locations.map((r) => ({ value: r, label: r }))]} />
-            <RefineSwitchRow label={t('shell.events.mine')} on={mineOnly} disabled={!user} onChange={(next) => { setMineOnly(next); setPage(1); }} />
-          </div>
-          {!user && <p className="sp-note">{t('shell.events.signInForClub')}</p>}
+      {past && filterCount > 0 && (
+        <div className="fk-chips" role="group" aria-label={t('shell.events.archiveFilters')}>
+          {yearFilter !== 'all' && <button type="button" className="fk-chip" aria-label={`Remove ${yearFilter}`} onClick={() => { setYearFilter('all'); setPage(1); }}>{yearFilter}<X aria-hidden="true" size={15} strokeWidth={2.2} /></button>}
+          {locationFilter !== 'all' && <button type="button" className="fk-chip" aria-label={`Remove ${locationFilter}`} onClick={() => { setLocationFilter('all'); setPage(1); }}>{locationFilter}<X aria-hidden="true" size={15} strokeWidth={2.2} /></button>}
+          {mineOnly && <button type="button" className="fk-chip" aria-label={`Remove ${t('shell.events.mine')}`} onClick={() => { setMineOnly(false); setPage(1); }}>{t('shell.events.mine')}<X aria-hidden="true" size={15} strokeWidth={2.2} /></button>}
         </div>
-      )}
-      {current && (
-        <button type="button" onClick={forgetCurrent} className="mg-btn mg-btn-secondary w-full">
-          <PinOff className="h-4 w-4" aria-hidden="true" />{t('shell.events.forget')}<span className="sr-only">: {current.name}</span>
-        </button>
       )}
       {!mineOnly && state.savedCopy && !loading && shouldNoticeSavedCopy(state.savedAt, true, now) && <Notice tone="info" icon={Clock}>{t('shell.events.refreshWhenOnline', { updated: lastUpdatedText(state.savedAt, now) })}</Notice>}
       <div className="flex flex-col gap-3.5" aria-busy={loading}>
@@ -198,7 +194,7 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
         )}
         {later.length > 0 && groups.map((group) => (
           <section key={group.heading} aria-label={group.heading}>
-            <h2 className="sp-sec sp-first">{group.heading}</h2>
+            <h2 className="sp-sec sp-first">{group.heading}{past && !(state.hasMore && group === groups[groups.length - 1]) && <small>{group.items.length === 1 ? '1 competition' : `${group.items.length} competitions`}</small>}</h2>
             <div className="mg-lines mg-lines-grid">
               {group.items.map((competition) => <CompetitionRow key={competition.id} competition={competition} past={past} distance={distanceOf(competition)} selected={current?.id === competition.id} onChoose={() => choose(competition)} warm={handlersFor(competition.id)} />)}
             </div>
@@ -207,10 +203,42 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
         {loading && state.items.length === 0 && <CompetitionListSkeleton />}
         {!loading && state.error && <PageProblem title={t('shell.events.loadFailed')} primaryLabel={t('common.tryAgain')} onPrimary={onRetry}>{t('shell.events.checkSignal')}</PageProblem>}
         {!loading && !state.error && state.items.length === 0 && <p className="mg-card p-4">{!unfiltered ? t('shell.events.noMatchFilters') : past ? t('shell.events.nonePast') : t('shell.events.noneYet')}</p>}
-        {!loading && !state.error && state.items.length > 0 && matches.length === 0 && <p className="mg-card p-4">{t('shell.events.noMatchSearch')}{state.hasMore ? t('shell.events.loadMoreHint') : ''}</p>}
         {!loading && !state.error && state.hasMore && <button className="mg-btn mg-btn-secondary w-full" onClick={() => setPage((value) => value + 1)}>{t('shell.events.loadMore')}</button>}
         {!past && <p className="m-0 text-center"><Link to="/competitions/past" className="sp-link">{t('shell.events.titlePast')}</Link></p>}
       </div>
+      {past && sheetOpen && (
+        <Sheet title={t('shell.events.archiveFilters')} className="fk-sheet" onClose={() => setSheetOpen(false)}>
+          {({ close }) => (
+            <>
+              {years.length > 0 && (
+                <div className="fk-group" role="group" aria-label={t('shell.events.year')}>
+                  <span className="fk-label" aria-hidden="true">{t('shell.events.year')}</span>
+                  <div className="fk-pills">
+                    {['all', ...years.map(String)].map((value) => (
+                      <button key={value} type="button" className="fk-pill" aria-pressed={yearFilter === value} onClick={() => { setYearFilter(value); setPage(1); }}>{value === 'all' ? t('shell.events.allYears') : value}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {locations.length > 0 && (
+                <div className="fk-group" role="group" aria-label={t('shell.events.location')}>
+                  <span className="fk-label" aria-hidden="true">{t('shell.events.location')}</span>
+                  <div className="fk-pills">
+                    {['all', ...locations].map((value) => (
+                      <button key={value} type="button" className="fk-pill" aria-pressed={locationFilter === value} onClick={() => { setLocationFilter(value); setPage(1); }}>{value === 'all' ? t('shell.events.allLocations') : value}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="sp-card">
+                <RefineSwitchRow label={t('shell.events.mine')} on={mineOnly} disabled={!user} onChange={(next) => { setMineOnly(next); setPage(1); }} />
+              </div>
+              {!user && <p className="sp-note m-0">{t('shell.events.signInForClub')}</p>}
+              <button type="button" className="kit-pill kit-pill-fill fk-show" onClick={() => close()}>Done</button>
+            </>
+          )}
+        </Sheet>
+      )}
     </section>
   );
 }
@@ -219,12 +247,6 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
 function liveLine(live: NonNullable<CompetitionPickerItem['live']>, t: Translate) {
   const section = displaySectionName(live.sectionName);
   return `${section ? `${section} · ` : ''}${t('shell.events.liveLine', { heat: live.heatLabel, arena: live.arenaName ? live.arenaName : t('shell.events.theArena') })}`;
-}
-
-/** The small tag on a list row: entries open. */
-function Tags({ competition }: { competition: CompetitionPickerItem }) {
-  const { t } = useLanguage();
-  return competition.entriesOpen ? <span className="mg-tag mg-tag-ok">{t('shell.events.entriesOpen')}</span> : null;
 }
 
 type WarmHandlers = ReturnType<ReturnType<typeof useCompetitionPrefetch>['handlersFor']>;
@@ -264,9 +286,9 @@ function CompetitionRow({ competition, past, distance, selected, onChoose, warm 
           <strong className="mg-line-title min-w-0 !font-semibold">{competition.name}</strong>
           {competitionIcon(competition.icon).id !== 'flag' && <CompetitionIcon id={competition.icon} labelled className="shrink-0 text-base" />}
         </span>
-        <span className="flex min-w-0 items-center gap-1.5 text-xs text-[rgb(var(--mg-muted))]">
+        <span className="flex min-w-0 items-center text-xs text-[rgb(var(--mg-muted))]">
           <span className="min-w-0 truncate">{[when, venue, distance].filter(Boolean).join(' · ')}</span>
-          <Tags competition={competition} />
+          {competition.entriesOpen && <span className="shrink-0 whitespace-pre font-semibold text-[rgb(var(--mg-ok))]">{(when || venue || distance) ? ' · ' : ''}{t('shell.events.entriesOpen')}</span>}
         </span>
       </span>
       <ChevronRight className="h-3.5 w-3.5 text-[rgb(var(--mg-faint))]" aria-hidden="true" />

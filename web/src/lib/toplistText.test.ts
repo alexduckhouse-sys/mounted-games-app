@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { translate } from '../i18n/translate';
 import type { Lang } from '../i18n/translate';
 import type { ToplistRow } from './toplist';
-import { ordinalText, resultStatusText, sessionColumnTitle, toplistNoteText } from './toplistText';
-import { ordinal } from './toplist';
+import { ordinalText, resultStatusText, sessionColumnTitle, toplistNoteText, toplistNoteTone } from './toplistText';
+import { ordinal, toplistNote } from './toplist';
 
 const tIn = (lang: Lang) => (key: Parameters<typeof translate>[1], values?: Parameters<typeof translate>[2]) => translate(lang, key, values);
 
@@ -33,27 +33,51 @@ describe('ordinalText', () => {
 });
 
 describe('toplistNoteText', () => {
-  it('says nothing when there is nothing to say', () => {
-    expect(toplistNoteText(row(), tIn('en'), 'en')).toBeNull();
+  it('says nothing when there is nothing to say: ties, run-offs and races left are not written out', () => {
+    expect(toplistNoteText(row(), tIn('en'))).toBeNull();
+    expect(toplistNoteText(row({ runoff: true, joint: true, position: 3 }), tIn('en'))).toBeNull();
+    expect(toplistNoteText(row({ racesLeft: 3 }), tIn('en'))).toBeNull();
   });
 
   it('matches the English notes word for word', () => {
     const en = tIn('en');
-    expect(toplistNoteText(row({ withdrawn: true }), en, 'en')).toBe('Withdrawn');
-    expect(toplistNoteText(row({ runoff: true, position: 3 }), en, 'en')).toBe('Joint 3rd · run-off');
-    expect(toplistNoteText(row({ neededUnavailable: true }), en, 'en')).toBe('Qualification calculation unavailable');
-    expect(toplistNoteText(row({ needed: 4 }), en, 'en')).toBe('4 needed to make the final (normal finishes)');
-    expect(toplistNoteText(row({ needed: 2, neededForRunoff: true }), en, 'en')).toBe('2 needed for a run-off (normal finishes)');
-    expect(toplistNoteText(row({ racesLeft: 1 }), en, 'en')).toBe('1 race left');
-    expect(toplistNoteText(row({ racesLeft: 3, bonus: 2 }), en, 'en')).toBe('3 races left · 2 tack bonus points');
-    expect(toplistNoteText(row({ bonus: 1 }), en, 'en')).toBe('1 tack bonus point');
+    expect(toplistNoteText(row({ withdrawn: true, guaranteed: true }), en)).toBe('Withdrawn');
+    expect(toplistNoteText(row({ neededUnavailable: true }), en)).toBe('Qualification calculation unavailable');
+    expect(toplistNoteText(row({ guaranteed: true, racesLeft: 2 }), en)).toBe('Guaranteed a place in the A Final');
+    expect(toplistNoteText(row({ toStay: 3, racesLeft: 2 }), en)).toBe('3 pts to stay in the A Final');
+    expect(toplistNoteText(row({ toStay: 1, racesLeft: 1 }), en)).toBe('1 pt to stay in the A Final');
+    expect(toplistNoteText(row({ needed: 4 }), en)).toBe('4 pts needed for the A Final (normal finishes)');
+    expect(toplistNoteText(row({ needed: 1 }), en)).toBe('1 pt needed for the A Final (normal finishes)');
+    expect(toplistNoteText(row({ needed: 2, neededForRunoff: true }), en)).toBe('2 pts needed for a run-off (normal finishes)');
+    expect(toplistNoteText(row({ toStay: 3, bonus: 2 }), en)).toBe('3 pts to stay in the A Final · 2 tack bonus points');
+    expect(toplistNoteText(row({ bonus: 1 }), en)).toBe('1 tack bonus point');
+  });
+
+  it('agrees with the English note used by the embed wherever both say something', () => {
+    for (const extra of [{ guaranteed: true }, { toStay: 4 }, { toStay: 1 }, { needed: 5 }, { needed: 1, neededForRunoff: true }, { neededUnavailable: true }, { withdrawn: true }]) {
+      expect(toplistNoteText(row(extra), tIn('en'))).toBe(toplistNote(row(extra)));
+    }
   });
 
   it('translates the notes', () => {
-    expect(toplistNoteText(row({ racesLeft: 3 }), tIn('cy'), 'cy')).toBe('3 ras ar ôl');
-    expect(toplistNoteText(row({ racesLeft: 1 }), tIn('fr'), 'fr')).toBe('1 course restante');
-    expect(toplistNoteText(row({ runoff: true, position: 2 }), tIn('fr'), 'fr')).toBe('2e ex æquo · barrage');
-    expect(toplistNoteText(row({ withdrawn: true }), tIn('cy'), 'cy')).toBe('Wedi tynnu’n ôl');
+    expect(toplistNoteText(row({ guaranteed: true }), tIn('fr'))).toBe('Place assurée en finale A');
+    expect(toplistNoteText(row({ toStay: 2 }), tIn('fr'))).toBe('2 pts pour rester en finale A');
+    expect(toplistNoteText(row({ needed: 1 }), tIn('fr'))).toBe('Il faut 1 pt pour la finale A (arrivées normales)');
+    expect(toplistNoteText(row({ toStay: 2 }), tIn('cy'))).toBe('2 pwynt i aros yn Rownd Derfynol A');
+    expect(toplistNoteText(row({ guaranteed: true }), tIn('cy'))).toBe('Lle yn Rownd Derfynol A yn sicr');
+    expect(toplistNoteText(row({ withdrawn: true }), tIn('cy'))).toBe('Wedi tynnu’n ôl');
+  });
+});
+
+describe('toplistNoteTone', () => {
+  it('is green for a guaranteed place, amber for points still to get and plain otherwise', () => {
+    expect(toplistNoteTone(row({ guaranteed: true }))).toBe('safe');
+    expect(toplistNoteTone(row({ toStay: 2 }))).toBe('need');
+    expect(toplistNoteTone(row({ needed: 0 }))).toBe('need');
+    expect(toplistNoteTone(row({ needed: 3, neededUnavailable: true }))).toBeNull();
+    expect(toplistNoteTone(row({ guaranteed: true, withdrawn: true }))).toBeNull();
+    expect(toplistNoteTone(row({ toStay: null }))).toBeNull();
+    expect(toplistNoteTone(row())).toBeNull();
   });
 });
 

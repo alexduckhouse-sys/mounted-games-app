@@ -14,6 +14,7 @@ import { NavigationDrawer } from './NavigationDrawer';
 import { TopBarTicker } from './TopBarTicker';
 import { TickerFeed } from './TickerFeed';
 import { useOptionalTicker } from './TickerContext';
+import { WeatherLine } from './WeatherLine';
 import { ConnectionPill } from './ConnectionPill';
 import { BottomTabs } from './BottomTabs';
 import { GlobalTabs } from './GlobalTabs';
@@ -26,7 +27,7 @@ import { InstallCard } from './InstallCard';
 import { LiteChip } from '../lite/LiteChip';
 import { initialsOf } from '../lib/profile';
 import { useNeedsYou } from '../pages/profile/needsYou';
-import { usePageFade } from '../hooks/usePageFade';
+import { PageTransition } from './PageTransition';
 import { useT } from '../i18n/LanguageContext';
 
 export function AppShell() {
@@ -72,7 +73,6 @@ function Shell({ width }: { width: PageWidth }) {
   // Sticky bits further down the page sit under the header, whatever its height.
   const barRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
-  usePageFade(mainRef, location.pathname);
   useLayoutEffect(() => {
     const bar = barRef.current;
     if (!bar) {
@@ -109,7 +109,7 @@ function Shell({ width }: { width: PageWidth }) {
           ) : (
             <div className={`mx-auto flex ${cap} items-center gap-2.5 py-1.5 pl-4 pr-3 sm:py-3`}>
               {pageHeader?.backTo
-                ? <Link to={pageHeader.backTo} className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center text-white" aria-label={pageHeader.backLabel ?? t('shell.header.back')}><ChevronLeft className="h-[22px] w-[22px]" strokeWidth={2.25} /></Link>
+                ? <Link to={pageHeader.backTo} className="mg-nav-btn !px-0" aria-label={pageHeader.backLabel ?? t('shell.header.back')}><ChevronLeft className="h-5 w-5" /></Link>
                 : <Link to={inAdminArea ? '/admin' : '/events'} className="mg-logo" aria-label={inAdminArea ? t('shell.header.adminHome') : t('shell.header.home')}>MG</Link>}
               {pageHeader?.plain ? (
                 <div className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5">
@@ -143,6 +143,7 @@ function Shell({ width }: { width: PageWidth }) {
             </div>
           )}
         </header>
+        {competitionId != null && <WeatherLine />}
       </div>
       )}
       <main ref={mainRef} className={publicPage
@@ -155,6 +156,7 @@ function Shell({ width }: { width: PageWidth }) {
           <Suspense fallback={<PageSkeleton />}><Outlet /></Suspense>
         </PageLoadBoundary>
       </main>
+      <PageTransition mainRef={mainRef} disabled={filmingMode} />
       {feedCompetitionId != null && <TickerFeed key={feedCompetitionId} competitionId={feedCompetitionId} />}
       {!filmingMode && <TopBarTicker low={!hasTabs} />}
       {!filmingMode && globalTabs && <GlobalTabs meCount={user ? needsYou : 0} />}

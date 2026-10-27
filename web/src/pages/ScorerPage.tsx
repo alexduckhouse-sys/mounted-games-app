@@ -13,8 +13,8 @@ import { ordinal } from '../lib/toplist';
 import { ScoreClashBanner, type ScoreClashItem } from './competition/ScoringParts';
 import { ScoringSection, type PendingPlace } from './competition/ScoringSection';
 import {
-  clearScorerToken, parseScorerSession, readSavedScorerSession, readSavedScorerSessionAt, readScorerToken, scorerApi, scorerFailure,
-  tokenFromHash, writeSavedScorerSession, writeScorerToken, type ScorerLoadFailure,
+  angleFromHash, clearScorerToken, parseScorerSession, readSavedScorerSession, readSavedScorerSessionAt, readScorerAngle, readScorerToken, scorerApi,
+  scorerFailure, tokenFromHash, writeSavedScorerSession, writeScorerAngle, writeScorerToken, type ScorerLoadFailure,
 } from '../offline/scorerLink';
 import { LIVE_SAVED_COPY_NOTICE_AFTER_MS, lastUpdatedText, shouldNoticeSavedCopy } from '../offline/savedCopies';
 import { enqueue, placingsOf, type QueuedScore } from '../offline/scoreOutbox';
@@ -31,13 +31,19 @@ import { ReplayInspector, SavedReplaysButton } from '../components/stream/Replay
 import { useLiveHub } from '../live/useLiveHub';
 import { useReplayPreparation } from '../live/useReplayPreparation';
 import { ReplayPreparation } from '../components/stream/ReplayPreparation';
+import { CameraLockButtons } from '../components/stream/CameraLocks';
+import { SelectField } from '../components/SelectField';
 import type { Heat, LiveStream, LiveStreamsResponse, ScorerSession, Session, StreamQualityPreset } from '../types';
 
-/** Takes the token from the address (`/score#t=…`), keeps it on this phone and tidies the address bar. */
+/**
+ * Takes the token from the address (`/score#t=…`), keeps it on this phone and tidies the address bar. A camera link
+ * also names the camera position (`&angle=…`), kept beside the token; a link without one forgets the last one.
+ */
 function captureToken(): string | null {
   const fromAddress = tokenFromHash(window.location.hash);
   if (fromAddress) {
     writeScorerToken(fromAddress);
+    writeScorerAngle(angleFromHash(window.location.hash));
     window.history.replaceState(null, '', window.location.pathname);
     return fromAddress;
   }
@@ -388,6 +394,8 @@ function RemoteStreamControlBar({ session }: { session: ScorerSession }) {
   );
 }
 
+const TRIPOD_ANGLES = ['Main camera', 'Finish line', 'Start line', 'Wide'];
+
 function TripodCameraBroadcaster({ session }: { session: ScorerSession }) {
   const replayBuffer = useRef<ReplayBufferHandle | null>(null);
   const replayPreparation = useReplayPreparation();
@@ -399,10 +407,43 @@ function TripodCameraBroadcaster({ session }: { session: ScorerSession }) {
   const [snapshot, setSnapshot] = useState<PublisherSnapshot>({
     state: 'idle', media: null, streamId: null, viewerCount: 0, signal: 'good', audioMuted: false, hasAudio: false, error: null,
   });
-  const [angle, setAngle] = useState('Main camera');
+  // The position the organiser picked when making the link comes first and is chosen already.
+  const [preset] = useState(readScorerAngle);
+  const angleChoices = preset && !TRIPOD_ANGLES.includes(preset) ? [preset, ...TRIPOD_ANGLES] : TRIPOD_ANGLES;
+  const [angle, setAngle] = useState(preset ?? TRIPOD_ANGLES[0]);
   const [quality, setQuality] = useState<StreamQualityPreset>('1080p');
   const [dimmed, setDimmed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
+  const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
+  const [cameraId, setCameraId] = useState('');
+  const [micId, setMicId] = useState('');
+  const hasMedia = Boolean(snapshot.media);
+
+  // Keep the pickers current when a camera or microphone is plugged in or taken out.
+  useEffect(() => {
+    if (!hasMedia) return;
+    return publisher.current?.watchDevices((nextCameras, nextMics) => { setCameras(nextCameras); setMics(nextMics); });
+  }, [hasMedia]);
+
+  async function allowCamera() {
+    setBusy(true);
+    try {
+      const current = publisher.current;
+      await current?.capture(true);
+      if (current && publisher.current === current) {
+        setCameras(await current.devices());
+        setMics(await current.audioDevices());
+      }
+    } catch {
+      setCommandError('The camera didn’t start. Check the browser lets this site use it, then try again.');
+    } finally { setBusy(false); }
+  }
+
+  async function change(action: () => Promise<unknown> | undefined, failure: string) {
+    setCommandError('');
+    try { await action(); } catch { setCommandError(failure); }
+  }
 
   useEffect(() => {
     if (typeof RTCPeerConnection === 'undefined' || !navigator.mediaDevices) return;
@@ -484,10 +525,7 @@ function TripodCameraBroadcaster({ session }: { session: ScorerSession }) {
           type="button"
           className="btn-primary min-h-11 flex items-center gap-2"
           disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            try { await publisher.current?.capture(true); } finally { setBusy(false); }
-          }}
+          onClick={() => void allowCamera()}
         >
           <Camera className="h-4 w-4" /> Allow camera
         </button>
@@ -499,7 +537,7 @@ function TripodCameraBroadcaster({ session }: { session: ScorerSession }) {
 
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="font-semibold">Camera angle:</span>
-            {['Main camera', 'Finish line', 'Start line', 'Wide'].map((name) => (
+            {angleChoices.map((name) => (
               <button
                 key={name}
                 type="button"
@@ -512,6 +550,40 @@ function TripodCameraBroadcaster({ session }: { session: ScorerSession }) {
               </button>
             ))}
           </div>
+
+          {(cameras.length > 1 || mics.length > 1) && (
+            <div className="flex flex-wrap gap-3 text-xs">
+              {cameras.length > 1 && (
+                <label className="flex min-w-40 flex-1 flex-col gap-1 font-semibold">Camera
+                  <SelectField className="input" value={cameraId} onChange={(event) => {
+                    const id = event.target.value; setCameraId(id);
+                    void change(() => publisher.current?.switchCamera(id), 'Couldn’t switch to that camera. Try again.');
+                  }}>
+                    <option value="" disabled>Choose camera</option>
+                    {cameras.map((device, index) => <option key={device.deviceId || index} value={device.deviceId}>{device.label || `Camera ${index + 1}`}</option>)}
+                  </SelectField>
+                </label>
+              )}
+              {mics.length > 1 && (
+                <label className="flex min-w-40 flex-1 flex-col gap-1 font-semibold">Microphone
+                  <SelectField className="input" value={micId} onChange={(event) => {
+                    const id = event.target.value; setMicId(id);
+                    void change(() => publisher.current?.switchAudio(id), 'Couldn’t switch to that microphone. Try again.');
+                  }}>
+                    <option value="" disabled>Choose microphone</option>
+                    {mics.map((device, index) => <option key={device.deviceId || index} value={device.deviceId}>{device.label || `Microphone ${index + 1}`}</option>)}
+                  </SelectField>
+                </label>
+              )}
+            </div>
+          )}
+
+          <CameraLockButtons
+            locks={snapshot.cameraLocks}
+            className="flex flex-wrap items-center gap-2 text-xs"
+            buttonClassName="min-h-9 rounded-full bg-slate-100 px-3 font-semibold text-slate-800 aria-pressed:bg-brand-600 aria-pressed:text-white"
+            onChange={(kind, locked) => void change(() => publisher.current?.setCameraLock(kind, locked), 'The camera didn’t accept that. Try again.')}
+          />
 
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="font-semibold">Quality:</span>
