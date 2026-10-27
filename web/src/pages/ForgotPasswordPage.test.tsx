@@ -23,6 +23,8 @@ const accepted = { data: { message: 'If there’s an account for that address, w
 
 beforeEach(() => {
   vi.mocked(api.post).mockResolvedValue(accepted);
+  // The sign-in page asks which social providers are on; none are here.
+  vi.mocked(api.get).mockResolvedValue({ data: [] });
 });
 
 describe('ForgotPasswordPage', () => {

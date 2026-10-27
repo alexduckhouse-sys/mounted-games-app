@@ -98,8 +98,8 @@ describe('SessionPage', () => {
     localStorage.setItem('mg.scorer.token', 'synthetic-old-scorer-token');
     mount(scoringData());
     await opened('Bending');
-    await userEvent.click(screen.getByText('Organiser tools'));
-    await userEvent.click(screen.getByText('Import scores from another phone'));
+    const tools = await openOrganiserTools();
+    await userEvent.click(within(tools).getByText('Import scores from another phone'));
     fireEvent.change(screen.getByLabelText('Backup'), { target: { value: JSON.stringify([{
       raceId: 1, competitionId: 1, sessionId: 1, label: 'Synthetic race',
       places: [{ teamId: 1, place: 1, eliminated: false }], expected: [], teamNames: { 1: 'Synthetic Team' },
@@ -168,11 +168,13 @@ describe('SessionPage', () => {
 
   it('links the arena crew sheet from race tools and puts the duty board in the organiser tools', async () => {
     mount(competition({ teams, sessions: [session(1, { status: 1, heats: [heat(1, { races: [race(1, { name: 'Bending' })] })] })] }));
-    expect(await screen.findByText(/No duties are set for/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Race tools' }));
-    const sheet = screen.getByRole('dialog', { name: 'Race tools' });
+    await opened('Bending');
+    const sheet = await openTools();
     expect(within(sheet).getByText('Arena crew sheet')).toBeInTheDocument();
     expect(within(sheet).getByText('Props to bring in, clear and keep')).toBeInTheDocument();
+    await userEvent.click(within(sheet).getByRole('button', { name: /Organiser tools/ }));
+    const tools = screen.getByRole('dialog', { name: 'Organiser tools' });
+    expect(await within(tools).findByText(/No duties are set for/)).toBeInTheDocument();
   });
 
   it('selects the first unfinished heat when none is requested', () => {
