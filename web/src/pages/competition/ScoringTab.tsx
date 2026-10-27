@@ -147,8 +147,8 @@ function AgeGroupRail({ sections, teams, value, onChange }: {
 
 /**
  * One page per age group: the navy age group bar, then three tabs. Heats is the draw, Scores holds the heat tables
- * and Toplist the standings. The menu opens it on Heats and the Toplists bottom tab on Toplist (`startOn`), with Toplist
- * the first tab there.
+ * and Toplist the standings. The menu opens it on Heats (`startOn`). The Toplists bottom tab shows the toplist alone,
+ * with no tab row: its Show sheet (beside the ticker dock) offers the heat scores as "Scores by heat".
  */
 export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   const t = useT();
@@ -268,7 +268,10 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
     </>
   );
 
-  const ageGroups = !rail && competition.sections.length > 1 && <AgeGroupSelect sections={competition.sections} value={sectionId} teamCount={teamCount} seamless onChange={chooseSection} />;
+  // The Toplists page is the toplist alone: only the age group stays in the navy band, and "Scores by heat" is in its
+  // Show sheet. The age group page from the menu keeps its Heats · Scores · Toplist row.
+  const showTabs = startOn !== 'toplist';
+  const ageGroups = !rail && competition.sections.length > 1 && <AgeGroupSelect sections={competition.sections} value={sectionId} teamCount={teamCount} seamless={showTabs} onChange={chooseSection} />;
   const sectionSessions = useMemo(
     () => competition.sessions
       .filter((s) => s.competitionSectionId === sectionId && (s.kind ?? (s.isBreak ? 1 : 0)) === 0)
@@ -294,7 +297,7 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
     ? [['toplist', t('competition.scoring.toplist')], ['draw', t('competition.scoring.heats')], ['scores', t('competition.scoring.scores')]]
     : [['draw', t('competition.scoring.heats')], ['scores', t('competition.scoring.scores')], ['toplist', t('competition.scoring.toplist')]];
   // The tabs sit in the navy bar under the age group on phones; beside the age group rail on a laptop they are plain.
-  const tabBar = (
+  const tabBar = showTabs && (
     <div className={rail ? 'pb-3' : 'mg-band-header pb-2.5 pt-1'}>
       <div className="mg-seg" role="group" aria-label={t('competition.scoring.viewGroup')}>
         {subTabs.map(([id, label]) => (
@@ -328,7 +331,7 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
     <section aria-label={sectionLabel} className="flex flex-col">
       <div className="flex flex-col gap-2.5 pt-3 empty:hidden">{notices}</div>
       {standings.length > 0 && provisional && <div className="pt-3"><ProvisionalBadge state={provisional} /></div>}
-      {standings.length > 0 && <ToplistView list={list} section={section} competitionId={competition.id} teams={competition.teams} chosenView={chosenView} onChooseView={chooseView} heatTables={scores} />}
+      {standings.length > 0 && <ToplistView list={list} section={section} competitionId={competition.id} teams={competition.teams} chosenView={chosenView} onChooseView={chooseView} heatTables={sectionSessions.some((s) => s.heats.length > 0) ? scores : undefined} />}
       {sectionId != null && <div className="pt-3"><TackLeaderboard competitionId={competition.id} sectionId={sectionId} refresh={retry} /></div>}
     </section>
   );

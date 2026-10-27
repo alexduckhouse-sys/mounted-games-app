@@ -273,6 +273,17 @@ describe('signing in', () => {
     expect(result.current.user).toBeNull();
     expect(localStorage.getItem('mg.auth')).toBeNull();
   });
+
+  it('clears unfinished entry drafts on sign-out but leaves other storage alone', () => {
+    signIn();
+    localStorage.setItem('mg.draft.entry.v1.["u",1,5,"standard"]', '{}');
+    localStorage.setItem('mg.draft.entry.v1.other', '{}');
+    localStorage.setItem('mg.other', 'keep');
+    const { result } = mount();
+    act(() => result.current.logout());
+    expect(Object.keys(localStorage).filter((k) => k.startsWith('mg.draft.entry.v1.'))).toEqual([]);
+    expect(localStorage.getItem('mg.other')).toBe('keep');
+  });
 });
 
 describe('roles and permissions', () => {
