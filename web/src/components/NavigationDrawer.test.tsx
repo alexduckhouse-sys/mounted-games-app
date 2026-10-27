@@ -105,6 +105,11 @@ describe('NavigationDrawer: when no competition is followed', () => {
     const rows = [...within(screen.getByRole('navigation', { name: 'General' })).getAllByRole('link'), screen.getByRole('button', { name: 'Scan a QR code' })];
     expect(rows).toHaveLength(9);
     for (const row of rows) expect(row.querySelector('svg')).not.toBeNull();
+    // The short site menu has bigger rows: 18px text and 24px icons, nothing capping either.
+    for (const row of rows) {
+      expect(row).toHaveClass('text-lg', 'min-h-14');
+      expect(row.querySelector('svg')).toHaveClass('h-6', 'w-6');
+    }
   });
 
   it('invites a visitor to sign in at the bottom of the menu without a role caption', () => {
@@ -175,6 +180,13 @@ describe('NavigationDrawer: following a competition', () => {
     expect(screen.getByRole('heading', { name: 'Spring Games' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Following' })).toBeInTheDocument();
     expect(screen.getByText('Sat 17 – Sun 18 Oct · Ashdown')).toBeInTheDocument();
+  });
+
+  it('keeps its compact rows and icons, because it has more to list', () => {
+    mount({ competition: true });
+    const row = screen.getByRole('link', { name: 'Following' });
+    expect(row).toHaveClass('text-base', 'min-h-12');
+    expect(row.querySelector('svg')).toHaveClass('h-5', 'w-5');
   });
 
   it('shows just the name when the details are for a different competition', () => {
