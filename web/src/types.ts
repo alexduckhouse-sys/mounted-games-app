@@ -1507,6 +1507,18 @@ export interface StatsGame {
   pointQuotaPercent: number | null;
   averagePoints?: number | null;
   averagePlace?: number | null;
+  /** A team profile's most recent runs of this game, oldest first; missing for every other kind of profile. */
+  runs?: StatsRun[] | null;
+}
+
+/** One time a team rode a game: where, when, how it went. `place` is null when put out or unplaced. */
+export interface StatsRun {
+  competitionName: string;
+  startDate: string;
+  place: number | null;
+  eliminated: boolean;
+  points: number;
+  maxPoints: number;
 }
 
 export interface StatsSession {

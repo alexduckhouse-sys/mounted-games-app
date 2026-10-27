@@ -34,31 +34,24 @@ describe('TeamGameStats', () => {
     expect(api.get).not.toHaveBeenCalled();
   });
 
-  it('shows the figures as a plain list and each game to a visitor who is not signed in, with no sign-in prompt', async () => {
+  it('shows three figures as a plain list and a See all stats row, and no games, to a visitor who is not signed in', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: profile });
     renderStats(2);
     expect(screen.getByRole('status')).toHaveTextContent('Loading race statistics…');
-    const facts = await screen.findByRole('list', { name: 'By game' });
+    const figures = await screen.findByLabelText('Race statistics');
     expect(api.get).toHaveBeenCalledWith('/stats/team-profiles/p1', expect.anything());
-    const figures = screen.getByLabelText('Race statistics');
+    expect(within(figures).getByText('Competitions').nextSibling).toHaveTextContent('1');
+    expect(within(figures).getByText('Podiums').nextSibling).toHaveTextContent('None yet');
     expect(within(figures).getByText('Average place').nextSibling).toHaveTextContent('7.9');
-    expect(within(figures).getByText('Points').nextSibling).toHaveTextContent('49 of 84 (58.3%)');
-    expect(within(figures).getByText('Races won').nextSibling).toHaveTextContent('2 of 12');
-    const rows = within(facts).getAllByRole('listitem');
-    expect(rows).toHaveLength(2);
-    expect(rows[0]).toHaveTextContent('Two Flag12 races · 2 wins · average 4.1 pts · average place 5.858.3%');
-    expect(rows[1]).toHaveTextContent('Mug Shuffle12 races · 1 win · average 3.6 pts · average place 6.951.2%');
-    expect(screen.queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument();
-    expect(screen.queryByText(/Sign in to see/)).not.toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Summary' })).not.toBeInTheDocument();
-  });
-
-  it('leaves the by-game list out when the API sent no games', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: { ...profile, games: null, bestGames: null, worstGames: null } });
-    renderStats(1);
-    expect(await screen.findByLabelText('Race statistics')).toBeInTheDocument();
+    expect(within(figures).getAllByRole('term')).toHaveLength(3);
+    expect(screen.queryByText('Points')).not.toBeInTheDocument();
+    expect(screen.queryByText('Races won')).not.toBeInTheDocument();
+    // The games moved to the stats page, which this row opens.
+    expect(screen.getByRole('link', { name: 'See all stats' })).toHaveAttribute('href', '/team-profiles/p1/stats');
     expect(screen.queryByRole('list', { name: 'By game' })).not.toBeInTheDocument();
     expect(screen.queryByText('By game')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Sign in to see/)).not.toBeInTheDocument();
   });
 
   it('reports a failure and hides a missing profile', async () => {
