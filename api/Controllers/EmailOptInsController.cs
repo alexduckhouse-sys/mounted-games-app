@@ -42,7 +42,7 @@ public class EmailOptInsController(
     /// <c>List-Unsubscribe</c> header. The signed token is in the query, as the standard requires; the body is ignored. Answers
     /// the same whatever the token, like the page's endpoint.
     /// </summary>
-    [EnableRateLimiting(RequestLimits.UnsubscribePolicy)]
+    [EnableRateLimiting(RequestLimits.UnsubscribeOneClickPolicy)]
     [HttpPost("api/email/unsubscribe-one-click")]
     [AllowAnonymous]
     public async Task<IActionResult> UnsubscribeOneClick([FromQuery] string? token, CancellationToken ct)

@@ -15,11 +15,18 @@ public sealed class LocationInference(AppDbContext db)
 {
     public const int VenuesToAverage = 10;
 
-    /// <summary>A signed-in person's own history, by account and by the address they gave on entry forms.</summary>
-    public Task<GeoPoint?> FromHistoryAsync(string? userId, string? email, CancellationToken ct)
-        => CentroidAsync(userId, NormaliseOrNull(email), ct);
+    /// <summary>
+    /// A signed-in person's own history, by account only. The address on an account's token is never matched against the
+    /// contact addresses typed on entry forms: accounts can be made for addresses nobody has confirmed, so that match would
+    /// let someone read where another family competes from the distances the page returns.
+    /// </summary>
+    public Task<GeoPoint?> FromHistoryAsync(string? userId, CancellationToken ct)
+        => string.IsNullOrEmpty(userId) ? Task.FromResult<GeoPoint?>(null) : CentroidAsync(userId, null, ct);
 
-    /// <summary>An opt-in address: the account holding that address (if any) and entries made with it.</summary>
+    /// <summary>
+    /// An opt-in address: the account holding that address (if any) and entries made with it. Only used to order an email that
+    /// goes to that same mailbox, so nothing about the places leaves it.
+    /// </summary>
     public async Task<GeoPoint?> ForAddressAsync(string address, CancellationToken ct)
     {
         var email = NormaliseOrNull(address);
@@ -39,7 +46,7 @@ public sealed class LocationInference(AppDbContext db)
 
         ids.UnionWith(await db.SectionSignups.AsNoTracking()
             .Where(s => s.Status != SignupPaymentStatus.Cancelled
-                && ((userId != null && s.UserId == userId) || (email != null && s.ContactEmail != null && s.ContactEmail.ToLower() == email)))
+                && ((userId != null && s.UserId == userId) || (email != null && s.ContactEmail == email)))
             .Select(s => s.Section!.CompetitionId).Distinct().ToListAsync(ct));
         if (userId is not null)
         {

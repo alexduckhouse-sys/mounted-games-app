@@ -45,12 +45,23 @@ public class EntriesDigestRun
     public ICollection<EntriesDigestRecipient> Recipients { get; set; } = new List<EntriesDigestRecipient>();
 }
 
-/// <summary>A competition announced by a run. The competition id is the key, so no competition is ever announced twice.</summary>
+/// <summary>
+/// A competition announced by a run. The competition id is the key, so no competition is ever announced twice. What the email
+/// says about it (name, venue, dates) is copied here when the run is claimed and sent from these values, never read again from
+/// the competition, so an organiser editing their event between batches can't put different text in front of the rest of the list.
+/// </summary>
 public class EntriesDigestCompetition
 {
     public int CompetitionId { get; set; }
     public int RunId { get; set; }
     public EntriesDigestRun? Run { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Location { get; set; }
+    public DateTime StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
+    public DateTime? EntriesCloseAt { get; set; }
 }
 
 /// <summary>

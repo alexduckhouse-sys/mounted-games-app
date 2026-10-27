@@ -495,6 +495,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
                 .OnDelete(DeleteBehavior.SetNull);
             e.HasIndex(s => new { s.CompetitionSectionId, s.UserId });
             e.Property(s => s.ContactEmail).HasMaxLength(254);
+            // Looked up by address when ordering the opt-in digest (LocationInference.ForAddressAsync).
+            e.HasIndex(s => s.ContactEmail);
             e.Property(s => s.ClientRequestId).HasMaxLength(64);
             e.Property(s => s.ConfirmationEmailStatus).HasDefaultValue(EmailDeliveryStatus.NotRequested);
             // A retried submit must not create a second entry (NULLs never collide).

@@ -289,6 +289,7 @@ public class EmailServicesTests : IClassFixture<ApiFactory>
         });
         await _f.InDbAsync(db => db.Database.ExecuteSqlRawAsync("""
             DROP INDEX "IX_SectionSignups_CompetitionSectionId_UserId_ClientRequestId";
+            DROP INDEX IF EXISTS "IX_SectionSignups_ContactEmail";
             ALTER TABLE "SectionSignups" DROP COLUMN "ContactEmail";
             ALTER TABLE "SectionSignups" DROP COLUMN "ConfirmationEmailStatus";
             ALTER TABLE "SectionSignups" DROP COLUMN "ConfirmationEmailAt";

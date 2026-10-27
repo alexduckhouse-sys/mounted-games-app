@@ -27,6 +27,16 @@ public static class RequestLimits
     /// <summary>Unsubscribing from emails: per IP (RateLimits:UnsubscribePerMinute, 10).</summary>
     public const string UnsubscribePolicy = "unsubscribe";
 
+    /// <summary>
+    /// The one-click unsubscribe mail apps POST (RFC 8058). Gmail and Yahoo send these from shared servers, so a per-IP limit would
+    /// lose real unsubscribes after a list-wide send. A validly signed token is limited per token (<c>RateLimits:UnsubscribePerMinute</c>);
+    /// anything else, which is how abuse looks, stays limited per IP.
+    /// </summary>
+    public const string UnsubscribeOneClickPolicy = "unsubscribe-one-click";
+
+    /// <summary>The upcoming list ordered for the viewer: per signed-in user or IP (<c>RateLimits:NearYouPerMinute</c>, 60). It loads the whole upcoming set, so it costs more than a plain read.</summary>
+    public const string NearYouPolicy = "near-you";
+
     /// <summary>Interactive scorer-link reads: per scorer token or IP, separate from previews and weather (RateLimits:ScorerReadsPerMinute, 120).</summary>
     public const string ScorerReadPolicy = "scorer-read";
 
@@ -62,6 +72,7 @@ public static class RequestLimits
         var joinPermits = configuration.GetValue("RateLimits:TeamJoinPerMinute", 10);
         var reportPermits = configuration.GetValue("RateLimits:ShopReportsPerMinute", 10);
         var unsubscribePermits = configuration.GetValue("RateLimits:UnsubscribePerMinute", 10);
+        var nearYouPermits = configuration.GetValue("RateLimits:NearYouPerMinute", 60);
         var scorerReadPermits = configuration.GetValue("RateLimits:ScorerReadsPerMinute", 120);
         var resetRequestPermits = configuration.GetValue("RateLimits:PasswordResetRequestsPerMinute", 5);
         var resetLinkPermits = configuration.GetValue("RateLimits:PasswordResetLinksPerMinute", 20);
@@ -74,6 +85,8 @@ public static class RequestLimits
             options.AddPolicy(TeamJoinPolicy, context => Partition(context, $"team-join:{WritePartition(context)}", joinPermits));
             options.AddPolicy(ShopReportPolicy, context => Partition(context, $"shop-report:{context.Connection.RemoteIpAddress}", reportPermits));
             options.AddPolicy(UnsubscribePolicy, context => Partition(context, $"unsubscribe:{context.Connection.RemoteIpAddress}", unsubscribePermits));
+            options.AddPolicy(UnsubscribeOneClickPolicy, context => Partition(context, $"unsubscribe-one-click:{OneClickPartition(context)}", unsubscribePermits));
+            options.AddPolicy(NearYouPolicy, context => Partition(context, $"near-you:{WritePartition(context)}", nearYouPermits));
             options.AddPolicy(ScorerReadPolicy, context => Partition(context, $"scorer-read:{ScorerPartition(context)}", scorerReadPermits));
             options.AddPolicy(PasswordResetRequestPolicy, context => Partition(context, $"password-reset-request:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}", resetRequestPermits));
             options.AddPolicy(PasswordResetLinkPolicy, context => Partition(context, $"password-reset-link:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}", resetLinkPermits));
@@ -130,6 +143,15 @@ public static class RequestLimits
         return ScorerLinkTokens.LooksValid(token)
             ? $"{ip}:token:{ScorerLinkTokens.Hash(token)}"
             : $"ip:{ip}";
+    }
+
+    private static string OneClickPartition(HttpContext context)
+    {
+        var token = context.Request.Query["token"].ToString().Trim();
+        var configuration = context.RequestServices.GetRequiredService<IConfiguration>();
+        return Services.Email.EmailUnsubscribeTokens.TryRead(configuration, token, out var optInId)
+            ? $"token:{optInId}"
+            : $"ip:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
     }
 
     private static string WritePartition(HttpContext context)

@@ -13,6 +13,35 @@ public class EntriesDigestSchemaTests : IClassFixture<ApiFactory>
     public EntriesDigestSchemaTests(ApiFactory f) => _f = f;
 
     [Fact]
+    public async Task ADigestTableFromBeforeTheTextWasFrozenGainsTheNewColumns()
+    {
+        using var scope = _f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await db.Database.ExecuteSqlRawAsync("""
+            DROP TABLE EntriesDigestRecipients; DROP TABLE EntriesDigestCompetitions; DROP TABLE EntriesDigestRuns;
+            CREATE TABLE "EntriesDigestRuns" ("Id" INTEGER NOT NULL CONSTRAINT "PK_EntriesDigestRuns" PRIMARY KEY AUTOINCREMENT,
+                "RunDate" TEXT NOT NULL, "ClaimedAt" TEXT NOT NULL, "Status" INTEGER NOT NULL, "Manual" INTEGER NOT NULL,
+                "Competitions" INTEGER NOT NULL, "Total" INTEGER NOT NULL, "CompletedAt" TEXT NULL);
+            CREATE TABLE "EntriesDigestCompetitions" ("CompetitionId" INTEGER NOT NULL CONSTRAINT "PK_EntriesDigestCompetitions" PRIMARY KEY,
+                "RunId" INTEGER NOT NULL);
+            """);
+        await DbInitializer.SeedAsync(_f.Services);
+
+        db.ChangeTracker.Clear();
+        var run = new EntriesDigestRun { RunDate = "2031-01-01", ClaimedAt = DateTime.UtcNow, Status = EntriesDigestRunStatus.Sending };
+        run.CompetitionRows.Add(new EntriesDigestCompetition
+        {
+            CompetitionId = 777, Name = "Frozen", Location = "Venue", StartDate = new DateTime(2031, 2, 3, 0, 0, 0, DateTimeKind.Utc),
+            Latitude = 51.5, Longitude = -2.5, EntriesCloseAt = new DateTime(2031, 1, 20, 18, 0, 0, DateTimeKind.Utc),
+        });
+        db.EntriesDigestRuns.Add(run);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        var back = await db.EntriesDigestCompetitions.AsNoTracking().SingleAsync(c => c.CompetitionId == 777);
+        Assert.Equal(("Frozen", "Venue", 51.5), (back.Name, back.Location, back.Latitude));
+    }
+
+    [Fact]
     public async Task AnExistingSqliteDatabaseGainsTheDigestTablesWithoutLosingEmailData()
     {
         using var scope = _f.Services.CreateScope();
