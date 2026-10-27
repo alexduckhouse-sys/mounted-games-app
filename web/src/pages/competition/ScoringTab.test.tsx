@@ -448,46 +448,45 @@ it('defaults to a populated age group when an earlier section is empty', async (
   await waitFor(() => expect(state.get).toHaveBeenCalledWith('/competitions/1/standings', { params: { sectionId: 9 } }));
 });
 
-it('links organiser screen actions to the selected age group and hides them from spectators', async () => {
+it('has no organiser button row: PA desk, TV kiosk and QR codes are in the menu', async () => {
   state.manage = true;
-  const view = renderTab('/?section=10', {});
-  await waitFor(() => expect(state.get).toHaveBeenCalled());
-  expect(screen.getByRole('link', { name: 'PA Commentator' })).toHaveAttribute('href', '/competitions/1/commentary?section=10');
-  expect(screen.getByRole('link', { name: 'TV Kiosk' })).toHaveAttribute('href', '/competitions/1/tv?section=10');
-  expect(screen.getByRole('button', { name: 'QR Access' })).toBeVisible();
-  view.unmount();
-  state.manage = false;
   renderTab('/?section=10', {});
+  await waitFor(() => expect(state.get).toHaveBeenCalled());
   expect(screen.queryByRole('region', { name: 'Organiser quick actions' })).toBeNull();
+  for (const name of [/PA Commentator/, /TV Kiosk/, /QR Access/]) {
+    expect(screen.queryByRole('link', { name })).toBeNull();
+    expect(screen.queryByRole('button', { name })).toBeNull();
+  }
 });
 
-  it('shows QR Access, PA Commentator, and TV Kiosk links for organisers and opens the QR Code Access Hub', async () => {
+describe('Create finals row', () => {
+  it('shows for an organiser once every session in the age group is done, and opens the finals sheet', async () => {
     state.manage = true;
-    state.get.mockImplementation((url: string, config?: { params?: { sectionId?: number } }) => {
-      if (url.endsWith('/scorer-links')) {
-        return Promise.resolve({
-          data: { arenas: ['Main Arena'], defaultExpiresAt: '2026-11-02T00:00:00Z', links: [] },
-        });
-      }
-      return Promise.resolve({ data: config?.params?.sectionId === 9 ? standings : otherStandings, headers: {} });
-    });
     const user = userEvent.setup();
-    renderTab('/?section=9', { startOn: 'toplist' });
-    await screen.findByRole('region', { name: 'Finals' });
-
-    const quickBar = screen.getByRole('region', { name: 'Organiser quick actions' });
-    expect(within(quickBar).getByRole('link', { name: /PA Commentator/ })).toHaveAttribute('href', '/competitions/1/commentary?section=9');
-    expect(within(quickBar).getByRole('link', { name: /TV Kiosk/ })).toHaveAttribute('href', '/competitions/1/tv?section=9');
-
-    await user.click(within(quickBar).getByRole('button', { name: /QR Access/ }));
-    const modal = await screen.findByRole('dialog', { name: 'Share with QR codes' });
-    expect(within(modal).getByRole('tab', { name: /Volunteer & Scorer QR Links/ })).toHaveAttribute('aria-selected', 'true');
-
-    await user.click(within(modal).getByRole('tab', { name: /Screens, PA & Spectator QR Codes/ }));
-    expect(within(modal).getByText('PA Commentator Desk')).toBeInTheDocument();
-    expect(within(modal).getByText('TV Kiosk Display')).toBeInTheDocument();
-    expect(within(modal).getByRole('link', { name: /Print QR posters/ })).toHaveAttribute('href', '/event-tools/1/print/posters');
-
-    await user.click(within(modal).getByRole('button', { name: 'Close QR access modal' }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Share with QR codes' })).toBeNull());
+    renderTab('/?section=9', {});
+    await user.click(screen.getByRole('button', { name: /Create finals/ }));
+    expect(await screen.findAllByRole('button', { name: /Create finals/ })).toHaveLength(2);
   });
+
+  it('stays hidden while a session is still to run, for spectators, and when the age group has no sessions', async () => {
+    state.manage = true;
+    const running = session(3, { competitionSectionId: 9, name: 'Under 12 later', status: 1, heats: [heat(3, { sessionId: 3, label: 'Heat 2', entries: entries([1, 2, 3]), races: [race(3, { name: 'Race 3' })] })] });
+    setCompetition([qualifier, running]);
+    const view = renderTab('/?section=9', {});
+    await waitFor(() => expect(state.get).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: /Create finals/ })).toBeNull();
+    view.unmount();
+
+    setCompetition([qualifier]);
+    state.manage = false;
+    const spectator = renderTab('/?section=9', {});
+    await waitFor(() => expect(state.get).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: /Create finals/ })).toBeNull();
+    spectator.unmount();
+
+    state.manage = true;
+    renderTab('/?section=10', {});
+    await waitFor(() => expect(state.get).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: /Create finals/ })).toBeNull();
+  });
+});

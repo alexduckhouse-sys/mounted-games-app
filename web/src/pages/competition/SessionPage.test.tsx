@@ -71,6 +71,16 @@ const openTools = async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Race tools' }));
   return screen.getByRole('dialog', { name: 'Race tools' });
 };
+const openOrganiserTools = async () => {
+  const sheet = await openTools();
+  await userEvent.click(within(sheet).getByRole('button', { name: /Organiser tools/ }));
+  return screen.getByRole('dialog', { name: 'Organiser tools' });
+};
+const openInfo = async (link: RegExp, dialog: string) => {
+  const sheet = await openTools();
+  await userEvent.click(within(sheet).getByRole('button', { name: link }));
+  return screen.getByRole('dialog', { name: dialog });
+};
 const teamMenu = async (sheet: HTMLElement, name: string) => {
   await userEvent.click(within(sheet).getByRole('button', { name: `More for ${name}` }));
   return within(sheet).getByRole('menu', { name });
@@ -89,7 +99,10 @@ describe('SessionPage', () => {
     it('shows the scoring view, the organiser tools, and no score record or sign-off, to someone who can manage this competition', async () => {
       mount(open());
       expect(screen.getByRole('region', { name: 'Scoring Bending' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Set up heats/ })).toBeInTheDocument();
+      // The organiser tools are no longer a panel under the race: they open from Race tools.
+      expect(screen.queryByRole('button', { name: /Set up heats/ })).not.toBeInTheDocument();
+      const tools = await openOrganiserTools();
+      expect(within(tools).getByRole('button', { name: /Set up heats/ })).toBeInTheDocument();
       expect(screen.queryByText('Score record')).not.toBeInTheDocument();
       expect(screen.queryByText(/Sign off/)).not.toBeInTheDocument();
       expect(screen.queryByText('History')).not.toBeInTheDocument();
@@ -667,9 +680,13 @@ describe('SessionPage', () => {
       mount(scoringData());
       expect(screen.queryByRole('link', { name: /Sessions/ })).not.toBeInTheDocument();
       expect(screen.queryByRole('link', { name: /Rules/ })).not.toBeInTheDocument();
-      const details = screen.getByText('Organiser tools').closest('details')!;
-      expect(within(details).getByRole('button', { name: /Set up heats/ })).toBeInTheDocument();
-      expect(within(details).getByRole('region', { name: 'Scorer links' })).toBeInTheDocument();
+      // Nothing sits under the race any more: no details panel, and the tools wait in the sheet.
+      expect(document.querySelector('details')).toBeNull();
+      expect(screen.queryByRole('button', { name: /Set up heats/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Scorer links' })).not.toBeInTheDocument();
+      const tools = await openOrganiserTools();
+      expect(within(tools).getByRole('button', { name: /Set up heats/ })).toBeInTheDocument();
+      expect(within(tools).getByRole('region', { name: 'Scorer links' })).toBeInTheDocument();
       expect(screen.queryByRole('region', { name: 'Race rules' })).toBeNull();
     });
 
@@ -679,7 +696,9 @@ describe('SessionPage', () => {
       await opened('Flag');
       expect(screen.getByRole('button', { name: 'Previous race' })).not.toBeDisabled();
       expect(screen.getByRole('button', { name: 'Next race' })).not.toBeDisabled();
-      expect(screen.getByRole('region', { name: 'Announcer summary for Bending' })).toHaveTextContent('1st Rider 2, 3 points');
+      expect(screen.queryByRole('region', { name: 'Announcer summary for Bending' })).toBeNull();
+      const lastRace = await openInfo(/Last race/, 'Last race');
+      expect(within(lastRace).getByRole('region', { name: 'Announcer summary for Bending' })).toHaveTextContent('1st Rider 2, 3 points');
     });
 
     it('shows a race saved on the phone as done, with its summary, before it has been sent', async () => {
@@ -689,7 +708,9 @@ describe('SessionPage', () => {
       await tapRider('Rider 1', 2);
       await completeRace();
       await opened('Flag');
-      expect(screen.getByRole('region', { name: 'Announcer summary for Bending' })).toHaveTextContent('1st Rider 2, 2 points');
+      const lastRace = await openInfo(/Last race/, 'Last race');
+      expect(within(lastRace).getByRole('region', { name: 'Announcer summary for Bending' })).toHaveTextContent('1st Rider 2, 2 points');
+      await userEvent.click(within(lastRace).getByRole('button', { name: 'Close' }));
       await userEvent.click(screen.getByRole('button', { name: 'Previous race' }));
       await opened('Bending');
       expect(screen.getByText(/Not sent yet:/)).toBeInTheDocument();
@@ -708,13 +729,23 @@ describe('SessionPage', () => {
         ] })],
       });
       const view = mount(data([]));
-      expect(await screen.findByRole('region', { name: 'Lanes for Final' }, { timeout: 5000 })).toHaveTextContent('Provisional');
-      expect(screen.getByRole('region', { name: 'Lanes for Final' })).toHaveTextContent('A1');
+      await opened('Final race');
+      // The provisional lanes are a link in Race tools, not a card under the race.
+      expect(screen.queryByRole('region', { name: 'Lanes for Final' })).not.toBeInTheDocument();
+      await waitFor(async () => {
+        await userEvent.click(screen.getByRole('button', { name: 'Race tools' }));
+        expect(within(screen.getByRole('dialog', { name: 'Race tools' })).getByRole('button', { name: /Lanes for Final/ })).toBeInTheDocument();
+      }, { timeout: 5000 });
+      await userEvent.click(within(screen.getByRole('dialog', { name: 'Race tools' })).getByRole('button', { name: /Lanes for Final/ }));
+      const lanes = screen.getByRole('dialog', { name: 'Next round lanes' });
+      expect(lanes).toHaveTextContent('Provisional');
+      expect(lanes).toHaveTextContent('A1');
       view.unmount();
       mount(data([{ id: 99, teamId: 21, teamName: 'B1', laneIndex: 1 }]));
       // Once the final has its teams its own rows show the lanes, so no second list.
       await opened('Final race');
-      expect(screen.queryByRole('region', { name: 'Lanes for Final' })).not.toBeInTheDocument();
+      const sheet = await openTools();
+      expect(within(sheet).queryByRole('button', { name: /Lanes for Final/ })).toBeNull();
     });
   });
 
@@ -894,7 +925,8 @@ describe('SessionPage', () => {
       vi.mocked(api.delete).mockResolvedValue({ data: {} });
 
       mount(scoringData(2));
-      await screen.findByText('Organiser tools');
+      await opened('Bending');
+      await openOrganiserTools();
 
       await userEvent.selectOptions(screen.getByLabelText('Short-handed team'), '2');
       await userEvent.click(screen.getByRole('button', { name: 'Mark team HC (Hors Concours)' }));
@@ -909,11 +941,12 @@ describe('SessionPage', () => {
       }));
       expect(await screen.findByTestId('under-review-badge-2')).toHaveTextContent('UNDER REVIEW: Rider 2');
 
-      await userEvent.click(screen.getByRole('button', { name: 'Re-run stopped race' }));
+      // The sheet shows the race controls first, then the score adjustments panel; these use the adjustments panel's own.
+      await userEvent.click(screen.getAllByRole('button', { name: 'Re-run stopped race' }).at(-1)!);
       await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/sessions/races/1/results'));
 
-      await userEvent.selectOptions(screen.getByLabelText('New race name'), 'Sword');
-      await userEvent.click(screen.getByRole('button', { name: 'Change race' }));
+      await userEvent.selectOptions(screen.getAllByLabelText('New race name').at(-1)!, 'Sword');
+      await userEvent.click(screen.getAllByRole('button', { name: 'Change race' }).at(-1)!);
       await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/1/sessions/1/races/1', {
         newName: 'Sword',
         applyToAllHeats: true,
@@ -923,7 +956,7 @@ describe('SessionPage', () => {
         type: 1,
       }));
 
-      await userEvent.click(screen.getByRole('button', { name: 'Cancel race' }));
+      await userEvent.click(screen.getAllByRole('button', { name: 'Cancel race' }).at(-1)!);
       await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/competitions/1/sessions/1/races/1'));
     });
   });
@@ -932,7 +965,8 @@ describe('SessionPage', () => {
     data.sessions[0].heats[0].races[0] = race(1, { name: 'Bending', isComplete: true, results: [result(1, 1, { points: 2 }), result(2, 2, { points: 1 })] });
     vi.mocked(api.put).mockResolvedValue({ data: {} });
     mount(data);
-    await screen.findByText('Organiser tools');
+    await opened('Flag');
+    await openOrganiserTools();
     expect(screen.getByRole('list', { name: 'Remaining uncompleted races' })).toHaveTextContent('Flag');
     await userEvent.click(screen.getByRole('button', { name: 'Save race line-up' }));
     expect(api.put).toHaveBeenCalledWith('/competitions/1/sessions/1/races', { raceNames: ['Bending', 'Flag'] });
@@ -989,10 +1023,34 @@ describe('SessionPage', () => {
         sessions: [session(1, { status: 1, scheduledStart: '2026-06-01T10:00:00Z', heats: [heat(1, { entries: entries(2), races: [race(1, { name: 'Bending' })] })] })],
       });
 
+      const openCallSheet = async () => {
+        await userEvent.click(await screen.findByRole('button', { name: 'Call teams' }));
+        return screen.getByRole('dialog', { name: 'Call teams to the ring' });
+      };
+
+      it('shows a late notice with a Call teams action, and the call buttons only in its sheet', async () => {
+        mount(late());
+        expect(await screen.findByText(/is late to the ring/)).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Call Rider 1/ })).toBeNull();
+        const sheet = await openCallSheet();
+        expect(within(sheet).getByRole('button', { name: /^Call Rider 1/ })).toBeInTheDocument();
+        expect(within(sheet).getByRole('button', { name: /^Call Rider 2/ })).toBeInTheDocument();
+      });
+
+      it('has no late notice when the heat is not yet due', () => {
+        mount(competition({
+          teams,
+          sessions: [session(1, { status: 1, scheduledStart: '2999-06-01T10:00:00Z', heats: [heat(1, { entries: entries(2), races: [race(1, { name: 'Bending' })] })] })],
+        }));
+        expect(screen.queryByText(/is late to the ring/)).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Call teams' })).toBeNull();
+      });
+
       it('says "Ring call sent" in a toast rather than a green box', async () => {
         vi.mocked(api.post).mockResolvedValue({ data: {} });
         mount(late());
-        await userEvent.click(await screen.findByRole('button', { name: /^Call Rider 1/ }));
+        const sheet = await openCallSheet();
+        await userEvent.click(within(sheet).getByRole('button', { name: /^Call Rider 1/ }));
         expect(api.post).toHaveBeenCalledWith('/competitions/1/chat', expect.objectContaining({ type: 1 }));
         expect(await screen.findByText('Ring call sent')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Dismiss ring call notice' })).toBeNull();
@@ -1003,7 +1061,8 @@ describe('SessionPage', () => {
           { ...form(1), trainerPhone: '+44 7700 900123' },
           { ...form(2), trainerPhone: '07700 900456' },
         ]);
-        const phone1 = await screen.findByRole('link', { name: 'Phone the trainer of Rider 1' });
+        const sheet = await openCallSheet();
+        const phone1 = await within(sheet).findByRole('link', { name: 'Phone the trainer of Rider 1' });
         expect(phone1).toHaveAttribute('href', 'tel:+447700900123');
         expect(screen.getByRole('link', { name: 'WhatsApp the trainer of Rider 1' }).getAttribute('href'))
           .toMatch(/^https:\/\/wa\.me\/447700900123\?text=Rider%201%3A%20you%20are%20wanted/);
@@ -1014,14 +1073,16 @@ describe('SessionPage', () => {
 
       it('hides the contact row when no number is on the form', async () => {
         mount(late(), [{ ...form(1), trainerPhone: 'not a number' }, form(2)]);
-        await screen.findByRole('button', { name: /^Call Rider 1/ });
+        const sheet = await openCallSheet();
+        expect(within(sheet).getByRole('button', { name: /^Call Rider 1/ })).toBeInTheDocument();
         expect(screen.queryByText(/Phone the trainer/)).toBeNull();
       });
 
       it('shows a problem strip when the call did not go', async () => {
         vi.mocked(api.post).mockRejectedValue(new Error('offline'));
         mount(late());
-        await userEvent.click(await screen.findByRole('button', { name: /^Call Rider 1/ }));
+        const sheet = await openCallSheet();
+        await userEvent.click(within(sheet).getByRole('button', { name: /^Call Rider 1/ }));
         const strip = await screen.findByRole('alert');
         expect(strip).toHaveClass('kit-strip-problem');
         expect(strip).toHaveTextContent('Couldn’t send ring call. Check your signal and try again.');
@@ -1077,10 +1138,9 @@ it('clears the in-memory draft and undo action when a race is rerun', async () =
   mount(scoringData(2));
   await opened('Bending');
   await tapRider('Rider 1', 1);
-  await openTools();
-  await userEvent.click(screen.getByRole('button', { name: /Organiser tools/ }));
-  const sheet = screen.getByRole('dialog', { name: 'Organiser tools' });
-  await userEvent.click(within(sheet).getByRole('button', { name: /Re-run stopped race/ }));
+  const sheet = await openOrganiserTools();
+  // Race controls and the score adjustments panel both offer a re-run in this sheet; the first is the race controls'.
+  await userEvent.click(within(sheet).getAllByRole('button', { name: /Re-run stopped race/ })[0]);
   await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/sessions/races/1/results'));
   expect(screen.queryByLabelText('Place 1')).toBeNull();
   expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
