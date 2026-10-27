@@ -8,6 +8,7 @@ import { useSponsorFeed } from '../hooks/useSponsorFeed';
 import { appendStreamMessage } from '../lib/streams';
 import { tickerItems } from '../lib/ticker';
 import { useTicker } from '../components/TickerContext';
+import { WeatherAlert } from '../components/WeatherAlert';
 import { useLiveHub } from '../live/useLiveHub';
 import { useConnectionStatus } from '../live/ConnectionStatusContext';
 import { isFocusPage, pollIntervalMs } from '../live/connectionStatus';
@@ -362,6 +363,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
           </Notice>
         )}
       </div>
+      <WeatherAlert competition={data} reload={load} />
     </CompetitionContext.Provider>
   );
 }

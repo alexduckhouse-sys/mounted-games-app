@@ -33,6 +33,7 @@ vi.mock('../components/NavExtrasContext', () => ({ useNavExtras: () => ({ setExt
 vi.mock('../components/AgeGroupsContext', () => ({ useAgeGroups: () => ({ setGroups: state.setGroups }) }));
 vi.mock('../components/competitionMeta', () => ({ useCompetitionMeta: () => ({ setMeta: state.setMeta }) }));
 vi.mock('../components/ScoreOutboxPanel', () => ({ ScoreOutboxPanel: () => null }));
+vi.mock('../components/WeatherAlert', () => ({ WeatherAlert: () => null }));
 
 const latestTickerText = () => (state.setItems.mock.calls.at(-1)?.[0] as Array<{ text: string }> | undefined)?.map((item) => item.text) ?? [];
 

@@ -12,6 +12,7 @@ import { Notice } from './Notice';
 import { PageLoadBoundary } from './PageLoadBoundary';
 import { NavigationDrawer } from './NavigationDrawer';
 import { TopBarTicker } from './TopBarTicker';
+import { WeatherLine } from './WeatherLine';
 import { ConnectionPill } from './ConnectionPill';
 import { BottomTabs } from './BottomTabs';
 import { GlobalTabs } from './GlobalTabs';
@@ -132,6 +133,7 @@ function Shell({ width }: { width: PageWidth }) {
           )}
         </header>
         {competitionId != null && <TopBarTicker />}
+        {competitionId != null && <WeatherLine />}
       </div>
       )}
       <main ref={mainRef} className={publicPage
