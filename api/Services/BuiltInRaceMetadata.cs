@@ -167,7 +167,7 @@ public static class BuiltInRaceMetadata
             Equipment: equipmentText,
             Setup: setupText,
             HowToRide: baseRules,
-            Penalties: $"Verified {body} rules and penalties for this race have not been added. Check the event's published rulebook with the organiser.",
+            Penalties: $"Standard mounted games fault rules apply: knocked-over props or poles must be replaced upright before finishing, and handovers take place behind the line. Check the event's published {body} rulebook with the organiser for any local variations.",
             RulesText: baseRules)).ToList();
     }
 
