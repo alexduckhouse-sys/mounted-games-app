@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { heat, session as makeSession } from '../../test/factories';
 import { SessionSharePrint } from './SessionSharePrint';
@@ -109,17 +109,38 @@ describe('ShareTextButtons', () => {
 });
 
 describe('SessionSharePrint', () => {
-  it('links to the print views for this session only', () => {
-    render(<MemoryRouter><SessionSharePrint competition={{ id: 7, name: 'Spring Games' }} session={s1} /></MemoryRouter>);
-    expect(screen.getByRole('link', { name: 'Draw' })).toHaveAttribute('href', '/event-tools/7/print/draw?sessionId=1');
-    expect(screen.getByRole('link', { name: 'Score sheets' })).toHaveAttribute('href', '/event-tools/7/print/score-sheets?sessionId=1');
-    expect(screen.getByRole('link', { name: 'Results' })).toHaveAttribute('href', '/event-tools/7/print/results?sessionId=1');
+  const show = (session: Session) => render(
+    <MemoryRouter initialEntries={['/s']}>
+      <Routes>
+        <Route path="/s" element={<SessionSharePrint competition={{ id: 7, name: 'Spring Games' }} session={session} />} />
+        <Route path="/event-tools/7/print/:view" element={<LocationProbe />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+
+  it('prints one sheet for this session only, picked from a list', async () => {
+    show(s1);
+    await userEvent.click(screen.getByRole('button', { name: 'Print this session' }));
+    expect(screen.getAllByRole('radio').map((option) => option.textContent)).toEqual(['Draw', 'Score sheets', 'Results']);
+    await userEvent.click(screen.getByRole('radio', { name: 'Score sheets' }));
+    expect(await screen.findByTestId('location')).toHaveTextContent('/event-tools/7/print/score-sheets?sessionId=1');
+  });
+
+  it('shows the lanes message before sending it', async () => {
+    show(s1);
+    await userEvent.click(screen.getByRole('button', { name: 'Send the lanes' }));
+    expect(screen.getByText(/Ash A/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Send on WhatsApp' })).toBeInTheDocument();
   });
 
   it('offers no draw to share before there are heats', () => {
-    render(<MemoryRouter><SessionSharePrint competition={{ id: 7, name: 'Spring Games' }} session={{ ...s1, heats: [] }} /></MemoryRouter>);
-    expect(screen.queryByRole('link', { name: 'Send on WhatsApp' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Draw' })).toBeInTheDocument();
+    show({ ...s1, heats: [] });
+    expect(screen.queryByRole('button', { name: 'Send the lanes' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Print this session' })).toBeInTheDocument();
   });
 });
+
+function LocationProbe() {
+  const location = useLocation();
+  return <p data-testid="location">{location.pathname}{location.search}</p>;
+}

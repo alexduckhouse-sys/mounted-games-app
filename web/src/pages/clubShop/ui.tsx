@@ -1,5 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { Check } from 'lucide-react';
+import { Check, ChevronRight } from 'lucide-react';
 import { Sheet } from '../../components/Sheet';
 import { initialsOf } from '../../lib/profile';
 import './clubShop.css';
@@ -48,6 +48,30 @@ export function PickSheet({ title, description, options, value, onPick, onClose,
         </>
       )}
     </Sheet>
+  );
+}
+
+/** A settings row (label on the left, current choice and › on the right) that opens a `PickSheet`. */
+export function PickRow({ label, value, options, onPick, placeholder = '' }: {
+  label: string;
+  value: string | null;
+  options: PickOption[];
+  onPick: (value: string) => void;
+  /** Shown on the right when nothing is chosen, e.g. for a row that only ever runs an action. */
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = options.find((option) => option.value === value)?.label ?? placeholder;
+  return (
+    <>
+      <button type="button" className="flex min-h-14 w-full items-center gap-3 bg-[rgb(var(--mg-surface))] px-4 text-left disabled:opacity-60"
+        aria-label={current ? `${label}: ${current}` : label} aria-haspopup="dialog" disabled={options.length === 0} onClick={() => setOpen(true)}>
+        <span className="flex-1 text-base font-semibold text-[rgb(var(--mg-ink))]">{label}</span>
+        {current && <span className="max-w-[60%] truncate text-base text-[rgb(var(--mg-heading))]">{current}</span>}
+        <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-[rgb(var(--mg-muted))]" strokeWidth={2.5} />
+      </button>
+      {open && <PickSheet title={label} options={options} value={value} onPick={onPick} onClose={() => setOpen(false)} />}
+    </>
   );
 }
 
