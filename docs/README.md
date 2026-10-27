@@ -11,7 +11,7 @@ What each document is for and how far to trust it. When a doc and the code disag
 | `../APP_DESIGN.md` | Goals, scope and agreed domain behaviour. Read before changing behaviour, and update it when a decision lands | Current (2026-10-26) |
 | `decisions.md` | Settled architecture, domain and security decisions (with rejected alternatives and file paths). Check before reopening a question | Current (2026-10-26) |
 | `../PRODUCT_DETAILS.md` | End-to-end competition lifecycle from entries through live scoring, streaming, seasons and payouts, by role | Current (2026-10-26) |
-| `../NEXT_STEPS.md` & `../BUGS.md` | Cross-chat to-do list, confirmed Q&A decisions and code-verified bug catalogue | Current (2026-10-26) |
+| `../NEXT_STEPS.md` & `../BUGS.md` | Cross-chat to-do list, confirmed Q&A decisions and code-verified bug catalogue | Current (2026-10-27) |
 
 ## Audited Workspace Skills (`../.agents/skills/`)
 
@@ -53,7 +53,7 @@ Multi-model audit reports live in `audits/antigravity/`, `audits/claude/`, and `
 
 | File | Use it for |
 | --- | --- |
-| `designs/design-decisions.md` | Settled house style and per-page UI/UX rules (25–26 October 2026) |
+| `designs/design-decisions.md` | Settled house style and per-page UI/UX rules (25–27 October 2026), including the pre-PR UI checklist |
 | `specs/scoring-page-redesign.md` | Full-screen phone scoring (`ScoringSection` + `ScoringParts`), lane cards, hold-to-eliminate, race tools and between-heat views |
 | `specs/creator-wizard.md` | 10-step competition creator wizard (`web/src/pages/admin/creator/`) |
 | `specs/live-stream.md` | Live video through the Cloudflare Realtime SFU: flows, API, limits |
