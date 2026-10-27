@@ -3,6 +3,7 @@ import type { StreamInvoke } from '../../live/streamRuntime';
 import type { CompetitionDetail, LiveStream, ChatMessage, Sponsor, StreamCommand, StreamOverlay, StreamTelemetry } from '../../types';
 import type { OverlaySaveResult } from '../../hooks/useStreamOverlay';
 import type { QueuedScoreCard } from '../../lib/scoreCard';
+import type { PrizeGiving } from '../../lib/prizeGiving';
 
 export interface CompetitionCtx {
   competition: CompetitionDetail;
@@ -32,6 +33,8 @@ export interface CompetitionCtx {
   reloadSponsors?: () => void;
   /** Counts the producer's "skip" instructions, so the sponsor cards on screen can move on. */
   sponsorSkip?: { count: number; at: number };
+  /** The prize-giving the organiser is stepping through on the stream, or null when there is none. */
+  prizeGiving?: PrizeGiving | null;
 }
 
 export const CompetitionContext = createContext<CompetitionCtx | null>(null);

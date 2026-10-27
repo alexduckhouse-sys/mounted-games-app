@@ -33,6 +33,7 @@ export interface LiveHandlers {
   onOverlayUpdated?: (overlay: unknown) => void;
   onScoreCardControl?: (control: unknown) => void;
   onSponsorControl?: (control: unknown) => void;
+  onPrizeGiving?: (prizeGiving: unknown) => void;
   onReady?: () => void;
   onChatMessage?: (msg: unknown) => void;
   onChatMessageDeleted?: (payload: { id: number }) => void;
@@ -130,6 +131,7 @@ export function useLiveHub(competitionId: number | null, handlers: LiveHandlers)
       conn.on('overlayUpdated', broadcast((h, o) => h.onOverlayUpdated?.(o)));
       conn.on('scoreCardControl', broadcast((h, c) => h.onScoreCardControl?.(c)));
       conn.on('sponsorControl', broadcast((h, c) => h.onSponsorControl?.(c)));
+      conn.on('prizeGiving', broadcast((h, p) => h.onPrizeGiving?.(p)));
       conn.on('streamViewers', broadcastCoalesced('streamViewers', (h, p) => h.onStreamViewers?.(p as { streamId: number; count: number })));
       conn.on('chatMessage', broadcast((h, m) => h.onChatMessage?.(m)));
       conn.on('chatMessageDeleted', broadcast((h, p) => h.onChatMessageDeleted?.(p as { id: number })));

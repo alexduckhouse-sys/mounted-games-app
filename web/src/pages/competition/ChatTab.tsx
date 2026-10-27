@@ -508,6 +508,7 @@ function StaffStreamCard({ active, fallback, competitionId, canBroadcast, canEdi
         {!active && <Link className="mg-btn mg-btn-primary" to={`/competitions/${competitionId}/broadcast`}>Go live</Link>}
         <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/stream-controls`}>Control the stream</Link>
         <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/commentary`}>Commentary desk</Link>
+        <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/prize-giving`}>Prize-giving</Link>
       </div>
     )}
     {streamingNotSetUp && <Notice tone="info">Streaming isn’t set up yet. Add the Cloudflare keys to switch it on.</Notice>}

@@ -869,6 +869,7 @@ function SessionScoring() {
                 { key: 'tv', label: 'TV kiosk', sub: 'Big screen for the arena', onSelect: () => navigate(`/competitions/${competition.id}/tv${sectionQuery}`) },
                 { key: 'help', label: 'Call for help', sub: 'Farrier, vet or first aid', onSelect: () => setShowHelp(true) },
                 { key: 'crew', label: 'Arena crew sheet', sub: 'Props to bring in, clear and keep', onSelect: () => navigate(arenaCrewPath(competition.id, session.id, activeHeat?.id)) },
+                { key: 'prizes', label: 'Prize-giving', sub: 'Give the places on the live stream', onSelect: () => navigate(`/competitions/${competition.id}/prize-giving${sectionQuery}`) },
               ]}
               heatTools={(
                 <div className="mt-4 space-y-3 border-t border-[rgb(var(--mg-rule-soft))] pt-3">
