@@ -1,0 +1,74 @@
+/* A search bar with a filter button beside it, the chips that show what is set, and the tile sheet the button opens.
+   The same look as the timetable filter (pages/competition/TimetableBoard.tsx, timetable.css), for the Teams tab, the
+   past competitions page and the season table. */
+.fk-find { display: flex; align-items: center; gap: 8px; }
+.fk-find > label { flex: 1; min-width: 0; }
+.fk-fbtn {
+  position: relative; flex: none; display: flex; align-items: center; justify-content: center; width: 46px; height: 46px; padding: 0;
+  border: 1.5px solid rgb(var(--mg-control)); border-radius: 14px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); cursor: pointer;
+}
+.fk-fbtn:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
+.fk-count {
+  position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; box-sizing: border-box;
+  background: rgb(var(--mg-heading)); color: #fff; font: 700 11px/18px var(--mg-font); text-align: center; box-shadow: 0 0 0 2px rgb(var(--mg-subtle));
+}
+/* On the navy band under the app header (past competitions): see-through button, red count. */
+.fk-band .fk-fbtn { border: 1px solid rgb(var(--mg-header-line)); background: transparent; color: #fff; }
+.fk-band .fk-fbtn:focus-visible { outline-color: #fff; }
+.fk-band .fk-count { background: rgb(var(--mg-red)); box-shadow: 0 0 0 2px rgb(var(--mg-header)); }
+
+/* What is set, tapped to clear. */
+.fk-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.fk-chip {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 0 8px 0 12px; border: 0; border-radius: 16px;
+  background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); font: 600 13px/1 var(--mg-font); cursor: pointer;
+}
+
+/* The heading over a group of rows: its name, then a count (and where). */
+.fk-group-title { display: flex; width: 100%; align-items: baseline; gap: 8px; padding: 0 2px 3px; border-bottom: 1.5px solid rgb(var(--mg-heading)); }
+.fk-group-title :is(h2, h3) { flex: 1; margin: 0; color: rgb(var(--mg-heading)); font: 700 15px/1.1 var(--mg-font-display); letter-spacing: .05em; text-transform: uppercase; }
+.fk-group-title > span { color: rgb(var(--mg-muted)); font: 500 12px/1 var(--mg-font); }
+
+/* The sheet: a heading read aloud only, then groups of tiles and a pill to close. */
+.fk-sheet .kit-sheet-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.fk-group { display: flex; flex-direction: column; gap: 8px; border: 0; margin: 0; padding: 0; min-width: 0; }
+.fk-group > legend, .fk-group > .fk-label { padding: 0; font: 700 14px/1 var(--mg-font); color: rgb(var(--mg-body)); }
+.fk-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.fk-tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-height: 62px; padding: 10px 12px; text-align: left;
+  border: 1px solid rgb(var(--mg-line)); border-radius: 12px; background: rgb(var(--mg-surface)); cursor: pointer;
+}
+.fk-tile > strong { font: 700 19px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
+.fk-tile > span { font: 500 13px/1.2 var(--mg-font); color: rgb(var(--mg-muted)); }
+.fk-tile[aria-pressed="true"] { border-color: rgb(var(--mg-button)); background: rgb(var(--mg-button)); }
+.fk-tile[aria-pressed="true"] > strong, .fk-tile[aria-pressed="true"] > span { color: rgb(var(--mg-button-ink)); }
+/* Short choices (years, places) as wrapping pills. */
+.fk-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.fk-pill {
+  min-height: 40px; padding: 0 14px; border: 1px solid rgb(var(--mg-line)); border-radius: 20px; background: rgb(var(--mg-surface));
+  color: rgb(var(--mg-heading)); font: 600 14px/1 var(--mg-font); cursor: pointer;
+}
+.fk-pill[aria-pressed="true"] { border-color: rgb(var(--mg-button)); background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); }
+.fk-show { width: 100%; }
+
+/* One row that shows what is chosen and opens a sheet (season table). */
+.fk-where {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 48px; padding: 0 10px 0 14px; box-sizing: border-box;
+  border: 1px solid rgb(var(--mg-line)); border-radius: 12px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading));
+  font: 600 15px/1.2 var(--mg-font); text-align: left; cursor: pointer;
+}
+.fk-where > span:first-child { flex: 1; min-width: 0; }
+.fk-where small { margin-left: 6px; color: rgb(var(--mg-muted)); font: 500 13px/1 var(--mg-font); }
+.fk-where:disabled { cursor: default; }
+.fk-where:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
+
+:is(.fk-chip, .fk-tile, .fk-pill, .fk-fbtn, .fk-where) {
+  transition: background-color var(--mg-dur-fast) var(--mg-ease-out), border-color var(--mg-dur-fast) var(--mg-ease-out), color var(--mg-dur-fast) var(--mg-ease-out), scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1);
+}
+:is(.fk-chip, .fk-tile, .fk-pill, .fk-fbtn, .fk-where):active:not(:disabled) { --mg-press-t: 90ms; scale: .96; }
+@media (prefers-reduced-motion: reduce) {
+  :is(.fk-chip, .fk-tile, .fk-pill, .fk-fbtn, .fk-where) { transition: none; }
+  :is(.fk-chip, .fk-tile, .fk-pill, .fk-fbtn, .fk-where):active:not(:disabled) { scale: none; }
+}
+html[data-lite="true"] :is(.fk-chip, .fk-tile, .fk-pill, .fk-fbtn, .fk-where) { transition: none; }
+html[data-lite="true"] :is(.fk-chip, .fk-tile, .fk-pill, .fk-fbtn, .fk-where):active:not(:disabled) { scale: none; }

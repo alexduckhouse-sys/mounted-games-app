@@ -1,21 +1,22 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { FollowStar } from '../../components/FollowStar';
-import { Plus, Save, ClipboardList, Ban, Flag, Search } from 'lucide-react';
+import { Plus, Save, ClipboardList, Ban, Flag, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useFavourites } from '../../hooks/useFavourites';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
-import type { Club, DeclarationForm, Team } from '../../types';
+import type { Club, DeclarationForm, Session, Team } from '../../types';
 import { parseBibAndFlag } from '../../lib/bib';
 import { displaySectionName } from '../../lib/section';
 import { Notice } from '../../components/Notice';
 import { SelectField } from '../../components/SelectField';
-import { DropdownRow } from '../../components/DropdownRow';
+import { Sheet } from '../../components/Sheet';
 import { PageGrid } from '../../components/PageGrid';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { useT } from '../../i18n/LanguageContext';
+import '../../components/filterKit.css';
 
 export function TeamsTab() {
   usePageWidth('wide');
@@ -28,6 +29,7 @@ export function TeamsTab() {
   const mayAssignTrainers = canEdit() || canOrganise(competition);
   const [sectionId, setSectionId] = useState<number | 'all'>('all');
   const [search, setSearch] = useState('');
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [clubs, setClubs] = useState<Club[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [decFormTeamIds, setDecFormTeamIds] = useState<Set<number>>(new Set());
@@ -222,7 +224,10 @@ export function TeamsTab() {
 
       {grouped.map(([section, sectionTeams]) => (
         <section key={section} aria-label={displaySectionName(section)} className="flex flex-col gap-2">
-          <h3 className="mg-display px-0.5 pt-2 text-[15px] font-bold uppercase leading-tight tracking-[0.05em] text-[rgb(var(--mg-heading))]">{displaySectionName(section)}</h3>
+          <div className="fk-group-title pt-2">
+            <h3>{displaySectionName(section)}</h3>
+            <span>{teamsInGroup(sectionTeams.length, arenaOf(competition.sessions, sectionTeams[0]?.competitionSectionId))}</span>
+          </div>
           <ul className="mg-card divide-y divide-[rgb(var(--mg-rule-soft))] overflow-hidden">
             {sectionTeams.map((team) => {
               const hasDec = decFormTeamIds.has(team.id);
@@ -296,7 +301,7 @@ export function TeamsTab() {
     </>
   );
 
-  const searchBar = (
+  const searchField = (
     <label className="flex h-[46px] items-center gap-2.5 rounded-full border-[1.5px] border-[rgb(var(--mg-control))] bg-[rgb(var(--mg-surface))] px-4 text-[rgb(var(--mg-muted))] focus-within:border-[rgb(var(--mg-heading))]">
       <Search aria-hidden="true" className="h-[18px] w-[18px] shrink-0" strokeWidth={2.2} />
       <input
@@ -309,7 +314,18 @@ export function TeamsTab() {
       />
     </label>
   );
-  const sectionOptions = [{ value: 'all', label: t('teams.list.allAgeGroups') }, ...competition.sections.map((sec) => ({ value: String(sec.id), label: displaySectionName(sec.displayName) }))];
+  const sectionLabel = sectionId === 'all' ? '' : displaySectionName(competition.sections.find((sec) => sec.id === sectionId)?.displayName ?? '');
+  const filterLabel = t('teams.list.ageGroup');
+  const searchBar = desktop ? searchField : (
+    <div className="fk-find">
+      {searchField}
+      <button type="button" className="fk-fbtn" aria-label={sectionLabel ? `${filterLabel}, 1 set` : filterLabel} onClick={() => setSheetOpen(true)}>
+        <SlidersHorizontal aria-hidden="true" className="h-5 w-5" />
+        {sectionLabel && <span className="fk-count" aria-hidden="true">1</span>}
+      </button>
+    </div>
+  );
+  const shownCount = (id: number | 'all') => (id === 'all' ? competition.teams : competition.teams.filter((team) => team.competitionSectionId === id)).length;
 
   return (
     <div className="space-y-3 pt-2">
@@ -323,13 +339,50 @@ export function TeamsTab() {
         </PageGrid>
       ) : (
         <>
-          <DropdownRow label={t('teams.list.ageGroup')} value={String(sectionId)} options={sectionOptions} onChange={(value) => setSectionId(value === 'all' ? 'all' : Number(value))} />
+          {sectionLabel && (
+            <div className="fk-chips">
+              <button type="button" className="fk-chip" aria-label={`Remove ${sectionLabel}`} onClick={() => setSectionId('all')}>
+                {sectionLabel}<X aria-hidden="true" size={15} strokeWidth={2.2} />
+              </button>
+            </div>
+          )}
           {canCreate && <div>{addButton}</div>}
           {teamBlocks}
         </>
       )}
+      {sheetOpen && !desktop && (
+        <Sheet title={filterLabel} className="fk-sheet" onClose={() => setSheetOpen(false)}>
+          {({ close }) => (
+            <>
+              <div className="fk-tiles" role="group" aria-label={filterLabel}>
+                {[{ id: 'all' as const, label: t('teams.list.allAgeGroups') }, ...competition.sections.map((sec) => ({ id: sec.id, label: displaySectionName(sec.displayName) }))].map((option) => (
+                  <button key={option.id} type="button" className="fk-tile" aria-pressed={sectionId === option.id} onClick={() => setSectionId(option.id)}>
+                    <strong>{option.label}</strong>
+                    <span>{shownCount(option.id) === 1 ? '1 team' : `${shownCount(option.id)} teams`}</span>
+                  </button>
+                ))}
+              </div>
+              <button type="button" className="kit-pill kit-pill-fill fk-show" onClick={() => close()}>
+                Show {grouped.reduce((sum, [, list]) => sum + list.length, 0)} {grouped.reduce((sum, [, list]) => sum + list.length, 0) === 1 ? 'team' : 'teams'}
+              </button>
+            </>
+          )}
+        </Sheet>
+      )}
     </div>
   );
+}
+
+/** "7 teams · Main Arena": how many teams ride in an age group, and where when every session of it is in one arena. */
+function teamsInGroup(count: number, arena: string): string {
+  return [count === 1 ? '1 team' : `${count} teams`, arena].filter(Boolean).join(' · ');
+}
+
+/** The one arena an age group's sessions use, or '' when it has none named or more than one. */
+function arenaOf(sessions: Session[], sectionId: number | null | undefined): string {
+  if (sectionId == null) return '';
+  const arenas = new Set(sessions.filter((session) => session.competitionSectionId === sectionId && !session.isBreak).map((session) => session.arenaName?.trim()).filter((name): name is string => !!name));
+  return arenas.size === 1 ? [...arenas][0] : '';
 }
 
 /** Lets an organiser put one of the team's club trainers in charge of it. */
