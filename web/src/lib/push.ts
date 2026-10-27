@@ -55,32 +55,45 @@ export function pushSupported(): boolean {
     && 'Notification' in window;
 }
 
+/** Why switching alerts on did or didn't work. "server" is our side refusing or unreachable; "browser" is the browser refusing. */
+export type PushResult = 'ok' | 'unsupported' | 'denied' | 'browser' | 'server';
+
 /**
  * Subscribe the browser for web-push notifications and register the endpoint
- * with the backend. No-op if push isn't supported or the user hasn't granted
- * notification permission yet.
+ * with the backend, and say how it went. Only 'ok' means alerts will arrive.
  */
-export async function subscribeForPush(): Promise<boolean> {
-  if (!pushSupported()) return false;
-  if (Notification.permission !== 'granted') return false;
+export async function subscribeForPushResult(): Promise<PushResult> {
+  if (!pushSupported()) return 'unsupported';
+  if (Notification.permission !== 'granted') return Notification.permission === 'denied' ? 'denied' : 'browser';
+  let sub: globalThis.PushSubscription | null;
   try {
     const reg = await waitForPush(navigator.serviceWorker.ready);
-    const existing = await reg.pushManager.getSubscription();
-    if (existing) {
-      await sendSubscription(existing);
-      return true;
+    sub = await waitForPush(reg.pushManager.getSubscription());
+    if (!sub) {
+      let publicKey: string;
+      try {
+        publicKey = (await api.get<{ publicKey: string }>('/push/vapid-public-key')).data.publicKey;
+      } catch { return 'server'; }
+      if (!publicKey) return 'server';
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToBuffer(publicKey),
+      });
     }
-    const { data } = await api.get<{ publicKey: string }>('/push/vapid-public-key');
-    if (!data.publicKey) return false;
-    const sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToBuffer(data.publicKey),
-    });
-    await sendSubscription(sub);
-    return true;
   } catch {
-    return false;
+    return 'browser';
   }
+  try {
+    await sendSubscription(sub);
+    return 'ok';
+  } catch {
+    return 'server';
+  }
+}
+
+/** True only when the browser is subscribed and the server accepted it. */
+export async function subscribeForPush(): Promise<boolean> {
+  return (await subscribeForPushResult()) === 'ok';
 }
 
 export async function unsubscribeFromPush(): Promise<void> {

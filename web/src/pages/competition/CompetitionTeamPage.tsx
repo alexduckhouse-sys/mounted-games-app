@@ -18,14 +18,14 @@ import { resultStatusLabel } from '../../lib/resultStatusText';
 import { displaySectionName } from '../../lib/section';
 import { computeTimings } from '../../lib/time';
 import { timetableRows, TIMETABLE_COLOURS, type TimetableStatus } from '../../lib/timetableRows';
-import { formatDelayDuration } from '../../lib/time';
+import { formatDelayDuration, formatTime } from '../../lib/time';
 import { buildToplist, type TeamBlock } from '../../lib/toplist';
 import { localOrdinal as ordinal } from '../../lib/ordinalText';
 import { useT } from '../../i18n/LanguageContext';
 import { activeLocale } from '../../i18n/translate';
 import type { DeclarationForm, Heat, Session, StandingRow } from '../../types';
 import { useCompetition } from './context';
-import { nextHeats } from '../../lib/following';
+import { heatName, nextHeats } from '../../lib/following';
 import { publicRiderName } from '../../lib/riderNames';
 import { statsProfileHref } from '../../lib/stats';
 import { StatsSubjectKind } from '../../types';
@@ -194,6 +194,9 @@ export function CompetitionTeamPage() {
   );
   const nextState = team ? nextMap.get(team.id) : undefined;
 
+  // Under way: a session is in the arena, or this team's next heat is on now.
+  const underWay = competition.sessions.some((s) => s.status === 1) || (nextState?.kind === 'heat' && nextState.row.status === 'live');
+
   const teamStats = useMemo(() => {
     if (!team) return null;
     let scoredRaces = 0;
@@ -344,6 +347,31 @@ export function CompetitionTeamPage() {
         </dl>
 
       </section>
+
+      {/* Where the team is next: shown first when there are no stats yet or the event is under way */}
+      {nextState?.kind === 'heat' && (!teamStats || underWay) && (() => {
+        const { row: nextRow } = nextState;
+        const lane = drawnHeats.find((d) => d.heat.id === nextRow.heat?.id)?.lane ?? nextState.lane;
+        const arena = nextRow.session.arenaName?.trim();
+        const isFinal = nextRow.group === 'Finals' || nextRow.heat?.raceRoundStage === 2;
+        const live = nextRow.status === 'live';
+        return (
+          <section aria-labelledby="team-next-title" className="flex flex-col gap-2">
+            <h2 id="team-next-title" className={heading}>{live ? t('teams.team.onNow') : t('teams.team.nextHeat')}</h2>
+            <div className="mg-card flex items-center gap-3 px-4 py-3">
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-base font-semibold leading-tight text-[rgb(var(--mg-ink))]">
+                  {nextRow.session.name} · {heatName(nextRow)}{isFinal ? '' : ` · ${t('teams.team.lane', { number: lane })}`}
+                </span>
+                <span className="text-[13.5px] leading-tight text-[rgb(var(--mg-muted))]">
+                  {arena || t('teams.team.arenaTbc')}
+                </span>
+              </div>
+              <span className="mg-display shrink-0 text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]">{formatTime(nextRow.effective)}</span>
+            </div>
+          </section>
+        );
+      })()}
 
       {/* One Heats list: a heat shows its lane, a final doesn't (final lanes come from the rankings) */}
       <section aria-labelledby="team-heats-title" className="flex flex-col gap-2">

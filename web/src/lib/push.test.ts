@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
-import { pushSupported, readPushReadiness, subscribeForPush, unsubscribeFromPush } from './push';
+import { pushSupported, readPushReadiness, subscribeForPush, subscribeForPushResult, unsubscribeFromPush } from './push';
 
 vi.mock('../api', () => ({ api: { get: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
 const get = vi.mocked(api.get);
@@ -223,6 +223,43 @@ describe('subscribeForPush', () => {
     expect(await subscribeForPush()).toBe(false);
     get.mockRejectedValue(new Error('offline'));
     expect(await subscribeForPush()).toBe(false);
+  });
+});
+
+describe('subscribeForPushResult', () => {
+  beforeEach(() => {
+    post.mockResolvedValue({ data: {} });
+    get.mockResolvedValue({ data: { publicKey: 'AQID' } });
+  });
+
+  it('says why it could not subscribe', async () => {
+    expect(await subscribeForPushResult()).toBe('unsupported');
+    setup({ permission: 'denied' });
+    expect(await subscribeForPushResult()).toBe('denied');
+    setup({ permission: 'default' });
+    expect(await subscribeForPushResult()).toBe('browser');
+  });
+
+  it('blames the browser when it will not subscribe', async () => {
+    const { pushManager } = setup();
+    pushManager.subscribe.mockRejectedValue(new Error('no'));
+    expect(await subscribeForPushResult()).toBe('browser');
+  });
+
+  it('blames the server when it has no key, cannot be reached or rejects the subscription', async () => {
+    setup();
+    get.mockResolvedValue({ data: { publicKey: '' } });
+    expect(await subscribeForPushResult()).toBe('server');
+    get.mockRejectedValue(new Error('offline'));
+    expect(await subscribeForPushResult()).toBe('server');
+    get.mockResolvedValue({ data: { publicKey: 'AQID' } });
+    post.mockRejectedValue(new Error('400'));
+    expect(await subscribeForPushResult()).toBe('server');
+  });
+
+  it('says ok once the server has accepted it', async () => {
+    setup();
+    expect(await subscribeForPushResult()).toBe('ok');
   });
 });
 
