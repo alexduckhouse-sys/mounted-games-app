@@ -95,6 +95,81 @@ public class DeclarationFormsController : ControllerBase
         return forms.Select(d => d.ToDto(CanReadPrivate(d, helping, mySignupTeamIds), entryNames.GetValueOrDefault(d.TeamId)));
     }
 
+    [HttpGet("my-saved-teams")]
+    [Authorize]
+    public async Task<ActionResult<IReadOnlyList<SavedTeamDeclarationDto>>> ListMySavedTeams(
+        [FromQuery] int? excludeTeamId = null,
+        CancellationToken ct = default)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(uid)) return Unauthorized();
+
+        var mySignupTeamIds = await SignedUpTeamIdsAsync(uid);
+        var myClubId = await _db.ClubIdOfAsync(User, ct);
+        var isClubManager = myClubId.HasValue && await _db.IsClubManagerAsync(User, myClubId.Value, ct);
+
+        var q = _db.DeclarationForms
+            .AsNoTracking()
+            .Include(d => d.Team).ThenInclude(t => t!.Club)
+            .Include(d => d.Team).ThenInclude(t => t!.Competition)
+            .Include(d => d.Team).ThenInclude(t => t!.Section)
+            .Include(d => d.SubmittedBy)
+            .Include(d => d.Riders)
+            .Where(d => d.Team != null && d.Riders.Count > 0)
+            .Where(d => d.SubmittedByUserId == uid
+                || d.Team!.TrainerUserId == uid
+                || mySignupTeamIds.Contains(d.TeamId)
+                || (isClubManager && d.Team!.ClubId == myClubId!.Value));
+
+        if (excludeTeamId.HasValue)
+            q = q.Where(d => d.TeamId != excludeTeamId.Value);
+
+        var forms = await q
+            .OrderByDescending(d => d.SubmittedAt)
+            .ThenByDescending(d => d.Id)
+            .ToListAsync(ct);
+
+        var entryNames = await EntryTeamNamesAsync(forms.Select(d => d.TeamId));
+        var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<SavedTeamDeclarationDto>();
+
+        foreach (var d in forms)
+        {
+            var team = d.Team!;
+            var section = team.Section;
+            var normName = (team.DisplayName ?? string.Empty).Trim().ToLowerInvariant();
+            var normAge = (section?.AgeGroup ?? string.Empty).Trim().ToLowerInvariant();
+            var format = section?.Format ?? SectionFormat.Teams;
+            var key = $"{team.ClubId}:{normName}:{(int)format}:{normAge}";
+            if (!seenKeys.Add(key)) continue;
+
+            var dto = d.ToDto(includePrivate: true, entryNames.GetValueOrDefault(d.TeamId));
+            result.Add(new SavedTeamDeclarationDto(
+                FormId: d.Id,
+                TeamId: team.Id,
+                TeamName: team.DisplayName ?? string.Empty,
+                ClubId: team.ClubId,
+                ClubName: team.Club?.Name ?? string.Empty,
+                CompetitionId: team.CompetitionId,
+                CompetitionName: team.Competition?.Name ?? string.Empty,
+                CompetitionStartDate: team.Competition?.StartDate ?? d.SubmittedAt,
+                SectionId: team.CompetitionSectionId,
+                SectionName: section?.DisplayName ?? string.Empty,
+                Format: format,
+                AgeGroup: section?.AgeGroup ?? string.Empty,
+                SubmittedAt: d.SubmittedAt,
+                Form: dto,
+                Riders: dto.Riders,
+                EntryTeamName: dto.EntryTeamName,
+                BibDescription: dto.BibDescription,
+                TrainerName: dto.TrainerName,
+                TrainerPhone: dto.TrainerPhone));
+        }
+
+        return result;
+    }
+
     [HttpGet("{id:int}")]
     public async Task<ActionResult<DeclarationFormDto>> Get(int id)
     {

@@ -9,6 +9,16 @@ public class VolunteerShift
     public Session? Session { get; set; }
     public string? ArenaName { get; set; }
     public string Role { get; set; } = string.Empty;
+    public string DutyCategory { get; set; } = "Custom";
+    public int? AssignedTeamId { get; set; }
+    public Team? AssignedTeam { get; set; }
+    public string? AssignedClubName { get; set; }
+    public int? LaneNumber { get; set; }
+    public string AttendanceStatus { get; set; } = "Assigned";
+    public DateTime? CheckedInAt { get; set; }
+    public string? CheckedInByName { get; set; }
+    public string? CheckedInByUserId { get; set; }
+    public bool CheckedInByStaffOverride { get; set; }
     public string? StartTimeLabel { get; set; }
     public string? Notes { get; set; }
     public int RequiredCount { get; set; } = 1;

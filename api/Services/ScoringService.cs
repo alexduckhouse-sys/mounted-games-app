@@ -237,6 +237,8 @@ public class ScoringService
                 {
                     session.Status = SessionStatus.InArena;
                     session.FinishedAt = null;
+                    session.ProvisionalUntil = null;
+                    session.OfficialConfirmedAt = null;
                 }
             }
             state.Revision++;
@@ -721,6 +723,8 @@ public class ScoringService
                 {
                     session.Status = SessionStatus.Finished;
                     session.FinishedAt ??= now;
+                    session.ProvisionalUntil = now.AddMinutes(15);
+                    session.OfficialConfirmedAt = null;
                     await _db.SaveChangesAsync(cancellationToken);
                 }
             }

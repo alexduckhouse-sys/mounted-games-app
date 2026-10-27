@@ -147,9 +147,20 @@ public class SessionsController : ControllerBase
             .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
         if (s is null) return NotFound();
 
+        var now = DateTime.UtcNow;
         s.Status = req.Status;
-        if (req.Status == SessionStatus.InArena && s.StartedAt is null) s.StartedAt = DateTime.UtcNow;
-        if (req.Status == SessionStatus.Finished && s.FinishedAt is null) s.FinishedAt = DateTime.UtcNow;
+        if (req.Status == SessionStatus.InArena && s.StartedAt is null) s.StartedAt = now;
+        if (req.Status == SessionStatus.Finished)
+        {
+            s.FinishedAt ??= now;
+            s.ProvisionalUntil = now.AddMinutes(15);
+            s.OfficialConfirmedAt = null;
+        }
+        else
+        {
+            s.ProvisionalUntil = null;
+            s.OfficialConfirmedAt = null;
+        }
         await _db.SaveChangesAsync();
 
         var dto = s.ToDto();
@@ -180,6 +191,59 @@ public class SessionsController : ControllerBase
         await _live.ChatMessage(competitionId, systemMessage.ToDto());
 
         return dto;
+    }
+
+    [HttpPost("{id:int}/confirm-official")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<SessionDto>> ConfirmOfficial(
+        int competitionId,
+        int id,
+        [FromBody] ConfirmSessionOfficialRequest? req = null)
+    {
+        var s = await SessionsWithDetail()
+            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+        if (s is null) return NotFound();
+        if (s.Status != SessionStatus.Finished)
+            return Conflict(new { message = "Only finished sessions can have their results confirmed." });
+
+        var now = DateTime.UtcNow;
+        if (req?.ReopenQueries == true)
+        {
+            var minutes = Math.Clamp(req.ProvisionalMinutes ?? 15, 1, 120);
+            s.OfficialConfirmedAt = null;
+            s.ProvisionalUntil = now.AddMinutes(minutes);
+        }
+        else
+        {
+            var hasUnderReview = s.Heats.Any(h => h.Races.Any(r => r.Results.Any(res => ScoringService.IsUnderReview(res.RefereeNote))));
+            if (hasUnderReview)
+                return Conflict(new { message = "Resolve or clear all results flagged under review before confirming official results." });
+
+            s.OfficialConfirmedAt = now;
+            s.ProvisionalUntil = now;
+        }
+
+        await _db.SaveChangesAsync();
+        var dto = s.ToDto();
+        await _live.SessionUpdated(competitionId, dto);
+        return dto;
+    }
+
+    [HttpGet("{id:int}/heats/{heatId:int}/commentator-briefing")]
+    [AllowAnonymous]
+    public async Task<ActionResult<CommentatorBriefingDto>> GetCommentatorBriefing(
+        int competitionId,
+        int id,
+        int heatId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await new CommentatorBriefingService(_db)
+                .GetAsync(competitionId, id, heatId, cancellationToken);
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
     }
 
     [HttpDelete("{id:int}")]

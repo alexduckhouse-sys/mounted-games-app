@@ -14,6 +14,8 @@ public class Session
     public DateTime? ScheduledStart { get; set; }
     public DateTime? StartedAt { get; set; }
     public DateTime? FinishedAt { get; set; }
+    public DateTime? ProvisionalUntil { get; set; }
+    public DateTime? OfficialConfirmedAt { get; set; }
     public SessionStatus Status { get; set; } = SessionStatus.Upcoming;
     public int OrderIndex { get; set; }
     public string? Notes { get; set; }

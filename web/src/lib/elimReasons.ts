@@ -6,10 +6,21 @@ export interface ElimReason { key: string; label: string; status: number }
 export const OTHER_REASON = 'other';
 
 export const ELIM_REASONS: readonly ElimReason[] = [
+  { key: 'obstruction', label: 'Obstruction', status: RESULT_STATUS.Eliminated },
+  { key: 'hatband', label: 'Hatband on wrong rider', status: RESULT_STATUS.Eliminated },
+  { key: 'prop_not_replaced', label: 'Prop not replaced', status: RESULT_STATUS.Eliminated },
+  { key: 'handover', label: 'Handover fault', status: RESULT_STATUS.Eliminated },
   { key: 'flag', label: 'Missed a flag or pot', status: RESULT_STATUS.Eliminated },
   { key: 'equipment', label: 'Dropped equipment', status: RESULT_STATUS.Eliminated },
   { key: 'lanes', label: 'Crossed lanes', status: RESULT_STATUS.Eliminated },
   { key: 'course', label: 'Wrong course', status: RESULT_STATUS.Eliminated },
+  { key: 'foot_down', label: 'Foot on ground', status: RESULT_STATUS.Eliminated },
+  { key: 'mount_line', label: 'Mount / dismount line', status: RESULT_STATUS.Eliminated },
+  { key: 'unmounted_finish', label: 'Not mounted at finish', status: RESULT_STATUS.Eliminated },
+  { key: 'outside_assistance', label: 'Outside assistance', status: RESULT_STATUS.Eliminated },
+  { key: 'fifth_rider', label: '5th rider in ring', status: RESULT_STATUS.Eliminated },
+  { key: 'broken_equipment', label: 'Broken equipment', status: RESULT_STATUS.Eliminated },
+  { key: 'dangerous_riding', label: 'Dangerous riding', status: RESULT_STATUS.Eliminated },
   { key: 'dns', label: 'Did not start', status: RESULT_STATUS.DidNotStart },
   { key: 'dnf', label: 'Did not finish', status: RESULT_STATUS.DidNotFinish },
   { key: 'retired', label: 'Retired', status: RESULT_STATUS.Retired },

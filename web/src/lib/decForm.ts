@@ -1,5 +1,5 @@
-import type { DeclarationForm, RiderEntry, SavedRider, SectionFormat } from '../types';
-import { formatBibWithFlag } from './bib';
+import type { DeclarationForm, RiderEntry, SavedRider, SavedTeamDeclaration, SectionFormat } from '../types';
+import { formatBibWithFlag, parseBibAndFlag } from './bib';
 import {
   asked, blankExtras, normalisePhone, PHONE_HELP, breach, extraIssues, extrasBody, extrasFromEntry, extrasReady, STANDARD_CONFIG, type DecFormConfig, type ExtraAnswers,
 } from './decFormConfig';
@@ -341,4 +341,121 @@ export function parseDraft(raw: string | null, required: number): DecFormDraft |
 /** The line under the team name: "U10 · Cheshire Area MG · Sat 24 Oct". Parts that are missing are left out. */
 export function subtitleOf(parts: readonly (string | null | undefined)[]): string {
   return parts.map((p) => p?.trim()).filter(Boolean).join(' · ');
+}
+
+/** Warning raised when a rider from a saved team looks older than the target section's age band. */
+export interface SavedTeamAgeWarning {
+  slotIndex: number;
+  riderName: string;
+  birthYear: number;
+  ageInCompetitionYear: number;
+  maxAge: number;
+  message: string;
+}
+
+export interface AppliedSavedTeamResult {
+  slots: Slot[];
+  teamName: string;
+  bibs: string;
+  flag: string;
+  trainerName: string;
+  phone: string;
+  ageWarnings: SavedTeamAgeWarning[];
+}
+
+/**
+ * Extracts the maximum age (as of 1 January / competition year) from a section or age-group label such as
+ * `"U12"`, `"Under 15"`, `"U17 Pairs"`, or `"Junior"` (U15). Returns `null` for Open / Senior sections.
+ */
+export function parseAgeGroupMaxAge(ageGroupOrSection: string | null | undefined): number | null {
+  const raw = ageGroupOrSection?.trim() ?? '';
+  if (!raw) return null;
+  const underMatch = /\b(?:u|under[\s-]*)(\d{1,2})\b/i.exec(raw);
+  if (underMatch) {
+    const n = Number(underMatch[1]);
+    return n >= 6 && n <= 25 ? n : null;
+  }
+  if (/\bjunior\b/i.test(raw)) return 15;
+  return null;
+}
+
+function birthYearFromRider(rider: DecRider): number | null {
+  const dobMatch = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(rider.dob.trim());
+  if (dobMatch) return Number(dobMatch[3]);
+  if (/^\d{4}$/.test(rider.extra.birthYear.trim())) return Number(rider.extra.birthYear.trim());
+  return null;
+}
+
+/**
+ * Readable label for a saved team in the "Auto-fill from a previous team" picker, e.g.
+ * `"Kent A · U15 · Summer Champs (5 riders)"`.
+ */
+export function savedTeamSummaryLabel(savedTeam: SavedTeamDeclaration): string {
+  const ridingCount = savedTeam.riders.filter((r) => !r.isReserve).length;
+  const reserveCount = savedTeam.riders.filter((r) => r.isReserve).length;
+  const countText = reserveCount > 0 ? `${ridingCount} riders + reserve` : `${ridingCount} ${ridingCount === 1 ? 'rider' : 'riders'}`;
+  const head = subtitleOf([savedTeam.entryTeamName || savedTeam.teamName, savedTeam.ageGroup || savedTeam.sectionName, savedTeam.competitionName]);
+  return `${head} (${countText})`;
+}
+
+/**
+ * Applies a previously declared team (`SavedTeamDeclaration`) onto a declaration form for `targetFormat`,
+ * copying riders, ponies, heights, privacy flags, bib/flag, and trainer contact while checking whether any
+ * rider exceeds the target section's age band for `competitionYear`.
+ */
+export function applySavedTeamToForm(
+  savedTeam: SavedTeamDeclaration,
+  targetFormat: SectionFormat | undefined,
+  config: DecFormConfig = STANDARD_CONFIG,
+  options?: {
+    targetAgeGroup?: string | null;
+    competitionYear?: number | null;
+  },
+): AppliedSavedTeamResult {
+  const required = ridersRequired(targetFormat);
+  const ordered = savedTeam.riders.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+  const reserveEntry = hasReserveSlotForRiders(required) ? ordered.find((r) => r.isReserve) : undefined;
+  const ridingEntries = ordered.filter((r) => r !== reserveEntry && !r.isReserve);
+
+  const slots = emptySlots(required);
+  for (let i = 0; i < Math.min(required, ridingEntries.length); i++) {
+    slots[i] = riderFromEntry(ridingEntries[i], config);
+  }
+  if (reserveEntry && hasReserveSlotForRiders(required)) {
+    slots[slots.length - 1] = riderFromEntry(reserveEntry, config);
+  }
+
+  const parsedBib = parseBibAndFlag(savedTeam.bibDescription);
+  const maxAge = parseAgeGroupMaxAge(options?.targetAgeGroup);
+  const compYear = options?.competitionYear ?? null;
+  const ageWarnings: SavedTeamAgeWarning[] = [];
+
+  if (maxAge !== null && compYear !== null && compYear >= 2000) {
+    slots.forEach((slot, idx) => {
+      if (!slot) return;
+      const birthYear = birthYearFromRider(slot);
+      if (birthYear === null) return;
+      const ageInCompYear = compYear - birthYear;
+      if (ageInCompYear > maxAge) {
+        ageWarnings.push({
+          slotIndex: idx,
+          riderName: slot.fullName,
+          birthYear,
+          ageInCompetitionYear: ageInCompYear,
+          maxAge,
+          message: `${slot.fullName} turns ${ageInCompYear} in ${compYear} (check U${maxAge} eligibility).`,
+        });
+      }
+    });
+  }
+
+  return {
+    slots,
+    teamName: (savedTeam.entryTeamName || savedTeam.teamName || '').trim(),
+    bibs: parsedBib.bib,
+    flag: parsedBib.flag ?? '',
+    trainerName: (savedTeam.trainerName ?? '').trim(),
+    phone: (savedTeam.trainerPhone ?? '').trim(),
+    ageWarnings,
+  };
 }
