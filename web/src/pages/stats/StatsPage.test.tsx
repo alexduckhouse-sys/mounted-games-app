@@ -66,12 +66,19 @@ describe('StatsPage browse', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Loading…');
     const link = await screen.findByRole('link', { name: /Oliver S\./ });
     expect(link).toHaveAttribute('href', '/stats/riders?name=oliver%20s.');
-    // A rider shown by surname initial keeps that form and says so; the others read "Surname, Given" with a count under them.
-    expect(link).toHaveTextContent('Oliver S.Shown by surname initial · 2 competitions');
-    expect(screen.getByRole('link', { name: /Barker, Arthur/ })).toHaveTextContent('Barker, Arthur2 competitions');
+    // A rider shown by surname initial keeps that form; the others read "Surname, Given". Nothing sits under a name.
+    expect(link).toHaveTextContent(/^Oliver S\.$/);
+    expect(screen.getByRole('link', { name: /Barker, Arthur/ })).toHaveTextContent(/^Barker, Arthur$/);
+    expect(screen.queryByText(/competitions?$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Shown by surname initial/)).not.toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)).toEqual(['B', 'J', 'O']);
     expect(screen.getByRole('region', { name: 'Riders B' })).toHaveTextContent('2 riders');
-    expect(within(screen.getByRole('list', { name: 'Riders B' })).getAllByRole('link').map((row) => row.textContent?.split('2 comp')[0])).toEqual(['Barker, Arthur', 'Barker, Owen']);
+    // Each letter's card is its own list with its full height, and clear space (not a tight 12px) before the next heading.
+    const sections = screen.getAllByRole('region').filter((region) => region.getAttribute('aria-label')?.startsWith('Riders '));
+    expect(sections).toHaveLength(3);
+    for (const section of sections) expect(section).toHaveClass('mt-8');
+    expect(within(sections[0]).getByRole('list')).toHaveClass('sp-card', 'mt-2');
+    expect(within(screen.getByRole('list', { name: 'Riders B' })).getAllByRole('link').map((row) => row.textContent)).toEqual(['Barker, Arthur', 'Barker, Owen']);
     expect(screen.queryByText(/found/)).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Season tables|Past competitions/ })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Riders' })).toHaveAttribute('aria-current', 'page');

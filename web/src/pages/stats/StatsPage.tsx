@@ -80,13 +80,13 @@ function BrowseResults({ list, kind, plural: noun, label, words }: { list: Extra
   const remaining = list.total - list.items.length;
   return <>
     {kind === StatsSubjectKind.Rider
-      ? groupRiders(list.items).map((group) => <section key={group.letter} aria-label={`Riders ${group.letter}`}>
-        <div className="fk-group-title mt-3">
+      ? groupRiders(list.items).map((group) => <section key={group.letter} aria-label={`Riders ${group.letter}`} className="mt-8 first:mt-4">
+        <div className="fk-group-title">
           <h2>{group.letter}</h2>
           {/* Only a full list can be counted by letter; more pages would add to it. */}
           {remaining <= 0 && <span>{plural(group.riders.length, 'rider')}</span>}
         </div>
-        <ul className="sp-card sp-gap m-0 list-none p-0" aria-label={`Riders ${group.letter}`}>{group.riders.map((line) => <RiderRow key={line.hit.key} line={line} />)}</ul>
+        <ul className="sp-card mt-2 list-none p-0" aria-label={`Riders ${group.letter}`}>{group.riders.map((line) => <RiderRow key={line.hit.key} line={line} />)}</ul>
       </section>)
       : <ul className="sp-card sp-gap m-0 list-none p-0" aria-label={label}>{list.items.map((hit) => <HitRow key={hit.key} hit={hit} />)}</ul>}
     {list.moreError && <Notice className="mt-3">{list.moreError}</Notice>}
@@ -97,15 +97,11 @@ function BrowseResults({ list, kind, plural: noun, label, words }: { list: Extra
   </>;
 }
 
-/** "Barker, Arthur" with the number of competitions under it; the club is not in the browse list yet. */
+/** "Barker, Arthur", surname first; nothing under it. */
 function RiderRow({ line }: { line: RiderLine }) {
   const { hit } = line;
-  const count = plural(hit.competitions, 'competition');
   return <li><Link to={statsProfileHref(hit.kind, hit.key)} className="sp-row">
-    <span className="sp-grow">
-      <span className="sp-t1 sp-big">{line.given ? <>{line.surname}, <span className="font-medium">{line.given}</span></> : line.surname}</span>
-      <span className="sp-t2">{line.initialOnly ? `Shown by surname initial · ${count}` : count}</span>
-    </span>
+    <span className="sp-grow"><span className="sp-t1 sp-big">{line.given ? <>{line.surname}, <span className="font-medium">{line.given}</span></> : line.surname}</span></span>
     <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
   </Link></li>;
 }
