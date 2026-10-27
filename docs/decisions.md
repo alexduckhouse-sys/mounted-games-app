@@ -1,5 +1,20 @@
 # Project decisions
 
+## 2026-10-27: Heat-result pushes wait for the iOS app decision; family accounts are a maybe
+- Why: the owner wants push notifications for a followed team's heat results ("Came 2nd in Heat 3, now 4th overall") considered together with the native iOS app and Live Activities, not built for web push first. Family accounts (one parent account holding several children's rider and pony details) were called "meh": possible later, not now.
+- Rejected for now: heat-result web pushes on their own; family accounts.
+- Revisit if: the iOS app debate (`docs/plans/2026-10-27-codex-debate-handoff.md`, item 1) is settled, or parents ask for one login for several children.
+- Also settled the same day: chat slow mode during finals is not being built unless the owner asks again; qualifying is shown only as a short "Through to Zones" mark, not a full road-to-the-championships tracker.
+- Files: none yet.
+- Source: chat, 27 October 2026.
+
+## 2026-10-27: Not building club training mode, pony workload caps, rider grading or a photographer hookup
+- Why: the owner reviewed a list of feature ideas and called these four not useful. Training mode, workload caps and grading don't match how clubs actually run. Event photography happens off site, outside the app.
+- Rejected: practice-race scoring with a team picker; runs-per-pony and rest limits flagged in the draw and dec forms; grading points and promotion tracking; photographers uploading bib-tagged photos for families to buy.
+- Revisit if: the owner raises one of them again or a governing body asks for it. Don't re-suggest them in idea lists.
+- Files: none (product scope).
+- Source: chat, 27 October 2026. The same session started weather alerts, entries-open emails, Welsh and French, governing-body results export, after-event feedback and a post-event report. Items the owner was unsure about are in `docs/plans/2026-10-27-codex-debate-handoff.md`.
+
 ## 2026-10-24: Entrant declaration access needs trusted team formation
 - Why: riders need to complete declarations for their own pairs and individual entries, but public supporter codes and matching names do not prove that someone is a team entrant.
 - Rule: the existing coach, club manager and organiser permissions remain. An entrant also needs an active Pending or Paid signup, an explicit link to the same section's team, no withdrawal, and `SignupMatchmaking.DeclarationAccessGranted`. Only organiser team formation and mutually accepted pair requests set that grant. Typing a team name or a public supporter code never grants declaration access.
