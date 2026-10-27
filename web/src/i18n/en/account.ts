@@ -256,4 +256,5 @@ export const account = {
   'account.needs.payoutsTitle': 'Payouts aren’t set up',
   'account.needs.payoutsSub': 'Entry money can’t be paid out until this is done',
   'account.needs.setUp': 'Set up',
+  'account.teams.alertsInstall': 'Add the app to your Home Screen to turn these on',
 } satisfies Record<string, Message>;
