@@ -5,12 +5,13 @@ import { api } from '../../api';
 import { Notice } from '../../components/Notice';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../auth/AuthContext';
+import { usePageHeader } from '../../components/CompactPageBarContext';
 import { useCompetition } from '../competition/context';
 import { RaceRulesSheet } from '../../components/RaceRulesSheet';
 import { RoundSearch } from '../../components/RoundSearch';
 import type { RaceTemplate } from '../../types';
 import { RulebooksPage as RaceByRaceRulebooksPage } from '../RulebooksPage';
-import { RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineStatus } from '../refine/Refine';
+import { RefineFoot, RefineList, RefineNote, RefinePage, RefineStatus } from '../refine/Refine';
 import type { Rulebook, RulebookSummary } from './types';
 import { apiMessage } from './types';
 import './operations.css';
@@ -39,6 +40,19 @@ export function RulebooksPage() {
   return <GlobalRulebooks key={user?.id ?? ''} />;
 }
 
+/** The page's title and back arrow go in the app header, like any other sub-page; the heading stays for screen readers. */
+function RulesHeader({ title, competition }: { title: string; competition: { id: number; name: string } | null }) {
+  const { t } = useLanguage();
+  usePageHeader({
+    title,
+    subtitle: competition?.name ?? t('teams.rulebooks.context'),
+    backTo: competition ? `/competitions/${competition.id}` : '/events',
+    backLabel: competition ? t('teams.rulebooks.backToEvent') : t('teams.rulebooks.backToEvents'),
+    plain: !competition,
+  });
+  return <h1 className="sr-only">{title}</h1>;
+}
+
 /** Rulebooks are shared by every competition. The list holds titles only; a rulebook's text is fetched when it is opened. */
 function GlobalRulebooks() {
   const { t } = useLanguage();
@@ -53,7 +67,7 @@ function GlobalRulebooks() {
   const canWrite = canEdit();
 
   const tabsRow = (
-    <div className="sp-seg mt-3" role="tablist" aria-label={t('teams.rulebooks.tabsAria')}>
+    <div className="sp-seg mb-3" role="tablist" aria-label={t('teams.rulebooks.tabsAria')}>
       <button type="button" role="tab" aria-selected={tab === 'rulebooks'} onClick={() => setTab('rulebooks')}>{t('teams.rulebooks.rulebooks')}</button>
       <button type="button" role="tab" aria-selected={tab === 'races'} onClick={() => setTab('races')}>{t('teams.rulebooks.gameRules')}</button>
     </div>
@@ -69,13 +83,11 @@ function GlobalRulebooks() {
 
     return (
       <>
-        <RefineHeader
-          back={competition ? `/competitions/${competition.id}` : '/events'}
-          backLabel={competition ? t('teams.rulebooks.backToEvent') : t('teams.rulebooks.backToEvents')}
-          context={competition?.name ?? t('teams.rulebooks.context')}
-          actions={actions}
+        <RulesHeader
           title={tab === 'rulebooks' && draft ? (draft.id == null ? 'New rulebook' : 'Edit rulebook') : t('teams.rulebooks.rules')}
+          competition={competition}
         />
+        {actions && <div className="mb-3 flex justify-end">{actions}</div>}
         {!editing && tabsRow}
       </>
     );
