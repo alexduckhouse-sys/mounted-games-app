@@ -1,10 +1,8 @@
-using System.Text;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
 using MountedGames.Api.Entities;
-using MountedGames.Api.Entities.Operations;
 
 namespace MountedGames.Api.Services;
 
@@ -476,7 +474,6 @@ public static class DbInitializer
         }
 
         await SeedRaceTemplatesAsync(db);
-        await SeedRulebooksAsync(db);
 
         // Canonical UK Pony Clubs list. Add only — never delete clubs that already exist
         // in the DB (they may be referenced by teams or saved riders).
@@ -1329,128 +1326,6 @@ public static class DbInitializer
             changed++;
         }
         if (changed > 0) await db.SaveChangesAsync();
-    }
-
-    public static async Task SeedRulebooksAsync(AppDbContext db)
-    {
-        var existing = await db.Set<Rulebook>()
-            .Select(r => new { r.Title, r.Edition })
-            .ToListAsync();
-        var existingKeys = existing
-            .Select(r => $"{r.Title.Trim().ToLowerInvariant()}|{r.Edition.Trim().ToLowerInvariant()}")
-            .ToHashSet();
-
-        var egukRaces = new StringBuilder();
-        foreach (var seed in RaceLibrarySeed.All)
-        {
-            var hasUpdate = RaceLibraryUpdates.ByName.TryGetValue(seed.Name, out var upd);
-            var summary = (hasUpdate ? upd!.Summary : null) ?? seed.Summary ?? string.Empty;
-            var rules = (hasUpdate ? upd!.Rules : null) ?? seed.Rules ?? string.Empty;
-            egukRaces.AppendLine($"### {seed.Name}");
-            if (!string.IsNullOrWhiteSpace(summary))
-                egukRaces.AppendLine($"Summary: {summary.Trim()}");
-            if (!string.IsNullOrWhiteSpace(rules))
-                egukRaces.AppendLine(rules.Trim());
-            egukRaces.AppendLine();
-        }
-
-        var egukText = $"""
-EQUESTRIAN GAMES UK (EGUK) — MOUNTED GAMES RULES & RACE GUIDE (2026 SEASON)
-
-1. ABOUT EQUESTRIAN GAMES UK
-Equestrian Games UK (EGUK) runs friendly, inclusive mounted games competitions across the UK for individuals, pairs, and teams. Competitions are open to riders of all ages and abilities, from Lead Rein and Assisted classes through to Novice, Junior, Open, and Veterans.
-
-2. AGE GROUPS & FORMATS
-- Lead Rein & Assisted: Designed for younger or developing combinations learning the games in a supportive environment.
-- Novice / Junior / Under 12 / Under 14 / Under 15 / Under 17: Age-grouped sections run as Individuals, Pairs, or Teams of up to five riders (four riding in each race).
-- Open / Seniors & Veterans: Open to eligible riders and ponies across pairs, individuals, and teams.
-
-3. ARENA LAYOUT & LANDMARKS
-- Start / Finish Line: Marked by posts or flags at the bottom of the arena.
-- Changeover Line: 54 m from the Start / Finish Line at the top of the arena.
-- Slalom / Bending Poles: Five poles per lane set 9 m apart in a straight line down the centre of the lane. Pole 1 is 9 m from the Start / Finish Line; Pole 4 is 9 m before the Changeover Line; Pole 5 is 9 m beyond the Changeover Line.
-- Centre / Halfway Line: Between Pole 2 and Pole 3 (27 m from the Start / Finish Line).
-- Lane Hatbands: Lanes are identified by hatband or bib colours (typically Red, Blue, Green, Yellow, Orange, Purple, White, Black).
-
-4. GENERAL RIDING, HANDOVER & FAULT RULES
-- Starting: Riders start behind the Start / Finish Line on the starter's signal.
-- Handovers: All handovers and changeovers take place with all cuatro/all four hooves of the incoming or outgoing pony behind the relevant line (Start / Finish Line or Changeover Line, as specified by the race). Dropped equipment during a handover may be recovered and handed over behind the line.
-- Knocked or Misplaced Equipment: Any pole, cone, bin, table, mug, or prop knocked over or displaced by a rider or pony must be replaced upright in its proper position before that rider (or the final rider) crosses the Finish Line, otherwise the team or combination is faulted / eliminated in that race.
-- Lane Discipline: Riders must stay within their own lane and must not obstruct or interfere with another lane.
-- Dismounting & Vaulting: Riders may dismount to retrieve or place equipment where permitted by the race rules and remount or vault back on before finishing, provided the pony is kept under control.
-- Scoring & Results Statuses:
-  - Finished: Points awarded according to the number of lanes in the heat (e.g. 6, 5, 4, 3, 2, 1 in a 6-lane heat). Finals may carry heat points forward and/or award double points where published in the event schedule.
-  - Eliminated (E) / Did Not Finish (DNF) / Did Not Start (DNS) / Retired (RET) / Broken Tack (BT): Recorded per race by the ring scorer and line judges.
-
-5. TACK, DRESS & PONY WELFARE
-- Pony welfare is paramount at all EGUK competitions. Rough handling, excessive whip or rein action, or unsafe riding is not permitted.
-- Riders must wear an approved, up-to-standard riding hat/skull cap with chinstrap fastened at all times while mounted, suitable footwear with a defined heel, and club/team bibs. Body protectors are strongly recommended (and mandatory where specified by venue or class rules).
-- Tack must be safe, well-fitting, and checked before entering the arena where tack check is in operation.
-
-6. COMPLETE RACE-BY-RACE GUIDE
-{egukRaces.ToString().TrimEnd()}
-""";
-
-        var pcRaces = new StringBuilder();
-        foreach (var seed in RaceLibrarySeed.All.Where(s => !s.Name.StartsWith("EGUK", StringComparison.OrdinalIgnoreCase) && !s.Name.Contains("Spell EGUK", StringComparison.OrdinalIgnoreCase)))
-        {
-            var hasUpdate = RaceLibraryUpdates.ByName.TryGetValue(seed.Name, out var upd);
-            var summary = (hasUpdate ? upd!.Summary : null) ?? seed.Summary ?? string.Empty;
-            var rules = (hasUpdate ? upd!.Rules : null) ?? seed.Rules ?? string.Empty;
-            pcRaces.AppendLine($"### {seed.Name}");
-            if (!string.IsNullOrWhiteSpace(summary))
-                pcRaces.AppendLine($"Summary: {summary.Trim()}");
-            if (!string.IsNullOrWhiteSpace(rules))
-                pcRaces.AppendLine(rules.Trim());
-            pcRaces.AppendLine();
-        }
-
-        var pcText = $"""
-PONY CLUB MOUNTED GAMES — 2026 RACE RULES & ARENA GUIDE
-
-1. ARENA DIMENSIONS & POLE POSITIONS
-- Start / Finish Line to Changeover Line: 54 m.
-- Five Pole Positions: 9 m apart (9 m, 18 m, 27 m, 36 m from the Start / Finish Line, with the 5th pole 9 m beyond the Changeover Line).
-- Centre Line: Halfway between the 2nd and 3rd poles.
-- Flag Cones / Containers on the Changeover Line or 9 m beyond the Changeover Line are aligned with the 5th pole position as specified for each race.
-
-2. 2026 COMPETITION RACE LISTS
-- Area Competitions: Senior (Bending, 2 Mug, 5 Flag, Bottle, Ball and Cone, 4 Flag, Sword, Carton, Pony Pairs, Litter); Junior (Bending, 2 Flag, Mug Shuffle, Bottle, Ball and Cone, Litter, 4 Flag, Run and Ride); Novice (Bending, 2 Flag, Mug Shuffle, Bottle, Ball and Cone, Sword).
-- Zone Competitions: Senior Adds Speed Weavers, Bank Race, Postman's Chase, 3 Pot Flag, HiLo, Hug a Mug; Junior Adds 3 Mug, Stepping Stones.
-- Championships: Senior Adds Balloon, Associates, Pyramid, Windsor Castle, Sock and Bucket, Tool Box.
-
-3. RACE-BY-RACE SETUP & RULES
-{pcRaces.ToString().TrimEnd()}
-""";
-
-        var defaults = new[]
-        {
-            new Rulebook
-            {
-                Title = "EGUK Mounted Games Rules & Race Guide",
-                Edition = "2026 Season",
-                SourceUrl = "https://www.equestriangamesuk.com/eguk-games-rules/",
-                Text = egukText,
-                UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-            },
-            new Rulebook
-            {
-                Title = "Pony Club Mounted Games Race Rules",
-                Edition = "2026",
-                SourceUrl = "https://pcuk.org/",
-                Text = pcText,
-                UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-            },
-        };
-
-        var toInsert = defaults
-            .Where(d => !existingKeys.Contains($"{d.Title.Trim().ToLowerInvariant()}|{d.Edition.Trim().ToLowerInvariant()}"))
-            .ToList();
-        if (toInsert.Count > 0)
-        {
-            db.Set<Rulebook>().AddRange(toInsert);
-            await db.SaveChangesAsync();
-        }
     }
 
 }
