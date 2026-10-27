@@ -16,7 +16,7 @@ The cross-chat to-do list, confirmed product specifications, code-verified bugs,
 
 **Not on main yet. Nothing is lost:** on 27 October every worktree's uncommitted work was snapshotted into a local ref, `refs/backup/wip-20261027/<worktree>`, in the main checkout. The snapshot's parent is the worktree's HEAD, so `git diff refs/backup/wip-20261027/<name>^ refs/backup/wip-20261027/<name>` shows the work. The tip of every deleted local branch is kept at `refs/backup/branches-20261027/<branch>`; `git for-each-ref refs/backup/` lists them all. The repo is public, so these refs are **local only. Don't push them.** Some contain unreleased security fixes and audit reports.
 
-**Tidy-up done:** 44 stale worktrees and 44 local branches were removed, all backed up as above (71 worktrees down to 30). The worktrees that are left hold live or unmerged work (the table below). Neon `production` and `backup-pre-integration-211-20261027` stay; the three older 27 October branches (`validate-leftover-steward-20261027`, `backup-pre-leftover-steward-20261027`, `backup-pre-pr202-20261027`) can go once the owner agrees.
+**Tidy-up done:** 44 stale worktrees and 44 local branches were removed, all backed up as above (71 worktrees down to 30). The worktrees that are left hold live or unmerged work (the table below). Neon now has only `production` and `backup-pre-integration-211-20261027`. The owner deleted the three older 27 October branches, so 8 of the 10 allowed branches are free.
 
 | Work | Where | State / next step |
 | --- | --- | --- |
