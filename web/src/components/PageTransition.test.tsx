@@ -5,7 +5,7 @@ import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PageTransition } from './PageTransition';
 
-let go: (to: string, replace?: boolean) => void = () => {};
+let go: (to: string, replace?: boolean, state?: unknown) => void = () => {};
 let goBack: () => void = () => {};
 const animations: Array<{ target: HTMLElement; keyframes: Keyframe[]; options: KeyframeAnimationOptions; finish: () => void; cancel: ReturnType<typeof vi.fn> }> = [];
 
@@ -14,13 +14,13 @@ function Harness({ disabled = false }: { disabled?: boolean }) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   useEffect(() => {
-    go = (to, replace) => navigate(to, { replace });
+    go = (to, replace, state) => navigate(to, { replace, state });
     goBack = () => navigate(-1);
   }, [navigate]);
   return (
     <>
       <main ref={ref} id="main"><span id="inner">{pathname}</span><video /></main>
-      <PageTransition mainRef={ref} pathname={pathname} disabled={disabled} />
+      <PageTransition mainRef={ref} disabled={disabled} />
     </>
   );
 }
@@ -122,6 +122,16 @@ describe('PageTransition', () => {
     document.getElementById('main')!.classList.add('rf-page');
     act(() => go('/competitions/4'));
     expect(animations).toHaveLength(1);
+  });
+
+  it('slides when a link asks for it, even within one page or between pages at the same level', () => {
+    mount('/competitions/4/session/1?heat=1');
+    act(() => go('/competitions/4/session/1?heat=2', false, { mgTransition: 'push' }));
+    expect(animations).toHaveLength(2);
+    expect(animations[1].keyframes[0]).toMatchObject({ transform: 'translateX(100%)' });
+    animations.length = 0;
+    act(() => go('/competitions/4/session/2?heat=5', false, { mgTransition: 'push' }));
+    expect(animations[1].keyframes[0]).toMatchObject({ transform: 'translateX(100%)' });
   });
 
   it('does nothing when only the query changes', () => {

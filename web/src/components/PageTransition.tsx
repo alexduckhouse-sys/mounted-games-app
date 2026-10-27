@@ -1,5 +1,5 @@
 import { Component, type RefObject } from 'react';
-import { useNavigationType } from 'react-router-dom';
+import { useLocation, useNavigationType } from 'react-router-dom';
 import { useStillMotion } from '../lite/useStillMotion';
 import { transitionFor, transitionPlan, type PageTransitionKind } from '../lib/pageTransition';
 
@@ -7,13 +7,17 @@ interface Props {
   /** The element the routed page renders into. Header, ticker and tab bar are outside it and stay still. */
   mainRef: RefObject<HTMLElement | null>;
   pathname: string;
+  /** The query string: it only counts when a move is forced, so a heat switch inside one session can still slide. */
+  search: string;
+  /** A link can ask for a slide with `state: { mgTransition: 'push' }`, whatever the depth of the two pages. */
+  forced: boolean;
   popped: boolean;
   /** Lite mode, reduced motion, or a page that shouldn't move (filming). */
   disabled: boolean;
 }
 
 interface Box { top: number; left: number; width: number; height: number }
-interface Snapshot { kind: PageTransitionKind; copy: HTMLElement; box: Box }
+interface Snapshot { kind: PageTransitionKind; copy: HTMLElement; box: Box; scrollReset: boolean }
 
 /** A still copy of a page: no ids, nothing that plays or loads, and nothing a finger or a screen reader can reach. */
 function stillCopy(source: HTMLElement): HTMLElement {
@@ -54,18 +58,21 @@ class PageTransitionHost extends Component<Props> {
 
   getSnapshotBeforeUpdate(prev: Props): Snapshot | null {
     this.cleanup?.();
-    const { mainRef, pathname, popped, disabled } = this.props;
+    const { mainRef, pathname, search, forced, popped, disabled } = this.props;
     const main = mainRef.current;
-    if (disabled || !main || typeof main.animate !== 'function' || prev.pathname === pathname) return null;
-    const kind = transitionFor(prev.pathname, pathname, popped);
+    if (disabled || !main || typeof main.animate !== 'function') return null;
+    const samePath = prev.pathname === pathname;
+    if (samePath && !(forced && !popped && prev.search !== search)) return null;
+    const kind: PageTransitionKind | null = forced && !popped ? 'push' : transitionFor(prev.pathname, pathname, popped);
     if (!kind) return null;
-    return { kind, copy: stillCopy(main), box: boxOf(main) };
+    // A new page opens at the top; a move within the same page keeps the scroll it had.
+    return { kind, copy: stillCopy(main), box: boxOf(main), scrollReset: !samePath && !popped };
   }
 
   componentDidUpdate(_prev: Props, _state: unknown, snapshot: Snapshot | null) {
     const main = this.props.mainRef.current;
     if (!snapshot || !main) return;
-    const { kind, copy, box } = snapshot;
+    const { kind, copy, box, scrollReset } = snapshot;
     const plan = transitionPlan(kind);
     const timing: KeyframeAnimationOptions = { duration: plan.duration, easing: plan.easing, fill: 'both' };
     const holders: HTMLElement[] = [];
@@ -79,7 +86,7 @@ class PageTransitionHost extends Component<Props> {
     } else {
       // A copy of the new page slides in; the real one waits, unseen, so it is never moved.
       const next = boxOf(main);
-      const incoming = frame(stillCopy(main), { ...next, top: this.props.popped ? next.top : next.top + window.scrollY }, plan.top === 'incoming' ? 2 : 1);
+      const incoming = frame(stillCopy(main), { ...next, top: scrollReset ? next.top + window.scrollY : next.top }, plan.top === 'incoming' ? 2 : 1);
       holders.push(incoming);
       running.push(incoming.animate(plan.incoming, timing));
       main.style.visibility = 'hidden';
@@ -109,8 +116,10 @@ class PageTransitionHost extends Component<Props> {
 }
 
 /** Put this next to the element the routed page renders into. */
-export function PageTransition({ mainRef, pathname, disabled }: { mainRef: RefObject<HTMLElement | null>; pathname: string; disabled?: boolean }) {
+export function PageTransition({ mainRef, disabled }: { mainRef: RefObject<HTMLElement | null>; disabled?: boolean }) {
   const still = useStillMotion();
   const popped = useNavigationType() === 'POP';
-  return <PageTransitionHost mainRef={mainRef} pathname={pathname} popped={popped} disabled={still || !!disabled} />;
+  const { pathname, search, state } = useLocation();
+  const forced = (state as { mgTransition?: string } | null)?.mgTransition === 'push';
+  return <PageTransitionHost mainRef={mainRef} pathname={pathname} search={search} forced={forced} popped={popped} disabled={still || !!disabled} />;
 }

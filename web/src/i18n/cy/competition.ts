@@ -163,6 +163,7 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.heat.position': 'Safle',
   'competition.heat.notRaced': 'Heb rasio eto',
   'competition.heat.sectionToplist': 'Tabl safleoedd {section}',
+  'competition.heat.change': 'Newid rhagras',
   'competition.heat.watch': 'Gwylio’r ffrwd',
   'competition.heat.rulesClose': 'Cau rheolau’r ras a’r trefn',
   'competition.heat.rulesOpen': 'Rheolau’r ras a threfn yr arena',

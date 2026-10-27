@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ChevronUp, SlidersHorizontal, Video } from 'lucide-react';
+import { ChevronUp, List, SlidersHorizontal, Video } from 'lucide-react';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { nowPrefixLength, tickerFocusAfterChange, type TickerItem, type TickerKind } from '../lib/ticker';
 import { useT } from '../i18n/LanguageContext';
@@ -165,7 +165,7 @@ export function TopBarTicker() {
         )}
         {dockAction && (
           <button type="button" className="mg-dock-action" aria-label={dockAction.count > 0 ? `${dockAction.label}, ${dockAction.count} set` : dockAction.label} onClick={() => { setOpen(false); dockAction.onClick(); }}>
-            <SlidersHorizontal aria-hidden="true" className="h-5 w-5" />
+            {dockAction.icon === 'list' ? <List aria-hidden="true" className="h-5 w-5" /> : <SlidersHorizontal aria-hidden="true" className="h-5 w-5" />}
             {dockAction.count > 0 && <span className="mg-dock-count" aria-hidden="true">{dockAction.count}</span>}
           </button>
         )}

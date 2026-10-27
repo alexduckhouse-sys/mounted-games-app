@@ -103,3 +103,17 @@
 .heat-grid.heat-grid-many td.heat-total { font-size: 17px; }
 .heat-grid.heat-grid-many .heat-name,
 .heat-grid.heat-grid-many .race-rules-btn.heat-name { left: 14px; font-size: 11px; }
+
+/* Change heat sheet: every heat of the day by age group; the one on screen is tinted and ticked. */
+.heat-sheet .hc-list { margin: 0 -20px; }
+.hc-head { margin: 0; padding: 14px 20px 8px; color: rgb(var(--mg-muted)); font: 700 14px/1 var(--mg-font); letter-spacing: .1em; text-transform: uppercase; }
+.hc-row {
+  display: flex; align-items: center; gap: 16px; width: 100%; min-height: 56px; padding: 0 20px; border: 0; border-top: 1px solid rgb(var(--mg-rule-soft));
+  background: transparent; color: rgb(var(--mg-ink)); text-align: left; cursor: pointer;
+}
+.hc-row[aria-current="true"] { background: rgb(var(--mg-tint)); }
+.hc-time { width: 74px; flex: none; color: rgb(var(--mg-heading)); font: 700 28px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; }
+.hc-name { flex: 1; min-width: 0; font: 500 19px/1.2 var(--mg-font); }
+.hc-status { color: rgb(var(--mg-muted)); font: 500 16px/1 var(--mg-font); }
+.hc-status-live { color: rgb(var(--mg-red)); }
+.hc-tick { display: flex; width: 22px; flex: none; justify-content: center; color: rgb(var(--mg-heading)); }
