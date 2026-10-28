@@ -7,17 +7,19 @@ import { useToast } from '../../components/Toast';
 import { useAuth } from '../../auth/AuthContext';
 import { SectionFormatLabel, type CompetitionDetail, type CompetitionSummary } from '../../types';
 import { Chevron, RefineList, RefineNote, RefinePage, RefineSection, RefineStatus } from '../refine/Refine';
-import { filterStandingsByDivision, positionLabels, roundDivision, roundStatus, seasonDivisions, shortDate } from './seasonModel';
+import { filterStandingsByDivision, positionLabels, teamNameForAge, roundDivision, roundStatus, seasonDivisions, shortDate } from './seasonModel';
 import { SeasonSettingsForm } from './SeasonSettingsForm';
 import { EmbedCard } from '../competition/EmbedCard';
 import { seasonError, type PublicationView, type SeasonRoundView, type SeasonView, type StandingsView } from './seasonViewTypes';
 import './seasonViews.css';
 import { SelectField } from '../../components/SelectField';
 import { NumberField } from '../../components/NumberField';
-import { CardDropdownRow } from '../../components/CardDropdownRow';
+import { Sheet } from '../../components/Sheet';
+import { ChevronDown } from 'lucide-react';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { AddBar } from '../admin/creator/controls';
 import '../../components/sitePages.css';
+import '../../components/filterKit.css';
 
 type SeasonTab = 'standings' | 'rounds' | 'settings';
 
@@ -69,7 +71,7 @@ function SeasonDetail({ id }: { id: string }) {
     </nav>
     {error && <Notice className="sv-msg" actionLabel="Try again" onAction={reload}>{error}</Notice>}
     <div key={tab} className="mg-settle">
-    {tab === 'standings' && <Standings season={season} table={table} />}
+    {tab === 'standings' && <Standings season={season} table={table} canManage={canManage} />}
     {tab === 'rounds' && <>
       {canManage && <div className="sp-gap"><AddBar onClick={() => setAddingRound((open) => !open)}>{addingRound ? 'Close add round' : 'Add a round'}</AddBar></div>}
       {addingRound && canManage && <AddRound season={season} onChanged={() => { setAddingRound(false); reload(); }} />}
@@ -84,7 +86,7 @@ function SeasonDetail({ id }: { id: string }) {
   </RefinePage>;
 }
 
-function Standings({ season, table }: { season: SeasonView; table: StandingsView }) {
+function Standings({ season, table, canManage }: { season: SeasonView; table: StandingsView; canManage: boolean }) {
   const formats = [...new Set(season.rounds.filter((round) => round.isIncluded).map((round) => round.format ?? season.format))];
   const [selectedFormat, setSelectedFormat] = useState(season.format);
   const activeFormat = formats.includes(selectedFormat) ? selectedFormat : formats[0] ?? season.format;
@@ -92,6 +94,7 @@ function Standings({ season, table }: { season: SeasonView; table: StandingsView
   const divisions = seasonDivisions(formatRounds, season.ageGroup);
   const hasMultipleDivisions = divisions.length > 1;
   const [selectedDivision, setSelectedDivision] = useState<string>('all');
+  const [sheetOpen, setSheetOpen] = useState(false);
   const activeDivision = hasMultipleDivisions && divisions.includes(selectedDivision) ? selectedDivision : 'all';
   const divisionRounds = formatRounds.filter((round) => activeDivision === 'all' || roundDivision(round, season.ageGroup) === activeDivision);
   const included = divisionRounds.filter((round) => round.isIncluded);
@@ -103,19 +106,56 @@ function Standings({ season, table }: { season: SeasonView; table: StandingsView
     ? [{ value: 'all', label: 'All age groups' }, ...divisions.map((div) => ({ value: div, label: div }))]
     : [{ value: 'all', label: season.ageGroup }];
   const formatOptions = (formats.length ? formats : [activeFormat]).map((format) => ({ value: String(format), label: SectionFormatLabel[format] }));
+  const ageLabel = ageOptions.find((option) => option.value === activeDivision)?.label ?? season.ageGroup;
+  const formatLabel = SectionFormatLabel[activeFormat];
+  const changeable = hasMultipleDivisions || formats.length > 1;
   return <>
-    <div className="sp-card sp-gap">
-      <CardDropdownRow label="Age group" value={activeDivision} options={ageOptions} onChange={setSelectedDivision} disabled={!hasMultipleDivisions} />
-      <CardDropdownRow label="Show" value={String(activeFormat)} options={formatOptions} disabled={formats.length < 2}
-        onChange={(value) => { setSelectedFormat(Number(value) as typeof activeFormat); setSelectedDivision('all'); }} />
-    </div>
-    {stale && <Notice className="sv-msg" role={null}>Results or rules changed since publication. Republish to update the table.</Notice>}
+    <button type="button" className="fk-where sp-gap" disabled={!changeable} aria-haspopup={changeable ? 'dialog' : undefined}
+      aria-label={changeable ? `${ageLabel}, ${formatLabel}. Change age group or what to show` : `${ageLabel}, ${formatLabel}`} onClick={() => setSheetOpen(true)}>
+      <span>{ageLabel}<small>· {formatLabel}</small></span>
+      {changeable && <ChevronDown aria-hidden="true" className="h-[18px] w-[18px] shrink-0" strokeWidth={2.2} />}
+    </button>
+    {sheetOpen && changeable && (
+      <Sheet title="Age group and what to show" className="fk-sheet" onClose={() => setSheetOpen(false)}>
+        {({ close }) => (
+          <>
+            {hasMultipleDivisions && (
+              <div className="fk-group" role="group" aria-label="Age group">
+                <span className="fk-label" aria-hidden="true">Age group</span>
+                <div className="fk-tiles">
+                  {ageOptions.map((option) => (
+                    <button key={option.value} type="button" className="fk-tile" aria-pressed={activeDivision === option.value} onClick={() => setSelectedDivision(option.value)}>
+                      <strong>{option.label}</strong>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {formats.length > 1 && (
+              <div className="fk-group" role="group" aria-label="Show">
+                <span className="fk-label" aria-hidden="true">Show</span>
+                <div className="fk-tiles">
+                  {formatOptions.map((option) => (
+                    <button key={option.value} type="button" className="fk-tile" aria-pressed={String(activeFormat) === option.value}
+                      onClick={() => { setSelectedFormat(Number(option.value) as typeof activeFormat); setSelectedDivision('all'); }}>
+                      <strong>{option.label}</strong>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <button type="button" className="kit-pill kit-pill-fill fk-show" onClick={() => close()}>Done</button>
+          </>
+        )}
+      </Sheet>
+    )}
+    {stale && canManage && <Notice className="sv-msg" role={null}>Results or rules changed since publication. Republish to update the table.</Notice>}
     {!visibleStandings.length ? <div className="sv-empty"><h2>No standings yet</h2><p>Results will appear after the first round is published.</p></div> : <>
-      <div className="rf-table-wrap sp-gap"><table className="rf-table sv-table">
+      <div className="rf-table-wrap sp-gap"><table className="rf-table sv-table sv-standings">
         <caption className="sr-only">Season standings. Struck-through points fall outside the best results that count.</caption>
         <thead>
           <tr>
-            <th scope="col" className="sv-pos">Pos</th>
+            <th scope="col" className="sv-pos"><span className="sr-only">Position</span></th>
             <th scope="col">{activeFormat === 1 ? 'Rider' : 'Team'}</th>
             {publishedRounds.map((round) => (
               <th key={round.id} scope="col" className="sv-mid" title={round.competitionName}>R{round.orderIndex}</th>
@@ -125,7 +165,7 @@ function Standings({ season, table }: { season: SeasonView; table: StandingsView
         </thead>
         <tbody>{visibleStandings.map((row) => <tr key={row.teamProfileId}>
           <td className="rf-num">{labels.get(row.teamProfileId)}</td>
-          <td><Link to={`/team-profiles/${row.teamProfileId}`} className="sv-team">{row.teamName}</Link></td>
+          <td><Link to={`/team-profiles/${row.teamProfileId}`} className="sv-team">{teamNameForAge(row.teamName, ageLabel)}</Link></td>
           {publishedRounds.map((round) => {
             const cell = row.rounds.find((r) => r.roundId === round.id);
             if (!cell) return <td key={round.id} className="sv-mid sv-dim">–</td>;

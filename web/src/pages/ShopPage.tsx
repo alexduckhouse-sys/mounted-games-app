@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingBag, Plus, Flag, Trash2, MessageCircle, Lock, X, Send, Image as ImageIcon, Check, ChevronRight } from 'lucide-react';
+import { ShoppingBag, Plus, Flag, Trash2, MessageCircle, Lock, X, Send, Image as ImageIcon, Check, ChevronRight, SlidersHorizontal } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { usePageWidth } from '../components/pageWidthState';
 import { usePageHeader } from '../components/CompactPageBarContext';
 import { LazyImage } from '../components/LazyImage';
 import { RoundSearch } from '../components/RoundSearch';
+import { Sheet } from '../components/Sheet';
 import '../components/sitePages.css';
+import '../components/filterKit.css';
+import { NO_SHOP_FILTERS, POSTED_OPTIONS, PRICE_BANDS, countShopFilters, matchesShopFilters, shopFilterChips, type ShopFilters } from '../lib/shopFilters';
 import { NumberField } from '../components/NumberField';
 import { priceLabel } from '../lib/money';
 import type { CompetitionSummary, ShopComment, ShopPost } from '../types';
@@ -36,18 +39,72 @@ export function ShopPage() {
   usePageWidth('wide');
   const [tab, setTab] = useState<'tack' | 'events'>('tack');
   const [query, setQuery] = useState('');
+  const [filters, setFilters] = useState<ShopFilters>(NO_SHOP_FILTERS);
+  const [sheetOpen, setSheetOpen] = useState(false);
   usePageHeader({ title: 'Shop', plain: true });
+  const filterCount = countShopFilters(filters);
+  const chips = shopFilterChips(filters);
+  const clearFilter = (key: keyof ShopFilters) => setFilters((current) => ({ ...current, [key]: NO_SHOP_FILTERS[key] }));
+  // The sheet sits outside the spaced column: a sibling margin would otherwise pull the dialog to the top of the screen.
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-3.5 pb-2 lg:max-w-3xl">
-      <div className="mg-band mg-band-header flex flex-col gap-2 pb-3 pt-0">
-        <div className="mg-navy-switch self-start" role="group" aria-label="Shop sections">
-          <button type="button" aria-pressed={tab === 'tack'} onClick={() => setTab('tack')}>Tack and kit</button>
-          <button type="button" aria-pressed={tab === 'events'} onClick={() => setTab('events')}>Event shops</button>
+    <>
+      <div className="mx-auto flex w-full max-w-xl flex-col gap-3.5 pb-2 lg:max-w-3xl">
+        <div className="mg-band mg-band-header flex flex-col gap-2 pb-3 pt-3">
+          <div className="mg-navy-switch w-full [&>*]:flex-1 [&>*]:justify-center" role="group" aria-label="Shop sections">
+            <button type="button" aria-pressed={tab === 'tack'} onClick={() => setTab('tack')}>Tack and kit</button>
+            <button type="button" aria-pressed={tab === 'events'} onClick={() => setTab('events')}>Event shops</button>
+          </div>
+          <div className="fk-find fk-band">
+            <RoundSearch band label="Search the shop" placeholder={tab === 'tack' ? 'Saddle, bending poles, 13.2…' : 'Event name'} value={query} onChange={setQuery} />
+            {tab === 'tack' && (
+              <button type="button" className="fk-fbtn" aria-haspopup="dialog" aria-label={filterCount ? `Filter the shop, ${filterCount} set` : 'Filter the shop'} onClick={() => setSheetOpen(true)}>
+                <SlidersHorizontal aria-hidden="true" className="h-5 w-5" />
+                {filterCount > 0 && <span className="fk-count" aria-hidden="true">{filterCount}</span>}
+              </button>
+            )}
+          </div>
         </div>
-        <RoundSearch band label="Search the shop" placeholder={tab === 'tack' ? 'Saddle, bending poles, 13.2…' : 'Event name'} value={query} onChange={setQuery} />
+        {tab === 'tack' && chips.length > 0 && (
+          <div className="fk-chips" role="group" aria-label="Filters set">
+            {chips.map((chip) => (
+              <button key={chip.key} type="button" className="fk-chip" aria-label={`Remove ${chip.label}`} onClick={() => clearFilter(chip.key)}>{chip.label}<X aria-hidden="true" size={15} strokeWidth={2.2} /></button>
+            ))}
+          </div>
+        )}
+        {tab === 'tack' ? <ShopClassifieds query={query} filters={filters} floatingSell intro="" /> : <EventShopLinks query={query} />}
       </div>
-      {tab === 'tack' ? <ShopClassifieds query={query} floatingSell intro="" /> : <EventShopLinks query={query} />}
-    </div>
+      {sheetOpen && tab === 'tack' && (
+        <Sheet title="Filter the shop" className="fk-sheet" onClose={() => setSheetOpen(false)}>
+          {({ close }) => (
+            <>
+              <div className="fk-group" role="group" aria-label="Price">
+                <span className="fk-label" aria-hidden="true">Price</span>
+                <div className="fk-pills">
+                  {PRICE_BANDS.map((band) => (
+                    <button key={band.value} type="button" className="fk-pill" aria-pressed={filters.price === band.value} onClick={() => setFilters((current) => ({ ...current, price: band.value }))}>{band.label}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="fk-group" role="group" aria-label="Posted">
+                <span className="fk-label" aria-hidden="true">Posted</span>
+                <div className="fk-pills">
+                  {POSTED_OPTIONS.map((option) => (
+                    <button key={option.value} type="button" className="fk-pill" aria-pressed={filters.posted === option.value} onClick={() => setFilters((current) => ({ ...current, posted: option.value }))}>{option.label}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="fk-group" role="group" aria-label="Photo">
+                <span className="fk-label" aria-hidden="true">Photo</span>
+                <div className="fk-pills">
+                  <button type="button" className="fk-pill" aria-pressed={filters.photoOnly} onClick={() => setFilters((current) => ({ ...current, photoOnly: !current.photoOnly }))}>With a photo</button>
+                </div>
+              </div>
+              <button type="button" className="kit-pill kit-pill-fill fk-show" onClick={() => close()}>Done</button>
+            </>
+          )}
+        </Sheet>
+      )}
+    </>
   );
 }
 
@@ -88,7 +145,7 @@ function EventShopLinks({ query }: { query: string }) {
  * Buy, sell or swap tack and equipment. Used on the main shop page (searchable, with a Sell something button
  * pinned above the tabs) and inside each event's shop.
  */
-export function ShopClassifieds({ intro = 'Buy, sell or swap tack and equipment with other Pony Clubbers.', query = '', floatingSell = false }: { intro?: string; query?: string; floatingSell?: boolean }) {
+export function ShopClassifieds({ intro = 'Buy, sell or swap tack and equipment with other Pony Clubbers.', query = '', filters = NO_SHOP_FILTERS, floatingSell = false }: { intro?: string; query?: string; filters?: ShopFilters; floatingSell?: boolean }) {
   const { user, canEdit } = useAuth();
   const [posts, setPosts] = useState<ShopPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,7 +169,8 @@ export function ShopClassifieds({ intro = 'Buy, sell or swap tack and equipment 
 
   const isAdmin = canEdit();
   const needle = query.trim().toLowerCase();
-  const shown = needle ? posts.filter((p) => `${p.title} ${p.body} ${p.authorName} ${p.ponyClubName ?? ''}`.toLowerCase().includes(needle)) : posts;
+  const filtering = countShopFilters(filters) > 0;
+  const shown = posts.filter((p) => (!needle || `${p.title} ${p.body} ${p.authorName} ${p.ponyClubName ?? ''}`.toLowerCase().includes(needle)) && matchesShopFilters(p, filters));
   const buttonClass = floatingSell ? 'sp-pill sp-pill-fill' : 'mg-btn mg-btn-primary !min-h-11 !px-3 !text-sm';
   const sell = user ? (
     <button type="button" onClick={() => setComposerOpen((v) => !v)} aria-expanded={composerOpen} className={buttonClass}>
@@ -145,7 +203,7 @@ export function ShopClassifieds({ intro = 'Buy, sell or swap tack and equipment 
           <p className="mg-meta">Nothing for sale yet. Be the first to post!</p>
         </div>
       ) : shown.length === 0 ? (
-        <p className="mg-card p-4">Nothing matches that search.</p>
+        <p className="mg-card p-4">{filtering ? 'Nothing matches that search and those filters.' : 'Nothing matches that search.'}</p>
       ) : (
         <ul className="sp-listings">
           {shown.map((p) => (

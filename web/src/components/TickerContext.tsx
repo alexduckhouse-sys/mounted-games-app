@@ -8,6 +8,8 @@ export interface DockAction {
   /** How many filters are set; shown as a small badge when above zero. */
   count: number;
   onClick: () => void;
+  /** The icon on the button: the filters (default) or a list of pages to jump to. */
+  icon?: 'filters' | 'list';
 }
 
 interface TickerState {

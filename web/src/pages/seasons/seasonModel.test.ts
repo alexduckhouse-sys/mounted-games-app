@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterStandingsByDivision, lastPublishedRound, ordinal, positionLabels, roundStatus, seasonDivisions } from './seasonModel';
+import { filterStandingsByDivision, lastPublishedRound, ordinal, positionLabels, roundStatus, seasonDivisions, teamNameForAge } from './seasonModel';
 import { buildRows, seasonChoices } from './teamHistoryModel';
 import type { SeasonRoundView, SeasonView, StandingView } from './seasonViewTypes';
 import type { TeamProfileHistoryResult } from './teamProfileTypes';
@@ -81,5 +81,24 @@ describe('multi-division standings', () => {
       ['Zeta', 1, 16],
       ['Alpha', 2, 16],
     ]);
+  });
+});
+
+describe('teamNameForAge', () => {
+  it('drops a trailing age suffix that matches the chosen age group', () => {
+    expect(teamNameForAge('Atherstone U14', 'Under 14')).toBe('Atherstone');
+    expect(teamNameForAge('Atherstone Under 14', 'U14')).toBe('Atherstone');
+    expect(teamNameForAge('Atherstone (U14)', 'Under 14')).toBe('Atherstone');
+    expect(teamNameForAge('Atherstone u 14', 'Under 14')).toBe('Atherstone');
+    expect(teamNameForAge('Dorset Seniors', 'Seniors')).toBe('Dorset');
+    expect(teamNameForAge('Dorset Under14', 'Under 14')).toBe('Dorset');
+    expect(teamNameForAge('Dorset A+B (Open)', 'A+B (Open)')).toBe('Dorset');
+  });
+  it('leaves names alone when nothing matches, when the age group is all of them, or when nothing would remain', () => {
+    expect(teamNameForAge('Dorset U12', 'Under 14')).toBe('Dorset U12');
+    expect(teamNameForAge('Atherstone U14', 'All age groups')).toBe('Atherstone U14');
+    expect(teamNameForAge('Atherstone U14', '  ')).toBe('Atherstone U14');
+    expect(teamNameForAge('U14', 'Under 14')).toBe('U14');
+    expect(teamNameForAge('Atherstone U14 Reds', 'Under 14')).toBe('Atherstone U14 Reds');
   });
 });

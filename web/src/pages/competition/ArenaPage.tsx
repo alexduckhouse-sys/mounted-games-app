@@ -1,21 +1,22 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Activity, ChevronLeft, ChevronRight, Flag } from 'lucide-react';
+import { Activity, Check, ChevronDown, ChevronLeft, ChevronRight, Flag } from 'lucide-react';
 import { api } from '../../api';
 import type { Heat, RaceTemplate, Session } from '../../types';
 import { useCompetition } from './context';
 import { usePageHeader } from '../../components/CompactPageBarContext';
-import { DropdownRow } from '../../components/DropdownRow';
+import { Sheet } from '../../components/Sheet';
 import { RaceDiagram } from '../../components/RaceDiagram';
 import { RaceRulesSheet, buildRaceRulebooks, type RaceTemplateDetail } from '../../components/RaceRulesSheet';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
-import { crewLines, diffRaceEquipment, equipmentFromDiagram } from '../../lib/raceEquipment';
+import { crewGroups, diffRaceEquipment, equipmentFromDiagram } from '../../lib/raceEquipment';
 import { displaySectionName } from '../../lib/section';
-import { formatTime, roundTo5Min, computeTimings } from '../../lib/time';
+import { roundTo5Min, computeTimings } from '../../lib/time';
 import '../../components/sitePages.css';
 import '../../components/eventPages.css';
-import { useT } from '../../i18n/LanguageContext';
+import './heat.css';
+import { useLanguage, useT } from '../../i18n/LanguageContext';
 
 function heatIsComplete(h: Heat): boolean {
   return h.races.length > 0 && h.races.every((r) => r.isComplete);
@@ -49,6 +50,8 @@ export function ArenaPage() {
   usePageWidth('narrow');
   const desktop = useIsDesktop();
   const t = useT();
+  const { locale } = useLanguage();
+  const clock = (when: Date) => when.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
   const { competition } = useCompetition();
   usePageHeader({
     title: t('teams.arena.title'),
@@ -120,19 +123,53 @@ export function ArenaPage() {
     };
   }, [activeRaceName, activeKey, byNameDetails]);
 
-  const arenaTabs = arenas.length > 1 ? (
-    <div className="sp-seg mb-3" role="tablist" aria-label={t('teams.arena.arena')}>
-      {arenas.map((name) => (
-        <button key={name} type="button" role="tab" aria-selected={selectedArena === name} onClick={() => chooseArena(name)}>{name}</button>
-      ))}
-    </div>
-  ) : null;
+  const timeOf = (c: HeatChoice) => {
+    const timing = timings.get(c.session.id)?.heats[c.heatIndex];
+    const when = timing ? roundTo5Min(timing.effective ?? timing.scheduled) : null;
+    return when ? clock(when) : '';
+  };
+
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const whereRow = (arenas.length > 1 || target) && (
+    <WhereRow arena={arenas.length > 1 ? selectedArena : ''} target={target} nextHere={target != null && target === currentChoice(choices)} timings={timings} clock={clock} onOpen={() => setPickerOpen(true)} />
+  );
+  const picker = pickerOpen && (
+    <Sheet title={t('teams.arena.where')} className="heat-sheet" onClose={() => setPickerOpen(false)}>
+      {({ close }) => (
+        <>
+          {arenas.length > 1 && (
+            <div className="sp-seg" role="tablist" aria-label={t('teams.arena.arena')}>
+              {arenas.map((name) => (
+                <button key={name} type="button" role="tab" aria-selected={selectedArena === name} onClick={() => { chooseArena(name); setPickedHeat(null); }}>{name}</button>
+              ))}
+            </div>
+          )}
+          <div className="hc-list">
+            {choices.map((c) => {
+              const finished = heatIsComplete(c.heat);
+              const live = !finished && c.session.status === 1 && c === currentChoice(choices);
+              const chosen = target != null && c.heat.id === target.heat.id;
+              return (
+                <button key={c.heat.id} type="button" className="hc-row" aria-current={chosen ? 'true' : undefined} onClick={() => close(() => { setPickedHeat(c.heat.id); setPickerOpen(false); })}>
+                  <span className="hc-time">{timeOf(c) || '–'}</span>
+                  <span className="hc-name">{heatName(c, t)}</span>
+                  <span className={`hc-status${live ? ' hc-status-live' : ''}`}>{finished ? t('common.finished') : live ? t('shell.header.onNow') : ''}</span>
+                  <span className="hc-tick" aria-hidden="true">{chosen && <Check className="h-5 w-5" strokeWidth={2.5} />}</span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </Sheet>
+  );
 
   const shell = (children: ReactNode) => (
     <div className="rf-page mx-auto flex w-full max-w-xl flex-col pb-6 pt-3">
       <h1 className="sr-only">{t('teams.arena.title')}</h1>
-      {arenaTabs}
+      {whereRow}
       {children}
+      {picker}
     </div>
   );
 
@@ -145,25 +182,15 @@ export function ArenaPage() {
     );
   }
 
-  const timeOf = (c: HeatChoice) => {
-    const timing = timings.get(c.session.id)?.heats[c.heatIndex];
-    const when = timing ? roundTo5Min(timing.effective ?? timing.scheduled) : null;
-    return when ? formatTime(when) : '';
-  };
-  const heatLabel = (c: HeatChoice) => [displaySectionName(c.session.sectionName ?? c.session.name), c.heat.label ?? t('teams.team.heatN', { number: c.heatIndex + 1 }), timeOf(c)].filter(Boolean).join(' · ');
-  const heatOptions = choices.map((c) => ({ value: String(c.heat.id), label: heatLabel(c) }));
-
   const template = activeRace ? (byNameDetails[activeKey] ?? tmplByName.get(activeKey) ?? null) : null;
   const equipment = equipmentFromDiagram(template?.diagramJson);
   const prevRace = activeIdx > 0 ? orderedRaces[activeIdx - 1] : null;
   const prevTemplate = prevRace ? tmplByName.get(prevRace.name.toLowerCase().trim()) : null;
-  const crew = template ? crewLines(diffRaceEquipment(prevTemplate?.diagramJson, template.diagramJson)) : [];
+  const crew = template ? crewGroups(diffRaceEquipment(prevTemplate?.diagramJson, template.diagramJson)) : [];
 
   return shell(
     <>
-      <DropdownRow label={t('teams.arena.heat')} value={String(target.heat.id)} options={heatOptions} onChange={(value) => setPickedHeat(Number(value))} />
-
-      <div className="ev-card mt-3 overflow-hidden">
+      <div className="ev-card overflow-hidden">
         <div className="flex items-center gap-1.5 border-b border-[rgb(var(--mg-rule-soft))] px-1.5 py-2">
           <button type="button" className="ev-arrow" aria-label={t('teams.arena.previous')} disabled={activeIdx === 0} onClick={() => goToRace(activeIdx - 1)}>
             <ChevronLeft className="h-[22px] w-[22px]" aria-hidden="true" strokeWidth={2.5} />
@@ -192,10 +219,9 @@ export function ArenaPage() {
             </div>
             {template.summary && <p className="ev-body !text-[15px]">{template.summary}</p>}
             {equipment.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5" aria-label={t('teams.arena.equipment')}>
-                <span className="sp-t2 mr-1">{t('teams.arena.eachLane')}</span>
-                {equipment.map((item) => <span key={item.label} className="ev-chip">{item.count > 1 ? `${item.count} × ` : ''}{item.label}</span>)}
-              </div>
+              <p className="m-0 text-sm font-medium leading-snug text-[rgb(var(--mg-muted))]" aria-label={t('teams.arena.equipment')}>
+                <b className="font-semibold text-[rgb(var(--mg-ink))]">{t('teams.arena.eachLane')}:</b> {equipment.map((item) => `${item.count > 1 ? `${item.count} × ` : ''}${item.label}`).join(', ')}
+              </p>
             )}
             <p className="m-0 text-center">
               <button type="button" className="ev-text-btn !no-underline" onClick={() => setRulesFor(activeRaceName)}>{t('teams.arena.fullRules')}</button>
@@ -213,13 +239,43 @@ export function ArenaPage() {
       {crew.length > 0 && (
         <section aria-label={t('teams.arena.crew')}>
           <h2 className="sp-sec">{t('teams.arena.crew')}</h2>
-          <div className="ev-card flex flex-col gap-1 px-4 py-3 text-[15px] leading-snug">
-            {crew.map((line) => <p key={line} className="m-0">{line}</p>)}
+          <div className="ev-card divide-y divide-[rgb(var(--mg-rule-soft))] text-[15px] leading-snug">
+            {crew.map((group) => (
+              <div key={group.place} className="flex flex-col gap-1 px-4 py-3">
+                <h3 className="m-0 text-xs font-bold uppercase tracking-[0.1em] text-[rgb(var(--mg-muted))]">{t(CREW_PLACE_KEY[group.place])}</h3>
+                {group.lines.map((line) => <p key={line} className="m-0">{line}</p>)}
+              </div>
+            ))}
           </div>
         </section>
       )}
 
       <RaceRulesSheet raceName={rulesFor} open={rulesFor != null} onClose={() => setRulesFor(null)} />
     </>,
+  );
+}
+
+const CREW_PLACE_KEY = { top: 'teams.arena.crewTop', middle: 'teams.arena.crewMiddle', start: 'teams.arena.crewStart' } as const;
+
+const heatName = (c: HeatChoice, t: ReturnType<typeof useT>) => [displaySectionName(c.session.sectionName ?? c.session.name), c.heat.label ?? t('teams.team.heatN', { number: c.heatIndex + 1 })].filter(Boolean).join(' ');
+
+/** One row for where you are looking: the arena and heat ("Main Arena · Seniors Heat 1"), with the time and what it is doing under it. */
+function WhereRow({ arena, target, nextHere, timings, clock, onOpen }: { arena: string; target: HeatChoice | null; nextHere: boolean; timings: ReturnType<typeof computeTimings>; clock: (when: Date) => string; onOpen: () => void }) {
+  const t = useT();
+  const timing = target ? timings.get(target.session.id)?.heats[target.heatIndex] : undefined;
+  const when = timing ? roundTo5Min(timing.effective ?? timing.scheduled) : null;
+  const live = target != null && !heatIsComplete(target.heat) && target.session.status === 1 && nextHere;
+  const state = target == null ? '' : heatIsComplete(target.heat) ? t('common.finished') : live ? t('shell.header.onNow') : nextHere ? t('teams.arena.nextHere') : '';
+  const main = [arena, target ? heatName(target, t) : ''].filter(Boolean).join(' · ');
+  const sub = [when ? clock(when) : '', state].filter(Boolean).join(' · ');
+  return (
+    <button type="button" onClick={onOpen} aria-haspopup="dialog"
+      className="mb-3 flex min-h-[50px] w-full items-center gap-2 rounded-xl border border-[rgb(var(--mg-line))] bg-[rgb(var(--mg-surface))] py-1.5 pl-3.5 pr-2.5 text-left">
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate text-[15px] font-semibold leading-tight text-[rgb(var(--mg-heading))]">{main}</span>
+        {sub && <small className="text-xs font-medium leading-none text-[rgb(var(--mg-muted))]">{sub}</small>}
+      </span>
+      <ChevronDown aria-hidden="true" className="h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-muted))]" strokeWidth={2.2} />
+    </button>
   );
 }

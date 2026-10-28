@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
@@ -27,35 +27,33 @@ vi.mock('../weather/weather', () => ({ getWeather: vi.fn() }));
 
 beforeEach(() => {
   vi.mocked(api.get).mockResolvedValue({ data: {} });
-  vi.mocked(useTeamNotifications).mockReturnValue({ enabled: false, setEnabled: vi.fn(), permission: 'default', problem: null });
+  vi.mocked(useTeamNotifications).mockReturnValue({ enabled: false, setEnabled: vi.fn(), permission: 'default', problem: null, needsInstall: false, installGuide: false, closeInstallGuide: vi.fn() });
 });
 
-describe('language picker in the menu', () => {
-  it('shows the three languages in their own names and switches the whole menu', async () => {
-    render(
-      <LanguageProvider>
-        <MotionConfig reducedMotion="always"><MemoryRouter>
-          <AuthProvider><ThemeProvider><CurrentCompetitionProvider><NavExtrasProvider><AgeGroupsProvider><CompetitionMetaProvider>
-            <NavigationDrawer onClose={() => {}} />
-          </CompetitionMetaProvider></AgeGroupsProvider></NavExtrasProvider></CurrentCompetitionProvider></ThemeProvider></AuthProvider>
-        </MemoryRouter></MotionConfig>
-      </LanguageProvider>,
-    );
-    const group = screen.getByRole('group', { name: 'Language' });
-    expect(within(group).getAllByRole('button').map((button) => button.textContent)).toEqual(['English', 'Cymraeg', 'Français']);
-    expect(within(group).getByRole('button', { name: 'English' })).toHaveAttribute('aria-pressed', 'true');
+describe('the menu and language', () => {
+  const mountMenu = () => render(
+    <LanguageProvider>
+      <MotionConfig reducedMotion="always"><MemoryRouter>
+        <AuthProvider><ThemeProvider><CurrentCompetitionProvider><NavExtrasProvider><AgeGroupsProvider><CompetitionMetaProvider>
+          <NavigationDrawer onClose={() => {}} />
+        </CompetitionMetaProvider></AgeGroupsProvider></NavExtrasProvider></CurrentCompetitionProvider></ThemeProvider></AuthProvider>
+      </MemoryRouter></MotionConfig>
+    </LanguageProvider>,
+  );
 
-    await userEvent.click(within(group).getByRole('button', { name: 'Français' }));
+  it('has no language buttons (Language lives in Settings, under Look)', () => {
+    mountMenu();
+    expect(screen.queryByRole('group', { name: 'Language' })).not.toBeInTheDocument();
+    for (const name of ['English', 'Cymraeg', 'Français']) expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+  });
+
+  it('is worded in the chosen language', () => {
+    localStorage.setItem(LANG_KEY, 'fr');
+    mountMenu();
     expect(screen.getByRole('dialog', { name: 'Menu' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Général' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Réglages' })).toHaveAttribute('href', '/settings');
-    expect(screen.getByRole('group', { name: 'Langue' })).toBeInTheDocument();
     expect(document.documentElement.lang).toBe('fr');
-    expect(localStorage.getItem(LANG_KEY)).toBe('fr');
-
-    await userEvent.click(screen.getByRole('button', { name: 'Cymraeg' }));
-    expect(screen.getByRole('heading', { name: 'Cyffredinol' })).toBeInTheDocument();
-    expect(document.documentElement.lang).toBe('cy');
   });
 });
 

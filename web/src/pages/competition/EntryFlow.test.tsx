@@ -336,7 +336,7 @@ describe('the entry form', () => {
     vi.mocked(api.post).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ data: { id: 9, status: 1, amountMinor: 0 } });
     await fill();
     await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t submit your entry. Check your signal and try again. Nothing was sent.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t submit your entry. Check your signal and try again.');
     await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(2));
     const ids = vi.mocked(api.post).mock.calls.map((c) => (c[1] as { requestId: string }).requestId);

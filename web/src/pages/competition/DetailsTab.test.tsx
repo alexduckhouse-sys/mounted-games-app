@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -89,28 +89,88 @@ describe('DetailsTab', () => {
     expect(screen.getByRole('link', { name: 'Message the organisers' })).toBeInTheDocument();
   });
 
-  it('shows the venue, a maps link and the what3words, and leaves out facts it does not have', () => {
+  it('keeps the title card to the name, date and venue and description, with the details folded away under See details', async () => {
     vi.mocked(useCompetition).mockReturnValue({
       competition: { ...competition, what3Words: 'gravel.pony.flag', latitude: 51.9, longitude: -2.3 }, reload,
     } as unknown as ReturnType<typeof useCompetition>);
     renderTab();
-    expect(screen.getByLabelText('Event facts')).toHaveTextContent('VenueHartpury');
-    expect(screen.getByRole('link', { name: 'Open in Maps' })).toHaveAttribute('href', 'https://www.google.com/maps/search/?api=1&query=51.9,-2.3');
-    expect(screen.getByRole('link', { name: '///gravel.pony.flag' })).toHaveAttribute('href', 'https://what3words.com/gravel.pony.flag');
-    expect(screen.queryByText('Postcode')).not.toBeInTheDocument();
-    expect(screen.queryByText('Comp no.')).not.toBeInTheDocument();
-    expect(screen.queryByText('Email')).not.toBeInTheDocument();
+    const card = screen.getByRole('region', { name: 'About this event' });
+    expect(within(card).getByRole('heading', { name: 'Hartpury Area Festival' })).toBeInTheDocument();
+    const toggle = within(card).getByRole('button', { name: /See details/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    // The muted line names what is inside, built from what is set.
+    expect(toggle).toHaveTextContent('Venue, what3words and organiser');
+    expect(screen.queryByRole('link', { name: /gravel/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Event facts')).not.toBeInTheDocument();
+
+    await userEvent.click(toggle);
+    const open = within(card).getByRole('button', { name: 'Hide details' });
+    expect(open).toHaveAttribute('aria-expanded', 'true');
+    expect(open).not.toHaveTextContent('what3words');
+    expect(within(card).getByRole('link', { name: /Venue\s*Hartpury/ })).toHaveAttribute('href', 'https://www.google.com/maps/search/?api=1&query=51.9,-2.3');
+    expect(within(card).getByRole('link', { name: /what3words\s*\/\/\/gravel\.pony\.flag/ })).toHaveAttribute('href', 'https://what3words.com/gravel.pony.flag');
+    expect(within(card).getByText('Severn Vale Branch')).toBeInTheDocument();
+    // Only what is set: no postcode, email, competition number or lorry park rows.
+    for (const label of ['Postcode', 'Email', 'Competition no.', 'Lorry park']) expect(within(card).queryByText(label)).not.toBeInTheDocument();
+
+    await userEvent.click(open);
+    await waitFor(() => expect(within(card).queryByText('Severn Vale Branch')).not.toBeInTheDocument());
+    expect(within(card).getByRole('button', { name: /See details/ })).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('uses the organiser’s own map link, and shows the postcode, competition number and email when the API sends them', () => {
+  it('shows the postcode, lorry park, email and competition number rows when the organiser has set them, with the organiser’s own map link', async () => {
     vi.mocked(useCompetition).mockReturnValue({
-      competition: { ...competition, appleMapsUrl: 'https://maps.apple.com/?q=Hartpury', postcode: 'GL19 3BE', competitionNumber: '2026-041', contactEmail: 'entries@example.org' }, reload,
+      competition: {
+        ...competition, appleMapsUrl: 'https://maps.apple.com/?q=Hartpury', postcode: 'GL19 3BE', competitionNumber: '2026-041', contactEmail: 'entries@example.org',
+        lorryWhat3Words: 'bags.cool.lamp', lorryDirectionsNote: 'Enter by the north gate',
+      }, reload,
     } as unknown as ReturnType<typeof useCompetition>);
     renderTab();
-    expect(screen.getByRole('link', { name: 'Open in Maps' })).toHaveAttribute('href', 'https://maps.apple.com/?q=Hartpury');
-    expect(screen.getByText('GL19 3BE')).toBeInTheDocument();
-    expect(screen.getByText('2026-041')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'entries@example.org' })).toHaveAttribute('href', 'mailto:entries@example.org');
+    const card = screen.getByRole('region', { name: 'About this event' });
+    expect(card).toHaveTextContent('Venue, postcode, lorry park, organiser, email and competition number');
+    await userEvent.click(within(card).getByRole('button', { name: /See details/ }));
+    expect(within(card).getByRole('link', { name: /Venue\s*Hartpury/ })).toHaveAttribute('href', 'https://maps.apple.com/?q=Hartpury');
+    expect(within(card).getByRole('link', { name: /Postcode\s*GL19 3BE/ })).toHaveAttribute('href', expect.stringContaining('GL19%203BE'));
+    expect(within(card).getByRole('link', { name: /Lorry park/ })).toHaveTextContent('///bags.cool.lamp · Enter by the north gate');
+    expect(within(card).getByRole('link', { name: /Lorry park/ })).toHaveAttribute('href', 'https://what3words.com/bags.cool.lamp');
+    expect(within(card).getByRole('link', { name: /Email\s*entries@example.org/ })).toHaveAttribute('href', 'mailto:entries@example.org');
+    expect(within(card).getByText('Competition no.')).toBeInTheDocument();
+    expect(within(card).getByText('2026-041')).toBeInTheDocument();
+  });
+
+  it('has no See details row when the organiser has set none of the details', () => {
+    vi.mocked(useCompetition).mockReturnValue({
+      competition: { ...competition, location: '', organiserName: null }, reload,
+    } as unknown as ReturnType<typeof useCompetition>);
+    renderTab();
+    expect(screen.queryByRole('button', { name: /See details/ })).not.toBeInTheDocument();
+  });
+
+  it('uses the cards look: a grey page with each list in its own white card under its heading', () => {
+    const { container } = renderTab();
+    expect(container.querySelector('.ev-white')).toBeNull();
+    for (const name of ['At the event', 'Share and print', 'Age groups and fees']) {
+      const list = screen.getByRole('list', { name });
+      expect(list).toHaveClass('sp-card');
+      expect(list).not.toHaveClass('ev-flat');
+    }
+  });
+
+  it('shows Dec forms only to signed-in trainers and organisers', () => {
+    const { unmount } = renderTab();
+    expect(screen.queryByRole('link', { name: 'Dec forms' })).not.toBeInTheDocument();
+    unmount();
+    viewer({ user: null });
+    const signedOut = renderTab();
+    expect(screen.queryByRole('link', { name: 'Dec forms' })).not.toBeInTheDocument();
+    signedOut.unmount();
+    viewer({ hasRole: (role: string) => role === 'Trainer' });
+    const trainer = renderTab();
+    expect(screen.getByRole('link', { name: 'Dec forms' })).toHaveAttribute('href', expect.stringContaining('declarations'));
+    trainer.unmount();
+    viewer({ canOrganise: () => true });
+    renderTab();
+    expect(screen.getByRole('link', { name: 'Dec forms' })).toBeInTheDocument();
   });
 
   it('shows Sign in to enter to a signed-out visitor, and it comes back to the entry page', () => {

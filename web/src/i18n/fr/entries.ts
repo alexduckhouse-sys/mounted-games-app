@@ -54,6 +54,9 @@ export const entries: AreaCatalogue<typeof en> = {
   'entries.page.afterDraw': 'Le programme, les classements et les scores en direct s’ouvrent une fois les équipes tirées au sort.',
 
   'entries.form.full': '{section} est complet. Vous pouvez rejoindre la liste d’attente.',
+  'entries.form.forSomeoneElse': 'Vous inscrivez quelqu’un d’autre ? Changez le nom et le club ci-dessous.',
+  'entries.form.draftUnsaved': 'Vos informations ne peuvent pas être enregistrées sur cet appareil. Gardez cette page ouverte jusqu’à l’envoi.',
+  'entries.form.draftSaved': 'Inscription non terminée enregistrée sur cet appareil pendant sept jours.',
   'entries.form.emailInvalid': 'Cette adresse e-mail ne semble pas correcte.',
   'entries.form.sentTitle': '{entry} à {competition}.',
   'entries.form.emailedCopy': 'Nous vous en avons envoyé une copie par e-mail.',
