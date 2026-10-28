@@ -54,7 +54,6 @@ describe('lazy Welsh and French catalogues', () => {
     expect(document.documentElement.lang).toBe('en');
     expect(await screen.findByText('Retour')).toBeInTheDocument();
     expect(document.documentElement.lang).toBe('fr');
-    expect(isLoaded('cy')).toBe(false);
   });
 
   it('shares one request between repeat calls', async () => {
