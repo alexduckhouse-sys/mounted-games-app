@@ -518,97 +518,20 @@ describe('CompetitionPicker: demo events', () => {
   });
 });
 
-describe('CompetitionPicker: nearest first', () => {
-  const near = (items: CompetitionPickerItem[], distances: { id: number; miles: number }[], extra: Record<string, unknown> = {}) => nearYou.mockResolvedValue({
-    data: { items, hasMore: false, locationKnown: true, sort: 'nearest', distances, ...extra }, headers: {},
-  } as never);
-
-  it('asks for the list in this viewer’s order first, and shows how far each event is', async () => {
-    near([festival, today, autumn], [{ id: 3, miles: 8 }, { id: 1, miles: 28 }, { id: 2, miles: 263 }]);
+describe('CompetitionPicker: date order and flags', () => {
+  it('lists upcoming events soonest first from the public list, with no order switch', async () => {
     renderPicker();
-    await loaded('Autumn Open');
-    expect(nearYou).toHaveBeenCalledWith('/competitions/picker/near-you', { params: { page: 1 }, signal: expect.any(AbortSignal) });
-    expect(get).not.toHaveBeenCalled();
-    expect(screen.getByText(/about 275 miles/)).toBeInTheDocument();
-    expect(screen.getByText(/about 10 miles/)).toBeInTheDocument();
-    // What is on today stays on top, with its distance too.
-    expect(within(screen.getByRole('region', { name: 'On today' })).getByText(/about 30 miles/)).toBeInTheDocument();
-    const rows = within(screen.getByRole('region', { name: 'Coming up' })).getAllByRole('button').map((b) => b.textContent);
-    expect(rows[0]).toContain('Weekend Fest');
-    expect(rows[1]).toContain('Autumn Open');
-  });
-
-  it('offers a way back to soonest first, remembers it, and starts again from the first page', async () => {
-    near([festival, autumn], [{ id: 3, miles: 8 }, { id: 2, miles: 40 }]);
-    renderPicker();
-    await loaded('Autumn Open');
-    expect(screen.getByRole('button', { name: 'Nearest first' })).toHaveAttribute('aria-pressed', 'true');
-    const soonest = screen.getByRole('button', { name: 'Soonest first' });
-    expect(soonest).toHaveAttribute('aria-pressed', 'false');
-
-    near([autumn, festival], [{ id: 2, miles: 40 }, { id: 3, miles: 8 }], { sort: 'soonest' });
-    await userEvent.click(soonest);
-    await waitFor(() => expect(nearYou).toHaveBeenLastCalledWith('/competitions/picker/near-you', { params: { page: 1, sort: 'soonest' }, signal: expect.any(AbortSignal) }));
-    expect(localStorage.getItem('mg.eventsSort')).toBe('soonest');
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Soonest first' })).toHaveAttribute('aria-pressed', 'true'));
-    const rows = within(screen.getByRole('region', { name: 'Coming up' })).getAllByRole('button').map((b) => b.textContent);
-    expect(rows[0]).toContain('Autumn Open');
-
-    // Pressing the choice already in force does nothing more.
-    const calls = nearYou.mock.calls.length;
-    await userEvent.click(screen.getByRole('button', { name: 'Soonest first' }));
-    expect(nearYou.mock.calls.length).toBe(calls);
-  });
-
-  it('uses the remembered choice for the very first request', async () => {
-    localStorage.setItem('mg.eventsSort', 'soonest');
-    near([autumn], [{ id: 2, miles: 40 }], { sort: 'soonest' });
-    renderPicker();
-    await loaded('Autumn Open');
-    expect(nearYou).toHaveBeenCalledWith('/competitions/picker/near-you', { params: { page: 1, sort: 'soonest' }, signal: expect.any(AbortSignal) });
-    expect(screen.getByRole('button', { name: 'Soonest first' })).toHaveAttribute('aria-pressed', 'true');
-  });
-
-  it('shows no toggle and no distances when nobody knows where the viewer is, and keeps the usual saved copy', async () => {
-    near([today, autumn, festival], [], { locationKnown: false, sort: 'soonest' });
-    renderPicker();
-    await loaded('Autumn Open');
-    expect(screen.queryByRole('button', { name: 'Nearest first' })).not.toBeInTheDocument();
-    expect(screen.queryByText(/miles/)).not.toBeInTheDocument();
-    expect(readSavedCopy<CompetitionPickerPage>(savedCopyKeys.picker(false))?.data.items.map((i) => i.id)).toEqual([1, 2, 3]);
-  });
-
-  it('does not keep a list put in one person’s order as the public saved copy', async () => {
-    near([festival, autumn], [{ id: 3, miles: 8 }, { id: 2, miles: 40 }]);
-    renderPicker();
-    await loaded('Autumn Open');
-    expect(readSavedCopy(savedCopyKeys.picker(false))).toBeNull();
-  });
-
-  it('loads the next page of the same order and keeps the distances of both', async () => {
-    nearYou.mockResolvedValueOnce({ data: { items: [festival], hasMore: true, locationKnown: true, sort: 'nearest', distances: [{ id: 3, miles: 8 }] }, headers: {} } as never)
-      .mockResolvedValueOnce({ data: { items: [autumn], hasMore: false, locationKnown: true, sort: 'nearest', distances: [{ id: 2, miles: 40 }] }, headers: {} } as never);
-    renderPicker();
-    await loaded('Weekend Fest');
-    await userEvent.click(screen.getByRole('button', { name: 'Load more competitions' }));
-    await loaded('Autumn Open');
-    expect(nearYou).toHaveBeenLastCalledWith('/competitions/picker/near-you', { params: { page: 2 }, signal: expect.any(AbortSignal) });
-    expect(screen.getByText(/about 40 miles/)).toBeInTheDocument();
-    expect(screen.getByText(/about 10 miles/)).toBeInTheDocument();
-  });
-
-  it('falls back to the public list when the personal one is not a list', async () => {
-    nearYou.mockResolvedValue({ data: '<html>not json</html>', headers: {} } as never);
-    renderPicker();
-    await loaded('Autumn Open');
-    expect(get).toHaveBeenCalledWith('/competitions/picker', { params: { past: false, page: 1 }, signal: expect.any(AbortSignal) });
-    expect(screen.queryByRole('button', { name: 'Nearest first' })).not.toBeInTheDocument();
-  });
-
-  it('leaves the archive alone', async () => {
-    renderPicker({ past: true });
     await loaded('Autumn Open');
     expect(nearYou).not.toHaveBeenCalled();
-    expect(screen.queryByRole('button', { name: 'Nearest first' })).not.toBeInTheDocument();
+    expect(get).toHaveBeenCalledWith('/competitions/picker', { params: { past: false, page: 1 }, signal: expect.any(AbortSignal) });
+    expect(screen.queryByRole('button', { name: /Nearest first|Soonest first/ })).not.toBeInTheDocument();
+  });
+
+  it('puts each flag in its own column, so flags line up whatever the name', async () => {
+    renderPicker();
+    const row = (await loaded('Weekend Fest')).closest('button') as HTMLElement;
+    const flag = within(row).getByRole('img');
+    expect(flag.parentElement?.parentElement).toBe(row);
+    expect(row.className).toContain('grid-cols-[44px_minmax(0,1fr)_40px_14px]');
   });
 });

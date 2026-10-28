@@ -193,18 +193,6 @@ export interface CompetitionPickerPage {
   hasMore: boolean;
 }
 
-/** `GET /api/competitions/picker/near-you`: the upcoming list ordered for this viewer. Never cached or shared. */
-export interface CompetitionNearYouPage {
-  items: CompetitionPickerItem[];
-  hasMore: boolean;
-  /** We could tell roughly where the viewer is (without asking). When false there are no distances and no toggle. */
-  locationKnown: boolean;
-  /** The order used: nearest first, or soonest first. */
-  sort: 'nearest' | 'soonest';
-  /** Whole miles from the viewer, for the items on this page that have a known venue. */
-  distances: { id: number; miles: number }[];
-}
-
 export interface CompetitionSection {
   id: number;
   competitionId: number;
