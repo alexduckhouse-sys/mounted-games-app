@@ -57,7 +57,7 @@ export function EntryManagement({ competition, signups, entriesCloseAt, onChange
         {bookings.length === 0 ? <p className="sp-note">No stables booked yet.</p> : <ul className="m-0 list-none px-4 pb-3">{bookings.map((s) => <li key={s.id}>{[s.fullName, clubLabel(s.stablingClubOrTeam) || clubLabel(s.ponyClubName) || clubLabel(s.teamName), `${s.stablesCount} ${s.stablesCount === 1 ? 'stable' : 'stables'}`].filter(Boolean).join(' · ')}</li>)}</ul>}
       </Disclosure>
       <Disclosure title={`Entries · ${signups.length}`}>
-        <ul className="m-0 list-none divide-y divide-[rgb(var(--mg-rule-soft))] px-4">{signups.map((s) => <ManagedSignup key={s.id} signup={s} competition={competition} onChanged={onChanged} />)}</ul>
+        {signups.length === 0 ? <p className="sp-note">No entries yet.</p> : <ul className="m-0 list-none divide-y divide-[rgb(var(--mg-rule-soft))] px-4">{signups.map((s) => <ManagedSignup key={s.id} signup={s} competition={competition} onChanged={onChanged} />)}</ul>}
       </Disclosure>
     </div>
   </section>;
