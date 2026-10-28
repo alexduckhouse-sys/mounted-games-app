@@ -1,4 +1,4 @@
-import { Fragment, useContext, useEffect, useState, type ReactNode } from 'react';
+import { Fragment, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useInRouterContext } from 'react-router-dom';
 import { Check, Trophy } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -335,14 +335,31 @@ function NameStar({ on }: { on: boolean }) {
   return <span aria-hidden="true" className={`ml-1 inline-flex align-[-2px] text-[#C08308] ${on ? '' : 'hidden'}`}><FollowStar on={on} className="h-3.5 w-3.5" /></span>;
 }
 
-/** A soft light sweep across a row the moment its team is followed (not when the page opens already followed). */
+/**
+ * A soft light sweep across a followed team's row, once each time the row comes into view: when the page opens, when you
+ * scroll to it, and the moment you follow a team whose row is showing.
+ */
 function FollowGlimmer({ on }: { on: boolean }) {
   const still = useStillMotion();
-  const [seen, setSeen] = useState({ on, plays: 0 });
-  if (seen.on !== on) setSeen({ on, plays: seen.plays + (on ? 1 : 0) });
-  const plays = seen.on === on ? seen.plays : seen.plays + (on ? 1 : 0);
-  if (!on || plays === 0 || still) return null;
-  return <span key={plays} aria-hidden="true" className="mg-follow-glimmer" />;
+  const anchor = useRef<HTMLSpanElement>(null);
+  const [plays, setPlays] = useState(0);
+  useEffect(() => {
+    const row = anchor.current?.parentElement;
+    if (!on || still || !row || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      setPlays((n) => n + 1);
+      observer.disconnect();
+    }, { threshold: 0.6 });
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, [on, still]);
+  return (
+    <>
+      <span ref={anchor} aria-hidden="true" hidden />
+      {on && !still && plays > 0 && <span key={plays} aria-hidden="true" className="mg-follow-glimmer" />}
+    </>
+  );
 }
 
 /**
