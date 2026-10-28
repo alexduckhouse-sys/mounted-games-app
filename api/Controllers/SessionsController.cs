@@ -272,7 +272,6 @@ public class SessionsController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>Started, finished or with a race marked complete. Needs heats and races loaded.</summary>
     /// <summary>Started, finished, or with any scored race or running or finished heat: its times are a record.</summary>
     private static bool IsRunOrScored(Session s) =>
         HasScores(s) || s.StartedAt.HasValue || s.Heats.Any(h => h.StartedAt.HasValue || h.FinishedAt.HasValue);
@@ -304,6 +303,7 @@ public class SessionsController : ControllerBase
         }
     }
 
+    /// <summary>Started, finished or with a race marked complete. Needs heats and races loaded.</summary>
     private static bool HasScores(Session s) =>
         s.Status != SessionStatus.Upcoming || s.Heats.Any(h => h.Races.Any(r => r.IsComplete));
 
