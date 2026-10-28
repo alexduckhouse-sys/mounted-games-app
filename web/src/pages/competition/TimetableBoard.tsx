@@ -110,7 +110,7 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
       reload();
       return true;
     } catch {
-      setActionError({ text: 'Couldn’t shift the timetable. Check your signal and try again.', retry: () => void shiftTimes(deltaMinutes) });
+      setActionError({ text: t('competition.timetable.shiftFailed'), retry: () => void shiftTimes(deltaMinutes) });
       return false;
     } finally {
       setShifting(false);
@@ -124,7 +124,7 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
       await api.post(`/competitions/${competition.id}/sessions/resume`, { arenaName: selectedArena || undefined });
       reload();
     } catch {
-      setActionError({ text: 'Couldn’t continue the timetable. Check your signal and try again.', retry: () => void resume() });
+      setActionError({ text: t('competition.timetable.continueFailed'), retry: () => void resume() });
     } finally {
       setShifting(false);
     }
@@ -228,7 +228,7 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
   });
   const updated = updatedAt ? updatedAt.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : null;
   const filterable = days.length > 1 || showArenaSelect || showSectionSelect;
-  const dayLabel = dayLabels(days);
+  const dayLabel = dayLabels(days, locale);
   const sectionLabel = sections.find((s) => String(s.id) === selectedSection)?.label;
   // With filters the header line says what is showing; otherwise it keeps the competition and update time.
   const summary = [dayLabel(selectedDay), selectedArena, showSectionSelect ? sectionLabel ?? t('competition.timetable.allAges') : ''].filter(Boolean).join(' · ');
@@ -238,7 +238,7 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
     onRefresh: reload,
     refreshLabel: t('competition.timetable.refresh'),
     onEdit: showQualifiers ? () => setDelayOpen(true) : undefined,
-    editLabel: 'Change the timing',
+    editLabel: t('competition.timetable.changeTiming'),
     editing: delayOpen,
   });
   const ticker = useOptionalTicker();
@@ -246,9 +246,9 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
   const filterCount = (selectedArena ? 1 : 0) + (selectedSection ? 1 : 0);
   useEffect(() => {
     if (!setDockAction || !filterable) return;
-    setDockAction({ label: 'Day, arena and age group', count: filterCount, onClick: () => setSheetOpen(true) });
+    setDockAction({ label: t('competition.timetable.filterTitle'), count: filterCount, onClick: () => setSheetOpen(true) });
     return () => setDockAction(null);
-  }, [setDockAction, filterable, filterCount]);
+  }, [setDockAction, filterable, filterCount, t]);
   function pickDay(day: string) {
     if (day === selectedDay) return;
     setDayMove((move) => ({ count: move.count + 1, dir: days.indexOf(day) > days.indexOf(selectedDay) ? 'right' : 'left' }));
@@ -305,11 +305,11 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
       )}
       {(selectedArena || sectionLabel) && (
         <div className="tt-chips">
-          {selectedArena && <button type="button" className="tt-chip" aria-label={`Remove ${selectedArena}`} onClick={() => chooseArena('')}>{selectedArena}<X aria-hidden="true" size={15} strokeWidth={2.2} /></button>}
-          {sectionLabel && <button type="button" className="tt-chip" aria-label={`Remove ${sectionLabel}`} onClick={() => setSectionFilter('')}>{sectionLabel}<X aria-hidden="true" size={15} strokeWidth={2.2} /></button>}
+          {selectedArena && <button type="button" className="tt-chip" aria-label={t('competition.timetable.removeFilter', { name: selectedArena })} onClick={() => chooseArena('')}>{selectedArena}<X aria-hidden="true" size={15} strokeWidth={2.2} /></button>}
+          {sectionLabel && <button type="button" className="tt-chip" aria-label={t('competition.timetable.removeFilter', { name: sectionLabel })} onClick={() => setSectionFilter('')}>{sectionLabel}<X aria-hidden="true" size={15} strokeWidth={2.2} /></button>}
         </div>
       )}
-      {actionError && <Notice className="mx-4 my-2" actionLabel={actionError.retry ? 'Try again' : undefined} onAction={actionError.retry}>{actionError.text}</Notice>}
+      {actionError && <Notice className="mx-4 my-2" actionLabel={actionError.retry ? t('common.tryAgain') : undefined} onAction={actionError.retry}>{actionError.text}</Notice>}
       <div className={`tt-body${swapClass}`}>
         {lead}
         {visibleRows.some(isProvisionalRow) && (
@@ -336,11 +336,11 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
         <SponsorStrip placement="Timetable" />
       </div>
       {sheetOpen && (
-        <Sheet title="Day, arena and age group" className="tt-sheet" onClose={() => setSheetOpen(false)}>
+        <Sheet title={t('competition.timetable.filterTitle')} className="tt-sheet" onClose={() => setSheetOpen(false)}>
           {({ close }) => (
             <>
               {days.length > 1 && (
-                <div className="tt-days" role="group" aria-label="Day" style={{ '--n': days.length, '--i': days.indexOf(selectedDay) } as CSSProperties}>
+                <div className="tt-days" role="group" aria-label={t('competition.timetable.day')} style={{ '--n': days.length, '--i': days.indexOf(selectedDay) } as CSSProperties}>
                   {days.map((day) => (
                     <button key={day} type="button" aria-pressed={day === selectedDay} onClick={() => pickDay(day)}>{dayLabel(day)}</button>
                   ))}
@@ -348,13 +348,13 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
                 </div>
               )}
               {showSectionSelect && (
-                <div className={`tt-tiles${swapClass}`} role="group" aria-label="Age group">
+                <div className={`tt-tiles${swapClass}`} role="group" aria-label={t('competition.timetable.ageGroup')}>
                   {sections.map((section) => {
                     const chosen = String(section.id) === selectedSection;
                     return (
                       <button key={section.id} type="button" className="tt-tile" aria-pressed={chosen} onClick={() => setSectionFilter(chosen ? '' : String(section.id))}>
                         <strong>{section.label}</strong>
-                        <span>{whatsOn(arenaRows.filter((row) => isRaceRow(row) && inSection(row, section.id)))}</span>
+                        <span>{whatsOn(arenaRows.filter((row) => isRaceRow(row) && inSection(row, section.id)), t)}</span>
                       </button>
                     );
                   })}
@@ -362,17 +362,17 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
               )}
               {showArenaSelect && (
                 <div className="tt-arena-line">
-                  <span>Arena</span>
-                  <div className="tt-seg" role="group" aria-label="Arena" style={{ '--n': arenas.length + 1, '--i': selectedArena ? arenas.indexOf(selectedArena) + 1 : 0 } as CSSProperties}>
+                  <span>{t('competition.timetable.arena')}</span>
+                  <div className="tt-seg" role="group" aria-label={t('competition.timetable.arena')} style={{ '--n': arenas.length + 1, '--i': selectedArena ? arenas.indexOf(selectedArena) + 1 : 0 } as CSSProperties}>
                     <span className="tt-seg-thumb" aria-hidden="true" />
                     {['', ...arenas].map((name) => (
-                      <button key={name || 'all'} type="button" aria-pressed={name === selectedArena} onClick={() => chooseArena(name)}>{name || 'All arenas'}</button>
+                      <button key={name || 'all'} type="button" aria-pressed={name === selectedArena} onClick={() => chooseArena(name)}>{name || t('competition.timetable.allArenas')}</button>
                     ))}
                   </div>
                 </div>
               )}
               <button type="button" className="kit-pill kit-pill-fill tt-show" onClick={() => close()}>
-                Show {heatCount} {heatCount === 1 ? 'heat' : 'heats'}
+                {t('competition.timetable.showHeats', { count: heatCount })}
               </button>
             </>
           )}
@@ -387,23 +387,23 @@ const isRaceRow = (row: TimetableRow) => (row.session.kind ?? (row.session.isBre
 const isBreakSession = (session: TimetableRow['session']) => session.kind === 1 || (session.kind == null && session.isBreak);
 
 /** "3 heats · on now", "2 heats · next 10:30" or "Nothing this day", for an age group's tile. */
-function whatsOn(rows: TimetableRow[]) {
-  if (rows.length === 0) return 'Nothing this day';
-  const count = `${rows.length} ${rows.length === 1 ? 'heat' : 'heats'}`;
-  if (rows.some((row) => row.status === 'live')) return `${count} · on now`;
+function whatsOn(rows: TimetableRow[], t: Translate) {
+  if (rows.length === 0) return t('competition.timetable.tileNothing');
+  const count = t('competition.timetable.heats', { count: rows.length });
+  if (rows.some((row) => row.status === 'live')) return `${count} · ${t('competition.timetable.tileOnNow')}`;
   const next = rows.find((row) => row.status !== 'finished');
-  return next ? `${count} · next ${formatTime(next.effective)}` : count;
+  return next ? `${count} · ${t('competition.timetable.tileNext', { time: formatTime(next.effective) })}` : count;
 }
 
 /** Day names for the tabs: "Tuesday" for up to three days, "Tue" for more, with the date when two share a name. */
-function dayLabels(days: string[]) {
+function dayLabels(days: string[], locale: string) {
   const at = (day: string) => new Date(`${day}T12:00:00`);
   const weekday = days.length > 3 ? 'short' : 'long';
-  const names = days.map((day) => at(day).toLocaleDateString('en-GB', { weekday }));
+  const names = days.map((day) => at(day).toLocaleDateString(locale, { weekday }));
   const repeated = names.some((name, index) => names.indexOf(name) !== index);
   return (day: string) => repeated
-    ? at(day).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })
-    : at(day).toLocaleDateString('en-GB', { weekday });
+    ? at(day).toLocaleDateString(locale, { weekday: 'short', day: 'numeric' })
+    : at(day).toLocaleDateString(locale, { weekday });
 }
 
 /** A race session with no heats yet: its time is an estimate, unless it is finals with a start time the organiser set. */

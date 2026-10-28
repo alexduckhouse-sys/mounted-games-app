@@ -83,7 +83,7 @@ export function RaceToolsSheet({
   return (
     <div className="rt-overlay">
       <button type="button" className="rt-scrim" aria-label="Close race tools" onClick={onClose} />
-      <PullDownDialog label="Race tools" className="rt-sheet" onClose={onClose}>
+      <PullDownDialog label="Race tools" className="rt-sheet" focus=".sc-link" onClose={onClose}>
         <div className="rt-head">
           <span className="rt-title">Race tools</span>
           <button type="button" className="sc-link" onClick={onClose}>Close</button>

@@ -17,6 +17,7 @@ import { Sheet } from '../../components/Sheet';
 import { useToast } from '../../components/Toast';
 import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDialogFocus } from '../../components/useDialogFocus';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   AlertTriangle, ChevronLeft, ClipboardList, Coffee, Wand2, X, Table2, Trophy,
@@ -1692,6 +1693,8 @@ interface GeneratorProps {
 }
 
 function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onClose, 'button');
   const { competition } = useCompetition();
   const sectionTeams = useMemo(
     () => competition.teams.filter((t) => session.competitionSectionId == null || t.competitionSectionId === session.competitionSectionId),
@@ -1789,6 +1792,7 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
       onClick={onClose}
     >
       <motion.div
+        ref={dialogRef} role="dialog" aria-modal="true" aria-label="Set up heats"
         initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }}
         className="card w-full max-w-xl max-h-[90vh] overflow-auto"
         onClick={(e) => e.stopPropagation()}
@@ -1796,7 +1800,7 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
         <div className="flex items-center gap-2 p-3 border-b border-slate-200 dark:border-slate-800">
           <Wand2 className="w-4 h-4 text-brand-600" />
           <h3 className="font-semibold text-sm flex-1">Set up heats</h3>
-          <button onClick={onClose} className="btn-ghost !py-1 !px-1.5"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label="Close" className="btn-ghost !py-1 !px-1.5"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="p-3 space-y-3">

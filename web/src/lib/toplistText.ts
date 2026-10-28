@@ -45,6 +45,17 @@ export function resultStatusText(eliminated: boolean, status: number | null | un
   }
 }
 
+/** A team-sheet block heading: "Session 2 · Heat A" has its "Session 2" in the chosen language; a final's name is shown as set. */
+export function blockLabelText(label: string, t: Translate): string {
+  const session = /^Session (\d+)(.*)$/s.exec(label);
+  return session ? `${t('competition.toplist.sessionN', { n: session[1] })}${session[2]}` : label;
+}
+
+/** The small note beside a block's points ("not carried over" for a final) in the chosen language. */
+export function blockNoteText(note: string | null, t: Translate): string | null {
+  return note === 'not carried over' ? t('competition.toplist.notCarried') : note;
+}
+
 /** The hover title of a by-session column, which the toplist builds in English ("Session 2", "Finals", ...). */
 export function sessionColumnTitle(title: string, t: Translate): string {
   const session = /^Session (\d+)$/.exec(title);

@@ -1,7 +1,8 @@
 // Unused in web UI yet — reserved for iOS / upcoming wiring
 import type { StandingRow } from '../types';
 import type { ToplistRow } from './toplist';
-import { ordinal } from './toplist';
+import { localOrdinal } from './ordinalText';
+import { tr } from '../i18n/translate';
 import { formatPoints } from './formatPoints';
 
 export const STORY_CARD_WIDTH = 1080;
@@ -61,15 +62,15 @@ function slugifyFilePart(value: string): string {
 }
 
 export function buildStoryCaption(data: Omit<StoryResultCardData, 'captionText' | 'suggestedFileName'>): string {
-  const statusTag = data.isProvisional ? ' (provisional)' : '';
+  const statusTag = data.isProvisional ? ` (${tr('competition.story.provisionalTag')})` : '';
   const header = `${data.competitionName} — ${data.sectionName}${statusTag}`;
   if (data.featuredTeam) {
     const ft = data.featuredTeam;
     const tierPart = ft.finalTierLabel ? ` · ${ft.finalTierLabel}` : '';
-    return `${header}\n${ft.teamName}: #${ft.rank} (${formatPoints(ft.totalPoints)} pts, ${ft.wins} ${ft.wins === 1 ? 'win' : 'wins'}${tierPart})`;
+    return `${header}\n${ft.teamName}: #${ft.rank} (${tr('competition.toplist.ptsValue', { points: formatPoints(ft.totalPoints) })}, ${tr('competition.story.wins', { count: ft.wins })}${tierPart})`;
   }
   const podiumLines = data.podium.map((p) => {
-    return `${ordinal(p.rank)} ${p.teamName}, ${formatPoints(p.totalPoints)} pts`;
+    return `${localOrdinal(p.rank)} ${p.teamName}, ${tr('competition.toplist.ptsValue', { points: formatPoints(p.totalPoints) })}`;
   });
   return [header, ...podiumLines].join('\n');
 }
@@ -222,7 +223,7 @@ function drawRosette(ctx: CanvasRenderingContext2D, cx: number, cy: number, radi
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = `800 ${Math.round(radius * 0.62)}px ${DISPLAY_FONT}`;
-  ctx.fillText(ordinal(rank), cx, cy + radius * 0.04);
+  ctx.fillText(localOrdinal(rank), cx, cy + radius * 0.04);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
 }
@@ -232,8 +233,9 @@ function drawPoints(ctx: CanvasRenderingContext2D, points: number, baseline: num
   ctx.textAlign = 'right';
   ctx.fillStyle = MUTED;
   ctx.font = `600 ${Math.round(size * 0.45)}px ${BODY_FONT}`;
-  ctx.fillText(' pts', RIGHT, baseline);
-  const unitWidth = ctx.measureText(' pts').width;
+  const unit = ` ${tr('teams.team.ptsUnit')}`;
+  ctx.fillText(unit, RIGHT, baseline);
+  const unitWidth = ctx.measureText(unit).width;
   ctx.fillStyle = INK;
   ctx.font = `800 ${size}px ${DISPLAY_FONT}`;
   ctx.fillText(formatPoints(points), RIGHT - unitWidth, baseline);
@@ -271,7 +273,7 @@ export function renderStoryResultCardCanvas(
 
   // Heading: status, event name (two lines at most), then age group, place and date.
   ctx.font = `700 30px ${BODY_FONT}`;
-  const status = data.isProvisional ? 'Provisional results' : 'Official results';
+  const status = data.isProvisional ? tr('competition.story.provisionalBadge') : tr('competition.story.officialBadge');
   ctx.fillStyle = data.isProvisional ? 'rgba(242, 194, 48, 0.18)' : 'rgba(46, 139, 78, 0.24)';
   roundedRect(ctx, MARGIN, 110, ctx.measureText(status).width + 56, 58, 29);
   ctx.fillStyle = data.isProvisional ? '#F2C230' : '#7FD69B';
@@ -302,13 +304,13 @@ export function renderStoryResultCardCanvas(
     drawRosette(ctx, MARGIN + 110, y + 115, 78, ft.rank, true);
     ctx.fillStyle = MUTED;
     ctx.font = `700 30px ${BODY_FONT}`;
-    ctx.fillText(`${ordinal(ft.rank)} overall`, MARGIN + 230, y + 80);
+    ctx.fillText(tr('competition.story.overall', { place: localOrdinal(ft.rank) }), MARGIN + 230, y + 80);
     ctx.fillStyle = INK;
     ctx.font = `800 64px ${DISPLAY_FONT}`;
     ctx.fillText(fitText(ctx, ft.teamName, RIGHT - MARGIN - 260), MARGIN + 230, y + 150);
     ctx.fillStyle = MUTED;
     ctx.font = `600 34px ${BODY_FONT}`;
-    const stats = [`${formatPoints(ft.totalPoints)} pts`, `${ft.wins} ${ft.wins === 1 ? 'win' : 'wins'}`, ft.finalTierLabel].filter(Boolean).join(' · ');
+    const stats = [tr('competition.toplist.ptsValue', { points: formatPoints(ft.totalPoints) }), tr('competition.story.wins', { count: ft.wins }), ft.finalTierLabel].filter(Boolean).join(' · ');
     ctx.fillText(fitText(ctx, stats, RIGHT - MARGIN - 260), MARGIN + 230, y + 200);
     y += featuredHeight;
   }
@@ -343,7 +345,7 @@ export function renderStoryResultCardCanvas(
 
   ctx.fillStyle = MUTED;
   ctx.font = `600 30px ${BODY_FONT}`;
-  ctx.fillText('Mounted Games · Live results and standings', MARGIN, STORY_CARD_HEIGHT - 84);
+  ctx.fillText(tr('competition.story.footer'), MARGIN, STORY_CARD_HEIGHT - 84);
 
   return canvas;
 }

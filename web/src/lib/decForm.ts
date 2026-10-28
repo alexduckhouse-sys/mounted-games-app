@@ -390,7 +390,7 @@ function birthYearFromRider(rider: DecRider): number | null {
 export function savedTeamSummaryLabel(savedTeam: SavedTeamDeclaration): string {
   const ridingCount = savedTeam.riders.filter((r) => !r.isReserve).length;
   const reserveCount = savedTeam.riders.filter((r) => r.isReserve).length;
-  const countText = reserveCount > 0 ? `${ridingCount} riders + reserve` : `${ridingCount} ${ridingCount === 1 ? 'rider' : 'riders'}`;
+  const countText = reserveCount > 0 ? tr('entries.dec.ridersReserve', { count: ridingCount }) : tr('entries.riders', { count: ridingCount });
   const head = subtitleOf([savedTeam.entryTeamName || savedTeam.teamName, savedTeam.ageGroup || savedTeam.sectionName, savedTeam.competitionName]);
   return `${head} (${countText})`;
 }
@@ -440,7 +440,7 @@ export function applySavedTeamToForm(
           birthYear,
           ageInCompetitionYear: ageInCompYear,
           maxAge,
-          message: `${slot.fullName} turns ${ageInCompYear} in ${compYear} (check U${maxAge} eligibility).`,
+          message: tr('entries.dec.ageWarning', { name: slot.fullName, age: ageInCompYear, year: compYear, max: maxAge }),
         });
       }
     });

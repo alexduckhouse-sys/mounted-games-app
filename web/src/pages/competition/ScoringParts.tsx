@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { motion, type PanInfo } from 'framer-motion';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useDialogFocus } from '../../components/useDialogFocus';
 import { BibSwatch } from '../../components/BibSwatch';
 import { dotColour } from '../../lib/teamColours';
 import type { LaneFill } from '../../lib/laneFill';
@@ -331,9 +332,13 @@ export function ScoreRow({
   );
 }
 
-/** A bottom dialog on the scoring screen that closes when it is swiped down (the same hook as `components/Sheet`). */
-export function PullDownDialog({ label, className, onClose, children }: { label: string; className: string; onClose: () => void; children: ReactNode }) {
+/**
+ * A bottom dialog on the scoring screen that closes when it is swiped down (the same hook as `components/Sheet`). Focus
+ * moves in to `focus` and stays inside; Escape closes it.
+ */
+export function PullDownDialog({ label, className, onClose, focus = 'button', children }: { label: string; className: string; onClose: () => void; focus?: string; children: ReactNode }) {
   const { ref, handlers, style, dragging } = useSwipeToClose<HTMLDivElement>(onClose);
+  useDialogFocus(ref, onClose, focus);
   return (
     <div ref={ref} role="dialog" aria-modal="true" aria-label={label} className={dragging ? `${className} is-dragging` : className} style={style} {...handlers} onClick={(e) => e.stopPropagation()}>
       {children}

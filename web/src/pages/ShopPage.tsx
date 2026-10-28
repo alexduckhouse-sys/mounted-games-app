@@ -314,13 +314,14 @@ function PostComposer({ onPosted, defaultName }: { onPosted: () => void; default
         <input
           type="file"
           accept="image/*"
+          aria-label="Photo"
           className="block mt-1 text-xs"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) pickImage(f); }}
         />
         {imageBase64 && (
           <div className="mt-2 relative inline-block">
             <img src={imageBase64} alt="preview" className="max-h-32 rounded-md border border-slate-200 dark:border-slate-700" />
-            <button onClick={() => setImageBase64(null)} className="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full p-0.5">
+            <button onClick={() => setImageBase64(null)} aria-label="Remove photo" className="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full p-0.5">
               <X className="w-3 h-3" />
             </button>
           </div>
@@ -486,6 +487,7 @@ function CommentThread({ postId, postAuthorId }: {
         <div className="flex gap-1">
           <input
             className="input !py-1 text-xs flex-1"
+            aria-label={isPrivate ? 'Private message to the seller' : 'Public comment'}
             placeholder={isPrivate ? 'Private message to the seller…' : 'Add a public comment…'}
             value={body}
             onChange={(e) => setBody(e.target.value)}
@@ -495,7 +497,7 @@ function CommentThread({ postId, postAuthorId }: {
             <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
             DM
           </label>
-          <button onClick={submit} disabled={busy || !body.trim()} className="btn-primary !py-1 !px-2 text-xs">
+          <button onClick={submit} disabled={busy || !body.trim()} aria-label="Send comment" className="btn-primary !py-1 !px-2 text-xs">
             <Send className="w-3 h-3" />
           </button>
         </div>

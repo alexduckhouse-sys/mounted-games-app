@@ -546,42 +546,49 @@ export function ScoringSection({
         />
       )}
       {infoSheet && (
-        <div className="rt-overlay">
-          <button type="button" className="rt-scrim" aria-label="Close" onClick={() => setInfoSheet(null)} />
-          <PullDownDialog label={infoSheet === 'summary' ? 'Last race' : infoSheet === 'lanes' ? 'Next round lanes' : 'Score history'} className="rt-sheet" onClose={() => setInfoSheet(null)}>
-            <div className="rt-head">
-              <span className="rt-title">{infoSheet === 'summary' ? 'Last race' : infoSheet === 'lanes' ? (nextLanes?.title ?? 'Next round') : 'Score history'}</span>
-              <button type="button" className="sc-link" onClick={() => setInfoSheet(null)}>Close</button>
-            </div>
-            {infoSheet === 'summary' && summary && <SummaryCard summary={summary} raceNumber={summaryIdx + 1} />}
-            {infoSheet === 'lanes' && nextLanes && <NextLanesCard lanes={nextLanes} />}
-            {infoSheet === 'history' && activeRace && <ScoreAuditPanel raceId={activeRace.id} onChanged={onRefresh} heat={protestCompetitionId != null ? heat : undefined} race={activeRace} />}
-          </PullDownDialog>
-        </div>
+        <RtDialog
+          scrimLabel="Close"
+          label={infoSheet === 'summary' ? 'Last race' : infoSheet === 'lanes' ? 'Next round lanes' : 'Score history'}
+          title={infoSheet === 'summary' ? 'Last race' : infoSheet === 'lanes' ? (nextLanes?.title ?? 'Next round') : 'Score history'}
+          onClose={() => setInfoSheet(null)}
+        >
+          {infoSheet === 'summary' && summary && <SummaryCard summary={summary} raceNumber={summaryIdx + 1} />}
+          {infoSheet === 'lanes' && nextLanes && <NextLanesCard lanes={nextLanes} />}
+          {infoSheet === 'history' && activeRace && <ScoreAuditPanel raceId={activeRace.id} onChanged={onRefresh} heat={protestCompetitionId != null ? heat : undefined} race={activeRace} />}
+        </RtDialog>
       )}
       {protesting && protestCompetitionId != null && (
         <ProtestSheet competitionId={protestCompetitionId} heat={heat} race={activeRace} onClose={() => setProtesting(false)} />
       )}
       {controlsOpen && activeRace && (
-        <div className="rt-overlay">
-          <button type="button" className="rt-scrim" aria-label="Close organiser tools" onClick={() => setControlsOpen(false)} />
-          <PullDownDialog label="Organiser tools" className="rt-sheet" onClose={() => setControlsOpen(false)}>
-            <div className="rt-head">
-              <span className="rt-title">Organiser tools</span>
-              <button type="button" className="sc-link" onClick={() => setControlsOpen(false)}>Close</button>
-            </div>
-            <RaceControlsPanel
-              raceName={activeRace.name}
-              onAddRace={onAddRace}
-              onRenameRace={onRenameRace}
-              onRerunRace={onRerunRace}
-              runoffTeams={runoffTeams}
-              onPickRunoffWinner={onPickRunoffWinner}
-            />
-            {heatTools}
-          </PullDownDialog>
-        </div>
+        <RtDialog scrimLabel="Close organiser tools" label="Organiser tools" title="Organiser tools" onClose={() => setControlsOpen(false)}>
+          <RaceControlsPanel
+            raceName={activeRace.name}
+            onAddRace={onAddRace}
+            onRenameRace={onRenameRace}
+            onRerunRace={onRerunRace}
+            runoffTeams={runoffTeams}
+            onPickRunoffWinner={onPickRunoffWinner}
+          />
+          {heatTools}
+        </RtDialog>
       )}
     </section>
+  );
+}
+
+/** Bottom sheet over the scoring screen: takes focus, closes on Escape and gives focus back. */
+function RtDialog({ label, title, scrimLabel, onClose, children }: { label: string; title: string; scrimLabel: string; onClose: () => void; children: ReactNode }) {
+  return (
+    <div className="rt-overlay">
+      <button type="button" className="rt-scrim" aria-label={scrimLabel} onClick={onClose} />
+      <PullDownDialog label={label} className="rt-sheet" focus=".sc-link" onClose={onClose}>
+        <div className="rt-head">
+          <span className="rt-title">{title}</span>
+          <button type="button" className="sc-link" onClick={onClose}>Close</button>
+        </div>
+        {children}
+      </PullDownDialog>
+    </div>
   );
 }
