@@ -36,4 +36,5 @@ export const common: AreaCatalogue<typeof en> = {
   'common.qty.group': 'Quantité : {name}',
   'common.qty.remove': 'Retirer 1 {name}',
   'common.qty.add': 'Ajouter 1 {name}',
+  'common.undo': 'Annuler',
 };

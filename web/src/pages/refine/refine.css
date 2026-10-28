@@ -185,3 +185,13 @@ details[open] > summary ~ * { animation: rf-reveal 220ms var(--mg-ease-out); }
 @keyframes rf-pop-in { from { opacity: 0; transform: scale(.95) translateY(-4px); } }
 .rf-menu-danger { color: rgb(var(--mg-elim)); text-decoration: underline; }
 .rf-menu-danger:hover { color: rgb(var(--mg-elim)); }
+/* My Teams' alerts switch: the same look, with a 44px area around it for a thumb. */
+.tm-sw::after { content: ''; position: absolute; inset: -11px -3px; }
+/* A team card folds its body away rather than snapping shut. */
+.tm-body { display: grid; grid-template-rows: 1fr; animation: tm-open var(--mg-dur-base) var(--mg-ease-out); }
+.tm-body > div { min-height: 0; overflow: hidden; }
+.tm-body[data-closing='true'] { grid-template-rows: 0fr; animation: tm-close 180ms var(--mg-ease-out) forwards; }
+@keyframes tm-open { from { grid-template-rows: 0fr; opacity: .4; } to { grid-template-rows: 1fr; opacity: 1; } }
+@keyframes tm-close { from { grid-template-rows: 1fr; opacity: 1; } to { grid-template-rows: 0fr; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .tm-body, .tm-body[data-closing='true'] { animation: none; } }
+html[data-lite='true'] .tm-body { animation: none; }

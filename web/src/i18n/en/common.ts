@@ -37,4 +37,5 @@ export const common = {
   'common.qty.group': 'Quantity for {name}',
   'common.qty.remove': 'Remove one {name}',
   'common.qty.add': 'Add one {name}',
+  'common.undo': 'Undo',
 } satisfies Record<string, Message>;

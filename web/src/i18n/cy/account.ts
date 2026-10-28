@@ -287,4 +287,6 @@ export const account: AreaCatalogue<typeof en> = {
   'account.signups.timeLeftHm': '{h} awr {m} munud ar ôl',
   'account.signups.timeLeftM': '{m} munud ar ôl',
   'account.signups.saveArrivalPass': 'Cadw tocyn cyrraedd',
+  'account.supporters.failed': 'Methu diweddaru’r cefnogwr hwnnw. Rhowch gynnig arall arni.',
+  'account.supporters.loading': 'Wrthi’n llwytho’r cefnogwyr…',
 };

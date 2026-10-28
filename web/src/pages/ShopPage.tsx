@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingBag, Plus, Flag, Trash2, MessageCircle, Lock, X, Send, Image as ImageIcon, Check, ChevronRight, SlidersHorizontal } from 'lucide-react';
+import { ShoppingBag, Plus, Flag, Trash2, MessageCircle, Lock, X, Image as ImageIcon, Check, ChevronRight, SlidersHorizontal, ArrowUp } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { usePageWidth } from '../components/pageWidthState';
@@ -10,6 +10,7 @@ import { RoundSearch } from '../components/RoundSearch';
 import { Sheet } from '../components/Sheet';
 import { useDockAction } from '../components/TickerContext';
 import '../components/sitePages.css';
+import '../components/eventPages.css';
 import '../components/filterKit.css';
 import { NO_SHOP_FILTERS, POSTED_OPTIONS, PRICE_BANDS, countShopFilters, matchesShopFilters, shopFilterChips, type ShopFilters } from '../lib/shopFilters';
 import { NumberField } from '../components/NumberField';
@@ -116,21 +117,28 @@ export function ShopPage() {
 function EventShopLinks({ query }: { query: string }) {
   const t = useT();
   const [events, setEvents] = useState<CompetitionSummary[] | null>(null);
+  // Only events with something on sale get a row; if the list of those can't be fetched, every live event is shown.
+  const [withItems, setWithItems] = useState<Set<number> | null | undefined>(undefined);
   useEffect(() => {
     let cancelled = false;
     api.get<CompetitionSummary[]>('/competitions')
       .then((r) => { if (!cancelled) setEvents(r.data.filter((c) => !c.isArchived)); })
       .catch(() => { if (!cancelled) setEvents([]); });
+    api.get<number[]>('/commerce/competitions/with-items')
+      .then((r) => { if (!cancelled) setWithItems(Array.isArray(r.data) ? new Set(r.data) : null); })
+      .catch(() => { if (!cancelled) setWithItems(null); });
     return () => { cancelled = true; };
   }, []);
+  const stocked = events && withItems !== undefined ? (withItems ? events.filter((event) => withItems.has(event.id)) : events) : null;
   const needle = query.trim().toLowerCase();
-  const shown = events?.filter((event) => `${event.name} ${event.location ?? ''}`.toLowerCase().includes(needle)) ?? [];
+  const shown = stocked?.filter((event) => `${event.name} ${event.location ?? ''}`.toLowerCase().includes(needle)) ?? [];
   return (
     <section aria-labelledby="event-shops-title" className="mg-sec">
       <div className="mg-sec-head"><h2 id="event-shops-title">{t('site.shop.eventShops')}</h2></div>
       <p className="mg-meta px-0.5">{t('site.shop.eventIntro')}</p>
-      {events === null ? <p role="status" className="mg-meta px-0.5">{t('site.shop.loadingEvents')}</p>
-        : events.length === 0 ? <p className="mg-card p-4">{t('site.shop.noEvents')}</p>
+      {stocked === null ? <p role="status" className="mg-meta px-0.5">{t('site.shop.loadingEvents')}</p>
+        : events?.length === 0 ? <p className="mg-card p-4">{t('site.shop.noEvents')}</p>
+        : stocked.length === 0 ? <p className="mg-card p-4">{t('site.shop.noEventShops')}</p>
         : shown.length === 0 ? <p className="mg-card p-4">{t('site.shop.noEventMatch')}</p>
         : <ul className="mg-lines mg-lines-grid">
           {shown.map((event) => (
@@ -337,8 +345,8 @@ function PostComposer({ onPosted, defaultName, bare = false }: { onPosted: () =>
         {imageBase64 && (
           <div className="mt-2 relative inline-block">
             <img src={imageBase64} alt={t('site.shop.preview')} className="max-h-32 rounded-md border border-slate-200 dark:border-slate-700" />
-            <button onClick={() => setImageBase64(null)} aria-label={t('site.shop.removePhoto')} className="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full p-0.5">
-              <X className="w-3 h-3" />
+            <button type="button" onClick={() => setImageBase64(null)} aria-label={t('site.shop.removePhoto')} className="sp-photo-x">
+              <X aria-hidden="true" className="h-3.5 w-3.5" />
             </button>
           </div>
         )}
@@ -496,27 +504,27 @@ function CommentThread({ postId, postAuthorId }: {
           <li key={c.id} className={`text-xs ${c.isPrivate ? 'bg-[rgb(var(--mg-info-bg))] px-2 py-1 rounded-md' : ''}`}>
             <span className="font-semibold">{c.authorName}</span>
             {c.isPrivate && <Lock className="inline w-2.5 h-2.5 ml-1 text-[rgb(var(--mg-info-ink))]" />}
-            <span className="text-slate-400 text-[9px] ml-1">{timeAgo(c.createdAt)}</span>
+            <span className="ml-1.5 text-[11px] font-normal text-[rgb(var(--mg-faint))]">{timeAgo(c.createdAt)}</span>
             <p className="text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{c.body}</p>
           </li>
         ))}
       </ul>
       {user ? (
-        <div className="flex gap-1">
+        <div className="flex items-center gap-1.5">
           <input
-            className="input !py-1 text-xs flex-1"
+            className="input min-h-11 min-w-0 flex-1 !rounded-full !px-4 !text-base"
             aria-label={isPrivate ? t('site.shop.privateLabel') : t('site.shop.publicLabel')}
             placeholder={isPrivate ? t('site.shop.privatePlaceholder') : t('site.shop.publicPlaceholder')}
             value={body}
             onChange={(e) => setBody(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
           />
-          <label className="flex items-center gap-1 text-[10px] text-slate-500 cursor-pointer px-1">
+          <label className="flex min-h-11 shrink-0 cursor-pointer items-center gap-1 px-1 text-xs text-[rgb(var(--mg-muted))]">
             <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
             {t('site.shop.dm')}
           </label>
-          <button onClick={submit} disabled={busy || !body.trim()} aria-label={t('site.shop.sendComment')} className="btn-primary !py-1 !px-2 text-xs">
-            <Send className="w-3 h-3" />
+          <button type="button" onClick={submit} disabled={busy || !body.trim()} aria-label={t('site.shop.sendComment')} className="ev-send">
+            <ArrowUp aria-hidden="true" className="h-5 w-5" strokeWidth={2.4} />
           </button>
         </div>
       ) : (

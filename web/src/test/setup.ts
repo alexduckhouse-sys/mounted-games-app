@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { afterEach } from 'vitest';
 import { loadCatalogue, setActiveLang } from '../i18n/translate';
 
@@ -7,6 +7,12 @@ import { loadCatalogue, setActiveLang } from '../i18n/translate';
 // tests unload them on purpose.
 await loadCatalogue('cy');
 await loadCatalogue('fr');
+
+// findBy*/waitFor give up after 1 s by default. That is plenty on a quiet machine, but the first render in a file is cold
+// (jsdom, role and accessible-name queries over a whole page) and when the CPU is shared, a full run, CI or another agent's
+// build, one second is not enough for a page that is working. Keep it well inside the 15 s test timeout set in
+// vitest.config.ts. Tests that wait for something that never comes still fail, only a little later.
+configure({ asyncUtilTimeout: 5_000 });
 
 // A few files opt into the node environment (service-worker helpers), where there is no DOM to reset.
 if (typeof window !== 'undefined') {

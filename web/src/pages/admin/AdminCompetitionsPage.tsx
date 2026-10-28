@@ -1,8 +1,9 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { api } from '../../api';
 import { Notice } from '../../components/Notice';
+import { useDockAction } from '../../components/TickerContext';
 import { apiErrorMessage } from '../../lib/apiError';
 import { competitionDateText } from '../../lib/competitionDates';
 import { stageOf } from '../../lib/adminStage';
@@ -42,6 +43,8 @@ export function AdminCompetitionsPage() {
   const [asking, setAsking] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const now = useMemo(() => new Date(), []);
+  const navigate = useNavigate();
+  const docked = useDockAction({ label: t('admin.accounts.newCompetition'), icon: 'plus', onClick: () => navigate('/admin/competitions/new') });
 
   const load = useCallback(() => api.get<CompetitionSummary[]>('/competitions', { params: { includeArchived: true } })
     .then(({ data }) => { setComps(Array.isArray(data) ? data : []); setError(null); })
@@ -100,9 +103,11 @@ export function AdminCompetitionsPage() {
             </RefineList>
           </Fragment>
         ))}
-        <div className="ops-new-comp">
-          <Link to="/admin/competitions/new" className="rf-btn rf-btn-primary"><Plus className="h-4 w-4" aria-hidden="true" />{t('admin.accounts.newCompetition')}</Link>
-        </div>
+        {!docked && (
+          <div className="ops-new-comp">
+            <Link to="/admin/competitions/new" className="rf-btn rf-btn-primary"><Plus className="h-4 w-4" aria-hidden="true" />{t('admin.accounts.newCompetition')}</Link>
+          </div>
+        )}
       </div>
     </RefinePage>
   );

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams, Outlet } from 'react-router-dom';
 import { api } from '../api';
 import type { ChatMessage, CompetitionDetail, Session, Heat } from '../types';
@@ -180,9 +180,11 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   const streamState = useCompetitionStreams(competitionId, ready);
   const overlayState = useStreamOverlay(competitionId, ready);
   const sponsorFeed = useSponsorFeed(competitionId, ready);
-  // Score cards are worked out from what this phone held before each results update.
+  // Score cards are worked out from what this phone held before each results update. A layout effect keeps the
+  // ref in step during the commit: a plain effect runs a moment later, and a results update landing in that gap
+  // read the old (or no) competition and queued no card.
   const latestData = useRef(data);
-  useEffect(() => { latestData.current = data; }, [data]);
+  useLayoutEffect(() => { latestData.current = data; }, [data]);
   const [scoreCards, setScoreCards] = useState<QueuedScoreCard[]>([]);
   const [prizeGiving, setPrizeGiving] = useState<PrizeGiving | null>(null);
   const [streamTelemetry, setStreamTelemetry] = useState<Record<number, import('../types').StreamTelemetry>>({});

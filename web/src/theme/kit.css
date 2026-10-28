@@ -88,6 +88,10 @@ body:has(.mg-dock-low) .kit-toast { bottom: calc(68px + env(safe-area-inset-bott
 body:has(.mg-dock:not(.mg-dock-low)) .kit-toast { bottom: calc(132px + env(safe-area-inset-bottom, 0px)); }
 .kit-toast-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kit-toast svg { flex: none; width: 22px; height: 22px; padding: 4px; border-radius: 50%; background: rgb(var(--mg-toast-tick)); }
+.kit-toast svg[data-tone="error"] { background: rgb(var(--mg-danger)); }
+.kit-toast-act { position: relative; flex: none; margin: 0 -8px 0 2px; padding: 0 12px; min-height: 36px; border: 0; border-radius: 999px; background: transparent; color: inherit; font: 700 14px/1 var(--mg-font); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; pointer-events: auto; }
+.kit-toast-act::after { content: ''; position: absolute; inset: -4px 0; }
+.kit-toast-act:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
 .kit-toast path { fill: none; stroke: #fff; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; }
 
 /* The "save quick access" banner: floats just above the bottom tabs, never dims or blocks the page. */
