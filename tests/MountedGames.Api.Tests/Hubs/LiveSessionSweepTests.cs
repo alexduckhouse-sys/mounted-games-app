@@ -1,12 +1,18 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using MountedGames.Api.Data;
 using MountedGames.Api.Hubs;
 using MountedGames.Api.Services;
+using MountedGames.Api.Services.Streaming;
 using MountedGames.Api.Tests.Auth;
 using MountedGames.Api.Tests.Infrastructure;
 
@@ -134,6 +140,91 @@ public class LiveSessionSweepTests(LiveSessionSweepTests.Factory f) : IClassFixt
 
         Assert.True(await Sweeper().RunOnceAsync(CancellationToken.None) >= 1);
         await live.Closed.WaitAsync(LiveSessionEndTests.Timeout);
+    }
+
+    [Fact]
+    public async Task AConnectionWhoseSessionCheckThrows_IsNotLeftRecorded()
+    {
+        var registry = new LiveConnections(f.Services.GetRequiredService<RedisConnection>(), NullLogger<LiveConnections>.Instance);
+        AppDbContext gone;
+        using (var scope = f.Services.CreateScope()) gone = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var hub = new LiveHub(f.Services.GetRequiredService<ViewerRegistry>(), registry, gone) { Context = new SignedInContext("someone") };
+
+        await Assert.ThrowsAnyAsync<ObjectDisposedException>(hub.OnConnectedAsync);
+
+        Assert.Equal(0, registry.CountFor("someone"));
+    }
+
+    [Fact]
+    public void WithoutRedis_EverySweepReadsTheDatabase()
+    {
+        // Nothing arrives from other instances, so the sweep is the only way word of an ended session gets here.
+        Assert.True(Registry.SweepNeeded());
+        Assert.True(Registry.SweepNeeded());
+    }
+
+    [Fact]
+    public void WithRedisSetButNotListening_TheSweepReadsTheDatabase()
+    {
+        // Configured, but this instance never subscribed (Redis was down when its connections opened). Building the
+        // connection only reads the setting; nothing here talks to Redis.
+        using var redis = new RedisConnection(new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Redis:ConnectionString"] = "127.0.0.1:1" }).Build(),
+            NullLogger<RedisConnection>.Instance);
+        Assert.True(redis.Configured);
+        var registry = new LiveConnections(redis, NullLogger<LiveConnections>.Instance);
+        Assert.True(registry.SweepNeeded());
+    }
+
+    [RedisFact]
+    public async Task WithRedisListening_TheSweepLeavesTheDatabaseAlone_UntilThisInstanceSeesRedisFail()
+    {
+        using var redisHost = new RedisFactory();
+        var registry = redisHost.Services.GetRequiredService<LiveConnections>();
+        var (_, auth) = await redisHost.SignupAsync("Member");
+        await using var live = await LiveSessionEndTests.ConnectAsync(redisHost, auth.Token);
+        await redisHost.WithDbAsync(db => db.Users.Where(u => u.Id == auth.User.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(u => u.SessionVersion, u => u.SessionVersion + 1)));
+        var sweeper = new LiveSessionSweeper(redisHost.Services.GetRequiredService<IServiceScopeFactory>(), registry,
+            TimeProvider.System, NullLogger<LiveSessionSweeper>.Instance);
+
+        // Listening and nothing failed: every ended session was announced, so the tick is skipped (and a scope factory
+        // that fails would show any database work).
+        var idle = new LiveSessionSweeper(new NoScopes(), registry, TimeProvider.System, NullLogger<LiveSessionSweeper>.Instance);
+        Assert.Equal(0, await idle.RunOnceAsync(CancellationToken.None));
+        Assert.Equal(HubConnectionState.Connected, live.Connection.State);
+
+        // A failed sweep or a Redis failure seen here means a message may have been missed: the next sweep reads.
+        registry.MarkMissed();
+        Assert.Equal(0, await idle.RunOnceAsync(CancellationToken.None));
+        Assert.Equal(HubConnectionState.Connected, live.Connection.State);
+        Assert.True(await sweeper.RunOnceAsync(CancellationToken.None) >= 1);
+        await live.Closed.WaitAsync(LiveSessionEndTests.Timeout);
+        Assert.False(registry.SweepNeeded());
+    }
+
+    /// <summary>The sweep tests' host (no per-request account check), pointed at the test Redis.</summary>
+    private sealed class RedisFactory : ApiFactory
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.UseSetting("Redis:ConnectionString", RedisFactAttribute.Url);
+            builder.ConfigureServices(services => services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme,
+                options => options.Events.OnTokenValidated = _ => Task.CompletedTask));
+        }
+    }
+
+    /// <summary>A hub connection signed in as <paramref name="userId"/>, for calling the hub directly.</summary>
+    private sealed class SignedInContext(string userId) : HubCallerContext
+    {
+        public override string ConnectionId { get; } = Guid.NewGuid().ToString("N");
+        public override string? UserIdentifier => userId;
+        public override ClaimsPrincipal? User { get; } = new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], "test"));
+        public override IDictionary<object, object?> Items { get; } = new Dictionary<object, object?>();
+        public override IFeatureCollection Features { get; } = new FeatureCollection();
+        public override CancellationToken ConnectionAborted => CancellationToken.None;
+        public override void Abort() { }
     }
 
     private sealed class NoScopes : IServiceScopeFactory

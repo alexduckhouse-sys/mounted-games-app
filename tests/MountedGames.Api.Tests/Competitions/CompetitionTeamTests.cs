@@ -64,7 +64,7 @@ public class CompetitionTeamTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task TheTeamList_FlagsAnAdminWhoseEmailIsNotConfirmed_WithoutBlockingThem()
+    public async Task SomeoneWhoseEmailIsNotConfirmed_CantBeAdded_AndOneAddedBeforeIsFlagged()
     {
         var (arena, _, _, owner, _) = await OwnedAsync();
         var (_, helperAuth) = await _f.SignupAsync("Member");
@@ -74,10 +74,22 @@ public class CompetitionTeamTests : IClassFixture<ApiFactory>
             await db.SaveChangesAsync();
         });
 
-        var added = await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = helperAuth.User.Email });
-        Assert.Equal(HttpStatusCode.OK, added.StatusCode);
-        Assert.False((await added.ReadAsync<TeamHelperDto>()).EmailConfirmed);
+        // A competition admin can reset their password by email, so the address must be theirs first.
+        var refused = await owner.PostAsJsonAsync(Team(arena.CompetitionId), new { email = helperAuth.User.Email });
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Contains("email_unconfirmed", await refused.Content.ReadAsStringAsync());
+        Assert.Empty((await owner.GetFromJsonAsync<CompetitionTeamDto>(Team(arena.CompetitionId)))!.Helpers);
 
+        // One added before this rule (or whose address changed since) still shows, flagged.
+        await _f.InDbAsync(async db =>
+        {
+            db.CompetitionCollaborators.Add(new CompetitionCollaborator
+            {
+                CompetitionId = arena.CompetitionId, UserId = helperAuth.User.Id, Role = CollaboratorRole.CompetitionAdmin, AddedByUserId = helperAuth.User.Id,
+                AddedAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        });
         var team = await owner.GetFromJsonAsync<CompetitionTeamDto>(Team(arena.CompetitionId));
         Assert.False(Assert.Single(team!.Helpers).EmailConfirmed);
     }

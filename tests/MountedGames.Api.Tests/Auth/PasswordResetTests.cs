@@ -1004,3 +1004,68 @@ public class PasswordResetRaceTests : IClassFixture<PasswordResetRaceTests.Facto
                                                  where m.UserId == account.User.Id && r.Name == Roles.MasterAdmin select m).AnyAsync()));
     }
 }
+
+/// <summary>
+/// Making the link fails (the database drops out, say): the request is still answered 202 at the floor, like any other,
+/// so a failure for a known address can't be told from an unknown one, and the failure is logged with a masked address.
+/// </summary>
+public class PasswordResetPrepareFailureTests : IClassFixture<PasswordResetPrepareFailureTests.Factory>
+{
+    public const int FloorMilliseconds = 300;
+
+    public sealed class Trap
+    {
+        private string? _armed;
+        public void Arm(string normalizedEmail) => Volatile.Write(ref _armed, normalizedEmail);
+        public bool Springs(string normalizedEmail) => Volatile.Read(ref _armed) == normalizedEmail;
+    }
+
+    public sealed class FailingUserStore(AppDbContext context, Trap trap, IdentityErrorDescriber? describer = null)
+        : Microsoft.AspNetCore.Identity.EntityFrameworkCore.UserStore<AppUser, IdentityRole, AppDbContext>(context, describer)
+    {
+        public override Task<AppUser?> FindByEmailAsync(string normalizedEmail, CancellationToken cancellationToken = default)
+            => trap.Springs(normalizedEmail)
+                ? throw new InvalidOperationException("The database went away.")
+                : base.FindByEmailAsync(normalizedEmail, cancellationToken);
+    }
+
+    public sealed class Factory : EmailApiFactory
+    {
+        public Trap Trap { get; } = new();
+
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.UseSetting("PasswordReset:MinResponseMilliseconds", FloorMilliseconds.ToString());
+            builder.ConfigureServices(services =>
+            {
+                services.AddSingleton(Trap);
+                services.RemoveAll<IUserStore<AppUser>>();
+                services.AddScoped<IUserStore<AppUser>, FailingUserStore>();
+            });
+        }
+    }
+
+    private readonly Factory _f;
+    public PasswordResetPrepareFailureTests(Factory f) => _f = f;
+
+    [Fact]
+    public async Task AFailureMakingTheLink_IsAnsweredLikeAnyOtherRequest_AtTheFloor_AndLoggedMasked()
+    {
+        var account = await _f.AccountAsync();
+        // Warm the host up first, so the timing below is the request's own.
+        Assert.Equal(HttpStatusCode.Accepted, (await _f.RequestResetAsync(ResetSteps.NewEmail())).StatusCode);
+        _f.Trap.Arm(account.User.Email.ToUpperInvariant());
+
+        var clock = Stopwatch.StartNew();
+        var response = await _f.RequestResetAsync(account.User.Email);
+        clock.Stop();
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.Equal(PasswordResetController.RequestedMessage, (await response.ReadAsync<PasswordResetRequestedResponse>()).Message);
+        Assert.True(clock.ElapsedMilliseconds >= FloorMilliseconds - 20, $"Answered in {clock.ElapsedMilliseconds} ms, before the floor.");
+        Assert.Contains(_f.Logs, l => l.Contains("password reset link") && l.Contains("could not be made: InvalidOperationException"));
+        Assert.DoesNotContain(_f.Logs, l => l.Contains(account.User.Email));
+        Assert.Empty(_f.Mail(account.User.Email, ResetSteps.ResetSubject));
+    }
+}
