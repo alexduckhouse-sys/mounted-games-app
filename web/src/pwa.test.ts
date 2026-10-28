@@ -1,7 +1,6 @@
-import { screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { registerPwa, setBroadcasting } from './pwa';
+import { registerPwa, reloadOnceForChunkFailure, setBroadcasting } from './pwa';
 
 type Options = { onNeedRefresh: () => void; onOfflineReady: () => void; onRegisteredSW: (url: string, registration?: unknown) => void };
 const registerSW = vi.hoisted(() => vi.fn());
@@ -21,19 +20,10 @@ describe('registerPwa', () => {
     expect(registerSW).toHaveBeenCalledTimes(1);
   });
 
-  it('reloads into the new version when the user accepts the prompt', async () => {
+  it('applies a waiting update straight away, without asking', () => {
     options.onNeedRefresh();
-    const dialog = await screen.findByRole('alertdialog', { name: 'Update ready' });
-    expect(dialog).toHaveTextContent('A new version of the app is ready.');
-    await userEvent.click(screen.getByRole('button', { name: 'Reload now' }));
-    await waitFor(() => expect(updateSW).toHaveBeenCalledWith(true));
-  });
-
-  it('leaves the new version waiting when the user declines', async () => {
-    options.onNeedRefresh();
-    await userEvent.click(await screen.findByRole('button', { name: 'Not now' }));
-    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
-    expect(updateSW).not.toHaveBeenCalled();
+    expect(updateSW).toHaveBeenCalledWith(true);
+    expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 
   it('remembers that the app is ready to work offline', () => {
@@ -51,15 +41,61 @@ describe('registerPwa', () => {
   });
 });
 
-it('defers the update prompt and reload while broadcasting', async () => {
+it('holds the update back while broadcasting, then applies it', () => {
   setBroadcasting(true);
   options.onNeedRefresh();
-  expect(screen.queryByRole('alertdialog')).toBeNull();
   expect(updateSW).not.toHaveBeenCalled();
   setBroadcasting(false);
-  options.onNeedRefresh();
-  await userEvent.click(await screen.findByRole('button', { name: 'Reload now' }));
-  await waitFor(() => expect(updateSW).toHaveBeenCalledWith(true));
+  expect(updateSW).toHaveBeenCalledWith(true);
+});
+
+describe('chunk load failures', () => {
+  beforeEach(() => { sessionStorage.clear(); });
+
+  it('reloads once onto the new version on a preload error, then not again', () => {
+    options.onNeedRefresh(); // gives the page its update hook
+    updateSW.mockClear();
+    const event = new Event('vite:preloadError', { cancelable: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(updateSW).toHaveBeenCalledTimes(1);
+    window.dispatchEvent(new Event('vite:preloadError', { cancelable: true }));
+    expect(updateSW).toHaveBeenCalledTimes(1);
+  });
+
+  it('reloads the page directly when no update is waiting', async () => {
+    vi.resetModules();
+    const fresh = await import('./pwa');
+    const reload = vi.fn();
+    expect(fresh.reloadOnceForChunkFailure(reload)).toBe(true);
+    expect(fresh.reloadOnceForChunkFailure(reload)).toBe(false);
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reload when session storage is unavailable', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
+    const reload = vi.fn();
+    expect(reloadOnceForChunkFailure(reload)).toBe(false);
+    expect(reload).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+
+  it('treats a rejected dynamic import as a chunk failure and ignores other rejections', () => {
+    options.onNeedRefresh();
+    updateSW.mockClear();
+    const reject = (reason: unknown) => {
+      const e = new Event('unhandledrejection') as Event & { reason: unknown };
+      e.reason = reason;
+      window.dispatchEvent(e);
+    };
+    reject(new Error('network down'));
+    reject(undefined);
+    expect(updateSW).not.toHaveBeenCalled();
+    reject(new Error('Failed to fetch dynamically imported module: /assets/x.js'));
+    expect(updateSW).toHaveBeenCalledTimes(1);
+    reject('error loading dynamically imported module');
+    expect(updateSW).toHaveBeenCalledTimes(1);
+  });
 });
 
 it('registers no service worker inside the iPhone app', async () => {

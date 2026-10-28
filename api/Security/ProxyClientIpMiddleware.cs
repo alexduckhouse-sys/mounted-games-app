@@ -20,6 +20,8 @@ public sealed class ProxyClientIpMiddleware(RequestDelegate next, IConfiguration
     public const string LatitudeHeader = "X-MG-Client-Lat";
     public const string LongitudeHeader = "X-MG-Client-Lon";
     public const int MinimumKeyBytes = 32;
+    /// <summary>Set in <c>HttpContext.Items</c> when the client address came from the keyed proxy, so it is the visitor's real one.</summary>
+    public const string TrustedIpItemKey = "MG.TrustedClientIp";
 
     private readonly byte[]? _key = LoadKey(configuration["Security:ProxyKey"], log);
 
@@ -37,7 +39,11 @@ public sealed class ProxyClientIpMiddleware(RequestDelegate next, IConfiguration
         if (_key is not null && presented.Length > 0
             && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(presented), _key))
         {
-            if (IPAddress.TryParse(claimed, out var ip)) context.Connection.RemoteIpAddress = ip;
+            if (IPAddress.TryParse(claimed, out var ip))
+            {
+                context.Connection.RemoteIpAddress = ip;
+                context.Items[TrustedIpItemKey] = true;
+            }
             // The rough place of the connection, for this request only: kept in the request's items, never stored or logged.
             if (GeoPoint.TryParse(latitude, longitude, out var place)) context.Items[VisitorGeo.ItemKey] = place;
         }

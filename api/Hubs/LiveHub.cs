@@ -1,4 +1,7 @@
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using MountedGames.Api.Security;
 using MountedGames.Api.Data;
 using Microsoft.AspNetCore.SignalR;
 using MountedGames.Api.Auth;
@@ -45,9 +48,18 @@ public class LiveHub(ViewerRegistry viewers, LiveConnections connections, AppDbC
     public Task<WatchStreamResponse> WatchStreamTier(int competitionId, int streamId, string? preferredRid) =>
         viewers.WatchAsync(Context.ConnectionId, competitionId, streamId, Context.ConnectionAborted, AnonymousViewerIp(), preferredRid);
 
-    // Signed-in viewers are accountable already; anonymous ones are capped per address.
-    private string? AnonymousViewerIp() =>
-        Context.User?.Identity?.IsAuthenticated == true ? null : Context.GetHttpContext()?.Connection.RemoteIpAddress?.ToString();
+    // Signed-in viewers are accountable already; anonymous ones are capped per address, but only when the address
+    // is really theirs. Browsers reach the hub directly (no proxy key), so otherwise everyone shares one address
+    // and the per-address cap would refuse the Nth viewer. The per-stream total cap still applies.
+    private string? AnonymousViewerIp()
+    {
+        if (Context.User?.Identity?.IsAuthenticated == true) return null;
+        var http = Context.GetHttpContext();
+        if (http is null) return null;
+        var trusted = http.Items.ContainsKey(ProxyClientIpMiddleware.TrustedIpItemKey)
+            || http.RequestServices.GetService<IOptions<ForwardedHeadersOptions>>()?.Value.ForwardedHeaders is { } f && f != ForwardedHeaders.None;
+        return trusted ? http.Connection.RemoteIpAddress?.ToString() : null;
+    }
 
     public Task AnswerStream(string watchId, string sdpAnswer) =>
         viewers.AnswerAsync(Context.ConnectionId, watchId, sdpAnswer, Context.ConnectionAborted);

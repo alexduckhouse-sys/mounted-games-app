@@ -130,6 +130,19 @@ public class StreamingHubTests : IClassFixture<StreamingApiFactory>
     }
 
     [Fact]
+    public async Task AnonymousViewersWithAnUntrustedAddressAreNotCappedPerIp()
+    {
+        using var f = new StreamingApiFactory();
+        f.Settings["MaxViewersPerIp"] = "1";
+        var (_, competition, attempt) = await LiveAsync(f);
+        // Direct hub connections carry no proxy key, so their shared address says nothing about the viewer.
+        await using var a = await f.ConnectAsync(ip: "198.51.100.1", trustedIp: false);
+        await using var b = await f.ConnectAsync(ip: "198.51.100.1", trustedIp: false);
+        await a.InvokeAsync<WatchStreamResponse>("WatchStream", competition, attempt.StreamId);
+        await b.InvokeAsync<WatchStreamResponse>("WatchStream", competition, attempt.StreamId);
+    }
+
+    [Fact]
     public async Task RegistryCapIgnoresViewersWithNoAddress_AndFreesSlotsOnDisconnect()
     {
         using var f = new StreamingApiFactory();

@@ -11,13 +11,18 @@ namespace MountedGames.Api.Tests.Infrastructure;
 public class TestIpStartupFilter : IStartupFilter
 {
     public const string Header = "X-Test-Ip";
+    public const string UntrustedHeader = "X-Test-Ip-Untrusted";
 
     public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
     {
         app.Use(async (ctx, nxt) =>
         {
             if (ctx.Request.Headers.TryGetValue(Header, out var ip) && IPAddress.TryParse(ip.ToString(), out var addr))
+            {
                 ctx.Connection.RemoteIpAddress = addr;
+                // Stands in for the keyed proxy: a test that sends an address is simulating a trusted edge.
+                if (!ctx.Request.Headers.ContainsKey(UntrustedHeader)) ctx.Items[MountedGames.Api.Security.ProxyClientIpMiddleware.TrustedIpItemKey] = true;
+            }
             await nxt();
         });
         next(app);
