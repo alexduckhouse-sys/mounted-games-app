@@ -541,7 +541,6 @@ export function HeatGrid({ heat, races, activeRaceId, activeIndex, rules, pendin
 }) {
   const teams = inLaneOrder(heat, activeIndex, rules);
   const manyRaces = races.length >= 6;
-  const minWidth = manyRaces ? undefined : 12 + 100 + races.length * 22 + 40;
   const activeRace = races.find((r) => r.id === activeRaceId) ?? null;
   const allDone = races.length > 0 && races.every((r) => r.isComplete);
   const metaText = activeRace
@@ -587,8 +586,8 @@ export function HeatGrid({ heat, races, activeRaceId, activeIndex, rules, pendin
 
   return (
     <section aria-label="Heat table" className="sc-card overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className={`heat-grid${manyRaces ? ' heat-grid-many' : ''}`} style={{ minWidth }}>
+      <div className="overflow-hidden">
+        <table className={`heat-grid${manyRaces ? ' heat-grid-many' : ''}`}>
           <thead>
             <tr>
               <th scope="col" className="heat-team-head">

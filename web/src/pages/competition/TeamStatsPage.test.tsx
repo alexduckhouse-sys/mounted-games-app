@@ -47,7 +47,7 @@ describe('TeamStatsPage', () => {
     expect(fact('Average per race')).toHaveTextContent('1.8 pts');
     expect(fact('Average place')).toHaveTextContent('1.8');
     expect(fact('Races won')).toHaveTextContent('2 of 5');
-    expect(fact('Point quota')).toHaveTextContent('%');
+    expect(fact('Avg points')).toHaveTextContent('%');
     expect(fact('Best race')).toHaveTextContent('Mug Shuffle · 2.7 avg');
     expect(fact('Hardest race')).toHaveTextContent('Two Flag · 0.5 avg');
     expect(fact('Total points')).toHaveTextContent('9');

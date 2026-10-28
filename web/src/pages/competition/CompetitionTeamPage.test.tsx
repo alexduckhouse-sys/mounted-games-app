@@ -280,7 +280,7 @@ describe('CompetitionTeamPage detailed view', () => {
     expect(fact('Average per race')).toHaveTextContent('5.0 pts');
     expect(fact('Average place')).toHaveTextContent('1.0');
     expect(screen.queryByText('Races won', { selector: 'dt' })).toBeNull();
-    expect(screen.queryByText('Point quota', { selector: 'dt' })).toBeNull();
+    expect(screen.queryByText('Avg points', { selector: 'dt' })).toBeNull();
     expect(within(stats).queryByText('By race')).toBeNull();
     expect(within(stats).getByRole('link', { name: 'See all stats' })).toHaveAttribute('href', '/competitions/1/teams/1/stats');
 

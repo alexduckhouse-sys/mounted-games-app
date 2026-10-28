@@ -8,9 +8,8 @@ using MountedGames.Api.Entities.Seasons;
 
 namespace MountedGames.Api.Services.Stats;
 
-/// <param name="SignedIn">Signed-in viewers get the detail lists; everyone else gets the summary, plus a team's per-game figures.</param>
 /// <param name="SeesFullNames">Site admins see riders' full names even when a rider asked for initials only.</param>
-public readonly record struct StatsViewer(bool SignedIn, bool SeesFullNames);
+public readonly record struct StatsViewer(bool SeesFullNames);
 
 /// <summary>
 /// The cross-competition statistics hub: riders, ponies, teams and clubs, matched by name (see
@@ -361,15 +360,8 @@ public sealed class StatsService(AppDbContext db, StandingsService? standings = 
         var best = games.Take(bestCount).Select(g => g.Name).ToList();
         var worst = games.Skip(bestCount).Reverse().Take(3).Select(g => g.Name).ToList();
 
-        // Per-game figures are totals over a team's own race results, which the public results pages already show, so a
-        // team profile gives them to everyone. Riders and ponies keep them behind sign-in, with the entries and the
-        // rider and pony partnerships (which name people) for every kind.
-        if (!viewer.SignedIn)
-            return new StatsProfileDto(kind, name, key, false, allFormats, summary,
-                kind == StatsSubjectKind.Team ? games : null,
-                kind == StatsSubjectKind.Team ? best : null,
-                kind == StatsSubjectKind.Team ? worst : null,
-                null, null);
+        // Everyone gets the same detail (games, entries, partnerships, clubs and seasons). Only the names differ:
+        // site admins see full names, everyone else sees what each rider chose to show.
 
         var sessionTables = await SessionTablesAsync(sessionIds, ct);
         var resultsByTeam = results.ToLookup(r => r.TeamId);

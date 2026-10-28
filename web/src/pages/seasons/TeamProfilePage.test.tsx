@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
+import { TickerProvider, useTicker } from '../../components/TickerContext';
 import { FAVOURITES_KEY, readFavourites } from '../../lib/favourites';
 import { readFollowedProfiles } from '../../lib/followedProfiles';
 import TeamProfilePage from './TeamProfilePage';
@@ -242,5 +243,33 @@ describe('TeamProfilePage', () => {
     expect(screen.getByLabelText('Suffix')).not.toBeRequired();
     await user.click(screen.getByRole('button', { name: 'Create profile' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/team-profiles', { clubId: 0, clubName: 'Welsh Dragons', suffix: '', displayName: 'Welsh Dragons' }));
+  });
+
+  it('sends Back to the season the team was opened from, and says it is the standings', async () => {
+    render(<MemoryRouter initialEntries={[{ pathname: '/team-profiles/profile-1', state: { from: '/seasons/season-9' } }]}><CompactPageBarProvider><Routes><Route path="/team-profiles/:id" element={<TeamProfilePage />} /></Routes><HeaderProbe /></CompactPageBarProvider></MemoryRouter>);
+    await waitFor(() => expect(screen.getByTestId('header')).toHaveTextContent('North Club A||/seasons/season-9'));
+  });
+
+  it('ignores a "from" that is not a season address', async () => {
+    render(<MemoryRouter initialEntries={[{ pathname: '/team-profiles/profile-1', state: { from: 'https://elsewhere.example/seasons/1' } }]}><CompactPageBarProvider><Routes><Route path="/team-profiles/:id" element={<TeamProfilePage />} /></Routes><HeaderProbe /></CompactPageBarProvider></MemoryRouter>);
+    await waitFor(() => expect(screen.getByTestId('header')).toHaveTextContent('North Club A||/team-profiles'));
+  });
+
+  it('puts New profile by the ticker dock, and keeps its own button without a dock', async () => {
+    function Dock() {
+      const { dockAction } = useTicker();
+      return dockAction ? <button type="button" data-testid="dock" onClick={dockAction.onClick}>{dockAction.label}</button> : null;
+    }
+    const user = userEvent.setup();
+    const docked = render(<TickerProvider><Dock /><MemoryRouter initialEntries={['/team-profiles']}><Routes><Route path="/team-profiles" element={<TeamProfilePage />} /></Routes></MemoryRouter></TickerProvider>);
+    const dock = await screen.findByTestId('dock');
+    expect(dock).toHaveTextContent('New profile');
+    expect(screen.getAllByRole('button', { name: 'New profile' })).toHaveLength(1);
+    await user.click(dock);
+    expect(await screen.findByRole('heading', { name: 'Create a team profile' })).toBeInTheDocument();
+    expect(screen.queryByTestId('dock')).not.toBeInTheDocument();
+    docked.unmount();
+    render(<MemoryRouter initialEntries={['/team-profiles']}><Routes><Route path="/team-profiles" element={<TeamProfilePage />} /></Routes></MemoryRouter>);
+    expect(await screen.findByRole('button', { name: 'New profile' })).not.toHaveAttribute('data-testid');
   });
 });

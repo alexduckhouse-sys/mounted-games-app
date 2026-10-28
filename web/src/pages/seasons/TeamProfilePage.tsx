@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { ChevronRight, Link2, Plus, Save, Star } from 'lucide-react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { Notice } from '../../components/Notice';
 import { PageProblem } from '../../components/PageProblem';
@@ -23,6 +23,7 @@ import { SelectField } from '../../components/SelectField';
 import { RoundSearch } from '../../components/RoundSearch';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { AddBar } from '../admin/creator/controls';
+import { useDockAction } from '../../components/TickerContext';
 import '../../components/sitePages.css';
 import { clubLabel } from '../../lib/clubName';
 
@@ -66,6 +67,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
   const { user, canOrganise } = useAuth();
   const mayManage = canOrganise();
   const navigate = useNavigate();
+  const location = useLocation();
   const [query] = useSearchParams();
   const [profiles, setProfiles] = useState<TeamProfile[] | null>(null);
   const [history, setHistory] = useState<TeamProfileHistory | null>(null);
@@ -97,12 +99,16 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
   const headerContext = !selected ? undefined
     : seasonData && seasonData.seasonId === selectedId ? `${seasonData.season.ageGroup} ${sectionFormatText(seasonData.season.format, t)} · ${seasonData.season.year}`
       : `${selected.title} · ${selected.year}`;
+  // Tapping a team on a season's standings sends the season's address along, so Back returns to that season.
+  const cameFrom = (location.state as { from?: unknown } | null)?.from;
+  const backToSeason = typeof cameFrom === 'string' && /^\/seasons\/[^/?#]+/.test(cameFrom) ? cameFrom : null;
+  const docked = useDockAction(!id && mayManage && !creating && !loading ? { label: t('site.profiles.newProfile'), icon: 'plus', onClick: () => setCreating(true) } : null);
   usePageHeader({
     title: !id ? t('site.profiles.title') : history?.profile.displayName ?? t('site.profiles.history'),
     subtitle: id ? headerContext : undefined,
     plain: true,
-    backTo: id ? (selected ? `/seasons/${selected.seasonId}` : '/team-profiles') : undefined,
-    backLabel: id ? (selected ? t('site.profiles.backToStandings') : t('site.profiles.backToProfiles')) : undefined,
+    backTo: id ? (backToSeason ?? (selected ? `/seasons/${selected.seasonId}` : '/team-profiles')) : undefined,
+    backLabel: id ? (backToSeason || selected ? t('site.profiles.backToStandings') : t('site.profiles.backToProfiles')) : undefined,
   });
 
   useEffect(() => {
@@ -223,7 +229,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
         {shown.length > 0 && <ul className="sp-card sp-gap m-0 list-none p-0" aria-label={t('site.profiles.title')}>{[...shown].sort((a, b) => a.displayName.localeCompare(b.displayName)).map((profile) => <li key={profile.id}><Link to={`/team-profiles/${profile.id}`} className="sp-row"><span className="sp-grow"><span className="sp-t1">{profile.displayName}</span><span className="sp-t2">{clubLabel(profile.clubName)}{profile.suffix ? `${clubLabel(profile.clubName) ? ' · ' : ''}${t('site.profiles.suffix', { suffix: profile.suffix })}` : ''}</span></span><ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} /></Link></li>)}</ul>}
         {shown.length === 0 && <p className="sp-note">{t('teams.list.noMatch', { query: search.trim() })}</p>}
       </> : <div className="sv-empty"><h2>{t('site.profiles.none')}</h2><p>{t('site.profiles.noneBody')}</p></div>)}
-      {mayManage && <div className="sp-gap"><AddBar onClick={() => setCreating(true)}>New profile</AddBar></div>}
+      {mayManage && !docked && <div className="sp-gap"><AddBar onClick={() => setCreating(true)}>{t('site.profiles.newProfile')}</AddBar></div>}
     </RefinePage>;
   }
 

@@ -690,7 +690,7 @@ public static class HistorySeeder
         {
             AuthorUserId = SellerIds[Array.IndexOf(new[] { "Warwickshire Tack Swap", "Onley Rosettes and Prints", "Malvern Saddlery Spares" }, r.Seller)],
             AuthorName = r.Seller, PonyClubName = r.Club, Title = r.Title, Body = r.Body, PriceMinor = r.Price,
-            ContactInfo = "Message me through the shop.", ImageBase64 = null,
+            ContactInfo = "Ask in the comments.", ImageBase64 = null,
             CreatedAt = DateTime.SpecifyKind(today.AddDays(-(i * 2 + rng.Next(0, 2))).AddHours(8 + rng.Next(0, 10)), DateTimeKind.Utc),
         }).ToList();
     }

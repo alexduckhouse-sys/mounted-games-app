@@ -8,6 +8,9 @@ import { Sheet } from '../components/Sheet';
 import { usePageWidth } from '../components/pageWidthState';
 import { usePageHeader } from '../components/CompactPageBarContext';
 import { Notice } from '../components/Notice';
+import { useDockAction } from '../components/TickerContext';
+import { useToast } from '../components/Toast';
+import { useStillMotion } from '../lite/useStillMotion';
 import { useFavourites } from '../hooks/useFavourites';
 import { useFollowedProfiles } from '../hooks/useFollowedProfiles';
 import type { FollowedProfile } from '../lib/followedProfiles';
@@ -64,6 +67,17 @@ function useProfileDetails(followed: FollowedProfile[]) {
   return { histories, competitions: competitions ?? null, profiles, profilesError, retryProfiles: () => setAttempt((value) => value + 1), ready };
 }
 
+/** One followed team profile with what is known about it so far (nothing, until its history arrives). */
+interface FollowRow {
+  profile: FollowedProfile;
+  history: TeamProfileHistory | null;
+  name: string;
+  entry: ReturnType<typeof nextEntry>;
+  last: ReturnType<typeof lastOut>;
+  /** Just unfollowed: still drawn while its row folds away. */
+  gone?: boolean;
+}
+
 type SearchProps = {
   profiles: TeamProfile[] | null; error: boolean; retry: () => void;
   followedIds: Set<string>; onToggle: (profile: TeamProfile) => void;
@@ -78,6 +92,11 @@ export function FollowingPage() {
   const details = useProfileDetails(followed.profiles);
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const [leaving, setLeaving] = useState<FollowRow[]>([]);
+  const toast = useToast();
+  const still = useStillMotion();
+  // "Follow a team" is the round + beside the ticker dock; without a dock the grey bar stays under the list.
+  const docked = useDockAction({ label: t('teams.following.followBar'), icon: 'plus', onClick: () => setSearchOpen(true) });
 
   // A team followed through its profile is shown once, with the profile, not again under its competition.
   const exclude = useMemo(() => new Set(followed.profiles.flatMap((item) => (details.histories[item.id]?.eventTeams ?? []).map((team) => `${team.competitionId}:${team.teamId}`))), [followed.profiles, details.histories]);
@@ -91,7 +110,7 @@ export function FollowingPage() {
   });
 
   const now = new Date();
-  const rows = followed.profiles.map((profile) => {
+  const rows: FollowRow[] = followed.profiles.map((profile) => {
     const history = details.histories[profile.id] ?? null;
     return {
       profile, history,
@@ -100,12 +119,30 @@ export function FollowingPage() {
       last: history ? lastOut(history.publishedResults) : null,
     };
   });
-  type Row = (typeof rows)[number];
-  const coming = rows.filter((row) => row.entry).sort((a, b) => new Date(a.entry!.startDate).getTime() - new Date(b.entry!.startDate).getTime());
-  const notEntered = rows.filter((row) => !row.entry).sort((a, b) => a.name.localeCompare(b.name));
+  type Row = FollowRow;
+  // A row that was just unfollowed stays in its place until it has folded away (or until it is followed again).
+  const everyRow: Row[] = [...rows, ...leaving.filter((row) => !followed.profiles.some((item) => item.id === row.profile.id))];
+  const coming = everyRow.filter((row) => row.entry).sort((a, b) => new Date(a.entry!.startDate).getTime() - new Date(b.entry!.startDate).getTime());
+  const notEntered = everyRow.filter((row) => !row.entry).sort((a, b) => a.name.localeCompare(b.name));
   const unfollow = (row: Row) => {
+    const teams = (row.history?.eventTeams ?? []).map((team) => ({ competitionId: team.competitionId, teamId: team.teamId }));
+    const settle = () => setLeaving((current) => current.filter((item) => item.profile.id !== row.profile.id));
     followed.set(row.profile, false);
-    if (row.history?.eventTeams.length) setMany(row.history.eventTeams.map((team) => ({ competitionId: team.competitionId, teamId: team.teamId })), false);
+    if (teams.length) setMany(teams, false);
+    if (!still) {
+      setLeaving((current) => [...current.filter((item) => item.profile.id !== row.profile.id), { ...row, gone: true }]);
+      setTimeout(settle, 220);
+    }
+    toast.show(t('teams.following.unfollowed'), {
+      action: {
+        label: t('common.undo'),
+        onClick: () => {
+          settle();
+          followed.set(row.profile, true);
+          if (teams.length) setMany(teams, true);
+        },
+      },
+    });
   };
   const strong = 'font-semibold text-[rgb(var(--mg-ink))]';
   const subOf = (row: Row) => {
@@ -117,12 +154,12 @@ export function FollowingPage() {
     const count = details.profiles ? clubTeamCount(row.profile.id, details.profiles) : null;
     return count ? t('teams.following.clubTeams', { count }) : null;
   };
-  const group = (list: Row[], label: string) => list.length > 0 && (
+  const group = (list: Row[], label: string, heading = true) => list.length > 0 && (
     <section aria-label={label}>
-      <h2 className="sp-sec !mt-0"><span>{label}</span><small>{t('teams.following.teamCount', { count: list.length })}</small></h2>
+      <h2 className={heading ? 'sp-sec !mt-0' : 'sr-only'}><span>{label}</span><small>{t('teams.following.teamCount', { count: list.filter((row) => !row.gone).length })}</small></h2>
       <ul className="sp-card m-0 list-none p-0">
         {list.map((row) => (
-          <li key={row.profile.id} className="sp-row !gap-1 !pr-1">
+          <li key={row.profile.id} className={`sp-row !gap-1 !pr-1${row.gone ? ' sp-row-leave' : ''}`} inert={row.gone || undefined} aria-hidden={row.gone || undefined}>
             <Link to={row.entry ? `/competitions/${row.entry.competitionId}/teams/${row.entry.teamId}` : `/team-profiles/${row.profile.id}`} className="sp-grow !text-[rgb(var(--mg-heading))] !no-underline">
               <span className="text-[21px] font-semibold leading-tight">{row.name}</span>
               {subOf(row) && <span className="sp-t2">{subOf(row)}</span>}
@@ -153,11 +190,12 @@ export function FollowingPage() {
             {group(coming, t('teams.following.comingUp'))}
             {group(notEntered, t('teams.following.notEntered'))}
             <FollowingTeamsSection plain exclude={exclude} quietWhenEmpty={followed.profiles.length > 0} addLink={false} />
-          </> : <p role="status" className="sp-note m-0">{t('teams.following.loadingEvent')}</p>}
-          <button type="button" className="sp-add" aria-haspopup="dialog" onClick={() => setSearchOpen(true)}><Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />{t('teams.following.followBar')}</button>
+          </> : group([...everyRow].sort((a, b) => a.name.localeCompare(b.name)), t('teams.following.title'), false)}
+          {!docked && <button type="button" className="sp-add" aria-haspopup="dialog" onClick={() => setSearchOpen(true)}><Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />{t('teams.following.followBar')}</button>}
           <Link to="/events" className="sp-link self-center">{eventIds.length || followed.profiles.length ? t('teams.following.anotherCompetition') : t('teams.following.chooseCompetition')}</Link>
         </>}
       </div>
+      {toast.node}
       {searchOpen && (
         <Sheet title={t('teams.following.followBar')} className="fk-sheet" initialFocus="input[type=search]" onClose={() => setSearchOpen(false)}>
           {({ close }) => <SheetSearch search={search} onDone={close} />}
@@ -222,8 +260,9 @@ export function FollowingTeamsSection({ plain = false, exclude, quietWhenEmpty =
     {ids.length > limit && <button className="mg-btn mg-btn-secondary" onClick={() => setLimit(limit + 12)}>{t('teams.following.moreEvents')}</button>}
     {addLink && (plain
       ? <Link to="/events" className="sp-add"><Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />{ids.length ? t('teams.following.anotherCompetition') : t('teams.following.chooseCompetition')}</Link>
-      : <Link to="/events" className="flex min-h-12 items-center justify-center gap-2 rounded-lg border border-dashed border-[rgb(var(--mg-control))] bg-[rgb(var(--mg-surface))] text-sm font-semibold !text-[rgb(var(--mg-heading))]">
-        <Plus className="h-4 w-4" strokeWidth={2.25} aria-hidden="true" />{ids.length ? t('teams.following.anotherCompetition') : t('teams.following.chooseCompetition')}
+      : <Link to="/events" className="flex min-h-12 items-center justify-between gap-2 rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))] px-3.5 text-sm font-semibold !text-[rgb(var(--mg-heading))] !no-underline">
+        <span>{ids.length ? t('teams.following.anotherCompetition') : t('teams.following.chooseCompetition')}</span>
+        <ChevronRight className="h-3.5 w-3.5 text-[rgb(var(--mg-faint))]" aria-hidden="true" />
       </Link>)}
   </div>;
 }

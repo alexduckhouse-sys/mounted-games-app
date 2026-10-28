@@ -294,4 +294,6 @@ export const account = {
   'account.signups.timeLeftHm': '{h}h {m}m left',
   'account.signups.timeLeftM': '{m}m left',
   'account.signups.saveArrivalPass': 'Save arrival pass',
+  'account.supporters.failed': 'Couldn’t update that supporter. Try again.',
+  'account.supporters.loading': 'Loading supporters…',
 } satisfies Record<string, Message>;

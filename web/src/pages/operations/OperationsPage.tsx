@@ -253,7 +253,7 @@ function OperationsPageContent() {
       )}
 
       {showDrawFoot && preview && (
-        <RefineFoot aboveTabs column label={t('ops.page.applyDraw')}>
+        <RefineFoot inline aboveTabs column label={t('ops.page.applyDraw')}>
           <span className="rf-t2">{t('ops.page.applyNote')}</span>
           <div className="rf-actions">
             <button type="button" className="rf-btn" onClick={() => { setPreview(null); setDrawError(null); }}>{t('ops.page.discard')}</button>
