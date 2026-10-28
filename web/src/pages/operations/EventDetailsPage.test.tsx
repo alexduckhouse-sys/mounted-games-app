@@ -59,7 +59,7 @@ describe('EventDetailsPage', () => {
       await screen.findByRole('switch', { name: 'Passport and vaccination check' });
       expect(screen.getByLabelText('Postcode')).toHaveValue('GL19 3BE');
       expect(screen.getByLabelText('Contact email')).toHaveValue('entries@example.org');
-      expect(screen.getByText('The contact email shows on the event page, so entrants can write to you.')).toBeInTheDocument();
+      expect(screen.getByText('Shown on the event page.')).toBeInTheDocument();
 
       await user.type(screen.getByLabelText('Competition number'), ' 2026-041 ');
       await user.tab();

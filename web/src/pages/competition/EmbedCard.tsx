@@ -68,10 +68,6 @@ export function EmbedCard(props: Props) {
     <>
       <RefineSection title="Embed on your website" />
       <div className="rf-list flex flex-col gap-3 p-3">
-        <p className="m-0 text-[15px]">
-          Live {props.kind === 'season' ? 'season table' : 'results'} widget for your website.
-        </p>
-
         {props.kind === 'competition' && (
           <>
             <div role="group" aria-label="What to show" className="flex flex-wrap gap-2">

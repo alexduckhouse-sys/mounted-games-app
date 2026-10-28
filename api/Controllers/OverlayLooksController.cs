@@ -77,7 +77,7 @@ public class OverlayLooksController(AppDbContext db, TimeProvider time) : Contro
 
     private BadRequestObjectResult? Invalid(SaveOverlayLookRequest req) =>
         req.Look.ValueKind != JsonValueKind.Object || System.Text.Encoding.UTF8.GetByteCount(req.Look.GetRawText()) > MaxLookBytes || string.IsNullOrWhiteSpace(req.Name)
-            ? BadRequest(new { message = "A look needs a name and must be a JSON object of at most 4000 bytes." })
+            ? BadRequest(new { message = "Give the overlay a name, and keep its settings short." })
             : null;
 
     private OverlayLookDto ToDto(OverlayLook l)

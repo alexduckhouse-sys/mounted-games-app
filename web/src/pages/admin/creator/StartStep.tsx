@@ -58,7 +58,6 @@ export function StartStep({ draft, replace }: {
         <div role="group" aria-label={t('admin.creator.start.howToStart')} className="cw-tiles">
           <button type="button" className="cw-tile" aria-pressed={!copying} onClick={fresh}>
             <strong>{t('admin.creator.start.scratch')}</strong>
-            <span className="cw-t2">{t('admin.creator.start.scratchSub')}</span>
             <span className="cw-tick" aria-hidden="true"><Check className="h-3 w-3" strokeWidth={3.5} /></span>
           </button>
           <button type="button" className="cw-tile" aria-pressed={copying} onClick={wantCopy}>

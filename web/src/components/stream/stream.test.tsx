@@ -190,7 +190,7 @@ it('wires the viewer, changes cameras, passes announcements and uses captions or
   expect(screen.getByText('The final')).toBeVisible();
   act(() => FakePeer.instances[0].track()); await tick(2000); expect(screen.queryByText('Connecting…')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Audio only' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Sync live' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Jump to live' }));
   fireEvent.click(screen.getByRole('button', { name: 'Finish line' })); await settle();
   expect(p.invoke).toHaveBeenCalledWith('StopWatching', 1); expect(p.invoke).toHaveBeenCalledWith('WatchStream', 1, 2);
   expect(screen.getByText('Live from')).toBeVisible();
@@ -241,7 +241,7 @@ it('supports viewer quality switching, audio-only mode, sync live, picture-in-pi
   fireEvent.click(screen.getByRole('button', { name: 'Audio only' }));
   expect(onAudioOnly).toHaveBeenCalledWith(true);
   expect(screen.getByText(/Video hidden. Audio continues./)).toBeVisible();
-  fireEvent.click(screen.getByRole('button', { name: 'Sync live' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Jump to live' }));
   expect(onSyncLive).toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Picture in picture' }));
   expect(requestPip).toHaveBeenCalled();

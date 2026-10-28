@@ -136,7 +136,7 @@ export function outcomeOfError(err: unknown, viaLink = false): SendOutcome {
 /** "1st Red Rum · 2nd Shergar · Arkle out" */
 export function describePlacings(places: Placing[], names: Record<number, string>): string {
   if (places.length === 0) return 'No results';
-  const name = (id: number) => names[id] ?? `Team ${id}`;
+  const name = (id: number) => names[id] ?? 'Unnamed team';
   return [...places]
     .sort((a, b) => Number(a.eliminated) - Number(b.eliminated) || a.place - b.place)
     .map((p) => p.eliminated ? `${name(p.teamId)} ${statusLetter(true, p.status) === 'E' ? 'out' : statusLetter(true, p.status)}` : `${ordinal(p.place)} ${name(p.teamId)}`)
