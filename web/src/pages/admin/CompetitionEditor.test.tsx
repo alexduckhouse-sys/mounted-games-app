@@ -605,7 +605,7 @@ describe('CompetitionEditor: structure and timing', () => {
     seed('structure');
     mount();
     const hats = screen.getByRole('group', { name: 'Hatbands' });
-    expect(within(hats).getAllByRole('button', { name: /^Move .* up$/ })).toHaveLength(6);
+    expect(within(hats).getAllByRole('button', { name: /^Move .*: drag/ })).toHaveLength(6);
   });
 });
 

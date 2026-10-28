@@ -173,7 +173,10 @@ describe('On the day: race lists', () => {
     await userEvent.click(within(junior).getByRole('button', { name: /Races for Junior pairs/ }));
     const dialog = await screen.findByRole('dialog', { name: 'Races for Junior pairs' });
     expect(within(dialog).getAllByRole('listitem')).toHaveLength(2);
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Move Bottle up' }));
+    const grip = within(dialog).getByRole('button', { name: 'Move Bottle: drag, or use the up and down arrow keys' });
+    expect(within(dialog).queryByRole('button', { name: /^Move .* (up|down)$/ })).not.toBeInTheDocument();
+    grip.focus();
+    await userEvent.keyboard('{ArrowUp}');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Remove Bending' }));
     await userEvent.type(within(dialog).getByLabelText('Race name'), 'Litter{Enter}');
     await userEvent.click(within(dialog).getByRole('combobox', { name: 'Add a race from the library' }));
