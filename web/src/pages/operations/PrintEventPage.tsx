@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { BarChart3, ChevronLeft, Download, Mic, Monitor, Printer, QrCode as QrCodeIcon } from 'lucide-react';
 import { api } from '../../api';
+import { useAuth } from '../../auth/AuthContext';
 import type { PrintableDraw, PrintableResults, PrintableScoreSheets } from '../eventTools/eventToolsTypes';
 import type { PrintableEntries, ResultsBook } from '../eventTools/resultsBookTypes';
 import { EntriesView, ResultsBookView } from '../eventTools/ResultsBookView';
@@ -64,6 +65,7 @@ export default function PrintEventPage() {
 }
 
 function PrintView({ competitionId, view, initialSponsorMode = false }: { competitionId: string; view: View; initialSponsorMode?: boolean }) {
+  const { canOrganise } = useAuth();
   const [data, setData] = useState<PrintableDraw | PrintableScoreSheets | PrintableResults | ResultsBook | PrintableEntries | PrintableTackCheck | { competition: CompetitionDetail } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -158,6 +160,9 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
   if (!data) return <p className="mg-card p-4" role="status">{tr('ops2.print.preparing')}</p>;
   const competition = data.competition;
   const reference = competition.competitionNumber?.trim() || null;
+  // The sheets are public, but the kiosk, PA desk, posters, official pack and sponsor report are for the event's organisers.
+  // The printable data doesn't say who made the event, so any signed-in organiser role (or a member of its team) counts; the API decides the rest.
+  const organiser = canOrganise() || canOrganise({ id: competition.id });
   const showQr = !sponsorMode && QR_VIEWS.includes(view);
 
   const totalSections = compDetail?.sections?.length
@@ -307,27 +312,31 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
       {toast.node}
       <div className="event-print-controls mb-5 flex flex-wrap items-center gap-2">
         <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/details`}><ChevronLeft className="h-4 w-4" />{tr('ops2.print.eventDetails')}</Link>
-        <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/tv`}><Monitor className="h-4 w-4" />{tr('ops2.print.tvKiosk')}</Link>
-        <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/commentary`}><Mic className="h-4 w-4" />{tr('ops2.print.paDesk')}</Link>
-        <Link className={`mg-btn ${view === 'posters' && !sponsorMode ? 'mg-btn-primary' : 'mg-btn-secondary'}`} to={`/event-tools/${competitionId}/print/posters`}>
-          <QrCodeIcon className="h-4 w-4" />{tr('ops2.print.view.posters')}
-        </Link>
-        <button
-          type="button"
-          onClick={() => void exportOfficialResultsCsv()}
-          disabled={exportingResults}
-          className="mg-btn mg-btn-secondary"
-        >
-          <Download className="h-4 w-4" />{exportingResults ? tr('ops2.print.exporting') : tr('ops2.print.officialPack')}
-        </button>
-        <button
-          type="button"
-          aria-pressed={sponsorMode}
-          onClick={() => setSponsorMode((v) => !v)}
-          className="mg-btn mg-btn-secondary"
-        >
-          <BarChart3 className="h-4 w-4" />{tr('ops2.print.sponsorReport')}
-        </button>
+        {organiser && (
+          <>
+            <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/tv`}><Monitor className="h-4 w-4" />{tr('ops2.print.tvKiosk')}</Link>
+            <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/commentary`}><Mic className="h-4 w-4" />{tr('ops2.print.paDesk')}</Link>
+            <Link className={`mg-btn ${view === 'posters' && !sponsorMode ? 'mg-btn-primary' : 'mg-btn-secondary'}`} to={`/event-tools/${competitionId}/print/posters`}>
+              <QrCodeIcon className="h-4 w-4" />{tr('ops2.print.view.posters')}
+            </Link>
+            <button
+              type="button"
+              onClick={() => void exportOfficialResultsCsv()}
+              disabled={exportingResults}
+              className="mg-btn mg-btn-secondary"
+            >
+              <Download className="h-4 w-4" />{exportingResults ? tr('ops2.print.exporting') : tr('ops2.print.officialPack')}
+            </button>
+            <button
+              type="button"
+              aria-pressed={sponsorMode}
+              onClick={() => setSponsorMode((v) => !v)}
+              className="mg-btn mg-btn-secondary"
+            >
+              <BarChart3 className="h-4 w-4" />{tr('ops2.print.sponsorReport')}
+            </button>
+          </>
+        )}
         <button className="mg-btn mg-btn-primary" disabled={printing} onClick={() => void printPage()}><Printer className="h-4 w-4" />{tr('ops2.print.print')}</button>
         {sessionId && !sponsorMode && (
           <span className="flex items-center gap-2 text-sm text-[rgb(var(--mg-muted))]">
@@ -336,7 +345,8 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
           </span>
         )}
       </div>
-      <header className="event-print-header">
+      {/* The poster sheets carry their own name and date, so the page header above them would push the first one onto a second sheet. */}
+      <header className={`event-print-header${view === 'posters' && !sponsorMode ? ' event-print-header-posters' : ''}`}>
         <div className="event-print-header-text">
           <p className="event-print-kicker">{tr('common.mountedGames')}</p>
           <h1>{competition.name}</h1>
@@ -569,7 +579,7 @@ function QrPostersSection({
   posterLinks,
   loadingLinks,
 }: {
-  competition: CompetitionDetail | { id: number; name: string; location?: string | null; startDate: string; endDate?: string | null; what3Words?: string | null; latitude?: number | null; longitude?: number | null };
+  competition: CompetitionDetail | { id: number; name: string; location?: string | null; startDate: string; endDate?: string | null; what3Words?: string | null; postcode?: string | null; latitude?: number | null; longitude?: number | null };
   scorerLinks: ScorerLink[];
   /** Fresh links with their QR addresses; null until the sheet has been printed. */
   posterLinks: PosterLink[] | null;
@@ -606,6 +616,12 @@ function QrPostersSection({
               <span className="font-semibold">{tr('ops2.print.p.venueLoc')}</span>
               <p className="text-sm font-medium">{competition.location || tr('ops2.print.p.locDetails')}</p>
             </div>
+            {competition.postcode && (
+              <div>
+                <span className="font-semibold">{tr('ops2.print.p.postcode')}</span>
+                <p className="font-mono text-sm font-bold">{competition.postcode}</p>
+              </div>
+            )}
             {competition.what3Words && (
               <div>
                 <span className="font-semibold">{tr('ops2.print.p.w3w')}</span>

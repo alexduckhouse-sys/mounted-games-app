@@ -235,6 +235,7 @@ export const ops2 = {
   'ops2.print.p.scan': 'Scan for the live timetable, scores and stream',
   'ops2.print.p.emergency': 'Emergency venue information (dial 999 or 112)',
   'ops2.print.p.venueLoc': 'Venue:',
+  'ops2.print.p.postcode': 'Postcode:',
   'ops2.print.p.locDetails': 'Location details on event schedule',
   'ops2.print.p.w3w': 'what3words Location:',
   'ops2.print.p.gps': 'GPS position:',

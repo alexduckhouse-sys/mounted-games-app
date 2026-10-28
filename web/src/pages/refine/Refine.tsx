@@ -238,6 +238,7 @@ function FloatingPanel({ id, anchor, place, onClose, children }: { id: string; a
   useEffect(() => { closeRef.current = onClose; });
   useEffect(() => {
     const panel = ref.current;
+    const trigger = anchor.current;
     if (panel && !panel.contains(document.activeElement)) panel.querySelector<HTMLElement>(PANEL_FIRST)?.focus();
     const away = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -274,7 +275,7 @@ function FloatingPanel({ id, anchor, place, onClose, children }: { id: string; a
       window.removeEventListener('resize', resize);
       window.removeEventListener('scroll', scroll, { capture: true });
       // Choosing something removes the focused item, which would drop focus on the page: put it back on the row.
-      if (document.activeElement == null || document.activeElement === document.body) anchor.current?.focus();
+      if (document.activeElement == null || document.activeElement === document.body) trigger?.focus();
     };
   }, [anchor]);
   return createPortal(<div ref={ref} id={id} className="skin rf-pop" style={{ top: place.top, right: place.right, maxHeight: place.max }}>{children}</div>, document.body);

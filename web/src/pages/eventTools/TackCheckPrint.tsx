@@ -29,15 +29,19 @@ export function TackCheckForms({ data }: { data: PrintableTackCheck }) {
     <p className="event-print-note">{instruction(section.mode, section.maxPoints)} {tr('ops3.tackPrint.steward')}</p>
     {section.teams.length === 0 ? <p className="event-print-empty">{tr('ops3.tackPrint.noTeams')}</p> : <div className="event-print-table-wrap"><table>
       <thead><tr><th>{tr('ops2.print.team')}</th><th>{tr('ops3.rider')}</th><th>{tr('ops3.pony')}</th>{section.sectors.map((name) => <th key={name} className="event-print-cell">{name}</th>)}<th>{tr('ops3.notes')}</th></tr></thead>
-      <tbody>{section.teams.flatMap((team) => {
+      {/* One body per team, so a team's riders are never split across two printed pages. */}
+      {section.teams.map((team) => {
         const label = `${team.teamName}${team.isHorsConcours ? ' (HC)' : ''}${team.withdrawn ? ` (${tr('ops3.withdrawn')})` : ''}`;
         const blanks = section.sectors.map((name) => <td key={name} />);
-        if (team.riders.length === 0) return [<tr key={team.teamId}><td>{label}</td><td colSpan={2}>{tr('ops3.tackPrint.noDec')}</td>{blanks}<td /></tr>];
-        return team.riders.map((rider, index) => <tr key={`${team.teamId}:${index}`}>
-          {index === 0 && <td rowSpan={team.riders.length}>{label}</td>}
-          <td>{rider.name}{rider.isReserve ? ` (${tr('ops2.sos.reserve')})` : ''}</td><td>{rider.pony ?? ''}</td>{blanks}<td />
-        </tr>);
-      })}</tbody>
+        return <tbody key={team.teamId} className="event-print-team">
+          {team.riders.length === 0
+            ? <tr><td>{label}</td><td colSpan={2}>{tr('ops3.tackPrint.noDec')}</td>{blanks}<td /></tr>
+            : team.riders.map((rider, index) => <tr key={index}>
+              {index === 0 && <td rowSpan={team.riders.length}>{label}</td>}
+              <td>{rider.name}{rider.isReserve ? ` (${tr('ops2.sos.reserve')})` : ''}</td><td>{rider.pony ?? ''}</td>{blanks}<td />
+            </tr>)}
+        </tbody>;
+      })}
     </table></div>}
   </section>)}</>;
 }

@@ -851,3 +851,9 @@ html[data-lite="true"] .mg-spin-once { animation: none; }
 .mg-follow-glimmer::after { content: ''; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 30%, rgb(255 222 120 / .55) 50%, transparent 70%); transform: translateX(-120%); animation: mg-champion-shine 800ms ease-in-out 120ms both; }
 @media (prefers-reduced-motion: reduce) { .mg-follow-glimmer { display: none; } }
 html[data-lite="true"] .mg-follow-glimmer { display: none; }
+
+/* Printing: the app's own header, tab bars, ticker dock and pop-ups never print, on any page. */
+@media print {
+  .mg-header, .mg-tabs, .mg-dock, .kit-toast, .mg-remember { display: none !important; }
+  main { padding-top: 0 !important; padding-bottom: 0 !important; }
+}
