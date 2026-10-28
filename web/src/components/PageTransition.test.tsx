@@ -106,13 +106,13 @@ describe('PageTransition', () => {
     expect(animations).toHaveLength(2);
   });
 
-  it('crossfades pages at the same level, with the real page fading up', () => {
+  it('fades the new page up at the same level, with no copy of the old page over it', () => {
     mount('/competitions/4/chat');
     act(() => go('/competitions/4'));
-    expect(frames()).toHaveLength(1);
-    expect(animations).toHaveLength(2);
-    expect(animations[0].keyframes).toEqual([{ opacity: 1 }, { opacity: 0 }]);
-    expect(animations[1].target.id).toBe('main');
+    expect(frames()).toHaveLength(0);
+    expect(animations).toHaveLength(1);
+    expect(animations[0].target.id).toBe('main');
+    expect(animations[0].keyframes).toEqual([{ opacity: 0 }, { opacity: 1 }]);
     expect(animations[0].options.duration).toBe(160);
     expect(document.getElementById('main')!.style.visibility).toBe('');
   });
@@ -121,7 +121,16 @@ describe('PageTransition', () => {
     mount('/competitions/4/chat');
     document.getElementById('main')!.classList.add('rf-page');
     act(() => go('/competitions/4'));
-    expect(animations).toHaveLength(1);
+    expect(animations).toHaveLength(0);
+    expect(frames()).toHaveLength(0);
+  });
+
+  it('paints the sliding copies in the page background, so the old page never shows through the new one', () => {
+    document.body.style.backgroundColor = 'rgb(247, 247, 247)';
+    mount('/competitions/4');
+    act(() => go('/competitions/4/teams/9'));
+    expect([...frames()].map((holder) => (holder as HTMLElement).style.background)).toEqual(['rgb(247, 247, 247)', 'rgb(247, 247, 247)']);
+    document.body.style.backgroundColor = '';
   });
 
   it('slides when a link asks for it, even within one page or between pages at the same level', () => {
@@ -162,8 +171,9 @@ describe('PageTransition', () => {
     act(() => go('/competitions/4/teams'));
     expect(frames()).toHaveLength(2);
     act(() => go('/competitions/4/chat'));
-    // The first move was ended on the spot and a new one began.
-    expect(frames()).toHaveLength(1);
+    // The first move was ended on the spot and a new one (a fade of the real page, with no copies) began.
+    expect(frames()).toHaveLength(0);
+    expect(animations[animations.length - 1].target.id).toBe('main');
   });
 
   it('removes its copies if the shell goes away mid-move', () => {
