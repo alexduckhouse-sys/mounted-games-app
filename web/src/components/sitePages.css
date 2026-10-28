@@ -169,3 +169,10 @@ a.sp-row:active, button.sp-row:active:not(:disabled), .sp-listing-head:active { 
 @keyframes sp-row-leave { from { max-height: 80px; opacity: 1; } to { max-height: 0; min-height: 0; padding-top: 0; padding-bottom: 0; opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .sp-row-leave { display: none; } }
 html[data-lite='true'] .sp-row-leave { display: none; }
+
+/* A card row that opens the content under it: the chevron turns down when it is open. */
+.sp-disc + .sp-disc { border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.sp-disc-row { cursor: pointer; }
+.sp-disc-chev { display: inline-flex; transition: transform var(--mg-dur-fast) var(--mg-ease-out); }
+.sp-disc-chev[data-open] { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { .sp-disc-chev { transition: none; } }
