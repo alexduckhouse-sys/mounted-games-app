@@ -835,4 +835,39 @@ public class ScorerLinkTests : IClassFixture<ApiFactory>
             }
         }
     }
+
+    // ---- stream overlay cards ----------------------------------------------------------------------
+
+    [Fact]
+    public async Task OverlayCard_NeedsAStreamScopeLinkForThatCompetition()
+    {
+        var w = await WorldAsync();
+        var competitionId = w.Arena.CompetitionId;
+        var scoreOnly = await w.Owner.PostAsJsonAsync(LinksUrl(competitionId), new { label = "Sam", arenaName = "Main", scope = 0 });
+        var stream = await w.Owner.PostAsJsonAsync(LinksUrl(competitionId), new { label = "Pat", arenaName = "Main", scope = 2 });
+        var scoreToken = (await scoreOnly.ReadAsync<CreatedScorerLinkDto>()).Token;
+        var streamToken = (await stream.ReadAsync<CreatedScorerLinkDto>()).Token;
+        var scorerRoute = $"/api/scorer/competitions/{competitionId}/overlay-card";
+        var linksRoute = $"{LinksUrl(competitionId)}/overlay-card";
+
+        // No token at all, and a link without the stream scope, are both turned away.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Scorer(null).PostAsJsonAsync(scorerRoute, new { card = "heat" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Scorer(scoreToken).PostAsJsonAsync(scorerRoute, new { card = "heat" })).StatusCode);
+
+        // A stream link for another competition is not found, not allowed through.
+        Assert.Equal(HttpStatusCode.NotFound, (await Scorer(streamToken).PostAsJsonAsync($"/api/scorer/competitions/{competitionId + 9999}/overlay-card", new { card = "heat" })).StatusCode);
+
+        // Unknown card names are rejected.
+        Assert.Equal(HttpStatusCode.BadRequest, (await Scorer(streamToken).PostAsJsonAsync(scorerRoute, new { card = "confetti" })).StatusCode);
+
+        // Known names (and their aliases) set the live card on both routes and bump the revision.
+        var heat = await (await Scorer(streamToken).PostAsJsonAsync(scorerRoute, new { card = "heat", liveSectionId = 7 })).ReadAsync<StreamOverlayDto>();
+        Assert.Equal("heat", heat.Look.GetProperty("liveCard").GetString());
+        Assert.Equal(7, heat.Look.GetProperty("liveSectionId").GetInt32());
+        var next = await (await Scorer(streamToken).PostAsJsonAsync(linksRoute, new { card = "upNext" })).ReadAsync<StreamOverlayDto>();
+        Assert.Equal("next", next.Look.GetProperty("liveCard").GetString());
+        Assert.True(next.Revision > heat.Revision);
+        var cleared = await (await Scorer(streamToken).PostAsJsonAsync(scorerRoute, new { card = "clear" })).ReadAsync<StreamOverlayDto>();
+        Assert.Equal("none", cleared.Look.GetProperty("liveCard").GetString());
+    }
 }

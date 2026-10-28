@@ -1,16 +1,15 @@
 /* eslint-disable react-refresh/only-export-components */
 import { motion, type PanInfo } from 'framer-motion';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { BibSwatch, HatbandSwatch } from '../../components/BibSwatch';
+import { BibSwatch } from '../../components/BibSwatch';
 import { dotColour } from '../../lib/teamColours';
 import { hatbandColour } from '../../lib/hatbands';
-import { RaceRulesButton } from '../../components/RaceRulesButton';
 import { RaceSelect } from '../../components/RacePicker';
 import { Notice } from '../../components/Notice';
 import { Sheet } from '../../components/Sheet';
 import { ELIM_REASONS, OTHER_REASON, noteFor, reasonKeyOf, statusFor } from '../../lib/elimReasons';
 import { RESULT_STATUS } from '../../lib/resultStatus';
-import { hatbandFor, inLaneOrder } from '../../lib/laneOrder';
+import { inLaneOrder } from '../../lib/laneOrder';
 import type { NextLanes } from '../../lib/nextRoundLanes';
 import type { PendingPlace } from '../../lib/raceScoring';
 import type { RaceSummary } from '../../lib/raceSummary';
@@ -90,14 +89,6 @@ export function parseRefereeCard(note: string | null | undefined): { card: Refer
     return { card, cleanNote: match[2].trim() };
   }
   return { card: null, cleanNote: note.trim() };
-}
-
-/** Formats a referee note with the [YC] or [RC] prefix when a card is selected. */
-export function formatRefereeCardNote(card: RefereeCard, cleanNote: string): string {
-  const clean = cleanNote.replace(/^\s*\[(YC|RC)\]\s*/i, '').trim();
-  if (card === 'yellow') return clean ? `[YC] ${clean}` : '[YC]';
-  if (card === 'red') return clean ? `[RC] ${clean}` : '[RC]';
-  return clean;
 }
 
 /** Reads stored cards from localStorage for immediate client-side badging. */
@@ -470,26 +461,6 @@ export function EliminationSheet({ places, names, onSave, onSkip, onCancel }: {
   );
 }
 
-/** The current race's lanes, in order. Sits beside the races on a wide screen and after them on a phone. */
-export function LaneView({ heat, raceIndex, raceName, rules, hatbands }: { heat: Heat; raceIndex: number; raceName: string; rules: LaneRules; hatbands?: string[] | null }) {
-  if (heat.entries.length === 0) return null;
-  const rotated = raceIndex > 0 && rules.mode !== 1;
-  return (
-    <section className="sc-card sc-pad" aria-label="Lane view">
-      <h3 className="sc-label">Lanes for {raceName}</h3>
-      {rotated && <p className="sc-sub">Rotated {rules.mode === 2 ? '-' : '+'}{raceIndex} from the draw</p>}
-      <ol className="sc-rows mt-1">
-        {inLaneOrder(heat, raceIndex, rules).map((e) => (
-          <li key={e.id} className="sc-lane-item">
-            <span className="sc-lane">{displayLaneFor(heat, e, raceIndex, rules)}</span>
-            <span className="sc-who"><span className="sc-name">{e.teamName}</span><BibSwatch colour={e.bibColour} /><HatbandSwatch colour={hatbandFor(hatbands, displayLaneFor(heat, e, raceIndex, rules))} /></span>
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
-}
-
 /** What the announcer says after a race. */
 export function SummaryCard({ summary, raceNumber }: { summary: RaceSummary; raceNumber: number }) {
   return (
@@ -641,39 +612,6 @@ export function HeatGrid({ heat, races, activeRaceId, activeIndex, rules, pendin
         </table>
       </div>
     </section>
-  );
-}
-
-/** The race rules, one button per race, below the table when opened. */
-export function RaceRules({ races }: { races: Race[] }) {
-  const [open, setOpen] = useState(false);
-  if (races.length === 0) return null;
-  return (
-    <>
-      <div className="flex justify-center">
-        <button
-          type="button"
-          className="mg-text-link"
-          aria-expanded={open}
-          onClick={() => setOpen((show) => !show)}
-        >
-          {open ? 'Close race rules and setup' : 'Race rules and arena setup'}
-        </button>
-      </div>
-      {open && (
-        <section aria-label="Race rules" className="sc-card px-3">
-          <h3 className="sc-label pt-3">Race rules</h3>
-          <ol className="divide-y divide-[rgb(var(--mg-rule-soft))]">
-            {races.map((r) => (
-              <li key={r.id} className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate py-2">{r.name}</span>
-                <RaceRulesButton raceName={r.name} className="!h-11 !w-11" />
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
-    </>
   );
 }
 

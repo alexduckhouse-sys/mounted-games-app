@@ -1,12 +1,5 @@
 export type Role = 'Admin' | 'MasterAdmin' | 'Trainer' | 'TrainerRequest' | 'ManagerRequest' | 'Manager' | 'Member' | 'Rider';
 
-/** Self-service signup choices. Trainer accounts need approval from an admin or their club's manager; team managers from an admin. */
-export const SIGNUP_ROLES: { value: 'Trainer' | 'Manager' | 'Member'; label: string; description: string }[] = [
-  { value: 'Trainer', label: 'Trainer', description: 'Coach your pony club\'s teams; submit dec forms.' },
-  { value: 'Manager', label: 'Team manager', description: 'Run the team\'s admin side: dec forms, contact, signups.' },
-  { value: 'Member', label: 'Pony Club member', description: 'Follow your club\'s teams; see dec forms.' },
-];
-
 export interface UserProfile {
   id: string;
   email: string;
@@ -141,11 +134,6 @@ export const SectionFormatLabel: Record<SectionFormat, string> = {
 };
 
 export type SessionStatus = 0 | 1 | 2;
-export const SessionStatusLabel: Record<SessionStatus, string> = {
-  0: 'Upcoming',
-  1: 'In Arena',
-  2: 'Finished',
-};
 
 export type SessionKind = 0 | 1 | 2 | 3;
 export const SessionKind = {

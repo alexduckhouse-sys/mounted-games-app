@@ -17,9 +17,6 @@ public static class SectionScoring
     /// <summary>The section may have a finals session. Always true outside the standard format.</summary>
     public static bool AllowsFinal(CompetitionSection? section) => !Applies(section) || section!.HasFinal;
 
-    /// <summary>Final race points count double, in the standard format.</summary>
-    public static bool DoublesFinal(CompetitionSection? section) => Applies(section) && section!.DoublePointsInFinal;
-
     /// <summary>Earlier points add to a finalist's score. A missing section keeps the old behaviour: they do.</summary>
     public static bool CarriesIntoFinal(CompetitionSection? section) => section is null || !Applies(section) || section.CarryPointsIntoFinal;
 

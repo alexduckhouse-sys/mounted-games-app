@@ -743,26 +743,6 @@ function BroadcastStudio() {
 function VideoIcon() { return <span aria-hidden="true" className="h-2 w-2 rounded-full bg-white" />; }
 
 /**
- * A quick banner switch for the person filming: clears the banner that's up, or puts back the latest
- * message saved on this phone's producer screen. Everything else lives on the producer screen.
- */
-export function BannerButton({ competitionId }: { competitionId: number }) {
-  const { overlay, saveOverlay } = useCompetition();
-  const [busy, setBusy] = useState(false);
-  const current = overlay ?? DEFAULT_OVERLAY;
-  const on = current.bannerText !== null;
-  const next = readMessages(competitionId).at(-1);
-  if (!saveOverlay || (!on && !next)) return null;
-  async function toggle() {
-    setBusy(true);
-    await saveOverlay!((o) => (on ? { ...o, bannerText: null } : { ...o, bannerText: next!.text, bannerStyle: next!.style }));
-    setBusy(false);
-  }
-  return <button className={`mg-stream-control flex-col !rounded-xl p-2 ${on ? '!bg-amber-500 !text-black' : ''}`} disabled={busy} onClick={() => void toggle()}
-    aria-label={on ? 'Clear the banner' : `Show banner: ${next!.text}`}><Megaphone />{on ? 'Banner on' : 'Banner'}</button>;
-}
-
-/**
  * Sponsor cards on the video: a switch between "in breaks" and off, and a skip to the next sponsor. Hidden when
  * no sponsor is set to show on the video, or when this phone can't change the overlays.
  */
