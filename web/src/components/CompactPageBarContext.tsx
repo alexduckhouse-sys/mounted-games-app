@@ -4,6 +4,8 @@ export type CompactPageBarBadge = 'live' | 'finished' | 'next';
 
 export interface CompactPageBarConfig {
   backTo: string;
+  /** Names the page the back arrow returns to; defaults to "Back to timetable". */
+  backLabel?: string;
   title: string;
   subtitle: string;
   badge: CompactPageBarBadge;
@@ -71,12 +73,12 @@ export function useCompactPageBarState() {
 export function useCompactPageBar(config: CompactPageBarConfig) {
   const { publish, clear } = useCompactPageBarState();
   const owner = useRef(Symbol('compact-page-bar'));
-  const { backTo, title, subtitle, badge } = config;
+  const { backTo, backLabel, title, subtitle, badge } = config;
   useLayoutEffect(() => {
     const ownerKey = owner.current;
-    publish(ownerKey, { backTo, title, subtitle, badge });
+    publish(ownerKey, { backTo, backLabel, title, subtitle, badge });
     return () => clear(ownerKey);
-  }, [backTo, title, subtitle, badge, publish, clear]);
+  }, [backTo, backLabel, title, subtitle, badge, publish, clear]);
 }
 
 /**

@@ -56,6 +56,21 @@ const renderTab = (initialPath = '/competitions/5/details') => render(
 );
 
 describe('DetailsTab', () => {
+  it('links to the volunteer rota for signed-in people and the arena crew sheet for organisers only', () => {
+    renderTab();
+    expect(screen.getByRole('link', { name: 'Volunteer shifts' })).toHaveAttribute('href', '/volunteers');
+    expect(screen.queryByRole('link', { name: 'Arena crew sheet' })).not.toBeInTheDocument();
+    viewer({ canOrganise: () => true });
+    renderTab();
+    expect(screen.getByRole('link', { name: 'Arena crew sheet' })).toHaveAttribute('href', '/arena-crew');
+  });
+
+  it('hides the volunteer rota link from signed-out visitors', () => {
+    viewer({ user: null });
+    renderTab();
+    expect(screen.queryByRole('link', { name: 'Volunteer shifts' })).not.toBeInTheDocument();
+  });
+
   it('puts the page title and refresh in the app header', async () => {
     renderTab();
     expect(screen.getByTestId('header')).toHaveTextContent('Details|Hartpury Area Festival');

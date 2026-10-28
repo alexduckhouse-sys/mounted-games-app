@@ -98,6 +98,27 @@ describe('EntriesPage', () => {
     expect(asked.titles).toEqual(['Mark Elm B paid?']);
   });
 
+  it('lists unpaid sign-ups with no team yet under All, and does not say there are no entries', async () => {
+    const user = userEvent.setup();
+    const pendingOnly = { id: 201, teamId: null, status: 0, competitionSectionId: 11, sectionName: 'Under 12', fullName: 'Casey', amountMinor: 1500, createdAt: '' };
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      const path = String(url);
+      if (path.endsWith('/entries')) return { data: [] } as never;
+      if (path.endsWith('/signups')) return { data: [pendingOnly] } as never;
+      if (path === '/declaration-forms') return { data: [] } as never;
+      if (path.endsWith('/lock-time')) return { data: { declarationsCloseAt: null } } as never;
+      return { data: config } as never;
+    });
+    autoConfirm(true);
+    show();
+    expect(await screen.findByText('Awaiting payment')).toBeInTheDocument();
+    expect(screen.getByText('Casey')).toBeInTheDocument();
+    expect(screen.getByText('Pending payment', { selector: '.ops-badge-pending' })).toBeInTheDocument();
+    expect(screen.queryByText('No entries yet.')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Mark Casey paid' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/7/signups/201/mark-paid'));
+  });
+
   it('marks a team paid and not paid', async () => {
     const user = userEvent.setup();
     autoConfirm(true);

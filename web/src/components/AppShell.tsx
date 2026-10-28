@@ -28,6 +28,7 @@ import { LiteChip } from '../lite/LiteChip';
 import { initialsOf } from '../lib/profile';
 import { useNeedsYou } from '../pages/profile/needsYou';
 import { PageTransition } from './PageTransition';
+import { BackLink } from './BackLink';
 import { useT } from '../i18n/LanguageContext';
 
 export function AppShell() {
@@ -93,7 +94,7 @@ function Shell({ width }: { width: PageWidth }) {
         <header className="mg-header">
           {compactBar ? (
             <div className={`mg-compact-bar mx-auto ${cap}`}>
-              <Link to={compactBar.backTo} className="mg-nav-btn !px-0" aria-label={t('shell.header.backToTimetable')}><ChevronLeft className="h-5 w-5" /></Link>
+              <BackLink to={compactBar.backTo} className="mg-nav-btn !px-0" aria-label={compactBar.backLabel ?? t('shell.header.backToTimetable')}><ChevronLeft className="h-5 w-5" /></BackLink>
               <div className="mg-compact-copy">
                 <span className="mg-compact-title">{compactBar.title}</span>
                 <span className="mg-compact-subtitle">{compactBar.subtitle}</span>
@@ -109,7 +110,7 @@ function Shell({ width }: { width: PageWidth }) {
           ) : (
             <div className={`mx-auto flex ${cap} items-center gap-2.5 py-1.5 pl-4 pr-3 sm:py-3`}>
               {pageHeader?.backTo
-                ? <Link to={pageHeader.backTo} className="mg-nav-btn !px-0" aria-label={pageHeader.backLabel ?? t('shell.header.back')}><ChevronLeft className="h-5 w-5" /></Link>
+                ? <BackLink to={pageHeader.backTo} className="mg-nav-btn !px-0" aria-label={pageHeader.backLabel ?? t('shell.header.back')}><ChevronLeft className="h-5 w-5" /></BackLink>
                 : <Link to={inAdminArea ? '/admin' : '/events'} className="mg-logo" aria-label={inAdminArea ? t('shell.header.adminHome') : t('shell.header.home')}>MG</Link>}
               {pageHeader?.plain ? (
                 <div className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5">

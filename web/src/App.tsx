@@ -19,7 +19,7 @@ import { AppShell } from './components/AppShell';
 import { CompactPageBarProvider } from './components/CompactPageBarContext';
 import { StartPage } from './pages/StartPage';
 import { CompetitionPage } from './pages/CompetitionPage';
-import { AfterDrawOnly, CompetitionHome } from './pages/competition/CompetitionHome';
+import { AfterDrawOnly, CompetitionHome, TimetableRoute } from './pages/competition/CompetitionHome';
 import { ScrollToTop } from './components/ScrollToTop';
 import { useT } from './i18n/LanguageContext';
 import { isLiteModeActive } from './lite/liteMode';
@@ -177,7 +177,7 @@ export default function App() {
                 <Route path="weather" element={<WeatherPage />} />
                 <Route path="volunteers" element={<VolunteerRotaPage />} />
                 <Route path="standings" element={<Navigate to="../scoring" replace />} />
-                <Route path="timetable" element={<Navigate to=".." replace />} />
+                <Route path="timetable" element={<TimetableRoute />} />
                 <Route path="teams" element={<TeamsTab />} />
                 <Route path="teams/:teamId" element={<CompetitionTeamPage />} />
                 <Route path="teams/:teamId/stats" element={<TeamStatsPage />} />

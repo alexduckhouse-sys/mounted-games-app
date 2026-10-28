@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboard
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { Check, ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Minus, Plus, X } from 'lucide-react';
+import { BackLink } from '../../components/BackLink';
 import { TickerNumber } from '../../components/TickerNumber';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useExitDelay } from '../../hooks/useExitDelay';
@@ -73,7 +74,7 @@ export function RefineHeader({ back, onBack, backLabel = 'Back', context, action
   return (
     <header className="rf-hd">
       <div className="rf-hd-top">
-        {back && <Link className="rf-ib" to={back} aria-label={backLabel}><ChevronLeft className="h-5 w-5" aria-hidden="true" /></Link>}
+        {back && <BackLink className="rf-ib" to={back} aria-label={backLabel}><ChevronLeft className="h-5 w-5" aria-hidden="true" /></BackLink>}
         {!back && onBack && <button type="button" className="rf-ib" aria-label={backLabel} onClick={onBack}><ChevronLeft className="h-5 w-5" aria-hidden="true" /></button>}
         <span className="rf-ctx">{context}</span>
         {actions}
