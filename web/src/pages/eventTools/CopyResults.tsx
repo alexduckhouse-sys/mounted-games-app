@@ -1,6 +1,8 @@
+import { useT } from '../../i18n/LanguageContext';
 import { useEffect, useRef, useState } from 'react';
 import { Copy } from 'lucide-react';
 import { api } from '../../api';
+import { tr } from '../../i18n/translate';
 import { resultsDigest } from '../../lib/resultsDigest';
 import type { ResultsBook } from './resultsBookTypes';
 
@@ -11,6 +13,7 @@ type Outcome = { kind: 'copied' } | { kind: 'manual'; text: string } | { kind: '
  * so the organiser copy fetches the public one rather than reusing its own private data. Nothing is sent anywhere.
  */
 export function CopyResults({ book }: { book: ResultsBook }) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const box = useRef<HTMLTextAreaElement>(null);
@@ -25,7 +28,7 @@ export function CopyResults({ book }: { book: ResultsBook }) {
     let text: string;
     try {
       const publicBook = book.includesPrivate ? (await api.get<ResultsBook>(`/event-tools/competitions/${id}/results-book`)).data : book;
-      text = `${resultsDigest(publicBook)}\n\nFull results: ${window.location.origin}/competitions/${id}/toplists`;
+      text = `${resultsDigest(publicBook)}\n\n${tr('ops3.copy.full', { link: `${window.location.origin}/competitions/${id}/toplists` })}`;
     } catch {
       setOutcome({ kind: 'failed' }); setBusy(false); return;
     }
@@ -40,14 +43,14 @@ export function CopyResults({ book }: { book: ResultsBook }) {
 
   return <div className="event-print-controls w-full">
     <button type="button" className="mg-btn mg-btn-secondary" disabled={busy} onClick={() => void copy()}>
-      <Copy className="h-4 w-4" aria-hidden="true" />{busy ? 'Getting the results…' : 'Copy results'}
+      <Copy className="h-4 w-4" aria-hidden="true" />{busy ? t('ops3.copy.getting') : t('ops3.copy.copy')}
     </button>
     <div role="status" className="mt-2 text-sm">
-      {outcome?.kind === 'copied' && 'Copied. Paste it into your message.'}
-      {outcome?.kind === 'failed' && 'Couldn’t get the results. Check your signal and try again.'}
+      {outcome?.kind === 'copied' && t('ops3.copy.copied')}
+      {outcome?.kind === 'failed' && t('ops3.copy.failed')}
     </div>
     {outcome?.kind === 'manual' && <label className="mt-2 block text-sm">
-      Couldn’t copy automatically. Select this text and copy it yourself.
+      {t('ops3.copy.manual')}
       <textarea ref={box} readOnly rows={8} value={outcome.text} onFocus={(event) => event.currentTarget.select()}
         className="mt-1 block w-full rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))] p-2 text-[16px] text-[rgb(var(--mg-ink))]" />
     </label>}
