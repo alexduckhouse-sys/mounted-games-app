@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
-import { TickerProvider, useTicker } from '../../components/TickerContext';
+import { TickerProvider, useDockHost, useTicker } from '../../components/TickerContext';
 import { FAVOURITES_KEY, readFavourites } from '../../lib/favourites';
 import { readFollowedProfiles } from '../../lib/followedProfiles';
 import TeamProfilePage from './TeamProfilePage';
@@ -258,6 +258,7 @@ describe('TeamProfilePage', () => {
   it('puts New profile by the ticker dock, and keeps its own button without a dock', async () => {
     function Dock() {
       const { dockAction } = useTicker();
+      useDockHost();
       return dockAction ? <button type="button" data-testid="dock" onClick={dockAction.onClick}>{dockAction.label}</button> : null;
     }
     const user = userEvent.setup();
