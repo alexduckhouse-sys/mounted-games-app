@@ -42,8 +42,6 @@ public record CreateSectionSignupInput(
     [StringLength(20)] string? PaymentMethod = null,
     bool IsWaitlist = false,
     [Range(1, 20)] int TeamsCount = 1,
-    [Range(0, 100_000_000)] int StableFeeMinor = 0,
-    [Range(1, 30)] int? StablingNights = null,
     [StringLength(120)] string? RiderName = null,
     [StringLength(32)] string? RiderDateOfBirth = null,
     [StringLength(120)] string? PonyName = null,
@@ -303,13 +301,6 @@ public class SignupController : ControllerBase
 {
     private readonly AppDbContext _db;
     public SignupController(AppDbContext db) => _db = db;
-
-    public static long CalculateStablingFeeMinor(int stablesCount, int feePerStableMinor, int? stablingNights = null)
-    {
-        if (stablesCount <= 0 || feePerStableMinor <= 0) return 0L;
-        var nights = stablingNights is > 0 ? stablingNights.Value : 1;
-        return (long)stablesCount * feePerStableMinor * nights;
-    }
 
     private Task<Dictionary<int, SignupMatchmaking>> LoadMatchmakingMapAsync(IEnumerable<int> signupIds)
     {
@@ -858,14 +849,11 @@ public class SignupController : ControllerBase
         // Free entries (including "Wait for a Guest Ride Spot") are complete immediately.
         // Waitlist entries start at 0 amount and Pending until promoted.
         // "Looking for a Pair" pays 50% of the section price; standard entries pay 100% upfront (multiplied by teamsCount).
-        var stablingFee = (req.WaitingForGuestSpot || req.IsWaitlist)
-            ? 0L
-            : CalculateStablingFeeMinor(req.StablesCount, req.StableFeeMinor, req.StablingNights);
         var amount = (req.WaitingForGuestSpot || req.IsWaitlist)
             ? 0L
             : (req.LookingForPair
                 ? section.PriceMinor / 2
-                : (long)section.PriceMinor * teamsCount) + stablingFee;
+                : (long)section.PriceMinor * teamsCount);
         if (amount > int.MaxValue) return BadRequest(new { message = "The total entry fee is too large." });
         var amountMinor = (int)amount;
         var isFree = amountMinor == 0 && !req.IsWaitlist;
