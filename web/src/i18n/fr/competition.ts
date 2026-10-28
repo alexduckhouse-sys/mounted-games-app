@@ -229,4 +229,10 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.rules.openPage': 'Ouvrir la page du règlement de la course',
   'competition.rules.pairsVersion': 'Version en paires',
   'competition.rules.individualVersion': 'Version individuelle',
+  'competition.seasonRound.remove': 'Retirer de la saison',
+  'competition.seasonRound.confirmTitle': 'Retirer cette manche ?',
+  'competition.seasonRound.confirmMessage': '{name} ne compte plus pour cette saison. Vous pourrez la rajouter plus tard.',
+  'competition.seasonRound.confirmMessagePublished': '{name} ne compte plus pour cette saison et ses résultats publiés sont supprimés. Vous pourrez la rajouter plus tard, mais il faudra publier à nouveau.',
+  'competition.seasonRound.confirmLabel': 'Retirer la manche',
+  'competition.seasonRound.error': 'Impossible de retirer cette manche. Vérifiez votre signal et réessayez.',
 };

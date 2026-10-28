@@ -15,6 +15,8 @@ import './seasonViews.css';
 import { SelectField } from '../../components/SelectField';
 import { NumberField } from '../../components/NumberField';
 import { Sheet } from '../../components/Sheet';
+import { confirmDialog } from '../../components/ConfirmDialog';
+import { useT } from '../../i18n/LanguageContext';
 import { ChevronDown } from 'lucide-react';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { AddBar } from '../admin/creator/controls';
@@ -268,6 +270,7 @@ function Round({ seasonId, round, canManage, expanded, onToggle, onChanged }: { 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const toast = useToast();
+  const t = useT();
   const base = `/seasons/${seasonId}/rounds/${round.id}`;
   const mult = round.pointsMultiplier && round.pointsMultiplier > 0 ? round.pointsMultiplier : 1;
 
@@ -276,6 +279,19 @@ function Round({ seasonId, round, canManage, expanded, onToggle, onChanged }: { 
     try { await action(); }
     catch (reason) { setError(seasonError(reason, 'This change couldn’t be saved. Check your signal and try again.')); setPreview(null); }
     finally { setBusy(false); }
+  }
+
+  async function remove() {
+    const confirmed = await confirmDialog({
+      title: t('competition.seasonRound.confirmTitle'),
+      message: t(round.publishedVersion ? 'competition.seasonRound.confirmMessagePublished' : 'competition.seasonRound.confirmMessage', { name: round.competitionName }),
+      confirmLabel: t('competition.seasonRound.confirmLabel'),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    setBusy(true); setError('');
+    try { await api.delete(base); onChanged(); }
+    catch (reason) { setError(seasonError(reason, t('competition.seasonRound.error'))); setBusy(false); }
   }
 
   const status = roundStatus(round);
@@ -308,6 +324,7 @@ function Round({ seasonId, round, canManage, expanded, onToggle, onChanged }: { 
         </label>
         <button type="button" className="rf-btn" disabled={busy} onClick={() => void act(async () => { await api.put(`${base}/included`, { isIncluded: !round.isIncluded }); onChanged(); })}>{round.isIncluded ? 'Exclude round' : 'Include round'}</button>
         <button type="button" className="rf-btn rf-btn-primary" disabled={busy} onClick={() => void act(async () => { const { data } = await api.get<PublicationView>(`${base}/publication-preview`); setPreview(data); })}>{busy ? 'Checking results…' : 'Preview publication'}</button>
+        <button type="button" className="rf-btn" disabled={busy} onClick={() => void remove()}>{t('competition.seasonRound.remove')}</button>
       </div>}
       {preview && canManage && <section className="sv-stack" aria-label="Publication preview">
         <div><h3 className="rf-sec">Version {preview.nextVersion} preview</h3><p className="rf-note sv-flush">{preview.rankingBasis}. Ties share a place and HC teams are excluded.</p></div>
