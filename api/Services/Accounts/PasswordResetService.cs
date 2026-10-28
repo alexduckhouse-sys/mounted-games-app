@@ -52,11 +52,13 @@ public sealed record PasswordResetResult(PasswordResetOutcome Outcome, IReadOnly
 /// reaches a server log) when the address belongs to an account that can be reset, and does nothing otherwise; the caller
 /// gives the same answer either way. The link works once, for 30 minutes, and asking again ends earlier links at least five minutes old. Using it
 /// sets the new password under the usual Identity rules (or the first one, for an account that only signed in with Google
-/// or Apple), clears the wrong-password lockout, confirms the address (the link proved the mailbox), raises
-/// <see cref="AppUser.SessionVersion"/> so every existing sign-in stops working (<see cref="LiveAccounts"/>), disconnects
+/// or Apple), clears the wrong-password lockout, raises <see cref="AppUser.SessionVersion"/> so every existing sign-in stops working (<see cref="LiveAccounts"/>), disconnects
 /// any Google, Apple or Facebook sign-in (one an intruder linked would otherwise survive), takes away <see cref="Roles.MasterAdmin"/> (the key holder gets it back with the key, so
 /// a stolen mailbox can't reach it), and sends a "your password was changed" notice. Emails never throw and never log the
 /// address or the link, and none outlives its request (the API scales to zero): see <see cref="RequestAsync"/>.
+/// <para>A reset never confirms the address. Reading the mailbox proves nothing about who uses the account (an address can
+/// be mistyped at sign-up), and a confirmed address is what lets a Trainer or Manager request be approved
+/// (<see cref="ConfirmedAddress"/>); only the signed-in owner confirms it (<c>POST /api/auth/confirm-email</c>).</para>
 /// </summary>
 public sealed class PasswordResetService(
     AppDbContext db, UserManager<AppUser> users, IEmailSender sender, IOptions<EmailOptions> emailOptions,
@@ -78,11 +80,29 @@ public sealed class PasswordResetService(
     /// <summary>
     /// Every reset request is answered at this point (<c>PasswordReset:MinResponseMilliseconds</c>), not before and not later
     /// because of the email, so a known address can't be told from an unknown one by the time the answer takes. The email
-    /// has until then to go, or it is cancelled. Zero turns the guard off, and the request then waits for the email (tests
+    /// has until then to go, or it is cancelled (and its link withdrawn: see <see cref="RequestAsync"/>). Zero turns the guard off, and the request then waits for the email (tests
     /// and local runs).
     /// </summary>
     public TimeSpan MinimumResponse => TimeSpan.FromMilliseconds(
         Math.Clamp(configuration.GetValue("PasswordReset:MinResponseMilliseconds", DefaultMinimumResponseMilliseconds), 0, 10_000));
+
+    public const int DefaultMinimumSendMilliseconds = 1000;
+
+    /// <summary>
+    /// The least time before <see cref="MinimumResponse"/> that a new link's email must have to go
+    /// (<c>PasswordReset:MinSendMilliseconds</c>, at most half the floor). With less left (a cold start that spent the time
+    /// finding the account), no link is made, so the per-account gap isn't used up by an email that would only be cancelled
+    /// and the person can ask again straight away.
+    /// </summary>
+    public TimeSpan MinimumSend
+    {
+        get
+        {
+            var floor = MinimumResponse;
+            var wanted = TimeSpan.FromMilliseconds(Math.Max(0, configuration.GetValue("PasswordReset:MinSendMilliseconds", DefaultMinimumSendMilliseconds)));
+            return wanted < floor / 2 ? wanted : floor / 2;
+        }
+    }
 
     /// <summary>
     /// The first test for a reset link: a real mailbox, and not deleted, locked or blocked. The shared admin-key account and
@@ -91,14 +111,19 @@ public sealed class PasswordResetService(
     public static bool CanReset(AppUser user) =>
         !user.IsAccessStopped && user.LockoutEnd != DateTimeOffset.MaxValue && HasMailbox(user.Email);
 
-    /// <summary>Roles whose holders only get a link once their address is confirmed, because the mailbox would then control more than the person's own entries.</summary>
-    private static readonly string[] NeedConfirmedAddress = [Roles.Admin, Roles.MasterAdmin, Roles.Trainer, Roles.Manager];
+    /// <summary>
+    /// Roles whose holders only get a link once their address is confirmed, because the mailbox would then control more than
+    /// the person's own entries. The two requests are here too: a request is approved onto the account as it stands, so a
+    /// link to a mistyped address would let that mailbox's owner take the account over before an organiser role arrives.
+    /// </summary>
+    private static readonly string[] NeedConfirmedAddress =
+        [Roles.Admin, Roles.MasterAdmin, Roles.Trainer, Roles.Manager, Roles.TrainerRequest, Roles.ManagerRequest];
 
     /// <summary>
     /// <see cref="CanReset"/>, plus:
     /// <list type="bullet">
-    /// <item>an organiser, team manager, admin or competition admin (a <c>CompetitionCollaborators</c> row, which is staff
-    /// access without a role) needs a confirmed address: an unconfirmed one may belong to someone other than the person who
+    /// <item>an organiser, team manager, admin, someone asking to be an organiser or team manager, or a competition admin (a
+    /// <c>CompetitionCollaborators</c> row, which is staff access without a role) needs a confirmed address: an unconfirmed one may belong to someone other than the person who
     /// uses the account (an admin-key admin can type any address);</item>
     /// <item>an account with no password (one that only signs in with Google or Apple) gets its first password this way only
     /// with a confirmed address, and never an admin, so the link can't add a second way into an admin account.</item>
@@ -126,8 +151,10 @@ public sealed class PasswordResetService(
     /// <summary>
     /// Emails a reset link if <paramref name="address"/> belongs to an account that may have one; silent either way. Takes
     /// exactly <see cref="MinimumResponse"/> whatever happened: the email gets the time left before then and is cancelled
-    /// (with a masked warning) if it needs longer, so nothing carries on after the answer. A failure while making the link
-    /// is logged (masked) and answered the same way, at the same time.
+    /// (with a masked warning) if it needs longer, so nothing carries on after the answer. A link is only made while at
+    /// least <see cref="MinimumSend"/> is left for its email, and a link whose email was cancelled is withdrawn, so a send
+    /// lost to a slow (cold) start never uses up the account's one-a-minute gap: the person can simply ask again. A failure
+    /// while making the link is logged (masked) and answered the same way, at the same time.
     /// </summary>
     public async Task RequestAsync(string address, string? ip, CancellationToken ct)
     {
@@ -136,7 +163,7 @@ public sealed class PasswordResetService(
         OutgoingEmail? email = null;
         try
         {
-            email = await PrepareAsync(address, ip, ct);
+            email = await PrepareAsync(address, ip, started, floor, ct);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
@@ -146,32 +173,54 @@ public sealed class PasswordResetService(
         }
         if (email is not null)
         {
-            if (floor <= TimeSpan.Zero) await SendAsync(email, CancellationToken.None);
+            SendResult sent;
+            if (floor <= TimeSpan.Zero) sent = await SendAsync(email, CancellationToken.None);
             else
             {
                 var left = floor - time.GetElapsedTime(started);
                 using var deadline = left > TimeSpan.Zero ? new CancellationTokenSource(left, time) : new CancellationTokenSource();
                 if (left <= TimeSpan.Zero) await deadline.CancelAsync();
-                await SendAsync(email, deadline.Token);
+                sent = await SendAsync(email, deadline.Token);
             }
+            // Cut off at the floor, the email most likely never reached the provider: take the link back so it doesn't count
+            // against the account's gap or hourly cap. (A provider failure keeps the link, in case the email turns up.)
+            if (sent == SendResult.Cancelled && email.LinkId is { } linkId) await WithdrawAsync(linkId, email.To);
         }
         var wait = floor - time.GetElapsedTime(started);
         if (wait > TimeSpan.Zero) await Task.Delay(wait, time, ct);
     }
 
-    /// <summary>One email, written and ready to send.</summary>
-    private sealed record OutgoingEmail(string To, string Subject, string Text, string Html, string IdempotencyKey, string What);
+    /// <summary>One email, written and ready to send. <see cref="LinkId"/> is the reset link it carries, if any.</summary>
+    private sealed record OutgoingEmail(string To, string Subject, string Text, string Html, string IdempotencyKey, string What, int? LinkId = null);
 
-    private async Task<OutgoingEmail?> PrepareAsync(string address, string? ip, CancellationToken ct)
+    private async Task<OutgoingEmail?> PrepareAsync(string address, string? ip, long started, TimeSpan floor, CancellationToken ct)
     {
         var user = await users.FindByEmailAsync(address);
         if (user is null || !await MayResetAsync(user)) return null;
         var site = EmailSite.Origin(emailOptions.Value, configuration);
         if (site is null) return null;
+        if (floor > TimeSpan.Zero && floor - time.GetElapsedTime(started) < MinimumSend)
+        {
+            log.LogWarning("A password reset link for {Recipient} was not made: too little time was left to send it.", EmailAddresses.Mask(user.Email));
+            return null;
+        }
         var issued = await IssueAsync(user.Id, ip, ct);
         if (issued is not { } link) return null;
         return new OutgoingEmail(user.Email!, "Reset your Mounted Games password", ResetText(site, link.Token), ResetHtml(site, link.Token),
-            $"password-reset-{link.Id}", "reset link");
+            $"password-reset-{link.Id}", "reset link", link.Id);
+    }
+
+    /// <summary>Deletes an unused link whose email didn't go. Never throws; a failure is logged with a masked address.</summary>
+    private async Task WithdrawAsync(int linkId, string to)
+    {
+        try
+        {
+            await db.PasswordResetTokens.Where(t => t.Id == linkId && t.UsedAt == null).ExecuteDeleteAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            log.LogWarning("A password reset link for {Recipient} that wasn't sent could not be withdrawn: {Reason}.", EmailAddresses.Mask(to), ex.GetType().Name);
+        }
     }
 
     /// <summary>What a link is, for the page that opens it. Says nothing about whose account it is for.</summary>
@@ -224,7 +273,7 @@ public sealed class PasswordResetService(
             if (master && await users.RemoveFromRoleAsync(account, Roles.MasterAdmin) is { Succeeded: false } unroled) return (SaveFailure(unroled), null);
 
             account.PasswordHash = users.PasswordHasher.HashPassword(account, newPassword);
-            account.EmailConfirmed = true;
+            // EmailConfirmed stays as it was: see the class summary.
             account.AccessFailedCount = 0;
             account.LockoutEnd = null;
             account.SessionVersion++;
@@ -331,26 +380,37 @@ public sealed class PasswordResetService(
         });
     }
 
+    private enum SendResult { Sent, Failed, Cancelled }
+
     /// <summary>
     /// Never throws: a failure, a cancellation (the deadline passed) or a sender that misbehaves is logged with a masked
-    /// address and nothing else.
+    /// address and nothing else. A provider that accepted the email in time counts as sent even if the deadline passed as
+    /// it answered.
     /// </summary>
-    private async Task SendAsync(OutgoingEmail email, CancellationToken ct)
+    private async Task<SendResult> SendAsync(OutgoingEmail email, CancellationToken ct)
     {
         var recipient = EmailAddresses.Mask(email.To);
         try
         {
             var status = await sender.SendAsync(new EmailMessage(email.To, email.Subject, email.Text, email.Html, email.IdempotencyKey), ct);
-            if (ct.IsCancellationRequested) log.LogWarning("The password {What} for {Recipient} was cancelled before it was sent.", email.What, recipient);
-            else if (status == EmailDeliveryStatus.Failed) log.LogWarning("The password {What} for {Recipient} was not delivered.", email.What, recipient);
+            if (status != EmailDeliveryStatus.Failed) return SendResult.Sent;
+            if (ct.IsCancellationRequested)
+            {
+                log.LogWarning("The password {What} for {Recipient} was cancelled before it was sent.", email.What, recipient);
+                return SendResult.Cancelled;
+            }
+            log.LogWarning("The password {What} for {Recipient} was not delivered.", email.What, recipient);
+            return SendResult.Failed;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             log.LogWarning("The password {What} for {Recipient} was cancelled before it was sent.", email.What, recipient);
+            return SendResult.Cancelled;
         }
         catch (Exception ex)
         {
             log.LogWarning("The password {What} for {Recipient} was not delivered: {Reason}.", email.What, recipient, ex.GetType().Name);
+            return SendResult.Failed;
         }
     }
 

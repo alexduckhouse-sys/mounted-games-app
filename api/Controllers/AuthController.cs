@@ -286,6 +286,9 @@ public class AuthController : ControllerBase
                     {
                         if (!await _users.IsInRoleAsync(existing, Roles.Admin))
                         {
+                            // The key makes an existing account staff, so its address must be confirmed (ConfirmedAddress).
+                            // An organiser who already has Admin this way signs in as before.
+                            if (ConfirmedAddress.Refuses(existing, Roles.Admin)) return ConfirmedAddress.OwnRefusal();
                             var granted = await _users.AddToRoleAsync(existing, Roles.Admin);
                             if (!granted.Succeeded) return PasswordProblems(granted);
                         }
@@ -557,7 +560,9 @@ public class AuthController : ControllerBase
 
     /// <summary>
     /// An admin makes an account for someone. The address is whatever the admin typed, so it starts unconfirmed and gets
-    /// the usual confirmation email: until its owner confirms it (signed in), it can't be used to reset the password.
+    /// the usual confirmation email: until its owner confirms it (signed in), it can't be used to reset the password. The
+    /// role is granted at once, unlike the other staff grants (<see cref="ConfirmedAddress"/>), because a new account has
+    /// nobody yet who could confirm it.
     /// </summary>
     [EnableRateLimiting("auth")]
     [HttpPost("register")]

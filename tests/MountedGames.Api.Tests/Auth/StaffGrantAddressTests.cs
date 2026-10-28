@@ -12,8 +12,9 @@ using MountedGames.Api.Tests.Infrastructure;
 namespace MountedGames.Api.Tests.Auth;
 
 /// <summary>
-/// Staff can reset their password by email, so every way of making someone staff needs their address confirmed first:
-/// an admin granting a role, a club's manager changing one, and an admin making an account. (Approving requests is in
+/// Staff can reset their password by email, so every way of making an existing account staff needs its address confirmed
+/// first: an admin granting a role, a club's manager changing one, and the organiser key. An account an admin makes starts
+/// unconfirmed and gets no reset link until its owner confirms it. (Approving requests is in
 /// <see cref="TrainerRequestAddressTests"/>, adding a competition admin in <c>CompetitionTeamTests</c>.)
 /// </summary>
 public class StaffGrantAddressTests(PasswordResetTests.Factory f) : IClassFixture<PasswordResetTests.Factory>
@@ -94,6 +95,41 @@ public class StaffGrantAddressTests(PasswordResetTests.Factory f) : IClassFixtur
         await f.ConfirmAddressAsync(person.User.Id);
         Assert.Equal(HttpStatusCode.OK, (await manager.PutAsJsonAsync(url, new ChangeMemberRoleRequest(Roles.Trainer))).StatusCode);
         Assert.Contains(Roles.Trainer, await RolesOfAsync(person.User.Id));
+    }
+
+    private Task<HttpResponseMessage> OrganiserKeyAsync(string email)
+        => f.CreateClient().PostAsJsonAsync("/api/auth/admin-key", new AdminKeyRequest(ApiFactory.AdminKey, "Show Secretary", email, ResetSteps.Password));
+
+    [Fact]
+    public async Task TheOrganiserKeyCantMakeAnExistingAccountAnAdmin_UntilTheAddressIsConfirmed()
+    {
+        var person = await f.AccountAsync();
+
+        var refused = await OrganiserKeyAsync(person.User.Email);
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        var body = await refused.Content.ReadAsStringAsync();
+        Assert.Contains(ConfirmedAddress.Code, body);
+        Assert.Contains("Confirm your email address before using the organiser key", body);
+        Assert.DoesNotContain(Roles.Admin, await RolesOfAsync(person.User.Id));
+
+        await f.ConfirmAddressAsync(person.User.Id);
+        var allowed = await OrganiserKeyAsync(person.User.Email);
+        Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
+        Assert.Contains(Roles.Admin, (await allowed.ReadAsync<AuthResponse>()).User.Roles);
+    }
+
+    [Fact]
+    public async Task AnOrganiserKeyAdminSignsInAgainWithTheKey_BeforeConfirmingTheirAddress()
+    {
+        // The key makes a new account unconfirmed; using it again grants nothing new, so it works as before.
+        var email = ResetSteps.NewEmail();
+        var first = await OrganiserKeyAsync(email);
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.False((await first.ReadAsync<AuthResponse>()).User.EmailConfirmed);
+
+        var again = await OrganiserKeyAsync(email);
+        Assert.Equal(HttpStatusCode.OK, again.StatusCode);
+        Assert.Contains(Roles.Admin, (await again.ReadAsync<AuthResponse>()).User.Roles);
     }
 
     [Fact]
