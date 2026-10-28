@@ -45,7 +45,9 @@
 .cs-more:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
 
 /* An add bar at the bottom of a card */
+/* Square where it meets another row; on its own in a card (nothing listed yet) it keeps all four corners. */
 .sp-card > .cs-addbar { border-radius: 0; border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.sp-card > .cs-addbar:first-child { border-top: 0; border-top-left-radius: 11px; border-top-right-radius: 11px; }
 .sp-card > .cs-addbar:last-child { border-bottom-left-radius: 11px; border-bottom-right-radius: 11px; }
 .cs-addbar-plain { background: rgb(var(--mg-surface)); }
 .cs-addbar-plain:hover { background: rgb(var(--mg-subtle)); }

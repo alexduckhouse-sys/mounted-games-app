@@ -9,6 +9,8 @@ main:has(.sp-top) { padding-top: 0; }
 .sp-card > * + * { border-top: 1px solid rgb(var(--mg-rule-soft)); }
 .sp-card > :first-child, .sp-card > :first-child > :first-child { border-top-left-radius: 11px; border-top-right-radius: 11px; }
 .sp-card > :last-child, .sp-card > :last-child > :last-child { border-bottom-left-radius: 11px; border-bottom-right-radius: 11px; }
+/* A dropdown row's button takes whatever corner its wrapper got, so it still rounds when the row sits inside one more wrapper (Settings' Lite mode row). */
+.sp-dropdown > .sp-row { border-radius: inherit; }
 .sp-gap { margin-top: 12px; }
 
 /* Rows */
