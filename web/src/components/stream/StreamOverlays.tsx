@@ -125,6 +125,7 @@ export function StreamOverlays({ stream, label, reconnecting, muted, onSound, an
 
   return <OverlayLayer>
     <OverlayChips stream={stream} look={look} live={<span className="mg-badge mg-badge-live">LIVE</span>} />
+    <span aria-live="polite" className="sr-only">{showStrip && label ? `Now racing: ${label}` : ''}</span>
     <AnimatePresence>
       {showStrip && (
         <motion.div

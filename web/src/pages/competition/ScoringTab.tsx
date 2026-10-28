@@ -1,7 +1,8 @@
 import { Dropdown } from '../../components/Dropdown';
 import { displaySectionName } from '../../lib/section';
 import { TimetableBoard } from './TimetableBoard';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDialogFocus } from '../../components/useDialogFocus';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ChevronRight, Sparkles, X } from 'lucide-react';
@@ -374,6 +375,8 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
 interface FinalsModalProps { sectionId: number; onClose: () => void; onCreated: () => void }
 
 function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onClose, 'button');
   const { competition } = useCompetition();
   const [topN, setTopN] = useState(6);
   const [lanes, setLanes] = useState(6);
@@ -470,6 +473,7 @@ function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
       onClick={onClose}
     >
       <motion.div
+        ref={dialogRef} role="dialog" aria-modal="true" aria-label="Create finals"
         initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }}
         className="card w-full max-w-md max-h-[90vh] overflow-auto"
         onClick={(e) => e.stopPropagation()}
@@ -477,7 +481,7 @@ function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
         <div className="flex items-center gap-2 p-3 border-b border-slate-200 dark:border-slate-800">
           <Sparkles className="w-4 h-4 text-brand-600" />
           <h3 className="font-semibold text-sm flex-1">Create finals</h3>
-          <button onClick={onClose} className="btn-ghost !py-1 !px-1.5"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} aria-label="Close" className="btn-ghost !py-1 !px-1.5"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-3 space-y-3">
           {toFill ? (
