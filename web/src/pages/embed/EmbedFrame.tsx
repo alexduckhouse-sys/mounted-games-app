@@ -1,5 +1,6 @@
 import { useEffect, type CSSProperties, type ReactNode } from 'react';
 import { clockText, embedColours, type EmbedOptions } from '../../lib/embed';
+import { useT } from '../../i18n/LanguageContext';
 import './embed.css';
 
 /**
@@ -14,6 +15,7 @@ export function EmbedFrame({ title, subtitle, updatedAt, options, homeHref, chil
   homeHref: string;
   children: ReactNode;
 }) {
+  const t = useT();
   useEffect(() => {
     document.documentElement.dataset.theme = options.theme === 'dark' ? 'dark' : 'eguk';
   }, [options.theme]);
@@ -33,7 +35,7 @@ export function EmbedFrame({ title, subtitle, updatedAt, options, homeHref, chil
   const style = colours
     ? ({ '--emb-accent': colours.text, '--emb-fill': colours.fill, '--emb-on-fill': colours.onFill } as CSSProperties)
     : undefined;
-  const sub = [subtitle, updatedAt ? `Updated ${clockText(updatedAt)}` : ''].filter(Boolean).join(' · ');
+  const sub = [subtitle, updatedAt ? t('screen.embed.updated', { time: clockText(updatedAt) }) : ''].filter(Boolean).join(' · ');
   return (
     <div className="emb" style={style}>
       <header className="emb-head">
@@ -42,7 +44,7 @@ export function EmbedFrame({ title, subtitle, updatedAt, options, homeHref, chil
       </header>
       <main className="emb-main">{children}</main>
       <footer className="emb-foot">
-        <a href={homeHref} target="_blank" rel="noopener">Powered by Mounted Games</a>
+        <a href={homeHref} target="_blank" rel="noopener">{t('screen.embed.powered')}</a>
       </footer>
     </div>
   );
@@ -50,15 +52,17 @@ export function EmbedFrame({ title, subtitle, updatedAt, options, homeHref, chil
 
 /** A short message in place of the data: loading, not found, or a failed load with a retry. */
 export function EmbedMessage({ children, onRetry }: { children: ReactNode; onRetry?: () => void }) {
+  const t = useT();
   return (
     <div className="emb-msg" role="status">
       <p style={{ margin: 0 }}>{children}</p>
-      {onRetry && <button type="button" onClick={onRetry}>Try again</button>}
+      {onRetry && <button type="button" onClick={onRetry}>{t('common.tryAgain')}</button>}
     </div>
   );
 }
 
 /** Shown when the last refresh failed but earlier data is still on screen. */
 export function StaleNotice() {
-  return <p className="emb-stale" role="status">Couldn’t refresh. Showing the last results we had.</p>;
+  const t = useT();
+  return <p className="emb-stale" role="status">{t('screen.embed.stale')}</p>;
 }

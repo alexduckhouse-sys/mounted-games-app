@@ -1,11 +1,12 @@
+import { tr } from '../i18n/translate';
 import { ProtestStatus, type Protest } from '../types';
 
 /** The words for each protest status, as staff see them. */
 export const PROTEST_STATUS_LABELS: Record<ProtestStatus, string> = {
-  [ProtestStatus.Open]: 'Open',
-  [ProtestStatus.Upheld]: 'Upheld',
-  [ProtestStatus.Dismissed]: 'Dismissed',
-  [ProtestStatus.Withdrawn]: 'Withdrawn',
+  get [ProtestStatus.Open]() { return tr('ops2.protest.open'); },
+  get [ProtestStatus.Upheld]() { return tr('ops2.protest.upheld'); },
+  get [ProtestStatus.Dismissed]() { return tr('ops2.protest.dismissed'); },
+  get [ProtestStatus.Withdrawn]() { return tr('ops2.protest.withdrawn'); },
 };
 
 export type ProtestTone = 'warn' | 'good' | 'grey';
@@ -18,8 +19,8 @@ export function protestTone(status: ProtestStatus): ProtestTone {
 
 /** "Race 2 · Heat 1" for a race, or "Whole heat · Heat 1"; the heat falls back to its place in the session. */
 export function protestWhere(protest: Pick<Protest, 'raceName' | 'raceId' | 'heatLabel' | 'heatOrder'>): string {
-  const heat = protest.heatLabel?.trim() || `Heat ${protest.heatOrder}`;
-  const race = protest.raceId == null ? 'Whole heat' : (protest.raceName?.trim() || 'Race');
+  const heat = protest.heatLabel?.trim() || tr('ops2.protest.heatN', { n: protest.heatOrder });
+  const race = protest.raceId == null ? tr('ops2.protest.wholeHeat') : (protest.raceName?.trim() || tr('ops2.protest.race'));
   return `${race} · ${heat}`;
 }
 
@@ -30,9 +31,9 @@ export function protestsBlocking(protests: readonly Protest[], raceId: number, h
 
 /** What a decision still needs before it can be saved, or null when it's ready. A withdrawal needs no note. */
 export function decisionProblem(outcome: ProtestStatus, decision: string): string | null {
-  if (outcome === ProtestStatus.Open) return 'Choose an outcome.';
+  if (outcome === ProtestStatus.Open) return tr('ops2.protest.chooseOutcome');
   if (outcome === ProtestStatus.Withdrawn) return null;
-  return decision.trim() ? null : 'Write down the decision and the reason for it.';
+  return decision.trim() ? null : tr('ops2.protest.needDecision');
 }
 
 /** The names of races marked under review, in order, for the public "Under review" line. */

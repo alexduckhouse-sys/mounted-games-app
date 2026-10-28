@@ -1,3 +1,4 @@
+import { tr } from '../i18n/translate';
 import type { ResultsBook } from '../pages/eventTools/resultsBookTypes';
 import { formatPoints } from './formatPoints';
 
@@ -13,20 +14,20 @@ export function resultsDigest(book: ResultsBook): string {
   const header = [
     line(book.competition.name),
     ...(book.competition.competitionNumber?.trim()
-      ? [`Competition reference: ${line(book.competition.competitionNumber)}`] : []),
-    book.isProvisional ? 'Provisional results' : 'Final results',
+      ? [tr('ops3.digest.ref', { ref: line(book.competition.competitionNumber) })] : []),
+    book.isProvisional ? tr('ops3.digest.provisional') : tr('ops3.digest.final'),
   ];
   const blocks = [header.join('\n')];
   for (const section of book.sections) {
     blocks.push([
       line(section.sectionName),
       ...(section.standings.length ? section.standings.map((row) =>
-        `${row.rank}. ${line(row.teamName)} · ${formatPoints(row.totalPoints)} pts${row.finalLabel ? ` · ${line(row.finalLabel)}` : ''}${row.withdrawn ? ' (withdrawn)' : ''}`,
-      ) : ['No results yet.']),
+        `${row.rank}. ${line(row.teamName)} · ${tr('ops3.digest.pts', { points: formatPoints(row.totalPoints) })}${row.finalLabel ? ` · ${line(row.finalLabel)}` : ''}${row.withdrawn ? ` (${tr('ops3.withdrawn')})` : ''}`,
+      ) : [tr('ops2.print.noResults')]),
       ...section.awards.map((award) => `${line(award.title)}: ${line(award.recipient)}`),
     ].join('\n'));
   }
-  if (book.sections.length === 0) blocks.push('No results yet.');
+  if (book.sections.length === 0) blocks.push(tr('ops2.print.noResults'));
   if (book.eventAwards.length) {
     blocks.push(book.eventAwards.map((award) => `${line(award.title)}: ${line(award.recipient)}`).join('\n'));
   }

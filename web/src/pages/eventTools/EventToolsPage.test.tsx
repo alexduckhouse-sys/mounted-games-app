@@ -45,6 +45,7 @@ function renderPage(initialEntry = '/event-tools/12') {
   const router = createMemoryRouter([
     { path: '/event-tools/:competitionId', element: <EventToolsPage /> },
     { path: '/competitions/:id/operations', element: <OperationsPage /> },
+    { path: '/competitions/:id/operations/:tool', element: <OperationsPage /> },
   ], { initialEntries: [initialEntry] });
   return { ...render(<RouterProvider router={router} />), router };
 }
@@ -73,12 +74,12 @@ describe('EventToolsPage merged into OperationsPage', () => {
   it('redirects /event-tools/:id straight to /competitions/:id/operations', async () => {
     const { router } = renderPage('/event-tools/12');
     await waitFor(() => expect(router.state.location.pathname).toBe('/competitions/12/operations'));
-    expect(await screen.findByRole('tab', { name: 'Import teams' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Tack check' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Passport check' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Print sheets' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Results book' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Duplicate event' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: /^Import teams/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Tack check/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Passport check/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Print sheets/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Results book/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^Duplicate event/ })).toBeInTheDocument();
   });
 
   it('turns away someone who does not run this competition', async () => {
@@ -95,10 +96,10 @@ describe('EventToolsPage merged into OperationsPage', () => {
     } as unknown as ReturnType<typeof useAuth>);
     const user = userEvent.setup();
     renderPage();
-    await user.click(await screen.findByRole('tab', { name: 'Import teams' }));
+    expect(await screen.findByRole('link', { name: /^Print sheets/ })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^Duplicate event/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('link', { name: /^Import teams/ }));
     expect(await screen.findByLabelText('CSV text')).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Print sheets' })).toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: 'Duplicate event' })).not.toBeInTheDocument();
   });
 
   it('previews CSV rows before applying the same fingerprint', async () => {
@@ -109,7 +110,7 @@ describe('EventToolsPage merged into OperationsPage', () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(await screen.findByRole('tab', { name: 'Import teams' }));
+    await user.click(await screen.findByRole('link', { name: /^Import teams/ }));
     const input = await screen.findByLabelText('CSV text');
     await user.clear(input);
     await user.type(input, 'club,suffix,section\nNorth Club,A,Under 12');
@@ -128,7 +129,7 @@ describe('EventToolsPage merged into OperationsPage', () => {
     post.mockRejectedValue({ response: { data: { detail: 'Those dates overlap another event.' } } });
     const user = userEvent.setup();
     renderPage();
-    await user.click(await screen.findByRole('tab', { name: 'Duplicate event' }));
+    await user.click(await screen.findByRole('link', { name: /^Duplicate event/ }));
     const name = await screen.findByLabelText('New competition name');
     await user.clear(name);
     await user.type(name, 'Autumn championship');
@@ -141,9 +142,9 @@ describe('EventToolsPage merged into OperationsPage', () => {
   it('lists the print sheets as links from the Print sheets tab', async () => {
     const user = userEvent.setup();
     renderPage();
-    await user.click(await screen.findByRole('tab', { name: 'Print sheets' }));
-    expect(screen.getByRole('tab', { name: 'Print sheets' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('link', { name: 'Back to event' })).toHaveAttribute('href', '/competitions/12');
+    await user.click(await screen.findByRole('link', { name: /^Print sheets/ }));
+    expect(screen.getByRole('heading', { level: 1, name: 'Print sheets' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to Before the day' })).toHaveAttribute('href', '/competitions/12/operations');
     expect(screen.getByRole('link', { name: /Draw and lanes/ })).toHaveAttribute('href', '/event-tools/12/print/draw');
     expect(screen.getByRole('link', { name: /Score sheets/ })).toHaveAttribute('href', '/event-tools/12/print/score-sheets');
     expect(screen.getByRole('link', { name: /Results/ })).toHaveAttribute('href', '/event-tools/12/print/results');
@@ -160,7 +161,7 @@ describe('EventToolsPage merged into OperationsPage', () => {
     } });
     const user = userEvent.setup();
     renderPage();
-    await user.click(await screen.findByRole('tab', { name: 'Import teams' }));
+    await user.click(await screen.findByRole('link', { name: /^Import teams/ }));
     await user.click(await screen.findByRole('button', { name: 'Preview teams' }));
 
     expect(await screen.findByText('Ready')).toBeInTheDocument();
@@ -173,7 +174,7 @@ describe('EventToolsPage merged into OperationsPage', () => {
     post.mockResolvedValue({ data: { competitionId: 99, name: 'Spring event copy', sections: 2, teams: 0, sessions: 3, heats: 0, races: 0 } });
     const user = userEvent.setup();
     renderPage();
-    await user.click(await screen.findByRole('tab', { name: 'Duplicate event' }));
+    await user.click(await screen.findByRole('link', { name: /^Duplicate event/ }));
     await user.click(screen.getByRole('button', { name: 'Duplicate setup' }));
 
     expect(await screen.findByText('2 age groups and 3 timetable sessions copied.')).toBeInTheDocument();

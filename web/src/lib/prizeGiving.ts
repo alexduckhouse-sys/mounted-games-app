@@ -1,3 +1,4 @@
+import { clubLabel } from './clubName';
 import type { DeclarationForm } from '../types';
 import { publicRiderName } from './riderNames';
 import type { Toplist } from './toplist';
@@ -35,7 +36,7 @@ export function parsePrizeGiving(raw: unknown): PrizeGiving | 'clear' | null {
   for (const item of message.places) {
     const place = item as Record<string, unknown> | null;
     if (!place || !isNumber(place.teamId) || !isNumber(place.place) || !isNumber(place.points) || typeof place.teamName !== 'string') return null;
-    places.push({ teamId: place.teamId, place: place.place, teamName: place.teamName, clubName: typeof place.clubName === 'string' ? place.clubName : null, points: place.points });
+    places.push({ teamId: place.teamId, place: place.place, teamName: place.teamName, clubName: typeof place.clubName === 'string' ? clubLabel(place.clubName) || null : null, points: place.points });
   }
   if (places.length === 0) return null;
   return { sectionId: message.sectionId, sectionName: typeof message.sectionName === 'string' ? message.sectionName : '', places, champions: message.champions === true };
@@ -80,4 +81,31 @@ export function riderLines(forms: DeclarationForm[], teamId: number): RiderLine[
     .slice()
     .sort((a, b) => Number(a.isReserve) - Number(b.isReserve) || a.orderIndex - b.orderIndex)
     .map((rider) => ({ rider: publicRiderName(rider), pony: rider.horseName?.trim() || null, reserve: rider.isReserve }));
+}
+
+/** The automatic prize-giving: how many places, and how long each place and the winners stay up. */
+export const AUTO_PLACES = 6;
+export const AUTO_PLACE_SECONDS = 6;
+export const AUTO_CHAMPION_SECONDS = 14;
+
+/**
+ * The frames of an automatic prize-giving, one per place from last to first, each carrying every place given so far
+ * (as the organiser's stepping does). The winners' frame is marked `champions`.
+ */
+export function autoPrizeGivingFrames(order: RevealPlace[], sectionId: number, sectionName: string, clubOf: (teamId: number) => string | null): PrizeGiving[] {
+  return order.map((_, index) => {
+    const given = order.slice(0, index + 1);
+    return {
+      sectionId,
+      sectionName,
+      places: given.map((place) => ({ teamId: place.teamId, place: place.place, teamName: place.teamName, clubName: clubLabel(clubOf(place.teamId)) || null, points: place.points })),
+      champions: index === order.length - 1 && given[index].place === 1,
+    };
+  });
+}
+
+/** The age groups whose finals have all just been scored: those in `now` that were not in `before` (null means first look). */
+export function newlyFinished(before: ReadonlySet<number> | null, now: ReadonlySet<number>): number[] {
+  if (!before) return [];
+  return [...now].filter((id) => !before.has(id));
 }

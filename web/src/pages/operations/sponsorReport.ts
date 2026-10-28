@@ -1,4 +1,6 @@
+import { activeLocale, tr } from '../../i18n/translate';
 import { SPONSOR_PLACEMENTS, SPONSOR_TIERS, formatDurationHms, hasPlacement } from '../../lib/sponsors';
+import type { MessageKey } from '../../i18n/en/index';
 import type { SponsorTier } from '../../types';
 
 export interface SponsorPlaceFigure { label: string; views: number; seconds: number }
@@ -25,6 +27,16 @@ const PLACE_NAMES: Record<string, string> = {
   liveStreamOverlay: 'Live video',
   sponsorPage: 'Sponsor page',
 };
+
+const PLACE_KEYS: Record<string, MessageKey> = {
+  'Details page': 'ops2.sr.place.details', Results: 'ops2.sr.place.results', Timetable: 'ops2.sr.place.timetable', 'Live video': 'ops2.sr.place.video',
+  'Sponsor page': 'ops2.sr.place.sponsorPage', 'Video breaks': 'ops2.sr.place.breaks', Details: 'ops2.sr.place.detailsShort', Other: 'ops2.sr.place.other',
+};
+const TIER_KEYS: Record<string, MessageKey> = { Headline: 'ops2.sr.tier.headline', Major: 'ops2.sr.tier.major', Supporter: 'ops2.sr.tier.supporter' };
+
+/** The words for a place or level in the language in use; anything the report doesn't know stays as the API sent it. */
+export const placementText = (label: string): string => (PLACE_KEYS[label] ? tr(PLACE_KEYS[label]) : label);
+export const tierText = (label: string): string => (TIER_KEYS[label] ? tr(TIER_KEYS[label]) : label);
 
 type Raw = Record<string, unknown>;
 const isRaw = (value: unknown): value is Raw => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -87,9 +99,9 @@ export function buildSponsorReportRows(rawStats: unknown, rawSponsors: unknown):
 
 /** "Timetable 12, Results 4", or a plain line saying why there is no split. */
 export function placeFiguresText(row: SponsorReportRow): string {
-  if (row.byPlace === null) return 'Not counted by place';
-  if (row.byPlace.length === 0) return 'No views yet';
-  return row.byPlace.map((p) => `${p.label} ${p.views.toLocaleString('en-GB')}`).join(', ');
+  if (row.byPlace === null) return tr('ops2.sr.notByPlace');
+  if (row.byPlace.length === 0) return tr('ops2.sr.noViews');
+  return row.byPlace.map((p) => `${placementText(p.label)} ${p.views.toLocaleString(activeLocale())}`).join(', ');
 }
 
 export const SPONSOR_CSV_HEADER = ['Sponsor', 'Level', 'Total views', 'Time on video', 'Seconds on video', 'Switched on for', 'Views by place'];

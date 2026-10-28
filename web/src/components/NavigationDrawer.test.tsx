@@ -236,6 +236,14 @@ describe('NavigationDrawer: On the day', () => {
     expect(screen.getByTestId('probe')).toHaveTextContent('/competitions/4/tv');
   });
 
+  it('gives the organiser a Before the day link, and nobody else', () => {
+    const { unmount } = mount({ competition: true, roles: ['Trainer'], meta: { createdByUserId: 'u1' } });
+    expect(links('Before the day')).toEqual([['Before the day', '/competitions/4/operations']]);
+    unmount();
+    mount({ competition: true, roles: ['Member'], meta: { createdByUserId: 'u1' } });
+    expect(screen.queryByRole('navigation', { name: 'Before the day' })).toBeNull();
+  });
+
   it('opens the QR codes sheet from Scorer and screen QR codes', async () => {
     mount({ competition: true, roles: ['Admin'], meta: {} });
     expect(screen.queryByRole('dialog', { name: 'Share with QR codes' })).toBeNull();

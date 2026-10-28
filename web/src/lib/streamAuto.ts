@@ -1,20 +1,22 @@
 import type { CompetitionDetail, Session } from '../types';
+import { sectionFinalsState } from './toplist';
 
 /** Automations for the stream. They live in the organiser's browser and run only while a stream controls page is open. */
-export type AutoRuleKey = 'race' | 'toplist' | 'podium' | 'title' | 'sponsor';
+export type AutoRuleKey = 'race' | 'toplist' | 'podium' | 'title' | 'sponsor' | 'favourites';
 export interface AutoRule { on: boolean; n: number }
 export interface AutoState { on: boolean; rules: Record<AutoRuleKey, AutoRule> }
 
 export const DEFAULT_AUTO: AutoState = {
   on: false,
-  rules: { race: { on: true, n: 20 }, toplist: { on: true, n: 2 }, podium: { on: true, n: 0 }, title: { on: false, n: 0 }, sponsor: { on: false, n: 10 } },
+  rules: { race: { on: true, n: 20 }, toplist: { on: true, n: 2 }, podium: { on: true, n: 0 }, title: { on: false, n: 0 }, sponsor: { on: false, n: 10 }, favourites: { on: false, n: 0 } },
 };
 
-export const AUTO_KEYS: AutoRuleKey[] = ['race', 'toplist', 'podium', 'title', 'sponsor'];
+export const AUTO_KEYS: AutoRuleKey[] = ['race', 'toplist', 'podium', 'title', 'sponsor', 'favourites'];
 
 export const TOPLIST_SECONDS = 20;
 export const PODIUM_SECONDS = 15;
 export const TITLE_SECONDS = 10;
+export const FAVOURITES_SECONDS = 15;
 
 export interface AutoRuleInfo { key: AutoRuleKey; when: string; what: (rule: AutoRule) => string; choiceLabel: string; choices: { n: number; label: string }[] }
 
@@ -25,6 +27,7 @@ export const AUTO_RULES: AutoRuleInfo[] = [
   { key: 'podium', when: 'After a session', what: () => `Podium for ${PODIUM_SECONDS}s`, choiceLabel: '', choices: [] },
   { key: 'title', when: 'Before each race', what: () => `Race title for ${TITLE_SECONDS}s`, choiceLabel: '', choices: [] },
   { key: 'sponsor', when: 'Between races', what: (r) => `Sponsors for ${r.n}s`, choiceLabel: 'Show for', choices: [{ n: 10, label: '10s' }, { n: 20, label: '20s' }] },
+  { key: 'favourites', when: 'Before a final', what: () => `Favourites for ${FAVOURITES_SECONDS}s`, choiceLabel: '', choices: [] },
 ];
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -58,15 +61,16 @@ export function saveAuto(competitionId: number, state: AutoState) {
   try { localStorage.setItem(storageKey(competitionId), JSON.stringify(state)); } catch { /* the choice still works until the page closes */ }
 }
 
-export type AutoCard = 'heat' | 'toplist' | 'podium' | 'title' | 'sponsor';
+export type AutoCard = 'heat' | 'toplist' | 'podium' | 'title' | 'sponsor' | 'favourites';
 export interface AutoStep { card: AutoCard; seconds: number }
 
 /** What to show, in order, after a race finishes. */
-export function autoSteps(state: AutoState, context: { sessionNumber: number; racesInSection: number; sessionFinished: boolean }): AutoStep[] {
+export function autoSteps(state: AutoState, context: { sessionNumber: number; racesInSection: number; sessionFinished: boolean; beforeFinal?: boolean }): AutoStep[] {
   const { rules } = state;
   const steps: AutoStep[] = [];
   if (rules.race.on) steps.push({ card: 'heat', seconds: rules.race.n });
   if (rules.toplist.on && context.sessionNumber >= 2 && rules.toplist.n > 0 && context.racesInSection % rules.toplist.n === 0) steps.push({ card: 'toplist', seconds: TOPLIST_SECONDS });
+  if (rules.favourites.on && context.beforeFinal) steps.push({ card: 'favourites', seconds: FAVOURITES_SECONDS });
   if (rules.podium.on && context.sessionFinished) steps.push({ card: 'podium', seconds: PODIUM_SECONDS });
   if (rules.title.on) steps.push({ card: 'title', seconds: TITLE_SECONDS });
   if (rules.sponsor.on) steps.push({ card: 'sponsor', seconds: rules.sponsor.n });
@@ -99,6 +103,12 @@ export function autoContext(competition: Pick<CompetitionDetail, 'sessions'>, ra
     sessionNumber: sameSection.indexOf(session) + 1,
     racesInSection: done.filter((item) => item.sectionId === race.sectionId).length,
     sessionFinished: races.length > 0 && races.every((r) => r.isComplete),
+    // The last qualifying race has just been scored and the age group has finals still to ride.
+    beforeFinal: (() => {
+      if (race.sectionId == null) return false;
+      const state = sectionFinalsState(competition.sessions as Session[], race.sectionId);
+      return state.hasFinals && state.qualifyingDone && !state.finalsStarted;
+    })(),
   };
 }
 

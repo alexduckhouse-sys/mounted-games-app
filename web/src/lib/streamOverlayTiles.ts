@@ -1,7 +1,7 @@
 import type { StreamOverlay } from '../types';
 
 /** The choices on the Overlay tab, in the order they appear. */
-export type OverlayTileId = 'none' | 'auto' | 'soon' | 'toplist' | 'heat' | 'podium' | 'result' | 'next' | 'title' | 'sponsor';
+export type OverlayTileId = 'none' | 'auto' | 'soon' | 'toplist' | 'heat' | 'podium' | 'result' | 'next' | 'title' | 'sponsor' | 'favourites';
 
 export interface OverlayTile {
   id: OverlayTileId;
@@ -21,6 +21,7 @@ export const OVERLAY_TILES: OverlayTile[] = [
   { id: 'podium', label: 'Podium', drawn: false, settings: true },
   { id: 'result', label: 'Race result', drawn: false, settings: true },
   { id: 'next', label: 'Up next', drawn: true, settings: true },
+  { id: 'favourites', label: 'Favourites', drawn: true, settings: true },
   { id: 'title', label: 'Race title', drawn: false, settings: false },
   { id: 'sponsor', label: 'Sponsors', drawn: true, settings: true },
 ];
@@ -41,10 +42,14 @@ export interface LiveOptions {
   resultRaceId: number | null;
   nextCount: 1 | 3;
   sponsorSize: 'full' | 'corner';
+  /** How many teams the Favourites card lists. */
+  favouritesRows: 3 | 5;
+  /** Viewers play the prize-giving by themselves once an age group's finals are all scored. */
+  autoPrizeGiving: boolean;
 }
 
 export const DEFAULT_LIVE_OPTIONS: LiveOptions = {
-  toplistRows: 5, heatShow: 'each', podiumReveal: 'all', podiumSectionId: null, podiumShown: 0, resultRaceId: null, nextCount: 1, sponsorSize: 'full',
+  toplistRows: 5, heatShow: 'each', podiumReveal: 'all', podiumSectionId: null, podiumShown: 0, resultRaceId: null, nextCount: 1, sponsorSize: 'full', favouritesRows: 5, autoPrizeGiving: true,
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -65,10 +70,12 @@ export function readLiveOptions(overlay: StreamOverlay): LiveOptions {
     resultRaceId: idOrNull(options.resultRaceId),
     nextCount: pick(options.nextCount, [1, 3] as const, DEFAULT_LIVE_OPTIONS.nextCount),
     sponsorSize: pick(options.sponsorSize, ['full', 'corner'] as const, DEFAULT_LIVE_OPTIONS.sponsorSize),
+    favouritesRows: pick(options.favouritesRows, [3, 5] as const, DEFAULT_LIVE_OPTIONS.favouritesRows),
+    autoPrizeGiving: typeof options.autoPrizeGiving === 'boolean' ? options.autoPrizeGiving : DEFAULT_LIVE_OPTIONS.autoPrizeGiving,
   };
 }
 
-const CARD_IDS: readonly OverlayTileId[] = ['none', 'auto', 'toplist', 'heat', 'podium', 'result', 'next', 'title', 'sponsor'];
+const CARD_IDS: readonly OverlayTileId[] = ['none', 'auto', 'toplist', 'heat', 'podium', 'result', 'next', 'title', 'sponsor', 'favourites'];
 
 /** The card the producer chose, ignoring Back soon (that comes from the camera being paused). */
 export function readCard(overlay: StreamOverlay): Exclude<OverlayTileId, 'soon'> {

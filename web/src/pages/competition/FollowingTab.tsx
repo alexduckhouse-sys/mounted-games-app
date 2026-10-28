@@ -4,6 +4,7 @@ import { FollowStar } from '../../components/FollowStar';
 import { Link } from 'react-router-dom';
 import { Check, ChevronRight, Search } from 'lucide-react';
 import { api } from '../../api';
+import { AgeGroupFilterButton, AgeGroupFilterSheet } from '../../components/AgeGroupFilter';
 import { Notice } from '../../components/Notice';
 import { usePageWidth } from '../../components/pageWidthState';
 import { usePageHeader } from '../../components/CompactPageBarContext';
@@ -26,6 +27,7 @@ import { useFollowedToplists } from './useFollowedToplists';
 import { lastUpdatedText } from '../../offline/savedCopies';
 import { useIsOld } from '../../live/useIsOld';
 import { formatPoints } from '../../lib/formatPoints';
+import { isUnaffiliated } from '../../lib/clubName';
 import { useLanguage } from '../../i18n/LanguageContext';
 import './following.css';
 
@@ -48,6 +50,8 @@ export function FollowingTab() {
   const { favourites, error, toggle, setMany } = useFavourites();
   const now = useNow(30_000);
   const [search, setSearch] = useState('');
+  const [sectionId, setSectionId] = useState<number | 'all'>('all');
+  const [filterOpen, setFilterOpen] = useState(false);
   const [shifts, setShifts] = useState<VolunteerShift[]>([]);
   const [here, setHere] = useState<ReadonlySet<number>>(new Set());
   const [sending, setSending] = useState<ReadonlySet<number>>(new Set());
@@ -88,12 +92,14 @@ export function FollowingTab() {
   const lists = useFollowedToplists(competition, teams.map((team) => team.competitionSectionId));
   const stale = isStale === true;
   const query = search.trim().toLowerCase();
-  const filtered = competition.teams.filter((team) => `${team.displayName} ${team.clubName} ${team.sectionName}`.toLowerCase().includes(query));
+  const inSection = (team: Team) => sectionId === 'all' || team.competitionSectionId === sectionId;
+  const filtered = competition.teams.filter((team) => inSection(team) && `${team.displayName} ${team.clubName} ${team.sectionName}`.toLowerCase().includes(query));
   // Followed teams are listed above, so the finder only offers the others: a few to start with, every match once you type.
   const findable = filtered.filter((team) => !ids.has(team.id)).slice(0, query ? 30 : 8);
   const clubs = useMemo(() => {
     const byClub = new Map<number, { id: number; name: string; teamIds: number[] }>();
     for (const team of competition.teams) {
+      if (isUnaffiliated(team.clubName)) continue;
       const club = byClub.get(team.clubId) ?? { id: team.clubId, name: team.clubName, teamIds: [] };
       club.teamIds.push(team.id);
       byClub.set(team.clubId, club);
@@ -216,11 +222,14 @@ export function FollowingTab() {
 
     <section aria-labelledby="find-team-title" className="mg-sec">
       <div className="mg-sec-head"><h2 id="find-team-title">{t('teams.following.findTeam')}</h2></div>
-      <label className="flex h-[46px] items-center gap-2.5 rounded-full border-[1.5px] border-[rgb(var(--mg-control))] bg-[rgb(var(--mg-surface))] px-4 text-[rgb(var(--mg-muted))] focus-within:border-[rgb(var(--mg-heading))]">
-        <Search aria-hidden="true" className="h-[18px] w-[18px] shrink-0" strokeWidth={2.2} />
-        <input type="search" aria-label={t('teams.following.findAria')} placeholder={t('teams.following.findPlaceholder')} value={search} onChange={(event) => setSearch(event.target.value)}
-          className="h-full min-w-0 flex-1 border-0 bg-transparent text-base text-[rgb(var(--mg-ink))] outline-none placeholder:text-[rgb(var(--mg-faint))]" />
-      </label>
+      <div className="fk-find">
+        <label className="flex h-[46px] items-center gap-2.5 rounded-full border-[1.5px] border-[rgb(var(--mg-control))] bg-[rgb(var(--mg-surface))] px-4 text-[rgb(var(--mg-muted))] focus-within:border-[rgb(var(--mg-heading))]">
+          <Search aria-hidden="true" className="h-[18px] w-[18px] shrink-0" strokeWidth={2.2} />
+          <input type="search" aria-label={t('teams.following.findAria')} placeholder={t('teams.following.findPlaceholder')} value={search} onChange={(event) => setSearch(event.target.value)}
+            className="h-full min-w-0 flex-1 border-0 bg-transparent text-base text-[rgb(var(--mg-ink))] outline-none placeholder:text-[rgb(var(--mg-faint))]" />
+        </label>
+        <AgeGroupFilterButton label={t('teams.list.ageGroup')} active={sectionId !== 'all'} onClick={() => setFilterOpen(true)} />
+      </div>
       {!filtered.length && <p className="mg-meta px-1">{competition.teams.length ? t('teams.following.noMatch') : t('teams.following.noTeams')}</p>}
       {(shownClubs.length > 0 || findable.length > 0) && <div className="mg-card divide-y divide-[rgb(var(--mg-rule-soft))] overflow-hidden">
         {shownClubs.length > 0 && <ul aria-label={t('teams.following.clubs')} className="divide-y divide-[rgb(var(--mg-rule-soft))]">
@@ -240,5 +249,13 @@ export function FollowingTab() {
         </ul>}
       </div>}
     </section>
+    {filterOpen && <AgeGroupFilterSheet
+      title={t('teams.list.ageGroup')}
+      value={sectionId}
+      shown={filtered.length}
+      options={[{ id: 'all' as const, label: t('teams.list.allAgeGroups'), teams: competition.teams.length }, ...competition.sections.map((sec) => ({ id: sec.id, label: displaySectionName(sec.displayName), teams: competition.teams.filter((team) => team.competitionSectionId === sec.id).length }))]}
+      onChange={setSectionId}
+      onClose={() => setFilterOpen(false)}
+    />}
   </div>;
 }

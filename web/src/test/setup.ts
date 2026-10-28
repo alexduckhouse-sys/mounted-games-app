@@ -1,7 +1,12 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
 import { afterEach } from 'vitest';
-import { setActiveLang } from '../i18n/translate';
+import { loadCatalogue, setActiveLang } from '../i18n/translate';
+
+// Welsh and French load on demand in the app. Most tests render them straight away, so have them ready; the lazy-loading
+// tests unload them on purpose.
+await loadCatalogue('cy');
+await loadCatalogue('fr');
 
 // A few files opt into the node environment (service-worker helpers), where there is no DOM to reset.
 if (typeof window !== 'undefined') {

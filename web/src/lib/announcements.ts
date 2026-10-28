@@ -1,3 +1,4 @@
+import { activeLocale } from '../i18n/translate.ts';
 import type { ChatMessage } from '../types';
 
 /** Tag on the copy of an announcement that is pinned: it is the notice on the bar at the top of the event. */
@@ -7,7 +8,7 @@ const byTime = (a: ChatMessage, b: ChatMessage) =>
   new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() || a.id - b.id;
 
 export function clockTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleTimeString(activeLocale(), { hour: '2-digit', minute: '2-digit' });
 }
 
 const isPublicAnnouncement = (message: ChatMessage) =>

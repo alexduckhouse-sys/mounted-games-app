@@ -1,8 +1,10 @@
+import { useT } from '../../i18n/LanguageContext';
 import { ArchiveDownload } from './ArchiveDownload';
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Upload } from 'lucide-react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { api } from '../../api';
+import { tr } from '../../i18n/translate';
 import { Notice } from '../../components/Notice';
 import { useToast } from '../../components/Toast';
 import { Chevron, RefineFoot, RefineList, RefineNote, RefineSection, RefineStatus } from '../refine/Refine';
@@ -35,6 +37,7 @@ export default function EventToolsPage() {
 }
 
 export function TeamImportPanel({ competitionId, onImported }: { competitionId: string; onImported?: () => void }) {
+  const t = useT();
   const fileRef = useRef<HTMLInputElement>(null);
   const [csv, setCsv] = useState('club,suffix,section\n');
   const [preview, setPreview] = useState<CsvTeamImportPreview | null>(null);
@@ -51,7 +54,7 @@ export function TeamImportPanel({ competitionId, onImported }: { competitionId: 
     const file = event.target.files?.[0];
     if (!file) return;
     try { changeCsv(await file.text()); }
-    catch { setError('Couldn’t read that file. Try pasting the CSV text instead.'); }
+    catch { setError(t('ops3.import.readError')); }
   }
 
   async function previewImport() {
@@ -59,7 +62,7 @@ export function TeamImportPanel({ competitionId, onImported }: { competitionId: 
     try {
       const { data } = await api.post<CsvTeamImportPreview>(`/event-tools/competitions/${competitionId}/team-import/preview`, { csv });
       setPreview(data);
-    } catch (caught) { setError(message(caught, 'Couldn’t preview this import. Check your signal and try again.')); setRetryPreview(true); }
+    } catch (caught) { setError(message(caught, t('ops3.import.previewError'))); setRetryPreview(true); }
     finally { setBusy(null); }
   }
 
@@ -70,11 +73,11 @@ export function TeamImportPanel({ competitionId, onImported }: { competitionId: 
       const { data } = await api.post<{ createdCount: number }>(`/event-tools/competitions/${competitionId}/team-import/apply`, {
         csv, fingerprint: preview.fingerprint, previewVersion: preview.previewVersion,
       });
-      toast.show(`${data.createdCount} ${data.createdCount === 1 ? 'team' : 'teams'} added`);
+      toast.show(t('ops3.import.teamsAdded', { count: data.createdCount }));
       setPreview(null);
       onImported?.();
     } catch (caught) {
-      setError(message(caught, 'Couldn’t add these teams. Preview the CSV again before retrying.'));
+      setError(message(caught, t('ops3.import.applyError')));
       setPreview(null);
     } finally { setBusy(null); }
   }
@@ -83,35 +86,35 @@ export function TeamImportPanel({ competitionId, onImported }: { competitionId: 
 
   return (
     <section aria-labelledby="import-title">
-      {error && <Notice className="tools-msg" actionLabel={retryPreview ? 'Try again' : undefined} onAction={() => void previewImport()}>{error}</Notice>}
+      {error && <Notice className="tools-msg" actionLabel={retryPreview ? t('common.tryAgain') : undefined} onAction={() => void previewImport()}>{error}</Notice>}
       {toast.node}
-      <RefineSection title="Import teams from CSV" />
-      <h2 id="import-title" className="sr-only">Import teams from CSV</h2>
-      <RefineNote>Columns: <strong>club</strong>, <strong>suffix</strong>, <strong>section</strong>.</RefineNote>
+      <RefineSection title={t('ops3.import.title')} />
+      <h2 id="import-title" className="sr-only">{t('ops3.import.title')}</h2>
+      <RefineNote>{t('ops3.import.columns')}<strong>club</strong>, <strong>suffix</strong>, <strong>section</strong>.</RefineNote>
       <RefineList as="div">
         <button type="button" className="rf-row" onClick={() => fileRef.current?.click()}>
-          <Upload className="h-5 w-5 rf-chev" aria-hidden="true" /><span className="rf-grow rf-t1">Choose CSV file</span><Chevron />
+          <Upload className="h-5 w-5 rf-chev" aria-hidden="true" /><span className="rf-grow rf-t1">{t('ops3.import.choose')}</span><Chevron />
         </button>
       </RefineList>
-      <input ref={fileRef} className="sr-only" type="file" accept=".csv,text/csv" onChange={loadFile} tabIndex={-1} aria-label="CSV file" />
+      <input ref={fileRef} className="sr-only" type="file" accept=".csv,text/csv" onChange={loadFile} tabIndex={-1} aria-label={t('ops3.import.fileLabel')} />
       <div className="tools-form">
-        <label className="rf-fld">CSV text<textarea className="tools-csv" value={csv} onChange={(event) => changeCsv(event.target.value)} spellCheck={false} /></label>
-        <button type="button" className="rf-btn rf-btn-primary rf-wide" disabled={busy !== null || !csv.trim()} onClick={previewImport}>{busy === 'preview' ? 'Checking rows…' : 'Preview teams'}</button>
+        <label className="rf-fld">{t('ops3.import.csvText')}<textarea className="tools-csv" value={csv} onChange={(event) => changeCsv(event.target.value)} spellCheck={false} /></label>
+        <button type="button" className="rf-btn rf-btn-primary rf-wide" disabled={busy !== null || !csv.trim()} onClick={previewImport}>{busy === 'preview' ? t('ops3.import.checking') : t('ops3.import.preview')}</button>
       </div>
       {preview && <>
-        <RefineSection title="Preview" meta={hasErrors ? 'Fix the marked rows, then preview again.' : 'All rows are ready to add.'} />
-        <RefineList as="ul" label={`${preview.validRows} of ${preview.totalRows} rows ready`}>
+        <RefineSection title={t('ops3.import.previewTitle')} meta={hasErrors ? t('ops3.import.fixRows') : t('ops3.import.allReady')} />
+        <RefineList as="ul" label={t('ops3.import.rowsReady', { valid: preview.validRows, total: preview.totalRows })}>
           {preview.rows.map((row) => <li key={row.rowNumber} className="rf-row">
             <span className="rf-grow">
               <span className="rf-t1"><span>{row.club}</span> <span>{row.suffix}</span></span>
-              <span className="rf-t2">Row {row.rowNumber} · {row.section}</span>
+              <span className="rf-t2">{t('ops3.import.row', { n: row.rowNumber, section: row.section })}</span>
               {row.errors.length > 0 && <span className="rf-t2 tools-error">{row.errors.join(' ')}</span>}
             </span>
-            {row.errors.length > 0 ? <RefineStatus tone="bad">Fix</RefineStatus> : <RefineStatus tone="ok">Ready</RefineStatus>}
+            {row.errors.length > 0 ? <RefineStatus tone="bad">{t('ops3.import.fix')}</RefineStatus> : <RefineStatus tone="ok">{t('ops3.import.ready')}</RefineStatus>}
           </li>)}
         </RefineList>
-        <RefineFoot label="Add teams">
-          <button type="button" className="rf-btn rf-btn-primary rf-wide" disabled={hasErrors || busy !== null} onClick={applyImport}>{busy === 'apply' ? 'Adding teams…' : `Add ${preview.validRows} ${preview.validRows === 1 ? 'team' : 'teams'}`}</button>
+        <RefineFoot label={t('ops3.import.addTeams')}>
+          <button type="button" className="rf-btn rf-btn-primary rf-wide" disabled={hasErrors || busy !== null} onClick={applyImport}>{busy === 'apply' ? t('ops3.import.adding') : t('ops3.import.addN', { count: preview.validRows })}</button>
         </RefineFoot>
       </>}
     </section>
@@ -119,7 +122,8 @@ export function TeamImportPanel({ competitionId, onImported }: { competitionId: 
 }
 
 export function DuplicateEventPanel({ competition }: { competition: CompetitionForTools }) {
-  const [cloneName, setCloneName] = useState(`${competition.name} copy`);
+  const t = useT();
+  const [cloneName, setCloneName] = useState(t('ops3.dup.copy', { name: competition.name }));
   const [cloneStart, setCloneStart] = useState(() => localInput(competition.startDate));
   const [cloneEnd, setCloneEnd] = useState(() => localInput(competition.endDate));
   const [cloneResult, setCloneResult] = useState<CloneCompetitionResult | null>(null);
@@ -135,8 +139,8 @@ export function DuplicateEventPanel({ competition }: { competition: CompetitionF
       const { data } = await api.post<CloneCompetitionResult>(`/event-tools/competitions/${competition.id}/clone`, {
         name: cloneName, startDate: startIso, endDate: cloneEnd ? new Date(cloneEnd).toISOString() : null,
       });
-      setCloneResult(data); toast.show(`${data.name} is ready to edit`);
-    } catch (caught) { setError(message(caught, 'Couldn’t duplicate this competition. Check your signal and try again.')); }
+      setCloneResult(data); toast.show(t('ops3.dup.ready', { name: data.name }));
+    } catch (caught) { setError(message(caught, t('ops3.dup.error'))); }
     finally { setBusy(false); }
   }
 
@@ -144,21 +148,21 @@ export function DuplicateEventPanel({ competition }: { competition: CompetitionF
     <section aria-labelledby="duplicate-title">
       {error && <Notice className="tools-msg">{error}</Notice>}
       {toast.node}
-      <RefineSection title="Duplicate event setup" />
-      <h2 id="duplicate-title" className="sr-only">Duplicate event setup</h2>
-      <RefineNote>Copies the set-up: age groups, scoring settings, race lists, timetable, hatbands, dec form and payment details. Teams, heats, results, entries and payments are left behind.</RefineNote>
-      <form className="tools-form" onSubmit={cloneCompetition}><fieldset disabled={busy} className="tools-fields"><legend className="sr-only">New event details</legend>
-        <label className="rf-fld">New competition name<input value={cloneName} onChange={(event) => setCloneName(event.target.value)} maxLength={200} required /></label>
-        <label className="rf-fld">Starts<input type="datetime-local" value={cloneStart} onChange={(event) => setCloneStart(event.target.value)} required /></label>
-        <label className="rf-fld">Ends<input type="datetime-local" value={cloneEnd} onChange={(event) => setCloneEnd(event.target.value)} /></label>
-        <button className="rf-btn rf-btn-primary rf-wide">{busy ? 'Duplicating…' : 'Duplicate setup'}</button>
+      <RefineSection title={t('ops3.dup.title')} />
+      <h2 id="duplicate-title" className="sr-only">{t('ops3.dup.title')}</h2>
+      <RefineNote>{t('ops3.dup.note')}</RefineNote>
+      <form className="tools-form" onSubmit={cloneCompetition}><fieldset disabled={busy} className="tools-fields"><legend className="sr-only">{t('ops3.dup.legend')}</legend>
+        <label className="rf-fld">{t('ops3.dup.name')}<input value={cloneName} onChange={(event) => setCloneName(event.target.value)} maxLength={200} required /></label>
+        <label className="rf-fld">{t('ops3.dup.starts')}<input type="datetime-local" value={cloneStart} onChange={(event) => setCloneStart(event.target.value)} required /></label>
+        <label className="rf-fld">{t('ops3.dup.ends')}<input type="datetime-local" value={cloneEnd} onChange={(event) => setCloneEnd(event.target.value)} /></label>
+        <button className="rf-btn rf-btn-primary rf-wide">{busy ? t('ops3.dup.duplicating') : t('ops3.dup.button')}</button>
       </fieldset></form>
       {cloneResult && <>
-        <RefineSection title="New event" />
+        <RefineSection title={t('ops3.dup.newEvent')} />
         <RefineList as="div">
           <Link className="rf-row" to={`/admin/competitions/${cloneResult.competitionId}`}>
-            <span className="rf-grow"><span className="rf-t1">{cloneResult.name}</span><span className="rf-t2">{cloneResult.sections} age groups and {cloneResult.sessions} timetable sessions copied.</span></span>
-            <span className="rf-st rf-ok">Edit the new event</span><Chevron />
+            <span className="rf-grow"><span className="rf-t1">{cloneResult.name}</span><span className="rf-t2">{t('ops3.dup.copied', { sections: cloneResult.sections, sessions: cloneResult.sessions })}</span></span>
+            <span className="rf-st rf-ok">{t('ops3.dup.edit')}</span><Chevron />
           </Link>
         </RefineList>
       </>}
@@ -167,26 +171,27 @@ export function DuplicateEventPanel({ competition }: { competition: CompetitionF
 }
 
 const PRINT_SHEETS = [
-  { to: 'entries', title: 'Entry list', detail: 'Every team with its riders and ponies, to check before the day' },
-  { to: 'draw', title: 'Draw and lanes', detail: 'Sessions, heats, lanes and race order' },
-  { to: 'score-sheets', title: 'Score sheets', detail: 'Blank placing, elimination and points columns' },
-  { to: 'results', title: 'Results', detail: 'Current section standings, marked provisional when unfinished' },
-  { to: 'volunteer-card', title: 'Volunteer card', detail: 'A pocket card for one session: games in order and the kit' },
-  { to: 'tack-check', title: 'Tack check forms', detail: 'One form per age group, with each team’s riders, ponies and a column per sector' },
-  { to: 'poster', title: 'Venue poster', detail: 'Name, date, venue and a QR code to this event’s page' },
+  { to: 'entries', get title() { return tr('ops3.sheet.entries'); }, get detail() { return tr('ops3.sheet.entriesDetail'); } },
+  { to: 'draw', get title() { return tr('ops3.sheet.draw'); }, get detail() { return tr('ops3.sheet.drawDetail'); } },
+  { to: 'score-sheets', get title() { return tr('ops3.sheet.scoresheets'); }, get detail() { return tr('ops3.sheet.scoresheetsDetail'); } },
+  { to: 'results', get title() { return tr('ops3.sheet.results'); }, get detail() { return tr('ops3.sheet.resultsDetail'); } },
+  { to: 'volunteer-card', get title() { return tr('ops3.sheet.volunteer'); }, get detail() { return tr('ops3.sheet.volunteerDetail'); } },
+  { to: 'tack-check', get title() { return tr('ops3.sheet.tack'); }, get detail() { return tr('ops3.sheet.tackDetail'); } },
+  { to: 'poster', get title() { return tr('ops3.sheet.poster'); }, get detail() { return tr('ops3.sheet.posterDetail'); } },
 ];
 
 export function PrintSheetsPanel({ competitionId }: { competitionId: string }) {
+  const t = useT();
   return (
     <section aria-labelledby="print-title">
-      <RefineSection title="Print event sheets" />
-      <h2 id="print-title" className="sr-only">Print event sheets</h2>
-      <nav aria-label="Printable event sheets"><RefineList as="div">
+      <RefineSection title={t('ops3.sheet.panel')} />
+      <h2 id="print-title" className="sr-only">{t('ops3.sheet.panel')}</h2>
+      <nav aria-label={t('ops3.sheet.nav')}><RefineList as="div">
         {PRINT_SHEETS.map((sheet) => <Link key={sheet.to} className="rf-row" to={`/event-tools/${competitionId}/print/${sheet.to}`}>
           <span className="rf-grow"><span className="rf-t1">{sheet.title}</span><span className="rf-t2">{sheet.detail}</span></span><Chevron />
         </Link>)}
       </RefineList></nav>
-      <RefineSection title="Keep a copy" />
+      <RefineSection title={t('ops3.sheet.keep')} />
       <RefineList as="div"><ArchiveDownload competitionId={Number(competitionId)} /></RefineList>
     </section>
   );

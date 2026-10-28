@@ -456,3 +456,8 @@ export function applySavedTeamToForm(
     ageWarnings,
   };
 }
+
+/** "12 of 18 dec forms in": how many of the teams still in the event have sent theirs. */
+export function decFormStat(formsIn: number, teams: number): string {
+  return `${formsIn} of ${teams} dec ${teams === 1 ? 'form' : 'forms'} in`;
+}

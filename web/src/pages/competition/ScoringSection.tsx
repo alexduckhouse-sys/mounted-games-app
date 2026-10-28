@@ -1,4 +1,3 @@
-import { useDialogFocus } from '../../components/useDialogFocus';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSavedToast } from '../../components/SavedTick';
 import { Notice } from '../../components/Notice';
@@ -13,12 +12,13 @@ import { deadHeatPoints, deadHeatSize, isDeadHeat, manualPoints, type PendingPla
 import { pointsForPlace } from '../../lib/queuedView';
 import { summariseRace } from '../../lib/raceSummary';
 import { afterRed, afterYellow, stepPoints, type CardMark } from '../../lib/refereeCards';
-import { ELIMINATED_HAPTIC, getSortByLaneOrder, PREFS_CHANGED_EVENT, triggerScorerHaptic } from '../../lib/userPrefs';
+import { ELIMINATED_HAPTIC, getFullColourLanes, getSortByLaneOrder, PREFS_CHANGED_EVENT, setFullColourLanes, triggerScorerHaptic } from '../../lib/userPrefs';
+import { laneFill } from '../../lib/laneFill';
 import { finishingReview, lastLaneLeft, raceLanes } from '../../lib/raceLanes';
 import { TieBreakRule, type Heat, type Race } from '../../types';
 import { displayLaneFor, sitsOutOf, type LaneRules } from './laneRules';
 import {
-  EliminationSheet, HOLD_ELIMINATE_MS, HeatGrid, NextLanesCard, RaceControlsPanel, ScoreRow, SummaryCard, tapHaptic,
+  EliminationSheet, HeatGrid, NextLanesCard, PullDownDialog, RaceControlsPanel, ScoreRow, SummaryCard, tapHaptic,
   type ScoreOverrideValue,
 } from './ScoringParts';
 import { RaceToolsSheet, type ToolLink, type ToolTeam } from './RaceToolsSheet';
@@ -103,8 +103,9 @@ const NO_LINKS: ToolLink[] = [];
 
 /** Runs a change made from race tools. A refusal is already explained by the page, so it is not raised again here. */
 /**
- * Stretches the race being scored down to just above the bottom tabs, so the lanes, tools and Save fill one screen.
- * The lanes grow to take the room; with more lanes than fit, the page scrolls as before.
+ * Fixes the race being scored to the room between its top and just above the bottom tabs, so the lanes, tools and Save
+ * fit one screen and the page never scrolls. The lanes share the room; with more lanes than fit, the lane list scrolls
+ * (see `.sc-fit .sc-rows`), not the page.
  */
 function useFillScreen(active: boolean, raceId: number | undefined) {
   const ref = useRef<HTMLElement>(null);
@@ -115,13 +116,13 @@ function useFillScreen(active: boolean, raceId: number | undefined) {
       const tabs = document.querySelector('.mg-tabs');
       const bottom = tabs ? tabs.getBoundingClientRect().top - 10 : window.innerHeight - 12;
       const top = el.getBoundingClientRect().top;
-      el.style.minHeight = `${Math.max(0, Math.floor(bottom - top))}px`;
+      el.style.height = `${Math.max(0, Math.floor(bottom - top))}px`;
     };
     fit();
     window.addEventListener('resize', fit);
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(fit);
     if (el.parentElement) observer?.observe(el.parentElement.closest('main') ?? el.parentElement);
-    return () => { window.removeEventListener('resize', fit); observer?.disconnect(); el.style.minHeight = ''; };
+    return () => { window.removeEventListener('resize', fit); observer?.disconnect(); el.style.height = ''; };
   }, [active, raceId]);
   return ref;
 }
@@ -146,9 +147,10 @@ export function ScoringSection({
   const [infoSheet, setInfoSheet] = useState<'summary' | 'lanes' | 'history' | null>(null);
   const [protesting, setProtesting] = useState(false);
   const [sortByLane, setSortByLane] = useState(() => getSortByLaneOrder());
+  const [fullColour, setFullColour] = useState(() => getFullColourLanes());
 
   useEffect(() => {
-    function onPrefs() { setSortByLane(getSortByLaneOrder()); }
+    function onPrefs() { setSortByLane(getSortByLaneOrder()); setFullColour(getFullColourLanes()); }
     window.addEventListener(PREFS_CHANGED_EVENT, onPrefs);
     window.addEventListener('storage', onPrefs);
     return () => {
@@ -411,6 +413,7 @@ export function ScoringSection({
                     card={cardsByTeam[e.teamId]}
                     fact={teamFacts?.[e.teamId]}
                     last={e.teamId === lastTeamId}
+                    fill={fullColour ? laneFill(e.bibColour) : null}
                     onTap={() => onClickTeam(e.teamId)}
                     onSwipeEliminate={() => toggleOut(e.teamId)}
                     onToggleElim={() => toggleOut(e.teamId)}
@@ -426,7 +429,6 @@ export function ScoringSection({
             )}
             <p className="sr-only" aria-live="polite">{keyedSays}</p>
 
-            {live && review.length === 0 && <p className="sc-hint sc-hint-quiet">Hold a lane for {HOLD_ELIMINATE_MS / 1000} s to eliminate</p>}
             {live && editing && <p className="sc-hint">Saving again replaces this race’s points.</p>}
             {live && isQualifier && <p className="sc-hint">The first {qualifiers} home go through; the rest score 1 point each.</p>}
 
@@ -537,6 +539,8 @@ export function ScoringSection({
           onClearDeadHeat={live ? onClearDeadHeat : undefined}
           factsOn={factsOn}
           onToggleFacts={onToggleFacts}
+          fullColour={fullColour}
+          onToggleFullColour={() => setFullColourLanes(!fullColour)}
           links={links}
           onClose={() => setToolsOpen(false)}
         />
@@ -575,18 +579,16 @@ export function ScoringSection({
 
 /** Bottom sheet over the scoring screen: takes focus, closes on Escape and gives focus back. */
 function RtDialog({ label, title, scrimLabel, onClose, children }: { label: string; title: string; scrimLabel: string; onClose: () => void; children: ReactNode }) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-  useDialogFocus(dialogRef, onClose, '.sc-link');
   return (
     <div className="rt-overlay">
       <button type="button" className="rt-scrim" aria-label={scrimLabel} onClick={onClose} />
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={label} className="rt-sheet">
+      <PullDownDialog label={label} className="rt-sheet" focus=".sc-link" onClose={onClose}>
         <div className="rt-head">
           <span className="rt-title">{title}</span>
           <button type="button" className="sc-link" onClick={onClose}>Close</button>
         </div>
         {children}
-      </div>
+      </PullDownDialog>
     </div>
   );
 }

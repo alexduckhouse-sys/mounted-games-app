@@ -122,7 +122,7 @@ describe('VolunteerRota', () => {
     expect(api.delete).not.toHaveBeenCalled();
     await user.click(button);
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/competitions/7/volunteer-shifts/1'));
-    expect(asked).toHaveBeenLastCalledWith(expect.stringContaining('lose their place'));
+    expect(asked).toHaveBeenLastCalledWith(expect.stringContaining('loses their place'));
     await waitFor(() => expect(screen.queryByText('Ring Crew, 9:30')).not.toBeInTheDocument());
   });
 

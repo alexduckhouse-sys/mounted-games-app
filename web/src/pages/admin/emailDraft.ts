@@ -1,3 +1,5 @@
+import { tr } from '../../i18n/translate';
+import type { MessageKey } from '../../i18n/en';
 import type { CustomEmailAudience, EmailBlock, EmailLink, EmailPage } from './customEmailTypes';
 
 /** What a link opens: one of an event's pages on the site, or any https address. */
@@ -21,13 +23,16 @@ export interface EmailDraft {
   footerPicture: PictureDraft | null;
 }
 
-export const LINK_TO_OPTIONS: { value: LinkTo; label: string }[] = [
-  { value: 'competition', label: 'Competition page' },
-  { value: 'entry', label: 'Entry form' },
-  { value: 'timetable', label: 'Timetable' },
-  { value: 'results', label: 'Results' },
-  { value: 'address', label: 'A web address' },
+const LINK_TO_KEYS: { value: LinkTo; key: MessageKey }[] = [
+  { value: 'competition', key: 'admin.email.linkTo.competition' },
+  { value: 'entry', key: 'admin.email.linkTo.entry' },
+  { value: 'timetable', key: 'admin.email.linkTo.timetable' },
+  { value: 'results', key: 'admin.email.linkTo.results' },
+  { value: 'address', key: 'admin.email.linkTo.address' },
 ];
+
+/** The places a link can go, labelled in the language in use. */
+export const linkToOptions = (): { value: LinkTo; label: string }[] => LINK_TO_KEYS.map((o) => ({ value: o.value, label: tr(o.key) }));
 
 const PAGE_OF: Record<Exclude<LinkTo, 'address'>, EmailPage> = { competition: 0, entry: 1, timetable: 2, results: 3 };
 
@@ -35,17 +40,20 @@ export const MAX_LINKS = 20;
 export const MAX_PICTURE_BYTES = 500 * 1024;
 export const PICTURE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 
-/** The audiences, in the order shown: the API's number, and the short name used on this page. */
-export const AUDIENCES: { audience: CustomEmailAudience; label: string; list: string }[] = [
-  { audience: 0, label: 'News list', list: 'the news list' },
-  { audience: 1, label: 'Trainers', list: 'the trainers' },
-  { audience: 2, label: 'Organisers and admins', list: 'the organisers and admins' },
-  { audience: 3, label: 'Admins', list: 'the admins' },
+/** The audiences, in the order shown: the API's number, and the keys for the short name and the confirm sheet's sentence. */
+export const AUDIENCES: { audience: CustomEmailAudience; label: MessageKey; sheet: MessageKey }[] = [
+  { audience: 0, label: 'admin.email.audience.news', sheet: 'admin.email.sheet.descNews' },
+  { audience: 1, label: 'admin.email.audience.trainers', sheet: 'admin.email.sheet.descTrainers' },
+  { audience: 2, label: 'admin.email.audience.organisers', sheet: 'admin.email.sheet.descOrganisers' },
+  { audience: 3, label: 'admin.email.audience.admins', sheet: 'admin.email.sheet.descAdmins' },
 ];
 
-export const audienceLabel = (audience: number) => AUDIENCES.find((a) => a.audience === audience)?.label ?? 'Everyone';
+export const audienceLabel = (audience: number) => {
+  const found = AUDIENCES.find((a) => a.audience === audience);
+  return found ? tr(found.label) : tr('admin.email.audience.everyone');
+};
 
-/** The usual footer line for an audience. It matches what the API uses when none is given. */
+/** The usual footer line for an audience. It matches what the API uses when none is given, so it stays English like the email it previews. */
 export const defaultFooter = (audience: CustomEmailAudience) => (audience === 0
   ? 'You’re getting this because you asked to hear about new competitions.'
   : 'You’re getting this because you run or help run competitions on Mounted Games.');
@@ -67,7 +75,7 @@ export function targetFields(target: LinkTarget): Pick<EmailLink, 'url' | 'compe
 /** "Entry form · Spring Open", or the web address. */
 export function describeTarget(target: LinkTarget, eventName: (id: number) => string | undefined): string {
   if (target.to === 'address') return target.address.trim();
-  const page = LINK_TO_OPTIONS.find((o) => o.value === target.to)?.label ?? '';
+  const page = linkToOptions().find((o) => o.value === target.to)?.label ?? '';
   const event = target.competitionId === null ? undefined : eventName(target.competitionId);
   return event ? `${page} · ${event}` : page;
 }
@@ -155,17 +163,17 @@ export function buildBlocks(draft: EmailDraft): EmailBlock[] | null {
 
 /** Why the email can't be sent yet, or null when it can. */
 export function whyNot(draft: EmailDraft, recipients: number | null): string | null {
-  if (!draft.subject.trim()) return 'Add a subject.';
+  if (!draft.subject.trim()) return tr('admin.email.why.subject');
   if (draft.kind === 'text') {
-    if (!draft.message.trim()) return 'Write the message.';
+    if (!draft.message.trim()) return tr('admin.email.why.message');
     const { missing } = linkedParagraphs(draft.message, draft.links);
-    if (missing.length > 0) return `“${missing[0]}” isn’t in the message any more. Put the words back or remove the link.`;
+    if (missing.length > 0) return tr('admin.email.why.missing', { words: missing[0] });
   } else {
-    if (!draft.picture) return 'Add the picture.';
-    if (draft.pictureLink && !targetFields(draft.pictureLink)) return 'Finish the picture’s link, or choose Nothing.';
+    if (!draft.picture) return tr('admin.email.why.picture');
+    if (draft.pictureLink && !targetFields(draft.pictureLink)) return tr('admin.email.why.pictureLink');
   }
-  if (recipients === null) return 'Still counting who is on the list.';
-  if (recipients === 0) return 'No one is on that list yet.';
+  if (recipients === null) return tr('admin.email.why.counting');
+  if (recipients === 0) return tr('admin.email.why.nobody');
   return null;
 }
 
@@ -187,7 +195,7 @@ export function loadDraft(): EmailDraft {
     };
     const target = (value: unknown): LinkTarget | null => {
       const t = value as Partial<LinkTarget> | null;
-      return t && LINK_TO_OPTIONS.some((o) => o.value === t.to) ? { to: t.to as LinkTo, competitionId: typeof t.competitionId === 'number' ? t.competitionId : null, address: String(t.address ?? '') } : null;
+      return t && LINK_TO_KEYS.some((o) => o.value === t.to) ? { to: t.to as LinkTo, competitionId: typeof t.competitionId === 'number' ? t.competitionId : null, address: String(t.address ?? '') } : null;
     };
     return {
       audience: AUDIENCES.some((a) => a.audience === saved.audience) ? (saved.audience as CustomEmailAudience) : base.audience,

@@ -1,3 +1,4 @@
+import { tr } from '../i18n/translate';
 import type { DrawUndoResult, DrawUndoStatus } from '../types';
 
 export const EMPTY_DRAW_UNDO_STATUS: DrawUndoStatus = {
@@ -48,9 +49,9 @@ export function formatUndoWindowRemaining(status: DrawUndoStatus | null | undefi
   const expiresMs = Date.parse(status.expiresAt);
   if (Number.isNaN(expiresMs)) return '';
   const remainingSec = Math.max(0, Math.ceil((expiresMs - nowMs) / 1000));
-  if (remainingSec <= 0) return 'Expired';
+  if (remainingSec <= 0) return tr('ops2.undo.expired');
   const mins = Math.ceil(remainingSec / 60);
-  return `${mins}m left`;
+  return tr('ops2.undo.minsLeft', { count: mins });
 }
 
 /** Human-friendly button label for the prominent Undo banner on OperationsPage and TimetablePage. */
@@ -68,8 +69,8 @@ export function drawUndoActionLabel(status: DrawUndoStatus | null | undefined): 
 /** Summary line describing what will be restored when the organiser clicks Undo. */
 export function drawUndoBannerDescription(status: DrawUndoStatus | null | undefined, nowMs: number = Date.now()): string {
   if (!status?.available) return '';
-  const label = status.label?.trim() || 'Last draw or heat change';
-  const heatsWord = status.affectedHeats === 1 ? '1 heat' : `${status.affectedHeats} heats`;
+  const label = status.label?.trim() || tr('ops2.undo.lastDraw');
+  const heatsWord = status.affectedHeats === 1 ? tr('ops2.undo.oneHeat') : tr('ops2.undo.heats', { count: status.affectedHeats });
   const remaining = formatUndoWindowRemaining(status, nowMs);
   return remaining ? `${label} (${heatsWord} · ${remaining})` : `${label} (${heatsWord})`;
 }

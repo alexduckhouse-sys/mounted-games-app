@@ -193,6 +193,6 @@ describe('ChatTab and ContactOrganisersPage auth sessions', () => {
 
     expect(await screen.findByText('Official heat 1 update')).toBeVisible();
     expect(screen.queryByText('Private question from rider')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Organiser messages \(1\)/ })).toHaveAttribute('href', '/competitions/1/contact');
+    expect(screen.getByRole('link', { name: /^Messages \(1\)$/ })).toHaveAttribute('href', '/competitions/1/contact');
   });
 });

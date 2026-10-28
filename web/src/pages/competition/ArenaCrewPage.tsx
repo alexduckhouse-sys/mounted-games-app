@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
+import { useT } from '../../i18n/LanguageContext';
+import type { MessageKey } from '../../i18n/en/index.ts';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { usePageWidth } from '../../components/pageWidthState';
 import { loadRaceTemplates, sessionFormat } from '../../lib/raceTemplates';
@@ -14,46 +16,48 @@ import { PickRow } from '../clubShop/ui';
 import { useCompetition } from './context';
 import { defaultChoice, heatDone, heatName, isRaceSession } from './crewDutyHelpers';
 
-const ZONE_FILTERS: { key: ArenaCrewZoneFilter; label: string }[] = [
-  { key: 'all', label: 'All zones' },
-  { key: 'start', label: 'Start/finish line' },
-  { key: 'centre', label: 'Centre poles' },
-  { key: 'top', label: 'Changeover line' },
+const ZONE_FILTERS: { key: ArenaCrewZoneFilter; label: MessageKey }[] = [
+  { key: 'all', label: 'desk.commentary.zoneAll' },
+  { key: 'start', label: 'desk.commentary.zoneStart' },
+  { key: 'centre', label: 'desk.commentary.zoneCentre' },
+  { key: 'top', label: 'desk.commentary.zoneTop' },
 ];
 
 // Headings in the same words as the filter, with the pole numbers for the centre line.
-const ZONE_HEADINGS: Record<string, string> = { start: 'Start/finish line', centre: 'Centre line (poles 1–4)', top: 'Changeover line' };
+const ZONE_HEADINGS: Record<string, MessageKey> = { start: 'desk.commentary.zoneStart', centre: 'desk.commentary.headCentre', top: 'desk.commentary.zoneTop' };
 
 function validSheet(data: unknown): data is ArenaCrewPropSheet {
   return !!data && typeof data === 'object' && Array.isArray((data as ArenaCrewPropSheet).allHeatRaces);
 }
 
 function Group({ title, items, tone }: { title: string; items: string[]; tone: 'in' | 'out' | 'keep' }) {
+  const t = useT();
   const colour = tone === 'in' ? '--mg-ok' : tone === 'out' ? '--mg-elim' : '--mg-muted';
   return (
     <section className="rounded-[10px] bg-[rgb(var(--mg-subtle))] p-3.5" style={{ borderLeft: `6px solid rgb(var(${colour}))` }} aria-label={title}>
       <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: `rgb(var(${colour}))` }}>{title}</h3>
       {items.length === 0
-        ? <p className="mt-1 text-lg text-[rgb(var(--mg-muted))]">Nothing</p>
+        ? <p className="mt-1 text-lg text-[rgb(var(--mg-muted))]">{t('desk.commentary.nothing')}</p>
         : <ul className="mt-1 space-y-1.5">{items.map((item) => <li key={item} className="text-xl font-semibold leading-snug text-[rgb(var(--mg-ink))]">{item}</li>)}</ul>}
     </section>
   );
 }
 
 function NowCard({ card, filter }: { card: ArenaCrewRaceCard; filter: ArenaCrewZoneFilter }) {
+  const t = useT();
   const zones = filterRaceCardZones(card, filter);
   return (
-    <section aria-label="Now" className="overflow-hidden rounded-[12px] border-2 border-[rgb(var(--mg-button))] bg-[rgb(var(--mg-surface))]">
+    <section aria-label={t('desk.commentary.now')} className="overflow-hidden rounded-[12px] border-2 border-[rgb(var(--mg-button))] bg-[rgb(var(--mg-surface))]">
       <header className="bg-[rgb(var(--mg-button))] px-4 py-3 text-[rgb(var(--mg-button-ink))]">
-        <p className="text-sm font-bold uppercase tracking-wide opacity-90">Now</p>
+        <p className="text-sm font-bold uppercase tracking-wide opacity-90">{t('desk.commentary.now')}</p>
         <h2 className="text-2xl font-bold leading-tight">{card.raceName}</h2>
       </header>
       <div className="space-y-4 p-4">
         {zones.map((zone) => (
           <div key={zone.zoneKey}>
-            <h3 className="text-base font-bold text-[rgb(var(--mg-heading))]">{ZONE_HEADINGS[zone.zoneKey] ?? zone.zoneLabel}</h3>
+            <h3 className="text-base font-bold text-[rgb(var(--mg-heading))]">{ZONE_HEADINGS[zone.zoneKey] ? t(ZONE_HEADINGS[zone.zoneKey]) : zone.zoneLabel}</h3>
             {zone.items.length === 0
-              ? <p className="text-lg text-[rgb(var(--mg-muted))]">Nothing to set</p>
+              ? <p className="text-lg text-[rgb(var(--mg-muted))]">{t('desk.commentary.nothingToSet')}</p>
               : <ul className="mt-1 space-y-1">{zone.items.map((item) => <li key={item} className="text-xl font-semibold leading-snug text-[rgb(var(--mg-ink))]">{item}</li>)}</ul>}
           </div>
         ))}
@@ -64,10 +68,11 @@ function NowCard({ card, filter }: { card: ArenaCrewRaceCard; filter: ArenaCrewZ
 
 export function ArenaCrewPage() {
   usePageWidth('narrow');
+  const t = useT();
   const { competition } = useCompetition();
   const sections = competition.sections;
   const [params, setParams] = useSearchParams();
-  usePageHeader({ title: 'Arena crew sheet', subtitle: competition.name, backTo: `/competitions/${competition.id}`, backLabel: 'Timetable' });
+  usePageHeader({ title: t('desk.commentary.crewTitle'), subtitle: competition.name, backTo: `/competitions/${competition.id}`, backLabel: t('desk.commentary.timetable') });
 
   const raceSessions = useMemo(
     () => competition.sessions.filter(isRaceSession).slice().sort((a, b) => a.orderIndex - b.orderIndex),
@@ -130,41 +135,41 @@ export function ArenaCrewPage() {
   }
 
   if (raceSessions.length === 0) {
-    return <p className="mg-card p-4 text-base">There are no race sessions to set up yet.</p>;
+    return <p className="mg-card p-4 text-base">{t('desk.commentary.noRaceSessions')}</p>;
   }
 
   return (
     <div className="space-y-4 pb-8">
       {/* Three settings rows, each opening a bottom sheet: one control per choice rather than boxes and a row of pills. */}
       <div className="mg-card overflow-hidden divide-y divide-[rgb(var(--mg-rule-soft))]">
-        <PickRow label="Session" value={String(session?.id ?? '')} onPick={(id) => choose({ session: Number(id) })}
+        <PickRow label={t('desk.commentary.pickSession')} value={String(session?.id ?? '')} onPick={(id) => choose({ session: Number(id) })}
           options={raceSessions.map((s) => ({ value: String(s.id), label: `${s.name}${s.arenaName ? ` · ${s.arenaName}` : ''}` }))} />
-        <PickRow label="Heat" value={String(heat?.id ?? '')} onPick={(id) => choose({ heat: Number(id) })}
+        <PickRow label={t('desk.commentary.pickHeat')} value={String(heat?.id ?? '')} onPick={(id) => choose({ heat: Number(id) })}
           options={heats.map((h) => ({ value: String(h.id), label: heatName(h) }))} />
-        <PickRow label="Zone" value={filter} onPick={(key) => setFilter(key as ArenaCrewZoneFilter)}
-          options={ZONE_FILTERS.map((z) => ({ value: z.key, label: z.label }))} />
+        <PickRow label={t('desk.commentary.pickZone')} value={filter} onPick={(key) => setFilter(key as ArenaCrewZoneFilter)}
+          options={ZONE_FILTERS.map((z) => ({ value: z.key, label: t(z.label) }))} />
       </div>
 
-      {offline && <p role="status" className="rounded-[10px] bg-[rgb(var(--mg-info-bg))] px-3 py-2 text-sm text-[rgb(var(--mg-info-ink))]">Couldn’t reach the server. This sheet is built from the timetable on your phone.</p>}
+      {offline && <p role="status" className="rounded-[10px] bg-[rgb(var(--mg-info-bg))] px-3 py-2 text-sm text-[rgb(var(--mg-info-ink))]">{t('desk.commentary.offline')}</p>}
 
-      {loading && !sheet && <p className="mg-card p-4 text-base" role="status">Loading the sheet…</p>}
+      {loading && !sheet && <p className="mg-card p-4 text-base" role="status">{t('desk.commentary.loadingSheet')}</p>}
 
-      {sheet && !sheet.currentRace && <p className="mg-card p-4 text-base">This heat has no races yet.</p>}
+      {sheet && !sheet.currentRace && <p className="mg-card p-4 text-base">{t('desk.commentary.noRaces')}</p>}
 
       {sheet?.currentRace && <NowCard card={sheet.currentRace} filter={filter} />}
 
       {sheet?.currentRace && (
-        <section aria-label="Next race" className="mg-card space-y-3 p-4">
+        <section aria-label={t('desk.commentary.nextRace')} className="mg-card space-y-3 p-4">
           <h2 className="text-lg font-bold text-[rgb(var(--mg-heading))]">
-            {sheet.nextRace ? <>Next race: {sheet.nextRace.raceName}</> : 'Next race'}
+            {sheet.nextRace ? t('desk.commentary.nextRaceName', { name: sheet.nextRace.raceName }) : t('desk.commentary.nextRace')}
           </h2>
           {sheet.nextRace && sheet.transition
             ? <>
-                <Group title="Bring in" items={sheet.transition.bringIn} tone="in" />
-                <Group title="Clear" items={sheet.transition.clearOut} tone="out" />
-                <Group title="Keep" items={sheet.transition.keepInRing} tone="keep" />
+                <Group title={t('desk.commentary.bringIn')} items={sheet.transition.bringIn} tone="in" />
+                <Group title={t('desk.commentary.clear')} items={sheet.transition.clearOut} tone="out" />
+                <Group title={t('desk.commentary.keep')} items={sheet.transition.keepInRing} tone="keep" />
               </>
-            : <p className="text-lg text-[rgb(var(--mg-muted))]">This is the last race of the heat. Clear the arena when it ends.</p>}
+            : <p className="text-lg text-[rgb(var(--mg-muted))]">{t('desk.commentary.lastRaceOfHeat')}</p>}
         </section>
       )}
     </div>

@@ -967,3 +967,30 @@ function standingNote(row: ToplistRow): string | null {
 }
 
 const pts = (n: number) => `${n} ${n === 1 ? 'pt' : 'pts'}`;
+
+/**
+ * Where an age group stands between qualifying and its finals, by the same reading of "final" as the timetable.
+ * `qualifyingDone`: every non-final heat is scored. `finalsStarted`: a final has a scored race. `finalsDone`: the age
+ * group has finals and every one is scored (the moment its places are settled).
+ */
+export function sectionFinalsState(sessions: Session[], sectionId: number) {
+  let qualifying = 0;
+  let qualifyingOpen = 0;
+  let finals = 0;
+  let finalsOpen = 0;
+  let finalsStarted = false;
+  for (const session of sessions) {
+    if (session.competitionSectionId !== sectionId || !isRace(session)) continue;
+    for (const heat of session.heats) {
+      if (isFinal(session, heat)) {
+        finals += 1;
+        if (!heatDone(heat)) finalsOpen += 1;
+        if (heat.races.some((race) => race.isComplete)) finalsStarted = true;
+      } else {
+        qualifying += 1;
+        if (!heatDone(heat)) qualifyingOpen += 1;
+      }
+    }
+  }
+  return { hasFinals: finals > 0, qualifyingDone: qualifying > 0 && qualifyingOpen === 0, finalsStarted, finalsDone: finals > 0 && finalsOpen === 0 };
+}
