@@ -952,6 +952,12 @@ public class SignupController : ControllerBase
         await _db.SaveChangesAsync();
         await transaction.CommitAsync();
 
+        // A free entry is paid at once, so it forms its team exactly as marking it paid would.
+        // Pair seekers and guest-spot waiters keep their own flows.
+        if (isFree && !req.LookingForPair && !req.WaitingForGuestSpot)
+            await FormTeamsCoreAsync(competitionId, signup.CompetitionSectionId,
+                new FormTeamsFromSignupsRequest(null, Preview: false, ReplaceExisting: false), signup.Id);
+
         // One confirmation, sent here and now (the API can be asleep a moment later). Whatever happens, the entry stays.
         if (contactEmail is not null)
         {
@@ -1533,6 +1539,11 @@ public class SignupController : ControllerBase
             return BadRequest(new { message = "No paid signups to form teams from." });
         return result;
     }
+
+    /// <summary>Forms the team for one paid entry from outside this controller (the demo checkout), the same way marking it paid does.</summary>
+    internal static Task<FormTeamsResult?> FormTeamForPaidSignupAsync(AppDbContext db, int competitionId, int sectionId, int signupId) =>
+        new SignupController(db).FormTeamsCoreAsync(competitionId, sectionId,
+            new FormTeamsFromSignupsRequest(null, Preview: false, ReplaceExisting: false), signupId);
 
     private async Task<FormTeamsResult?> FormTeamsCoreAsync(
         int competitionId, int sectionId, FormTeamsFromSignupsRequest req,
