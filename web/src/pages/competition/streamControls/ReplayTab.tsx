@@ -1,9 +1,11 @@
 import { Notice } from '../../../components/Notice';
 import { ReplayPreparation } from '../../../components/stream/ReplayPreparation';
-import { INSTANT_LENGTHS, lengthLabel, type InstantLength } from '../../../lib/instantReplay';
+import { useLanguage } from '../../../i18n/LanguageContext';
+import { INSTANT_LENGTHS, type InstantLength } from '../../../lib/instantReplay';
 import type { SavedReplayClip } from '../../../live/replayBuffer';
 import { RefineList, RefineNote, RefineSection } from '../../refine/Refine';
 import { ReplayEditor } from './ReplayEditor';
+import { lengthText } from './streamText';
 
 interface Controller {
   recording: boolean;
@@ -16,16 +18,18 @@ interface Controller {
   cancelClip: (clipId: string) => void;
 }
 
-const time = (iso: string) => {
+const timeOf = (iso: string, locale: string) => {
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 };
 
 function Row({ clip, open, action, onToggle }: { clip: SavedReplayClip; open: boolean; action: string; onToggle: () => void }) {
+  const { t, locale } = useLanguage();
+  const time = timeOf(clip.createdAt, locale);
   return (
     <button type="button" className="rf-row" aria-expanded={open} onClick={onToggle}>
-      <span className="rf-grow"><span className="rf-t1">{clip.label}</span><span className="rf-t2">{[time(clip.createdAt) && `Saved ${time(clip.createdAt)}`, lengthLabel(Math.round(clip.durationSeconds))].filter(Boolean).join(' · ')}</span></span>
-      <span className="rf-btn">{open ? 'Close' : action}</span>
+      <span className="rf-grow"><span className="rf-t1">{clip.label}</span><span className="rf-t2">{[time && t('desk.stream.rt.saved', { time }), lengthText(t, Math.round(clip.durationSeconds))].filter(Boolean).join(' · ')}</span></span>
+      <span className="rf-btn">{open ? t('common.close') : action}</span>
     </button>
   );
 }
@@ -38,6 +42,7 @@ export function ReplayTab({ clips, openId, onOpen, controller, instantLength, on
   instantLength: InstantLength;
   onInstantLength: (length: InstantLength) => void;
 }) {
+  const { t } = useLanguage();
   const newestFirst = [...clips].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const races = newestFirst.filter((clip) => clip.source === 'race');
   const saved = newestFirst.filter((clip) => clip.source !== 'race');
@@ -53,28 +58,28 @@ export function ReplayTab({ clips, openId, onOpen, controller, instantLength, on
       )}
       <RefineNote>
         {controller.recording
-          ? `Recording the video on this page. ${minutes > 0 ? `The last ${minutes} min is` : 'The last few seconds are'} kept on this device.`
-          : 'Replays are recorded from the video on this page. They start when a camera is live.'}
+          ? (minutes > 0 ? t('desk.stream.rt.recordingMin', { minutes }) : t('desk.stream.rt.recordingSecs'))
+          : t('desk.stream.rt.notRecording')}
       </RefineNote>
       {controller.warning && <Notice role="status">{controller.warning}</Notice>}
 
-      <RefineSection title="Race recordings" />
-      <RefineList as="div" label="Race recordings">
-        {races.length === 0 && <div className="rf-row"><span className="rf-t2">Each race is recorded here once it is scored.</span></div>}
-        {races.map((clip) => <Row key={clip.id} clip={clip} open={openId === clip.id} action="Watch" onToggle={() => onOpen(openId === clip.id ? null : clip.id)} />)}
+      <RefineSection title={t('desk.stream.rt.raceRecordings')} />
+      <RefineList as="div" label={t('desk.stream.rt.raceRecordings')}>
+        {races.length === 0 && <div className="rf-row"><span className="rf-t2">{t('desk.stream.rt.raceEmpty')}</span></div>}
+        {races.map((clip) => <Row key={clip.id} clip={clip} open={openId === clip.id} action={t('desk.stream.rt.watch')} onToggle={() => onOpen(openId === clip.id ? null : clip.id)} />)}
       </RefineList>
 
-      <RefineSection title="Instant replay saves" />
-      <div className="sx-pills" role="radiogroup" aria-label="Instant replay length">
+      <RefineSection title={t('desk.stream.rt.instantSaves')} />
+      <div className="sx-pills" role="radiogroup" aria-label={t('desk.stream.rt.instantLength')}>
         {INSTANT_LENGTHS.map((length) => (
-          <button key={length} type="button" role="radio" aria-checked={instantLength === length} className="sx-pill" onClick={() => onInstantLength(length)}>Last {lengthLabel(length)}</button>
+          <button key={length} type="button" role="radio" aria-checked={instantLength === length} className="sx-pill" onClick={() => onInstantLength(length)}>{t('desk.stream.rt.lastLength', { length: lengthText(t, length) })}</button>
         ))}
       </div>
 
-      <RefineSection title="Saved replays" />
-      <RefineList as="div" label="Saved replays">
-        {saved.length === 0 && <div className="rf-row"><span className="rf-t2">No saved replays</span></div>}
-        {saved.map((clip) => <Row key={clip.id} clip={clip} open={openId === clip.id} action="Edit" onToggle={() => onOpen(openId === clip.id ? null : clip.id)} />)}
+      <RefineSection title={t('desk.stream.rt.savedReplays')} />
+      <RefineList as="div" label={t('desk.stream.rt.savedReplays')}>
+        {saved.length === 0 && <div className="rf-row"><span className="rf-t2">{t('desk.stream.rt.noSaved')}</span></div>}
+        {saved.map((clip) => <Row key={clip.id} clip={clip} open={openId === clip.id} action={t('common.edit')} onToggle={() => onOpen(openId === clip.id ? null : clip.id)} />)}
       </RefineList>
     </>
   );

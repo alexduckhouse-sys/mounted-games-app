@@ -7,6 +7,7 @@ import { QrCode as QrCodeImage } from '../../components/QrCode';
 import { useToast } from '../../components/Toast';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { useT } from '../../i18n/LanguageContext';
 import { displaySectionName } from '../../lib/section';
 import { DEFAULT_OVERLAY, overlayRequest, parseOverlay } from '../../lib/overlays';
 import { useCompetition } from './context';
@@ -15,6 +16,7 @@ import type { StreamCommand, StreamOverlay } from '../../types';
 type OverlayCardMode = 'none' | 'toplist' | 'heat' | 'lanes' | 'next';
 
 export function ProducePage() {
+  const t = useT();
   const { competition, streams, overlay: ctxOverlay, saveOverlay } = useCompetition();
   const { canOrganise, user } = useAuth();
   const allowed = canOrganise(competition);
@@ -58,8 +60,8 @@ export function ProducePage() {
   // Any signed-in account reaches this page (a competition team member may produce); the API makes the real check.
   if (!allowed) {
     return (
-      <PageProblem title="Only the organiser’s team can control the stream" secondaryLabel="Back to competition" secondaryTo={`/competitions/${competition.id}`}>
-        Ask the organiser to add you to the competition team.
+      <PageProblem title={t('desk.stream.pr.onlyTeam')} secondaryLabel={t('desk.stream.backToCompetition')} secondaryTo={`/competitions/${competition.id}`}>
+        {t('desk.stream.pr.askAdd')}
       </PageProblem>
     );
   }
@@ -74,8 +76,8 @@ export function ProducePage() {
         const result = await saveOverlay((o) => ({ ...o, ...patch }));
         if (result !== 'saved') {
           setProblem(result === 'conflict'
-            ? { text: 'The overlay changed on another phone. Check it and try again.', show: true }
-            : { text: 'Couldn’t update the overlay. Check your signal and try again.', retry: () => void pushOverlay(patch, note) });
+            ? { text: t('desk.stream.overlayConflict'), show: true }
+            : { text: t('desk.stream.overlayFailed'), retry: () => void pushOverlay(patch, note) });
           return false;
         }
       } else {
@@ -87,7 +89,7 @@ export function ProducePage() {
       if (note) toast.show(note);
       return true;
     } catch {
-      setProblem({ text: 'Couldn’t update the overlay. Check your signal and try again.', retry: () => void pushOverlay(patch, note) });
+      setProblem({ text: t('desk.stream.overlayFailed'), retry: () => void pushOverlay(patch, note) });
       return false;
     } finally {
       busyRef.current = false;
@@ -105,7 +107,7 @@ export function ProducePage() {
         : mode;
     await pushOverlay(
       { look: nextLook, bannerText: nextBanner },
-      mode === 'none' ? 'Overlay cleared' : `Showing ${mode} centred on stream`,
+      mode === 'none' ? t('desk.stream.pr.cleared') : t('desk.stream.pr.showingCentred', { mode: t(`desk.stream.card.shown.${mode}`) }),
     );
   };
 
@@ -115,14 +117,14 @@ export function ProducePage() {
       await api.post(`/competitions/${competition.id}/streams/${streamId}/command`, { command, value });
       if (note) toast.show(note);
     } catch {
-      setProblem({ text: 'Couldn’t reach the camera phone. Check your signal and try again.', retry: () => void sendCommand(streamId, command, value, note) });
+      setProblem({ text: t('desk.stream.cameraUnreachable'), retry: () => void sendCommand(streamId, command, value, note) });
     }
   };
 
   const postAnnouncement = async () => {
     const text = announceText.trim();
     if (!text) return;
-    if (!(await pushOverlay({ bannerText: text, bannerStyle: 1 }, 'Banner posted to stream'))) return;
+    if (!(await pushOverlay({ bannerText: text, bannerStyle: 1 }, t('desk.stream.pr.bannerPosted')))) return;
     if (!user?.roles.includes('Admin')) { setAnnounceText(''); return; }
     try {
       await api.post(`/competitions/${competition.id}/chat/announcement`, {
@@ -130,12 +132,12 @@ export function ProducePage() {
       });
       setAnnounceText((current) => current.trim() === text ? '' : current);
     } catch {
-      setProblem({ text: 'The stream banner was saved, but the announcement was not sent. Try again.', retry: () => void postAnnouncement() });
+      setProblem({ text: t('desk.stream.pr.announceFailed'), retry: () => void postAnnouncement() });
     }
   };
 
   const clearAnnouncement = async () => {
-    await pushOverlay({ bannerText: null }, 'Banner cleared');
+    await pushOverlay({ bannerText: null }, t('desk.stream.pr.bannerCleared'));
   };
 
   return (
@@ -144,10 +146,10 @@ export function ProducePage() {
         <div>
           <div className="flex items-center gap-2">
             <Sliders className="h-5 w-5 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
-            <h1 className="text-xl font-bold">Remote stream controller</h1>
+            <h1 className="text-xl font-bold">{t('desk.stream.pr.title')}</h1>
           </div>
           <p className="mt-0.5 text-xs text-[rgb(var(--mg-muted))]">
-            Control centred stream overlays, switch between multiple camera phones, and trigger replays without touching the tripod phone.
+            {t('desk.stream.pr.intro')}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -157,18 +159,18 @@ export function ProducePage() {
             onClick={() => setShowDualCamQr((v) => !v)}
           >
             <QrCode className="mr-1.5 h-4 w-4 inline" aria-hidden="true" />
-            Add 2nd camera phone
+            {t('desk.stream.pr.add2nd')}
           </button>
           <Link className="mg-btn mg-btn-primary text-xs" to={`/competitions/${competition.id}/broadcast`}>
             <Video className="mr-1.5 h-4 w-4 inline" aria-hidden="true" />
-            Open camera on this phone
+            {t('desk.stream.pr.openHere')}
           </Link>
         </div>
       </div>
 
       {problem && (
         <Notice
-          actionLabel={problem.show ? 'Show me' : problem.retry ? 'Try again' : undefined}
+          actionLabel={problem.show ? t('desk.stream.showMe') : problem.retry ? t('common.tryAgain') : undefined}
           onAction={problem.show ? () => overlaysRef.current?.querySelector<HTMLElement>('[aria-pressed="true"]')?.focus() : problem.retry}
         >
           {problem.text}
@@ -178,19 +180,19 @@ export function ProducePage() {
 
       {/* Dual-camera QR modal / card */}
       {showDualCamQr && (
-        <div role="region" aria-label="Add second camera phone" className="mg-card flex flex-col gap-3 p-4">
+        <div role="region" aria-label={t('desk.stream.pr.addSecondRegion')} className="mg-card flex flex-col gap-3 p-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold">Pair a 2nd camera phone ({targetArena})</h2>
+            <h2 className="text-sm font-bold">{t('desk.stream.pr.pair', { arena: targetArena })}</h2>
             <button
               type="button"
               className="mg-btn mg-btn-secondary text-xs"
               onClick={() => setShowDualCamQr(false)}
             >
-              Close
+              {t('common.close')}
             </button>
           </div>
           <p className="text-xs text-[rgb(var(--mg-muted))]">
-            Scan this QR code on a second phone to stream a second angle (e.g. Finish line or Collecting ring) for {targetArena}. Viewers and this remote can switch angles live.
+            {t('desk.stream.pr.scanIntro', { arena: targetArena })}
           </p>
           <div className="flex flex-wrap gap-2">
             {['Finish line', 'Changeover line', 'Collecting ring', 'Main stand'].map((preset) => (
@@ -206,7 +208,7 @@ export function ProducePage() {
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-4">
-            <QrCodeImage value={dualCamUrl} label="Second camera link" className="h-32 w-32 shrink-0 rounded-xl bg-white p-2" />
+            <QrCodeImage value={dualCamUrl} label={t('desk.stream.pr.secondLink')} className="h-32 w-32 shrink-0 rounded-xl bg-white p-2" />
             <div className="min-w-0 flex-1">
               <div className="break-all rounded-lg bg-[rgb(var(--mg-subtle))] p-2 font-mono text-xs">
                 {dualCamUrl}
@@ -221,12 +223,12 @@ export function ProducePage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Camera className="h-4 w-4 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
-            <h2 className="text-sm font-bold">Active cameras &amp; multi-angle switcher ({liveStreams.length})</h2>
+            <h2 className="text-sm font-bold">{t('desk.stream.pr.activeHeading', { count: liveStreams.length })}</h2>
           </div>
         </div>
         {liveStreams.length === 0 ? (
           <p className="text-xs text-[rgb(var(--mg-muted))]">
-            No camera is broadcasting right now. Start a camera on the tripod phone or tap &ldquo;Open camera on this phone&rdquo;.
+            {t('desk.stream.pr.noneBroadcasting')}
           </p>
         ) : (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -247,7 +249,7 @@ export function ProducePage() {
                       <span className="truncate">{s.arenaName} · {s.angleName}</span>
                     </div>
                     <div className="text-xs text-[rgb(var(--mg-muted))]">
-                      {s.viewerCount} watching {s.status === 1 ? '· Paused' : '· Live'}
+                      {t('desk.stream.watching', { viewers: s.viewerCount, state: s.status === 1 ? t('desk.stream.paused') : t('desk.stream.stateLive') })}
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -257,10 +259,10 @@ export function ProducePage() {
                       aria-pressed={isSelected}
                       onClick={() => {
                         setSelectedStreamId(s.id);
-                        void sendCommand(s.id, 'selectAngle', String(s.id), `Switched program to ${s.angleName}`);
+                        void sendCommand(s.id, 'selectAngle', String(s.id), t('desk.stream.pr.switched', { angle: s.angleName }));
                       }}
                     >
-                      {isSelected ? 'Controlling' : 'Cut to angle'}
+                      {isSelected ? t('desk.stream.pr.controlling') : t('desk.stream.pr.cutTo')}
                     </button>
                   </div>
                 </div>
@@ -272,38 +274,38 @@ export function ProducePage() {
         {activeStream && (
           <div className="mt-1 flex flex-wrap items-center gap-2 border-t border-[rgb(var(--mg-line))] pt-3">
             <span className="text-xs font-semibold text-[rgb(var(--mg-muted))]">
-              Remote camera ({activeStream.angleName}):
+              {t('desk.stream.pr.remoteCamera', { angle: activeStream.angleName })}
             </span>
             {[1, 2, 3].map((z) => (
               <button
                 key={z}
                 type="button"
                 className="mg-stream-chip text-xs"
-                onClick={() => void sendCommand(activeStream.id, 'setZoom', String(z), `Camera zoom set to ${z}x`)}
+                onClick={() => void sendCommand(activeStream.id, 'setZoom', String(z), t('desk.stream.pr.zoomSet', { z }))}
               >
-                {z}x Zoom
+                {t('desk.stream.zoomX', { z })}
               </button>
             ))}
             <button
               type="button"
               className="mg-stream-chip text-xs"
-              onClick={() => void sendCommand(activeStream.id, 'setQualityPreset', 'auto', 'Switched camera to Auto HD')}
+              onClick={() => void sendCommand(activeStream.id, 'setQualityPreset', 'auto', t('desk.stream.pr.autoHd'))}
             >
-              Auto HD
+              {t('desk.stream.quality.auto')}
             </button>
             <button
               type="button"
               className="mg-stream-chip text-xs"
-              onClick={() => void sendCommand(activeStream.id, 'setQualityPreset', '480p', 'Switched camera to 480p Saver')}
+              onClick={() => void sendCommand(activeStream.id, 'setQualityPreset', '480p', t('desk.stream.pr.saver480'))}
             >
-              480p Saver
+              {t('desk.stream.quality.480p')}
             </button>
             <button
               type="button"
               className="mg-stream-chip text-xs"
-              onClick={() => void sendCommand(activeStream.id, 'saveReplay', '15', 'Replay requested on camera')}
+              onClick={() => void sendCommand(activeStream.id, 'saveReplay', '15', t('desk.stream.pr.replayRequested'))}
             >
-              Save 15s replay
+              {t('desk.stream.pr.save15')}
             </button>
           </div>
         )}
@@ -314,7 +316,7 @@ export function ProducePage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Layers className="h-4 w-4 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
-            <h2 className="text-sm font-bold">Centred stream overlays</h2>
+            <h2 className="text-sm font-bold">{t('desk.stream.pr.overlaysHeading')}</h2>
           </div>
           {activeCard !== 'none' && (
             <button
@@ -322,21 +324,21 @@ export function ProducePage() {
               className="mg-btn mg-btn-secondary text-xs"
               onClick={() => void selectOverlayCard('none')}
             >
-              Hide overlay
+              {t('desk.stream.pr.hideOverlay')}
             </button>
           )}
         </div>
         <p className="text-xs text-[rgb(var(--mg-muted))]">
-          Popups appear centred over the video covering most of the screen and automatically hide the bottom caption bar while open.
+          {t('desk.stream.pr.popups')}
         </p>
         <div className="flex flex-wrap gap-2">
           {(
             [
-              { id: 'none', label: 'Off' },
-              { id: 'toplist', label: 'Toplist' },
-              { id: 'heat', label: 'Heat table' },
-              { id: 'lanes', label: 'Lanes' },
-              { id: 'next', label: 'Up next' },
+              { id: 'none', label: t('desk.stream.card.off') },
+              { id: 'toplist', label: t('desk.stream.card.toplist') },
+              { id: 'heat', label: t('desk.stream.card.heat') },
+              { id: 'lanes', label: t('desk.stream.card.lanes') },
+              { id: 'next', label: t('desk.stream.card.next') },
             ] as const
           ).map((item) => (
             <button
@@ -374,7 +376,7 @@ export function ProducePage() {
             className="mg-stream-chip text-xs"
             onClick={() => void pushOverlay({ scoreCardMode: overlay.scoreCardMode === 2 ? 0 : 2 })}
           >
-            Score strip
+            {t('desk.stream.pr.scoreStrip')}
           </button>
           <button
             type="button"
@@ -382,7 +384,7 @@ export function ProducePage() {
             className="mg-stream-chip text-xs"
             onClick={() => void pushOverlay({ stripMode: overlay.stripMode === 2 ? 0 : 2 })}
           >
-            Lower third
+            {t('desk.stream.pr.lowerThird')}
           </button>
           <button
             type="button"
@@ -391,7 +393,7 @@ export function ProducePage() {
             onClick={() => void pushOverlay({ sponsorMode: overlay.sponsorMode === 2 ? 0 : 2 })}
           >
             <Sparkles aria-hidden="true" className="mr-1 h-3.5 w-3.5" />
-            Sponsors
+            {t('desk.stream.pr.sponsors')}
           </button>
         </div>
       </div>
@@ -400,23 +402,23 @@ export function ProducePage() {
       <div className="mg-card flex flex-col gap-3 p-4">
         <div className="flex items-center gap-2">
           <Megaphone className="h-4 w-4 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
-          <h2 className="text-sm font-bold">Live announcement banner</h2>
+          <h2 className="text-sm font-bold">{t('desk.stream.pr.announceHeading')}</h2>
         </div>
         <div className="flex flex-wrap gap-2">
           <input
-            aria-label="Banner message"
+            aria-label={t('desk.stream.pr.bannerMessage')}
             className="mg-input flex-1"
-            placeholder="Message for viewers (e.g. Finals start in 10 mins)"
+            placeholder={t('desk.stream.pr.bannerPlaceholder')}
             value={announceText}
             maxLength={140}
             onChange={(e) => setAnnounceText(e.target.value)}
           />
           <button type="button" className="mg-btn mg-btn-primary" onClick={() => void postAnnouncement()}>
-            Post
+            {t('desk.stream.pr.post')}
           </button>
           {overlay.bannerText && !['toplist', 'heat', 'lanes', 'next'].includes(overlay.bannerText) && (
             <button type="button" className="mg-btn mg-btn-secondary" onClick={() => void clearAnnouncement()}>
-              Clear banner
+              {t('desk.stream.pr.clearBanner')}
             </button>
           )}
         </div>

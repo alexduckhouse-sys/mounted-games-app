@@ -8,13 +8,15 @@ import { usePageHeader } from '../../components/CompactPageBarContext';
 import { QrAccessModal } from '../../components/QrAccessModal';
 import { usePageWidth } from '../../components/pageWidthState';
 import { formatPoints } from '../../lib/formatPoints';
+import { useLanguage, useT } from '../../i18n/LanguageContext';
+import { localOrdinal } from '../../lib/ordinalText';
 import { parseBibAndFlag } from '../../lib/bib';
 import { currentRaceIndex, raceLanes, racesInOrder } from '../../lib/raceLanes';
 import { lanesOf } from './laneRules';
 import { statusLetter } from '../../lib/resultStatus';
 import { publicRiderName } from '../../lib/riderNames';
 import { displaySectionName } from '../../lib/section';
-import { buildToplist, ordinal, sectionScoreVersion } from '../../lib/toplist';
+import { buildToplist, sectionScoreVersion } from '../../lib/toplist';
 import { useLiveHub } from '../../live/useLiveHub';
 import type { DeclarationForm, Heat, Session, StandingRow, Team } from '../../types';
 import { useCompetition } from './context';
@@ -38,6 +40,8 @@ function defaultDeskSectionId(sessions: Session[], sectionIds: number[], request
 
 export function CommentaryDeskPage() {
   usePageWidth('wide');
+  const t = useT();
+  const { lang } = useLanguage();
   const { competition, reload } = useCompetition();
   const { canOrganise } = useAuth();
   const canControlStreams = canOrganise(competition);
@@ -59,7 +63,7 @@ export function CommentaryDeskPage() {
   const [showQrModal, setShowQrModal] = useState(false);
 
   const bumpRefresh = useCallback(() => {
-    setRefreshTick((t) => t + 1);
+    setRefreshTick((n) => n + 1);
   }, []);
 
   const { connected } = useLiveHub(competition.id, {
@@ -78,10 +82,10 @@ export function CommentaryDeskPage() {
   });
 
   usePageHeader({
-    title: 'Commentary desk',
+    title: t('desk.commentary.title'),
     subtitle: competition.name,
     backTo: `/competitions/${competition.id}/scoring${sectionId != null ? `?section=${sectionId}` : ''}`,
-    backLabel: 'Back to scoring',
+    backLabel: t('desk.commentary.backToScoring'),
   });
 
   const scoreVersion = useMemo(
@@ -128,11 +132,11 @@ export function CommentaryDeskPage() {
   };
 
   const section = competition.sections.find((s) => s.id === sectionId) ?? null;
-  const sectionName = displaySectionName(section?.displayName) || 'Section';
+  const sectionName = displaySectionName(section?.displayName) || t('desk.commentary.sectionFallback');
 
   const teamById = useMemo(() => {
     const map = new Map<number, Team>();
-    for (const t of competition.teams) map.set(t.id, t);
+    for (const tm of competition.teams) map.set(tm.id, tm);
     return map;
   }, [competition.teams]);
 
@@ -174,23 +178,23 @@ export function CommentaryDeskPage() {
         for (const r of races) {
           for (const res of r.results) {
             const placeText = res.isSitOut
-              ? 'Sat out'
+              ? t('desk.commentary.satOut')
               : res.eliminated
                 ? (statusLetter(true, res.status) ?? 'E')
                 : res.placing != null
-                  ? ordinal(res.placing)
-                  : 'Scored';
-            map.set(res.teamId, `${placeText} in ${r.name} (${formatPoints(res.points)} pts)`);
+                  ? localOrdinal(res.placing, lang)
+                  : t('desk.commentary.scored');
+            map.set(res.teamId, t('desk.commentary.lastRaceLine', { place: placeText, race: r.name, points: formatPoints(res.points) }));
           }
           const winner = r.results.find((res) => !res.eliminated && !res.isSitOut && res.placing === 1);
           if (winner) {
-            latestWinner = `${winner.teamName} won ${r.name} (+${formatPoints(winner.points)} pts)`;
+            latestWinner = t('desk.commentary.winnerLine', { team: winner.teamName, race: r.name, points: formatPoints(winner.points) });
           }
         }
       }
     }
     return { lastRaceByTeamId: map, latestRaceSummary: latestWinner };
-  }, [competition.sessions, sectionId]);
+  }, [competition.sessions, sectionId, t, lang]);
 
   // Section heats in running order
   const sectionHeats = useMemo(() => {
@@ -206,13 +210,13 @@ export function CommentaryDeskPage() {
           list.push({
             session: s,
             heat: h,
-            label: `${s.name} · ${h.label || `Heat ${idx + 1}`}`,
+            label: `${s.name} · ${h.label || t('desk.commentary.heatN', { n: idx + 1 })}`,
           });
         }
       });
     }
     return list;
-  }, [competition.sessions, sectionId]);
+  }, [competition.sessions, sectionId, t]);
 
   const activeHeatItem = useMemo(() => {
     if (sectionHeats.length === 0) return null;
@@ -252,15 +256,15 @@ export function CommentaryDeskPage() {
         const gapToFirst = Math.max(0, leaderPoints - row.points);
         const gapToCutoff = idx < cutoffPlaces ? 0 : Math.max(0, cutoffPoints - row.points);
         const gapLabel = idx === 0
-          ? 'Leader'
+          ? t('desk.commentary.leader')
           : idx < cutoffPlaces
-            ? `−${formatPoints(gapToFirst)} pts to 1st · Top ${cutoffPlaces}`
-            : `−${formatPoints(gapToFirst)} to 1st · −${formatPoints(gapToCutoff)} to Top ${cutoffPlaces}`;
+            ? t('desk.commentary.gapTop', { gap: formatPoints(gapToFirst), places: cutoffPlaces })
+            : t('desk.commentary.gapCutoff', { gap: formatPoints(gapToFirst), cut: formatPoints(gapToCutoff), places: cutoffPlaces });
 
         return {
           teamId: row.teamId,
           rank: row.position,
-          rankLabel: toplist.started ? `${ordinal(row.position)}${row.joint ? '=' : ''}` : ordinal(idx + 1),
+          rankLabel: toplist.started ? `${localOrdinal(row.position, lang)}${row.joint ? '=' : ''}` : localOrdinal(idx + 1, lang),
           bibColour: team?.bibColour ?? st?.bibColour ?? null,
           teamName: row.teamName,
           clubName: team?.clubName ?? st?.clubName ?? '',
@@ -274,28 +278,28 @@ export function CommentaryDeskPage() {
     }
 
     const sectionTeams = competition.teams
-      .filter((t) => (sectionId == null || t.competitionSectionId === sectionId) && !t.isHorsConcours)
+      .filter((tm) => (sectionId == null || tm.competitionSectionId === sectionId) && !tm.isHorsConcours)
       .slice()
       .sort((a, b) => a.displayName.localeCompare(b.displayName));
 
-    return sectionTeams.map((t, idx) => {
-      const dec = decByTeamId.get(t.id);
+    return sectionTeams.map((tm, idx) => {
+      const dec = decByTeamId.get(tm.id);
       const riders = (dec?.riders ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex);
       return {
-        teamId: t.id,
+        teamId: tm.id,
         rank: idx + 1,
-        rankLabel: ordinal(idx + 1),
-        bibColour: t.bibColour ?? null,
-        teamName: t.displayName,
-        clubName: t.clubName,
-        trainerName: dec?.trainerName?.trim() || t.trainerName?.trim() || null,
+        rankLabel: localOrdinal(idx + 1, lang),
+        bibColour: tm.bibColour ?? null,
+        teamName: tm.displayName,
+        clubName: tm.clubName,
+        trainerName: dec?.trainerName?.trim() || tm.trainerName?.trim() || null,
         riders,
         totalPoints: 0,
         wins: 0,
-        gapLabel: '0 pts',
+        gapLabel: t('desk.commentary.zeroPts'),
       };
     });
-  }, [toplist, section?.finalistCount, teamById, standingByTeamId, decByTeamId, competition.teams, sectionId]);
+  }, [toplist, section?.finalistCount, teamById, standingByTeamId, decByTeamId, competition.teams, sectionId, t, lang]);
 
   // Points each team has made in the heat on show (the toplist total sits beside it).
   const heatPointsByTeamId = useMemo(() => {
@@ -331,29 +335,29 @@ export function CommentaryDeskPage() {
     const cutoffPlaces = section?.finalistCount ?? 6;
     const leader = orderedStandings[0] ?? null;
     const leaderText = toplist.started && leader
-      ? `${leader.teamName} (${formatPoints(leader.totalPoints)} pts, ${leader.wins} ${leader.wins === 1 ? 'win' : 'wins'})`
-      : 'No races scored yet';
+      ? t('desk.commentary.leaderText', { team: leader.teamName, points: formatPoints(leader.totalPoints), wins: t('desk.commentary.winsCount', { count: leader.wins }) })
+      : t('desk.commentary.noRacesScored');
 
-    let cutoffText = `Top ${cutoffPlaces} qualify for the A Final`;
+    let cutoffText = t('desk.commentary.cutoffDefault', { places: cutoffPlaces });
     if (toplist.started && orderedStandings.length > cutoffPlaces) {
       const onBubble = orderedStandings[cutoffPlaces - 1];
       const chasing = orderedStandings[cutoffPlaces];
       if (onBubble && chasing) {
         const diff = Math.max(0, onBubble.totalPoints - chasing.totalPoints);
-        cutoffText = `${onBubble.teamName} (${formatPoints(onBubble.totalPoints)} pts) holds ${ordinal(cutoffPlaces)} — ${chasing.teamName} is ${formatPoints(diff)} pts behind`;
+        cutoffText = t('desk.commentary.cutoffBubble', { team: onBubble.teamName, points: formatPoints(onBubble.totalPoints), place: localOrdinal(cutoffPlaces, lang), chasing: chasing.teamName, diff: formatPoints(diff) });
       }
     }
 
     return {
       leaderText,
       cutoffText,
-      latestWinner: latestRaceSummary ?? 'Waiting for first completed race',
+      latestWinner: latestRaceSummary ?? t('desk.commentary.waitingFirst'),
     };
-  }, [section?.finalistCount, orderedStandings, toplist.started, latestRaceSummary]);
+  }, [section?.finalistCount, orderedStandings, toplist.started, latestRaceSummary, t, lang]);
 
   return (
     <div className="mx-auto flex w-full flex-col gap-4 py-3">
-      {standingsStale && (standings.length ? savedNotice && <Notice tone="info">Showing saved standings while results refresh.</Notice> : <Notice tone="info">Waiting for official standings.</Notice>)}
+      {standingsStale && (standings.length ? savedNotice && <Notice tone="info">{t('desk.commentary.savedStandings')}</Notice> : <Notice tone="info">{t('desk.commentary.waitingOfficial')}</Notice>)}
       {/* Top Bar */}
       <header className="mg-card flex flex-col gap-3 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -366,20 +370,21 @@ export function CommentaryDeskPage() {
               }`}
             >
               <Radio className="h-3.5 w-3.5" aria-hidden="true" />
-              {connected ? 'Live PA Feed' : 'Standby'}
+              {connected ? t('desk.commentary.livePa') : t('desk.commentary.standby')}
             </span>
             <h1 className="mg-display m-0 text-xl font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))] sm:text-2xl">
               <Mic className="mr-1.5 inline h-5 w-5 align-text-bottom" aria-hidden="true" />
-              Commentary desk · {sectionName}
+              {/* a template string keeps the React Compiler from treating the section as mutable */}
+              {t('desk.commentary.titleSection', { section: `${sectionName}` })}
             </h1>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             {competition.sections.length > 1 && (
               <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
-                <span>Section</span>
+                <span>{t('desk.commentary.section')}</span>
                 <select
-                  aria-label="Section filter"
+                  aria-label={t('desk.commentary.sectionFilter')}
                   value={sectionId ?? ''}
                   onChange={(e) => chooseSection(Number(e.target.value))}
                   className="min-h-10 rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] px-2.5 py-1.5 text-sm font-semibold text-[rgb(var(--mg-ink))]"
@@ -398,7 +403,7 @@ export function CommentaryDeskPage() {
                 to={`/competitions/${competition.id}/session/${activeHeatItem.session.id}?heat=${activeHeatItem.heat.id}&commentator=1`}
                 className="mg-btn mg-btn-primary !min-h-10 !px-3 text-xs font-bold"
               >
-                <ClipboardCheck className="h-4 w-4" aria-hidden="true" /> Score &amp; Commentate
+                <ClipboardCheck className="h-4 w-4" aria-hidden="true" /> {t('desk.commentary.scoreAndCommentate')}
               </Link>
             )}
 
@@ -407,42 +412,42 @@ export function CommentaryDeskPage() {
               onClick={() => setShowQrModal(true)}
               className="mg-btn mg-btn-secondary !min-h-10 !px-3 text-xs font-bold"
             >
-              <QrCodeIcon className="h-4 w-4" aria-hidden="true" /> QR Access
+              <QrCodeIcon className="h-4 w-4" aria-hidden="true" /> {t('desk.commentary.qrAccess')}
             </button>
 
             <Link
               to={`/competitions/${competition.id}/tv${sectionId != null ? `?section=${sectionId}` : ''}`}
               className="mg-btn mg-btn-secondary !min-h-10 !px-3 text-xs font-bold"
             >
-              <Monitor className="h-4 w-4" aria-hidden="true" /> TV Kiosk
+              <Monitor className="h-4 w-4" aria-hidden="true" /> {t('desk.commentary.tvKiosk')}
             </Link>
             <Link
               to={`/competitions/${competition.id}/scoring${sectionId != null ? `?section=${sectionId}` : ''}`}
               className="mg-btn mg-btn-secondary !min-h-10 !px-3 text-xs font-bold"
             >
-              Scoring
+              {t('desk.commentary.scoring')}
             </Link>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="mg-seg" role="group" aria-label="Commentary desk view">
+          <div className="mg-seg" role="group" aria-label={t('desk.commentary.viewGroup')}>
             <button type="button" aria-pressed={mode === 'split'} onClick={() => setMode('split')}>
-              Side-by-Side
+              {t('desk.commentary.sideBySide')}
             </button>
             <button type="button" aria-pressed={mode === 'lanes'} onClick={() => setMode('lanes')}>
-              Current Heat Lanes
+              {t('desk.commentary.currentLanes')}
             </button>
             <button type="button" aria-pressed={mode === 'standings'} onClick={() => setMode('standings')}>
-              Standings in Order
+              {t('desk.commentary.standingsInOrder')}
             </button>
           </div>
 
           {sectionHeats.length > 1 && (
             <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
-              <span>Heat</span>
+              <span>{t('desk.commentary.heat')}</span>
               <select
-                aria-label="Select heat"
+                aria-label={t('desk.commentary.selectHeat')}
                 value={activeHeatItem?.heat.id ?? ''}
                 onChange={(e) => setSelectedHeatId(Number(e.target.value))}
                 className="min-h-9 rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] px-2 py-1 text-xs font-semibold text-[rgb(var(--mg-ink))]"
@@ -462,22 +467,22 @@ export function CommentaryDeskPage() {
       {canControlStreams && <DeskOverlays />}
 
       {/* Key Talking Points Banner */}
-      <section aria-label="Key talking points" className="mg-card grid grid-cols-1 gap-3 p-3.5 sm:grid-cols-3">
+      <section aria-label={t('desk.commentary.keyPoints')} className="mg-card grid grid-cols-1 gap-3 p-3.5 sm:grid-cols-3">
         <div className="rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] px-3 py-2">
           <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
-            <Trophy className="h-3.5 w-3.5 text-[rgb(var(--mg-heading))]" aria-hidden="true" /> Section Leader
+            <Trophy className="h-3.5 w-3.5 text-[rgb(var(--mg-heading))]" aria-hidden="true" /> {t('desk.commentary.sectionLeader')}
           </span>
           <p className="mt-1 mb-0 text-sm font-bold text-[rgb(var(--mg-ink))]">{talkingPoints.leaderText}</p>
         </div>
         <div className="rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] px-3 py-2">
           <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
-            <Sparkles className="h-3.5 w-3.5 text-[rgb(var(--mg-heading))]" aria-hidden="true" /> Finals Cut-Off Battle
+            <Sparkles className="h-3.5 w-3.5 text-[rgb(var(--mg-heading))]" aria-hidden="true" /> {t('desk.commentary.cutoffBattle')}
           </span>
           <p className="mt-1 mb-0 text-sm font-bold text-[rgb(var(--mg-ink))]">{talkingPoints.cutoffText}</p>
         </div>
         <div className="rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] px-3 py-2">
           <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
-            <Radio className="h-3.5 w-3.5 text-[rgb(var(--mg-heading))]" aria-hidden="true" /> Latest Race Winner
+            <Radio className="h-3.5 w-3.5 text-[rgb(var(--mg-heading))]" aria-hidden="true" /> {t('desk.commentary.latestWinner')}
           </span>
           <p className="mt-1 mb-0 text-sm font-bold text-[rgb(var(--mg-ink))]">{talkingPoints.latestWinner}</p>
         </div>
@@ -487,21 +492,21 @@ export function CommentaryDeskPage() {
       <div className={mode === 'split' ? 'grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start' : 'flex flex-col gap-4'}>
         {(mode === 'split' || mode === 'lanes') && (
           <div className="flex flex-col gap-4">
-          <section aria-label="Current Heat — Lanes in Order" className="mg-card overflow-hidden">
+          <section aria-label={t('desk.commentary.lanesInOrder')} className="mg-card overflow-hidden">
             <div className="flex flex-wrap items-baseline justify-between gap-2 border-b-2 border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-ground))] px-4 py-3">
               <div className="flex items-center gap-2">
                 <Users className="h-5 w-5 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
                 <h2 className="mg-display m-0 text-lg font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-                  Current Heat — Lanes in Order
+                  {t('desk.commentary.lanesInOrder')}
                 </h2>
               </div>
               <span className="text-xs font-bold text-[rgb(var(--mg-body))]">
-                {activeHeatItem ? `${activeHeatItem.label} · ` : ''}{activeLanes?.race ? `Lanes for ${activeLanes.race.name} · ` : ''}Heat / toplist
+                {activeHeatItem ? `${activeHeatItem.label} · ` : ''}{activeLanes?.race ? `${t('desk.commentary.lanesFor', { race: activeLanes.race.name })} · ` : ''}{t('desk.commentary.heatToplist')}
               </span>
             </div>
 
             {!activeHeatItem || activeHeatItem.heat.entries.length === 0 ? (
-              <p className="p-4 text-sm text-[rgb(var(--mg-muted))]">No lane draw available for this heat yet.</p>
+              <p className="p-4 text-sm text-[rgb(var(--mg-muted))]">{t('desk.commentary.noLaneDraw')}</p>
             ) : (
               <ol className="m-0 divide-y divide-[rgb(var(--mg-rule-soft))] list-none p-0">
                 {(activeLanes?.lanes ?? []).map(({ entry, lane, sitting, hatband }) => {
@@ -513,14 +518,14 @@ export function CommentaryDeskPage() {
                     const rankText = rankByTeamId.get(entry.teamId) ?? '—';
                     const toplistPts = formatPoints(st?.totalPoints ?? 0);
                     const heatPts = formatPoints(heatPointsByTeamId.get(entry.teamId) ?? 0);
-                    const lastRace = lastRaceByTeamId.get(entry.teamId) ?? 'No completed race yet';
+                    const lastRace = lastRaceByTeamId.get(entry.teamId) ?? t('desk.commentary.noRaceYet');
 
                     return (
                       <li key={entry.id} className="flex flex-col gap-1.5 px-4 py-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
                             <span className="mg-display shrink-0 rounded bg-[rgb(var(--mg-tint))] px-2 py-0.5 text-base font-bold uppercase text-[rgb(var(--mg-heading))]">
-                              {sitting ? 'Sits out' : `Lane ${lane}`}
+                              {sitting ? t('desk.commentary.sitsOut') : t('desk.commentary.lane', { n: lane })}
                             </span>
                             <HatbandSwatch colour={hatband} />
                             <BibSwatch colour={entry.bibColour ?? team?.bibColour ?? st?.bibColour} />
@@ -533,8 +538,8 @@ export function CommentaryDeskPage() {
                               </span>
                             )}
                           </div>
-                          <span className="mg-display shrink-0 text-sm font-bold text-[rgb(var(--mg-heading))]" aria-label={`Rank ${rankText}, ${heatPts} in this heat, ${toplistPts} on the toplist`}>
-                            Rank {rankText} · {heatPts} / {toplistPts}
+                          <span className="mg-display shrink-0 text-sm font-bold text-[rgb(var(--mg-heading))]" aria-label={t('desk.commentary.rankAria', { rank: rankText, heat: heatPts, toplist: toplistPts })}>
+                            {t('desk.commentary.rankLine', { rank: rankText, heat: heatPts, toplist: toplistPts })}
                           </span>
                         </div>
 
@@ -549,13 +554,13 @@ export function CommentaryDeskPage() {
                           </ul>
                         ) : (
                           <p className="m-0 text-xs text-[rgb(var(--mg-muted))]">
-                            {team?.trainerName ? `Trainer: ${team.trainerName}` : 'No rider declaration submitted yet'}
+                            {team?.trainerName ? t('desk.commentary.trainer', { name: team.trainerName }) : t('desk.commentary.noDec')}
                           </p>
                         )}
 
-                        {bibWords && <p className="m-0 truncate text-xs text-[rgb(var(--mg-muted))]">Bibs: {bibWords}</p>}
+                        {bibWords && <p className="m-0 truncate text-xs text-[rgb(var(--mg-muted))]">{t('desk.commentary.bibs', { bibs: bibWords })}</p>}
                         <div className="text-xs font-medium text-[rgb(var(--mg-muted))]">
-                          Last race: <span className="font-semibold text-[rgb(var(--mg-body))]">{lastRace}</span>
+                          {t('desk.commentary.lastRace')}{' '}<span className="font-semibold text-[rgb(var(--mg-body))]">{lastRace}</span>
                         </div>
                       </li>
                     );
@@ -579,12 +584,12 @@ export function CommentaryDeskPage() {
             />
           )}
 
-          <section aria-label="Up next" className="mg-card overflow-hidden">
+          <section aria-label={t('desk.commentary.upNext')} className="mg-card overflow-hidden">
             <div className="border-b-2 border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-ground))] px-4 py-3">
-              <h2 className="mg-display m-0 text-lg font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">Up next</h2>
+              <h2 className="mg-display m-0 text-lg font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">{t('desk.commentary.upNext')}</h2>
             </div>
             {upNext.length === 0 ? (
-              <p className="p-4 text-sm text-[rgb(var(--mg-muted))]">Nothing else to run in this section.</p>
+              <p className="p-4 text-sm text-[rgb(var(--mg-muted))]">{t('desk.commentary.nothingElse')}</p>
             ) : (
               <ol className="m-0 divide-y divide-[rgb(var(--mg-rule-soft))] list-none p-0">
                 {upNext.map((label) => <li key={label} className="px-4 py-3 text-base font-semibold text-[rgb(var(--mg-ink))]">{label}</li>)}
@@ -595,21 +600,21 @@ export function CommentaryDeskPage() {
         )}
 
         {(mode === 'split' || mode === 'standings') && (
-          <section aria-label="Standings — Each Team in Order" className="mg-card overflow-hidden">
+          <section aria-label={t('desk.commentary.standingsEach')} className="mg-card overflow-hidden">
             <div className="flex flex-wrap items-baseline justify-between gap-2 border-b-2 border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-ground))] px-4 py-3">
               <div className="flex items-center gap-2">
                 <Trophy className="h-5 w-5 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
                 <h2 className="mg-display m-0 text-lg font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-                  Standings — Each Team in Order
+                  {t('desk.commentary.standingsEach')}
                 </h2>
               </div>
               <span className="text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
-                1st to {ordinal(orderedStandings.length || 1)}
+                {t('desk.commentary.firstTo', { place: localOrdinal(orderedStandings.length || 1, lang) })}
               </span>
             </div>
 
             {orderedStandings.length === 0 ? (
-              <p className="p-4 text-sm text-[rgb(var(--mg-muted))]">No teams in this section yet.</p>
+              <p className="p-4 text-sm text-[rgb(var(--mg-muted))]">{t('desk.commentary.noTeams')}</p>
             ) : (
               <ol className="m-0 divide-y divide-[rgb(var(--mg-rule-soft))] list-none p-0">
                 {orderedStandings.map((row) => (
@@ -632,10 +637,10 @@ export function CommentaryDeskPage() {
 
                       <div className="flex shrink-0 items-baseline gap-2.5">
                         <span className="rounded bg-[rgb(var(--mg-tint))] px-2 py-0.5 text-xs font-bold text-[rgb(var(--mg-heading))]">
-                          {row.wins} {row.wins === 1 ? '1st' : '1sts'}
+                          {t('desk.commentary.firsts', { count: row.wins })}
                         </span>
                         <span className="mg-display text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]">
-                          {formatPoints(row.totalPoints)} pts
+                          {t('desk.commentary.ptsOnly', { points: formatPoints(row.totalPoints) })}
                         </span>
                       </div>
                     </div>
@@ -650,11 +655,11 @@ export function CommentaryDeskPage() {
                         ))}
                       </ul>
                     ) : row.trainerName ? (
-                      <p className="m-0 text-xs text-[rgb(var(--mg-muted))]">Trainer: {row.trainerName}</p>
+                      <p className="m-0 text-xs text-[rgb(var(--mg-muted))]">{t('desk.commentary.trainer', { name: row.trainerName })}</p>
                     ) : null}
 
                     {parseBibAndFlag(teamById.get(row.teamId)?.bibDescription).bib && (
-                      <p className="m-0 truncate text-xs text-[rgb(var(--mg-muted))]">Bibs: {parseBibAndFlag(teamById.get(row.teamId)?.bibDescription).bib}</p>
+                      <p className="m-0 truncate text-xs text-[rgb(var(--mg-muted))]">{t('desk.commentary.bibs', { bibs: parseBibAndFlag(teamById.get(row.teamId)?.bibDescription).bib })}</p>
                     )}
                     <div className="text-xs font-semibold text-[rgb(var(--mg-muted))]">
                       {row.gapLabel}

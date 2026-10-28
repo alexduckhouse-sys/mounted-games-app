@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
+import { useT } from '../../../i18n/LanguageContext';
 import { renderTrimmedFollowClip } from '../../../components/stream/ReplayInspector';
 import { ReplayPreparation } from '../../../components/stream/ReplayPreparation';
 import { clockLabel, followFromKeys, frameAt, frameRect, keysFromFollow, putKey, zoomLabel, MAX_ZOOM, MIN_ZOOM, ZOOM_STEP, type FrameKey } from '../../../lib/replayFrame';
@@ -21,6 +22,7 @@ export function ReplayEditor({ clip, editable, justMade, onClose, onCancelClip, 
   onCancelClip?: (clipId: string) => void;
   onSaved?: (clip: SavedReplayClip) => void;
 }) {
+  const t = useT();
   const video = useRef<HTMLVideoElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const preparation = useReplayPreparation();
@@ -125,16 +127,16 @@ export function ReplayEditor({ clip, editable, justMade, onClose, onCancelClip, 
   const cutLength = Math.max(0, end - start);
 
   return (
-    <div className="rp" role="region" aria-label={`Replay: ${clip.label}`}>
-      <span className="rp-head"><span className="rp-name">{clip.label}</span><span className="rp-len">{editable ? `${cutLength.toFixed(1)}s of ${Math.round(duration)}s` : `${Math.round(duration)}s`}</span></span>
+    <div className="rp" role="region" aria-label={t('desk.stream.ed.region', { label: clip.label })}>
+      <span className="rp-head"><span className="rp-name">{clip.label}</span><span className="rp-len">{editable ? t('desk.stream.ed.lengthCut', { cut: cutLength.toFixed(1), total: Math.round(duration) }) : t('desk.stream.ed.lengthWhole', { total: Math.round(duration) })}</span></span>
 
       <div className="rp-video" ref={stage} onPointerMove={onDragMove} onPointerUp={onDragEnd} onPointerLeave={onDragEnd}>
-        <video ref={video} src={clip.url} playsInline preload="auto" aria-label={`${clip.label} video`} className="rp-media"
+        <video ref={video} src={clip.url} playsInline preload="auto" aria-label={t('desk.stream.ed.video', { label: clip.label })} className="rp-media"
           onLoadedMetadata={(event) => { const length = event.currentTarget.duration; if (Number.isFinite(length) && length > 0) setDuration(length); }}
           onEnded={() => setPlaying(false)} />
         {editable && (
-          <span className="rp-frame" role="slider" tabIndex={0} aria-label="Replay framing, drag to move" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(frame.x)}
-            aria-valuetext={`Centre ${Math.round(frame.x)}% across, ${Math.round(frame.y)}% down, ${frame.z.toFixed(1)}× zoom`} data-drag={dragging !== null}
+          <span className="rp-frame" role="slider" tabIndex={0} aria-label={t('desk.stream.ed.framing')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(frame.x)}
+            aria-valuetext={t('desk.stream.ed.framingValue', { x: Math.round(frame.x), y: Math.round(frame.y), z: frame.z.toFixed(1) })} data-drag={dragging !== null}
             style={{ left: `${rect.left}%`, top: `${rect.top}%`, width: `${rect.width}%`, height: `${rect.height}%` }}
             onPointerDown={onDragStart} onKeyDown={onFrameKey}><span className="rp-z">{zoomLabel(frame.z)}</span></span>
         )}
@@ -144,45 +146,45 @@ export function ReplayEditor({ clip, editable, justMade, onClose, onCancelClip, 
         <span aria-hidden="true" className="rp-track" />
         {editable && <span aria-hidden="true" className="rp-band" style={{ left: percent(start), width: `${((end - start) / duration) * 100}%` }} />}
         {editable && keys.map((key) => <span key={key.t} aria-hidden="true" className="rp-key" style={{ left: percent(key.t) }} />)}
-        <input type="range" min={0} max={100} step={0.5} value={(now / duration) * 100} aria-label="Playhead" className="rp-range"
+        <input type="range" min={0} max={100} step={0.5} value={(now / duration) * 100} aria-label={t('desk.stream.ed.playhead')} className="rp-range"
           onChange={(event) => { pause(); seek((Number(event.target.value) / 100) * duration); }} />
       </div>
-      <span className="rp-time"><span>{clockLabel(now)}</span>{editable && <span>{keys.length} keyframe{keys.length === 1 ? '' : 's'}</span>}<span>{clockLabel(duration)}</span></span>
+      <span className="rp-time"><span>{clockLabel(now)}</span>{editable && <span>{t('desk.stream.ed.keyframes', { count: keys.length })}</span>}<span>{clockLabel(duration)}</span></span>
 
       <div className="rp-ctl">
-        <button type="button" className="rp-ib" aria-label="Back 0.1 seconds" onClick={() => nudge(-STEP_SECONDS)}><ChevronLeft className="h-4 w-4" aria-hidden="true" /></button>
-        <button type="button" className="rp-play" aria-label={playing ? 'Pause' : 'Play'} onClick={togglePlay}>
+        <button type="button" className="rp-ib" aria-label={t('desk.stream.ed.back')} onClick={() => nudge(-STEP_SECONDS)}><ChevronLeft className="h-4 w-4" aria-hidden="true" /></button>
+        <button type="button" className="rp-play" aria-label={playing ? t('desk.stream.ed.pause') : t('desk.stream.ed.play')} onClick={togglePlay}>
           {playing ? <Pause className="h-5 w-5" aria-hidden="true" /> : <Play className="h-5 w-5" aria-hidden="true" />}
         </button>
-        <button type="button" className="rp-ib" aria-label="Forward 0.1 seconds" onClick={() => nudge(STEP_SECONDS)}><ChevronRight className="h-4 w-4" aria-hidden="true" /></button>
+        <button type="button" className="rp-ib" aria-label={t('desk.stream.ed.forward')} onClick={() => nudge(STEP_SECONDS)}><ChevronRight className="h-4 w-4" aria-hidden="true" /></button>
         <span className="rp-fill" />
-        {editable && <button type="button" className="rp-pill" onClick={() => { if (now < end) setStart(now); }}>Start here</button>}
-        {editable && <button type="button" className="rp-pill" onClick={() => { if (now > start) setEnd(now); }}>End here</button>}
+        {editable && <button type="button" className="rp-pill" onClick={() => { if (now < end) setStart(now); }}>{t('desk.stream.ed.startHere')}</button>}
+        {editable && <button type="button" className="rp-pill" onClick={() => { if (now > start) setEnd(now); }}>{t('desk.stream.ed.endHere')}</button>}
       </div>
 
       {editable && (
         <div className="rp-ctl">
-          <span className="rp-lbl">Zoom</span>
+          <span className="rp-lbl">{t('desk.stream.ed.zoom')}</span>
           <span className="rp-zoom">
-            <button type="button" aria-label="Zoom out" disabled={frame.z <= MIN_ZOOM} onClick={() => setKey({ z: frame.z - ZOOM_STEP })}>−</button>
+            <button type="button" aria-label={t('desk.stream.ed.zoomOut')} disabled={frame.z <= MIN_ZOOM} onClick={() => setKey({ z: frame.z - ZOOM_STEP })}>−</button>
             <span>{zoomLabel(frame.z)}</span>
-            <button type="button" aria-label="Zoom in" disabled={frame.z >= MAX_ZOOM} onClick={() => setKey({ z: frame.z + ZOOM_STEP })}>+</button>
+            <button type="button" aria-label={t('desk.stream.ed.zoomIn')} disabled={frame.z >= MAX_ZOOM} onClick={() => setKey({ z: frame.z + ZOOM_STEP })}>+</button>
           </span>
           <span className="rp-fill" />
-          <button type="button" className="rp-pill" onClick={() => setKey({})}>Add keyframe</button>
-          <button type="button" className="rp-pill" aria-pressed={slow} onClick={() => setSlow((on) => !on)}>Slow-mo</button>
+          <button type="button" className="rp-pill" onClick={() => setKey({})}>{t('desk.stream.ed.addKeyframe')}</button>
+          <button type="button" className="rp-pill" aria-pressed={slow} onClick={() => setSlow((on) => !on)}>{t('desk.stream.ed.slowMo')}</button>
         </div>
       )}
 
       <ReplayPreparation progress={preparation.progress} error={preparation.error} cancel={preparation.cancel} />
 
       <div className="rp-ctl rp-last">
-        {justMade && onCancelClip && <button type="button" className="rp-link" onClick={() => { pause(); onCancelClip(clip.id); onClose(); }}>Cancel clip</button>}
+        {justMade && onCancelClip && <button type="button" className="rp-link" onClick={() => { pause(); onCancelClip(clip.id); onClose(); }}>{t('desk.stream.ed.cancelClip')}</button>}
         <span className="rp-fill" />
-        {editable && <button type="button" className="rp-pill" disabled={preparation.progress !== null} onClick={saveClip}>Save clip</button>}
-        {editable && <button type="button" className="rp-link" onClick={() => setKeys([])}>Reset framing</button>}
-        {editable && !justMade && <button type="button" className="rp-link" onClick={remove}>Remove</button>}
-        <button type="button" className="rp-pill" onClick={() => { pause(); onClose(); }}>Close</button>
+        {editable && <button type="button" className="rp-pill" disabled={preparation.progress !== null} onClick={saveClip}>{t('desk.stream.ed.saveClip')}</button>}
+        {editable && <button type="button" className="rp-link" onClick={() => setKeys([])}>{t('desk.stream.ed.resetFraming')}</button>}
+        {editable && !justMade && <button type="button" className="rp-link" onClick={remove}>{t('desk.stream.ed.remove')}</button>}
+        <button type="button" className="rp-pill" onClick={() => { pause(); onClose(); }}>{t('common.close')}</button>
       </div>
     </div>
   );
