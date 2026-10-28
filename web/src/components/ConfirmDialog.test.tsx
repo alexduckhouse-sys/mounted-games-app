@@ -92,6 +92,29 @@ describe('confirmDialog', () => {
     await expect(no).resolves.toBe(false);
   });
 
+  it('opens in its own modal <dialog>, so it stacks above a Sheet that is already open', async () => {
+    const showModal = vi.fn(function (this: HTMLDialogElement) { this.setAttribute('open', ''); });
+    const original = HTMLDialogElement.prototype.showModal;
+    HTMLDialogElement.prototype.showModal = showModal;
+    try {
+      const sheet = document.createElement('dialog');
+      document.body.appendChild(sheet);
+      sheet.setAttribute('open', '');
+      const answer = confirmDialog({ title: 'Call the vet?', message: 'Sends an alert.', confirmLabel: 'Call vet' });
+      const yes = await screen.findByRole('button', { name: 'Call vet' });
+      const host = yes.closest('dialog.mg-confirm-host');
+      expect(host).not.toBeNull();
+      expect(host).not.toBe(sheet);
+      expect(showModal).toHaveBeenCalledTimes(1);
+      expect(host!.hasAttribute('open')).toBe(true);
+      await userEvent.click(yes);
+      await expect(answer).resolves.toBe(true);
+      sheet.remove();
+    } finally {
+      HTMLDialogElement.prototype.showModal = original;
+    }
+  });
+
   it('leaves on a hidden, inert copy that goes once its animation ends', async () => {
     const answer = confirmDialog({ title: 'Remove?', message: 'Gone for good.', confirmLabel: 'Remove' });
     await userEvent.click(await screen.findByRole('button', { name: 'Remove' }));

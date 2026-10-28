@@ -5,6 +5,27 @@
   margin: 0 auto;
   max-width: 1100px;
   padding: 24px;
+  /* Paper is always light: put the default theme's colour tokens back, whatever theme is on screen (Stable Night). */
+  --mg-ground: 247 247 247;
+  --mg-surface: 255 255 255;
+  --mg-subtle: 247 248 250;
+  --mg-ink: 33 33 33;
+  --mg-body: 74 80 90;
+  --mg-muted: 90 98 112;
+  --mg-faint: 110 116 128;
+  --mg-dash: 163 169 179;
+  --mg-rule: 218 218 218;
+  --mg-rule-soft: 235 235 235;
+  --mg-control: 196 201 209;
+  --mg-tint: 227 231 236;
+  --mg-heading: 23 56 95;
+  --mg-button: 23 56 95;
+  --mg-header: 23 56 95;
+  --mg-red: 225 42 57;
+  --mg-elim: 200 32 47;
+  --mg-ok: 31 107 67;
+  --mg-line: var(--mg-rule);
+  --mg-border: var(--mg-control);
 }
 
 .event-print-header { align-items: flex-start; border-bottom: 3px solid #17385f; display: flex; gap: 16px; justify-content: space-between; margin-bottom: 24px; padding-bottom: 14px; }
@@ -29,13 +50,13 @@
 .event-print-kicker, .event-print-kind { color: #17385f; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .event-print-kind { margin-top: 9px !important; }
 .event-print-section { margin: 0 0 26px; }
-.event-print-section h2 { background: #17385f; color: white; font: 700 20px/1.15 var(--mg-font-display); margin: 0; padding: 8px 10px; }
+.event-print-section h2 { background: #17385f; color: white; font: 700 20px/1.15 var(--mg-font-display); margin: 0; padding: 8px 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .event-print-block { break-inside: avoid; margin: 12px 0 18px; }
 .event-print-block h3 { border-bottom: 2px solid #17385f; color: #17385f; display: flex; font-size: 16px; justify-content: space-between; margin: 0; padding: 5px 2px; }
 .event-print-table-wrap { max-width: 100%; overflow-x: auto; }
 .event-print-page table { border-collapse: collapse; font-size: 13px; min-width: 620px; width: 100%; }
 .event-print-page th, .event-print-page td { border: 1px solid #9ca3af; padding: 6px 7px; text-align: left; vertical-align: top; }
-.event-print-page th { background: #e8eef5; color: #17385f; font-weight: 700; }
+.event-print-page th { background: #e8eef5; color: #17385f; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .event-print-note { font-size: 12px; margin: 5px 0; }
 .event-print-cell { width: 70px; }
 .event-print-empty { border: 1px solid #9ca3af; padding: 12px; }

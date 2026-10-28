@@ -411,8 +411,9 @@ button.sc-done-name { background: none; border: 0; padding: 0; text-align: left;
 /* Printing the heat: only the print sheet shows. */
 .sc-print { display: none; }
 @media print {
-  body * { visibility: hidden !important; }
-  .sc-print, .sc-print * { visibility: visible !important; }
+  /* Only while the heat print sheet is on the page: this file stays loaded after leaving Scoring. */
+  body:has(.sc-print) * { visibility: hidden !important; }
+  body:has(.sc-print) .sc-print, body:has(.sc-print) .sc-print * { visibility: visible !important; }
   .sc-print { display: block; position: absolute; left: 0; top: 0; width: 100%; color: #000; background: #fff; font: 12pt/1.3 var(--mg-font); }
   .sc-print h2 { margin: 0 0 8pt; font: 700 20pt/1 var(--mg-font-display); }
   .sc-print table { width: 100%; border-collapse: collapse; }

@@ -225,6 +225,7 @@ export const competition = {
   'competition.rules.howRidden': 'How the race is ridden',
   'competition.rules.penalties': 'Rules & penalties',
   'competition.rules.loadingRace': 'Loading race rules…',
+  'competition.posters.qrOnPrint': 'QR codes are created when you print',
   'competition.rules.openPage': 'Open race rulebook page',
   'competition.rules.pairsVersion': 'Pairs version',
   'competition.rules.individualVersion': 'Individual version',

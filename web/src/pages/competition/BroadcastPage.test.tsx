@@ -358,6 +358,8 @@ it('supports microphone selection, wind filter, quality presets, camera zoom, tr
   state.lastStreamCommand = { streamId: 1, arenaName: 'Main Arena', command: 'setZoom', value: '3', issuedAt: '2026-10-24T12:05:00Z' };
   rerender(<MemoryRouter initialEntries={['/competitions/1/broadcast']}><BroadcastPage /></MemoryRouter>);
   expect(publisher.setZoom).toHaveBeenLastCalledWith(3);
+  // The on-screen controls follow the remote command rather than drifting.
+  expect(screen.getByRole('button', { name: 'Camera zoom 3x' })).toHaveAttribute('aria-pressed', 'true');
 
   state.lastStreamCommand = { streamId: 1, arenaName: 'Main Arena', command: 'setQualityPreset', value: '360p', issuedAt: '2026-10-24T12:06:00Z' };
   rerender(<MemoryRouter initialEntries={['/competitions/1/broadcast']}><BroadcastPage /></MemoryRouter>);

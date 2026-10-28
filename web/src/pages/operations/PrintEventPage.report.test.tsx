@@ -6,7 +6,7 @@ import { api } from '../../api';
 import { downloadCsv } from '../../lib/csv';
 import PrintEventPage from './PrintEventPage';
 
-vi.mock('../../api', () => ({ api: { get: vi.fn() } }));
+vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
 vi.mock('../../lib/csv', async (importOriginal) => ({ ...(await importOriginal<typeof import('../../lib/csv')>()), downloadCsv: vi.fn() }));
 
 const competition = { id: 12, name: 'Spring event', location: 'Field Lane', startDate: '2031-05-04T09:00:00Z', endDate: null };
@@ -18,7 +18,7 @@ const draw = {
     { sessionId: 6, sectionName: 'Under 14', sessionName: 'Session 1', arenaName: null, orderIndex: 2, heats: [heat(2, 'Heat 2', [[2, 'Elm B']])] },
   ],
 };
-const sheetHeat = (heatId: number, sectionName: string, teamName: string) => ({ heatId, label: 'Heat', sectionName, sessionName: 'Session 1', scheduledStart: null, races: [{ raceId: heatId, name: 'Race 1', teams: [{ teamId: heatId, teamName, placing: null, eliminated: false, points: null, lane: 1 }] }] });
+const sheetHeat = (heatId: number, sectionName: string, teamName: string) => ({ heatId, label: 'Heat', sectionName, sessionName: 'Session 1', sessionId: heatId === 1 ? 5 : 6, scheduledStart: null, races: [{ raceId: heatId, name: 'Race 1', teams: [{ teamId: heatId, teamName, placing: null, eliminated: false, points: null, lane: 1 }] }] });
 
 function show(path: string) {
   return render(<MemoryRouter initialEntries={[path]}><Routes><Route path="/event-tools/:competitionId/print/:view" element={<PrintEventPage />} /></Routes></MemoryRouter>);
@@ -128,5 +128,67 @@ describe('PrintEventPage sponsor report', () => {
     });
     show('/event-tools/12/print/sponsor-report');
     expect(await screen.findByText('No sponsors have been added to this event yet.')).toBeInTheDocument();
+  });
+});
+
+describe('PrintEventPage official results pack', () => {
+  const results = { competition, isProvisional: false, sections: [] };
+  beforeEach(() => {
+    vi.mocked(api.get).mockReset();
+    vi.mocked(downloadCsv).mockReset();
+  });
+
+  it('fetches the competition for referee cards when it has not been loaded', async () => {
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (url.endsWith('/print/draw')) return { data: draw };
+      if (url.endsWith('/print/results')) return { data: results };
+      if (url.endsWith('/print/score-sheets')) return { data: { competition, heats: [] } };
+      if (url === '/competitions/12') return { data: { id: 12, name: 'Spring event', teams: [], sections: [] } };
+      throw new Error(`unexpected ${url}`);
+    });
+    show('/event-tools/12/print/draw');
+    await screen.findByText('Oak A');
+    await userEvent.setup().click(screen.getByRole('button', { name: /Official results pack/ }));
+    await waitFor(() => expect(downloadCsv).toHaveBeenCalled());
+    expect(api.get).toHaveBeenCalledWith('/competitions/12');
+  });
+
+  it('tells the organiser when the pack cannot be built', async () => {
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (url.endsWith('/print/draw')) return { data: draw };
+      throw { response: { data: { detail: 'No luck' } } };
+    });
+    show('/event-tools/12/print/draw');
+    await screen.findByText('Oak A');
+    await userEvent.setup().click(screen.getByRole('button', { name: /Official results pack/ }));
+    expect(await screen.findByText('No luck')).toBeInTheDocument();
+    expect(downloadCsv).not.toHaveBeenCalled();
+  });
+});
+
+describe('PrintEventPage staff QR posters', () => {
+  const old = { id: 4, label: 'Ring 1', arenaName: 'Main', createdAt: '2031-01-01T00:00:00Z', expiresAt: '2099-01-01T00:00:00Z', lastUsedAt: null, revokedAt: null };
+  beforeEach(() => {
+    vi.mocked(api.get).mockReset();
+    vi.mocked(api.post).mockReset();
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (url.endsWith('/scorer-links')) return { data: { arenas: [], defaultExpiresAt: '', links: [old] } };
+      return { data: { id: 12, name: 'Spring event', startDate: '2031-05-04T09:00:00Z', endDate: null, location: null } };
+    });
+    vi.mocked(api.post).mockResolvedValue({ data: { link: { ...old, id: 9 }, token: 'mgs_tok', path: '' } });
+    window.print = vi.fn();
+  });
+
+  it('makes no links on load, then mints them and prints when Print is pressed', async () => {
+    show('/event-tools/12/print/posters');
+    expect(await screen.findByText('Ring 1')).toBeInTheDocument();
+    expect(screen.getByText('QR codes are created when you print')).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+    await userEvent.setup().click(screen.getByRole('button', { name: /^Print$/ }));
+    await waitFor(() => expect(window.print).toHaveBeenCalledTimes(1));
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.post).toHaveBeenCalledWith('/competitions/12/scorer-links', expect.objectContaining({ label: 'Ring 1', arenaName: 'Main' }));
+    expect(screen.queryByText('QR codes are created when you print')).not.toBeInTheDocument();
+    expect(screen.getByText(/\/score#t=mgs_tok/)).toBeInTheDocument();
   });
 });

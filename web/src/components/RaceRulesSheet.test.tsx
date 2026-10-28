@@ -17,8 +17,8 @@ function deferred<T>() {
   const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
   return { promise, resolve, reject };
 }
-const sheet = (raceName: string | null, open = true, onClose = vi.fn()) =>
-  <MemoryRouter><RaceRulesSheet raceName={raceName} open={open} onClose={onClose} /></MemoryRouter>;
+const sheet = (raceName: string | null, open = true, onClose = vi.fn(), competitionId?: number) =>
+  <MemoryRouter><RaceRulesSheet raceName={raceName} open={open} onClose={onClose} competitionId={competitionId} /></MemoryRouter>;
 
 beforeEach(() => { clearRaceDetailCache(); vi.mocked(api.get).mockReset(); });
 
@@ -174,7 +174,7 @@ describe('race rules sheet loading and closing', () => {
   it('keeps inside taps open, closes on backdrop/button/page-link, and encodes the race name in the link', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { ...template('Fake race & poles'), summary: 'Fake setup summary' } });
     const close = vi.fn();
-    render(sheet('Fake race & poles', true, close));
+    render(sheet('Fake race & poles', true, close, 9));
     await screen.findByText('Fake setup summary');
     const dialog = screen.getByRole('dialog');
     fireEvent.pointerDown(within(dialog).getByRole('heading'));
@@ -184,8 +184,15 @@ describe('race rules sheet loading and closing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close rules' }));
     expect(close).toHaveBeenCalledTimes(2);
     const link = screen.getByRole('link', { name: 'Open race rulebook page' });
-    expect(link).toHaveAttribute('href', '/rulebooks?race=Fake%20race%20%26%20poles');
+    expect(link).toHaveAttribute('href', '/competitions/9/rulebooks?race=Fake%20race%20%26%20poles');
     fireEvent.click(link);
     expect(close).toHaveBeenCalledTimes(3);
+  });
+
+  it('leaves out the full-page link when no competition is in context', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { ...template('Fake race'), summary: 'Plain summary' } });
+    render(sheet('Fake race', true));
+    await screen.findByText('Plain summary');
+    expect(screen.queryByRole('link', { name: 'Open race rulebook page' })).not.toBeInTheDocument();
   });
 });
