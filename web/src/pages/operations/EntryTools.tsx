@@ -14,6 +14,7 @@ import { RefineList, RefineSheet } from '../refine/Refine';
 import { BacsMatchSheet, ClubInvoicesSheet, RemindUnpaidSheet } from './EntryMoneySheets';
 import { dispositionLabel, entriesSummaryText, fetchShopOrders } from './entryLogic';
 import './entryTools.css';
+import { clubLabel } from '../../lib/clubName';
 
 type Tool = 'bacs' | 'remind' | 'clubs' | 'arrivals' | 'refunds' | 'treasurer' | 'share';
 
@@ -94,7 +95,7 @@ function ArrivalListSheet({ competition, signups, onClose }: { competition: Comp
               <div key={s.id} className="rf-row">
                 <span className="rf-grow">
                   <span className="rf-t1">{s.fullName}</span>
-                  <span className="rf-t2">{(s.stablingClubOrTeam || s.ponyClubName || s.teamName || 'Unaffiliated').trim()} · {displaySectionName(s.sectionName)}</span>
+                  <span className="rf-t2">{[clubLabel(s.stablingClubOrTeam) || clubLabel(s.ponyClubName) || clubLabel(s.teamName), displaySectionName(s.sectionName)].filter(Boolean).join(' · ')}</span>
                   <span className="rf-t2">{arrivalWindowLabel(s.arrivalWindow)} · {s.vehicleRegistration?.trim() || 'No vehicle given'} · {s.stablesCount ?? 0} {(s.stablesCount ?? 0) === 1 ? 'stable' : 'stables'}</span>
                 </span>
                 <span className={`rf-st ${s.status === 1 ? 'rf-ok' : 'rf-warn'}`}>{s.status === 1 ? paidWord(competition.isDemo) : 'Pending payment'}</span>

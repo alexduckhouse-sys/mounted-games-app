@@ -79,7 +79,7 @@ describe('stablingPass', () => {
       createdAt: '2026-06-01T12:00:00Z',
       stablesCount: 2,
     });
-    expect(unallocatedWithStables.clubOrTeamName).toBe('Unaffiliated');
+    expect(unallocatedWithStables.clubOrTeamName).toBe('');
     expect(unallocatedWithStables.stableAssignment).toBe('To be allocated on arrival');
 
     const fromSection = buildLorryStablingPassFromSectionSignup(
