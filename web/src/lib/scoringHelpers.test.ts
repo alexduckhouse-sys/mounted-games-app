@@ -240,6 +240,19 @@ describe('undo', () => {
     expect(out.outbox).toContain(other);
   });
 
+  it('reverses a save that is mid-flight after it lands, instead of just deleting it', () => {
+    const prior = [{ teamId: 2, place: 1, eliminated: false }, { teamId: 1, place: 2, eliminated: false }];
+    const sent = queued('flying', { expected: prior });
+    const out = undoSave([sent], entry(sent), new Date('2026-10-23T11:00:00Z'), (q) => q.saveId === 'flying');
+    expect(out.how).toBe('corrected');
+    expect(out.outbox).toHaveLength(1);
+    const correction = out.outbox[0];
+    expect(correction.saveId).not.toBe('flying');
+    expect(correction.places).toEqual(prior);
+    // Compared against what was there before, so settling the in-flight save moves it on to the accepted results.
+    expect(correction.expected).toEqual(prior);
+  });
+
   it('reopens the race for correction when a sent save had nothing before it', () => {
     const sent = queued('first', { expected: [] });
     const out = undoSave([], entry(sent));

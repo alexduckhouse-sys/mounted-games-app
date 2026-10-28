@@ -491,6 +491,57 @@ public class SessionsCrudTests : IClassFixture<ApiFactory>
         return (a, h1, h2, new[] { r1[0], r2[0] });
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CancelRace_Returns409AndKeepsTheRace_WhenItHasRecordedOrSignedOffResults(bool signedOffOnly)
+    {
+        var (a, h1, _, races) = await ScoredTwoHeatSessionAsync();
+        if (signedOffOnly)
+        {
+            await _f.WithDbAsync(async db =>
+            {
+                db.Results.RemoveRange(db.Results.Where(r => r.RaceId == races[0]));
+                db.Add(new RaceScoreState { RaceId = races[0], Revision = 1, IsSignedOff = true, SignedOffAt = DateTime.UtcNow });
+                await db.SaveChangesAsync();
+            });
+        }
+        var admin = await _f.AdminAsync();
+
+        var r = await admin.DeleteAsync(Url(a, $"/{a.SessionId}/races/{races[0]}"));
+
+        Assert.Equal(HttpStatusCode.Conflict, r.StatusCode);
+        Assert.Contains("can't be cancelled", (await r.ReadAsync<System.Text.Json.JsonElement>()).GetProperty("message").GetString());
+        Assert.True(await _f.InDbAsync(db => db.Races.AnyAsync(x => x.Id == races[0])));
+    }
+
+    [Fact]
+    public async Task UpdateSessionRaces_ReopeningAFinishedSession_ClearsTheProvisionalAndOfficialMarks()
+    {
+        var arena = await _f.CreateArenaAsync();
+        var admin = await _f.AdminAsync();
+        var heat = await _f.AddHeatAsync(arena.SessionId, arena.TeamIds, raceCount: 1);
+        await _f.WithDbAsync(async db =>
+        {
+            (await db.Races.FindAsync(heat.RaceIds[0]))!.IsComplete = true;
+            var session = await db.Sessions.FindAsync(arena.SessionId);
+            session!.Status = SessionStatus.Finished;
+            session.FinishedAt = DateTime.UtcNow;
+            session.ProvisionalUntil = DateTime.UtcNow.AddMinutes(15);
+            session.OfficialConfirmedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+        });
+        var name = await _f.InDbAsync(db => db.Races.Where(r => r.Id == heat.RaceIds[0]).Select(r => r.Name).SingleAsync());
+
+        var res = await admin.PutAsJsonAsync(Url(arena, $"/{arena.SessionId}/races"), new { raceNames = new[] { name, "Extra game" } });
+
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var s = await _f.InDbAsync(db => db.Sessions.AsNoTracking().SingleAsync(x => x.Id == arena.SessionId));
+        Assert.Equal(SessionStatus.InArena, s.Status);
+        Assert.Null(s.ProvisionalUntil);
+        Assert.Null(s.OfficialConfirmedAt);
+    }
+
     [Fact]
     public async Task UpdateHeatAssignments_KeepsScoresInHeatsThatDidNotChange()
     {

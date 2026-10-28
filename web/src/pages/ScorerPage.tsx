@@ -24,7 +24,7 @@ import { dropDrafts, pushUndo, undoSave, type UndoEntry } from '../lib/scoreUndo
 import { clearDeadHeat, markDeadHeat, overridePoints, nextRaceToScore, placesFromResults, tapTeam, toggleEliminated } from '../lib/raceScoring';
 import { inLaneOrder } from '../lib/laneOrder';
 import { displayLaneFor, lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './competition/laneRules';
-import { HEAT_SAVED, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
+import { HEAT_SAVED, isSaveInFlight, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
 import { browserPublisherDependencies, createStreamPublisher, type PublisherSnapshot } from '../live/streamPublisher';
 import { createReplayBuffer, getSavedReplays, type ReplayBufferHandle, type SavedReplayClip } from '../live/replayBuffer';
 import { ReplayInspector, SavedReplaysButton } from '../components/stream/ReplayInspector';
@@ -119,7 +119,15 @@ export function ScorerPage() {
     document.addEventListener('visibilitychange', refresh);
     const onSaved = (event: Event) => {
       const detail = (event as CustomEvent<{ sessionId: number; heat: Heat }>).detail;
-      if (detail?.heat) setSession((current) => current ? withHeat(current, detail.sessionId, detail.heat) : current);
+      if (detail?.heat) {
+        setSession((current) => {
+          if (!current) return current;
+          const next = withHeat(current, detail.sessionId, detail.heat);
+          // Keep the saved copy in step, so a reload while offline doesn't bring back the old results.
+          writeSavedScorerSession(next);
+          return next;
+        });
+      }
     };
     window.addEventListener(HEAT_SAVED, onSaved);
     return () => {
@@ -735,7 +743,9 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
   }
 
   // Correcting a scored race starts from what's there.
-  const seeded = activeRace?.isComplete ? placesFromResults(activeRace) : [];
+  // A save still waiting on this phone counts: re-opening that race shows what was queued, not blank placings.
+  const seedRace = viewRaces.find((r) => r.id === activeRace?.id) ?? activeRace;
+  const seeded = seedRace?.isComplete ? placesFromResults(seedRace) : [];
   const shown = pending ?? seeded;
 
   function change(next: PendingPlace[]) {
@@ -820,7 +830,7 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
     if (lastUndo.kind === 'mark') return;
     let restore: PendingPlace[] = [];
     updateOutbox((list) => {
-      const result = undoSave(list, lastUndo);
+      const result = undoSave(list, lastUndo, new Date(), isSaveInFlight);
       restore = result.restore;
       return result.outbox;
     });

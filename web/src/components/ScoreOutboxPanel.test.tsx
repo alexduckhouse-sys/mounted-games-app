@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
@@ -81,6 +81,23 @@ describe('ScoreOutboxPanel', () => {
     expect(await screen.findByText('Heat 1 · Barrel Race sent')).toBeInTheDocument();
     expect(screen.queryByText(/saved on this phone/)).toBeNull();
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument(), { timeout: TOAST_MS + 1000 });
+  });
+
+  it('holds back the saved-on-this-phone notice while a fresh online save is still going out', () => {
+    seed(item(1, { queuedAt: new Date().toISOString() }));
+    post.mockReturnValue(new Promise(() => undefined) as never);
+    render(<ScoreOutboxPanel competitionId={1} />);
+    expect(screen.queryByText(/saved on this phone/)).toBeNull();
+  });
+
+  it('does not say anything was sent when a waiting save is removed without being sent', async () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    seed(item(1));
+    render(<ScoreOutboxPanel competitionId={1} />);
+    expect(screen.getByRole('status')).toHaveTextContent('saved on this phone');
+    act(() => { localStorage.removeItem(KEY); window.dispatchEvent(new CustomEvent('mg:outbox')); });
+    await new Promise((r) => setTimeout(r, 120));
+    expect(screen.queryByText(/sent/)).toBeNull();
   });
 
   describe('when another phone scored the race differently', () => {

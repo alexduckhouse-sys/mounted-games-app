@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { axiosError, heat } from '../test/factories';
 import type { QueuedScore } from './scoreOutbox';
-import { flushOutbox, inFlightGraceRemainingMs, IN_FLIGHT_GRACE_MS } from './useScoreOutbox';
+import { flushOutbox, inFlightGraceRemainingMs, IN_FLIGHT_GRACE_MS, isSaveInFlight, SCORE_SENT } from './useScoreOutbox';
 
 vi.mock('../api', () => ({ api: { post: vi.fn() } }));
 vi.mock('./scorerLink', () => ({ scorerApi: { post: vi.fn() } }));
@@ -48,5 +48,25 @@ describe('initial score-save grace period', () => {
     await flushOutbox();
     expect(localStorage.getItem('mg.outbox.scores')).toBeNull();
     expect(inFlightGraceRemainingMs(item, now)).toBe(IN_FLIGHT_GRACE_MS);
+  });
+});
+
+describe('in-flight tracking and the sent event', () => {
+  it('knows a save is in flight only while its POST is pending, and announces it once accepted', async () => {
+    const item = queued({ raceId: 93, saveId: 'test-inflight' });
+    localStorage.setItem('mg.outbox.scores', JSON.stringify([item]));
+    let release!: (v: { data: ReturnType<typeof heat> }) => void;
+    vi.mocked(api.post).mockImplementationOnce(() => new Promise((resolve) => { release = resolve as never; }));
+    const sent = vi.fn();
+    window.addEventListener(SCORE_SENT, sent);
+    const flushing = flushOutbox();
+    expect(isSaveInFlight(item)).toBe(true);
+    expect(sent).not.toHaveBeenCalled();
+    release({ data: heat(5) });
+    await flushing;
+    window.removeEventListener(SCORE_SENT, sent);
+    expect(isSaveInFlight(item)).toBe(false);
+    expect(sent).toHaveBeenCalledTimes(1);
+    expect((sent.mock.calls[0][0] as CustomEvent).detail).toEqual({ competitionId: 1, label: 'Test race' });
   });
 });

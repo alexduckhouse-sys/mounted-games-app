@@ -939,11 +939,21 @@ public class SessionsController : ControllerBase
         if (targetRace is null || targetHeat is null) return NotFound();
 
         var targetOrder = targetRace.OrderIndex;
+        List<Race> RacesToRemove(Heat heat) => targetHeat.RaceRoundId.HasValue && heat.RaceRoundId == targetHeat.RaceRoundId
+            ? heat.Races.ToList()
+            : heat.Races.Where(r => r.OrderIndex == targetOrder).ToList();
+
+        // Cancelling deletes the race and its results, so refuse when any affected race has scores on record.
+        var affected = s.Heats.SelectMany(RacesToRemove).ToList();
+        var affectedIds = affected.Select(r => r.Id).ToList();
+        var hasScoreState = await _db.Set<RaceScoreState>().AsNoTracking()
+            .AnyAsync(x => affectedIds.Contains(x.RaceId) && (x.IsSignedOff || x.Revision > 0));
+        if (hasScoreState || affected.Any(r => r.Results.Count > 0))
+            return Conflict(new { message = "This race has recorded or signed-off results, so it can't be cancelled. Clear its results first." });
+
         foreach (var heat in s.Heats.ToList())
         {
-            var toRemove = targetHeat.RaceRoundId.HasValue && heat.RaceRoundId == targetHeat.RaceRoundId
-                ? heat.Races.ToList()
-                : heat.Races.Where(r => r.OrderIndex == targetOrder).ToList();
+            var toRemove = RacesToRemove(heat);
             foreach (var r in toRemove)
             {
                 _db.Results.RemoveRange(r.Results);
@@ -1296,6 +1306,8 @@ public class SessionsController : ControllerBase
         {
             s.Status = SessionStatus.InArena;
             s.FinishedAt = null;
+            s.ProvisionalUntil = null;
+            s.OfficialConfirmedAt = null;
         }
 
         await _db.SaveChangesAsync();
