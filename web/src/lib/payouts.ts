@@ -1,3 +1,4 @@
+import type { MessageKey } from '../i18n/en/index.ts';
 import { tr } from '../i18n/translate.ts';
 import type { ClubPayouts, PayoutBusinessType, PayoutRegion, PayoutSchedule } from '../types';
 
@@ -8,26 +9,20 @@ import type { ClubPayouts, PayoutBusinessType, PayoutRegion, PayoutSchedule } fr
 
 export const BULLETS = '••••';
 
-export const BUSINESS_TYPES: { value: PayoutBusinessType; label: string; hint: string }[] = [
-  { value: 0, label: 'Individual or sole trader', hint: 'One person, in their own name' },
-  { value: 1, label: 'Club or association', hint: 'A pony club or similar group' },
-  { value: 2, label: 'Registered charity', hint: 'Has a charity number' },
-  { value: 3, label: 'Company', hint: 'Has a company number' },
+export const BUSINESS_TYPES: PayoutBusinessType[] = [0, 1, 2, 3];
+export const REGIONS: { value: PayoutRegion; currency: string }[] = [
+  { value: 0, currency: 'GBP' },
+  { value: 1, currency: 'EUR' },
 ];
+export const SCHEDULES: PayoutSchedule[] = [0, 1, 2];
 
-export const REGIONS: { value: PayoutRegion; label: string; currency: string }[] = [
-  { value: 0, label: 'United Kingdom', currency: 'GBP' },
-  { value: 1, label: 'Ireland or the EU', currency: 'EUR' },
-];
-
-export const SCHEDULES: { value: PayoutSchedule; label: string; hint: string }[] = [
-  { value: 0, label: 'Daily', hint: 'Every working day' },
-  { value: 1, label: 'Weekly', hint: 'Once a week' },
-  { value: 2, label: 'After each event', hint: 'When an event finishes' },
-];
+export const businessTypeLabel = (type: PayoutBusinessType) => tr(`acct.pay.type.${type}` as MessageKey);
+export const businessTypeHint = (type: PayoutBusinessType) => tr(`acct.pay.type.${type}.hint` as MessageKey);
+export const regionLabel = (region: PayoutRegion) => tr(`acct.pay.region.${region}` as MessageKey);
+export const scheduleLabel = (schedule: PayoutSchedule) => tr(`acct.pay.schedule.${schedule}` as MessageKey);
 
 export const needsRegistrationNumber = (type: number | null) => type === 2 || type === 3;
-export const registrationLabel = (type: number | null) => (type === 2 ? 'Charity number' : 'Company number');
+export const registrationLabel = (type: number | null) => (type === 2 ? tr('acct.pay.charityNumber') : tr('acct.pay.companyNumber'));
 
 /** Keeps digits only, up to `max`. Used for number boxes so nothing like "e" or "-" gets in. */
 export function digitsOnly(raw: string, max: number): string {
@@ -87,42 +82,42 @@ export function bankLine(bank: ClubPayouts['bank']): string {
 
 export type Problems = Record<string, string>;
 
-export const validateEmail = (v: string) => (v.length <= 200 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) ? null : 'Enter a valid email address.');
+export const validateEmail = (v: string) => (v.length <= 200 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) ? null : tr('acct.pay.badEmail'));
 
 export function validatePhone(v: string): string | null {
   const digits = (v.match(/\d/g) ?? []).length;
-  return v.length <= 30 && /^\+?[0-9 ()-]+$/.test(v) && digits >= 7 && digits <= 15 ? null : 'Enter a valid phone number.';
+  return v.length <= 30 && /^\+?[0-9 ()-]+$/.test(v) && digits >= 7 && digits <= 15 ? null : tr('acct.pay.badPhone');
 }
 
 export function validatePostcode(v: string, region: PayoutRegion): string | null {
-  if (region === 0) return /^[A-Z]{1,2}\d[A-Z\d]? ?\d[A-Z]{2}$/.test(v.trim().replace(/ +/g, ' ').toUpperCase()) ? null : 'Enter a UK postcode, like SW1A 1AA.';
-  return /^[A-Za-z0-9 -]{3,10}$/.test(v) ? null : 'Enter a valid postcode.';
+  if (region === 0) return /^[A-Z]{1,2}\d[A-Z\d]? ?\d[A-Z]{2}$/.test(v.trim().replace(/ +/g, ' ').toUpperCase()) ? null : tr('acct.pay.badPostcodeUk');
+  return /^[A-Za-z0-9 -]{3,10}$/.test(v) ? null : tr('acct.pay.badPostcode');
 }
 
-export const validateRegistrationNumber = (v: string) => (/^[A-Za-z0-9]{5,12}$/.test(v.replace(/ /g, '')) ? null : 'Use 5 to 12 letters or numbers.');
+export const validateRegistrationNumber = (v: string) => (/^[A-Za-z0-9]{5,12}$/.test(v.replace(/ /g, '')) ? null : tr('acct.pay.badRegNumber'));
 
 export function validateVat(v: string, region: PayoutRegion): string | null {
   const t = v.replace(/ /g, '').toUpperCase();
   const ok = region === 0 ? /^(GB)?\d{9}(\d{3})?$/.test(t) : /^[A-Z]{2}[A-Z0-9]{7,12}$/.test(t);
-  return ok ? null : 'Enter a valid VAT number, like GB123456789.';
+  return ok ? null : tr('acct.pay.badVat');
 }
 
 export function validateDescriptor(v: string): string | null {
-  return /^[A-Za-z0-9 ]{5,22}$/.test(v) && /[A-Za-z]/.test(v) ? null : 'Use 5 to 22 letters, numbers or spaces, with at least one letter.';
+  return /^[A-Za-z0-9 ]{5,22}$/.test(v) && /[A-Za-z]/.test(v) ? null : tr('acct.pay.badDescriptor');
 }
 
 /** `dob` is YYYY-MM-DD; `today` is a Date (passed in so tests can fix it). */
 export function validateDateOfBirth(dob: string, today: Date): string | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dob);
-  if (!m) return 'Enter their date of birth.';
+  if (!m) return tr('acct.pay.dobMissing');
   const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
   const date = new Date(Date.UTC(y, mo - 1, d));
-  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== mo - 1 || date.getUTCDate() !== d) return 'Enter a real date.';
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== mo - 1 || date.getUTCDate() !== d) return tr('acct.pay.dobNotReal');
   const t = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
   const eighteen = Date.UTC(today.getFullYear() - 18, today.getMonth(), today.getDate());
   const oldest = Date.UTC(today.getFullYear() - 120, today.getMonth(), today.getDate());
-  if (date.getTime() > Math.min(t, eighteen)) return 'They must be at least 18.';
-  return date.getTime() < oldest ? 'Check the date of birth.' : null;
+  if (date.getTime() > Math.min(t, eighteen)) return tr('acct.pay.dobTooYoung');
+  return date.getTime() < oldest ? tr('acct.pay.dobCheck') : null;
 }
 
 /** The text fields of the details steps, as the page holds them while editing. */
@@ -157,16 +152,16 @@ const required = (p: Problems, key: string, value: string, message: string, chec
 /** Problems with one of the details steps (1, 2, 3 or 5), keyed by the same names the API uses. */
 export function stepProblems(step: 1 | 2 | 3 | 5, f: PayoutForm, today: Date): Problems {
   const p: Problems = {};
-  if (step === 1 && f.businessType == null) p.businessType = 'Pick who is being paid.';
+  if (step === 1 && f.businessType == null) p.businessType = tr('acct.pay.pickType');
   if (step === 2) {
-    required(p, 'legalName', f.legalName, 'Enter the legal name.');
-    required(p, 'addressLine1', f.addressLine1, 'Enter the first line of the address.');
-    required(p, 'city', f.city, 'Enter the town or city.');
-    required(p, 'postcode', f.postcode, 'Enter the postcode.', (v) => validatePostcode(v, f.region));
-    required(p, 'contactEmail', f.contactEmail, 'Enter a contact email.', validateEmail);
-    required(p, 'contactPhone', f.contactPhone, 'Enter a contact phone number.', validatePhone);
+    required(p, 'legalName', f.legalName, tr('acct.pay.needLegalName'));
+    required(p, 'addressLine1', f.addressLine1, tr('acct.pay.needAddress1'));
+    required(p, 'city', f.city, tr('acct.pay.needCity'));
+    required(p, 'postcode', f.postcode, tr('acct.pay.needPostcode'), (v) => validatePostcode(v, f.region));
+    required(p, 'contactEmail', f.contactEmail, tr('acct.pay.needEmail'), validateEmail);
+    required(p, 'contactPhone', f.contactPhone, tr('acct.pay.needPhone'), validatePhone);
     if (needsRegistrationNumber(f.businessType)) {
-      required(p, 'registrationNumber', f.registrationNumber, `Enter the ${registrationLabel(f.businessType).toLowerCase()}.`, validateRegistrationNumber);
+      required(p, 'registrationNumber', f.registrationNumber, tr(f.businessType === 2 ? 'acct.pay.enterCharity' : 'acct.pay.enterCompany'), validateRegistrationNumber);
     } else if (f.registrationNumber.trim()) {
       const bad = validateRegistrationNumber(f.registrationNumber.trim());
       if (bad) p.registrationNumber = bad;
@@ -177,11 +172,11 @@ export function stepProblems(step: 1 | 2 | 3 | 5, f: PayoutForm, today: Date): P
     }
   }
   if (step === 3) {
-    required(p, 'personFullName', f.personFullName, "Enter the responsible person's full name.");
+    required(p, 'personFullName', f.personFullName, tr('acct.pay.needPerson'));
     const bad = validateDateOfBirth(f.personDateOfBirth, today);
     if (bad) p.personDateOfBirth = bad;
   }
-  if (step === 5) required(p, 'statementDescriptor', f.statementDescriptor, 'Enter a statement descriptor.', validateDescriptor);
+  if (step === 5) required(p, 'statementDescriptor', f.statementDescriptor, tr('acct.pay.needDescriptor'), validateDescriptor);
   return p;
 }
 
@@ -191,27 +186,26 @@ export const emptyBank: BankForm = { accountHolder: '', sortCode: '', accountNum
 /** Problems with the bank form for the club's region. Never includes the numbers themselves. */
 export function bankProblems(f: BankForm, region: PayoutRegion): Problems {
   const p: Problems = {};
-  if (!f.accountHolder.trim()) p.accountHolder = 'Enter the name on the account.';
-  else if (f.accountHolder.trim().length > 150) p.accountHolder = 'Use 150 characters or fewer.';
+  if (!f.accountHolder.trim()) p.accountHolder = tr('acct.pay.needHolder');
+  else if (f.accountHolder.trim().length > 150) p.accountHolder = tr('acct.pay.holderLong');
   if (region === 0) {
-    if (!normaliseSortCode(f.sortCode)) p.sortCode = 'A sort code has 6 digits.';
-    if (!normaliseAccountNumber(f.accountNumber)) p.accountNumber = 'An account number has 8 digits.';
+    if (!normaliseSortCode(f.sortCode)) p.sortCode = tr('acct.pay.badSortCode');
+    if (!normaliseAccountNumber(f.accountNumber)) p.accountNumber = tr('acct.pay.badAccountNumber');
   } else {
-    if (!normaliseIban(f.iban)) p.iban = "That IBAN doesn't look right. Check it and try again.";
-    if (f.bic.trim() && !isValidBic(f.bic)) p.bic = 'A BIC has 8 or 11 letters and numbers.';
+    if (!normaliseIban(f.iban)) p.iban = tr('acct.pay.badIban');
+    if (f.bic.trim() && !isValidBic(f.bic)) p.bic = tr('acct.pay.badBic');
   }
   return p;
 }
 
 /** What a club still has to add, in the words the Payouts page uses. Each group of keys is one thing. */
-const MISSING_THINGS: { keys: string[]; noun: string }[] = [
-  { keys: ['businessType'], noun: 'who gets paid' },
-  { keys: ['legalName', 'tradingName', 'addressLine1', 'addressLine2', 'city', 'postcode', 'contactEmail', 'contactPhone', 'registrationNumber', 'vatNumber'], noun: 'the legal name and address' },
-  { keys: ['personFullName', 'personDateOfBirth'], noun: 'the responsible person' },
-  { keys: ['bank', 'accountHolder', 'sortCode', 'accountNumber', 'iban', 'bic'], noun: 'the club’s bank account' },
-  { keys: ['statementDescriptor', 'schedule'], noun: 'the name on statements' },
+const MISSING_THINGS: { keys: string[]; noun: MessageKey }[] = [
+  { keys: ['businessType'], noun: 'acct.pay.thing.type' },
+  { keys: ['legalName', 'tradingName', 'addressLine1', 'addressLine2', 'city', 'postcode', 'contactEmail', 'contactPhone', 'registrationNumber', 'vatNumber'], noun: 'acct.pay.thing.legal' },
+  { keys: ['personFullName', 'personDateOfBirth'], noun: 'acct.pay.thing.person' },
+  { keys: ['bank', 'accountHolder', 'sortCode', 'accountNumber', 'iban', 'bic'], noun: 'acct.pay.thing.bank' },
+  { keys: ['statementDescriptor', 'schedule'], noun: 'acct.pay.thing.statement' },
 ];
-const COUNT_WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five'];
 
 /**
  * The status line at the top of Payouts: "One thing left: add the club’s bank account." while something is missing,
@@ -220,12 +214,13 @@ const COUNT_WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five'];
 export function payoutStatusLine(p: Pick<ClubPayouts, 'status' | 'missing' | 'bank'>): { text: string; ready: boolean } {
   if (p.status === 2) {
     const last4 = (p.bank?.maskedAccount ?? '').replace(/\D/g, '').slice(-4);
-    return { ready: true, text: `Ready. Money from entries goes to ${last4 ? `account ending ${last4}` : 'the club’s bank account'}.` };
+    return { ready: true, text: tr('acct.pay.ready', { where: last4 ? tr('acct.pay.endingIn', { last4 }) : tr('acct.pay.clubAccount') }) };
   }
-  const things = MISSING_THINGS.filter((thing) => thing.keys.some((key) => p.missing.includes(key))).map((thing) => thing.noun);
-  if (things.length === 0) return { ready: false, text: 'Nearly there. Finishing set-up…' };
-  const list = things.length === 1 ? things[0] : `${things.slice(0, -1).join(', ')} and ${things[things.length - 1]}`;
-  return { ready: false, text: `${COUNT_WORDS[things.length] ?? things.length} ${things.length === 1 ? 'thing' : 'things'} left: add ${list}.` };
+  const things = MISSING_THINGS.filter((thing) => thing.keys.some((key) => p.missing.includes(key))).map((thing) => tr(thing.noun));
+  if (things.length === 0) return { ready: false, text: tr('acct.pay.nearly') };
+  const list = things.length === 1 ? things[0] : tr('acct.pay.listAnd', { rest: things.slice(0, -1).join(', '), last: things[things.length - 1] });
+  const word = things.length <= 5 ? tr(`acct.pay.word.${things.length}` as MessageKey) : String(things.length);
+  return { ready: false, text: tr('acct.pay.left', { count: things.length, word, list }) };
 }
 
 /** The line the competition editor shows: "Entry fees are paid out to Ashdown PC: ••••1234 · Ready". */

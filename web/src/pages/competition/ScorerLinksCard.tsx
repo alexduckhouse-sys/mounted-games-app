@@ -3,12 +3,13 @@ import { api } from '../../api';
 import { QrCode } from '../../components/QrCode';
 import { scorerLinkUrl } from '../../offline/scorerLink';
 import type { CreatedScorerLink, ScorerLink, ScorerLinkList, ScorerLinkScope } from '../../types';
-import { RefineList, RefineNote, RefineSection } from '../refine/Refine';
+import { RefineChoiceRow, RefineList, RefineNote, RefineSection } from '../refine/Refine';
 import { apiMessage } from '../operations/types';
-import { SelectField } from '../../components/SelectField';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
 import { useToast } from '../../components/Toast';
+import { useT } from '../../i18n/LanguageContext';
+import { activeLocale } from '../../i18n/translate';
 
 /** Keeps a wrong or partial response from reaching the screen. */
 function parseList(data: unknown): ScorerLinkList | null {
@@ -22,7 +23,7 @@ function parseList(data: unknown): ScorerLinkList | null {
 }
 
 function when(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : '';
+  return iso ? new Date(iso).toLocaleString(activeLocale(), { dateStyle: 'medium', timeStyle: 'short' }) : '';
 }
 
 function statusOf(link: ScorerLink, now: number): 'active' | 'revoked' | 'expired' {
@@ -44,6 +45,7 @@ type State = { competitionId: number; list: ScorerLinkList } | 'error' | null;
  * may do this; the card only hides what won't work.
  */
 export function ScorerLinksCard({ competitionId, canWrite = true }: { competitionId: number; canWrite?: boolean }) {
+  const t = useT();
   const [state, setState] = useState<State>(null);
   const [retry, setRetry] = useState(0);
   const [label, setLabel] = useState('');
@@ -95,7 +97,7 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
       setLabel('');
       setExpires('');
     } catch (error) {
-      setProblem(apiMessage(error, 'Couldn’t make that link. Check your signal and try again.'));
+      setProblem(apiMessage(error, t('ops3.plan.scorer.makeError')));
     } finally {
       setBusy(false);
     }
@@ -104,61 +106,60 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
   async function copy(url: string) {
     try {
       await navigator.clipboard.writeText(url);
-      toast.show('Link copied');
+      toast.show(t('ops3.plan.scorer.copied'));
     } catch {
-      setProblem('Couldn’t copy the link. Press and hold it to copy, or show the QR code.');
+      setProblem(t('ops3.plan.scorer.copyFailed'));
     }
   }
 
   async function revoke(link: ScorerLink) {
     if (busy) return;
-    if (!(await confirmDialog({ title: `Withdraw ${link.label}’s scorer link?`, message: 'It stops working straight away.', confirmLabel: 'Withdraw link', destructive: true }))) return;
+    if (!(await confirmDialog({ title: t('ops3.plan.scorer.confirmTitle', { name: link.label }), message: t('ops3.plan.scorer.confirmMessage'), confirmLabel: t('ops3.plan.scorer.confirmLabel'), destructive: true }))) return;
     setBusy(true);
     setProblem(null);
     try {
       const { data } = await api.post<ScorerLink>(`/competitions/${competitionId}/scorer-links/${link.id}/revoke`);
       changeLinks((links) => links.map((item) => item.id === data.id ? data : item));
-      toast.show(`${link.label}’s link no longer works`);
+      toast.show(t('ops3.plan.scorer.stopped', { name: link.label }));
     } catch (error) {
-      setProblem(apiMessage(error, `Couldn’t withdraw ${link.label}’s link. Check your signal and try again.`));
+      setProblem(apiMessage(error, t('ops3.plan.scorer.withdrawError', { name: link.label })));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <section id="scorer-links" aria-label="Scorer links" className="scroll-mt-20">
-      <RefineSection title="Scorer links" />
+    <section id="scorer-links" aria-label={t('ops3.plan.scorer.title')} className="scroll-mt-20">
+      <RefineSection title={t('ops3.plan.scorer.title')} />
       {state === 'error' && (
-        <Notice className="mt-2" actionLabel="Try again" onAction={() => { setState(null); setRetry((n) => n + 1); }}>Couldn’t load the scorer links. Check your signal and try again.</Notice>
+        <Notice className="mt-2" actionLabel={t('common.tryAgain')} onAction={() => { setState(null); setRetry((n) => n + 1); }}>{t('ops3.plan.scorer.loadError')}</Notice>
       )}
-      {state === null && <p role="status" className="rf-note">Loading scorer links…</p>}
+      {state === null && <p role="status" className="rf-note">{t('ops3.plan.scorer.loading')}</p>}
       {list && (
         <>
-          <RefineNote>
-            Score from a phone without an account.
-          </RefineNote>
+          <RefineNote>{t('ops3.plan.scorer.note')}</RefineNote>
 
           {mayEdit && (list.arenas.length === 0
-            ? <p className="rf-note">Name an arena on a session in the timetable first. Each link covers the whole competition.</p>
+            ? <p className="rf-note">{t('ops3.plan.scorer.noArena')}</p>
             : (
-              <form onSubmit={create} className="rf-list flex flex-col gap-2 p-3">
-                <label className="rf-fld">Scorer’s name
+              <form onSubmit={create} className="ops-form">
+                <label className="rf-fld">{t('ops3.plan.scorer.name')}
                   <input type="text" required maxLength={60} autoComplete="off" value={label} onChange={(event) => setLabel(event.target.value)} />
                 </label>
-                <label className="rf-fld">Arena
-                  <SelectField value={chosenArena} onChange={(event) => setArena(event.target.value)}>
-                    {list.arenas.map((name) => <option key={name} value={name}>{name}</option>)}
-                  </SelectField>
-                </label>
-                <label className="rf-fld">Link permissions
-                  <SelectField value={String(scope)} onChange={(event) => setScope(Number(event.target.value) as ScorerLinkScope)}>
-                    <option value="0">Scorer (enter race results)</option>
-                    <option value="2">Scorer + stream controller (score + remote camera &amp; replays)</option>
-                    <option value="1">Tripod camera (broadcast arena video only)</option>
-                  </SelectField>
-                </label>
-                <label className="rf-fld">Stops working at (optional)
+                <RefineList as="div">
+                  <RefineChoiceRow label={t('ops3.plan.scorer.arena')} value={chosenArena} options={list.arenas.map((name) => ({ value: name, label: name }))} onChange={setArena} />
+                  <RefineChoiceRow
+                    label={t('ops3.plan.scorer.permissions')}
+                    value={String(scope)}
+                    options={[
+                      { value: '0', label: t('ops3.plan.scorer.scopeScorer') },
+                      { value: '2', label: t('ops3.plan.scorer.scopeStream') },
+                      { value: '1', label: t('ops3.plan.scorer.scopeTripod') },
+                    ]}
+                    onChange={(next) => setScope(Number(next) as ScorerLinkScope)}
+                  />
+                </RefineList>
+                <label className="rf-fld">{t('ops3.plan.scorer.expires')}
                   <input
                     type="datetime-local"
                     value={expires}
@@ -166,25 +167,25 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
                     onChange={(event) => setExpires(event.target.value)}
                   />
                 </label>
-                <p className="mg-meta">Defaults to {when(list.defaultExpiresAt)}.</p>
-                <div><button type="submit" className="mg-btn mg-btn-primary" disabled={busy || !label.trim()}>Make scorer link</button></div>
+                <p className="mg-meta">{t('ops3.plan.scorer.defaults', { date: when(list.defaultExpiresAt) })}</p>
+                <div className="kit-acts"><button type="submit" className="kit-pill kit-pill-fill" disabled={busy || !label.trim()}>{t('ops3.plan.scorer.make')}</button></div>
               </form>
             ))}
 
           {created && (
             <div role="status" className="rf-list mt-2 flex flex-col items-start gap-2 p-3">
-              <p className="font-medium">{created.label}’s link is ready. Copy it now: it can’t be shown again.</p>
+              <p className="font-medium">{t('ops3.plan.scorer.ready', { name: created.label })}</p>
               <div className="rf-fld w-full">
-                <input readOnly aria-label={`Link for ${created.label}`} className="w-full break-all" value={created.url} onFocus={(event) => event.currentTarget.select()} />
+                <input readOnly aria-label={t('ops3.plan.scorer.linkFor', { name: created.label })} className="w-full break-all" value={created.url} onFocus={(event) => event.currentTarget.select()} />
               </div>
-              <button type="button" className="mg-btn mg-btn-primary" onClick={() => void copy(created.url)}>Copy link</button>
-              <p className="mg-meta">Or let them scan this with their phone’s camera.</p>
-              <QrCode value={created.url} label={`QR code for ${created.label}’s scorer link`} className="w-48 max-w-full" />
+              <div className="kit-acts"><button type="button" className="kit-pill kit-pill-fill" onClick={() => void copy(created.url)}>{t('ops3.plan.scorer.copy')}</button></div>
+              <p className="mg-meta">{t('ops3.plan.scorer.scan')}</p>
+              <QrCode value={created.url} label={t('ops3.plan.scorer.qr', { name: created.label })} className="w-48 max-w-full" />
             </div>
           )}
 
           <div className="mt-2">
-            <RefineList label="Scorer links">
+            <RefineList label={t('ops3.plan.scorer.title')}>
             {list.links.map((link) => {
               const status = statusOf(link, now);
               return (
@@ -192,24 +193,24 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
                   <span className="min-w-0">
                     <span className="block font-medium">
                       {link.label} · {link.arenaName}
-                      {link.scope === 1 && <span className="mg-badge mg-badge-outline ml-2">Tripod camera</span>}
-                      {link.scope === 2 && <span className="mg-badge mg-badge-outline ml-2">Scorer + stream</span>}
+                      {link.scope === 1 && <span className="mg-badge mg-badge-outline ml-2">{t('ops3.plan.scorer.tripod')}</span>}
+                      {link.scope === 2 && <span className="mg-badge mg-badge-outline ml-2">{t('ops3.plan.scorer.scorerStream')}</span>}
                     </span>
                     <span className="mg-meta block">
-                      {status === 'revoked' ? `Withdrawn ${when(link.revokedAt)}`
-                        : status === 'expired' ? `Expired ${when(link.expiresAt)}`
-                          : `Works until ${when(link.expiresAt)}`}
-                      {' · '}{link.lastUsedAt ? `last used ${when(link.lastUsedAt)}` : 'not used yet'}
+                      {status === 'revoked' ? t('ops3.plan.scorer.withdrawnOn', { date: when(link.revokedAt) })
+                        : status === 'expired' ? t('ops3.plan.scorer.expiredOn', { date: when(link.expiresAt) })
+                          : t('ops3.plan.scorer.worksUntil', { date: when(link.expiresAt) })}
+                      {' · '}{link.lastUsedAt ? t('ops3.plan.scorer.lastUsed', { date: when(link.lastUsedAt) }) : t('ops3.plan.scorer.notUsed')}
                     </span>
-                    <span className="mg-meta block">Made {when(link.createdAt)}</span>
+                    <span className="mg-meta block">{t('ops3.plan.scorer.made', { date: when(link.createdAt) })}</span>
                   </span>
                   {status === 'active' && mayEdit
-                    ? <button type="button" className="mg-btn mg-btn-secondary" disabled={busy} aria-label={`Withdraw ${link.label}’s link`} onClick={() => void revoke(link)}>Withdraw</button>
-                    : <span className="mg-meta">{status === 'active' ? 'Active' : status === 'revoked' ? 'Withdrawn' : 'Expired'}</span>}
+                    ? <button type="button" className="kit-redtext" disabled={busy} aria-label={t('ops3.plan.scorer.withdrawAria', { name: link.label })} onClick={() => void revoke(link)}>{t('ops3.plan.scorer.withdraw')}</button>
+                    : <span className="mg-meta">{status === 'active' ? t('ops3.plan.scorer.active') : status === 'revoked' ? t('ops3.plan.scorer.withdrawn') : t('ops3.plan.scorer.expired')}</span>}
                 </li>
               );
             })}
-            {list.links.length === 0 && <li className="p-3 mg-meta">No scorer links yet.</li>}
+            {list.links.length === 0 && <li className="p-3 mg-meta">{t('ops3.plan.scorer.none')}</li>}
           </RefineList>
           </div>
         </>

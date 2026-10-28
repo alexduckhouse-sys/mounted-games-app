@@ -132,7 +132,7 @@ function GameRulesList() {
   }, [races, search]);
 
   return (
-    <div className="mt-3 flex flex-col gap-2.5">
+    <div className="mt-3 flex flex-col gap-2.5 ops-fade">
       <RoundSearch label={t('teams.rulebooks.findRace')} placeholder={t('teams.rulebooks.findRace')} value={search} onChange={setSearch} />
       {failed ? <Notice actionLabel={t('common.tryAgain')} onAction={() => { setFailed(false); setAttempt((n) => n + 1); }}>{t('teams.rulebooks.rulesError')}</Notice>
         : races === null ? <p role="status" className="sp-note">{t('teams.rulebooks.loadingGameRules')}</p>
@@ -170,6 +170,7 @@ export function RulebooksPanel({
   const [texts, setTexts] = useState<Record<number, Rulebook>>({});
   const [opening, setOpening] = useState(false);
   const [draft, setDraft] = useState<RulebookDraft | null>(null);
+  const [find, setFind] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   // "Add a rulebook" is the + beside the ticker dock while the list shows.
@@ -197,6 +198,10 @@ export function RulebooksPanel({
   }, [load]);
 
   const selected = selectedId != null ? texts[selectedId] ?? null : null;
+  const shownBooks = useMemo(() => {
+    const q = find.trim().toLowerCase();
+    return q ? rulebooks.filter((item) => item.title.toLowerCase().includes(q) || item.edition.toLowerCase().includes(q)) : rulebooks;
+  }, [rulebooks, find]);
 
   /** Fetch one rulebook's text, once; later opens reuse it until it is edited or deleted. */
   async function open(id: number) {
@@ -299,15 +304,19 @@ export function RulebooksPanel({
       {draft && <RulebookEditor draft={draft} setDraft={setDraft} busy={busy} onSave={save} onCancel={() => setDraft(null)} />}
 
       {rulebooks.length > 0 && !draft && (
-        <div className="mt-3 flex flex-col gap-4 lg:grid lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start lg:gap-6">
+        <div className="mt-3 flex flex-col gap-4 lg:grid lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start lg:gap-6 ops-fade">
+          <div className="flex flex-col gap-2.5">
+          <RoundSearch label={t('ops3.plan.rulebooks.find')} placeholder={t('ops3.plan.rulebooks.find')} value={find} onChange={setFind} />
+          {shownBooks.length === 0 && <p className="sp-note">{t('ops3.plan.rulebooks.noMatch', { query: find.trim() })}</p>}
           <RefineList as="div">
-            {rulebooks.map((item) => (
+            {shownBooks.map((item) => (
               <button key={item.id} type="button" className="rf-row" aria-current={selectedId === item.id ? 'true' : undefined} onClick={() => void open(item.id)}>
                 <span className="rf-grow"><span className="rf-t1">{item.title}</span><span className="rf-t2">{item.edition}</span></span>
                 {selectedId === item.id && <RefineStatus tone="ok">{t('teams.rulebooks.showing')}</RefineStatus>}
               </button>
             ))}
           </RefineList>
+          </div>
 
           {opening && !selected && <p role="status" className="rf-note">{t('teams.rulebooks.loadingRulebook')}</p>}
           {selected && <article className="rulebook-reader">

@@ -1,5 +1,5 @@
 import { HeatBibClash } from './HeatBibClash';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react';
 import { BackLink } from '../../components/BackLink';
 import { ConnectionPill } from '../../components/ConnectionPill';
@@ -21,10 +21,31 @@ export interface HeatPickItem { key: string; label: string; status: string; sele
  */
 export function HeatPickerBar({ arena, label, items, back }: { arena: string; label: string; items: HeatPickItem[]; back?: { to: string; label: string } }) {
   const [open, setOpen] = useState(false);
+  const barRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  // An open list closes on a tap or click anywhere outside the bar, and on Escape (focus goes back to the button).
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !barRef.current?.contains(event.target)) setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setOpen(false);
+      buttonRef.current?.focus();
+    };
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('pointerdown', outside);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [open]);
   return (
-    <div className="hb-bar">
+    <div className="hb-bar" ref={barRef}>
       {back && <BackLink to={back.to} className="hb-back" aria-label={back.label}><ChevronLeft className="h-5 w-5" aria-hidden="true" /></BackLink>}
       <button
+        ref={buttonRef}
         type="button"
         className="hb-btn"
         aria-haspopup="listbox"

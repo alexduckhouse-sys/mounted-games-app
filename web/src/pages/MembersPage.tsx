@@ -7,7 +7,8 @@ import { confirmDialog } from '../components/ConfirmDialog';
 import { Notice } from '../components/Notice';
 import { PageSkeleton } from '../components/Skeletons';
 import { apiErrorMessage } from '../lib/apiError';
-import { applyRoleChange, canEditMember, groupMembers, memberSubline, MEMBER_GROUPS, ROLE_LABEL, withoutMember, wantsToJoinAs } from '../lib/members';
+import { applyRoleChange, canEditMember, groupMembers, memberGroups, memberSubline, roleLabel, withoutMember, wantsToJoinAs } from '../lib/members';
+import { useT } from '../i18n/LanguageContext';
 import type { Club, ClubMember, ClubMembers, ClubRoleChange, MemberRole, TrainerRequest } from '../types';
 import { Avatar, Chip, PickSheet } from './clubShop/ui';
 import { useNeedsYou } from './profile/needsYou';
@@ -19,6 +20,7 @@ import './clubShop/clubShop.css';
  * everyone else by role. A ⋯ on each row opens a sheet to change their role or remove them from the club.
  */
 export function MembersPage() {
+  const t = useT();
   const { user, hasRole } = useAuth();
   const { review, reviewError } = useNeedsYou();
   const isAdmin = hasRole('Admin');
@@ -32,10 +34,12 @@ export function MembersPage() {
   const [notice, setNotice] = useState<string | null>(null);
   // An approve or decline that failed: the reason (the server's, such as an unconfirmed address) comes from `reviewError`.
   const [reviewFailed, setReviewFailed] = useState(false);
-  const shown = notice ?? (reviewFailed ? reviewError || 'Couldn’t update this request. Check your signal and try again.' : null);
+  const shown = notice ?? (reviewFailed ? reviewError || t('acct.members.reviewFail') : null);
   const [busy, setBusy] = useState(false);
+  // The request being approved or declined, so its buttons switch off until the answer comes back.
+  const [deciding, setDeciding] = useState<string | null>(null);
   const data = loaded && loaded.clubId === clubId ? loaded.data : null;
-  usePageHeader({ title: 'Club members', subtitle: data?.clubName ?? user?.clubName ?? undefined, plain: true, backTo: '/me', backLabel: 'Back to my profile' });
+  usePageHeader({ title: t('acct.members.title'), subtitle: data?.clubName ?? user?.clubName ?? undefined, plain: true, backTo: '/me', backLabel: t('acct.members.back') });
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -65,14 +69,26 @@ export function MembersPage() {
   }
 
   async function decide(request: TrainerRequest, action: 'approve' | 'decline') {
+    if (deciding) return;
+    if (action === 'decline' && !(await confirmDialog({
+      title: t('acct.members.declineTitle'),
+      message: t('acct.members.declineMessage', { name: request.fullName }),
+      confirmLabel: t('acct.members.declineConfirm'),
+      destructive: true,
+    }))) return;
     setNotice(null);
     setReviewFailed(false);
-    if (!(await review(request, action))) {
-      setReviewFailed(true);
-      return;
+    setDeciding(request.userId);
+    try {
+      if (!(await review(request, action))) {
+        setReviewFailed(true);
+        return;
+      }
+      // An approved person joins a group, so fetch the list again rather than guess which one.
+      setVersion((v) => v + 1);
+    } finally {
+      setDeciding(null);
     }
-    // An approved person joins a group, so fetch the list again rather than guess which one.
-    setVersion((v) => v + 1);
   }
 
   async function setRole(userId: string, role: MemberRole) {
@@ -84,7 +100,7 @@ export function MembersPage() {
       const { data: change } = await api.put<ClubRoleChange>(`/clubs/${clubId}/members/${encodeURIComponent(userId)}/role`, { role });
       edit((cur) => ({ ...cur, members: applyRoleChange(cur.members, userId, change) }));
     } catch (err) {
-      setNotice(apiErrorMessage(err, 'Couldn’t change the role. Check your signal and try again.'));
+      setNotice(apiErrorMessage(err, t('acct.members.roleFail')));
     } finally {
       setBusy(false);
     }
@@ -93,7 +109,7 @@ export function MembersPage() {
   /** Asks first. Returns whether they were removed, so the sheet can slide away. */
   async function remove(member: ClubMember): Promise<boolean> {
     if (clubId == null || busy) return false;
-    if (!(await confirmDialog({ title: 'Remove from club?', message: `${member.fullName} stops being a member of ${data?.clubName ?? 'the club'}.`, confirmLabel: 'Remove from club', destructive: true }))) return false;
+    if (!(await confirmDialog({ title: t('acct.members.removeTitle'), message: t('acct.members.removeMessage', { name: member.fullName, club: data?.clubName ?? t('acct.members.theClub') }), confirmLabel: t('acct.members.remove'), destructive: true }))) return false;
     setBusy(true);
     setNotice(null);
     setReviewFailed(false);
@@ -102,7 +118,7 @@ export function MembersPage() {
       edit((cur) => ({ ...cur, members: withoutMember(cur.members, member.userId) }));
       return true;
     } catch (err) {
-      setNotice(apiErrorMessage(err, 'Couldn’t remove them. Check your signal and try again.'));
+      setNotice(apiErrorMessage(err, t('acct.members.removeFail')));
       return false;
     } finally {
       setBusy(false);
@@ -114,38 +130,39 @@ export function MembersPage() {
 
   return (
     <div className="skin cs-page">
-      <h1 className="sr-only">Club members</h1>
+      <h1 className="sr-only">{t('acct.members.title')}</h1>
 
       {isAdmin && (
         <div className="sp-card">
-          <CardDropdownRow label="Club" value={clubId == null ? '' : String(clubId)}
-            options={[{ value: '', label: 'Choose a club' }, ...clubs.map((c) => ({ value: String(c.id), label: c.name }))]}
+          <CardDropdownRow label={t('acct.members.club')} value={clubId == null ? '' : String(clubId)}
+            options={[{ value: '', label: t('acct.members.chooseClub') }, ...clubs.map((c) => ({ value: String(c.id), label: c.name }))]}
             onChange={(value) => { setPicked(value ? Number(value) : null); setMenuFor(null); setNotice(null); setReviewFailed(false); }} />
         </div>
       )}
 
       {shown && <div className="cs-gap"><Notice>{shown}</Notice></div>}
+      {clubId == null && <p className="sp-note">{isAdmin ? t('acct.members.pickClub') : t('acct.members.noClub')}</p>}
       {clubId != null && !data && (
         <div className="cs-gap">
           {loadFailed === clubId
-            ? <Notice actionLabel="Try again" onAction={() => { setLoadFailed(null); setVersion((v) => v + 1); }}>Couldn’t load the members. Check your signal and try again.</Notice>
+            ? <Notice actionLabel={t('acct.members.tryAgain')} onAction={() => { setLoadFailed(null); setVersion((v) => v + 1); }}>{t('acct.members.loadFail')}</Notice>
             : <PageSkeleton />}
         </div>
       )}
 
       {data && data.pending.length > 0 && (
-        <section aria-label="Waiting for you">
-          <h2 className="sp-sec">Waiting for you <small>{data.pending.length}</small></h2>
+        <section aria-label={t('acct.members.waiting')}>
+          <h2 className="sp-sec">{t('acct.members.waiting')} <small>{data.pending.length}</small></h2>
           <div className="sp-card">
             {data.pending.map((request) => (
               <div key={request.userId} className="cs-row">
                 <Avatar name={request.fullName} />
                 <span className="sp-grow">
                   <span className="sp-t1">{request.fullName}</span>
-                  <span className="sp-t2">Wants to join as {wantsToJoinAs(request)}</span>
+                  <span className="sp-t2">{t('acct.members.wantsToJoin', { role: wantsToJoinAs(request) })}</span>
                 </span>
-                <button type="button" className="kit-redtext cs-redtext-s" aria-label={`Decline ${request.fullName}`} onClick={() => { void decide(request, 'decline'); }}>Decline</button>
-                <button type="button" className="kit-pill kit-pill-fill cs-pill-s" aria-label={`Approve ${request.fullName}`} onClick={() => { void decide(request, 'approve'); }}>Approve</button>
+                <button type="button" className="kit-redtext cs-redtext-s cs-tap44" aria-label={t('acct.members.declineFor', { name: request.fullName })} disabled={deciding !== null} onClick={() => { void decide(request, 'decline'); }}>{t('acct.members.decline')}</button>
+                <button type="button" className="kit-pill kit-pill-fill cs-pill-s cs-tap44" aria-label={t('acct.members.approveFor', { name: request.fullName })} disabled={deciding !== null} onClick={() => { void decide(request, 'approve'); }}>{t('acct.members.approve')}</button>
               </div>
             ))}
           </div>
@@ -167,8 +184,8 @@ export function MembersPage() {
                     <span className="sp-t1">{member.fullName}</span>
                     {sub && <span className="sp-t2">{sub}</span>}
                   </span>
-                  {you && <Chip tone="grey">You</Chip>}
-                  {editable && <button type="button" className="cs-more" aria-label={`More for ${member.fullName}`} onClick={() => setMenuFor(member.userId)}>⋯</button>}
+                  {you && <Chip tone="grey">{t('acct.members.you')}</Chip>}
+                  {editable && <button type="button" className="cs-more" aria-label={t('acct.members.moreFor', { name: member.fullName })} onClick={() => setMenuFor(member.userId)}>⋯</button>}
                 </div>
               );
             })}
@@ -179,13 +196,13 @@ export function MembersPage() {
       {menuMember && (
         <PickSheet
           title={menuMember.fullName}
-          options={MEMBER_GROUPS.filter(({ role }) => isAdmin || role !== 'Manager').map(({ role }) => ({ value: role, label: ROLE_LABEL[role] }))}
+          options={memberGroups().filter(({ role }) => isAdmin || role !== 'Manager').map(({ role }) => ({ value: role, label: roleLabel(role) }))}
           value={menuMember.role}
           onClose={() => setMenuFor(null)}
           onPick={(role) => { if (role !== menuMember.role) void setRole(menuMember.userId, role as MemberRole); }}
           footer={(close) => (
             <div className="kit-acts">
-              <button type="button" className="kit-redtext" disabled={busy} onClick={() => { void remove(menuMember).then((removed) => { if (removed) close(); }); }}>Remove from club</button>
+              <button type="button" className="kit-redtext" disabled={busy} onClick={() => { void remove(menuMember).then((removed) => { if (removed) close(); }); }}>{t('acct.members.remove')}</button>
             </div>
           )}
         />

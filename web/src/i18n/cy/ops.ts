@@ -6,7 +6,7 @@ export const ops: AreaCatalogue<typeof en> = {
   'ops.view.draw': 'Tynnu enwau',
   'ops.view.entries': 'Cofrestriadau',
   'ops.view.protests': 'Gwrthwynebiadau',
-  'ops.view.scorers': 'Sgorwyr a thîm',
+  'ops.view.scorers': 'Pobl a chodau QR',
   'ops.view.volunteers': 'Gwirfoddolwyr',
   'ops.view.safety': 'Cysylltiadau brys',
   'ops.view.tack': 'Archwilio tac',

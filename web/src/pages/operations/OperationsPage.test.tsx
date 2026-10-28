@@ -135,7 +135,7 @@ describe('OperationsPage', () => {
     expect(href(/^Entries and dec forms/)).toBe('/competitions/7/entries');
     expect(href(/^Import teams/)).toBe('/competitions/7/operations/import');
     expect(href(/^Volunteers/)).toBe('/competitions/7/operations/volunteers');
-    expect(href(/^Scorers & team/)).toBe('/competitions/7/operations/scorers');
+    expect(href(/^People and QR codes/)).toBe('/competitions/7/operations/scorers');
     expect(href(/^Emergency contacts/)).toBe('/competitions/7/operations/safety');
     expect(href(/^Tack check/)).toBe('/competitions/7/operations/tack');
     expect(href(/^Passport check/)).toBe('/competitions/7/operations/passport');
@@ -295,7 +295,7 @@ describe('OperationsPage', () => {
     });
     at('/competitions/7/operations/scorers');
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Scorers & team' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'People and QR codes' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Scorer links' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Competition team' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Back to Before the day' })).toHaveAttribute('href', '/competitions/7/operations');

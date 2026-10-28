@@ -247,7 +247,7 @@ export const ops2: AreaCatalogue<typeof en> = {
   'ops2.print.p.loadingLinks': 'Chargement des liens d’accès du personnel…',
   'ops2.print.p.noLinks': 'Aucun lien pour le personnel pour l’instant',
   'ops2.print.p.toCreate': 'Créez des liens pour les marqueurs, les caméras et les responsables du direct.',
-  'ops2.print.p.steps': 'Allez dans Marqueurs et équipe. Choisissez l’arène et le rôle, puis touchez Make scorer link. Revenez ici pour imprimer la feuille.',
+  'ops2.print.p.steps': 'Allez dans Avant le jour J › Personnes et codes QR. Choisissez l’arène et le rôle, puis touchez Make scorer link. Revenez ici pour imprimer la feuille.',
   'ops2.print.p.arenaScorer': 'Marqueur',
   'ops2.print.p.tripod': 'Caméra',
   'ops2.print.p.scorerStream': 'Marqueur et direct',

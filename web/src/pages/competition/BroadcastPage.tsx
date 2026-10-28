@@ -626,7 +626,7 @@ function BroadcastStudio() {
       {screenDimmed && (
         <DimmedLock
           label={t('desk.stream.bc.dimmedLabel')}
-          className="pointer-events-auto fixed inset-0 z-[120] flex flex-col items-center justify-center gap-3 bg-black text-white/35 select-none"
+          className="pointer-events-auto fixed inset-0 z-[120] flex flex-col items-center justify-center gap-3 bg-black text-white/50 select-none"
           onUnlock={() => setScreenDimmed(false)}
         >
           <Lock className="h-8 w-8" />

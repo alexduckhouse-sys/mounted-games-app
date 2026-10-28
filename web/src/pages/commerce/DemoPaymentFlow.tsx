@@ -7,6 +7,9 @@ import { RefineFoot, RefineHeader, RefinePage } from '../refine/Refine';
 import { newIdempotencyKey, pounds } from './commerceFormat';
 import { TestReceipt } from './commerceUi';
 import { CountUp } from '../../components/stream/CountUp';
+import type { MessageKey } from '../../i18n/en';
+import { useT } from '../../i18n/LanguageContext';
+import { tr } from '../../i18n/translate';
 import type { FakePaymentOutcome, TestPayment, TestPaymentStatus } from './types';
 import './demoPayment.css';
 
@@ -65,13 +68,14 @@ export function DemoPaymentFlow({
   variant = 'inline',
   context = '',
   onBack,
-  backLabel = 'Back',
-  approvedTitle = 'Payment approved',
+  backLabel,
+  approvedTitle,
   resultContext,
   renderResult,
   minProcessingMs = 1200,
   what = 'order',
 }: DemoPaymentFlowProps) {
+  const t = useT();
   const page = variant === 'page';
   const reducedMotion = Boolean(useReducedMotion());
   const [step, setStep] = useState<Step>(initialPayment ? 'result' : page ? 'details' : 'review');
@@ -131,7 +135,7 @@ export function DemoPaymentFlow({
       onPayment?.(confirmed);
     } catch (error) {
       const message = (error as { response?: { data?: { message?: string; detail?: string } | string } }).response?.data;
-      setRequestError(typeof message === 'string' ? message : message?.message ?? message?.detail ?? 'Couldn’t check the demo payment. Check your signal and try again.');
+      setRequestError(typeof message === 'string' ? message : message?.message ?? message?.detail ?? t('acct.demo.checkFail'));
       setStep('details');
     }
   }
@@ -140,15 +144,15 @@ export function DemoPaymentFlow({
     event.preventDefault();
     const digits = card.replace(/\D/g, '');
     if (!name.trim()) {
-      setValidationError('Enter a made-up name for this demo.');
+      setValidationError(t('acct.demo.needName'));
       return;
     }
     if (digits !== SUCCESS_CARD && digits !== DECLINE_CARD) {
-      setValidationError('Use one of the demo card numbers shown below.');
+      setValidationError(t('acct.demo.needCard'));
       return;
     }
     if (expiry !== DEMO_EXPIRY || cvc !== DEMO_CVC) {
-      setValidationError(`Use ${DEMO_EXPIRY} and ${DEMO_CVC} for this demo.`);
+      setValidationError(t('acct.demo.needExpiryCvc', { expiry: DEMO_EXPIRY, cvc: DEMO_CVC }));
       return;
     }
     setValidationError(null);
@@ -162,14 +166,14 @@ export function DemoPaymentFlow({
   if (page) {
     const amount = pounds(amountMinor);
     const headerTitle = step === 'result' && payment
-      ? payment.status === 0 ? approvedTitle : payment.status === 1 ? 'Payment declined' : payment.status === 2 ? 'Checkout cancelled' : 'Payment refunded'
-      : 'Payment';
+      ? payment.status === 0 ? approvedTitle ?? t('acct.demo.approvedTitle') : payment.status === 1 ? t('acct.demo.declinedTitle') : payment.status === 2 ? t('acct.demo.checkoutCancelled') : t('acct.demo.refundedTitle')
+      : t('acct.demo.paymentTitle');
     const headerContext = step === 'result' && resultContext ? resultContext : context;
     return (
       <RefinePage>
         <RefineHeader
           onBack={step === 'details' ? onBack : undefined}
-          backLabel={backLabel}
+          backLabel={backLabel ?? t('acct.demo.back')}
           context={headerContext}
           title={headerTitle}
           demo
@@ -178,47 +182,47 @@ export function DemoPaymentFlow({
         {step === 'processing' && (
           <div className="rf-lockwrap" role="status" aria-live="polite">
             <DemoPaymentLock state="waiting" reducedMotion={reducedMotion} />
-            <h2 className="mg-h2">Processing demo payment</h2>
-            <p className="rf-note">{amount} · a few seconds</p>
+            <h2 className="mg-h2">{t('acct.demo.processing')}</h2>
+            <p className="rf-note">{t('acct.demo.fewSeconds', { amount })}</p>
           </div>
         )}
         {step === 'result' && payment && <ResultSlot payment={payment} retry={resetForAnotherAttempt} render={renderResult} />}
         {(step === 'details' || step === 'review') && (
           <>
             <form id="demo-pay-form" className="flex flex-col gap-3 py-3" onSubmit={submit} noValidate>
-              <p className="rf-note !py-0">Test card filled in for you.</p>
-              <label className="rf-fld">Card number
+              <p className="rf-note !py-0">{t('acct.demo.cardFilled')}</p>
+              <label className="rf-fld">{t('acct.demo.cardNumber')}
                 <input value={card} onChange={(event) => setCard(formatCard(event.target.value))} inputMode="numeric" autoComplete="off" placeholder="0000 0000 0000 0000" />
               </label>
               <div className="grid grid-cols-2 gap-2.5">
-                <label className="rf-fld">Expiry
-                  <input value={expiry} onChange={(event) => setExpiry(event.target.value.replace(/[^\d/]/g, '').slice(0, 5))} inputMode="numeric" autoComplete="off" placeholder="MM/YY" />
+                <label className="rf-fld">{t('acct.demo.expiry')}
+                  <input value={expiry} onChange={(event) => setExpiry(event.target.value.replace(/[^\d/]/g, '').slice(0, 5))} inputMode="numeric" autoComplete="off" placeholder={t('acct.demo.expiryHint')} />
                 </label>
-                <label className="rf-fld">CVC
+                <label className="rf-fld">{t('acct.demo.cvc')}
                   <input value={cvc} onChange={(event) => setCvc(event.target.value.replace(/\D/g, '').slice(0, 3))} inputMode="numeric" autoComplete="off" placeholder="000" />
                 </label>
               </div>
-              <label className="rf-fld">Name on card
+              <label className="rf-fld">{t('acct.demo.nameOnCard')}
                 <input value={name} onChange={(event) => setName(event.target.value.slice(0, 80))} autoComplete="off" spellCheck={false} />
               </label>
               <fieldset className="m-0 border-0 p-0">
-                <legend className="rf-fld mb-1 p-0">Demo result</legend>
+                <legend className="rf-fld mb-1 p-0">{t('acct.demo.demoResult')}</legend>
                 <div className="mg-seg">
-                  <button type="button" aria-pressed={!declining} onClick={() => fillDemoDetails(SUCCESS_CARD)}>Approve</button>
-                  <button type="button" aria-pressed={declining} onClick={() => fillDemoDetails(DECLINE_CARD)}>Decline</button>
+                  <button type="button" aria-pressed={!declining} onClick={() => fillDemoDetails(SUCCESS_CARD)}>{t('acct.demo.approve')}</button>
+                  <button type="button" aria-pressed={declining} onClick={() => fillDemoDetails(DECLINE_CARD)}>{t('acct.demo.decline')}</button>
                 </div>
               </fieldset>
               {validationError && <p role="alert" className="mg-field-msg m-0 text-sm font-semibold text-[rgb(var(--mg-elim))]"><CircleAlert aria-hidden="true" />{validationError}</p>}
               {requestError && (
                 <Notice>
                   {requestError}
-                  <span className="mt-1 block text-xs">Your demo details are still here. Trying again will check the same payment attempt.</span>
+                  <span className="mt-1 block text-xs">{t('acct.demo.detailsKept')}</span>
                 </Notice>
               )}
             </form>
             <RefineFoot column aboveTabs>
-              <button type="submit" form="demo-pay-form" className="rf-btn rf-btn-primary"><Lock className="h-4 w-4" aria-hidden="true" />Pay {amount}</button>
-              <button type="button" className="rf-btn rf-btn-text" onClick={() => void submitOutcome(2)}>Cancel</button>
+              <button type="submit" form="demo-pay-form" className="rf-btn rf-btn-primary"><Lock className="h-4 w-4" aria-hidden="true" />{t('acct.demo.pay', { amount })}</button>
+              <button type="button" className="rf-btn rf-btn-text" onClick={() => void submitOutcome(2)}>{t('acct.demo.cancel')}</button>
             </RefineFoot>
           </>
         )}
@@ -227,10 +231,10 @@ export function DemoPaymentFlow({
   }
 
   return (
-    <section className="demo-pay" data-reduced-motion={reducedMotion ? 'true' : 'false'} aria-label="Demo payment">
+    <section className="demo-pay" data-reduced-motion={reducedMotion ? 'true' : 'false'} aria-label={t('acct.demo.region')}>
       <Notice tone="info" icon={ShieldCheck} role={null}>
-        <span className="block font-extrabold">DEMO · no money is taken</span>
-        Use the made-up details on this screen. Never enter real card details here.
+        <span className="block font-extrabold">{t('acct.demo.banner')}</span>
+        {t('acct.demo.bannerBody')}
       </Notice>
 
       <>
@@ -240,14 +244,14 @@ export function DemoPaymentFlow({
               <CreditCard className="mt-0.5 h-5 w-5 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
               <div className="min-w-0 flex-1">
                 <h3 className="mg-h2">{title}</h3>
-                <p className="mt-1 text-sm text-[rgb(var(--mg-muted))]">Test total</p>
+                <p className="mt-1 text-sm text-[rgb(var(--mg-muted))]">{t('acct.demo.testTotal')}</p>
               </div>
               <strong className="text-lg text-[rgb(var(--mg-heading))]">{pounds(amountMinor)}</strong>
             </div>
             {canPay ? (
-              <button type="button" className="mg-btn mg-btn-primary w-full" onClick={() => setStep('details')}>Enter demo details</button>
+              <button type="button" className="mg-btn mg-btn-primary w-full" onClick={() => setStep('details')}>{t('acct.demo.enterDetails')}</button>
             ) : (
-              <Notice tone="info">This demo payment has already finished.</Notice>
+              <Notice tone="info">{t('acct.demo.alreadyDone')}</Notice>
             )}
           </motion.div>
         )}
@@ -256,32 +260,32 @@ export function DemoPaymentFlow({
           <motion.form key="details" className="demo-pay__panel" onSubmit={submit} initial={reducedMotion ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={reducedMotion ? undefined : { opacity: 0, y: -6 }} transition={transition} noValidate>
             <div className="demo-pay__test-cards">
               <div>
-                <p className="font-bold">Made-up details for this demo</p>
-                <p className="mt-1 font-mono text-xs">4242 4242 4242 4242 succeeds</p>
-                <p className="font-mono text-xs">4000 0000 0000 0002 is declined</p>
-                <p className="mt-1 text-xs">Expiry {DEMO_EXPIRY} · CVC {DEMO_CVC}</p>
+                <p className="font-bold">{t('acct.demo.madeUp')}</p>
+                <p className="mt-1 font-mono text-xs">{t('acct.demo.succeeds')}</p>
+                <p className="font-mono text-xs">{t('acct.demo.isDeclined')}</p>
+                <p className="mt-1 text-xs">{t('acct.demo.expiryCvc', { expiry: DEMO_EXPIRY, cvc: DEMO_CVC })}</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button type="button" className="mg-btn mg-btn-secondary" onClick={() => fillDemoDetails()}>Use demo details</button>
-                <button type="button" className="mg-btn mg-btn-secondary" onClick={() => fillDemoDetails(DECLINE_CARD)}>Use decline card</button>
+                <button type="button" className="mg-btn mg-btn-secondary" onClick={() => fillDemoDetails()}>{t('acct.demo.useDemo')}</button>
+                <button type="button" className="mg-btn mg-btn-secondary" onClick={() => fillDemoDetails(DECLINE_CARD)}>{t('acct.demo.useDecline')}</button>
               </div>
             </div>
 
             <label className="mg-field">
-              <span>Name on demo card</span>
+              <span>{t('acct.demo.nameOnDemoCard')}</span>
               <input value={name} onChange={(event) => setName(event.target.value.slice(0, 80))} autoComplete="off" spellCheck={false} />
             </label>
             <label className="mg-field">
-              <span>Demo card number</span>
+              <span>{t('acct.demo.demoCardNumber')}</span>
               <input value={card} onChange={(event) => setCard(formatCard(event.target.value))} inputMode="numeric" autoComplete="off" placeholder="0000 0000 0000 0000" />
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="mg-field">
-                <span>Demo expiry</span>
-                <input value={expiry} onChange={(event) => setExpiry(event.target.value.replace(/[^\d/]/g, '').slice(0, 5))} inputMode="numeric" autoComplete="off" placeholder="MM/YY" />
+                <span>{t('acct.demo.demoExpiry')}</span>
+                <input value={expiry} onChange={(event) => setExpiry(event.target.value.replace(/[^\d/]/g, '').slice(0, 5))} inputMode="numeric" autoComplete="off" placeholder={t('acct.demo.expiryHint')} />
               </label>
               <label className="mg-field">
-                <span>Demo CVC</span>
+                <span>{t('acct.demo.demoCvc')}</span>
                 <input value={cvc} onChange={(event) => setCvc(event.target.value.replace(/\D/g, '').slice(0, 3))} inputMode="numeric" autoComplete="off" placeholder="000" />
               </label>
             </div>
@@ -289,18 +293,18 @@ export function DemoPaymentFlow({
             {requestError && (
               <Notice>
                 {requestError}
-                <span className="mt-1 block text-xs">Your demo details are still here. Trying again will check the same payment attempt.</span>
+                <span className="mt-1 block text-xs">{t('acct.demo.detailsKept')}</span>
               </Notice>
             )}
-            <button type="submit" className="mg-btn mg-btn-primary w-full">Run demo payment for {pounds(amountMinor)}</button>
-            <button type="button" className="mg-btn mg-btn-secondary w-full" onClick={() => void submitOutcome(2)}>Cancel demo payment</button>
+            <button type="submit" className="mg-btn mg-btn-primary w-full">{t('acct.demo.run', { amount: pounds(amountMinor) })}</button>
+            <button type="button" className="mg-btn mg-btn-secondary w-full" onClick={() => void submitOutcome(2)}>{t('acct.demo.cancelDemo')}</button>
           </motion.form>
         )}
 
         {step === 'processing' && (
           <motion.div key="processing" className="demo-pay__processing" role="status" aria-live="polite" initial={reducedMotion ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={reducedMotion ? undefined : { opacity: 0, y: -6 }} transition={transition}>
             <DemoPaymentLock state="waiting" reducedMotion={reducedMotion} />
-            <h3 className="mg-h2">Checking demo payment…</h3>
+            <h3 className="mg-h2">{t('acct.demo.checking')}</h3>
           </motion.div>
         )}
 
@@ -308,12 +312,12 @@ export function DemoPaymentFlow({
           <motion.div key="result" className="demo-pay__panel items-center text-center" role="status" aria-live="polite" initial={reducedMotion ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={transition}>
             <DemoPaymentLock state={resultState} reducedMotion={reducedMotion} />
             <div>
-              <h3 className="mg-h2">{resultTitle(payment.status)}</h3>
-              <p className="mt-1 text-sm text-[rgb(var(--mg-muted))]">{resultCopy(payment.status)}</p>
+              <h3 className="mg-h2">{tr(`acct.demo.title.${payment.status}` as MessageKey)}</h3>
+              <p className="mt-1 text-sm text-[rgb(var(--mg-muted))]">{tr(`acct.demo.copy.${payment.status}` as MessageKey)}</p>
             </div>
             <TestReceipt payment={payment} />
             {canPay && (payment.status === 1 || payment.status === 2) && (
-              <button type="button" className="mg-btn mg-btn-primary w-full" onClick={resetForAnotherAttempt}>Try another demo payment</button>
+              <button type="button" className="mg-btn mg-btn-primary w-full" onClick={resetForAnotherAttempt}>{t('acct.demo.tryAnother')}</button>
             )}
           </motion.div>
         )}
@@ -329,10 +333,10 @@ function ResultSlot({ payment, retry, render }: { payment: TestPayment; retry: (
 /** Round icon plus a title and one line, for the page checkout's outcome screens. */
 export function OutcomeState({ payment, title, detail, role }: { payment: TestPayment; title?: string; detail?: ReactNode; role?: 'alert' | 'status' }) {
   const tone = payment.status === 0 ? 'ok' : payment.status === 1 ? 'bad' : 'mut';
-  const heading = title ?? (payment.status === 0 ? 'Payment approved' : payment.status === 1 ? 'The demo card was declined' : payment.status === 2 ? 'Payment cancelled' : 'Payment refunded');
+  const heading = title ?? (payment.status === 0 ? tr('acct.demo.outApproved') : payment.status === 1 ? tr('acct.demo.outDeclined') : payment.status === 2 ? tr('acct.demo.outCancelled') : tr('acct.demo.outRefunded'));
   const line = detail ?? (payment.status === 0
-    ? <>Demo paid <PaidAmount amountMinor={payment.amountMinor} /></>
-    : payment.status === 1 ? 'Nothing was charged.' : payment.status === 2 ? 'Nothing was charged.' : 'No money moved.');
+    ? <PaidAmountLine amountMinor={payment.amountMinor} />
+    : payment.status === 1 ? tr('acct.demo.nothingCharged') : payment.status === 2 ? tr('acct.demo.nothingCharged') : tr('acct.demo.noMoneyMoved'));
   // The disc pops in and its mark draws itself; a declined card gives a small shake (see demoPayment.css).
   return (
     <div className={`rf-state mg-outcome mg-outcome-${tone}`} role={role ?? (payment.status === 1 ? 'alert' : 'status')}>
@@ -352,18 +356,10 @@ export function PaidAmount({ amountMinor }: { amountMinor: number }) {
   return <CountUp from={0} to={amountMinor} delay={0.25} duration={0.7} round={Math.round} format={pounds} />;
 }
 
-function resultTitle(status: TestPaymentStatus): string {
-  if (status === 0) return 'Demo payment approved';
-  if (status === 1) return 'Demo payment declined';
-  if (status === 2) return 'Demo payment cancelled';
-  return 'Demo refund recorded';
-}
-
-function resultCopy(status: TestPaymentStatus): string {
-  if (status === 0) return 'Approved. No money was taken.';
-  if (status === 1) return 'Declined. No money was taken.';
-  if (status === 2) return 'Cancelled. No money was taken.';
-  return 'Refund recorded. No money moved.';
+/** "Demo paid £17.00", the amount counting up. The sentence comes from the catalogue with a marker where the amount goes. */
+function PaidAmountLine({ amountMinor }: { amountMinor: number }) {
+  const [before, after] = tr('acct.demo.demoPaid', { amount: '\u0000' }).split('\u0000');
+  return <>{before}<PaidAmount amountMinor={amountMinor} />{after}</>;
 }
 
 export type DemoPaymentLockState = 'waiting' | 'success' | 'failed' | 'cancelled' | 'refunded';

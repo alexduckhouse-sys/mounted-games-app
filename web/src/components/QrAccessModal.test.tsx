@@ -25,7 +25,7 @@ it('shows scorer management only when the caller grants organiser access', () =>
 it('opens as a sheet with the approved title and description', () => {
   show();
   const dialog = screen.getByRole('dialog', { name: 'Share with QR codes' });
-  expect(dialog).toHaveAccessibleDescription('Pick what to share: the public results page, the TV display or the commentator desk. Scorer links are under Scorers & team.');
+  expect(dialog).toHaveAccessibleDescription('Pick what to share: the public results page, the TV display or the commentator desk. Scorer links are in Before the day › People and QR codes.');
 });
 
 it('closes from the Close pill', async () => {

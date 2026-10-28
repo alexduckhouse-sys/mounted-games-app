@@ -183,7 +183,7 @@ export const screen = {
   'screen.colour.pink': 'Pink',
   'screen.colour.custom': 'Custom colour',
   'screen.qr.title': 'Share with QR codes',
-  'screen.qr.description': 'Pick what to share: the public results page, the TV display or the commentator desk. Scorer links are under Scorers & team.',
+  'screen.qr.description': 'Pick what to share: the public results page, the TV display or the commentator desk. Scorer links are in Before the day › People and QR codes.',
   'screen.qr.tablist': 'QR code categories',
   'screen.qr.tabScorer': 'Volunteer and scorer QR links (no sign-in needed)',
   'screen.qr.tabScreens': 'Screens, PA and spectator QR codes',
