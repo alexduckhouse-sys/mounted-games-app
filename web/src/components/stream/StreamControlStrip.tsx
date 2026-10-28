@@ -1,6 +1,7 @@
 import { useCallback, useContext, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Eye, EyeOff, Film, Layers, ListOrdered, Megaphone, Mic, MicOff, Pause, Play, RefreshCw, Table2, Trophy, Video } from 'lucide-react';
 import { api } from '../../api';
+import { useT } from '../../i18n/LanguageContext';
 import { scorerApi } from '../../offline/scorerLink';
 import { Notice } from '../Notice';
 import { useToast } from '../Toast';
@@ -23,6 +24,7 @@ export function StreamControlStrip({
   compact = false,
   useScorerClient = false,
 }: StreamControlStripProps) {
+  const t = useT();
   const client = useScorerClient ? scorerApi : api;
   const context = useContext(CompetitionContext);
   const [streams, setStreams] = useState<LiveStream[]>([]);
@@ -75,13 +77,13 @@ export function StreamControlStrip({
   ): Promise<boolean> {
     const streamId = targetStreamId ?? activeStream?.id;
     setProblem(null);
-    if (streamId == null) { setProblem({ text: 'No camera is broadcasting.', tone: 'info' }); return false; }
+    if (streamId == null) { setProblem({ text: t('desk.stream.strip.noCamera'), tone: 'info' }); return false; }
     try {
       await client.post(`/competitions/${competitionId}/streams/${streamId}/command`, { command, value });
-      toast.show(`Requested: ${statusLabel}`);
+      toast.show(t('desk.stream.strip.requested', { label: statusLabel }));
       return true;
     } catch {
-      setProblem({ text: 'Couldn’t reach the camera phone. Check your signal and try again.', actionLabel: 'Try again', onAction: () => void sendStreamCommand(command, value, statusLabel, targetStreamId) });
+      setProblem({ text: t('desk.stream.cameraUnreachable'), actionLabel: t('common.tryAgain'), onAction: () => void sendStreamCommand(command, value, statusLabel, targetStreamId) });
       return false;
     }
   }
@@ -89,23 +91,23 @@ export function StreamControlStrip({
   async function triggerOverlay(kind: 'lanes' | 'heat' | 'toplist' | 'upNext' | 'none', label: string) {
     setProblem(null);
     if (useScorerClient || !context?.saveOverlay) {
-      setProblem({ text: 'Sign in as an organiser to change overlays.', tone: 'info' });
+      setProblem({ text: t('desk.stream.strip.signInOrganiser'), tone: 'info' });
       return;
     }
-    const tryAgain = { actionLabel: 'Try again', onAction: () => void triggerOverlay(kind, label) };
+    const tryAgain = { actionLabel: t('common.tryAgain'), onAction: () => void triggerOverlay(kind, label) };
     try {
       const outcome = await context.saveOverlay((overlay) => ({
         ...overlay, look: { ...(overlay.look as Record<string, unknown>), liveCard: kind === 'upNext' ? 'next' : kind, liveSectionId: sectionId },
       }));
       if (outcome !== 'saved') {
         setProblem(outcome === 'conflict'
-          ? { text: 'The overlay changed on another phone. Check it and try again.', actionLabel: 'Show me', onAction: () => overlayGroup.current?.querySelector<HTMLElement>('[aria-pressed="true"]')?.focus() }
-          : { text: 'Couldn’t update the overlay. Check your signal and try again.', ...tryAgain });
+          ? { text: t('desk.stream.overlayConflict'), actionLabel: t('desk.stream.showMe'), onAction: () => overlayGroup.current?.querySelector<HTMLElement>('[aria-pressed="true"]')?.focus() }
+          : { text: t('desk.stream.overlayFailed'), ...tryAgain });
         return;
       }
       setActiveOverlay(kind);
-      toast.show(`Showing: ${label}`);
-    } catch { setProblem({ text: 'Couldn’t update the overlay. Check your signal and try again.', ...tryAgain }); }
+      toast.show(t('desk.stream.strip.showing', { label }));
+    } catch { setProblem({ text: t('desk.stream.overlayFailed'), ...tryAgain }); }
   }
 
   async function submitAnnouncement(e: FormEvent) {
@@ -118,28 +120,28 @@ export function StreamControlStrip({
       const outcome = await context.saveOverlay((overlay) => ({ ...overlay, bannerText: body, bannerStyle: 1 }));
       if (outcome !== 'saved') throw new Error('Banner was not saved');
       setAnnouncement((current) => current.trim() === body ? '' : current);
-      toast.show('Stream banner saved.');
-    } catch { setProblem({ text: 'Couldn’t save the stream banner. Check your signal and try again.' }); }
+      toast.show(t('desk.stream.strip.bannerSaved'));
+    } catch { setProblem({ text: t('desk.stream.strip.bannerFailed') }); }
     finally { setPostingChat(false); }
   }
 
   return (
     <section
-      aria-label="Live stream control strip"
+      aria-label={t('desk.stream.strip.region')}
       className={`mg-card flex flex-col gap-2.5 ${compact ? 'p-3' : 'p-3.5 sm:p-4'}`}
     >
       {/* Header row */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-heading))]">
           <Video className="h-4 w-4 text-[rgb(var(--mg-red))]" aria-hidden="true" />
-          <span>Live Stream &amp; Overlay Controls</span>
+          <span>{t('desk.stream.strip.heading')}</span>
           {activeStream ? (
             <span className="rounded-full bg-[rgb(var(--mg-ok))] px-2 py-0.5 text-[11px] font-bold text-white">
-              LIVE · {activeStream.angleName} ({activeStream.viewerCount} watching)
+              {t('desk.stream.strip.liveBadge', { angle: activeStream.angleName, viewers: activeStream.viewerCount })}
             </span>
           ) : (
             <span className="rounded-full bg-[rgb(var(--mg-tint))] px-2 py-0.5 text-[11px] font-semibold normal-case tracking-normal text-[rgb(var(--mg-muted))]">
-              Ready for stream overlays &amp; remote camera
+              {t('desk.stream.strip.ready')}
             </span>
           )}
         </div>
@@ -147,70 +149,70 @@ export function StreamControlStrip({
         <button
           type="button"
           onClick={() => void loadStreams()}
-          aria-label="Refresh stream cameras"
+          aria-label={t('desk.stream.strip.refreshAria')}
           className="mg-btn mg-btn-secondary !min-h-8 !px-2.5 text-xs"
         >
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /> Refresh
+          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /> {t('common.refresh')}
         </button>
       </div>
 
       {/* 1. Stream Overlay Triggers */}
-      <div ref={overlayGroup} className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Stream overlay triggers">
+      <div ref={overlayGroup} className="flex flex-wrap items-center gap-1.5" role="group" aria-label={t('desk.stream.strip.triggers')}>
         <button
           type="button"
           aria-pressed={activeOverlay === 'lanes'}
-          onClick={() => void triggerOverlay('lanes', 'Show Lanes')}
+          onClick={() => void triggerOverlay('lanes', t('desk.stream.strip.lanesLabel'))}
           className={`mg-btn !min-h-9 !px-2.5 text-xs font-semibold ${
             activeOverlay === 'lanes' ? 'mg-btn-primary' : 'mg-btn-secondary'
           }`}
         >
-          <ListOrdered className="h-3.5 w-3.5" aria-hidden="true" /> Show Lanes on Stream
+          <ListOrdered className="h-3.5 w-3.5" aria-hidden="true" /> {t('desk.stream.strip.lanes')}
         </button>
         <button
           type="button"
           aria-pressed={activeOverlay === 'heat'}
-          onClick={() => void triggerOverlay('heat', 'Show Heat Table')}
+          onClick={() => void triggerOverlay('heat', t('desk.stream.strip.heatLabel'))}
           className={`mg-btn !min-h-9 !px-2.5 text-xs font-semibold ${
             activeOverlay === 'heat' ? 'mg-btn-primary' : 'mg-btn-secondary'
           }`}
         >
-          <Table2 className="h-3.5 w-3.5" aria-hidden="true" /> Show Heat Table on Stream
+          <Table2 className="h-3.5 w-3.5" aria-hidden="true" /> {t('desk.stream.strip.heat')}
         </button>
         <button
           type="button"
           aria-pressed={activeOverlay === 'toplist'}
-          onClick={() => void triggerOverlay('toplist', 'Show Toplist')}
+          onClick={() => void triggerOverlay('toplist', t('desk.stream.strip.toplistLabel'))}
           className={`mg-btn !min-h-9 !px-2.5 text-xs font-semibold ${
             activeOverlay === 'toplist' ? 'mg-btn-primary' : 'mg-btn-secondary'
           }`}
         >
-          <Trophy className="h-3.5 w-3.5" aria-hidden="true" /> Show Toplist on Stream
+          <Trophy className="h-3.5 w-3.5" aria-hidden="true" /> {t('desk.stream.strip.toplist')}
         </button>
         <button
           type="button"
           aria-pressed={activeOverlay === 'upNext'}
-          onClick={() => void triggerOverlay('upNext', 'Show Up Next')}
+          onClick={() => void triggerOverlay('upNext', t('desk.stream.strip.nextLabel'))}
           className={`mg-btn !min-h-9 !px-2.5 text-xs font-semibold ${
             activeOverlay === 'upNext' ? 'mg-btn-primary' : 'mg-btn-secondary'
           }`}
         >
-          <Layers className="h-3.5 w-3.5" aria-hidden="true" /> Show Up Next on Stream
+          <Layers className="h-3.5 w-3.5" aria-hidden="true" /> {t('desk.stream.strip.next')}
         </button>
         <button
           type="button"
           aria-pressed={activeOverlay === 'none'}
-          onClick={() => void triggerOverlay('none', 'Hide Overlay')}
+          onClick={() => void triggerOverlay('none', t('desk.stream.strip.hideLabel'))}
           className="mg-btn mg-btn-secondary !min-h-9 !px-2.5 text-xs font-semibold"
         >
           {activeOverlay === 'none' ? <EyeOff className="h-3.5 w-3.5" aria-hidden="true" /> : <Eye className="h-3.5 w-3.5" aria-hidden="true" />}
-          Hide Stream Overlay
+          {t('desk.stream.strip.hide')}
         </button>
       </div>
 
       {/* Camera angle switcher when multiple streams exist */}
       {streams.length > 1 && (
-        <div className="flex flex-wrap items-center gap-1.5 text-xs" role="group" aria-label="Camera angle switcher">
-          <span className="font-bold text-[rgb(var(--mg-muted))]">Camera angle:</span>
+        <div className="flex flex-wrap items-center gap-1.5 text-xs" role="group" aria-label={t('desk.stream.strip.switcher')}>
+          <span className="font-bold text-[rgb(var(--mg-muted))]">{t('desk.stream.strip.angleLabel')}</span>
           {streams.map((s) => (
             <button
               key={s.id}
@@ -220,7 +222,7 @@ export function StreamControlStrip({
                 setSelectedStreamId(s.id);
                 setMuted(Boolean(s.audioMuted));
                 setPaused(s.status === 1);
-                void sendStreamCommand('selectAngle', String(s.id), `Angle: ${s.angleName}`, s.id);
+                void sendStreamCommand('selectAngle', String(s.id), t('desk.stream.strip.angleStatus', { angle: s.angleName }), s.id);
               }}
               className={`mg-btn !min-h-8 !px-2.5 text-xs font-semibold ${
                 activeStream?.id === s.id ? 'mg-btn-primary' : 'mg-btn-secondary'
@@ -233,15 +235,15 @@ export function StreamControlStrip({
       )}
 
       {/* 2. Camera & Replay Controls */}
-      <div className="flex flex-wrap items-center gap-1.5 text-xs" role="group" aria-label="Camera and replay controls">
+      <div className="flex flex-wrap items-center gap-1.5 text-xs" role="group" aria-label={t('desk.stream.strip.controls')}>
         {([1, 2, 3] as const).map((z) => (
           <button
             key={z}
             type="button"
-            aria-label={`Remote zoom ${z}x`}
+            aria-label={t('desk.stream.strip.remoteZoom', { z })}
             aria-pressed={zoom === z}
             onClick={() => {
-              void sendStreamCommand('setZoom', String(z), `Zoom ${z}x`).then((ok) => { if (ok) setZoom(z); });
+              void sendStreamCommand('setZoom', String(z), t('desk.stream.strip.zoomStatus', { z })).then((ok) => { if (ok) setZoom(z); });
             }}
             className={`mg-btn !min-h-8 !px-2.5 text-xs font-bold ${
               zoom === z ? 'mg-btn-primary' : 'mg-btn-secondary'
@@ -254,45 +256,45 @@ export function StreamControlStrip({
         <button
           type="button"
           aria-pressed={muted}
-          aria-label={muted ? 'Unmute stream mic' : 'Mute stream mic'}
+          aria-label={muted ? t('desk.stream.strip.unmuteAria') : t('desk.stream.strip.muteAria')}
           onClick={() => {
             const next = !muted;
-            void sendStreamCommand('mute', String(next), next ? 'Mic muted' : 'Mic on').then((ok) => { if (ok) setMuted(next); });
+            void sendStreamCommand('mute', String(next), next ? t('desk.stream.strip.micMuted') : t('desk.stream.strip.micOn')).then((ok) => { if (ok) setMuted(next); });
           }}
           className="mg-btn mg-btn-secondary !min-h-8 !px-2.5 text-xs font-semibold"
         >
           {muted ? <MicOff className="h-3.5 w-3.5" aria-hidden="true" /> : <Mic className="h-3.5 w-3.5" aria-hidden="true" />}
-          {muted ? 'Mic muted' : 'Mic on'}
+          {muted ? t('desk.stream.strip.micMuted') : t('desk.stream.strip.micOn')}
         </button>
 
         <button
           type="button"
           aria-pressed={paused}
-          aria-label={paused ? 'Resume stream' : 'Pause stream (Back soon)'}
+          aria-label={paused ? t('desk.stream.strip.resumeAria') : t('desk.stream.strip.pauseAria')}
           onClick={() => {
             const next = !paused;
-            void sendStreamCommand('pause', String(next), next ? 'Stream paused (Back soon)' : 'Stream resumed').then((ok) => { if (ok) setPaused(next); });
+            void sendStreamCommand('pause', String(next), next ? t('desk.stream.strip.statusPaused') : t('desk.stream.strip.statusResumed')).then((ok) => { if (ok) setPaused(next); });
           }}
           className="mg-btn mg-btn-secondary !min-h-8 !px-2.5 text-xs font-semibold"
         >
           {paused ? <Play className="h-3.5 w-3.5" aria-hidden="true" /> : <Pause className="h-3.5 w-3.5" aria-hidden="true" />}
-          {paused ? 'Resume' : 'Back soon'}
+          {paused ? t('desk.stream.strip.resume') : t('desk.stream.strip.backSoon')}
         </button>
 
         <button
           type="button"
-          onClick={() => void sendStreamCommand('saveReplay', '15', 'Save 15s Replay')}
+          onClick={() => void sendStreamCommand('saveReplay', '15', t('desk.stream.strip.save15'))}
           className="mg-btn mg-btn-secondary !min-h-8 !px-2.5 text-xs font-semibold"
         >
-          <Film className="h-3.5 w-3.5" aria-hidden="true" /> Save 15s Replay
+          <Film className="h-3.5 w-3.5" aria-hidden="true" /> {t('desk.stream.strip.save15')}
         </button>
 
         <button
           type="button"
-          onClick={() => void sendStreamCommand('saveReplay', '30', 'Save 30s Replay')}
+          onClick={() => void sendStreamCommand('saveReplay', '30', t('desk.stream.strip.save30'))}
           className="mg-btn mg-btn-secondary !min-h-8 !px-2.5 text-xs font-semibold"
         >
-          <Film className="h-3.5 w-3.5" aria-hidden="true" /> Save 30s Replay
+          <Film className="h-3.5 w-3.5" aria-hidden="true" /> {t('desk.stream.strip.save30')}
         </button>
       </div>
 
@@ -303,8 +305,8 @@ export function StreamControlStrip({
             <Megaphone className="h-3.5 w-3.5 shrink-0 text-[rgb(var(--mg-muted))]" aria-hidden="true" />
             <input
               type="text"
-              aria-label="Quick stream announcement"
-              placeholder="Message for the stream banner…"
+              aria-label={t('desk.stream.strip.quick')}
+              placeholder={t('desk.stream.strip.quickPlaceholder')}
               maxLength={140}
               value={announcement}
               onChange={(e) => setAnnouncement(e.target.value)}
@@ -316,7 +318,7 @@ export function StreamControlStrip({
             disabled={postingChat || !announcement.trim()}
             className="mg-btn mg-btn-secondary !min-h-9 !px-3 text-xs font-bold"
           >
-            {postingChat ? 'Posting…' : 'Post to stream'}
+            {postingChat ? t('desk.stream.strip.posting') : t('desk.stream.strip.post')}
           </button>
         </form>
       )}
