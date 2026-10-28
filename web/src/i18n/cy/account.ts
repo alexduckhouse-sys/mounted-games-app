@@ -250,4 +250,5 @@ export const account: AreaCatalogue<typeof en> = {
   'account.needs.payoutsTitle': 'Nid yw taliadau allan wedi’u sefydlu',
   'account.needs.payoutsSub': 'Ni ellir talu arian cofrestru allan nes y gwneir hyn',
   'account.needs.setUp': 'Sefydlu',
+  'account.teams.alertsInstall': 'Ychwanegwch yr ap at eich Sgrin Gartref i’w troi ymlaen',
 };

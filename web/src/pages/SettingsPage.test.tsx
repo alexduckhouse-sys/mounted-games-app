@@ -1,19 +1,28 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CompactPageBarProvider, useCompactPageBarState } from '../components/CompactPageBarContext';
 import { CurrentCompetitionProvider, useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { useTeamNotifications } from '../hooks/useTeamNotifications';
 import { LiteModeProvider } from '../lite/LiteModeContext';
 import { ThemeProvider } from '../theme/ThemeContext';
+import { resetInstallState } from '../hooks/usePwaInstall';
+import { fakeDevice, installPromptEvent, resetDevice, UA } from '../test/device';
 import { SettingsPage } from './SettingsPage';
 
 vi.mock('../hooks/useTeamNotifications', () => ({ useTeamNotifications: vi.fn() }));
 const setEnabled = vi.fn();
+const closeInstallGuide = vi.fn();
+const base = { needsInstall: false, installGuide: false, closeInstallGuide };
 beforeEach(() => {
   setEnabled.mockReset();
-  vi.mocked(useTeamNotifications).mockReturnValue({ enabled: false, setEnabled, permission: 'default', problem: null });
+  vi.mocked(useTeamNotifications).mockReturnValue({ ...base, enabled: false, setEnabled, permission: 'default', problem: null });
+});
+
+afterEach(() => {
+  resetInstallState();
+  resetDevice();
 });
 
 function Probe() {
@@ -296,7 +305,7 @@ describe('SettingsPage: notifications', () => {
   });
 
   it('turns them off again when they are on', async () => {
-    vi.mocked(useTeamNotifications).mockReturnValue({ enabled: true, setEnabled, permission: 'granted', problem: null });
+    vi.mocked(useTeamNotifications).mockReturnValue({ ...base, enabled: true, setEnabled, permission: 'granted', problem: null });
     mount();
     const on = card().getByRole('switch', { name: 'Notifications' });
     expect(on).toHaveAttribute('aria-checked', 'true');
@@ -305,22 +314,54 @@ describe('SettingsPage: notifications', () => {
   });
 
   it('switches it off, and says why, when the browser has blocked notifications', () => {
-    vi.mocked(useTeamNotifications).mockReturnValue({ enabled: false, setEnabled, permission: 'denied', problem: null });
+    vi.mocked(useTeamNotifications).mockReturnValue({ ...base, enabled: false, setEnabled, permission: 'denied', problem: null });
     mount();
     expect(card().getByRole('switch', { name: 'Notifications' })).toBeDisabled();
     expect(card().getByText('Blocked in your browser’s settings')).toBeInTheDocument();
   });
 
   it('switches it off, and says why, when the browser can’t show notifications', () => {
-    vi.mocked(useTeamNotifications).mockReturnValue({ enabled: false, setEnabled, permission: 'unsupported', problem: null });
+    vi.mocked(useTeamNotifications).mockReturnValue({ ...base, enabled: false, setEnabled, permission: 'unsupported', problem: null });
     mount();
     expect(card().getByRole('switch', { name: 'Notifications' })).toBeDisabled();
     expect(card().getByText('This browser can’t show notifications')).toBeInTheDocument();
   });
 
   it('shows the problem strip when turning them on failed', () => {
-    vi.mocked(useTeamNotifications).mockReturnValue({ enabled: false, setEnabled, permission: 'default', problem: 'This browser can’t show notifications. Try Chrome or Safari.' });
+    vi.mocked(useTeamNotifications).mockReturnValue({ ...base, enabled: false, setEnabled, permission: 'default', problem: 'This browser can’t show notifications. Try Chrome or Safari.' });
     mount();
     expect(card().getByRole('alert')).toHaveTextContent('Try Chrome or Safari.');
+  });
+
+  it('offers to install the app on an iPhone, with the Home Screen steps', async () => {
+    fakeDevice({ userAgent: UA.iphoneSafari });
+    mount();
+    await userEvent.click(card().getByRole('button', { name: /Install the app/ }));
+    expect(screen.getByRole('heading', { name: 'Add to your Home Screen' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Done' }));
+    await vi.waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('offers Chromium’s install prompt once the browser has sent one', () => {
+    fakeDevice({ userAgent: UA.desktopChrome });
+    mount();
+    expect(screen.queryByRole('button', { name: /Install the app/ })).toBeNull();
+    act(() => { window.dispatchEvent(installPromptEvent()); });
+    expect(card().getByRole('button', { name: /Install the app/ })).toBeInTheDocument();
+  });
+
+  it('hides the install row once the app is on the Home Screen', () => {
+    fakeDevice({ userAgent: UA.iphoneSafari, iosStandalone: true });
+    mount();
+    expect(screen.queryByRole('button', { name: /Install the app/ })).toBeNull();
+  });
+
+  it('keeps the notifications switch live on an iPhone that needs the app on its Home Screen, and shows how', () => {
+    vi.mocked(useTeamNotifications).mockReturnValue({ ...base, needsInstall: true, installGuide: true, enabled: false, setEnabled, permission: 'unsupported', problem: null });
+    fakeDevice({ userAgent: UA.iphoneSafari });
+    mount();
+    expect(card().getByRole('switch', { name: 'Notifications' })).toBeEnabled();
+    expect(card().getByText('Add the app to your Home Screen first')).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toHaveAccessibleDescription('Notifications only reach an iPhone once the app is on its Home Screen.');
   });
 });

@@ -34,6 +34,7 @@ const TvKioskPage = lazy(() => import('./pages/competition/TvKioskPage').then((m
 const CommentaryDeskPage = lazy(() => import('./pages/competition/CommentaryDeskPage').then((module) => ({ default: module.CommentaryDeskPage })));
 const SessionPage = lazy(() => import('./pages/competition/SessionPage').then((module) => ({ default: module.SessionPage })));
 const TeamsTab = lazy(() => import('./pages/competition/TeamsTab').then((module) => ({ default: module.TeamsTab })));
+const TeamStatsPage = lazy(() => import('./pages/competition/TeamStatsPage').then((module) => ({ default: module.TeamStatsPage })));
 const CompetitionTeamPage = lazy(() => import('./pages/competition/CompetitionTeamPage').then((module) => ({ default: module.CompetitionTeamPage })));
 const DeclarationsTab = lazy(() => import('./pages/competition/DeclarationsTab').then((module) => ({ default: module.DeclarationsTab })));
 const BroadcastPage = lazy(() => import('./pages/competition/BroadcastPage').then((module) => ({ default: module.BroadcastPage })));
@@ -152,6 +153,7 @@ export default function App() {
                 <Route path="timetable" element={<Navigate to=".." replace />} />
                 <Route path="teams" element={<TeamsTab />} />
                 <Route path="teams/:teamId" element={<CompetitionTeamPage />} />
+                <Route path="teams/:teamId/stats" element={<TeamStatsPage />} />
                 <Route path="following" element={<FollowingTab />} />
                 <Route path="shop" element={<EventShopPage />} />
                 <Route path="shop/manage" element={<ProtectedRoute roles={['Admin', 'Trainer']}><CommerceManagementPage /></ProtectedRoute>} />

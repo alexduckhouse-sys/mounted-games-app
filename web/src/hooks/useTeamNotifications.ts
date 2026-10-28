@@ -6,6 +6,8 @@ import { computeTimings } from '../lib/time';
 import { subscribeForPushResult, unsubscribeFromPush, type PushResult } from '../lib/push';
 import { hatbandName } from '../lib/hatbands';
 import { formatNotifyLeadReminder, getNotifyMinutesBefore } from '../lib/userPrefs';
+import { isIosDevice, needsHomeScreenForPush } from '../lib/pwaInstall';
+import { tr } from '../i18n/translate';
 
 const ENABLED_KEY = 'mg.notify.enabled';
 const FIRED_PREFIX = 'mg.notify.fired:';
@@ -69,6 +71,9 @@ export function useTeamNotifications(teams: Team[]) {
   const [enabled, setEnabledState] = useState<boolean>(() => readEnabled() && permState() === 'granted');
   const [permission, setPermission] = useState<NotificationPermissionState>(permState());
   const [problem, setProblem] = useState<string | null>(null);
+  // An iPhone or iPad gets notifications only once the app is on its Home Screen, so switching on shows how instead.
+  const needsInstall = needsHomeScreenForPush();
+  const [installGuide, setInstallGuide] = useState(false);
   const [comps, setComps] = useState<Map<number, CompetitionDetail>>(new Map());
 
   useEffect(() => writeEnabled(enabled), [enabled]);
@@ -148,8 +153,14 @@ export function useTeamNotifications(teams: Team[]) {
       await unsubscribeFromPush();
       return;
     }
+    if (needsInstall) {
+      setProblem(null);
+      setInstallGuide(true);
+      return;
+    }
     if (permission === 'unsupported') {
-      setProblem(NOT_SUPPORTED);
+      // On an iPhone or iPad already running from the Home Screen, only an older iOS lacks notifications.
+      setProblem(isIosDevice() ? tr('shell.install.iosTooOld') : NOT_SUPPORTED);
       return;
     }
     if (permission !== 'granted') {
@@ -168,7 +179,7 @@ export function useTeamNotifications(teams: Team[]) {
     setEnabledState(problem === null);
   }
 
-  return { enabled, setEnabled, permission, problem };
+  return { enabled, setEnabled, permission, problem, needsInstall, installGuide, closeInstallGuide: () => setInstallGuide(false) };
 }
 
 function maybeFire(
