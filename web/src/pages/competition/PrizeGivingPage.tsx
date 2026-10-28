@@ -8,7 +8,9 @@ import { Notice } from '../../components/Notice';
 import { problemMessage } from '../../lib/apiError';
 import { revealOrder, riderLines } from '../../lib/prizeGiving';
 import { displaySectionName } from '../../lib/section';
-import { buildToplist, ordinal } from '../../lib/toplist';
+import { buildToplist } from '../../lib/toplist';
+import { localOrdinal as ordinal } from '../../lib/ordinalText';
+import { useT } from '../../i18n/LanguageContext';
 import { useStillMotion } from '../../lite/useStillMotion';
 import { RefineChoiceRow, RefineHeader, RefineList, RefineNote, RefinePage, RefineQty, RefineSection } from '../refine/Refine';
 import type { DeclarationForm, StandingRow } from '../../types';
@@ -23,6 +25,7 @@ const points = (value: number) => (Number.isInteger(value) ? String(value) : val
  * champions' moment. The phone also shows each team's riders and ponies to read out, which the stream never shows.
  */
 export function PrizeGivingPage() {
+  const t = useT();
   const { competition } = useCompetition();
   const [params] = useSearchParams();
   const still = useStillMotion();
@@ -45,9 +48,9 @@ export function PrizeGivingPage() {
     let cancelled = false;
     api.get<StandingRow[]>(`/competitions/${competition.id}/standings`, { params: { sectionId } })
       .then(({ data }) => { if (!cancelled) { setStandings({ sectionId, rows: Array.isArray(data) ? data : [] }); setLoadError(null); } })
-      .catch(() => { if (!cancelled) setLoadError('Couldn’t load the toplist for this age group. Check your signal and try again.'); });
+      .catch(() => { if (!cancelled) setLoadError(t('screen.pg.loadError')); });
     return () => { cancelled = true; };
-  }, [competition.id, sectionId, mayRun, attempt]);
+  }, [competition.id, sectionId, mayRun, attempt, t]);
 
   useEffect(() => {
     if (!mayRun) return;
@@ -72,8 +75,8 @@ export function PrizeGivingPage() {
   if (!mayRun) {
     return (
       <RefinePage>
-        <RefineHeader back={`/competitions/${competition.id}/chat`} backLabel="Back to live stream" context={competition.name} title="Prize-giving" />
-        <p className="rf-note">Only the competition organiser or team can run the prize-giving.</p>
+        <RefineHeader back={`/competitions/${competition.id}/chat`} backLabel={t('screen.pg.backToStream')} context={competition.name} title={t('screen.pg.title')} />
+        <p className="rf-note">{t('screen.pg.onlyOrganiser')}</p>
       </RefinePage>
     );
   }
@@ -96,7 +99,7 @@ export function PrizeGivingPage() {
       }
       setShown(next);
     } catch (caught) {
-      setError({ text: problemMessage(caught, 'Couldn’t update the stream. Check your signal and try again.'), retry: () => void step(next) });
+      setError({ text: problemMessage(caught, t('screen.pg.updateError')), retry: () => void step(next) });
     } finally {
       setSending(false);
     }
@@ -105,62 +108,62 @@ export function PrizeGivingPage() {
   const upNext = shown < order.length ? order[shown] : null;
   const riders = upNext && forms ? riderLines(forms, upNext.teamId) : [];
   const given = order.slice(0, shown).reverse();
-  const nextLabel = !upNext ? 'Clear the stream'
-    : shown === order.length - 1 && upNext.place === 1 ? 'Reveal the winners'
-      : `Reveal ${upNext.joint ? 'joint ' : ''}${ordinal(upNext.place)}`;
+  const nextLabel = !upNext ? t('screen.pg.clearStream')
+    : shown === order.length - 1 && upNext.place === 1 ? t('screen.pg.revealWinners')
+      : t(upNext.joint ? 'screen.pg.revealJoint' : 'screen.pg.reveal', { place: ordinal(upNext.place) });
 
   return (
     <RefinePage className="pg-page">
-      <RefineHeader back={`/competitions/${competition.id}/chat`} backLabel="Back to live stream" context={competition.name} title="Prize-giving" />
+      <RefineHeader back={`/competitions/${competition.id}/chat`} backLabel={t('screen.pg.backToStream')} context={competition.name} title={t('screen.pg.title')} />
 
-      <RefineSection title="Set up" />
-      <RefineList as="div" label="Prize-giving set-up">
-        <RefineChoiceRow label="Age group" value={String(sectionId ?? '')} disabled={shown > 0}
+      <RefineSection title={t('screen.pg.setUp')} />
+      <RefineList as="div" label={t('screen.pg.setUpLabel')}>
+        <RefineChoiceRow label={t('screen.pg.ageGroup')} value={String(sectionId ?? '')} disabled={shown > 0}
           options={sections.map((s) => ({ value: String(s.id), label: displaySectionName(s.displayName || s.ageGroup) }))}
           onChange={(value) => { setSectionId(Number(value)); setError(null); }} />
         <div className="rf-row">
-          <span className="rf-grow rf-t1">Places to give</span>
+          <span className="rf-grow rf-t1">{t('screen.pg.placesToGive')}</span>
           <RefineQty name="place" value={count} max={30} disabled={shown > 0} onChange={(next) => setCount(Math.max(1, next))} />
         </div>
       </RefineList>
-      {shown > 0 && <RefineNote>Clear the stream to change the age group or the number of places.</RefineNote>}
+      {shown > 0 && <RefineNote>{t('screen.pg.clearToChange')}</RefineNote>}
 
       <div className="pg-body">
-        {loadError && <Notice actionLabel="Try again" onAction={() => { setLoadError(null); setAttempt((n) => n + 1); }}>{loadError}</Notice>}
-        {error && <Notice actionLabel="Try again" onAction={error.retry} actionDisabled={sending}>{error.text}</Notice>}
-        {unfinished && shown === 0 && <Notice tone="info">Some races in {sectionName} aren’t scored yet, so these places could still change.</Notice>}
-        {toplist && order.length === 0 && <Notice tone="info">No places to give in {sectionName} yet.</Notice>}
-        {!toplist && !loadError && <p role="status" className="rf-note">Loading the toplist…</p>}
+        {loadError && <Notice actionLabel={t('common.tryAgain')} onAction={() => { setLoadError(null); setAttempt((n) => n + 1); }}>{loadError}</Notice>}
+        {error && <Notice actionLabel={t('common.tryAgain')} onAction={error.retry} actionDisabled={sending}>{error.text}</Notice>}
+        {unfinished && shown === 0 && <Notice tone="info">{t('screen.pg.unfinished', { section: sectionName })}</Notice>}
+        {toplist && order.length === 0 && <Notice tone="info">{t('screen.pg.noPlaces', { section: sectionName })}</Notice>}
+        {!toplist && !loadError && <p role="status" className="rf-note">{t('screen.pg.loadingToplist')}</p>}
 
         {order.length > 0 && (
-          <section className="pg-up" aria-live="polite" aria-label={upNext ? 'Up next' : 'Prize-giving done'}>
+          <section className="pg-up" aria-live="polite" aria-label={upNext ? t('screen.pg.upNextLabel') : t('screen.pg.doneLabel')}>
             <AnimatePresence mode="wait" initial={false}>
               <motion.div key={upNext ? upNext.teamId : 'done'} className="pg-up-card"
                 initial={still ? false : { opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={still ? undefined : { opacity: 0, x: -24, transition: { duration: 0.16 } }}
                 transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
                 {upNext ? <>
                   <div className="pg-up-head">
-                    <span className="pg-up-place">Up next: {upNext.joint ? 'joint ' : ''}{ordinal(upNext.place)}</span>
-                    <span className="pg-up-pts">{points(upNext.points)} pts</span>
+                    <span className="pg-up-place">{t(upNext.joint ? 'screen.pg.upNextJoint' : 'screen.pg.upNext', { place: ordinal(upNext.place) })}</span>
+                    <span className="pg-up-pts">{t('screen.pg.pts', { points: points(upNext.points) })}</span>
                   </div>
                   <div>
                     <div className="pg-up-team">{upNext.teamName}</div>
                     {clubOf(upNext.teamId) && <div className="pg-up-club">{clubOf(upNext.teamId)}</div>}
                   </div>
                   {forms === null
-                    ? <p className="pg-up-club">Loading riders…</p>
+                    ? <p className="pg-up-club">{t('screen.pg.loadingRiders')}</p>
                     : riders.length > 0
                       ? (
-                        <ul className="pg-riders" aria-label="Riders and ponies">
+                        <ul className="pg-riders" aria-label={t('screen.pg.ridersLabel')}>
                           {riders.map((line) => (
-                            <li key={line.rider}><b>{line.rider}{line.reserve && <span className="pg-reserve">Reserve</span>}</b><span>{line.pony ?? 'No pony named'}</span></li>
+                            <li key={line.rider}><b>{line.rider}{line.reserve && <span className="pg-reserve">{t('teams.team.reserve')}</span>}</b><span>{line.pony ?? t('screen.pg.noPony')}</span></li>
                           ))}
                         </ul>
                       )
-                      : <p className="pg-up-club">No dec form for this team, so no riders to read out.</p>}
+                      : <p className="pg-up-club">{t('screen.pg.noDec')}</p>}
                 </> : <>
-                  <div className="pg-up-head"><span className="pg-up-place">All places given</span></div>
-                  <p className="pg-up-club">The champions stay on the stream until you clear it.</p>
+                  <div className="pg-up-head"><span className="pg-up-place">{t('screen.pg.allGiven')}</span></div>
+                  <p className="pg-up-club">{t('screen.pg.championsStay')}</p>
                 </>}
               </motion.div>
             </AnimatePresence>
@@ -169,14 +172,14 @@ export function PrizeGivingPage() {
 
         {order.length > 0 && (
           <div className="pg-acts">
-            <button type="button" className="rf-btn" disabled={sending || shown === 0} onClick={() => void step(shown - 1)}>Back</button>
+            <button type="button" className="rf-btn" disabled={sending || shown === 0} onClick={() => void step(shown - 1)}>{t('common.back')}</button>
             <button type="button" className="rf-btn rf-btn-primary" disabled={sending} onClick={() => void step(upNext ? shown + 1 : 0)}>{nextLabel}</button>
           </div>
         )}
 
         {given.length > 0 && (
-          <section aria-label="Places given">
-            <h2 className="pg-given-head">On the stream</h2>
+          <section aria-label={t('screen.pg.placesGiven')}>
+            <h2 className="pg-given-head">{t('screen.pg.onStream')}</h2>
             <ul className="pg-given">
               {given.map((place, index) => (
                 <li key={place.teamId} className={index === 0 ? 'mg-arrive' : undefined}>

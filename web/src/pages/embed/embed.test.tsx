@@ -253,3 +253,21 @@ describe('embedded season standings', () => {
     await waitFor(() => expect(screen.getByText('Hunt A')).toBeInTheDocument());
   });
 });
+
+describe('embeds in French and Welsh', () => {
+  it('follow the browser language, with no stored choice read', async () => {
+    const language = vi.spyOn(window.navigator, 'language', 'get').mockReturnValue('fr-FR');
+    try {
+      const view = open('/embed/competitions/1/standings');
+      expect(await screen.findByText('Team 1')).toBeInTheDocument();
+      expect(screen.getByText('Les 1 premiers vont en finale')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Propulsé par Mounted Games' })).toBeInTheDocument();
+      expect(screen.getByRole('list', { name: 'Classement' })).toBeInTheDocument();
+      view.unmount();
+      language.mockReturnValue('cy-GB');
+      open('/embed/competitions/1/timetable');
+      expect(await screen.findByText('Egwyl')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Wedi’i bweru gan Mounted Games' })).toBeInTheDocument();
+    } finally { language.mockRestore(); }
+  });
+});

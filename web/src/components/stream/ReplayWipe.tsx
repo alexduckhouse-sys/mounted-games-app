@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { EASE_IN, EASE_OUT } from '../../lib/motion';
 import { useStillMotion } from '../../lite/useStillMotion';
+import { useT } from '../../i18n/LanguageContext';
 
 /** How long the band covers the screen between the swap and the reveal. */
 export const WIPE_HOLD_MS = 160;
@@ -73,6 +74,7 @@ export function useReplayWipe(accent?: string, ink?: string): { wipe: (card: Wip
 }
 
 function WipeBand({ card, accent = '#F5B82E', ink = '#0F1E3D', onCovered }: { card: WipeCard; accent?: string; ink?: string; onCovered: () => void }) {
+  const t = useT();
   return (
     <div className="mg-wipe" aria-hidden="true">
       <motion.div
@@ -92,7 +94,7 @@ function WipeBand({ card, accent = '#F5B82E', ink = '#0F1E3D', onCovered }: { ca
             animate={{ opacity: 1, x: '0%' }}
             transition={{ duration: 0.3, delay: SWEEP_S * 0.6, ease: EASE_OUT }}
           >
-            <strong>{card.title === 'Live' && <i className="mg-wipe-dot" />}{card.title}</strong>
+            <strong>{card.title === 'Live' && <i className="mg-wipe-dot" />}{t(card.title === 'Live' ? 'screen.wipe.live' : 'screen.wipe.replay')}</strong>
             {card.detail && <small>{card.detail}</small>}
           </motion.span>
         </span>

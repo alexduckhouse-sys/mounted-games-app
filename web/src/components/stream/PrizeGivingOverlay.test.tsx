@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CompetitionContext, type CompetitionCtx } from '../../pages/competition/context';
 import type { PrizeGiving } from '../../lib/prizeGiving';
+import { LanguageProvider } from '../../i18n/LanguageContext';
 import { PrizeGivingOverlay } from './PrizeGivingOverlay';
 
 const burst = vi.hoisted(() => vi.fn());
@@ -58,4 +59,15 @@ it('keeps the champions still, without confetti, when motion is stilled', () => 
   expect(screen.getByRole('status', { name: 'Open champions: Team 1, 214 points' })).toHaveTextContent('214 points');
   act(() => { vi.advanceTimersByTime(2000); });
   expect(burst).not.toHaveBeenCalled();
+});
+
+it('reads out the place and the champions in French and Welsh', () => {
+  const value = { prizeGiving: { sectionId: 3, sectionName: 'Open', champions: false, places: [place(6, 6, 172), place(5, 5, 181)] } } as unknown as CompetitionCtx;
+  const fr = render(<LanguageProvider initial="fr"><MotionConfig reducedMotion="always"><CompetitionContext.Provider value={value}><PrizeGivingOverlay /></CompetitionContext.Provider></MotionConfig></LanguageProvider>);
+  expect(screen.getByRole('status', { name: '5e : Team 5, 181 points' })).toBeInTheDocument();
+  expect(screen.getByRole('complementary', { name: 'Remise des prix, Open' })).toBeInTheDocument();
+  fr.unmount();
+  const champions = { prizeGiving: { sectionId: 3, sectionName: 'Open', champions: true, places: [place(1, 1, 214)] } } as unknown as CompetitionCtx;
+  render(<LanguageProvider initial="cy"><MotionConfig reducedMotion="always"><CompetitionContext.Provider value={champions}><PrizeGivingOverlay /></CompetitionContext.Provider></MotionConfig></LanguageProvider>);
+  expect(screen.getByRole('status', { name: 'Pencampwyr Open: Team 1, 214 pwynt' })).toHaveTextContent('Pencampwyr Open');
 });

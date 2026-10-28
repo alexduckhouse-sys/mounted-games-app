@@ -7,6 +7,7 @@ import { CompactPageBarProvider } from '../../components/CompactPageBarContext';
 import { competition, heat, race, result, session, standing, team } from '../../test/factories';
 import type { CompetitionDetail, DeclarationForm, LiveStream } from '../../types';
 import { CommentaryDeskPage } from './CommentaryDeskPage';
+import { LanguageProvider } from '../../i18n/LanguageContext';
 import { CompetitionContext } from './context';
 import { TvKioskPage } from './TvKioskPage';
 import { StreamControlStrip } from '../../components/stream/StreamControlStrip';
@@ -141,9 +142,10 @@ function makeComp(): CompetitionDetail {
   });
 }
 
-function renderWithCompetition(initialEntry: string, comp = makeComp()) {
+function renderWithCompetition(initialEntry: string, comp = makeComp(), lang: 'en' | 'cy' | 'fr' = 'en') {
   const reload = vi.fn();
   return render(
+    <LanguageProvider initial={lang}>
     <MemoryRouter initialEntries={[initialEntry]}>
       <CompactPageBarProvider>
         <CompetitionContext.Provider
@@ -165,7 +167,8 @@ function renderWithCompetition(initialEntry: string, comp = makeComp()) {
           </Routes>
         </CompetitionContext.Provider>
       </CompactPageBarProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
+    </LanguageProvider>,
   );
 }
 
@@ -296,6 +299,17 @@ describe('CommentaryDeskPage lanes', () => {
 });
 
 describe('TvKioskPage', () => {
+  it('shows its controls and slide names in French and Welsh', async () => {
+    const fr = renderWithCompetition('/competitions/1/tv', makeComp(), 'fr');
+    expect(await screen.findByRole('button', { name: 'Suivre automatiquement la catégorie en direct' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Diapositive du tableau d’affichage TV' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Diapositive suivante' })).toBeInTheDocument();
+    fr.unmount();
+    renderWithCompetition('/competitions/1/tv', makeComp(), 'cy');
+    expect(await screen.findByRole('button', { name: 'Dilyn yr adran fyw yn awtomatig' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sleid nesaf' })).toBeInTheDocument();
+  });
+
   it('supports Current Heat Table slide, removes redundant Club columns, and offers Auto-follow live section, Full screen, Stream Controls & QR Access', async () => {
     const user = userEvent.setup();
     renderWithCompetition('/competitions/1/tv');
