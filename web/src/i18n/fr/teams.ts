@@ -44,7 +44,7 @@ export const teams: AreaCatalogue<typeof en> = {
   'teams.team.onNow': 'En cours',
   'teams.team.onTime': 'À l’heure',
   'teams.team.eliminated': 'Éliminé(e)',
-  'teams.team.didNotStart': 'Non partante',
+  'teams.team.didNotStart': 'Non-partant(e)',
   'teams.team.didNotFinish': 'N’a pas terminé',
   'teams.team.retired': 'Abandon',
   'teams.team.notFound': 'Équipe introuvable dans cette compétition.',
