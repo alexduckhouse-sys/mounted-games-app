@@ -77,6 +77,10 @@ public class TrainerRequestsController(AppDbContext db, UserManager<AppUser> use
                 return NotFound();
         }
 
+        // A locked or blocked account's roles are frozen until it is restored.
+        if (approve && user.IsAccessStopped)
+            return Conflict(new { message = "This account is locked or blocked, so its roles can't be changed." });
+
         var grant = requestedRole == Roles.ManagerRequest ? Roles.Manager : Roles.Trainer;
         // Organisers and team managers can reset their password by email, so the address must be theirs before they get the role.
         if (approve && ConfirmedAddress.Refuses(user, grant)) return ConfirmedAddress.Refusal();

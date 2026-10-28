@@ -1,3 +1,4 @@
+using MountedGames.Api.Services.Accounts;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -194,6 +195,9 @@ public class VolunteerAndEmergencyController(
     public async Task<ActionResult<VolunteerShiftDto>> ClaimVolunteerShift(
         int id, int shiftId, ClaimVolunteerShiftRequest? req, CancellationToken ct = default)
     {
+        if (await db.IsIpBlockedAsync(HttpContext, ct))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Posting from this network is blocked." });
+
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userId)) return Unauthorized();
 
@@ -424,6 +428,9 @@ public class VolunteerAndEmergencyController(
     public async Task<ActionResult<VolunteerShiftDto>> CheckInVolunteerShift(
         int id, int shiftId, [FromBody] CheckInVolunteerShiftRequest? req = null, CancellationToken ct = default)
     {
+        if (await db.IsIpBlockedAsync(HttpContext, ct))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Posting from this network is blocked." });
+
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userId)) return Unauthorized();
 

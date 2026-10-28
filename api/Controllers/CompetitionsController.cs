@@ -508,6 +508,20 @@ public class CompetitionsController : ControllerBase
             .FirstOrDefaultAsync(x => x.Id == id);
         if (c is null) return NotFound();
 
+        // Money and season records are never deleted with an event, so say what is in the way rather than crash on the foreign key.
+        var hasOrders = await _db.Set<EventOrder>().AnyAsync(o => o.CompetitionId == id);
+        var hasRounds = await _db.Set<MountedGames.Api.Entities.Seasons.SeasonRound>().AnyAsync(r => r.CompetitionId == id);
+        if (hasOrders || hasRounds)
+        {
+            var blockers = new List<string>();
+            if (hasOrders) blockers.Add("shop orders");
+            if (hasRounds) blockers.Add("a season round");
+            return Conflict(new
+            {
+                message = $"This competition can't be deleted because it still has {string.Join(" and ", blockers)}. Remove or move those first."
+            });
+        }
+
         // Walk the graph bottom-up so foreign-key constraints don't trip.
         foreach (var session in c.Sessions)
         foreach (var heat in session.Heats)
@@ -674,9 +688,16 @@ public class CompetitionsController : ControllerBase
             .FirstOrDefaultAsync(s => s.Id == sectionId && s.CompetitionId == id);
         if (section is null) return NotFound();
 
+        if (await _db.Set<MountedGames.Api.Entities.Seasons.SeasonRound>().AnyAsync(r => r.CompetitionSectionId == sectionId))
+            return Conflict(new { message = "This section can't be deleted because it is a round in a season. Remove it from the season first." });
+
         var hasPaidSignups = await _db.SectionSignups.AnyAsync(
             s => s.CompetitionSectionId == sectionId && s.Status == SignupPaymentStatus.Paid);
-        var hasScoredResults = section.Sessions.Any(ss => ss.Heats.Any(h => h.Races.Any(r => r.Results.Count > 0)));
+        // The section's teams can also sit in another section's combined heat; their entries and results there block the delete too.
+        var sectionTeamIds = section.Teams.Select(t => t.Id).ToList();
+        var teamResults = await _db.Results.Where(r => sectionTeamIds.Contains(r.TeamId)).ToListAsync();
+        var hasScoredResults = teamResults.Count > 0
+            || section.Sessions.Any(ss => ss.Heats.Any(h => h.Races.Any(r => r.Results.Count > 0)));
         if (!force && (hasPaidSignups || section.Teams.Count > 0 || hasScoredResults))
             return BadRequest(new { message = "This section already has paid entries, teams or scored results. Pass ?force=true to delete it anyway." });
 
@@ -689,6 +710,9 @@ public class CompetitionsController : ControllerBase
             _db.HeatEntries.RemoveRange(heat.Entries);
         }
         foreach (var ss in section.Sessions) _db.Heats.RemoveRange(ss.Heats);
+        // Same as deleting a team: take its place out of any other section's combined heat (and, forced, its results there).
+        _db.Results.RemoveRange(teamResults);
+        _db.HeatEntries.RemoveRange(await _db.HeatEntries.Where(he => sectionTeamIds.Contains(he.TeamId)).ToListAsync());
         var sectionSessionIds = section.Sessions.Select(ss => ss.Id).ToList();
         if (sectionSessionIds.Count > 0)
         {

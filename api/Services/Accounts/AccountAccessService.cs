@@ -49,7 +49,9 @@ public sealed class AccountAccessService(
         var stamp = NewStamp();
         await db.Users.Where(u => u.Id == targetId)
             .ExecuteUpdateAsync(s => s.SetProperty(u => u.LockedAt, now).SetProperty(u => u.LockedByUserId, callerId)
-                .SetProperty(u => u.LockedByMaster, callerIsMaster).SetProperty(u => u.ConcurrencyStamp, stamp), ct);
+                .SetProperty(u => u.LockedByMaster, callerIsMaster).SetProperty(u => u.ConcurrencyStamp, stamp)
+                // Older tokens stay dead after an unlock, not just while the lock lasts.
+                .SetProperty(u => u.SessionVersion, u => u.SessionVersion + 1), ct);
         await liveAccounts.SessionsEndedAsync(targetId);
     }
 
@@ -94,7 +96,8 @@ public sealed class AccountAccessService(
                 .SetProperty(u => u.BlockedByUserId, u => u.BlockedAt == null ? callerId : u.BlockedByUserId)
                 .SetProperty(u => u.BlockedByMaster, u => u.BlockedAt == null ? callerIsMaster : (u.BlockedByMaster || callerIsMaster))
                 .SetProperty(u => u.BlockReason, string.IsNullOrEmpty(cleanReason) ? (string?)null : cleanReason)
-                .SetProperty(u => u.ConcurrencyStamp, stamp), ct);
+                .SetProperty(u => u.ConcurrencyStamp, stamp)
+                .SetProperty(u => u.SessionVersion, u => u.SessionVersion + 1), ct);
 
             added = 0;
             foreach (var hash in await NetworksOfAsync(targetId, ct))
