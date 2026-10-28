@@ -7,6 +7,7 @@ import { TickerNumber } from '../../components/TickerNumber';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useExitDelay } from '../../hooks/useExitDelay';
 import { useSwipeToClose } from '../../hooks/useSwipeToClose';
+import { useT } from '../../i18n/LanguageContext';
 import './refine.css';
 
 /** Wraps a refined page so its tokens and type apply. Pass `aboveTabs` on competition pages that show the bottom tabs. */
@@ -241,16 +242,17 @@ function FloatingPanel({ anchor, place, onClose, children }: { anchor: RefObject
  * under the right end of the row, on every screen size. `allowOther` adds "Other…", which swaps the list for a box to
  * type your own value in.
  */
-export function RefineChoiceRow<T extends string>({ label, value, options, onChange, disabled = false, allowOther = false, placeholder = 'Choose' }: {
+export function RefineChoiceRow<T extends string>({ label, value, options, onChange, disabled = false, allowOther = false, placeholder }: {
   label: string; value: T; options: ChoiceOption<T>[]; onChange: (value: T) => void; disabled?: boolean; allowOther?: boolean; placeholder?: string;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [typing, setTyping] = useState(false);
   const [custom, setCustom] = useState('');
   const [place, setPlace] = useState<Place | null>(null);
   const rowRef = useRef<HTMLButtonElement>(null);
   const known = options.find((option) => option.value === value);
-  const current = known?.label ?? (value || placeholder);
+  const current = known?.label ?? (value || placeholder || t('site.choice.placeholder'));
 
   const close = () => { setOpen(false); setTyping(false); };
   function toggle() {
@@ -264,8 +266,8 @@ export function RefineChoiceRow<T extends string>({ label, value, options, onCha
 
   const list = typing ? (
     <form className="rf-choice-other" onSubmit={(event) => { event.preventDefault(); submitCustom(); }}>
-      <input autoFocus aria-label={`${label}, your own`} value={custom} onChange={(event) => setCustom(event.target.value)} maxLength={60} />
-      <button type="submit" className="rf-btn" disabled={!custom.trim()}>Use</button>
+      <input autoFocus aria-label={t('site.choice.yourOwn', { label })} value={custom} onChange={(event) => setCustom(event.target.value)} maxLength={60} />
+      <button type="submit" className="rf-btn" disabled={!custom.trim()}>{t('site.choice.use')}</button>
     </form>
   ) : (
     <div role="listbox" aria-label={label} className="rf-choices">
@@ -274,7 +276,7 @@ export function RefineChoiceRow<T extends string>({ label, value, options, onCha
           <span>{option.label}</span>{option.value === value && <Check className="h-4 w-4" aria-hidden="true" />}
         </button>
       ))}
-      {allowOther && <button type="button" role="option" aria-selected={false} className="rf-choice" onClick={() => setTyping(true)}><span>Other…</span></button>}
+      {allowOther && <button type="button" role="option" aria-selected={false} className="rf-choice" onClick={() => setTyping(true)}><span>{t('site.choice.other')}</span></button>}
     </div>
   );
   return (

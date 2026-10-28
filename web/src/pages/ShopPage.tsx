@@ -17,18 +17,20 @@ import type { CompetitionSummary, ShopComment, ShopPost } from '../types';
 import { confirmDialog } from '../components/ConfirmDialog';
 import { Notice } from '../components/Notice';
 import { useToast } from '../components/Toast';
+import { useT } from '../i18n/LanguageContext';
+import { tr } from '../i18n/translate';
 
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
   const m = Math.floor(ms / 60_000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m} min ago`;
+  if (m < 1) return tr('site.shop.justNow');
+  if (m < 60) return tr('site.shop.minAgo', { count: m });
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h} h ago`;
+  if (h < 24) return tr('site.shop.hAgo', { count: h });
   const d = Math.floor(h / 24);
-  if (d === 1) return 'Yesterday';
-  if (d < 7) return `${d} days ago`;
-  return d < 14 ? 'Last week' : `${Math.floor(d / 7)} weeks ago`;
+  if (d === 1) return tr('site.shop.yesterday');
+  if (d < 7) return tr('site.shop.daysAgo', { count: d });
+  return d < 14 ? tr('site.shop.lastWeek') : tr('site.shop.weeksAgo', { count: Math.floor(d / 7) });
 }
 
 /**
@@ -36,12 +38,13 @@ function timeAgo(iso: string): string {
  * (merchandise and add-ons, collected at the event). The same listings also appear inside each event's shop.
  */
 export function ShopPage() {
+  const t = useT();
   usePageWidth('wide');
   const [tab, setTab] = useState<'tack' | 'events'>('tack');
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<ShopFilters>(NO_SHOP_FILTERS);
   const [sheetOpen, setSheetOpen] = useState(false);
-  usePageHeader({ title: 'Shop', plain: true });
+  usePageHeader({ title: t('site.shop.title'), plain: true });
   const filterCount = countShopFilters(filters);
   const chips = shopFilterChips(filters);
   const clearFilter = (key: keyof ShopFilters) => setFilters((current) => ({ ...current, [key]: NO_SHOP_FILTERS[key] }));
@@ -50,14 +53,14 @@ export function ShopPage() {
     <>
       <div className="mx-auto flex w-full max-w-xl flex-col gap-3.5 pb-2 lg:max-w-3xl">
         <div className="mg-band mg-band-header flex flex-col gap-2 pb-3 pt-3">
-          <div className="mg-navy-switch w-full [&>*]:flex-1 [&>*]:justify-center" role="group" aria-label="Shop sections">
-            <button type="button" aria-pressed={tab === 'tack'} onClick={() => setTab('tack')}>Tack and kit</button>
-            <button type="button" aria-pressed={tab === 'events'} onClick={() => setTab('events')}>Event shops</button>
+          <div className="mg-navy-switch w-full [&>*]:flex-1 [&>*]:justify-center" role="group" aria-label={t('site.shop.sections')}>
+            <button type="button" aria-pressed={tab === 'tack'} onClick={() => setTab('tack')}>{t('site.shop.tackAndKit')}</button>
+            <button type="button" aria-pressed={tab === 'events'} onClick={() => setTab('events')}>{t('site.shop.eventShops')}</button>
           </div>
           <div className="fk-find fk-band">
-            <RoundSearch band label="Search the shop" placeholder={tab === 'tack' ? 'Saddle, bending poles, 13.2…' : 'Event name'} value={query} onChange={setQuery} />
+            <RoundSearch band label={t('site.shop.search')} placeholder={tab === 'tack' ? t('site.shop.searchTack') : t('site.shop.searchEvent')} value={query} onChange={setQuery} />
             {tab === 'tack' && (
-              <button type="button" className="fk-fbtn" aria-haspopup="dialog" aria-label={filterCount ? `Filter the shop, ${filterCount} set` : 'Filter the shop'} onClick={() => setSheetOpen(true)}>
+              <button type="button" className="fk-fbtn" aria-haspopup="dialog" aria-label={filterCount ? t('site.shop.filterSet', { count: filterCount }) : t('site.shop.filter')} onClick={() => setSheetOpen(true)}>
                 <SlidersHorizontal aria-hidden="true" className="h-5 w-5" />
                 {filterCount > 0 && <span className="fk-count" aria-hidden="true">{filterCount}</span>}
               </button>
@@ -65,41 +68,41 @@ export function ShopPage() {
           </div>
         </div>
         {tab === 'tack' && chips.length > 0 && (
-          <div className="fk-chips" role="group" aria-label="Filters set">
+          <div className="fk-chips" role="group" aria-label={t('site.shop.filtersSet')}>
             {chips.map((chip) => (
-              <button key={chip.key} type="button" className="fk-chip" aria-label={`Remove ${chip.label}`} onClick={() => clearFilter(chip.key)}>{chip.label}<X aria-hidden="true" size={15} strokeWidth={2.2} /></button>
+              <button key={chip.key} type="button" className="fk-chip" aria-label={t('site.shop.removeChip', { label: chip.label })} onClick={() => clearFilter(chip.key)}>{chip.label}<X aria-hidden="true" size={15} strokeWidth={2.2} /></button>
             ))}
           </div>
         )}
         {tab === 'tack' ? <ShopClassifieds query={query} filters={filters} floatingSell intro="" /> : <EventShopLinks query={query} />}
       </div>
       {sheetOpen && tab === 'tack' && (
-        <Sheet title="Filter the shop" className="fk-sheet" onClose={() => setSheetOpen(false)}>
+        <Sheet title={t('site.shop.filter')} className="fk-sheet" onClose={() => setSheetOpen(false)}>
           {({ close }) => (
             <>
-              <div className="fk-group" role="group" aria-label="Price">
-                <span className="fk-label" aria-hidden="true">Price</span>
+              <div className="fk-group" role="group" aria-label={t('site.shop.price')}>
+                <span className="fk-label" aria-hidden="true">{t('site.shop.price')}</span>
                 <div className="fk-pills">
                   {PRICE_BANDS.map((band) => (
                     <button key={band.value} type="button" className="fk-pill" aria-pressed={filters.price === band.value} onClick={() => setFilters((current) => ({ ...current, price: band.value }))}>{band.label}</button>
                   ))}
                 </div>
               </div>
-              <div className="fk-group" role="group" aria-label="Posted">
-                <span className="fk-label" aria-hidden="true">Posted</span>
+              <div className="fk-group" role="group" aria-label={t('site.shop.posted')}>
+                <span className="fk-label" aria-hidden="true">{t('site.shop.posted')}</span>
                 <div className="fk-pills">
                   {POSTED_OPTIONS.map((option) => (
                     <button key={option.value} type="button" className="fk-pill" aria-pressed={filters.posted === option.value} onClick={() => setFilters((current) => ({ ...current, posted: option.value }))}>{option.label}</button>
                   ))}
                 </div>
               </div>
-              <div className="fk-group" role="group" aria-label="Photo">
-                <span className="fk-label" aria-hidden="true">Photo</span>
+              <div className="fk-group" role="group" aria-label={t('site.shop.photo')}>
+                <span className="fk-label" aria-hidden="true">{t('site.shop.photo')}</span>
                 <div className="fk-pills">
-                  <button type="button" className="fk-pill" aria-pressed={filters.photoOnly} onClick={() => setFilters((current) => ({ ...current, photoOnly: !current.photoOnly }))}>With a photo</button>
+                  <button type="button" className="fk-pill" aria-pressed={filters.photoOnly} onClick={() => setFilters((current) => ({ ...current, photoOnly: !current.photoOnly }))}>{t('site.shop.withPhoto')}</button>
                 </div>
               </div>
-              <button type="button" className="kit-pill kit-pill-fill fk-show" onClick={() => close()}>Done</button>
+              <button type="button" className="kit-pill kit-pill-fill fk-show" onClick={() => close()}>{t('common.done')}</button>
             </>
           )}
         </Sheet>
@@ -110,6 +113,7 @@ export function ShopPage() {
 
 /** The events that are on or coming up, each with a link to its own shop. */
 function EventShopLinks({ query }: { query: string }) {
+  const t = useT();
   const [events, setEvents] = useState<CompetitionSummary[] | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -122,11 +126,11 @@ function EventShopLinks({ query }: { query: string }) {
   const shown = events?.filter((event) => `${event.name} ${event.location ?? ''}`.toLowerCase().includes(needle)) ?? [];
   return (
     <section aria-labelledby="event-shops-title" className="mg-sec">
-      <div className="mg-sec-head"><h2 id="event-shops-title">Event shops</h2></div>
-      <p className="mg-meta px-0.5">Merchandise and add-ons from the organisers, collected at the event.</p>
-      {events === null ? <p role="status" className="mg-meta px-0.5">Loading events…</p>
-        : events.length === 0 ? <p className="mg-card p-4">No events to shop for right now.</p>
-        : shown.length === 0 ? <p className="mg-card p-4">No event shops match that search.</p>
+      <div className="mg-sec-head"><h2 id="event-shops-title">{t('site.shop.eventShops')}</h2></div>
+      <p className="mg-meta px-0.5">{t('site.shop.eventIntro')}</p>
+      {events === null ? <p role="status" className="mg-meta px-0.5">{t('site.shop.loadingEvents')}</p>
+        : events.length === 0 ? <p className="mg-card p-4">{t('site.shop.noEvents')}</p>
+        : shown.length === 0 ? <p className="mg-card p-4">{t('site.shop.noEventMatch')}</p>
         : <ul className="mg-lines mg-lines-grid">
           {shown.map((event) => (
             <li key={event.id}>
@@ -145,7 +149,8 @@ function EventShopLinks({ query }: { query: string }) {
  * Buy, sell or swap tack and equipment. Used on the main shop page (searchable, with a Sell something button
  * pinned above the tabs) and inside each event's shop.
  */
-export function ShopClassifieds({ intro = 'Buy, sell or swap tack and equipment with other Pony Clubbers.', query = '', filters = NO_SHOP_FILTERS, floatingSell = false }: { intro?: string; query?: string; filters?: ShopFilters; floatingSell?: boolean }) {
+export function ShopClassifieds({ intro, query = '', filters = NO_SHOP_FILTERS, floatingSell = false }: { intro?: string; query?: string; filters?: ShopFilters; floatingSell?: boolean }) {
+  const t = useT();
   const { user, canEdit } = useAuth();
   const [posts, setPosts] = useState<ShopPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -174,19 +179,19 @@ export function ShopClassifieds({ intro = 'Buy, sell or swap tack and equipment 
   const buttonClass = floatingSell ? 'sp-pill sp-pill-fill' : 'mg-btn mg-btn-primary !min-h-11 !px-3 !text-sm';
   const sell = user ? (
     <button type="button" onClick={() => setComposerOpen((v) => !v)} aria-expanded={composerOpen} className={buttonClass}>
-      {composerOpen ? <X className="h-[18px] w-[18px]" aria-hidden="true" /> : <Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />}{composerOpen ? 'Cancel' : floatingSell ? 'Sell something' : 'New post'}
+      {composerOpen ? <X className="h-[18px] w-[18px]" aria-hidden="true" /> : <Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />}{composerOpen ? t('common.cancel') : floatingSell ? t('site.shop.sell') : t('site.shop.newPost')}
     </button>
   ) : (
     <Link to="/login" className={buttonClass}>
-      <Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />{floatingSell ? 'Sell something' : 'Sign in to post'}
+      <Plus className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />{floatingSell ? t('site.shop.sell') : t('site.shop.signInToPost')}
     </Link>
   );
 
   return (
     <div className="flex flex-col gap-3">
-      {(intro || !floatingSell) && (
+      {(intro !== '' || !floatingSell) && (
         <div className="flex flex-wrap items-center gap-2">
-          <p className="mg-meta flex-1">{intro}</p>
+          <p className="mg-meta flex-1">{intro ?? t('site.shop.intro')}</p>
           {!floatingSell && sell}
         </div>
       )}
@@ -196,14 +201,14 @@ export function ShopClassifieds({ intro = 'Buy, sell or swap tack and equipment 
       )}
 
       {loading ? (
-        <p role="status" className="mg-meta px-0.5">Loading posts…</p>
+        <p role="status" className="mg-meta px-0.5">{t('site.shop.loadingPosts')}</p>
       ) : posts.length === 0 ? (
         <div className="mg-card p-6 text-center">
           <ShoppingBag className="mx-auto mb-2 h-8 w-8 text-[rgb(var(--mg-faint))]" aria-hidden="true" />
-          <p className="mg-meta">Nothing for sale yet. Be the first to post!</p>
+          <p className="mg-meta">{t('site.shop.empty')}</p>
         </div>
       ) : shown.length === 0 ? (
-        <p className="mg-card p-4">{filtering ? 'Nothing matches that search and those filters.' : 'Nothing matches that search.'}</p>
+        <p className="mg-card p-4">{filtering ? t('site.shop.noMatchFilters') : t('site.shop.noMatch')}</p>
       ) : (
         <ul className="sp-listings">
           {shown.map((p) => (
@@ -225,6 +230,7 @@ export function ShopClassifieds({ intro = 'Buy, sell or swap tack and equipment 
 }
 
 function PostComposer({ onPosted, defaultName }: { onPosted: () => void; defaultName: string }) {
+  const t = useT();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [price, setPrice] = useState('');
@@ -239,13 +245,13 @@ function PostComposer({ onPosted, defaultName }: { onPosted: () => void; default
   async function pickImage(file: File) {
     setImageErr(null);
     if (file.size > 2_000_000) {
-      setImageErr('Image is too big. Pick one under 2 MB.');
+      setImageErr(t('site.shop.imageTooBig'));
       return;
     }
     // Resize client-side to keep base64 manageable.
     const dataUrl = await resizeToDataUrl(file, 800);
     if (dataUrl.length > 700_000) {
-      setImageErr('Compressed image is still too large. Try a smaller photo.');
+      setImageErr(t('site.shop.imageStillBig'));
       return;
     }
     setImageBase64(dataUrl);
@@ -253,7 +259,7 @@ function PostComposer({ onPosted, defaultName }: { onPosted: () => void; default
 
   async function submit() {
     if (!title.trim() || !body.trim() || !name.trim()) {
-      setErr({ text: 'Title, description and your name are all required.', retry: false });
+      setErr({ text: t('site.shop.required'), retry: false });
       return;
     }
     setErr(null);
@@ -272,7 +278,7 @@ function PostComposer({ onPosted, defaultName }: { onPosted: () => void; default
       onPosted();
     } catch (e) {
       const msg = (e as { response?: { data?: { message?: string } | string } }).response?.data;
-      setErr({ text: typeof msg === 'string' ? msg : msg?.message ?? 'Couldn’t post. Check your signal and try again.', retry: true });
+      setErr({ text: typeof msg === 'string' ? msg : msg?.message ?? t('site.shop.postFailed'), retry: true });
     } finally {
       setBusy(false);
     }
@@ -280,58 +286,58 @@ function PostComposer({ onPosted, defaultName }: { onPosted: () => void; default
 
   return (
     <div className="card p-4 space-y-2 border-l-4 border-brand-500">
-      <h2 className="font-semibold text-sm">New shop post</h2>
+      <h2 className="font-semibold text-sm">{t('site.shop.newShopPost')}</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <label className="block">
-          <span className="text-xs font-semibold">Title</span>
-          <input className="input mt-1 text-sm" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What are you selling?" />
+          <span className="text-xs font-semibold">{t('site.shop.fieldTitle')}</span>
+          <input className="input mt-1 text-sm" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('site.shop.titlePlaceholder')} />
         </label>
         <label className="block">
-          <span className="text-xs font-semibold">Price (£, optional)</span>
+          <span className="text-xs font-semibold">{t('site.shop.fieldPrice')}</span>
           <NumberField decimal min={0} step="0.01" className="input mt-1 text-sm" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="25.00" />
         </label>
       </div>
       <label className="block">
-        <span className="text-xs font-semibold">Description</span>
-        <textarea rows={3} className="input mt-1 text-sm" value={body} onChange={(e) => setBody(e.target.value)} placeholder="Condition, size, photos, where you'd meet to hand over…" />
+        <span className="text-xs font-semibold">{t('site.shop.fieldDescription')}</span>
+        <textarea rows={3} className="input mt-1 text-sm" value={body} onChange={(e) => setBody(e.target.value)} placeholder={t('site.shop.descriptionPlaceholder')} />
       </label>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <label className="block">
-          <span className="text-xs font-semibold">Your name</span>
+          <span className="text-xs font-semibold">{t('site.shop.fieldName')}</span>
           <input className="input mt-1 text-sm" value={name} onChange={(e) => setName(e.target.value)} />
         </label>
         <label className="block">
-          <span className="text-xs font-semibold">Pony Club (optional)</span>
+          <span className="text-xs font-semibold">{t('site.shop.fieldPonyClub')}</span>
           <input className="input mt-1 text-sm" value={ponyClub} onChange={(e) => setPonyClub(e.target.value)} />
         </label>
       </div>
       <label className="block">
-        <span className="text-xs font-semibold">Contact info (optional)</span>
-        <input className="input mt-1 text-sm" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="Phone, email, 'DM here'" />
+        <span className="text-xs font-semibold">{t('site.shop.fieldContact')}</span>
+        <input className="input mt-1 text-sm" value={contact} onChange={(e) => setContact(e.target.value)} placeholder={t('site.shop.contactPlaceholder')} />
       </label>
       <div>
-        <span className="text-xs font-semibold flex items-center gap-1.5"><ImageIcon className="w-3.5 h-3.5" /> Image (optional)</span>
+        <span className="text-xs font-semibold flex items-center gap-1.5"><ImageIcon className="w-3.5 h-3.5" /> {t('site.shop.fieldImage')}</span>
         <input
           type="file"
           accept="image/*"
-          aria-label="Photo"
+          aria-label={t('site.shop.photo')}
           className="block mt-1 text-xs"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) pickImage(f); }}
         />
         {imageBase64 && (
           <div className="mt-2 relative inline-block">
-            <img src={imageBase64} alt="preview" className="max-h-32 rounded-md border border-slate-200 dark:border-slate-700" />
-            <button onClick={() => setImageBase64(null)} aria-label="Remove photo" className="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full p-0.5">
+            <img src={imageBase64} alt={t('site.shop.preview')} className="max-h-32 rounded-md border border-slate-200 dark:border-slate-700" />
+            <button onClick={() => setImageBase64(null)} aria-label={t('site.shop.removePhoto')} className="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full p-0.5">
               <X className="w-3 h-3" />
             </button>
           </div>
         )}
         {imageErr && <div className="mt-1"><Notice>{imageErr}</Notice></div>}
       </div>
-      {err && <Notice actionLabel={err.retry ? 'Try again' : undefined} onAction={err.retry ? () => { void submit(); } : undefined} actionDisabled={busy}>{err.text}</Notice>}
+      {err && <Notice actionLabel={err.retry ? t('common.tryAgain') : undefined} onAction={err.retry ? () => { void submit(); } : undefined} actionDisabled={busy}>{err.text}</Notice>}
       <div className="flex justify-end">
         <button onClick={submit} disabled={busy} className="btn-primary !py-1.5 !px-3 text-sm">
-          <Check className="w-3.5 h-3.5" /> {busy ? 'Posting…' : 'Post'}
+          <Check className="w-3.5 h-3.5" /> {busy ? t('site.shop.posting') : t('site.shop.post')}
         </button>
       </div>
     </div>
@@ -348,6 +354,7 @@ function PostRow({
   currentUserId: string | null;
   onChanged: () => void;
 }) {
+  const t = useT();
   const [showComments, setShowComments] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [reportReason, setReportReason] = useState('');
@@ -358,7 +365,7 @@ function PostRow({
   const ownPost = currentUserId != null && post.authorUserId === currentUserId;
 
   async function remove() {
-    if (!(await confirmDialog({ title: 'Remove this post?', message: 'It disappears from the tack and kit shop.', confirmLabel: 'Remove post', destructive: true }))) return;
+    if (!(await confirmDialog({ title: t('site.shop.removeTitle'), message: t('site.shop.removeMessage'), confirmLabel: t('site.shop.removeLabel'), destructive: true }))) return;
     await api.delete(`/shop/posts/${post.id}`);
     onChanged();
   }
@@ -371,9 +378,9 @@ function PostRow({
       setReporting(false);
       setReportReason('');
       setReported(true);
-      toast.show('Reported. An admin will look at it.');
+      toast.show(t('site.shop.reported'));
     } catch {
-      setReportError('Couldn’t send the report. Check your signal and try again.');
+      setReportError(t('site.shop.reportFailed'));
     } finally {
       setSendingReport(false);
     }
@@ -385,11 +392,11 @@ function PostRow({
       <button type="button" onClick={onToggle} aria-expanded={open} className="sp-listing-head">
         {post.imageBase64
           ? <LazyImage src={post.imageBase64} alt="" className="sp-thumb" compact />
-          : <span role="img" aria-label={`No photo: ${post.title}`} className="sp-thumb"><ImageIcon className="h-[22px] w-[22px]" aria-hidden="true" /></span>}
+          : <span role="img" aria-label={t('site.shop.noPhoto', { title: post.title })} className="sp-thumb"><ImageIcon className="h-[22px] w-[22px]" aria-hidden="true" /></span>}
         <span className="sp-grow !gap-1">
           <strong className="text-[17px] font-semibold leading-tight">{post.title}</strong>
           <span className="sp-t2 truncate">{where}</span>
-          <span className="sp-t2 !text-[12.5px]">{timeAgo(post.createdAt)}{post.isDeleted ? ' · Removed' : ''}</span>
+          <span className="sp-t2 !text-[12.5px]">{timeAgo(post.createdAt)}{post.isDeleted ? ` · ${t('site.shop.removed')}` : ''}</span>
         </span>
         <span className="sp-price">{post.priceMinor != null ? priceLabel(post.priceMinor) : ''}</span>
       </button>
@@ -397,35 +404,35 @@ function PostRow({
         <div className="mg-reveal space-y-2 border-t border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-subtle))] px-3 py-3">
           {post.imageBase64 && <LazyImage src={post.imageBase64} alt={post.title} className="max-h-60 w-full rounded-md object-cover" />}
           <p className="whitespace-pre-wrap text-sm">{post.body}</p>
-          {post.contactInfo && <p className="mg-meta">Contact: {post.contactInfo}</p>}
+          {post.contactInfo && <p className="mg-meta">{t('site.shop.contact', { info: post.contactInfo })}</p>}
           <div className="flex flex-wrap items-center gap-1.5">
             <button onClick={() => setShowComments((v) => !v)} className="mg-small-btn gap-1.5">
-              <MessageCircle className="h-4 w-4" aria-hidden="true" /> {showComments ? 'Hide' : 'Comments'}
+              <MessageCircle className="h-4 w-4" aria-hidden="true" /> {showComments ? t('site.shop.hide') : t('site.shop.comments')}
               {post.commentCount > 0 && <span className="text-[rgb(var(--mg-muted))]">{post.commentCount}</span>}
             </button>
             <div className="ml-auto" />
             {!post.isDeleted && !ownPost && !reported && (
-              <button type="button" onClick={() => { setReporting((v) => !v); setReportError(null); }} disabled={sendingReport} className="mg-small-btn gap-1.5"><Flag className="h-4 w-4" aria-hidden="true" /> Report</button>
+              <button type="button" onClick={() => { setReporting((v) => !v); setReportError(null); }} disabled={sendingReport} className="mg-small-btn gap-1.5"><Flag className="h-4 w-4" aria-hidden="true" /> {t('site.shop.report')}</button>
             )}
             {(isAdmin || ownPost) && !post.isDeleted && (
-              <button onClick={remove} className="mg-small-btn gap-1.5 !text-[rgb(var(--mg-elim))]" aria-label="Remove post"><Trash2 className="h-4 w-4" aria-hidden="true" /></button>
+              <button onClick={remove} className="mg-small-btn gap-1.5 !text-[rgb(var(--mg-elim))]" aria-label={t('site.shop.removeLabel')}><Trash2 className="h-4 w-4" aria-hidden="true" /></button>
             )}
           </div>
           {reporting && (
             <div className="flex flex-wrap items-center gap-2 pt-1">
               <input
                 type="text"
-                aria-label="Why are you reporting this post? (optional)"
-                placeholder="Reason (optional)"
+                aria-label={t('site.shop.reportWhy')}
+                placeholder={t('site.shop.reasonPlaceholder')}
                 maxLength={1000}
                 disabled={sendingReport}
                 value={reportReason}
                 onChange={(e) => setReportReason(e.target.value)}
                 className="input min-w-[180px] flex-1 text-sm"
               />
-              <button type="button" disabled={sendingReport} onClick={() => { void submitReport(); }} className="mg-small-btn">{sendingReport ? 'Sending…' : 'Send report'}</button>
-              <button type="button" disabled={sendingReport} onClick={() => { setReporting(false); setReportReason(''); setReportError(null); }} className="mg-small-btn">Cancel</button>
-              {reportError && <div className="w-full"><Notice actionLabel="Try again" onAction={() => { void submitReport(); }} actionDisabled={sendingReport}>{reportError}</Notice></div>}
+              <button type="button" disabled={sendingReport} onClick={() => { void submitReport(); }} className="mg-small-btn">{sendingReport ? t('site.shop.sending') : t('site.shop.sendReport')}</button>
+              <button type="button" disabled={sendingReport} onClick={() => { setReporting(false); setReportReason(''); setReportError(null); }} className="mg-small-btn">{t('common.cancel')}</button>
+              {reportError && <div className="w-full"><Notice actionLabel={t('common.tryAgain')} onAction={() => { void submitReport(); }} actionDisabled={sendingReport}>{reportError}</Notice></div>}
             </div>
           )}
           {toast.node}
@@ -439,6 +446,7 @@ function PostRow({
 function CommentThread({ postId, postAuthorId }: {
   postId: number; postAuthorId: string | null; currentUserId: string | null;
 }) {
+  const t = useT();
   const [comments, setComments] = useState<ShopComment[]>([]);
   const [body, setBody] = useState('');
   const [isPrivate, setIsPrivate] = useState(false);
@@ -472,7 +480,7 @@ function CommentThread({ postId, postAuthorId }: {
     <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-700/60">
       <ul className="space-y-1.5 max-h-48 overflow-auto">
         {comments.length === 0 && (
-          <li className="text-[11px] text-slate-500 italic">No comments yet.</li>
+          <li className="text-[11px] text-slate-500 italic">{t('site.shop.noComments')}</li>
         )}
         {comments.map((c) => (
           <li key={c.id} className={`text-xs ${c.isPrivate ? 'bg-[rgb(var(--mg-info-bg))] px-2 py-1 rounded-md' : ''}`}>
@@ -487,23 +495,23 @@ function CommentThread({ postId, postAuthorId }: {
         <div className="flex gap-1">
           <input
             className="input !py-1 text-xs flex-1"
-            aria-label={isPrivate ? 'Private message to the seller' : 'Public comment'}
-            placeholder={isPrivate ? 'Private message to the seller…' : 'Add a public comment…'}
+            aria-label={isPrivate ? t('site.shop.privateLabel') : t('site.shop.publicLabel')}
+            placeholder={isPrivate ? t('site.shop.privatePlaceholder') : t('site.shop.publicPlaceholder')}
             value={body}
             onChange={(e) => setBody(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
           />
           <label className="flex items-center gap-1 text-[10px] text-slate-500 cursor-pointer px-1">
             <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
-            DM
+            {t('site.shop.dm')}
           </label>
-          <button onClick={submit} disabled={busy || !body.trim()} aria-label="Send comment" className="btn-primary !py-1 !px-2 text-xs">
+          <button onClick={submit} disabled={busy || !body.trim()} aria-label={t('site.shop.sendComment')} className="btn-primary !py-1 !px-2 text-xs">
             <Send className="w-3 h-3" />
           </button>
         </div>
       ) : (
         <Link to="/login" className="text-xs text-brand-600 dark:text-brand-300 hover:underline">
-          Sign in to comment
+          {t('site.shop.signInToComment')}
         </Link>
       )}
     </div>

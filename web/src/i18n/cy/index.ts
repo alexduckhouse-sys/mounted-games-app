@@ -11,8 +11,9 @@ import { competition } from './competition.ts';
 import { entries } from './entries.ts';
 import { ops } from './ops.ts';
 import { shell } from './shell.ts';
+import { site } from './site.ts';
 import { teams } from './teams.ts';
 
-export const AREAS = { common, shell, auth, account, entries, competition, teams, ops } as const;
+export const AREAS = { common, shell, auth, account, entries, competition, teams, site, ops } as const;
 
-export const cy: Catalogue = { ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...ops };
+export const cy: Catalogue = { ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...site, ...ops };
