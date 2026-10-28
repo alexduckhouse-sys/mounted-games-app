@@ -8,6 +8,7 @@ import { PasswordChecklist } from '../components/PasswordChecklist';
 import { apiErrorStatus } from '../lib/apiError';
 import { friendlyPasswordErrors, passwordMeetsRules } from '../lib/passwordRules';
 import { tokenFromHash } from '../offline/scorerLink';
+import { useT } from '../i18n/LanguageContext';
 import type { PasswordResetCheck, PasswordResetProblem } from '../types';
 import { AuthFrame } from './auth/AuthFrame';
 import { Field } from './auth/Field';
@@ -36,6 +37,7 @@ function deadFromState(state: PasswordResetCheck['state']): 'expired' | 'used' |
  * account out everywhere, so this device signs out too, and the person signs in again with the new password.
  */
 export function ResetPasswordPage() {
+  const t = useT();
   const { user, logout } = useAuth();
   const rulesId = useId();
   // Read once, before the effect below clears the fragment (StrictMode keeps this state across its second effect run).
@@ -91,6 +93,9 @@ export function ResetPasswordPage() {
         setPhase({ kind: 'dead', why: problem.code });
       } else if (status === 400) {
         setError(friendlyPasswordErrors(problem)[0] || problem?.message || 'Choose a password that meets the rules below.');
+      } else if (problem?.code === 'conflict' || problem?.code === 'failed') {
+        // Nothing was saved and the link still works, so the form stays for another go.
+        setError(t(problem.code === 'conflict' ? 'auth.reset.conflict' : 'auth.reset.failed'));
       } else if (status === 429) {
         setError('Too many tries. Wait a minute and try again.');
       } else {

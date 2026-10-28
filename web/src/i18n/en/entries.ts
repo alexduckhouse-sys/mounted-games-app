@@ -72,7 +72,7 @@ export const entries = {
   'entries.form.bankCopied': 'Bank details copied',
   'entries.form.payAmount': 'Pay {fee}',
   'entries.form.payByTransfer': 'Pay {fee} by bank transfer',
-  'entries.form.demoNote': 'This is a demo event. After you submit, you will see a test payment page. No money is taken.',
+  'entries.form.demoNote': 'After you submit, you will see a test payment page.',
   'entries.form.bankDetails': 'Bank details',
   'entries.form.payTo': 'Pay to',
   'entries.form.reference': 'Reference',

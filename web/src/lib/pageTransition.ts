@@ -61,5 +61,5 @@ export function transitionPlan(kind: PageTransitionKind): { outgoing: Keyframe[]
       top: 'outgoing', duration: PUSH_MS, easing: PUSH_EASING,
     };
   }
-  return { outgoing: [{ opacity: 1 }, { opacity: 0 }], incoming: [{ opacity: 0 }, { opacity: 1 }], top: 'outgoing', duration: FADE_MS, easing: FADE_EASING };
+  return { outgoing: [{ opacity: 1 }, { opacity: 0 }], incoming: [{ opacity: 0.4 }, { opacity: 1 }], top: 'outgoing', duration: FADE_MS, easing: FADE_EASING };
 }

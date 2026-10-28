@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { DelaySheet } from './DelaySheet';
 
@@ -76,5 +77,10 @@ describe('DelaySheet', () => {
     setup();
     expect(screen.queryByText(/Races are taking/)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Continue the timetable' })).toBeNull();
+  });
+
+  it('links to Timetable & draw to change the order or add a break', () => {
+    render(<MemoryRouter><DelaySheet arena="" lateMinutes={0} paused={false} busy={false} pace={null} rearrangeTo="/competitions/7/timetable-and-draw" onShift={vi.fn()} onContinue={vi.fn()} onClose={vi.fn()} /></MemoryRouter>);
+    expect(screen.getByRole('link', { name: 'Change the order or add a break' })).toHaveAttribute('href', '/competitions/7/timetable-and-draw');
   });
 });

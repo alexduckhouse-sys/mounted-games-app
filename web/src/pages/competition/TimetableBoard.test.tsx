@@ -305,6 +305,21 @@ it('shows a session with no heats as provisional to organisers, and hides it fro
   expect(screen.getByRole('note')).toHaveTextContent('Provisional timetable');
 });
 
+it('shows everyone an age group’s finals at the time the organiser set, before the draw', () => {
+  const finals = session(5, { arenaName: 'Arena Two', name: 'Juniors finals', sectionName: 'Juniors', competitionSectionId: 2, scheduledStart: `${day}T15:30:00`, orderIndex: 5 });
+  const unset = session(6, { arenaName: 'Main Arena', name: 'Seniors finals', sectionName: 'Seniors', competitionSectionId: 3, orderIndex: 6 });
+  setCompetition({ sessions: [...(state.value as { competition: { sessions: unknown[] } }).competition.sessions, finals, unset] });
+  renderBoard();
+  const block = screen.getByRole('region', { name: 'Juniors · Finals' });
+  const row = within(block).getByRole('link', { name: /Finals start/ });
+  expect(row).toHaveTextContent(/15:30|03:30 PM/);
+  expect(row).toHaveTextContent('Teams decided by the heats');
+  expect(row).toHaveAttribute('href', '/competitions/1/session/5');
+  expect(block).not.toHaveTextContent(/\d finals?\b/);
+  expect(screen.queryByRole('region', { name: 'Seniors · Finals' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('note')).not.toBeInTheDocument();
+});
+
 it('shows ON NOW · Race X of Y when a live heat has races, highlights followed teams, and keeps multi-arena sessions grouped chronologically by session', () => {
   localStorage.setItem(FAVOURITES_KEY, JSON.stringify([{ competitionId: 1, teamId: 7 }]));
   setCompetition({
@@ -347,6 +362,9 @@ it('shows ON NOW · Race X of Y when a live heat has races, highlights followed 
   const live = container.querySelector('.tt-live') as HTMLElement;
   expect(live).toHaveTextContent('ON NOW · Race 2 of 3');
   expect(live).toHaveAttribute('data-followed', 'true');
+  // The star comes after the heat's name.
+  const title = live.querySelector('.tt-event strong')!;
+  expect(title.lastElementChild).toHaveClass('tt-fav-star');
 
   // Concurrent sessions across arenas stay grouped as single session blocks rather than splitting heat-by-heat.
   const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);

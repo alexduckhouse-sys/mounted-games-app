@@ -551,17 +551,22 @@ span[data-grow] { display: inline-block; }
 @keyframes mg-drawer-out { to { transform: translateX(100%); } }
 @keyframes mg-sheet-in { from { transform: translateY(100%); } }
 @keyframes mg-sheet-out { from { transform: translateY(var(--drag, 0px)); } to { transform: translateY(100%); } }
+/* Bottom pop-ups (sheets, confirms, the quick-access card): straight up, straight down, no bounce (chosen 28 Oct 2026).
+   While a finger drags one it follows 1:1 (hooks/useSwipeToClose); let go short and it slides back. */
+:root { --mg-sheet-ease: cubic-bezier(.32, .72, 0, 1); }
+dialog.mg-sheet, .mg-confirm, .mg-remember, .rf-sheet { transition: transform 220ms var(--mg-sheet-ease); }
+dialog.mg-sheet.is-dragging, .mg-confirm.is-dragging, .mg-remember.is-dragging, .rf-sheet.is-dragging { transition: none; }
 @keyframes mg-confirm-in { from { opacity: 0; transform: translateY(10px) scale(.95); } }
 dialog.mg-drawer[open] { animation: mg-drawer-in .3s var(--mg-ease-out); }
-dialog.mg-sheet[open] { animation: mg-sheet-in .34s var(--mg-ease-out); }
+dialog.mg-sheet[open] { animation: mg-sheet-in 280ms var(--mg-sheet-ease); }
 /* The dim behind them comes and goes gently, slower than the panel itself. */
 dialog.mg-drawer[open]::backdrop, dialog.mg-sheet[open]::backdrop { animation: mg-fade-in .5s ease-out; }
 dialog.mg-drawer.is-closing { animation: mg-drawer-out .28s ease-in forwards; }
-dialog.mg-sheet.is-closing { animation: mg-sheet-out .28s ease-in forwards; }
+dialog.mg-sheet.is-closing { animation: mg-sheet-out 200ms ease-in forwards; }
 dialog.is-closing::backdrop { animation: mg-fade-out .38s ease-in-out forwards; }
 /* An answered confirm leaves like a sheet (ConfirmDialog plays it on a still copy); its dim fades a little slower. */
 .mg-confirm-backdrop.mg-confirm-leaving { pointer-events: none; animation: mg-fade-out .3s ease-in-out forwards; }
-.mg-confirm-leaving .mg-confirm { animation: mg-sheet-out .28s ease-in forwards; }
+.mg-confirm-leaving .mg-confirm { animation: mg-sheet-out 200ms ease-in forwards; }
 /* On wider screens sheets and confirms are centred cards, so they drop 12px and fade rather than sliding off. */
 @keyframes mg-card-out { to { opacity: 0; transform: translateY(12px); } }
 @media (min-width: 640px) {
@@ -571,6 +576,7 @@ dialog.is-closing::backdrop { animation: mg-fade-out .38s ease-in-out forwards; 
 .mg-confirm { animation: mg-confirm-in .28s cubic-bezier(.34, 1.4, .64, 1); }
 @media (prefers-reduced-motion: reduce) {
   dialog.mg-drawer, dialog.mg-sheet, dialog.mg-drawer::backdrop, dialog.mg-sheet::backdrop, .mg-confirm-backdrop, .mg-confirm { animation: none !important; }
+  dialog.mg-sheet, .mg-confirm, .mg-remember, .rf-sheet { transition: none; }
   .mg-confirm-leaving { display: none; }
 }
 html[data-lite="true"] dialog::backdrop { animation: none !important; }

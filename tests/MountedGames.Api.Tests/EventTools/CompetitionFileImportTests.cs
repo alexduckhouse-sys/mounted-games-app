@@ -83,7 +83,7 @@ public class CompetitionFileImportTests : IClassFixture<ApiFactory>
 
         // Sessions run in start order: the Novice finals at 09:30 sit between the junior heats and their finals.
         Assert.Equal(
-            ["Under 15 Pairs heats", "Novice Pairs finals", "Under 15 Pairs finals", "Novice Pairs heats"],
+            ["Under 15 Pairs heats", "Finals · Novice Pairs", "Finals · Under 15 Pairs", "Novice Pairs heats"],
             comp.Sessions.OrderBy(s => s.OrderIndex).Select(s => s.Name));
         var heats = comp.Sessions.Single(s => s.Name == "Under 15 Pairs heats");
         Assert.Equal((4, 20, "[\"Bending\",\"Stepping Stones\",\"Old Sock\"]"), (heats.LanesPerHeat!.Value, heats.MinutesPerHeat!.Value, heats.PlannedRaces));
@@ -96,10 +96,10 @@ public class CompetitionFileImportTests : IClassFixture<ApiFactory>
         Assert.Equal(HeatRaces, heat2.Races.OrderBy(r => r.OrderIndex).Select(r => r.Name));
         Assert.All(heat2.Races, r => Assert.False(r.IsComplete));
 
-        var finals = comp.Sessions.Single(s => s.Name == "Under 15 Pairs finals");
+        var finals = comp.Sessions.Single(s => s.Name == "Finals · Under 15 Pairs");
         Assert.Empty(finals.Heats);
         Assert.Equal((30, "[\"Bending\",\"2 Flag\"]"), (finals.MinutesPerHeat!.Value, finals.PlannedRaces));
-        Assert.Equal("[\"Bending\",\"Sweetie Race\"]", comp.Sessions.Single(s => s.Name == "Novice Pairs finals").PlannedRaces);
+        Assert.Equal("[\"Bending\",\"Sweetie Race\"]", comp.Sessions.Single(s => s.Name == "Finals · Novice Pairs").PlannedRaces);
 
         var teams = await db.Teams.Include(t => t.Club).Include(t => t.DeclarationForms).ThenInclude(d => d.Riders)
             .Where(t => t.CompetitionId == comp.Id).ToListAsync();
@@ -201,6 +201,13 @@ public class CompetitionFileImportTests : IClassFixture<ApiFactory>
         { "final-minutes", "minutesPerFinal must be at least 1" },
         { "final-races", "finals have no races" },
         { "end", "endTime is before the last session ends" },
+        { "final-lanes", "lanesPerFinal must be at least 1" },
+        { "final-lanes-hatbands", "lanesPerFinal is more than there are hatbands" },
+        { "final-early", "A Final starts before the finals session" },
+        { "final-order", "B Final starts before the final before it" },
+        { "final-count", "more than 26 finals" },
+        { "final-time", "C Final: time must be written HH:mm" },
+        { "final-end", "endTime is before the last session ends" },
     };
 
     [Theory]
@@ -233,6 +240,13 @@ public class CompetitionFileImportTests : IClassFixture<ApiFactory>
             "final-minutes" => good with { Sections = [s with { Finals = new("10:10", 0) }] },
             "final-races" => good with { Sections = [s with { FinalRaces = [] }] },
             "end" => good with { EndTime = "09:00" },
+            "final-lanes" => good with { Sections = [s with { Finals = new("10:10", LanesPerFinal: 0, Heats: ["10:10"]) }] },
+            "final-lanes-hatbands" => good with { Sections = [s with { Finals = new("10:10", LanesPerFinal: 5) }] },
+            "final-early" => good with { Sections = [s with { Finals = new("10:10", Heats: ["10:00"]) }] },
+            "final-order" => good with { Sections = [s with { Finals = new("10:10", Heats: ["10:40", "10:10"]) }] },
+            "final-count" => good with { Sections = [s with { Finals = new("10:10", Heats: Enumerable.Repeat("10:10", 27).ToList()) }] },
+            "final-time" => good with { Sections = [s with { Finals = new("10:10", Heats: ["10:10", "10:40", "11am"]) }] },
+            "final-end" => good with { Sections = [s with { Finals = new("15:00", Heats: ["15:00", "15:30", "16:00"]) }] },
             _ => throw new ArgumentOutOfRangeException(nameof(fault)),
         };
 
@@ -272,7 +286,7 @@ public class CompetitionFileImportTests : IClassFixture<ApiFactory>
         var ordered = heats.Heats.OrderBy(h => h.OrderIndex).ToList();
         Assert.Equal(["Heat 1", "Heat 2"], ordered.Select(h => h.Label));
         Assert.Equal([1, 2, 4], ordered[1].Entries.Select(e => e.LaneIndex).Order());
-        var planned = sessions.Single(s => s.Name == "Under 15 Pairs finals");
+        var planned = sessions.Single(s => s.Name == "Finals · Under 15 Pairs");
         Assert.Equal(FinalRaces, planned.PlannedRaces);
 
         // Every heat race scored: lane order is finishing order, points from the largest heat (3).
@@ -297,5 +311,149 @@ public class CompetitionFileImportTests : IClassFixture<ApiFactory>
         Assert.Equal(planned.Id, drawn.Id);
         Assert.Equal(["A Final", "B Final"], drawn.Heats.OrderBy(h => h.OrderIndex).Select(h => h.Label));
         Assert.All(drawn.Heats, h => Assert.Equal(FinalRaces, h.Races.Select(r => r.Name)));
+    }
+
+    /// <summary>The juniors with their A and B finals on the timetable, empty, three pairs each.</summary>
+    private static CompetitionImportSection JuniorsWithFinals() => Juniors() with
+    {
+        Finals = new("10:10", MinutesPerFinal: 25, LanesPerFinal: 3, Heats: ["10:10", "10:30"]),
+    };
+
+    [Fact]
+    public async Task Import_AddsEmptyLetteredFinals_WithTheirTimesAndRaces()
+    {
+        await using var db = await Database();
+        var file = Sample() with { Sections = [JuniorsWithFinals()] };
+
+        var result = await CompetitionFileImport.ImportAsync(db, file);
+
+        // Two heats and two finals; 3 heat races each and 2 final races each.
+        Assert.Equal((4, 10), (result.Heats, result.Races));
+        var finals = await db.Sessions.Include(s => s.Heats).ThenInclude(h => h.Races).Include(s => s.Heats).ThenInclude(h => h.Entries)
+            .SingleAsync(s => s.CompetitionId == result.CompetitionId && s.Name == "Finals · Under 15 Pairs");
+        Assert.Equal((3, 25, new DateTime(2030, 6, 1, 9, 10, 0)), (finals.LanesPerHeat!.Value, finals.MinutesPerHeat!.Value, finals.ScheduledStart!.Value));
+        // A runs first, as on the sheet; A is cut to the 20 minutes before B starts.
+        Assert.Equal(
+            [("A Final", 1, new DateTime(2030, 6, 1, 9, 10, 0), 20), ("B Final", 2, new DateTime(2030, 6, 1, 9, 30, 0), 25)],
+            finals.Heats.OrderBy(h => h.OrderIndex).Select(h => (h.Label!, h.OrderIndex, h.ScheduledStart!.Value, h.DurationMinutes!.Value)));
+        Assert.All(finals.Heats, h =>
+        {
+            Assert.Empty(h.Entries);
+            Assert.Equal(FinalRaces, h.Races.OrderBy(r => r.OrderIndex).Select(r => r.Name));
+        });
+    }
+
+    [Fact]
+    public async Task AddFinals_FillsThePlannedSessionsOfAnEventImportedEarlier_Once()
+    {
+        await using var db = await Database();
+        var name = $"Finals later {Guid.NewGuid():N}";
+        var first = await CompetitionFileImport.ImportAsync(db, Sample(name));
+        var later = Sample(name) with
+        {
+            Sections =
+            [
+                JuniorsWithFinals() with { FinalRaces = null },
+                // The Novice final waits for the draw: nothing listed, nothing added.
+                Sample().Sections[1],
+            ],
+        };
+
+        var check = await CompetitionFileImport.AddFinalsAsync(db, later, dryRun: true);
+        Assert.Equal((first.CompetitionId, 1, 2, 4, true), (check.CompetitionId, check.Sessions, check.Heats, check.Races, check.DryRun));
+        Assert.Empty(await db.Heats.Where(h => h.Label == "A Final").ToListAsync());
+
+        var added = await CompetitionFileImport.AddFinalsAsync(db, later);
+
+        Assert.False(added.DryRun);
+        db.ChangeTracker.Clear();
+        var sessions = await db.Sessions.Include(s => s.Heats).ThenInclude(h => h.Races)
+            .Where(s => s.CompetitionId == first.CompetitionId).ToListAsync();
+        var juniors = sessions.Single(s => s.Name == "Finals · Under 15 Pairs");
+        Assert.Equal(["A Final", "B Final"], juniors.Heats.OrderBy(h => h.OrderIndex).Select(h => h.Label));
+        // The races planned at import are kept when the later file doesn't list them.
+        Assert.All(juniors.Heats, h => Assert.Equal(FinalRaces, h.Races.OrderBy(r => r.OrderIndex).Select(r => r.Name)));
+        Assert.Equal(3, juniors.LanesPerHeat);
+        Assert.Empty(sessions.Single(s => s.Name == "Finals · Novice Pairs").Heats);
+
+        var again = await Assert.ThrowsAsync<CompetitionImportException>(() => CompetitionFileImport.AddFinalsAsync(db, later));
+        Assert.Equal("Under 15 already has finals heats. Nothing was changed.", again.Message);
+    }
+
+    [Theory]
+    [InlineData("no-event", "There's no")]
+    [InlineData("two-events", "more than one")]
+    [InlineData("no-age-group", "has no Under 18 age group")]
+    [InlineData("no-session", "has no empty finals session")]
+    [InlineData("nothing", "lists no finals heats to add")]
+    [InlineData("too-late", "The last final ends after the event does")]
+    [InlineData("minutes", "minutesPerFinal must be at least 1")]
+    public async Task AddFinals_RefusesWithoutChangingAnything(string fault, string message)
+    {
+        await using var db = await Database();
+        var name = $"Refused {Guid.NewGuid():N}";
+        var withFinals = Sample(name) with { Sections = [JuniorsWithFinals()] };
+        if (fault != "no-event") await CompetitionFileImport.ImportAsync(db, Sample(name));
+        if (fault == "two-events")
+        {
+            db.Competitions.Add(new Competition { Name = name, StartDate = new DateTime(2030, 6, 1, 9, 0, 0, DateTimeKind.Utc), EndDate = new DateTime(2030, 6, 1, 17, 0, 0, DateTimeKind.Utc) });
+            await db.SaveChangesAsync();
+        }
+        if (fault == "no-session")
+        {
+            var planned = await db.Sessions.SingleAsync(s => s.Name == "Finals · Under 15 Pairs");
+            db.Sessions.Remove(planned);
+            await db.SaveChangesAsync();
+        }
+        var file = fault switch
+        {
+            "no-age-group" => withFinals with { Sections = [JuniorsWithFinals() with { AgeGroup = "Under 18" }] },
+            "nothing" => Sample(name),
+            "too-late" => withFinals with { Sections = [JuniorsWithFinals() with { Finals = new("15:30", Heats: ["15:30", "15:50"]) }] },
+            "minutes" => withFinals with { Sections = [JuniorsWithFinals() with { Finals = new("10:10", MinutesPerFinal: 0, Heats: ["10:10"]) }] },
+            _ => withFinals,
+        };
+
+        var ex = await Assert.ThrowsAsync<CompetitionImportException>(() => CompetitionFileImport.AddFinalsAsync(db, file));
+
+        Assert.Contains(message, ex.Message);
+        Assert.Empty(await db.Heats.Where(h => h.Label!.EndsWith("Final")).ToListAsync());
+    }
+
+    [Fact]
+    public async Task ImportedEmptyFinals_AreFilledFromTheStandingsOnTheDay()
+    {
+        var name = $"Filled finals {Guid.NewGuid():N}";
+        var result = await _f.WithDbAsync(db => CompetitionFileImport.ImportAsync(db,
+            Sample(name) with { OwnerEmail = TestClients.TrainerEmail, Sections = [JuniorsWithFinals()] }));
+        var id = result.CompetitionId!.Value;
+        var trainer = await _f.TrainerAsync();
+        var sessions = await (await trainer.GetAsync($"/api/competitions/{id}/sessions")).ReadAsync<List<SessionDto>>();
+        var heats = sessions.Single(s => s.Name == "Under 15 Pairs heats");
+        var finals = sessions.Single(s => s.Name == "Finals · Under 15 Pairs");
+        Assert.All(finals.Heats, h => Assert.Empty(h.Entries));
+
+        // Lane 1 wins each heat race, lane 2 is second and so on.
+        await _f.WithDbAsync(async db =>
+        {
+            var races = await db.Races.Include(r => r.Heat!).ThenInclude(h => h.Entries).Where(r => r.Heat!.SessionId == heats.Id).ToListAsync();
+            foreach (var race in races)
+            {
+                race.IsComplete = true;
+                var place = 0;
+                foreach (var entry in race.Heat!.Entries.OrderBy(e => e.LaneIndex))
+                    db.Results.Add(new Result { RaceId = race.Id, TeamId = entry.TeamId, Placing = ++place, Points = 4 - place });
+            }
+            await db.SaveChangesAsync();
+        });
+
+        var response = await trainer.PostAsync($"/api/competitions/{id}/sessions/{finals.Id}/populate-finals", null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var filled = (await response.ReadAsync<SessionDto>()).Heats.OrderBy(h => h.OrderIndex).ToList();
+        Assert.Equal([("A Final", 3), ("B Final", 3)], filled.Select(h => (h.Label!, h.Entries.Count)));
+        // Both heat winners and a second place make the A Final.
+        var laneOne = heats.Heats.SelectMany(h => h.Entries.Where(e => e.LaneIndex == 1)).Select(e => e.TeamId);
+        Assert.Subset(filled[0].Entries.Select(e => e.TeamId).ToHashSet(), laneOne.ToHashSet());
     }
 }

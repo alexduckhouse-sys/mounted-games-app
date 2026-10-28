@@ -34,13 +34,17 @@ function boxOf(element: HTMLElement): Box {
   return { top, left, width, height };
 }
 
-/** A fixed frame the size of the screen, under the header and tab bar, holding one copy of a page where it was. */
+/**
+ * A fixed frame the size of the screen, under the header and tab bar, holding one copy of a page where it was. It is
+ * painted in the page's own background, so neither page shows through the gaps in the other as they slide.
+ */
 function frame(copy: HTMLElement, box: Box, layer: number): HTMLElement {
   const holder = document.createElement('div');
   holder.setAttribute('aria-hidden', 'true');
   holder.setAttribute('inert', '');
   holder.setAttribute('data-page-transition', '');
-  holder.style.cssText = `position:fixed;inset:0;z-index:${19 + layer};overflow:hidden;pointer-events:none;will-change:transform,opacity`;
+  const ground = getComputedStyle(document.body).backgroundColor;
+  holder.style.cssText = `position:fixed;inset:0;z-index:${19 + layer};overflow:hidden;pointer-events:none;will-change:transform,opacity${ground ? `;background:${ground}` : ''}`;
   copy.style.cssText += `;position:absolute;margin:0;top:${box.top}px;left:${box.left}px;width:${box.width}px;height:${box.height}px`;
   holder.appendChild(copy);
   document.body.appendChild(holder);
@@ -78,13 +82,15 @@ class PageTransitionHost extends Component<Props> {
     const timing: KeyframeAnimationOptions = { duration: plan.duration, easing: plan.easing, fill: 'both' };
     const holders: HTMLElement[] = [];
     const running: Animation[] = [];
-    const outgoing = frame(copy, box, plan.top === 'outgoing' ? 2 : 1);
-    holders.push(outgoing);
-    running.push(outgoing.animate(plan.outgoing, timing));
     if (kind === 'fade') {
-      // The new page is already in place underneath; it fades up unless it brings its own entrance.
-      if (!main.classList.contains('rf-page') && !main.querySelector('.rf-page')) running.push(main.animate(plan.incoming, timing));
+      // Only the new page fades up (unless it brings its own entrance). A copy of the old page fading out on top showed
+      // through the new one for a moment (the "running late" line over the toplist's age band), so there is none.
+      if (main.classList.contains('rf-page') || main.querySelector('.rf-page')) return;
+      running.push(main.animate(plan.incoming, timing));
     } else {
+      const outgoing = frame(copy, box, plan.top === 'outgoing' ? 2 : 1);
+      holders.push(outgoing);
+      running.push(outgoing.animate(plan.outgoing, timing));
       // A copy of the new page slides in; the real one waits, unseen, so it is never moved.
       const next = boxOf(main);
       const incoming = frame(stillCopy(main), { ...next, top: scrollReset ? next.top + window.scrollY : next.top }, plan.top === 'incoming' ? 2 : 1);

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { CreditCard } from 'lucide-react';
 import { api } from '../../api';
+import { DemoPaymentNotice } from '../../components/DemoPaymentNotice';
 import { Notice } from '../../components/Notice';
 import { PageProblem } from '../../components/PageProblem';
 import type { MySignup } from '../../types';
@@ -88,13 +89,17 @@ export function TestEntryPaymentPage() {
   return <TestPaymentScreen signup={load.signup} isDemo={load.isDemo} payments={load.payments} />;
 }
 
-function TestBanner({ children }: { children: string }) {
+/** The demo notice, then (if there is one) what this screen adds to it. */
+function TestBanner({ children }: { children?: string }) {
   return (
     <div className="mx-4 mt-3">
-      <Notice tone="info" role={null}>
-        <span className="block font-extrabold uppercase tracking-wide">Test payment</span>
-        {children}
-      </Notice>
+      <DemoPaymentNotice what="entry" />
+      {children && (
+        <Notice tone="info" role={null}>
+          <span className="block font-extrabold uppercase tracking-wide">Test payment</span>
+          {children}
+        </Notice>
+      )}
     </div>
   );
 }
@@ -114,6 +119,7 @@ function TestPaymentScreen({ signup, isDemo, payments }: { signup: MySignup; isD
       <RefinePage>
         <RefineHeader back={back} backLabel="Back to the competition" context={signup.competitionName} title="Payment" />
         <div className="m-4 flex flex-col items-start gap-3">
+          <DemoPaymentNotice what="entry" className="w-full" />
           <Notice tone="info" role={null} className="w-full">
             <span className="block font-semibold">Online payment isn’t available for this event.</span>
             Pay the organiser directly. Your entry stays pending until they confirm it.
@@ -180,8 +186,8 @@ function TestPaymentScreen({ signup, isDemo, payments }: { signup: MySignup; isD
         />
         <TestBanner>
           {failed
-            ? 'Nothing was charged. This was only a demonstration.'
-            : 'This is a test receipt, not a real one. No money was taken.'}
+            ? 'Nothing was charged.'
+            : 'This is a test receipt, not a real one.'}
         </TestBanner>
         {shown.status === 0 && (
           <EntryRosette team={signup.teamName?.trim() || signup.fullName} section={displaySectionName(signup.sectionName)} year={new Date(signup.competitionStart).getFullYear()} />
@@ -227,7 +233,7 @@ function TestPaymentScreen({ signup, isDemo, payments }: { signup: MySignup; isD
     return (
       <RefinePage>
         <RefineHeader back={back} backLabel="Back to the competition" context={signup.competitionName} title="Test payment" demo />
-        <TestBanner>This is a demonstration. No money is taken.</TestBanner>
+        <TestBanner />
         <p className="rf-note">There is nothing to pay for this entry.</p>
         <RefineFoot column><Link className="rf-btn rf-btn-primary" to={back}>Back to the competition</Link></RefineFoot>
       </RefinePage>
@@ -237,7 +243,7 @@ function TestPaymentScreen({ signup, isDemo, payments }: { signup: MySignup; isD
   return (
     <RefinePage>
       <RefineHeader back={back} backLabel="Back to the competition" context={signup.competitionName} title="Test payment" demo />
-      <TestBanner>This is a demonstration. We don’t ask for card details and no money is taken. Pick what you’d like to see happen.</TestBanner>
+      <TestBanner>We don’t ask for card details. Pick what you’d like to see happen.</TestBanner>
       <RefineSection title="Your entry" />
       <RefineList as="div" label="Your entry">
         {receiptRow('Event', signup.competitionName)}

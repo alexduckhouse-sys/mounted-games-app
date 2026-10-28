@@ -194,10 +194,14 @@ export const shell: AreaCatalogue<typeof en> = {
   'shell.unsubscribe.changeMind': 'Si vous changez d’avis, cochez la case la prochaine fois que vous vous inscrirez à une compétition.',
   'shell.confirmEmail.fallback': 'Impossible de confirmer votre adresse e-mail. Vérifiez votre signal et réessayez.',
   'shell.confirmEmail.failedTitle': 'Impossible de confirmer votre e-mail',
-  'shell.confirmEmail.failedBody': '{message} Si le lien a expiré, connectez-vous et utilisez le bouton « Renvoyer » sur votre profil.',
+  'shell.confirmEmail.failedBody': '{message} Si le lien a expiré, utilisez le bouton « Renvoyer » sur votre profil.',
   'shell.confirmEmail.title': 'Confirmer votre e-mail',
   'shell.confirmEmail.done': 'Merci, votre adresse e-mail est confirmée.',
   'shell.confirmEmail.toProfile': 'Aller à mon profil',
+  'shell.confirmEmail.signInBody': 'Connectez-vous au compte auquel cet e-mail a été envoyé, et nous confirmerons l’adresse aussitôt.',
+  'shell.confirmEmail.signIn': 'Se connecter',
+  'shell.confirmEmail.otherTitle': 'Un autre compte est connecté',
+  'shell.confirmEmail.otherBody': 'Ce lien concerne un autre compte. Déconnectez-vous, puis connectez-vous au compte auquel l’e-mail a été envoyé.',
 
   // Legal pages
   'shell.legal.title': 'Politiques et mentions légales',

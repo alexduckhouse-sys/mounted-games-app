@@ -1,0 +1,24 @@
+/* A team profile's stats page: four big figures two by two, then each game with its share of the points on offer. */
+
+.ps-tiles { display: grid; grid-template-columns: 1fr 1fr; margin: 0; }
+/* The card rule between rows would cut the grid in the wrong places, so the tiles draw their own lines. */
+.ps-tiles > * + * { border-top: 0; }
+.ps-tile { display: flex; flex-direction: column-reverse; justify-content: flex-end; gap: 4px; min-height: 96px; padding: 14px 16px; box-sizing: border-box; }
+.ps-tile:nth-child(even) { border-left: 1px solid rgb(var(--mg-rule-soft)); }
+.ps-tile:nth-child(n + 3) { border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.ps-tile dd { margin: 0; font: 800 32px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); font-variant-numeric: tabular-nums; }
+.ps-tile dt { font: 500 15px/1.25 var(--mg-font); color: rgb(var(--mg-muted)); }
+
+.ps-game { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; padding: 10px 14px 10px 16px; box-sizing: border-box; border: 0; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); text-align: left; font: inherit; cursor: pointer; transition: background-color var(--mg-dur-fast) var(--mg-ease-out); }
+.ps-game:hover { background: rgb(var(--mg-subtle)); }
+.ps-game:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
+.ps-game-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.ps-bar { display: block; height: 8px; border-radius: 4px; background: rgb(var(--mg-rule-soft)); overflow: hidden; }
+.ps-bar > span { display: block; height: 100%; border-radius: 4px; background: rgb(var(--mg-heading)); }
+.ps-chev { flex: none; color: rgb(var(--mg-muted)); transition: transform .2s; }
+.ps-chev.is-open { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .ps-chev { transition: none; } }
+html[data-lite="true"] .ps-chev { transition: none; }
+
+.ps-panel { padding: 4px 16px 16px; }
+.ps-line { margin: 0 0 8px; font: 500 15px/1.4 var(--mg-font); color: rgb(var(--mg-muted)); }

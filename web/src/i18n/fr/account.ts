@@ -101,6 +101,7 @@ export const account: AreaCatalogue<typeof en> = {
   'account.signups.waitingList': 'Liste d’attente',
   'account.signups.notPaid': 'Non payé',
   'account.signups.paid': 'Payé',
+  'account.signups.demoPaid': 'Payé (démo)',
   'account.signups.pairFailed': 'Impossible de mettre à jour la demande de paire. Vérifiez votre signal et réessayez.',
   'account.signups.thisEntry': 'Cette inscription',
   'account.signups.at': 'à {competition}',

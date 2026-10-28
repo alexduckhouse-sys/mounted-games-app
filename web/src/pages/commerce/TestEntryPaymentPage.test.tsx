@@ -64,7 +64,8 @@ describe('test payment page', () => {
     renderPage();
 
     expect(await screen.findByRole('heading', { name: /Test payment/ })).toBeInTheDocument();
-    expect(screen.getByText(/We don’t ask for card details and no money is taken/).closest('.kit-strip-info')).toHaveTextContent('Test payment');
+    expect(screen.getByText(/We don’t ask for card details\./).closest('.kit-strip-info')).toHaveTextContent('Test payment');
+    expect(screen.getByText('This is a demo. No money will be taken or sent, and your entry hasn’t been paid for.').closest('.kit-strip-info')).not.toBeNull();
     expect(screen.getByText('Test amount')).toBeInTheDocument();
     expect(screen.getByText('£15.00')).toBeInTheDocument();
     expect(document.querySelectorAll('input, textarea, select')).toHaveLength(0);
@@ -94,7 +95,8 @@ describe('test payment page', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Try a declined card (test)' }));
 
     expect(await screen.findByText('Test card declined')).toBeInTheDocument();
-    expect(screen.getByText(/Nothing was charged\. This was only a demonstration/).closest('.kit-strip-info')).not.toBeNull();
+    expect(screen.getAllByText('Nothing was charged.').some((element) => element.closest('.kit-strip-info'))).toBe(true);
+    expect(screen.getByText('This is a demo. No money will be taken or sent, and your entry hasn’t been paid for.')).toBeInTheDocument();
     expect(screen.queryByText('TEST RECEIPT')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Back to the test payment' }));
     expect(screen.getByRole('button', { name: 'Pay £15.00 (test)' })).toBeInTheDocument();
@@ -153,6 +155,7 @@ describe('test payment page', () => {
 
     expect(await screen.findByText('Online payment isn’t available for this event.')).toBeInTheDocument();
     expect(screen.getByText(/Pay the organiser directly/)).toBeInTheDocument();
+    expect(screen.getByText('This is a demo. No money will be taken or sent, and your entry hasn’t been paid for.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Pay/ })).not.toBeInTheDocument();
     expect(post).not.toHaveBeenCalled();
   });
@@ -162,6 +165,7 @@ describe('test payment page', () => {
     renderPage();
 
     expect(await screen.findByText('There is nothing to pay for this entry.')).toBeInTheDocument();
+    expect(screen.getByText('This is a demo. No money will be taken or sent, and your entry hasn’t been paid for.')).toBeInTheDocument();
   });
 
   it('copes with an entry that is not on the account and with a failed load', async () => {
@@ -202,7 +206,7 @@ describe('demo entry link on My signups', () => {
 
     const link = await screen.findByRole('link', { name: 'Open the test payment page' });
     expect(link).toHaveAttribute('href', '/me/signups/42/test-payment');
-    expect(screen.getByText('Demo event: test payment only')).toBeInTheDocument();
+    expect(screen.getByText('This is a demo. No money will be taken or sent, and your entry hasn’t been paid for.')).toBeInTheDocument();
   });
 
   it('links a paid demo entry to its test receipt', async () => {
@@ -212,16 +216,24 @@ describe('demo entry link on My signups', () => {
     expect(await screen.findByRole('link', { name: 'View the test receipt' })).toBeInTheDocument();
   });
 
-  it('shows nothing on a real event or when the check fails', async () => {
+  it('shows the demo notice without a link on a real event still waiting for money, or when the check fails', async () => {
     get.mockResolvedValue({ data: { competitionId: 5, isDemo: false, isLocked: false, updatedAt: null } } as never);
     const real = renderLink(0);
-    await waitFor(() => expect(get).toHaveBeenCalled());
-    expect(real.container).toBeEmptyDOMElement();
+    expect(await screen.findByText('This is a demo. No money will be taken or sent, and your entry hasn’t been paid for.')).toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
     real.unmount();
 
     get.mockRejectedValue(new Error('offline'));
-    const failed = renderLink(0);
-    await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
-    expect(failed.container).toBeEmptyDOMElement();
+    renderLink(0);
+    expect(await screen.findByText('This is a demo. No money will be taken or sent, and your entry hasn’t been paid for.')).toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+
+  it('shows nothing for a paid entry on a real event, and nothing until it knows which kind of event it is', async () => {
+    get.mockResolvedValue({ data: { competitionId: 5, isDemo: false, isLocked: false, updatedAt: null } } as never);
+    const paid = renderLink(1);
+    expect(paid.container).toBeEmptyDOMElement();
+    await waitFor(() => expect(get).toHaveBeenCalled());
+    expect(paid.container).toBeEmptyDOMElement();
   });
 });

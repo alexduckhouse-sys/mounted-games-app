@@ -55,11 +55,22 @@ public record StatsSummaryDto(
 public record StatsClubDto(string ClubName, int Entries, int Competitions, string? FirstDate, string? LastDate);
 public record StatsSeasonStandingDto(Guid SeasonId, string SeasonName, int Year, int? Rank, long Points, int EventsEntered, Guid TeamProfileId, string TeamName);
 
-/// <summary>One game (race name) across every counted race. <c>NonFinishes</c> covers E, DNS, DNF and R.</summary>
+/// <summary>
+/// One game (race name) across every counted race. <c>NonFinishes</c> covers E, DNS, DNF and R. <c>Runs</c> lists the
+/// most recent runs of a team profile's games (oldest first, at most <see cref="StatsService.MaxRunsPerGame"/>); it is
+/// null for every other kind of profile.
+/// </summary>
 public record StatsGameDto(
     string Name, int Races, int Wins, double? WinPercent, int NonFinishes,
     double Points, double MaxPoints, double? PointQuotaPercent,
-    double? AveragePoints = null, double? AveragePlace = null);
+    double? AveragePoints = null, double? AveragePlace = null,
+    IReadOnlyList<StatsRunDto>? Runs = null);
+
+/// <summary>
+/// One time the team rode a game: the competition and its start date, where it came (<c>Place</c> is null when put out
+/// or unplaced) and what it scored out of what the race offered. The same figures the public results pages show.
+/// </summary>
+public record StatsRunDto(string CompetitionName, DateTime StartDate, int? Place, bool Eliminated, double Points, double MaxPoints);
 
 /// <param name="Place">Place in the age group's final standings; null for hors concours.</param>
 /// <param name="FinalTier">0 for the A Final, 1 for the B Final and so on; null when not in a lettered final.</param>

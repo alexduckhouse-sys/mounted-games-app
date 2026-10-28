@@ -105,6 +105,7 @@ export const account = {
   'account.signups.waitingList': 'Waiting list',
   'account.signups.notPaid': 'Not paid',
   'account.signups.paid': 'Paid',
+  'account.signups.demoPaid': 'Demo paid',
   'account.signups.pairFailed': 'Couldn’t update the pair request. Check your signal and try again.',
   'account.signups.thisEntry': 'This entry',
   'account.signups.at': 'at {competition}',

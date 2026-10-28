@@ -7,12 +7,35 @@ using MountedGames.Api.Services.Streaming;
 
 namespace MountedGames.Api.Hubs;
 
-public class LiveHub(ViewerRegistry viewers, LiveConnections connections) : Hub
+public class LiveHub(ViewerRegistry viewers, LiveConnections connections, AppDbContext db) : Hub
 {
-    /// <summary>Signed-in connections are recorded so they can be closed when the account's sessions end.</summary>
+    /// <summary>
+    /// Signed-in connections are recorded so they can be closed when the account's sessions end. A session can end between
+    /// this connection's sign-in check and its being recorded, when closing would miss it, so the account is read again
+    /// once it is recorded.
+    /// </summary>
     public override async Task OnConnectedAsync()
     {
         connections.Add(Context);
+        if (Context.User?.Identity?.IsAuthenticated == true && Context.UserIdentifier is { } userId)
+        {
+            LiveAccounts.TokenState? state;
+            try
+            {
+                state = await LiveAccounts.StateAsync(db, userId, Context.ConnectionAborted);
+            }
+            catch
+            {
+                // The connection fails to open, so OnDisconnectedAsync may never run for it: don't leave it recorded.
+                connections.Remove(Context);
+                throw;
+            }
+            if (state is null || !state.Accepts(LiveAccounts.SessionVersionOf(Context.User)))
+            {
+                Context.Abort();
+                return;
+            }
+        }
         await base.OnConnectedAsync();
     }
 

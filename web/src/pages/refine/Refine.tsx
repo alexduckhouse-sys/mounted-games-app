@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom';
 import { Check, ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Minus, Plus, X } from 'lucide-react';
 import { TickerNumber } from '../../components/TickerNumber';
 import { usePageWidth } from '../../components/pageWidthState';
+import { useExitDelay } from '../../hooks/useExitDelay';
+import { useSwipeToClose } from '../../hooks/useSwipeToClose';
 import './refine.css';
 
 /** Wraps a refined page so its tokens and type apply. Pass `aboveTabs` on competition pages that show the bottom tabs. */
@@ -159,12 +161,13 @@ export function RefineFoot({ children, column = false, aboveTabs = false, label 
 
 interface SheetProps { title: string; onClose: () => void; children: ReactNode }
 
-/** Modal bottom sheet: traps focus, closes on Esc, the scrim or the × button, and returns focus to whatever opened it. */
+/** Modal bottom sheet: traps focus, closes on Esc, the scrim, the × button or a swipe down (sliding away first), and returns focus to whatever opened it. */
 export function RefineSheet({ title, onClose, children }: SheetProps) {
-  const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
-  const closeRef = useRef(onClose);
-  useEffect(() => { closeRef.current = onClose; });
+  const { closing, close } = useExitDelay(onClose);
+  const { ref, handlers, style, dragging } = useSwipeToClose<HTMLDivElement>(close);
+  const closeRef = useRef(close);
+  useEffect(() => { closeRef.current = close; });
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const sheet = ref.current;
@@ -184,15 +187,16 @@ export function RefineSheet({ title, onClose, children }: SheetProps) {
     };
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('keydown', onKey); opener?.focus(); };
-  }, []);
+  }, [ref]);
   return (
     <>
-      <div className="rf-scrim" onClick={onClose} aria-hidden="true" />
-      <div ref={ref} role="dialog" aria-modal="true" aria-labelledby={titleId} className="rf-sheet skin">
+      <div className={`rf-scrim${closing ? ' is-closing' : ''}`} onClick={() => close()} aria-hidden="true" />
+      <div ref={ref} role="dialog" aria-modal="true" aria-labelledby={titleId} {...handlers} style={style}
+        className={`rf-sheet skin${dragging ? ' is-dragging' : ''}${closing ? ' is-closing' : ''}`}>
         <span className="rf-grab" aria-hidden="true" />
         <div className="rf-sheet-head">
           <h2 id={titleId}>{title}</h2>
-          <button type="button" className="rf-ib" aria-label="Close" onClick={onClose}><X className="h-5 w-5" aria-hidden="true" /></button>
+          <button type="button" className="rf-ib" aria-label="Close" onClick={() => close()}><X className="h-5 w-5" aria-hidden="true" /></button>
         </div>
         {children}
       </div>

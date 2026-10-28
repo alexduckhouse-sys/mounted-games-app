@@ -112,6 +112,7 @@ public class ClubMembersController(AppDbContext db, UserManager<AppUser> users) 
             return new ChangeMemberRoleResponse(current, true);
         }
 
+        if (ConfirmedAddress.Refuses(target!, wanted)) return ConfirmedAddress.Refusal();
         var removed = await users.RemoveFromRolesAsync(target!, roles.Where(r => OwnedRoles.Contains(r)));
         if (!removed.Succeeded) return Conflict(new { message = "Could not change the role. Refresh and try again." });
         var added = await users.AddToRoleAsync(target!, wanted);

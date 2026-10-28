@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { PageLoadBoundary } from './components/PageLoadBoundary';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { LanguageProvider } from './i18n/LanguageContext';
@@ -22,6 +22,7 @@ import { CompetitionPage } from './pages/CompetitionPage';
 import { AfterDrawOnly, CompetitionHome } from './pages/competition/CompetitionHome';
 import { ScrollToTop } from './components/ScrollToTop';
 import { useT } from './i18n/LanguageContext';
+import { isLiteModeActive } from './lite/liteMode';
 
 const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })));
 const SignUpPage = lazy(() => import('./pages/SignUpPage').then((module) => ({ default: module.SignUpPage })));
@@ -34,6 +35,7 @@ const TvKioskPage = lazy(() => import('./pages/competition/TvKioskPage').then((m
 const CommentaryDeskPage = lazy(() => import('./pages/competition/CommentaryDeskPage').then((module) => ({ default: module.CommentaryDeskPage })));
 const SessionPage = lazy(() => import('./pages/competition/SessionPage').then((module) => ({ default: module.SessionPage })));
 const TeamsTab = lazy(() => import('./pages/competition/TeamsTab').then((module) => ({ default: module.TeamsTab })));
+const TeamStatsPage = lazy(() => import('./pages/competition/TeamStatsPage').then((module) => ({ default: module.TeamStatsPage })));
 const CompetitionTeamPage = lazy(() => import('./pages/competition/CompetitionTeamPage').then((module) => ({ default: module.CompetitionTeamPage })));
 const DeclarationsTab = lazy(() => import('./pages/competition/DeclarationsTab').then((module) => ({ default: module.DeclarationsTab })));
 const BroadcastPage = lazy(() => import('./pages/competition/BroadcastPage').then((module) => ({ default: module.BroadcastPage })));
@@ -83,6 +85,7 @@ const CommerceManagementPage = lazy(() => import('./pages/commerce/CommerceManag
 const SeasonsPage = lazy(() => import('./pages/seasons/SeasonsPage').then((module) => ({ default: module.SeasonsPage })));
 const SeasonPage = lazy(() => import('./pages/seasons/SeasonPage').then((module) => ({ default: module.SeasonPage })));
 const TeamProfilePage = lazy(() => import('./pages/seasons/TeamProfilePage'));
+const TeamProfileStatsPage = lazy(() => import('./pages/seasons/TeamProfileStatsPage'));
 const StatsPage = lazy(() => import('./pages/stats/StatsPage').then((module) => ({ default: module.StatsPage })));
 const EventToolsPage = lazy(() => import('./pages/eventTools/EventToolsPage'));
 const PrintEventPage = lazy(() => import('./pages/operations/PrintEventPage'));
@@ -101,7 +104,33 @@ function OpeningPage() {
   return <p role="status" className="p-4 text-sm">{t('shell.header.openingPage')}</p>;
 }
 
+/**
+ * The pages people tap between at an event. Their code is fetched once the app is idle, so a tab opens straight away
+ * instead of holding the old page while it downloads. Lite mode and Data Saver skip it to save data.
+ */
+function warmPublicPages() {
+  if (isLiteModeActive()) return;
+  void Promise.allSettled([
+    import('./pages/CompetitionsPage'),
+    import('./pages/FollowingPage'),
+    import('./pages/ProfilePage'),
+    import('./pages/competition/ScoringTab'),
+    import('./pages/competition/SessionPage'),
+    import('./pages/competition/TeamsTab'),
+    import('./pages/competition/CompetitionTeamPage'),
+    import('./pages/competition/DetailsTab'),
+    import('./pages/competition/FollowingTab'),
+    import('./pages/competition/ChatTab'),
+  ]);
+}
+
 export default function App() {
+  useEffect(() => {
+    const idle = window.requestIdleCallback ?? ((run: () => void) => window.setTimeout(run, 1500));
+    const cancel = window.cancelIdleCallback ?? window.clearTimeout;
+    const handle = idle(warmPublicPages);
+    return () => cancel(handle);
+  }, []);
   return (
     <LanguageProvider>
     <LiteModeProvider>
@@ -151,6 +180,7 @@ export default function App() {
                 <Route path="timetable" element={<Navigate to=".." replace />} />
                 <Route path="teams" element={<TeamsTab />} />
                 <Route path="teams/:teamId" element={<CompetitionTeamPage />} />
+                <Route path="teams/:teamId/stats" element={<TeamStatsPage />} />
                 <Route path="following" element={<FollowingTab />} />
                 <Route path="shop" element={<EventShopPage />} />
                 <Route path="shop/manage" element={<ProtectedRoute roles={['Admin', 'Trainer']}><CommerceManagementPage /></ProtectedRoute>} />
@@ -183,6 +213,7 @@ export default function App() {
               <Route path="seasons/:seasonId" element={<SeasonPage />} />
               <Route path="team-profiles" element={<TeamProfilePage />} />
               <Route path="team-profiles/:profileId" element={<TeamProfilePage />} />
+              <Route path="team-profiles/:profileId/stats" element={<TeamProfileStatsPage />} />
               <Route path="stats" element={<StatsPage />} />
               <Route path="stats/:kind" element={<StatsPage />} />
               <Route path="event-tools/:competitionId" element={<ProtectedRoute roles={['Admin', 'Trainer']}><EventToolsPage /></ProtectedRoute>} />

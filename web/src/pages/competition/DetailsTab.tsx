@@ -13,15 +13,17 @@ import { useEntrySettings } from './entrySettings';
 import { competitionDateText } from '../../lib/competitionDates';
 import { competitionCalendarUrl, competitionLink } from '../../lib/sharing';
 import { QrCode } from '../../components/QrCode';
+import { Sheet } from '../../components/Sheet';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { CompetitionTeamCard } from './CompetitionTeamCard';
 import { EmbedCard } from './EmbedCard';
 import { HorseboxEntranceCard } from './HorseboxEntranceCard';
 import { ScorerLinksCard } from './ScorerLinksCard';
+import { useStoryImage } from './StoryImage';
 import { EventSponsorsSection } from './SponsorsCard';
 import { usePageWidth } from '../../components/pageWidthState';
-import type { CompetitionSection, EquipmentLine, SectionSignup } from '../../types';
+import type { CompetitionDetail, CompetitionSection, EquipmentLine, SectionSignup } from '../../types';
 import { feesLine, sectionFull } from '../../lib/entryOptions';
 import { placesLeftText } from '../../lib/placesLeft';
 import '../../components/sitePages.css';
@@ -152,7 +154,8 @@ export function DetailsTab() {
     <div className="rf-page mx-auto flex w-full max-w-xl flex-col pb-4 pt-3 lg:max-w-3xl">
       <h1 className="sr-only">{t('competition.details.heading')}</h1>
 
-      <section className="mg-card flex flex-col overflow-hidden" aria-label={t('competition.details.about')}>
+      {/* The event card sits a little in from the cards below it, so it reads as the page's heading. */}
+      <section className="mg-card mx-2 flex flex-col overflow-hidden" aria-label={t('competition.details.about')}>
         <div className="flex flex-col p-4">
           <div className="flex flex-col gap-1 pb-3">
             <h2 className="ev-title">{competition.name}</h2>
@@ -190,7 +193,7 @@ export function DetailsTab() {
       <h2 className="sp-sec">{t('competition.details.sharePrint')}</h2>
       <div className="sp-card" role="list" aria-label={t('competition.details.sharePrint')}>
         <LinkRow href={competitionCalendarUrl(competition.id, window.location.origin)} label={t('competition.details.calendar')} />
-        <EventShareRows competitionId={competition.id} competitionName={competition.name} />
+        <EventShareRows competition={competition} />
         <LinkRow to={`/event-tools/${competition.id}/print/draw`} label={t('competition.details.printDraw')} />
         <LinkRow to={`/event-tools/${competition.id}/print/results`} label={t('competition.details.printResults')} />
         {mayOrganise && <LinkRow to={`/event-tools/${competition.id}/print/poster`} label="Print venue poster" />}
@@ -259,13 +262,17 @@ export function DetailsTab() {
 }
 
 /**
- * Share event link (native share sheet or clipboard) and inline QR code toggle, used on both DetailsTab and EntryPage.
+ * Share event (native share sheet or clipboard) and inline QR code toggle. Once an age group has results the row
+ * opens a Share event sheet instead, offering the link or a results picture.
  */
-export function EventShareRows({ competitionId, competitionName }: { competitionId: number; competitionName: string }) {
+export function EventShareRows({ competition }: { competition: CompetitionDetail }) {
   const t = useT();
   const toast = useToast();
+  const story = useStoryImage(competition);
   const [shareError, setShareError] = useState(false);
   const [showQr, setShowQr] = useState(false);
+  const [choosing, setChoosing] = useState(false);
+  const { id: competitionId, name: competitionName } = competition;
   const shareUrl = competitionLink(competitionId, window.location.origin);
   // The sentence has a link in the middle, so it is split at {link} and the pieces go around the <a>.
   const [copyBefore, copyAfter = ''] = t('competition.details.copyFailed').split('{link}');
@@ -292,16 +299,45 @@ export function EventShareRows({ competitionId, competitionName }: { competition
   return (
     <>
       <div>
-        <button type="button" className="sp-row" onClick={() => { void shareEvent(); }}>
-          <span className="sp-grow"><span className="sp-t1 !font-medium">{t('competition.details.shareLink')}</span></span>
-          <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
-        </button>
+        {story.available ? (
+          <button type="button" className="sp-row" onClick={() => setChoosing(true)} disabled={story.busy} aria-busy={story.busy}>
+            <span className="sp-grow">
+              <span className="sp-t1 !font-medium">{t('competition.details.share')}</span>
+              {story.busy && <span className="sp-t2">{t('competition.details.storyMaking')}</span>}
+            </span>
+            <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
+          </button>
+        ) : (
+          <button type="button" className="sp-row" onClick={() => { void shareEvent(); }}>
+            <span className="sp-grow"><span className="sp-t1 !font-medium">{t('competition.details.shareLink')}</span></span>
+            <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
+          </button>
+        )}
         {shareError && (
           <Notice className="mx-4 my-2">
             {copyBefore}<a className="ev-link" href={shareUrl}>{t('competition.details.copyFailedLink')}</a>{copyAfter}
           </Notice>
         )}
         {toast.node}
+        {story.node}
+        {choosing && (
+          <Sheet title={t('competition.details.share')} onClose={() => setChoosing(false)}>
+            {({ close }) => (
+              <div className="cs-opts">
+                {/* The link is shared in the tap itself, since phones refuse a share that waits for the sheet to close. */}
+                <button type="button" className="cs-opt" onClick={() => { void shareEvent(); close(); }}>
+                  {t('competition.details.shareSendLink')}
+                </button>
+                <button type="button" className="cs-opt" onClick={() => close(() => { setChoosing(false); story.start(); })}>
+                  <span className="flex flex-col py-2">
+                    <span>{t('competition.details.storyImage')}</span>
+                    <span className="text-sm font-normal text-[rgb(var(--mg-muted))]">{t('competition.details.storyHint')}</span>
+                  </span>
+                </button>
+              </div>
+            )}
+          </Sheet>
+        )}
       </div>
       <div>
         <button type="button" className="sp-row" aria-expanded={showQr} onClick={() => setShowQr((open) => !open)}>

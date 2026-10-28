@@ -15,7 +15,7 @@ namespace MountedGames.Api.Controllers;
 /// fragment and then in request bodies, never in a URL, so it stays out of server and proxy logs.
 /// </summary>
 [ApiController]
-public sealed class PasswordResetController(AppDbContext db, PasswordResetService resets, TimeProvider time) : ControllerBase
+public sealed class PasswordResetController(AppDbContext db, PasswordResetService resets) : ControllerBase
 {
     public const string RequestedMessage =
         "If there's an account for that address, we've sent it a link to choose a new password. The link works for 30 minutes.";
@@ -32,23 +32,9 @@ public sealed class PasswordResetController(AppDbContext db, PasswordResetServic
         if (await db.IsIpBlockedAsync(HttpContext, ct))
             return StatusCode(StatusCodes.Status403Forbidden, new { message = BlockedMessage });
 
-        var started = time.GetTimestamp();
-        var sending = await resets.RequestAsync(address, HttpContext.Connection.RemoteIpAddress?.ToString(), ct);
-        var floor = resets.MinimumResponse;
-        if (floor <= TimeSpan.Zero)
-        {
-            // No floor to answer at (tests and local runs), so wait for the email.
-            await sending;
-        }
-        else
-        {
-            // Answer at the floor whatever the email is doing, so a slow mail provider can't give a known address away.
-            var wait = floor - time.GetElapsedTime(started);
-            if (wait > TimeSpan.Zero) await Task.Delay(wait, time, ct);
-            // A send still going on finishes inside this request's lifetime: the server runs OnCompleted after the answer
-            // has gone, so the instance isn't idle (and free to scale to zero) while the email is on its way.
-            if (!sending.IsCompleted) Response.OnCompleted(() => sending);
-        }
+        // Takes the same time whatever happens, and the email goes (or is cancelled) within it, so nothing runs on after
+        // the answer on an instance that may scale to zero.
+        await resets.RequestAsync(address, HttpContext.Connection.RemoteIpAddress?.ToString(), ct);
         return Accepted(new PasswordResetRequestedResponse(RequestedMessage));
     }
 
@@ -84,6 +70,8 @@ public sealed class PasswordResetController(AppDbContext db, PasswordResetServic
                 new PasswordResetProblem("used", "This link has already been used. Ask for a new one if you still need to reset your password.")),
             PasswordResetOutcome.Conflict => Conflict(
                 new PasswordResetProblem("conflict", "Your account changed while your new password was being saved, so nothing was changed. Try the link again.")),
+            PasswordResetOutcome.Failed => StatusCode(StatusCodes.Status500InternalServerError,
+                new PasswordResetProblem("failed", "We couldn't save your new password, so nothing was changed. Try the link again in a moment.")),
             _ => NotFound(new PasswordResetProblem("invalid", "This link isn't valid. Ask for a new one.")),
         };
     }

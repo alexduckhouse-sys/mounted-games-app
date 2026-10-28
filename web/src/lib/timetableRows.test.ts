@@ -3,7 +3,7 @@ import type { Session } from '../types';
 import { heat, race, session } from '../test/factories';
 import { computeTimings, type SessionTiming } from './time';
 import {
-  arenaDelays, delayInWords, lastFinishedRow, groupMaxDelay, groupRowsBySession, isGroupFinished, sessionOrdinals, sessionTitle, statusLabel, timetableRows, timetableStatus,
+  arenaDelays, delayInWords, lastFinishedRow, groupMaxDelay, groupRowsBySession, isGroupFinished, isPlannedFinal, sessionOrdinals, sessionTitle, statusLabel, timetableRows, timetableStatus,
   type TimetableStatus,
 } from './timetableRows';
 
@@ -51,6 +51,18 @@ describe('statusLabel', () => {
 });
 
 describe('timetableRows', () => {
+  it('counts an age group’s finals with a set time and no heats yet as a planned final', () => {
+    const start = '2026-06-01T14:00:00Z';
+    const rows = timetableRows([
+      session(1, { name: 'Juniors finals', scheduledStart: start }),
+      session(2, { name: 'Seniors finals' }),
+      session(3, { name: 'Juniors', scheduledStart: start }),
+      session(4, { name: 'Juniors finals', scheduledStart: start, heats: [heat(4, { label: 'A Final' })] }),
+      session(5, { name: 'Finals briefing', kind: 2, scheduledStart: start }),
+    ], new Map(), false);
+    expect(rows.filter(isPlannedFinal).map((row) => row.session.id)).toEqual([1]);
+  });
+
   it('marks only the first unfinished heat of a running session as live', () => {
     const rows = timetableRows([session(1, { status: 1, heats: [heat(1, { races: [done] }), heat(2), heat(3)] })], new Map(), false);
     expect(rows.map((row) => row.status)).toEqual(['finished', 'live', 'on-time']);

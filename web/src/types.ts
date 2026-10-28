@@ -57,7 +57,7 @@ export interface PasswordResetCheck {
 
 /** The body of a refused `POST /api/auth/password-reset/confirm` (400, 404 or 410). */
 export interface PasswordResetProblem {
-  code: 'expired' | 'used' | 'invalid' | 'conflict' | 'password_rules' | 'password_required';
+  code: 'expired' | 'used' | 'invalid' | 'conflict' | 'failed' | 'password_rules' | 'password_required';
   message: string;
   /** Friendly wording per broken password rule, with Identity's codes in `errorCodes`. Only for `password_rules`. */
   errors?: string[] | null;
@@ -201,18 +201,6 @@ export interface CompetitionPickerPage {
   locations?: string[] | null;
   items: CompetitionPickerItem[];
   hasMore: boolean;
-}
-
-/** `GET /api/competitions/picker/near-you`: the upcoming list ordered for this viewer. Never cached or shared. */
-export interface CompetitionNearYouPage {
-  items: CompetitionPickerItem[];
-  hasMore: boolean;
-  /** We could tell roughly where the viewer is (without asking). When false there are no distances and no toggle. */
-  locationKnown: boolean;
-  /** The order used: nearest first, or soonest first. */
-  sort: 'nearest' | 'soonest';
-  /** Whole miles from the viewer, for the items on this page that have a known venue. */
-  distances: { id: number; miles: number }[];
 }
 
 export interface CompetitionSection {
@@ -1517,6 +1505,18 @@ export interface StatsGame {
   pointQuotaPercent: number | null;
   averagePoints?: number | null;
   averagePlace?: number | null;
+  /** A team profile's most recent runs of this game, oldest first; missing for every other kind of profile. */
+  runs?: StatsRun[] | null;
+}
+
+/** One time a team rode a game: where, when, how it went. `place` is null when put out or unplaced. */
+export interface StatsRun {
+  competitionName: string;
+  startDate: string;
+  place: number | null;
+  eliminated: boolean;
+  points: number;
+  maxPoints: number;
 }
 
 export interface StatsSession {

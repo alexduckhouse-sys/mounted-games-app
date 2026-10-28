@@ -194,10 +194,14 @@ export const shell: AreaCatalogue<typeof en> = {
   'shell.unsubscribe.changeMind': 'Os byddwch yn newid eich meddwl, ticiwch y blwch y tro nesaf y byddwch yn cofrestru mewn cystadleuaeth.',
   'shell.confirmEmail.fallback': 'Methwyd cadarnhau eich cyfeiriad e-bost. Gwiriwch eich signal a rhowch gynnig arall arni.',
   'shell.confirmEmail.failedTitle': 'Methwyd cadarnhau eich e-bost',
-  'shell.confirmEmail.failedBody': '{message} Os yw’r ddolen wedi dod i ben, mewngofnodwch a defnyddiwch y botwm “Anfon eto” ar eich proffil.',
+  'shell.confirmEmail.failedBody': '{message} Os yw’r ddolen wedi dod i ben, defnyddiwch y botwm “Anfon eto” ar eich proffil.',
   'shell.confirmEmail.title': 'Cadarnhau eich e-bost',
   'shell.confirmEmail.done': 'Diolch, mae eich cyfeiriad e-bost wedi’i gadarnhau.',
   'shell.confirmEmail.toProfile': 'Mynd i fy mhroffil',
+  'shell.confirmEmail.signInBody': 'Mewngofnodwch i’r cyfrif yr anfonwyd yr e-bost hwn ato, a byddwn yn cadarnhau’r cyfeiriad ar unwaith.',
+  'shell.confirmEmail.signIn': 'Mewngofnodi i gadarnhau',
+  'shell.confirmEmail.otherTitle': 'Rydych wedi mewngofnodi i gyfrif arall',
+  'shell.confirmEmail.otherBody': 'Mae’r ddolen hon ar gyfer cyfrif arall. Allgofnodwch, yna mewngofnodwch i’r cyfrif yr anfonwyd yr e-bost ato.',
 
   // Legal pages
   'shell.legal.title': 'Polisïau a materion cyfreithiol',

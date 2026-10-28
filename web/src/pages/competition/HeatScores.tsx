@@ -393,9 +393,9 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
                         <th scope="row" className="heat-team" title={team.name}>
                           <Link to={`/competitions/${competition.id}/teams/${team.id}`} className="heat-team-link">
                             <span data-grow="start" className={`heat-team-name${team.name.length > 16 || manyRaces ? ' heat-team-name-long' : ''}`}>
-                              {team.isFav && <Star aria-hidden="true" className="mr-1 inline h-3 w-3 fill-[#C08308] text-[#C08308]" />}
                               {flag && <img src={`/flags/${flag}.png`} alt="" className="mr-1 inline h-3.5 w-5 rounded-[2px] object-cover" />}
                               {team.name}
+                              {team.isFav && <Star aria-hidden="true" className="ml-1 inline h-3 w-3 fill-[#C08308] text-[#C08308]" />}
                               {cardsEnabled && <TeamCardBadge card={team.card} />}
                             </span>
                             {team.laneLabel && <span className="heat-team-lane">{team.laneLabel}</span>}

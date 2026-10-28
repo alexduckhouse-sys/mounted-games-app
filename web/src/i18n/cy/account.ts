@@ -101,6 +101,7 @@ export const account: AreaCatalogue<typeof en> = {
   'account.signups.waitingList': 'Rhestr aros',
   'account.signups.notPaid': 'Heb dalu',
   'account.signups.paid': 'Talwyd',
+  'account.signups.demoPaid': 'Talwyd (arddangos)',
   'account.signups.pairFailed': 'Methu diweddaru’r cais pâr. Gwiriwch eich signal a rhowch gynnig arall arni.',
   'account.signups.thisEntry': 'Y cofrestriad hwn',
   'account.signups.at': 'yn {competition}',

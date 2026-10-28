@@ -1,4 +1,5 @@
 import { useId, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { Sheet } from '../../components/Sheet';
 import { delayInWords } from '../../lib/timetableRows';
 import '../../components/sitePages.css';
@@ -6,9 +7,10 @@ import '../../components/sitePages.css';
 /**
  * Running late: move an arena's times by the minutes the organiser types (a minus for earlier). Opened from the
  * pencil in the timetable's header; the move goes live as soon as Shift is tapped. There is no Pause, but a
- * timetable paused before can be set going again from here.
+ * timetable paused before can be set going again from here. To change the order or add a break, it links to the
+ * organiser's Timetable & draw page.
  */
-export function DelaySheet({ arena, lateMinutes, paused, busy, pace, onShift, onContinue, onClose }: {
+export function DelaySheet({ arena, lateMinutes, paused, busy, pace, rearrangeTo, onShift, onContinue, onClose }: {
   /** The arena being changed, or empty for every arena. */
   arena: string;
   lateMinutes: number;
@@ -16,6 +18,8 @@ export function DelaySheet({ arena, lateMinutes, paused, busy, pace, onShift, on
   busy: boolean;
   /** Recent minutes per race, when there are enough races to say. */
   pace: number | null;
+  /** The organiser's Timetable & draw page, where sessions can be dragged into a new order and breaks added. */
+  rearrangeTo?: string;
   onShift: (minutes: number) => Promise<boolean>;
   onContinue: () => void;
   onClose: () => void;
@@ -69,6 +73,7 @@ export function DelaySheet({ arena, lateMinutes, paused, busy, pace, onShift, on
               <button type="submit" className="kit-pill kit-pill-fill" disabled={busy || !minutes.trim()}>Shift</button>
               {paused && <button type="button" className="kit-pill" disabled={busy} onClick={onContinue}>Continue the timetable</button>}
             </div>
+            {rearrangeTo && <Link className="ev-text-btn" to={rearrangeTo}>Change the order or add a break</Link>}
           </form>
         );
       }}

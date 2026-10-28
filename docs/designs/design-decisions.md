@@ -173,7 +173,8 @@ The owner reviewed each public page as "live capture beside a tidier version" on
 - **Back button:** a boxed 44px arrow matching the menu button (`.mg-nav-btn`) on every page that has a back button.
 - **Page transitions** (picked by the owner, so they're an exception to "leave animations alone"):
   - opening a page and going back use a push;
-  - switching tabs uses a quick 160ms crossfade.
+  - switching tabs uses a quick 160ms crossfade, starting part-faded (never from a blank page);
+  - bottom pop-ups (sheets, confirm boxes, the "Save quick access" card, organiser sheets) use the **quick slide** picked on 28 October 2026: straight up in about 280ms, straight down in about 200ms, no bounce. Any of them can be swiped down: it follows the finger, and letting go past a quarter of its height (or after a quick flick) closes it, otherwise it slides back. Reduced motion and Lite mode skip the movement. Spring and lift-and-fade were the other options.
 - **Heat page:**
   - built as it is now, with bigger team names;
   - no "Lane N" line, no ‹ › arrows, no Official mark, nothing underlined;
@@ -183,6 +184,7 @@ The owner reviewed each public page as "live capture beside a tidier version" on
 - **Teams, competitions, past competitions:** the tidier versions were liked as they stand. Competitions loses its search bar.
 - **Arena setup:** the ring crew splits into Top, Middle and Start line.
 - **Menu:** the age group picker is a white settings-style row ("Age group · Juniors ⌄"), not the navy band, which read as part of the top bar.
+- **Finals times** (decided 28 October 2026): an age group's finals have their own start time, set by the organiser ahead of the day on Timetable and draw, where a finals row always offers a Start time. Once it is set, the public timetable shows the finals block at that time before the draw ("Finals start", "Teams decided by the heats", no count of finals). Finals with no time set stay off the public timetable.
 - **Toplist:** age groups appear as a row of tabs (like the day tabs), scrolling sideways when there are more than three. It has Toplist and Scores only, with no Heats tab. Ties show as "3=" with a thick 6px left bar like the live run-off. The A Final cut-off is a red dashed line labelled "A Final cut-off". Teams below it show "N pts needed for the A Final". There's no "N behind" figure and no chevrons.
 
   The toplist is **not yet approved**: ask before building it.
@@ -195,8 +197,7 @@ The owner reviewed each public page as "live capture beside a tidier version" on
   - Following / My teams (follow teams outside a competition);
   - the teams filter open;
   - the menu age dropdown open;
-  - the site menu (bigger text, no language row);
-  - showing finals times.
+  - the site menu (bigger text, no language row).
 
 ## Rejected (don't bring back)
 

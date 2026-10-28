@@ -109,8 +109,8 @@ body {
   }
   .btn-danger {
     @apply btn text-white;
-    background: rgb(var(--mg-elim, 200 32 47));
-    border: 1.5px solid rgb(var(--mg-elim, 200 32 47));
+    background: rgb(var(--mg-danger, 200 32 47));
+    border: 1.5px solid rgb(var(--mg-danger, 200 32 47));
   }
   .btn-lg { @apply px-6 py-4 text-lg rounded-xl; }
 

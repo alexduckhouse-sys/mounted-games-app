@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { ArrowDown, ArrowUp, Minus, Pencil, Plus } from 'lucide-react';
 import { useSavedToast } from '../../components/SavedTick';
 import { TickerNumber } from '../../components/TickerNumber';
@@ -10,6 +10,8 @@ import { competitionUpdateBody } from '../../lib/competitionPayload';
 import { HATBAND_COLOURS, MAX_LANES, lanesFor } from '../../lib/creatorDraft';
 import { HATBAND_PALETTE, formatHatband, hatbandColour, hatbandHex, hatbandName, isHatbandHex, parseHatband } from '../../lib/hatbands';
 import { defaultEventStart, heatSizes, planTimetable } from '../../lib/formatPlan';
+import { dropIndex, makeRoom } from '../../lib/creatorRaces';
+import { reorderStarts } from '../../lib/timetableReorder';
 import { SessionKind, type Session } from '../../types';
 import { useCompetition } from '../competition/context';
 import { RefineChoiceRow, RefineHeader, RefineList, RefineMenu, RefinePage, RefineSwitchRow, type ChoiceOption } from '../refine/Refine';
@@ -23,6 +25,7 @@ import './operations.css';
 const DEFAULT_MINUTES = 10;
 const BREAK_NAMES: ChoiceOption<string>[] = [{ value: 'Lunch', label: 'Lunch' }, { value: 'Tea', label: 'Tea' }];
 const NO_COLOUR = '#8A93A0';
+const AT_START = 'start';
 
 const isRace = (s: Session) => !s.isBreak && (s.kind ?? SessionKind.Race) === SessionKind.Race;
 const hhmm = (d: Date) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -40,7 +43,25 @@ interface Item {
   perHeat: number;
   /** Heats exist or it has started: its times are the real ones and it can't be nudged. */
   locked: boolean;
+  /** An age group's finals: they keep their own start time, and the public timetable shows them only once it is set. */
+  final: boolean;
 }
+
+/** Six dots: the grip for dragging a block to another place in the running order. */
+function GripIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <circle cx="9" cy="6" r="1.7" /><circle cx="15" cy="6" r="1.7" /><circle cx="9" cy="12" r="1.7" /><circle cx="15" cy="12" r="1.7" /><circle cx="9" cy="18" r="1.7" /><circle cx="15" cy="18" r="1.7" />
+    </svg>
+  );
+}
+
+interface Drag { id: number; from: number; to: number; dy: number; height: number }
+
+/** Keeps its own time when the order changes: drawn or started, a final (its start is set by the organiser), or no start yet. */
+const stays = (item: Item) => item.locked || item.final || !item.start;
+/** Moves with the others when times are pushed: not drawn or started, and not a final that has no start of its own yet. */
+const shifts = (item: Item) => !!item.start && !item.locked && !(item.final && !item.session.scheduledStart);
 
 /** Timetable and draw: the day's running order for each arena, the hatbands, and the lane draw. Every change saves as it is made. */
 export function TimetablePage() {
@@ -51,7 +72,10 @@ export function TimetablePage() {
   const [move, setMove] = useState(15);
   const [follow, setFollow] = useState(true);
   const [editing, setEditing] = useState<number | null>(null);
-  const [adding, setAdding] = useState<string | null>(null);
+  const [adding, setAdding] = useState<{ group: string; after?: string } | null>(null);
+  const [arrange, setArrange] = useState(false);
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const dragRef = useRef<Drag | null>(null);
   const [undoVersion, setUndoVersion] = useState(0);
 
   const items = useMemo<Item[]>(() => {
@@ -77,7 +101,7 @@ export function TimetablePage() {
       const heats = brk ? 0 : s.heats.length > 0 ? s.heats.length : heatSizes(teamsIn(s.competitionSectionId), s.lanesPerHeat ?? lanesFor(section?.format ?? 2)).length;
       const minutes = brk ? s.durationMinutes ?? 0 : section?.usesRaceFinals ? 3 * perHeat : s.heats.length > 0 || !s.durationMinutes ? heats * perHeat || row?.minutes || 0 : s.durationMinutes;
       const start = s.scheduledStart ? new Date(s.scheduledStart) : row && row.minutes > 0 ? row.start : null;
-      return { session: s, isBreak: brk, arena: s.arenaName?.trim() ?? '', start, minutes, heats, perHeat, locked: !brk && (s.heats.length > 0 || s.status !== 0) };
+      return { session: s, isBreak: brk, arena: s.arenaName?.trim() ?? '', start, minutes, heats, perHeat, locked: !brk && (s.heats.length > 0 || s.status !== 0), final: !brk && /\bfinals?\b/i.test(s.name) };
     });
   }, [competition]);
 
@@ -106,14 +130,18 @@ export function TimetablePage() {
   const put = (id: number, body: Record<string, unknown>) => api.put(`/competitions/${competition.id}/sessions/${id}`, body);
   const endOf = (item: Item) => (item.start ? addMinutes(item.start, item.minutes) : null);
 
+  /** Moves each of these by the minutes: the start of every one is saved at the same time. */
+  const pushItems = (list: Item[], minutes: number) =>
+    Promise.all(list.filter(shifts).map((item) => put(item.session.id, { scheduledStart: addMinutes(item.start!, minutes).toISOString() })));
+
   /** With follow-on, everything after an item in its arena moves with it when its length changes. */
   async function shiftLater(list: Item[], after: Item, minutes: number) {
     if (!follow || minutes === 0 || !after.start) return;
-    for (const item of list) {
-      if (item === after || !item.start || item.locked || item.start.getTime() < after.start.getTime()) continue;
-      await put(item.session.id, { scheduledStart: addMinutes(item.start, minutes).toISOString() });
-    }
+    await pushItems(list.filter((item) => item !== after && !!item.start && item.start.getTime() >= after.start!.getTime()), minutes);
   }
+
+  /** This block and every later one in its arena, whether or not each follows on. */
+  const shiftFrom = (list: Item[], item: Item, minutes: number) => run('Couldn’t move those.', () => pushItems(list.slice(list.indexOf(item)), minutes));
 
   const shiftAll = (by: number) => run('Couldn’t move the timetable.', () => api.post(`/competitions/${competition.id}/sessions/shift-times`, { deltaMinutes: by }));
 
@@ -144,17 +172,50 @@ export function TimetablePage() {
     if (end) await put(item.session.id, { scheduledStart: end.toISOString() });
   });
 
-  /** Swaps an item with its neighbour: the earlier takes the other's start, and the other follows it. */
-  const swap = (list: Item[], item: Item, direction: -1 | 1) => run('Couldn’t move that.', async () => {
-    const index = list.indexOf(item);
-    const other = list[index + direction];
-    const [first, second] = direction === -1 ? [other, item] : [item, other];
-    if (!first.start || !second.start) return;
-    const firstEnd = endOf(first)!;
-    const gap = Math.max(0, Math.round((second.start.getTime() - firstEnd.getTime()) / 60_000));
-    await put(second.session.id, { scheduledStart: first.start.toISOString() });
-    await put(first.session.id, { scheduledStart: addMinutes(first.start, second.minutes + gap).toISOString() });
+  /** Moves a block to another place in its arena; the ones that can move share out the times, and the rest keep theirs. */
+  const reorder = (list: Item[], from: number, to: number) => run('Couldn’t move that.', async () => {
+    const changes = reorderStarts(list.map((item) => ({ id: item.session.id, start: item.start, minutes: item.minutes, fixed: stays(item) })), from, to);
+    await Promise.all(changes.map((change) => put(change.id, { scheduledStart: change.start.toISOString() })));
   });
+
+  function grab(event: ReactPointerEvent<HTMLButtonElement>, list: Item[], index: number) {
+    if (event.button > 0) return;
+    event.preventDefault();
+    const row = event.currentTarget.closest('[data-tt-row]');
+    const height = row ? row.getBoundingClientRect().height : 56;
+    const y0 = event.clientY;
+    const start: Drag = { id: list[index].session.id, from: index, to: index, dy: 0, height };
+    dragRef.current = start;
+    setDrag(start);
+    const move = (ev: PointerEvent) => {
+      const dy = ev.clientY - y0;
+      const next = { ...start, dy, to: dropIndex(index, dy, height, list.length) };
+      dragRef.current = next;
+      setDrag(next);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      const done = dragRef.current;
+      dragRef.current = null;
+      setDrag(null);
+      if (done && done.to !== done.from) void reorder(list, done.from, done.to);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  }
+
+  /** The arrow keys on a focused grip move the block one place, over any that keep their own time. */
+  function keys(event: ReactKeyboardEvent<HTMLButtonElement>, list: Item[], index: number) {
+    const by = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0;
+    if (!by) return;
+    event.preventDefault();
+    let to = index + by;
+    while (list[to] && stays(list[to])) to += by;
+    if (list[to]) void reorder(list, index, to);
+  }
 
   async function removeBreak(list: Item[], item: Item) {
     if (!(await confirmDialog({ title: `Remove ${item.session.name}?`, message: 'Later sessions move up to fill the gap.', confirmLabel: 'Remove break', destructive: true }))) return;
@@ -168,6 +229,7 @@ export function TimetablePage() {
   const addBreak = (list: Item[], arena: string, after: Item | null, name: string, minutes: number) => run('Couldn’t add the break.', async () => {
     const start = (after && endOf(after)) ?? list.find((i) => i.start)?.start ?? defaultEventStart(new Date(competition.startDate));
     if (after) await shiftLater(list.filter((i) => i !== after), { ...after, start }, minutes);
+    else if (follow) await pushItems(list, minutes);
     await api.post(`/competitions/${competition.id}/sessions`, {
       competitionSectionId: null, name, arenaName: arena === 'All arenas' ? null : arena, scheduledStart: start.toISOString(),
       orderIndex: competition.sessions.reduce((m, s) => Math.max(m, s.orderIndex), 0) + 1, notes: null, isBreak: true, durationMinutes: minutes, kind: SessionKind.Break, location: null,
@@ -226,6 +288,7 @@ export function TimetablePage() {
             </span>
           </div>
           <RefineSwitchRow label="Each one follows on from the one before" on={follow} onChange={setFollow} />
+          <RefineSwitchRow label="Drag to change the order" on={arrange} onChange={(on) => { setArrange(on); setEditing(null); }} />
           <div className="rf-row ops-wrap">
             <span className="rf-grow rf-t1">Send the timetable</span>
             <ShareTextButtons title="Share timetable" name="Timetable" text={timetableShareText(competition, `${window.location.origin}/competitions/${competition.id}`)} />
@@ -245,12 +308,28 @@ export function TimetablePage() {
                   const gap = prevEnd && item.start ? Math.round((item.start.getTime() - prevEnd.getTime()) / 60_000) : 0;
                   const open = editing === item.session.id;
                   const end = endOf(item);
-                  const meta = item.isBreak ? `Break · ${lengthText(item.minutes)}` : `${item.heats} ${item.heats === 1 ? 'heat' : 'heats'} · ${item.perHeat} min a heat · ${lengthText(item.minutes)}`;
-                  const canMove = (dir: -1 | 1) => { const o = group.list[i + dir]; return !!o && !item.locked && !o.locked && !!item.start && !!o.start; };
+                  const unsetFinal = item.final && !item.locked && !item.session.scheduledStart;
+                  const meta = item.isBreak ? `Break · ${lengthText(item.minutes)}` : unsetFinal ? 'Set a start time so it shows on the public timetable' : `${item.heats} ${item.heats === 1 ? 'heat' : 'heats'} · ${item.perHeat} min a heat · ${lengthText(item.minutes)}`;
+                  const lifted = drag?.id === item.session.id;
+                  const room = drag && !lifted ? makeRoom(i, drag.from, drag.to, drag.height) : 0;
                   return (
                     <Fragment key={item.session.id}>
                       {gap > 0 && <div className="ops-gap-line">{gap} min gap</div>}
-                      {!open ? (
+                      {arrange ? (
+                        <div className="rf-row ops-tt-row" data-tt-row="" data-lifted={lifted}
+                          style={lifted && drag ? { transform: `translateY(${drag.dy}px)` } : room ? { transform: `translateY(${room}px)` } : undefined}>
+                          {stays(item)
+                            ? <span className="ops-grip-gap" />
+                            : (
+                              <button type="button" className="ops-grip" disabled={busy} aria-label={`Move ${item.session.name}: drag, or use the up and down arrow keys`}
+                                onPointerDown={(event) => grab(event, group.list, i)} onKeyDown={(event) => keys(event, group.list, i)}><GripIcon /></button>
+                            )}
+                          <span className="ops-time">{item.start ? hhmm(item.start) : '–'}</span>
+                          <span className="rf-grow"><span className="rf-t1">{item.session.name}</span><span className="rf-t2">{meta}</span></span>
+                          {gap < 0 && <span className="ops-warn">Overlaps the one before</span>}
+                          {end && <span className="rf-t2">to {hhmm(end)}</span>}
+                        </div>
+                      ) : !open ? (
                         <button type="button" className="rf-row ops-tt-row" aria-expanded={false} onClick={() => setEditing(item.session.id)}>
                           <span className="ops-time">{item.start ? hhmm(item.start) : '–'}</span>
                           <span className="rf-grow"><span className="rf-t1">{item.session.name}</span><span className="rf-t2">{meta}</span></span>
@@ -263,35 +342,37 @@ export function TimetablePage() {
                           <div className="rf-row">
                             <span className="ops-time">{item.start ? hhmm(item.start) : '–'}</span>
                             <span className="rf-grow"><span className="rf-t1">{item.session.name}</span><span className="rf-t2">{meta}{end ? ` · to ${hhmm(end)}` : ''}</span></span>
-                            <button type="button" className="ops-ibtn" aria-label={`Move ${item.session.name} up`} disabled={busy || !canMove(-1)} onClick={() => void swap(group.list, item, -1)}><ArrowUp className="h-4 w-4" aria-hidden="true" /></button>
-                            <button type="button" className="ops-ibtn" aria-label={`Move ${item.session.name} down`} disabled={busy || !canMove(1)} onClick={() => void swap(group.list, item, 1)}><ArrowDown className="h-4 w-4" aria-hidden="true" /></button>
                             <button type="button" className="rf-btn" aria-expanded onClick={() => setEditing(null)}>Done</button>
                           </div>
                           {item.isBreak && (
                             <RefineChoiceRow label="Name" value={item.session.name} options={BREAK_NAMES} allowOther disabled={busy} onChange={(name) => void setBreakName(item, name)} />
                           )}
-                          {!follow && item.start && (
+                          {(!follow || item.final) && item.start && (
                             <div className="rf-row">
                               <label className="rf-grow rf-t1" htmlFor={`start-${item.session.id}`}>Start</label>
                               <input id={`start-${item.session.id}`} type="time" className="ops-time-input" defaultValue={hhmm(item.start)} disabled={busy || item.locked}
-                                onBlur={(event) => { if (event.target.value && event.target.value !== hhmm(item.start!)) void setStart(item, event.target.value); }} />
+                                onBlur={(event) => { if (event.target.value && (event.target.value !== hhmm(item.start!) || unsetFinal)) void setStart(item, event.target.value); }} />
                               <button type="button" className="rf-btn" disabled={busy || item.locked || !prev} onClick={() => void followOn(group.list, item)}>Follow on from the one before</button>
                             </div>
                           )}
+                          {shifts(item) && <ShiftFrom name={item.session.name} busy={busy} onShift={(minutes) => void shiftFrom(group.list, item, minutes)} />}
                           <div className="ops-pair">
                             {item.isBreak
                               ? <MinuteStepper label="Length" value={item.minutes} min={5} max={240} disabled={busy} onChange={(n) => void setBreakLength(group.list, item, n)} />
                               : <MinuteStepper label="Time per heat" value={item.perHeat} min={5} max={120} disabled={busy} onChange={(n) => void setHeatMinutes(group.list, item, n)} />}
                           </div>
-                          {item.isBreak && <div className="rf-row ops-end"><button type="button" className="ops-danger-link" disabled={busy} onClick={() => void removeBreak(group.list, item)}>Remove</button></div>}
+                          <div className="rf-row ops-end">
+                            <button type="button" className="rf-btn" disabled={busy} onClick={() => { setEditing(null); setAdding({ group: group.name, after: String(item.session.id) }); }}>Add a break after this</button>
+                            {item.isBreak && <button type="button" className="ops-danger-link" disabled={busy} onClick={() => void removeBreak(group.list, item)}>Remove</button>}
+                          </div>
                         </div>
                       )}
                     </Fragment>
                   );
                 })}
-                {adding === group.name
-                  ? <BreakForm key={group.name} list={group.list} busy={busy} onCancel={() => setAdding(null)} onAdd={(after, name, minutes) => void addBreak(group.list, group.name, after, name, minutes)} />
-                  : <button type="button" className="ops-addbar ops-addrow" disabled={busy} onClick={() => setAdding(group.name)}><Plus className="h-4 w-4" aria-hidden="true" />Add a break</button>}
+                {adding?.group === group.name
+                  ? <BreakForm key={`${group.name}-${adding.after ?? ''}`} list={group.list} initialAfter={adding.after} busy={busy} onCancel={() => setAdding(null)} onAdd={(after, name, minutes) => void addBreak(group.list, group.name, after, name, minutes)} />
+                  : <button type="button" className="ops-addbar ops-addrow" disabled={busy} onClick={() => setAdding({ group: group.name })}><Plus className="h-4 w-4" aria-hidden="true" />Add a break</button>}
               </RefineList>
             </Fragment>
           );
@@ -370,13 +451,33 @@ function MinuteStepper({ label, value, min, max, disabled, onChange }: { label: 
   );
 }
 
-function BreakForm({ list, busy, onAdd, onCancel }: { list: Item[]; busy: boolean; onAdd: (after: Item | null, name: string, minutes: number) => void; onCancel: () => void }) {
-  const [after, setAfter] = useState(list.length ? String(list[list.length - 1].session.id) : '');
+/** Moves this block and everything after it in the arena later or earlier by the minutes chosen. */
+function ShiftFrom({ name, busy, onShift }: { name: string; busy: boolean; onShift: (minutes: number) => void }) {
+  const [minutes, setMinutes] = useState(15);
+  return (
+    <div className="rf-row ops-mv">
+      <span className="rf-grow rf-t1">From here on</span>
+      <span className="ops-step-ctl" role="group" aria-label={`Minutes to move ${name} and later ones`}>
+        <button type="button" className="ops-ibtn" aria-label="Fewer minutes from here" disabled={minutes <= 5} onClick={() => setMinutes(Math.max(5, minutes - 5))}><Minus className="h-4 w-4" aria-hidden="true" /></button>
+        <output><TickerNumber value={minutes} format={String} /></output>
+        <button type="button" className="ops-ibtn" aria-label="More minutes from here" disabled={minutes >= 120} onClick={() => setMinutes(Math.min(120, minutes + 5))}><Plus className="h-4 w-4" aria-hidden="true" /></button>
+      </span>
+      <span className="rf-t2">min</span>
+      <span className="ops-mv-btns">
+        <button type="button" className="rf-btn" disabled={busy} aria-label={`Move ${name} and later ones earlier`} onClick={() => onShift(-minutes)}>Earlier</button>
+        <button type="button" className="rf-btn" disabled={busy} aria-label={`Move ${name} and later ones later`} onClick={() => onShift(minutes)}>Later</button>
+      </span>
+    </div>
+  );
+}
+
+function BreakForm({ list, initialAfter, busy, onAdd, onCancel }: { list: Item[]; initialAfter?: string; busy: boolean; onAdd: (after: Item | null, name: string, minutes: number) => void; onCancel: () => void }) {
+  const [after, setAfter] = useState(initialAfter ?? (list.length ? String(list[list.length - 1].session.id) : AT_START));
   const [name, setName] = useState('Lunch');
   const [minutes, setMinutes] = useState(30);
   return (
     <div className="ops-dup">
-      <RefineChoiceRow label="After" value={after} options={list.map((item) => ({ value: String(item.session.id), label: item.session.name }))} onChange={setAfter} />
+      <RefineChoiceRow label="After" value={after} options={[{ value: AT_START, label: 'At the start' }, ...list.map((item) => ({ value: String(item.session.id), label: item.session.name }))]} onChange={setAfter} />
       <RefineChoiceRow label="Name" value={name} options={BREAK_NAMES} allowOther onChange={setName} />
       <MinuteStepper label="How long" value={minutes} min={5} max={240} onChange={setMinutes} />
       <div className="rf-actions">
