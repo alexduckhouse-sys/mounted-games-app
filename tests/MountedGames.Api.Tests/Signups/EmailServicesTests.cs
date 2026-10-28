@@ -241,7 +241,7 @@ public class EmailServicesTests : IClassFixture<ApiFactory>
         NullLogger<ResendEmailSender>.Instance, (d, _) => { lock (delays) delays.Add(d); return Task.CompletedTask; });
 
     [Fact]
-    public async Task Resend_RetriesRateLimitsAndServerErrors_HonouringRetryAfterWithinABound()
+    public async Task Resend_RetriesRateLimits_HonouringRetryAfterWithinABound()
     {
         var stub = new StubHttp();
         var calls = 0;
@@ -254,7 +254,7 @@ public class EmailServicesTests : IClassFixture<ApiFactory>
                 limited.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(120));
                 return limited;
             }
-            return new HttpResponseMessage(calls == 2 ? System.Net.HttpStatusCode.BadGateway : System.Net.HttpStatusCode.OK);
+            return new HttpResponseMessage(calls == 2 ? System.Net.HttpStatusCode.TooManyRequests : System.Net.HttpStatusCode.OK);
         });
         var delays = new List<TimeSpan>();
 
@@ -267,7 +267,7 @@ public class EmailServicesTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Resend_GivesUpAfterTheRetries_AndNeverRetriesClientErrors()
+    public async Task Resend_GivesUpAfterTheRetries_AndNeverRetriesOtherFailures()
     {
         var stub = new StubHttp();
         var calls = 0;
@@ -276,11 +276,14 @@ public class EmailServicesTests : IClassFixture<ApiFactory>
         Assert.Equal(EmailDeliveryStatus.Failed, await resend.SendAsync(new EmailMessage("a@example.org", "Hi", "plain")));
         Assert.Equal(1 + ResendEmailSender.MaxRetries, calls);
 
-        stub.Reset();
-        var bad = 0;
-        stub.Respond("api.resend.com", _ => { bad++; return new HttpResponseMessage(System.Net.HttpStatusCode.UnprocessableEntity); });
-        Assert.Equal(EmailDeliveryStatus.Failed, await resend.SendAsync(new EmailMessage("a@example.org", "Hi", "plain")));
-        Assert.Equal(1, bad);
+        foreach (var code in new[] { System.Net.HttpStatusCode.UnprocessableEntity, System.Net.HttpStatusCode.InternalServerError })
+        {
+            stub.Reset();
+            var bad = 0;
+            stub.Respond("api.resend.com", _ => { bad++; return new HttpResponseMessage(code); });
+            Assert.Equal(EmailDeliveryStatus.Failed, await resend.SendAsync(new EmailMessage("a@example.org", "Hi", "plain")));
+            Assert.Equal(1, bad);
+        }
     }
 
     [Fact]

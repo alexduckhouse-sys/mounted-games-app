@@ -42,8 +42,9 @@ public class LoggingEmailSender(ILogger<LoggingEmailSender> log) : IEmailSender
 
 /// <summary>
 /// Resend's REST API (<c>POST https://api.resend.com/emails</c>). Sends are spaced out to stay under Resend's default
-/// limit of 2 requests a second, and a 429 or 5xx answer is retried a couple of times after a short, bounded wait
-/// (honouring <c>Retry-After</c>). The caller records the final outcome and the sign-up carries on either way.
+/// limit of 2 requests a second, and a 429 (rate limited) answer is retried a couple of times after a short, bounded wait
+/// (honouring <c>Retry-After</c>). Other failures, 5xx included, are not retried here: callers such as the entries digest
+/// keep their own attempt counts and waits. The caller records the final outcome and the sign-up carries on either way.
 /// </summary>
 public class ResendEmailSender(IHttpClientFactory http, IOptions<EmailOptions> options, ILogger<ResendEmailSender> log,
     Func<TimeSpan, CancellationToken, Task>? delay = null) : IEmailSender
@@ -115,7 +116,7 @@ public class ResendEmailSender(IHttpClientFactory http, IOptions<EmailOptions> o
                 using var response = await client.SendAsync(request, timeout.Token);
                 if (response.IsSuccessStatusCode) return EmailDeliveryStatus.Sent;
                 var status = (int)response.StatusCode;
-                if ((status == 429 || status >= 500) && attempt <= MaxRetries)
+                if (status == 429 && attempt <= MaxRetries)
                 {
                     await _delay(RetryWait(response, attempt), ct);
                     continue;
