@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { FAVOURITES_KEY } from '../../lib/favourites';
 import { competition, heat, race, result, session, standing, team } from '../../test/factories';
@@ -22,6 +22,7 @@ function mount(extra: Partial<CompetitionCtx> = {}, comp = data) {
 const section = (extra: Partial<CompetitionSection> = {}): CompetitionSection => ({ id: 5, competitionId: 1, format: 2, ageGroup: 'Seniors', displayName: 'Seniors', ...extra });
 
 beforeEach(() => { vi.mocked(api.get).mockRejectedValue(new Error('offline')); });
+afterEach(() => { vi.useRealTimers(); });
 
 describe('FollowingTab', () => {
   it('lets a signed-out visitor search, star and unstar a team', async () => {
@@ -153,6 +154,8 @@ describe('FollowingTab', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
   it('says when the copy is old and not refreshing', async () => {
+    // At midday, so the saved time is never yesterday's (the notice then adds the date).
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 5, 15, 12, 0) });
     mount({ isStale: true, updatedAt: new Date(Date.now() - 20 * 60_000) });
     expect(await screen.findByRole('status')).toHaveTextContent(/Last updated \d\d:\d\d\. Times may have changed\./);
   });
