@@ -214,6 +214,8 @@ describe('PrintEventPage', () => {
       vi.mocked(api.get).mockImplementation(async (url: string) => (String(url).endsWith('/equipment') ? { data: { lines: [] } } : draw()) as never);
       open('volunteer-card');
       const card = await screen.findByRole('region', { name: 'Volunteer card' });
+      // The kit list loads after the card first draws; wait for it so the checks below are not racing the fetch.
+      await within(card).findByText('No kit listed yet.');
       chooseOption(screen.getByRole('combobox'), 'Under 16 · Afternoon');
       expect(card).toHaveTextContent('Arena to be confirmed');
       expect(card).toHaveTextContent('No games chosen yet.');
