@@ -16,7 +16,7 @@ function mount(path: string) {
     <MemoryRouter initialEntries={[path]}>
       <CompactPageBarProvider>
         <Routes>
-          {['/privacy', '/terms', '/refunds', '/cookies', '/safeguarding'].map((to) => <Route key={to} path={to} element={<PrivacyPage />} />)}
+          {['/privacy', '/terms', '/refunds', '/cookies', '/safeguarding', '/data-deletion'].map((to) => <Route key={to} path={to} element={<PrivacyPage />} />)}
         </Routes>
         <Probe />
       </CompactPageBarProvider>
@@ -75,6 +75,19 @@ describe('PrivacyPage', () => {
     await userEvent.click(screen.getByRole('combobox', { name: /Showing/ }));
     await userEvent.click(screen.getByRole('option', { name: 'Terms of service' }));
     expect(screen.getByTestId('probe')).toHaveTextContent('/terms|');
+  });
+
+  it('shows Facebook’s status address as the privacy policy, quoting a well-formed code without claiming what happened', () => {
+    const view = mount('/data-deletion?code=0123456789abcdef');
+    expect(heading('Privacy and data protection (UK GDPR)')).toBeInTheDocument();
+    expect(screen.getByText(/Your reference is 0123456789abcdef\./)).toBeInTheDocument();
+    expect(screen.queryByText(/we’ve removed/i)).not.toBeInTheDocument();
+    view.unmount();
+
+    // Anything else in the address isn't shown.
+    mount('/data-deletion?code=<b>not-a-code</b>');
+    expect(screen.queryByText(/Your reference/)).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Removing Google, Apple or Facebook' })).toBeInTheDocument();
   });
 
   it('keeps the legal wording', () => {

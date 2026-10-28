@@ -4,6 +4,8 @@ import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { Notice } from '../../components/Notice';
 import { externalErrorMessage } from '../../lib/externalAuthError';
+import type { MessageKey } from '../../i18n/en';
+import { useT } from '../../i18n/LanguageContext';
 import type { Club } from '../../types';
 import { Field } from './Field';
 
@@ -11,22 +13,22 @@ export type SignupRoleId = 'member' | 'trainer' | 'manager';
 
 const SIGNUP_ROLE_CHOICES: {
   id: SignupRoleId;
-  label: string;
+  label: MessageKey;
   api: 'Member' | 'Trainer' | 'Manager';
-  sentence: string;
   byAdmins: boolean;
 }[] = [
-  { id: 'member', label: 'Rider or parent', api: 'Member', sentence: 'a member', byAdmins: false },
-  { id: 'trainer', label: 'Trainer', api: 'Trainer', sentence: 'a trainer', byAdmins: false },
-  { id: 'manager', label: 'Team manager', api: 'Manager', sentence: 'team manager', byAdmins: true },
+  { id: 'member', label: 'auth.signup.roleRider', api: 'Member', byAdmins: false },
+  { id: 'trainer', label: 'auth.signup.roleTrainer', api: 'Trainer', byAdmins: false },
+  { id: 'manager', label: 'auth.signup.roleManager', api: 'Manager', byAdmins: true },
 ];
 
-/** A provider sign-in that found no account yet: the token is sent again, with the club and role, to create one. */
+/**
+ * A provider sign-in that found no account yet. The token has been used; the ten-minute sign-up ticket finishes the
+ * account with the club and role. `email` is the provider's: a sign-in that didn't share one gets no ticket.
+ */
 export interface PendingExternalSignup {
   provider: string;
-  idToken: string;
-  nonce: string;
-  providerName?: string;
+  ticket: string;
   email: string;
   suggestedName: string;
 }
@@ -34,12 +36,13 @@ export interface PendingExternalSignup {
 interface ExternalOnboardingFormProps {
   pending: PendingExternalSignup;
   initialClubs?: Club[];
-  onComplete: (result: { club: string; role: SignupRoleId }) => void;
+  /** `emailConfirmed` is false when a confirmation email has gone out. */
+  onComplete: (result: { club: string; role: SignupRoleId; emailConfirmed: boolean }) => void;
   onCancel: () => void;
 }
 
 /**
- * In-page completion step shown when someone signs in with Google or Apple for the first time and needs to pick their
+ * In-page completion step shown when someone signs in with a provider for the first time and needs to pick their
  * Pony Club / team and role. The API makes the account the same way as the email sign-up.
  */
 export function ExternalOnboardingForm({
@@ -48,7 +51,8 @@ export function ExternalOnboardingForm({
   onComplete,
   onCancel,
 }: ExternalOnboardingFormProps) {
-  const { loginWithExternal, loading } = useAuth();
+  const t = useT();
+  const { completeExternalSignup, loading } = useAuth();
   const [name, setName] = useState(pending.suggestedName);
   const [club, setClub] = useState('');
   const [clubPicked, setClubPicked] = useState(false);
@@ -73,7 +77,7 @@ export function ExternalOnboardingForm({
   const exact = clubs.some((c) => c.name.toLowerCase() === typed.toLowerCase());
   const chosenRole = SIGNUP_ROLE_CHOICES.find((r) => r.id === role) ?? null;
   const ready = name.trim() !== '' && typed !== '' && clubPicked && chosenRole !== null;
-  const approver = chosenRole?.byAdmins ? 'Mounted Games admins' : `${typed}'s team manager`;
+  const approvedBy = chosenRole?.byAdmins ? t('auth.signup.approvedByAdmins') : t('auth.signup.approvedByManager', { club: typed });
 
   function pickClub(value: string) {
     setClub(value);
@@ -86,31 +90,29 @@ export function ExternalOnboardingForm({
     if (!ready || !chosenRole || loading) return;
     setError(null);
     try {
-      await loginWithExternal(pending.provider, pending.idToken, {
-        nonce: pending.nonce,
-        providerName: pending.providerName,
+      const profile = await completeExternalSignup(pending.ticket, {
         fullName: name.trim(),
         clubName: typed,
         role: chosenRole.api,
       });
-      onComplete({ club: typed, role: chosenRole.id });
+      onComplete({ club: typed, role: chosenRole.id, emailConfirmed: profile.emailConfirmed !== false });
     } catch (err: unknown) {
-      setError(externalErrorMessage(err, 'Couldn’t create the account. Check your signal and try again.'));
+      setError(externalErrorMessage(err, t('auth.signup.failed')));
     }
   }
 
   return (
     <form onSubmit={submit} className="flex flex-1 flex-col gap-[18px]" noValidate>
       <div className="flex flex-col gap-1.5">
-        <h1 className="mg-h1 !text-[34px] !leading-none">Finish creating your account</h1>
+        <h1 className="mg-h1 !text-[34px] !leading-none">{t('auth.external.title')}</h1>
         {pending.email && (
           <p className="m-0 text-sm text-[rgb(var(--mg-muted))]">
-            Signed in as <span className="font-semibold text-[rgb(var(--mg-ink))]">{pending.email}</span>
+            {t('auth.external.signedInAs')} <span className="font-semibold text-[rgb(var(--mg-ink))]">{pending.email}</span>
           </p>
         )}
       </div>
 
-      <Field label="Your name">
+      <Field label={t('auth.field.yourName')}>
         {({ id }) => (
           <div className="mg-field">
             <input
@@ -125,13 +127,13 @@ export function ExternalOnboardingForm({
       </Field>
 
       <div className="flex flex-col gap-1.5">
-        <Field label="Club / team name">
+        <Field label={t('auth.signup.club')}>
           {({ id }) => (
             <div className="mg-field">
               <input
                 id={id}
                 value={club}
-                placeholder="Start typing"
+                placeholder={t('auth.signup.clubPlaceholder')}
                 autoComplete="off"
                 onChange={(e) => { setClub(e.target.value); setClubPicked(false); setError(null); }}
               />
@@ -139,7 +141,7 @@ export function ExternalOnboardingForm({
           )}
         </Field>
         {!clubPicked && typed !== '' && (
-          <div role="group" aria-label="Club suggestions" className="mg-card mg-list">
+          <div role="group" aria-label={t('auth.signup.clubSuggestions')} className="mg-card mg-list">
             {matches.map((c) => (
               <button
                 key={c.id}
@@ -156,7 +158,7 @@ export function ExternalOnboardingForm({
                 onClick={() => pickClub(typed)}
                 className="flex min-h-11 w-full items-center gap-2 px-3.5 text-left text-[15px] font-semibold text-[rgb(var(--mg-heading))] hover:bg-[rgb(var(--mg-subtle))]"
               >
-                <Plus aria-hidden="true" className="h-4 w-4" />Add "{typed}"
+                <Plus aria-hidden="true" className="h-4 w-4" />{t('auth.signup.addClub', { club: typed })}
               </button>
             )}
           </div>
@@ -164,7 +166,7 @@ export function ExternalOnboardingForm({
       </div>
 
       <div role="radiogroup" aria-labelledby="external-signup-role" className="flex flex-col gap-2">
-        <span id="external-signup-role" className="text-sm font-semibold text-[rgb(var(--mg-body))]">I am a</span>
+        <span id="external-signup-role" className="text-sm font-semibold text-[rgb(var(--mg-body))]">{t('auth.signup.iAmA')}</span>
         {SIGNUP_ROLE_CHOICES.map((r) => {
           const on = r.id === role;
           return (
@@ -181,7 +183,7 @@ export function ExternalOnboardingForm({
                 className={`box-border h-[22px] w-[22px] shrink-0 rounded-full ${on ? 'border-[7px] border-[rgb(var(--mg-heading))]' : 'border-[1.5px] border-[rgb(var(--mg-control))]'}`}
               />
               <span className={`flex-1 text-base font-semibold ${on ? 'text-[rgb(var(--mg-heading))]' : 'text-[rgb(var(--mg-ink))]'}`}>
-                {r.label}
+                {t(r.label)}
               </span>
             </button>
           );
@@ -189,14 +191,14 @@ export function ExternalOnboardingForm({
       </div>
 
       {clubPicked && chosenRole && (
-        <p className="text-sm font-medium leading-[1.4] text-[rgb(var(--mg-muted))]">Approved by {approver}.</p>
+        <p className="text-sm font-medium leading-[1.4] text-[rgb(var(--mg-muted))]">{approvedBy}</p>
       )}
 
       {error && <Notice>{error}</Notice>}
 
       <div className="mt-auto flex flex-col gap-2.5 pt-2">
         <button type="submit" disabled={!ready || loading} className="mg-btn mg-btn-primary w-full">
-          Create account
+          {t('auth.signup.submit')}
         </button>
         <button
           type="button"
@@ -204,7 +206,7 @@ export function ExternalOnboardingForm({
           className="mx-auto flex min-h-11 items-center gap-2 text-[15px] font-semibold text-[rgb(var(--mg-muted))]"
         >
           <ArrowLeft aria-hidden="true" className="h-4 w-4" />
-          Use a different account
+          {t('auth.external.useDifferent')}
         </button>
       </div>
     </form>

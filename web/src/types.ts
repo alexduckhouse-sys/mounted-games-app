@@ -66,7 +66,7 @@ export interface PasswordResetProblem {
 
 /** A sign-in provider switched on in the API (`GET /auth/providers`). `clientId` is the public web client ID. */
 export interface ExternalProvider {
-  id: 'google' | 'apple';
+  id: 'google' | 'apple' | 'facebook';
   name: string;
   clientId: string;
 }
@@ -77,6 +77,16 @@ export interface ExternalAuthResponse {
   email?: string | null;
   suggestedName?: string | null;
   provider?: string | null;
+  /** Finishes a new account through `POST /auth/external/signup` within ten minutes. */
+  signupTicket?: string | null;
+}
+
+/** `GET /auth/logins`: whether the account has a password, and which providers it can sign in with. */
+export interface LinkedSignIns {
+  hasPassword: boolean;
+  logins: { provider: string; name: string }[];
+  /** After adding or removing one: this device's new sign-in, because every other session has ended. */
+  auth?: AuthResponse | null;
 }
 
 export interface TrainerRequest {

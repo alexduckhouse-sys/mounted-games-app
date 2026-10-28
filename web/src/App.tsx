@@ -260,6 +260,7 @@ export default function App() {
               <Route path="refunds" element={<PrivacyPage />} />
               <Route path="cookies" element={<PrivacyPage />} />
               <Route path="safeguarding" element={<PrivacyPage />} />
+              <Route path="data-deletion" element={<PrivacyPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="unsubscribe" element={<UnsubscribePage />} />
               <Route path="confirm-email" element={<ConfirmEmailPage />} />

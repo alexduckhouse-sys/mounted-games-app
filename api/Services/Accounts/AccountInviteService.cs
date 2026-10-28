@@ -144,6 +144,8 @@ public sealed class AccountInviteService(
             var granted = await users.AddToRoleAsync(user, role);
             if (!granted.Succeeded) return (null, granted);
             await db.AccountInvites.Where(i => i.Id == known.Id).ExecuteUpdateAsync(s => s.SetProperty(i => i.AcceptedUserId, user.Id), ct);
+            // The password was chosen through a link sent to the address (see LinkByEmail).
+            await LinkByEmail.RecordPasswordFromMailboxAsync(db, user.Id, LinkByEmail.FromInvite, ct);
             await transaction.CommitAsync(ct);
             return (user, null);
         });

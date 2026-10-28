@@ -52,6 +52,9 @@ Other specifics:
 - French "né(e) en" is used even when the value is a full date.
 - The ring inside the heat ring (28px) holds `Byw` / `Nawr` (Welsh) and `Live` / `Maint.` (French); these are guesses and may not fit.
 - Welsh and French weekday and month names come from the browser (`Intl`). A browser without Welsh data shows English day names; nothing breaks.
+- Google, Apple and Facebook sign-in buttons use the provider's own wording. Google draws its button itself and is asked for `cy` or `fr`; if it has no Welsh it shows English. Apple's and Facebook's buttons are ours, so their text is in the catalogue: French uses `Se connecter avec Apple`, `Continuer avec Apple` and `Continuer avec Facebook`, which we believe are their official French titles (please check against Apple's Human Interface Guidelines and Facebook's brand guide). Welsh keeps the English (a deliberate fallback in `catalogues.test.ts`) because we couldn't find an official Welsh version from either. Apple's and Facebook's own pop-ups stay in English for now: their scripts are loaded from fixed `en_GB` addresses that the Content Security Policy names exactly, so changing the language there means changing the CSP too.
+- "Ways to sign in" on My account: Welsh `Tynnu` and French `Retirer` for Remove (taking a sign-in off the account, not deleting anything). `Seul accès` for "Only way in" is short to fit beside the provider name.
+- French `Connexion en tant que` for "Signed in as" avoids choosing `connecté` or `connectée`.
 
 ## How to review
 

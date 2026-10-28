@@ -1,19 +1,23 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api, readStoredAuth, writeStoredAuth, type StoredAuth } from '../api';
-import type { CompetitionAccess, ExternalAuthResponse, Role, UserProfile } from '../types';
+import type { AuthResponse, CompetitionAccess, ExternalAuthResponse, Role, UserProfile } from '../types';
 
 export type ExternalAuthResult =
   | { needsSignup: false }
-  | { needsSignup: true; email: string; suggestedName: string; provider: string };
+  | { needsSignup: true; email: string; suggestedName: string; provider: string; ticket: string };
 
 export interface ExternalAuthOptions {
   /** The raw nonce whose hash the provider put in the token. */
   nonce?: string;
   /** Apple's first-sign-in name: a suggestion for a new account only. */
   providerName?: string;
-  fullName?: string;
-  clubName?: string;
-  role?: string;
+}
+
+/** What a new Google, Apple or Facebook account needs on top of its sign-up ticket. The email is always the provider's. */
+export interface ExternalSignupDetails {
+  fullName: string;
+  clubName: string;
+  role: string;
 }
 
 interface AuthContextValue {
@@ -24,6 +28,8 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   loginWithAdminKey: (key: string, title?: string, email?: string, password?: string) => Promise<void>;
   loginWithExternal: (provider: string, idToken: string, options?: ExternalAuthOptions) => Promise<ExternalAuthResult>;
+  /** Makes the account for a provider sign-in that found none (`POST /auth/external/signup`), signs in and returns the profile. */
+  completeExternalSignup: (ticket: string, details: ExternalSignupDetails) => Promise<UserProfile>;
   /** `username` is the email; `fullName` is the person's own name (without it the API uses the start of the email). */
   signupTrainer: (username: string, password: string, role?: string, clubName?: string, fullName?: string) => Promise<void>;
   /** Turns an emailed invitation into an account (`POST /auth/invites/accept`) and signs the person in. */
@@ -33,6 +39,11 @@ interface AuthContextValue {
    * so the API sends back a fresh sign-in for this device, which replaces the old one here. Rejects as the request does.
    */
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  /**
+   * Swaps this device's sign-in for a fresh one the API sent after ending every other session (adding or removing a way
+   * to sign in). Ignores anything that isn't a sign-in.
+   */
+  adoptSession: (auth: AuthResponse) => void;
   logout: () => void;
   /** Re-reads the signed-in person's profile, e.g. after they confirm their email address. */
   refreshUser: () => Promise<void>;
@@ -129,6 +140,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (items) setAccessState({ userKey, items });
   }, [token, userKey]);
 
+  /** Keeps a new provider session and raises the request notice while an organiser role awaits approval. */
+  const startSession = useCallback((next: StoredAuth) => {
+    writeStoredAuth(next);
+    setAuth(next);
+    setSignedOut(false);
+    setNotice(next.user.roles.some((role) => role === 'TrainerRequest' || role === 'ManagerRequest') ? { token: next.token, kind: 'requested' } : null);
+  }, []);
+
   const login = useCallback(async (email: string, password: string) => {
     setLoading(true);
     try {
@@ -170,32 +189,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         idToken,
         ...(options?.nonce ? { nonce: options.nonce } : {}),
         ...(options?.providerName ? { providerName: options.providerName } : {}),
-        ...(options?.fullName ? { fullName: options.fullName } : {}),
-        ...(options?.clubName ? { clubName: options.clubName } : {}),
-        ...(options?.role ? { role: options.role } : {}),
       });
       if (data.needsSignup) {
+        if (!data.signupTicket) throw new Error('The sign-in reply had no sign-up ticket.');
         return {
           needsSignup: true,
           email: data.email ?? '',
           suggestedName: data.suggestedName ?? '',
           provider: data.provider ?? provider,
+          ticket: data.signupTicket,
         };
       }
       if (!data.auth) throw new Error('The sign-in reply had no session.');
-      writeStoredAuth(data.auth);
-      setAuth(data.auth);
-      setSignedOut(false);
-      setNotice(
-        data.auth.user.roles.some((role) => role === 'TrainerRequest' || role === 'ManagerRequest')
-          ? { token: data.auth.token, kind: 'requested' }
-          : null,
-      );
+      startSession(data.auth);
       return { needsSignup: false };
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [startSession]);
+
+  const completeExternalSignup = useCallback(async (ticket: string, details: ExternalSignupDetails): Promise<UserProfile> => {
+    setLoading(true);
+    try {
+      const { data } = await api.post<AuthResponse>('/auth/external/signup', {
+        ticket,
+        fullName: details.fullName,
+        clubName: details.clubName,
+        role: details.role,
+      });
+      startSession(data);
+      return data.user;
+    } finally {
+      setLoading(false);
+    }
+  }, [startSession]);
 
   const signupTrainer = useCallback(async (username: string, password: string, role?: string, clubName?: string, fullName?: string) => {
     setLoading(true);
@@ -224,14 +251,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
-    const { data } = await api.post<unknown>('/auth/change-password', { currentPassword, newPassword });
-    // An older API answered 204 with no body; this device then keeps the sign-in it has.
-    const fresh = data as Partial<StoredAuth> | null | undefined;
+  const adoptSession = useCallback((next: unknown) => {
+    const fresh = next as Partial<StoredAuth> | null | undefined;
     if (!fresh || typeof fresh.token !== 'string' || !fresh.user) return;
     writeStoredAuth(fresh as StoredAuth);
     setAuth(fresh as StoredAuth);
   }, []);
+
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    const { data } = await api.post<unknown>('/auth/change-password', { currentPassword, newPassword });
+    // An older API answered 204 with no body; this device then keeps the sign-in it has.
+    adoptSession(data);
+  }, [adoptSession]);
 
   const refreshUser = useCallback(async () => {
     try {
@@ -289,9 +320,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login,
     loginWithAdminKey,
     loginWithExternal,
+    completeExternalSignup,
     signupTrainer,
     acceptInvite,
     changePassword,
+    adoptSession,
     logout,
     refreshUser,
     signedOut,

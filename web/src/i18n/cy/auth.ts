@@ -63,6 +63,17 @@ export const auth: AreaCatalogue<typeof en> = {
   'auth.invite.title': 'Gwahoddiad',
   'auth.invite.join': 'Ymuno â Mounted Games',
 
+  'auth.social.or': 'neu',
+  'auth.social.googleUnavailable': 'Wnaeth mewngofnodi Google ddim llwytho. Gwiriwch eich signal, neu defnyddiwch eich e-bost a’ch cyfrinair.',
+  'auth.social.appleUnavailable': 'Wnaeth mewngofnodi Apple ddim llwytho. Gwiriwch eich signal, neu defnyddiwch eich e-bost a’ch cyfrinair.',
+  'auth.social.facebookUnavailable': 'Wnaeth mewngofnodi Facebook ddim llwytho. Gwiriwch eich signal, neu defnyddiwch eich e-bost a’ch cyfrinair.',
+  'auth.social.googleFailed': 'Wnaeth mewngofnodi Google ddim gweithio. Rhowch gynnig arall arni, neu defnyddiwch eich e-bost a’ch cyfrinair.',
+  'auth.social.appleFailed': 'Wnaeth mewngofnodi Apple ddim gweithio. Rhowch gynnig arall arni, neu defnyddiwch eich e-bost a’ch cyfrinair.',
+  'auth.social.notChecked': 'Methwyd â gwirio’r mewngofnodi hwnnw. Rhowch gynnig arall arni.',
+  'auth.external.title': 'Gorffen creu eich cyfrif',
+  'auth.external.signedInAs': 'Wedi mewngofnodi fel',
+  'auth.external.useDifferent': 'Defnyddio cyfrif arall',
+
   'auth.pw.length': 'O leiaf {min} nod',
   'auth.pw.number': 'Rhif',
   'auth.pw.lowercase': 'Llythyren fach',

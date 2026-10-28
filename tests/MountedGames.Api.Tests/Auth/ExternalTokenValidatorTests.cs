@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.IdentityModel.Tokens;
 using MountedGames.Api.Auth;
+using MountedGames.Api.Services;
 using MountedGames.Api.Tests.Infrastructure;
 
 namespace MountedGames.Api.Tests.Auth;
@@ -50,7 +51,25 @@ public sealed class ExternalTokenValidatorTests : IDisposable
     {
         var values = settings.Length > 0 ? settings : [("Auth:Google:ClientIds:0", Web), ("Auth:Google:ClientIds:1", Ios), ("Auth:Apple:ClientIds:0", AppleWeb)];
         var config = new ConfigurationBuilder().AddInMemoryCollection(values.Select(v => new KeyValuePair<string, string?>(v.Key, v.Value))).Build();
-        return new ExternalTokenValidator(config, new Factory(_http), _clock, NullLogger<ExternalTokenValidator>.Instance);
+        return Build(config, _http);
+    }
+
+    private ExternalTokenValidator Build(IConfiguration config, HttpMessageHandler http)
+    {
+        var guard = Guard(config);
+        var facebook = new FacebookTokenVerifier(new FacebookApp(config), new Factory(http), guard, _clock, NullLogger<FacebookTokenVerifier>.Instance);
+        return new ExternalTokenValidator(config, new Factory(http), _clock, guard, facebook, NullLogger<ExternalTokenValidator>.Instance);
+    }
+
+    /// <summary>The used-token store with no Redis configured, so it falls back to this instance's memory.</summary>
+    private ExternalTokenReplayGuard Guard(IConfiguration config)
+        => new(new RedisConnection(config, NullLogger<RedisConnection>.Instance, _clock), _clock, NullLogger<ExternalTokenReplayGuard>.Instance);
+
+    /// <summary>A fresh Google token and its raw nonce, checked once.</summary>
+    private Task<ExternalTokenResult> FreshGoogleAsync(ExternalTokenValidator validator, string audience = Web)
+    {
+        var nonce = IdTokenSigner.NewNonce();
+        return validator.ValidateAsync("google", GoogleToken(nonce, audience: audience), nonce);
     }
 
     private int KeyFetches(string fragment) => _http.Requests.Count(r => r.Contains(fragment, StringComparison.OrdinalIgnoreCase));
@@ -222,11 +241,15 @@ public sealed class ExternalTokenValidatorTests : IDisposable
     [Theory]
     [InlineData("rider@icloud.com", "true", null, true, false)]
     [InlineData("rider@icloud.com", true, false, true, false)]
+    [InlineData("rider@me.com", true, null, true, false)]
+    [InlineData("rider@mac.com", true, null, true, false)]
+    [InlineData("rider@btinternet.example", true, false, false, false)]
+    [InlineData("rider@icloud.com.example", true, false, false, false)]
     [InlineData("x7k2q9@privaterelay.appleid.com", "true", "true", false, true)]
     [InlineData("x7k2q9@privaterelay.appleid.com", true, null, false, true)]
     [InlineData("rider@icloud.com", "false", null, false, false)]
     [InlineData("rider@icloud.com", 1, null, false, false)]
-    public async Task AppleAddressesAreLinkableUnlessHidden(string email, object verified, object? isPrivate, bool mayLink, bool relay)
+    public async Task AppleVouchesOnlyForICloudAddresses(string email, object verified, object? isPrivate, bool mayLink, bool relay)
     {
         var nonce = IdTokenSigner.NewNonce();
         var extra = new Dictionary<string, object> { ["name"] = "Never In Apple Tokens" };
@@ -258,8 +281,8 @@ public sealed class ExternalTokenValidatorTests : IDisposable
         var validator = Validator();
         var nonce = IdTokenSigner.NewNonce();
 
-        Assert.Equal(ExternalTokenFailure.None, (await validator.ValidateAsync("google", GoogleToken(nonce), nonce)).Failure);
-        Assert.Equal(ExternalTokenFailure.None, (await validator.ValidateAsync("google", GoogleToken(nonce), nonce)).Failure);
+        Assert.Equal(ExternalTokenFailure.None, (await FreshGoogleAsync(validator)).Failure);
+        Assert.Equal(ExternalTokenFailure.None, (await FreshGoogleAsync(validator)).Failure);
         Assert.Equal(1, KeyFetches(GoogleKeys));
 
         // Google starts signing with a new key it hasn't published yet: one look, then no more for a minute.
@@ -274,7 +297,7 @@ public sealed class ExternalTokenValidatorTests : IDisposable
         _googleJwks = IdTokenSigner.Jwks(_google, rotated);
         _clock.Advance(ExternalTokenValidator.RefetchGap);
         Assert.Equal(ExternalTokenFailure.None, (await validator.ValidateAsync("google", withNewKey, nonce)).Failure);
-        Assert.Equal(ExternalTokenFailure.None, (await validator.ValidateAsync("google", GoogleToken(nonce), nonce)).Failure);
+        Assert.Equal(ExternalTokenFailure.None, (await FreshGoogleAsync(validator)).Failure);
         Assert.Equal(3, KeyFetches(GoogleKeys));
     }
 
@@ -282,21 +305,106 @@ public sealed class ExternalTokenValidatorTests : IDisposable
     public async Task StaleKeysAreFetchedAgainAndNeverUsedWhenTheProviderCantBeReached()
     {
         var validator = Validator();
-        var nonce = IdTokenSigner.NewNonce();
-        Assert.Equal(ExternalTokenFailure.None, (await validator.ValidateAsync("google", GoogleToken(nonce), nonce)).Failure);
+        Assert.Equal(ExternalTokenFailure.None, (await FreshGoogleAsync(validator)).Failure);
 
         _clock.Advance(ExternalTokenValidator.KeysFreshFor);
         _googleStatus = HttpStatusCode.InternalServerError;
-        Assert.Equal(ExternalTokenFailure.KeysUnavailable, (await validator.ValidateAsync("google", GoogleToken(nonce), nonce)).Failure);
+        Assert.Equal(ExternalTokenFailure.KeysUnavailable, (await FreshGoogleAsync(validator)).Failure);
 
+        _clock.Advance(ExternalTokenValidator.FailureMemory);
         _googleStatus = HttpStatusCode.OK;
         _googleJwks = "{ this is not json";
-        Assert.Equal(ExternalTokenFailure.KeysUnavailable, (await validator.ValidateAsync("google", GoogleToken(nonce), nonce)).Failure);
+        Assert.Equal(ExternalTokenFailure.KeysUnavailable, (await FreshGoogleAsync(validator)).Failure);
 
+        _clock.Advance(ExternalTokenValidator.FailureMemory);
         _googleJwks = IdTokenSigner.Jwks(_google);
-        Assert.Equal(ExternalTokenFailure.None, (await validator.ValidateAsync("google", GoogleToken(nonce), nonce)).Failure);
+        Assert.Equal(ExternalTokenFailure.None, (await FreshGoogleAsync(validator)).Failure);
         Assert.Equal(4, KeyFetches(GoogleKeys));
     }
+
+    [Fact]
+    public async Task AFailedKeyFetchIsRememberedForHalfAMinuteSoAnOutageDoesntQueueEverySignIn()
+    {
+        var validator = Validator();
+        _googleStatus = HttpStatusCode.ServiceUnavailable;
+        Assert.Equal(ExternalTokenFailure.KeysUnavailable, (await FreshGoogleAsync(validator)).Failure);
+        Assert.Equal(ExternalTokenFailure.KeysUnavailable, (await FreshGoogleAsync(validator)).Failure);
+        Assert.Equal(1, KeyFetches(GoogleKeys));
+
+        // Back up, but still inside the half minute: nothing is fetched yet.
+        _googleStatus = HttpStatusCode.OK;
+        _clock.Advance(ExternalTokenValidator.FailureMemory - TimeSpan.FromSeconds(1));
+        Assert.Equal(ExternalTokenFailure.KeysUnavailable, (await FreshGoogleAsync(validator)).Failure);
+        Assert.Equal(1, KeyFetches(GoogleKeys));
+
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        Assert.Equal(ExternalTokenFailure.None, (await FreshGoogleAsync(validator)).Failure);
+        Assert.Equal(2, KeyFetches(GoogleKeys));
+
+        // A new key turns up during a later outage: one look fails, and the keys already held keep serving everyone else.
+        using var rotated = new IdTokenSigner("g-2");
+        var nonce = IdTokenSigner.NewNonce();
+        var withNewKey = rotated.Sign(IdTokenSigner.GoogleIssuer, Web, "g-sub-1", "rider@gmail.com", nonce, emailVerified: true);
+        _googleStatus = HttpStatusCode.ServiceUnavailable;
+        Assert.Equal(ExternalTokenFailure.Signature, (await validator.ValidateAsync("google", withNewKey, nonce)).Failure);
+        Assert.Equal(3, KeyFetches(GoogleKeys));
+        _clock.Advance(ExternalTokenValidator.RefetchGap);
+        Assert.Equal(ExternalTokenFailure.Signature, (await validator.ValidateAsync("google", withNewKey, nonce)).Failure);
+        Assert.Equal(ExternalTokenFailure.None, (await FreshGoogleAsync(validator)).Failure);
+        Assert.Equal(4, KeyFetches(GoogleKeys));
+    }
+
+    [Fact]
+    public async Task ATokenAndNonceWorkOnce()
+    {
+        var validator = Validator();
+        var nonce = IdTokenSigner.NewNonce();
+        var token = GoogleToken(nonce);
+
+        Assert.Equal(ExternalTokenFailure.None, (await validator.ValidateAsync("google", token, nonce)).Failure);
+        Assert.Equal(ExternalTokenFailure.Replayed, (await validator.ValidateAsync("google", token, nonce)).Failure);
+        // A new token for the same nonce is the same sign-in.
+        Assert.Equal(ExternalTokenFailure.Replayed, (await validator.ValidateAsync("google", GoogleToken(nonce), nonce)).Failure);
+        // Another person, or the same person with a new nonce, is a new sign-in.
+        var other = _google.Sign(IdTokenSigner.GoogleIssuer, Web, "g-sub-2", "other@gmail.com", nonce, emailVerified: true);
+        Assert.Equal(ExternalTokenFailure.None, (await validator.ValidateAsync("google", other, nonce)).Failure);
+        Assert.Equal(ExternalTokenFailure.None, (await FreshGoogleAsync(validator)).Failure);
+    }
+
+    [Fact]
+    public async Task AUsedSignInIsForgottenOnceItsTokenHasExpired()
+    {
+        var guard = Guard(new ConfigurationBuilder().Build());
+        var expires = _clock.GetUtcNow().AddMinutes(10);
+        Assert.True(await guard.TryUseAsync("google", "sub", "hash", expires));
+        Assert.False(await guard.TryUseAsync("google", "sub", "hash", expires));
+        Assert.True(await guard.TryUseAsync("apple", "sub", "hash", expires));
+
+        _clock.Advance(TimeSpan.FromMinutes(10) + ExternalTokenValidator.ClockSkew + TimeSpan.FromSeconds(1));
+        Assert.True(await guard.TryUseAsync("google", "sub", "hash", expires));
+
+        // An already-expired token is still held for the clock skew, and old entries are swept as new ones arrive.
+        Assert.True(await guard.TryUseAsync("google", "late", "hash", _clock.GetUtcNow().AddMinutes(-5)));
+        Assert.False(await guard.TryUseAsync("google", "late", "hash", _clock.GetUtcNow().AddMinutes(-5)));
+        _clock.Advance(TimeSpan.FromMinutes(2));
+        for (var i = 0; i < 300; i++) Assert.True(await guard.TryUseAsync("google", $"many-{i}", "hash", _clock.GetUtcNow()));
+        Assert.True(await guard.TryUseAsync("google", "late", "hash", _clock.GetUtcNow()));
+    }
+
+    [RedisFact]
+    public async Task UsedSignInsAreSharedThroughRedis()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection([new("Redis:ConnectionString", RedisFactAttribute.Url)]).Build();
+        using var redisA = new RedisConnection(config, NullLogger<RedisConnection>.Instance, _clock);
+        using var redisB = new RedisConnection(config, NullLogger<RedisConnection>.Instance, _clock);
+        var instanceA = new ExternalTokenReplayGuard(redisA, _clock, NullLogger<ExternalTokenReplayGuard>.Instance);
+        var instanceB = new ExternalTokenReplayGuard(redisB, _clock, NullLogger<ExternalTokenReplayGuard>.Instance);
+        var subject = $"redis-{Guid.NewGuid():N}";
+
+        Assert.True(await instanceA.TryUseAsync("google", subject, "hash", DateTimeOffset.UtcNow.AddMinutes(5)));
+        Assert.False(await instanceB.TryUseAsync("google", subject, "hash", DateTimeOffset.UtcNow.AddMinutes(5)));
+    }
+
 
     [Fact]
     public async Task ANetworkFailureFetchingKeysRefusesTheSignIn()
@@ -304,7 +412,7 @@ public sealed class ExternalTokenValidatorTests : IDisposable
         var http = new StubHttp();
         http.Throw(GoogleKeys);
         var config = new ConfigurationBuilder().AddInMemoryCollection([new("Auth:Google:ClientIds:0", Web)]).Build();
-        var validator = new ExternalTokenValidator(config, new Factory(http), _clock, NullLogger<ExternalTokenValidator>.Instance);
+        var validator = Build(config, http);
         var nonce = IdTokenSigner.NewNonce();
         Assert.Equal(ExternalTokenFailure.KeysUnavailable, (await validator.ValidateAsync("google", GoogleToken(nonce), nonce)).Failure);
     }

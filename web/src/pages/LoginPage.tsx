@@ -42,14 +42,14 @@ export function LoginPage() {
     try {
       const res = await loginWithExternal(provider, idToken, { nonce, providerName });
       if (res.needsSignup) {
-        setPendingExternal({ provider: res.provider, idToken, nonce, providerName, email: res.email, suggestedName: res.suggestedName });
+        setPendingExternal({ provider: res.provider, ticket: res.ticket, email: res.email, suggestedName: res.suggestedName });
       } else {
         nav((loc.state as NavState | null)?.from ?? '/', { replace: true });
       }
     } catch (err: unknown) {
-      setExternalError(externalErrorMessage(err, 'Couldn’t sign in. Check your signal and try again.'));
+      setExternalError(externalErrorMessage(err, t('auth.login.noSignal')));
     }
-  }, [loc.state, loginWithExternal, nav]);
+  }, [loc.state, loginWithExternal, nav, t]);
 
   const ready = useKey
     ? organiserTitle.trim().length > 0 && organiserEmail.trim().includes('@') && passwordMeetsRules(organiserPassword) && organiserKey.trim().length > 0

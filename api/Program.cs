@@ -104,13 +104,21 @@ builder.Services
 builder.Services.AddAuthorizationWithCompetitionStaff();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<LiveAccounts>();
-// Sign in with Google / Apple: fetches only the providers' fixed signing-key addresses (see ExternalProviders).
+// Sign in with Google / Apple / Facebook: fetches only the providers' fixed signing-key addresses (see ExternalProviders)
+// and Facebook's Graph API. Facebook's debug_token call carries the token being checked in the query string
+// (input_token, as Facebook requires; the app's own token goes in the Authorization header), so the factory's request
+// logging is off for this client.
 builder.Services.AddHttpClient(ExternalTokenValidator.HttpClientName, c =>
     {
         c.Timeout = TimeSpan.FromSeconds(10);
         c.MaxResponseContentBufferSize = 256 * 1024;
     })
-    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
+    .RemoveAllLoggers();
+builder.Services.AddSingleton<ExternalTokenReplayGuard>();
+builder.Services.AddSingleton<ExternalSignupTickets>();
+builder.Services.AddSingleton<FacebookApp>();
+builder.Services.AddSingleton<FacebookTokenVerifier>();
 builder.Services.AddSingleton<IExternalTokenValidator, ExternalTokenValidator>();
 builder.Services.AddSingleton<LiveConnections>();
 builder.Services.AddHostedService<LiveSessionSweeper>();

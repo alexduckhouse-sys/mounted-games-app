@@ -10,17 +10,20 @@ namespace MountedGames.Api.Auth;
 /// <summary>
 /// Who a provider says signed in, read from an ID token that passed every check in <see cref="ExternalTokenValidator"/>.
 /// </summary>
+/// <param name="Email">The address the provider gave. Google and Apple always give one; Facebook may not.</param>
 /// <param name="EmailVerified">The provider says the person proved they own <paramref name="Email"/>.</param>
 /// <param name="MayLinkByEmail">
 /// The provider vouches for the address strongly enough to attach this sign-in to an existing account with the same
-/// email: Google for Gmail or a Google Workspace domain (<c>hd</c>), Apple for a real address (never a private relay one).
+/// email, and for a new account to start with it confirmed: only when the provider hosts the mailbox itself. Google for
+/// Gmail or a Google Workspace domain (<c>hd</c>); Apple for iCloud addresses (<c>icloud.com</c>, <c>me.com</c>,
+/// <c>mac.com</c>), never a private relay one. Any other address was only verified once, and may have changed hands.
 /// </param>
 /// <param name="IsPrivateRelay">An Apple "Hide My Email" address, unique to this app and person.</param>
 /// <param name="Name">The name inside the token (Google sends one; Apple never does). A suggestion only, never identity.</param>
 public sealed record ExternalIdentity(
     string Provider,
     string Subject,
-    string Email,
+    string? Email,
     bool EmailVerified,
     bool MayLinkByEmail,
     bool IsPrivateRelay,
@@ -40,7 +43,36 @@ public enum ExternalTokenFailure
     Expired,
     MissingClaims,
     KeysUnavailable,
+    /// <summary>The provider couldn't be asked about the token (Facebook checks tokens online).</summary>
+    ProviderUnavailable,
+    /// <summary>This token and nonce were used before (or, to confirm it's the owner, the Facebook token was seen at a sign-in).</summary>
+    Replayed,
+    /// <summary>A Facebook token offered to confirm it's the owner was issued too long ago to count as a fresh log-in.</summary>
+    NotFresh,
     Invalid,
+}
+
+/// <summary>
+/// What a provider token is being used for, which decides whether it may be presented again. Google and Apple tokens
+/// always work once, whatever the use: each carries its own nonce. The rules below are for Facebook, whose SDK hands back
+/// the same access token for an hour or two.
+/// </summary>
+public enum ExternalTokenUse
+{
+    /// <summary>
+    /// Confirming it's the owner (deleting the account, adding or removing a sign-in): the token must be fresh. It must
+    /// not have been seen at a sign-in (one captured then can't stand in for a new log-in), it works once, and if
+    /// Facebook says when it was issued, that must be within <see cref="FacebookTokenVerifier.ConfirmFreshFor"/>. The
+    /// default.
+    /// </summary>
+    Confirm,
+    /// <summary>Signing in: the token may sign in again within its life. It is recorded as seen, which bars it from confirming.</summary>
+    SignIn,
+    /// <summary>
+    /// The provider being added to an account (the owner confirms separately): the token works once, but may have been
+    /// seen at a sign-in, because the usual way here is a Facebook sign-in that told the person to add Facebook instead.
+    /// </summary>
+    Connect,
 }
 
 public sealed record ExternalTokenResult(ExternalIdentity? Identity, ExternalTokenFailure Failure)
@@ -58,7 +90,9 @@ public interface IExternalTokenValidator
     /// its SHA-256 (see <see cref="ExternalNonce"/>), so the token alone isn't enough to sign in: whoever presents it must
     /// also hold the raw value, which never leaves the page that asked.
     /// </param>
-    Task<ExternalTokenResult> ValidateAsync(string provider, string idToken, string? rawNonce, CancellationToken ct = default);
+    /// <param name="use">What the token is for, which decides whether a Facebook token may be presented again (<see cref="ExternalTokenUse"/>).</param>
+    Task<ExternalTokenResult> ValidateAsync(string provider, string idToken, string? rawNonce, ExternalTokenUse use = ExternalTokenUse.Confirm,
+        CancellationToken ct = default);
 }
 
 /// <summary>
@@ -71,6 +105,8 @@ public static class ExternalProviders
 {
     public const string Google = "google";
     public const string Apple = "apple";
+    /// <summary>Checked by <see cref="FacebookTokenVerifier"/>: an access token, not an ID token, and never linked by email.</summary>
+    public const string Facebook = "facebook";
 
     internal sealed record Spec(string Id, string Name, string[] Issuers, string KeysUri, string ConfigKey);
 
@@ -90,9 +126,25 @@ public static class ExternalProviders
             .ToArray();
     }
 
+    /// <summary>
+    /// Whether the provider says if it checked the address (Google and Apple do). An address it hasn't confirmed never
+    /// makes or opens an account through it.
+    /// </summary>
+    public static bool VerifiesEmail(string providerId) => providerId is Google or Apple;
+
     /// <summary>Apple's "Hide My Email" addresses.</summary>
     public static bool IsApplePrivateRelay(string email)
         => email.EndsWith("@privaterelay.appleid.com", StringComparison.OrdinalIgnoreCase);
+
+    private static readonly string[] GoogleHosted = ["@gmail.com", "@googlemail.com"];
+    private static readonly string[] AppleHosted = ["@icloud.com", "@me.com", "@mac.com"];
+
+    /// <summary>Gmail, or a Google Workspace account (the token names its domain in <c>hd</c>).</summary>
+    public static bool IsGoogleHosted(string email, string? hostedDomain)
+        => GoogleHosted.Any(d => email.EndsWith(d, StringComparison.OrdinalIgnoreCase)) || !string.IsNullOrWhiteSpace(hostedDomain);
+
+    /// <summary>An iCloud mailbox, which Apple itself runs.</summary>
+    public static bool IsAppleHosted(string email) => AppleHosted.Any(d => email.EndsWith(d, StringComparison.OrdinalIgnoreCase));
 }
 
 /// <summary>
@@ -119,16 +171,20 @@ public static class ExternalNonce
 
 /// <summary>
 /// Checks Google and Apple ID tokens: an RS256 signature from the provider's published keys, the issuer, the audience
-/// (any configured client ID), expiry and the nonce. Keys are cached for a few hours and fetched again when a token names
-/// a key we don't have (providers rotate them), at most once a minute. Nothing from the token is logged.
+/// (any configured client ID), expiry and the nonce, then that this token and nonce haven't been used before
+/// (<see cref="ExternalTokenReplayGuard"/>). Keys are cached for a few hours and fetched again when a token names a key
+/// we don't have (providers rotate them), at most once a minute; a failed fetch is remembered for half a minute, so a
+/// provider outage doesn't make every sign-in wait for its own timeout. Nothing from the token is logged.
 /// </summary>
 public sealed class ExternalTokenValidator : IExternalTokenValidator
 {
     public const string HttpClientName = "external-auth";
     public const int MaxTokenLength = 8 * 1024;
     private const int MaxSubjectLength = 255;
+    public static readonly TimeSpan ClockSkew = TimeSpan.FromMinutes(1);
     internal static readonly TimeSpan KeysFreshFor = TimeSpan.FromHours(6);
     internal static readonly TimeSpan RefetchGap = TimeSpan.FromMinutes(1);
+    internal static readonly TimeSpan FailureMemory = TimeSpan.FromSeconds(30);
 
     /// <summary>Keys and when they were fetched, replaced together so a reader outside the lock never sees half of each.</summary>
     private sealed record KeySnapshot(IReadOnlyList<SecurityKey> Keys, DateTimeOffset FetchedAt);
@@ -138,33 +194,48 @@ public sealed class ExternalTokenValidator : IExternalTokenValidator
         public volatile KeySnapshot Snapshot = new([], DateTimeOffset.MinValue);
         /// <summary>Read and written only under <see cref="Lock"/>.</summary>
         public DateTimeOffset LastRefetch = DateTimeOffset.MinValue;
+        /// <summary>When a fetch last failed. Read and written only under <see cref="Lock"/>.</summary>
+        public DateTimeOffset LastFailure = DateTimeOffset.MinValue;
         public readonly SemaphoreSlim Lock = new(1, 1);
     }
 
     private readonly IConfiguration _config;
     private readonly IHttpClientFactory _http;
     private readonly TimeProvider _time;
+    private readonly ExternalTokenReplayGuard _replay;
+    private readonly FacebookTokenVerifier _facebook;
     private readonly ILogger<ExternalTokenValidator> _log;
     private readonly JsonWebTokenHandler _handler = new();
     private readonly ConcurrentDictionary<string, KeyCache> _keys = new(StringComparer.Ordinal);
 
-    public ExternalTokenValidator(IConfiguration config, IHttpClientFactory http, TimeProvider time, ILogger<ExternalTokenValidator> log)
+    public ExternalTokenValidator(IConfiguration config, IHttpClientFactory http, TimeProvider time, ExternalTokenReplayGuard replay,
+        FacebookTokenVerifier facebook, ILogger<ExternalTokenValidator> log)
     {
         _config = config;
         _http = http;
         _time = time;
+        _replay = replay;
+        _facebook = facebook;
         _log = log;
     }
 
+    /// <summary>Google and Apple when they have a client ID; Facebook when it has both its App ID and secret (only the ID is sent).</summary>
     public IReadOnlyList<ExternalProviderDto> GetEnabledProviders()
-        => ExternalProviders.All
+    {
+        var list = ExternalProviders.All
             .Select(spec => (spec, ids: ExternalProviders.ClientIds(_config, spec)))
             .Where(p => p.ids.Length > 0)
             .Select(p => new ExternalProviderDto(p.spec.Id, p.spec.Name, p.ids[0]))
             .ToList();
+        if (_facebook.App.IsConfigured) list.Add(new ExternalProviderDto(ExternalProviders.Facebook, "Facebook", _facebook.App.AppId!));
+        return list;
+    }
 
-    public async Task<ExternalTokenResult> ValidateAsync(string provider, string idToken, string? rawNonce, CancellationToken ct = default)
+    /// <remarks>For Facebook, <paramref name="idToken"/> is the access token from its SDK and there is no nonce.</remarks>
+    public async Task<ExternalTokenResult> ValidateAsync(string provider, string idToken, string? rawNonce, ExternalTokenUse use = ExternalTokenUse.Confirm,
+        CancellationToken ct = default)
     {
+        if (provider == ExternalProviders.Facebook) return await _facebook.VerifyAsync(idToken, use, ct);
         var spec = ExternalProviders.All.FirstOrDefault(s => s.Id == provider);
         var audiences = spec is null ? [] : ExternalProviders.ClientIds(_config, spec);
         if (spec is null || audiences.Length == 0) return ExternalTokenResult.Fail(ExternalTokenFailure.UnknownProvider);
@@ -191,7 +262,7 @@ public sealed class ExternalTokenValidator : IExternalTokenValidator
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ClockSkew = TimeSpan.FromMinutes(1),
+            ClockSkew = ClockSkew,
         });
         if (!checkedToken.IsValid || checkedToken.SecurityToken is not JsonWebToken token)
             return Refuse(spec, Classify(checkedToken.Exception));
@@ -205,15 +276,18 @@ public sealed class ExternalTokenValidator : IExternalTokenValidator
 
         var verified = Flag(token, "email_verified");
         var relay = spec.Id == ExternalProviders.Apple && (Flag(token, "is_private_email") || ExternalProviders.IsApplePrivateRelay(email));
-        // Google vouches for an address now only when it hosts it (Gmail, or a Workspace domain named in "hd"). An
-        // ordinary Google account verified with another address once may have lost that mailbox since.
+        // A provider vouches for an address now only when it runs the mailbox. Any other address was verified once and
+        // may have lost that mailbox since, so it never opens an existing account.
         var mayLink = verified && spec.Id switch
         {
-            ExternalProviders.Google => email.EndsWith("@gmail.com", StringComparison.OrdinalIgnoreCase)
-                || email.EndsWith("@googlemail.com", StringComparison.OrdinalIgnoreCase)
-                || !string.IsNullOrWhiteSpace(Text(token, "hd")),
-            _ => !relay,
+            ExternalProviders.Google => ExternalProviders.IsGoogleHosted(email, Text(token, "hd")),
+            _ => !relay && ExternalProviders.IsAppleHosted(email),
         };
+
+        // Last, so a refused token never uses up its nonce: each token and nonce pair signs in once, on any instance.
+        if (!await _replay.TryUseAsync(spec.Id, subject, Text(token, "nonce")!, new DateTimeOffset(token.ValidTo, TimeSpan.Zero)))
+            return Refuse(spec, ExternalTokenFailure.Replayed);
+
         var name = spec.Id == ExternalProviders.Google ? GoogleName(token) : null;
         return new ExternalTokenResult(new ExternalIdentity(spec.Id, subject, email, verified, mayLink, relay, name), ExternalTokenFailure.None);
     }
@@ -275,10 +349,14 @@ public sealed class ExternalTokenValidator : IExternalTokenValidator
             // Fresh keys that don't include this token's key: the provider may have rotated, so look again, but only now
             // and then, or a stream of made-up key ids would have us fetching on every request.
             if (fresh && now - cache.LastRefetch < RefetchGap) return snapshot.Keys;
+            // A fetch failed moments ago: answer at once rather than queue every sign-in behind another 10-second wait.
+            if (now - cache.LastFailure < FailureMemory) return fresh ? snapshot.Keys : [];
             if (fresh) cache.LastRefetch = now;
             var fetched = await FetchKeysAsync(spec, ct);
             if (fetched.Count > 0)
                 cache.Snapshot = snapshot = new KeySnapshot(fetched, now);
+            else
+                cache.LastFailure = _time.GetUtcNow();
             // Stale keys are never used once a fetch fails: a key the provider has withdrawn may be one that leaked.
             return IsFresh(snapshot, now) ? snapshot.Keys : [];
         }
