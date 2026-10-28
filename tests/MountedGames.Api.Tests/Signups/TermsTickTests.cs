@@ -18,8 +18,8 @@ public class TermsTickTests : IClassFixture<ApiFactory>
 
     private static string SignupUrl(CompetitionSection s) => $"/api/competitions/{s.CompetitionId}/sections/{s.Id}/signups";
 
-    private static CreateSectionSignupRequest Entry(string name, bool accept, string? version, bool noFilming = false)
-        => new(name, null, null, null, false, noFilming, accept, version);
+    private static CreateSectionSignupRequest Entry(string name, bool accept, string? version)
+        => new(name, null, null, null, false, accept, version);
 
     [Fact]
     public async Task Signup_WithoutTheTick_IsRefused_AndNothingIsSaved()
@@ -54,19 +54,6 @@ public class TermsTickTests : IClassFixture<ApiFactory>
         var row = await _f.WithDbAsync(db => db.SectionSignups.AsNoTracking().SingleAsync(s => s.Id == dto.Id));
         Assert.Equal((me.User.Id, "Pat Parent"), (row.TermsAcceptedByUserId, row.TermsAcceptedByName));
         Assert.InRange(row.TermsAcceptedAt!.Value, before, DateTime.UtcNow.AddSeconds(2));
-    }
-
-    [Fact]
-    public async Task Signup_CanTickTheTermsAndStillOptOutOfCloseUps()
-    {
-        var section = await _f.NewSectionAsync();
-        var trainer = await _f.TrainerAsync();
-
-        var dto = await (await trainer.PostAsJsonAsync(SignupUrl(section), Entry("Pat", true, SignupTerms.WordingVersion, noFilming: true)))
-            .ReadAsync<SectionSignupDto>();
-
-        Assert.True(dto.TermsAccepted);
-        Assert.True(dto.NoFilming);
     }
 
     [Fact]

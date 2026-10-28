@@ -426,7 +426,7 @@ describe('DeclarationsTab: the dec form', () => {
       id: 9, teamId: 7, teamName: 'Stockport C', competitionId: 4, competitionName: 'Cheshire Area MG', submittedAt: '2026-10-20T09:00:00Z', isLocked: true,
       riders: [0, 1, 2, 3, 4].map((i) => ({
         id: i + 1, fullName: `Rider ${i + 1}`, dateOfBirth: '2015-04-05T00:00:00', horseName: 'Pony', ponyHeightHands: 13, isCaptain: i === 0, isReserve: false, orderIndex: i,
-        noFilming: i === 1, useInitialOnly: i === 2,
+        useInitialOnly: i === 2,
       })),
     }];
     const user = userEvent.setup();
@@ -439,7 +439,6 @@ describe('DeclarationsTab: the dec form', () => {
     await waitFor(() => expect(state.post).toHaveBeenCalled());
     const riders = state.post.mock.calls[0][1].riders;
     expect(riders[0].isCaptain).toBe(true);
-    expect(riders[1].noFilming).toBe(true);
     expect(riders[2].useInitialOnly).toBe(true);
   });
 

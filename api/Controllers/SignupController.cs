@@ -24,7 +24,6 @@ public record CreateSectionSignupInput(
     string? ContactInfo,
     string? TeamCode = null,
     bool UseInitialOnly = false,
-    bool NoFilming = false,
     bool AcceptTerms = false,
     string? ConsentVersion = null,
     [MaxLength(EmailAddresses.MaxLength)] string? ContactEmail = null,
@@ -73,7 +72,7 @@ public record SectionSignupExtendedDto(
     string FullName, string? PonyClubName, string? ContactInfo,
     int AmountMinor, SignupPaymentStatus Status, DateTime? PaidAt,
     int? TeamId, DateTime CreatedAt,
-    bool UseInitialOnly = false, bool NoFilming = false,
+    bool UseInitialOnly = false,
     bool TermsAccepted = false, DateTime? TermsAcceptedAt = null, string? TermsWordingVersion = null,
     string? ContactEmail = null, EmailDeliveryStatus ConfirmationEmailStatus = EmailDeliveryStatus.NotRequested,
     DateTime? ConfirmationEmailAt = null,
@@ -99,7 +98,7 @@ public record SectionSignupExtendedDto(
 ) : SectionSignupDto(
     Id, CompetitionSectionId, SectionName, FullName, PonyClubName, ContactInfo,
     AmountMinor, Status, PaidAt, TeamId, CreatedAt,
-    UseInitialOnly, NoFilming, TermsAccepted, TermsAcceptedAt, TermsWordingVersion,
+    UseInitialOnly, TermsAccepted, TermsAcceptedAt, TermsWordingVersion,
     ContactEmail, ConfirmationEmailStatus, ConfirmationEmailAt, TeamName, IsWholeTeam
 );
 
@@ -541,7 +540,7 @@ public class SignupController : ControllerBase
         return new SectionSignupExtendedDto(
             b.Id, b.CompetitionSectionId, b.SectionName, b.FullName, b.PonyClubName, b.ContactInfo,
             b.AmountMinor, b.Status, b.PaidAt, b.TeamId, b.CreatedAt,
-            b.UseInitialOnly, b.NoFilming, b.TermsAccepted, b.TermsAcceptedAt, b.TermsWordingVersion,
+            b.UseInitialOnly, b.TermsAccepted, b.TermsAcceptedAt, b.TermsWordingVersion,
             b.ContactEmail, b.ConfirmationEmailStatus, b.ConfirmationEmailAt,
             b.TeamName, b.IsWholeTeam,
             m?.LookingForPair == true, m?.LookingForGuestRiders == true, m?.WaitingForGuestSpot == true,
@@ -857,7 +856,7 @@ public class SignupController : ControllerBase
         if (amount > int.MaxValue) return BadRequest(new { message = "The total entry fee is too large." });
         var amountMinor = (int)amount;
         var isFree = amountMinor == 0 && !req.IsWaitlist;
-        // Same safeguarding rule as declaration forms: a single-letter surname ("Oliver S.") means initial-only and no filming.
+        // Same safeguarding rule as declaration forms: a single-letter surname ("Oliver S.") means initial-only.
         var singleLetterSurname = DecFormRules.HasSingleLetterSurnameInitial(name)
             || DecFormRules.HasSingleLetterSurnameInitial(guestDetails?.RiderName);
         var signup = new SectionSignup
@@ -872,7 +871,6 @@ public class SignupController : ControllerBase
             ContactEmail = contactEmail,
             ClientRequestId = requestId,
             UseInitialOnly = req.UseInitialOnly || singleLetterSurname,
-            NoFilming = req.NoFilming || singleLetterSurname,
             TermsAccepted = true,
             TermsAcceptedAt = DateTime.UtcNow,
             TermsAcceptedByUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,

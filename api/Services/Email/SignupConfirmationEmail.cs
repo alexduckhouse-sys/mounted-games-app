@@ -14,6 +14,17 @@ public static class SignupConfirmationEmail
     private static readonly CultureInfo Uk = CultureInfo.InvariantCulture;
 
     /// <summary>
+    /// A subject line built from text people typed (event, class and club names): line breaks and other control
+    /// characters become spaces so nothing can add a header line or break the layout of the inbox row.
+    /// </summary>
+    public static string OneLine(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        var cleaned = new string(value.Select(ch => char.IsControl(ch) ? ' ' : ch).ToArray());
+        return string.Join(' ', cleaned.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    /// <summary>
     /// Plain, short and honest about money: the entry is recorded, the fee is paid to the organiser directly,
     /// and nothing here suggests a card payment took place.
     /// </summary>
@@ -81,8 +92,8 @@ public static class SignupConfirmationEmail
         sb.AppendLine("Mounted Games");
 
         var subject = signup.AmountMinor <= 0
-            ? $"You're entered in {competition.Name}"
-            : $"Your entry for {competition.Name}";
+            ? OneLine($"You're entered in {competition.Name}")
+            : OneLine($"Your entry for {competition.Name}");
 
         var html = new StringBuilder();
         html.Append("<p style=\"margin:0 0 12px;\">Hello,</p>");
@@ -191,7 +202,7 @@ public static class SignupConfirmationEmail
             html.Append(EmailHtml.Button(competitionUrl, "Open competition page"));
         html.Append("<p style=\"margin:16px 0 12px;color:#475569;font-size:13px;\">If you have already sent your transfer, thank you — the organiser will mark your entry paid once it clears.</p>");
 
-        var subject = $"Payment reminder: {competition.Name} ({section.DisplayName})";
+        var subject = OneLine($"Payment reminder: {competition.Name} ({section.DisplayName})");
         return new EmailMessage(toAddress, subject, sb.ToString(), EmailHtml.Wrap(html.ToString()));
     }
 
@@ -232,7 +243,7 @@ public static class SignupConfirmationEmail
         if (!string.IsNullOrEmpty(myEntriesUrl))
             html.Append(EmailHtml.Button(myEntriesUrl, "Accept spot & proceed to payment"));
 
-        var subject = $"Spot available: {section.DisplayName} at {competition.Name}";
+        var subject = OneLine($"Spot available: {section.DisplayName} at {competition.Name}");
         return new EmailMessage(toAddress, subject, sb.ToString(), EmailHtml.Wrap(html.ToString()));
     }
 
@@ -288,7 +299,7 @@ public static class SignupConfirmationEmail
         if (!string.IsNullOrEmpty(competitionUrl))
             html.Append(EmailHtml.Button(competitionUrl, "Open competition page"));
 
-        var subject = $"Club payment receipt: {clubName} at {competition.Name}";
+        var subject = OneLine($"Club payment receipt: {clubName} at {competition.Name}");
         return new EmailMessage(toAddress, subject, sb.ToString(), EmailHtml.Wrap(html.ToString()));
     }
 

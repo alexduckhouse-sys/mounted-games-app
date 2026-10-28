@@ -34,7 +34,6 @@ export interface SavedReplayClip {
   trimEndSec?: number;
   followKeyframes?: FollowKeyframe[];
   resolutionLabel?: string;
-  hasFilmingOptOut?: boolean;
   /** Where the clip came from: a race recording made when a race was scored, or an instant replay. Absent for other clips. */
   source?: 'race' | 'instant';
   races?: ReadonlyArray<{
@@ -53,7 +52,6 @@ export interface ReplayBufferOptions {
   arenaName: string;
   windowSeconds?: number; // default 1800 (30 minutes)
   timesliceMs?: number; // default 1000
-  hasFilmingOptOut?: boolean;
   resolutionLabel?: string;
   createRecorder?: (stream: MediaStream, mimeType?: string) => MediaRecorderLike;
   createObjectUrl?: (blob: Blob) => string;
@@ -81,7 +79,6 @@ export interface MediaRecorderLike {
 export type SaveClipOptions = ReplayEncodingOptions & {
   durationSeconds?: number;
   offsetAgoSeconds?: number;
-  hasFilmingOptOut?: boolean;
   resolutionLabel?: string;
 };
 
@@ -170,7 +167,7 @@ async function persistClip(clip: SavedReplayClip): Promise<void> {
         durationSeconds: clip.durationSeconds, mimeType: clip.mimeType, blob: clip.blob,
         savedHighlight: clip.savedHighlight, trimStartSeconds: clip.trimStartSeconds,
         trimEndSeconds: clip.trimEndSeconds, followKeyframes: clip.followKeyframes,
-        resolutionLabel: clip.resolutionLabel, hasFilmingOptOut: clip.hasFilmingOptOut,
+        resolutionLabel: clip.resolutionLabel,
         source: clip.source, races: clip.races,
       });
     });
@@ -547,7 +544,6 @@ export function createReplayBuffer(options: ReplayBufferOptions): ReplayBufferHa
         durationSeconds: seconds, mimeType: blob.type, blob, url, savedHighlight: false,
         trimStartSeconds: 0, trimEndSeconds: seconds, trimStartSec: 0, trimEndSec: seconds,
         resolutionLabel: settings.resolutionLabel ?? options.resolutionLabel,
-        hasFilmingOptOut: settings.hasFilmingOptOut ?? options.hasFilmingOptOut ?? false,
       };
       addSavedReplay(clip); return clip;
     } finally {
