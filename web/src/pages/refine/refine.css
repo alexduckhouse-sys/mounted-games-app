@@ -111,13 +111,14 @@ details[open] > summary ~ * { animation: rf-reveal 220ms var(--mg-ease-out); }
 
 /* Bottom sheet */
 .rf-scrim { position: fixed; inset: 0; z-index: 60; background: rgb(var(--mg-overlay) / .55); animation: rf-fade 160ms var(--mg-ease-out); }
-.rf-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; max-width: 32rem; margin-inline: auto; max-height: 90vh; overflow-y: auto; background: rgb(var(--mg-surface)); border-radius: 16px 16px 0 0; box-shadow: 0 -8px 24px rgb(var(--mg-overlay) / .25); padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; animation: rf-up 200ms var(--mg-ease-out); }
+.rf-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; max-width: 32rem; margin-inline: auto; max-height: 90vh; overflow-y: auto; background: rgb(var(--mg-surface)); border-radius: 16px 16px 0 0; box-shadow: 0 -8px 24px rgb(var(--mg-overlay) / .25); padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; animation: mg-sheet-in 280ms var(--mg-sheet-ease); }
+.rf-sheet.is-closing { animation: mg-sheet-out 200ms ease-in forwards; pointer-events: none; }
+.rf-scrim.is-closing { animation: mg-fade-out 200ms ease-in forwards; pointer-events: none; }
 .rf-grab { width: 40px; height: 4px; border-radius: 2px; background: rgb(var(--mg-control)); align-self: center; }
 .rf-sheet-head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1.5px solid rgb(var(--mg-heading)); padding-bottom: 6px; }
 .rf-sheet h2 { margin: 0; font: 700 20px/1.1 var(--mg-font-display); letter-spacing: .03em; text-transform: uppercase; color: rgb(var(--mg-heading)); }
 .rf-actions { display: flex; gap: 8px; }
 @keyframes rf-fade { from { opacity: 0; } to { opacity: 1; } }
-@keyframes rf-up { from { transform: translateY(24px); opacity: .6; } to { transform: translateY(0); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
   .rf-page, .rf-sheet, .rf-scrim, .rf-pop, details[open] > summary ~ * { animation: none; }
   details::details-content { transition: none; }
