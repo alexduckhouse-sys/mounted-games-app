@@ -128,4 +128,5 @@ dialog.rules-sheet { overflow: hidden; }
 .rules-sheet-close { position: absolute; top: 6px; right: 10px; z-index: 1; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: rgb(var(--mg-heading)); cursor: pointer; }
 .rules-sheet-close:hover { background: rgb(var(--mg-subtle)); }
 .rules-sheet-close:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
-.rules-sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 4px; }
+/* The scroll bar sits in the sheet's side gutter, so the cards keep a gap on the right like on the left. */
+.rules-sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 12px 4px 0; margin-right: -12px; scrollbar-width: thin; }
