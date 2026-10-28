@@ -249,7 +249,7 @@ export const adminFormat: AreaCatalogue<typeof en> = {
   'admin.format.diagram.editorLabel': 'Golygydd diagram y ras',
   'admin.format.diagram.places': 'Mannau ar y lôn',
   'admin.format.diagram.tapToPlace': 'Tapiwch bolyn neu fwlch i osod offer.',
-  'admin.format.diagram.tapToEdit': 'Tapiwch eitem i’w golygu, neu fan ar y lôn i ychwanegu offer.',
+  'admin.format.diagram.tapToEdit': 'Tapiwch ddarn o offer i’w newid, neu fwlch i ychwanegu mwy.',
   'admin.format.diagram.addHere': 'Ychwanegu yma:',
   'admin.format.diagram.group.lane': 'Lôn',
   'admin.format.diagram.group.cones': 'Conau',

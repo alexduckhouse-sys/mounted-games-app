@@ -238,7 +238,7 @@ function SellerCatalogueContent() {
         <h2 className="sp-sec">{t('site.seller.events')}</h2>
         <div className="sp-card">
           {itemListings.map((listing) => {
-                        const event = nameOf(listing.competitionId);
+            const event = nameOf(listing.competitionId);
             const eventName = event?.name ?? t('site.seller.eventN', { id: listing.competitionId });
             return (
               <div key={listing.id} className="cs-row cs-row-wrap">

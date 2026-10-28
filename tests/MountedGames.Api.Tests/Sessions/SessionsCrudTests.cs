@@ -1111,7 +1111,7 @@ public class SessionsCrudTests : IClassFixture<ApiFactory>
         });
         Assert.Equal(HttpStatusCode.OK, farrierResp.StatusCode);
         var msg = await farrierResp.ReadAsync<ChatMessageDto>();
-        Assert.Equal("Farrier needed at Arena 1 — Lane 2 pony lost front shoe", msg.Body);
+        Assert.Equal("Farrier needed at Arena 1: Lane 2 pony lost front shoe", msg.Body);
 
         var storedSession = await _f.WithDbAsync(db => db.Sessions.SingleAsync(s => s.Id == a.SessionId));
         Assert.Contains("[paused:", storedSession.Notes);

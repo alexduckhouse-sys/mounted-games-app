@@ -46,7 +46,6 @@ export const adminCreator = {
   'admin.creator.arenas.arenaLower': 'arena {n}',
   'admin.creator.arenas.maxLanes': 'Max lanes',
   'admin.creator.arenas.maxLanesFor': 'Max lanes, {name}',
-  'admin.creator.arenas.note': 'Races in the same arena run one after another. Different arenas run side by side.',
   // Breaks
   'admin.creator.break.problemMinutes': 'Enter how many minutes it lasts.',
   'admin.creator.break.problemStart': 'Choose when it starts.',
@@ -150,7 +149,7 @@ export const adminCreator = {
   'admin.creator.review.editAria': 'Edit {label}',
   'admin.creator.review.editRacesAria': 'Edit races for {name}',
   'admin.creator.review.editRaces': 'Edit races',
-  'admin.creator.review.decEdit': 'Set up on the dec form page of this competition.',
+  'admin.creator.review.decEdit': 'Set up on the declaration form page of this competition.',
   'admin.creator.review.decNew': 'The basics: rider, pony, trainer name and phone. Add more once it’s created.',
   'admin.creator.review.pay': 'Pay: {destination}',
   'admin.creator.review.payNotSet': 'How to pay not set',
@@ -183,7 +182,6 @@ export const adminCreator = {
   // Start
   'admin.creator.start.howToStart': 'How to start',
   'admin.creator.start.scratch': 'Start from scratch',
-  'admin.creator.start.scratchSub': 'Fill in each step yourself',
   'admin.creator.start.copy': 'Copy a past competition',
   'admin.creator.start.copySub': 'Every step filled in, dates left empty',
   'admin.creator.start.copyFrom': 'Copy from',
@@ -245,9 +243,8 @@ export const adminCreator = {
   'admin.creator.when.what3words': 'what3words',
   'admin.creator.when.what3wordsPlaceholder': '///word.word.word',
   'admin.creator.when.number': 'Competition number',
-  'admin.creator.when.numberHint': 'The number your governing body gave the event.',
   'admin.creator.when.email': 'Contact email',
-  'admin.creator.when.emailHint': 'Where entrants write to you. It shows on the event page.',
+  'admin.creator.when.emailHint': 'Shown on the event page.',
   // Validation (lib/creatorDraft.ts)
   'admin.creator.problem.arenaName': 'Give the arena a name.',
   'admin.creator.problem.arenaSame': 'Two arenas have the same name.',

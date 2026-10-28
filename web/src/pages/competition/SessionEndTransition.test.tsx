@@ -160,15 +160,15 @@ describe('SessionEndTransition', () => {
     expect(items[1]).toHaveTextContent('Stockport PC');
     expect(items[1]).toHaveTextContent('18 pts');
     expect(items[1]).toHaveTextContent('Trained by Tom Trainer');
-    expect(items[1]).toHaveTextContent('Chloe Rider — Bramble');
+    expect(items[1]).toHaveTextContent('Chloe Rider · Bramble');
 
     expect(items[2]).toHaveTextContent('1st');
     expect(items[2]).toHaveTextContent('Rockwood A');
     expect(items[2]).toHaveTextContent('Rockwood Harriers');
     expect(items[2]).toHaveTextContent('25 pts');
     expect(items[2]).toHaveTextContent('Trained by Sarah Coach');
-    expect(items[2]).toHaveTextContent('Alice Rider — Starlight');
-    expect(items[2]).toHaveTextContent('Ben R. — Thunder');
+    expect(items[2]).toHaveTextContent('Alice Rider · Starlight');
+    expect(items[2]).toHaveTextContent('Ben R. · Thunder');
     expect(items[2]).not.toHaveTextContent('Ben Rider');
   });
 

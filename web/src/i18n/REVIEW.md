@@ -72,3 +72,16 @@ Left for a native speaker, because the fix depends on judgement rather than a cl
 - Welsh wording in `match.title`, `plannedNow`, `events.mine`, `laneOrder`, the install-the-app text, the stabling words, `theirPhone`, `deadline.sent*`, `lookingPair`, `onNow` and `equineId`.
 - French `volunteers.summary` / `taken` and `screen.ov.watching`.
 - Strings built in shared helpers that are still English: tie-break reasons in `lib/toplist.ts`, the "+10 min" delay text, `hatbandName()` outside the stream overlay, `lib/commentatorFacts`, `lib/arenaCrewSheet`, and CSV file contents (deliberately English).
+
+## Added by the design plan (28–29 October 2026)
+
+The design-plan PRs wrote their own Welsh and French, as the owner asked, and none of it has had a second pass. These keys are new or changed since PR #302. To see the English, run `git diff 67b32b56^1 origin/main -- web/src/i18n/en`.
+
+- **Things I sell** (`site.seller.*`, about 90 keys in `site`): the seller catalogue, item form, preset items (stabling, shavings, haylage, electric hook-up), stock, options and the archive and withdraw confirmations. Please check the stabling words and `site.seller.cat.camping` against the vocabulary table above.
+- **Seasons** (`site.seasons.*` and `site.seasons.form.*`, about 60 keys): the season form, adding a round, points multipliers and the tie wording. `struck-through` became `crossed-out` in `site.seasons.caption` and `site.profiles.roundsIn`.
+- **Stats** (`site.stats.*`, `teams.team.pointQuota`): "Point quota" was renamed to "Average points" (`Avg points`, `Avg pts`, `Per race`), and the sign-in lines went because stats are now public.
+- **Sign-up and sign-in** (`auth.signup.role*Hint`, `auth.password.capsLock`): the hints under each "I am a" tick, and the caps lock warning.
+- **Smaller ones:** `common.undo`, `account.supporters.loading` / `failed`, `site.shop.noEventShops`, `site.shop.contactPlaceholder`, `site.profiles.newProfile`, `teams.following.unfollowed`, `teams.rulebooks.add` / `addHint` / `addHintDock`.
+- **Scoring (PR #312):** `desk.stream.bc.unlock` is now "Tap to unlock." (`Tapiwch i ddatgloi.` / `Touchez pour déverrouiller.`).
+
+More design-plan PRs are still open (organiser tools, dock filters and race rules, admin and the wizard, accounts and commerce). Each one lists its new keys in its PR description. Add them here as they merge.

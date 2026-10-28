@@ -41,7 +41,6 @@ export function ArenasStep({ draft, change, problems, clear }: StepProps<Creator
         ))}
         </AnimatePresence>
       </div>
-      <p className="cw-note">{t('admin.creator.arenas.note')}</p>
     </section>
   );
 }

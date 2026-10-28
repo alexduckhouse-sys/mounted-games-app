@@ -154,10 +154,10 @@ describe('PrintEventPage', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText('Scan for Live Timetable, Scores & Stream')).toBeInTheDocument();
+    expect(await screen.findByText('Scan for the live timetable, scores and stream')).toBeInTheDocument();
     expect(screen.getByText('///apple.table.chair')).toBeInTheDocument();
     expect(screen.getByText('Main Ring Tripod')).toBeInTheDocument();
-    expect(screen.getByText('Tripod Camera')).toBeInTheDocument();
+    expect(screen.getByText('Camera')).toBeInTheDocument();
     expect(screen.queryByText(/offline/i)).not.toBeInTheDocument();
   });
 

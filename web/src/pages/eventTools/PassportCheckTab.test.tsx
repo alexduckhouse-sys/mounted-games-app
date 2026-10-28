@@ -38,7 +38,7 @@ describe('passport check tab', () => {
 
     const toggle = await screen.findByLabelText('Check passports at this event');
     expect(toggle).not.toBeChecked();
-    expect(screen.getByText(/Turn this on to tick off ponies/)).toBeInTheDocument();
+    expect(screen.getByText(/Tick ponies off as they arrive/)).toBeInTheDocument();
     await userEvent.click(toggle);
 
     await waitFor(() => expect(put).toHaveBeenCalledWith('/event-tools/competitions/12/passport-check/settings', { enabled: true }));
