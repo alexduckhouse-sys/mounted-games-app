@@ -15,6 +15,8 @@ import { DecFormEditor } from './decform/DecFormEditor';
 import { DecFormList } from './DecFormList';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
+import { Sheet } from '../../components/Sheet';
+import { useDockAction } from '../../components/TickerContext';
 import { RefineDateTimeRow } from '../refine/Refine';
 import { PageGrid } from '../../components/PageGrid';
 import { usePageWidth } from '../../components/pageWidthState';
@@ -200,8 +202,8 @@ export function DeclarationsTab() {
     </nav>
   );
   const exportButton = (
-    <button type="button" onClick={exportCsv} disabled={count === 0} className="sp-pill sp-pill-sm disabled:opacity-50" title="Download all submitted dec forms as CSV">
-      Export CSV ({count})
+    <button type="button" onClick={exportCsv} disabled={count === 0} className="sp-pill sp-pill-sm disabled:opacity-50" title={t('entries.tab.exportTitle')}>
+      {t('entries.tab.exportCsv', { count })}
     </button>
   );
 
@@ -214,29 +216,41 @@ export function DeclarationsTab() {
   const qr = (
     <div className="sp-card">
       <button type="button" className="sp-row" aria-expanded={showQr} onClick={() => setShowQr((open) => !open)}>
-        <span className="sp-grow"><span className="sp-t1 !font-medium">Show dec form QR code</span></span>
+        <span className="sp-grow"><span className="sp-t1 !font-medium">{t('entries.tab.showQr')}</span></span>
         <ChevronRight aria-hidden="true" className={`sp-chev h-4 w-4 transition-transform ${showQr ? 'rotate-90' : ''}`} strokeWidth={2.5} />
       </button>
       {showQr && (
         <div className="flex items-center gap-3 border-t border-[rgb(var(--mg-rule-soft))] px-4 py-3">
-          <QrCode value={`${window.location.origin}/competitions/${competition.id}/declarations`} label={`QR code for the ${competition.name} dec forms`} className="w-36 rounded-lg border border-[rgb(var(--mg-rule))] bg-white p-2" />
-          <p className="m-0 text-xs text-[rgb(var(--mg-muted))]">Scan to open the dec forms for {competition.name}.</p>
+          <QrCode value={`${window.location.origin}/competitions/${competition.id}/declarations`} label={t('entries.tab.qrLabel', { name: competition.name })} className="w-36 rounded-lg border border-[rgb(var(--mg-rule))] bg-white p-2" />
+          <p className="m-0 text-xs text-[rgb(var(--mg-muted))]">{t('entries.tab.qrScan', { name: competition.name })}</p>
         </div>
       )}
     </div>
   );
-  const exportFooter = isOrganiser && <div className="flex justify-end">{exportButton}</div>;
+  // Organisers' tools (deadline, QR code, export) sit behind the dock button; with no dock they stay on the page.
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const docked = useDockAction(isOrganiser ? { label: t('entries.tab.toolsTitle'), icon: 'settings', onClick: () => setToolsOpen(true) } : null);
+  const inSheet = docked && isOrganiser;
+  const exportFooter = isOrganiser && !inSheet && <div className="flex justify-end">{exportButton}</div>;
+  const deadlineRow = (
+    <div className="sp-card">
+      <RefineDateTimeRow label={t('entries.tab.formsClose')} value={lockInfo?.declarationsCloseAt ?? null} disabled={lockBusy}
+        eventDays={[new Date(competition.startDate)].filter((d) => !Number.isNaN(d.getTime()))} onChange={(iso) => { void updateLockTime(iso); }} />
+    </div>
+  );
+  const toolsSheet = inSheet && toolsOpen && (
+    <Sheet title={t('entries.tab.toolsTitle')} onClose={() => setToolsOpen(false)}>
+      <div className="flex flex-col gap-3">
+        {deadlineRow}
+        {qr}
+        <div className="flex justify-end">{exportButton}</div>
+      </div>
+    </Sheet>
+  );
 
   const deadlineHeader = (
     <>
-      {isOrganiser && (
-        <div className="flex flex-col gap-2">
-          <div className="sp-card">
-            <RefineDateTimeRow label="Dec forms close" value={lockInfo?.declarationsCloseAt ?? null} disabled={lockBusy}
-              eventDays={[new Date(competition.startDate)].filter((d) => !Number.isNaN(d.getTime()))} onChange={(iso) => { void updateLockTime(iso); }} />
-          </div>
-        </div>
-      )}
+      {isOrganiser && !inSheet && <div className="flex flex-col gap-2">{deadlineRow}</div>}
       {lockInfo?.declarationsCloseAt && declarationsClosed && (
         <Notice
           tone="info"
@@ -251,7 +265,7 @@ export function DeclarationsTab() {
       {lockError && <Notice>{lockError}</Notice>}
       {deleteError && <Notice onDismiss={() => setDeleteError('')}>{deleteError}</Notice>}
       {stat}
-      {qr}
+      {!inSheet && qr}
     </>
   );
 
@@ -263,6 +277,7 @@ export function DeclarationsTab() {
           <div className="flex flex-col gap-3">{editor}{cards}</div>
         </PageGrid>
         {exportFooter}
+        {toolsSheet}
       </div>
     );
   }
@@ -296,6 +311,7 @@ export function DeclarationsTab() {
 
       {cards}
       {exportFooter}
+      {toolsSheet}
     </div>
   );
 }

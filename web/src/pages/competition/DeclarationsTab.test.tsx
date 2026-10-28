@@ -8,6 +8,9 @@ import { decDraftKey } from '../../lib/decForm';
 import { CompetitionContext } from './context';
 import { DeclarationsTab } from './DeclarationsTab';
 import { autoConfirm } from '../../test/confirm';
+import { CurrentCompetitionProvider } from '../../competition/CurrentCompetitionContext';
+import { TickerProvider } from '../../components/TickerContext';
+import { TopBarTicker } from '../../components/TopBarTicker';
 
 const state = vi.hoisted(() => ({
   user: { id: 'u1', fullName: 'Alex Morgan', email: 'alex@example.com', clubId: 1, clubName: 'Stockport PC', roles: ['Trainer'] } as { id: string; fullName: string; email: string; clubId: number | null; clubName: string; roles: Role[] } | null,
@@ -58,6 +61,20 @@ function mount(extra: Partial<CompetitionDetail> = {}, url = '/competitions/4/de
   );
 }
 
+
+function mountDocked() {
+  const value = { competition: comp(), reload: vi.fn(), streams: [], streamingEnabled: false, invoke: vi.fn(), ready: 1, streamMessages: [] };
+  return render(
+    <MemoryRouter initialEntries={['/competitions/4/declarations']}>
+      <CurrentCompetitionProvider>
+        <TickerProvider>
+          <CompetitionContext.Provider value={value}><DeclarationsTab /></CompetitionContext.Provider>
+          <TopBarTicker />
+        </TickerProvider>
+      </CurrentCompetitionProvider>
+    </MemoryRouter>,
+  );
+}
 
 const opened = () => screen.findByLabelText('Team name');
 const riderRows = () => within(screen.getByRole('list', { name: 'Riders' })).queryAllByRole('listitem');
@@ -904,5 +921,29 @@ describe('DeclarationsTab: copy a previous team', () => {
     mount();
     await opened();
     expect(screen.queryByRole('button', { name: /Copy a previous team/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('DeclarationsTab: organiser tools in the dock', () => {
+  it('moves the deadline, QR code and export into a sheet for organisers', async () => {
+    state.user!.roles = ['Admin'];
+    const user = userEvent.setup();
+    mountDocked();
+    await opened();
+    expect(screen.queryByRole('button', { name: /^Dec forms close/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Export CSV/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show dec form QR code' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Dec form tools' }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Dec form tools' }));
+    expect(sheet.getByRole('button', { name: 'Dec forms close: Not set' })).toBeInTheDocument();
+    expect(sheet.getByRole('button', { name: 'Show dec form QR code' })).toBeInTheDocument();
+    expect(sheet.getByRole('button', { name: /Export CSV \(0\)/ })).toBeDisabled();
+  });
+
+  it('keeps the QR code on the page for a trainer and puts nothing in the dock', async () => {
+    mountDocked();
+    await opened();
+    expect(screen.getByRole('button', { name: 'Show dec form QR code' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Dec form tools' })).not.toBeInTheDocument();
   });
 });
