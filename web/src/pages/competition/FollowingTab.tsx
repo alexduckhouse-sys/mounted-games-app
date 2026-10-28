@@ -18,6 +18,7 @@ import { formatTime } from '../../lib/time';
 import { ordinalText, toplistNoteText, toplistNoteTone } from '../../lib/toplistText';
 import { EASE_OUT } from '../../lib/motion';
 import { isDutyHere, nextDuties, type TeamDuty } from '../../lib/followingDuties';
+import { isShiftCheckedInHere } from '../../lib/lorryAndVolunteers';
 import { apiErrorStatus } from '../../lib/apiError';
 import type { Team, VolunteerShift } from '../../types';
 import { fetchVolunteerShifts } from '../operations/rotaShifts';
@@ -152,11 +153,13 @@ export function FollowingTab() {
     const arena = arenaToShow(row.session, arenas);
     const sub = arena ? t('duties.follow.subArena', { heat: where(row, owner), arena }) : t('duties.follow.sub', { heat: where(row, owner) });
     const done = isDutyHere(shift) || here.has(shift.id);
+    // Staff's own check-in reads "Here"; the team's word (from any follower) reads "Team says here", so nobody taps twice.
+    const doneText = isShiftCheckedInHere(shift) ? t('duties.follow.hereDone') : t('duties.status.teamSaysHere');
     return <div key="duty" className="fc-line fc-duty">
       <time className={`fc-lead${row.status === 'late' ? ' is-late' : ''}`} dateTime={row.effective?.toISOString()}>{formatTime(row.effective)}</time>
       <span className="fc-what"><strong>{lead}</strong><span>{sub}</span></span>
       {done
-        ? <span className="fc-here-done" role="status"><Check className="h-4 w-4" aria-hidden="true" />{t('duties.follow.hereDone')}</span>
+        ? <span className="fc-here-done" role="status"><Check className="h-4 w-4" aria-hidden="true" />{doneText}</span>
         : <button type="button" className="fc-here" disabled={sending.has(shift.id)} aria-label={`${t('duties.follow.here')}: ${lead}`} onClick={() => void sayHere(shift)}>{t('duties.follow.here')}</button>}
     </div>;
   };

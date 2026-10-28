@@ -83,19 +83,27 @@ describe('the duty line on a followed team’s card', () => {
 });
 
 describe('We’re here', () => {
-  it('tells the organisers and swaps the button for a green Here', async () => {
+  it('tells the organisers and swaps the button for Team says here', async () => {
     mount();
     await userEvent.click(await screen.findByRole('button', { name: /We’re here/ }));
     expect(api.post).toHaveBeenCalledWith('/competitions/1/volunteer-shifts/1/team-here');
     const done = await screen.findByRole('status');
-    expect(done).toHaveTextContent('Here');
+    expect(done).toHaveTextContent('Team says here');
     expect(screen.queryByRole('button', { name: /We’re here/ })).not.toBeInTheDocument();
   });
 
-  it('shows Here straight away when the team or staff already said so', async () => {
+  it('shows Team says here to every follower once one of them has said so', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: [shift(1, { attendanceStatus: 'TeamSaysHere' })] });
     mount();
-    expect(await screen.findByRole('status')).toHaveTextContent('Here');
+    expect(await screen.findByRole('status')).toHaveTextContent('Team says here');
+    expect(screen.queryByRole('button', { name: /We’re here/ })).not.toBeInTheDocument();
+  });
+
+  it('shows a plain Here once staff have checked the team in', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [shift(1, { attendanceStatus: 'Here' })] });
+    mount();
+    const done = await screen.findByRole('status');
+    expect(done).toHaveTextContent(/^Here$/);
     expect(screen.queryByRole('button', { name: /We’re here/ })).not.toBeInTheDocument();
   });
 
@@ -107,7 +115,7 @@ describe('We’re here', () => {
     expect(screen.getByRole('button', { name: /We’re here/ })).toBeEnabled();
     await userEvent.click(screen.getByRole('button', { name: /We’re here/ }));
     await waitFor(() => expect(screen.queryByText(/That’s a lot of taps/)).not.toBeInTheDocument());
-    expect(await screen.findByRole('status')).toHaveTextContent('Here');
+    expect(await screen.findByRole('status')).toHaveTextContent('Team says here');
   });
 
   it('says so plainly when it can’t reach the server, and the notice can be put away', async () => {
