@@ -70,6 +70,7 @@ const VolunteerRotaPage = lazy(() => import('./pages/competition/VolunteerRotaPa
 const ArenaPage = lazy(() => import('./pages/competition/ArenaPage').then((module) => ({ default: module.ArenaPage })));
 const WeatherPage = lazy(() => import('./pages/competition/WeatherPage').then((module) => ({ default: module.WeatherPage })));
 const OperationsPage = lazy(() => import('./pages/operations/OperationsPage').then((module) => ({ default: module.OperationsPage })));
+const HeatDutiesPage = lazy(() => import('./pages/operations/HeatDutiesPage').then((module) => ({ default: module.HeatDutiesPage })));
 const EventDetailsPage = lazy(() => import('./pages/operations/EventDetailsPage').then((module) => ({ default: module.EventDetailsPage })));
 const SectionsPage = lazy(() => import('./pages/operations/SectionsPage').then((module) => ({ default: module.SectionsPage })));
 const TimetablePage = lazy(() => import('./pages/operations/TimetablePage').then((module) => ({ default: module.TimetablePage })));
@@ -187,6 +188,7 @@ export default function App() {
                 <Route path="rulebooks" element={<RulebooksPage />} />
                 <Route path="operations" element={<ProtectedRoute roles={['Admin', 'Trainer']}><OperationsPage /></ProtectedRoute>} />
                 <Route path="operations/:tool" element={<ProtectedRoute roles={['Admin', 'Trainer']}><OperationsPage /></ProtectedRoute>} />
+                <Route path="operations/heat-duties" element={<ProtectedRoute roles={['Admin', 'Trainer']}><HeatDutiesPage /></ProtectedRoute>} />
                 <Route path="sections" element={<ProtectedRoute roles={['Admin', 'Trainer']}><SectionsPage /></ProtectedRoute>} />
                 <Route path="timetable-and-draw" element={<ProtectedRoute roles={['Admin', 'Trainer']}><TimetablePage /></ProtectedRoute>} />
                 <Route path="equipment" element={<ProtectedRoute roles={['Admin', 'Trainer']}><EquipmentPage /></ProtectedRoute>} />

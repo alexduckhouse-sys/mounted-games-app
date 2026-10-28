@@ -155,6 +155,11 @@ export function isShiftCheckedInHere(shift: Pick<VolunteerShift, 'attendanceStat
   return (shift.attendanceStatus ?? 'Assigned').toLowerCase() === 'here';
 }
 
+/** The team said it is here (from the Following tab) but no member of staff has confirmed it yet. */
+export function isShiftTeamSaysHere(shift: Pick<VolunteerShift, 'attendanceStatus'>): boolean {
+  return (shift.attendanceStatus ?? 'Assigned').toLowerCase() === 'teamsayshere';
+}
+
 export function isShiftMarkedMissing(shift: Pick<VolunteerShift, 'attendanceStatus'>): boolean {
   return (shift.attendanceStatus ?? 'Assigned').toLowerCase() === 'missing';
 }

@@ -158,8 +158,8 @@ export function RefineQty({ name, value, onChange, max = 99, disabled = false }:
 }
 
 /** The screen's one primary action, sticky under the content. `aboveTabs` lifts it over a competition's bottom tabs. */
-export function RefineFoot({ children, column = false, aboveTabs = false, label }: { children: ReactNode; column?: boolean; aboveTabs?: boolean; label?: string }) {
-  return <div className={`rf-foot ${column ? 'rf-foot-col' : ''} ${aboveTabs ? 'rf-above-tabs' : ''}`.trim()} role={label ? 'region' : undefined} aria-label={label}>{children}</div>;
+export function RefineFoot({ children, column = false, aboveTabs = false, label, className = '' }: { children: ReactNode; column?: boolean; aboveTabs?: boolean; label?: string; className?: string }) {
+  return <div className={`rf-foot ${column ? 'rf-foot-col' : ''} ${aboveTabs ? 'rf-above-tabs' : ''} ${className}`.trim()} role={label ? 'region' : undefined} aria-label={label}>{children}</div>;
 }
 
 interface SheetProps { title: string; onClose: () => void; children: ReactNode }

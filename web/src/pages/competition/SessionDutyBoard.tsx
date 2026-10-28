@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api';
 import { confirmDialog } from '../../components/ConfirmDialog';
-import { isShiftCheckedInHere, isShiftMarkedMissing, sessionStewardDutySummary } from '../../lib/lorryAndVolunteers';
+import { tr } from '../../i18n/translate';
+import { isShiftCheckedInHere, isShiftMarkedMissing, isShiftTeamSaysHere, sessionStewardDutySummary } from '../../lib/lorryAndVolunteers';
 import type { CallMissingStewardResult, Session, VolunteerShift } from '../../types';
 import { isDutyShift } from './crewDutyHelpers';
 
@@ -14,12 +15,16 @@ function errorText(error: unknown, fallback: string): string {
 function StatusPill({ shift }: { shift: VolunteerShift }) {
   const here = isShiftCheckedInHere(shift);
   const missing = isShiftMarkedMissing(shift);
+  // "Team says here" is the team's own word, not staff's: a dashed blue pill so it never reads as a confirmed check-in.
+  const teamSays = !here && isShiftTeamSaysHere(shift);
   const tone = here
     ? 'bg-[rgb(var(--mg-ok)/0.16)] text-[rgb(var(--mg-ok))]'
+    : teamSays
+      ? 'border-2 border-dashed border-[rgb(var(--mg-info-ink)/0.5)] bg-[rgb(var(--mg-info-bg))] text-[rgb(var(--mg-info-ink))]'
     : missing
       ? 'bg-[rgb(var(--mg-elim)/0.14)] text-[rgb(var(--mg-elim))]'
       : 'bg-[rgb(var(--mg-tint))] text-[rgb(var(--mg-body))]';
-  return <span className={`inline-flex min-h-7 items-center rounded-full px-3 text-sm font-bold ${tone}`}>{here ? 'Here' : missing ? 'Missing' : 'Assigned'}</span>;
+  return <span className={`inline-flex min-h-7 items-center rounded-full px-3 text-sm font-bold ${tone}`}>{here ? 'Here' : teamSays ? tr('duties.status.teamSaysHere') : missing ? 'Missing' : 'Assigned'}</span>;
 }
 
 /** Organisers' view of one session's steward and arena crew duties: who is here, who is not, and the tools to chase them. */

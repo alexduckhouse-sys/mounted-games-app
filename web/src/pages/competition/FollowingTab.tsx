@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { FollowStar } from '../../components/FollowStar';
 import { Link } from 'react-router-dom';
-import { ChevronRight, Search } from 'lucide-react';
+import { Check, ChevronRight, Search } from 'lucide-react';
+import { api } from '../../api';
 import { AgeGroupFilterButton, AgeGroupFilterSheet } from '../../components/AgeGroupFilter';
 import { Notice } from '../../components/Notice';
 import { usePageWidth } from '../../components/pageWidthState';
@@ -16,7 +17,11 @@ import { displaySectionName } from '../../lib/section';
 import { formatTime } from '../../lib/time';
 import { ordinalText, toplistNoteText, toplistNoteTone } from '../../lib/toplistText';
 import { EASE_OUT } from '../../lib/motion';
-import type { Team } from '../../types';
+import { isDutyHere, nextDuties, type TeamDuty } from '../../lib/followingDuties';
+import { apiErrorStatus } from '../../lib/apiError';
+import type { Team, VolunteerShift } from '../../types';
+import { fetchVolunteerShifts } from '../operations/rotaShifts';
+import { roleLabel } from '../operations/heatDutiesText';
 import { useCompetition } from './context';
 import { useFollowedToplists } from './useFollowedToplists';
 import { lastUpdatedText } from '../../offline/savedCopies';
@@ -47,11 +52,42 @@ export function FollowingTab() {
   const [search, setSearch] = useState('');
   const [sectionId, setSectionId] = useState<number | 'all'>('all');
   const [filterOpen, setFilterOpen] = useState(false);
+  const [shifts, setShifts] = useState<VolunteerShift[]>([]);
+  const [here, setHere] = useState<ReadonlySet<number>>(new Set());
+  const [sending, setSending] = useState<ReadonlySet<number>>(new Set());
+  const [dutyError, setDutyError] = useState<string | null>(null);
   const ids = useMemo(() => new Set(favourites.filter((f) => f.competitionId === competition.id).map((f) => f.teamId)), [favourites, competition.id]);
   const teams = competition.teams.filter((team) => ids.has(team.id));
   const missing = [...ids].filter((id) => !competition.teams.some((team) => team.id === id));
   const rows = useMemo(() => followedHeats(competition, ids), [competition, ids]);
   const next = useMemo(() => nextHeats(competition, ids), [competition, ids]);
+  const duties = useMemo(() => nextDuties(competition, shifts, ids), [competition, shifts, ids]);
+  const dutyKey = [...ids].sort().join(',');
+  const updatedMs = updatedAt?.getTime() ?? 0;
+  const loadDuties = useCallback(() => {
+    if (!dutyKey) return;
+    fetchVolunteerShifts(competition.id).then((data) => setShifts(data.filter((shift) => shift.heatId != null && shift.assignedTeamId != null)), () => { /* keep what we have: the duty line is a bonus, not the page */ });
+  }, [competition.id, dutyKey]);
+  // Duties load once, again when the competition refreshes from the live feed, and when the tab comes back into view.
+  useEffect(() => { loadDuties(); }, [loadDuties, updatedMs]);
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') loadDuties(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', loadDuties);
+    return () => { document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', loadDuties); };
+  }, [loadDuties]);
+  async function sayHere(shift: VolunteerShift) {
+    setDutyError(null);
+    setSending((current) => new Set(current).add(shift.id));
+    try {
+      await api.post(`/competitions/${competition.id}/volunteer-shifts/${shift.id}/team-here`);
+      setHere((current) => new Set(current).add(shift.id));
+    } catch (caught) {
+      setDutyError(t(apiErrorStatus(caught) === 429 ? 'duties.follow.tooMany' : 'duties.follow.failed'));
+    } finally {
+      setSending((current) => { const copy = new Set(current); copy.delete(shift.id); return copy; });
+    }
+  }
   const arenas = useMemo(() => arenaNames(competition.sessions), [competition.sessions]);
   const lists = useFollowedToplists(competition, teams.map((team) => team.competitionSectionId));
   const stale = isStale === true;
@@ -87,7 +123,7 @@ export function FollowingTab() {
     return { id, title, teams: id === 'next' ? members.sort((a, b) => startsAt(a) - startsAt(b)) : members };
   }).filter((group) => group.teams.length > 0);
 
-  const where = (row: FollowedHeat, team: Team) => `${displaySectionName(row.session.sectionName || team.sectionName)} ${heatName(row)}`.trim();
+  const where = (row: Pick<FollowedHeat, 'session' | 'heat' | 'heatIndex'>, team: Team) => `${displaySectionName(row.session.sectionName || team.sectionName)} ${heatName(row)}`.trim();
   const arenaLane = (row: FollowedHeat, lane: number) => [arenaToShow(row.session, arenas), t('teams.following.laneLower', { number: lane })].filter(Boolean).join(' · ');
   const chevron = <ChevronRight className="fc-chev h-3.5 w-3.5" aria-hidden="true" />;
 
@@ -107,6 +143,22 @@ export function FollowingTab() {
     const minutes = minutesToGo(row.effective, now);
     const title = minutes != null ? t('teams.following.inMinutes', { heat: where(row, team), minutes }) : where(row, team);
     return <Link key="heat" to={to} state={PUSH} className="fc-line"><time className={`fc-lead${row.status === 'late' ? ' is-late' : ''}`} dateTime={row.effective?.toISOString()}>{formatTime(row.effective)}</time><span className="fc-what"><strong>{title}</strong><span>{arenaLane(row, lane)}</span></span>{chevron}</Link>;
+  };
+  /** The team's next duty, timed like a heat, with a button to tell the organisers the team is there. */
+  const dutyLine = ({ shift, row }: TeamDuty, owner: Team) => {
+    const lead = shift.laneNumber != null
+      ? t('duties.follow.roleLane', { role: roleLabel({ role: shift.role, category: shift.dutyCategory ?? 'General' }, t), number: shift.laneNumber })
+      : roleLabel({ role: shift.role, category: shift.dutyCategory ?? 'General' }, t);
+    const arena = arenaToShow(row.session, arenas);
+    const sub = arena ? t('duties.follow.subArena', { heat: where(row, owner), arena }) : t('duties.follow.sub', { heat: where(row, owner) });
+    const done = isDutyHere(shift) || here.has(shift.id);
+    return <div key="duty" className="fc-line fc-duty">
+      <time className={`fc-lead${row.status === 'late' ? ' is-late' : ''}`} dateTime={row.effective?.toISOString()}>{formatTime(row.effective)}</time>
+      <span className="fc-what"><strong>{lead}</strong><span>{sub}</span></span>
+      {done
+        ? <span className="fc-here-done" role="status"><Check className="h-4 w-4" aria-hidden="true" />{t('duties.follow.hereDone')}</span>
+        : <button type="button" className="fc-here" disabled={sending.has(shift.id)} aria-label={`${t('duties.follow.here')}: ${lead}`} onClick={() => void sayHere(shift)}>{t('duties.follow.here')}</button>}
+    </div>;
   };
   /** The team's latest finished heat, in the same words as a heat row. */
   const lastLine = (team: Team) => {
@@ -135,7 +187,14 @@ export function FollowingTab() {
     const toplist = toplistLine(team);
     // A team with a heat ahead shows it, then its place; a team that has no place yet shows its last heat in that slot.
     // A team with nothing left to ride shows its last heat first, then its place.
-    const lines = group === 'done' ? [lastLine(team), toplist] : [heatLine(team, next.get(team.id), group), toplist ?? lastLine(team)];
+    const duty = duties.get(team.id);
+    const dutyEl = duty ? dutyLine(duty, team) : null;
+    const heatState = next.get(team.id);
+    const heatFirst = heatState?.kind !== 'heat' || group === 'now' || !duty || (heatState.row.effective?.getTime() ?? Infinity) <= (duty.row.effective?.getTime() ?? Infinity);
+    // The duty sits in time order with the heats: before the next heat when it falls first, otherwise just after it.
+    const lines = group === 'done' ? [dutyEl, lastLine(team), toplist]
+      : heatFirst ? [heatLine(team, heatState, group), dutyEl, toplist ?? lastLine(team)]
+      : [dutyEl, heatLine(team, heatState, group), toplist ?? lastLine(team)];
     return <motion.li key={team.id} layout="position" transition={{ duration: 0.4, ease: EASE_OUT }} className={`fc-card${group === 'now' ? ' is-live' : ''}`}>
       <div className="fc-top">
         <Link to={`/competitions/${competition.id}/teams/${team.id}`} className="fc-name">
@@ -152,6 +211,7 @@ export function FollowingTab() {
 
   return <div className="mx-auto flex w-full max-w-xl flex-col gap-4 pb-2 pt-3 lg:max-w-3xl">
     {error && <Notice>{error}</Notice>}
+    {dutyError && <Notice onDismiss={() => setDutyError(null)}>{dutyError}</Notice>}
     {isStale && old && <Notice tone="info" actionLabel={t('common.refresh')} onAction={reload}>{t('teams.following.timesChanged', { updated: lastUpdatedText(updatedAt) })}</Notice>}
     {missing.map((teamId) => <Notice key={teamId} tone="info" role={null} actionLabel={t('teams.following.removeIt')} onAction={() => toggle({ competitionId: competition.id, teamId })}>{t('teams.following.goneOne')}</Notice>)}
 

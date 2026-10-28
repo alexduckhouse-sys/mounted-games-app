@@ -4,6 +4,7 @@ import {
   cleanWhat3Words,
   filterEmergencyContacts,
   filterVolunteerShifts,
+  isShiftTeamSaysHere,
   lorryGateLinks,
   missingStewardShifts,
   myTeamAssignedDuties,
@@ -237,5 +238,13 @@ describe('lorryAndVolunteers helpers', () => {
       allHere: false,
       readinessLabel: '1/3 here · 2 not checked in',
     });
+  });
+});
+
+describe('isShiftTeamSaysHere', () => {
+  it('is true only for the team’s own word', () => {
+    expect(isShiftTeamSaysHere({ attendanceStatus: 'TeamSaysHere' })).toBe(true);
+    expect(isShiftTeamSaysHere({ attendanceStatus: 'Here' })).toBe(false);
+    expect(isShiftTeamSaysHere({})).toBe(false);
   });
 });

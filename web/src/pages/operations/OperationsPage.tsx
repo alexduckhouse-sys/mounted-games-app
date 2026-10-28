@@ -19,6 +19,7 @@ import { VolunteerRota } from './VolunteerRota';
 import { EntriesPanel } from './EntriesPanel';
 import { BeforeTheDayHub } from './BeforeTheDayHub';
 import { isTool, type Tool } from './hubData';
+import { useDutiesSavedToast } from './useDutiesSavedToast';
 import { buildIssueGroups, drawSubtitle } from './readiness';
 import type { CompetitionReadiness, DrawPreview } from './types';
 import { apiMessage } from './types';
@@ -78,6 +79,7 @@ function OperationsPageContent() {
   const [round, setRound] = useState(0);
   const [drawError, setDrawError] = useState<string | null>(null);
   const toast = useToast();
+  useDutiesSavedToast(toast);
   const [previewing, setPreviewing] = useState(false);
   const [applying, setApplying] = useState(false);
   const [undoVersion, setUndoVersion] = useState(0);

@@ -35,6 +35,10 @@ The sport has no settled Welsh or French terms for several words. Where several 
 | tack and kit shop | siop offer a chit | sellerie et équipement | |
 | trainer | hyfforddwr | entraîneur | |
 | team manager | rheolwr tîm | responsable d'équipe | |
+| line steward / changeover steward | stiward llinell / stiward trosglwyddo | commissaire de ligne / commissaire de relais | Heat duties wizard (`duties.*`). Role names an organiser types themselves are never translated. |
+| arena party | parti arena | groupe d'arène | |
+| collecting ring | cylch casglu | zone de rassemblement | |
+| scorer | sgoriwr | marqueur | Also in the wizard's grid headings (`duties.col.*`), which are shortened to fit a phone. |
 | guest rider | marchog gwadd | cavalier invité | |
 | solo rider | marchog unigol | cavalier seul | |
 | reserve | wrth gefn | remplaçant | |

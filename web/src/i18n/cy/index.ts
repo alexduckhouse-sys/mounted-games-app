@@ -8,6 +8,7 @@ import { account } from './account.ts';
 import { auth } from './auth.ts';
 import { common } from './common.ts';
 import { competition } from './competition.ts';
+import { duties } from './duties.ts';
 import { entries } from './entries.ts';
 import { screen } from './screen.ts';
 import { ops } from './ops.ts';
@@ -19,6 +20,6 @@ import { admin } from './admin.ts';
 import { desk } from './desk.ts';
 import { teams } from './teams.ts';
 
-export const AREAS = { common, shell, auth, account, entries, competition, teams, site, ops, screen, admin, desk, ops2, ops3 } as const;
+export const AREAS = { common, shell, auth, account, entries, competition, teams, site, ops, screen, admin, desk, ops2, ops3, duties } as const;
 
-export const cy: Catalogue = { ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...site, ...ops, ...screen, ...admin, ...desk, ...ops2, ...ops3 };
+export const cy: Catalogue = { ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...site, ...ops, ...screen, ...admin, ...desk, ...ops2, ...ops3, ...duties };
