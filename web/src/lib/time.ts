@@ -164,8 +164,10 @@ interface Lane {
 }
 
 const arenaKey = (s: Session) => s.arenaName?.trim() ?? '';
-const calendarDayKey = (d: Date) =>
-  `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+// The UK calendar date (Europe/London), kept in step with UkTime.DateKey in TimetableTimes.cs, so a 00:30 BST start
+// belongs to its own day's lane and not the day before.
+const ukDayFormat = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' });
+const calendarDayKey = (d: Date) => ukDayFormat.format(d);
 
 /**
  * Walks the sessions in order. When a session has `startedAt` we anchor on the

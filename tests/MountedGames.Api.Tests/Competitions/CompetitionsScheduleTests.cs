@@ -79,6 +79,24 @@ public class CompetitionsScheduleTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task ShiftDay_KeepsUkWallClockTimeAcrossClockChange()
+    {
+        // 10:00 GMT on Saturday 27 March 2032; clocks go forward the next night, so 10:00 on Sunday is 09:00 UTC.
+        var saturday = new DateTime(2032, 3, 27, 10, 0, 0, DateTimeKind.Utc);
+        var comp = await _f.SeedCompetitionAsync();
+        await _f.WithDbAsync(async db =>
+        {
+            db.Sessions.Add(new Session { CompetitionId = comp, Name = "up", OrderIndex = 1, ScheduledStart = saturday });
+            await db.SaveChangesAsync();
+        });
+        var admin = await _f.AdminAsync();
+
+        var detail = await (await admin.PostAsync($"/api/competitions/{comp}/shift-day", null)).ReadAsync<CompetitionDetail>();
+
+        Assert.Equal(new DateTime(2032, 3, 28, 9, 0, 0, DateTimeKind.Utc), Assert.Single(detail.Sessions).ScheduledStart);
+    }
+
+    [Fact]
     public async Task ShiftDay_DefaultsToOneDay_AndToleratesMissingEndDate()
     {
         var baseTime = new DateTime(2032, 6, 1, 10, 0, 0, DateTimeKind.Utc);

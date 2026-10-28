@@ -33,7 +33,8 @@ internal static class ReminderPlan
         var plans = new List<PlannedReminder>();
         foreach (var competition in sessions.GroupBy(s => s.CompetitionId))
         {
-            var timings = TimetableTimes.Compute(competition, now);
+            var sessionStarts = new Dictionary<int, DateTime?>();
+            var timings = TimetableTimes.Compute(competition, now, sessionStarts);
             foreach (var s in competition.Where(s => s.Status != SessionStatus.Finished))
             {
                 if (s.Kind == SessionKind.Race && s.Heats.Any(h => h.Entries.Count > 0))
@@ -42,7 +43,7 @@ internal static class ReminderPlan
                     {
                         if (h.StartedAt.HasValue || h.FinishedAt.HasValue || (h.Races.Count > 0 && h.Races.All(r => r.IsComplete))) continue;
                         if (timings.GetValueOrDefault(h.Id).Start is not { } heatStart) continue;
-                        var label = string.IsNullOrWhiteSpace(h.Label) ? $"Heat {h.OrderIndex}" : h.Label;
+                        var label = string.IsNullOrWhiteSpace(h.Label) ? $"Heat {h.OrderIndex + 1}" : h.Label;
                         foreach (var entry in h.Entries)
                         {
                             var team = teams.FirstOrDefault(t => t.Id == entry.TeamId);
@@ -53,8 +54,10 @@ internal static class ReminderPlan
                         }
                     }
                 }
-                else if (s.ScheduledStart is { } scheduled && !s.StartedAt.HasValue && s.Status == SessionStatus.Upcoming)
+                else if (s.ScheduledStart is { } rawScheduled && !s.StartedAt.HasValue && s.Status == SessionStatus.Upcoming)
                 {
+                    // Lead time counts from when the session is now expected to start (after any delay), not its planned time.
+                    var scheduled = sessionStarts.GetValueOrDefault(s.Id) ?? rawScheduled;
                     var users = teams.Where(t => t.CompetitionId == s.CompetitionId && (s.CompetitionSectionId == null || t.CompetitionSectionId == s.CompetitionSectionId))
                         .SelectMany(t => usersByTeam[t.Id]).ToHashSet();
                     if (s.Kind == SessionKind.Race && s.Heats.Count > 0)

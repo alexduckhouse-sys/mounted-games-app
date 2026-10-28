@@ -281,6 +281,18 @@ describe('unsubscribeFromPush', () => {
     expect(del).toHaveBeenCalledWith('/push/subscribe', { params: { endpoint: 'https://push.example/abc' } });
   });
 
+  it('sends the given token, for sign-out when the stored login is already gone', async () => {
+    setup({ existing: fakeSubscription() });
+    await unsubscribeFromPush('tok');
+    expect(del).toHaveBeenCalledWith('/push/subscribe', { params: { endpoint: 'https://push.example/abc' }, headers: { Authorization: 'Bearer tok' } });
+  });
+
+  it('sends the given token when only the server holds a subscription', async () => {
+    setup();
+    await unsubscribeFromPush('tok');
+    expect(del).toHaveBeenCalledWith('/push/subscribe', { headers: { Authorization: 'Bearer tok' } });
+  });
+
   it('still succeeds when the server has already forgotten the endpoint', async () => {
     const existing = fakeSubscription();
     setup({ existing });

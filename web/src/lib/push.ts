@@ -96,8 +96,13 @@ export async function subscribeForPush(): Promise<boolean> {
   return (await subscribeForPushResult()) === 'ok';
 }
 
-export async function unsubscribeFromPush(): Promise<void> {
+/**
+ * Drops this browser's push subscription and tells the server to forget it. Pass the token when signing out:
+ * the stored login is already gone by the time the request is sent, so the call has to carry its own.
+ */
+export async function unsubscribeFromPush(token?: string | null): Promise<void> {
   if (!pushSupported()) return;
+  const headers = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
   try {
     const reg = await waitForPush(navigator.serviceWorker.ready);
     const sub = await reg.pushManager.getSubscription();
@@ -105,11 +110,11 @@ export async function unsubscribeFromPush(): Promise<void> {
       const endpoint = sub.endpoint;
       await sub.unsubscribe();
       try {
-        await api.delete('/push/subscribe', { params: { endpoint } });
+        await api.delete('/push/subscribe', { params: { endpoint }, ...headers });
       } catch { /* server may already have purged the row */ }
     } else {
       // No browser subscription but server may still have one for us.
-      await api.delete('/push/subscribe').catch(() => {});
+      await (token ? api.delete('/push/subscribe', headers) : api.delete('/push/subscribe')).catch(() => {});
     }
   } catch { /* swallow */ }
 }

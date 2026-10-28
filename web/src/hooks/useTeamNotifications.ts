@@ -224,6 +224,12 @@ function maybeFire(
     }
   }
 
+  // The reminders and slip alerts are for the team's own section: skip another section's sessions (unless the
+  // team has a heat in one). A session or team with no section is for everyone, as on the server.
+  const inSession = sess.heats?.some((h) => h.entries?.some((e) => e.teamId === team.id)) ?? false;
+  if (!inSession && sess.competitionSectionId != null && team.competitionSectionId != null
+    && sess.competitionSectionId !== team.competitionSectionId) return;
+
   const scheduled = timing?.scheduled?.getTime() ?? null;
   if (scheduled == null) return;
 

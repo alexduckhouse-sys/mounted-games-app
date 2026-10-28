@@ -75,8 +75,11 @@ public class WeatherController : ControllerBase
         return ServeAsync(WeatherCache.AtKey(lat, lon, when), async () =>
         {
             var client = _http.CreateClient("weather");
-            var day = when.ToString("yyyy-MM-dd");
-            var url = $"https://api.open-meteo.com/v1/forecast?latitude={WeatherCache.Format(lat)}&longitude={WeatherCache.Format(lon)}&hourly=temperature_2m,weather_code,is_day&start_date={day}&end_date={day}&timezone=auto";
+            // The web sends a UTC instant, so ask Open-Meteo for UTC hours too (timezone=auto would answer in the
+            // venue's local time, an hour out in BST). A time with no zone is read as UTC, as ForecastTtl does.
+            var whenUtc = when.Kind == DateTimeKind.Unspecified ? when : when.ToUniversalTime();
+            var day = whenUtc.ToString("yyyy-MM-dd");
+            var url = $"https://api.open-meteo.com/v1/forecast?latitude={WeatherCache.Format(lat)}&longitude={WeatherCache.Format(lon)}&hourly=temperature_2m,weather_code,is_day&start_date={day}&end_date={day}&timezone=UTC";
             try
             {
                 using var resp = await client.GetAsync(url);
@@ -91,7 +94,7 @@ public class WeatherController : ControllerBase
                 var temps = hourly.GetProperty("temperature_2m").EnumerateArray().Select(t => t.GetDouble()).ToList();
                 var codes = hourly.GetProperty("weather_code").EnumerateArray().Select(t => t.GetInt32()).ToList();
                 var days = hourly.GetProperty("is_day").EnumerateArray().Select(t => t.GetInt32()).ToList();
-                var targetHour = when.Hour;
+                var targetHour = whenUtc.Hour;
                 var idx = 0;
                 for (var i = 0; i < times.Count; i++)
                 {

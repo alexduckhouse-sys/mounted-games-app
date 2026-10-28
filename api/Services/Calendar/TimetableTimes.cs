@@ -109,7 +109,7 @@ public static class TimetableTimes
                 ? TimeSpan.FromMinutes(minutesShifted) : TimeSpan.Zero;
             var scheduled = rawScheduled - shift;
             var dayKey = scheduled.HasValue
-                ? scheduled.Value.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
+                ? UkTime.DateKey(scheduled.Value)
                 : (lastDayByArena.TryGetValue(key, out var prevDay) ? prevDay : lastDayKey);
             if (scheduled.HasValue)
             {

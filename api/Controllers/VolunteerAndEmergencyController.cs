@@ -352,7 +352,7 @@ public class VolunteerAndEmergencyController(
             .Select(g => new { TeamId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.TeamId, x => x.Count, ct);
 
-        var startTimeLabel = session.ScheduledStart?.ToString("HH:mm");
+        var startTimeLabel = session.ScheduledStart is { } startUtc ? MountedGames.Api.Services.UkTime.ToUk(startUtc).ToString("HH:mm") : null;
         var now = DateTime.UtcNow;
         var createdShifts = new List<VolunteerShift>();
 

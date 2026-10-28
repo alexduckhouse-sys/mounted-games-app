@@ -385,4 +385,16 @@ public class TimetableTimesTests
         Assert.Equal(At(10, 45), times[2].Start);
         Assert.Equal(At(9).AddDays(1), times[3].Start);
     }
+
+    [Fact]
+    public void SessionJustAfterUkMidnightBelongsToTheNextUkDay()
+    {
+        // 23:30 UTC on 17 October is 00:30 BST on the 18th, so day one's delay must not reach it.
+        var day1Late = NewSession(1, At(9), started: At(9, 45), heats: [NewHeat(1, 1, 30)]);
+        var afterMidnight = NewSession(2, At(23, 30), heats: [NewHeat(2, 1, 30)]);
+
+        var times = TimetableTimes.Compute([day1Late, afterMidnight]);
+
+        Assert.Equal(At(23, 30), times[2].Start);
+    }
 }

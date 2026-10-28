@@ -3,6 +3,7 @@ import { createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { CacheFirst, NetworkFirst, NetworkOnly } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
+import { pickNotificationClient } from './lib/notificationClient';
 import { canCachePublicApi, isEmbedRequest, markSavedResponse, NAVIGATION_DENYLIST, stampPublicResponse } from './offline/cachePolicy';
 
 declare const self: ServiceWorkerGlobalScope;
@@ -84,12 +85,12 @@ self.addEventListener('notificationclick', (event: NotificationEvent) => {
   const target = (event.notification.data as { url?: string } | null)?.url ?? '/';
   event.waitUntil((async () => {
     const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    for (const client of all) {
-      if ('focus' in client) {
-        await client.focus();
-        if ('navigate' in client) await (client as WindowClient).navigate(target).catch(() => {});
-        return;
-      }
+    // Not a /broadcast or /score tab: navigating one of those would end a live camera or scoring session.
+    const client = pickNotificationClient(all.filter((c) => 'focus' in c));
+    if (client) {
+      await client.focus();
+      if ('navigate' in client) await (client as WindowClient).navigate(target).catch(() => {});
+      return;
     }
     await self.clients.openWindow(target);
   })());
