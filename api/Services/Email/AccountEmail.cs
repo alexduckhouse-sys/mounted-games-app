@@ -192,12 +192,13 @@ public class AccountEmailService(
             var reserved = await ReserveAsync(user.Id);
             if (reserved != ConfirmationResult.Sent) return reserved;
 
-            var link = $"{site}/confirm-email?userId={Uri.EscapeDataString(user.Id)}&token={Uri.EscapeDataString(tokens.Create(user))}";
+            // In the fragment, which browsers never send to a server, so the token stays out of server and proxy logs.
+            var link = $"{site}/confirm-email#u={Uri.EscapeDataString(user.Id)}&t={Uri.EscapeDataString(tokens.Create(user))}";
             var days = (int)EmailConfirmationTokens.Lifetime.TotalDays;
             var text = $"""
                 Hello,
 
-                Someone used this email address to create a Mounted Games account. Please confirm the address so we can reach you. This link works for {days} days:
+                Someone used this email address to create a Mounted Games account. Please confirm the address so we can reach you: open this link and sign in to that account. It works for {days} days:
 
                 {link}
 
@@ -207,7 +208,7 @@ public class AccountEmailService(
                 """;
             var html = EmailHtml.Wrap($"""
                 <p style="margin:0 0 12px;">Hello,</p>
-                <p style="margin:0 0 16px;">Someone used this email address to create a Mounted Games account. Please confirm the address so we can reach you. This link works for {days} days:</p>
+                <p style="margin:0 0 16px;">Someone used this email address to create a Mounted Games account. Please confirm the address so we can reach you: open this link and sign in to that account. It works for {days} days:</p>
                 {EmailHtml.Button(link, "Confirm your email address")}
                 <p style="margin:16px 0 0;color:#475569;font-size:13px;">If that wasn't you, you can ignore this email.</p>
                 """);

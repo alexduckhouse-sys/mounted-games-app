@@ -194,10 +194,14 @@ export const shell = {
   'shell.unsubscribe.changeMind': 'If you change your mind, tick the box next time you enter a competition.',
   'shell.confirmEmail.fallback': 'We couldn’t confirm your email address. Check your signal and try again.',
   'shell.confirmEmail.failedTitle': 'Couldn’t confirm your email',
-  'shell.confirmEmail.failedBody': '{message} If the link has expired, sign in and use the “Send it again” button on your profile.',
+  'shell.confirmEmail.failedBody': '{message} If the link has expired, use the “Send it again” button on your profile.',
   'shell.confirmEmail.title': 'Confirm your email',
   'shell.confirmEmail.done': 'Thanks, your email address is confirmed.',
   'shell.confirmEmail.toProfile': 'Go to my profile',
+  'shell.confirmEmail.signInBody': 'Sign in to the account this email was sent to, and we’ll confirm the address straight away.',
+  'shell.confirmEmail.signIn': 'Sign in to confirm',
+  'shell.confirmEmail.otherTitle': 'You’re signed in to a different account',
+  'shell.confirmEmail.otherBody': 'This link is for another account. Sign out, then sign in to the account the email was sent to.',
 
   // Legal pages
   'shell.legal.title': 'Policies and legal',

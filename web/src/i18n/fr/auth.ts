@@ -78,4 +78,7 @@ export const auth: AreaCatalogue<typeof en> = {
   'auth.pw.err.upper': 'Votre mot de passe doit contenir une lettre majuscule.',
   'auth.pw.err.special': 'Votre mot de passe doit contenir un caractère spécial (comme ! ? # @ £).',
   'auth.pw.err.unique': 'Votre mot de passe doit mélanger davantage de caractères.',
+
+  'auth.reset.conflict': 'Votre compte a changé pendant l’enregistrement de votre nouveau mot de passe, donc rien n’a été modifié. Réessayez.',
+  'auth.reset.failed': 'Impossible d’enregistrer votre nouveau mot de passe, donc rien n’a été modifié. Réessayez dans un instant.',
 };

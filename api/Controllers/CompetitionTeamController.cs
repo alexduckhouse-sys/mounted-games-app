@@ -70,6 +70,8 @@ public class CompetitionTeamController(AppDbContext db, UserManager<AppUser> use
         var helper = await db.CompetitionCollaborators.AsNoTracking().FirstOrDefaultAsync(c => c.CompetitionId == competitionId && c.UserId == user.Id);
         if (helper is null)
         {
+            // A competition admin is staff for a password reset by email, so the address must be theirs first.
+            if (!user.EmailConfirmed) return ConfirmedAddress.Refusal();
             if (await db.CompetitionCollaborators.CountAsync(c => c.CompetitionId == competitionId) >= MaxHelpers)
                 return BadRequest(new { message = $"A competition can have up to {MaxHelpers} competition admins." });
             helper = new CompetitionCollaborator

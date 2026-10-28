@@ -23,6 +23,7 @@ public sealed class LiveAccounts(LiveConnections connections)
     /// <summary>What a token check needs to know about an account, read in one query.</summary>
     public sealed class TokenState
     {
+        public string Id { get; init; } = string.Empty;
         public DateTimeOffset? LockoutEnd { get; init; }
         public DateTime? LockedAt { get; init; }
         public DateTime? BlockedAt { get; init; }
@@ -44,6 +45,7 @@ public sealed class LiveAccounts(LiveConnections connections)
     public static IQueryable<TokenState> StateQuery(AppDbContext db, string userId) =>
         db.Users.AsNoTracking().Where(u => u.Id == userId).Select(u => new TokenState
         {
+            Id = u.Id,
             LockoutEnd = u.LockoutEnd,
             LockedAt = u.LockedAt,
             BlockedAt = u.BlockedAt,
@@ -52,6 +54,20 @@ public sealed class LiveAccounts(LiveConnections connections)
                      join role in db.Roles on membership.RoleId equals role.Id
                      where membership.UserId == u.Id && role.Name != null
                      select role.Name!).ToList(),
+        });
+
+    /// <summary>
+    /// The same state for many accounts at once, without roles (<see cref="TokenState.Accepts"/> doesn't need them): the
+    /// <c>LiveSessionSweeper</c>'s one query for every signed-in live connection on an instance.
+    /// </summary>
+    public static IQueryable<TokenState> StatesQuery(AppDbContext db, IReadOnlyCollection<string> userIds) =>
+        db.Users.AsNoTracking().Where(u => userIds.Contains(u.Id)).Select(u => new TokenState
+        {
+            Id = u.Id,
+            LockoutEnd = u.LockoutEnd,
+            LockedAt = u.LockedAt,
+            BlockedAt = u.BlockedAt,
+            SessionVersion = u.SessionVersion,
         });
 
     /// <summary>Null when the account doesn't exist.</summary>

@@ -211,6 +211,10 @@ describe('LoginPage', () => {
       vi.mocked(api.post).mockRejectedValue({ response: { status: 400, data: { message: 'Enter a valid email address.' } } });
       await userEvent.type(screen.getByLabelText('Organiser key'), 'x{Enter}');
       expect(await screen.findByRole('alert')).toHaveTextContent('Enter a valid email address.');
+      // An existing account whose address isn't confirmed is told to confirm it first.
+      vi.mocked(api.post).mockRejectedValue({ response: { status: 409, data: { code: 'email_unconfirmed', message: 'Confirm your email address before using the organiser key.' } } });
+      await userEvent.type(screen.getByLabelText('Organiser key'), 'x{Enter}');
+      expect(await screen.findByRole('alert')).toHaveTextContent('Confirm your email address before using the organiser key.');
       // A 429 rate-limit error shows the server message.
       vi.mocked(api.post).mockRejectedValue({ response: { status: 429, data: { message: 'Too many accounts have been created from this network address (maximum 5).' } } });
       await userEvent.type(screen.getByLabelText('Organiser key'), 'x{Enter}');

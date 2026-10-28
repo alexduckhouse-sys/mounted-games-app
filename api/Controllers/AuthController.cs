@@ -286,6 +286,9 @@ public class AuthController : ControllerBase
                     {
                         if (!await _users.IsInRoleAsync(existing, Roles.Admin))
                         {
+                            // The key makes an existing account staff, so its address must be confirmed (ConfirmedAddress).
+                            // An organiser who already has Admin this way signs in as before.
+                            if (ConfirmedAddress.Refuses(existing, Roles.Admin)) return ConfirmedAddress.OwnRefusal();
                             var granted = await _users.AddToRoleAsync(existing, Roles.Admin);
                             if (!granted.Succeeded) return PasswordProblems(granted);
                         }
@@ -555,10 +558,16 @@ public class AuthController : ControllerBase
         return cleaned.Length == 0 ? "user" : cleaned;
     }
 
+    /// <summary>
+    /// An admin makes an account for someone. The address is whatever the admin typed, so it starts unconfirmed and gets
+    /// the usual confirmation email: until its owner confirms it (signed in), it can't be used to reset the password. The
+    /// role is granted at once, unlike the other staff grants (<see cref="ConfirmedAddress"/>), because a new account has
+    /// nobody yet who could confirm it.
+    /// </summary>
     [EnableRateLimiting("auth")]
     [HttpPost("register")]
     [Authorize(Roles = Roles.Admin)]
-    public async Task<ActionResult<AuthResponse>> Register(RegisterRequest req)
+    public async Task<ActionResult<AuthResponse>> Register(RegisterRequest req, [FromServices] AccountEmailService accountEmail)
     {
         if (await _db.IsIpBlockedAsync(HttpContext, HttpContext.RequestAborted))
             return StatusCode(StatusCodes.Status403Forbidden, new { message = "Registration from this network is blocked." });
@@ -572,7 +581,7 @@ public class AuthController : ControllerBase
             Email = req.Email,
             FullName = req.FullName,
             ClubId = req.ClubId,
-            EmailConfirmed = true
+            EmailConfirmed = false
         };
         var result = await _users.CreateAsync(user, req.Password);
         if (!result.Succeeded)
@@ -585,6 +594,7 @@ public class AuthController : ControllerBase
         if (!Roles.Assignable.Contains(role))
             role = Roles.Trainer;
         await _users.AddToRoleAsync(user, role);
+        await accountEmail.SendConfirmationAsync(user);
 
         var (token, expiresAt, roles) = await _tokens.CreateTokenAsync(user);
         var club = user.ClubId.HasValue ? await _db.Clubs.FindAsync(user.ClubId.Value) : null;
@@ -657,7 +667,7 @@ public class AuthController : ControllerBase
     /// Changes the signed-in person's own password. Needs the current one; a wrong guess counts towards the same
     /// lockout as signing in, so this can't be used to guess it. It also signs the account out everywhere else: the
     /// account's <c>SessionVersion</c> goes up with the new password, so <see cref="LiveAccounts"/> refuses every older
-    /// token at once and their live-hub connections close, and this device gets a fresh token back. Any Google or Apple
+    /// token at once and their live-hub connections close, and this device gets a fresh token back. Any Google, Apple or Facebook
     /// sign-in is disconnected in the same transaction, so one an intruder linked doesn't survive the change.
     /// </summary>
     [EnableRateLimiting("auth")]
@@ -712,17 +722,26 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Opens the link from the confirmation email. No sign-in needed. A wrong user, a wrong or old token and an
-    /// expired one all get the same answer, so it can't be used to find out who has an account.
+    /// Opens the link from the confirmation email, for the person signed in to the account it was sent for. Whoever can read
+    /// a mailbox isn't necessarily its account's owner (an address can be mistyped, or belong to someone else), and a
+    /// confirmed address is what lets a staff account reset its password by email, so the link alone is not enough. Signed
+    /// in to a different account: 403 <c>other_account</c>. A wrong, old or expired token: the same 400 whatever the reason.
     /// </summary>
     [EnableRateLimiting("auth")]
     [HttpPost("confirm-email")]
-    [AllowAnonymous]
+    [Authorize]
     public async Task<IActionResult> ConfirmEmail(ConfirmEmailRequest req, [FromServices] EmailConfirmationTokens tokens)
     {
-        var user = string.IsNullOrWhiteSpace(req.UserId) ? null : await _users.FindByIdAsync(req.UserId);
-        if (user is null || !tokens.IsValid(user, req.Token))
-            return BadRequest(new { message = "This confirmation link has expired or isn't valid. Sign in and ask for a new one." });
+        var user = await _users.GetUserAsync(User);
+        if (user is null) return Unauthorized();
+        if (!string.IsNullOrWhiteSpace(req.UserId) && req.UserId != user.Id)
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                code = "other_account",
+                message = "This link is for a different account. Sign out, then sign in to the account the email was sent to.",
+            });
+        if (!tokens.IsValid(user, req.Token))
+            return BadRequest(new { message = "This confirmation link has expired or isn't valid. Ask for a new one from your profile." });
         if (!user.EmailConfirmed)
         {
             user.EmailConfirmed = true;

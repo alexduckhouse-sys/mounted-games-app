@@ -73,6 +73,7 @@ export function LoginPage() {
         const pwErrors = friendlyPasswordErrors(res?.data);
         if (status === 400) setError(pwErrors[0] || res?.data?.message || t('auth.login.checkDetails'));
         else if (status === 401) setError(res?.data?.message && res.data.message !== 'Invalid admin key.' ? res.data.message : t('auth.login.keyFailed'));
+        else if (status === 409) setError(res?.data?.message || t('auth.login.keyFailed'));
         else setError(t('auth.login.keyFailed'));
       } else {
         setError(status === 401 || status === 400 ? t('auth.login.wrong') : t('auth.login.noSignal'));

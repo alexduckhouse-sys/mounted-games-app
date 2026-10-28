@@ -69,11 +69,21 @@ export function rejectHtmlPage(response: AxiosResponse): AxiosResponse | Promise
     response.config, response.request, { ...response, status: 404, statusText: 'Not Found' }));
 }
 
+/** The bearer token a request went out with, or null when it carried none. */
+function tokenSentWith(config: { headers?: unknown } | undefined): string | null {
+  const headers = config?.headers as { get?: (name: string) => unknown; [name: string]: unknown } | undefined;
+  const value = typeof headers?.get === 'function' ? headers.get('Authorization') : headers?.['Authorization'];
+  return typeof value === 'string' && value.startsWith('Bearer ') ? value.slice('Bearer '.length) : null;
+}
+
 api.interceptors.response.use(
   rejectHtmlPage,
   (err) => {
+    // Sign out only if the refused token is still the stored one: a request sent before a password change, answered after
+    // the fresh token was stored, must not throw the fresh one away.
     if (err?.response?.status === 401) {
-      writeStoredAuth(null);
+      const sent = tokenSentWith(err.config);
+      if (sent !== null && sent === readToken()) writeStoredAuth(null);
     }
     return Promise.reject(err);
   }
