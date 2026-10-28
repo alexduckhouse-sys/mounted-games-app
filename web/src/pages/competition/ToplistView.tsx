@@ -1,6 +1,6 @@
 import { Fragment, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Link, useInRouterContext } from 'react-router-dom';
-import { Check, Star, Trophy } from 'lucide-react';
+import { Check, Trophy } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { CompetitionSection, Team } from '../../types';
 import type { FinalGroup, Toplist } from '../../lib/toplist';
@@ -16,6 +16,8 @@ import type { DeclarationForm } from '../../types';
 import { DropdownRow } from '../../components/DropdownRow';
 import { Sheet } from '../../components/Sheet';
 import { useOptionalTicker } from '../../components/TickerContext';
+import { FollowStar } from '../../components/FollowStar';
+import { useStillMotion } from '../../lite/useStillMotion';
 import { Rosette } from '../../components/Rosette';
 import { ScoreFlash } from '../../components/ScoreFlash';
 import { TickerNumber } from '../../components/TickerNumber';
@@ -62,6 +64,7 @@ export function ToplistView({
   heatTables?: ReactNode;
 }) {
   const { t, lang } = useLanguage();
+  const still = useStillMotion();
   const compCtx = useContext(CompetitionContext);
   const inRouter = useInRouterContext();
   const teams = suppliedTeams ?? compCtx?.competition.teams ?? [];
@@ -79,8 +82,7 @@ export function ToplistView({
   const renderTeamName = (teamId: number, teamName: string, fav: boolean, asLink = false) => {
     const inner = (
       <>
-        {fav && <Star aria-hidden="true" className="mr-1 inline h-3.5 w-3.5 shrink-0 fill-[#C08308] text-[#C08308]" />}
-        {flagBadge(teamId)}{teamName}
+        {flagBadge(teamId)}{teamName}<NameStar on={fav} />
       </>
     );
     if (asLink && inRouter && competitionId != null) {
@@ -116,6 +118,11 @@ export function ToplistView({
     ...(heatTables ? ([['heats', t('competition.toplist.scoresByHeat')]] as [View, string][]) : []),
   ];
   const view: View = tabs.some(([id]) => id === chosen) ? chosen! : hasFinals ? 'finals' : 'totals';
+  // The first view appears as it is; only a change of view or age group fades in.
+  const viewKey = `${currentSectionId}-${view}`;
+  const [seenView, setSeenView] = useState({ key: viewKey, changes: 0 });
+  if (seenView.key !== viewKey) setSeenView({ key: viewKey, changes: seenView.changes + 1 });
+  const viewChanged = seenView.changes > 0 || seenView.key !== viewKey;
   const places = section?.finalistCount ?? null;
   const sheet = activeOpenTeam == null ? null : list.detail.get(activeOpenTeam) ?? null;
   // A team's row opens its sheet (riders, ponies and heat-by-heat scores) so a spectator stays on Standings; the sheet links on to the team page.
@@ -150,6 +157,7 @@ export function ToplistView({
     <>
       <div className="flex flex-col gap-3 pt-3">
         {viewRow}
+        <motion.div key={viewKey} className="flex flex-col gap-3" initial={still || !viewChanged ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: EASE_OUT }}>
         {view === 'finals' && (
           <FinalsList
             groups={list.finals}
@@ -192,9 +200,10 @@ export function ToplistView({
                       data-followed={fav ? 'true' : undefined}
                       data-tied={tied ? 'true' : undefined}
                       style={tied ? TIED : undefined}
-                      className={`flex min-h-11 items-center pr-1 ${lastInRunoff ? 'border-b border-dashed border-[rgb(var(--mg-rule))]' : 'border-b border-[rgb(var(--mg-rule-soft))]'} ${fav ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_3px_0_0_#C08308]' : ''}`}
+                      className={`relative flex min-h-11 items-center pr-1 ${lastInRunoff ? 'border-b border-dashed border-[rgb(var(--mg-rule))]' : 'border-b border-[rgb(var(--mg-rule-soft))]'} ${fav ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_3px_0_0_#C08308]' : ''}`}
                     >
                       <RowBox open={openRow} href={teamHref(row.teamId)}>{content}</RowBox>
+                      <FollowGlimmer on={fav} />
                     </motion.li>
                     {list.cutAfter === index && index < list.rows.length - 1 && (
                       <motion.li layout="position" transition={RESORT} role="separator" aria-label={t('competition.toplist.cutoff')} className={`${separatorLabel} !py-1.5`}>
@@ -289,6 +298,7 @@ export function ToplistView({
             </ol>
           </section>
         )}
+        </motion.div>
       </div>
       {sheet && (
         <TeamSheet
@@ -318,6 +328,21 @@ export function ToplistView({
       )}
     </>
   );
+}
+
+/** The gold star after a followed team's name. It stays mounted so following a team plays the pop and sparks. */
+function NameStar({ on }: { on: boolean }) {
+  return <span aria-hidden="true" className={`ml-1 inline-flex align-[-2px] text-[#C08308] ${on ? '' : 'hidden'}`}><FollowStar on={on} className="h-3.5 w-3.5" /></span>;
+}
+
+/** A soft light sweep across a row the moment its team is followed (not when the page opens already followed). */
+function FollowGlimmer({ on }: { on: boolean }) {
+  const still = useStillMotion();
+  const [seen, setSeen] = useState({ on, plays: 0 });
+  if (seen.on !== on) setSeen({ on, plays: seen.plays + (on ? 1 : 0) });
+  const plays = seen.on === on ? seen.plays : seen.plays + (on ? 1 : 0);
+  if (!on || plays === 0 || still) return null;
+  return <span key={plays} aria-hidden="true" className="mg-follow-glimmer" />;
 }
 
 /**
@@ -353,7 +378,7 @@ function FinalsList({ groups, t, lang, onOpen, teamHref, isFav, renderTeamName }
               const champion = winner && group.complete === true;
               const fav = isFav(row.teamId);
               return (
-                <li key={row.teamId} data-followed={fav ? 'true' : undefined} className={`flex min-h-11 items-center pr-1 border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0 ${champion ? 'mg-champion' : fav ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_3px_0_0_#C08308]' : ''}`}>
+                <li key={row.teamId} data-followed={fav ? 'true' : undefined} className={`relative flex min-h-11 items-center pr-1 border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0 ${champion ? 'mg-champion' : fav ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_3px_0_0_#C08308]' : ''}`}>
                   <RowBox open={openRow} href={teamHref(row.teamId)}>
                     <span className={`mg-display w-9 shrink-0 text-lg font-bold leading-none ${winner ? 'text-[rgb(var(--mg-late-time))]' : ''}`}>{row.place != null ? ordinalText(row.place, lang) : <span aria-hidden="true">–</span>}</span>
                     <span className="flex min-w-0 flex-1 items-center gap-1.5">
@@ -364,6 +389,7 @@ function FinalsList({ groups, t, lang, onOpen, teamHref, isFav, renderTeamName }
                     {champion && <span className="mg-champion-rosette"><Rosette width={26} /></span>}
                     <span className="mg-display shrink-0 text-xl font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]">{row.points != null ? formatPoints(row.points) : '–'}<span className="sr-only">{' '}{t('competition.toplist.points')}</span></span>
                   </RowBox>
+                  <FollowGlimmer on={fav} />
                 </li>
               );
             })}

@@ -3,7 +3,7 @@ import type { DeclarationForm, RiderEntry, SavedRider, SavedTeamDeclaration } fr
 import {
   applySavedTeamToForm, blankRider, buildSubmitBody, canSubmit, decDraftKey, dobText, emptySlots, firstEmpty, heightText, isReserveSlot, normaliseSlotsForFormat, panelTitle,
   parseAgeGroupMaxAge, parseDob, parseDraft, parseHeight, riderFromSaved, riderReady, ridersAdded, ridersRequired, savedChoices, savedTeamSummaryLabel, slotLabel, slotMeta,
-  slotsFromForm, sendReason, ridersCount, addLabel, subtitleOf, teamIsFull, type DecRider, type Slot,
+  slotsFromForm, decFormStat, sendReason, ridersCount, addLabel, subtitleOf, teamIsFull, type DecRider, type Slot,
 } from './decForm';
 
 const rider = (fullName: string, extra: Partial<DecRider> = {}): DecRider =>
@@ -373,5 +373,12 @@ describe('multi-team saved declaration auto-fill (#8)', () => {
       ageInCompetitionYear: 14,
       maxAge: 12,
     });
+  });
+});
+
+describe('decFormStat', () => {
+  it('says how many dec forms are in', () => {
+    expect(decFormStat(12, 18)).toBe('12 of 18 dec forms in');
+    expect(decFormStat(0, 1)).toBe('0 of 1 dec form in');
   });
 });

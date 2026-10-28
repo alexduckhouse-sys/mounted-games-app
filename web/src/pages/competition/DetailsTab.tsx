@@ -154,8 +154,8 @@ export function DetailsTab() {
     <div className="rf-page mx-auto flex w-full max-w-xl flex-col pb-4 pt-3 lg:max-w-3xl">
       <h1 className="sr-only">{t('competition.details.heading')}</h1>
 
-      {/* The event card sits a little in from the cards below it, so it reads as the page's heading. */}
-      <section className="mg-card mx-2 flex flex-col overflow-hidden" aria-label={t('competition.details.about')}>
+      {/* The event card is the same width as the lists below it. */}
+      <section className="mg-card flex flex-col overflow-hidden" aria-label={t('competition.details.about')}>
         <div className="flex flex-col p-4">
           <div className="flex flex-col gap-1 pb-3">
             <h2 className="ev-title">{competition.name}</h2>
