@@ -8,6 +8,7 @@ import { createReplayBuffer } from '../live/replayBuffer';
 import { asMedia, FakeMediaStream } from '../test/streamFakes';
 import { chooseOption } from '../test/select';
 import { ScorerPage } from './ScorerPage';
+import { readSavedScorerSession } from '../offline/scorerLink';
 
 const link = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), request: vi.fn() }));
 vi.mock('../live/replayBuffer', async (original) => { const actual = await original<typeof import('../live/replayBuffer')>(); return { ...actual, createReplayBuffer: vi.fn(actual.createReplayBuffer) }; });
@@ -345,6 +346,9 @@ describe('ScorerPage', () => {
     act(() => { window.dispatchEvent(new CustomEvent(HEAT_SAVED, { detail: {} })); });
 
     await waitFor(() => expect(screen.getByRole('region', { name: 'Scoring Flag' })).toBeInTheDocument());
+    // The saved copy follows, so a reload while offline doesn't bring the old results back.
+    const saved = readSavedScorerSession();
+    expect(saved?.sessions[0].heats.find((h) => h.id === newer.id)?.races).toHaveLength(2);
   });
 
   it('reloads when the phone comes back online or the page is shown again', async () => {

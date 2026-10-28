@@ -5,7 +5,7 @@ import { ELIM_REASONS, noteFor, reasonKeyOf, statusFor } from './elimReasons';
 import { nextRoundLanes } from './nextRoundLanes';
 import { heatTotals, summariseRace } from './raceSummary';
 import { dropDrafts, pushUndo, undoSave, UNDO_LIMIT, type DraftUndo, type SaveUndo } from './scoreUndo';
-import type { QueuedScore } from '../offline/scoreOutbox';
+import { settle, type QueuedScore } from '../offline/scoreOutbox';
 
 const entries = (...names: string[]): Heat['entries'] => names.map((teamName, i) => ({ id: i + 1, teamId: i + 1, teamName, laneIndex: i + 1 }));
 const scored = (id: number, rows: [number, number | null, number, boolean?][], extra: Partial<Race> = {}): Race =>
@@ -238,6 +238,47 @@ describe('undo', () => {
     expect(correction.saveId).not.toBe('gone');
     expect(correction.state).toBe('waiting');
     expect(out.outbox).toContain(other);
+  });
+
+  it('reverses a save that is mid-flight after it lands, instead of just deleting it', () => {
+    const prior = [{ teamId: 2, place: 1, eliminated: false }, { teamId: 1, place: 2, eliminated: false }];
+    const sent = queued('flying', { expected: prior });
+    const out = undoSave([sent], entry(sent), new Date('2026-10-23T11:00:00Z'), (q) => q.saveId === 'flying');
+    expect(out.how).toBe('corrected');
+    expect(out.outbox).toHaveLength(1);
+    const correction = out.outbox[0];
+    expect(correction.saveId).not.toBe('flying');
+    expect(correction.places).toEqual(prior);
+    // Compared against what was there before, so settling the in-flight save moves it on to the accepted results.
+    expect(correction.expected).toEqual(prior);
+  });
+
+  describe('undoing a save that is mid-flight', () => {
+    const prior = [{ teamId: 2, place: 1, eliminated: false }, { teamId: 1, place: 2, eliminated: false }];
+    const setup = () => {
+      const sent = queued('flying', { expected: prior });
+      const { outbox } = undoSave([sent], entry(sent), new Date('2026-10-23T11:00:00Z'), (q) => q.saveId === 'flying');
+      return { sent, outbox };
+    };
+
+    it('lets the reversal go through once the in-flight save lands, rather than clashing with it', () => {
+      const { sent, outbox } = setup();
+      const server = heat(1, { races: [race(5, { isComplete: true, results: [result(1, 1), result(2, 2)] })] });
+      const after = settle(outbox, sent, { kind: 'saved', sessionId: 1, heat: server });
+      expect(after).toHaveLength(1);
+      // The server now holds what was sent, so the reversal is based on exactly that.
+      expect(after[0].expected.map((p) => [p.teamId, p.place])).toEqual([[1, 1], [2, 2]]);
+      expect(after[0].places).toEqual(prior);
+    });
+
+    it('does not overwrite someone else’s results when the in-flight save conflicts or fails', () => {
+      const { sent, outbox } = setup();
+      const theirs = heat(1, { races: [race(5, { isComplete: true, results: [result(2, 1)] })] });
+      expect(settle(outbox, sent, { kind: 'conflict', sessionId: 1, heat: theirs })).toEqual(outbox);
+      expect(settle(outbox, sent, { kind: 'failed', message: 'no' })).toEqual(outbox);
+      // Still based on what was there before the save, so the server rejects it if that has since changed.
+      expect(outbox[0].expected).toEqual(prior);
+    });
   });
 
   it('reopens the race for correction when a sent save had nothing before it', () => {

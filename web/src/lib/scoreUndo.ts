@@ -38,12 +38,16 @@ export interface SaveUndoResult {
 
 /**
  * Take back a race save. While it still waits in the outbox it is cancelled (the save it replaced comes back).
- * Once sent, the race's earlier results go back as a correction through the outbox. If the race had no earlier
+ * Once sent (or while it is being sent), the race's earlier results go back as a correction through the outbox. If the race had no earlier
  * results there is nothing to send back, so it is reopened with what was saved for the scorer to correct.
  */
-export function undoSave(list: QueuedScore[], entry: SaveUndo, now: Date = new Date()): SaveUndoResult {
+export function undoSave(
+  list: QueuedScore[], entry: SaveUndo, now: Date = new Date(), inFlight: (q: QueuedScore) => boolean = () => false,
+): SaveUndoResult {
   const waiting = list.find((q) => q.raceId === entry.raceId && q.saveId === entry.sent.saveId);
-  if (waiting) {
+  // A save already being sent may commit whatever we do, so it can't just be deleted: it is reversed after it lands.
+  const sending = waiting != null && inFlight(waiting);
+  if (waiting && !sending) {
     const rest = list.filter((q) => q !== waiting);
     return { outbox: entry.queuedBefore ? enqueue(rest, entry.queuedBefore) : rest, restore: entry.draft, how: 'cancelled' };
   }
@@ -54,8 +58,8 @@ export function undoSave(list: QueuedScore[], entry: SaveUndo, now: Date = new D
     saveId: crypto.randomUUID(),
     reason: 'Undo: reversed the last save',
     places: prior,
-    // What the server holds now is what was sent.
-    expected: entry.sent.places,
+    // What the server holds now is what was sent. A save still in flight lands first, and settling it then updates this.
+    expected: sending ? entry.sent.expected : entry.sent.places,
     queuedAt: now.toISOString(),
     state: 'waiting',
     theirs: undefined,

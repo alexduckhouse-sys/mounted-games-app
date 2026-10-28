@@ -17,7 +17,16 @@ const KEY = 'mg.outbox.scores';
 const CHANGED = 'mg:outbox';
 /** Fired with `{ sessionId, heat }` when the server answers with a heat, so open pages can show it. */
 export const HEAT_SAVED = 'mg:heat-saved';
+/** Fired with `{ competitionId, label }` each time a flush gets a waiting save accepted by the server. */
+export const SCORE_SENT = 'mg:score-sent';
 export const IN_FLIGHT_GRACE_MS = 1500;
+
+/** Saves whose POST has been started and not yet answered. */
+const inFlightIds = new Set<string>();
+/** True while this save is being sent, so it may already be committing on the server. */
+export function isSaveInFlight(q: Pick<QueuedScore, 'raceId' | 'saveId' | 'queuedAt'>): boolean {
+  return inFlightIds.has(`${q.raceId}@${q.saveId ?? q.queuedAt}`);
+}
 
 const failedAttemptIds = new Set<string>();
 const itemKey = (item: Pick<QueuedScore, 'raceId' | 'saveId' | 'queuedAt'>) => `${item.raceId}@${item.saveId ?? item.queuedAt}`;
@@ -88,7 +97,12 @@ async function sendWaiting() {
     const id = itemKey(item);
     if (sent.has(id)) return;
     sent.add(id);
-    const outcome = await send(item);
+    inFlightIds.add(id);
+    let outcome: SendOutcome;
+    try { outcome = await send(item); } finally { inFlightIds.delete(id); }
+    if (outcome.kind === 'saved') {
+      window.dispatchEvent(new CustomEvent(SCORE_SENT, { detail: { competitionId: item.competitionId, label: item.label } }));
+    }
     if (outcome.kind === 'saved' || outcome.kind === 'conflict') {
       failedAttemptIds.delete(id);
       window.dispatchEvent(new CustomEvent(HEAT_SAVED, { detail: { sessionId: outcome.sessionId, heat: outcome.heat } }));

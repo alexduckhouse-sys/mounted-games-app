@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CloudOff } from 'lucide-react';
 import { describePlacings, discard, overrule, retry, type QueuedScore } from '../offline/scoreOutbox';
-import { flushOutbox, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
+import { flushOutbox, inFlightGraceRemainingMs, OUTBOX_STORAGE_ERROR, SCORE_SENT, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
 import { confirmDialog } from './ConfirmDialog';
 import { OutboxTransfer } from './OutboxTransfer';
 import { Notice } from './Notice';
@@ -20,20 +20,33 @@ export function ScoreOutboxPanel({ competitionId, competitionName, alwaysImport 
   const toast = useToast();
   const showToast = toast.show;
 
-  // A waiting result that leaves the outbox has been sent: say so in a toast. (Only conflicts and failures can be
-  // deleted, and those have stopped waiting, so a deletion never counts as sent.)
-  const waitingKey = waiting.map((q) => q.raceId).join(',');
-  const [before, setBefore] = useState({ key: waitingKey, items: waiting.map((q) => ({ raceId: q.raceId, label: q.label })) });
-  const [sent, setSent] = useState<{ message: string } | null>(null);
-  if (before.key !== waitingKey) {
-    const stillQueued = new Set(queued.map((q) => q.raceId));
-    const gone = before.items.filter((item) => !stillQueued.has(item.raceId));
-    setBefore({ key: waitingKey, items: waiting.map((q) => ({ raceId: q.raceId, label: q.label })) });
-    if (gone.length > 0) setSent({ message: gone.length === 1 ? `${gone[0].label} sent` : `${gone.length} races sent` });
-  }
+  // Only a flush that gets a save accepted counts as "sent". Deleting or undoing a waiting save never does.
   useEffect(() => {
-    if (sent) showToast(sent.message);
-  }, [sent, showToast]);
+    let labels: string[] = [];
+    let timer: number | undefined;
+    const onSent = (event: Event) => {
+      const detail = (event as CustomEvent<{ competitionId: number; label: string }>).detail;
+      if (detail?.competitionId !== competitionId) return;
+      labels.push(detail.label);
+      timer ??= window.setTimeout(() => {
+        showToast(labels.length === 1 ? `${labels[0]} sent` : `${labels.length} races sent`);
+        labels = [];
+        timer = undefined;
+      }, 50);
+    };
+    window.addEventListener(SCORE_SENT, onSent);
+    return () => { window.removeEventListener(SCORE_SENT, onSent); window.clearTimeout(timer); };
+  }, [competitionId, showToast]);
+
+  // A normal online save is out within a moment, so the "saved on this phone" notice waits out the grace period.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const graceLeft = Math.max(0, ...waiting.map((q) => inFlightGraceRemainingMs(q, nowMs)));
+  useEffect(() => {
+    if (graceLeft <= 0) return;
+    const timer = window.setTimeout(() => setNowMs(Date.now()), graceLeft + 20);
+    return () => window.clearTimeout(timer);
+  }, [graceLeft]);
+  const showWaiting = waiting.filter((q) => inFlightGraceRemainingMs(q, nowMs) === 0);
 
   const reasonOf = (q: QueuedScore) => reasons[q.raceId] ?? q.reason ?? '';
   const setReason = (q: QueuedScore, value: string) => setReasons((current) => ({ ...current, [q.raceId]: value }));
@@ -80,9 +93,9 @@ export function ScoreOutboxPanel({ competitionId, competitionName, alwaysImport 
           {q.label} wasn’t saved. {q.error} ({describePlacings(q.places, q.teamNames)})
         </Notice>
       ))}
-      {waiting.length > 0 && (
+      {showWaiting.length > 0 && (
         <Notice tone="info" icon={CloudOff} actionLabel="Send now" onAction={() => void flushOutbox()}>
-          {waiting.length === 1 ? `${waiting[0].label} is` : <><TickerNumber value={waiting.length} format={String} /> races are</>} saved on this phone and will send when you have signal.
+          {showWaiting.length === 1 ? `${showWaiting[0].label} is` : <><TickerNumber value={showWaiting.length} format={String} /> races are</>} saved on this phone and will send when you have signal.
         </Notice>
       )}
       {queued.length > 0 && <OutboxTransfer competitionId={competitionId} competitionName={competitionName} viaLink={viaLink} />}
