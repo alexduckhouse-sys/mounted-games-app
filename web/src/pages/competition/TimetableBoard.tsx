@@ -464,8 +464,8 @@ function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false
     <span className={`tt-time${timeColourClass}`}>{showShift && <span className="sr-only">{t('competition.timetable.plannedNow', { time: formatTime(row.scheduled) })}{' '}</span>}{formatTime(row.effective)}</span>
     <span className="tt-event">
       <strong>
-        {hasFollowedTeam && <Star aria-hidden="true" className="tt-fav-star" size={12} />}
         {name}
+        {hasFollowedTeam && <Star aria-hidden="true" className="tt-fav-star" size={12} />}
       </strong>
       {sub && <span className="tt-sub">{sub}</span>}
       {showShift && (

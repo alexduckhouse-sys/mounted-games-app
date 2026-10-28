@@ -362,6 +362,9 @@ it('shows ON NOW · Race X of Y when a live heat has races, highlights followed 
   const live = container.querySelector('.tt-live') as HTMLElement;
   expect(live).toHaveTextContent('ON NOW · Race 2 of 3');
   expect(live).toHaveAttribute('data-followed', 'true');
+  // The star comes after the heat's name.
+  const title = live.querySelector('.tt-event strong')!;
+  expect(title.lastElementChild).toHaveClass('tt-fav-star');
 
   // Concurrent sessions across arenas stay grouped as single session blocks rather than splitting heat-by-heat.
   const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
