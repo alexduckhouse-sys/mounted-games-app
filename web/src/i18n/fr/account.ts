@@ -287,4 +287,6 @@ export const account: AreaCatalogue<typeof en> = {
   'account.signups.timeLeftHm': 'Il reste {h} h {m} min',
   'account.signups.timeLeftM': 'Il reste {m} min',
   'account.signups.saveArrivalPass': 'Enregistrer le laissez-passer d’arrivée',
+  'account.supporters.failed': 'Impossible de mettre à jour ce supporter. Réessayez.',
+  'account.supporters.loading': 'Chargement des supporters…',
 };

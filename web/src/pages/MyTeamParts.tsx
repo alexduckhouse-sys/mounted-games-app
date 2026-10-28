@@ -141,7 +141,9 @@ export function CodeRow({ team, onTeamUpdated }: { team: Team; onTeamUpdated: ()
 export function SupportersBlock({ team }: { team: Team }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const [supporters, setSupporters] = useState<TeamSupporter[]>([]);
+  // null until the first fetch finishes, so the list never flashes empty while it is on its way.
+  const [supporters, setSupporters] = useState<TeamSupporter[] | null>(null);
+  const toast = useToast();
 
   const fetchSupporters = useCallback(
     () => api.get<TeamSupporter[]>(`/teams/${team.id}/supporters`).then((r) => r.data).catch(() => [] as TeamSupporter[]),
@@ -156,17 +158,27 @@ export function SupportersBlock({ team }: { team: Team }) {
   }, [open, fetchSupporters]);
 
   async function accept(s: TeamSupporter) {
-    await api.put(`/team-supporters/${s.id}/accept`);
+    try {
+      await api.put(`/team-supporters/${s.id}/accept`);
+    } catch {
+      toast.show(t('account.supporters.failed'), { error: true });
+      return;
+    }
     load();
   }
   async function kick(s: TeamSupporter) {
     if (!(await confirmDialog({ title: t('account.supporters.removeTitle', { name: s.userName }), message: t('account.supporters.removeMessage'), confirmLabel: t('account.supporters.removeConfirm'), destructive: true }))) return;
-    await api.delete(`/team-supporters/${s.id}`);
+    try {
+      await api.delete(`/team-supporters/${s.id}`);
+    } catch {
+      toast.show(t('account.supporters.failed'), { error: true });
+      return;
+    }
     load();
   }
 
-  const pendingCount = supporters.filter((s) => s.status === 0).length;
-  const acceptedCount = supporters.filter((s) => s.status === 1).length;
+  const pendingCount = (supporters ?? []).filter((s) => s.status === 0).length;
+  const acceptedCount = (supporters ?? []).filter((s) => s.status === 1).length;
 
   return (
     <div className="border-t border-[rgb(var(--mg-rule-soft))]">
@@ -181,7 +193,8 @@ export function SupportersBlock({ team }: { team: Team }) {
           <p className="mg-meta">{t('account.supporters.helpBefore')}<em>{t('account.supporters.helpPage')}</em>{t('account.supporters.helpAfter')}</p>
           <JoinQr team={team} />
           <TeamCalendarFeed team={team} />
-          {supporters.length > 0 && (
+          {supporters === null && <p role="status" className="mg-meta">{t('account.supporters.loading')}</p>}
+          {supporters !== null && supporters.length > 0 && (
             <ul className="divide-y divide-[rgb(var(--mg-rule-soft))] text-sm">
               {supporters.map((s) => (
                 <li key={s.id} className="flex min-h-11 items-center gap-2 py-1">
@@ -199,6 +212,7 @@ export function SupportersBlock({ team }: { team: Team }) {
           )}
         </div>
       )}
+      {toast.node}
     </div>
   );
 }
