@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { translate } from '../i18n/translate';
 import type { Lang } from '../i18n/translate';
 import type { ToplistRow } from './toplist';
-import { ordinalText, resultStatusText, sessionColumnTitle, toplistNoteText, toplistNoteTone } from './toplistText';
+import { blockLabelText, blockNoteText, ordinalText, resultStatusText, sessionColumnTitle, toplistNoteText, toplistNoteTone } from './toplistText';
 import { ordinal, toplistNote } from './toplist';
 
 const tIn = (lang: Lang) => (key: Parameters<typeof translate>[1], values?: Parameters<typeof translate>[2]) => translate(lang, key, values);
@@ -89,6 +89,19 @@ describe('sessionColumnTitle', () => {
     expect(sessionColumnTitle('Finals', fr)).toBe('Finales');
     expect(sessionColumnTitle('Tack check bonus points', tIn('en'))).toBe('Tack check bonus points');
     expect(sessionColumnTitle('Something else', fr)).toBe('Something else');
+  });
+});
+
+describe('blockLabelText and blockNoteText', () => {
+  it('puts the session word and the note in the chosen language and leaves other labels alone', () => {
+    expect(blockLabelText('Session 2 · Heat A', tIn('en'))).toBe('Session 2 · Heat A');
+    expect(blockLabelText('Session 2 · Heat A', tIn('cy'))).toBe('Sesiwn 2 · Heat A');
+    expect(blockLabelText('Session 3', tIn('fr'))).toBe('Session 3');
+    expect(blockLabelText('A Final', tIn('cy'))).toBe('A Final');
+    expect(blockNoteText('not carried over', tIn('en'))).toBe('not carried over');
+    expect(blockNoteText('not carried over', tIn('cy'))).toBe('heb ei gario ymlaen');
+    expect(blockNoteText('not carried over', tIn('fr'))).toBe('non reportés');
+    expect(blockNoteText(null, tIn('fr'))).toBeNull();
   });
 });
 

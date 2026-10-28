@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { setActiveLang } from '../i18n/translate';
 import type { DeclarationForm, RiderEntry, SavedRider, SavedTeamDeclaration } from '../types';
 import {
   applySavedTeamToForm, blankRider, buildSubmitBody, canSubmit, decDraftKey, dobText, emptySlots, firstEmpty, heightText, isReserveSlot, normaliseSlotsForFormat, panelTitle,
@@ -350,6 +351,15 @@ describe('multi-team saved declaration auto-fill (#8)', () => {
 
   it('builds a readable summary label for the saved-team picker', () => {
     expect(savedTeamSummaryLabel(sampleSavedTeam)).toBe('Kent Invicta A · U15 · Spring Friendly (2 riders + reserve)');
+  });
+
+  it('counts the riders in the language in use', () => {
+    setActiveLang('fr');
+    try {
+      expect(savedTeamSummaryLabel(sampleSavedTeam)).toBe('Kent Invicta A · U15 · Spring Friendly (2 cavaliers + remplaçant)');
+    } finally {
+      setActiveLang('en');
+    }
   });
 
   it('copies riders, reserve, parsed bib/flag, and trainer contact and flags riders over the target section age', () => {

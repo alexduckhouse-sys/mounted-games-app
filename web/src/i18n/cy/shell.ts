@@ -328,4 +328,5 @@ export const shell: AreaCatalogue<typeof en> = {
   'shell.weather.draft.rainPause': 'Rydyn ni’n oedi oherwydd glaw trwm. Arhoswch am newyddion yma.',
   'shell.weather.draft.rainNoPause': 'Mae glaw trwm ar y ffordd o tua {time}. Mae’r rasio’n parhau oni ddywedwn yn wahanol.',
   'shell.weather.draft.clear': 'Mae’r rasio’n ailddechrau. Mae’r amserlen wedi’i diweddaru, felly gwiriwch hi am eich rhagras nesaf.',
+  'shell.events.yearCount': { one: '{count} cystadleuaeth', other: '{count} cystadleuaeth' },
 };

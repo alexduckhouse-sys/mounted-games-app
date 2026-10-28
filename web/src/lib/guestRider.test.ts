@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { setActiveLang } from '../i18n/translate';
 import {
   ageGroupWarning, ageLimitsOf, ageOn, blankGuestRider, decRiderFromGuest, guestContactLines, guestDobIso, guestRiderBody, guestRiderProblem,
   guestRiderSummary, MAX_GUEST_NAME, type GuestRiderFields,
@@ -114,5 +115,18 @@ describe('carrying the rider on', () => {
     ]);
     expect(guestContactLines({ ...saved, guardianName: null, emergencyContactPhone: null })).toEqual(['Emergency contact: Fakeaunt Testcontact']);
     expect(guestContactLines(null)).toEqual([]);
+  });
+});
+
+describe('guest rider messages follow the language in use', () => {
+  afterEach(() => setActiveLang('en'));
+  it('speaks Welsh and French when asked', () => {
+    const fields = { ...blankGuestRider(), riderDob: 'nonsense' };
+    expect(guestRiderProblem(fields, today)).toBe('Enter the rider’s date of birth as a real date in the past, like 05/04/2015.');
+    setActiveLang('cy');
+    expect(guestRiderProblem(fields, today)).toContain('dyddiad geni’r marchog');
+    setActiveLang('fr');
+    expect(guestRiderProblem(fields, today)).toContain('date de naissance du cavalier');
+    expect(guestRiderProblem({ ...blankGuestRider(), guardianName: 'Sam', guardianPhone: '123' }, today)).toContain('Téléphone du parent ou tuteur');
   });
 });

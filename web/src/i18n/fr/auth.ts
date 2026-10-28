@@ -95,4 +95,17 @@ export const auth: AreaCatalogue<typeof en> = {
 
   'auth.reset.conflict': 'Votre compte a changé pendant l’enregistrement de votre nouveau mot de passe, donc rien n’a été modifié. Réessayez.',
   'auth.reset.failed': 'Impossible d’enregistrer votre nouveau mot de passe, donc rien n’a été modifié. Réessayez dans un instant.',
+  'auth.forgot.link': 'Mot de passe oublié ?',
+  'auth.forgot.tooMany': 'Trop d’essais. Attendez une minute et réessayez.',
+  'auth.forgot.checkAddress': 'Vérifiez l’adresse et réessayez.',
+  'auth.forgot.sendFailed': 'Impossible d’envoyer le lien. Vérifiez votre signal et réessayez.',
+  'auth.forgot.checkTitle': 'Consultez vos e-mails',
+  'auth.forgot.sentNotice': 'S’il existe un compte pour {email}, nous lui avons envoyé un lien pour choisir un nouveau mot de passe. Le lien est valable 30 minutes.',
+  'auth.forgot.nothingYet': 'Rien après quelques minutes ? Regardez dans vos courriers indésirables, ou',
+  'auth.forgot.tryAgain': 'réessayez',
+  'auth.forgot.title': 'Réinitialiser votre mot de passe',
+  'auth.forgot.intro': 'Saisissez l’adresse e-mail avec laquelle vous vous connectez et nous vous enverrons un lien pour choisir un nouveau mot de passe.',
+  'auth.forgot.sending': 'Envoi…',
+  'auth.forgot.send': 'Envoyer le lien',
+  'auth.forgot.remembered': 'Vous vous en souvenez ?',
 };

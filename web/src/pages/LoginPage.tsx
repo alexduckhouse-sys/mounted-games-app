@@ -198,7 +198,7 @@ export function LoginPage() {
                 </div>
               )}
             </Field>
-            {passwordRefused && <Link to="/forgot-password" className="-mt-2 self-end text-sm font-semibold text-[rgb(var(--mg-heading))] !underline">Forgot your password?</Link>}
+            {passwordRefused && <Link to="/forgot-password" className="-mt-2 self-end text-sm font-semibold text-[rgb(var(--mg-heading))] !underline">{t('auth.forgot.link')}</Link>}
           </>
         )}
 

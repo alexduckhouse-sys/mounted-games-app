@@ -4,7 +4,7 @@ import { ChevronRight } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { useLanguage } from '../i18n/LanguageContext';
-import { tr } from '../i18n/translate';
+import { tr, type Translate } from '../i18n/translate';
 import { usePageHeader } from '../components/CompactPageBarContext';
 import { confirmDialog } from '../components/ConfirmDialog';
 import { Notice } from '../components/Notice';
@@ -17,7 +17,7 @@ import { displaySectionName } from '../lib/section';
 import type { MySignup } from '../types';
 import { DemoEntryPayment } from './commerce/DemoEntryPayment';
 import type { TestPayment } from './commerce/types';
-import { qrSvgMarkup, waitlistOfferState } from './operations/entryLogic';
+import { offerTimeLeft, qrSvgMarkup, waitlistOfferState } from './operations/entryLogic';
 import '../components/sitePages.css';
 
 export interface ExtendedMySignup extends MySignup {
@@ -49,8 +49,14 @@ function statusOf(s: ExtendedMySignup, demoPaid = false): { label: string; due: 
   if (s.refundPending) return { label: tr('account.signups.refundPending'), due: false };
   if (s.isWithdrawn) return { label: tr('account.signups.withdrawn'), due: false };
   if (s.status === 3) return { label: tr('account.signups.cancelled'), due: false };
-  if (s.status === 0) return s.isWaitlist ? { label: waitlistOfferState(s.waitlistOfferExpiresAt).state === 'open' ? 'Place offered' : tr('account.signups.waitingList'), due: false } : { label: tr('account.signups.notPaid'), due: true };
+  if (s.status === 0) return s.isWaitlist ? { label: waitlistOfferState(s.waitlistOfferExpiresAt).state === 'open' ? tr('account.signups.placeOffered') : tr('account.signups.waitingList'), due: false } : { label: tr('account.signups.notPaid'), due: true };
   return { label: tr(demoPaid ? 'account.signups.demoPaid' : 'account.signups.paid'), due: false };
+}
+
+/** "5h 20m left" in the chosen language, for an open waiting-list offer. */
+function offerLeft(expiresAt: string | null | undefined, now: Date, t: Translate): string {
+  const { h, m } = offerTimeLeft(new Date(expiresAt ?? 0).getTime() - now.getTime());
+  return h > 0 ? t('account.signups.timeLeftHm', { h, m }) : t('account.signups.timeLeftM', { m });
 }
 
 export function MySignupsPage() {
@@ -121,9 +127,9 @@ function SignupList() {
     const entry = signups?.find((item) => item.id === signupId);
     if (!entry) return;
     const fee = entry.amountMinor > 0
-      ? `The entry fee is ${priceLabel(entry.amountMinor)}, paid by bank transfer or the organiser’s payment link once you accept. ${t('common.demoPayment.entry')}`
-      : 'It’s free, so nothing to pay.';
-    if (!(await confirmDialog({ title: 'Take this place?', message: `${entry.competitionName}, ${displaySectionName(entry.sectionName)}. ${fee}`, confirmLabel: 'Accept the place' }))) return;
+      ? `${t('account.signups.takeFee', { price: priceLabel(entry.amountMinor) })} ${t('common.demoPayment.entry')}`
+      : t('account.signups.takeFree');
+    if (!(await confirmDialog({ title: t('account.signups.takeTitle'), message: `${entry.competitionName}, ${displaySectionName(entry.sectionName)}. ${fee}`, confirmLabel: t('account.signups.acceptPlace') }))) return;
     setError(null);
     try {
       const { data } = await api.post<ExtendedMySignup>(`/competitions/${entry.competitionId}/signups/${signupId}/accept-waitlist-spot`, {});
@@ -131,7 +137,7 @@ function SignupList() {
     } catch (caught) {
       const data = (caught as { response?: { data?: { message?: string } | string } }).response?.data;
       const message = typeof data === 'string' ? data : data?.message;
-      setError(message || 'Couldn’t accept the place. Check your signal and try again.');
+      setError(message || t('account.signups.acceptFailed'));
     }
   }
 
@@ -179,7 +185,7 @@ function SignupList() {
                 </span>
                 <span className="flex shrink-0 items-center gap-2">
                   <button type="button" className="sp-red" aria-label={t('account.signups.declinePair', { name: s.pairRequestFromName ?? t('account.signups.anotherRider') })} onClick={() => void respondPair(s.id, false)}>{t('account.signups.decline')}</button>
-                  <button type="button" className="sp-pill sp-pill-fill sp-pill-sm" aria-label={t('account.signups.acceptPair', { name: s.pairRequestFromName ?? t('account.signups.anotherRider') })} onClick={() => void respondPair(s.id, true)}>{t('account.signups.accept')}</button>
+                  <button type="button" className="sp-pill sp-pill-fill sp-pill-sm" aria-label={t('account.signups.acceptPair', { name: s.pairRequestFromName ?? t('account.signups.anotherRider') })} onClick={() => void respondPair(s.id, true)}>{t('account.signups.acceptPlace')}</button>
                 </span>
               </div>
             ))}
@@ -245,7 +251,7 @@ function EntrySheet({ signup: s, demoPaid, onClose, onWithdraw, onAccept }: { si
     (s.stablesCount ?? 0) > 0 ? `${t('account.signups.stabling', { count: s.stablesCount ?? 0 })}${s.stablingClubOrTeam ? ` (${s.stablingClubOrTeam})` : ''}` : null,
     s.pairRequestToSignupId && s.pairRequestStatus === 'Pending' ? t('account.signups.pairSent', { name: s.pairRequestToName ?? t('account.signups.aRider') }) : null,
     s.ponyClubName ? t('account.signups.ponyClub', { name: s.ponyClubName }) : null,
-    guestLine ? `Rider: ${guestLine}` : null,
+    guestLine ? t('account.signups.riderLine', { rider: guestLine }) : null,
   ].filter((note): note is string => note !== null);
   return (
     <Sheet title={s.competitionName} onClose={onClose}
@@ -255,13 +261,13 @@ function EntrySheet({ signup: s, demoPaid, onClose, onWithdraw, onAccept }: { si
           {notes.map((note) => <p key={note} className="kit-sheet-text m-0">{note}</p>)}
           {offer.state !== 'none' && (
             <section aria-label="Place offered" className="flex flex-col gap-2 rounded-[14px] border-[1.5px] border-[rgb(var(--mg-button))] bg-[rgb(var(--mg-tint)/.55)] p-3.5">
-              <p className="kit-sheet-text m-0 font-semibold">{offer.state === 'open' ? 'A place has come up for you.' : 'The offer of a place has run out.'}</p>
-              <p className="kit-sheet-text m-0" role="status">{offer.state === 'open' ? `${offer.text}. Accept before then to keep it.` : 'You’re still on the waiting list. The organiser may offer you another place.'}</p>
-              {offer.state === 'open' && <button type="button" className="kit-pill kit-pill-fill" onClick={() => close(() => { onClose(); void onAccept(s.id); })}>Accept the place</button>}
+              <p className="kit-sheet-text m-0 font-semibold">{offer.state === 'open' ? t('account.signups.offerOpenTitle') : t('account.signups.offerExpiredTitle')}</p>
+              <p className="kit-sheet-text m-0" role="status">{offer.state === 'open' ? t('account.signups.offerOpenBody', { left: offerLeft(s.waitlistOfferExpiresAt, now, t) }) : t('account.signups.offerExpiredBody')}</p>
+              {offer.state === 'open' && <button type="button" className="kit-pill kit-pill-fill" onClick={() => close(() => { onClose(); void onAccept(s.id); })}>{t('account.signups.acceptPlace')}</button>}
             </section>
           )}
           <div className="flex flex-col gap-2">
-            {hasPass && <button type="button" className="kit-pill" onClick={savePass}>Save arrival pass</button>}
+            {hasPass && <button type="button" className="kit-pill" onClick={savePass}>{t('account.signups.saveArrivalPass')}</button>}
             {status.due && <Link to={`/competitions/${s.competitionId}/details`} className="kit-pill kit-pill-fill" aria-label={t('account.signups.howToPayAria', { competition: s.competitionName })}>{t('account.signups.howToPay')}</Link>}
             {declarationTeams.map((team) => (
               <Link key={team.id} to={`/competitions/${s.competitionId}/declarations?team=${team.id}`} className="kit-pill">
