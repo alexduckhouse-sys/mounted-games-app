@@ -62,8 +62,8 @@ function Shell({ width }: { width: PageWidth }) {
   // the event last opened, and it only shows when there is news (or a page button such as the timetable's filters).
   const ticker = useOptionalTicker();
   const feedCompetitionId = !filmingMode && competitionId == null && ticker ? current?.id ?? null : null;
-  const dockShown = !filmingMode && !chromeHidden && current != null && ticker != null
-    && (ticker.items.length > 0 || ticker.watchCompetitionId != null || ticker.dockAction != null);
+  const dockShown = !filmingMode && !chromeHidden && ticker != null
+    && (ticker.dockAction != null || (current != null && (ticker.items.length > 0 || ticker.watchCompetitionId != null)));
   // Public pages get the EGUK look; signed-in tools (dashboard, teams, admin) keep their own.
   const globalTabs = hasGlobalTabs(location.pathname);
   const publicPage = choosingCompetition || competitionId != null || onProfile || globalTabs || location.pathname === '/me/members' || location.pathname === '/settings';

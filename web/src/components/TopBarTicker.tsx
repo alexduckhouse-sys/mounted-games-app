@@ -1,16 +1,17 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ChevronUp, List, SlidersHorizontal, Video } from 'lucide-react';
+import { ChevronUp, List, Plus, Printer, Settings2, SlidersHorizontal, Video, type LucideIcon } from 'lucide-react';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { nowPrefixLength, tickerFocusAfterChange, type TickerItem, type TickerKind } from '../lib/ticker';
 import { useT } from '../i18n/LanguageContext';
 import type { MessageKey } from '../i18n/en';
-import { useTicker } from './TickerContext';
+import { useTicker, type DockIcon } from './TickerContext';
 import { PAGE_WIDTH_CLASS, usePageWidthValue } from './pageWidthState';
 
 const ROTATE_MS = 4500;
 const ANNOUNCEMENT_HOLD_MS = 10_000;
 const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
+const DOCK_ICONS: Record<DockIcon, LucideIcon> = { filters: SlidersHorizontal, list: List, settings: Settings2, plus: Plus, print: Printer };
 
 /** The badge in front of each line; the dark dock keeps every badge readable in every theme. */
 const KIND_BADGES: Record<TickerKind, { label: MessageKey; className: string; srLabel?: MessageKey } | null> = {
@@ -103,9 +104,11 @@ export function TopBarTicker({ low = false }: { low?: boolean }) {
     return () => clearTimeout(timer);
   }, [items, index, holdMs, reduceMotion, open]);
 
-  if (!current || (!active && !dockAction)) return null;
-  const feed = `/competitions/${current.id}/chat`;
-  const timetable = `/competitions/${current.id}`;
+  // A page's button shows on its own (bottom right) on pages outside any competition, such as the shop's "+".
+  if (!dockAction && (!current || !active)) return null;
+  const feed = current ? `/competitions/${current.id}/chat` : '/events';
+  const timetable = current ? `/competitions/${current.id}` : '/events';
+  const DockActionIcon = DOCK_ICONS[dockAction?.icon ?? 'filters'];
   const linkFor = (item: TickerItem) => {
     if (item.sessionId != null) return `${timetable}/session/${item.sessionId}`;
     return item.kind === 'late' || item.kind === 'ontime' ? timetable : feed;
@@ -115,7 +118,7 @@ export function TopBarTicker({ low = false }: { low?: boolean }) {
   return (
     <div className={`mg-dock${low ? ' mg-dock-low' : ''}`}>
       <div ref={dockRef} className={`mx-auto ${cap} mg-dock-row`}>
-        {active && (
+        {active && current && (
           <div className="mg-dock-wrap">
             <ul className="sr-only" aria-label={t('shell.ticker.updates')}>
               {items.map((item) => {
@@ -166,7 +169,7 @@ export function TopBarTicker({ low = false }: { low?: boolean }) {
         )}
         {dockAction && (
           <button type="button" className="mg-dock-action" aria-label={dockAction.count > 0 ? `${dockAction.label}, ${dockAction.count} set` : dockAction.label} onClick={() => { setOpen(false); dockAction.onClick(); }}>
-            {dockAction.icon === 'list' ? <List aria-hidden="true" className="h-5 w-5" /> : <SlidersHorizontal aria-hidden="true" className="h-5 w-5" />}
+            <DockActionIcon aria-hidden="true" className="h-5 w-5" strokeWidth={dockAction.icon === 'plus' ? 2.4 : 2} />
             {dockAction.count > 0 && <span className="mg-dock-count" aria-hidden="true">{dockAction.count}</span>}
           </button>
         )}
