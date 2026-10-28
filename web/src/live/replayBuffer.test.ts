@@ -114,10 +114,10 @@ describe('complete recorder segments', () => {
     expect(handle.recording).toBe(false); expect(onStatus).toHaveBeenLastCalledWith(expect.objectContaining({ warning: expect.stringContaining('stopped') }));
   });
   it('passes progress and privacy metadata to saved bookmarks', async () => {
-    const { handle, recorders, stream } = setup({ streamId: 9, hasFilmingOptOut: true, resolutionLabel: '4K' }); handle.start(stream);
+    const { handle, recorders, stream } = setup({ streamId: 9, resolutionLabel: '4K' }); handle.start(stream);
     recorders[0].emit('video'); await vi.advanceTimersByTimeAsync(2000);
     const saved = await handle.markRaceBookmark('Synthetic finish', 2);
-    expect(saved).toMatchObject({ streamId: 9, hasFilmingOptOut: true, resolutionLabel: '4K' });
+    expect(saved).toMatchObject({ streamId: 9, resolutionLabel: '4K' });
   });
 });
 

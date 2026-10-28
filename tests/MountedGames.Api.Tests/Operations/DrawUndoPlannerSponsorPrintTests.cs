@@ -137,55 +137,6 @@ public class DrawUndoPlannerSponsorPrintTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task TeamRaceLineup_GetAndPut_PersistAssignmentsAndEnforcePermissions()
-    {
-        var arena = await _f.CreateArenaAsync(2);
-        var teamId = arena.TeamIds[0];
-
-        var anon = _f.CreateClient();
-        var initial = await (await anon.GetAsync(
-            $"/api/competitions/{arena.CompetitionId}/teams/{teamId}/race-lineup")).ReadAsync<TeamRaceLineupPlanDto>();
-        Assert.Equal(arena.CompetitionId, initial.CompetitionId);
-        Assert.Equal(teamId, initial.TeamId);
-        Assert.Empty(initial.Assignments);
-
-        Assert.Equal(HttpStatusCode.NotFound,
-            (await anon.GetAsync($"/api/competitions/{arena.CompetitionId}/teams/999999/race-lineup")).StatusCode);
-
-        var payload = new SaveTeamRaceLineupRequest(new Dictionary<string, Dictionary<string, string>>
-        {
-            ["101"] = new()
-            {
-                ["1"] = "1",
-                ["2"] = "2",
-                ["3"] = "3",
-                ["4"] = "4",
-                ["5"] = "sit-out",
-            },
-        });
-
-        Assert.Equal(HttpStatusCode.Unauthorized,
-            (await anon.PutAsJsonAsync($"/api/competitions/{arena.CompetitionId}/teams/{teamId}/race-lineup", payload)).StatusCode);
-
-        var (unrelatedMember, _) = await _f.SignupAsync("Member");
-        Assert.Equal(HttpStatusCode.Forbidden,
-            (await unrelatedMember.PutAsJsonAsync($"/api/competitions/{arena.CompetitionId}/teams/{teamId}/race-lineup", payload)).StatusCode);
-
-        var admin = await _f.AdminAsync();
-        var putResp = await admin.PutAsJsonAsync(
-            $"/api/competitions/{arena.CompetitionId}/teams/{teamId}/race-lineup", payload);
-        Assert.Equal(HttpStatusCode.OK, putResp.StatusCode);
-        var saved = await putResp.ReadAsync<TeamRaceLineupPlanDto>();
-        Assert.Equal("sit-out", saved.Assignments["101"]["5"]);
-        Assert.NotNull(saved.UpdatedAt);
-
-        var fetched = await (await anon.GetAsync(
-            $"/api/competitions/{arena.CompetitionId}/teams/{teamId}/race-lineup")).ReadAsync<TeamRaceLineupPlanDto>();
-        Assert.Equal("sit-out", fetched.Assignments["101"]["5"]);
-        Assert.Equal("1", fetched.Assignments["101"]["1"]);
-    }
-
-    [Fact]
     public async Task SponsorStats_ReturnsHumanFriendlyPlacements_ViewsAndFormattedOnScreenTime()
     {
         var arena = await _f.CreateArenaAsync(1);

@@ -173,7 +173,7 @@ describe('eventArchive branches', () => {
           3,
           form({
             riders: [
-              { id: 1, fullName: '  ', horseName: null, ponyHeightHands: null, isCaptain: false, isReserve: false, isGuestRider: false, useInitialOnly: false, noFilming: false, orderIndex: 0 },
+              { id: 1, fullName: '  ', horseName: null, ponyHeightHands: null, isCaptain: false, isReserve: false, isGuestRider: false, useInitialOnly: false, orderIndex: 0 },
             ] as never,
           }),
         ],

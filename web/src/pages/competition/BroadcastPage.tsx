@@ -21,7 +21,6 @@ import { streamHeatLabel } from '../../lib/streams';
 import { setBroadcasting } from '../../pwa';
 import { LiveDataCardOverlay, ProducerBanner, type LiveOverlayCardMode } from '../../components/stream/OverlayExtras';
 import { OverlayLayer, StreamNotice } from '../../components/stream/StreamOverlays';
-import { FilmingBanner } from '../../components/FilmingBanner';
 import { SelectField } from '../../components/SelectField';
 import { Notice } from '../../components/Notice';
 import { PageProblem } from '../../components/PageProblem';
@@ -468,7 +467,6 @@ function BroadcastStudio() {
             ))}
           </div>
         )}
-        <FilmingBanner competitionId={competition.id} refreshKey={competition.sessions} />
       </div>
       <ProducerBanner arenaName={arena} overlay={currentOverlay} />
       <LiveDataCardOverlay arenaName={arena} overlay={currentOverlay} />
@@ -673,7 +671,6 @@ function BroadcastStudio() {
   return <div className={`mx-auto flex w-full flex-col gap-4 pb-6 pt-3 ${snapshot.media ? '' : 'max-w-xl'}`}>
     <Link className="mg-text-link" to={`/competitions/${competition.id}/chat`}>‹ Live stream</Link><h1 className="mg-h1">Go live</h1>
     {error || snapshot.error ? <Notice>{error || snapshot.error}</Notice> : null}
-    <FilmingBanner competitionId={competition.id} refreshKey={competition.sessions} />
     {!snapshot.media && soundField}
     {!snapshot.media ? <button disabled={busy} className="mg-btn mg-btn-primary min-h-12" onClick={() => run(async () => { await publisher.current!.capture(sound); setDevices(await publisher.current!.devices()); setMics(await (publisher.current!.audioDevices?.() ?? Promise.resolve([]))); })}><Camera />Allow camera</button> : <>
       <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(340px,2fr)] lg:items-start lg:gap-6">

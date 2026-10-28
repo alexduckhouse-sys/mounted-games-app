@@ -45,7 +45,7 @@ public class AdaptiveDecFormTests : IClassFixture<ApiFactory>
     private static RiderEntryInput Rider(string name, bool reserve = false, DateTime? dob = null, decimal? weight = null,
         string? passport = null, int? ponyAge = null, string? member = null, string? contact = null, string? phone = null,
         string? medical = null, string? ageGroup = null, int? year = null, decimal? height = null, Dictionary<string, string?>? custom = null)
-        => new(null, name, dob, "Pickle", null, false, reserve, 0, false, false, false, height, year, ageGroup, weight, passport,
+        => new(null, name, dob, "Pickle", null, false, reserve, 0, false, false, height, year, ageGroup, weight, passport,
             ponyAge, member, contact, phone, medical, custom);
 
     private static SubmitDeclarationFormRequest Form(int teamId, params RiderEntryInput[] riders)
