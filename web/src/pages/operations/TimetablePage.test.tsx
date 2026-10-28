@@ -101,6 +101,26 @@ describe('TimetablePage', () => {
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/3', { scheduledStart: at(70) }));
   });
 
+  it('always offers a start time for finals, and saves it even when the suggested time is kept', async () => {
+    competition.sessions.push(session(4, 'Under 12 finals', { scheduledStart: null, durationMinutes: null }));
+    try {
+      const user = userEvent.setup();
+      show();
+      const row = await screen.findByRole('button', { name: /Under 12 finals/ });
+      expect(row).toHaveTextContent('Set a start time so it shows on the public timetable');
+      await user.click(row);
+      const start = screen.getByLabelText('Start');
+      fireEvent.blur(start);
+      await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/4', { scheduledStart: expect.any(String) }));
+      fireEvent.change(start, { target: { value: '15:30' } });
+      fireEvent.blur(start);
+      await waitFor(() => expect(vi.mocked(api.put).mock.calls.some(([url, body]) => url === '/competitions/7/sessions/4'
+        && new Date((body as { scheduledStart: string }).scheduledStart).getHours() === 15)).toBe(true));
+    } finally {
+      competition.sessions.pop();
+    }
+  });
+
   it('edits a break: its name, length and removal', async () => {
     const user = userEvent.setup();
     const asked = autoConfirm(true);

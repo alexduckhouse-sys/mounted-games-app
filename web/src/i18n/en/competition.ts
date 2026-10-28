@@ -92,6 +92,8 @@ export const competition = {
   'competition.timetable.heat': 'Heat {n}',
   'competition.timetable.heatsToFollow': 'Heats to follow',
   'competition.timetable.provisionalLabel': 'Provisional',
+  'competition.timetable.finalsStart': 'Finals start',
+  'competition.timetable.finalsByHeats': 'Teams decided by the heats',
   'competition.timetable.briefing': 'Briefing',
   'competition.timetable.break': 'Break',
   'competition.timetable.onNow': 'ON NOW',
