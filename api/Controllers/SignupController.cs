@@ -1832,7 +1832,9 @@ public class SignupController : ControllerBase
             extras.TryGetValue(signup.Id, out var ex);
             if (signup.Status != SignupPaymentStatus.Pending || signup.AmountMinor <= 0
                 || ex?.IsWithdrawn == true || ex?.IsWaitlist == true
-                || string.IsNullOrWhiteSpace(signup.ContactEmail))
+                || string.IsNullOrWhiteSpace(signup.ContactEmail)
+                // One reminder a day per entry, the same cooldown the entries page shows.
+                || (ex?.LastReminderSentAt is { } lastReminder && nowUtc - lastReminder < TimeSpan.FromHours(24)))
             {
                 skippedCount++;
                 continue;
@@ -1853,10 +1855,9 @@ public class SignupController : ControllerBase
             }
             ex.LastReminderSentAt = nowUtc;
             sentCount++;
-        }
-
-        if (sentCount > 0)
+            // Saved per recipient, so a failure part-way never leaves already-reminded entrants open to a second email.
             await _db.SaveChangesAsync();
+        }
 
         var guests = await LoadGuestMapAsync(rows.Select(r => r.Id));
         foreach (var signup in rows)
@@ -1988,6 +1989,9 @@ public class SignupController : ControllerBase
         }
         if (req.DispositionNote?.Trim().Length > 500)
             return BadRequest(new { message = "Disposition note must be 500 characters or fewer." });
+        // Nothing was paid on a Pending entry, so there is no fee to refund or keep.
+        if (signup.Status == SignupPaymentStatus.Pending && disposition is "Refunded" or "Retained")
+            return Conflict(new { message = "This entry hasn't been paid, so there is no fee to refund or keep." });
 
         var ex = await _db.Set<SignupExtras>().FindAsync(signup.Id);
         if (ex is null)

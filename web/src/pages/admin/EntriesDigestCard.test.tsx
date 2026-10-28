@@ -70,6 +70,17 @@ describe('EntriesDigestCard', () => {
     expect(screen.getByText('Nothing new')).toBeInTheDocument();
   });
 
+  it('stops when a call sends nobody, such as recipients waiting out the retry delay', async () => {
+    autoConfirm(true);
+    const stuck = { data: status({ todayClaimed: true, last: run({ status: 0, sent: 5, remaining: 7 }) }) } as never;
+    vi.mocked(api.post).mockResolvedValue(stuck);
+    render(<EntriesDigestCard />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Send now' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(2));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.post).toHaveBeenCalledTimes(2);
+  });
+
   it('sends nothing when the question is answered no', async () => {
     autoConfirm(false);
     render(<EntriesDigestCard />);

@@ -583,6 +583,45 @@ public class CustomEmailTests : IClassFixture<EmailApiFactory>
     }
 
     [Fact]
+    public async Task AClaimAbandonedTooOftenIsGivenUpOn_NotMailedAgain()
+    {
+        var admin = await AdminAsync();
+        var people = Addresses(3);
+        await OptInsAsync(people);
+        var started = await StartAsync(admin, Content());
+        await _f.InDbAsync(async db =>
+        {
+            var first = await db.CustomEmailRecipients.Where(r => r.CustomEmailId == started.Id).OrderBy(r => r.Id).FirstAsync();
+            first.Status = CustomEmailRecipientStatus.Claimed; first.ClaimedAt = DateTime.UtcNow.AddMinutes(-10);
+            first.ClaimToken = Guid.NewGuid(); first.Attempts = CustomEmailService.MaxAttempts;
+            await db.SaveChangesAsync();
+        });
+
+        var batch = await BatchAsync(admin, started.Id);
+
+        Assert.Equal((2, 1, 0), (batch.Sent, batch.Failed, batch.Remaining));
+    }
+
+    [Fact]
+    public async Task CancellingMidBatchStopsTheRestOfThatBatchBeingMailed()
+    {
+        var admin = await AdminAsync();
+        var people = Addresses(5);
+        await OptInsAsync(people);
+        var started = await StartAsync(admin, Content());
+        _f.Fail = () =>
+        {
+            _f.InDbAsync(async db => await db.CustomEmails.Where(e => e.Id == started.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(e => e.Status, CustomEmailStatus.Cancelled))).GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"id\":\"fake\"}") };
+        };
+        try { await admin.PostAsync($"/api/admin/custom-emails/{started.Id}/send-batch", null); }
+        finally { _f.Fail = null; }
+
+        Assert.Single(SentTo(people));
+    }
+
+    [Fact]
     public async Task TwoBatchesAtOnceNeverMailAnyoneTwice()
     {
         var admin = await AdminAsync();

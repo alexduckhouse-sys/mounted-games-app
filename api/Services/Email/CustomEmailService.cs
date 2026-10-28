@@ -83,6 +83,7 @@ public sealed class CustomEmailService(
     public const int MaxRecipients = 10000;
     public const int MaxLinksPerText = 20;
     public const int MaxFooterLength = 1000;
+    public const int MaxAttempts = 3;
     private static readonly TimeSpan ClaimIsStale = TimeSpan.FromMinutes(2);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -346,8 +347,15 @@ public sealed class CustomEmailService(
         var clock = Stopwatch.StartNew();
         var now = time.GetUtcNow().UtcDateTime;
         var stale = now - ClaimIsStale;
+        // A claim abandoned too often (the instance died each time) is given up on, not retried for ever.
+        var gaveUp = await db.CustomEmailRecipients
+            .Where(r => r.CustomEmailId == id && r.Status == CustomEmailRecipientStatus.Claimed && r.ClaimedAt < stale && r.Attempts >= MaxAttempts)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, CustomEmailRecipientStatus.Failed), ct);
+        if (gaveUp > 0)
+            await db.CustomEmails.Where(e => e.Id == id).ExecuteUpdateAsync(s => s.SetProperty(e => e.Failed, e => e.Failed + gaveUp), ct);
         var claimable = db.CustomEmailRecipients.Where(r => r.CustomEmailId == id
-            && (r.Status == CustomEmailRecipientStatus.Pending || (r.Status == CustomEmailRecipientStatus.Claimed && r.ClaimedAt < stale)));
+            && (r.Status == CustomEmailRecipientStatus.Pending
+                || (r.Status == CustomEmailRecipientStatus.Claimed && r.ClaimedAt < stale && r.Attempts < MaxAttempts)));
         var ids = await claimable.OrderBy(r => r.Id).Select(r => r.Id).Take(BatchSize).ToListAsync(ct);
         var token = Guid.NewGuid();
         if (ids.Count > 0)
@@ -384,9 +392,12 @@ public sealed class CustomEmailService(
             {
                 var back = mine.Skip(i).Select(r => r.Id).ToList();
                 await db.CustomEmailRecipients.Where(r => back.Contains(r.Id) && r.ClaimToken == token)
-                    .ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, CustomEmailRecipientStatus.Pending).SetProperty(r => r.ClaimToken, (Guid?)null), ct);
+                    .ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, CustomEmailRecipientStatus.Pending).SetProperty(r => r.ClaimToken, (Guid?)null)
+                        .SetProperty(r => r.Attempts, r => r.Attempts - 1), ct);
                 break;
             }
+            // An admin may have cancelled while this batch was in memory: stop mailing the moment that happens.
+            if (!await db.CustomEmails.AsNoTracking().AnyAsync(e => e.Id == id && e.Status == CustomEmailStatus.Sending, ct)) break;
             handled++;
             var status = site is null || !options.Value.IsConfigured
                 ? EmailDeliveryStatus.NotSent

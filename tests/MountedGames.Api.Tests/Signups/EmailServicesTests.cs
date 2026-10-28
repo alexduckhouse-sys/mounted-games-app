@@ -121,6 +121,20 @@ public class EmailServicesTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public void HtmlBody_KeepsLineBreaksInBankDetailsAndOrganiserNote()
+    {
+        var (comp, section) = Event(pay: "Sort 12-34-56\nAcc 87654321 <ok>");
+
+        var confirm = SignupConfirmationEmail.Build(Signup(), comp, section, "a@example.org", null, OptInOutcome.NotAsked, null);
+        var reminder = SignupConfirmationEmail.BuildPaymentReminder(
+            new SectionSignup { Id = 1, AmountMinor = 1500 }, comp, section, "a@example.org", "Line one\r\nLine two");
+
+        Assert.Contains("Sort 12-34-56<br>Acc 87654321 &lt;ok&gt;", confirm.HtmlBody);
+        Assert.Contains("Sort 12-34-56<br>Acc 87654321 &lt;ok&gt;", reminder.HtmlBody);
+        Assert.Contains("Line one<br>Line two", reminder.HtmlBody);
+    }
+
+    [Fact]
     public void Message_CoversMultiDayEventsMissingPaymentDetailsAndNoLink()
     {
         var (comp, section) = Event(end: new DateTime(2027, 3, 15, 0, 0, 0, DateTimeKind.Utc), location: null, pay: null);

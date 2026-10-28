@@ -181,7 +181,10 @@ export function computeTreasurerTotals(
     } else if (s.status === 2) {
       grossEntriesMinor += entryFee;
       grossStablingMinor += stablesFee;
-      totalRefundsMinor += rowTotal;
+      // A partial refund keeps the rest of the entry fee as income.
+      const refundedEntry = Math.min(entryFee, Math.max(0, s.refundedAmountMinor ?? entryFee));
+      totalRefundsMinor += refundedEntry + stablesFee;
+      netTotalCollectedMinor += entryFee - refundedEntry;
     } else if (s.status === 0 && !s.isWithdrawn && !s.isWaitlist) {
       totalPendingMinor += rowTotal;
     } else if (s.status === 3 && s.refundPending) {

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Entities.Commerce;
 
 namespace MountedGames.Api.Services;
 
@@ -26,16 +27,18 @@ public static class DbInitializer
         }
 
         await SeedReferenceDataAsync(db, roles);
-        await NormaliseSectionNamesAsync(db);
         var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
         if (!scope.ServiceProvider.GetRequiredService<IHostEnvironment>().IsDevelopment()
             || !(configuration.GetValue<bool?>("Database:SeedDemoData") ?? db.Database.IsSqlite()))
         {
             if (!string.IsNullOrWhiteSpace(configuration["Admin:Key"]))
                 await EnsureSharedAdminAsync(users);
+            await NormaliseSectionNamesAsync(db);
             return;
         }
         await SeedDemoDataAsync(db, users);
+        // After the seed, so the demo sections made on a first boot get their normal names straight away.
+        await NormaliseSectionNamesAsync(db);
     }
 
     /// <summary>
@@ -667,6 +670,9 @@ public static class DbInitializer
                 CreatedByUserId = admin!.Id
             };
             db.Competitions.Add(comp);
+            await db.SaveChangesAsync();
+            // The same mark an organiser sets under "Demo", so the demo checkout works locally.
+            db.Set<EventCommerceSettings>().Add(new EventCommerceSettings { CompetitionId = comp.Id, IsDemo = true });
             await db.SaveChangesAsync();
 
             var secPairsU15 = new CompetitionSection

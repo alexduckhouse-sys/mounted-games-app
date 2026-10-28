@@ -115,6 +115,10 @@ public sealed class CsvTeamImportService(AppDbContext db)
                     .Select(x => x.Club).Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToDictionary(name => name, name => new Club { Name = name, Region = "Custom" }, StringComparer.OrdinalIgnoreCase);
                 db.Clubs.AddRange(newClubs.Values);
+                // A team starts with its club's bib colour, as on the other ways of adding a team.
+                var existingIds = preview.Rows.Where(x => x.ClubId is not null).Select(x => x.ClubId!.Value).Distinct().ToList();
+                var bibByClub = await db.Clubs.AsNoTracking().Where(c => existingIds.Contains(c.Id))
+                    .ToDictionaryAsync(c => c.Id, c => c.BibColour, ct);
                 var teams = preview.Rows.Select(x => new Team
                 {
                     CompetitionId = competitionId,
@@ -123,6 +127,7 @@ public sealed class CsvTeamImportService(AppDbContext db)
                     Club = x.ClubId is null ? newClubs[x.Club] : null,
                     Suffix = x.Suffix,
                     DisplayName = x.TeamName,
+                    BibColour = x.ClubId is { } clubId ? bibByClub.GetValueOrDefault(clubId) : null,
                 }).ToList();
                 db.Teams.AddRange(teams);
                 await db.SaveChangesAsync(ct);

@@ -186,7 +186,7 @@ export function groupClubInvoices(competitionId: number, signups: SectionSignup[
       const clubName = (list[0].ponyClubName ?? '').trim();
       const clubSlug = buildClubSlug(clubName);
       const clubBacsReference = buildClubBacsReference(competitionId, clubName);
-      const teamsCount = list.reduce((sum, s) => sum + Math.max(1, s.teamsCount ?? 1), 0);
+      const teamsCount = list.reduce((sum, s) => sum + (s.waitingForGuestSpot ? 0 : Math.max(1, s.teamsCount ?? 1)), 0);
       const stablesCount = list.reduce((sum, s) => sum + (s.stablesCount ?? 0), 0);
       const totalAmountMinor = list.reduce((sum, s) => sum + s.amountMinor, 0);
       const totalDueMinor = list.filter((s) => s.status === 0).reduce((sum, s) => sum + s.amountMinor, 0);

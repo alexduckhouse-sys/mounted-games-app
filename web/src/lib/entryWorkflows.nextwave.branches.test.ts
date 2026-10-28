@@ -159,3 +159,13 @@ describe('hasActiveWaitlistOffer', () => {
     expect(hasActiveWaitlistOffer({ isWaitlist: true, waitlistOfferExpiresAt: future })).toBe(true);
   });
 });
+
+describe('groupClubInvoices guest spots', () => {
+  it('counts entries still waiting for a guest spot as no teams, like the API', () => {
+    const [group] = groupClubInvoices(5, [
+      signup(1, { ponyClubName: 'Gamma PC', teamsCount: 2 }),
+      signup(2, { ponyClubName: 'Gamma PC', teamsCount: 3, waitingForGuestSpot: true }),
+    ]);
+    expect(group.teamsCount).toBe(2);
+  });
+});

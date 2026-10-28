@@ -313,3 +313,14 @@ describe('matchBankStatementLines branches', () => {
     expect(rows[0]).toMatchObject({ status: 'unmatched', targetId: null, matchedLabel: null, expectedAmountMinor: null });
   });
 });
+
+describe('computeTreasurerTotals partial refunds', () => {
+  it('keeps the unrefunded part of a refunded entry as collected', () => {
+    const totals = computeTreasurerTotals([
+      signup(1, { status: 2, amountMinor: 1200, refundedAmountMinor: 900 }),
+      signup(2, { status: 2, amountMinor: 1000 }),
+    ]);
+    expect(totals.totalRefundsMinor).toBe(900 + 1000);
+    expect(totals.netTotalCollectedMinor).toBe(300);
+  });
+});
