@@ -1,45 +1,46 @@
+import { activeLocale, tr } from '../../i18n/translate';
 import { whatsAppUrl } from '../../lib/whatsapp';
 import type { CompetitionDetail, Heat, Session } from '../../types';
 
 const clock = (iso: string | null | undefined): string => {
   if (!iso) return '';
   const when = new Date(iso);
-  return Number.isNaN(when.getTime()) ? '' : when.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  return Number.isNaN(when.getTime()) ? '' : when.toLocaleTimeString(activeLocale(), { hour: '2-digit', minute: '2-digit' });
 };
 
-const day = (iso: string): string => new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+const day = (iso: string): string => new Date(iso).toLocaleDateString(activeLocale(), { weekday: 'short', day: 'numeric', month: 'short' });
 
 /** The timetable as plain text for a group chat: each arena in running order, then the link to the live page. */
 export function timetableShareText(competition: Pick<CompetitionDetail, 'name' | 'sessions' | 'startDate'>, link: string): string {
   const byArena = new Map<string, Session[]>();
   for (const session of competition.sessions) {
-    const arena = session.arenaName?.trim() || 'All arenas';
+    const arena = session.arenaName?.trim() || tr('ops2.share.allArenas');
     byArena.set(arena, [...(byArena.get(arena) ?? []), session]);
   }
-  const lines = [`${competition.name}`, `Timetable, ${day(competition.startDate)}`];
+  const lines = [`${competition.name}`, tr('ops2.share.timetable', { day: day(competition.startDate) })];
   for (const [arena, sessions] of byArena) {
     lines.push('', arena);
     const ordered = sessions.slice().sort((a, b) => (a.scheduledStart ? Date.parse(a.scheduledStart) : Infinity) - (b.scheduledStart ? Date.parse(b.scheduledStart) : Infinity) || a.orderIndex - b.orderIndex);
     for (const session of ordered) {
       const time = clock(session.scheduledStart);
-      lines.push(`${time || 'Time to be confirmed'}  ${session.sectionName && !session.isBreak ? `${session.sectionName}, ` : ''}${session.name}`);
+      lines.push(`${time || tr('ops2.share.tbc')}  ${session.sectionName && !session.isBreak ? `${session.sectionName}, ` : ''}${session.name}`);
     }
   }
-  lines.push('', `Live times and scores: ${link}`);
+  lines.push('', tr('ops2.share.live', { link }));
   return lines.join('\n');
 }
 
 /** The lanes for a session as plain text, one block per heat. Team names only, nothing private. */
 export function drawShareText(competition: Pick<CompetitionDetail, 'name'>, session: Pick<Session, 'name' | 'sectionName' | 'arenaName' | 'heats'>, link: string): string {
   const heading = [session.sectionName, session.name].filter(Boolean).join(', ');
-  const lines = [competition.name, `Draw: ${heading}${session.arenaName ? ` (${session.arenaName})` : ''}`];
+  const lines = [competition.name, tr('ops2.share.draw', { heading, arena: session.arenaName ? ` (${session.arenaName})` : '' })];
   const heats: Heat[] = session.heats.slice().sort((a, b) => a.orderIndex - b.orderIndex);
   for (const [index, heat] of heats.entries()) {
     const time = clock(heat.scheduledStart);
-    lines.push('', `${heat.label?.trim() || `Heat ${index + 1}`}${time ? `, ${time}` : ''}`);
-    for (const entry of heat.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex)) lines.push(`Lane ${entry.laneIndex}: ${entry.teamName}`);
+    lines.push('', `${heat.label?.trim() || tr('ops2.share.heatN', { n: index + 1 })}${time ? `, ${time}` : ''}`);
+    for (const entry of heat.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex)) lines.push(tr('ops2.share.lane', { n: entry.laneIndex, team: entry.teamName }));
   }
-  lines.push('', `Live times and scores: ${link}`);
+  lines.push('', tr('ops2.share.live', { link }));
   return lines.join('\n');
 }
 

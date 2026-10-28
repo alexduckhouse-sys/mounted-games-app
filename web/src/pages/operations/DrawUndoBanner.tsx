@@ -1,3 +1,5 @@
+import { tr } from '../../i18n/translate';
+import { useT } from '../../i18n/LanguageContext';
 import { useEffect, useRef, useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 import { confirmDialog } from '../../components/ConfirmDialog';
@@ -11,7 +13,7 @@ import type { DrawUndoStatus } from '../../types';
 
 /** The button for what the snapshot holds. The shared helper's labels are in title case, so the wording lives here. */
 function undoButtonLabel(status: DrawUndoStatus): string {
-  return status.kind === 'DeleteHeat' || status.kind === 'ClearHeats' ? 'Restore the heats' : 'Undo the draw';
+  return status.kind === 'DeleteHeat' || status.kind === 'ClearHeats' ? tr('ops2.undo.restoreHeats') : tr('ops2.undo.undoDraw');
 }
 
 /**
@@ -22,6 +24,7 @@ export function DrawUndoBanner({ competitionId, version = 0, onRestored }: { com
   const { undoStatus, restoring, refresh, undo } = useDrawUndo(competitionId);
   const now = useNow(30_000);
   const toast = useToast();
+  const t = useT();
   const [problem, setProblem] = useState<string | null>(null);
   const first = useRef(true);
 
@@ -36,25 +39,25 @@ export function DrawUndoBanner({ competitionId, version = 0, onRestored }: { com
     const status = undoStatus;
     const ok = await confirmDialog({
       title: `${undoButtonLabel(status)}?`,
-      message: 'Lanes and heats go back to how they were before. It only works while no race in those heats has been scored. Anyone watching sees the change straight away.',
+      message: t('ops2.undo.message'),
       confirmLabel: undoButtonLabel(status),
     });
     if (!ok) return;
     setProblem(null);
     try {
       const result = await undo();
-      toast.show(result ? 'Draw put back' : 'Nothing to put back');
+      toast.show(result ? t('ops2.undo.putBack') : t('ops2.undo.nothing'));
       onRestored?.();
     } catch (caught) {
-      setProblem(apiErrorMessage(caught, 'Couldn’t put the draw back. Check your signal and try again.'));
+      setProblem(apiErrorMessage(caught, t('ops2.undo.putBackError')));
     }
   }
 
   return (
     <>
       {toast.node}
-      <Notice tone="info" icon={RotateCcw} actionLabel={restoring ? 'Working…' : undoButtonLabel(undoStatus)} onAction={() => void restore()} actionDisabled={restoring}>
-        Last change: {drawUndoBannerDescription(undoStatus, now.getTime())}
+      <Notice tone="info" icon={RotateCcw} actionLabel={restoring ? t('ops2.undo.working') : undoButtonLabel(undoStatus)} onAction={() => void restore()} actionDisabled={restoring}>
+        {t('ops2.undo.lastChange', { text: drawUndoBannerDescription(undoStatus, now.getTime()) })}
       </Notice>
       {problem && <Notice>{problem}</Notice>}
     </>

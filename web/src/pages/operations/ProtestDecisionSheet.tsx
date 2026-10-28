@@ -1,3 +1,4 @@
+import { useT } from '../../i18n/LanguageContext';
 import { useState } from 'react';
 import { api } from '../../api';
 import { SelectField } from '../../components/SelectField';
@@ -17,6 +18,7 @@ interface ProtestDecisionSheetProps {
  * changes a score: a result that changes is corrected in the score record, with the decision as the reason.
  */
 export function ProtestDecisionSheet({ protest, onClose, onDecided }: ProtestDecisionSheetProps) {
+  const t = useT();
   const [outcome, setOutcome] = useState<ProtestStatus>(ProtestStatus.Open);
   const [decision, setDecision] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -38,35 +40,35 @@ export function ProtestDecisionSheet({ protest, onClose, onDecided }: ProtestDec
       onDecided?.(response.data);
       return true;
     } catch (saveError) {
-      setError(apiMessage(saveError, 'Couldn’t save the decision. Check your signal and try again.'));
+      setError(apiMessage(saveError, t('ops2.pd.saveError')));
       return false;
     }
   }
 
   return (
     <FormSheet
-      title="Decide the protest"
+      title={t('ops2.pd.title')}
       description={`${protestWhere(protest)}: ${protest.reason}`}
-      saveLabel={withdrawing ? 'Mark withdrawn' : 'Save decision'}
+      saveLabel={withdrawing ? t('ops2.pd.markWithdrawn') : t('ops2.pd.saveDecision')}
       canSave={problem === null}
       onSave={save}
       onClose={onClose}
       error={error}
     >
-      <SheetField label="Outcome">
-        <SelectField aria-label="Outcome" placeholder="Choose" value={outcome === ProtestStatus.Open ? '' : String(outcome)}
+      <SheetField label={t('ops2.pd.outcome')}>
+        <SelectField aria-label={t('ops2.pd.outcome')} placeholder={t('ops2.pd.choose')} value={outcome === ProtestStatus.Open ? '' : String(outcome)}
           onChange={(event) => setOutcome(Number(event.target.value) as ProtestStatus)}>
-          <option value={String(ProtestStatus.Upheld)}>Upheld</option>
-          <option value={String(ProtestStatus.Dismissed)}>Dismissed</option>
-          <option value={String(ProtestStatus.Withdrawn)}>Withdrawn by whoever raised it</option>
+          <option value={String(ProtestStatus.Upheld)}>{t('ops2.protest.upheld')}</option>
+          <option value={String(ProtestStatus.Dismissed)}>{t('ops2.protest.dismissed')}</option>
+          <option value={String(ProtestStatus.Withdrawn)}>{t('ops2.pd.withdrawnBy')}</option>
         </SelectField>
       </SheetField>
       <SheetField
-        label={withdrawing ? 'Note (optional)' : 'Decision and reason'}
-        hint={outcome === ProtestStatus.Upheld ? 'If a result changes, correct it in the score record and give this decision as the reason.' : undefined}
+        label={withdrawing ? t('ops2.pd.noteOptional') : t('ops2.pd.decisionReason')}
+        hint={outcome === ProtestStatus.Upheld ? t('ops2.pd.upheldHint') : undefined}
       >
         <textarea rows={3} maxLength={1000} value={decision} onChange={(event) => setDecision(event.target.value)}
-          placeholder={withdrawing ? 'e.g. The trainer withdrew it after seeing the video.' : 'e.g. Referee saw the crossing. Team 3 eliminated from this race.'} />
+          placeholder={withdrawing ? t('ops2.pd.withdrawPlaceholder') : t('ops2.pd.decidePlaceholder')} />
       </SheetField>
     </FormSheet>
   );
