@@ -285,6 +285,13 @@ a.ops-tile:active { background: rgb(var(--mg-tint) / .65); }
 @media (min-width: 1280px) { .ops-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (prefers-reduced-motion: reduce) { .ops-tile { transition: none; } }
 
+/* Room held for a block that may or may not appear, so the page below doesn't jump: it folds shut when nothing turns up. */
+.ops-reserve { display: grid; grid-template-rows: 1fr; transition: grid-template-rows var(--mg-dur-base) var(--mg-ease-out), opacity var(--mg-dur-base) var(--mg-ease-out); }
+.ops-reserve > div { min-height: 0; }
+.ops-reserve[data-open="false"] { grid-template-rows: 0fr; opacity: 0; }
+.ops-reserve[data-open="false"] > div { overflow: hidden; }
+@media (prefers-reduced-motion: reduce) { .ops-reserve { transition: none; } }
+
 /* Design plan #73: a quiet skeleton while the checks load, and a short fade when a view appears. */
 .ops-skel { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
 .ops-skel-row { height: 56px; border-radius: 12px; }

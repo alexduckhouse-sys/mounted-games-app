@@ -25,6 +25,8 @@
 .cw-drawer .cw-step[aria-current="step"] { background: rgb(var(--mg-tint) / .6); color: rgb(var(--mg-heading)); }
 .cw-badge { flex: none; width: 24px; height: 24px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; border: 2px solid rgb(var(--mg-control)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-muted)); font: 700 12px/1 var(--mg-font); }
 .cw-step[data-done="true"] .cw-badge { background: rgb(var(--mg-ok)); border-color: rgb(var(--mg-ok)); color: #fff; }
+/* Stable Night's mint is light, so the tick on it is dark navy. */
+[data-theme="dark"] .cw-step[data-done="true"] .cw-badge { color: rgb(var(--mg-ground)); }
 .cw-step[aria-current="step"] .cw-badge { background: rgb(var(--mg-button-ink)); border-color: rgb(var(--mg-button-ink)); color: rgb(var(--mg-button)); }
 .cw-drawer .cw-step[aria-current="step"] .cw-badge { border-color: rgb(var(--mg-heading)); }
 
@@ -92,6 +94,7 @@
 .cw-stp button::after { content: ''; position: absolute; inset: -5px; }
 .cw-stp button:disabled { opacity: .35; cursor: default; }
 .cw-stp input { width: 44px; min-height: 34px; padding: 0; border: 0; background: transparent; text-align: center; font: 700 22px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); -moz-appearance: textfield; appearance: textfield; }
+.cw-stp input::placeholder { font: 600 14px/1 var(--mg-font); color: rgb(var(--mg-muted)); }
 .cw-stp input::-webkit-inner-spin-button, .cw-stp input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .cw-stp input:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; border-radius: 8px; }
 .cw-stp-field { display: flex; flex-direction: column; gap: 6px; font: 600 13px/1.2 var(--mg-font); color: rgb(var(--mg-body)); }
@@ -123,12 +126,6 @@
 /* Races: a row with a six-dot grip. Only the lifted row moves while it is dragged. */
 .cw-race { display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 4px 8px 4px 4px; background: rgb(var(--mg-surface)); touch-action: pan-y; }
 .cw-race[data-same="true"] { background: rgb(var(--mg-subtle)); }
-.cw-race[data-lifted="true"] { position: relative; z-index: 3; border-radius: 10px; box-shadow: 0 10px 24px rgb(var(--mg-overlay) / .2); }
-.cw-grip { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 44px; border: 0; border-radius: 10px; background: transparent; color: rgb(var(--mg-faint)); cursor: grab; touch-action: none; }
-.cw-grip { position: relative; }
-.cw-grip::after { content: ''; position: absolute; inset: 0 -2px; }
-.cw-grip:hover, .cw-grip:focus-visible { background: rgb(var(--mg-tint) / .7); color: rgb(var(--mg-heading)); }
-.cw-race[data-lifted="true"] .cw-grip { cursor: grabbing; background: rgb(var(--mg-tint) / .7); }
 .cw-num { flex: none; width: 28px; text-align: right; font: 700 20px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); font-variant-numeric: tabular-nums; }
 
 /* Icon picker: a searchable list inside the floating panel. */
@@ -176,14 +173,9 @@
 .cw-btn, .cw-steps-btn, .cw-ib, .cw-stp button, .cw-addbar, .cw-addrow { transition: background-color var(--mg-dur-fast) var(--mg-ease-out), filter var(--mg-dur-fast) var(--mg-ease-out), scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1); }
 :is(.cw-btn, .cw-steps-btn, .cw-ib, .cw-stp button, .cw-seg button, .cw-palette button):active:not(:disabled) { --mg-press-t: 90ms; scale: .96; }
 :is(.cw-tile, .cw-pick, .cw-addbar, .cw-addrow):active:not(:disabled) { --mg-press-t: 90ms; scale: .985; }
-/* A race being dragged lifts a little; the rows around it glide to make room (only while a drag is on, so the drop
-   itself doesn't replay the slide). */
-.cw-race { transition: box-shadow .2s var(--mg-ease-out), scale .2s var(--mg-ease-out); }
-.cw-race[data-lifted="true"] { scale: 1.015; }
-:has(> .cw-race[data-lifted="true"]) > .cw-race:not([data-lifted="true"]) { transition: transform .2s var(--mg-ease-out); }
 /* A hatband opened for editing unfolds under its row. */
 .cw-edit { animation: mg-reveal .24s var(--mg-ease-out) backwards; }
 @media (prefers-reduced-motion: reduce) {
   .cw-step-in, .cw-drawer nav, .cw-scrim, .cw-step[data-done="true"] .cw-badge, .cw-tile[aria-pressed="true"] .cw-tick, .cw-edit { animation: none !important; }
-  .cw-step, .cw-badge, .cw-tile, .cw-seg button, .cw-pick, .cw-palette button, .cw-btn, .cw-steps-btn, .cw-ib, .cw-stp button, .cw-addbar, .cw-addrow, .cw-race { transition: none; }
+  .cw-step, .cw-badge, .cw-tile, .cw-seg button, .cw-pick, .cw-palette button, .cw-btn, .cw-steps-btn, .cw-ib, .cw-stp button, .cw-addbar, .cw-addrow { transition: none; }
 }

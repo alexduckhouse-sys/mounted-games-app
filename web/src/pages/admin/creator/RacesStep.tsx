@@ -1,25 +1,18 @@
-import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useState } from 'react';
+import { AnimatePresence } from 'framer-motion';
+import { LeavingRow } from '../../../components/LeavingRow';
 import { Plus, X } from 'lucide-react';
 import { useT } from '../../../i18n/LanguageContext';
 import { defaultRaceList, SCOPE_LABEL, type RaceScope } from '../../../lib/defaultRaces';
 import { finalCountOf, sectionHasFinal, sectionName, type CreatorDraft, type SectionDraft } from '../../../lib/creatorDraft';
 import {
-  dropIndex, followsFirst, isFinalKey, isKeyLocked, makeRoom, moveItem, raceKeyLabel, raceKeys, racesOf, withFollowsFirst, withRaces, type RaceKey,
+  followsFirst, isFinalKey, isKeyLocked, moveItem, raceKeyLabel, raceKeys, racesOf, withFollowsFirst, withRaces, type RaceKey,
 } from '../../../lib/creatorRaces';
+import { GripButton } from '../../../components/GripButton';
+import { useRowDrag } from '../../../hooks/useRowDrag';
 import { RefineSwitchRow } from '../../refine/Refine';
 import { AddBar, SecHead, StepHeading } from './controls';
 import type { StepProps } from './parts';
-
-/** Six dots: the grip for dragging a race. */
-function GripIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <circle cx="9" cy="6" r="1.7" /><circle cx="15" cy="6" r="1.7" /><circle cx="9" cy="12" r="1.7" /><circle cx="15" cy="12" r="1.7" /><circle cx="9" cy="18" r="1.7" /><circle cx="15" cy="18" r="1.7" />
-    </svg>
-  );
-}
-
-interface Drag { name: string; from: number; to: number; dy: number; height: number }
 
 /**
  * Races for each age group, a tab for each session and each final. Rows are put in order by dragging the six-dot grip,
@@ -31,46 +24,9 @@ export function RacesStep({ draft, change, templates }: StepProps<CreatorDraft> 
   const [picker, setPicker] = useState<number | null>(null);
   const [presets, setPresets] = useState<number | null>(null);
   const [query, setQuery] = useState('');
-  const [drag, setDrag] = useState<Drag | null>(null);
-  const dragRef = useRef<Drag | null>(null);
+  const { grab, keys, lifted, rowStyle } = useRowDrag();
 
   const edit = (si: number, next: (s: SectionDraft) => SectionDraft) => change({ sections: draft.sections.map((s, i) => (i === si ? next(s) : s)) });
-
-  function grab(e: ReactPointerEvent<HTMLButtonElement>, si: number, key: RaceKey, list: string[], index: number) {
-    if (e.button > 0) return;
-    e.preventDefault();
-    const row = e.currentTarget.closest('[data-race-row]');
-    const height = row ? row.getBoundingClientRect().height : 56;
-    const y0 = e.clientY;
-    const start: Drag = { name: list[index], from: index, to: index, dy: 0, height };
-    dragRef.current = start;
-    setDrag(start);
-    const move = (ev: PointerEvent) => {
-      const dy = ev.clientY - y0;
-      const next = { ...start, dy, to: dropIndex(index, dy, height, list.length) };
-      dragRef.current = next;
-      setDrag(next);
-    };
-    const up = () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      window.removeEventListener('pointercancel', up);
-      const done = dragRef.current;
-      dragRef.current = null;
-      setDrag(null);
-      if (done && done.to !== done.from) edit(si, (s) => withRaces(s, key, moveItem(list, done.from, done.to)));
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-    window.addEventListener('pointercancel', up);
-  }
-
-  function keys(e: ReactKeyboardEvent<HTMLButtonElement>, si: number, key: RaceKey, list: string[], index: number) {
-    const by = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
-    if (!by || index + by < 0 || index + by >= list.length) return;
-    e.preventDefault();
-    edit(si, (s) => withRaces(s, key, moveItem(list, index, index + by)));
-  }
 
   return (
     <section aria-label={t('admin.creator.step.races')} className="flex flex-col">
@@ -114,7 +70,7 @@ export function RacesStep({ draft, change, templates }: StepProps<CreatorDraft> 
               )}
             </div>
 
-            <div className="cw-card" role="list" aria-label={t('admin.creator.races.listAria', { label: raceKeyLabel(active, finals) })}>
+            <div className="cw-card" role="list" data-row-list="" aria-label={t('admin.creator.races.listAria', { label: raceKeyLabel(active, finals) })}>
               {!final && active !== 1 && !locked && (
                 <div className="cw-sw-row" role="listitem">
                   <RefineSwitchRow label={t('admin.creator.races.same')} on={same} onChange={(on) => edit(si, (cur) => withFollowsFirst(cur, active as number, on))} />
@@ -122,16 +78,18 @@ export function RacesStep({ draft, change, templates }: StepProps<CreatorDraft> 
               )}
               {locked && <div className="cw-row" role="listitem"><span className="cw-t2">{t('admin.creator.races.locked')}</span></div>}
               {list.length === 0 && !locked && <div className="cw-row" role="listitem"><span className="cw-t2">{t('admin.creator.races.none')}</span></div>}
+              {/* Keyed by tab, so switching tabs swaps the whole list at once and only adding or removing a race animates. */}
+              <AnimatePresence initial={false} key={`${si}:${String(active)}`}>
               {list.map((race, i) => {
-                const lifted = drag?.name === race;
-                const shift = drag && !lifted ? makeRoom(i, drag.from, drag.to, drag.height) : 0;
+                const group = `${si}:${String(active)}`;
+                const onMove = (from: number, to: number) => edit(si, (cur) => withRaces(cur, active, moveItem(list, from, to)));
                 return (
-                  <div key={race} role="listitem" data-race-row="" data-same={same} data-lifted={lifted} className="cw-race"
-                    style={lifted && drag ? { transform: `translateY(${drag.dy}px)` } : shift ? { transform: `translateY(${shift}px)` } : undefined}>
+                  <LeavingRow as="div" key={race}>
+                  <div role="listitem" data-race-row="" data-same={same} data-lifted={lifted(i, group)} className="cw-race" style={rowStyle(i, group)}>
                     {editable
                       ? (
-                        <button type="button" className="cw-grip" aria-label={t('admin.creator.races.move', { race })}
-                          onPointerDown={(e) => grab(e, si, active, list, i)} onKeyDown={(e) => keys(e, si, active, list, i)}><GripIcon /></button>
+                        <GripButton label={t('admin.creator.races.move', { race })}
+                          onPointerDown={(e) => grab(e, i, list.length, onMove, group)} onKeyDown={(e) => keys(e, i, list.length, onMove)} />
                       )
                       : <span style={{ width: 8 }} />}
                     <span className="cw-num">{i + 1}</span>
@@ -142,8 +100,10 @@ export function RacesStep({ draft, change, templates }: StepProps<CreatorDraft> 
                       </button>
                     )}
                   </div>
+                  </LeavingRow>
                 );
               })}
+              </AnimatePresence>
             </div>
 
             {editable && (

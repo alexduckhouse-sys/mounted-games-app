@@ -104,7 +104,6 @@ export const adminEmail: AreaCatalogue<typeof en> = {
   'admin.email.sheet.descTrainers': 'Aux entraîneurs, {people}. Vous ne pourrez pas l’annuler.',
   'admin.email.sheet.descOrganisers': 'Aux organisateurs et administrateurs, {people}. Vous ne pourrez pas l’annuler.',
   'admin.email.sheet.descAdmins': 'Aux administrateurs, {people}. Vous ne pourrez pas l’annuler.',
-  'admin.email.sheet.notYet': 'Pas encore',
 
   'admin.email.err.counts': 'Impossible de compter les personnes de chaque liste. Vérifiez votre signal et réessayez.',
   'admin.email.err.dropped': 'L’envoi s’est arrêté, la connexion a été perdue. Reprenez quand vous serez de nouveau en ligne.',
