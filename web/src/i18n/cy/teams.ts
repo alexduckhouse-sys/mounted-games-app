@@ -247,6 +247,9 @@ export const teams: AreaCatalogue<typeof en> = {
   'teams.rulebooks.races': 'Rasys',
   'teams.rulebooks.loadingRulebooks': 'Yn llwytho’r llyfrau rheolau…',
   'teams.rulebooks.noRulebook': 'Nid oes llyfr rheolau wedi’i ychwanegu eto.',
+  'teams.rulebooks.add': 'Ychwanegu llyfr rheolau',
+  'teams.rulebooks.addHintDock': 'Tapiwch + i ychwanegu un.',
+  'teams.rulebooks.addHint': 'Defnyddiwch Ychwanegu llyfr rheolau i ychwanegu un.',
   'teams.rulebooks.see': 'Gweler',
   'teams.rulebooks.seeAfter': 'i weld sut mae pob ras yn cael ei marchogaeth.',
   'teams.rulebooks.gameRulesHas': 'Mae Rheolau’r gemau yn esbonio sut mae pob ras yn cael ei marchogaeth.',
@@ -330,4 +333,5 @@ export const teams: AreaCatalogue<typeof en> = {
   'teams.following.followPromptPreview': 'Eich bar gwaelod gyda Dilyn wedi’i ychwanegu',
   'teams.following.followPromptNotNow': 'Nid nawr',
   'teams.following.followPromptAdd': 'Ychwanegu at y bar gwaelod',
+  'teams.following.unfollowed': 'Dim yn dilyn mwyach',
 };

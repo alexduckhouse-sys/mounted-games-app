@@ -8,6 +8,7 @@ import type { CompetitionDetail, Team } from '../types';
 import { formatTime, roundTo5Min } from '../lib/time';
 import { FAVOURITES_KEY } from '../lib/favourites';
 import { MyTeamsPage } from './MyTeamsPage';
+import { TickerProvider, useTicker } from '../components/TickerContext';
 import { chooseOption, optionLabels } from '../test/select';
 
 import { autoConfirm } from '../test/confirm';
@@ -116,7 +117,9 @@ describe('MyTeamsPage layout', () => {
     expect(screen.queryByRole('article', { name: 'Stockport A' })).not.toBeInTheDocument();
     expect(screen.getByText('Not set')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Hide details for Stockport B' }));
-    expect(screen.queryByRole('article')).not.toBeInTheDocument();
+    // The card plays its fold-away motion, then swaps for the one-line card.
+    expect(screen.getByRole('article', { name: 'Stockport B' }).querySelector('.tm-body')).toHaveAttribute('data-closing', 'true');
+    await waitFor(() => expect(screen.queryByRole('article')).not.toBeInTheDocument());
   });
 
   it('says so when there are no heats, or all of them are over', async () => {
@@ -331,5 +334,81 @@ describe('MyTeamsPage followed teams', () => {
     expect(await screen.findByRole('article', { name: 'Example Blue' })).toBeInTheDocument();
     const followedRegion = await screen.findByRole('region', { name: 'Hartpury Area Festival' });
     expect(within(followedRegion).getByRole('link', { name: /Wirral Pairs/ })).toHaveAttribute('href', '/competitions/1/teams/2');
+  });
+});
+
+describe('MyTeamsPage design plan A8', () => {
+  beforeEach(() => {
+    myTeams = [
+      team(1, { displayName: 'Blackmore Vale Pony Club Seniors', sectionName: 'Open', relationship: 'trainer', supporterJoinKey: 'BV-A' }),
+      team(2, { displayName: 'Stockport B', sectionName: 'Junior', relationship: 'trainer', supporterJoinKey: null }),
+    ];
+  });
+
+  it('shows no back arrow: it is a top-level page', async () => {
+    mount();
+    await screen.findByRole('article');
+    expect(screen.queryByRole('link', { name: /back/i })).toBeNull();
+  });
+
+  it('keeps the open card in its own column and does not truncate the team name', async () => {
+    mount();
+    const open = await screen.findByRole('article', { name: 'Blackmore Vale Pony Club Seniors' });
+    expect(open).not.toHaveClass('lg:col-span-2');
+    const name = within(open).getByText('Blackmore Vale Pony Club Seniors');
+    expect(name).not.toHaveClass('truncate');
+    // The status chips sit on their own line, after the name.
+    const chips = within(open).getByText('Dec form due');
+    expect(name.compareDocumentPosition(chips) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(chips.parentElement).not.toBe(name.parentElement);
+    expect(screen.getByRole('button', { name: /Stockport B/ }).querySelector('strong')).not.toHaveClass('truncate');
+  });
+
+  it('uses the house switch for heat alerts and a 44px collapse button', async () => {
+    mount();
+    const open = await screen.findByRole('article', { name: 'Blackmore Vale Pony Club Seniors' });
+    expect(within(open).getByRole('switch', { name: 'Heat alerts' })).toHaveClass('rf-sw');
+    expect(within(open).getByRole('button', { name: 'Hide details for Blackmore Vale Pony Club Seniors' })).toHaveClass('h-11', 'w-11');
+  });
+
+  it('says a supporter list is loading rather than showing it empty, and toasts when approve or remove fails', async () => {
+    let release: (value: unknown) => void = () => {};
+    const slow = new Promise((resolve) => { release = resolve; });
+    const supporters = [{ id: 7, userName: 'Pat Parent', userEmail: null, status: 0 }, { id: 8, userName: 'Sam Supporter', userEmail: null, status: 1 }];
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/trainer/my-teams') return { data: myTeams };
+      if (url === '/declaration-forms') return { data: [] };
+      if (url.endsWith('/supporters')) { await slow; return { data: supporters }; }
+      return { data: detail };
+    });
+    vi.mocked(api.put).mockRejectedValue(new Error('offline'));
+    vi.mocked(api.delete).mockRejectedValue(new Error('offline'));
+    autoConfirm(true);
+    mount();
+    await userEvent.click(await screen.findByRole('button', { name: /Supporters and sharing/ }));
+    expect(screen.getByText('Loading supporters…')).toBeInTheDocument();
+    expect(screen.queryByText('Pat Parent')).toBeNull();
+    release(undefined);
+    await userEvent.click(await screen.findByRole('button', { name: /Accept/ }));
+    expect(await screen.findByText('Couldn’t update that supporter. Try again.')).toBeInTheDocument();
+    expect(screen.getByText('Pat Parent')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Sam Supporter' }));
+    await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/team-supporters/8'));
+    expect(screen.getByText('Sam Supporter')).toBeInTheDocument();
+  });
+
+  it('moves Join a team with a code to the dock, and turns Choose a competition into a quiet row', async () => {
+    function Probe() {
+      const { dockAction } = useTicker();
+      return dockAction ? <button type="button" data-testid="dock" onClick={dockAction.onClick}>{dockAction.label}</button> : null;
+    }
+    render(<MemoryRouter><TickerProvider><MyTeamsPage /><Probe /></TickerProvider></MemoryRouter>);
+    await screen.findByRole('article', { name: 'Blackmore Vale Pony Club Seniors' });
+    expect(document.querySelector('.border-dashed')).toBeNull();
+    expect(screen.getByTestId('dock')).toHaveTextContent('Join a team with a code');
+    await userEvent.click(screen.getByTestId('dock'));
+    expect(screen.getByLabelText('Join key')).toBeInTheDocument();
+    expect(screen.queryByTestId('dock')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Choose a competition' })).not.toHaveClass('border-dashed');
   });
 });

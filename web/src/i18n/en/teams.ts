@@ -246,6 +246,9 @@ export const teams = {
   'teams.rulebooks.races': 'Races',
   'teams.rulebooks.loadingRulebooks': 'Loading rulebooks…',
   'teams.rulebooks.noRulebook': 'No rulebook has been added yet.',
+  'teams.rulebooks.add': 'Add a rulebook',
+  'teams.rulebooks.addHintDock': 'Tap + to add one.',
+  'teams.rulebooks.addHint': 'Use Add a rulebook to add one.',
   'teams.rulebooks.see': 'See',
   'teams.rulebooks.seeAfter': 'for how each race is ridden.',
   'teams.rulebooks.gameRulesHas': 'Game rules has how each race is ridden.',
@@ -329,4 +332,5 @@ export const teams = {
   'teams.following.followPromptPreview': 'Your bottom bar with Following added',
   'teams.following.followPromptNotNow': 'Not now',
   'teams.following.followPromptAdd': 'Add to bottom bar',
+  'teams.following.unfollowed': 'Unfollowed',
 } satisfies Record<string, Message>;

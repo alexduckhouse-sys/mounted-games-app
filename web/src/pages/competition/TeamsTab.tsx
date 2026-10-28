@@ -10,6 +10,8 @@ import type { Club, DeclarationForm, Session, Team } from '../../types';
 import { parseBibAndFlag } from '../../lib/bib';
 import { displaySectionName } from '../../lib/section';
 import { Notice } from '../../components/Notice';
+import { Sheet } from '../../components/Sheet';
+import { useDockAction } from '../../components/TickerContext';
 import { SelectField } from '../../components/SelectField';
 import { PageGrid } from '../../components/PageGrid';
 import { usePageWidth } from '../../components/pageWidthState';
@@ -126,7 +128,9 @@ export function TeamsTab() {
 
   const canCreate = hasRole('Trainer') || hasRole('Admin') || hasRole('Manager') || canOrganise(competition);
 
-  const addButton = canCreate && (
+  // Organisers add a team from the + beside the ticker dock; the form opens in a sheet.
+  const docked = useDockAction(canCreate ? { label: t('teams.list.addCustom'), icon: 'plus', onClick: () => setShowForm(true) } : null);
+  const addButton = canCreate && !docked && (
     <button onClick={() => setShowForm((s) => !s)} className="mg-btn mg-btn-primary !min-h-10 !px-3.5 !py-2 text-sm">
       <Plus className="h-4 w-4" /> {showForm ? t('common.close') : t('teams.list.addCustom')}
     </button>
@@ -150,78 +154,79 @@ export function TeamsTab() {
       {addButton}
     </nav>
   );
+  const addForm = (inSheet: boolean) => (
+    <form onSubmit={submit} className={inSheet ? 'grid gap-3' : 'mg-card grid gap-3 p-4 sm:grid-cols-12'}>
+      <label className="sm:col-span-3">
+        <span className="text-xs font-semibold text-[rgb(var(--mg-muted))]">{t('teams.list.section')}</span>
+        <SelectField
+          className="input mt-1"
+          value={form.competitionSectionId}
+          onChange={(e) => setDraft({ ...form, competitionSectionId: parseInt(e.target.value, 10) })}
+          required
+        >
+          {competition.sections.map((s) => (
+            <option key={s.id} value={s.id}>{s.displayName}</option>
+          ))}
+        </SelectField>
+      </label>
+      <label className="sm:col-span-3">
+        <span className="text-xs font-semibold text-[rgb(var(--mg-muted))]">{t('teams.list.club')}</span>
+        <SelectField
+          className="input mt-1"
+          value={form.clubId}
+          onChange={(e) => setDraft({ ...form, clubId: parseInt(e.target.value, 10), clubName: '' })}
+        >
+          <option value={0}>{t('teams.list.chooseClub')}</option>
+          {clubs.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </SelectField>
+      </label>
+      <label className="sm:col-span-2">
+        <span className="text-xs text-slate-500">{t('teams.list.newClub')}</span>
+        <input
+          className="input mt-1"
+          list="mg-clubs-datalist"
+          placeholder={t('teams.list.newClubPlaceholder')}
+          value={form.clubName}
+          onChange={(e) => setDraft({ ...form, clubName: e.target.value })}
+        />
+        <datalist id="mg-clubs-datalist">
+          {clubs.map((c) => (
+            <option key={c.id} value={c.name} />
+          ))}
+        </datalist>
+      </label>
+      <label className="sm:col-span-2">
+        <span className="text-xs text-slate-500">{t('teams.list.teamName')}</span>
+        <input
+          className="input mt-1"
+          placeholder={t('teams.list.teamNamePlaceholder')}
+          value={form.teamName}
+          onChange={(e) => setDraft({ ...form, teamName: e.target.value })}
+        />
+      </label>
+      <label className="sm:col-span-2">
+        <span className="text-xs text-slate-500">{t('teams.list.suffix')}</span>
+        <input
+          className="input mt-1 uppercase" maxLength={4}
+          placeholder={t('teams.list.suffixPlaceholder')}
+          value={form.suffix}
+          onChange={(e) => setDraft({ ...form, suffix: e.target.value, suffixTouched: true })}
+        />
+      </label>
+      <div className="flex justify-end gap-2 sm:col-span-12">
+        {createError && <div className="mr-auto"><Notice>{createError}</Notice></div>}
+        <button type="button" className="mg-btn mg-btn-secondary !min-h-10 !px-3.5 text-sm" onClick={() => setShowForm(false)}>{t('common.cancel')}</button>
+        <button type="submit" disabled={busy || (!form.clubId && !form.clubName.trim() && !form.teamName.trim())} className="mg-btn mg-btn-primary !min-h-10 !px-3.5 text-sm">
+          <Save className="h-4 w-4" /> {busy ? t('teams.list.creating') : t('teams.list.create')}
+        </button>
+      </div>
+    </form>
+  );
   const teamBlocks = (
     <>
-      {showForm && canCreate && (
-        <form onSubmit={submit} className="mg-card grid gap-3 p-4 sm:grid-cols-12">
-          <label className="sm:col-span-3">
-            <span className="text-xs font-semibold text-[rgb(var(--mg-muted))]">{t('teams.list.section')}</span>
-            <SelectField
-              className="input mt-1"
-              value={form.competitionSectionId}
-              onChange={(e) => setDraft({ ...form, competitionSectionId: parseInt(e.target.value, 10) })}
-              required
-            >
-              {competition.sections.map((s) => (
-                <option key={s.id} value={s.id}>{s.displayName}</option>
-              ))}
-            </SelectField>
-          </label>
-          <label className="sm:col-span-3">
-            <span className="text-xs font-semibold text-[rgb(var(--mg-muted))]">{t('teams.list.club')}</span>
-            <SelectField
-              className="input mt-1"
-              value={form.clubId}
-              onChange={(e) => setDraft({ ...form, clubId: parseInt(e.target.value, 10), clubName: '' })}
-            >
-              <option value={0}>{t('teams.list.chooseClub')}</option>
-              {clubs.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </SelectField>
-          </label>
-          <label className="sm:col-span-2">
-            <span className="text-xs text-slate-500">{t('teams.list.newClub')}</span>
-            <input
-              className="input mt-1"
-              list="mg-clubs-datalist"
-              placeholder={t('teams.list.newClubPlaceholder')}
-              value={form.clubName}
-              onChange={(e) => setDraft({ ...form, clubName: e.target.value })}
-            />
-            <datalist id="mg-clubs-datalist">
-              {clubs.map((c) => (
-                <option key={c.id} value={c.name} />
-              ))}
-            </datalist>
-          </label>
-          <label className="sm:col-span-2">
-            <span className="text-xs text-slate-500">{t('teams.list.teamName')}</span>
-            <input
-              className="input mt-1"
-              placeholder={t('teams.list.teamNamePlaceholder')}
-              value={form.teamName}
-              onChange={(e) => setDraft({ ...form, teamName: e.target.value })}
-            />
-          </label>
-          <label className="sm:col-span-2">
-            <span className="text-xs text-slate-500">{t('teams.list.suffix')}</span>
-            <input
-              className="input mt-1 uppercase" maxLength={4}
-              placeholder={t('teams.list.suffixPlaceholder')}
-              value={form.suffix}
-              onChange={(e) => setDraft({ ...form, suffix: e.target.value, suffixTouched: true })}
-            />
-          </label>
-          <div className="flex justify-end gap-2 sm:col-span-12">
-            {createError && <div className="mr-auto"><Notice>{createError}</Notice></div>}
-            <button type="button" className="mg-btn mg-btn-secondary !min-h-10 !px-3.5 text-sm" onClick={() => setShowForm(false)}>{t('common.cancel')}</button>
-            <button type="submit" disabled={busy || (!form.clubId && !form.clubName.trim() && !form.teamName.trim())} className="mg-btn mg-btn-primary !min-h-10 !px-3.5 text-sm">
-              <Save className="h-4 w-4" /> {busy ? t('teams.list.creating') : t('teams.list.create')}
-            </button>
-          </div>
-        </form>
-      )}
+      {showForm && canCreate && !docked && addForm(false)}
 
       {grouped.map(([section, sectionTeams]) => (
         <section key={section} aria-label={displaySectionName(section)} className="flex flex-col gap-2">
@@ -346,11 +351,12 @@ export function TeamsTab() {
               </button>
             </div>
           )}
-          {canCreate && <div>{addButton}</div>}
+          {addButton && <div>{addButton}</div>}
           {teamBlocks}
         </>
       )}
     </div>
+      {showForm && canCreate && docked && <Sheet title={t('teams.list.addCustom')} onClose={() => setShowForm(false)}>{addForm(true)}</Sheet>}
       {sheetOpen && !desktop && (
         <AgeGroupFilterSheet
           title={filterLabel}
