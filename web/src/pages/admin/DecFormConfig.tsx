@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import { useLanguage } from '../../i18n/LanguageContext';
+import type { MessageKey } from '../../i18n/en';
+import type { Translate } from '../../i18n/translate';
 import { Plus, X } from 'lucide-react';
 import { api } from '../../api';
 import { apiErrorMessage } from '../../lib/apiError';
@@ -7,53 +10,63 @@ import { Notice } from '../../components/Notice';
 import { useToast } from '../../components/Toast';
 import { SelectField } from '../../components/SelectField';
 import {
-  asked, BASIC_CONFIG, configProblem, MAX_CUSTOM_FIELDS, newFieldId, NUMBER_FIELD, parseConfigResponse, STANDARD_CONFIG, TEXT_FIELD,
+  asked, BASIC_CONFIG, MAX_CUSTOM_FIELDS, newFieldId, NUMBER_FIELD, parseConfigResponse, STANDARD_CONFIG, TEXT_FIELD,
   type CustomField, type DecFormConfig, type DecFormConfigResponse, type Requirement,
 } from '../../lib/decFormConfig';
 import { Field } from '../auth/Field';
 
-const REQUIREMENT_OPTIONS = [
-  { value: '0', label: 'Off' },
-  { value: '1', label: 'Optional' },
-  { value: '2', label: 'Required' },
+const REQUIREMENT_OPTIONS: { value: string; label: MessageKey }[] = [
+  { value: '0', label: 'admin.format.off' },
+  { value: '1', label: 'admin.format.dec.optional' },
+  { value: '2', label: 'admin.format.dec.required' },
 ];
 
 type PartKey = 'trainerPhone' | 'bib' | 'dob' | 'weight' | 'ponyHeight' | 'ponyPassport' | 'ponyAge' | 'membershipNumber' | 'emergencyContact' | 'medicalNotes';
 
-interface Part { key: PartKey; label: string; hint: string }
+interface Part { key: PartKey; label: MessageKey; hint?: MessageKey }
 
-const GROUPS: { title: string; parts: Part[] }[] = [
+const GROUPS: { title: MessageKey; parts: Part[] }[] = [
   {
-    title: 'The team',
+    title: 'admin.format.dec.group.team',
     parts: [
-      { key: 'trainerPhone', label: 'Trainer’s phone number', hint: 'One per team. A UK or Irish number.' },
-      { key: 'bib', label: 'Bibs or numbers', hint: 'A note of what the team’s bibs look like.' },
+      { key: 'trainerPhone', label: 'admin.format.dec.part.trainerPhone', hint: 'admin.format.dec.part.trainerPhoneHint' },
+      { key: 'bib', label: 'admin.format.dec.part.bib', hint: 'admin.format.dec.part.bibHint' },
     ],
   },
   {
-    title: 'The rider',
+    title: 'admin.format.dec.group.rider',
     parts: [
-      { key: 'dob', label: 'Age', hint: 'Full date of birth, just the year, or only an age group.' },
-      { key: 'weight', label: 'Weight', hint: 'For events with a weight limit.' },
+      { key: 'dob', label: 'admin.format.dec.part.dob', hint: 'admin.format.dec.part.dobHint' },
+      { key: 'weight', label: 'admin.format.dec.part.weight', hint: 'admin.format.dec.part.weightHint' },
     ],
   },
   {
-    title: 'The pony',
+    title: 'admin.format.dec.group.pony',
     parts: [
-      { key: 'ponyHeight', label: 'Height', hint: 'In hands, like 13.2.' },
-      { key: 'ponyPassport', label: 'Passport or ID number', hint: '' },
-      { key: 'ponyAge', label: 'Age', hint: 'In years.' },
+      { key: 'ponyHeight', label: 'admin.format.dec.part.ponyHeight', hint: 'admin.format.dec.part.ponyHeightHint' },
+      { key: 'ponyPassport', label: 'admin.format.dec.part.ponyPassport' },
+      { key: 'ponyAge', label: 'admin.format.dec.part.ponyAge', hint: 'admin.format.dec.part.ponyAgeHint' },
     ],
   },
   {
-    title: 'Membership and safety',
+    title: 'admin.format.dec.group.safety',
     parts: [
-      { key: 'membershipNumber', label: 'Membership number', hint: '' },
-      { key: 'emergencyContact', label: 'Emergency contact', hint: 'A name and a phone number.' },
-      { key: 'medicalNotes', label: 'Medical notes', hint: 'Anything a first aider should know.' },
+      { key: 'membershipNumber', label: 'admin.format.dec.part.membershipNumber' },
+      { key: 'emergencyContact', label: 'admin.format.dec.part.emergencyContact', hint: 'admin.format.dec.part.emergencyContactHint' },
+      { key: 'medicalNotes', label: 'admin.format.dec.part.medicalNotes', hint: 'admin.format.dec.part.medicalNotesHint' },
     ],
   },
 ];
+
+/** The same checks as `configProblem` in lib/decFormConfig, worded in the chosen language. */
+function problemText(t: Translate, config: DecFormConfig): string | null {
+  if (config.customFields.length > MAX_CUSTOM_FIELDS) return t('admin.format.dec.problem.tooMany', { max: MAX_CUSTOM_FIELDS });
+  for (const f of config.customFields) {
+    if (!f.label.trim()) return t('admin.format.dec.problem.noName');
+    if (f.type === NUMBER_FIELD && f.min != null && f.max != null && f.min > f.max) return t('admin.format.dec.problem.minMax', { name: f.label.trim() });
+  }
+  return null;
+}
 
 interface Props {
   competitionId: number;
@@ -67,6 +80,7 @@ interface Props {
  * editor, the Format page or a wizard step without any wiring.
  */
 export function DecFormConfigEditor({ competitionId, readOnly = false }: Props) {
+  const { t } = useLanguage();
   const [saved, setSaved] = useState<DecFormConfigResponse | null>(null);
   const [draft, setDraft] = useState<DecFormConfig>(STANDARD_CONFIG);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -92,11 +106,11 @@ export function DecFormConfigEditor({ competitionId, readOnly = false }: Props) 
     return () => { cancelled = true; };
   }, [competitionId, attempt]);
 
-  if (loadFailed) return <Notice role={null} actionLabel="Try again" onAction={() => { setLoadFailed(false); setAttempt((n) => n + 1); }}>Couldn’t load the dec form setup. Check your signal and try again.</Notice>;
-  if (!saved) return <p className="text-sm text-[rgb(var(--mg-muted))]">Loading the dec form setup…</p>;
+  if (loadFailed) return <Notice role={null} actionLabel={t('common.tryAgain')} onAction={() => { setLoadFailed(false); setAttempt((n) => n + 1); }}>{t('admin.format.dec.loadFailed')}</Notice>;
+  if (!saved) return <p className="text-sm text-[rgb(var(--mg-muted))]">{t('admin.format.dec.loading')}</p>;
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved.config);
-  const problem = configProblem(draft);
+  const problem = problemText(t, draft);
   const change = (patch: Partial<DecFormConfig>) => { setDraft((cur) => ({ ...cur, ...patch })); setSaveError(null); };
   const setPart = (key: PartKey, value: Requirement) => change({ [key]: value } as Partial<DecFormConfig>);
 
@@ -116,9 +130,9 @@ export function DecFormConfigEditor({ competitionId, readOnly = false }: Props) 
       const { data } = await api.put(`/competitions/${competitionId}/dec-form-config`, draft);
       const parsed = parseConfigResponse(data);
       if (parsed) { setSaved(parsed); setDraft(parsed.config); }
-      toast.show('Dec form setup saved');
+      toast.show(t('admin.format.dec.saved'));
     } catch (err) {
-      setSaveError(apiErrorMessage(err, 'Couldn’t save the dec form setup. Check your signal and try again.'));
+      setSaveError(apiErrorMessage(err, t('admin.format.dec.saveFailed')));
     } finally {
       setBusy(false);
     }
@@ -128,50 +142,50 @@ export function DecFormConfigEditor({ competitionId, readOnly = false }: Props) 
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1.5 text-[15px] text-[rgb(var(--mg-body))]">
         <p>
-          Rider, pony and trainer names are always included.
-          {saved.isStandard && ' Until saved, trainers see the standard form.'}
+          {t('admin.format.dec.alwaysIncluded')}
+          {saved.isStandard && ` ${t('admin.format.dec.untilSaved')}`}
         </p>
         <p className="text-sm text-[rgb(var(--mg-muted))]">
-          Personal details are only seen by organisers and the trainer, and never show on public pages.
+          {t('admin.format.dec.privacy')}
         </p>
       </div>
 
       <div className="flex flex-wrap gap-2">
         <button type="button" className="mg-btn mg-btn-secondary !min-h-11" disabled={readOnly} onClick={() => change({ ...BASIC_CONFIG, customFields: draft.customFields })}>
-          Start from the basics
+          {t('admin.format.dec.basics')}
         </button>
         <button type="button" className="mg-btn mg-btn-secondary !min-h-11" disabled={readOnly} onClick={() => change({ ...STANDARD_CONFIG, customFields: draft.customFields })}>
-          Use the standard form
+          {t('admin.format.dec.standard')}
         </button>
       </div>
 
       {GROUPS.map((group) => (
         <fieldset key={group.title} className="flex flex-col gap-3 border-0 p-0">
-          <legend className="mg-display mb-1 text-[17px] font-bold uppercase tracking-[0.03em] text-[rgb(var(--mg-heading))]">{group.title}</legend>
+          <legend className="mg-display mb-1 text-[17px] font-bold uppercase tracking-[0.03em] text-[rgb(var(--mg-heading))]">{t(group.title)}</legend>
           {group.parts.map((part) => (
             <div key={part.key} className="flex flex-col gap-2 rounded-xl border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))] p-3">
               <div className="grid grid-cols-[minmax(0,1fr)_132px] items-center gap-3">
                 <div className="min-w-0">
-                  <div className="text-base font-semibold text-[rgb(var(--mg-ink))]">{part.label}</div>
-                  {part.hint && <div className="text-[13px] text-[rgb(var(--mg-muted))]">{part.hint}</div>}
+                  <div className="text-base font-semibold text-[rgb(var(--mg-ink))]">{t(part.label)}</div>
+                  {part.hint && <div className="text-[13px] text-[rgb(var(--mg-muted))]">{t(part.hint)}</div>}
                 </div>
-                <SelectField aria-label={`${group.title}: ${part.label}`} disabled={readOnly} value={String(draft[part.key])} options={REQUIREMENT_OPTIONS}
+                <SelectField aria-label={t('admin.format.dec.partAria', { group: t(group.title), part: t(part.label) })} disabled={readOnly} value={String(draft[part.key])} options={REQUIREMENT_OPTIONS.map((o) => ({ value: o.value, label: t(o.label) }))}
                   onChange={(e) => setPart(part.key, Number(e.target.value) as Requirement)} />
               </div>
               {part.key === 'dob' && asked(draft.dob) && (
-                <Field label="What to ask for">
+                <Field label={t('admin.format.dec.whatToAsk')}>
                   {({ id }) => (
                     <SelectField id={id} disabled={readOnly} value={String(draft.dobFormat)}
-                      options={[{ value: '0', label: 'Full date of birth' }, { value: '1', label: 'Year of birth only' }, { value: '2', label: 'Age group only' }]}
+                      options={[{ value: '0', label: t('admin.format.dec.dobFull') }, { value: '1', label: t('admin.format.dec.dobYear') }, { value: '2', label: t('admin.format.dec.dobGroup') }]}
                       onChange={(e) => change({ dobFormat: Number(e.target.value) as 0 | 1 | 2 })} />
                   )}
                 </Field>
               )}
               {part.key === 'weight' && asked(draft.weight) && (
-                <Field label="Show weight in">
+                <Field label={t('admin.format.dec.showWeightIn')}>
                   {({ id }) => (
                     <SelectField id={id} disabled={readOnly} value={String(draft.weightUnit)}
-                      options={[{ value: '0', label: 'Kilograms (kg)' }, { value: '1', label: 'Stone and pounds (st, lb)' }]}
+                      options={[{ value: '0', label: t('admin.format.dec.kg') }, { value: '1', label: t('admin.format.dec.stone') }]}
                       onChange={(e) => change({ weightUnit: Number(e.target.value) as 0 | 1 })} />
                   )}
                 </Field>
@@ -182,9 +196,9 @@ export function DecFormConfigEditor({ competitionId, readOnly = false }: Props) 
       ))}
 
       <fieldset className="flex flex-col gap-3 border-0 p-0">
-        <legend className="mg-display mb-1 text-[17px] font-bold uppercase tracking-[0.03em] text-[rgb(var(--mg-heading))]">Your own questions</legend>
+        <legend className="mg-display mb-1 text-[17px] font-bold uppercase tracking-[0.03em] text-[rgb(var(--mg-heading))]">{t('admin.format.dec.ownQuestions')}</legend>
         <p className="text-sm text-[rgb(var(--mg-muted))]">
-          Add custom text or number questions. Numbers outside a limit are flagged for organisers.
+          {t('admin.format.dec.ownQuestionsNote')}
         </p>
         {draft.customFields.map((field, index) => (
           <CustomFieldCard key={field.id} field={field} index={index} readOnly={readOnly}
@@ -192,20 +206,20 @@ export function DecFormConfigEditor({ competitionId, readOnly = false }: Props) 
             onRemove={() => change({ customFields: draft.customFields.filter((f) => f.id !== field.id) })} />
         ))}
         <button type="button" className="mg-btn mg-btn-secondary !min-h-11 self-start" disabled={readOnly || draft.customFields.length >= MAX_CUSTOM_FIELDS} onClick={addField}>
-          <Plus aria-hidden="true" className="h-4 w-4" /> Add a question
+          <Plus aria-hidden="true" className="h-4 w-4" /> {t('admin.format.dec.addQuestion')}
         </button>
       </fieldset>
 
       <div className="flex flex-col gap-2">
         <Notice tone="info" role={null}>
-          Changes apply to dec forms sent from now on.
-          {saved.formsSubmitted > 0 && ` The ${saved.formsSubmitted} already in keep the answers they have.`}
+          {t('admin.format.dec.appliesFromNow')}
+          {saved.formsSubmitted > 0 && ` ${t('admin.format.dec.alreadyIn', { count: saved.formsSubmitted })}`}
         </Notice>
         {problem && <Notice>{problem}</Notice>}
-        {saveError && <Notice actionLabel="Try again" onAction={() => { void save(); }} actionDisabled={busy}>{saveError}</Notice>}
+        {saveError && <Notice actionLabel={t('common.tryAgain')} onAction={() => { void save(); }} actionDisabled={busy}>{saveError}</Notice>}
         <div className="flex flex-wrap items-center gap-3">
           <button type="button" className="mg-btn mg-btn-primary !min-h-12" disabled={readOnly || busy || !!problem || (!dirty && !saved.isStandard)} onClick={() => { void save(); }}>
-            {busy ? 'Saving…' : saved.isStandard && !dirty ? 'Save this setup' : 'Save the dec form'}
+            {busy ? t('admin.format.dec.saving') : saved.isStandard && !dirty ? t('admin.format.dec.saveSetup') : t('admin.format.dec.saveForm')}
           </button>
           {toast.node}
         </div>
@@ -223,60 +237,62 @@ interface CardProps {
 }
 
 function CustomFieldCard({ field, index, readOnly, onChange, onRemove }: CardProps) {
-  const name = field.label.trim() || `question ${index + 1}`;
+  const { t } = useLanguage();
+  const name = field.label.trim() || t('admin.format.dec.questionN', { n: index + 1 });
   const number = field.type === NUMBER_FIELD;
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-surface))] p-3">
       <div className="flex items-end gap-2">
-        <Field label="Question" className="min-w-0 flex-1">
+        <Field label={t('admin.format.dec.question')} className="min-w-0 flex-1">
           {({ id }) => (
             <div className="mg-field">
-              <input id={id} value={field.label} maxLength={80} placeholder="e.g. Saddle size" disabled={readOnly} onChange={(e) => onChange({ label: e.target.value })} />
+              <input id={id} value={field.label} maxLength={80} placeholder={t('admin.format.dec.questionPlaceholder')} disabled={readOnly} onChange={(e) => onChange({ label: e.target.value })} />
             </div>
           )}
         </Field>
-        <button type="button" className="mg-icon-btn" aria-label={`Remove ${name}`} disabled={readOnly} onClick={onRemove}><X aria-hidden="true" className="h-[18px] w-[18px]" /></button>
+        <button type="button" className="mg-icon-btn" aria-label={t('admin.format.dec.removeQuestion', { name })} disabled={readOnly} onClick={onRemove}><X aria-hidden="true" className="h-[18px] w-[18px]" /></button>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Answer is">
+        <Field label={t('admin.format.dec.answerIs')}>
           {({ id }) => (
-            <SelectField id={id} disabled={readOnly} value={String(field.type)} options={[{ value: '0', label: 'Text' }, { value: '1', label: 'A number' }]}
+            <SelectField id={id} disabled={readOnly} value={String(field.type)} options={[{ value: '0', label: t('admin.format.dec.text') }, { value: '1', label: t('admin.format.dec.number') }]}
               onChange={(e) => onChange(e.target.value === '1' ? { type: NUMBER_FIELD } : { type: TEXT_FIELD, min: null, max: null, unit: null })} />
           )}
         </Field>
-        <Field label="Must be answered">
+        <Field label={t('admin.format.dec.mustAnswer')}>
           {({ id }) => (
-            <SelectField id={id} disabled={readOnly} value={field.required ? 'yes' : 'no'} options={[{ value: 'no', label: 'No, optional' }, { value: 'yes', label: 'Yes, required' }]}
+            <SelectField id={id} disabled={readOnly} value={field.required ? 'yes' : 'no'} options={[{ value: 'no', label: t('admin.format.dec.noOptional') }, { value: 'yes', label: t('admin.format.dec.yesRequired') }]}
               onChange={(e) => onChange({ required: e.target.value === 'yes' })} />
           )}
         </Field>
       </div>
       {number && (
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Unit">
+          <Field label={t('admin.format.dec.unit')}>
             {({ id }) => (
-              <div className="mg-field"><input id={id} value={field.unit ?? ''} maxLength={20} placeholder="kg, cm…" disabled={readOnly} onChange={(e) => onChange({ unit: e.target.value })} /></div>
+              <div className="mg-field"><input id={id} value={field.unit ?? ''} maxLength={20} placeholder={t('admin.format.dec.unitPlaceholder')} disabled={readOnly} onChange={(e) => onChange({ unit: e.target.value })} /></div>
             )}
           </Field>
-          <Field label="Can’t be below">
+          <Field label={t('admin.format.dec.cantBelow')}>
             {({ id }) => <LimitInput id={id} value={field.min} disabled={readOnly} onValue={(min) => onChange({ min })} />}
           </Field>
-          <Field label="Can’t be above">
+          <Field label={t('admin.format.dec.cantAbove')}>
             {({ id }) => <LimitInput id={id} value={field.max} disabled={readOnly} onValue={(max) => onChange({ max })} />}
           </Field>
         </div>
       )}
-      {number && <p className="text-[13px] text-[rgb(var(--mg-muted))]">Leave a limit blank for no limit. Going outside it is allowed, but gets flagged.</p>}
+      {number && <p className="text-[13px] text-[rgb(var(--mg-muted))]">{t('admin.format.dec.limitNote')}</p>}
     </div>
   );
 }
 
 /** A number box that keeps what is being typed ("1." on its way to "1.5") and tells the parent the number, or null when empty. */
 function LimitInput({ id, value, disabled, onValue }: { id: string; value: number | null | undefined; disabled: boolean; onValue: (value: number | null) => void }) {
+  const { t } = useLanguage();
   const [text, setText] = useState(value == null ? '' : String(value));
   return (
     <div className="mg-field">
-      <NumberField id={id} decimal allowNegative value={text} disabled={disabled} placeholder="No limit"
+      <NumberField id={id} decimal allowNegative value={text} disabled={disabled} placeholder={t('admin.format.dec.noLimit')}
         onChange={(e) => {
           const next = e.target.value;
           setText(next);

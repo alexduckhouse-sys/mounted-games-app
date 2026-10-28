@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api';
 import { competitionDateText } from '../../lib/competitionDates';
-import { STAGE_LABEL, stageCounts, stageOf } from '../../lib/adminStage';
+import { stageOf } from '../../lib/adminStage';
+import { useT } from '../../i18n/LanguageContext';
 import type { CompetitionSummary, RaceTemplate, TrainerRequest } from '../../types';
 import { Chevron, RefineHeader, RefineList, RefinePage, RefineStatus } from '../refine/Refine';
-import { STAGE_TONE } from './adminShared';
+import { STAGE_TONE, stageCountsText, stageLabel } from './adminShared';
 import '../operations/operations.css';
 
 /** How many things came back, or null while loading and when the request failed. */
@@ -13,6 +14,7 @@ const lengthOf = (data: unknown): number | null => (Array.isArray(data) ? data.l
 
 /** Site admin home: what needs the admin, the upcoming competitions, and the places to manage the site. */
 export function SiteAdminDashboard() {
+  const t = useT();
   const [comps, setComps] = useState<CompetitionSummary[] | null>(null);
   const [waiting, setWaiting] = useState<number | null>(null);
   const [races, setRaces] = useState<number | null>(null);
@@ -35,59 +37,59 @@ export function SiteAdminDashboard() {
 
   return (
     <RefinePage>
-      <RefineHeader context="Mounted Games" title="Site admin" />
+      <RefineHeader context={t('common.mountedGames')} title={t('admin.accounts.siteAdmin')} />
       <div className="ops-cards ops-tt ops-admin">
         {toApprove > 0 && (
           <>
-            <h2 className="rf-sec ops-tt-head"><span>Needs you</span></h2>
-            <RefineList as="div" label="Needs you">
+            <h2 className="rf-sec ops-tt-head"><span>{t('admin.accounts.dash.needsYou')}</span></h2>
+            <RefineList as="div" label={t('admin.accounts.dash.needsYou')}>
               <Link to="/admin/trainer-requests" className="rf-row">
                 <span className="rf-num ops-count">{toApprove}</span>
-                <span className="rf-grow rf-t1">{toApprove === 1 ? 'Trainer request to approve' : 'Trainer requests to approve'}</span>
+                <span className="rf-grow rf-t1">{t('admin.accounts.dash.requestsToApprove', { count: toApprove })}</span>
                 <Chevron />
               </Link>
             </RefineList>
           </>
         )}
 
-        <h2 className="rf-sec ops-tt-head"><span>Competitions</span></h2>
-        <RefineList as="div" label="Competitions">
-          {comps === null && <div className="rf-row"><span className="rf-t2" role="status">Loading…</span></div>}
-          {comps !== null && upcoming.length === 0 && <div className="rf-row"><span className="rf-t2">No competitions coming up</span></div>}
+        <h2 className="rf-sec ops-tt-head"><span>{t('admin.accounts.competitions')}</span></h2>
+        <RefineList as="div" label={t('admin.accounts.competitions')}>
+          {comps === null && <div className="rf-row"><span className="rf-t2" role="status">{t('common.loading')}</span></div>}
+          {comps !== null && upcoming.length === 0 && <div className="rf-row"><span className="rf-t2">{t('admin.accounts.dash.noneComingUp')}</span></div>}
           {upcoming.slice(0, 6).map(({ c, stage }) => (
             <Link key={c.id} to={`/competitions/${c.id}/operations`} className="rf-row">
               <span className="rf-grow"><span className="rf-t1">{c.name}</span><span className="rf-t2">{competitionDateText(c.startDate, c.endDate)}</span></span>
-              <RefineStatus tone={STAGE_TONE[stage]}>{STAGE_LABEL[stage]}</RefineStatus>
+              <RefineStatus tone={STAGE_TONE[stage]}>{stageLabel(stage)}</RefineStatus>
               <Chevron />
             </Link>
           ))}
         </RefineList>
 
-        <h2 className="rf-sec ops-tt-head"><span>Manage the site</span></h2>
-        <RefineList as="div" label="Manage the site">
+        <h2 className="rf-sec ops-tt-head"><span>{t('admin.accounts.dash.manage')}</span></h2>
+        <RefineList as="div" label={t('admin.accounts.dash.manage')}>
           <Link to="/admin/competitions" className="rf-row">
-            <span className="rf-grow"><span className="rf-t1">Competitions</span><span className="rf-t2">{comps ? stageCounts(rows.map((row) => row.stage)) : ' '}</span></span>
+            <span className="rf-grow"><span className="rf-t1">{t('admin.accounts.competitions')}</span><span className="rf-t2">{comps ? stageCountsText(rows.map((row) => row.stage)) : ' '}</span></span>
             <Chevron />
           </Link>
           <Link to="/admin/trainer-requests" className="rf-row">
-            <span className="rf-grow"><span className="rf-t1">Trainer requests</span><span className="rf-t2">{waiting === null ? ' ' : waiting > 0 ? `${waiting} waiting` : 'No one waiting'}</span></span>
+            <span className="rf-grow"><span className="rf-t1">{t('admin.accounts.dash.trainerRequests')}</span><span className="rf-t2">{waiting === null ? ' ' : waiting > 0 ? t('admin.accounts.dash.waiting', { count: waiting }) : t('admin.accounts.dash.noneWaiting')}</span></span>
             {toApprove > 0 && <span className="ops-badge" aria-hidden="true">{toApprove}</span>}
             <Chevron />
           </Link>
           <Link to="/admin/users" className="rf-row">
-            <span className="rf-grow rf-t1">Users</span>
+            <span className="rf-grow rf-t1">{t('admin.accounts.dash.users')}</span>
             <Chevron />
           </Link>
           <Link to="/admin/blocked" className="rf-row">
-            <span className="rf-grow rf-t1">Blocked accounts</span>
+            <span className="rf-grow rf-t1">{t('admin.accounts.dash.blocked')}</span>
             <Chevron />
           </Link>
           <Link to="/admin/email" className="rf-row">
-            <span className="rf-grow rf-t1">Email</span>
+            <span className="rf-grow rf-t1">{t('admin.accounts.dash.email')}</span>
             <Chevron />
           </Link>
           <Link to="/admin/rules" className="rf-row">
-            <span className="rf-grow"><span className="rf-t1">Rules library</span><span className="rf-t2">{races === null ? ' ' : `${races} ${races === 1 ? 'race' : 'races'}`}</span></span>
+            <span className="rf-grow"><span className="rf-t1">{t('admin.accounts.dash.rules')}</span><span className="rf-t2">{races === null ? ' ' : t('admin.accounts.dash.races', { count: races })}</span></span>
             <Chevron />
           </Link>
         </RefineList>
