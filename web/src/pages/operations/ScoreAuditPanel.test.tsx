@@ -25,7 +25,7 @@ describe('ScoreAuditPanel', () => {
   it('shows the record but no sign-off or corrections to someone who cannot manage this competition', async () => {
     auth.manage = false;
     render(<ScoreAuditPanel raceId={9} />);
-    await screen.findByRole('button', { name: 'Refresh score record' });
+    await screen.findByRole('button', { name: 'Refresh score history' });
     expect(screen.queryByRole('button', { name: 'Sign off results' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save correction' })).not.toBeInTheDocument();
     expect(auth.asked).toContainEqual({ id: 5, createdByUserId: 'owner-1' });
@@ -66,13 +66,27 @@ describe('ScoreAuditPanel', () => {
     expect(await screen.findByText('Correction saved')).toBeInTheDocument();
   });
 
+  it('names each team, and says so when a team has no name instead of showing its number', async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<ScoreAuditPanel raceId={9} />);
+    await screen.findByRole('button', { name: 'Save correction' });
+    await user.click(screen.getByText('Correct placings'));
+    expect(screen.getByLabelText('Points for Unnamed team')).toBeInTheDocument();
+    expect(screen.queryByText(/Team 4/)).not.toBeInTheDocument();
+    unmount();
+    render(<ScoreAuditPanel raceId={9} teams={[{ teamId: 4, teamName: 'Rockwood A' }]} />);
+    await screen.findByRole('button', { name: 'Save correction' });
+    await user.click(screen.getByText('Correct placings'));
+    expect(screen.getByText('Rockwood A')).toBeInTheDocument();
+  });
+
   it('preserves and edits half-point manual overrides when saving a correction', async () => {
     const user = userEvent.setup();
-    render(<ScoreAuditPanel raceId={9} />);
+    render(<ScoreAuditPanel raceId={9} teams={[{ teamId: 4, teamName: 'Rockwood A' }]} />);
     await screen.findByRole('button', { name: 'Save correction' });
     await user.click(screen.getByText('Correct placings'));
 
-    const pointsInput = screen.getByLabelText('Points for team 4');
+    const pointsInput = screen.getByLabelText('Points for Rockwood A');
     await user.clear(pointsInput);
     await user.type(pointsInput, '2.5');
     await user.type(screen.getByRole('textbox', { name: 'Correction reason' }), 'Split dead heat');

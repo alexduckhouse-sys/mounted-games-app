@@ -380,7 +380,7 @@ public class TeamsController : ControllerBase
         var team = await _db.Teams
             .Include(t => t.Competition).Include(t => t.Trainer)
             .FirstOrDefaultAsync(t => t.SupporterJoinKey != null && t.SupporterJoinKey.ToUpper() == keyUpper);
-        if (team is null) return NotFound(new { message = "No team matches that key. Double-check with the trainer." });
+        if (team is null) return NotFound(new { message = "No team matches that code. Check it with your trainer." });
 
         // Don't let the team's own trainer request to "support" their own team.
         if (team.TrainerUserId == userId)

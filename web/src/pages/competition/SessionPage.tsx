@@ -1030,7 +1030,7 @@ function PostRaceCommentatorModal({
           {/* Updated heat table */}
           <section aria-label="Updated heat table" className="space-y-2">
             <h3 className="mg-display m-0 flex items-center gap-1.5 text-sm font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-              <Table2 className="h-4 w-4" aria-hidden="true" /> Updated Heat Table · {recap.heat.label || 'Heat'}
+              <Table2 className="h-4 w-4" aria-hidden="true" /> Updated heat table · {recap.heat.label || 'Heat'}
             </h3>
             <ul className="m-0 flex flex-wrap gap-2 list-none p-0 text-xs">
               {heatTotals.map((row) => (
@@ -1052,10 +1052,10 @@ function PostRaceCommentatorModal({
 
           {/* Official section toplist */}
           <section aria-label="Updated section toplist" className="space-y-2">
-            <p className="m-0 text-xs">Queued scores are not included in the official standings yet.</p>
+            <p className="m-0 text-xs">Scores waiting for signal aren’t in the official toplist yet.</p>
             <div className="flex items-center justify-between gap-2">
               <h3 className="mg-display m-0 flex items-center gap-1.5 text-sm font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-                <Trophy className="h-4 w-4" aria-hidden="true" /> Official Section Toplist
+                <Trophy className="h-4 w-4" aria-hidden="true" /> Official toplist
               </h3>
               <span className="text-xs font-semibold text-[rgb(var(--mg-muted))]">
                 Top {cutoffPlaces} Finals cut-off
@@ -1300,7 +1300,7 @@ function ScoreAdjustmentsBody({
       return;
     }
     const formatted = formatPoints(pts);
-    const reason = overrideReason.trim() || `Manual score override to ${formatted} pts`;
+    const reason = overrideReason.trim() || `Points set to ${formatted} pts`;
     await submitPointDirective(overrideTeamId, `[pts:${formatted}]`, reason, pts);
     setOverrideReason('');
   }
@@ -1534,7 +1534,7 @@ function ScoreAdjustmentsBody({
             />
           </label>
           <button type="button" className="btn-ghost min-h-11 px-3 text-sm" onClick={() => void toggleUnderReview()}>
-            {underReviewTeamIds.has(reviewTeamId) ? 'Remove Under Review' : 'Flag Under Review'}
+            {underReviewTeamIds.has(reviewTeamId) ? 'Remove under review' : 'Flag under review'}
           </button>
           {underReviewTeamIds.size > 0 && (
             <div className="flex flex-wrap items-center gap-1.5" aria-label="Under review results">
@@ -1555,9 +1555,9 @@ function ScoreAdjustmentsBody({
       {targetRace && entries.length > 0 && (
         <div className="flex flex-wrap items-end gap-2">
           <label className="flex flex-col gap-1">
-            <span className="font-semibold">Override team</span>
+            <span className="font-semibold">Team</span>
             <select
-              aria-label="Override team"
+              aria-label="Team"
               className="input min-h-11 text-sm"
               value={overrideTeamId}
               onChange={(e) => setOverrideTeamId(Number(e.target.value))}
@@ -1577,9 +1577,9 @@ function ScoreAdjustmentsBody({
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="font-semibold">Override reason</span>
+            <span className="font-semibold">Reason</span>
             <input
-              aria-label="Override reason"
+              aria-label="Reason"
               type="text"
               placeholder="e.g. Combined heat"
               className="input min-h-11 text-sm"
@@ -1588,7 +1588,7 @@ function ScoreAdjustmentsBody({
             />
           </label>
           <button type="button" className="btn-ghost min-h-11 px-3 text-sm" onClick={() => void saveOverride()}>
-            Save override
+            Set points
           </button>
         </div>
       )}

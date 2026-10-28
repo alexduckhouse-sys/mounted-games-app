@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronRight, Plus } from 'lucide-react';
 import { api } from '../api';
@@ -6,6 +6,7 @@ import { signOutDestination } from '../auth/signOutDestination';
 import { useAuth } from '../auth/AuthContext';
 import { useT } from '../i18n/LanguageContext';
 import { EmailConfirmBanner } from '../components/EmailConfirmBanner';
+import { usePageHeader } from '../components/CompactPageBarContext';
 import { useCurrentCompetition } from '../competition/CurrentCompetitionContext';
 import { useMyTeams } from '../hooks/useMyTeams';
 import { heatRowsForTeam, heatTime } from '../lib/myTeams';
@@ -51,6 +52,12 @@ function ProfileDetails() {
   const [forms, setForms] = useState<DeclarationForm[] | null>(null);
   const [entries, setEntries] = useState<ExtendedMySignup[] | null>(null);
   const [itemCount, setItemCount] = useState<number | null>(null);
+  const [entriesTried, setEntriesTried] = useState(false);
+  const [needsSettled, setNeedsSettled] = useState(false);
+  const [gaveUpWaiting, setGaveUpWaiting] = useState(false);
+  const topRef = useRef<HTMLDivElement>(null);
+  const onNeedsSettled = useCallback(() => setNeedsSettled(true), []);
+  usePageHeader({ title: t('account.profile.title'), plain: true });
 
   const userId = user?.id;
   const clubId = user?.clubId ?? null;
@@ -74,15 +81,29 @@ function ProfileDetails() {
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;
-    api.get<ExtendedMySignup[]>('/me/signups').then((r) => { if (!cancelled && Array.isArray(r.data)) setEntries(r.data); }).catch(() => {});
+    api.get<ExtendedMySignup[]>('/me/signups')
+      .then((r) => { if (!cancelled && Array.isArray(r.data)) setEntries(r.data); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setEntriesTried(true); });
     api.get<{ isActive?: boolean }[]>('/commerce/catalogue').then((r) => { if (!cancelled && Array.isArray(r.data)) setItemCount(r.data.filter((item) => item.isActive !== false).length); }).catch(() => {});
     return () => { cancelled = true; };
   }, [userId]);
 
   const isAdmin = hasRole('Admin');
-  const canCreate = isAdmin || hasRole('Trainer');
   const events = useTodaysEvents(true);
 
+  // "Needs you" and "On today" arrive from several requests. They show together once all have answered (or after a few
+  // seconds), in space held from the last visit, so nothing below them jumps while a finger is on its way to it.
+  const topLoaded = (events.loaded && entriesTried && mine.loaded && needsSettled) || gaveUpWaiting;
+  const [reserved] = useState(() => readTopHeight(userId));
+  useEffect(() => {
+    const timer = window.setTimeout(() => setGaveUpWaiting(true), 4000);
+    return () => window.clearTimeout(timer);
+  }, []);
+  useLayoutEffect(() => {
+    if (topLoaded && topRef.current) saveTopHeight(userId, Math.round(topRef.current.getBoundingClientRect().height));
+  });
+  const canCreate = isAdmin || hasRole('Trainer');
   if (!user) return null;
 
   const todayKey = dayKey(now);
@@ -119,39 +140,41 @@ function ProfileDetails() {
 
       <EmailConfirmBanner />
 
-      <NeedsYouPanel events={events.upcoming} dueEntries={dueEntries} pairRequests={pairRequests} />
+      <div ref={topRef} className={topLoaded ? 'mg-settle flow-root' : 'flow-root'} style={topLoaded ? undefined : { height: reserved, overflow: 'hidden', visibility: 'hidden' }}>
+        <NeedsYouPanel events={events.upcoming} dueEntries={dueEntries} pairRequests={pairRequests} onSettled={onNeedsSettled} />
 
-      {todays.length > 0 && (
-        <Section title={t('account.profile.teamsToday')}>
-          {todays.map(({ team, row }) => (
-            <Link key={`${team.id}-${row.heatId}`} to={`/competitions/${team.competitionId}/teams/${team.id}`} className="sp-row">
-              <span className="sp-grow">
-                <span className="sp-t1">{team.displayName}</span>
-                <span className="sp-t2">{[displaySectionName(team.sectionName), row.sessionName, row.label, row.lane != null ? t('account.profile.lane', { n: row.lane }) : '', row.delayMinutes > 0 ? `+${formatDelayDuration(row.delayMinutes)}` : ''].filter(Boolean).join(' · ')}</span>
-              </span>
-              <span className="sp-num" data-tone={row.delayMinutes > 0 ? 'warn' : undefined}>{heatTime(row)}</span>
-              <Chevron />
-            </Link>
-          ))}
-        </Section>
-      )}
+        {todays.length > 0 && (
+          <Section title={t('account.profile.teamsToday')}>
+            {todays.map(({ team, row }) => (
+              <Link key={`${team.id}-${row.heatId}`} to={`/competitions/${team.competitionId}/teams/${team.id}`} className="sp-row">
+                <span className="sp-grow">
+                  <span className="sp-t1">{team.displayName}</span>
+                  <span className="sp-t2">{[displaySectionName(team.sectionName), row.sessionName, row.label, row.lane != null ? t('account.profile.lane', { n: row.lane }) : '', row.delayMinutes > 0 ? `+${formatDelayDuration(row.delayMinutes)}` : ''].filter(Boolean).join(' · ')}</span>
+                </span>
+                <span className="sp-num" data-tone={row.delayMinutes > 0 ? 'warn' : undefined}>{heatTime(row)}</span>
+                <Chevron />
+              </Link>
+            ))}
+          </Section>
+        )}
 
-      {events.today.length > 0 && (canCreate || todays.length === 0) && (
-        <Section title={t('account.profile.today')}>
-          {events.today.map((event) => (
-            <Link key={event.id} to={`/competitions/${event.id}`} className="sp-row">
-              <span className="sp-grow">
-                <span className="sp-t1">{event.name}</span>
-                <span className="sp-t2">{event.live
-                  ? t('account.profile.onNow', { where: [event.live.sectionName, event.live.heatLabel, event.live.arenaName].filter(Boolean).join(' · ') })
-                  : event.location ?? ''}</span>
-              </span>
-              {event.live && <span className="sp-chip" data-tone="live">{t('account.profile.liveChip')}</span>}
-              <Chevron />
-            </Link>
-          ))}
-        </Section>
-      )}
+        {events.today.length > 0 && (canCreate || todays.length === 0) && (
+          <Section title={t('account.profile.today')}>
+            {events.today.map((event) => (
+              <Link key={event.id} to={`/competitions/${event.id}`} className="sp-row">
+                <span className="sp-grow">
+                  <span className="sp-t1">{event.name}</span>
+                  <span className="sp-t2">{event.live
+                    ? t('account.profile.onNow', { where: [event.live.sectionName, event.live.heatLabel, event.live.arenaName].filter(Boolean).join(' · ') })
+                    : event.location ?? ''}</span>
+                </span>
+                {event.live && <span className="sp-chip" data-tone="live">{t('account.profile.liveChip')}</span>}
+                <Chevron />
+              </Link>
+            ))}
+          </Section>
+        )}
+      </div>
 
       {canCreate && (
         <section aria-label={t('account.profile.organiser')}>
@@ -183,7 +206,7 @@ function ProfileDetails() {
             {clubId != null && (
               <>
                 <ListRow label={t('account.profile.savedRiders')} value={savedRiders != null ? String(savedRiders.length) : undefined} expanded={ridersOpen} onClick={() => setRidersOpen((open) => !open)} />
-                {ridersOpen && (
+                <Reveal open={ridersOpen}>
                   <div className="flex flex-col gap-2 bg-[rgb(var(--mg-subtle))] px-4 py-3 text-sm">
                     {savedRiders && savedRiders.length > 0 ? (
                       <ul className="m-0 flex list-none flex-col gap-1.5 p-0" aria-label={t('account.profile.savedRidersList')}>
@@ -200,9 +223,9 @@ function ProfileDetails() {
                     ) : (
                       <p className="m-0 text-[rgb(var(--mg-muted))]">{t('account.profile.noSavedRiders')}</p>
                     )}
-                    <Link to="/declarations" className="font-semibold text-[rgb(var(--mg-heading))] underline">{t('account.profile.manageOnDec')}</Link>
+                    <Link to="/declarations" className="inline-flex min-h-11 items-center font-semibold text-[rgb(var(--mg-heading))] underline">{t('account.profile.manageOnDec')}</Link>
                   </div>
-                )}
+                </Reveal>
               </>
             )}
             <ListRow to="/declarations" label={t('account.profile.decForms')} value={decFormCount} />
@@ -227,6 +250,38 @@ function ProfileDetails() {
       </Section>
     </div>
   );
+}
+
+const TOP_KEY = 'mg.profileTop.';
+
+/** How tall the "Needs you" and "On today" block was on the last visit, so the page can hold that space while it loads. */
+function readTopHeight(userId: string | undefined): number {
+  try {
+    const value = Number(localStorage.getItem(TOP_KEY + (userId ?? '')));
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function saveTopHeight(userId: string | undefined, height: number) {
+  try { localStorage.setItem(TOP_KEY + (userId ?? ''), String(height)); } catch { /* storage may be blocked */ }
+}
+
+/** Opens and closes its content smoothly. It stays mounted for the length of the close, then goes. */
+function Reveal({ open, children }: { open: boolean; children: ReactNode }) {
+  const [mounted, setMounted] = useState(open);
+  useEffect(() => {
+    if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMounted(true);
+      return;
+    }
+    const timer = window.setTimeout(() => setMounted(false), 200);
+    return () => window.clearTimeout(timer);
+  }, [open]);
+  if (!open && !mounted) return null;
+  return <div className="sp-reveal" data-open={open}><div>{children}</div></div>;
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {

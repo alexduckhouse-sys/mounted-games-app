@@ -24,6 +24,9 @@ interface TickerState {
   setItems: (items: TickerItem[]) => void;
   dockAction: DockAction | null;
   setDockAction: (action: DockAction | null) => void;
+  /** True while the dock is actually on screen (the shell leaves it off on some pages, such as print and scoring). */
+  docked: boolean;
+  setDockHosts: (change: (count: number) => number) => void;
 }
 const Ctx = createContext<TickerState | null>(null);
 
@@ -31,11 +34,13 @@ export function TickerProvider({ children }: { children: ReactNode }) {
   const [watchCompetitionId, setWatchCompetitionId] = useState<number | null>(null);
   const [items, setRawItems] = useState<TickerItem[]>([]);
   const [dockAction, setDockAction] = useState<DockAction | null>(null);
+  const [dockHosts, setDockHosts] = useState(0);
+  const docked = dockHosts > 0;
   // The page republishes every minute; keep the same list when nothing changed so the rotation is not reset.
   const setItems = useCallback((next: TickerItem[]) => setRawItems((current) => (sameTickerItems(current, next) ? current : next)), []);
   const value = useMemo(
-    () => ({ items, setItems, watchCompetitionId, setWatchCompetitionId, dockAction, setDockAction }),
-    [items, setItems, watchCompetitionId, dockAction],
+    () => ({ items, setItems, watchCompetitionId, setWatchCompetitionId, dockAction, setDockAction, docked, setDockHosts }),
+    [items, setItems, watchCompetitionId, dockAction, docked],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -54,13 +59,27 @@ export function useOptionalTicker() {
   return useContext(Ctx);
 }
 
+/** Called by the dock itself while it is mounted, so pages know their button will really be drawn. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function useDockHost() {
+  const setDockHosts = useContext(Ctx)?.setDockHosts;
+  // Before paint, so a page never flashes its own button for a frame first.
+  useLayoutEffect(() => {
+    if (!setDockHosts) return;
+    setDockHosts((n) => n + 1);
+    return () => setDockHosts((n) => n - 1);
+  }, [setDockHosts]);
+}
+
 /**
  * Puts a page's one button beside the ticker dock while the page is open (pass null for none). Returns false when
- * there is no dock (a page rendered on its own), so the page can show its own button instead.
+ * there is no dock on screen (a page rendered on its own, or one where the shell leaves the dock off, such as print),
+ * so the page can show its own button instead.
  */
 // eslint-disable-next-line react-refresh/only-export-components
 export function useDockAction(action: { label: string; onClick: () => void; icon?: DockIcon; count?: number } | null): boolean {
-  const setDockAction = useContext(Ctx)?.setDockAction;
+  const ctx = useContext(Ctx);
+  const setDockAction = ctx?.setDockAction;
   // The latest handler, so a page can pass a fresh arrow function on every render without re-publishing the button.
   const onClick = useRef(action?.onClick);
   useLayoutEffect(() => { onClick.current = action?.onClick; });
@@ -73,5 +92,5 @@ export function useDockAction(action: { label: string; onClick: () => void; icon
     setDockAction({ label, count, icon, onClick: () => onClick.current?.() });
     return () => setDockAction(null);
   }, [setDockAction, shown, label, icon, count]);
-  return setDockAction != null;
+  return ctx?.docked ?? false;
 }

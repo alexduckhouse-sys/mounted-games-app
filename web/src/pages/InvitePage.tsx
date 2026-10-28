@@ -1,12 +1,12 @@
 import { useEffect, useId, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { useT } from '../i18n/LanguageContext';
 import { tr } from '../i18n/translate';
 import { Notice } from '../components/Notice';
 import { PasswordChecklist } from '../components/PasswordChecklist';
+import { PasswordInput } from '../components/PasswordInput';
 import { friendlyPasswordErrors, passwordMeetsRules } from '../lib/passwordRules';
 import { tokenFromHash } from '../offline/scorerLink';
 import type { InvitePreview } from './admin/accountAccessTypes';
@@ -27,7 +27,6 @@ export function InvitePage() {
   const [lookup, setLookup] = useState<Lookup>(token ? { state: 'looking' } : { state: 'invalid', message: null });
   const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
-  const [show, setShow] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -71,6 +70,7 @@ export function InvitePage() {
         <div className="flex flex-col gap-4">
           <h1 className="mg-h1 !text-[34px] !leading-none">{t('auth.invite.title')}</h1>
           <Notice>{lookup.message ?? t('auth.invite.invalid')}</Notice>
+          <Link to="/login" className="mg-btn mg-btn-primary w-full">{t('auth.login.backToSignIn')}</Link>
         </div>
       )}
       {lookup.state === 'ready' && (
@@ -89,14 +89,9 @@ export function InvitePage() {
           <div className="flex flex-col gap-1.5">
             <Field label={t('auth.field.password')} error={error}>
               {({ id, invalid, describedBy }) => (
-                <div className="mg-field" data-invalid={invalid}>
-                  <input id={id} type={show ? 'text' : 'password'} value={password} autoComplete="new-password" aria-invalid={invalid}
-                    aria-describedby={[rulesId, describedBy].filter(Boolean).join(' ')} onChange={(event) => { setPassword(event.target.value); setError(null); }} />
-                  <button type="button" onClick={() => setShow((v) => !v)} aria-label={show ? t('auth.password.hide') : t('auth.password.show')} aria-pressed={show}
-                    className="-mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[rgb(var(--mg-muted))] hover:text-[rgb(var(--mg-ink))]">
-                    {show ? <EyeOff aria-hidden="true" className="h-[18px] w-[18px]" /> : <Eye aria-hidden="true" className="h-[18px] w-[18px]" />}
-                  </button>
-                </div>
+                <PasswordInput id={id} value={password} autoComplete="new-password" invalid={invalid}
+                  describedBy={[rulesId, describedBy].filter(Boolean).join(' ')}
+                  onChange={(event) => { setPassword(event.target.value); setError(null); }} />
               )}
             </Field>
             <PasswordChecklist password={password} id={rulesId} />

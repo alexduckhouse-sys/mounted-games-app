@@ -20,14 +20,14 @@ const board = (mode: 1 | 2): Board => ({
 
 beforeEach(() => { get.mockReset(); });
 
-describe('Tack & Turnout table', () => {
+describe('Tack and turnout table', () => {
   it('shows the age group’s table with HC teams unranked and unmarked sectors as a dash', async () => {
     get.mockResolvedValueOnce({ data: board(1) });
     render(<TackLeaderboard competitionId={12} sectionId={5} />);
 
-    expect(await screen.findByRole('heading', { name: 'Tack & Turnout' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Tack and turnout' })).toBeInTheDocument();
     expect(get).toHaveBeenCalledWith('/event-tools/competitions/12/tack-check/leaderboard');
-    expect(screen.getByText(/not added to the standings/)).toBeInTheDocument();
+    expect(screen.getByText(/Not added to the toplist/)).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Boots' })).toBeInTheDocument();
     expect(screen.getByText('HC')).toBeInTheDocument();
     expect(screen.getByText('Not marked')).toBeInTheDocument();

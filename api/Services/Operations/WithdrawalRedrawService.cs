@@ -193,7 +193,7 @@ public class WithdrawalRedrawService(AppDbContext db, PushNotifier? push = null)
             next[target.Id].Add(teamId);
         }
 
-        string Name(int teamId) => names.GetValueOrDefault(teamId, $"Team {teamId}");
+        string Name(int teamId) => names.GetValueOrDefault(teamId, "Unnamed team");
         var before = unscored.Select(h => new DrawHeatDto(h.Id, h.Label, h.OrderIndex,
             h.Entries.OrderBy(e => e.LaneIndex).ThenBy(e => e.Id)
                 .Select(e => new DrawTeamAssignmentDto(e.TeamId, Name(e.TeamId), e.LaneIndex)).ToList())).ToList();

@@ -5,7 +5,7 @@ import { useCurrentCompetition } from '../competition/CurrentCompetitionContext'
 import { nowPrefixLength, tickerFocusAfterChange, type TickerItem, type TickerKind } from '../lib/ticker';
 import { useT } from '../i18n/LanguageContext';
 import type { MessageKey } from '../i18n/en';
-import { useTicker, type DockIcon } from './TickerContext';
+import { useDockHost, useTicker, type DockIcon } from './TickerContext';
 import { PAGE_WIDTH_CLASS, usePageWidthValue } from './pageWidthState';
 
 const ROTATE_MS = 4500;
@@ -63,6 +63,7 @@ export function TopBarTicker({ low = false }: { low?: boolean }) {
   const { current } = useCurrentCompetition();
   // The header already shows the competition name, so the line only appears when there is news.
   const { items, watchCompetitionId, dockAction } = useTicker();
+  useDockHost();
   const reduceMotion = useSyncExternalStore(subscribeReducedMotion, prefersReducedMotion, () => false);
 
   // Follow the list as it changes: keep the current line, or jump to an announcement that has just arrived.

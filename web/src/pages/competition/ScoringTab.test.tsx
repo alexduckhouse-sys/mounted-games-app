@@ -16,7 +16,7 @@ vi.mock('../../api', () => ({ api: { get: state.get, post: vi.fn() } }));
 // Stands in for 30 seconds passing (useHeldFor has its own timing test).
 const held = vi.hoisted(() => ({ value: true }));
 vi.mock('../../hooks/useHeldFor', () => ({ useHeldFor: (active: boolean) => active && held.value }));
-// The Tack & Turnout table fetches on its own; it has its own tests.
+// The Tack and turnout table fetches on its own; it has its own tests.
 vi.mock('./TackLeaderboard', () => ({ TackLeaderboard: () => null }));
 vi.mock('./TimetableBoard', () => ({
   TimetableBoard: ({ bandExtra, lead, title }: { bandExtra?: React.ReactNode; lead?: React.ReactNode; title?: string }) => <div><h1>{title}</h1>{bandExtra}{lead}</div>,
@@ -569,7 +569,7 @@ it('has no organiser button row: PA desk, TV kiosk and QR codes are in the menu'
   renderTab('/?section=10', {});
   await waitFor(() => expect(state.get).toHaveBeenCalled());
   expect(screen.queryByRole('region', { name: 'Organiser quick actions' })).toBeNull();
-  for (const name of [/PA Commentator/, /TV Kiosk/, /QR Access/]) {
+  for (const name of [/PA Commentator/, /TV kiosk/, /QR access/]) {
     expect(screen.queryByRole('link', { name })).toBeNull();
     expect(screen.queryByRole('button', { name })).toBeNull();
   }

@@ -126,7 +126,7 @@ describe('SessionPage', () => {
       expect(screen.queryByRole('button', { name: /Set up heats/ })).not.toBeInTheDocument();
       const tools = await openOrganiserTools();
       expect(within(tools).getByRole('button', { name: /Set up heats/ })).toBeInTheDocument();
-      expect(screen.queryByText('Score record')).not.toBeInTheDocument();
+      expect(screen.queryByText('Score history')).not.toBeInTheDocument();
       expect(screen.queryByText(/Sign off/)).not.toBeInTheDocument();
       expect(screen.queryByText('History')).not.toBeInTheDocument();
     });
@@ -928,8 +928,8 @@ describe('SessionPage', () => {
       const customPts = screen.getByLabelText('Custom points');
       await userEvent.clear(customPts);
       await userEvent.type(customPts, '4.5');
-      await userEvent.type(screen.getByLabelText('Override reason'), 'Dead heat');
-      await userEvent.click(screen.getByRole('button', { name: 'Save override' }));
+      await userEvent.type(screen.getByLabelText('Reason'), 'Dead heat');
+      await userEvent.click(screen.getByRole('button', { name: 'Set points' }));
       await waitFor(() => expect(api.post).toHaveBeenCalledWith('/races/1/results', expect.objectContaining({
         reason: 'Dead heat',
         places: expect.arrayContaining([
@@ -973,7 +973,7 @@ describe('SessionPage', () => {
       const customPts = screen.getByLabelText('Custom points');
       await userEvent.clear(customPts);
       await userEvent.type(customPts, '2.25');
-      await userEvent.click(screen.getByRole('button', { name: 'Save override' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Set points' }));
       expect(await within(adjustments).findByText('Enter whole or half points, such as 3 or 2.5.')).toBeInTheDocument();
 
       const delta = screen.getByLabelText('Point adjustment');
@@ -1001,7 +1001,7 @@ describe('SessionPage', () => {
 
       await userEvent.selectOptions(screen.getByLabelText('Under review team'), '2');
       await userEvent.type(screen.getByLabelText('Under review note'), 'Lane interference');
-      await userEvent.click(screen.getByRole('button', { name: 'Flag Under Review' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Flag under review' }));
       await waitFor(() => expect(api.put).toHaveBeenCalledWith('/sessions/races/1/results/2/under-review', {
         underReview: true,
         note: 'Lane interference',
@@ -1084,7 +1084,7 @@ describe('SessionPage', () => {
     });
   });
 
-  describe('Commentator facts, post-race summary modal, and QR Access', () => {
+  describe('Commentator facts, post-race summary modal, and QR access', () => {
     it('turns commentator facts on from race tools, shows a line under each team, and opens the post-race toplist & heat table modal after completing a race', async () => {
       const forms: DeclarationForm[] = [
         {
@@ -1205,7 +1205,7 @@ describe('SessionPage', () => {
       await userEvent.click(within(sheet).getByRole('button', { name: /QR access/ }));
       const modal = await screen.findByRole('dialog', { name: 'Share with QR codes' });
       expect(modal).toBeInTheDocument();
-      await userEvent.click(within(modal).getByRole('button', { name: 'Close QR access modal' }));
+      await userEvent.click(within(modal).getByRole('button', { name: 'Close' }));
       await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Share with QR codes' })).toBeNull());
       expect(screen.getByRole('region', { name: 'Scoring Bending' })).toBeInTheDocument();
     });

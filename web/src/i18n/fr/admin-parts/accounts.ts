@@ -166,7 +166,7 @@ export const adminAccounts: AreaCatalogue<typeof en> = {
   'admin.accounts.ed.payoutsReady': 'Les frais d’inscription sont versés à {club} — {account} · Prêt',
   'admin.accounts.ed.payoutsNotReady': '{club} n’a pas encore fini de configurer les versements.',
   'admin.accounts.ed.onlyAdmins': 'Seuls les administrateurs et les entraîneurs peuvent enregistrer les modifications.',
-  'admin.accounts.ed.fixFields': 'Corrigez les champs en surbrillance.',
+  'admin.accounts.ed.fixFields': 'Vérifiez les cases en surbrillance.',
   'admin.accounts.ed.createdOpen': 'La compétition a été créée. {link}.',
   'admin.accounts.ed.openToFinish': 'Ouvrez-la pour terminer',
   'admin.accounts.ed.stepOf': 'Étape {n} sur {total}',

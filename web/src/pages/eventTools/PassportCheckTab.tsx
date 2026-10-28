@@ -159,7 +159,6 @@ export function PassportCheckTab({ competitionId }: { competitionId: string }) {
   return <section aria-labelledby="passport-title">
     <RefineSection title={t('ops3.pc.title')} />
     <h2 id="passport-title" className="sr-only">{t('ops3.pc.title')}</h2>
-    <RefineNote>{t('ops3.pc.intro')}</RefineNote>
     {error && <Notice className="tools-msg" actionLabel={!board ? t('common.tryAgain') : undefined} onAction={() => setAttempt((n) => n + 1)}>{error}</Notice>}
     {!board && !error && <p role="status" className="rf-note">{t('ops3.pc.loading')}</p>}
     {board && <div className="tools-form">

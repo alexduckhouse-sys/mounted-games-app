@@ -301,7 +301,7 @@ export function RaceListPicker({
 
       <ol className="mg-card mg-list max-h-60 overflow-y-auto" aria-label={ariaLabel ?? label}>
         {races.length === 0 && (
-          <li className="p-3 text-sm text-[rgb(var(--mg-muted))]">No races selected yet. Search and add races below.</li>
+          <li className="p-3 text-sm text-[rgb(var(--mg-muted))]">No races yet.</li>
         )}
         {races.map((race, i) => (
           <li key={`${race}-${i}`} className="flex min-h-11 items-center gap-1 py-1 pl-3 pr-1">

@@ -210,12 +210,12 @@ export function buildCommentatorBriefing(params: {
               : `Joint leader on ${formatPoints(totalPoints)} pts`;
         } else if (standings.length > cutline && rank <= cutline) {
           const cushion = totalPoints - firstOutsidePoints;
-          stakesHeadline = `#${rank} overall (${formatPoints(totalPoints)} pts) — +${formatPoints(cushion)} pts above the Top ${cutline} A-Final cutline`;
+          stakesHeadline = `#${rank} overall (${formatPoints(totalPoints)} pts), ${formatPoints(cushion)} pts clear of the A final cut-off`;
         } else if (standings.length > cutline && rank > cutline) {
           const deficit = cutlinePoints - totalPoints;
           stakesHeadline =
             deficit <= 10
-              ? `#${rank} overall (${formatPoints(totalPoints)} pts) — ${formatPoints(deficit)} pts off the Top ${cutline} A-Final cutline`
+              ? `#${rank} overall (${formatPoints(totalPoints)} pts), ${formatPoints(deficit)} pts off the A final cut-off`
               : `#${rank} overall (${formatPoints(totalPoints)} pts)`;
         } else {
           stakesHeadline = `#${rank} overall (${formatPoints(totalPoints)} pts)`;

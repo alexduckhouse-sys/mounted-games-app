@@ -565,7 +565,7 @@ export function ScoringSection({
         >
           {infoSheet === 'summary' && summary && <SummaryCard summary={summary} raceNumber={summaryIdx + 1} />}
           {infoSheet === 'lanes' && nextLanes && <NextLanesCard lanes={nextLanes} />}
-          {infoSheet === 'history' && activeRace && <ScoreAuditPanel raceId={activeRace.id} onChanged={onRefresh} heat={protestCompetitionId != null ? heat : undefined} race={activeRace} />}
+          {infoSheet === 'history' && activeRace && <ScoreAuditPanel raceId={activeRace.id} onChanged={onRefresh} heat={protestCompetitionId != null ? heat : undefined} race={activeRace} teams={heat.entries} />}
         </RtDialog>
       )}
       {protesting && protestCompetitionId != null && (

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { SeasonPage } from './SeasonPage';
-import { TickerProvider, useTicker } from '../../components/TickerContext';
+import { TickerProvider, useDockHost, useTicker } from '../../components/TickerContext';
 import { SeasonsPage } from './SeasonsPage';
 import { SeasonSettingsForm } from './SeasonSettingsForm';
 import type { SeasonView } from './seasonViewTypes';
@@ -46,6 +46,7 @@ beforeEach(() => {
 /** Stands in for the ticker dock: shows the page's one button and lets a test press it. */
 function DockProbe() {
   const { dockAction } = useTicker();
+  useDockHost();
   return dockAction ? <button type="button" data-testid="dock" onClick={dockAction.onClick}>{dockAction.label}</button> : null;
 }
 

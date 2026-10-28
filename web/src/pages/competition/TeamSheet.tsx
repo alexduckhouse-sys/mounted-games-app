@@ -49,7 +49,7 @@ export function TeamSheet({
 }) {
   const t = useT();
   const inRouter = useInRouterContext();
-  const rode = detail.blocks.filter((block) => block.kind === 'session' && block.points != null).length;
+  const rode = detail.blocks.filter((block) => block.kind === 'session' && block.points != null && block.races.length > 0).length;
   const rodeText = rode > 0 ? t('teams.sheet.rode', { count: rode }) : null;
   const sub = [sectionName, [rodeText, detail.final?.label].filter(Boolean).join(' + ')].filter(Boolean).join(' · ');
   const parsedBib = parseBibAndFlag(team?.bibDescription);

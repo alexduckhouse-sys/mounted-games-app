@@ -108,7 +108,7 @@ describe('OutboxTransfer', () => {
     fireEvent.change(screen.getByLabelText('Backup'), { target: { value: JSON.stringify([queued(3, 2)]) } });
     await userEvent.click(screen.getByRole('button', { name: 'Add scores' }));
 
-    expect(await screen.findByText(/That backup could not be read/)).toBeInTheDocument();
+    expect(await screen.findByText(/That backup couldn’t be read/)).toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem(KEY) ?? '[]')).toEqual([queued(1)]);
   });
 
@@ -117,9 +117,9 @@ describe('OutboxTransfer', () => {
     await userEvent.click(screen.getByText('Import scores from another phone'));
     fireEvent.change(screen.getByLabelText('Backup'), { target: { value: 'nonsense' } });
     await userEvent.click(screen.getByRole('button', { name: 'Add scores' }));
-    expect(await screen.findByText(/could not be read/)).toBeInTheDocument();
+    expect(await screen.findByText(/couldn’t be read/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Backup'), { target: { value: 'x' } });
-    expect(screen.queryByText(/could not be read/)).toBeNull();
+    expect(screen.queryByText(/couldn’t be read/)).toBeNull();
   });
 
   it('reads a chosen file into the box', async () => {

@@ -81,7 +81,7 @@ describe('describePlacings status wording', () => {
       [place(3, 0, { eliminated: true }), place(2, 2), place(4, 0, { eliminated: true, status: 2 }), place(1, 1)],
       { 1: 'Red Rum', 2: 'Shergar' },
     );
-    expect(text).toBe('1st Red Rum · 2nd Shergar · Team 3 out · Team 4 DNS');
+    expect(text).toBe('1st Red Rum · 2nd Shergar · Unnamed team out · Unnamed team DNS');
     expect(describePlacings([], {})).toBe('No results');
   });
 });

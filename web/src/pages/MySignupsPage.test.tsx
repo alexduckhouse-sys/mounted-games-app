@@ -177,9 +177,9 @@ describe('MySignupsPage', () => {
     mount();
     const sheet = await openRow(/^Event 6/);
     expect(sheet.getByText('Pair request sent to Bea Rider, waiting for an answer')).toBeInTheDocument();
-    expect(sheet.getByText('Looking for a Pair (50% entry)')).toBeInTheDocument();
-    expect(sheet.getByText('Waiting for a Guest Ride Spot')).toBeInTheDocument();
-    expect(sheet.getByText('Looking for Guest Rider(s)')).toBeInTheDocument();
+    expect(sheet.getByText('Looking for a pair partner (50% entry)')).toBeInTheDocument();
+    expect(sheet.getByText('Waiting for a guest rider place')).toBeInTheDocument();
+    expect(sheet.getByText('Looking for guest riders')).toBeInTheDocument();
     expect(sheet.getByText('Stabling: 1 stable')).toBeInTheDocument();
   });
 

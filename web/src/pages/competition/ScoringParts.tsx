@@ -431,7 +431,7 @@ export function EliminationSheet({ places, names, onSave, onSkip, onCancel }: {
     <Sheet title="Why are they out?" description="Saved as a private note for staff, and read out in the summary." onClose={onCancel}>
       {out.map((p) => (
         <div key={p.teamId} className="sc-field">
-          <span className="sc-name">{names[p.teamId] ?? `Team ${p.teamId}`}</span>
+          <span className="sc-name">{names[p.teamId] ?? 'Unnamed team'}</span>
           <div className="sc-choices sc-reasons" role="group" aria-label={`Reason for ${names[p.teamId] ?? p.teamId}`}>
             {ELIM_REASONS.map((r) => (
               // Faults come first; the non-finishes and Other start a new row of their own.
@@ -699,7 +699,7 @@ export function ScoreClashBanner({
               <ol className="m-0 mt-2 list-none space-y-1 p-0 text-sm">
                 {side.places.map((p) => (
                   <li key={p.teamId} className="flex items-center justify-between gap-2">
-                    <span className="truncate font-semibold text-[rgb(var(--mg-ink))]">{teamNamesById[p.teamId] ?? `Team ${p.teamId}`}</span>
+                    <span className="truncate font-semibold text-[rgb(var(--mg-ink))]">{teamNamesById[p.teamId] ?? 'Unnamed team'}</span>
                     <span className="shrink-0 font-bold text-[rgb(var(--mg-heading))]">{formatClashPlace(p)}</span>
                   </li>
                 ))}

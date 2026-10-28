@@ -43,9 +43,9 @@ describe('lazy Welsh and French catalogues', () => {
     expect(isLoaded('cy')).toBe(true);
     expect(isLoaded('fr')).toBe(false);
     expect(tr('common.back')).toBe('Yn ôl');
-    expect(activeLocale()).toBe('cy-GB');
-    // The <html lang> update is a passive effect, which can land a moment after the text does.
+    // The page language is set in an effect after the text changes, so wait for it rather than race it.
     await waitFor(() => expect(document.documentElement.lang).toBe('cy'));
+    expect(activeLocale()).toBe('cy-GB');
   });
 
   it('starts with a stored French choice in English, then switches to French once it arrives', async () => {

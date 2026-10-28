@@ -210,7 +210,7 @@ it('posts live banner announcements, clears banners, and switches overlays from 
   fireEvent.click(screen.getByRole('button', { name: 'Score strip' })); await settle();
   expect(state.overlay?.scoreCardMode).toBe(2);
 
-  fireEvent.click(screen.getByRole('button', { name: 'Lower third' })); await settle();
+  fireEvent.click(screen.getByRole('button', { name: 'Live heat bar' })); await settle();
   expect(state.overlay?.stripMode).toBe(2);
 });
 it('shows remaining free-plan stream time, allows +15m extension, and auto-stops when time expires', async () => {
@@ -318,7 +318,7 @@ it('supports microphone selection, wind filter, quality presets, camera zoom, tr
   await settle();
   expect(publisher.switchAudio).toHaveBeenCalledWith('rodelink');
 
-  fireEvent.click(screen.getByRole('button', { name: /Outdoor wind filter/i }));
+  fireEvent.click(screen.getByRole('button', { name: /Cut wind noise/i }));
   expect(publisher.setWindFilter).toHaveBeenCalledWith(true);
 
   fireEvent.click(screen.getByRole('button', { name: '720p' }));
@@ -387,8 +387,8 @@ it('supports microphone selection, wind filter, quality presets, camera zoom, tr
   fireEvent.click(screen.getByRole('button', { name: 'Overlays' }));
   expect(screen.queryByText('Viewers see')).toBeNull();
 
-  // Open 30m replay hub from Overlays modal
-  fireEvent.click(screen.getByRole('button', { name: '30m replay hub' }));
+  // Open Saved replays (last 30 minutes) from Overlays modal
+  fireEvent.click(screen.getByRole('button', { name: 'Saved replays (last 30 minutes)' }));
   expect(screen.getByRole('dialog', { name: 'Saved replays' })).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: 'Close saved replays' }));
 });

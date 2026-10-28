@@ -96,7 +96,7 @@ export function WhenWhereStep({ draft, change, problems, clear }: StepProps<Crea
           </div>
           <div className="cw-line">
             <TextBox label={<>{t('admin.creator.when.number')} <span className="font-normal text-[rgb(var(--mg-muted))]">{t('admin.creator.optional')}</span></>} value={draft.competitionNumber}
-              onChange={(competitionNumber) => change({ competitionNumber })} hint={t('admin.creator.when.numberHint')} />
+              onChange={(competitionNumber) => change({ competitionNumber })} />
             <TextBox label={<>{t('admin.creator.when.email')} <span className="font-normal text-[rgb(var(--mg-muted))]">{t('admin.creator.optional')}</span></>} value={draft.contactEmail} autoComplete="email"
               error={problems.contactEmail} onChange={(contactEmail) => { change({ contactEmail }); clear('contactEmail'); }} hint={t('admin.creator.when.emailHint')} />
           </div>
