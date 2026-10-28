@@ -524,6 +524,9 @@ public static class DemoDataCleaner
             ("score records", await db.Set<RaceScoreState>().CountAsync(s => races.Contains(s.RaceId), ct)
                 + await db.Set<RaceScoreEvent>().CountAsync(s => races.Contains(s.RaceId), ct)),
             ("team status changes", await db.Set<TeamStatusEvent>().CountAsync(e => e.CompetitionId == k, ct)),
+            ("chat reports", await db.ChatReports.CountAsync(r => r.Message.CompetitionId == k, ct)),
+            ("scheduled notifications", await db.ScheduledNotifications.CountAsync(n => n.CompetitionId == k, ct)),
+            ("protests", await db.Set<Protest>().CountAsync(p => p.CompetitionId == k, ct)),
             ("draw changes", await db.Set<DrawChange>().CountAsync(e => e.CompetitionId == k, ct)),
             ("rider swaps", await db.Set<RiderSwapEvent>().CountAsync(e => e.CompetitionId == k, ct)),
             ("special awards", await db.SpecialAwards.CountAsync(a => a.CompetitionId == k, ct)),

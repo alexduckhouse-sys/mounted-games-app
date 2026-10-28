@@ -15,7 +15,8 @@ public class RosterEndpointsTests(ApiFactory f) : IClassFixture<ApiFactory>
 
     private async Task<(HttpClient Client, string UserId, int ClubId)> MemberAsync()
     {
-        var (client, auth) = await f.SignupAsync("Member", $"Roster test club {Guid.NewGuid():N}");
+        // An approved Team Manager: the roster is shared by a club's approved trainers and managers, not by every member.
+        var (client, auth) = await f.ApprovedManagerAsync($"Roster test club {Guid.NewGuid():N}");
         var clubId = await f.WithDbAsync(db => db.Users.Where(u => u.Id == auth.User.Id).Select(u => u.ClubId).SingleAsync());
         Assert.NotNull(clubId);
         return (client, auth.User.Id, clubId.Value);
@@ -227,5 +228,56 @@ public class RosterEndpointsTests(ApiFactory f) : IClassFixture<ApiFactory>
             await db.SaveChangesAsync();
         });
         Assert.Equal(HttpStatusCode.BadRequest, (await member.Client.PostAsJsonAsync("/api/roster", new SaveToRosterRequest(null, "Example No Club"))).StatusCode);
+    }
+
+    [Fact]
+    public async Task SelfSignupMemberOfTheClub_CannotReadCreateUpdateOrDeleteItsRoster()
+    {
+        var clubName = $"Roster member club {Guid.NewGuid():N}";
+        var (managerClient, managerAuth) = await f.ApprovedManagerAsync(clubName);
+        var clubId = (await f.WithDbAsync(db => db.Users.Where(u => u.Id == managerAuth.User.Id).Select(u => u.ClubId).SingleAsync()))!.Value;
+        var saved = await SaveAsync(managerClient, Roster(true, clubId), new(clubId, "Example Child", NoFilming: true, UseInitialOnly: true));
+        var (memberClient, memberAuth) = await f.SignupAsync("Member", clubName);
+        Assert.Equal(clubId, await f.WithDbAsync(db => db.Users.Where(u => u.Id == memberAuth.User.Id).Select(u => u.ClubId).SingleAsync()));
+
+        foreach (var clubRoute in new[] { false, true })
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.PostAsJsonAsync(Roster(clubRoute, clubId), new SaveToRosterRequest(clubId, "Unwanted Example"))).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.PutAsJsonAsync(Rider(clubRoute, clubId, saved.Id),
+                new UpdateSavedRiderRequest(null, NoFilming: false, UseInitialOnly: false))).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.DeleteAsync(Rider(clubRoute, clubId, saved.Id))).StatusCode);
+        }
+        var kept = await f.WithDbAsync(db => db.SavedRiders.SingleAsync(r => r.Id == saved.Id));
+        Assert.True(kept.NoFilming);
+        Assert.True(kept.UseInitialOnly);
+        var mine = await memberClient.GetFromJsonAsync<List<SavedRiderDto>>("/api/clubs/my-saved-riders", TestClients.Json);
+        Assert.DoesNotContain(mine!, r => r.Id == saved.Id);
+    }
+
+    [Fact]
+    public async Task SingleLetterSurname_ForcesBothInitialOnlyAndNoFilming_OnCreateAndUpdate()
+    {
+        var manager = await MemberAsync();
+        var created = await SaveAsync(manager.Client, "/api/roster", new(manager.ClubId, "Example R."));
+        Assert.True(created.UseInitialOnly);
+        Assert.True(created.NoFilming);
+        var other = await SaveAsync(manager.Client, "/api/roster", new(manager.ClubId, "Another Rider"));
+        var response = await manager.Client.PutAsJsonAsync($"/api/roster/{other.Id}", new UpdateSavedRiderRequest("Another R", UseInitialOnly: false, NoFilming: false));
+        var updated = await response.ReadAsync<SavedRiderDto>();
+        Assert.True(updated.UseInitialOnly);
+        Assert.True(updated.NoFilming);
+    }
+
+    [Fact]
+    public async Task OverLongFields_AreRefusedWithBadRequest()
+    {
+        var manager = await MemberAsync();
+        Assert.Equal(HttpStatusCode.BadRequest, (await manager.Client.PostAsJsonAsync("/api/roster",
+            new SaveToRosterRequest(manager.ClubId, new string('a', 201)))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await manager.Client.PostAsJsonAsync("/api/roster",
+            new SaveToRosterRequest(manager.ClubId, "Example Long", PonyPassportNumber: new string('p', 81)))).StatusCode);
+        var saved = await SaveAsync(manager.Client, "/api/roster", new(manager.ClubId, "Example Fine"));
+        Assert.Equal(HttpStatusCode.BadRequest, (await manager.Client.PutAsJsonAsync($"/api/roster/{saved.Id}",
+            new UpdateSavedRiderRequest(null, PonyOwnerFullName: new string('o', 161)))).StatusCode);
     }
 }

@@ -78,7 +78,7 @@ public sealed class ResultsBookService(AppDbContext db, StandingsService standin
         if (book is null) return null;
 
         var teams = await db.Teams.AsNoTracking()
-            .Include(t => t.DeclarationForms).ThenInclude(f => f.Riders)
+            .Include(t => t.DeclarationForms).ThenInclude(f => f.Riders).ThenInclude(r => r.SavedRider)
             .Where(t => t.CompetitionId == competitionId)
             .ToListAsync(ct);
 
@@ -86,13 +86,14 @@ public sealed class ResultsBookService(AppDbContext db, StandingsService standin
             t => t.Id,
             t =>
             {
-                var form = t.DeclarationForms.OrderByDescending(f => f.SubmittedAt).ThenByDescending(f => f.Id).FirstOrDefault();
+                // Public output: only a locked (submitted) form, never a draft.
+                var form = t.DeclarationForms.Where(f => f.IsLocked).OrderByDescending(f => f.SubmittedAt).ThenByDescending(f => f.Id).FirstOrDefault();
                 return (IReadOnlyList<(string Name, string? Pony)>)(form?.Riders ?? [])
                     .OrderBy(r => r.IsReserve)
                     .ThenBy(r => r.OrderIndex)
                     .ThenBy(r => r.Id)
                     .Select(r => (
-                        Name: RiderNames.Display(r.FullName, r.UseInitialOnly, viewerSeesFullNames: false),
+                        Name: RiderNames.Display(r.FullName, r.UseInitialOnly || (r.SavedRider?.UseInitialOnly ?? false), viewerSeesFullNames: false),
                         Pony: string.IsNullOrWhiteSpace(r.HorseName) ? null : r.HorseName.Trim()))
                     .Where(r => !string.IsNullOrWhiteSpace(r.Name))
                     .ToList();

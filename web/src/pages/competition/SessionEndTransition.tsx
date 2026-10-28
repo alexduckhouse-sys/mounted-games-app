@@ -8,6 +8,7 @@ import { useAuth } from '../../auth/AuthContext';
 import type { CompetitionDetail, DeclarationForm, Heat, Session } from '../../types';
 import { displaySectionName } from '../../lib/section';
 import { ordinal } from '../../lib/toplist';
+import { publicRiderName } from '../../lib/riderNames';
 import type { SpecialAward } from '../eventTools/resultsBookTypes';
 
 const reserveTag = 'ml-1.5 inline-block rounded-[4px] border border-[rgb(var(--mg-rule))] px-1 text-[10px] font-semibold text-[rgb(var(--mg-muted))]';
@@ -265,7 +266,7 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
                               <ul className="grid grid-cols-1 gap-1 pt-0.5 sm:grid-cols-2">
                                 {form.riders.map((r) => (
                                   <li key={r.id} className="text-xs text-[rgb(var(--mg-body))]">
-                                    {r.fullName}
+                                    {publicRiderName(r)}
                                     {r.horseName?.trim() ? ` — ${r.horseName.trim()}` : ''}
                                     {r.isReserve && <span className={reserveTag}>Reserve</span>}
                                   </li>
@@ -353,7 +354,7 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
                             >
                               {(r.bibColour ?? '—').slice(0, 2)}
                             </span>
-                            <span className="truncate font-medium text-[rgb(var(--mg-ink))]">{r.fullName}</span>
+                            <span className="truncate font-medium text-[rgb(var(--mg-ink))]">{publicRiderName(r)}</span>
                             {r.isReserve && <span className={reserveTag}>Reserve</span>}
                             <span className="truncate text-[rgb(var(--mg-muted))]">{r.horseName ?? ''}</span>
                           </li>

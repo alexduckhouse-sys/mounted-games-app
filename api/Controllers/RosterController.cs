@@ -39,15 +39,23 @@ public record UpdateSavedRiderRequest(
 [Authorize]
 public class RosterController(AppDbContext db) : ControllerBase
 {
-    private async Task<bool> IsClubMemberOrTrainerOrAdminAsync(string userId, int clubId, CancellationToken ct)
+    private async Task<bool> IsClubMemberOrTrainerOrAdminAsync(int clubId, CancellationToken ct)
     {
+        // Same rule as ClubsController: an admin, or an approved trainer / Team Manager of the club. Merely
+        // belonging to the club (a self-signup Member can pick any club) gives no access to its riders.
         if (User.IsInRole(Roles.Admin)) return true;
+        return await db.SharesClubRosterAsync(User, clubId, ct);
+    }
 
-        var isMember = await db.Users.AsNoTracking()
-            .AnyAsync(u => u.Id == userId && u.ClubId == clubId, ct);
-        if (isMember) return true;
+    // Match the SavedRiders column limits so an over-long value is a 400, not a database error.
+    private const int FullNameMax = 200, PassportMax = 80, OwnerMax = 160;
 
-        return await db.SharesClubRosterAsync(User, clubId);
+    private static string? TooLong(string? fullName, string? passport, string? owner)
+    {
+        if (fullName?.Length > FullNameMax) return $"Rider name must be {FullNameMax} characters or fewer.";
+        if (passport?.Length > PassportMax) return $"Passport number must be {PassportMax} characters or fewer.";
+        if (owner?.Length > OwnerMax) return $"Owner name must be {OwnerMax} characters or fewer.";
+        return null;
     }
 
     [HttpPost("api/roster")]
@@ -64,7 +72,7 @@ public class RosterController(AppDbContext db) : ControllerBase
         if (targetClubId is null or <= 0)
             return BadRequest(new { message = "A target club is required to save a rider to the club roster." });
 
-        if (!await IsClubMemberOrTrainerOrAdminAsync(userId, targetClubId.Value, ct))
+        if (!await IsClubMemberOrTrainerOrAdminAsync(targetClubId.Value, ct))
             return Forbid();
 
         var fullName = (req.FullName ?? string.Empty).Trim();
@@ -74,6 +82,8 @@ public class RosterController(AppDbContext db) : ControllerBase
         var horseName = string.IsNullOrWhiteSpace(req.HorseName) ? null : req.HorseName.Trim();
         var passport = string.IsNullOrWhiteSpace(req.PonyPassportNumber) ? null : req.PonyPassportNumber.Trim();
         var owner = string.IsNullOrWhiteSpace(req.PonyOwnerFullName) ? null : req.PonyOwnerFullName.Trim();
+        if (TooLong(fullName, passport, owner) is { } tooLong) return BadRequest(new { message = tooLong });
+        var singleLetter = DecFormRules.HasSingleLetterSurnameInitial(fullName);
 
         var existing = await db.SavedRiders
             .Where(s => s.ClubId == targetClubId.Value)
@@ -92,9 +102,10 @@ public class RosterController(AppDbContext db) : ControllerBase
             if (passport is not null) match.PonyPassportNumber = passport;
             if (owner is not null) match.PonyOwnerFullName = owner;
             if (req.UseInitialOnly.HasValue)
-                match.UseInitialOnly = req.UseInitialOnly.Value || DecFormRules.HasSingleLetterSurnameInitial(fullName);
+                match.UseInitialOnly = req.UseInitialOnly.Value || singleLetter;
             if (req.NoFilming.HasValue)
-                match.NoFilming = req.NoFilming.Value;
+                match.NoFilming = req.NoFilming.Value || singleLetter;
+            if (singleLetter) { match.UseInitialOnly = true; match.NoFilming = true; }
             await db.SaveChangesAsync(ct);
             return match.ToDto();
         }
@@ -109,8 +120,8 @@ public class RosterController(AppDbContext db) : ControllerBase
             PonyHeightHands = req.PonyHeightHands,
             PonyPassportNumber = passport,
             PonyOwnerFullName = owner,
-            UseInitialOnly = (req.UseInitialOnly ?? false) || DecFormRules.HasSingleLetterSurnameInitial(fullName),
-            NoFilming = req.NoFilming ?? false,
+            UseInitialOnly = (req.UseInitialOnly ?? false) || singleLetter,
+            NoFilming = (req.NoFilming ?? false) || singleLetter,
         };
         db.SavedRiders.Add(saved);
         await db.SaveChangesAsync(ct);
@@ -132,12 +143,17 @@ public class RosterController(AppDbContext db) : ControllerBase
             s => s.Id == id && (!clubId.HasValue || s.ClubId == clubId.Value), ct);
         if (saved is null) return NotFound();
 
-        if (!await IsClubMemberOrTrainerOrAdminAsync(userId, saved.ClubId, ct) && saved.CreatedByUserId != userId)
+        if (!await IsClubMemberOrTrainerOrAdminAsync(saved.ClubId, ct) && saved.CreatedByUserId != userId)
             return Forbid();
 
         var fullName = (req.FullName ?? saved.FullName).Trim();
         if (string.IsNullOrEmpty(fullName))
             return BadRequest(new { message = "Rider full name is required." });
+
+        var newPassport = req.PonyPassportNumber is null ? null : req.PonyPassportNumber.Trim();
+        var newOwner = req.PonyOwnerFullName is null ? null : req.PonyOwnerFullName.Trim();
+        if (TooLong(fullName, newPassport, newOwner) is { } tooLong) return BadRequest(new { message = tooLong });
+        var singleLetter = DecFormRules.HasSingleLetterSurnameInitial(fullName);
 
         saved.FullName = fullName;
         saved.HorseName = string.IsNullOrWhiteSpace(req.HorseName) ? null : req.HorseName.Trim();
@@ -148,9 +164,10 @@ public class RosterController(AppDbContext db) : ControllerBase
         if (req.PonyOwnerFullName is not null)
             saved.PonyOwnerFullName = string.IsNullOrWhiteSpace(req.PonyOwnerFullName) ? null : req.PonyOwnerFullName.Trim();
         if (req.UseInitialOnly.HasValue)
-            saved.UseInitialOnly = req.UseInitialOnly.Value || DecFormRules.HasSingleLetterSurnameInitial(fullName);
+            saved.UseInitialOnly = req.UseInitialOnly.Value || singleLetter;
         if (req.NoFilming.HasValue)
-            saved.NoFilming = req.NoFilming.Value;
+            saved.NoFilming = req.NoFilming.Value || singleLetter;
+        if (singleLetter) { saved.UseInitialOnly = true; saved.NoFilming = true; }
 
         await db.SaveChangesAsync(ct);
         return saved.ToDto();
@@ -170,7 +187,7 @@ public class RosterController(AppDbContext db) : ControllerBase
             s => s.Id == id && (!clubId.HasValue || s.ClubId == clubId.Value), ct);
         if (saved is null) return NotFound();
 
-        if (!await IsClubMemberOrTrainerOrAdminAsync(userId, saved.ClubId, ct) && saved.CreatedByUserId != userId)
+        if (!await IsClubMemberOrTrainerOrAdminAsync(saved.ClubId, ct) && saved.CreatedByUserId != userId)
             return Forbid();
 
         var linkedEntries = await db.RiderEntries

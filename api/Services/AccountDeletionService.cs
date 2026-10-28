@@ -109,6 +109,23 @@ public sealed class AccountDeletionService(AppDbContext db, UserManager<AppUser>
         // --- Event and accounting history: kept, with the account link removed. ---
         await db.DeclarationForms.Where(d => d.SubmittedByUserId == id)
             .ExecuteUpdateAsync(s => s.SetProperty(d => d.SubmittedByUserId, (string?)null), ct);
+        // Protest logs stay with the competition; only the account links go.
+        await db.Set<MountedGames.Api.Entities.Operations.Protest>().Where(p => p.CreatedByUserId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.CreatedByUserId, (string?)null), ct);
+        await db.Set<MountedGames.Api.Entities.Operations.Protest>().Where(p => p.DecidedByUserId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.DecidedByUserId, (string?)null), ct);
+        // A guest entry made for a child holds the child's date of birth and their guardian and emergency contacts, and an entry
+        // may hold a vehicle registration and arrival notes: all personal, so erased with the contact details below.
+        var signupIds = db.SectionSignups.Where(x => x.UserId == id).Select(x => x.Id);
+        await db.Set<SignupGuestDetails>().Where(g => signupIds.Contains(g.SignupId)).ExecuteUpdateAsync(s => s
+            .SetProperty(g => g.RiderDateOfBirth, (DateTime?)null)
+            .SetProperty(g => g.GuardianName, (string?)null)
+            .SetProperty(g => g.GuardianPhone, (string?)null)
+            .SetProperty(g => g.EmergencyContactName, (string?)null)
+            .SetProperty(g => g.EmergencyContactPhone, (string?)null), ct);
+        await db.Set<SignupExtras>().Where(x => signupIds.Contains(x.SignupId)).ExecuteUpdateAsync(s => s
+            .SetProperty(x => x.VehicleRegistration, (string?)null)
+            .SetProperty(x => x.ArrivalNotes, (string?)null), ct);
         // A signup is also a payment record, so it stays with the name the organiser took payment from; the contact details go.
         await db.SectionSignups.Where(x => x.UserId == id).ExecuteUpdateAsync(s => s
             .SetProperty(x => x.UserId, (string?)null)

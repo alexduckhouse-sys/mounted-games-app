@@ -180,6 +180,61 @@ public class AccountDeletionTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Deleting_ErasesGuestChildDetailsVehicleAndArrivalNotes_AndClearsProtestAccountLinks()
+    {
+        var (client, auth) = await _f.SignupAsync();
+        var id = auth.User.Id;
+        var arena = await _f.CreateArenaAsync(2);
+        var (heatId, _) = await _f.AddHeatAsync(arena.SessionId, arena.TeamIds);
+        var (signupId, otherSignupId, protestId) = await _f.WithDbAsync(async db =>
+        {
+            var mine = new SectionSignup { CompetitionSectionId = arena.SectionId, UserId = id, FullName = "Real Name", AmountMinor = 0, Status = SignupPaymentStatus.Paid };
+            var others = new SectionSignup { CompetitionSectionId = arena.SectionId, FullName = "Someone Else", AmountMinor = 0, Status = SignupPaymentStatus.Paid };
+            db.AddRange(mine, others);
+            await db.SaveChangesAsync();
+            foreach (var sid in new[] { mine.Id, others.Id })
+            {
+                db.Add(new SignupGuestDetails { SignupId = sid, RiderName = "Child Name", RiderDateOfBirth = new DateTime(2015, 4, 5), PonyName = "Pony",
+                    GuardianName = "Guardian", GuardianPhone = "+447123456789", EmergencyContactName = "Emergency", EmergencyContactPhone = "+447123456780" });
+                db.Add(new SignupExtras { SignupId = sid, VehicleRegistration = "AB12 CDE", ArrivalNotes = "Arriving late" });
+            }
+            var protest = new MountedGames.Api.Entities.Operations.Protest
+            {
+                CompetitionId = arena.CompetitionId, HeatId = heatId, Reason = "Test", RequestId = Guid.NewGuid().ToString("N"),
+                CreatedByUserId = id, DecidedByUserId = id,
+            };
+            db.Add(protest);
+            await db.SaveChangesAsync();
+            return (mine.Id, others.Id, protest.Id);
+        });
+
+        using var r = await Delete(client, Password);
+        Assert.Equal(HttpStatusCode.NoContent, r.StatusCode);
+
+        await _f.WithDbAsync(async db =>
+        {
+            var g = await db.Set<SignupGuestDetails>().SingleAsync(x => x.SignupId == signupId);
+            Assert.Null(g.RiderDateOfBirth);
+            Assert.Null(g.GuardianName);
+            Assert.Null(g.GuardianPhone);
+            Assert.Null(g.EmergencyContactName);
+            Assert.Null(g.EmergencyContactPhone);
+            var e = await db.Set<SignupExtras>().SingleAsync(x => x.SignupId == signupId);
+            Assert.Null(e.VehicleRegistration);
+            Assert.Null(e.ArrivalNotes);
+            var p = await db.Set<MountedGames.Api.Entities.Operations.Protest>().SingleAsync(x => x.Id == protestId);
+            Assert.Null(p.CreatedByUserId);
+            Assert.Null(p.DecidedByUserId);
+
+            // Someone else's entry is untouched.
+            var og = await db.Set<SignupGuestDetails>().SingleAsync(x => x.SignupId == otherSignupId);
+            Assert.NotNull(og.RiderDateOfBirth);
+            Assert.Equal("Guardian", og.GuardianName);
+            Assert.Equal("AB12 CDE", (await db.Set<SignupExtras>().SingleAsync(x => x.SignupId == otherSignupId)).VehicleRegistration);
+        });
+    }
+
+    [Fact]
     public async Task Deleting_RemovesAuthoredContent_PreservesAccounting_AndClearsOwnership()
     {
         var (client, auth) = await _f.SignupAsync();

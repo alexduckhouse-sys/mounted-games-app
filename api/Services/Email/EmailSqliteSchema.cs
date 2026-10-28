@@ -113,5 +113,16 @@ public static class EmailSqliteSchema
         await DbInitializer.EnsureColumnAsync(db, "EntriesDigestCompetitions", "Latitude", "REAL NULL");
         await DbInitializer.EnsureColumnAsync(db, "EntriesDigestCompetitions", "Longitude", "REAL NULL");
         await DbInitializer.EnsureColumnAsync(db, "EntriesDigestCompetitions", "EntriesCloseAt", "TEXT NULL");
+        // Fill rows that predate the frozen text from their competition, as the Postgres migration does.
+        await db.Database.ExecuteSqlRawAsync("""
+            UPDATE "EntriesDigestCompetitions"
+            SET "Name" = COALESCE(SUBSTR((SELECT c."Name" FROM "Competitions" c WHERE c."Id" = "EntriesDigestCompetitions"."CompetitionId"), 1, 200), ''),
+                "Location" = SUBSTR((SELECT c."Location" FROM "Competitions" c WHERE c."Id" = "EntriesDigestCompetitions"."CompetitionId"), 1, 500),
+                "StartDate" = COALESCE((SELECT c."StartDate" FROM "Competitions" c WHERE c."Id" = "EntriesDigestCompetitions"."CompetitionId"), "StartDate"),
+                "EndDate" = (SELECT c."EndDate" FROM "Competitions" c WHERE c."Id" = "EntriesDigestCompetitions"."CompetitionId"),
+                "Latitude" = (SELECT c."Latitude" FROM "Competitions" c WHERE c."Id" = "EntriesDigestCompetitions"."CompetitionId"),
+                "Longitude" = (SELECT c."Longitude" FROM "Competitions" c WHERE c."Id" = "EntriesDigestCompetitions"."CompetitionId")
+            WHERE "Name" = '' AND EXISTS (SELECT 1 FROM "Competitions" c WHERE c."Id" = "EntriesDigestCompetitions"."CompetitionId");
+            """);
     }
 }

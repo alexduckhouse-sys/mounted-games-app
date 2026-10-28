@@ -1,4 +1,5 @@
 import type { DeclarationForm } from '../types';
+import { publicRiderName } from './riderNames';
 import type { Toplist } from './toplist';
 
 /** One place given at a prize-giving, as every viewer receives it. */
@@ -78,5 +79,5 @@ export function riderLines(forms: DeclarationForm[], teamId: number): RiderLine[
   return form.riders
     .slice()
     .sort((a, b) => Number(a.isReserve) - Number(b.isReserve) || a.orderIndex - b.orderIndex)
-    .map((rider) => ({ rider: rider.fullName, pony: rider.horseName?.trim() || null, reserve: rider.isReserve }));
+    .map((rider) => ({ rider: publicRiderName(rider), pony: rider.horseName?.trim() || null, reserve: rider.isReserve }));
 }

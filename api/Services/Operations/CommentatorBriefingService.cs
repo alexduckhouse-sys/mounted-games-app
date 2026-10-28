@@ -39,7 +39,7 @@ public class CommentatorBriefingService(AppDbContext db)
         var sectionTeams = await db.Teams
             .AsNoTracking()
             .Include(t => t.Club)
-            .Include(t => t.DeclarationForms).ThenInclude(df => df.Riders)
+            .Include(t => t.DeclarationForms).ThenInclude(df => df.Riders).ThenInclude(r => r.SavedRider)
             .Where(t => t.CompetitionId == competitionId
                 && (sectionId == null || t.CompetitionSectionId == sectionId))
             .ToListAsync(ct);
@@ -192,7 +192,7 @@ public class CommentatorBriefingService(AppDbContext db)
         var list = new List<string>();
         foreach (var rider in latest.Riders.OrderBy(r => r.IsReserve).ThenBy(r => r.OrderIndex).ThenBy(r => r.Id))
         {
-            var safeName = RiderNames.Display(rider.FullName, rider.UseInitialOnly, viewerSeesFullNames: false);
+            var safeName = RiderNames.Display(rider.FullName, rider.UseInitialOnly || (rider.SavedRider?.UseInitialOnly ?? false), viewerSeesFullNames: false);
             var pony = CompetitionFields.Trimmed(rider.HorseName);
             var suffix = rider.IsCaptain ? " (Capt)" : rider.IsReserve ? " (Reserve)" : string.Empty;
             var line = !string.IsNullOrEmpty(pony)
