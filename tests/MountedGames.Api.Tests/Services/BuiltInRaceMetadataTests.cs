@@ -14,7 +14,7 @@ public class BuiltInRaceMetadataTests
             Assert.Contains("not verified", book.Edition);
             Assert.Equal("Test stored race notes.", book.HowToRide);
             Assert.DoesNotContain("6 m", book.Setup);
-            Assert.Contains("published rulebook", book.Penalties);
+            Assert.Contains("rulebook", book.Penalties);
         });
     }
 

@@ -16,6 +16,7 @@ import App from './App.tsx'
 import { registerPwa } from './pwa'
 import { startOutboxSync } from './offline/useScoreOutbox'
 import { isEmbedPath } from './lib/embed'
+import { listenForInstall } from './hooks/usePwaInstall'
 
 const root = createRoot(document.getElementById('root')!)
 
@@ -35,5 +36,7 @@ if (isEmbedPath(window.location.pathname)) {
   )
 
   registerPwa();
+  // Chromium offers its install prompt once, early; keep it for the Install button in Settings.
+  listenForInstall();
   startOutboxSync();
 }

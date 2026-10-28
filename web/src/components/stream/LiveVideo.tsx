@@ -17,8 +17,11 @@ export function LiveVideo({ competitionId, streams, sessions, invoke, ready, mes
   competitionId: number; streams: LiveStream[]; sessions: Session[]; invoke: StreamInvoke; ready: number;
   messages: { message: ChatMessage; receivedAt: number }[]; canBroadcast: boolean; fallback?: string | null; competitionName: string;
   publicLayout?: boolean; showPlaceholder?: boolean; lastCommand?: StreamCommand | null;
-  /** Hands the live video to the page (for example to record replays from it). Called with null when it goes away. */
-  onMedia?: (media: MediaStream | null) => void;
+  /**
+   * Hands the live video to the page (for example to record replays from it), with the id of the stream it is
+   * playing (also while it connects, when the video is still null). Called with just null when the player goes away.
+   */
+  onMedia?: (media: MediaStream | null, streamId?: number) => void;
 }) {
   const { lite } = useLiteMode();
   const t = useT();
@@ -83,7 +86,7 @@ function TapToWatch({ stream, captionBar, onTap }: { stream: LiveStream; caption
   </button>;
 }
 function ConnectedPlayer({ stream, invoke, ready, announcement, captionBar, label, competitionName, onMedia }: {
-  stream: LiveStream; competitionName: string; invoke: StreamInvoke; ready: number; onMedia?: (media: MediaStream | null) => void;
+  stream: LiveStream; competitionName: string; invoke: StreamInvoke; ready: number; onMedia?: (media: MediaStream | null, streamId?: number) => void;
   announcement?: { message: ChatMessage; receivedAt: number };
   captionBar?: boolean; label: string | null;
 }) {
@@ -97,9 +100,9 @@ function ConnectedPlayer({ stream, invoke, ready, announcement, captionBar, labe
     return () => { unsubscribe(); next.dispose(); };
   }, [stream.competitionId, stream.id, invoke]);
   useEffect(() => {
-    onMedia?.(snapshot.media);
+    onMedia?.(snapshot.media, stream.id);
     return () => onMedia?.(null);
-  }, [snapshot.media, onMedia]);
+  }, [snapshot.media, onMedia, stream.id]);
   // With the video hidden this is a radio: the lock screen names the event, the arena and the heat on air.
   useShowgroundRadio(snapshot.audioOnly === true, { competitionName, arenaName: stream.arenaName, heatLabel: label });
   useEffect(() => { viewer.current!.sync(ready, stream.generation); }, [ready, stream.generation, stream.competitionId, stream.id, invoke]);

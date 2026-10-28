@@ -28,6 +28,8 @@ public sealed class StatsService(AppDbContext db, StandingsService? standings = 
     private readonly StandingsService? _standings = standings;
     public const int HitsPerKind = 8;
     public const int BrowsePageSize = 24;
+    /// <summary>The most recent runs of one game sent with a team profile, so a long history stays a small answer.</summary>
+    public const int MaxRunsPerGame = 40;
     private const int MaxSearchRows = 2000;
     private const int MaxBrowseRows = 20000;
     private const int MaxProfileRows = 5000;
@@ -37,7 +39,7 @@ public sealed class StatsService(AppDbContext db, StandingsService? standings = 
     private sealed record Membership(int TeamId, string? RiderName, string? PonyName, bool IsReserve);
     private sealed record TeamRow(int TeamId, string TeamName, string ClubName, bool IsHorsConcours, int CompetitionId,
         string CompetitionName, DateTime StartDate, int SectionId, string SectionName, SectionFormat Format);
-    private sealed record ResultRow(int TeamId, string RaceName, int SessionId, string SessionName, int SessionOrder,
+    private sealed record ResultRow(int TeamId, int RaceId, string RaceName, int SessionId, string SessionName, int SessionOrder,
         RaceRoundStage Stage, int? Placing, bool Eliminated, double Points);
     private sealed record Placing(int Place, int TeamsPlaced, int? FinalTier, bool SectionHasFinals);
 
@@ -239,7 +241,7 @@ public sealed class StatsService(AppDbContext db, StandingsService? standings = 
 
         var results = ids.Count == 0 ? [] : await db.Results.AsNoTracking()
             .Where(r => ids.Contains(r.TeamId) && r.Race!.IsComplete && !r.IsSitOut)
-            .Select(r => new ResultRow(r.TeamId, r.Race!.Name, r.Race.Heat!.SessionId, r.Race.Heat.Session!.Name,
+            .Select(r => new ResultRow(r.TeamId, r.RaceId, r.Race!.Name, r.Race.Heat!.SessionId, r.Race.Heat.Session!.Name,
                 r.Race.Heat.Session.OrderIndex, r.Race.Heat.RaceRoundStage, r.Placing, r.Eliminated, r.Points))
             .ToListAsync(ct);
         var sessionIds = results.Select(r => r.SessionId).Distinct().ToList();
@@ -277,8 +279,17 @@ public sealed class StatsService(AppDbContext db, StandingsService? standings = 
                 var avgPoints = Math.Round(gamePoints / g.Count(), 1, MidpointRounding.AwayFromZero);
                 var placedRaces = g.Where(r => !r.Eliminated && r.Placing is > 0).Select(r => r.Placing!.Value).ToList();
                 var avgPlace = placedRaces.Count == 0 ? (double?)null : Math.Round(placedRaces.Average(), 1, MidpointRounding.AwayFromZero);
+                // A team profile also lists each run, oldest first, so the page can draw them. Other kinds don't need them.
+                var runs = kind != StatsSubjectKind.Team ? null : g
+                    .Select(r => (Row: r, Team: teamById[r.TeamId]))
+                    .OrderByDescending(x => x.Team.StartDate).ThenByDescending(x => x.Row.SessionOrder).ThenByDescending(x => x.Row.RaceId)
+                    .Take(MaxRunsPerGame)
+                    .OrderBy(x => x.Team.StartDate).ThenBy(x => x.Row.SessionOrder).ThenBy(x => x.Row.RaceId)
+                    .Select(x => new StatsRunDto(x.Team.CompetitionName, x.Team.StartDate,
+                        !x.Row.Eliminated && x.Row.Placing is > 0 ? x.Row.Placing : null, x.Row.Eliminated, x.Row.Points, MaxFor(x.Row)))
+                    .ToList();
                 return new StatsGameDto(StatsNames.Tidy(g.First().RaceName), g.Count(), gameWins, StatsNames.Percent(gameWins, g.Count()),
-                    g.Count(r => r.Eliminated), gamePoints, gameMax, StatsNames.Percent(gamePoints, gameMax), avgPoints, avgPlace);
+                    g.Count(r => r.Eliminated), gamePoints, gameMax, StatsNames.Percent(gamePoints, gameMax), avgPoints, avgPlace, runs);
             })
             .OrderByDescending(g => g.PointQuotaPercent ?? -1).ThenByDescending(g => g.Races)
             .ThenBy(g => g.Name, StringComparer.OrdinalIgnoreCase)

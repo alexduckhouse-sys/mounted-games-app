@@ -57,7 +57,7 @@ public class ReviewCompetitionSeederTests
     public async Task SeedAsync_ReplacesExistingDemoCompetition_WhenItHadDuplicateSplitSections()
     {
         await using var db = await Database();
-        var comp = new Competition { Name = "Demo Meadow Cup", StartDate = Today, EndDate = Today.AddHours(8) };
+        var comp = new Competition { Name = "EGUK Winter Pairs Series — Round 1", StartDate = Today, EndDate = Today.AddHours(8) };
         comp.Sections.Add(new CompetitionSection { Competition = comp, Format = SectionFormat.Teams, AgeGroup = "Seniors", DisplayName = "Seniors teams A" });
         comp.Sections.Add(new CompetitionSection { Competition = comp, Format = SectionFormat.Teams, AgeGroup = "Seniors", DisplayName = "Seniors teams B" });
         db.Competitions.Add(comp);
@@ -67,7 +67,7 @@ public class ReviewCompetitionSeederTests
         await ReviewCompetitionSeeder.SeedAsync(db, Today, Today.AddHours(10));
         db.ChangeTracker.Clear();
 
-        var meadow = await db.Competitions.Include(c => c.Sections).SingleAsync(c => c.Name == "Demo Meadow Cup");
+        var meadow = await db.Competitions.Include(c => c.Sections).SingleAsync(c => c.Name == "EGUK Winter Pairs Series — Round 1");
         Assert.Equal(3, meadow.Sections.Count);
         Assert.Single(meadow.Sections, s => s.AgeGroup == "Seniors");
         Assert.Equal("Seniors", meadow.Sections.Single(s => s.AgeGroup == "Seniors").DisplayName);

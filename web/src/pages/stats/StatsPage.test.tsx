@@ -60,40 +60,56 @@ const browse = (kind: number, names: string[], overrides: Record<string, unknown
 });
 
 describe('StatsPage browse', () => {
-  it('lists riders straight away and links each to its profile', async () => {
-    vi.mocked(api.get).mockResolvedValue(browse(0, ['Oliver S.', 'Ann Jones']));
+  it('lists riders straight away, surname first under letter headings, and links each to its profile', async () => {
+    vi.mocked(api.get).mockResolvedValue(browse(0, ['Oliver S.', 'Ann Jones', 'Arthur Barker', 'Owen Barker']));
     renderAt('/stats');
     expect(screen.getByRole('status')).toHaveTextContent('Loading…');
     const link = await screen.findByRole('link', { name: /Oliver S\./ });
     expect(link).toHaveAttribute('href', '/stats/riders?name=oliver%20s.');
-    // Just the name: no count of competitions, no total, no label above the search, no pill row of other pages.
+    // A rider shown by surname initial keeps that form; the others read "Surname, Given". Nothing sits under a name.
     expect(link).toHaveTextContent(/^Oliver S\.$/);
+    expect(screen.getByRole('link', { name: /Barker, Arthur/ })).toHaveTextContent(/^Barker, Arthur$/);
     expect(screen.queryByText(/competitions?$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Shown by surname initial/)).not.toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)).toEqual(['B', 'J', 'O']);
+    expect(screen.getByRole('region', { name: 'Riders B' })).toHaveTextContent('2 riders');
+    // Each letter's card is its own list with its full height, and clear space (not a tight 12px) before the next heading.
+    const sections = screen.getAllByRole('region').filter((region) => region.getAttribute('aria-label')?.startsWith('Riders '));
+    expect(sections).toHaveLength(3);
+    for (const section of sections) expect(section).toHaveClass('mt-8');
+    expect(within(sections[0]).getByRole('list')).toHaveClass('sp-card', 'mt-2');
+    expect(within(screen.getByRole('list', { name: 'Riders B' })).getAllByRole('link').map((row) => row.textContent)).toEqual(['Barker, Arthur', 'Barker, Owen']);
     expect(screen.queryByText(/found/)).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Season tables|Past competitions/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Show Riders' })).toHaveTextContent('Riders');
-    expect(screen.getByRole('list', { name: 'Riders' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Riders' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByText(/Only finished competitions count/)).toBeInTheDocument();
     expect(api.get).toHaveBeenCalledWith('/stats/browse', expect.objectContaining({ params: { kind: 0, q: undefined, page: 1 } }));
   });
 
-  it('switches between riders, ponies, teams and clubs', async () => {
+  it('switches between riders, ponies, teams and clubs with the tabs', async () => {
     vi.mocked(api.get).mockImplementation(async (_url, config) => {
       const kind = (config?.params as { kind: number }).kind;
       return browse(kind, [['Rider One', 'Pony One', 'Team One', 'Club One'][kind]]);
     });
     renderAt('/stats');
-    expect(await screen.findByText('Rider One')).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: /One, Rider/ })).toBeInTheDocument();
     for (const [label, name, href] of [['Ponies', 'Pony One', '/stats/ponies?name=pony%20one'], ['Teams', 'Team One', '/stats/teams?name=team%20one'], ['Clubs', 'Club One', '/stats/clubs?name=club%20one']]) {
-      await userEvent.click(screen.getByRole('combobox', { name: /^Show/ }));
-      await userEvent.click(screen.getByRole('option', { name: label }));
+      await userEvent.click(screen.getByRole('link', { name: label }));
       expect(await screen.findByRole('link', { name: new RegExp(name) })).toHaveAttribute('href', href);
-      expect(screen.getByRole('combobox', { name: /^Show/ })).toHaveTextContent(label);
+      expect(screen.getByRole('link', { name: label })).toHaveAttribute('aria-current', 'page');
+      // These stay as plain lists: no letter headings.
+      expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument();
     }
     expect(screen.getByRole('searchbox')).toHaveAttribute('placeholder', 'Name of a club');
-    await userEvent.click(screen.getByRole('combobox', { name: /^Show/ }));
-    await userEvent.click(screen.getByRole('option', { name: 'Riders' }));
-    expect(await screen.findByText('Rider One')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('link', { name: 'Riders' }));
+    expect(await screen.findByRole('link', { name: /One, Rider/ })).toBeInTheDocument();
+  });
+
+  it('keeps the words typed when a tab is chosen', async () => {
+    vi.mocked(api.get).mockResolvedValue(browse(0, []));
+    renderAt('/stats?q=oak');
+    expect(screen.getByRole('link', { name: 'Teams' })).toHaveAttribute('href', '/stats?kind=teams&q=oak');
+    expect(screen.getByRole('link', { name: 'Riders' })).toHaveAttribute('href', '/stats?q=oak');
   });
 
   it('narrows the list as you type', async () => {
@@ -102,11 +118,11 @@ describe('StatsPage browse', () => {
       return browse(0, q ? ['Oliver S.'] : ['Oliver S.', 'Ann Jones'], { query: q ?? '' });
     });
     renderAt('/stats');
-    expect(await screen.findByText('Ann Jones')).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: /Jones, Ann/ })).toBeInTheDocument();
     await userEvent.type(screen.getByRole('searchbox'), 'o');
     expect(screen.getByText('Type at least two letters to narrow the list.')).toBeInTheDocument();
     await userEvent.type(screen.getByRole('searchbox'), 'li');
-    await waitFor(() => expect(screen.queryByText('Ann Jones')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('link', { name: /Jones, Ann/ })).not.toBeInTheDocument());
     expect(await screen.findByText('Oliver S.')).toBeInTheDocument();
     expect(api.get).toHaveBeenCalledWith('/stats/browse', expect.objectContaining({ params: { kind: 0, q: 'oli', page: 1 } }));
   });
@@ -115,7 +131,7 @@ describe('StatsPage browse', () => {
     vi.mocked(api.get).mockResolvedValue(browse(1, []));
     renderAt('/stats?kind=ponies&q=zz');
     expect(screen.getByRole('searchbox')).toHaveValue('zz');
-    expect(screen.getByRole('combobox', { name: /^Show/ })).toHaveTextContent('Ponies');
+    expect(screen.getByRole('link', { name: 'Ponies' })).toHaveAttribute('aria-current', 'page');
     expect(await screen.findByText('No matches')).toBeInTheDocument();
     expect(screen.getByText(/No ponies in a finished competition match “zz”/)).toBeInTheDocument();
   });
@@ -132,8 +148,11 @@ describe('StatsPage browse', () => {
       .mockResolvedValueOnce(browse(0, ['Ann', 'Bea'], { total: 3 }))
       .mockResolvedValueOnce(browse(0, ['Cat'], { page: 2, total: 3 }));
     renderAt('/stats');
+    // With more still to come, a letter's rider count would be wrong, so it is left off.
+    expect(await screen.findByRole('region', { name: 'Riders A' })).not.toHaveTextContent('rider');
     await userEvent.click(await screen.findByRole('button', { name: 'Show more (1 left)' }));
     expect(await screen.findByText('Cat')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Riders C' })).toHaveTextContent('1 rider');
     expect(screen.queryByRole('button', { name: /Show more/ })).not.toBeInTheDocument();
     expect(api.get).toHaveBeenLastCalledWith('/stats/browse', expect.objectContaining({ params: { kind: 0, q: undefined, page: 2 } }));
   });

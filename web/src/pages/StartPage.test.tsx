@@ -42,7 +42,7 @@ beforeEach(() => {
 describe('the start page and the events page', () => {
   it('shows the events list at / when nothing is remembered', async () => {
     renderAt('/');
-    expect(await screen.findByRole('searchbox', { name: 'Search competitions' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Competitions' })).toBeInTheDocument();
     expect(screen.getByTestId('probe')).toHaveTextContent('/');
   });
 
@@ -56,7 +56,7 @@ describe('the start page and the events page', () => {
   it('shows the events list at / when the competition is only for this visit', async () => {
     visit();
     renderAt('/');
-    expect(await screen.findByRole('searchbox', { name: 'Search competitions' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Competitions' })).toBeInTheDocument();
     expect(screen.getByTestId('probe')).toHaveTextContent('/');
   });
 
@@ -67,7 +67,7 @@ describe('the start page and the events page', () => {
   ])('always shows the events list at /events, with %s', async (_name, setup) => {
     setup();
     renderAt('/events');
-    expect(await screen.findByRole('searchbox', { name: 'Search competitions' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Competitions' })).toBeInTheDocument();
     expect(screen.queryByText('Competition page')).not.toBeInTheDocument();
     expect(screen.getByTestId('probe')).toHaveTextContent('/events');
   });

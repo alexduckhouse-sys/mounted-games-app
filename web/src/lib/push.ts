@@ -1,5 +1,42 @@
 import { api } from '../api';
 
+const PUSH_READY_TIMEOUT_MS = 10_000;
+
+export type PushReadiness = 'unsupported' | 'default' | 'denied' | 'not-subscribed' | 'ready' | 'error';
+
+// A service worker may never activate (for example after a failed install).
+// Stop waiting without continuing subscription work if it becomes ready later.
+async function waitForPush<T>(pending: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      pending,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Push readiness timed out')), PUSH_READY_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Reads this browser's state without requesting permission or contacting the API.
+ * `ready` means a browser subscription exists; it does not prove server registration
+ * or delivery. `default` means permission has not yet been granted or denied.
+ */
+export async function readPushReadiness(): Promise<PushReadiness> {
+  if (!pushSupported()) return 'unsupported';
+  if (Notification.permission !== 'granted') return Notification.permission;
+  try {
+    const reg = await waitForPush(navigator.serviceWorker.ready);
+    const subscription = await waitForPush(reg.pushManager.getSubscription());
+    return subscription ? 'ready' : 'not-subscribed';
+  } catch {
+    return 'error';
+  }
+}
+
 /** Decodes a base64url VAPID key into a fresh ArrayBuffer (what PushManager wants). */
 function urlBase64ToBuffer(base64: string): ArrayBuffer {
   const padding = '='.repeat((4 - (base64.length % 4)) % 4);
@@ -18,38 +55,51 @@ export function pushSupported(): boolean {
     && 'Notification' in window;
 }
 
+/** Why switching alerts on did or didn't work. "server" is our side refusing or unreachable; "browser" is the browser refusing. */
+export type PushResult = 'ok' | 'unsupported' | 'denied' | 'browser' | 'server';
+
 /**
  * Subscribe the browser for web-push notifications and register the endpoint
- * with the backend. No-op if push isn't supported or the user hasn't granted
- * notification permission yet.
+ * with the backend, and say how it went. Only 'ok' means alerts will arrive.
  */
-export async function subscribeForPush(): Promise<boolean> {
-  if (!pushSupported()) return false;
-  if (Notification.permission !== 'granted') return false;
+export async function subscribeForPushResult(): Promise<PushResult> {
+  if (!pushSupported()) return 'unsupported';
+  if (Notification.permission !== 'granted') return Notification.permission === 'denied' ? 'denied' : 'browser';
+  let sub: globalThis.PushSubscription | null;
   try {
-    const reg = await navigator.serviceWorker.ready;
-    const existing = await reg.pushManager.getSubscription();
-    if (existing) {
-      await sendSubscription(existing);
-      return true;
+    const reg = await waitForPush(navigator.serviceWorker.ready);
+    sub = await waitForPush(reg.pushManager.getSubscription());
+    if (!sub) {
+      let publicKey: string;
+      try {
+        publicKey = (await api.get<{ publicKey: string }>('/push/vapid-public-key')).data.publicKey;
+      } catch { return 'server'; }
+      if (!publicKey) return 'server';
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToBuffer(publicKey),
+      });
     }
-    const { data } = await api.get<{ publicKey: string }>('/push/vapid-public-key');
-    if (!data.publicKey) return false;
-    const sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToBuffer(data.publicKey),
-    });
-    await sendSubscription(sub);
-    return true;
   } catch {
-    return false;
+    return 'browser';
   }
+  try {
+    await sendSubscription(sub);
+    return 'ok';
+  } catch {
+    return 'server';
+  }
+}
+
+/** True only when the browser is subscribed and the server accepted it. */
+export async function subscribeForPush(): Promise<boolean> {
+  return (await subscribeForPushResult()) === 'ok';
 }
 
 export async function unsubscribeFromPush(): Promise<void> {
   if (!pushSupported()) return;
   try {
-    const reg = await navigator.serviceWorker.ready;
+    const reg = await waitForPush(navigator.serviceWorker.ready);
     const sub = await reg.pushManager.getSubscription();
     if (sub) {
       const endpoint = sub.endpoint;

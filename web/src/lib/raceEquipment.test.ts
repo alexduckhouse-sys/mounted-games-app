@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { crewLines, diffRaceEquipment, equipmentFromDiagram } from './raceEquipment';
+import { crewGroups, diffRaceEquipment, equipmentFromDiagram } from './raceEquipment';
 
 describe('equipmentFromDiagram', () => {
   it('counts equipment by name, including things stacked on other things at arbitrary depth', () => {
@@ -100,28 +100,39 @@ describe('diffRaceEquipment', () => {
   });
 });
 
-describe('crewLines', () => {
+describe('crewGroups', () => {
   const lane = (poles: number, items: object[] = []) => JSON.stringify([
     ...Array.from({ length: poles }, (_, i) => ({ t: 'pole', x: 20 + i * 15 })),
     ...items,
   ]);
-  const mugs = (n: number) => Array.from({ length: n }, () => ({ t: 'item', kind: 'mug', x: 30 }));
+  const mugs = (n: number, x = 30) => Array.from({ length: n }, () => ({ t: 'item', kind: 'mug', x }));
+  const groups = (prev: string, next: string) => crewGroups(diffRaceEquipment(prev, next));
 
   it('says what goes out and what comes in, in plain sentences', () => {
-    const lines = crewLines(diffRaceEquipment(lane(5, mugs(3)), lane(5, mugs(1))));
-    expect(lines).toEqual(['Take out 2 × Mug (Poles P1–P5).']);
-    expect(crewLines(diffRaceEquipment(lane(5), lane(5, mugs(2))))).toEqual(['Bring in 2 × Mug (Poles P1–P5).']);
+    expect(groups(lane(5, mugs(3)), lane(5, mugs(1)))).toEqual([{ place: 'middle', lines: ['Take out 2 × Mug.'] }]);
+    expect(groups(lane(5), lane(5, mugs(2)))).toEqual([{ place: 'middle', lines: ['Bring in 2 × Mug.'] }]);
   });
 
-  it('puts the poles first', () => {
-    expect(crewLines(diffRaceEquipment(lane(5), lane(4)))[0]).toBe('Take out the 5th pole.');
-    expect(crewLines(diffRaceEquipment(lane(4), lane(5)))[0]).toBe('Put in the 5th pole.');
-    expect(crewLines(diffRaceEquipment(lane(5), lane(0)))[0]).toBe('Take out the bending poles.');
-    expect(crewLines(diffRaceEquipment(lane(0), lane(4)))[0]).toBe('Put in 4 poles.');
-    expect(crewLines(diffRaceEquipment(lane(0), lane(5)))[0]).toBe('Put in 5 poles.');
+  it('puts the poles first, in the middle', () => {
+    expect(groups(lane(5), lane(4))[0]).toEqual({ place: 'middle', lines: ['Take out the 5th pole.'] });
+    expect(groups(lane(4), lane(5))[0].lines[0]).toBe('Put in the 5th pole.');
+    expect(groups(lane(5), lane(0))[0].lines[0]).toBe('Take out the bending poles.');
+    expect(groups(lane(0), lane(4))[0].lines[0]).toBe('Put in 4 poles.');
+    expect(groups(lane(0), lane(5))[0].lines[0]).toBe('Put in 5 poles.');
+    expect(groups(lane(5, mugs(1)), lane(4, mugs(2)))[0].lines).toEqual(['Take out the 5th pole.', 'Bring in Mug.']);
+  });
+
+  it('splits what changes by where it sits: top, then middle, then start line, leaving out places with nothing to do', () => {
+    const next = lane(5, [...mugs(1, 95), ...mugs(1, 5), { t: 'item', kind: 'ball', x: 40 }]);
+    const found = groups(lane(5, mugs(2, 95)), next);
+    expect(found.map((g) => g.place)).toEqual(['top', 'middle', 'start']);
+    expect(found[0].lines).toEqual(['Take out Mug.']);
+    expect(found[1].lines).toEqual(['Bring in Ball.']);
+    expect(found[2].lines).toEqual(['Bring in Mug.']);
+    expect(groups(lane(5, mugs(1, 5)), lane(5, mugs(2, 5))).map((g) => g.place)).toEqual(['start']);
   });
 
   it('has nothing to say when the lane stays as it is', () => {
-    expect(crewLines(diffRaceEquipment(lane(5), lane(5)))).toEqual([]);
+    expect(groups(lane(5), lane(5))).toEqual([]);
   });
 });

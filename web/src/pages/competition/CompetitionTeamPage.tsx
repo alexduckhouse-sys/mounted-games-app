@@ -1,34 +1,31 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FollowStar } from '../../components/FollowStar';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Ban, ChevronRight, ClipboardList, Shield } from 'lucide-react';
+import { ArrowLeft, Ban, ChevronRight } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useStillMotion } from '../../lite/useStillMotion';
 import { HeatScores } from './HeatScores';
 import { api } from '../../api';
-import { useAuth } from '../../auth/AuthContext';
 import { useCompactPageBar, usePageHeader } from '../../components/CompactPageBarContext';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useFavourites } from '../../hooks/useFavourites';
 import { parseBibAndFlag } from '../../lib/bib';
-import { heightText } from '../../lib/decForm';
+import { dotColour } from '../../lib/teamColours';
 import { formatPoints } from '../../lib/formatPoints';
 import { statusLetter } from '../../lib/resultStatus';
 import { resultStatusLabel } from '../../lib/resultStatusText';
 import { displaySectionName } from '../../lib/section';
 import { computeTimings } from '../../lib/time';
 import { timetableRows, TIMETABLE_COLOURS, type TimetableStatus } from '../../lib/timetableRows';
-import { formatDelayDuration } from '../../lib/time';
+import { formatDelayDuration, formatTime } from '../../lib/time';
 import { buildToplist, type TeamBlock } from '../../lib/toplist';
 import { localOrdinal as ordinal } from '../../lib/ordinalText';
 import { useT } from '../../i18n/LanguageContext';
 import { activeLocale } from '../../i18n/translate';
-import type { DeclarationForm, Heat, Session, StandingRow } from '../../types';
+import type { Heat, Session, StandingRow } from '../../types';
 import { useCompetition } from './context';
-import { nextHeats } from '../../lib/following';
-import { publicRiderName } from '../../lib/riderNames';
-import { statsProfileHref } from '../../lib/stats';
-import { StatsSubjectKind } from '../../types';
+import { heatName, nextHeats } from '../../lib/following';
+import { computeTeamStats } from '../../lib/teamStats';
 import type { TeamProfile, TeamProfileHistory } from '../seasons/teamProfileTypes';
 import { byDrawnLane } from './laneRules';
 
@@ -45,7 +42,6 @@ export function CompetitionTeamPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { competition } = useCompetition();
-  const { user, token, hasRole, canOrganise } = useAuth();
   const { favourites, toggle } = useFavourites();
 
   const team = competition.teams.find((t) => t.id === id) ?? null;
@@ -65,11 +61,6 @@ export function CompetitionTeamPage() {
   }
 
   const [standings, setStandings] = useState<StandingRow[]>([]);
-  // A response is visible only for the exact resource and authentication that fetched it.
-  const declarationKey = JSON.stringify([competition.id, id, user?.id ?? null, token ?? null, user?.roles ?? [], canOrganise(competition)]);
-  const [declarationState, setDeclarationState] = useState<{ key: string; form: DeclarationForm | null } | null>(null);
-  const decLoaded = declarationState?.key === declarationKey;
-  const decForm = decLoaded ? declarationState.form : null;
   // One heat at a time opens in place to show its full table.
   const [openHeatId, setOpenHeatId] = useState<number | null>(null);
   const still = useStillMotion();
@@ -84,23 +75,6 @@ export function CompetitionTeamPage() {
       .catch(() => { if (!cancelled) setStandings([]); });
     return () => { cancelled = true; };
   }, [competition.id, team]);
-
-  useEffect(() => {
-    if (!team) return;
-    let cancelled = false;
-    api.get<DeclarationForm[]>('/declaration-forms', { params: { competitionId: competition.id, teamId: team.id } })
-      .then((r) => {
-        if (cancelled) return;
-        const list = Array.isArray(r.data) ? r.data : [];
-        setDeclarationState({ key: declarationKey, form: list.find((f) => f.teamId === team.id) ?? null });
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setDeclarationState({ key: declarationKey, form: null });
-        }
-      });
-    return () => { cancelled = true; };
-  }, [competition.id, team, declarationKey]);
 
   useEffect(() => {
     if (!team) return;
@@ -194,56 +168,13 @@ export function CompetitionTeamPage() {
   );
   const nextState = team ? nextMap.get(team.id) : undefined;
 
-  const teamStats = useMemo(() => {
-    if (!team) return null;
-    let scoredRaces = 0;
-    let totalPoints = 0;
-    let maxAvailablePoints = 0;
-    let placedFinishes = 0;
-    let totalPlace = 0;
-    let racesWon = 0;
-    const byRace = new Map<string, { name: string; runs: number; totalPoints: number; bestPlace: number | null }>();
+  // Under way: a session is in the arena, or this team's next heat is on now.
+  const underWay = competition.sessions.some((s) => s.status === 1) || (nextState?.kind === 'heat' && nextState.row.status === 'live');
 
-    const orderedSessions = competition.sessions.filter(isRaceSession).sort((a, b) => a.orderIndex - b.orderIndex);
-    for (const session of orderedSessions) {
-      const largestHeatSize = Math.max(1, ...session.heats.map((h) => h.entries.length), session.lanesPerHeat ?? 0);
-      for (const heat of session.heats) {
-        const heatMax = heat.raceRoundStage === 1 ? 1 : Math.max(heat.entries.length, largestHeatSize, 1);
-        for (const race of heat.races) {
-          if (!race.isComplete && race.results.length === 0) continue;
-          const res = race.results.find((item) => item.teamId === team.id && !item.isSitOut);
-          if (!res) continue;
-          const raceMax = Math.max(heatMax, ...race.results.map((r) => r.points), 1);
-          scoredRaces += 1;
-          totalPoints += res.points;
-          maxAvailablePoints += raceMax;
-          if (!res.eliminated && res.placing != null && res.placing > 0) {
-            placedFinishes += 1;
-            totalPlace += res.placing;
-            if (res.placing === 1) racesWon += 1;
-          }
-          const key = race.name.trim() || t('teams.team.raceN', { number: race.orderIndex + 1 });
-          const existing = byRace.get(key) ?? { name: key, runs: 0, totalPoints: 0, bestPlace: null };
-          existing.runs += 1;
-          existing.totalPoints += res.points;
-          if (!res.eliminated && res.placing != null && res.placing > 0) {
-            existing.bestPlace = existing.bestPlace == null ? res.placing : Math.min(existing.bestPlace, res.placing);
-          }
-          byRace.set(key, existing);
-        }
-      }
-    }
-
-    if (scoredRaces === 0) return null;
-    return {
-      scoredRaces,
-      avgPointsPerRace: totalPoints / scoredRaces,
-      avgPlace: placedFinishes > 0 ? totalPlace / placedFinishes : null,
-      racesWon,
-      pointQuota: maxAvailablePoints > 0 ? Math.round((totalPoints / maxAvailablePoints) * 100) : 0,
-      races: [...byRace.values()],
-    };
-  }, [competition.sessions, team, t]);
+  const teamStats = useMemo(
+    () => (team ? computeTeamStats(competition.sessions, team.id, (number) => t('teams.team.raceN', { number }), (number) => t('teams.team.heatN', { number })) : null),
+    [competition.sessions, team, t],
+  );
 
   const timetableStatusLabel = (status: TimetableStatus, delayMinutes: number) => (status === 'finished' ? t('common.finished')
     : status === 'live' ? t('teams.team.onNow')
@@ -274,29 +205,18 @@ export function CompetitionTeamPage() {
   }
 
   const isFollowed = favourites.some((item) => item.competitionId === competition.id && item.teamId === team.id);
-  const canDeclare = hasRole('Admin') || canOrganise(competition) || (
-    user != null && (team.trainerUserId === user.id || (hasRole('Manager') && user.clubId != null && user.clubId === team.clubId))
-  );
-
-  const rawBib = decForm?.bibDescription || team.bibDescription || team.bibColour || '';
+  const rawBib = team.bibDescription || team.bibColour || '';
   const parsedBib = parseBibAndFlag(rawBib);
   const detail = list?.detail.get(team.id) ?? null;
   const toplistRow = list?.rows.find((r) => r.teamId === team.id) ?? null;
   const hcRow = list?.hc.find((r) => r.teamId === team.id) ?? null;
+  const placed = !team.isHorsConcours && !!toplistRow && !!list?.started;
   const placeText = team.isHorsConcours ? t('teams.team.horsConcoursLower')
     : toplistRow && list?.started ? `${toplistRow.joint ? '=' : ''}${ordinal(toplistRow.position)}` : t('teams.team.notPlaced');
   const pointsText = formatPoints(toplistRow?.points ?? hcRow?.points ?? detail?.qualifyingPoints ?? 0);
   const racesLeft = toplistRow?.racesLeft ?? hcRow?.racesLeft ?? 0;
-  const orderedRiders = decForm ? [...decForm.riders].sort((a, b) => a.orderIndex - b.orderIndex) : [];
-  const trainerDisplay = decForm?.trainerName ?? decForm?.submittedByName ?? team.trainerName ?? null;
   const row = 'flex items-baseline gap-3 border-t border-[rgb(var(--mg-rule-soft))] px-4 py-2.5 text-[15.5px] leading-snug first:border-t-0';
   const heading = 'mg-display px-0.5 text-[15px] font-bold uppercase leading-tight tracking-[0.05em] text-[rgb(var(--mg-heading))]';
-  const decLink = canDeclare && (
-    <Link to={`/competitions/${competition.id}/declarations?team=${team.id}`} className="mg-btn mg-btn-secondary !min-h-10 !px-3 !text-sm">
-      <ClipboardList aria-hidden="true" className="h-4 w-4" />
-      {decForm ? t('teams.team.editDec') : t('teams.team.submitDec')}
-    </Link>
-  );
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 pt-3">
@@ -306,44 +226,78 @@ export function CompetitionTeamPage() {
 
       {/* The team: name with the follow star, then the plain facts */}
       <section aria-label={t('teams.team.summary')} className="flex flex-col gap-3">
-        <div className="mg-card flex items-start gap-2 py-3.5 pl-4 pr-2">
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <h1 className="mg-h1 flex items-center gap-2.5">
-              {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="h-6 w-9 shrink-0 rounded-sm object-cover" />}
-              <span>{team.displayName}</span>
-            </h1>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-[rgb(var(--mg-muted))]">
-              <span>{[sectionLabel, team.clubName].filter(Boolean).join(' · ')}</span>
-              {team.isHorsConcours && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
-                  <Ban aria-hidden="true" className="h-3 w-3" /> {t('teams.team.horsConcours')}
-                </span>
-              )}
-              {team.isWithdrawn && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
-                  {t('teams.withdrawn')}
-                </span>
-              )}
+        <div className="mg-card">
+          <div className="flex items-start gap-2 pb-0 pl-4 pr-2 pt-3.5">
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <h1 className="mg-h1 flex items-center gap-2.5">
+                {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="h-6 w-9 shrink-0 rounded-sm object-cover" />}
+                <span>{team.displayName}</span>
+              </h1>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-[rgb(var(--mg-muted))]">
+                <span>{[sectionLabel, team.clubName].filter(Boolean).join(' · ')}</span>
+                {team.isHorsConcours && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                    <Ban aria-hidden="true" className="h-3 w-3" /> {t('teams.team.horsConcours')}
+                  </span>
+                )}
+                {team.isWithdrawn && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                    {t('teams.withdrawn')}
+                  </span>
+                )}
+              </div>
             </div>
+            <button
+              type="button"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[rgb(var(--mg-heading))] hover:bg-[rgb(var(--mg-subtle))]"
+              aria-pressed={isFollowed}
+              aria-label={t(isFollowed ? 'teams.unfollow' : 'teams.follow', { name: team.displayName })}
+              onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}
+            >
+              <FollowStar on={isFollowed} className="h-[26px] w-[26px]" />
+            </button>
           </div>
-          <button
-            type="button"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[rgb(var(--mg-heading))] hover:bg-[rgb(var(--mg-subtle))]"
-            aria-pressed={isFollowed}
-            aria-label={t(isFollowed ? 'teams.unfollow' : 'teams.follow', { name: team.displayName })}
-            onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}
-          >
-            <FollowStar on={isFollowed} className="h-[26px] w-[26px]" />
-          </button>
+          {/* Place, points, bibs and races left on one line under the name */}
+          <p className="m-0 flex flex-wrap items-baseline gap-x-3.5 gap-y-1 px-4 pb-3.5 pt-1">
+            {placed
+              ? <b className="mg-display text-[26px] font-bold leading-none text-[rgb(var(--mg-heading))]">{placeText}</b>
+              : <span className="text-sm font-medium text-[rgb(var(--mg-muted))]">{placeText}</span>}
+            <b className="mg-display text-[26px] font-bold leading-none tabular-nums text-[rgb(var(--mg-heading))]">{pointsText}<small className="ml-[3px] font-[var(--mg-font)] text-sm font-semibold text-[rgb(var(--mg-muted))]">{t('teams.team.ptsUnit')}</small></b>
+            <span className="inline-flex items-center gap-1.5 text-sm font-medium text-[rgb(var(--mg-muted))]">
+              {parsedBib.bib
+                ? <><span aria-hidden="true" className="inline-block h-3 w-3 rounded-[3px]" style={{ background: dotColour(parsedBib.bib), boxShadow: '0 0 0 1px rgb(var(--mg-rule))' }} />{/\bbibs?\b/i.test(parsedBib.bib) ? parsedBib.bib : t('teams.team.bibsOf', { colour: parsedBib.bib })}</>
+                : t('teams.team.noBib')}
+            </span>
+            <span className="text-sm font-medium text-[rgb(var(--mg-muted))]">{racesLeft > 0 ? t('competition.toplist.racesLeft', { count: racesLeft }) : t('teams.team.noRacesLeft')}</span>
+          </p>
         </div>
-        <dl className="mg-card m-0 overflow-hidden">
-          <div className={row}><dt className="w-24 shrink-0 text-[rgb(var(--mg-muted))]">{t('teams.team.bibs')}</dt><dd className="m-0 min-w-0 flex-1">{parsedBib.bib || t('teams.team.noBib')}</dd></div>
-          <div className={row}><dt className="w-24 shrink-0 text-[rgb(var(--mg-muted))]">{t('teams.team.place')}</dt><dd className="m-0 min-w-0 flex-1">{placeText}</dd></div>
-          <div className={row}><dt className="w-24 shrink-0 text-[rgb(var(--mg-muted))]">{t('teams.team.points')}</dt><dd className="m-0 min-w-0 flex-1">{pointsText}</dd></div>
-          <div className={row}><dt className="w-24 shrink-0 text-[rgb(var(--mg-muted))]">{t('teams.team.racesLeft')}</dt><dd className="m-0 min-w-0 flex-1">{racesLeft}</dd></div>
-        </dl>
 
       </section>
+
+      {/* Where the team is next: shown first when there are no stats yet or the event is under way */}
+      {nextState?.kind === 'heat' && (!teamStats || underWay) && (() => {
+        const { row: nextRow } = nextState;
+        const lane = drawnHeats.find((d) => d.heat.id === nextRow.heat?.id)?.lane ?? nextState.lane;
+        const arena = nextRow.session.arenaName?.trim();
+        const isFinal = nextRow.group === 'Finals' || nextRow.heat?.raceRoundStage === 2;
+        const live = nextRow.status === 'live';
+        return (
+          <section aria-labelledby="team-next-title" className="flex flex-col gap-2">
+            <h2 id="team-next-title" className={heading}>{live ? t('teams.team.onNow') : t('teams.team.nextHeat')}</h2>
+            <div className="mg-card flex items-center gap-3 px-4 py-3">
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-base font-semibold leading-tight text-[rgb(var(--mg-ink))]">
+                  {nextRow.session.name} · {heatName(nextRow)}{isFinal ? '' : ` · ${t('teams.team.lane', { number: lane })}`}
+                </span>
+                <span className="text-[13.5px] leading-tight text-[rgb(var(--mg-muted))]">
+                  {arena || t('teams.team.arenaTbc')}
+                </span>
+              </div>
+              <span className="mg-display shrink-0 text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]">{formatTime(nextRow.effective)}</span>
+            </div>
+          </section>
+        );
+      })()}
 
       {/* One Heats list: a heat shows its lane, a final doesn't (final lanes come from the rankings) */}
       <section aria-labelledby="team-heats-title" className="flex flex-col gap-2">
@@ -412,79 +366,22 @@ export function CompetitionTeamPage() {
         )}
       </section>
 
-      {/* Stats, worked out from the races scored so far */}
+      {/* Two facts and a way in to the rest, worked out from the races scored so far */}
       <section aria-labelledby="team-stats-title" className="flex flex-col gap-2">
         <h2 id="team-stats-title" className={heading}>{t('teams.team.stats')}</h2>
         {teamStats ? (
-          <>
-            <dl className="mg-card m-0 overflow-hidden">
+          <div className="mg-card overflow-hidden">
+            <dl className="m-0">
               <div className={row}><dt className="w-40 shrink-0 text-[rgb(var(--mg-muted))]">{t('teams.team.avgPerRace')}</dt><dd className="m-0 min-w-0 flex-1">{t('teams.team.pts', { points: teamStats.avgPointsPerRace.toFixed(1) })}</dd></div>
               <div className={row}><dt className="w-40 shrink-0 text-[rgb(var(--mg-muted))]">{t('teams.team.avgPlace')}</dt><dd className="m-0 min-w-0 flex-1">{teamStats.avgPlace != null ? teamStats.avgPlace.toFixed(1) : '—'}</dd></div>
-              <div className={row}><dt className="w-40 shrink-0 text-[rgb(var(--mg-muted))]">{t('teams.team.racesWon')}</dt><dd className="m-0 min-w-0 flex-1">{t('teams.team.wonOf', { won: teamStats.racesWon, total: teamStats.scoredRaces })}</dd></div>
-              <div className={row}><dt className="w-40 shrink-0 text-[rgb(var(--mg-muted))]">{t('teams.team.pointQuota')}</dt><dd className="m-0 min-w-0 flex-1">{teamStats.pointQuota}%</dd></div>
             </dl>
-            {teamStats.races.length > 0 && (
-              <>
-                <h3 className={`${heading} pt-3`}>{t('teams.team.byRace')}</h3>
-                <ul className="mg-card divide-y divide-[rgb(var(--mg-rule-soft))] overflow-hidden">
-                  {teamStats.races.map((r) => (
-                    <li key={r.name} className="flex min-h-[52px] items-center gap-3 px-4 py-2">
-                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <span className="text-[15px] font-semibold leading-tight text-[rgb(var(--mg-ink))]">{r.name}</span>
-                        <span className="text-[13.5px] leading-tight text-[rgb(var(--mg-muted))]">
-                          {t('teams.team.raceRuns', { count: r.runs, best: r.bestPlace != null ? ordinal(r.bestPlace) : '—', average: (r.totalPoints / r.runs).toFixed(1) })}
-                        </span>
-                      </div>
-                      <span className="mg-display shrink-0 text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]">{t('teams.team.pts', { points: formatPoints(r.totalPoints) })}</span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </>
-        ) : (
-          <p className="mg-card p-4 text-[15px] leading-snug text-[rgb(var(--mg-body))]">{t('teams.team.statsLater', { name: team.displayName })}</p>
-        )}
-      </section>
-
-      {/* Declared Riders & Ponies */}
-      <section aria-label={t('teams.team.declaredAria')} className="mg-card overflow-hidden">
-        <div className="flex items-center justify-between gap-2 border-b border-[rgb(var(--mg-rule))] px-4 py-2.5">
-          <h2 className={`${heading} !px-0`}>{t('teams.team.decForm')}</h2>
-          {decLink || (decForm && <span className="text-xs font-medium text-[rgb(var(--mg-muted))]">{t('teams.team.declared', { count: orderedRiders.length })}</span>)}
-        </div>
-        {trainerDisplay && <p className="border-b border-[rgb(var(--mg-rule-soft))] px-4 py-2 text-sm text-[rgb(var(--mg-muted))]">{t('teams.team.trainer')} <strong className="font-semibold text-[rgb(var(--mg-ink))]">{trainerDisplay}</strong></p>}
-        {!decLoaded ? (
-          <p className="p-4 text-sm text-[rgb(var(--mg-muted))]">{t('teams.team.loadingDec')}</p>
-        ) : orderedRiders.length === 0 ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 p-4 text-sm text-[rgb(var(--mg-muted))]">
-            <span>{t('teams.team.noDec')}</span>
+            <Link to={`/competitions/${competition.id}/teams/${team.id}/stats`} state={{ mgTransition: 'push' }} className="flex min-h-12 items-center justify-between gap-2 border-t border-[rgb(var(--mg-rule-soft))] px-4 text-base font-bold text-[rgb(var(--mg-heading))] hover:bg-[rgb(var(--mg-subtle))]">
+              {t('teams.team.seeAllStats')}
+              <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-[rgb(var(--mg-dash))]" />
+            </Link>
           </div>
         ) : (
-          <ol className="divide-y divide-[rgb(var(--mg-rule-soft))]">
-            {orderedRiders.map((rider, index) => (
-              <li key={rider.id} className="flex min-h-12 flex-wrap items-center justify-between gap-2 px-4 py-2.5">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <span className="mg-display w-5 shrink-0 text-sm font-bold text-[rgb(var(--mg-muted))]">
-                    {rider.isReserve ? 'R' : index + 1}
-                  </span>
-                  <span className="truncate text-[15px] font-semibold text-[rgb(var(--mg-ink))]"><Link to={statsProfileHref(StatsSubjectKind.Rider, publicRiderName(rider))}>{publicRiderName(rider)}</Link></span>
-                  {rider.isCaptain && <span className="mg-badge mg-badge-outline !h-5">{t('teams.team.captain')}</span>}
-                  {rider.isReserve && (
-                    <span className="mg-badge mg-badge-outline !h-5 inline-flex items-center gap-1">
-                      <Shield aria-hidden="true" className="h-3 w-3" /> {t('teams.team.reserve')}
-                    </span>
-                  )}
-                  {rider.isGuestRider && <span className="mg-badge mg-badge-outline !h-5">{t('teams.team.guest')}</span>}
-                </div>
-                <div className="text-sm font-medium text-[rgb(var(--mg-body))]">
-                  {rider.isReserve && !rider.horseName
-                    ? <span className="text-xs text-[rgb(var(--mg-muted))]">{t('teams.team.nonRidingReserve')}</span>
-                    : <>{rider.horseName ? <Link to={statsProfileHref(StatsSubjectKind.Pony, rider.horseName)}>{rider.horseName}</Link> : '—'}{rider.ponyHeightHands != null ? ` · ${t('teams.team.hh', { height: heightText(rider.ponyHeightHands) })}` : ''}</>}
-                </div>
-              </li>
-            ))}
-          </ol>
+          <p className="mg-card p-4 text-[15px] leading-snug text-[rgb(var(--mg-body))]">{t('teams.team.statsLater', { name: team.displayName })}</p>
         )}
       </section>
 

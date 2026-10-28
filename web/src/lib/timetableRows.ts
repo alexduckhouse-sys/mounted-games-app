@@ -58,6 +58,9 @@ export function timetableRows(sessions: Session[], timings: Map<number, SessionT
 
 const isRace = (session: Session) => (session.kind ?? (session.isBreak ? 1 : 0)) === 0;
 
+/** An age group's finals before their draw, at the start time the organiser set: everyone sees it at that time. */
+export const isPlannedFinal = (row: TimetableRow) => !row.heat && row.group === 'Finals' && isRace(row.session) && row.session.scheduledStart != null;
+
 /** 1-based position of each race session among the sessions of its age group, in running order. */
 export function sessionOrdinals(sessions: Session[]): Map<number, number> {
   const counts = new Map<string, number>();

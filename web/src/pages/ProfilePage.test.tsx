@@ -448,3 +448,31 @@ describe('ProfilePage: today', () => {
     expect(needs.compareDocumentPosition(teamsToday) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
+
+
+describe('ProfilePage: incoming pair requests', () => {
+  it('shows only active incoming pending requests and opens the existing response flow', async () => {
+    const incoming = { ...dueEntry, status: 1, fullName: 'Example Entrant', competitionName: 'Example Games', pairRequestFromSignupId: 80, pairRequestFromName: 'Example Partner', pairRequestStatus: 'Pending' };
+    responses['/me/signups'] = [incoming,
+      { ...incoming, id: 32, pairRequestStatus: 'Accepted' },
+      { ...incoming, id: 33, pairRequestFromSignupId: null, pairRequestToSignupId: 81 },
+      { ...incoming, id: 34, isWithdrawn: true },
+      { ...incoming, id: 35, status: 3 }];
+    mount({ roles: ['Member'], clubName: null });
+    const needs = await needsSection();
+    expect(await needs.findByText('Pair request from Example Partner')).toBeInTheDocument();
+    expect(needs.getByText('Example Games · Under 15 Pairs')).toBeInTheDocument();
+    expect(needs.getByRole('link', { name: /Review: Pair request/ })).toHaveAttribute('href', '/me/signups');
+    expect(needs.getAllByRole('link')).toHaveLength(1);
+    expect(needs.getByText('1', { selector: 'small' })).toBeInTheDocument();
+  });
+
+  it('counts a pair request alongside an entry still to pay', async () => {
+    responses['/me/signups'] = [{ ...dueEntry, fullName: 'Example Entrant', pairRequestFromSignupId: 80, pairRequestStatus: 'Pending' }];
+    mount({ roles: ['Member'], clubName: null });
+    const needs = await needsSection();
+    expect(await needs.findByText('Pair request from another rider')).toBeInTheDocument();
+    expect(needs.getByText('Pay for your entry')).toBeInTheDocument();
+    expect(needs.getByText('2', { selector: 'small' })).toBeInTheDocument();
+  });
+});
