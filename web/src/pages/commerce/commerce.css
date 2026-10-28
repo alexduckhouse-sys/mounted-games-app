@@ -10,6 +10,9 @@
   animation: shop-bar-in 220ms var(--mg-ease-out, cubic-bezier(.22, 1, .36, 1));
 }
 body:has(.mg-tabs) .shop-basket-bar { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+/* Clear the ticker dock too, which sits above the tabs (or at the bottom when there are none). */
+body:has(.mg-dock-low) .shop-basket-bar { bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
+body:has(.mg-dock:not(.mg-dock-low)) .shop-basket-bar { bottom: calc(130px + env(safe-area-inset-bottom, 0px)); }
 .shop-basket-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .shop-basket-count { font: 500 13px/1 var(--mg-font); color: rgb(var(--mg-muted)); }
 .shop-basket-total { font: 700 21px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); font-variant-numeric: tabular-nums; }

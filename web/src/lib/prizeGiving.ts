@@ -1,3 +1,4 @@
+import { clubLabel } from './clubName';
 import type { DeclarationForm } from '../types';
 import { publicRiderName } from './riderNames';
 import type { Toplist } from './toplist';
@@ -35,7 +36,7 @@ export function parsePrizeGiving(raw: unknown): PrizeGiving | 'clear' | null {
   for (const item of message.places) {
     const place = item as Record<string, unknown> | null;
     if (!place || !isNumber(place.teamId) || !isNumber(place.place) || !isNumber(place.points) || typeof place.teamName !== 'string') return null;
-    places.push({ teamId: place.teamId, place: place.place, teamName: place.teamName, clubName: typeof place.clubName === 'string' ? place.clubName : null, points: place.points });
+    places.push({ teamId: place.teamId, place: place.place, teamName: place.teamName, clubName: typeof place.clubName === 'string' ? clubLabel(place.clubName) || null : null, points: place.points });
   }
   if (places.length === 0) return null;
   return { sectionId: message.sectionId, sectionName: typeof message.sectionName === 'string' ? message.sectionName : '', places, champions: message.champions === true };
@@ -97,7 +98,7 @@ export function autoPrizeGivingFrames(order: RevealPlace[], sectionId: number, s
     return {
       sectionId,
       sectionName,
-      places: given.map((place) => ({ teamId: place.teamId, place: place.place, teamName: place.teamName, clubName: clubOf(place.teamId), points: place.points })),
+      places: given.map((place) => ({ teamId: place.teamId, place: place.place, teamName: place.teamName, clubName: clubLabel(clubOf(place.teamId)) || null, points: place.points })),
       champions: index === order.length - 1 && given[index].place === 1,
     };
   });

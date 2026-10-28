@@ -9,10 +9,11 @@ import { auth } from './auth.ts';
 import { common } from './common.ts';
 import { competition } from './competition.ts';
 import { entries } from './entries.ts';
+import { ops } from './ops.ts';
 import { shell } from './shell.ts';
 import { site } from './site.ts';
 import { teams } from './teams.ts';
 
-export const AREAS = { common, shell, auth, account, entries, competition, teams, site } as const;
+export const AREAS = { common, shell, auth, account, entries, competition, teams, site, ops } as const;
 
-export const fr: Catalogue = { ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...site };
+export const fr: Catalogue = { ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...site, ...ops };
