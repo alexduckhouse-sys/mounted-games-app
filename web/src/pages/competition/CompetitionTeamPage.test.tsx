@@ -339,7 +339,7 @@ describe('declaration forms', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Oak A' })).toBeInTheDocument();
     expect(vi.mocked(api.get).mock.calls.map((call) => call[0])).not.toContain('/declaration-forms');
     expect(screen.queryByText('Private Test Coach')).toBeNull();
-    expect(screen.queryByText('No dec form yet.')).toBeNull();
+    expect(screen.queryByText('No declaration form yet.')).toBeNull();
     expect(screen.queryByText('Loading declaration…')).toBeNull();
   });
 });

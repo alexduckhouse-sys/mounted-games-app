@@ -284,7 +284,7 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
             '',
             'Referee Card Incident',
             '',
-            teamMap.get(tId) ?? `Team #${tId}`,
+            teamMap.get(tId) ?? 'Unnamed team',
             '',
             '',
             card === 'yellow' ? 'Yellow card' : 'Red card',
@@ -650,11 +650,7 @@ function QrPostersSection({
             <p className="mx-auto max-w-lg text-sm text-[rgb(var(--mg-body))]">
               {tr('ops2.print.p.toCreate')}
             </p>
-            <ol className="mx-auto mt-3 max-w-md list-decimal pl-5 text-left text-sm text-[rgb(var(--mg-body))]">
-              <li>{tr('ops2.print.p.step1a')}<strong>{tr('ops2.print.p.step1b')}</strong> &gt; <strong>{tr('ops2.print.p.step1c')}</strong>{tr('ops2.print.p.end')}</li>
-              <li>{tr('ops2.print.p.step2a')}<strong>{tr('ops2.print.p.arenaScorer')}</strong>, <strong>{tr('ops2.print.p.tripod')}</strong>{tr('ops2.print.p.step2b')}<strong>{tr('ops2.print.p.scorerStream')}</strong>{tr('ops2.print.p.end')}</li>
-              <li>{tr('ops2.print.p.step3a')}<strong>{tr('ops2.print.p.createLink')}</strong>{tr('ops2.print.p.step3b')}</li>
-            </ol>
+            <p className="mx-auto mt-3 max-w-md text-sm text-[rgb(var(--mg-body))]">{tr('ops2.print.p.steps')}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">

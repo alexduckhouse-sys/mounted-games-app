@@ -382,7 +382,7 @@ describe('Things I sell: an item', () => {
     catalogueGet([mug], [listingOf(1, 20, 1, 99)], []);
     mount();
     await openItem('Event mug');
-    expect(screen.getByText('Event 99')).toBeInTheDocument();
+    expect(screen.getByText('Past event')).toBeInTheDocument();
   });
 
   it('says so when there are no upcoming events at all', async () => {

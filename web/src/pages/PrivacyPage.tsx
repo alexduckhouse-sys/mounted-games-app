@@ -79,8 +79,8 @@ function PrivacyPolicy() {
         <ul className="list-disc space-y-1.5 pl-5 marker:text-[rgb(var(--mg-muted))]">
           <li className="mg-lede">
             <strong>Account details.</strong> Your name, sign-in (an email address or username), club if you gave
-            one, phone number if you added one to a declaration, and your role. Your password is stored as a hash,
-            never as text.
+            one, phone number if you added one to a declaration, and your role. We never store your password itself, only
+            a scrambled version that can’t be turned back.
           </li>
           <li className="mg-lede">
             <strong>Google, Apple or Facebook sign-in.</strong> If you sign in with one of them, we keep the ID it uses
@@ -108,7 +108,7 @@ function PrivacyPolicy() {
             stored. Only that club’s managers and administrators can see them.
           </li>
           <li className="mg-lede">
-            <strong>Notes and teams.</strong> Private trainer notes, and the teams you coach or support.
+            <strong>Teams.</strong> The teams you coach or support.
           </li>
           <li className="mg-lede">
             <strong>Chat and the marketplace.</strong> What you post, the name you posted under, and any contact
@@ -122,7 +122,7 @@ function PrivacyPolicy() {
         </ul>
         <p className="mg-lede">
           We use this information to run accounts and competition features, including entries, declarations, scoring,
-          timetables, notifications and moderation. Data is stored in Neon Postgres and served through Vercel.
+          timetables, notifications and moderation. Your data is held on secure servers in the US (Neon database, Vercel hosting).
           We don’t sell your data or use it for advertising.
         </p>
       </div>
@@ -335,7 +335,7 @@ function SafeguardingPolicy() {
         <h3 className="mg-h2">Children &amp; arena filming</h3>
         <p className="mg-lede">
           Many riders are under 18. Private declaration details, including dates of birth, weight, medical notes and
-          emergency contacts, are restricted as described above. Public pages can show rider names and competition
+          emergency contacts, are restricted: only the organiser and the people running the event can see them. Public pages can show rider names and competition
           information. Use the surname-initial and filming-preference options where available, and discuss filming
           concerns with the organiser before the event.
         </p>

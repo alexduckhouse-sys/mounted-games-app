@@ -238,7 +238,7 @@ function SellerCatalogueContent() {
           {itemListings.map((listing) => {
             const status = LISTING_STATUS[listing.status];
             const event = nameOf(listing.competitionId);
-            const eventName = event?.name ?? `Event ${listing.competitionId}`;
+            const eventName = event?.name ?? 'Past event';
             return (
               <div key={listing.id} className="cs-row cs-row-wrap">
                 <span className="sp-grow"><span className="sp-t1">{eventName}</span>{event && <span className="sp-t2">{eventDate(event.startDate)}</span>}</span>
@@ -384,15 +384,15 @@ function ItemSheet({ item, onSave, onClose }: { item: CatalogueItem | null; onSa
       <SheetField label="Description">
         <textarea rows={3} maxLength={4000} placeholder="What buyers get" value={form.description} onChange={(event) => change({ description: event.target.value })} />
       </SheetField>
-      <SheetField label="Ask the buyer for (optional)" hint="Shown when they add this item, such as “Stable number”.">
-        <input maxLength={60} value={form.detailPrompt} onChange={(event) => change({ detailPrompt: event.target.value })} />
+      <SheetField label="Ask the buyer for (optional)">
+        <input maxLength={60} placeholder="e.g. Stable number" value={form.detailPrompt} onChange={(event) => change({ detailPrompt: event.target.value })} />
       </SheetField>
       {form.detailPrompt.trim() !== '' && (
         <SheetField label="Hint (optional)">
           <input maxLength={80} placeholder="e.g. B12" value={form.detailHint} onChange={(event) => change({ detailHint: event.target.value })} />
         </SheetField>
       )}
-      <SheetField label="Options (optional)" hint="Sizes or choices, such as XS, S, M, L. Separate them with commas.">
+      <SheetField label="Options (optional)" hint="Separate choices with commas.">
         <input maxLength={400} placeholder="e.g. XS, S, M, L, XL" value={form.optionText} aria-describedby="option-chips"
           onChange={(event) => change({ optionText: event.target.value })}
           onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addTyped(); } }} />

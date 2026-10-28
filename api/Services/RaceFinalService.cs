@@ -84,7 +84,7 @@ public sealed class RaceFinalService(AppDbContext db, PushNotifier? push = null)
             var heatLabel = !string.IsNullOrWhiteSpace(final.Label) ? final.Label : $"Heat {final.OrderIndex}";
             var messages = final.Entries.Select(entry => (entry.TeamId, new PushPayload(
                 Title: "Finals draw published",
-                Body: $"You are in the {heatLabel}, Lane {entry.LaneIndex} ({entry.Team?.DisplayName ?? $"Team {entry.TeamId}"})",
+                Body: $"You are in the {heatLabel}, Lane {entry.LaneIndex} ({entry.Team?.DisplayName ?? "Unnamed team"})",
                 Tag: $"finals-draw:{final.Id}:{entry.TeamId}",
                 Url: $"/competitions/{final.Session!.CompetitionId}")));
             await push.NotifyPerTeamAsync(messages, ct);

@@ -178,6 +178,6 @@ describe('DiagramEditor', () => {
 
   it('shows a hint when there are elements but nothing is chosen', () => {
     render(<Harness initial={JSON.stringify([{ t: 'cone', x: 50 }])} />);
-    expect(screen.getByText(/Tap an element to edit it/)).toBeInTheDocument();
+    expect(screen.getByText(/Tap a piece of kit to change it/)).toBeInTheDocument();
   });
 });

@@ -131,7 +131,7 @@ describe('toplist tie explanation boundaries', () => {
 
   it('explains a zero-point tie when results show both teams rode', () => {
     const played = programme([field(1, [1, 2], [race(1, { results: [result(1, null, { eliminated: true }), result(2, null, { eliminated: true })] })])]);
-    expect(explanation([played], { totalPoints: 0 }, { totalPoints: 0 })).toBe('Level on points and countback — run-off if on cut-off');
+    expect(explanation([played], { totalPoints: 0 }, { totalPoints: 0 })).toBe('Level on points and countback (run-off if on cut-off)');
   });
 
   it.each([
@@ -176,7 +176,7 @@ describe('toplist tie explanation boundaries', () => {
       field(2, [2], [race(2, { results: [result(2, null, { points: 4 })] })], { label: 'A Final' }),
       field(3, [3], [race(3, { results: [result(3, 1, { points: 4 })] })], { label: 'B Final' }),
     ]);
-    expect(explanation([finals])).toBe('Level on points and countback — run-off if on cut-off');
+    expect(explanation([finals])).toBe('Level on points and countback (run-off if on cut-off)');
   });
 
   it('explains final countback when final totals are level', () => {

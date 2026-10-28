@@ -33,14 +33,14 @@ beforeEach(() => {
 });
 
 describe.each([
-  ['TV', TvKioskPage, 'Live Section Standings'],
-  ['commentator', CommentaryDeskPage, 'Standings — Each Team in Order'],
+  ['TV', TvKioskPage, 'Live toplist'],
+  ['commentator', CommentaryDeskPage, 'Toplist · each team in order'],
 ] as const)('%s official standings', (label, Page, region) => {
   it('keeps official totals and labels them as saved when a live refresh fails', async () => {
     const view = render(<MemoryRouter><Page /></MemoryRouter>);
     expect(screen.queryByText('Staff stream controls')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Stream Controls' })).toBeNull();
-    if (label === 'TV') await userEvent.click(screen.getByRole('button', { name: 'Live Section Standings' }));
+    if (label === 'TV') await userEvent.click(screen.getByRole('button', { name: 'Live toplist' }));
     const rows = await screen.findByRole('region', { name: region });
     await waitFor(() => expect(rows).toHaveTextContent('8.5'));
     const previous = state.value as { competition: ReturnType<typeof competition>; reload: () => void };

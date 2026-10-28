@@ -43,7 +43,7 @@ public class StreamOverlaysController(AppDbContext db, ILiveBroadcaster live, Ti
             return BadRequest(new { message = "Too many arenas, or an arena name is too long." });
         var look = req.Look is { } element ? element.GetRawText() : "{}";
         if (req.Look is { ValueKind: not JsonValueKind.Object } || System.Text.Encoding.UTF8.GetByteCount(look) > MaxLookBytes)
-            return BadRequest(new { message = "The look must be a JSON object of at most 4000 bytes." });
+            return BadRequest(new { message = "Those overlay settings are too big to save." });
 
         var overlay = await db.StreamOverlays.FirstOrDefaultAsync(o => o.CompetitionId == competitionId);
         if (overlay is null)

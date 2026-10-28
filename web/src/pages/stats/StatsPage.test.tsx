@@ -120,7 +120,7 @@ describe('StatsPage browse', () => {
     renderAt('/stats');
     expect(await screen.findByRole('link', { name: /Jones, Ann/ })).toBeInTheDocument();
     await userEvent.type(screen.getByRole('searchbox'), 'o');
-    expect(screen.getByText('Type at least two letters to narrow the list.')).toBeInTheDocument();
+    expect(screen.getByText('Type at least 2 letters.')).toBeInTheDocument();
     await userEvent.type(screen.getByRole('searchbox'), 'li');
     await waitFor(() => expect(screen.queryByRole('link', { name: /Jones, Ann/ })).not.toBeInTheDocument());
     expect(await screen.findByText('Oliver S.')).toBeInTheDocument();

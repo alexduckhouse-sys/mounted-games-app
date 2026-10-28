@@ -141,7 +141,7 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
   const choices = useMemo(
     () => savedChoices(saved, slots).map((r) => ({
       ...r,
-      fullName: r.horseName ? `${r.fullName} — ${r.horseName}` : r.fullName,
+      fullName: r.horseName ? `${r.fullName} · ${r.horseName}` : r.fullName,
     })),
     [saved, slots],
   );
@@ -282,7 +282,6 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
                 <Copy aria-hidden="true" className="h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-heading))]" strokeWidth={2.25} />
                 <span className="sp-grow">
                   <span className="sp-t1">{t('entries.dec.copyTeam')}</span>
-                  <span className="sp-t2">{t('entries.dec.copyTeamHelp')}</span>
                 </span>
                 <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
               </button>
@@ -368,8 +367,8 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
             onPick={(pick) => {
               const original = saved.find((s) => s.id === pick.id) ?? {
                 ...pick,
-                fullName: pick.horseName && pick.fullName.endsWith(` — ${pick.horseName}`)
-                  ? pick.fullName.slice(0, -(` — ${pick.horseName}`).length)
+                fullName: pick.horseName && pick.fullName.endsWith(` · ${pick.horseName}`)
+                  ? pick.fullName.slice(0, -(` · ${pick.horseName}`).length)
                   : pick.fullName,
               };
               const next = riderFromSaved(original, reserve);
@@ -384,9 +383,7 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
           <section aria-label={t('entries.dec.nextStep')} className="hidden flex-col items-start gap-3 rounded-xl border-[1.5px] border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-surface))] p-6 lg:flex">
             <CircleCheck aria-hidden="true" className="h-7 w-7 text-[rgb(var(--mg-heading))]" />
             <h3 className="mg-display text-[28px] font-bold leading-none text-[rgb(var(--mg-heading))]">{full ? t('entries.dec.teamComplete') : t('entries.dec.pickSlot')}</h3>
-            <p className="text-base leading-snug text-[rgb(var(--mg-body))]">
-              {full ? t('entries.dec.teamCompleteHelp') : t('entries.dec.pickSlotHelp')}
-            </p>
+            {full && <p className="text-base leading-snug text-[rgb(var(--mg-body))]">{t('entries.dec.teamCompleteHelp')}</p>}
           </section>
         )}
       </div>
