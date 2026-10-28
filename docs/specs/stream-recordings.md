@@ -1,6 +1,6 @@
 # Saving live streams for later
 
-Status: draft for the owner's review (28 October 2026). Nothing is built yet.
+Status: proposed (28 October 2026). Nothing is built. The owner wants cheap recordings for watching later; Stage 1 is the recommended start and waits on the owner's go-ahead.
 
 ## Why
 
@@ -13,7 +13,7 @@ People want to watch an event's stream again afterwards. Today the live stream (
   - After the event, the link stays on the event page as "Watch again" instead of disappearing when the event ends.
   - The organiser can add more than one link (one per day or arena), each with a label.
   - A short help line in Stream settings: "Stream to YouTube and paste the link here. YouTube keeps the recording."
-- Limits: viewers leave our player, so there are no overlays, toplist cards or Follow-Cam replays on the recording, and NoFilming teams aren't protected by us. The organiser must handle that on YouTube, and the help line says so.
+- Limits: viewers leave our player, so there are no overlays, toplist cards or Follow-Cam replays on the recording, and rider names in YouTube titles or descriptions are outside our `UseInitialOnly` rule. The organiser handles takedown requests on YouTube, and the help line says so.
 
 ## Stage 2: free, recorded on the broadcasting phone (optional)
 
@@ -22,7 +22,7 @@ People want to watch an event's stream again afterwards. Today the live stream (
 
 ## Stage 3: paid, recorded by the server (later)
 
-- Record on Cloudflare's side (or bridge the SFU to a recording service) and host the recordings on the event page with our own player, overlays and NoFilming rules applied.
+- Record on Cloudflare's side (or bridge the SFU to a recording service) and host the recordings on the event page with our own player and overlays.
 - It's charged per minute stored and watched. Check current Cloudflare prices and limits before choosing, and set a per-event cap so a long weekend can't run up a surprise bill.
 
 ## Recommendation
@@ -31,4 +31,4 @@ Do Stage 1 now (small and web-only). Then decide between Stages 2 and 3 once we 
 
 ## Safeguarding
 
-Any recording we host ourselves (Stage 3) must respect `NoFilming` and `UseInitialOnly`, and needs a takedown route for a parent's request. Don't host anything until that's designed. Stages 1 and 2 leave hosting with the organiser, and the help text says what they're responsible for.
+There's no per-rider filming opt-out: the owner removed it on 28 October 2026 because the entry terms cover filming and footage isn't close-up (`docs/decisions.md`). Any recording we host ourselves (Stage 3) must still show names through `UseInitialOnly` (overlays, titles) and needs a takedown route for a parent's request. Don't host anything until that's designed. Stages 1 and 2 leave hosting with the organiser, and the help text says what they're responsible for.
