@@ -129,7 +129,12 @@ export function TeamsTab() {
   const canCreate = hasRole('Trainer') || hasRole('Admin') || hasRole('Manager') || canOrganise(competition);
 
   // Organisers add a team from the + beside the ticker dock; the form opens in a sheet.
-  const docked = useDockAction(canCreate ? { label: t('teams.list.addCustom'), icon: 'plus', onClick: () => setShowForm(true) } : null);
+  // Spectators get the age-group filter there instead (phones only: wider screens have the rail).
+  const dockedFilter = !canCreate && !desktop;
+  const docked = useDockAction(
+    canCreate ? { label: t('teams.list.addCustom'), icon: 'plus', onClick: () => setShowForm(true) }
+      : dockedFilter ? { label: t('teams.list.ageGroup'), icon: 'filters', count: sectionId === 'all' ? 0 : 1, onClick: () => setSheetOpen(true) } : null,
+  );
   const addButton = canCreate && !docked && (
     <button onClick={() => setShowForm((s) => !s)} className="mg-btn mg-btn-primary !min-h-10 !px-3.5 !py-2 text-sm">
       <Plus className="h-4 w-4" /> {showForm ? t('common.close') : t('teams.list.addCustom')}
@@ -325,7 +330,7 @@ export function TeamsTab() {
   const searchBar = desktop ? searchField : (
     <div className="fk-find">
       {searchField}
-      <AgeGroupFilterButton label={filterLabel} active={!!sectionLabel} onClick={() => setSheetOpen(true)} />
+      {!(docked && dockedFilter) && <AgeGroupFilterButton label={filterLabel} active={!!sectionLabel} onClick={() => setSheetOpen(true)} />}
     </div>
   );
   const shownCount = (id: number | 'all') => (id === 'all' ? competition.teams : competition.teams.filter((team) => team.competitionSectionId === id)).length;

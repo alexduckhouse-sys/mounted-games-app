@@ -92,6 +92,7 @@ export const deskCommentary = {
   'desk.commentary.noRaceSessions': 'There are no race sessions to set up yet.',
   'desk.commentary.pickSession': 'Session',
   'desk.commentary.pickHeat': 'Heat',
+  'desk.commentary.pickWhat': 'Session, heat and zone',
   'desk.commentary.pickZone': 'Zone',
   'desk.commentary.offline': 'Couldn’t reach the server. This sheet is built from the timetable on your phone.',
   'desk.commentary.loadingSheet': 'Loading the sheet…',

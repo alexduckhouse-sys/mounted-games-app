@@ -17,6 +17,7 @@ import { CompetitionListSkeleton } from '../components/Skeletons';
 import { usePageHeader } from '../components/CompactPageBarContext';
 import { useAuth } from '../auth/AuthContext';
 import { Sheet } from '../components/Sheet';
+import { useDockAction } from '../components/TickerContext';
 import { RoundSearch } from '../components/RoundSearch';
 import { RefineSwitchRow } from '../pages/refine/Refine';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -100,6 +101,9 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
   }, [past, page, saved, filterKey, yearFilter, locationFilter, serverSearch, mineOnly, unfiltered, refresh]);
 
   const filterCount = (yearFilter !== 'all' ? 1 : 0) + (locationFilter !== 'all' ? 1 : 0) + (mineOnly ? 1 : 0);
+  // On the archive the filters open from the button beside the ticker dock; the inline button stays when there is no dock.
+  const archiveFiltersLabel = t('shell.events.archiveFilters');
+  const docked = useDockAction(past ? { label: archiveFiltersLabel, icon: 'filters', count: filterCount, onClick: () => setSheetOpen(true) } : null);
   const items = state.key === filterKey ? state.items : [];
   const matches = items;
   const years = state.years;
@@ -131,10 +135,10 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
         <div className="mg-band mg-band-header pb-3 pt-0">
           <div className="fk-find fk-band">
             <RoundSearch band label={t('shell.events.search')} placeholder={t('shell.events.searchPlaceholder')} value={search} onChange={(text) => { setSearch(text); setPage(1); }} />
-            <button type="button" className="fk-fbtn" aria-label={filterCount ? `${t('shell.events.archiveFilters')}, ${filterCount} set` : t('shell.events.archiveFilters')} onClick={() => setSheetOpen(true)}>
+            {!docked && <button type="button" className="fk-fbtn" aria-label={filterCount ? `${t('shell.events.archiveFilters')}, ${filterCount} set` : t('shell.events.archiveFilters')} onClick={() => setSheetOpen(true)}>
               <SlidersHorizontal aria-hidden="true" className="h-5 w-5" />
               {filterCount > 0 && <span className="fk-count" aria-hidden="true">{filterCount}</span>}
-            </button>
+            </button>}
           </div>
         </div>
       )}

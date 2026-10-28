@@ -93,6 +93,7 @@ export const deskCommentary: AreaCatalogue<typeof en> = {
   'desk.commentary.noRaceSessions': 'Aucune session de course à préparer pour l’instant.',
   'desk.commentary.pickSession': 'Session',
   'desk.commentary.pickHeat': 'Manche',
+  'desk.commentary.pickWhat': 'Session, manche et zone',
   'desk.commentary.pickZone': 'Zone',
   'desk.commentary.offline': 'Impossible de joindre le serveur. Cette fiche est établie à partir du programme enregistré sur votre téléphone.',
   'desk.commentary.loadingSheet': 'Chargement de la fiche…',

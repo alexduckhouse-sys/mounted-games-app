@@ -124,13 +124,16 @@ function Standings({ season, table, canManage }: { season: SeasonView; table: St
   const ageLabel = ageOptions.find((option) => option.value === activeDivision)?.label ?? season.ageGroup;
   const formatLabel = sectionFormatText(activeFormat, t);
   const changeable = hasMultipleDivisions || formats.length > 1;
+  // On Standings, "what to show" is the filters button beside the ticker dock; the heading still says what is shown.
+  const filtersSet = (activeDivision !== 'all' ? 1 : 0) + (formats.length > 1 && activeFormat !== formats[0] ? 1 : 0);
+  const docked = useDockAction(changeable ? { label: t('site.seasons.sheetTitle'), icon: 'filters', count: filtersSet, onClick: () => setSheetOpen(true) } : null);
   const anyDropped = visibleStandings.some((row) => row.rounds.some((cell) => !cell.counted && publishedRounds.some((round) => round.id === cell.roundId)));
   // One column a round: the more rounds, the smaller the type, so up to about ten still fit a phone.
   // Position and points take about a fifth of the width and the team name at least a quarter; the rounds share the rest.
   const roundWidth = Math.round(Math.min(13, 50 / Math.max(1, publishedRounds.length)) * 10) / 10;
   const roundsSize = publishedRounds.length >= 8 ? 'sv-rounds-many' : publishedRounds.length >= 5 ? 'sv-rounds-some' : '';
   return <>
-    {changeable
+    {changeable && !docked
       ? <button type="button" className="fk-where sp-gap" aria-haspopup="dialog" aria-label={t('site.seasons.changeAria', { age: ageLabel, format: formatLabel })} onClick={() => setSheetOpen(true)}>
         <span>{ageLabel}<small>· {formatLabel}</small></span>
         <ChevronDown aria-hidden="true" className="h-[18px] w-[18px] shrink-0" strokeWidth={2.2} />

@@ -46,7 +46,7 @@ beforeEach(() => {
 /** Stands in for the ticker dock: shows the page's one button and lets a test press it. */
 function DockProbe() {
   const { dockAction } = useTicker();
-  return dockAction ? <button type="button" data-testid="dock" onClick={dockAction.onClick}>{dockAction.label}</button> : null;
+  return dockAction ? <button type="button" data-testid="dock" data-count={dockAction.count} onClick={dockAction.onClick}>{dockAction.label}</button> : null;
 }
 
 describe('SeasonSettingsForm', () => {
@@ -364,6 +364,29 @@ describe('SeasonPage', () => {
     first.unmount();
     mountDocked(false, '?tab=rounds');
     await screen.findByRole('heading', { name: 'Example Summer League' });
+    expect(screen.queryByTestId('dock')).not.toBeInTheDocument();
+  });
+  it('moves What to show to the dock on Standings, with a badge, and only when there is something to choose', async () => {
+    const multiSeason: SeasonView = { ...season, ageGroup: 'All age groups', canManage: false, rounds: [
+      { ...season.rounds[0], id: 'round-1', sectionName: 'Seniors', ageGroup: 'Seniors', orderIndex: 1 },
+      { ...season.rounds[0], id: 'round-2', sectionName: 'Under 12', ageGroup: 'Under 12', orderIndex: 2 },
+    ] };
+    vi.mocked(api.get).mockImplementation(async (url) => ({ data: url.endsWith('/standings') ? standings : multiSeason }));
+    const user = userEvent.setup();
+    const view = render(<TickerProvider><DockProbe /><MemoryRouter initialEntries={['/seasons/example-season']}><Routes><Route path="/seasons/:seasonId" element={<SeasonPage />} /></Routes></MemoryRouter></TickerProvider>);
+    const dock = await screen.findByTestId('dock');
+    expect(dock).toHaveTextContent('Age group and what to show');
+    expect(screen.queryByRole('button', { name: /^All age groups, Teams/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /All age groups/ })).toBeInTheDocument();
+    await user.click(dock);
+    await user.click(within(await screen.findByRole('group', { name: 'Age group' })).getByRole('button', { name: 'Under 12' }));
+    await user.click(screen.getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByTestId('dock')).toHaveAttribute('data-count', '1');
+    view.unmount();
+    vi.mocked(api.get).mockImplementation(async (url) => ({ data: url.endsWith('/standings') ? standings : season }));
+    render(<TickerProvider><DockProbe /><MemoryRouter initialEntries={['/seasons/example-season']}><Routes><Route path="/seasons/:seasonId" element={<SeasonPage />} /></Routes></MemoryRouter></TickerProvider>);
+    await screen.findByRole('heading', { name: /Seniors/ });
     expect(screen.queryByTestId('dock')).not.toBeInTheDocument();
   });
   it('requires a reviewed preview before publication and handles changed source results', async () => {
