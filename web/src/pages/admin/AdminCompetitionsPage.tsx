@@ -2,7 +2,10 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { api } from '../../api';
+import { AnimatePresence } from 'framer-motion';
+import { LeavingRow } from '../../components/LeavingRow';
 import { Notice } from '../../components/Notice';
+import { RoundSearch } from '../../components/RoundSearch';
 import { useDockAction } from '../../components/TickerContext';
 import { apiErrorMessage } from '../../lib/apiError';
 import { competitionDateText } from '../../lib/competitionDates';
@@ -42,6 +45,7 @@ export function AdminCompetitionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [asking, setAsking] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState('');
   const now = useMemo(() => new Date(), []);
   const navigate = useNavigate();
   const docked = useDockAction({ label: t('admin.accounts.newCompetition'), icon: 'plus', onClick: () => navigate('/admin/competitions/new') });
@@ -67,7 +71,9 @@ export function AdminCompetitionsPage() {
     }
   }
 
-  const rows = (comps ?? []).map((c) => ({ c, stage: stageOf(c, now) }));
+  const needle = query.trim().toLowerCase();
+  const matching = (comps ?? []).filter((c) => !needle || `${c.name} ${c.location ?? ''}`.toLowerCase().includes(needle));
+  const rows = matching.map((c) => ({ c, stage: stageOf(c, now) }));
   const groups = [
     { id: 'upcoming', name: t('admin.accounts.upcoming'), list: rows.filter((row) => row.stage !== 'finished') },
     { id: 'past', name: t('admin.accounts.past'), list: rows.filter((row) => row.stage === 'finished') },
@@ -79,15 +85,21 @@ export function AdminCompetitionsPage() {
       <div className="ops-cards ops-tt ops-admin" aria-busy={busy}>
         {error && <Notice>{error}</Notice>}
         {comps === null && <p role="status" className="rf-note">{t('common.loading')}</p>}
-        {comps !== null && rows.length === 0 && !error && <RefineList as="div"><div className="rf-row"><span className="rf-t2">{t('admin.accounts.noCompetitionsYet')}</span></div></RefineList>}
+        {comps !== null && comps.length > 0 && (
+          <RoundSearch label={t('admin.accounts.comps.search')} placeholder={t('admin.accounts.comps.searchPlaceholder')} value={query} onChange={setQuery} />
+        )}
+        {comps !== null && rows.length === 0 && !error && (
+          <RefineList as="div"><div className="rf-row"><span className="rf-t2">{comps.length > 0 ? t('admin.accounts.comps.noMatch', { query: query.trim() }) : t('admin.accounts.noCompetitionsYet')}</span></div></RefineList>
+        )}
         {groups.map((group) => (
           <Fragment key={group.id}>
             <h2 className="rf-sec ops-tt-head"><span>{group.name}</span><span>{group.list.length}</span></h2>
             <RefineList as="div" label={group.name}>
+              <AnimatePresence initial={false}>
               {group.list.map(({ c, stage }) => {
                 const open = asking === c.id;
                 return (
-                  <Fragment key={c.id}>
+                  <LeavingRow as="div" key={c.id}>
                     <div className="rf-row ops-comp-row">
                       <span className="rf-grow ops-comp-name"><span className="rf-t1">{c.name}</span><span className="rf-t2">{competitionDateText(c.startDate, c.endDate)}</span></span>
                       <RefineStatus tone={STAGE_TONE[stage]}>{stageLabel(stage)}</RefineStatus>
@@ -97,9 +109,10 @@ export function AdminCompetitionsPage() {
                     {open && (
                       <DeleteAsk competition={c} stage={stage} busy={busy} onKeep={() => setAsking(null)} onDelete={() => void remove(c)} />
                     )}
-                  </Fragment>
+                  </LeavingRow>
                 );
               })}
+              </AnimatePresence>
             </RefineList>
           </Fragment>
         ))}

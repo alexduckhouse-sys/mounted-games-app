@@ -58,6 +58,28 @@ describe('SiteAdminDashboard', () => {
     expect(screen.getByRole('link', { name: /Rules library/ })).toHaveTextContent('1 race');
   });
 
+  it('holds the Needs you space while it loads, fills it when someone waits, and folds it away when no one does', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (url === '/admin/trainer-requests') { await held; return { data: [] } as never; }
+      return { data: [] } as never;
+    });
+    const { container } = render(<MemoryRouter><SiteAdminDashboard /></MemoryRouter>);
+    const reserve = container.querySelector('.ops-reserve') as HTMLElement;
+    expect(reserve).toHaveAttribute('data-open', 'true');
+    expect(reserve.querySelector('[aria-hidden="true"]')).not.toBeNull();
+    release();
+    await waitFor(() => expect(reserve).toHaveAttribute('data-open', 'false'));
+    expect(screen.queryByRole('heading', { name: 'Needs you' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the Needs you space open when someone is waiting', async () => {
+    const { container } = render(<MemoryRouter><SiteAdminDashboard /></MemoryRouter>);
+    expect(await screen.findByRole('heading', { name: 'Needs you' })).toBeInTheDocument();
+    expect(container.querySelector('.ops-reserve')).toHaveAttribute('data-open', 'true');
+  });
+
   it('copes with the requests and races failing to load', async () => {
     vi.mocked(api.get).mockRejectedValue(new Error('offline'));
     render(<MemoryRouter><SiteAdminDashboard /></MemoryRouter>);
@@ -96,6 +118,33 @@ describe('AdminCompetitionsPage', () => {
     expect(screen.getByRole('button', { name: 'Delete for good' })).toHaveClass('ops-danger-link');
     await user.click(screen.getByRole('button', { name: 'Delete for good' }));
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/competitions/2'));
+  });
+
+  it('searches by name or place, and says when nothing matches', async () => {
+    serve({ comps: [comp(1, 'Spring Open', { location: 'Stoneleigh' }), comp(2, 'Old Cup', { location: 'Badminton', startDate: '2020-01-01T00:00:00Z', endDate: '2020-01-02T00:00:00Z' })] });
+    const user = userEvent.setup();
+    render(<MemoryRouter><AdminCompetitionsPage /></MemoryRouter>);
+    const search = await screen.findByRole('searchbox', { name: 'Search competitions' });
+    await user.type(search, 'badmin');
+    expect(screen.getByRole('link', { name: 'Organise Old Cup' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Organise Spring Open' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /Upcoming/ })).not.toBeInTheDocument();
+    await user.clear(search);
+    await user.type(search, 'spring');
+    expect(screen.getByRole('link', { name: 'Organise Spring Open' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Organise Old Cup' })).not.toBeInTheDocument();
+    await user.clear(search);
+    await user.type(search, 'zzz');
+    expect(screen.getByText('No competitions match “zzz”.')).toBeInTheDocument();
+  });
+
+  it('folds a deleted competition away', async () => {
+    const user = userEvent.setup();
+    render(<MemoryRouter><AdminCompetitionsPage /></MemoryRouter>);
+    await user.click(await screen.findByRole('button', { name: 'Delete Old Cup' }));
+    serve({ comps: [comp(1, 'Spring Open')] });
+    await user.click(screen.getByRole('button', { name: 'Delete for good' }));
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Organise Old Cup' })).not.toBeInTheDocument());
   });
 
   it('mentions that a live competition is running now, and reports a failed delete', async () => {
