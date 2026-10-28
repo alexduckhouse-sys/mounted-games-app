@@ -248,7 +248,7 @@ export const adminFormat = {
   'admin.format.diagram.editorLabel': 'Race diagram editor',
   'admin.format.diagram.places': 'Places on the lane',
   'admin.format.diagram.tapToPlace': 'Tap a pole or a gap to place equipment.',
-  'admin.format.diagram.tapToEdit': 'Tap an element to edit it, or a slot to add equipment.',
+  'admin.format.diagram.tapToEdit': 'Tap an item to edit it, or a place on the lane to add equipment.',
   'admin.format.diagram.addHere': 'Add here:',
   'admin.format.diagram.group.lane': 'Lane',
   'admin.format.diagram.group.cones': 'Cones',
