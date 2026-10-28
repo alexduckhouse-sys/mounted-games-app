@@ -83,9 +83,8 @@ class PageTransitionHost extends Component<Props> {
     const holders: HTMLElement[] = [];
     const running: Animation[] = [];
     if (kind === 'fade') {
-      // Only the new page fades up (unless it brings its own entrance). A copy of the old page fading out on top showed
+      // Only the new page fades up (no page brings its own entrance any more). A copy of the old page fading out on top showed
       // through the new one for a moment (the "running late" line over the toplist's age band), so there is none.
-      if (main.classList.contains('rf-page') || main.querySelector('.rf-page')) return;
       running.push(main.animate(plan.incoming, timing));
     } else {
       const outgoing = frame(copy, box, plan.top === 'outgoing' ? 2 : 1);

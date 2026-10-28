@@ -23,13 +23,13 @@ function Go({ to }: { to: string }) {
   const navigate = useNavigate();
   return <button onClick={() => navigate(to)}>Go {to}</button>;
 }
-function Page({ items, watch = null, action = null, low }: { items: TickerItem[]; watch?: number | null; action?: DockAction | null; low?: boolean }) {
+function Page({ items, watch = null, action = null, low, quiet }: { items: TickerItem[]; watch?: number | null; action?: DockAction | null; low?: boolean; quiet?: boolean }) {
   return (
     <MemoryRouter initialEntries={['/competitions/1']}>
       <CurrentCompetitionProvider>
         <TickerProvider>
           <Publish items={items} watch={watch} action={action} />
-          <TopBarTicker low={low} />
+          <TopBarTicker low={low} quiet={quiet} />
           <Go to="/competitions/1/chat" />
           <button>Outside</button>
         </TickerProvider>
@@ -72,6 +72,15 @@ describe('TopBarTicker: what it shows', () => {
     expect(container.querySelector('.mg-strip-bar')).toBeNull();
     const second = show([]);
     expect(second.container.querySelector('.mg-strip-bar')).toBeNull();
+  });
+
+  it('leaves the news line out on a quiet page, and shows nothing at all without a page button', () => {
+    const { container, unmount } = render(<Page items={[live]} quiet />);
+    expect(container.querySelector('.mg-dock')).toBeNull();
+    unmount();
+    const withButton = render(<Page items={[live]} quiet action={{ label: 'Add', count: 0, icon: 'plus', onClick: () => undefined }} />);
+    expect(withButton.container.querySelector('.mg-strip-bar')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument();
   });
 
   it('links a session line to that session', () => {

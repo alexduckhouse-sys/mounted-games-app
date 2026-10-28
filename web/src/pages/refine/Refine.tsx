@@ -170,6 +170,7 @@ interface SheetProps { title: string; onClose: () => void; children: ReactNode }
 
 /** Modal bottom sheet: traps focus, closes on Esc, the scrim, the × button or a swipe down (sliding away first), and returns focus to whatever opened it. */
 export function RefineSheet({ title, onClose, children }: SheetProps) {
+  const t = useT();
   const titleId = useId();
   const { closing, close } = useExitDelay(onClose);
   const { ref, handlers, style, dragging } = useSwipeToClose<HTMLDivElement>(close);
@@ -203,7 +204,7 @@ export function RefineSheet({ title, onClose, children }: SheetProps) {
         <span className="rf-grab" aria-hidden="true" />
         <div className="rf-sheet-head">
           <h2 id={titleId}>{title}</h2>
-          <button type="button" className="rf-ib" aria-label="Close" onClick={() => close()}><X className="h-5 w-5" aria-hidden="true" /></button>
+          <button type="button" className="rf-ib" aria-label={t('common.close')} onClick={() => close()}><X className="h-5 w-5" aria-hidden="true" /></button>
         </div>
         {children}
       </div>
@@ -222,24 +223,61 @@ function placeUnder(element: HTMLElement | null): Place | null {
   return { top: rect.bottom + 4, right: Math.max(8, window.innerWidth - rect.right + 12), max: Math.max(160, window.innerHeight - rect.bottom - 16) };
 }
 
-/** A small panel fixed under a row. It closes on Escape, on a click outside it and its row, and on resize. */
-function FloatingPanel({ anchor, place, onClose, children }: { anchor: RefObject<HTMLElement | null>; place: Place; onClose: () => void; children: ReactNode }) {
+/** What a keyboard can move between inside a floating panel. */
+const PANEL_ITEMS = '.rf-choice:not(:disabled)';
+const PANEL_FIRST = '[aria-selected="true"], [role="menuitem"], input:not(:disabled), button:not(:disabled), select:not(:disabled)';
+
+/**
+ * A small panel fixed under a row (`id` is what the row's `aria-controls` points at). It closes on Escape, on a click
+ * outside it and its row, on Tab, on resize and when the page scrolls. Focus moves into it when it opens, Up/Down/Home/End
+ * move between its choices, and focus goes back to the row when it closes.
+ */
+function FloatingPanel({ id, anchor, place, onClose, children }: { id: string; anchor: RefObject<HTMLElement | null>; place: Place; onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   useEffect(() => { closeRef.current = onClose; });
   useEffect(() => {
+    const panel = ref.current;
+    if (panel && !panel.contains(document.activeElement)) panel.querySelector<HTMLElement>(PANEL_FIRST)?.focus();
     const away = (event: MouseEvent) => {
       const target = event.target as Node;
       if (!ref.current?.contains(target) && !anchor.current?.contains(target)) closeRef.current();
     };
-    const esc = (event: KeyboardEvent) => { if (event.key === 'Escape') { closeRef.current(); anchor.current?.focus(); } };
+    const key = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { closeRef.current(); anchor.current?.focus(); return; }
+      if (event.key === 'Tab') { closeRef.current(); anchor.current?.focus(); return; }
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+      const items = [...(ref.current?.querySelectorAll<HTMLElement>(PANEL_ITEMS) ?? [])];
+      if (items.length === 0 || !ref.current?.contains(document.activeElement)) return;
+      event.preventDefault();
+      const at = items.indexOf(document.activeElement as HTMLElement);
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+        : event.key === 'ArrowDown' ? (at + 1) % items.length : (at <= 0 ? items.length - 1 : at - 1);
+      items[next].focus();
+    };
+    // A scroll anywhere else leaves the panel floating away from its row. The panel's own scrolling, and the scroll a
+    // phone makes to bring a field into view while someone types in it, do not close it.
+    const scroll = (event: Event) => {
+      if (ref.current?.contains(event.target as Node)) return;
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && ref.current?.contains(active) && active.matches('input, textarea')) return;
+      closeRef.current();
+    };
     const resize = () => closeRef.current();
     document.addEventListener('mousedown', away);
-    document.addEventListener('keydown', esc);
+    document.addEventListener('keydown', key);
     window.addEventListener('resize', resize);
-    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); window.removeEventListener('resize', resize); };
+    window.addEventListener('scroll', scroll, { capture: true, passive: true });
+    return () => {
+      document.removeEventListener('mousedown', away);
+      document.removeEventListener('keydown', key);
+      window.removeEventListener('resize', resize);
+      window.removeEventListener('scroll', scroll, { capture: true });
+      // Choosing something removes the focused item, which would drop focus on the page: put it back on the row.
+      if (document.activeElement == null || document.activeElement === document.body) anchor.current?.focus();
+    };
   }, [anchor]);
-  return createPortal(<div ref={ref} className="skin rf-pop" style={{ top: place.top, right: place.right, maxHeight: place.max }}>{children}</div>, document.body);
+  return createPortal(<div ref={ref} id={id} className="skin rf-pop" style={{ top: place.top, right: place.right, maxHeight: place.max }}>{children}</div>, document.body);
 }
 
 /**
@@ -256,6 +294,7 @@ export function RefineChoiceRow<T extends string>({ label, value, options, onCha
   const [custom, setCustom] = useState('');
   const [place, setPlace] = useState<Place | null>(null);
   const rowRef = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
   const known = options.find((option) => option.value === value);
   const current = known?.label ?? (value || placeholder || t('site.choice.placeholder'));
 
@@ -286,12 +325,12 @@ export function RefineChoiceRow<T extends string>({ label, value, options, onCha
   );
   return (
     <div className="rf-choice-wrap">
-      <button ref={rowRef} type="button" className="rf-row rf-choice-row" aria-haspopup="listbox" aria-expanded={open} aria-label={`${label}: ${current}`} disabled={disabled} onClick={toggle}>
+      <button ref={rowRef} type="button" className="rf-row rf-choice-row" aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? panelId : undefined} aria-label={`${label}: ${current}`} disabled={disabled} onClick={toggle}>
         <span className="rf-grow rf-t1">{label}</span>
         <span className={`rf-choice-val ${known || value ? '' : 'rf-choice-empty'}`}>{current}</span>
         <ChevronRight className="rf-chev h-4 w-4" aria-hidden="true" />
       </button>
-      {open && place && <FloatingPanel anchor={rowRef} place={place} onClose={close}>{list}</FloatingPanel>}
+      {open && place && <FloatingPanel id={panelId} anchor={rowRef} place={place} onClose={close}>{list}</FloatingPanel>}
     </div>
   );
 }
@@ -304,15 +343,16 @@ export function RefinePanelRow({ label, ariaLabel, value, children }: { label: s
   const [open, setOpen] = useState(false);
   const [place, setPlace] = useState<Place | null>(null);
   const rowRef = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
   return (
     <div className="rf-choice-wrap">
-      <button ref={rowRef} type="button" className="rf-row rf-choice-row" aria-haspopup="listbox" aria-expanded={open} aria-label={ariaLabel}
+      <button ref={rowRef} type="button" className="rf-row rf-choice-row" aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? panelId : undefined} aria-label={ariaLabel}
         onClick={() => { if (open) { setOpen(false); return; } setPlace(placeUnder(rowRef.current)); setOpen(true); }}>
         <span className="rf-grow rf-t1">{label}</span>
         <span className="rf-choice-val" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{value}</span>
         <ChevronRight className="rf-chev h-4 w-4" aria-hidden="true" />
       </button>
-      {open && place && <FloatingPanel anchor={rowRef} place={place} onClose={() => setOpen(false)}>{children(() => setOpen(false))}</FloatingPanel>}
+      {open && place && <FloatingPanel id={panelId} anchor={rowRef} place={place} onClose={() => setOpen(false)}>{children(() => setOpen(false))}</FloatingPanel>}
     </div>
   );
 }
@@ -342,6 +382,7 @@ export function RefineDateTimeRow({ label, value, onChange, eventDays = [], remo
   const [time, setTime] = useState('09:00');
   const [month, setMonth] = useState(() => startOfDay(new Date()));
   const rowRef = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
   const text = dateTimeText(value);
 
   function begin() {
@@ -368,13 +409,13 @@ export function RefineDateTimeRow({ label, value, onChange, eventDays = [], remo
 
   return (
     <div className="rf-choice-wrap">
-      <button ref={rowRef} type="button" className="rf-row rf-choice-row" aria-haspopup="dialog" aria-expanded={open} aria-label={`${label}: ${text || 'Not set'}`} disabled={disabled} onClick={begin}>
+      <button ref={rowRef} type="button" className="rf-row rf-choice-row" aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? panelId : undefined} aria-label={`${label}: ${text || 'Not set'}`} disabled={disabled} onClick={begin}>
         <span className="rf-grow rf-t1">{label}</span>
         <span className={`rf-choice-val ${text ? '' : 'rf-choice-empty'}`}>{text || 'Not set'}</span>
         <ChevronRight className="rf-chev h-4 w-4" aria-hidden="true" />
       </button>
       {open && place && (
-        <FloatingPanel anchor={rowRef} place={place} onClose={() => setOpen(false)}>
+        <FloatingPanel id={panelId} anchor={rowRef} place={place} onClose={() => setOpen(false)}>
           <div role="dialog" aria-label={label} className="rf-cal">
             <div className="rf-cal-head">
               <button type="button" className="rf-ib" aria-label="Previous month" onClick={() => shift(-1)}><ChevronLeft className="h-5 w-5" aria-hidden="true" /></button>
@@ -418,6 +459,7 @@ export function RefineMenu({ label, items, disabled = false, text }: { label: st
   const [open, setOpen] = useState(false);
   const [place, setPlace] = useState<Place | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
   function toggle() {
     if (open) { setOpen(false); return; }
     setPlace(placeUnder(buttonRef.current));
@@ -426,14 +468,14 @@ export function RefineMenu({ label, items, disabled = false, text }: { label: st
   return (
     <>
       {text ? (
-        <button ref={buttonRef} type="button" className="rf-btn" aria-label={label} aria-haspopup="menu" aria-expanded={open} disabled={disabled} onClick={toggle}>{text}</button>
+        <button ref={buttonRef} type="button" className="rf-btn" aria-label={label} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? panelId : undefined} disabled={disabled} onClick={toggle}>{text}</button>
       ) : (
-        <button ref={buttonRef} type="button" className="ops-ibtn" aria-label={label} aria-haspopup="menu" aria-expanded={open} disabled={disabled} onClick={toggle}>
+        <button ref={buttonRef} type="button" className="ops-ibtn" aria-label={label} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? panelId : undefined} disabled={disabled} onClick={toggle}>
           <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
         </button>
       )}
       {open && place && (
-        <FloatingPanel anchor={buttonRef} place={place} onClose={() => setOpen(false)}>
+        <FloatingPanel id={panelId} anchor={buttonRef} place={place} onClose={() => setOpen(false)}>
           <div role="menu" aria-label={label} className="rf-choices">
             {items.map((item) => (
               <button key={item.label} type="button" role="menuitem" className={`rf-choice ${item.danger ? 'rf-menu-danger' : ''}`.trim()} onClick={() => { setOpen(false); item.onSelect(); }}>

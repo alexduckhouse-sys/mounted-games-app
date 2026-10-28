@@ -3,12 +3,7 @@
 
 /* On signed-in routes AppShell's <main> has top padding, which showed the page background as a white bar between the app header and the header band. The band should butt up against the app header. */
 main:has(.rf-hd) { padding-top: 0; }
-.rf-page { width: 100%; font-family: var(--mg-font); color: rgb(var(--mg-ink)); animation: rf-page-in 180ms var(--mg-ease-out); }
-@keyframes rf-page-in {
-  /* From part-faded, not blank: a page that starts invisible reads as a flash of empty screen. */
-  from { opacity: .4; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+.rf-page { width: 100%; font-family: var(--mg-font); color: rgb(var(--mg-ink)); }
 
 /* Header band: navy band matching .mg-band-header, with title in --mg-font-display. */
 .rf-hd, .rf-head { margin-top: 0; }
@@ -33,7 +28,7 @@ main:has(.rf-hd) { padding-top: 0; }
 .rf-hd :focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
 
 /* Section headings and lists: matches .mg-sec-head / .tt-group-title and .mg-lines / .mg-card. */
-.rf-sec { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 12px 0 6px; padding: 0 2px 4px; border-bottom: 1.5px solid rgb(var(--mg-heading)); font: 700 14px/1.1 var(--mg-font-display); letter-spacing: .05em; text-transform: uppercase; color: rgb(var(--mg-heading)); }
+.rf-sec { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 12px 0 6px; padding: 0 2px 4px; font: 700 14px/1.1 var(--mg-font-display); letter-spacing: .05em; text-transform: uppercase; color: rgb(var(--mg-heading)); }
 .rf-sec > span { text-transform: none; letter-spacing: 0; font: 500 12px/1 var(--mg-font); color: rgb(var(--mg-muted)); }
 :where(.rf-list) { padding: 0; list-style: none; }
 .rf-list { background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); border-radius: var(--mg-radius-card); box-shadow: var(--mg-shadow-sm); overflow: hidden; }
@@ -126,7 +121,7 @@ body:has(.mg-dock:not(.mg-dock-low)) .rf-foot:not(.rf-foot-inline) { --rf-foot-o
 .rf-actions { display: flex; gap: 8px; }
 @keyframes rf-fade { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
-  .rf-page, .rf-sheet, .rf-scrim, .rf-pop, details[open] > summary ~ * { animation: none; }
+  .rf-sheet, .rf-scrim, .rf-pop, details[open] > summary ~ * { animation: none; }
   details::details-content { transition: none; }
   .rf-sw > span { transition: none; }
   .rf-btn, .rf-row, .rf-chev-down, .rf-fld input, .rf-fld select, .rf-fld textarea { transition: none; }
@@ -171,12 +166,14 @@ body:has(.mg-dock:not(.mg-dock-low)) .rf-foot:not(.rf-foot-inline) { --rf-foot-o
 .rf-choice-other { display: flex; gap: 8px; padding: 8px 12px; }
 .rf-choice-other input { flex: 1; min-width: 0; min-height: 44px; padding: 0 10px; border: 1.5px solid rgb(var(--mg-border)); border-radius: 10px; font: 500 16px/1.2 var(--mg-font); background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); }
 .rf-sw { flex: none; position: relative; width: 38px; height: 22px; padding: 0; border: 0; border-radius: 11px; background: rgb(var(--mg-control)); cursor: pointer; transition: background-color .15s; }
-.rf-sw > span { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 9px; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .2); transition: left 260ms cubic-bezier(.34, 1.56, .64, 1), width 160ms var(--mg-ease-out); }
+/* The thumb slides with transform only (no layout work), and the area a thumb hits is 44px tall even though the switch is 22px. */
+.rf-sw::after { content: ''; position: absolute; inset: -11px -4px; }
+.rf-sw > span { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 9px; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .2); transform-origin: left center; transition: transform 260ms cubic-bezier(.34, 1.56, .64, 1); }
 /* The knob stretches under a finger, the way a phone's switch does, and springs across. */
-.rf-sw:active:not(:disabled) > span { width: 22px; }
-.rf-sw[aria-checked="true"]:active:not(:disabled) > span { left: 14px; }
+.rf-sw:active:not(:disabled) > span { transform: scaleX(1.22); }
+.rf-sw[aria-checked="true"]:active:not(:disabled) > span { transform: translateX(16px) scaleX(1.22); transform-origin: right center; }
 .rf-sw[aria-checked="true"] { background: rgb(var(--mg-button)); }
-.rf-sw[aria-checked="true"] > span { left: 18px; }
+.rf-sw[aria-checked="true"] > span { transform: translateX(16px); transform-origin: right center; }
 .rf-sw:disabled { opacity: .5; cursor: default; }
 .rf-sw:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
 
@@ -198,8 +195,6 @@ body:has(.mg-dock:not(.mg-dock-low)) .rf-foot:not(.rf-foot-inline) { --rf-foot-o
 @keyframes rf-pop-in { from { opacity: 0; transform: scale(.95) translateY(-4px); } }
 .rf-menu-danger { color: rgb(var(--mg-elim)); text-decoration: underline; }
 .rf-menu-danger:hover { color: rgb(var(--mg-elim)); }
-/* My Teams' alerts switch: the same look, with a 44px area around it for a thumb. */
-.tm-sw::after { content: ''; position: absolute; inset: -11px -3px; }
 /* A team card folds its body away rather than snapping shut. */
 .tm-body { display: grid; grid-template-rows: 1fr; animation: tm-open var(--mg-dur-base) var(--mg-ease-out); }
 .tm-body > div { min-height: 0; overflow: hidden; }
