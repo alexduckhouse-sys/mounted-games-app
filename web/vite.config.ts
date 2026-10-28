@@ -1,8 +1,9 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv, type UserConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { NATIVE_BUILD_MODE, assertNativeBuildEnv } from './src/native/buildEnv';
 
-export default defineConfig({
+const config: UserConfig = {
   plugins: [
     react(),
     VitePWA({
@@ -81,4 +82,10 @@ export default defineConfig({
       },
     },
   },
+};
+
+export default defineConfig(({ mode }) => {
+  // The iPhone app build (`vite build --mode ios`) must point at the servers by absolute https address.
+  if (mode === NATIVE_BUILD_MODE) assertNativeBuildEnv(loadEnv(mode, process.cwd(), 'VITE_'));
+  return config;
 });

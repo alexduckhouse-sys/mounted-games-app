@@ -5,11 +5,15 @@
  */
 import { registerSW } from 'virtual:pwa-register';
 import { confirmDialog } from './components/ConfirmDialog';
+import { isNativeApp } from './native/platform';
 
 let broadcasting = false;
 export function setBroadcasting(value: boolean): void { broadcasting = value; }
 
 export function registerPwa(): void {
+  // The iPhone app ships the build inside itself and updates with each app release, so it runs no
+  // service worker (and WKWebView doesn't offer one for the app's own origin anyway).
+  if (isNativeApp()) return;
   const updateSW = registerSW({
     onNeedRefresh() {
       if (broadcasting) return;

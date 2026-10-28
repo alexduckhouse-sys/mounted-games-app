@@ -23,7 +23,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'html'],
       // Measured: src/lib, src/api.ts, src/auth, src/theme, src/competition, src/live, src/hooks,
-      // src/lite, src/offline, src/weather, src/pwa.ts and the testable shared components.
+      // src/lite, src/offline, src/weather, src/native, src/pwa.ts and the testable shared components.
       include: [
         'src/api.ts',
         'src/pwa.ts',
@@ -36,6 +36,7 @@ export default defineConfig({
         'src/lite/**',
         'src/offline/**',
         'src/weather/**',
+        'src/native/**',
         'src/components/**',
       ],
       // Not measured, and why:
