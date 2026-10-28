@@ -144,7 +144,7 @@ export function exportCompetitionOutbox(competitionId: number, now?: string): st
   return serializeOutboxBackup(readOutbox(), competitionId, now);
 }
 
-export const OUTBOX_IMPORT_ERROR = 'That backup could not be read. Check that the whole JSON backup was copied.';
+export const OUTBOX_IMPORT_ERROR = 'That backup could not be read. Check that the whole backup was copied.';
 
 /** Validate and merge a JSON backup of offline scores into the active outbox, flushing immediately if online. */
 export function importCompetitionOutbox(

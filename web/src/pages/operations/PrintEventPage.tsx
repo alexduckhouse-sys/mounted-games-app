@@ -284,7 +284,7 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
             '',
             'Referee Card Incident',
             '',
-            teamMap.get(tId) ?? `Team #${tId}`,
+            teamMap.get(tId) ?? 'Unnamed team',
             '',
             '',
             card === 'yellow' ? 'Yellow card' : 'Red card',

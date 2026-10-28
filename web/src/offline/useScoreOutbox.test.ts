@@ -287,7 +287,7 @@ describe('exportCompetitionOutbox, importCompetitionOutbox and shareOrCopyOutbox
   it('returns the validation error when importing invalid JSON or storage error when full', () => {
     expect(importCompetitionOutbox('not-json')).toEqual({
       ok: false,
-      error: 'That backup could not be read. Check that the whole JSON backup was copied.',
+      error: 'That backup could not be read. Check that the whole backup was copied.',
     });
 
     const backup = JSON.stringify([queued(1)]);

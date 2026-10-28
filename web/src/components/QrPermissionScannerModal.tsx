@@ -302,7 +302,7 @@ function QrPermissionScannerDialog({
             <label className="kit-sheet-field">
               <span className="flex items-center gap-1.5">
                 <KeyRound className="h-3.5 w-3.5" aria-hidden="true" />
-                Or enter permission link / secret key
+                Or enter permission link / access code
               </span>
               <input
                 ref={pasteRef}
