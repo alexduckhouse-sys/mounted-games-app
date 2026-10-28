@@ -570,7 +570,7 @@ public class AdaptiveDecFormTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task TeamNameGivenAtEntry_BecomesTheTeam_AndIsShownOnItsDecForm()
     {
-        var section = await _f.NewSectionAsync();
+        var section = await _f.NewSectionAsync(priceMinor: 1000);
         var trainer = await _f.TrainerAsync();
         var name = $"Welsh Dragons {Guid.NewGuid():N}"[..24];
         foreach (var rider in new[] { "R1", "R2" })
@@ -580,6 +580,7 @@ public class AdaptiveDecFormTests : IClassFixture<ApiFactory>
             AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion))).EnsureSuccessStatusCode();
 
         var admin = await _f.AdminAsync();
+        await _f.PayPendingAsync(section.Id);
         var formed = await (await admin.PostAsJsonAsync($"/api/competitions/{section.CompetitionId}/sections/{section.Id}/form-teams",
             new FormTeamsFromSignupsRequest(5, false, false))).ReadAsync<FormTeamsResult>();
         Assert.Contains(name, formed.Created.Select(t => t.DisplayName));
@@ -601,11 +602,12 @@ public class AdaptiveDecFormTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task EntryTeamName_SurvivesTheTrainerRenamingTheTeamOnTheForm()
     {
-        var section = await _f.NewSectionAsync();
+        var section = await _f.NewSectionAsync(priceMinor: 1000);
         var trainer = await _f.TrainerAsync();
         var name = $"Originals {Guid.NewGuid():N}"[..20];
         (await trainer.PostAsJsonAsync(SignupUrl(section), new CreateSectionSignupRequest("R1", "Club Y", null,
             AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion, TeamName: name, WholeTeam: false))).EnsureSuccessStatusCode();
+        await _f.PayPendingAsync(section.Id);
         var formed = await (await (await _f.AdminAsync()).PostAsJsonAsync($"/api/competitions/{section.CompetitionId}/sections/{section.Id}/form-teams",
             new FormTeamsFromSignupsRequest(5, false, false))).ReadAsync<FormTeamsResult>();
         var team = formed.Created.Single();

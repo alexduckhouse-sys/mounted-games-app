@@ -214,11 +214,11 @@ public class SignupTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Create_DoesNotLinkAPublicCodeFromAnotherSection()
     {
-        var section = await _f.NewSectionAsync();
+        var section = await _f.NewSectionAsync(priceMinor: 1000);
         await ArrangeTeamAsync(section, "SYNTHETIC-CROSS-SECTION");
         var other = await _f.WithDbAsync(async db =>
         {
-            var second = new CompetitionSection { CompetitionId = section.CompetitionId, Format = SectionFormat.Teams, AgeGroup = "Synthetic", DisplayName = "Synthetic second section" };
+            var second = new CompetitionSection { CompetitionId = section.CompetitionId, Format = SectionFormat.Teams, AgeGroup = "Synthetic", DisplayName = "Synthetic second section", PriceMinor = 1000 };
             db.Add(second);
             await db.SaveChangesAsync();
             return second;
@@ -231,7 +231,7 @@ public class SignupTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Create_LeavesTeamEmpty_WhenTeamCodeUnknown()
     {
-        var section = await _f.NewSectionAsync();
+        var section = await _f.NewSectionAsync(priceMinor: 1000);
 
         var resp = await (await _f.TrainerAsync()).PostAsJsonAsync(Url(section), Entry(code: "nope"));
 
@@ -386,7 +386,7 @@ public class SignupTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task MySignups_ListsOwnSignupsWithTeamName_NotOthers()
     {
-        var section = await _f.NewSectionAsync();
+        var section = await _f.NewSectionAsync(priceMinor: 1000);
         var teamId = await ArrangeTeamAsync(section, "MYCODE");
         var (me, _) = await _f.SignupAsync();
         var (other, _) = await _f.SignupAsync();
@@ -474,10 +474,11 @@ public class SignupTests : IClassFixture<ApiFactory>
     [InlineData(SectionFormat.Individual, 1)]
     public async Task FormTeams_UsesFormatDefaultTeamSize(SectionFormat format, int expected)
     {
-        var section = await _f.NewSectionAsync(format);
+        var section = await _f.NewSectionAsync(format, priceMinor: 1000);
         await SignUpAsync(section, "R1", null);
         var admin = await _f.AdminAsync();
 
+        await _f.PayPendingAsync(section.Id);
         var result = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, true, false)))
             .ReadAsync<FormTeamsResult>();
 
@@ -489,10 +490,11 @@ public class SignupTests : IClassFixture<ApiFactory>
     [InlineData(50, 12)]
     public async Task FormTeams_ClampsRidersPerTeam(int requested, int expected)
     {
-        var section = await _f.NewSectionAsync();
+        var section = await _f.NewSectionAsync(priceMinor: 1000);
         await SignUpAsync(section, "R1", null);
         var admin = await _f.AdminAsync();
 
+        await _f.PayPendingAsync(section.Id);
         var result = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(requested, true, false)))
             .ReadAsync<FormTeamsResult>();
 
@@ -503,11 +505,12 @@ public class SignupTests : IClassFixture<ApiFactory>
     public async Task FormTeams_Preview_GroupsByClubAndSpillsIntoSuffixes_WithoutWriting()
     {
         var clubName = await ArrangeClubAsync($"Club{Guid.NewGuid():N}");
-        var section = await _f.NewSectionAsync();
+        var section = await _f.NewSectionAsync(priceMinor: 1000);
         foreach (var n in new[] { "A1", "A2", "A3" }) await SignUpAsync(section, n, clubName);
         await SignUpAsync(section, "Loner", null);
         var admin = await _f.AdminAsync();
 
+        await _f.PayPendingAsync(section.Id);
         var result = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(2, true, false)))
             .ReadAsync<FormTeamsResult>();
 
@@ -519,10 +522,11 @@ public class SignupTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task FormTeams_Preview_DoesNotCreateTeams()
     {
-        var section = await _f.NewSectionAsync();
+        var section = await _f.NewSectionAsync(priceMinor: 1000);
         await SignUpAsync(section, "R1", null);
         var admin = await _f.AdminAsync();
 
+        await _f.PayPendingAsync(section.Id);
         await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, true, false));
 
         Assert.Equal(0, await _f.InDbAsync(db => db.Teams.CountAsync(t => t.CompetitionSectionId == section.Id)));
@@ -531,7 +535,7 @@ public class SignupTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task FormTeams_IgnoresUnpaidSignups()
     {
-        var section = await _f.NewSectionAsync();
+        var section = await _f.NewSectionAsync(priceMinor: 1000);
         await SignUpAsync(section, "Paid", null);
         await SignUpAsync(section, "Refunded", null);
         var admin = await _f.AdminAsync();
@@ -539,6 +543,7 @@ public class SignupTests : IClassFixture<ApiFactory>
         await admin.PutAsJsonAsync($"/api/signups/{list.Single(s => s.FullName == "Refunded").Id}/status",
             new UpdateSignupStatusRequest(SignupPaymentStatus.Refunded));
 
+        await _f.PayPendingAsync(section.Id);
         var result = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, true, false)))
             .ReadAsync<FormTeamsResult>();
 
@@ -549,11 +554,12 @@ public class SignupTests : IClassFixture<ApiFactory>
     public async Task FormTeams_CreatesTeamsAndLinksSignups()
     {
         var clubName = await ArrangeClubAsync($"Club{Guid.NewGuid():N}");
-        var section = await _f.NewSectionAsync();
+        var section = await _f.NewSectionAsync(priceMinor: 1000);
         await SignUpAsync(section, "A1", clubName);
         await SignUpAsync(section, "A2", clubName);
         var admin = await _f.AdminAsync();
 
+        await _f.PayPendingAsync(section.Id);
         var result = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(4, false, false)))
             .ReadAsync<FormTeamsResult>();
 
@@ -566,13 +572,14 @@ public class SignupTests : IClassFixture<ApiFactory>
     public async Task FormTeams_GivesEachNewClubItsOwnTeam_AndBlankClubsGoToUnaffiliated()
     {
         var suffix = Guid.NewGuid().ToString("N")[..6];
-        var section = await _f.NewSectionAsync();
+        var section = await _f.NewSectionAsync(priceMinor: 1000);
         await SignUpAsync(section, "R1", $"Welsh Dragons {suffix}");
         await SignUpAsync(section, "R2", $"Gower MG {suffix}");
         await SignUpAsync(section, "R3", $"gower mg {suffix}");
         await SignUpAsync(section, "R4", null);
         var admin = await _f.AdminAsync();
 
+        await _f.PayPendingAsync(section.Id);
         var preview = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, true, false)))
             .ReadAsync<FormTeamsResult>();
         Assert.Equal(0, await _f.InDbAsync(db => db.Clubs.CountAsync(c => c.Name.EndsWith(suffix))));
@@ -591,12 +598,14 @@ public class SignupTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task FormTeams_DoesNotReBinSignupsThatAreAlreadyOnATeam()
     {
-        var section = await _f.NewSectionAsync();
+        var section = await _f.NewSectionAsync(priceMinor: 1000);
         await SignUpAsync(section, "R1", null);
         var admin = await _f.AdminAsync();
+        await _f.PayPendingAsync(section.Id);
         await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, false, false));
         await SignUpAsync(section, "R2", null);
 
+        await _f.PayPendingAsync(section.Id);
         var second = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, false, false)))
             .ReadAsync<FormTeamsResult>();
 
@@ -623,13 +632,14 @@ public class SignupTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task FormTeams_KeepsRidersWhoShareACustomTeamNameTogether()
     {
-        var section = await _f.NewSectionAsync();
+        var section = await _f.NewSectionAsync(priceMinor: 1000);
         var trainer = await _f.TrainerAsync();
         foreach (var n in new[] { "R1", "R2", "R3", "R4", "R5" })
             (await trainer.PostAsJsonAsync(Url(section), new CreateSectionSignupRequest(n, "Stockport", null, AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion, TeamName: "Stockport Stars")))
                 .EnsureSuccessStatusCode();
         var admin = await _f.AdminAsync();
 
+        await _f.PayPendingAsync(section.Id);
         var result = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(4, false, false)))
             .ReadAsync<FormTeamsResult>();
 
@@ -641,12 +651,13 @@ public class SignupTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task FormTeams_FormsAWholeTeamEntryAsOneTeam()
     {
-        var section = await _f.NewSectionAsync();
+        var section = await _f.NewSectionAsync(priceMinor: 1000);
         (await (await _f.TrainerAsync()).PostAsJsonAsync(Url(section),
             new CreateSectionSignupRequest("Manager", "Stockport", null, AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion, WholeTeam: true, TeamName: "Stockport Reds")))
             .EnsureSuccessStatusCode();
         var admin = await _f.AdminAsync();
 
+        await _f.PayPendingAsync(section.Id);
         var result = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, false, false)))
             .ReadAsync<FormTeamsResult>();
 
@@ -672,15 +683,17 @@ public class SignupTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task FormTeams_PairsAndIndividual_UseRiderNamesWithoutSuffixA()
     {
-        var pairsSection = await _f.NewSectionAsync(SectionFormat.Pairs);
+        var pairsSection = await _f.NewSectionAsync(SectionFormat.Pairs, priceMinor: 1000);
         await SignUpAsync(pairsSection, "Alice Rider", "Stockport");
         await SignUpAsync(pairsSection, "Bob Rider", "Stockport");
-        var indSection = await _f.NewSectionAsync(SectionFormat.Individual);
+        var indSection = await _f.NewSectionAsync(SectionFormat.Individual, priceMinor: 1000);
         await SignUpAsync(indSection, "Solo Sam", "Stockport");
 
         var admin = await _f.AdminAsync();
+        await _f.PayPendingAsync(pairsSection.Id);
         var pairsResult = await (await admin.PostAsJsonAsync(FormUrl(pairsSection), new FormTeamsFromSignupsRequest(null, false, false)))
             .ReadAsync<FormTeamsResult>();
+        await _f.PayPendingAsync(indSection.Id);
         var indResult = await (await admin.PostAsJsonAsync(FormUrl(indSection), new FormTeamsFromSignupsRequest(null, false, false)))
             .ReadAsync<FormTeamsResult>();
 
@@ -859,13 +872,15 @@ public class SignupTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task FormTeams_BumpsSuffix_WhenTeamAlreadyExistsForClub()
     {
-        var section = await _f.NewSectionAsync();
+        var section = await _f.NewSectionAsync(priceMinor: 1000);
         await SignUpAsync(section, "R1", null);
         var admin = await _f.AdminAsync();
+        await _f.PayPendingAsync(section.Id);
         await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, false, false));
         await SignUpAsync(section, "R2", null);
         await SignUpAsync(section, "R3", null);
 
+        await _f.PayPendingAsync(section.Id);
         var second = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(1, false, false)))
             .ReadAsync<FormTeamsResult>();
 
@@ -875,9 +890,10 @@ public class SignupTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task FormTeams_ReplaceExisting_RemovesUnusedTeamsAndKeepsUsedOnes()
     {
-        var section = await _f.NewSectionAsync();
+        var section = await _f.NewSectionAsync(priceMinor: 1000);
         await SignUpAsync(section, "R1", null);
         var admin = await _f.AdminAsync();
+        await _f.PayPendingAsync(section.Id);
         var first = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, false, false)))
             .ReadAsync<FormTeamsResult>();
         var oldTeamId = first.Created.Single().Id;
@@ -892,9 +908,10 @@ public class SignupTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task FormTeams_ReplaceExisting_KeepsTeamsWithHeatEntries()
     {
-        var section = await _f.NewSectionAsync();
+        var section = await _f.NewSectionAsync(priceMinor: 1000);
         await SignUpAsync(section, "R1", null);
         var admin = await _f.AdminAsync();
+        await _f.PayPendingAsync(section.Id);
         var first = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, false, false)))
             .ReadAsync<FormTeamsResult>();
         var usedTeamId = first.Created.Single().Id;
