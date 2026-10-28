@@ -1,5 +1,6 @@
 import { useAudioLevel } from '../../hooks/useAudioLevel';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useDialogFocus } from '../../components/useDialogFocus';
 import { createPortal } from 'react-dom';
 import { AnimatePresence } from 'framer-motion';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -21,7 +22,6 @@ import { streamHeatLabel } from '../../lib/streams';
 import { setBroadcasting } from '../../pwa';
 import { LiveDataCardOverlay, ProducerBanner, type LiveOverlayCardMode } from '../../components/stream/OverlayExtras';
 import { OverlayLayer, StreamNotice } from '../../components/stream/StreamOverlays';
-import { FilmingBanner } from '../../components/FilmingBanner';
 import { SelectField } from '../../components/SelectField';
 import { Notice } from '../../components/Notice';
 import { PageProblem } from '../../components/PageProblem';
@@ -468,7 +468,6 @@ function BroadcastStudio() {
             ))}
           </div>
         )}
-        <FilmingBanner competitionId={competition.id} refreshKey={competition.sessions} />
       </div>
       <ProducerBanner arenaName={arena} overlay={currentOverlay} />
       <LiveDataCardOverlay arenaName={arena} overlay={currentOverlay} />
@@ -626,24 +625,15 @@ function BroadcastStudio() {
       {(snapshot.state === 'starting' || snapshot.state === 'reconnecting') && <p role="status" className="mg-stream-glass absolute left-4 top-1/2 p-3">{snapshot.state === 'starting' ? 'Starting stream…' : 'Reconnecting…'}</p>}
       {error && <p role="alert" className="mg-stream-glass absolute left-4 right-24 top-20 p-3">{error}</p>}
       {screenDimmed && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Screen dimmed for tripod battery saving"
+        <DimmedLock
+          label="Screen dimmed for tripod battery saving"
           className="pointer-events-auto fixed inset-0 z-[120] flex flex-col items-center justify-center gap-3 bg-black text-white/35 select-none"
-          onDoubleClick={() => setScreenDimmed(false)}
+          onUnlock={() => setScreenDimmed(false)}
         >
           <Lock className="h-8 w-8" />
           <h2 className="text-lg font-bold">Screen locked</h2>
           <p className="text-sm font-semibold">LIVE {time} · {arena} · {angle}</p>
-          <button
-            type="button"
-            className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/50 hover:text-white"
-            onClick={() => setScreenDimmed(false)}
-          >
-            Double-tap to unlock.
-          </button>
-        </div>
+        </DimmedLock>
       )}
       <SavedReplaysDrawer
         competitionId={competition.id}
@@ -673,7 +663,6 @@ function BroadcastStudio() {
   return <div className={`mx-auto flex w-full flex-col gap-4 pb-6 pt-3 ${snapshot.media ? '' : 'max-w-xl'}`}>
     <Link className="mg-text-link" to={`/competitions/${competition.id}/chat`}>‹ Live stream</Link><h1 className="mg-h1">Go live</h1>
     {error || snapshot.error ? <Notice>{error || snapshot.error}</Notice> : null}
-    <FilmingBanner competitionId={competition.id} refreshKey={competition.sessions} />
     {!snapshot.media && soundField}
     {!snapshot.media ? <button disabled={busy} className="mg-btn mg-btn-primary min-h-12" onClick={() => run(async () => { await publisher.current!.capture(sound); setDevices(await publisher.current!.devices()); setMics(await (publisher.current!.audioDevices?.() ?? Promise.resolve([]))); })}><Camera />Allow camera</button> : <>
       <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(340px,2fr)] lg:items-start lg:gap-6">
@@ -743,26 +732,6 @@ function BroadcastStudio() {
 function VideoIcon() { return <span aria-hidden="true" className="h-2 w-2 rounded-full bg-white" />; }
 
 /**
- * A quick banner switch for the person filming: clears the banner that's up, or puts back the latest
- * message saved on this phone's producer screen. Everything else lives on the producer screen.
- */
-export function BannerButton({ competitionId }: { competitionId: number }) {
-  const { overlay, saveOverlay } = useCompetition();
-  const [busy, setBusy] = useState(false);
-  const current = overlay ?? DEFAULT_OVERLAY;
-  const on = current.bannerText !== null;
-  const next = readMessages(competitionId).at(-1);
-  if (!saveOverlay || (!on && !next)) return null;
-  async function toggle() {
-    setBusy(true);
-    await saveOverlay!((o) => (on ? { ...o, bannerText: null } : { ...o, bannerText: next!.text, bannerStyle: next!.style }));
-    setBusy(false);
-  }
-  return <button className={`mg-stream-control flex-col !rounded-xl p-2 ${on ? '!bg-amber-500 !text-black' : ''}`} disabled={busy} onClick={() => void toggle()}
-    aria-label={on ? 'Clear the banner' : `Show banner: ${next!.text}`}><Megaphone />{on ? 'Banner on' : 'Banner'}</button>;
-}
-
-/**
  * Sponsor cards on the video: a switch between "in breaks" and off, and a skip to the next sponsor. Hidden when
  * no sponsor is set to show on the video, or when this phone can't change the overlays.
  */
@@ -788,4 +757,22 @@ export function SponsorButtons({ competitionId }: { competitionId: number }) {
       aria-label={on ? 'Turn sponsors off' : 'Turn sponsors on'}><Handshake />{on ? 'Sponsors on' : 'Sponsors off'}</button>
     {on && <button className="mg-stream-control flex-col !rounded-xl p-2" disabled={busy} onClick={() => void skip()} aria-label="Skip sponsor"><SkipForward />Skip</button>}
   </>;
+}
+
+/** The tripod lock screen: focus sits on the unlock button, Escape unlocks, and Tab stays on the screen. */
+function DimmedLock({ label, className, onUnlock, children }: { label: string; className: string; onUnlock: () => void; children: ReactNode }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onUnlock, 'button');
+  return (
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={label} className={className} onDoubleClick={onUnlock}>
+      {children}
+      <button
+        type="button"
+        className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/50 hover:text-white"
+        onClick={onUnlock}
+      >
+        Double-tap to unlock.
+      </button>
+    </div>
+  );
 }

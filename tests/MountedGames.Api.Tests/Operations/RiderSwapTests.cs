@@ -236,7 +236,6 @@ public class RiderSwapTests : IClassFixture<ApiFactory>
             rider.PonyOwnerFullName = "Example Owner";
             rider.PonyAge = 10;
             rider.UseInitialOnly = true;
-            rider.NoFilming = true;
             rider.MedicalNotes = "Example rider note";
             await db.SaveChangesAsync();
             return saved.Id;
@@ -256,7 +255,6 @@ public class RiderSwapTests : IClassFixture<ApiFactory>
         Assert.Null(rider.PonyAge);
         Assert.Null(rider.SavedRiderId);
         Assert.True(rider.UseInitialOnly);
-        Assert.True(rider.NoFilming);
         Assert.True(rider.IsCaptain);
         Assert.False(rider.IsReserve);
         Assert.Equal(0, rider.OrderIndex);

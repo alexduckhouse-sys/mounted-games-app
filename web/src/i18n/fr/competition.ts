@@ -245,4 +245,10 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.story.wins': { one: '{count} victoire', other: '{count} victoires' },
   'competition.story.overall': '{place} au classement général',
   'competition.story.footer': 'Mounted Games · Résultats et classements en direct',
+  'competition.seasonRound.remove': 'Retirer de la saison',
+  'competition.seasonRound.confirmTitle': 'Retirer cette manche ?',
+  'competition.seasonRound.confirmMessage': '{name} ne compte plus pour cette saison. Vous pourrez la rajouter plus tard.',
+  'competition.seasonRound.confirmMessagePublished': '{name} ne compte plus pour cette saison et ses résultats publiés sont supprimés. Vous pourrez la rajouter plus tard, mais il faudra publier à nouveau.',
+  'competition.seasonRound.confirmLabel': 'Retirer la manche',
+  'competition.seasonRound.error': 'Impossible de retirer cette manche. Vérifiez votre signal et réessayez.',
 };

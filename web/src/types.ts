@@ -1,12 +1,5 @@
 export type Role = 'Admin' | 'MasterAdmin' | 'Trainer' | 'TrainerRequest' | 'ManagerRequest' | 'Manager' | 'Member' | 'Rider';
 
-/** Self-service signup choices. Trainer accounts need approval from an admin or their club's manager; team managers from an admin. */
-export const SIGNUP_ROLES: { value: 'Trainer' | 'Manager' | 'Member'; label: string; description: string }[] = [
-  { value: 'Trainer', label: 'Trainer', description: 'Coach your pony club\'s teams; submit dec forms.' },
-  { value: 'Manager', label: 'Team manager', description: 'Run the team\'s admin side: dec forms, contact, signups.' },
-  { value: 'Member', label: 'Pony Club member', description: 'Follow your club\'s teams; see dec forms.' },
-];
-
 export interface UserProfile {
   id: string;
   email: string;
@@ -141,11 +134,6 @@ export const SectionFormatLabel: Record<SectionFormat, string> = {
 };
 
 export type SessionStatus = 0 | 1 | 2;
-export const SessionStatusLabel: Record<SessionStatus, string> = {
-  0: 'Upcoming',
-  1: 'In Arena',
-  2: 'Finished',
-};
 
 export type SessionKind = 0 | 1 | 2 | 3;
 export const SessionKind = {
@@ -641,7 +629,6 @@ export interface SectionSignup {
   teamId?: number | null;
   createdAt: string;
   useInitialOnly?: boolean;
-  noFilming?: boolean;
   /** Staff-only: the adult's address and whether the confirmation email went. */
   contactEmail?: string | null;
   confirmationEmailStatus?: EmailDeliveryStatus;
@@ -1035,8 +1022,6 @@ export interface RiderEntry {
   orderIndex: number;
   /** Public pages get the name already shortened; staff and the owning trainer see the choice. */
   useInitialOnly?: boolean;
-  /** Only sent to the owning trainer and staff. */
-  noFilming?: boolean;
   /** The pony's height in hands, written as a decimal: 13.2 is 13 hands 2 inches. */
   ponyHeightHands?: number | null;
   // The answers below depend on what the organiser asks for. They are personal data about a child, so only staff and the
@@ -1055,23 +1040,6 @@ export interface RiderEntry {
   customValues?: Record<string, string | null> | null;
   /** Plain-English notes where an answer broke the organiser's number rules. Staff and the submitter only. */
   flags?: string[] | null;
-}
-
-/** A heat holding a rider who opted out of close-up filming. Staff only. */
-export interface FilmingOptOut {
-  heatId: number;
-  sessionId: number;
-  sessionName: string;
-  arenaName?: string | null;
-  heatLabel: string;
-  teamId: number;
-  teamName: string;
-  lane: number;
-  riderName: string;
-  isReserve: boolean;
-  heatFinished: boolean;
-  sessionOrder: number;
-  heatOrder: number;
 }
 
 export interface DeclarationForm {
@@ -1134,7 +1102,6 @@ export interface SavedRider {
   horseName?: string | null;
   notes?: string | null;
   useInitialOnly?: boolean;
-  noFilming?: boolean;
   ponyHeightHands?: number | null;
   ponyPassportNumber?: string | null;
   ponyOwnerFullName?: string | null;
@@ -1428,18 +1395,6 @@ export interface DrawUndoResult {
   restoredSessions: number;
   restoredHeats: number;
   undoStatus: DrawUndoStatus;
-}
-
-/** Role assigned to a rider for a single race in the 5-rider Race Line-Up & Sit-Out Planner. */
-export type RiderRaceRole = '1' | '2' | '3' | '4' | 'sit-out';
-
-/** Shared race line-up and sit-out assignments for a team (`GET/PUT /competitions/:id/teams/:teamId/race-lineup`). */
-export interface TeamRaceLineupPlan {
-  competitionId: number;
-  teamId: number;
-  /** Keyed by race key (e.g. `String(race.id)` or `${heat.id}:${race.orderIndex}`), inner map keyed by rider key (`String(rider.id)` or rider name). */
-  assignments: Record<string, Record<string, RiderRaceRole | string>>;
-  updatedAt?: string | null;
 }
 
 /** Summary of a printable race session for the single-session noticeboard filter. */

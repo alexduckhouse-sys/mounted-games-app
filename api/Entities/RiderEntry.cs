@@ -23,7 +23,7 @@ public class RiderEntry
 
     /// <summary>Show only the surname's initial on public pages ("Oliver S.").</summary>
     public bool UseInitialOnly { get; set; }
-    /// <summary>Opt out of close-up filming and photography; shown to stream staff only.</summary>
+    /// <summary>Legacy column from the removed per-rider filming opt-out. Nothing reads or writes it; kept so no migration is needed.</summary>
     public bool NoFilming { get; set; }
 
     // Adaptive dec form (see Services/DecForms). All of these are personal data about a child: staff and the

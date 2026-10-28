@@ -245,4 +245,10 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.story.wins': { one: '{count} buddugoliaeth', other: '{count} buddugoliaeth' },
   'competition.story.overall': '{place} yn gyffredinol',
   'competition.story.footer': 'Mounted Games · Canlyniadau byw a safleoedd',
+  'competition.seasonRound.remove': 'Tynnu o’r tymor',
+  'competition.seasonRound.confirmTitle': 'Tynnu’r rownd hon?',
+  'competition.seasonRound.confirmMessage': 'Nid yw {name} yn cyfrif tuag at y tymor hwn mwyach. Gallwch ei ychwanegu’n ôl yn nes ymlaen.',
+  'competition.seasonRound.confirmMessagePublished': 'Nid yw {name} yn cyfrif tuag at y tymor hwn mwyach ac mae’r canlyniadau cyhoeddedig yn cael eu dileu. Gallwch ei ychwanegu’n ôl yn nes ymlaen, ond bydd rhaid cyhoeddi eto.',
+  'competition.seasonRound.confirmLabel': 'Tynnu’r rownd',
+  'competition.seasonRound.error': 'Methwyd tynnu’r rownd hon. Gwiriwch eich signal a rhowch gynnig arall arni.',
 };

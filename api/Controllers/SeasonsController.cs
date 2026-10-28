@@ -213,6 +213,23 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
         return await ToRoundDtoAsync(round, ct);
     }
 
+    /// <summary>
+    /// Unlinks a round from a season. Its published versions and results go with it; standings are worked out
+    /// from the remaining published rounds on every request, so nothing needs recalculating.
+    /// </summary>
+    [HttpDelete("{id:guid}/rounds/{roundId:guid}")]
+    [Authorize(Roles = SeasonOrganiserRoles)]
+    public async Task<IActionResult> RemoveRound(Guid id, Guid roundId, CancellationToken ct)
+    {
+        var round = await db.Set<SeasonRound>().Include(x => x.Season)
+            .SingleOrDefaultAsync(x => x.Id == roundId && x.SeasonId == id, ct);
+        if (round?.Season is null || !CanManage(round.Season.OwnerUserId)) return NotFound();
+        round.Season.UpdatedAt = DateTime.UtcNow;
+        db.Set<SeasonRound>().Remove(round);
+        await db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
     [HttpPut("{id:guid}/rounds/{roundId:guid}/multiplier")]
     [Authorize(Roles = SeasonOrganiserRoles)]
     public async Task<ActionResult<SeasonRoundDto>> SetRoundMultiplier(

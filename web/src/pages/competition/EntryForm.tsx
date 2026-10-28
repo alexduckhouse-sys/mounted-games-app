@@ -81,7 +81,7 @@ function EntryFormDetails({ competition, section, kind, step, onSent, onConflict
   const [stablingClubOrTeam, setStablingClubOrTeam] = useState(draft?.stablingClubOrTeam ?? '');
   const [guestFields, setGuestFields] = useState<GuestRiderFields>(blankGuestRider);
   const [showGuestProblem, setShowGuestProblem] = useState(false);
-  const [privacy, setPrivacy] = useState<RiderPrivacy>({ useInitialOnly: draft?.useInitialOnly ?? false, noFilming: draft?.noFilming ?? false });
+  const [privacy, setPrivacy] = useState<RiderPrivacy>({ useInitialOnly: draft?.useInitialOnly ?? false });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<{ text: string; retry: boolean } | null>(null);
   const toast = useToast();
@@ -95,11 +95,10 @@ function EntryFormDetails({ competition, section, kind, step, onSent, onConflict
     if (completed.current) return;
     setDraftSaved(saveEntryDraft(draftKey, {
       fullName, club, teamName, wholeTeam, lookingForGuestRiders,
-      teamsCount, stablesCount, stablingClubOrTeam, useInitialOnly: privacy.useInitialOnly,
-      noFilming: privacy.noFilming, requestId,
+      teamsCount, stablesCount, stablingClubOrTeam, useInitialOnly: privacy.useInitialOnly, requestId,
     }));
   }, [draftKey, fullName, club, teamName, wholeTeam, lookingForGuestRiders,
-    teamsCount, stablesCount, stablingClubOrTeam, privacy.useInitialOnly, privacy.noFilming, requestId]);
+    teamsCount, stablesCount, stablingClubOrTeam, privacy.useInitialOnly, requestId]);
 
   const isWaitlist = kind === 'waitlist';
   const guestWaiting = kind === 'guest' && section.format === 2;
@@ -167,7 +166,6 @@ function EntryFormDetails({ competition, section, kind, step, onSent, onConflict
         stablingClubOrTeam: guestWaiting || isWaitlist || !hasStables ? null : stablingClubOrTeam.trim() || club.trim() || teamName.trim() || null,
         paymentMethod: priceMinor > 0 ? (isDemo ? 'card' : 'bacs') : null,
         useInitialOnly: privacy.useInitialOnly,
-        noFilming: privacy.noFilming,
         acceptTerms: privacy.agreed,
         consentVersion: CONSENT_VERSION,
       });

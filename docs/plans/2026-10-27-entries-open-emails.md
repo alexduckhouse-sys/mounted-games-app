@@ -1,6 +1,6 @@
 # Entries-open emails and nearest-first events (27 October 2026)
 
-Status: built on `feat/entries-open-emails` (merged as part of #211); review fixes on `fix/entries-digest-security`. Settled by the user: everyone on the opt-in list gets every newly opened event; we never ask anyone where they are; when we can infer roughly where someone is, show nearest first.
+Status (updated 28 October): the web events page no longer calls `near-you` (see `docs/decisions.md`); the email ordering still uses it. Built on `feat/entries-open-emails` (merged as part of #211); review fixes on `fix/entries-digest-security`. Settled by the user: everyone on the opt-in list gets every newly opened event; we never ask anyone where they are; when we can infer roughly where someone is, show nearest first.
 
 ## What "opened" means
 

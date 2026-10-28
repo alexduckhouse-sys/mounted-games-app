@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { useFavourites } from '../../hooks/useFavourites';
 import { isShiftCheckedInHere, isShiftMarkedMissing, myTeamAssignedDuties } from '../../lib/lorryAndVolunteers';
 import type { VolunteerShift } from '../../types';
 import { useT } from '../../i18n/LanguageContext';
@@ -14,19 +15,23 @@ function timeLabel(iso: string | null | undefined): string {
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
-/** Tells a signed-in team member which steward or arena crew duties their team has, and lets them check in. Hidden when there are none. */
+/** Tells a team member or follower (signed in or not) which steward or arena crew duties their team has, and lets them check in. Hidden when there are none. */
 export function MyStewardDutyBanner() {
   const { competition } = useCompetition();
   const { user } = useAuth();
   const t = useT();
+  const { favourites } = useFavourites();
   const [shifts, setShifts] = useState<VolunteerShift[]>([]);
   const [busy, setBusy] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const userId = user?.id ?? null;
   const base = `/competitions/${competition.id}`;
+  // Teams this device follows in this event. Following is enough to check a duty in, so no sign-in is needed.
+  const followedKey = favourites.filter((f) => f.competitionId === competition.id).map((f) => f.teamId).sort((a, b) => a - b).join(',');
+  const followedIds = followedKey ? followedKey.split(',').map(Number) : [];
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId && !followedKey) return;
     let live = true;
     (async () => {
       try {
@@ -35,14 +40,14 @@ export function MyStewardDutyBanner() {
       } catch { /* the banner is a convenience; stay hidden if the list can't load */ }
     })();
     return () => { live = false; };
-  }, [base, userId]);
+  }, [base, userId, followedKey]);
 
-  // The server says which duties this person's teams can check in to, so no team list is needed here.
+  // The server says which duties a signed-in person's teams can check in to; followed teams are matched here.
   const finished = new Set(competition.sessions.filter((s) => s.status === 2).map((s) => s.id));
-  const mine = myTeamAssignedDuties(shifts, [], null)
+  const mine = myTeamAssignedDuties(userId || followedKey ? shifts : [], followedIds, null)
     .filter((s) => s.sessionId != null && !finished.has(s.sessionId) && (s.dutyCategory ?? 'General') !== 'General');
 
-  if (!userId || mine.length === 0) return null;
+  if (mine.length === 0) return null;
 
   async function checkIn(shift: VolunteerShift) {
     setBusy(shift.id);

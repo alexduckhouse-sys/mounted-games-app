@@ -121,6 +121,27 @@ public class EmailServicesTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public void Subjects_NeverCarryLineBreaksOrControlCharacters()
+    {
+        var (comp, section) = Event();
+        comp.Name = "Spring\r\nBcc: x@example.org\tGames\u0000";
+        section.DisplayName = "U12\nPairs";
+        var signup = new SectionSignup { Id = 1, AmountMinor = 1500 };
+
+        var subjects = new[]
+        {
+            SignupConfirmationEmail.Build(signup, comp, section, "a@example.org", null, OptInOutcome.NotAsked, null).Subject,
+            SignupConfirmationEmail.BuildPaymentReminder(signup, comp, section, "a@example.org", null).Subject,
+            SignupConfirmationEmail.BuildWaitlistOffer(signup, comp, section, "a@example.org", DateTime.UtcNow.AddDays(1), 1500).Subject,
+        };
+
+        Assert.All(subjects, subject => Assert.DoesNotContain(subject, ch => char.IsControl(ch)));
+        Assert.Equal("Your entry for Spring Bcc: x@example.org Games", subjects[0]);
+        Assert.Equal("a b c", SignupConfirmationEmail.OneLine("a\n b\r\nc"));
+        Assert.Equal(string.Empty, SignupConfirmationEmail.OneLine(null));
+    }
+
+    [Fact]
     public void HtmlBody_KeepsLineBreaksInBankDetailsAndOrganiserNote()
     {
         var (comp, section) = Event(pay: "Sort 12-34-56\nAcc 87654321 <ok>");

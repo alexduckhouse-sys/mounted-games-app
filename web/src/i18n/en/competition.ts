@@ -245,4 +245,10 @@ export const competition = {
   'competition.story.wins': { one: '{count} win', other: '{count} wins' },
   'competition.story.overall': '{place} overall',
   'competition.story.footer': 'Mounted Games · Live results and standings',
+  'competition.seasonRound.remove': 'Remove from season',
+  'competition.seasonRound.confirmTitle': 'Remove this round?',
+  'competition.seasonRound.confirmMessage': '{name} stops counting towards this season. You can add it back later.',
+  'competition.seasonRound.confirmMessagePublished': '{name} stops counting towards this season and its published results are deleted. You can add it back later, but you would need to publish again.',
+  'competition.seasonRound.confirmLabel': 'Remove round',
+  'competition.seasonRound.error': 'This round couldn’t be removed. Check your signal and try again.',
 } satisfies Record<string, Message>;

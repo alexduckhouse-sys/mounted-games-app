@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -41,7 +43,14 @@ public class PushController : ControllerBase
         var existing = await _db.PushSubscriptions.FirstOrDefaultAsync(s => s.Endpoint == req.Endpoint);
         if (existing != null)
         {
-            if (existing.UserId != userId) return Conflict();
+            // Another account holds this browser endpoint. Hand it over only if the request proves it holds the
+            // browser's own subscription (the keys are generated in the browser and never shared), which covers a
+            // browser whose logout never managed to unsubscribe. Anyone who merely knows the endpoint gets a 409.
+            if (existing.UserId != userId)
+            {
+                if (!KeysMatch(existing, req)) return Conflict();
+                existing.UserId = userId;
+            }
             existing.P256dh = req.P256dh;
             existing.Auth = req.Auth;
             existing.LastSeenAt = DateTime.UtcNow;
@@ -58,6 +67,19 @@ public class PushController : ControllerBase
         }
         await _db.SaveChangesAsync();
         return NoContent();
+    }
+
+    private static bool KeysMatch(PushSubscription stored, PushSubscribeRequest req)
+    {
+        static bool Same(string? a, string? b)
+        {
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
+            return CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(a), Encoding.UTF8.GetBytes(b));
+        }
+        // Evaluate both so timing doesn't reveal which key was wrong.
+        var p256dh = Same(stored.P256dh, req.P256dh);
+        var auth = Same(stored.Auth, req.Auth);
+        return p256dh & auth;
     }
 
     /// <summary>

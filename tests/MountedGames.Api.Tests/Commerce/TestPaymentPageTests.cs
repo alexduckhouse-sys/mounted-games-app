@@ -130,6 +130,52 @@ public class TestPaymentPageTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task SuccessfulTestCheckout_FormsTheTeamAndGrantsDeclarationAccess()
+    {
+        var (section, entrant, signup) = await DemoEntryAsync();
+
+        var paid = await entrant.PostAsJsonAsync($"/api/commerce/signups/{signup.Id}/demo-checkout", Key("team-1", FakePaymentOutcome.Success));
+
+        Assert.Equal(HttpStatusCode.OK, paid.StatusCode);
+        Assert.True(await _f.InDbAsync(db => db.Teams.AnyAsync(t => t.CompetitionSectionId == section.Id)));
+        Assert.True(await _f.InDbAsync(db => db.Set<SignupMatchmaking>().AnyAsync(m => m.SignupId == signup.Id && m.DeclarationAccessGranted)));
+    }
+
+    [Fact]
+    public async Task DeclinedTestCheckout_FormsNoTeam()
+    {
+        var (section, entrant, signup) = await DemoEntryAsync();
+
+        await entrant.PostAsJsonAsync($"/api/commerce/signups/{signup.Id}/demo-checkout", Key("team-declined", FakePaymentOutcome.Decline));
+
+        Assert.False(await _f.InDbAsync(db => db.Teams.AnyAsync(t => t.CompetitionSectionId == section.Id)));
+    }
+
+    [Fact]
+    public async Task FreeEntry_FormsTheTeamAndGrantsDeclarationAccessAtOnce()
+    {
+        var section = await _f.NewSectionAsync(priceMinor: 0);
+        var (_, entrant, signup) = await EnterAsync(section);
+
+        Assert.Equal(SignupPaymentStatus.Paid, signup.Status);
+        Assert.True(await _f.InDbAsync(db => db.Teams.AnyAsync(t => t.CompetitionSectionId == section.Id)));
+        Assert.True(await _f.InDbAsync(db => db.Set<SignupMatchmaking>().AnyAsync(m => m.SignupId == signup.Id && m.DeclarationAccessGranted)));
+    }
+
+    [Fact]
+    public async Task FreeGuestSpotWaiter_FormsNoTeam()
+    {
+        var section = await _f.NewSectionAsync(priceMinor: 0);
+        var (entrant, _) = await _f.SignupAsync();
+        var response = await entrant.PostAsJsonAsync(
+            $"/api/competitions/{section.CompetitionId}/sections/{section.Id}/signups",
+            new { fullName = "Guest waiter", acceptTerms = true, consentVersion = SignupTerms.WordingVersion, waitingForGuestSpot = true });
+        Assert.True(response.IsSuccessStatusCode);
+
+        Assert.False(await _f.InDbAsync(db => db.Teams.AnyAsync(t => t.CompetitionSectionId == section.Id)));
+    }
+
+    [Fact]
     public async Task FreeEntriesDoNotUseTheTestCheckout()
     {
         var (_, entrant, signup) = await DemoEntryAsync(price: 0);

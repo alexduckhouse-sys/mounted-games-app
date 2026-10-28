@@ -254,7 +254,7 @@ public record SectionSignupDto(
     string FullName, string? PonyClubName, string? ContactInfo,
     int AmountMinor, SignupPaymentStatus Status, DateTime? PaidAt,
     int? TeamId, DateTime CreatedAt,
-    bool UseInitialOnly = false, bool NoFilming = false,
+    bool UseInitialOnly = false,
     bool TermsAccepted = false, DateTime? TermsAcceptedAt = null, string? TermsWordingVersion = null,
     string? ContactEmail = null, EmailDeliveryStatus ConfirmationEmailStatus = EmailDeliveryStatus.NotRequested,
     DateTime? ConfirmationEmailAt = null,
@@ -269,7 +269,7 @@ public record SectionSignupDto(
 /// <param name="RequestId">Made by the form for one submit, so a retry doesn't create a second entry or a second email.</param>
 public record CreateSectionSignupRequest(
     string FullName, string? PonyClubName, string? ContactInfo,
-    string? TeamCode = null, bool UseInitialOnly = false, bool NoFilming = false,
+    string? TeamCode = null, bool UseInitialOnly = false,
     bool AcceptTerms = false, string? ConsentVersion = null,
     [MaxLength(EmailAddresses.MaxLength)] string? ContactEmail = null,
     bool EmailOptIn = false, string? EmailOptInVersion = null,
@@ -555,7 +555,7 @@ public record SavedTeamDeclarationDto(
 public record RiderEntryDto(
     int Id, int? SavedRiderId, string FullName, DateTime? DateOfBirth,
     string? HorseName, string? BibColour, bool IsCaptain, bool IsReserve, int OrderIndex,
-    bool UseInitialOnly = false, bool NoFilming = false, bool IsGuestRider = false,
+    bool UseInitialOnly = false, bool IsGuestRider = false,
     decimal? PonyHeightHands = null,
     // Adaptive dec form. Personal data: filled only for staff and the submitting trainer, never on a public form.
     int? BirthYear = null, string? AgeGroup = null, decimal? WeightKg = null, string? PonyPassportNumber = null,
@@ -579,7 +579,7 @@ public record SubmitDeclarationFormRequest(
 public record RiderEntryInput(
     int? SavedRiderId, string FullName, DateTime? DateOfBirth,
     string? HorseName, string? BibColour, bool IsCaptain, bool IsReserve, int OrderIndex,
-    bool UseInitialOnly = false, bool NoFilming = false, bool IsGuestRider = false,
+    bool UseInitialOnly = false, bool IsGuestRider = false,
     decimal? PonyHeightHands = null,
     int? BirthYear = null, [StringLength(30)] string? AgeGroup = null, [Range(1, 400)] decimal? WeightKg = null,
     [StringLength(80)] string? PonyPassportNumber = null, [Range(0, 60)] int? PonyAge = null,
@@ -590,7 +590,7 @@ public record RiderEntryInput(
 
 public record SavedRiderDto(
     int Id, int ClubId, string FullName, DateTime? DateOfBirth, string? HorseName, string? Notes,
-    bool UseInitialOnly = false, bool NoFilming = false, decimal? PonyHeightHands = null,
+    bool UseInitialOnly = false, decimal? PonyHeightHands = null,
     string? PonyPassportNumber = null, string? PonyOwnerFullName = null);
 
 public record ChatMessageDto(
@@ -739,9 +739,3 @@ public record OverlayLookDto(int Id, string Name, System.Text.Json.JsonElement L
 
 public record SaveOverlayLookRequest([Required, StringLength(60, MinimumLength = 1)] string Name, System.Text.Json.JsonElement Look);
 
-
-/// <summary>A heat that includes a rider who opted out of close-up filming. Staff only: it names the rider.</summary>
-public record FilmingOptOutDto(
-    int HeatId, int SessionId, string SessionName, string? ArenaName, string HeatLabel,
-    int TeamId, string TeamName, int Lane, string RiderName, bool IsReserve, bool HeatFinished,
-    int SessionOrder, int HeatOrder);

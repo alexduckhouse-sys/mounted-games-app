@@ -152,11 +152,11 @@ describe('riderReady', () => {
 });
 
 describe('riderFromSaved', () => {
-  const saved: SavedRider = { id: 9, clubId: 1, fullName: 'Ella Hughes', dateOfBirth: '2015-04-05T00:00:00', horseName: 'Pickle', ponyHeightHands: 13.2, useInitialOnly: true, noFilming: true };
+  const saved: SavedRider = { id: 9, clubId: 1, fullName: 'Ella Hughes', dateOfBirth: '2015-04-05T00:00:00', horseName: 'Pickle', ponyHeightHands: 13.2, useInitialOnly: true };
 
   it('fills every field and keeps the privacy choices', () => {
     expect(riderFromSaved(saved, false)).toMatchObject({
-      savedRiderId: 9, fullName: 'Ella Hughes', dob: '05/04/2015', pony: 'Pickle', height: '13.2', useInitialOnly: true, noFilming: true,
+      savedRiderId: 9, fullName: 'Ella Hughes', dob: '05/04/2015', pony: 'Pickle', height: '13.2', useInitialOnly: true,
     });
   });
 
@@ -165,7 +165,7 @@ describe('riderFromSaved', () => {
   });
 
   it('copes with a rider saved before heights and dates were kept', () => {
-    expect(riderFromSaved({ id: 1, clubId: 1, fullName: 'Old Rider' }, false)).toMatchObject({ dob: '', pony: '', height: '', useInitialOnly: false, noFilming: false });
+    expect(riderFromSaved({ id: 1, clubId: 1, fullName: 'Old Rider' }, false)).toMatchObject({ dob: '', pony: '', height: '', useInitialOnly: false });
   });
 });
 
@@ -174,10 +174,10 @@ describe('slotsFromForm', () => {
     const slots = slotsFromForm(form([
       entry(3, { orderIndex: 5, isReserve: true, dateOfBirth: '2016-01-02T00:00:00' }),
       entry(2, { orderIndex: 1, horseName: 'Toffee', ponyHeightHands: 12.3, isCaptain: true }),
-      entry(1, { orderIndex: 0, savedRiderId: 4, useInitialOnly: true, noFilming: true, isGuestRider: true }),
+      entry(1, { orderIndex: 0, savedRiderId: 4, useInitialOnly: true, isGuestRider: true }),
     ]), 5);
     expect(slots).toHaveLength(6);
-    expect(slots[0]).toMatchObject({ fullName: 'Rider 1', savedRiderId: 4, useInitialOnly: true, noFilming: true, isGuestRider: true });
+    expect(slots[0]).toMatchObject({ fullName: 'Rider 1', savedRiderId: 4, useInitialOnly: true, isGuestRider: true });
     expect(slots[1]).toMatchObject({ fullName: 'Rider 2', pony: 'Toffee', height: '12.3', isCaptain: true });
     expect(slots[2]).toBeNull();
     expect(slots[5]).toMatchObject({ fullName: 'Rider 3', dob: '02/01/2016' });
@@ -248,7 +248,7 @@ describe('submitting', () => {
 
   it('builds the request: reserve flagged, optional pony on the reserve preserved if given, order kept, terms ticked', () => {
     const slots = filled(2, true);
-    slots[1] = rider('  Oliver Smith ', { savedRiderId: 8, isCaptain: true, useInitialOnly: true, noFilming: true });
+    slots[1] = rider('  Oliver Smith ', { savedRiderId: 8, isCaptain: true, useInitialOnly: true });
     const body = buildSubmitBody({ teamId: 7, teamName: ' Stockport C ', bibs: ' Yellow ', trainerName: ' Alex Morgan ', phone: ' 07700 900123 ', notes: '  ' }, slots);
     expect(body).toMatchObject({
       teamId: 7, teamName: 'Stockport C', bibDescription: 'Yellow', trainerName: 'Alex Morgan', trainerPhone: '07700 900123',
@@ -258,7 +258,7 @@ describe('submitting', () => {
     expect(body.riders[0]).toMatchObject({
       fullName: 'Rider 1', dateOfBirth: '2015-04-05', horseName: 'Pickle', ponyHeightHands: 13.2, isReserve: false, isCaptain: false, isGuestRider: false, orderIndex: 0,
     });
-    expect(body.riders[1]).toMatchObject({ fullName: 'Oliver Smith', savedRiderId: 8, isCaptain: true, useInitialOnly: true, noFilming: true, orderIndex: 1 });
+    expect(body.riders[1]).toMatchObject({ fullName: 'Oliver Smith', savedRiderId: 8, isCaptain: true, useInitialOnly: true, orderIndex: 1 });
     expect(body.riders[2]).toMatchObject({ fullName: 'Reserve One', isReserve: true, horseName: null, ponyHeightHands: null, orderIndex: 5 });
 
     slots[5] = rider('Riding Reserve', { pony: 'Bramble', height: '14.0' });

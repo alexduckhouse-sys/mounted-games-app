@@ -315,8 +315,3 @@ function OrderSheet({ order, busy, onClose, onPay, onCancel, onRefund }: {
     </Sheet>
   );
 }
-
-export function LatestTestReceipt({ payments }: { payments: TestPayment[] }) {
-  const payment = payments.at(-1);
-  return payment ? <TestReceipt payment={payment} /> : null;
-}

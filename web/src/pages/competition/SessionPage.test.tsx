@@ -437,7 +437,7 @@ describe('SessionPage', () => {
       await userEvent.type(screen.getByLabelText('Reason for correction'), 'Judge changed it');
       await completeRace();
       // Rider 2 is out for not finishing, so the sheet starts on that reason.
-      await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Save race' }));
+      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Why were teams eliminated?' })).getByRole('button', { name: 'Save race' }));
       expect(outbox()[0].places).toEqual([
         { teamId: 1, place: 1, eliminated: false, refereeNote: 'Quick start' },
         { teamId: 2, place: 0, eliminated: true, status: 3, refereeNote: 'Did not finish' },

@@ -47,12 +47,4 @@ public class IpBlocksController : ControllerBase
         await _db.SaveChangesAsync();
         return NoContent();
     }
-
-    [HttpGet("mine")]
-    [AllowAnonymous]
-    public ActionResult<object> Mine()
-    {
-        var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "";
-        return new { ip };
-    }
 }

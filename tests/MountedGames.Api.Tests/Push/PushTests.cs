@@ -63,18 +63,36 @@ public class PushTests : IClassFixture<ApiFactory>
             (r.StatusCode, rows.Count, rows[0].UserId, rows[0].P256dh));
     }
 
-    [Fact]
-    public async Task Subscribe_Returns409_WhenAnotherUserClaimsTheEndpoint()
+    [Theory]
+    [InlineData("old", "wrong-auth")]
+    [InlineData("wrong-key", "old-auth")]
+    [InlineData("new-key", "new-auth")]
+    public async Task Subscribe_Returns409_WhenAnotherUserClaimsTheEndpointWithoutTheStoredKeys(string p256dh, string auth)
     {
         var endpoint = AllowedEndpoint();
         var (first, firstAuth) = await _f.SignupAsync();
         var (second, _) = await _f.SignupAsync();
-        await first.PostAsJsonAsync("/api/push/subscribe", new PushSubscribeRequest(endpoint, "old", "old"));
+        await first.PostAsJsonAsync("/api/push/subscribe", new PushSubscribeRequest(endpoint, "old", "old-auth"));
 
-        var r = await second.PostAsJsonAsync("/api/push/subscribe", new PushSubscribeRequest(endpoint, "new-key", "new-auth"));
+        var r = await second.PostAsJsonAsync("/api/push/subscribe", new PushSubscribeRequest(endpoint, p256dh, auth));
 
         var row = await _f.InDbAsync(db => db.PushSubscriptions.SingleAsync(s => s.Endpoint == endpoint));
-        Assert.Equal((HttpStatusCode.Conflict, firstAuth.User.Id, "old"), (r.StatusCode, row.UserId, row.P256dh));
+        Assert.Equal((HttpStatusCode.Conflict, firstAuth.User.Id, "old", "old-auth"), (r.StatusCode, row.UserId, row.P256dh, row.Auth));
+    }
+
+    [Fact]
+    public async Task Subscribe_ReassignsTheEndpoint_WhenTheRequestHoldsTheStoredKeys()
+    {
+        var endpoint = AllowedEndpoint();
+        var (first, firstAuth) = await _f.SignupAsync();
+        var (second, secondAuth) = await _f.SignupAsync();
+        await first.PostAsJsonAsync("/api/push/subscribe", new PushSubscribeRequest(endpoint, "browser-key", "browser-auth"));
+
+        var r = await second.PostAsJsonAsync("/api/push/subscribe", new PushSubscribeRequest(endpoint, "browser-key", "browser-auth"));
+
+        var rows = await _f.InDbAsync(db => db.PushSubscriptions.Where(s => s.Endpoint == endpoint).ToListAsync());
+        var firstOwns = await _f.InDbAsync(db => db.PushSubscriptions.CountAsync(s => s.UserId == firstAuth.User.Id));
+        Assert.Equal((HttpStatusCode.NoContent, 1, secondAuth.User.Id, 0), (r.StatusCode, rows.Count, rows[0].UserId, firstOwns));
     }
 
     [Fact]
