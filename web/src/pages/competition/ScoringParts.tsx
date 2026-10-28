@@ -1,7 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { motion, type PanInfo } from 'framer-motion';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { useDialogFocus } from '../../components/useDialogFocus';
 import { BibSwatch } from '../../components/BibSwatch';
 import { dotColour } from '../../lib/teamColours';
 import type { LaneFill } from '../../lib/laneFill';
@@ -14,7 +13,7 @@ import { RESULT_STATUS } from '../../lib/resultStatus';
 import { inLaneOrder } from '../../lib/laneOrder';
 import type { NextLanes } from '../../lib/nextRoundLanes';
 import type { PendingPlace } from '../../lib/raceScoring';
-import type { RaceSummary } from '../../lib/raceSummary';
+import { placeText, type RaceSummary } from '../../lib/raceSummary';
 import { statusLetter, statusLabel } from '../../lib/resultStatus';
 import { ordinal } from '../../lib/toplist';
 import type { Heat, HeatEntry, Race } from '../../types';
@@ -23,7 +22,6 @@ import './heat.css';
 import './scoring.css';
 import { formatPoints } from '../../lib/formatPoints';
 import { triggerScorerHaptic } from '../../lib/userPrefs';
-import { useSwipeToClose } from '../../hooks/useSwipeToClose';
 
 export interface ScoreOverrideValue {
   points: number;
@@ -332,28 +330,6 @@ export function ScoreRow({
   );
 }
 
-/**
- * A bottom dialog on the scoring screen that closes when it is swiped down (the same hook as `components/Sheet`). Focus
- * moves in to `focus` and stays inside; Escape closes it.
- */
-export function PullDownDialog({ label, className, onClose, focus = 'button', children }: { label: string; className: string; onClose: () => void; focus?: string; children: ReactNode }) {
-  const { ref, handlers, style, dragging } = useSwipeToClose<HTMLDivElement>(onClose);
-  useDialogFocus(ref, onClose, focus);
-  return (
-    <div ref={ref} role="dialog" aria-modal="true" aria-label={label} className={dragging ? `${className} is-dragging` : className} style={style} {...handlers} onClick={(e) => e.stopPropagation()}>
-      {children}
-    </div>
-  );
-}
-
-function Overlay({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
-  return (
-    <div className="sc-overlay" onClick={onClose}>
-      <PullDownDialog label={label} className="sc-sheet" onClose={onClose}>{children}</PullDownDialog>
-    </div>
-  );
-}
-
 /** Organiser tools for the race being scored: change it, add one, re-run it, or record a run-off winner. */
 export function RaceControlsPanel({
   raceName, onAddRace, onRenameRace, onRerunRace, runoffTeams, onPickRunoffWinner,
@@ -452,9 +428,7 @@ export function EliminationSheet({ places, names, onSave, onSkip, onCancel }: {
     }));
   }
   return (
-    <Overlay label="Why were teams eliminated?" onClose={onCancel}>
-      <h3 className="sc-title">Why are they out?</h3>
-      <p className="sc-sub mt-1">Saved as a private note for staff, and read out in the summary.</p>
+    <Sheet title="Why are they out?" description="Saved as a private note for staff, and read out in the summary." onClose={onCancel}>
       {out.map((p) => (
         <div key={p.teamId} className="sc-field">
           <span className="sc-name">{names[p.teamId] ?? 'Unnamed team'}</span>
@@ -479,7 +453,7 @@ export function EliminationSheet({ places, names, onSave, onSkip, onCancel }: {
         <button type="button" className="mg-btn mg-btn-secondary" onClick={onSkip}>Save without reasons</button>
         <button type="button" className="mg-btn mg-btn-secondary" onClick={onCancel}>Back</button>
       </div>
-    </Overlay>
+    </Sheet>
   );
 }
 
@@ -491,7 +465,7 @@ export function SummaryCard({ summary, raceNumber }: { summary: RaceSummary; rac
       <p className="sc-sub">{summary.raceName}</p>
       <h4>Placings</h4>
       <ol>
-        {summary.placings.map((p) => <li key={p.teamId}>{ordinal(p.place)} {p.teamName}{p.hc ? ' (HC)' : ''}, {formatPoints(p.points)} {p.points === 1 ? 'point' : 'points'}</li>)}
+        {summary.placings.map((p) => <li key={p.teamId}>{placeText(p.place, p.joint)} {p.teamName}{p.hc ? ' (HC)' : ''}, {formatPoints(p.points)} {p.points === 1 ? 'point' : 'points'}</li>)}
       </ol>
       {summary.out.length > 0 && <>
         <h4>Out</h4>
@@ -499,7 +473,7 @@ export function SummaryCard({ summary, raceNumber }: { summary: RaceSummary; rac
       </>}
       <h4>Heat totals so far</h4>
       <ol>
-        {summary.totals.map((t) => <li key={t.teamId}>{t.hc ? `${t.teamName}: HC, ${formatPoints(t.points)} points` : `${ordinal(t.position ?? 0)} ${t.teamName}: ${formatPoints(t.points)} ${t.points === 1 ? 'point' : 'points'}${t.why ? ` (tie-break: ${t.why})` : ''}`}</li>)}
+        {summary.totals.map((t) => <li key={t.teamId}>{t.hc ? `${t.teamName}: HC, ${formatPoints(t.points)} points` : `${placeText(t.position ?? 0, t.joint)} ${t.teamName}: ${formatPoints(t.points)} ${t.points === 1 ? 'point' : 'points'}${t.why ? ` (tie-break: ${t.why})` : ''}`}</li>)}
       </ol>
       {summary.ending && <>
         <h4>{summary.ending.heading}</h4>

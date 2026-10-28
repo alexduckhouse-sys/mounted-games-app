@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSavedToast } from '../../components/SavedTick';
 import { Notice } from '../../components/Notice';
+import { Sheet } from '../../components/Sheet';
 import { ChevronLeft, ChevronRight, CloudOff, Keyboard, MoreHorizontal, Printer, Trash2, Undo2 } from 'lucide-react';
 import { useScoringKeys } from '../../hooks/useScoringKeys';
 import type { ScoringKeyAction } from '../../lib/scoringKeys';
@@ -10,7 +11,7 @@ import { describePlacings, type QueuedScore } from '../../offline/scoreOutbox';
 import type { NextLanes } from '../../lib/nextRoundLanes';
 import { deadHeatPoints, deadHeatSize, isDeadHeat, manualPoints, type PendingPlace } from '../../lib/raceScoring';
 import { pointsForPlace } from '../../lib/queuedView';
-import { summariseRace } from '../../lib/raceSummary';
+import { heatFinishedSentence, heatTotals, summariseRace } from '../../lib/raceSummary';
 import { afterRed, afterYellow, stepPoints, type CardMark } from '../../lib/refereeCards';
 import { ELIMINATED_HAPTIC, getFullColourLanes, getSortByLaneOrder, PREFS_CHANGED_EVENT, setFullColourLanes, triggerScorerHaptic } from '../../lib/userPrefs';
 import { laneFill } from '../../lib/laneFill';
@@ -18,7 +19,7 @@ import { finishingReview, lastLaneLeft, raceLanes } from '../../lib/raceLanes';
 import { TieBreakRule, type Heat, type Race } from '../../types';
 import { displayLaneFor, sitsOutOf, type LaneRules } from './laneRules';
 import {
-  EliminationSheet, HeatGrid, NextLanesCard, PullDownDialog, RaceControlsPanel, ScoreRow, SummaryCard, tapHaptic,
+  EliminationSheet, HeatGrid, NextLanesCard, RaceControlsPanel, ScoreRow, SummaryCard, tapHaptic,
   type ScoreOverrideValue,
 } from './ScoringParts';
 import { RaceToolsSheet, type ToolLink, type ToolTeam } from './RaceToolsSheet';
@@ -354,8 +355,21 @@ export function ScoringSection({
     keyedSays = `${keyedEntry.teamName}, lane ${displayLaneFor(heat, keyedEntry, laneIdx, laneRules)}, ${outcome}`;
   }
 
+  // When the heat's last race goes in, one quiet sentence for screen readers (not on opening a heat that is already done).
+  const [heatSays, setHeatSays] = useState('');
+  const wasComplete = useRef({ heatId: heat.id, done: allComplete });
+  useEffect(() => {
+    const before = wasComplete.current;
+    wasComplete.current = { heatId: heat.id, done: allComplete };
+    if (before.heatId !== heat.id) { setHeatSays(''); return; }
+    if (allComplete && !before.done) {
+      setHeatSays(heatFinishedSentence(heat.label?.trim() || 'Heat', heatTotals(heat, races, races.length - 1, hcTeamIds, tieRule)));
+    }
+  }, [allComplete, heat, races, hcTeamIds, tieRule]);
+
   return (
     <section className="space-y-3">
+      <p className="sr-only" aria-live="polite">{keyedSays || heatSays}</p>
       <div className="sc-main">
         {races.length === 0 && <p className="sc-card sc-pad sc-sub">No races in this heat yet.</p>}
         {activeRace && (
@@ -427,7 +441,6 @@ export function ScoringSection({
                 <Keyboard className="h-3.5 w-3.5" aria-hidden="true" /> Keypad connected
               </p>
             )}
-            <p className="sr-only" aria-live="polite">{keyedSays}</p>
 
             {live && editing && <p className="sc-hint">Saving again replaces this race’s points.</p>}
             {live && isQualifier && <p className="sc-hint">The first {qualifiers} home go through; the rest score 1 point each.</p>}
@@ -547,8 +560,6 @@ export function ScoringSection({
       )}
       {infoSheet && (
         <RtDialog
-          scrimLabel="Close"
-          label={infoSheet === 'summary' ? 'Last race' : infoSheet === 'lanes' ? 'Next round lanes' : 'Score history'}
           title={infoSheet === 'summary' ? 'Last race' : infoSheet === 'lanes' ? (nextLanes?.title ?? 'Next round') : 'Score history'}
           onClose={() => setInfoSheet(null)}
         >
@@ -561,7 +572,7 @@ export function ScoringSection({
         <ProtestSheet competitionId={protestCompetitionId} heat={heat} race={activeRace} onClose={() => setProtesting(false)} />
       )}
       {controlsOpen && activeRace && (
-        <RtDialog scrimLabel="Close organiser tools" label="Organiser tools" title="Organiser tools" onClose={() => setControlsOpen(false)}>
+        <RtDialog title="Organiser tools" onClose={() => setControlsOpen(false)}>
           <RaceControlsPanel
             raceName={activeRace.name}
             onAddRace={onAddRace}
@@ -577,18 +588,14 @@ export function ScoringSection({
   );
 }
 
-/** Bottom sheet over the scoring screen: takes focus, closes on Escape and gives focus back. */
-function RtDialog({ label, title, scrimLabel, onClose, children }: { label: string; title: string; scrimLabel: string; onClose: () => void; children: ReactNode }) {
+/** Bottom sheet over the scoring screen: the shared Sheet, so it swipes, closes on Escape and gives focus back. */
+function RtDialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
-    <div className="rt-overlay">
-      <button type="button" className="rt-scrim" aria-label={scrimLabel} onClick={onClose} />
-      <PullDownDialog label={label} className="rt-sheet" focus=".sc-link" onClose={onClose}>
-        <div className="rt-head">
-          <span className="rt-title">{title}</span>
-          <button type="button" className="sc-link" onClick={onClose}>Close</button>
-        </div>
+    <Sheet title={title} onClose={onClose}>
+      {({ close }) => (<>
         {children}
-      </PullDownDialog>
-    </div>
+        <div className="kit-acts"><button type="button" className="kit-pill" onClick={() => close()}>Close</button></div>
+      </>)}
+    </Sheet>
   );
 }
