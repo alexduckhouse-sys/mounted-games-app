@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { MapPinCheck } from 'lucide-react';
+import { useT } from '../../../i18n/LanguageContext';
 import { api } from '../../../api';
 import type { CreatorDraft } from '../../../lib/creatorDraft';
 import { Field } from '../../auth/Field';
@@ -36,6 +37,7 @@ function eventDays(draft: CreatorDraft): Date[] {
 }
 
 export function WhenWhereStep({ draft, change, problems, clear }: StepProps<CreatorDraft>) {
+  const t = useT();
   // The last postcode / what3words pair that was looked up, and how that went.
   const [geo, setGeo] = useState<{ key: string; status: 'ok' | 'none' | 'failed' } | null>(null);
   const geoKey = `${draft.postcode.trim()}|${draft.what3Words.trim()}`;
@@ -57,46 +59,46 @@ export function WhenWhereStep({ draft, change, problems, clear }: StepProps<Crea
   }
 
   return (
-    <section aria-label="When and where" className="flex flex-col">
-      <StepHeading>When and where</StepHeading>
+    <section aria-label={t('admin.creator.step.when')} className="flex flex-col">
+      <StepHeading>{t('admin.creator.step.when')}</StepHeading>
       <div className="cw-card mt-3">
-        <RefineDateTimeRow label="Starts" value={toIso(draft.startDate, draft.startTime)} removable={false} eventDays={eventDays(draft)}
+        <RefineDateTimeRow label={t('admin.creator.when.starts')} value={toIso(draft.startDate, draft.startTime)} removable={false} eventDays={eventDays(draft)}
           onChange={(iso) => { if (!iso) return; const { date, time } = fromIso(iso); change({ startDate: date, startTime: time }); clear('startDate'); clear('startTime'); }} />
-        <RefineDateTimeRow label="Ends" value={toIso(draft.endDate, draft.endTime)} eventDays={eventDays(draft)}
+        <RefineDateTimeRow label={t('admin.creator.when.ends')} value={toIso(draft.endDate, draft.endTime)} eventDays={eventDays(draft)}
           onChange={(iso) => { if (!iso) { change({ endDate: '' }); clear('endDate'); return; } const { date, time } = fromIso(iso); change({ endDate: date, endTime: time }); clear('endDate'); }} />
       </div>
       {(problems.startDate || problems.startTime || problems.endDate) && (
         <p role="alert" aria-invalid="true" tabIndex={-1} className="cw-note" style={{ color: 'rgb(var(--mg-elim))' }}>{problems.startDate || problems.startTime || problems.endDate}</p>
       )}
-      {!draft.endDate && <p className="cw-note">No end set: it finishes the same day.</p>}
+      {!draft.endDate && <p className="cw-note">{t('admin.creator.when.noEnd')}</p>}
 
       <div className="cw-card mt-4">
         <div className="cw-panel cw-panel-roomy">
-          <TextBox label="Venue" value={draft.location} onChange={(location) => change({ location })} />
+          <TextBox label={t('admin.creator.when.venue')} value={draft.location} onChange={(location) => change({ location })} />
           <div className="cw-line">
-            <Field label="Postcode" error={geoNow === 'none' ? 'No location found for that.' : geoNow === 'failed' ? 'Couldn’t look that up. Check your signal and try again.' : null} className="sm:max-w-[200px]">
+            <Field label={t('admin.creator.when.postcode')} error={geoNow === 'none' ? t('admin.creator.when.geoNone') : geoNow === 'failed' ? t('admin.creator.when.geoFailed') : null} className="sm:max-w-[200px]">
               {({ id, invalid, describedBy }) => (
                 <div className={fieldClass} data-invalid={invalid}>
                   <input id={id} value={draft.postcode} autoComplete="postal-code" aria-invalid={invalid} aria-describedby={describedBy}
                     className="uppercase" onChange={(e) => change({ postcode: e.target.value })} onBlur={() => void lookUp()} />
-                  {geoNow === 'ok' && <MapPinCheck aria-label="Location found" role="img" className="h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-heading))]" />}
+                  {geoNow === 'ok' && <MapPinCheck aria-label={t('admin.creator.when.geoFound')} role="img" className="h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-heading))]" />}
                 </div>
               )}
             </Field>
-            <Field label={<>what3words <span className="font-normal text-[rgb(var(--mg-muted))]">(optional)</span></>}>
+            <Field label={<>{t('admin.creator.when.what3words')} <span className="font-normal text-[rgb(var(--mg-muted))]">{t('admin.creator.optional')}</span></>}>
               {({ id }) => (
                 <div className={fieldClass}>
-                  <input id={id} value={draft.what3Words} placeholder="///word.word.word" autoComplete="off"
+                  <input id={id} value={draft.what3Words} placeholder={t('admin.creator.when.what3wordsPlaceholder')} autoComplete="off"
                     onChange={(e) => change({ what3Words: e.target.value })} onBlur={() => void lookUp()} />
                 </div>
               )}
             </Field>
           </div>
           <div className="cw-line">
-            <TextBox label={<>Competition number <span className="font-normal text-[rgb(var(--mg-muted))]">(optional)</span></>} value={draft.competitionNumber}
-              onChange={(competitionNumber) => change({ competitionNumber })} hint="The number your governing body gave the event." />
-            <TextBox label={<>Contact email <span className="font-normal text-[rgb(var(--mg-muted))]">(optional)</span></>} value={draft.contactEmail} autoComplete="email"
-              error={problems.contactEmail} onChange={(contactEmail) => { change({ contactEmail }); clear('contactEmail'); }} hint="Where entrants write to you. It shows on the event page." />
+            <TextBox label={<>{t('admin.creator.when.number')} <span className="font-normal text-[rgb(var(--mg-muted))]">{t('admin.creator.optional')}</span></>} value={draft.competitionNumber}
+              onChange={(competitionNumber) => change({ competitionNumber })} hint={t('admin.creator.when.numberHint')} />
+            <TextBox label={<>{t('admin.creator.when.email')} <span className="font-normal text-[rgb(var(--mg-muted))]">{t('admin.creator.optional')}</span></>} value={draft.contactEmail} autoComplete="email"
+              error={problems.contactEmail} onChange={(contactEmail) => { change({ contactEmail }); clear('contactEmail'); }} hint={t('admin.creator.when.emailHint')} />
           </div>
         </div>
       </div>
