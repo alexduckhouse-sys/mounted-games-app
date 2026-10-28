@@ -943,12 +943,13 @@ public class SessionsController : ControllerBase
             ? heat.Races.ToList()
             : heat.Races.Where(r => r.OrderIndex == targetOrder).ToList();
 
-        // Cancelling deletes the race and its results, so refuse when any affected race has scores on record.
+        // Cancelling deletes the race and its results, so refuse when any affected race has results or is signed off.
+        // (A save's revision counter alone doesn't count: clearing a race leaves it behind, and clearing is the way out.)
         var affected = s.Heats.SelectMany(RacesToRemove).ToList();
         var affectedIds = affected.Select(r => r.Id).ToList();
-        var hasScoreState = await _db.Set<RaceScoreState>().AsNoTracking()
-            .AnyAsync(x => affectedIds.Contains(x.RaceId) && (x.IsSignedOff || x.Revision > 0));
-        if (hasScoreState || affected.Any(r => r.Results.Count > 0))
+        var isSignedOff = await _db.Set<RaceScoreState>().AsNoTracking()
+            .AnyAsync(x => affectedIds.Contains(x.RaceId) && x.IsSignedOff);
+        if (isSignedOff || affected.Any(r => r.Results.Count > 0))
             return Conflict(new { message = "This race has recorded or signed-off results, so it can't be cancelled. Clear its results first." });
 
         foreach (var heat in s.Heats.ToList())

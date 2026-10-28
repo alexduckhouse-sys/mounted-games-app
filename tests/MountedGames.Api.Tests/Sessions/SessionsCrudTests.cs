@@ -516,6 +516,22 @@ public class SessionsCrudTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task CancelRace_Succeeds_OnceItsResultsHaveBeenCleared()
+    {
+        var (a, _, _, races) = await ScoredTwoHeatSessionAsync();
+        var admin = await _f.AdminAsync();
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.DeleteAsync(Url(a, $"/{a.SessionId}/races/{races[0]}"))).StatusCode);
+
+        // Cancelling a race removes the same-numbered race from every heat, so both must be cleared.
+        foreach (var raceId in races)
+            Assert.True((await admin.DeleteAsync($"/api/sessions/races/{raceId}/results")).IsSuccessStatusCode);
+
+        var r = await admin.DeleteAsync(Url(a, $"/{a.SessionId}/races/{races[0]}"));
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        Assert.False(await _f.InDbAsync(db => db.Races.AnyAsync(x => x.Id == races[0])));
+    }
+
+    [Fact]
     public async Task UpdateSessionRaces_ReopeningAFinishedSession_ClearsTheProvisionalAndOfficialMarks()
     {
         var arena = await _f.CreateArenaAsync();
