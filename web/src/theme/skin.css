@@ -494,6 +494,7 @@ a.mg-line:active, button.mg-line:active { background: rgb(var(--mg-tint) / .65);
 .mg-ov-card-added { padding: 1px 6px; border-radius: 6px; background: var(--ov-accent, #F5B82E); color: #111; font-weight: 700; font-size: .85em; }
 .mg-ov-card-added.is-out { background: rgb(255 255 255 / .2); color: #fff; }
 .mg-ov-card-total { text-align: right; font-weight: 700; font-size: 1.1em; }
+.mg-ov-card-empty { margin: 0; padding: 6px 0; font-size: .9em; opacity: .8; }
 .mg-ov-card-rule { display: block; height: 3px; margin: 2px 0 4px; border-radius: 2px; background: var(--ov-accent, #F5B82E); transform-origin: left center; }
 /* An alert's accent ring pulses once as it lands. */
 .mg-ov-alert-ring { animation: mg-ov-ring 1.1s var(--mg-ease-out) .15s 1 both; }

@@ -55,6 +55,7 @@ function Settings({ id, competition, tiles }: { id: OverlayTileId; competition: 
   let body: ReactNode = null;
   if (id === 'toplist') body = <Choice label="Show" value={options.toplistRows} choices={[{ value: 3, label: 'Top 3' }, { value: 5, label: 'Top 5' }, { value: 8, label: 'All' }]} onPick={set('toplistRows')} />;
   if (id === 'heat') body = <Choice label="Show" value={options.heatShow} choices={[{ value: 'each', label: 'Each race' }, { value: 'total', label: 'Totals only' }]} onPick={set('heatShow')} />;
+  if (id === 'favourites') body = <Choice label="Show" value={options.favouritesRows} choices={[{ value: 3, label: 'Top 3' }, { value: 5, label: 'Top 5' }]} onPick={set('favouritesRows')} />;
   if (id === 'next') body = <Choice label="Show" value={options.nextCount} choices={[{ value: 1, label: 'Next race' }, { value: 3, label: 'Next 3' }]} onPick={set('nextCount')} />;
   if (id === 'podium') {
     body = (
