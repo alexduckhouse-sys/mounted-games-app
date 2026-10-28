@@ -7,6 +7,7 @@ import { TickerNumber } from '../../components/TickerNumber';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useExitDelay } from '../../hooks/useExitDelay';
 import { useSwipeToClose } from '../../hooks/useSwipeToClose';
+import { useT } from '../../i18n/LanguageContext';
 import './refine.css';
 
 /** Wraps a refined page so its tokens and type apply. Pass `aboveTabs` on competition pages that show the bottom tabs. */
@@ -146,11 +147,12 @@ export function RefineDisclosure({ title, sub, trailing, defaultOpen = false, ch
 
 interface QtyProps { name: string; value: number; onChange: (next: number) => void; max?: number; disabled?: boolean }
 export function RefineQty({ name, value, onChange, max = 99, disabled = false }: QtyProps) {
+  const t = useT();
   return (
-    <span className="rf-qty" role="group" aria-label={`Quantity for ${name}`}>
-      <button type="button" aria-label={`Remove one ${name}`} disabled={disabled || value <= 0} onClick={() => onChange(value - 1)}><Minus className="h-4 w-4" aria-hidden="true" /></button>
+    <span className="rf-qty" role="group" aria-label={t('common.qty.group', { name })}>
+      <button type="button" aria-label={t('common.qty.remove', { name })} disabled={disabled || value <= 0} onClick={() => onChange(value - 1)}><Minus className="h-4 w-4" aria-hidden="true" /></button>
       <output aria-live="polite"><TickerNumber value={value} format={String} /></output>
-      <button type="button" aria-label={`Add one ${name}`} disabled={disabled || value >= max} onClick={() => onChange(value + 1)}><Plus className="h-4 w-4" aria-hidden="true" /></button>
+      <button type="button" aria-label={t('common.qty.add', { name })} disabled={disabled || value >= max} onClick={() => onChange(value + 1)}><Plus className="h-4 w-4" aria-hidden="true" /></button>
     </span>
   );
 }

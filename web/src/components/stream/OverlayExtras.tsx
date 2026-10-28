@@ -18,7 +18,7 @@ import { timetableRows } from '../../lib/timetableRows';
 import { EASE_OUT, ENTER, LEAVE, previousSlots, ROW_STAGGER_S, SHUFFLE_DELAY_S, SHUFFLE_S, SPRING, WIPE_HIDDEN_BOTTOM, WIPE_HIDDEN_LEFT, WIPE_HIDDEN_RIGHT, WIPE_SHOWN } from '../../lib/motion';
 import { useStillMotion } from '../../lite/useStillMotion';
 import { currentLanes, type RaceLane } from '../../lib/raceLanes';
-import { hatbandName } from '../../lib/hatbands';
+import { localHatbandName } from '../../lib/hatbands';
 import { CountUp } from './CountUp';
 import { TickerNumber } from '../TickerNumber';
 import { playRankMoves, useRankMotion } from '../../hooks/useRankMotion';
@@ -479,7 +479,7 @@ export function LanesBody({
               {bibColor && <BibSwatch color={bibColor} size={10} />}
             </span>
             <span />
-            <span className="mg-ov-card-added">{sitting ? t('screen.ov.sitsOut') : hatband ? t('screen.ov.hatband', { name: hatbandName(hatband) }) : t('screen.ov.lane', { n: lane })}</span>
+            <span className="mg-ov-card-added">{sitting ? t('screen.ov.sitsOut') : hatband ? t('screen.ov.hatband', { name: localHatbandName(hatband, t) }) : t('screen.ov.lane', { n: lane })}</span>
             <span />
           </motion.li>
         );

@@ -123,7 +123,7 @@ export function PrizeGivingPage() {
           onChange={(value) => { setSectionId(Number(value)); setError(null); }} />
         <div className="rf-row">
           <span className="rf-grow rf-t1">{t('screen.pg.placesToGive')}</span>
-          <RefineQty name="place" value={count} max={30} disabled={shown > 0} onChange={(next) => setCount(Math.max(1, next))} />
+          <RefineQty name={t('screen.pg.placeNoun')} value={count} max={30} disabled={shown > 0} onChange={(next) => setCount(Math.max(1, next))} />
         </div>
       </RefineList>
       {shown > 0 && <RefineNote>{t('screen.pg.clearToChange')}</RefineNote>}

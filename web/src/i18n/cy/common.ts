@@ -33,4 +33,7 @@ export const common: AreaCatalogue<typeof en> = {
   'common.demoPayment.entry': 'Arddangosiad yw hwn. Ni fydd unrhyw arian yn cael ei gymryd na’i anfon, ac nid yw eich cofrestriad wedi’i dalu.',
   'common.demoPayment.order': 'Arddangosiad yw hwn. Ni fydd unrhyw arian yn cael ei gymryd na’i anfon, ac nid yw eich archeb wedi’i thalu.',
   'common.demoPayment.payout': 'Arddangosiad yw hwn. Ni fydd unrhyw arian yn cael ei gymryd na’i anfon, ac ni chaiff eich manylion banc eu defnyddio i dalu neb.',
+  'common.qty.group': 'Nifer ar gyfer {name}',
+  'common.qty.remove': 'Tynnu un {name}',
+  'common.qty.add': 'Ychwanegu un {name}',
 };
