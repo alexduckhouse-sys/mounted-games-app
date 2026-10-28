@@ -106,7 +106,7 @@ public static class SignupConfirmationEmail
             if (string.IsNullOrWhiteSpace(competition.PaymentDestination))
                 html.Append("<p style=\"margin:0 0 12px;\">The organiser will let you know how they'd like to be paid.</p>");
             else
-                html.Append($"<p style=\"margin:0 0 12px;\"><strong>How the organiser asked to be paid:</strong><br>{EmailHtml.Encode(competition.PaymentDestination.Trim())}</p>");
+                html.Append($"<p style=\"margin:0 0 12px;\"><strong>How the organiser asked to be paid:</strong><br>{EmailHtml.EncodeMultiline(competition.PaymentDestination.Trim())}</p>");
         }
 
         if (!string.IsNullOrEmpty(competitionUrl))
@@ -183,10 +183,10 @@ public static class SignupConfirmationEmail
         html.Append(EmailHtml.Row("Amount due", amountText));
         html.Append(EmailHtml.Row("Payment reference", paymentRef));
         if (!string.IsNullOrWhiteSpace(competition.PaymentDestination))
-            html.Append(EmailHtml.Row("BACS details", competition.PaymentDestination.Trim()));
+            html.Append(EmailHtml.RowMultiline("BACS details", competition.PaymentDestination.Trim()));
         html.Append("</table>");
         if (trimmedNote is not null)
-            html.Append($"<p style=\"margin:0 0 12px;\"><strong>Note from the organiser:</strong><br>{EmailHtml.Encode(trimmedNote)}</p>");
+            html.Append($"<p style=\"margin:0 0 12px;\"><strong>Note from the organiser:</strong><br>{EmailHtml.EncodeMultiline(trimmedNote)}</p>");
         if (!string.IsNullOrEmpty(competitionUrl))
             html.Append(EmailHtml.Button(competitionUrl, "Open competition page"));
         html.Append("<p style=\"margin:16px 0 12px;color:#475569;font-size:13px;\">If you have already sent your transfer, thank you — the organiser will mark your entry paid once it clears.</p>");

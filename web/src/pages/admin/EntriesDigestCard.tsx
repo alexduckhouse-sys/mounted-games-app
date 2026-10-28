@@ -28,6 +28,7 @@ export function EntriesDigestCard() {
     setError(null);
     try {
       let latest = current;
+      let previousRemaining = current.last?.status === 0 ? current.last.remaining : null;
       // Each call works for a short while; carry on until nobody is left.
       for (let guard = 0; guard < 500; guard += 1) {
         const { data } = await api.post<EntriesDigestStatus>('/admin/entries-digest/send', { confirm: true, expectedRecipients: current.recipients });
@@ -35,6 +36,9 @@ export function EntriesDigestCard() {
         latest = data;
         if (alive.current) setStatus(data);
         if (!alive.current || !data.last || data.last.status !== 0 || data.last.remaining === 0) break;
+        // Recipients waiting out the retry delay stay in "remaining" but can't be claimed yet: stop when a call sent nobody.
+        if (previousRemaining !== null && data.last.remaining >= previousRemaining) break;
+        previousRemaining = data.last.remaining;
       }
       return latest;
     } catch (caught) {

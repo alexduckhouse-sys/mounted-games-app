@@ -579,6 +579,8 @@ public static class HistorySeeder
                 StartedAt = upcoming ? null : heatStart, FinishedAt = upcoming ? null : heatStart.AddMinutes(MinutesPerHeat),
             };
             session.Heats.Add(heat);
+            // A lettered final (A Final, B Final) scores from its own heat's team count, as ScoringService does.
+            var heatBase = label.EndsWith(" Final", StringComparison.Ordinal) ? entrants.Count : baseSize;
             for (var lane = 0; lane < entrants.Count; lane++)
                 heat.Entries.Add(new HeatEntry { Heat = heat, Team = entrants[lane].Team, LaneIndex = lane + 1 });
             for (var r = 0; r < raceTotal; r++)
@@ -592,7 +594,7 @@ public static class HistorySeeder
                 heat.Races.Add(race);
                 raceCount++;
                 if (upcoming) continue;
-                foreach (var result in Score(race, entrants, baseSize, rng, raceStart.AddMinutes(3)))
+                foreach (var result in Score(race, entrants, heatBase, rng, raceStart.AddMinutes(3)))
                 {
                     race.Results.Add(result);
                     resultCount++;

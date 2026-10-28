@@ -275,7 +275,8 @@ public class CompetitionPickerTests
             Assert.Equal(competition.Sections.Sum(x => x.HasFinal ? 2 : 1), competition.Sessions.Count);
             Assert.All(competition.Sessions.SelectMany(s => s.Heats), heat =>
             {
-                Assert.InRange(heat.Entries.Count, 1, 6);
+                // A final is drawn only once its heats are scored, so an upcoming event's final has no teams yet.
+                Assert.InRange(heat.Entries.Count, heat.Label == "A Final" ? 0 : 1, 6);
                 Assert.InRange(heat.Races.Count, 6, 10);
             });
             Assert.All(competition.Sessions.SelectMany(s => s.Heats).SelectMany(h => h.Entries), entry =>

@@ -89,6 +89,17 @@ public sealed class EntriesDigestService(
         var now = time.GetUtcNow().UtcDateTime;
         var key = UkTime.DateKey(now);
         var existing = await db.EntriesDigestRuns.AsNoTracking().FirstOrDefaultAsync(r => r.RunDate == key, ct);
+        // After UK midnight, yesterday's run may still be part-way: carry that on (the card offers "Carry on") rather than start a new one.
+        if (existing is null)
+        {
+            var unfinished = await db.EntriesDigestRuns.AsNoTracking().Where(r => r.Status == EntriesDigestRunStatus.Sending)
+                .OrderByDescending(r => r.Id).FirstOrDefaultAsync(ct);
+            if (unfinished is not null)
+            {
+                await WorkAsync(unfinished.Id, SendNowBudget, ct);
+                return;
+            }
+        }
         if (existing is null)
         {
             var pending = await EntriesOpenRule.OpenAsync(db, now, null, excludeAnnounced: true, ct);

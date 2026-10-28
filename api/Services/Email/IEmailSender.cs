@@ -33,6 +33,10 @@ public static class EmailHtml
 
     public static string Encode(string? value) => WebUtility.HtmlEncode(value ?? string.Empty);
 
+    /// <summary>Encodes a multi-line value and turns its line breaks into <c>&lt;br&gt;</c> so bank details keep their layout.</summary>
+    public static string EncodeMultiline(string? value) =>
+        Encode(value).Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "<br>");
+
     public static string Wrap(string innerHtml) =>
         $"""
         <!doctype html>
@@ -50,6 +54,9 @@ public static class EmailHtml
 
     public static string Button(string href, string label) =>
         $"<p style=\"margin:16px 0;\"><a href=\"{Encode(href)}\" style=\"display:inline-block;background:#17385F;color:#ffffff;text-decoration:none;font-weight:600;padding:10px 18px;border-radius:8px;\">{Encode(label)}</a></p>";
+
+    public static string RowMultiline(string label, string value) =>
+        $"<tr><td style=\"padding:6px 12px 6px 0;color:#475569;font-weight:600;vertical-align:top;white-space:nowrap;\">{Encode(label)}</td><td style=\"padding:6px 0;color:#0f172a;\">{EncodeMultiline(value)}</td></tr>";
 
     public static string Row(string label, string value) =>
         $"<tr><td style=\"padding:6px 12px 6px 0;color:#475569;font-weight:600;vertical-align:top;white-space:nowrap;\">{Encode(label)}</td><td style=\"padding:6px 0;color:#0f172a;\">{Encode(value)}</td></tr>";

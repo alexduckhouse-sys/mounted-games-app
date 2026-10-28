@@ -196,6 +196,26 @@ public class TestPaymentPageTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task RealIncomeKeepsTheUnrefundedPartOfAPartialRefund()
+    {
+        var section = await _f.NewSectionAsync(priceMinor: 1200);
+        await _f.InDbAsync(async db =>
+        {
+            var partial = new SectionSignup { CompetitionSectionId = section.Id, FullName = "Partial", AmountMinor = 1200, Status = SignupPaymentStatus.Refunded };
+            var full = new SectionSignup { CompetitionSectionId = section.Id, FullName = "Full", AmountMinor = 1200, Status = SignupPaymentStatus.Refunded };
+            db.SectionSignups.AddRange(partial, full);
+            await db.SaveChangesAsync();
+            db.Add(new SignupExtras { SignupId = partial.Id, RefundedAmountMinor = 900 });
+            db.Add(new SignupExtras { SignupId = full.Id, RefundedAmountMinor = 1200 });
+            await db.SaveChangesAsync();
+        });
+
+        var income = await IncomeAsync(section.CompetitionId);
+
+        Assert.Equal(300, income.EntriesMinor);
+    }
+
+    [Fact]
     public async Task PickerAndDetailsFlagDemoEvents()
     {
         var plain = (await _f.NewSectionAsync()).CompetitionId;

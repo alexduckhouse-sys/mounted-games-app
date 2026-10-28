@@ -32,6 +32,25 @@ public class ReviewSeedFreshTests
     }
 
     [Fact]
+    public async Task FinalsAreFilledOnlyOnceTheirHeatsAreScored_FromTheHeatLeaders()
+    {
+        await using var db = await Database();
+        await ReviewCompetitionSeeder.SeedAsync(db, Today, Today.AddHours(14));
+        db.ChangeTracker.Clear();
+        async Task<List<Heat>> FinalsOf(string name) => (await db.Heats
+            .Include(h => h.Entries).Include(h => h.Session).ThenInclude(s => s.Heats)
+            .Where(h => h.Label == "A Final" && h.Session.Competition!.Name == name).ToListAsync());
+
+        var upcoming = await FinalsOf("EGUK Winter Pairs Series — Round 3");
+        var finished = await FinalsOf("End of Season Championships");
+
+        Assert.NotEmpty(upcoming);
+        Assert.All(upcoming, h => Assert.Empty(h.Entries));
+        Assert.NotEmpty(finished);
+        Assert.All(finished, h => Assert.NotEmpty(h.Entries));
+    }
+
+    [Fact]
     public async Task RemovingEventClearsRemindersButKeepsSubscription()
     {
         await using var db = await Database();

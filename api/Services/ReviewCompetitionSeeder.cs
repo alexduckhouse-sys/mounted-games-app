@@ -92,6 +92,8 @@ public static class ReviewCompetitionSeeder
             await using var transaction = await db.Database.BeginTransactionAsync();
             var created = 0;
             var eventIndex = -1;
+            // Each team belongs to its real club (found by name, made once), not to a per-event host club.
+            var clubsByName = new Dictionary<string, Club>(StringComparer.OrdinalIgnoreCase);
             foreach (var (name, icon, location, region, offset) in events)
             {
                 eventIndex++;
@@ -120,9 +122,6 @@ public static class ReviewCompetitionSeeder
                     }
                 }
                 var day = DateTime.SpecifyKind(todayUtc.Date.AddDays(offset), DateTimeKind.Utc);
-                var clubName = $"{name} Host Club";
-                var club = await db.Clubs.SingleOrDefaultAsync(c => c.Name == clubName)
-                    ?? new Club { Name = clubName, Region = region };
                 var competition = new Competition
                 {
                     Name = name,
@@ -169,6 +168,11 @@ public static class ReviewCompetitionSeeder
                     var teams = Enumerable.Range(1, teamCount).Select(teamNumber =>
                     {
                         var teamClub = TeamClubs[(teamNumber - 1) % TeamClubs.Length];
+                        if (!clubsByName.TryGetValue(teamClub, out var club))
+                        {
+                            club = db.Clubs.SingleOrDefault(c => c.Name == teamClub) ?? new Club { Name = teamClub, Region = region };
+                            clubsByName[teamClub] = club;
+                        }
                         return new Team
                         {
                             Competition = competition,
@@ -181,15 +185,26 @@ public static class ReviewCompetitionSeeder
                     }).ToArray();
                     foreach (var team in teams) competition.Teams.Add(team);
 
+                    // Heat points earned so far by each team; the A Final of a finished event is drawn from them.
+                    var heatPoints = teams.ToDictionary(t => t, _ => 0);
+                    var heatsFinished = false;
                     for (var round = 0; round < (hasFinal ? 2 : 1); round++)
                     {
                         var finished = offset < 0 || (offset == 0 && sessionOrder == 0);
                         var running = offset == 0 && sessionOrder == 1;
                         var arenaName = round == 0 ? "Main Arena" : "Arena 2";
-                        // Heats: balanced groups of at most 6. Finals: one heat of the top 6.
+                        // Heats: balanced groups of at most 6. Finals: one heat of the top 6 by heat points, drawn only once
+                        // the heats are over (a finished event, or the running one's finished heats); before that the final has no teams yet.
                         var groups = round == 0
                             ? SplitBalanced(teams, LanesPerHeat)
-                            : new List<Team[]> { teams.Take(LanesPerHeat).ToArray() };
+                            : new List<Team[]>
+                            {
+                                heatsFinished
+                                    ? teams.OrderByDescending(t => heatPoints[t]).Take(LanesPerHeat).ToArray()
+                                    : Array.Empty<Team>(),
+                            };
+                        // Heat points count down from the largest heat in the session, as ScoringService does.
+                        var sessionBase = groups.Max(g => g.Length);
                         var duration = groups.Count * MinutesPerHeat;
                         DateTime start;
                         if (!anchored) start = day.AddHours(9).AddMinutes(sessionOrder * 80);
@@ -204,6 +219,7 @@ public static class ReviewCompetitionSeeder
                             if (!finished) arenaFree[arenaName] = new[] { free, start.AddMinutes(duration + ChangeoverMinutes) }.Max();
                             if (start.AddMinutes(duration) > latestEnd) latestEnd = start.AddMinutes(duration);
                         }
+                        if (round == 0) heatsFinished = finished;
                         var session = new Session
                         {
                             Competition = competition,
@@ -262,7 +278,12 @@ public static class ReviewCompetitionSeeder
                                         .Select(x => x.team)
                                         .ToArray();
                                     for (var place = 0; place < ranked.Length; place++)
-                                        race.Results.Add(new Result { Race = race, Team = ranked[place], Placing = place + 1, Points = (ranked.Length - place) * (round == 1 && doubled ? 2 : 1), RecordedAt = raceStart.AddMinutes(3) });
+                                    {
+                                        // A final scores from its own heat's team count (doubled when the option is on).
+                                        var points = (round == 0 ? sessionBase - place : ranked.Length - place) * (round == 1 && doubled ? 2 : 1);
+                                        if (round == 0) heatPoints[ranked[place]] += points;
+                                        race.Results.Add(new Result { Race = race, Team = ranked[place], Placing = place + 1, Points = points, RecordedAt = raceStart.AddMinutes(3) });
+                                    }
                                 }
                             }
                         }
@@ -329,6 +350,16 @@ public static class ReviewCompetitionSeeder
                 throw new InvalidOperationException("A demo event is part of a season. Remove it from the season, then run this again.");
 
             await DeleteCompetitionGraphAsync(db, ids);
+
+            // Older seeds gave every event a "<event> Host Club"; none is used now, so drop any that nothing points at.
+            var hostClubNames = Events.Select(e => $"{e.Name} Host Club").ToArray();
+            await db.Clubs
+                .Where(c => hostClubNames.Contains(c.Name)
+                    && !db.Teams.Any(t => t.ClubId == c.Id)
+                    && !db.SavedRiders.Any(r => r.ClubId == c.Id)
+                    && !db.Set<TeamProfile>().Any(p => p.ClubId == c.Id)
+                    && !db.Users.Any(u => u.ClubId == c.Id))
+                .ExecuteDeleteAsync();
 
             await transaction.CommitAsync();
             return ids.Count;

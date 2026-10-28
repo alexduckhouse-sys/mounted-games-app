@@ -43,6 +43,22 @@ public class EntriesWaitlistClubInvoiceTests : IClassFixture<ApiFactory>
         );
 
     [Fact]
+    public async Task BatchUnpaidReminders_SkipsAnEntryRemindedInTheLast24Hours()
+    {
+        var section = await _f.NewSectionAsync(priceMinor: 2500);
+        var admin = await _f.AdminAsync();
+        var (e1, _) = await _f.SignupAsync();
+        var entry = await (await e1.PostAsJsonAsync(EntryUrl(section), MakeEntry("Dee Trainer", email: "dee@example.invalid"))).ReadAsync<SectionSignupExtendedDto>();
+        var url = $"/api/competitions/{section.CompetitionId}/signups/send-unpaid-reminders";
+
+        var first = await (await admin.PostAsJsonAsync(url, new SendUnpaidRemindersInput(new[] { entry.Id }))).ReadAsync<SendUnpaidRemindersResultDto>();
+        var second = await (await admin.PostAsJsonAsync(url, new SendUnpaidRemindersInput(new[] { entry.Id }))).ReadAsync<SendUnpaidRemindersResultDto>();
+
+        Assert.Equal((1, 0), (first.SentCount, first.SkippedCount));
+        Assert.Equal((0, 1), (second.SentCount, second.SkippedCount));
+    }
+
+    [Fact]
     public async Task BatchUnpaidReminders_SendsToSelectedPendingWithEmail_AndRecordsTimestamp()
     {
         var section = await _f.NewSectionAsync(priceMinor: 2500);
@@ -125,6 +141,24 @@ public class EntriesWaitlistClubInvoiceTests : IClassFixture<ApiFactory>
         Assert.Single(manifest.SaturdayMorning);
         Assert.Equal("XY99 BOX", manifest.SaturdayMorning[0].VehicleRegistration);
         Assert.Empty(manifest.Other);
+    }
+
+    [Theory]
+    [InlineData("Refunded")]
+    [InlineData("Retained")]
+    public async Task FeeDisposition_RefusesRefundedOrRetainedOnAnEntryThatWasNeverPaid(string disposition)
+    {
+        var section = await _f.NewSectionAsync(priceMinor: 4000);
+        var admin = await _f.AdminAsync();
+        var (e1, _) = await _f.SignupAsync();
+        var entry = await (await e1.PostAsJsonAsync(EntryUrl(section), MakeEntry("Never Paid"))).ReadAsync<SectionSignupExtendedDto>();
+        var url = $"/api/competitions/{section.CompetitionId}/signups/{entry.Id}/disposition";
+
+        var refused = await admin.PutAsJsonAsync(url, new UpdateSignupDispositionInput(disposition, null, null));
+        var allowed = await admin.PutAsJsonAsync(url, new UpdateSignupDispositionInput("CreditRollover", null, null));
+
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
     }
 
     [Fact]

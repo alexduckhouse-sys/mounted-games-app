@@ -643,6 +643,27 @@ public class EntriesDigestTests : IClassFixture<DigestApiFactory>
         Assert.Equal(5, status.Last!.Sent);
     }
 
+    [Fact]
+    public async Task SendNowCarriesOnYesterdaysUnfinishedRunAfterMidnight()
+    {
+        await StartAsync(hour: 9);
+        var people = Enumerable.Range(0, 5).Select(i => Addr($"y{i}")).ToArray();
+        await _f.OptInsAsync(people);
+        await _f.OpenEventAsync("Left over");
+        using (var scope = _f.Services.CreateScope())
+        {
+            var service = Service(scope);
+            var run = (await service.ClaimRunAsync("2026-10-23", EntriesDigestRunStatus.Sending, false, CancellationToken.None))!;
+            await service.WorkAsync(run.Id, TimeSpan.Zero, CancellationToken.None);
+        }
+        Assert.Single(_f.Sent);
+        var admin = await _f.AdminAsync();
+        var status = await (await admin.PostAsJsonAsync("/api/admin/entries-digest/send", new SendEntriesDigestRequest(true, 5))).ReadAsync<EntriesDigestStatusDto>();
+        Assert.Equal(5, _f.Sent.Count);
+        Assert.Equal(5, status.Last!.Sent);
+        Assert.Single(await RunsAsync());
+    }
+
     private static async Task<ProblemInfo> Problem(HttpClient client, SendEntriesDigestRequest body)
     {
         var response = await client.PostAsJsonAsync("/api/admin/entries-digest/send", body);
