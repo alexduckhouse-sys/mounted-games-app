@@ -30,9 +30,10 @@ import { useNeedsYou } from '../pages/profile/needsYou';
 import { PageTransition } from './PageTransition';
 import { BackLink } from './BackLink';
 import { useT } from '../i18n/LanguageContext';
+import { ScreenChromeProvider, useChromeHidden } from './ScreenChrome';
 
 export function AppShell() {
-  return <PageWidthProvider>{(width) => <Shell width={width} />}</PageWidthProvider>;
+  return <ScreenChromeProvider><PageWidthProvider>{(width) => <Shell width={width} />}</PageWidthProvider></ScreenChromeProvider>;
 }
 
 function Shell({ width }: { width: PageWidth }) {
@@ -54,12 +55,14 @@ function Shell({ width }: { width: PageWidth }) {
   const choosingCompetition = ['/', '/events', '/competitions', '/competitions/past'].includes(location.pathname);
   const competitionId = competitionIdFromPath(location.pathname);
   const filmingMode = /\/competitions\/\d+\/broadcast\/?$/.test(location.pathname);
+  // The full-screen scoring screen asks for no app header and no ticker dock (it has its own back button and fits one screen).
+  const chromeHidden = useChromeHidden();
   const onLiveFeed = /\/competitions\/\d+\/chat\/?$/.test(location.pathname);
   // The ticker docks above the tab bar on every page but filming. An event's own pages feed it; elsewhere it follows
   // the event last opened, and it only shows when there is news (or a page button such as the timetable's filters).
   const ticker = useOptionalTicker();
   const feedCompetitionId = !filmingMode && competitionId == null && ticker ? current?.id ?? null : null;
-  const dockShown = !filmingMode && current != null && ticker != null
+  const dockShown = !filmingMode && !chromeHidden && current != null && ticker != null
     && (ticker.items.length > 0 || ticker.watchCompetitionId != null || ticker.dockAction != null);
   // Public pages get the EGUK look; signed-in tools (dashboard, teams, admin) keep their own.
   const globalTabs = hasGlobalTabs(location.pathname);
@@ -85,11 +88,11 @@ function Shell({ width }: { width: PageWidth }) {
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(publish);
     observer?.observe(bar);
     return () => observer?.disconnect();
-  }, [filmingMode]);
+  }, [filmingMode, chromeHidden]);
 
   return (
     <div className="min-h-screen flex flex-col">
-      {!filmingMode && (
+      {!filmingMode && !chromeHidden && (
       <div ref={barRef} className="sticky top-0 z-30">
         <header className="mg-header">
           {compactBar ? (
@@ -159,7 +162,7 @@ function Shell({ width }: { width: PageWidth }) {
       </main>
       <PageTransition mainRef={mainRef} disabled={filmingMode} />
       {feedCompetitionId != null && <TickerFeed key={feedCompetitionId} competitionId={feedCompetitionId} />}
-      {!filmingMode && <TopBarTicker low={!hasTabs} />}
+      {!filmingMode && !chromeHidden && <TopBarTicker low={!hasTabs} />}
       {!filmingMode && globalTabs && <GlobalTabs meCount={user ? needsYou : 0} />}
       {!filmingMode && tabsCompetitionId != null && <BottomTabs competitionId={tabsCompetitionId} entryOnly={meta?.id === tabsCompetitionId && !!meta.entryPhase && !canOrganise({ id: meta.id, createdByUserId: meta.createdByUserId })} me={user ? { initials: initialsOf(user.fullName, user.email), count: needsYou } : undefined} />}
       {menuOpen && <NavigationDrawer onClose={() => setMenuOpen(false)} />}

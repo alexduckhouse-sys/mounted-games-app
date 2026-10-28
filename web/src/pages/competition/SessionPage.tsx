@@ -5,6 +5,7 @@ import { OutboxTransfer } from '../../components/OutboxTransfer';
 import { ArenaHelpSheet } from './ArenaHelpSheet';
 import { setHeatEntryBibOverride } from '../../lib/heatBibOverride';
 import { useWakeLock } from '../../hooks/useWakeLock';
+import { useHideChrome } from '../../components/ScreenChrome';
 import { stripInternalSessionNotes } from '../../lib/gateCheck';
 import { ConfirmOfficialButton } from '../../components/ProvisionalStatus';
 import { useProvisionalState } from '../../hooks/useProvisionalState';
@@ -247,6 +248,8 @@ function SessionScoring() {
   const activeHeat = orderedHeats.find((h) => h.id === activeHeatId) ?? null;
   // Keep the screen on while staff are scoring a heat.
   useWakeLock(Boolean(session && activeHeat && view === 'score' && canManage(competition)));
+  // The scoring screen has its own back button, and no app header or ticker above it.
+  useHideChrome(canManage(competition));
 
   const orderedRaces = useMemo(
     () => (activeHeat?.races ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex),
@@ -688,8 +691,9 @@ function SessionScoring() {
       {canManage(competition) ? (
         <>
           {activeRef && (
-            <div className="-mx-4">
+            <div>
               <HeatPickerBar
+                back={{ to: `/competitions/${competition.id}/scoring${sectionQuery}`, label: 'Back to scoring' }}
                 arena={arena}
                 label={heatBarLabel(activeRef)}
                 items={[
