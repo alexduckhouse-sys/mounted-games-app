@@ -50,8 +50,8 @@ export function LinkedSignIns({ info, connect, remove, onChanged }: LinkedSignIn
     setPending(next);
   }
 
+  /** Cancel, Escape or a swipe. None of them is open while a change is under way (the sheet isn't dismissible then). */
   function close() {
-    if (busy) return;
     setPending(null);
     setPassword('');
     setSheetError(null);
@@ -78,9 +78,10 @@ export function LinkedSignIns({ info, connect, remove, onChanged }: LinkedSignIn
     }
   }
 
+  /** The pill is disabled until there's a password, which also stops Enter submitting an empty one. */
   function submitPassword(event: FormEvent) {
     event.preventDefault();
-    if (password) void confirmed({ password });
+    void confirmed({ password });
   }
 
   function add(credential: SocialCredential) {

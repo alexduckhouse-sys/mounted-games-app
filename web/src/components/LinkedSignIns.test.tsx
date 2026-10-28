@@ -115,6 +115,9 @@ describe('LinkedSignIns', () => {
 
     await user.click(screen.getByRole('button', { name: 'Remove Google sign-in' }));
     asked = sheet('Remove Google sign-in?');
+    // Enter with no password does nothing.
+    await user.type(asked.getByLabelText('Your password'), '{Enter}');
+    expect(remove).not.toHaveBeenCalled();
     await user.type(asked.getByLabelText('Your password'), 'Passw0rd!x');
     await user.click(asked.getByRole('button', { name: 'Remove' }));
     expect(remove).toHaveBeenCalledWith('google', { password: 'Passw0rd!x' });
@@ -140,6 +143,31 @@ describe('LinkedSignIns', () => {
     await act(async () => { lastGoogleCallback()({ credential: 'confirm-token' }); });
     expect(remove).toHaveBeenCalledWith('apple', { provider: 'google', idToken: 'confirm-token', nonce: 'raw-nonce' });
     expect(onChanged).toHaveBeenCalledWith('Apple removed');
+  });
+
+  it('shows a refused confirmation in the sheet, ignores a second sign-in while one is under way, and Cancel closes it', async () => {
+    let finish!: () => void;
+    const remove = vi.fn()
+      .mockRejectedValueOnce({ response: { status: 400, data: { message: 'That isn’t the Google account linked to this one.' } } })
+      .mockReturnValueOnce(new Promise<void>((resolve) => { finish = resolve; }));
+    mount({ hasPassword: false, logins: [{ provider: 'google', name: 'Google' }, { provider: 'apple', name: 'Apple' }, { provider: 'legacy', name: 'Legacy' }] }, { remove });
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Apple sign-in' }));
+    const asked = sheet('Remove Apple sign-in?');
+    await waitFor(() => expect(google.initialize).toHaveBeenCalled());
+
+    await act(async () => { lastGoogleCallback()({ credential: 'someone-elses' }); });
+    expect(await asked.findByRole('alert')).toHaveTextContent('That isn’t the Google account linked to this one.');
+
+    await act(async () => { lastGoogleCallback()({ credential: 'confirm-1' }); });
+    await act(async () => { lastGoogleCallback()({ credential: 'confirm-2' }); });
+    expect(remove).toHaveBeenCalledTimes(2);
+    expect(asked.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    await act(async () => { finish(); });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Google sign-in' }));
+    await userEvent.click(sheet('Remove Google sign-in?').getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
   it('names a provider from the list it was linked under when it is no longer switched on', async () => {
