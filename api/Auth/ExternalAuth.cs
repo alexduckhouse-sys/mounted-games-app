@@ -45,24 +45,34 @@ public enum ExternalTokenFailure
     KeysUnavailable,
     /// <summary>The provider couldn't be asked about the token (Facebook checks tokens online).</summary>
     ProviderUnavailable,
-    /// <summary>This token and nonce were used before.</summary>
+    /// <summary>This token and nonce were used before (or, to confirm it's the owner, the Facebook token was seen at a sign-in).</summary>
     Replayed,
+    /// <summary>A Facebook token offered to confirm it's the owner was issued too long ago to count as a fresh log-in.</summary>
+    NotFresh,
     Invalid,
 }
 
-/// <summary>What a provider token is being used for, which decides whether it may be presented again.</summary>
+/// <summary>
+/// What a provider token is being used for, which decides whether it may be presented again. Google and Apple tokens
+/// always work once, whatever the use: each carries its own nonce. The rules below are for Facebook, whose SDK hands back
+/// the same access token for an hour or two.
+/// </summary>
 public enum ExternalTokenUse
 {
     /// <summary>
-    /// Confirming it's the owner (deleting the account, adding or removing a sign-in) or adding a provider: the token works
-    /// once. The default.
+    /// Confirming it's the owner (deleting the account, adding or removing a sign-in): the token must be fresh. It must
+    /// not have been seen at a sign-in (one captured then can't stand in for a new log-in), it works once, and if
+    /// Facebook says when it was issued, that must be within <see cref="FacebookTokenVerifier.ConfirmFreshFor"/>. The
+    /// default.
     /// </summary>
     Confirm,
-    /// <summary>
-    /// Signing in. Google and Apple tokens still work once (each carries its own nonce). Facebook's SDK hands back the same
-    /// access token for an hour or two, so a Facebook token may sign in again within its life.
-    /// </summary>
+    /// <summary>Signing in: the token may sign in again within its life. It is recorded as seen, which bars it from confirming.</summary>
     SignIn,
+    /// <summary>
+    /// The provider being added to an account (the owner confirms separately): the token works once, but may have been
+    /// seen at a sign-in, because the usual way here is a Facebook sign-in that told the person to add Facebook instead.
+    /// </summary>
+    Connect,
 }
 
 public sealed record ExternalTokenResult(ExternalIdentity? Identity, ExternalTokenFailure Failure)
@@ -80,7 +90,7 @@ public interface IExternalTokenValidator
     /// its SHA-256 (see <see cref="ExternalNonce"/>), so the token alone isn't enough to sign in: whoever presents it must
     /// also hold the raw value, which never leaves the page that asked.
     /// </param>
-    /// <param name="use">Whether a Facebook token may be used again (<see cref="ExternalTokenUse.SignIn"/>) or only once.</param>
+    /// <param name="use">What the token is for, which decides whether a Facebook token may be presented again (<see cref="ExternalTokenUse"/>).</param>
     Task<ExternalTokenResult> ValidateAsync(string provider, string idToken, string? rawNonce, ExternalTokenUse use = ExternalTokenUse.Confirm,
         CancellationToken ct = default);
 }
@@ -225,7 +235,7 @@ public sealed class ExternalTokenValidator : IExternalTokenValidator
     public async Task<ExternalTokenResult> ValidateAsync(string provider, string idToken, string? rawNonce, ExternalTokenUse use = ExternalTokenUse.Confirm,
         CancellationToken ct = default)
     {
-        if (provider == ExternalProviders.Facebook) return await _facebook.VerifyAsync(idToken, singleUse: use != ExternalTokenUse.SignIn, ct);
+        if (provider == ExternalProviders.Facebook) return await _facebook.VerifyAsync(idToken, use, ct);
         var spec = ExternalProviders.All.FirstOrDefault(s => s.Id == provider);
         var audiences = spec is null ? [] : ExternalProviders.ClientIds(_config, spec);
         if (spec is null || audiences.Length == 0) return ExternalTokenResult.Fail(ExternalTokenFailure.UnknownProvider);

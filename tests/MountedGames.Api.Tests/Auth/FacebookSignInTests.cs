@@ -153,17 +153,19 @@ public class FacebookSignInTests : IClassFixture<ExternalAuthFactory>
     public async Task AFacebookEmailNeverOpensAnExistingAccount()
     {
         var (id, email) = await PasswordAccountAsync(Email());
-        var refused = await PostAsync(Token(email));
+        var facebookId = FakeFacebookGraph.NewUserId();
+        var signInToken = Token(email, facebookId);
+        var refused = await PostAsync(signInToken);
         Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
         Assert.Equal("external_link_refused", await CodeAsync(refused));
         Assert.Contains("then add Facebook from My account", await refused.Content.ReadAsStringAsync());
         Assert.Empty(await LoginsAsync(id));
 
-        // Signed in, with their password again, the same person can add Facebook, and their address is told.
+        // Signed in, with their password again, the same person can add Facebook, and their address is told. Facebook's SDK
+        // hands back the token it just used, and that's fine for adding: the password is the proof.
         var login = await _f.CreateClient().PostAsJsonAsync("/api/auth/login", new LoginRequest(email, Password));
         var client = _f.WithToken((await login.ReadAsync<AuthResponse>()).Token);
-        var facebookId = FakeFacebookGraph.NewUserId();
-        var connected = await client.PostAsJsonAsync("/api/auth/logins", new ExternalConnectRequest("facebook", Token(email, facebookId), Confirm: new ReauthRequest(Password)));
+        var connected = await client.PostAsJsonAsync("/api/auth/logins", new ExternalConnectRequest("facebook", signInToken, Confirm: new ReauthRequest(Password)));
         Assert.Equal(HttpStatusCode.OK, connected.StatusCode);
         var list = await connected.ReadAsync<LinkedSignInsDto>();
         Assert.Contains(new LinkedSignInDto("facebook", "Facebook"), list.Logins);
@@ -264,6 +266,33 @@ public class FacebookSignInTests : IClassFixture<ExternalAuthFactory>
         Assert.NotEmpty(await LoginsAsync(auth.User.Id));
     }
 
+    [Fact]
+    public async Task ATokenSeenAtASignInOrIssuedLongAgoCantConfirmItsTheOwner()
+    {
+        var (auth, facebookId) = await CreateAsync(Email());
+        var client = _f.WithToken(auth.Token);
+
+        // A token captured from an ordinary sign-in (still valid, and Facebook would hand it back again) can't confirm.
+        var signedIn = Token(auth.User.Email, facebookId);
+        Assert.Equal(auth.User.Id, (await (await PostAsync(signedIn)).ReadAsync<ExternalAuthResultDto>()).Auth!.User.Id);
+        var captured = await DeleteMeAsync(client, new DeleteAccountRequest(Provider: "facebook", IdToken: signedIn));
+        Assert.Equal(HttpStatusCode.BadRequest, captured.StatusCode);
+        Assert.Equal("external_token", await CodeAsync(captured));
+
+        // Nor can one Facebook says it issued more than ten minutes ago, or in the future.
+        foreach (var issued in new[] { DateTimeOffset.UtcNow.AddMinutes(-11), DateTimeOffset.UtcNow.AddMinutes(5) })
+        {
+            var old = Token(auth.User.Email, facebookId, change: u => u with { IssuedAt = issued });
+            Assert.Equal("external_token", await CodeAsync(await DeleteMeAsync(client, new DeleteAccountRequest(Provider: "facebook", IdToken: old))));
+        }
+        Assert.NotNull(await UserAsync(auth.User.Id));
+
+        // A fresh one does, and so does one without issued_at (the sign-in rule still applies).
+        var undated = Token(auth.User.Email, facebookId, change: u => u with { IssuedAt = null, Expires = DateTimeOffset.UtcNow.AddMinutes(50) });
+        Assert.Equal(HttpStatusCode.NoContent, (await DeleteMeAsync(client, new DeleteAccountRequest(Provider: "facebook", IdToken: undated))).StatusCode);
+        Assert.Null(await UserAsync(auth.User.Id));
+    }
+
     // ---- Data deletion callback ----
 
     private static string SignedRequest(object payload, string secret = FakeFacebookGraph.AppSecret)
@@ -352,6 +381,84 @@ public class FacebookSignInTests : IClassFixture<ExternalAuthFactory>
     }
 
     [Fact]
+    public async Task ABlockedOrLockedFacebookOnlyAccountLosesOnlyItsLink_SoItsBlockAndHistoryStay()
+    {
+        foreach (var stop in new Action<AppUser>[] { u => { u.BlockedAt = DateTime.UtcNow; u.BlockReason = "Abuse in chat"; }, u => u.LockedAt = DateTime.UtcNow })
+        {
+            var (auth, facebookId) = await CreateAsync(Email());
+            await _f.InDbAsync(async db =>
+            {
+                stop(await db.Users.SingleAsync(u => u.Id == auth.User.Id));
+                db.ChatMessages.Add(new ChatMessage { CompetitionId = (await db.Competitions.FirstAsync()).Id, UserId = auth.User.Id, AuthorName = "Sam Rider", Body = "Abuse", IpAddress = "203.0.113.9" });
+                await db.SaveChangesAsync();
+            });
+
+            await ConfirmationCodeAsync(await DeletionAsync(Deletion(facebookId)));
+
+            Assert.Empty(await LoginsAsync(auth.User.Id));
+            var kept = await UserAsync(auth.User.Id);
+            Assert.NotNull(kept);
+            Assert.True(kept.IsAccessStopped);
+            var chat = await _f.WithDbAsync(db => db.ChatMessages.SingleAsync(m => m.UserId == auth.User.Id));
+            Assert.Equal(("Sam Rider", "203.0.113.9"), (chat.AuthorName, chat.IpAddress));
+            Assert.Contains(_f.Logs, line => line.Contains("account stopped, link removed", StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
+    public async Task ADeletionRequestThatFailsPartWayCanBeSentAgain()
+    {
+        var (auth, facebookId) = await CreateAsync(Email());
+        await _f.InDbAsync(async db =>
+        {
+            (await db.Users.SingleAsync(u => u.Id == auth.User.Id)).BlockedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            await db.Database.ExecuteSqlRawAsync(
+                $"CREATE TRIGGER fail_facebook_unlink BEFORE DELETE ON AspNetUserLogins WHEN OLD.ProviderKey = '{facebookId}' BEGIN SELECT RAISE(ABORT, 'Synthetic failure'); END;");
+        });
+        var request = Deletion(facebookId);
+        Assert.Equal(HttpStatusCode.InternalServerError, (await DeletionAsync(request)).StatusCode);
+        Assert.Single(await LoginsAsync(auth.User.Id));
+
+        await _f.InDbAsync(db => db.Database.ExecuteSqlRawAsync("DROP TRIGGER fail_facebook_unlink"));
+        await ConfirmationCodeAsync(await DeletionAsync(request));
+        Assert.Empty(await LoginsAsync(auth.User.Id));
+        // Once it has worked, it is spent.
+        Assert.Equal(HttpStatusCode.BadRequest, (await DeletionAsync(request)).StatusCode);
+    }
+
+    [Fact]
+    public async Task AHandledDeletionRequestCantComeBackInAnotherSpelling()
+    {
+        var (auth, facebookId) = await CreateAsync(Email());
+        var request = Deletion(facebookId);
+        var (signature, body) = (request.Split('.')[0], request.Split('.')[1]);
+        // Same bytes to a lenient decoder: spaces, line breaks, padding, standard base64 characters, other spare bits.
+        var spareBits = signature[..^1] + (char)(signature[^1] + 1);
+        var variants = new[]
+        {
+            $"{signature[..10]}    {signature[10..]}.{body}",
+            $"{signature[..10]}\n\n{signature[10..]}.{body}",
+            $"{signature}=.{body}",
+            $"{signature}  .{body}",
+            $"{signature.Replace('-', '+').Replace('_', '/')}.{body}",
+            $"{spareBits}.{body}",
+            $"{signature}.{body}=",
+            $"{signature}.{body[..5]} {body[5..]}",
+        }.Where(v => v != request).ToArray();
+        // Whichever characters the signature happens to have, a standard-base64 spelling is always tried.
+        if (!signature.Contains('-') && !signature.Contains('_'))
+            Assert.Null(FacebookSignedRequest.Read($"{signature[..^2]}+{signature[^1]}.{body}", FakeFacebookGraph.AppSecret, DateTimeOffset.UtcNow));
+        foreach (var variant in variants)
+            Assert.Equal(HttpStatusCode.BadRequest, (await DeletionAsync(variant)).StatusCode);
+        Assert.Single(await LoginsAsync(auth.User.Id));
+
+        await ConfirmationCodeAsync(await DeletionAsync(request));
+        foreach (var variant in variants.Prepend(request))
+            Assert.Equal(HttpStatusCode.BadRequest, (await DeletionAsync(variant)).StatusCode);
+    }
+
+    [Fact]
     public async Task AnUnsignedOrForgedDeletionRequestChangesNothing()
     {
         var (auth, facebookId) = await CreateAsync(Email());
@@ -388,7 +495,9 @@ public class FacebookSignInTests : IClassFixture<ExternalAuthFactory>
         // Up to 24 hours old, and no more than the clock skew ahead.
         var issued = now.AddHours(-23);
         var request = SignedRequest(new { algorithm = "HMAC-SHA256", issued_at = issued.ToUnixTimeSeconds(), user_id = "77" }, "s");
-        Assert.Equal(new FacebookDeletionRequest("77", DateTimeOffset.FromUnixTimeSeconds(issued.ToUnixTimeSeconds())), FacebookSignedRequest.Read(request, "s", now));
+        var read = FacebookSignedRequest.Read(request, "s", now)!;
+        Assert.Equal(("77", DateTimeOffset.FromUnixTimeSeconds(issued.ToUnixTimeSeconds())), (read.UserId, read.IssuedAt));
+        Assert.Equal(Convert.ToHexStringLower(WebEncoders.Base64UrlDecode(request.Split('.')[0])), read.Signature);
         Assert.Null(FacebookSignedRequest.Read(request, "s", now.AddHours(2)));
         Assert.Null(FacebookSignedRequest.Read(request, "s", issued.AddMinutes(-2)));
         Assert.NotNull(FacebookSignedRequest.Read(request, "s", issued.AddSeconds(-30)));

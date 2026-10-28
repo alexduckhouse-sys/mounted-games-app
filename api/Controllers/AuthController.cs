@@ -238,12 +238,15 @@ public class AuthController : ControllerBase
 
     /// <summary>
     /// Facebook's data deletion callback, set as the app's Data Deletion Request URL. Facebook posts a <c>signed_request</c>
-    /// when someone removes the app. Only one signed with our app secret, issued within the last 24 hours and not seen
-    /// before is accepted (<see cref="FacebookSignedRequest"/>, <see cref="ExternalTokenReplayGuard"/>). Then:
+    /// when someone removes the app. Only one signed with our app secret, issued within the last 24 hours and not handled
+    /// before is accepted (<see cref="FacebookSignedRequest"/>, <see cref="ExternalTokenReplayGuard"/>, keyed on the
+    /// signature bytes). A request is marked handled only once the action has worked, so Facebook can retry after a
+    /// failure. Then:
     /// <list type="bullet">
     /// <item>An account that can only sign in with Facebook (no password, no other provider) is deleted, as if its owner
     /// had deleted it (<see cref="AccountDeletionService"/>), and its sessions end. Otherwise it would be left with no way
-    /// in. The last administrator is never deleted this way; only the link goes.</item>
+    /// in. The last administrator is never deleted this way, and nor is a locked or blocked account: deleting would wipe
+    /// the evidence behind the block and free its owner to sign up again. For those only the link goes.</item>
     /// <item>Any other account just loses its Facebook link, so the Facebook user id is gone; it keeps its name and email,
     /// as the privacy page explains, and can be deleted from My account.</item>
     /// </list>
@@ -268,8 +271,7 @@ public class AuthController : ControllerBase
         if (!facebook.IsConfigured) return NotFound();
         var request = FacebookSignedRequest.Read(signedRequest, facebook.AppSecret!, time.GetUtcNow());
         if (request is null) return BadRequest(new { message = "That request isn't signed by Facebook for this app, or it's out of date." });
-        var requestHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(signedRequest!)));
-        if (!await replay.TryUseAsync("facebook-deletion", request.UserId, requestHash, request.IssuedAt + FacebookSignedRequest.MaxAge))
+        if (await replay.IsUsedAsync(FacebookDeletionStore, request.UserId, request.Signature))
             return BadRequest(new { message = "That request has already been handled." });
 
         var outcome = "no linked account";
@@ -278,7 +280,12 @@ public class AuthController : ControllerBase
         {
             var onlyWayIn = !await _users.HasPasswordAsync(user)
                 && (await _users.GetLoginsAsync(user)).All(l => l.LoginProvider == ExternalProviders.Facebook);
-            if (onlyWayIn && !await deletion.IsLastAdminAsync(user, Roles.Admin))
+            if (onlyWayIn && user.IsAccessStopped)
+            {
+                await RemoveFacebookLinkAsync(user, request.UserId);
+                outcome = "account stopped, link removed";
+            }
+            else if (onlyWayIn && !await deletion.IsLastAdminAsync(user, Roles.Admin))
             {
                 await deletion.DeleteAsync(user, HttpContext.RequestAborted);
                 await accounts.SessionsEndedAsync(user.Id);
@@ -286,14 +293,24 @@ public class AuthController : ControllerBase
             }
             else
             {
-                await _users.RemoveLoginAsync(user, ExternalProviders.Facebook, request.UserId);
+                await RemoveFacebookLinkAsync(user, request.UserId);
                 outcome = "link removed";
             }
         }
+        // Only now: a request that failed part-way can be sent again.
+        await replay.TryUseAsync(FacebookDeletionStore, request.UserId, request.Signature, request.IssuedAt + FacebookSignedRequest.MaxAge);
         var code = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(8));
         log.LogInformation("Facebook data deletion request {Code}: {Outcome}.", code, outcome);
         var site = EmailSite.Origin(emailOptions.Value, config) ?? $"{Request.Scheme}://{Request.Host}";
         return Ok(new { url = $"{site}/data-deletion?code={code}", confirmation_code = code });
+    }
+
+    private const string FacebookDeletionStore = "facebook-deletion";
+
+    private async Task RemoveFacebookLinkAsync(AppUser user, string facebookUserId)
+    {
+        var removed = await _users.RemoveLoginAsync(user, ExternalProviders.Facebook, facebookUserId);
+        if (!removed.Succeeded) throw new InvalidOperationException("The Facebook link could not be removed.");
     }
 
     /// <summary>How the signed-in person can sign in: whether they have a password, and which providers are linked.</summary>
@@ -330,7 +347,7 @@ public class AuthController : ControllerBase
                 "Enter your current password to add a way to sign in.", NoWayToConfirm) is { } unconfirmed)
             return unconfirmed;
 
-        var checkedSignIn = await CheckExternalTokenAsync(externalValidator, req.Provider, req.IdToken, req.Nonce, ExternalTokenUse.Confirm);
+        var checkedSignIn = await CheckExternalTokenAsync(externalValidator, req.Provider, req.IdToken, req.Nonce, ExternalTokenUse.Connect);
         if (checkedSignIn is not ({ } provider, { } identity))
             return Unauthorized(new { message = ExternalTokenRefused, code = "external_token" });
 

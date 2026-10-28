@@ -43,6 +43,27 @@ public sealed class ExternalTokenReplayGuard(RedisConnection redis, TimeProvider
         return UseHere(key, now, now + keepFor);
     }
 
+    /// <summary>
+    /// True when this sign-in has been recorded (by <see cref="TryUseAsync"/>) and not yet expired, without recording it.
+    /// For checking before an action that should only be marked done once it has worked.
+    /// </summary>
+    public async Task<bool> IsUsedAsync(string provider, string subject, string nonceHash)
+    {
+        var key = Key(provider, subject, nonceHash);
+        if (redis.Available?.GetDatabase() is { } db)
+        {
+            try
+            {
+                return await db.KeyExistsAsync(key);
+            }
+            catch (Exception ex) when (ex is RedisException or TimeoutException)
+            {
+                log.LogWarning("Couldn't check a sign-in in Redis ({Error}); using this instance's memory.", ex.GetType().Name);
+            }
+        }
+        return _used.TryGetValue(key, out var until) && until > time.GetUtcNow();
+    }
+
     /// <summary>Hashed, so the store never holds an account's provider id.</summary>
     private static string Key(string provider, string subject, string nonceHash)
         => $"mg:external-signin:{provider}:{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"{subject}\n{nonceHash}")))}";

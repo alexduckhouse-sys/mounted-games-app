@@ -100,6 +100,8 @@ public sealed class FakeFacebookGraph
         public bool Valid { get; init; } = true;
         public string Type { get; init; } = "USER";
         public DateTimeOffset Expires { get; init; } = DateTimeOffset.UtcNow.AddHours(2);
+        /// <summary>When Facebook says the token was issued; null leaves <c>issued_at</c> out of <c>debug_token</c>.</summary>
+        public DateTimeOffset? IssuedAt { get; init; } = DateTimeOffset.UtcNow;
         public string[] Scopes { get; init; } = ["email", "public_profile"];
         public string? MeId { get; init; }
     }
@@ -138,19 +140,18 @@ public sealed class FakeFacebookGraph
         {
             if (accessToken != $"{AppId}|{AppSecret}") return Error(400);
             if (!_tokens.TryGetValue(Q("input_token"), out var user)) return Json(new { data = new { is_valid = false } });
-            return Json(new
+            var data = new Dictionary<string, object>
             {
-                data = new
-                {
-                    app_id = user.AppId,
-                    type = user.Type,
-                    application = "Mounted Games test",
-                    expires_at = user.Expires.ToUnixTimeSeconds(),
-                    is_valid = user.Valid,
-                    scopes = user.Scopes,
-                    user_id = user.Id,
-                },
-            });
+                ["app_id"] = user.AppId,
+                ["type"] = user.Type,
+                ["application"] = "Mounted Games test",
+                ["expires_at"] = user.Expires.ToUnixTimeSeconds(),
+                ["is_valid"] = user.Valid,
+                ["scopes"] = user.Scopes,
+                ["user_id"] = user.Id,
+            };
+            if (user.IssuedAt is { } issued) data["issued_at"] = issued.ToUnixTimeSeconds();
+            return Json(new { data });
         }
         if (url.AbsolutePath.EndsWith("/me", StringComparison.Ordinal) && _tokens.TryGetValue(accessToken, out var me))
             return Json(new { id = me.MeId ?? me.Id, name = me.Name, email = me.Email });
