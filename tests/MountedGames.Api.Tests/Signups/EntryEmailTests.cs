@@ -19,7 +19,7 @@ public class EntryEmailTests : IClassFixture<EmailApiFactory>
 
     private static CreateSectionSignupRequest Entry(string? email, string name = "Alice Rider", string? requestId = null,
         bool optIn = false, string? version = null)
-        => new(name, "Cheshire PC", "07700 900123", null, false, false,
+        => new(name, "Cheshire PC", "07700 900123", null, false,
             AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion,
             ContactEmail: email, EmailOptIn: optIn,
             EmailOptInVersion: optIn ? version ?? EmailOptInWording.Version : null, RequestId: requestId);

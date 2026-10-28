@@ -52,6 +52,47 @@ public class SeasonsEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task RemoveRound_UnlinksItFromTheSeason_AndFreesTheSectionForDeletion()
+    {
+        var trainer = await _f.TrainerAsync();
+        var competitionId = await _f.SeedCompetitionAsync(ownerUserId: await _f.TrainerIdAsync());
+        var sectionId = await _f.SeedSectionAsync(competitionId, "U12 round");
+        var season = await (await trainer.PostAsJsonAsync("/api/seasons", SeasonBody())).ReadAsync<SeasonDto>();
+        var round = await (await trainer.PostAsJsonAsync($"/api/seasons/{season.Id}/rounds", new AddSeasonRoundRequest(sectionId))).ReadAsync<SeasonRoundDto>();
+        var admin = await _f.AdminAsync();
+        var blocked = await admin.DeleteAsync($"/api/competitions/{competitionId}/sections/{sectionId}?force=true");
+
+        var removed = await trainer.DeleteAsync($"/api/seasons/{season.Id}/rounds/{round.Id}");
+
+        var after = await (await trainer.GetAsync($"/api/seasons/{season.Id}")).ReadAsync<SeasonDto>();
+        var unblocked = await admin.DeleteAsync($"/api/competitions/{competitionId}/sections/{sectionId}?force=true");
+        Assert.Equal(
+            (HttpStatusCode.Conflict, HttpStatusCode.NoContent, 0, HttpStatusCode.NoContent),
+            (blocked.StatusCode, removed.StatusCode, after.Rounds.Count, unblocked.StatusCode));
+        Assert.Contains("Remove it from the season first", await blocked.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task RemoveRound_RequiresTheSeasonOwner_AndAnExistingRound()
+    {
+        var trainer = await _f.TrainerAsync();
+        var competitionId = await _f.SeedCompetitionAsync(ownerUserId: await _f.TrainerIdAsync());
+        var sectionId = await _f.SeedSectionAsync(competitionId, "U12 round");
+        var season = await (await trainer.PostAsJsonAsync("/api/seasons", SeasonBody())).ReadAsync<SeasonDto>();
+        var round = await (await trainer.PostAsJsonAsync($"/api/seasons/{season.Id}/rounds", new AddSeasonRoundRequest(sectionId))).ReadAsync<SeasonRoundDto>();
+        var (member, _) = await _f.SignupAsync("Member");
+        var (other, _) = await _f.ApprovedTrainerAsync();
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _f.CreateClient().DeleteAsync($"/api/seasons/{season.Id}/rounds/{round.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await member.DeleteAsync($"/api/seasons/{season.Id}/rounds/{round.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await other.DeleteAsync($"/api/seasons/{season.Id}/rounds/{round.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await trainer.DeleteAsync($"/api/seasons/{season.Id}/rounds/{Guid.NewGuid()}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await trainer.DeleteAsync($"/api/seasons/{Guid.NewGuid()}/rounds/{round.Id}")).StatusCode);
+        var kept = await (await trainer.GetAsync($"/api/seasons/{season.Id}")).ReadAsync<SeasonDto>();
+        Assert.Single(kept.Rounds);
+    }
+
+    [Fact]
     public async Task SeasonValidation_RejectsInvalidRules()
     {
         var trainer = await _f.TrainerAsync();

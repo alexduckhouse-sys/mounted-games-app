@@ -38,14 +38,13 @@ public class RosterEndpointsTests(ApiFactory f) : IClassFixture<ApiFactory>
         var url = Roster(clubRoute, member.ClubId);
         // The unscoped route can infer the signed-in member's club.
         var first = await SaveAsync(member.Client, url, new(null, "  Example Rider  ",
-            new DateTime(2012, 1, 1), "  Test Pony  ", 13.2m, "  TEST-PASSPORT  ", "  Example Owner  ", true, true));
+            new DateTime(2012, 1, 1), "  Test Pony  ", 13.2m, "  TEST-PASSPORT  ", "  Example Owner  ", true));
         Assert.Equal(member.ClubId, first.ClubId);
         Assert.Equal("Example Rider", first.FullName);
         Assert.Equal("Test Pony", first.HorseName);
         Assert.Equal("TEST-PASSPORT", first.PonyPassportNumber);
         Assert.Equal("Example Owner", first.PonyOwnerFullName);
         Assert.True(first.UseInitialOnly);
-        Assert.True(first.NoFilming);
 
         var repeated = await SaveAsync(member.Client, url, new(member.ClubId, " example rider ", HorseName: " test pony "));
         Assert.Equal(first.Id, repeated.Id);
@@ -54,19 +53,17 @@ public class RosterEndpointsTests(ApiFactory f) : IClassFixture<ApiFactory>
         Assert.Equal(first.PonyPassportNumber, repeated.PonyPassportNumber);
         Assert.Equal(first.PonyOwnerFullName, repeated.PonyOwnerFullName);
         Assert.True(repeated.UseInitialOnly);
-        Assert.True(repeated.NoFilming);
         Assert.Equal(1, await f.WithDbAsync(db => db.SavedRiders.CountAsync(r => r.ClubId == member.ClubId)));
         Assert.Equal(member.UserId, await f.WithDbAsync(db => db.SavedRiders.Where(r => r.Id == first.Id).Select(r => r.CreatedByUserId).SingleAsync()));
 
         var changed = await SaveAsync(member.Client, url, new(member.ClubId, "Example Rider", new DateTime(2011, 2, 2),
-            "Test Pony", 14.1m, "REPLACEMENT-TEST-PASSPORT", "Another Example Owner", false, false));
+            "Test Pony", 14.1m, "REPLACEMENT-TEST-PASSPORT", "Another Example Owner", false));
         Assert.Equal(first.Id, changed.Id);
         Assert.Equal(new DateTime(2011, 2, 2), changed.DateOfBirth);
         Assert.Equal(14.1m, changed.PonyHeightHands);
         Assert.Equal("REPLACEMENT-TEST-PASSPORT", changed.PonyPassportNumber);
         Assert.Equal("Another Example Owner", changed.PonyOwnerFullName);
         Assert.False(changed.UseInitialOnly);
-        Assert.False(changed.NoFilming);
     }
 
     [Theory]
@@ -76,7 +73,7 @@ public class RosterEndpointsTests(ApiFactory f) : IClassFixture<ApiFactory>
     {
         var member = await MemberAsync();
         var saved = await SaveAsync(member.Client, Roster(clubRoute, member.ClubId), new(member.ClubId, "Example Rider",
-            new DateTime(2012, 1, 1), "Test Pony", 13.2m, "TEST-PASSPORT", "Example Owner", true, true));
+            new DateTime(2012, 1, 1), "Test Pony", 13.2m, "TEST-PASSPORT", "Example Owner", true));
         var url = Rider(clubRoute, member.ClubId, saved.Id);
         var response = await member.Client.PutAsJsonAsync(url, new UpdateSavedRiderRequest(null, "  Other Test Pony  "));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -88,10 +85,9 @@ public class RosterEndpointsTests(ApiFactory f) : IClassFixture<ApiFactory>
         Assert.Equal(saved.PonyPassportNumber, preserved.PonyPassportNumber);
         Assert.Equal(saved.PonyOwnerFullName, preserved.PonyOwnerFullName);
         Assert.True(preserved.UseInitialOnly);
-        Assert.True(preserved.NoFilming);
 
         response = await member.Client.PutAsJsonAsync(url, new UpdateSavedRiderRequest("  Changed Example  ", " ",
-            new DateTime(2011, 2, 2), 14.1m, " ", " ", false, false));
+            new DateTime(2011, 2, 2), 14.1m, " ", " ", false));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var changed = await response.ReadAsync<SavedRiderDto>();
         Assert.Equal("Changed Example", changed.FullName);
@@ -101,7 +97,6 @@ public class RosterEndpointsTests(ApiFactory f) : IClassFixture<ApiFactory>
         Assert.Equal(new DateTime(2011, 2, 2), changed.DateOfBirth);
         Assert.Equal(14.1m, changed.PonyHeightHands);
         Assert.False(changed.UseInitialOnly);
-        Assert.False(changed.NoFilming);
         Assert.Equal(changed.FullName, await f.WithDbAsync(db => db.SavedRiders.Where(r => r.Id == saved.Id).Select(r => r.FullName).SingleAsync()));
     }
 
@@ -118,11 +113,10 @@ public class RosterEndpointsTests(ApiFactory f) : IClassFixture<ApiFactory>
         Assert.Equal(saved.Id, repeated.Id);
         Assert.True(repeated.UseInitialOnly);
         var response = await member.Client.PutAsJsonAsync(Rider(clubRoute, member.ClubId, saved.Id),
-            new UpdateSavedRiderRequest("Other E.", UseInitialOnly: false, NoFilming: true));
+            new UpdateSavedRiderRequest("Other E.", UseInitialOnly: false));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var updated = await response.ReadAsync<SavedRiderDto>();
         Assert.True(updated.UseInitialOnly);
-        Assert.True(updated.NoFilming);
     }
 
     [Theory]
@@ -132,18 +126,17 @@ public class RosterEndpointsTests(ApiFactory f) : IClassFixture<ApiFactory>
     {
         var owner = await MemberAsync();
         var stranger = await MemberAsync();
-        var saved = await SaveAsync(owner.Client, Roster(clubRoute, owner.ClubId), new(owner.ClubId, "Example Protected", NoFilming: true));
+        var saved = await SaveAsync(owner.Client, Roster(clubRoute, owner.ClubId), new(owner.ClubId, "Example Protected", UseInitialOnly: true));
         var collection = Roster(clubRoute, owner.ClubId);
         var item = Rider(clubRoute, owner.ClubId, saved.Id);
         foreach (var (client, status) in new[] { (f.CreateClient(), HttpStatusCode.Unauthorized), (stranger.Client, HttpStatusCode.Forbidden) })
         {
             Assert.Equal(status, (await client.PostAsJsonAsync(collection, new SaveToRosterRequest(owner.ClubId, "Unwanted Example"))).StatusCode);
-            Assert.Equal(status, (await client.PutAsJsonAsync(item, new UpdateSavedRiderRequest("Unwanted Change", NoFilming: false))).StatusCode);
+            Assert.Equal(status, (await client.PutAsJsonAsync(item, new UpdateSavedRiderRequest("Unwanted Change", UseInitialOnly: false))).StatusCode);
             Assert.Equal(status, (await client.DeleteAsync(item)).StatusCode);
         }
         var kept = await f.WithDbAsync(db => db.SavedRiders.SingleAsync(r => r.Id == saved.Id));
         Assert.Equal("Example Protected", kept.FullName);
-        Assert.True(kept.NoFilming);
         Assert.Equal(1, await f.WithDbAsync(db => db.SavedRiders.CountAsync(r => r.ClubId == owner.ClubId)));
     }
 
@@ -171,7 +164,7 @@ public class RosterEndpointsTests(ApiFactory f) : IClassFixture<ApiFactory>
     public async Task Delete_UnlinksEveryDeclaration_ButPreservesLockedFormsSnapshotsAndOtherRosterLinks(bool clubRoute)
     {
         var member = await MemberAsync();
-        var saved = await SaveAsync(member.Client, Roster(clubRoute, member.ClubId), new(member.ClubId, "Example Historical", NoFilming: true));
+        var saved = await SaveAsync(member.Client, Roster(clubRoute, member.ClubId), new(member.ClubId, "Example Historical", UseInitialOnly: true));
         var retained = await SaveAsync(member.Client, Roster(clubRoute, member.ClubId), new(member.ClubId, "Example Retained"));
         var arena = await f.CreateArenaAsync(2);
         var snapshots = await f.WithDbAsync(async db =>
@@ -181,13 +174,13 @@ public class RosterEndpointsTests(ApiFactory f) : IClassFixture<ApiFactory>
                 TeamId = teamId, IsLocked = true, SubmittedByUserId = member.UserId,
                 Riders = new List<RiderEntry>
                 {
-                    new() { SavedRiderId = saved.Id, FullName = "Example Historical", HorseName = "Historical Test Pony", UseInitialOnly = true, NoFilming = true, PonyPassportNumber = "HISTORICAL-TEST-PASSPORT" },
+                    new() { SavedRiderId = saved.Id, FullName = "Example Historical", HorseName = "Historical Test Pony", UseInitialOnly = true, PonyPassportNumber = "HISTORICAL-TEST-PASSPORT" },
                     new() { SavedRiderId = retained.Id, FullName = "Example Retained", OrderIndex = 1 },
                 },
             }).ToList();
             db.DeclarationForms.AddRange(forms);
             await db.SaveChangesAsync();
-            return forms.SelectMany(form => form.Riders).Select(r => new { r.Id, r.DeclarationFormId, r.SavedRiderId, r.FullName, r.HorseName, r.UseInitialOnly, r.NoFilming, r.PonyPassportNumber }).ToList();
+            return forms.SelectMany(form => form.Riders).Select(r => new { r.Id, r.DeclarationFormId, r.SavedRiderId, r.FullName, r.HorseName, r.UseInitialOnly, r.PonyPassportNumber }).ToList();
         });
 
         // Administrators can manage a club they do not belong to as well.
@@ -205,7 +198,6 @@ public class RosterEndpointsTests(ApiFactory f) : IClassFixture<ApiFactory>
             Assert.Equal(before.FullName, after.FullName);
             Assert.Equal(before.HorseName, after.HorseName);
             Assert.Equal(before.UseInitialOnly, after.UseInitialOnly);
-            Assert.Equal(before.NoFilming, after.NoFilming);
             Assert.Equal(before.PonyPassportNumber, after.PonyPassportNumber);
         }
         Assert.Equal(HttpStatusCode.NotFound, (await admin.DeleteAsync(Rider(clubRoute, member.ClubId, saved.Id))).StatusCode);
@@ -236,7 +228,7 @@ public class RosterEndpointsTests(ApiFactory f) : IClassFixture<ApiFactory>
         var clubName = $"Roster member club {Guid.NewGuid():N}";
         var (managerClient, managerAuth) = await f.ApprovedManagerAsync(clubName);
         var clubId = (await f.WithDbAsync(db => db.Users.Where(u => u.Id == managerAuth.User.Id).Select(u => u.ClubId).SingleAsync()))!.Value;
-        var saved = await SaveAsync(managerClient, Roster(true, clubId), new(clubId, "Example Child", NoFilming: true, UseInitialOnly: true));
+        var saved = await SaveAsync(managerClient, Roster(true, clubId), new(clubId, "Example Child", UseInitialOnly: true));
         var (memberClient, memberAuth) = await f.SignupAsync("Member", clubName);
         Assert.Equal(clubId, await f.WithDbAsync(db => db.Users.Where(u => u.Id == memberAuth.User.Id).Select(u => u.ClubId).SingleAsync()));
 
@@ -244,28 +236,25 @@ public class RosterEndpointsTests(ApiFactory f) : IClassFixture<ApiFactory>
         {
             Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.PostAsJsonAsync(Roster(clubRoute, clubId), new SaveToRosterRequest(clubId, "Unwanted Example"))).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.PutAsJsonAsync(Rider(clubRoute, clubId, saved.Id),
-                new UpdateSavedRiderRequest(null, NoFilming: false, UseInitialOnly: false))).StatusCode);
+                new UpdateSavedRiderRequest(null, UseInitialOnly: false))).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await memberClient.DeleteAsync(Rider(clubRoute, clubId, saved.Id))).StatusCode);
         }
         var kept = await f.WithDbAsync(db => db.SavedRiders.SingleAsync(r => r.Id == saved.Id));
-        Assert.True(kept.NoFilming);
         Assert.True(kept.UseInitialOnly);
         var mine = await memberClient.GetFromJsonAsync<List<SavedRiderDto>>("/api/clubs/my-saved-riders", TestClients.Json);
         Assert.DoesNotContain(mine!, r => r.Id == saved.Id);
     }
 
     [Fact]
-    public async Task SingleLetterSurname_ForcesBothInitialOnlyAndNoFilming_OnCreateAndUpdate()
+    public async Task SingleLetterSurname_ForcesInitialOnly_OnCreateAndUpdate()
     {
         var manager = await MemberAsync();
         var created = await SaveAsync(manager.Client, "/api/roster", new(manager.ClubId, "Example R."));
         Assert.True(created.UseInitialOnly);
-        Assert.True(created.NoFilming);
         var other = await SaveAsync(manager.Client, "/api/roster", new(manager.ClubId, "Another Rider"));
-        var response = await manager.Client.PutAsJsonAsync($"/api/roster/{other.Id}", new UpdateSavedRiderRequest("Another R", UseInitialOnly: false, NoFilming: false));
+        var response = await manager.Client.PutAsJsonAsync($"/api/roster/{other.Id}", new UpdateSavedRiderRequest("Another R", UseInitialOnly: false));
         var updated = await response.ReadAsync<SavedRiderDto>();
         Assert.True(updated.UseInitialOnly);
-        Assert.True(updated.NoFilming);
     }
 
     [Fact]

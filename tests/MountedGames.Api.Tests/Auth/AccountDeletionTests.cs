@@ -586,4 +586,27 @@ public class AccountDeletionTests : IClassFixture<ApiFactory>
             Assert.False(await db.ChatMessages.AnyAsync(m => m.Id == othersReplyId));
         });
     }
+
+    [Fact]
+    public async Task Deleting_ErasesTheAccountsEmailOptIns_AndNobodyElses()
+    {
+        var (client, auth) = await _f.SignupAsync();
+        var other = $"someone-else-{Guid.NewGuid():N}@example.test";
+        await _f.WithDbAsync(async db =>
+        {
+            // Stored the way the opt-in form stores them: trimmed and lower-case.
+            db.EmailOptIns.AddRange(
+                new EmailOptIn { Email = auth.User.Email!.ToLowerInvariant(), WordingVersion = "v1", Source = "signup-form", UnsubscribeTokenHash = Guid.NewGuid().ToString("N") },
+                new EmailOptIn { Email = other, WordingVersion = "v1", Source = "signup-form", UnsubscribeTokenHash = Guid.NewGuid().ToString("N") });
+            await db.SaveChangesAsync();
+        });
+
+        Assert.Equal(HttpStatusCode.NoContent, (await Delete(client, Password)).StatusCode);
+
+        await _f.WithDbAsync(async db =>
+        {
+            Assert.False(await db.EmailOptIns.AnyAsync(o => o.Email == auth.User.Email!.ToLowerInvariant()));
+            Assert.True(await db.EmailOptIns.AnyAsync(o => o.Email == other));
+        });
+    }
 }

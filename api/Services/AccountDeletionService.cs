@@ -45,6 +45,10 @@ public sealed class AccountDeletionService(AppDbContext db, UserManager<AppUser>
         var blocked = await db.Users.AsNoTracking().AnyAsync(u => u.Id == id && u.BlockedAt != null, ct);
 
         // --- Private to the person: removed. ---
+        // Marketing opt-ins for the account's address. They are stored trimmed and lower-cased, so match the same way.
+        var optInEmail = (user.Email ?? string.Empty).Trim().ToLowerInvariant();
+        if (optInEmail.Length > 0)
+            await db.EmailOptIns.Where(o => o.Email == optInEmail).ExecuteDeleteAsync(ct);
         await db.TrainerNotes.Where(n => n.UserId == id).ExecuteDeleteAsync(ct);
         await db.StartingPoints.Where(p => p.OwnerUserId == id).ExecuteDeleteAsync(ct);
         // The networks it signed in from, and the ones blocked because of it. A blocked account keeps both: the blocks stay

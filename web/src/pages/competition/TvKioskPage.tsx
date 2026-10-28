@@ -21,6 +21,8 @@ import { buildToplist, ordinal, sectionScoreVersion } from '../../lib/toplist';
 import { useLiveHub } from '../../live/useLiveHub';
 import type { Heat, Race, Session, StandingRow, Team } from '../../types';
 import { useCompetition } from './context';
+import { currentRaceIndex, raceLanes, racesInOrder } from '../../lib/raceLanes';
+import { lanesOf } from './laneRules';
 import { Notice } from '../../components/Notice';
 import { HeatScores } from './HeatScores';
 import { useHeldFor } from '../../hooks/useHeldFor';
@@ -473,6 +475,7 @@ export function TvKioskPage() {
                   item={currentHeatItem}
                   teamById={teamById}
                   standingByTeamId={standingByTeamId}
+                  laneHatbands={competition.laneHatbands}
                   emptyText="No active heat in the ring right now."
                 />
                 <HeatLaneCard
@@ -480,6 +483,7 @@ export function TvKioskPage() {
                   item={nextHeatItem}
                   teamById={teamById}
                   standingByTeamId={standingByTeamId}
+                  laneHatbands={competition.laneHatbands}
                   emptyText="No upcoming heat scheduled after the current heat."
                 />
               </section>
@@ -655,12 +659,14 @@ function HeatLaneCard({
   item,
   teamById,
   standingByTeamId,
+  laneHatbands,
   emptyText,
 }: {
   badge: string;
   item: { session: Session; heat: Heat; indexInSession: number } | null;
   teamById: Map<number, Team>;
   standingByTeamId: Map<number, StandingRow>;
+  laneHatbands: string[] | null | undefined;
   emptyText: string;
 }) {
   if (!item) {
@@ -673,11 +679,10 @@ function HeatLaneCard({
   }
 
   const { session, heat, indexInSession } = item;
-  const entries = heat.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex);
-  const nextOpenRace = heat.races
-    .slice()
-    .sort((a, b) => a.orderIndex - b.orderIndex)
-    .find((r) => !r.isComplete);
+  const races = racesInOrder(heat);
+  const nextOpenRace = races.find((r) => !r.isComplete);
+  // The lanes for that race as the scorer and the commentary desk show them: rotated, with sit-outs marked.
+  const lanes = raceLanes(heat, currentRaceIndex(heat) ?? Math.max(races.length - 1, 0), lanesOf(session), laneHatbands);
 
   return (
     <div className="mg-card overflow-hidden">
@@ -694,18 +699,18 @@ function HeatLaneCard({
         </div>
       </div>
 
-      {entries.length === 0 ? (
+      {lanes.length === 0 ? (
         <p className="p-4 text-sm text-[rgb(var(--mg-muted))]">No lanes assigned for this heat yet.</p>
       ) : (
         <ol className="m-0 divide-y divide-[rgb(var(--mg-rule-soft))] list-none p-0">
-          {entries.map((entry) => {
+          {lanes.map(({ entry, lane, sitting }) => {
             const team = teamById.get(entry.teamId);
             const st = standingByTeamId.get(entry.teamId);
             return (
               <li key={entry.id} className="flex items-center justify-between gap-3 px-4 py-3">
                 <div className="flex min-w-0 items-center gap-3">
-                  <span className="mg-display w-16 shrink-0 text-lg font-bold uppercase text-[rgb(var(--mg-heading))]">
-                    Lane {entry.laneIndex}
+                  <span className="mg-display min-w-16 shrink-0 whitespace-nowrap text-lg font-bold uppercase text-[rgb(var(--mg-heading))]">
+                    {sitting ? 'Sits out' : `Lane ${lane}`}
                   </span>
                   <BibSwatch colour={entry.bibColour ?? team?.bibColour ?? st?.bibColour} />
                   <div className="min-w-0">

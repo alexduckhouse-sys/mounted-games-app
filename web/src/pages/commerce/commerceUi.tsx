@@ -2,15 +2,6 @@ import type { ReactNode } from 'react';
 import { Notice } from '../../components/Notice';
 import type { TestPayment } from './types';
 
-export function PageHeader({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <header className="flex flex-col gap-1.5">
-      <h1 className="mg-h1">{title}</h1>
-      <p className="mg-lede">{children}</p>
-    </header>
-  );
-}
-
 export function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <Notice actionLabel="Try again" onAction={onRetry}>{message}</Notice>

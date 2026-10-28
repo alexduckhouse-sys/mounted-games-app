@@ -332,6 +332,17 @@ describe('TvKioskPage', () => {
     expect(await screen.findByRole('dialog', { name: 'Share with QR codes' })).toBeInTheDocument();
   });
 
+  it('lists the lane draw for the next race, rotated as the commentary desk shows it', async () => {
+    renderWithCompetition('/competitions/1/tv');
+    const draw = await screen.findByRole('region', { name: 'In the Ring and Next Heat Lane Draw' });
+    const first = within(draw).getAllByRole('list')[0];
+    const rows = within(first).getAllByRole('listitem');
+    // Same order as the commentary desk test above: race 2 moves everyone up one lane.
+    expect(rows.map((li) => within(li).getByText(/^Lane \d$/).textContent)).toEqual(['Lane 1', 'Lane 2', 'Lane 3']);
+    expect(within(rows[0]).getByText('East C')).toBeInTheDocument();
+    expect(within(rows[1]).getByText('North A')).toBeInTheDocument();
+  });
+
   it('handles offline stream list and scorer client mode in StreamControlStrip', async () => {
     const user = userEvent.setup();
     vi.mocked(api.get).mockRejectedValueOnce(new Error('offline'));
