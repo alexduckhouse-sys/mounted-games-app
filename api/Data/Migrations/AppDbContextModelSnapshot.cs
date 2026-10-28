@@ -2476,6 +2476,9 @@ namespace MountedGames.Api.Data.Migrations
                         .HasColumnType("character varying(40)")
                         .HasDefaultValue("Custom");
 
+                    b.Property<int?>("HeatId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("LaneNumber")
                         .HasColumnType("integer");
 
@@ -2503,6 +2506,8 @@ namespace MountedGames.Api.Data.Migrations
                     b.HasIndex("AssignedTeamId");
 
                     b.HasIndex("CompetitionId");
+
+                    b.HasIndex("HeatId");
 
                     b.HasIndex("SessionId");
 
@@ -4881,6 +4886,11 @@ namespace MountedGames.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("MountedGames.Api.Entities.Heat", "Heat")
+                        .WithMany()
+                        .HasForeignKey("HeatId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.HasOne("MountedGames.Api.Entities.Session", "Session")
                         .WithMany()
                         .HasForeignKey("SessionId")
@@ -4889,6 +4899,8 @@ namespace MountedGames.Api.Data.Migrations
                     b.Navigation("AssignedTeam");
 
                     b.Navigation("Competition");
+
+                    b.Navigation("Heat");
 
                     b.Navigation("Session");
                 });

@@ -1579,13 +1579,15 @@ export interface VolunteerClaim {
 }
 
 export type StewardDutyCategory = 'General' | 'ArenaCrew' | 'LineSteward' | 'ChangeoverSteward' | string;
-export type StewardAttendanceStatus = 'Assigned' | 'Here' | 'Missing' | string;
+export type StewardAttendanceStatus = 'Assigned' | 'TeamSaysHere' | 'Here' | 'Missing' | string;
 
 export interface VolunteerShift {
   id: number;
   competitionId: number;
   sessionId?: number | null;
   sessionName?: string | null;
+  heatId?: number | null;
+  heatLabel?: string | null;
   arenaName?: string | null;
   role: string;
   startTimeLabel?: string | null;
@@ -1610,6 +1612,7 @@ export interface VolunteerShift {
 export interface CreateVolunteerShiftInput {
   role: string;
   sessionId?: number | null;
+  heatId?: number | null;
   arenaName?: string | null;
   startTimeLabel?: string | null;
   notes?: string | null;
@@ -1642,6 +1645,70 @@ export interface AssignSessionDutiesInput {
   autoAssignNonRidingTeams?: boolean;
   includeChangeoverLineStewards?: boolean;
   replaceExistingSessionDuties?: boolean;
+}
+
+export interface HeatDutyItemInput {
+  id?: number | null;
+  heatId: number;
+  role: string;
+  dutyCategory?: StewardDutyCategory | null;
+  laneNumber?: number | null;
+  assignedTeamId?: number | null;
+  assignedClubName?: string | null;
+  requiredCount?: number;
+  notes?: string | null;
+}
+
+export interface SaveHeatDutiesInput {
+  sessionIds: number[];
+  duties: HeatDutyItemInput[];
+  confirmRemoveCheckedIn?: boolean;
+}
+
+export interface SaveHeatDutiesResult {
+  shifts: VolunteerShift[];
+  created: number;
+  updated: number;
+  deleted: number;
+}
+
+export interface HeatDutiesConflictResult {
+  message: string;
+  checkedInShifts: VolunteerShift[];
+}
+
+export interface HeatDutyRoleTemplateInput {
+  role: string;
+  dutyCategory?: StewardDutyCategory | null;
+  laneNumber?: number | null;
+  requiredCount?: number;
+}
+
+export interface AutoFillHeatDutiesInput {
+  roles?: HeatDutyRoleTemplateInput[] | null;
+  heatIds?: number[] | null;
+  includeChangeoverLineStewards?: boolean;
+}
+
+export interface ProposedHeatDuty {
+  sessionId: number;
+  heatId: number;
+  heatLabel: string;
+  role: string;
+  dutyCategory: StewardDutyCategory;
+  laneNumber?: number | null;
+  assignedTeamId?: number | null;
+  assignedTeamName?: string | null;
+  assignedClubName?: string | null;
+  requiredCount: number;
+}
+
+export interface AutoFillHeatDutiesResult {
+  sessionId: number;
+  duties: ProposedHeatDuty[];
+  unfilledCount: number;
+  warnings: string[];
+  teamDutyCounts: Record<number, number>;
 }
 
 export interface CallMissingStewardResult {

@@ -50,6 +50,9 @@ public static class RequestLimits
     /// <summary>Checking and using a reset link: per IP (<c>RateLimits:PasswordResetLinksPerMinute</c>, 20).</summary>
     public const string PasswordResetLinkPolicy = "password-reset-link";
 
+    /// <summary>"Team says here" anonymous duty confirmation: per IP (<c>RateLimits:TeamHerePerMinute</c>, defaults to <c>RateLimits:WritesPerMinute</c>, 60).</summary>
+    public const string TeamHerePolicy = "team-here";
+
     /// <summary>
     /// Per-minute limits for sign-in (per IP), geocoding (per IP), API writes (per user, or per IP when anonymous), the public
     /// calendar and link-preview reads (per IP) and sponsor "shown" counts (per IP). <c>RateLimits:AuthPerMinute</c>,
@@ -76,6 +79,7 @@ public static class RequestLimits
         var scorerReadPermits = configuration.GetValue("RateLimits:ScorerReadsPerMinute", 120);
         var resetRequestPermits = configuration.GetValue("RateLimits:PasswordResetRequestsPerMinute", 5);
         var resetLinkPermits = configuration.GetValue("RateLimits:PasswordResetLinksPerMinute", 20);
+        var teamHerePermits = configuration.GetValue("RateLimits:TeamHerePerMinute", writePermits);
         return services.AddRateLimiter(options =>
         {
             Configure(options, authPermits, writePermits, geocodePermits, scorerPermits, publicReadPermits, exposurePermits);
@@ -90,6 +94,7 @@ public static class RequestLimits
             options.AddPolicy(ScorerReadPolicy, context => Partition(context, $"scorer-read:{ScorerPartition(context)}", scorerReadPermits));
             options.AddPolicy(PasswordResetRequestPolicy, context => Partition(context, $"password-reset-request:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}", resetRequestPermits));
             options.AddPolicy(PasswordResetLinkPolicy, context => Partition(context, $"password-reset-link:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}", resetLinkPermits));
+            options.AddPolicy(TeamHerePolicy, context => Partition(context, $"team-here:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}", teamHerePermits));
         });
     }
 

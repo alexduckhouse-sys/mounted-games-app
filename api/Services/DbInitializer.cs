@@ -416,6 +416,7 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "RiderEntries", "CustomValuesJson", "TEXT NULL");
         await EnsureColumnAsync(db, "RiderEntries", "FlagsJson", "TEXT NULL");
         await Operations.OperationsSqliteSchema.EnsureAsync(db);
+        await EnsureColumnAsync(db, "VolunteerShift", "HeatId", "INTEGER NULL REFERENCES \"Heats\" (\"Id\") ON DELETE CASCADE");
         await EnsureColumnAsync(db, "RaceScoreEvent", "ActorLabel", "TEXT NULL");
 
         await db.Database.ExecuteSqlRawAsync("""

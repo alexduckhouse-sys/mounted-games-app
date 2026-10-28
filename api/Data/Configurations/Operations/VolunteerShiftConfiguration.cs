@@ -20,9 +20,11 @@ public class VolunteerShiftConfiguration : IEntityTypeConfiguration<VolunteerShi
         b.Property(x => x.Notes).HasMaxLength(500);
         b.HasIndex(x => x.CompetitionId);
         b.HasIndex(x => x.SessionId);
+        b.HasIndex(x => x.HeatId);
         b.HasIndex(x => x.AssignedTeamId);
         b.HasOne(x => x.Competition).WithMany().HasForeignKey(x => x.CompetitionId).OnDelete(DeleteBehavior.Cascade);
         b.HasOne(x => x.Session).WithMany().HasForeignKey(x => x.SessionId).OnDelete(DeleteBehavior.SetNull);
+        b.HasOne(x => x.Heat).WithMany().HasForeignKey(x => x.HeatId).OnDelete(DeleteBehavior.Cascade);
         b.HasOne(x => x.AssignedTeam).WithMany().HasForeignKey(x => x.AssignedTeamId).OnDelete(DeleteBehavior.SetNull);
     }
 }

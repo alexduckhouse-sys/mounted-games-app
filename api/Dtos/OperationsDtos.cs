@@ -120,7 +120,9 @@ public record VolunteerShiftDto(
     DateTime? CheckedInAt = null,
     string? CheckedInByName = null,
     bool CheckedInByStaffOverride = false,
-    bool CanViewerCheckIn = false);
+    bool CanViewerCheckIn = false,
+    int? HeatId = null,
+    string? HeatLabel = null);
 
 public record CreateVolunteerShiftRequest(
     [Required, StringLength(80, MinimumLength = 1)] string Role,
@@ -132,7 +134,8 @@ public record CreateVolunteerShiftRequest(
     [StringLength(40)] string? DutyCategory = null,
     int? AssignedTeamId = null,
     [StringLength(150)] string? AssignedClubName = null,
-    [Range(1, 20)] int? LaneNumber = null);
+    [Range(1, 20)] int? LaneNumber = null,
+    int? HeatId = null);
 
 public record UpdateVolunteerShiftRequest(
     [Required, StringLength(80, MinimumLength = 1)] string Role,
@@ -144,7 +147,64 @@ public record UpdateVolunteerShiftRequest(
     [StringLength(40)] string? DutyCategory = null,
     int? AssignedTeamId = null,
     [StringLength(150)] string? AssignedClubName = null,
-    [Range(1, 20)] int? LaneNumber = null);
+    [Range(1, 20)] int? LaneNumber = null,
+    int? HeatId = null);
+
+public record HeatDutyItemInput(
+    int HeatId,
+    [Required, StringLength(80, MinimumLength = 1)] string Role,
+    [StringLength(40)] string? DutyCategory = null,
+    [Range(1, 20)] int? LaneNumber = null,
+    int? AssignedTeamId = null,
+    int? Id = null,
+    [StringLength(150)] string? AssignedClubName = null,
+    [Range(1, 50)] int RequiredCount = 1,
+    [StringLength(500)] string? Notes = null);
+
+public record SaveHeatDutiesRequest(
+    IReadOnlyList<int>? SessionIds,
+    IReadOnlyList<HeatDutyItemInput>? Duties,
+    bool ConfirmRemoveCheckedIn = false);
+
+public record SaveHeatDutiesResultDto(
+    IReadOnlyList<VolunteerShiftDto> Shifts,
+    int Created,
+    int Updated,
+    int Deleted);
+
+public record HeatDutiesConflictDto(
+    string Message,
+    IReadOnlyList<VolunteerShiftDto> CheckedInShifts);
+
+public record HeatDutyRoleTemplateInput(
+    [Required, StringLength(80, MinimumLength = 1)] string Role,
+    [StringLength(40)] string? DutyCategory = null,
+    [Range(1, 20)] int? LaneNumber = null,
+    [Range(1, 50)] int RequiredCount = 1);
+
+public record AutoFillHeatDutiesRequest(
+    IReadOnlyList<HeatDutyRoleTemplateInput>? Roles = null,
+    IReadOnlyList<int>? HeatIds = null,
+    bool IncludeChangeoverLineStewards = false);
+
+public record ProposedHeatDutyDto(
+    int SessionId,
+    int HeatId,
+    string HeatLabel,
+    string Role,
+    string DutyCategory,
+    int? LaneNumber,
+    int? AssignedTeamId,
+    string? AssignedTeamName,
+    string? AssignedClubName,
+    int RequiredCount = 1);
+
+public record AutoFillHeatDutiesResultDto(
+    int SessionId,
+    IReadOnlyList<ProposedHeatDutyDto> Duties,
+    int UnfilledCount,
+    IReadOnlyList<string> Warnings,
+    IReadOnlyDictionary<int, int> TeamDutyCounts);
 
 public record ClaimVolunteerShiftRequest(
     [StringLength(160)] string? VolunteerName = null,

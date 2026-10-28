@@ -133,4 +133,64 @@ public class OperationsSchemaTests : IClassFixture<ApiFactory>
         Assert.Single(await db.VolunteerClaims.ToListAsync());
         Assert.Equal(competitions, await db.Competitions.AsNoTracking().OrderBy(c => c.Id).Select(c => new { c.Id, c.Name }).ToListAsync());
     }
+
+    [Fact]
+    public async Task ExistingSqliteVolunteerShiftTableGainsHeatIdColumnWithoutLosingShifts()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var competitionId = await db.Competitions.Select(c => c.Id).FirstAsync();
+        var heat = await db.Heats.AsNoTracking().FirstAsync(h => h.Session != null && h.Session.CompetitionId == competitionId);
+
+        await db.Database.ExecuteSqlRawAsync("""
+            DROP TABLE IF EXISTS VolunteerClaim;
+            DROP TABLE IF EXISTS VolunteerShift;
+            CREATE TABLE "VolunteerShift" (
+                "Id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                "CompetitionId" INTEGER NOT NULL,
+                "SessionId" INTEGER NULL,
+                "ArenaName" TEXT NULL,
+                "Role" TEXT NOT NULL,
+                "DutyCategory" TEXT NOT NULL DEFAULT 'General',
+                "AssignedTeamId" INTEGER NULL,
+                "AssignedClubName" TEXT NULL,
+                "LaneNumber" INTEGER NULL,
+                "AttendanceStatus" TEXT NOT NULL DEFAULT 'Assigned',
+                "CheckedInAt" TEXT NULL,
+                "CheckedInByUserId" TEXT NULL,
+                "CheckedInByName" TEXT NULL,
+                "CheckedInByStaffOverride" INTEGER NOT NULL DEFAULT 0,
+                "StartTimeLabel" TEXT NULL,
+                "Notes" TEXT NULL,
+                "RequiredCount" INTEGER NOT NULL DEFAULT 1,
+                "CreatedAt" TEXT NOT NULL
+            );
+            INSERT INTO "VolunteerShift" ("CompetitionId", "SessionId", "Role", "RequiredCount", "CreatedAt")
+            VALUES (1, NULL, 'Legacy Ring Crew', 2, '2030-01-01 09:00:00');
+            """);
+
+        await DbInitializer.SeedAsync(_factory.Services);
+        db.ChangeTracker.Clear();
+
+        var legacyShift = await db.VolunteerShifts.SingleAsync(s => s.Role == "Legacy Ring Crew");
+        Assert.Null(legacyShift.HeatId);
+
+        var heatShift = new VolunteerShift
+        {
+            CompetitionId = competitionId,
+            SessionId = heat.SessionId,
+            HeatId = heat.Id,
+            Role = "Start/Finish Line Steward — Lane 1",
+            DutyCategory = "LineSteward",
+            LaneNumber = 1,
+            RequiredCount = 1,
+        };
+        db.VolunteerShifts.Add(heatShift);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var reloadedHeatShift = await db.VolunteerShifts.SingleAsync(s => s.Id == heatShift.Id);
+        Assert.Equal(heat.Id, reloadedHeatShift.HeatId);
+        Assert.Equal(1, await db.Database.SqlQueryRaw<int>("""SELECT COUNT(*) AS "Value" FROM pragma_table_info('VolunteerShift') WHERE name = 'HeatId'""").SingleAsync());
+    }
 }

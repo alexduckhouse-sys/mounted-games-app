@@ -714,6 +714,19 @@ public class CompetitionsController : ControllerBase
         _db.Results.RemoveRange(teamResults);
         _db.HeatEntries.RemoveRange(await _db.HeatEntries.Where(he => sectionTeamIds.Contains(he.TeamId)).ToListAsync());
         var sectionSessionIds = section.Sessions.Select(ss => ss.Id).ToList();
+        var sectionHeatIds = section.Sessions.SelectMany(ss => ss.Heats).Select(h => h.Id).ToList();
+        if (sectionHeatIds.Count > 0)
+        {
+            var heatShiftIds = await _db.VolunteerShifts
+                .Where(s => s.HeatId != null && sectionHeatIds.Contains(s.HeatId.Value))
+                .Select(s => s.Id)
+                .ToListAsync();
+            if (heatShiftIds.Count > 0)
+            {
+                await _db.VolunteerClaims.Where(cl => heatShiftIds.Contains(cl.ShiftId)).ExecuteDeleteAsync();
+                await _db.VolunteerShifts.Where(s => heatShiftIds.Contains(s.Id)).ExecuteDeleteAsync();
+            }
+        }
         if (sectionSessionIds.Count > 0)
         {
             await _db.VolunteerShifts

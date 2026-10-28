@@ -7,6 +7,8 @@ public class VolunteerShift
     public Competition? Competition { get; set; }
     public int? SessionId { get; set; }
     public Session? Session { get; set; }
+    public int? HeatId { get; set; }
+    public Heat? Heat { get; set; }
     public string? ArenaName { get; set; }
     public string Role { get; set; } = string.Empty;
     public string DutyCategory { get; set; } = "Custom";
