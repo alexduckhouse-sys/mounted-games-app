@@ -142,6 +142,7 @@ export const ops3 = {
   'ops3.rb.save': 'Save awards',
   'ops3.tc.loadError': 'Couldn’t load the tack check. Check your signal and try again.',
   'ops3.tc.title': 'Tack check',
+  'ops3.tc.settingsSheet': 'Tack check settings',
   'ops3.tc.form': 'Tack check form',
   'ops3.tc.print': 'Print tack check forms',
   'ops3.tc.printSub': 'One form per age group, with each team’s riders and ponies',
