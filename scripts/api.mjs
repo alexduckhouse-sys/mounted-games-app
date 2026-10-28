@@ -18,13 +18,13 @@ const importArgs = importAt < 0 ? [] : [
   '--import-competition', path.resolve(process.argv[importAt + 1] ?? ''),
   ...(process.argv.includes('--dry-run') ? ['--dry-run'] : []),
 ];
-// node scripts/api.mjs --clear-demo-data --keep-competition <id> [--apply] [--venue-postcode "<postcode>"]
+// node scripts/api.mjs --clear-demo-data --keep-competition <id> --expect-name "<name>" [--apply] [--venue-postcode "<postcode>"]
 const valueAfter = flag => {
   const at = process.argv.indexOf(flag);
   return at < 0 || process.argv[at + 1] === undefined ? [] : [flag, process.argv[at + 1]];
 };
 const clearArgs = !process.argv.includes('--clear-demo-data') ? [] : [
-  '--clear-demo-data', ...valueAfter('--keep-competition'), ...valueAfter('--venue-postcode'),
+  '--clear-demo-data', ...valueAfter('--keep-competition'), ...valueAfter('--expect-name'), ...valueAfter('--venue-postcode'),
   ...(process.argv.includes('--apply') ? ['--apply'] : []),
 ];
 const child = spawn('dotnet', [

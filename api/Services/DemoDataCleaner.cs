@@ -12,7 +12,8 @@ using MountedGames.Api.Services.DecForms;
 namespace MountedGames.Api.Services;
 
 /// <summary>What <c>--clear-demo-data</c> was asked to do. Without <see cref="Apply"/> it is a dry run.</summary>
-public sealed record DemoDataCleanOptions(int KeepCompetitionId, bool Apply = false, string? VenuePostcode = null);
+/// <remarks><see cref="ExpectName"/> must equal the kept competition's name exactly, so a mistyped id stops the run.</remarks>
+public sealed record DemoDataCleanOptions(int KeepCompetitionId, string ExpectName, bool Apply = false, string? VenuePostcode = null);
 
 /// <summary>A refusal: the message says why, and that nothing was changed.</summary>
 public sealed class DemoDataCleanException(string message) : Exception(message);
@@ -26,20 +27,25 @@ public sealed record DemoDataTableCount(string Table, long Before, long After)
 /// <summary>Accounts by kind. Counts only: never names or addresses.</summary>
 public sealed record DemoDataAccountCounts(int Deleted, int Admins, int RealSignups, int SeededKeptForEvent);
 
-public sealed record DemoDataClubCounts(int Deleted, int KeptInUse, int KeptPreset);
+/// <summary>Clubs by kind. <see cref="DeletedNames"/> lists the clubs going (club names are not personal data).</summary>
+public sealed record DemoDataClubCounts(IReadOnlyList<string> DeletedNames, int KeptInUse, int KeptPreset)
+{
+    public int Deleted => DeletedNames.Count;
+}
 
-/// <summary>The venue postcode to set on the kept competition; the coordinates are looked up only with --apply.</summary>
-public sealed record DemoDataPostcode(string Postcode, double? Latitude, double? Longitude);
+/// <summary>The venue postcode to set on the kept competition and where it is (looked up in the dry run too).</summary>
+public sealed record DemoDataPostcode(string Postcode, double Latitude, double Longitude);
 
 public sealed record DemoDataCleanResult(
     bool Applied,
-    string Provider,
+    string Database,
     int KeptCompetitionId,
     string KeptCompetitionName,
     IReadOnlyList<(string Label, int Count)> KeptCompetition,
     IReadOnlyList<(int Id, string Name)> DeletedCompetitions,
     DemoDataAccountCounts Accounts,
     DemoDataClubCounts Clubs,
+    int TeamProfilesKept,
     DemoDataPostcode? Postcode,
     IReadOnlyList<DemoDataTableCount> Tables)
 {
@@ -48,12 +54,13 @@ public sealed record DemoDataCleanResult(
     /// </summary>
     public IEnumerable<string> Report()
     {
+        yield return $"Database: {Database}.";
         yield return Applied
-            ? $"Applied on {Provider}: everything below was deleted in one transaction."
-            : $"Dry run on {Provider}: nothing has been changed. The deletes ran inside a transaction that was rolled back, "
+            ? "Applied: everything below was deleted in one transaction."
+            : "Dry run: nothing has been changed. The deletes ran inside a transaction that was rolled back, "
                 + "so these are exactly the rows --apply would remove. Add --apply to delete them.";
         yield return "";
-        var kept = KeptCompetition.Where(x => x.Count > 0).Select(x => $"{x.Count} {x.Label}").ToList();
+        var kept = KeptCompetition.Where(x => x.Count > 0).Select(x => Say(x.Count, x.Label)).ToList();
         yield return $"Keeping competition {KeptCompetitionId} \"{KeptCompetitionName}\""
             + (kept.Count == 0 ? "." : $": {string.Join(", ", kept)}.");
         yield return $"{(Applied ? "Checked" : "Checked inside the rolled-back transaction")}: competition {KeptCompetitionId} "
@@ -61,22 +68,23 @@ public sealed record DemoDataCleanResult(
         yield return "";
         yield return DeletedCompetitions.Count == 0
             ? "No other competitions to delete."
-            : $"{(Applied ? "Deleted" : "Would delete")} {DeletedCompetitions.Count} other competitions, with everything under them:";
+            : $"{(Applied ? "Deleted" : "Would delete")} {Say(DeletedCompetitions.Count, "other competitions")}, with everything under them:";
         foreach (var (id, name) in DeletedCompetitions)
             yield return $"  {id} \"{name}\"";
         yield return "";
         yield return $"Accounts: {(Applied ? "deleted" : "would delete")} {Accounts.Deleted} made by the seeders; keeping "
-            + $"{Accounts.Admins + Accounts.RealSignups + Accounts.SeededKeptForEvent} ({Accounts.Admins} site admins, "
-            + $"{Accounts.RealSignups} real sign-ups, {Accounts.SeededKeptForEvent} seeder accounts the kept competition uses).";
+            + $"{Accounts.Admins + Accounts.RealSignups + Accounts.SeededKeptForEvent} ({Say(Accounts.Admins, "site admins")}, "
+            + $"{Say(Accounts.RealSignups, "real sign-ups")}, {Say(Accounts.SeededKeptForEvent, "seeder accounts")} the kept competition uses).";
         yield return "  Seeder accounts are recognised only by their fixed markers: the history seed's ids (history-seed-*) and "
             + "@history-seed.invalid addresses, and the two demo trainer addresses of the local demo data. Site admins are never deleted.";
+        yield return $"Team profiles: keeping {Say(TeamProfilesKept, "team profiles")} owned by real accounts (or linked to the kept competition).";
         yield return $"Clubs: {(Applied ? "deleted" : "would delete")} {Clubs.Deleted} that nothing kept uses; keeping "
             + $"{Clubs.KeptInUse + Clubs.KeptPreset} ({Clubs.KeptInUse} in use, {Clubs.KeptPreset} more from the preset club list).";
+        foreach (var name in Clubs.DeletedNames)
+            yield return $"  \"{name}\"";
         if (Postcode is not null)
-            yield return Applied
-                ? $"Postcode: set competition {KeptCompetitionId}'s postcode to {Postcode.Postcode} "
-                    + $"({Coordinate(Postcode.Latitude)}, {Coordinate(Postcode.Longitude)})."
-                : $"Postcode: would set competition {KeptCompetitionId}'s postcode to {Postcode.Postcode} and look up its coordinates.";
+            yield return $"Postcode: {(Applied ? "set" : "would set")} competition {KeptCompetitionId}'s postcode to {Postcode.Postcode} "
+                + $"({Coordinate(Postcode.Latitude)}, {Coordinate(Postcode.Longitude)}).";
         yield return "";
         yield return "Rows per table:";
         var width = Math.Max(5, Tables.Max(t => t.Table.Length));
@@ -84,8 +92,24 @@ public sealed record DemoDataCleanResult(
         foreach (var t in Tables.Where(t => t.Before > 0))
             yield return $"  {t.Table.PadRight(width)}  {t.Before,8}  {t.Deleted,8}  {t.After,8}";
         var empty = Tables.Count(t => t.Before == 0);
-        if (empty > 0) yield return $"  ({empty} other tables are empty)";
+        if (empty > 0) yield return $"  ({empty} other {(empty == 1 ? "table is" : "tables are")} empty)";
     }
+
+    /// <summary>"1 section", "2 sections": each report label is plural, made singular for a count of one.</summary>
+    internal static string Say(int count, string plural) => $"{count} {(count == 1 ? Singular(plural) : plural)}";
+
+    private static string Singular(string plural) => plural switch
+    {
+        "entries" => "entry",
+        "results for its teams" => "result for its teams",
+        "lanes for its teams" => "lane for its teams",
+        "clubs its teams use" => "club its teams use",
+        "chat messages with an author" => "chat message with an author",
+        "other competitions" => "other competition",
+        _ when plural.EndsWith("ies", StringComparison.Ordinal) => plural[..^3] + "y",
+        _ when plural.EndsWith('s') => plural[..^1],
+        _ => plural,
+    };
 
     private static string Coordinate(double? value) => value?.ToString("0.#####", CultureInfo.InvariantCulture) ?? "?";
 }
@@ -114,6 +138,13 @@ public static class DemoDataCleaner
                 + "Nothing was changed.";
             return false;
         }
+        var expectName = ValueAfter(args, "--expect-name");
+        if (string.IsNullOrEmpty(expectName))
+        {
+            problem = "Say the kept competition's exact name too: --expect-name \"<name>\", for example "
+                + "--expect-name \"West Mids Pairs\". Nothing was changed.";
+            return false;
+        }
         string? postcode = null;
         if (args.Contains("--venue-postcode"))
         {
@@ -125,7 +156,7 @@ public static class DemoDataCleaner
                 return false;
             }
         }
-        options = new DemoDataCleanOptions(id, args.Contains("--apply"), postcode);
+        options = new DemoDataCleanOptions(id, expectName, args.Contains("--apply"), postcode);
         problem = null;
         return true;
     }
@@ -146,16 +177,16 @@ public static class DemoDataCleaner
             error.WriteLine(problem);
             return 1;
         }
-        using var scope = services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        // Deliberately no DbInitializer.SeedAsync: a dry run must not write anything, not even reference data.
-        if (db.Database.IsNpgsql() && (await db.Database.GetPendingMigrationsAsync(ct)).Any())
-        {
-            error.WriteLine("This database has migrations still to apply. Run npm run db:migrate first. Nothing was changed.");
-            return 1;
-        }
         try
         {
+            using var scope = services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            // Deliberately no DbInitializer.SeedAsync: a dry run must not write anything, not even reference data.
+            if (db.Database.IsNpgsql() && (await db.Database.GetPendingMigrationsAsync(ct)).Any())
+            {
+                error.WriteLine("This database has migrations still to apply. Run npm run db:migrate first. Nothing was changed.");
+                return 1;
+            }
             var result = await ClearAsync(db, options!, scope.ServiceProvider.GetRequiredService<GeocodingService>(), ct);
             foreach (var line in result.Report())
                 output.WriteLine(line);
@@ -166,6 +197,13 @@ public static class DemoDataCleaner
             error.WriteLine(ex.Message);
             return 1;
         }
+        catch (Exception ex)
+        {
+            // The database's own message can carry connection details or row values, so only the kind of failure is shown.
+            error.WriteLine($"The run stopped with an unexpected error ({ex.GetType().Name}). Nothing was committed: the "
+                + "transaction, if it had started, was rolled back. Run the dry run again to see where things stand.");
+            return 1;
+        }
     }
 
     public static async Task<DemoDataCleanResult> ClearAsync(
@@ -174,36 +212,35 @@ public static class DemoDataCleaner
         db.ChangeTracker.Clear();
         var k = options.KeepCompetitionId;
         var kept = await db.Competitions.AsNoTracking().Where(c => c.Id == k)
-            .Select(c => new { c.Id, c.Name, c.What3Words, c.DecFormConfigJson })
+            .Select(c => new { c.Id, c.Name, c.DecFormConfigJson })
             .FirstOrDefaultAsync(ct)
             ?? throw new DemoDataCleanException($"There is no competition {k}, so nothing was changed.");
+        if (!string.Equals(kept.Name, options.ExpectName, StringComparison.Ordinal))
+            throw new DemoDataCleanException($"Competition {k} is called \"{kept.Name}\", not \"{options.ExpectName}\", so "
+                + "nothing was changed. Check the id and the name.");
         if (await db.Set<EventCommerceSettings>().AnyAsync(x => x.CompetitionId == k && x.IsDemo, ct))
             throw new DemoDataCleanException($"Competition {k} \"{kept.Name}\" is marked as a demo event, so it is unlikely to be "
                 + "the one to keep. Nothing was changed.");
 
-        // Look the postcode up before anything is deleted, so a typo stops the run with nothing changed.
+        // Look the postcode up (in the dry run too: the lookup only reads) before anything is deleted, so a typo stops the run.
         DemoDataPostcode? postcode = null;
-        var wanted = CompetitionFields.Postcode(options.VenuePostcode);
-        if (wanted is not null && options.Apply)
+        if (CompetitionFields.Postcode(options.VenuePostcode) is { } wanted)
         {
-            // As CompetitionsController.Update does: the postcode first, then the event's what3words address.
-            var (lat, lon, _) = await geocoder.ResolveAsync(wanted, kept.What3Words, ct);
+            var (lat, lon) = await geocoder.ResolvePostcodeAsync(wanted, ct);
             if (lat is null || lon is null)
                 throw new DemoDataCleanException($"Couldn't find where {wanted} is, so nothing was changed. "
                     + "Check the postcode and run again.");
-            postcode = new DemoDataPostcode(wanted, lat, lon);
+            postcode = new DemoDataPostcode(wanted, lat.Value, lon.Value);
         }
-        else if (wanted is not null)
-            postcode = new DemoDataPostcode(wanted, null, null);
 
         var payoutClubId = DecFormConfig.Parse(kept.DecFormConfigJson)?.PayoutClubId;
-        var provider = db.Database.IsNpgsql() ? "PostgreSQL" : "SQLite";
+        var database = DatabaseLabel(db);
 
         return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
             db.ChangeTracker.Clear();
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
-            var result = await DeleteAsync(db, k, kept.Name, payoutClubId, postcode, options.Apply, provider, ct);
+            var result = await DeleteAsync(db, k, kept.Name, payoutClubId, postcode, options.Apply, database, ct);
             if (options.Apply) await transaction.CommitAsync(ct);
             else await transaction.RollbackAsync(ct);
             return result;
@@ -211,7 +248,7 @@ public static class DemoDataCleaner
     }
 
     private static async Task<DemoDataCleanResult> DeleteAsync(
-        AppDbContext db, int k, string keptName, int? payoutClubId, DemoDataPostcode? postcode, bool apply, string provider,
+        AppDbContext db, int k, string keptName, int? payoutClubId, DemoDataPostcode? postcode, bool apply, string database,
         CancellationToken ct)
     {
         var tables = Tables(db);
@@ -251,13 +288,16 @@ public static class DemoDataCleaner
         if (deletedCompetitions.Count > 0)
             await ReviewCompetitionSeeder.DeleteCompetitionGraphAsync(db, deletedCompetitions.Select(c => c.Id).ToList());
 
-        // 3. Team profiles, except any linked to the kept competition's teams (only its links are left now).
+        // 3. Team profiles with no owner or a seeder owner that goes, unless linked to the kept competition (only its links
+        //    are left now). A profile a person owns stays.
         await db.Set<TeamProfile>()
-            .Where(p => !db.Set<EventTeamProfileLink>().Any(l => l.TeamProfileId == p.Id))
+            .Where(p => (p.OwnerUserId == "" || gone.Contains(p.OwnerUserId))
+                && !db.Set<EventTeamProfileLink>().Any(l => l.TeamProfileId == p.Id))
             .ExecuteDeleteAsync(ct);
+        var teamProfilesKept = await db.Set<TeamProfile>().CountAsync(ct);
 
         // 4. Rider rosters the seeders made, unless a kept dec form was filled from one.
-        var demoRosterIds = await SeededSavedRiderIdsAsync(db, seededIds, ct);
+        var demoRosterIds = await SeededSavedRiderIdsAsync(db, gone, ct);
         await db.SavedRiders.Where(r => demoRosterIds.Contains(r.Id)).ExecuteDeleteAsync(ct);
 
         // 5. The seeders' accounts and everything they own.
@@ -267,11 +307,11 @@ public static class DemoDataCleaner
         var clubs = await ClubsAsync(db, payoutClubId, ct);
 
         // 7. The venue, as the organiser's own edit would set it.
-        if (postcode?.Latitude is not null && postcode.Longitude is not null)
+        if (postcode is not null)
             await db.Competitions.Where(c => c.Id == k).ExecuteUpdateAsync(s => s
                 .SetProperty(c => c.Postcode, postcode.Postcode)
-                .SetProperty(c => c.Latitude, postcode.Latitude)
-                .SetProperty(c => c.Longitude, postcode.Longitude), ct);
+                .SetProperty(c => c.Latitude, (double?)postcode.Latitude)
+                .SetProperty(c => c.Longitude, (double?)postcode.Longitude), ct);
 
         // Checks: the kept competition lost nothing, and nothing points at a deleted row that didn't before.
         var after = await SnapshotAsync(db, k, ct);
@@ -289,8 +329,8 @@ public static class DemoDataCleaner
         foreach (var table in tables)
             counts.Add(new DemoDataTableCount(table.Name, before[table.Name],
                 await CountAsync(db, $"SELECT COUNT(*) AS \"Value\" FROM {table.Sql}", ct)));
-        return new DemoDataCleanResult(apply, provider, k, keptName, snapshot, deletedCompetitions, accounts, clubs,
-            postcode, counts);
+        return new DemoDataCleanResult(apply, database, k, keptName, snapshot, deletedCompetitions, accounts, clubs,
+            teamProfilesKept, postcode, counts);
     }
 
     // ----- accounts -----
@@ -387,19 +427,19 @@ public static class DemoDataCleaner
     }
 
     /// <summary>
-    /// Saved riders the seeders made: the history seed's (made by its organiser account) and the local demo data's eight
-    /// (no creator, on two preset club rosters, matched on club, name and pony together). One a kept dec form uses stays.
+    /// Saved riders the seeders made: those made by a seeder account that is being deleted (a kept one keeps its riders), and
+    /// the local demo data's eight (no creator, on two preset club rosters, matched on club, name and pony together). One a
+    /// kept dec form uses stays.
     /// The names are compared here and never printed.
     /// </summary>
-    private static async Task<List<int>> SeededSavedRiderIdsAsync(AppDbContext db, string[] seeded, CancellationToken ct)
+    private static async Task<List<int>> SeededSavedRiderIdsAsync(AppDbContext db, List<string> gone, CancellationToken ct)
     {
-        var historyIds = HistorySeeder.SellerIds.Append(HistorySeeder.OrganiserId).Concat(seeded).ToArray();
         var demo = DbInitializer.DemoSavedRiders;
         var demoClubs = demo.Select(r => r.Club).Distinct().ToArray();
         var demoNames = demo.Select(r => r.Name).ToArray();
         var candidates = await db.SavedRiders
             .Where(r => !db.RiderEntries.Any(e => e.SavedRiderId == r.Id)
-                && ((r.CreatedByUserId != null && historyIds.Contains(r.CreatedByUserId))
+                && ((r.CreatedByUserId != null && gone.Contains(r.CreatedByUserId))
                     || (r.CreatedByUserId == null && demoNames.Contains(r.FullName)
                         && db.Clubs.Any(c => c.Id == r.ClubId && demoClubs.Contains(c.Name)))))
             .Select(r => new { r.Id, r.CreatedByUserId, r.FullName, r.HorseName, Club = r.Club!.Name })
@@ -426,10 +466,12 @@ public static class DemoDataCleaner
             used.UnionWith(await query.Distinct().ToListAsync(ct));
         if (payoutClubId is { } pinned) used.Add(pinned);
         var clubs = await db.Clubs.Select(c => new { c.Id, c.Name }).ToListAsync(ct);
-        var unused = clubs.Where(c => !used.Contains(c.Id) && !preset.Contains(c.Name)).Select(c => c.Id).ToList();
-        await db.Clubs.Where(c => unused.Contains(c.Id)).ExecuteDeleteAsync(ct);
+        var unused = clubs.Where(c => !used.Contains(c.Id) && !preset.Contains(c.Name))
+            .OrderBy(c => c.Name, StringComparer.Ordinal).ToList();
+        var unusedIds = unused.Select(c => c.Id).ToList();
+        await db.Clubs.Where(c => unusedIds.Contains(c.Id)).ExecuteDeleteAsync(ct);
         var inUse = clubs.Count(c => used.Contains(c.Id));
-        return new DemoDataClubCounts(unused.Count, inUse, clubs.Count - unused.Count - inUse);
+        return new DemoDataClubCounts(unused.Select(c => c.Name).ToList(), inUse, clubs.Count - unused.Count - inUse);
     }
 
     // ----- checks -----
@@ -466,7 +508,7 @@ public static class DemoDataCleaner
             ("results for its teams", await db.Results.CountAsync(r => teams.Contains(r.TeamId), ct)),
             ("lanes for its teams", await db.HeatEntries.CountAsync(e => teams.Contains(e.TeamId), ct)),
             ("clubs its teams use", await db.Clubs.CountAsync(c => clubIds.Contains(c.Id), ct)),
-            ("owner account", await db.Users.CountAsync(u => ownerId.Contains(u.Id), ct)),
+            ("owner accounts", await db.Users.CountAsync(u => ownerId.Contains(u.Id), ct)),
             ("competition admins", await db.CompetitionCollaborators.CountAsync(c => c.CompetitionId == k, ct)),
             ("supporters", await db.TeamSupporters.CountAsync(s => teams.Contains(s.TeamId), ct)),
             ("sponsors", await db.Sponsors.CountAsync(s => s.CompetitionId == k, ct)),
@@ -496,6 +538,18 @@ public static class DemoDataCleaner
                 + await db.Set<CompetitionDeclarationLock>().CountAsync(x => x.CompetitionId == k, ct)
                 + await db.StreamOverlays.CountAsync(x => x.CompetitionId == k, ct)),
         ];
+    }
+
+    /// <summary>Which database this is: the provider with host and database name, or the SQLite file. Never credentials.</summary>
+    internal static string DatabaseLabel(AppDbContext db)
+    {
+        var connection = db.Database.GetDbConnection().ConnectionString;
+        if (db.Database.IsNpgsql())
+        {
+            var postgres = new Npgsql.NpgsqlConnectionStringBuilder(connection);
+            return $"PostgreSQL, host {postgres.Host ?? "(none)"}, database {postgres.Database ?? "(default)"}";
+        }
+        return $"SQLite, file {new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connection).DataSource}";
     }
 
     private sealed record TableRef(string Name, string Sql, Microsoft.EntityFrameworkCore.Metadata.IEntityType Type);

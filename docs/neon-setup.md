@@ -22,7 +22,7 @@ To refresh stale demo data, run `npm run db:reseed-review`. It deletes the eight
 
 ## Clear the demo data (one-off)
 
-The owner asked for all demo data to go from production, keeping the one real event, West Mids Pairs (competition 44). `--clear-demo-data` does that (`api/Services/DemoDataCleaner.cs`; what it keeps and deletes is in `docs/decisions.md`, 28 October). Without `--apply` it is a dry run: it runs every delete inside a transaction, prints the counts and rolls back, so nothing is saved and the counts are exactly what `--apply` would remove. It prints counts per table, competition ids and names, and club totals; never a person's name or address.
+The owner asked for all demo data to go from production, keeping the one real event, West Mids Pairs (competition 44). `--clear-demo-data` does that (`api/Services/DemoDataCleaner.cs`; what it keeps and deletes is in `docs/decisions.md`, 28 October). Without `--apply` it is a dry run: it runs every delete inside a transaction, prints the counts and rolls back, so nothing is saved and the counts are exactly what `--apply` would remove. It prints which database it is on (host and database name, never credentials), counts per table, competition ids and names, and the names of the clubs it would delete; never a person's name or address. `--expect-name` must match the kept competition's name exactly, so a mistyped id stops the run.
 
 1. Take a backup branch of production first, and keep it until the site has been checked:
 
@@ -34,23 +34,23 @@ The owner asked for all demo data to go from production, keeping the one real ev
 
    ```sh
    NEON_ENV_FILE=.env.production.local Jwt__Key="$(openssl rand -base64 48)" Admin__Key= \
-     node scripts/api.mjs --clear-demo-data --keep-competition 44
+     node scripts/api.mjs --clear-demo-data --keep-competition 44 --expect-name "West Mids Pairs" --venue-postcode "<postcode>"
    ```
 
-   Check that it keeps competition 44 "West Mids Pairs" with its 32 teams, that the list of competitions to delete is what you expect, and the account and club counts.
+   Check the first line names the production host and database. Check that it keeps competition 44 "West Mids Pairs" with its 32 teams, that the list of competitions to delete is what you expect, the account counts, and the list of clubs to delete. The postcode is looked up in the dry run too (it only reads), so a postcode that can't be found shows up here.
 
-3. Apply, optionally setting the venue's postcode (it is looked up like an organiser's edit; a postcode that can't be found stops the run before anything is deleted):
+3. Apply with the same arguments plus `--apply` (`--venue-postcode` is optional; a postcode that can't be found stops the run before anything is deleted):
 
    ```sh
    NEON_ENV_FILE=.env.production.local Jwt__Key="$(openssl rand -base64 48)" Admin__Key= \
-     node scripts/api.mjs --clear-demo-data --keep-competition 44 --apply --venue-postcode "<postcode>"
+     node scripts/api.mjs --clear-demo-data --keep-competition 44 --expect-name "West Mids Pairs" --venue-postcode "<postcode>" --apply
    ```
 
    Everything goes in one transaction. Before committing, it checks that competition 44 still has every session, team, result, entry and so on that it had, and that no row points at something deleted; if either check fails it rolls back and says why. Run it when nobody is using the site: a write to a demo event during the run makes it fail (safely), and the deletes briefly lock those rows.
 
 4. Check the live site (`/api/competitions`, the West Mids Pairs page, signing in). To undo, restore production from the backup branch (`neon branches restore production backup-before-demo-clear`).
 
-The command refuses to run without `--keep-competition`, for an id that doesn't exist, or for an event carrying the demo mark. It doesn't run the startup seeding, and it refuses a database with pending migrations. After it, production holds only the real event; `npm run db:seed-review` and `db:seed-history` can still fill a separate review branch.
+The command refuses to run without `--keep-competition` and `--expect-name`, for an id that doesn't exist or whose name doesn't match, or for an event carrying the demo mark. Any unexpected error is reported by its kind only (no database detail) and rolls back. It doesn't run the startup seeding, and it refuses a database with pending migrations. After it, production holds only the real event; `npm run db:seed-review` and `db:seed-history` can still fill a separate review branch.
 
 ## Run locally
 
