@@ -19,6 +19,10 @@ public class ShopController : ControllerBase
     private readonly AppDbContext _db;
     public ShopController(AppDbContext db) => _db = db;
 
+    // Only a plain inline picture: never an external URL (a tracking pixel) or an SVG, which can carry script.
+    private static readonly System.Text.RegularExpressions.Regex ImageDataUrl =
+        new(@"^data:image/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]*$", System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+    private const string BadImageMessage = "That image isn't a supported picture. Use a JPEG, PNG, WebP or GIF.";
     private const int MaxImageBase64Bytes = 700_000; // ≈500 KB image when base64-encoded
 
     [HttpGet("posts")]
@@ -65,6 +69,8 @@ public class ShopController : ControllerBase
         var image = req.ImageBase64;
         if (image is { Length: > MaxImageBase64Bytes })
             return BadRequest(new { message = "Image is too large (max ~500 KB after compression)." });
+        if (!string.IsNullOrEmpty(image) && !ImageDataUrl.IsMatch(image))
+            return BadRequest(new { message = BadImageMessage });
         var post = new ShopPost
         {
             AuthorUserId = userId,
@@ -90,6 +96,8 @@ public class ShopController : ControllerBase
             return StatusCode(403, new { message = "Posting from this network is blocked." });
         if (req.ImageBase64 is { Length: > MaxImageBase64Bytes })
             return BadRequest(new { message = "Image is too large (max ~500 KB after compression)." });
+        if (!string.IsNullOrEmpty(req.ImageBase64) && !ImageDataUrl.IsMatch(req.ImageBase64))
+            return BadRequest(new { message = BadImageMessage });
         if (req.PriceMinor is < 0 or > 100_000_000)
             return BadRequest(new { message = "Price must be zero or positive." });
 
@@ -203,6 +211,8 @@ public class ShopController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> Report(int id, CreateShopReportRequest req)
     {
+        if (await _db.IsIpBlockedAsync(HttpContext, HttpContext.RequestAborted))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Reporting from this network is blocked." });
         if (req.Reason is not null && req.Reason.Trim().Length > 1000)
             return BadRequest(new { message = "Report reason must be 1000 characters or fewer." });
         var post = await _db.ShopPosts.FindAsync(id);

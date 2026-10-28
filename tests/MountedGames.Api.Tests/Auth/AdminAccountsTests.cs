@@ -156,8 +156,8 @@ public class AdminAccountsTests : IClassFixture<ApiFactory>
 
         Assert.Equal(HttpStatusCode.NoContent, (await master.DeleteAsync(Lock(organiser.Id))).StatusCode);
         (await LoginFromAsync(organiser.Email, "203.0.113.11")).EnsureSuccessStatusCode();
-        // The token issued before the lock works again as well, since the account is whole again.
-        (await organiser.Client.GetAsync("/api/auth/me")).EnsureSuccessStatusCode();
+        // The token issued before the lock stays dead: a lock ends those sessions for good, and the person signs in again.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await organiser.Client.GetAsync("/api/auth/me")).StatusCode);
     }
 
     [Fact]
@@ -253,7 +253,8 @@ public class AdminAccountsTests : IClassFixture<ApiFactory>
 
         Assert.Equal(HttpStatusCode.NoContent, (await plain.Client.DeleteAsync(Block(target.Id))).StatusCode);
         (await LoginFromAsync(target.Email, "203.0.113.21")).EnsureSuccessStatusCode();
-        (await target.Client.PostAsJsonAsync(chat, new PostChatMessageRequest("back again"))).EnsureSuccessStatusCode();
+        // The token from before the block stays dead; a fresh sign-in is needed.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await target.Client.PostAsJsonAsync(chat, new PostChatMessageRequest("back again"))).StatusCode);
     }
 
     [Fact]
