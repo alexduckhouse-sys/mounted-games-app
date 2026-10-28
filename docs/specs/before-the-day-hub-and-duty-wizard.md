@@ -67,10 +67,7 @@ Running the wizard again only creates, changes or removes the shifts that change
 - Duties go to teams, per heat. Roles include referee, starter and scorer. A team can't do a duty in a heat it rides, but can in its own session.
 - Arena party is normally the teams riding in the heat; one per arena.
 - Teams are told through the Following tab and push notifications; there are no emails.
-
-## Still open
-
-1. Who may press "We're here"? Following is anonymous (stored on the device). Suggested: anyone following can press it, but it shows as "Team says here" (not "Checked in by staff") and is rate limited, so staff can still check. The alternative is signed-in team members and trainers only.
+- Anyone following the team can press "We're here". Staff see it as "Team says here" (not "Checked in by staff"), and it's rate limited.
 
 ## Done when
 
