@@ -2,7 +2,9 @@ import { useT } from '../../i18n/LanguageContext';
 import { tr } from '../../i18n/translate';
 import type { Translate } from '../../i18n/translate';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Check, Minus, Plus, X } from 'lucide-react';
+import { Check, Minus, Plus, X } from 'lucide-react';
+import { GripButton } from '../../components/GripButton';
+import { useRowDrag } from '../../hooks/useRowDrag';
 import { TickerNumber } from '../../components/TickerNumber';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
@@ -312,14 +314,16 @@ function RaceEditor({ section, templates, disabled, onChange }: { section: Secti
   const fixed = onFinal ? Boolean(section.finalHasHeats || section.finalScored) : Boolean(session?.hasHeats || session?.scored);
   const readOnly = disabled || fixed;
   const list = races ?? [];
+  const { grab, keys, lifted, rowStyle } = useRowDrag();
 
   const set = (next: string[] | null) => onChange(onFinal
     ? { ...section, finalRaces: next }
     : { ...section, sessions: section.sessions.map((s, i) => (i === active ? { ...s, races: next } : s)) });
   const move = (from: number, to: number) => {
-    if (to < 0 || to >= list.length) return;
+    if (to < 0 || to >= list.length || from === to) return;
     const next = [...list];
-    [next[from], next[to]] = [next[to], next[from]];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
     set(next);
   };
   const add = (name: string) => { const text = name.trim(); if (text) { set([...list, text]); setQuery(''); } };
@@ -348,14 +352,13 @@ function RaceEditor({ section, templates, disabled, onChange }: { section: Secti
       )}
       {fixed && <p className="rf-note">{t('ops.sections.fixed')}</p>}
       {races === null && !fixed && <p className="rf-note">{t('ops.sections.later')}</p>}
-      <ol className="ops-race-list">
+      <ol className="ops-race-list" data-row-list="">
         {list.map((name, i) => (
-          <li key={`${name}-${i}`}>
+          <li key={`${name}-${i}`} data-race-row="" data-lifted={lifted(i)} style={rowStyle(i)}>
+            {!readOnly && <GripButton label={t('ops.sections.move', { name })} onPointerDown={(e) => grab(e, i, list.length, move)} onKeyDown={(e) => keys(e, i, list.length, move)} />}
             <span className="ops-race-n">{i + 1}</span>
             <span className="ops-race-name">{name}</span>
             {!readOnly && <>
-              <button type="button" className="ops-ibtn" aria-label={t('ops.sections.moveUp', { name })} onClick={() => move(i, i - 1)} disabled={i === 0}><ArrowUp className="h-4 w-4" aria-hidden="true" /></button>
-              <button type="button" className="ops-ibtn" aria-label={t('ops.sections.moveDown', { name })} onClick={() => move(i, i + 1)} disabled={i === list.length - 1}><ArrowDown className="h-4 w-4" aria-hidden="true" /></button>
               <button type="button" className="ops-ibtn ops-ibtn-red" aria-label={t('ops.sections.removeRace', { name })} onClick={() => set(list.filter((_, j) => j !== i))}><X className="h-4 w-4" aria-hidden="true" /></button>
             </>}
           </li>
