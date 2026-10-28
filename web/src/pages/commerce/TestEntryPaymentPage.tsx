@@ -214,7 +214,7 @@ function TestPaymentScreen({ signup, isDemo, payments }: { signup: MySignup; isD
           </>
         )}
         {error && <div className="mx-4"><Notice>{error}</Notice></div>}
-        <RefineFoot column>
+        <RefineFoot inline column>
           {status === 0 && (
             <button type="button" className="rf-btn rf-btn-primary" onClick={() => { setReviewing(false); setError(null); }}>Back to the test payment</button>
           )}
@@ -235,7 +235,7 @@ function TestPaymentScreen({ signup, isDemo, payments }: { signup: MySignup; isD
         <RefineHeader back={back} backLabel="Back to the competition" context={signup.competitionName} title="Test payment" demo />
         <TestBanner />
         <p className="rf-note">There is nothing to pay for this entry.</p>
-        <RefineFoot column><Link className="rf-btn rf-btn-primary" to={back}>Back to the competition</Link></RefineFoot>
+        <RefineFoot inline column><Link className="rf-btn rf-btn-primary" to={back}>Back to the competition</Link></RefineFoot>
       </RefinePage>
     );
   }
@@ -262,7 +262,7 @@ function TestPaymentScreen({ signup, isDemo, payments }: { signup: MySignup; isD
           </Notice>
         </div>
       )}
-      <RefineFoot column>
+      <RefineFoot inline column>
         <button type="button" className="rf-btn rf-btn-primary" disabled={busy} onClick={() => void pay(0)}>
           {busy ? 'Checking the test payment…' : `Pay ${amount} (test)`}
         </button>

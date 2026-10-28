@@ -109,6 +109,11 @@ details[open] > summary ~ * { animation: rf-reveal 220ms var(--mg-ease-out); }
     bottom: 0;
   }
 }
+/* A sticky footer also clears the ticker dock when it shows (on desktop too, where the dock still sits at the bottom). */
+body:has(.mg-dock-low) .rf-foot:not(.rf-foot-inline) { --rf-foot-offset: calc(64px + env(safe-area-inset-bottom, 0px)); bottom: var(--rf-foot-offset); }
+body:has(.mg-dock:not(.mg-dock-low)) .rf-foot:not(.rf-foot-inline) { --rf-foot-offset: calc(128px + env(safe-area-inset-bottom, 0px)); bottom: var(--rf-foot-offset); }
+/* Inline: the page's last row of buttons, in the flow like any other content. */
+.rf-foot.rf-foot-inline { position: static; margin-inline: 0; margin-top: 16px; padding: 0; background: none; border-top: 0; }
 
 /* Bottom sheet */
 .rf-scrim { position: fixed; inset: 0; z-index: 60; background: rgb(var(--mg-overlay) / .55); animation: rf-fade 160ms var(--mg-ease-out); }
