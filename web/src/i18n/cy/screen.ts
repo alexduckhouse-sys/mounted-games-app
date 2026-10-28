@@ -55,6 +55,7 @@ export const screen: AreaCatalogue<typeof en> = {
   'screen.pg.loadError': 'Methu llwytho’r tabl safleoedd ar gyfer y grŵp oedran hwn. Gwiriwch eich signal a rhowch gynnig arall arni.',
   'screen.pg.updateError': 'Methu diweddaru’r ffrwd. Gwiriwch eich signal a rhowch gynnig arall arni.',
   'screen.pg.setUp': 'Gosod',
+  'screen.pg.setUpTitle': 'Gosod y rhoi gwobrau',
   'screen.pg.setUpLabel': 'Gosod y rhoi gwobrau',
   'screen.pg.ageGroup': 'Grŵp oedran',
   'screen.pg.placesToGive': 'Nifer y safleoedd',

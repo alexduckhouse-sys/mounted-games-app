@@ -57,6 +57,7 @@ export const screen = {
   'screen.pg.loadError': 'Couldn’t load the toplist for this age group. Check your signal and try again.',
   'screen.pg.updateError': 'Couldn’t update the stream. Check your signal and try again.',
   'screen.pg.setUp': 'Set up',
+  'screen.pg.setUpTitle': 'Prize-giving set-up',
   'screen.pg.setUpLabel': 'Prize-giving set-up',
   'screen.pg.ageGroup': 'Age group',
   'screen.pg.placesToGive': 'Places to give',
