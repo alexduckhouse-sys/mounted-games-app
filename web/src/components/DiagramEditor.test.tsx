@@ -61,7 +61,7 @@ describe('DiagramEditor', () => {
     expect(screen.getByRole('button', { name: 'Move towards the start' })).toBeDisabled();
   });
 
-  it('drags an element to the nearest slot', () => {
+  it('drags an item to the nearest place', () => {
     const spy = vi.fn();
     render(<Harness spy={spy} initial={JSON.stringify([{ t: 'cone', kind: 'flag', anchor: 'pole1' }])} />);
     const svg = screen.getByRole('img', { name: 'Race diagram editor' });

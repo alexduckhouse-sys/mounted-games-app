@@ -403,7 +403,7 @@ export function EmailPage() {
               <div className="em-confirm-prev"><EmailPreview draft={draft} to={toText} /></div>
               <div className="kit-acts">
                 <button type="button" className="kit-pill kit-pill-fill" onClick={() => close(() => void send())}>{sendLabel}</button>
-                <button type="button" className="kit-pill" onClick={() => close()}>{t('admin.email.sheet.notYet')}</button>
+                <button type="button" className="kit-redtext" onClick={() => close()}>{t('common.cancel')}</button>
               </div>
             </div>
           )}

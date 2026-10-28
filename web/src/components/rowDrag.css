@@ -1,0 +1,9 @@
+/* A row with a six-dot grip (races, hatbands). Only the lifted row follows the pointer; the others slide out of its way. */
+[data-race-row] { transition: box-shadow .2s var(--mg-ease-out), scale .2s var(--mg-ease-out); touch-action: pan-y; }
+/* The others glide only while a drag is on, so the dropped row doesn't replay the slide. */
+[data-row-list]:has([data-lifted="true"]) [data-race-row]:not([data-lifted="true"]) { transition: transform .2s var(--mg-ease-out); }
+[data-race-row][data-lifted="true"] { position: relative; z-index: 3; border-radius: 10px; background: rgb(var(--mg-surface)); box-shadow: 0 10px 24px rgb(var(--mg-overlay) / .2); scale: 1.015; }
+.mg-grip { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 44px; border: 0; border-radius: 10px; background: transparent; color: rgb(var(--mg-faint)); cursor: grab; touch-action: none; }
+.mg-grip:hover, .mg-grip:focus-visible { background: rgb(var(--mg-tint) / .7); color: rgb(var(--mg-heading)); }
+[data-race-row][data-lifted="true"] .mg-grip { cursor: grabbing; background: rgb(var(--mg-tint) / .7); }
+@media (prefers-reduced-motion: reduce) { [data-race-row] { transition: none !important; } }

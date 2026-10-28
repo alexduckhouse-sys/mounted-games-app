@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, Plus, Search } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import { api } from '../../api';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { Notice } from '../../components/Notice';
@@ -90,7 +90,6 @@ export function RulesLibraryPage() {
         : <RefineHeader onBack={toList} backLabel={t('admin.format.rules.backToLibrary')} context={t('admin.format.rules.title')} title={title} />}
       <div className="ops-cards ops-tt ops-admin" aria-busy={busy}>
         {error && <Notice>{error}</Notice>}
-        {view.kind !== 'list' && <button type="button" className="ops-back" onClick={toList}><ChevronLeft className="h-4 w-4" aria-hidden="true" />{t('admin.format.rules.title')}</button>}
 
         {view.kind === 'list' && (
           <>
@@ -144,6 +143,7 @@ function NewRace({ busy, onCreate }: { busy: boolean; onCreate: (name: string) =
     <form onSubmit={(event) => { event.preventDefault(); void submit(); }}>
       <h2 className="rf-sec ops-tt-head"><span>{t('admin.format.rules.about')}</span></h2>
       <label className="rf-fld">{t('admin.format.rules.name')}<input autoFocus value={name} maxLength={80} onChange={(event) => setName(event.target.value)} onBlur={() => void submit()} /></label>
+      <div className="mt-4 flex"><button type="submit" className="rf-btn rf-btn-primary" disabled={busy || !name.trim()}>{t('admin.format.rules.createRace')}</button></div>
     </form>
   );
 }

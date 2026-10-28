@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Plus, Search, Trash2, X } from 'lucide-react';
+import { Plus, Search, Trash2, X } from 'lucide-react';
 import { Dropdown } from '../../components/Dropdown';
+import { GripButton } from '../../components/GripButton';
+import { useRowDrag } from '../../hooks/useRowDrag';
+import { moveItem } from '../../lib/creatorRaces';
 import { defaultRaceList, type RaceScope } from '../../lib/defaultRaces';
 import { useLanguage } from '../../i18n/LanguageContext';
 
@@ -27,12 +30,10 @@ export function RaceListDialog({ title, races, format, ageGroup, templates, onSa
     return () => dialog?.close();
   }, []);
 
-  const move = (from: number, to: number) => setList((current) => {
-    if (to < 0 || to >= current.length) return current;
-    const next = [...current];
-    [next[from], next[to]] = [next[to], next[from]];
-    return next;
-  });
+  const { grab, keys, lifted, rowStyle } = useRowDrag();
+  const onMove = (from: number, to: number) => setList((current) => moveItem(current, from, to));
+  // A race name can be in the list twice, so a row's key counts the ones before it.
+  const seen = new Map<string, number>();
   const add = (name: string) => {
     if (name === '__custom__') {
       customInputRef.current?.focus();
@@ -64,17 +65,20 @@ export function RaceListDialog({ title, races, format, ageGroup, templates, onSa
             <button key={scope} type="button" className="mg-btn mg-btn-secondary !min-h-11 !px-3 !text-sm" onClick={() => setList(defaultRaceList(scope, format, ageGroup))}>{t('admin.format.dialog.useList', { scope: t(scope === 'Zone' ? 'admin.format.dialog.scope.Zone' : 'admin.format.dialog.scope.Area') })}</button>
           ))}
         </div>
-        <ol className="mg-card mg-list" aria-label={t('admin.format.dialog.inOrder')}>
+        <ol className="mg-card mg-list" data-row-list="" aria-label={t('admin.format.dialog.inOrder')}>
           {list.length === 0 && <li className="p-4 text-sm text-[rgb(var(--mg-muted))]">{t('admin.format.dialog.empty')}</li>}
-          {list.map((race, i) => (
-            <li key={`${race}-${i}`} className="flex min-h-12 items-center gap-1 py-1 pl-3 pr-1">
-              <span className="w-6 text-sm tabular-nums text-[rgb(var(--mg-muted))]">{i + 1}</span>
-              <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{race}</span>
-              <button type="button" className="mg-icon-btn !border-0" aria-label={t('admin.format.dialog.moveUp', { race })} disabled={i === 0} onClick={() => move(i, i - 1)}><ArrowUp className="h-4 w-4" /></button>
-              <button type="button" className="mg-icon-btn !border-0" aria-label={t('admin.format.dialog.moveDown', { race })} disabled={i === list.length - 1} onClick={() => move(i, i + 1)}><ArrowDown className="h-4 w-4" /></button>
-              <button type="button" className="mg-icon-btn !border-0" aria-label={t('admin.format.dialog.remove', { race })} onClick={() => setList((current) => current.filter((_, index) => index !== i))}><Trash2 className="h-4 w-4" /></button>
-            </li>
-          ))}
+          {list.map((race, i) => {
+            const nth = seen.get(race) ?? 0;
+            seen.set(race, nth + 1);
+            return (
+              <li key={`${race}-${nth}`} data-race-row="" data-lifted={lifted(i)} style={rowStyle(i)} className="flex min-h-12 items-center gap-1 py-1 pl-1 pr-1">
+                <GripButton label={t('admin.format.dialog.move', { race })} onPointerDown={(e) => grab(e, i, list.length, onMove)} onKeyDown={(e) => keys(e, i, list.length, onMove)} />
+                <span className="w-6 text-sm tabular-nums text-[rgb(var(--mg-muted))]">{i + 1}</span>
+                <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{race}</span>
+                <button type="button" className="mg-icon-btn !border-0" aria-label={t('admin.format.dialog.remove', { race })} onClick={() => setList((current) => current.filter((_, index) => index !== i))}><Trash2 className="h-4 w-4" /></button>
+              </li>
+            );
+          })}
         </ol>
         <div className="flex flex-col gap-2">
           <label className="mg-field !min-h-11">
