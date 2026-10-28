@@ -157,7 +157,7 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
         )}
         {later.length > 0 && groups.map((group) => (
           <section key={group.heading} aria-label={group.heading}>
-            <h2 className="sp-sec sp-first">{group.heading}{past && !(state.hasMore && group === groups[groups.length - 1]) && <small>{group.items.length === 1 ? '1 competition' : `${group.items.length} competitions`}</small>}</h2>
+            <h2 className="sp-sec sp-first">{group.heading}{past && !(state.hasMore && group === groups[groups.length - 1]) && <small>{t('shell.events.yearCount', { count: group.items.length })}</small>}</h2>
             <div className="mg-lines mg-lines-grid">
               {group.items.map((competition) => <CompetitionRow key={competition.id} competition={competition} past={past} selected={current?.id === competition.id} onChoose={() => choose(competition)} warm={handlersFor(competition.id)} />)}
             </div>

@@ -328,4 +328,5 @@ export const shell: AreaCatalogue<typeof en> = {
   'shell.weather.draft.rainPause': 'Nous faisons une pause à cause de la forte pluie. Merci d’attendre des nouvelles ici.',
   'shell.weather.draft.rainNoPause': 'De la forte pluie arrive vers {time}. Les courses continuent sauf avis contraire.',
   'shell.weather.draft.clear': 'Les courses reprennent. Le programme a été mis à jour, consultez-le pour votre prochaine manche.',
+  'shell.events.yearCount': { one: '{count} compétition', other: '{count} compétitions' },
 };

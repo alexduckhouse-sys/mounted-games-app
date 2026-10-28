@@ -109,6 +109,7 @@ export function lastPublishedRound(rounds: SeasonRoundView[]): SeasonRoundView |
   return published.reduce<SeasonRoundView | null>((best, round) => (!best || round.orderIndex > best.orderIndex ? round : best), null);
 }
 
-export function shortDate(iso: string, withWeekday = true): string {
-  return new Date(iso).toLocaleDateString('en-GB', { ...(withWeekday ? { weekday: 'short' as const } : {}), day: 'numeric', month: 'short' });
+/** "Sat 25 Oct". The season and admin pages are English; pages that follow the person's language pass `locale`. */
+export function shortDate(iso: string, withWeekday = true, locale = 'en-GB'): string {
+  return new Date(iso).toLocaleDateString(locale, { ...(withWeekday ? { weekday: 'short' as const } : {}), day: 'numeric', month: 'short' });
 }

@@ -1,7 +1,8 @@
 // Unused in web UI yet — reserved for iOS / upcoming wiring
 import type { SignupGuestDetails, SignupGuestDetailsInput } from '../types';
 import { blankRider, dobText, parseDob, type DecRider } from './decForm';
-import { normalisePhone, PHONE_HELP } from './decFormConfig';
+import { normalisePhone } from './decFormConfig';
+import { tr } from '../i18n/translate';
 
 /**
  * The guest rider section of a guest or individual entry: the rider (when an adult enters for a child), their pony,
@@ -40,14 +41,14 @@ export function guestDobIso(text: string, today: Date = new Date()): string | nu
 /** What's wrong with the guest section, or null when it can be sent. Everything in it is optional. */
 export function guestRiderProblem(fields: GuestRiderFields, today: Date = new Date()): string | null {
   const names = [fields.riderName, fields.ponyName, fields.guardianName, fields.emergencyName];
-  if (names.some((n) => n.trim().length > MAX_GUEST_NAME)) return `Names must be ${MAX_GUEST_NAME} characters or fewer.`;
+  if (names.some((n) => n.trim().length > MAX_GUEST_NAME)) return tr('entries.guest.namesTooLong', { max: MAX_GUEST_NAME });
   if (fields.riderDob.trim() && guestDobIso(fields.riderDob, today) === null) {
-    return 'Enter the rider’s date of birth as a real date in the past, like 05/04/2015.';
+    return tr('entries.guest.badDob');
   }
-  if (!fields.guardianName.trim() !== !fields.guardianPhone.trim()) return 'Give both the parent or guardian’s name and phone number, or neither.';
-  if (!fields.emergencyName.trim() !== !fields.emergencyPhone.trim()) return 'Give both the emergency contact’s name and phone number, or neither.';
-  if (fields.guardianPhone.trim() && normalisePhone(fields.guardianPhone) === null) return `Parent or guardian’s phone: ${PHONE_HELP}`;
-  if (fields.emergencyPhone.trim() && normalisePhone(fields.emergencyPhone) === null) return `Emergency contact’s phone: ${PHONE_HELP}`;
+  if (!fields.guardianName.trim() !== !fields.guardianPhone.trim()) return tr('entries.guest.guardianBoth');
+  if (!fields.emergencyName.trim() !== !fields.emergencyPhone.trim()) return tr('entries.guest.emergencyBoth');
+  if (fields.guardianPhone.trim() && normalisePhone(fields.guardianPhone) === null) return tr('entries.guest.guardianPhone', { help: tr('entries.dec.phoneHelp') });
+  if (fields.emergencyPhone.trim() && normalisePhone(fields.emergencyPhone) === null) return tr('entries.guest.emergencyPhone', { help: tr('entries.dec.phoneHelp') });
   return null;
 }
 
@@ -103,8 +104,8 @@ export function ageGroupWarning(dobIso: string | null | undefined, ageGroup: str
   if (!limits || Number.isNaN(start.getTime())) return null;
   const age = ageOn(dobIso, new Date(start.getFullYear(), 0, 1));
   if (age == null) return null;
-  if (limits.max != null && age > limits.max) return `This rider is ${age} on 1 January, older than ${ageGroup?.trim()} allows.`;
-  if (limits.min != null && age < limits.min) return `This rider is ${age} on 1 January, younger than ${ageGroup?.trim()} allows.`;
+  if (limits.max != null && age > limits.max) return tr('entries.guest.ageOlder', { age, group: ageGroup?.trim() ?? '' });
+  if (limits.min != null && age < limits.min) return tr('entries.guest.ageYounger', { age, group: ageGroup?.trim() ?? '' });
   return null;
 }
 

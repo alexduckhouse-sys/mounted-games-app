@@ -92,4 +92,17 @@ export const auth: AreaCatalogue<typeof en> = {
 
   'auth.reset.conflict': 'Newidiodd eich cyfrif tra oedd eich cyfrinair newydd yn cael ei gadw, felly ni newidiwyd dim. Rhowch gynnig arall arni.',
   'auth.reset.failed': 'Methwyd cadw eich cyfrinair newydd, felly ni newidiwyd dim. Rhowch gynnig arall arni mewn munud.',
+  'auth.forgot.link': 'Wedi anghofio eich cyfrinair?',
+  'auth.forgot.tooMany': 'Gormod o ymdrechion. Arhoswch funud a rhowch gynnig arall arni.',
+  'auth.forgot.checkAddress': 'Gwiriwch y cyfeiriad a rhowch gynnig arall arni.',
+  'auth.forgot.sendFailed': 'Methu anfon y ddolen. Gwiriwch eich signal a rhowch gynnig arall arni.',
+  'auth.forgot.checkTitle': 'Gwiriwch eich e-bost',
+  'auth.forgot.sentNotice': 'Os oes cyfrif ar gyfer {email}, rydym wedi anfon dolen ato i ddewis cyfrinair newydd. Mae’r ddolen yn gweithio am 30 munud.',
+  'auth.forgot.nothingYet': 'Dim byd ar ôl ychydig funudau? Gwiriwch eich ffolder sbam, neu',
+  'auth.forgot.tryAgain': 'rhowch gynnig arall arni',
+  'auth.forgot.title': 'Ailosod eich cyfrinair',
+  'auth.forgot.intro': 'Rhowch y cyfeiriad e-bost rydych yn mewngofnodi ag ef a byddwn yn anfon dolen atoch i ddewis cyfrinair newydd.',
+  'auth.forgot.sending': 'Yn anfon…',
+  'auth.forgot.send': 'Anfon dolen ailosod',
+  'auth.forgot.remembered': 'Wedi cofio?',
 };

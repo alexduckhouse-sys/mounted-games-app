@@ -1,5 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { LanguageProvider } from '../../i18n/LanguageContext';
+import { setActiveLang } from '../../i18n/translate';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
@@ -162,6 +164,20 @@ it('filters by arena from the slider in the filter sheet, shows it as a chip and
   expect(localStorage.getItem('mg.tt.arena.1')).toBeNull();
   expect(screen.getByText('Heat 1')).toBeVisible();
   expect(screen.queryByRole('button', { name: /^Remove/ })).toBeNull();
+});
+
+it('speaks French in the filter sheet, its tiles and its weekday names', () => {
+  setCompetition();
+  render(<MemoryRouter><CompactPageBarProvider><TickerProvider><HeaderProbe /><DockProbe /><LanguageProvider initial="fr"><TimetableBoard /></LanguageProvider></TickerProvider></CompactPageBarProvider></MemoryRouter>);
+  try {
+    fireEvent.click(screen.getByRole('button', { name: /^Jour, arène et catégorie d’âge/ }));
+    const sheet = screen.getByRole('dialog', { name: 'Jour, arène et catégorie d’âge' });
+    expect(within(sheet).getByRole('button', { name: 'Toutes les arènes' })).toBeVisible();
+    expect(within(sheet).getByRole('button', { name: 'Afficher 3 manches' })).toBeVisible();
+    expect(within(sheet).queryByText(/Show|All arenas/)).toBeNull();
+  } finally {
+    setActiveLang('en');
+  }
 });
 
 it('closes the filter sheet from "Show N heats"', async () => {

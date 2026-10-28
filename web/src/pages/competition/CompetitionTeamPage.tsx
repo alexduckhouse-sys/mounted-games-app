@@ -29,6 +29,7 @@ import { computeTeamStats } from '../../lib/teamStats';
 import type { TeamProfile, TeamProfileHistory } from '../seasons/teamProfileTypes';
 import { byDrawnLane } from './laneRules';
 import { clubLabel } from '../../lib/clubName';
+import { blockLabelText, blockNoteText } from '../../lib/toplistText';
 
 
 
@@ -433,9 +434,9 @@ function BreakdownBlock({ block }: { block: TeamBlock }) {
     <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline gap-2 border-b-[1.5px] pb-1" style={{ borderColor: `rgb(${accent})` }}>
         <h3 className="mg-display flex-1 text-[13px] font-bold uppercase leading-none tracking-[0.05em]" style={{ color: `rgb(${accent})` }}>
-          {block.label}
+          {blockLabelText(block.label, t)}
         </h3>
-        {block.note && <span className="text-[11px] font-medium text-[rgb(var(--mg-muted))]">{block.note}</span>}
+        {block.note && <span className="text-[11px] font-medium text-[rgb(var(--mg-muted))]">{blockNoteText(block.note, t)}</span>}
         <span className="mg-display text-lg font-bold leading-none text-[rgb(var(--mg-heading))]">
           {block.points == null ? '–' : formatPoints(block.points)}
         </span>
