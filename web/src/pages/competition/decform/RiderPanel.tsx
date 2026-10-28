@@ -37,8 +37,7 @@ interface Props {
 const wide = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 1024px)').matches;
 
 /**
- * The rider panel: a side panel on a laptop and a bottom sheet on a phone. It is the same markup both ways;
- * the classes decide where it sits. Pick a saved rider to fill every field, or type a new one.
+ * The rider panel: a side panel on a laptop and the shared bottom sheet on a phone, around the same fields. Pick a saved rider to fill every field, or type a new one.
  * It asks only what the competition's dec form setup asks for.
  */
 export function RiderPanel({ title, reserve, editing, form, choices, addLabel, ready, onChange, onPick, onCommit, onClose, onRemove, config = STANDARD_CONFIG, competitionId }: Props) {
@@ -109,9 +108,8 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
   const setExtra = (patch: Partial<ExtraAnswers>) => onChange({ extra: { ...extra, ...patch } });
   const setCustom = (id: string, value: string) => setExtra({ custom: { ...extra.custom, [id]: value } });
 
-  // On a phone the panel is the standard bottom sheet; on a laptop it stays a side panel. `finish` runs a button's action
-  // after the sheet has slid away (straight away on a laptop).
-  const body = (finish: (action: () => void) => void) => (
+  // The fields and buttons, shared by the phone sheet and the laptop side panel.
+  const body = () => (
     <>
         {!editing && choices.length > 0 && (
           <div className="flex flex-col gap-2">
@@ -329,8 +327,8 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
         )}
 
         <div className="flex items-center gap-3">
-          {editing && onRemove && <button type="button" className="sp-red shrink-0" onClick={() => finish(onRemove)}>{reserve ? t('entries.rider.removeReserve') : t('entries.rider.removeRider')}</button>}
-          <button type="button" className="mg-btn mg-btn-primary min-w-0 flex-1" disabled={!ready} onClick={() => finish(onCommit)}>{addLabel}</button>
+          {editing && onRemove && <button type="button" className="sp-red shrink-0" onClick={onRemove}>{reserve ? t('entries.rider.removeReserve') : t('entries.rider.removeRider')}</button>}
+          <button type="button" className="mg-btn mg-btn-primary min-w-0 flex-1" disabled={!ready} onClick={onCommit}>{addLabel}</button>
         </div>
     </>
   );
@@ -338,7 +336,7 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
   if (!desktop) {
     return (
       <Sheet title={title} onClose={onClose}>
-        {() => <div role="region" aria-label={title} className="flex flex-col gap-4">{body((action) => action())}</div>}
+        {() => <div role="region" aria-label={title} className="flex flex-col gap-4">{body()}</div>}
       </Sheet>
     );
   }
@@ -350,7 +348,7 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
         <h2 className="mg-display flex-1 text-[26px] font-bold leading-tight text-[rgb(var(--mg-heading))] lg:text-[28px]">{title}</h2>
         <button ref={closeRef} type="button" className="mg-icon-btn" aria-label={t('common.close')} onClick={onClose}><X aria-hidden="true" className="h-[18px] w-[18px]" /></button>
       </div>
-      {body((action) => action())}
+      {body()}
     </section>
   );
 }
