@@ -111,8 +111,6 @@
 .hd-bar-n { color: rgb(var(--mg-heading)); text-align: right; font-variant-numeric: tabular-nums; }
 
 .hd-foot-btn { flex: 1; }
-.rf-foot.rf-above-tabs.hd-docked { --rf-foot-offset: calc(124px + env(safe-area-inset-bottom, 0px)); }
-@media (min-width: 1024px) { .rf-foot.rf-above-tabs.hd-docked { --rf-foot-offset: calc(124px + env(safe-area-inset-bottom, 0px)); bottom: var(--rf-foot-offset); } }
 .hd-sheet .kit-acts { display: flex; }
 .hd-sheet .kit-acts .kit-pill { flex: 1; }
 .hd-foot-main { flex: 1.4; }

@@ -4,7 +4,7 @@ import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
-import { useOptionalTicker } from '../../components/TickerContext';
+import { useHideChrome } from '../../components/ScreenChrome';
 import { useT } from '../../i18n/LanguageContext';
 import { apiErrorMessage, apiErrorStatus } from '../../lib/apiError';
 import {
@@ -31,7 +31,7 @@ export function HeatDutiesPage() {
   const [shifts, setShifts] = useState<VolunteerShift[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const back = `/competitions/${competition.id}/volunteers`;
+  const back = `/competitions/${competition.id}/operations/volunteers`;
   const sessions = useMemo(() => dutySessions(competition.sessions), [competition.sessions]);
 
   useEffect(() => {
@@ -85,9 +85,8 @@ function Wizard({ shifts, sessions, back }: { shifts: VolunteerShift[]; sessions
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // The shell's ticker dock sits just above the tab bar; when it is showing, lift the buttons over it so it never hides them.
-  const ticker = useOptionalTicker();
-  const docked = ticker != null && (ticker.items.length > 0 || ticker.watchCompetitionId != null || ticker.dockAction != null);
+  // A focused set-up job: the app header and ticker dock step aside so the steps and the Back/Next buttons have the screen.
+  useHideChrome(true);
 
   // The draft follows the wizard, but only once the organiser has changed something, so opening the page never hides newer saved duties.
   useEffect(() => {
@@ -131,7 +130,7 @@ function Wizard({ shifts, sessions, back }: { shifts: VolunteerShift[]; sessions
       {step === 0 && <HeatDutiesRoles setup={setup} sessions={sessions} onChange={(next) => change((m) => ({ ...m, setup: next, slots: applySetup(m.slots, sessions, next) }))} />}
       {step === 1 && <HeatDutiesHeats competitionId={id} sessions={sessions} setup={setup} state={slots} teams={competition.teams} onChange={(next) => change((m) => ({ ...m, slots: next }))} />}
       {step === 2 && <HeatDutiesCheck sessions={sessions} state={slots} teams={competition.teams} />}
-      <RefineFoot aboveTabs className={docked ? 'hd-docked' : ''}>
+      <RefineFoot aboveTabs>
         {step === 0 ? <button type="button" className="rf-btn hd-foot-btn" onClick={() => navigate(back)}>{t('common.cancel')}</button>
           : <button type="button" className="rf-btn hd-foot-btn" disabled={saving} onClick={() => go((step - 1) as Step)}>{t('common.back')}</button>}
         {step < 2

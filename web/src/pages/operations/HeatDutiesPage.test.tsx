@@ -39,7 +39,7 @@ const mount = () => render(
   <MemoryRouter initialEntries={['/competitions/1/operations/heat-duties']}>
     <Routes>
       <Route path="/competitions/1/operations/heat-duties" element={<HeatDutiesPage />} />
-      <Route path="/competitions/1/volunteers" element={<Landing />} />
+      <Route path="/competitions/1/operations/volunteers" element={<Landing />} />
     </Routes>
   </MemoryRouter>,
 );
@@ -90,7 +90,7 @@ describe('the Heat duties page', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Loading');
     expect(await screen.findByText('Each heat needs')).toBeInTheDocument();
     expect(screen.getByText('Step 1 of 3 · Roles')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Back to volunteers' })).toHaveAttribute('href', '/competitions/1/volunteers');
+    expect(screen.getByRole('link', { name: 'Back to volunteers' })).toHaveAttribute('href', '/competitions/1/operations/volunteers');
     const stats = document.querySelector('.hd-stats')!;
     expect(stats).toHaveTextContent('5duties a heat');
     expect(stats).toHaveTextContent('4heats in 2 sessions');

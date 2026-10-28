@@ -6,7 +6,6 @@ import type { MessageKey } from '../../i18n/en';
 import { useT } from '../../i18n/LanguageContext';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
-import { useT } from '../../i18n/LanguageContext';
 import { dutySessions, heatCount, heatDutySummary } from '../../lib/heatDuties';
 import { VOLUNTEER_ROLE_PRESETS } from '../../lib/lorryAndVolunteers';
 import { apiErrorMessage } from '../../lib/apiError';
@@ -46,7 +45,6 @@ export function VolunteerRota({ competition, manage }: { competition: Competitio
   const [busy, setBusy] = useState<number | 'form' | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [dutySummary, setDutySummary] = useState<ReturnType<typeof heatDutySummary> | null>(null);
-  const t = useT();
   const id = competition.id;
 
   useEffect(() => {
