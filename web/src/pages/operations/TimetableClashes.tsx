@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useT } from '../../i18n/LanguageContext';
+import { tr } from '../../i18n/translate';
 import { api } from '../../api';
 import { detectTimetableClashes, type TimetableClash, type TimetableDeclarationInput } from '../../lib/timetableClashes';
 import { clashReason, clashesForSession } from './clashText';
@@ -6,8 +8,8 @@ import type { CompetitionDetail, DeclarationForm } from '../../types';
 import { RefineList, RefineNote, RefineSection } from '../refine/Refine';
 
 function timing(clash: TimetableClash): string {
-  const gap = clash.gapMinutes === 0 ? 'at the same time' : `${clash.gapMinutes} min apart`;
-  return `${clash.first.arenaName} ${clash.first.timeText} and ${clash.second.arenaName} ${clash.second.timeText}, ${gap}`;
+  const gap = clash.gapMinutes === 0 ? tr('ops.clash.sameTime') : tr('ops.clash.apart', { count: clash.gapMinutes });
+  return tr('ops.clash.timing', { a: clash.first.arenaName, at: clash.first.timeText, b: clash.second.arenaName, bt: clash.second.timeText, gap });
 }
 
 /**
@@ -15,6 +17,7 @@ function timing(clash: TimetableClash): string {
  * warning under the session they affect. The riders' declarations are read only to spot shared ponies.
  */
 export function TimetableClashes({ competition }: { competition: CompetitionDetail }) {
+  const t = useT();
   const [declarations, setDeclarations] = useState<TimetableDeclarationInput[]>([]);
   useEffect(() => {
     let cancelled = false;
@@ -34,16 +37,16 @@ export function TimetableClashes({ competition }: { competition: CompetitionDeta
   if (sessions.length === 0) return null;
 
   return (
-    <section aria-label="Clashes between sessions">
-      <RefineSection title="Clashes to look at" meta={clashes.length} />
-      <RefineNote>These teams share a trainer or a pony and are due in different arenas within 15 minutes. Only organisers see this.</RefineNote>
+    <section aria-label={t('ops.clash.aria')}>
+      <RefineSection title={t('ops.clash.title')} meta={clashes.length} />
+      <RefineNote>{t('ops.clash.note')}</RefineNote>
       {sessions.map(({ session, found }) => (
         <RefineList as="div" key={session.id} label={session.name}>
-          <div className="rf-row"><span className="rf-grow rf-t1">{session.name}</span><span className="rf-t2">{found.length === 1 ? '1 clash' : `${found.length} clashes`}</span></div>
+          <div className="rf-row"><span className="rf-grow rf-t1">{session.name}</span><span className="rf-t2">{found.length === 1 ? t('ops.clash.one') : t('ops.clash.many', { count: found.length })}</span></div>
           {found.map((clash) => (
             <div key={clash.key} className="rf-row">
               <span className="rf-grow">
-                <span className="rf-t1">{clash.first.team.displayName} and {clash.second.team.displayName}</span>
+                <span className="rf-t1">{t('ops.clash.and', { a: clash.first.team.displayName, b: clash.second.team.displayName })}</span>
                 <span className="rf-t2">{clashReason(clash)}</span>
                 <span className="rf-t2">{timing(clash)}</span>
               </span>

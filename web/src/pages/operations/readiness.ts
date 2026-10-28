@@ -1,4 +1,5 @@
 import type { CompetitionReadiness, DrawPreview } from './types';
+import { activeLocale, tr } from '../../i18n/translate';
 
 export type IssueGroupId = 'clashes' | 'declarations' | 'payments' | 'teams' | 'equipment';
 
@@ -31,11 +32,11 @@ export function clock(value: Date | string | null | undefined): string {
   if (!value) return '';
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleTimeString(activeLocale(), { hour: '2-digit', minute: '2-digit' });
 }
 
 export function money(minor: number): string {
-  return (minor / 100).toLocaleString('en-GB', { style: 'currency', currency: 'GBP' });
+  return (minor / 100).toLocaleString(activeLocale(), { style: 'currency', currency: 'GBP' });
 }
 
 export function plural(count: number, one: string, many = `${one}s`): string {
@@ -47,68 +48,68 @@ export function buildIssueGroups(readiness: CompetitionReadiness, competitionId:
   const base = `/competitions/${competitionId}`;
   return [
     {
-      id: 'clashes', title: 'Arena clashes', hint: 'Sessions overlapping in an arena', blocks: true, doneText: 'No arena clashes',
+      id: 'clashes', title: tr('ops.ready.clashes'), hint: tr('ops.ready.clashesHint'), blocks: true, doneText: tr('ops.ready.clashesDone'),
       items: readiness.sessionOverlaps.map((item) => ({
         key: `o-${item.firstSessionId}-${item.secondSessionId}`,
-        title: `${item.firstSessionName} overlaps ${item.secondSessionName}`,
+        title: tr('ops.ready.overlaps', { first: item.firstSessionName, second: item.secondSessionName }),
         detail: item.arena,
-        subject: `${item.firstSessionName} and ${item.secondSessionName}`,
+        subject: tr('ops.ready.overlapSubject', { first: item.firstSessionName, second: item.secondSessionName }),
         section: '—',
         note: [item.arena, [clock(item.startsAt), clock(item.endsAt)].filter(Boolean).join('–')].filter(Boolean).join(' · '),
         to: base,
-        action: 'Open timetable',
+        action: tr('ops.ready.openTimetable'),
       })),
     },
     {
-      id: 'declarations', title: 'Missing declarations', hint: 'Teams without a declaration', blocks: false, doneText: 'Every team has a declaration',
+      id: 'declarations', title: tr('ops.ready.decls'), hint: tr('ops.ready.declsHint'), blocks: false, doneText: tr('ops.ready.declsDone'),
       items: readiness.missingDeclarations.map((item) => ({
         key: `d-${item.teamId}`,
-        title: `${item.teamName} needs a declaration`,
+        title: tr('ops.ready.needsDecl', { team: item.teamName }),
         detail: item.sectionName,
         subject: item.teamName,
         section: item.sectionName,
-        note: 'Declaration not returned',
+        note: tr('ops.ready.declNote'),
         to: `${base}/declarations`,
-        action: 'Open declarations',
+        action: tr('ops.ready.openDecls'),
       })),
     },
     {
-      id: 'payments', title: 'Unpaid entries', hint: 'Entries waiting for payment', blocks: false, doneText: 'No unpaid entries',
+      id: 'payments', title: tr('ops.ready.payments'), hint: tr('ops.ready.paymentsHint'), blocks: false, doneText: tr('ops.ready.paymentsDone'),
       items: readiness.unpaidSignups.map((item) => ({
         key: `u-${item.signupId}`,
-        title: `Payment pending in ${item.sectionName}`,
-        detail: `${money(item.amountMinor)} due`,
-        subject: 'Payment pending',
+        title: tr('ops.ready.paymentPending', { section: item.sectionName }),
+        detail: tr('ops.ready.due', { amount: money(item.amountMinor) }),
+        subject: tr('ops.ready.paymentSubject'),
         section: item.sectionName,
-        note: `${money(item.amountMinor)} due`,
+        note: tr('ops.ready.due', { amount: money(item.amountMinor) }),
         to: `${base}/entries`,
-        action: 'Open entries',
+        action: tr('ops.ready.openEntries'),
       })),
     },
     {
-      id: 'teams', title: 'Incomplete teams', hint: 'Below the minimum riders', blocks: false, doneText: 'Every team has enough riders',
+      id: 'teams', title: tr('ops.ready.teams'), hint: tr('ops.ready.teamsHint'), blocks: false, doneText: tr('ops.ready.teamsDone'),
       items: readiness.incompleteTeams.map((item) => ({
         key: `i-${item.teamId}`,
-        title: `${item.teamName} has ${item.declaredRiders} of ${item.minimumRiders} riders`,
+        title: tr('ops.ready.teamShort', { team: item.teamName, declared: item.declaredRiders, minimum: item.minimumRiders }),
         detail: item.sectionName,
         subject: item.teamName,
         section: item.sectionName,
-        note: `${item.declaredRiders} of ${item.minimumRiders} riders declared`,
+        note: tr('ops.ready.teamNote', { declared: item.declaredRiders, minimum: item.minimumRiders }),
         to: `${base}/teams`,
-        action: 'Open teams',
+        action: tr('ops.ready.openTeams'),
       })),
     },
     {
-      id: 'equipment', title: 'Equipment details', hint: 'Races missing equipment details', blocks: false, doneText: 'Equipment details are complete',
+      id: 'equipment', title: tr('ops.ready.equipment'), hint: tr('ops.ready.equipmentHint'), blocks: false, doneText: tr('ops.ready.equipmentDone'),
       items: readiness.equipmentIssues.map((item) => ({
         key: `e-${item.raceName}`,
-        title: `${item.raceName} needs equipment details`,
+        title: tr('ops.ready.needsEquipment', { race: item.raceName }),
         detail: item.message,
         subject: item.raceName,
         section: '—',
         note: item.message,
         to: base,
-        action: 'Open timetable',
+        action: tr('ops.ready.openTimetable'),
       })),
     },
   ];
@@ -123,8 +124,8 @@ export function laneCount(preview: DrawPreview): number {
 export function drawSubtitle(preview: DrawPreview): string {
   const lanes = laneCount(preview);
   return [
-    plural(preview.fairness.teamCount, 'team'),
-    lanes > 0 ? plural(lanes, 'lane') : null,
-    plural(preview.sessions.length, 'round'),
+    tr('ops.count.team', { count: preview.fairness.teamCount }),
+    lanes > 0 ? tr('ops.count.lane', { count: lanes }) : null,
+    tr('ops.count.round', { count: preview.sessions.length }),
   ].filter(Boolean).join(' · ');
 }
