@@ -1,3 +1,4 @@
+import { tr } from '../../i18n/translate';
 import type { Heat, Session, VolunteerShift } from '../../types';
 
 /** Where the arena crew sheet for a competition, and optionally one session and heat, lives. */
@@ -11,7 +12,7 @@ export function arenaCrewPath(competitionId: number, sessionId?: number | null, 
 
 export const isRaceSession = (s: Session) => (s.kind ?? (s.isBreak ? 1 : 0)) === 0;
 export const heatDone = (h: Heat) => h.races.length > 0 && h.races.every((r) => r.isComplete);
-export const heatName = (h: Heat) => h.label?.trim() || `Heat ${h.orderIndex}`;
+export const heatName = (h: Heat) => h.label?.trim() || tr('desk.commentary.heatN', { n: h.orderIndex });
 
 /** The heat that is happening now: the first unfinished one in a live session, else the first unfinished anywhere, else the last. */
 export function defaultChoice(sessions: Session[]): { sessionId: number; heatId: number } | null {

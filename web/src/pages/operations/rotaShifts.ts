@@ -1,4 +1,5 @@
 import { api } from '../../api';
+import { tr } from '../../i18n/translate';
 import { volunteerShiftSummary } from '../../lib/lorryAndVolunteers';
 import type { ClaimVolunteerShiftInput, CreateVolunteerShiftInput, Session, VolunteerShift } from '../../types';
 
@@ -16,7 +17,7 @@ export function groupShiftsBySession(shifts: readonly VolunteerShift[], sessions
   const groups = new Map<string, RotaGroup>();
   for (const shift of shifts) {
     const key = shift.sessionId == null ? 'event' : `s${shift.sessionId}`;
-    const title = shift.sessionId == null ? 'Whole event' : order.get(shift.sessionId)?.name ?? shift.sessionName?.trim() ?? 'Session';
+    const title = shift.sessionId == null ? tr('site.volunteers.wholeEvent') : order.get(shift.sessionId)?.name ?? shift.sessionName?.trim() ?? tr('site.volunteers.session');
     const group = groups.get(key) ?? { key, title, shifts: [] };
     group.shifts.push(shift);
     groups.set(key, group);
@@ -33,25 +34,25 @@ export function unfilledShifts(shifts: readonly VolunteerShift[]): VolunteerShif
 /** A message for a group chat asking for help with the shifts that are not full. Roles and times only, no names. */
 export function unfilledShareText(eventName: string, shifts: readonly VolunteerShift[], sessions: readonly Pick<Session, 'id' | 'name' | 'orderIndex'>[], link: string): string {
   const open = unfilledShifts(shifts);
-  if (open.length === 0) return `${eventName}: every volunteer shift is covered. Thank you.`;
-  const lines = [`${eventName}: we still need volunteers`];
+  if (open.length === 0) return tr('site.share.allCovered', { event: eventName });
+  const lines = [tr('site.share.stillNeed', { event: eventName })];
   for (const group of groupShiftsBySession(open, sessions)) {
     lines.push('', group.title);
     for (const shift of group.shifts) {
       const when = shift.startTimeLabel?.trim() ? `, ${shift.startTimeLabel.trim()}` : '';
-      lines.push(`${shift.role}${when}: ${shift.remainingCount} ${shift.remainingCount === 1 ? 'place' : 'places'} left`);
+      lines.push(tr('site.share.placesLeft', { role: shift.role, when, count: shift.remainingCount }));
     }
   }
-  lines.push('', `Sign up here: ${link}`);
+  lines.push('', tr('site.share.signUp', { link }));
   return lines.join('\n');
 }
 
 /** "14 of 20 places taken" and how many shifts still need someone. */
 export function rotaSummaryText(shifts: readonly VolunteerShift[]): string {
   const summary = volunteerShiftSummary(shifts);
-  if (summary.totalShifts === 0) return 'No shifts yet';
-  const need = summary.unfilledShifts === 0 ? 'every shift is covered' : `${summary.unfilledShifts} ${summary.unfilledShifts === 1 ? 'shift needs' : 'shifts need'} people`;
-  return `${summary.claimedSlots} of ${summary.totalSlots} places taken, ${need}`;
+  if (summary.totalShifts === 0) return tr('site.volunteers.noShiftsYet');
+  const need = summary.unfilledShifts === 0 ? tr('site.volunteers.allCovered') : tr('site.volunteers.shiftsNeed', { count: summary.unfilledShifts });
+  return tr('site.volunteers.summary', { taken: summary.claimedSlots, total: summary.totalSlots, need });
 }
 
 // ---- the API, one call each ----

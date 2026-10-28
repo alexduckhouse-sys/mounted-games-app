@@ -24,6 +24,7 @@ export function OverlayLayer({ children }: { children: ReactNode }) {
 }
 export function StreamNotice({ message, receivedAt, duration = 8000 }: { message: ChatMessage; receivedAt: number; duration?: number }) {
   const still = useStillMotion();
+  const t = useT();
   const [visible, setVisible] = useState(() => Date.now() - receivedAt < duration);
   useEffect(() => {
     const timer = setTimeout(() => setVisible(false), Math.max(0, duration - (Date.now() - receivedAt)));
@@ -39,7 +40,7 @@ export function StreamNotice({ message, receivedAt, duration = 8000 }: { message
       transition={SPRING}
     >
       {message.type === 2 && <Megaphone aria-hidden="true" className="h-5 w-5 shrink-0" />}
-      <p><strong>{message.type === 2 ? 'Announcement' : message.authorName}</strong> · {message.body}</p>
+      <p><strong>{message.type === 2 ? t('teams.announcement.title') : message.authorName}</strong> · {message.body}</p>
     </motion.div>}
   </AnimatePresence>;
 }
@@ -128,13 +129,13 @@ export function StreamOverlays({ stream, label, reconnecting, muted, onSound, an
     : [];
 
   return <OverlayLayer>
-    <OverlayChips stream={stream} look={look} live={<span className="mg-badge mg-badge-live">LIVE</span>} />
-    <span aria-live="polite" className="sr-only">{showStrip && label ? `Now racing: ${label}` : ''}</span>
+    <OverlayChips stream={stream} look={look} live={<span className="mg-badge mg-badge-live">{t('screen.ov.live')}</span>} />
+    <span aria-live="polite" className="sr-only">{showStrip && label ? t('screen.ov.nowRacingLabel', { label }) : ''}</span>
     <AnimatePresence>
       {showStrip && (
         <motion.div
           key="now-racing-strip"
-          aria-label="Now racing"
+          aria-label={t('screen.ov.nowRacing')}
           initial={still ? false : { clipPath: WIPE_HIDDEN_LEFT }}
           animate={{ clipPath: WIPE_SHOWN }}
           exit={still ? undefined : { clipPath: WIPE_HIDDEN_LEFT, transition: LEAVE }}
@@ -150,7 +151,7 @@ export function StreamOverlays({ stream, label, reconnecting, muted, onSound, an
               transition={{ ...ENTER, delay: 0.1 }}
             >
               <span className="block text-[10px] uppercase tracking-wider text-[rgb(var(--mg-header-sub))]">
-                {stream.caption ? 'Now' : label ? 'Now racing' : 'Live from'}
+                {stream.caption ? t('screen.ov.now') : label ? t('screen.ov.nowRacing') : t('screen.ov.liveFrom')}
               </span>
               {label ?? `${stream.arenaName} · ${stream.angleName}`}
             </motion.div>

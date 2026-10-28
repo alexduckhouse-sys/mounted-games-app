@@ -1,3 +1,4 @@
+import { tr } from '../i18n/translate.ts';
 import type { ClubPayouts, PayoutBusinessType, PayoutRegion, PayoutSchedule } from '../types';
 
 /**
@@ -230,6 +231,6 @@ export function payoutStatusLine(p: Pick<ClubPayouts, 'status' | 'missing' | 'ba
 /** The line the competition editor shows: "Entry fees are paid out to Ashdown PC: ••••1234 · Ready". */
 export function payoutsLine(p: { clubName: string; maskedAccount: string | null; ready: boolean }): string {
   return p.ready && p.maskedAccount
-    ? `Entry fees are paid out to ${p.clubName} — ${p.maskedAccount} · Ready`
-    : `${p.clubName} hasn't finished setting up payouts yet.`;
+    ? tr('admin.creator.payoutsReady', { club: p.clubName, account: p.maskedAccount })
+    : tr('admin.creator.payoutsNotReady', { club: p.clubName });
 }

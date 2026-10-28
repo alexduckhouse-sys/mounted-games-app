@@ -97,6 +97,8 @@ a.sp-row:hover, button.sp-row:hover { background: rgb(var(--mg-subtle)); }
 .sp-thumb { flex: none; width: 68px; height: 68px; border-radius: 10px; background: rgb(var(--mg-tint)); color: rgb(var(--mg-faint)); display: flex; align-items: center; justify-content: center; object-fit: cover; }
 .sp-price { flex: none; font: 800 23px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
 .sp-sell-bar { position: sticky; bottom: calc(78px + env(safe-area-inset-bottom, 0px)); z-index: 20; display: flex; justify-content: flex-end; pointer-events: none; }
+/* The ticker dock sits just above the tabs; lift the button over it. */
+body:has(.mg-dock:not(.mg-dock-low)) .sp-sell-bar { bottom: calc(130px + env(safe-area-inset-bottom, 0px)); }
 .sp-sell-bar > * { pointer-events: auto; box-shadow: 0 6px 18px rgb(var(--mg-overlay) / .3); }
 
 /* Settings: grip, bottom bar rows and the reminder stepper */

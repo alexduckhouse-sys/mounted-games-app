@@ -1,3 +1,6 @@
+import { useT } from '../../i18n/LanguageContext';
+import { tr } from '../../i18n/translate';
+import type { Translate } from '../../i18n/translate';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, Minus, Plus, X } from 'lucide-react';
 import { TickerNumber } from '../../components/TickerNumber';
@@ -6,11 +9,11 @@ import { useAuth } from '../../auth/AuthContext';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { defaultRaceList, SCOPE_LABEL, type RaceScope } from '../../lib/defaultRaces';
 import {
-  AGE_GROUP_PRESETS, defaultSection, FORMAT_LABEL, MAIN_ARENA, MAX_SESSIONS, parseFinalistCount, resizeSessions, sectionHasFinal, sectionLocked, sectionName, setRaceFinals,
+  AGE_GROUP_PRESETS, defaultSection, MAIN_ARENA, MAX_SESSIONS, parseFinalistCount, resizeSessions, sectionHasFinal, sectionLocked, sectionName, setRaceFinals,
   type CreatorDraft, type Format, type SectionDraft,
 } from '../../lib/creatorDraft';
 import { draftFromCompetition, teamCountsOf } from '../../lib/creatorLoad';
-import { LANE_ROTATION_LABELS, type LaneRotationModeValue } from '../../lib/lanes';
+import { type LaneRotationModeValue } from '../../lib/lanes';
 import { loadRaceTemplates, raceListNames } from '../../lib/raceTemplates';
 import { SessionKind, TieBreakRule, type CompetitionDetail, type Session } from '../../types';
 import { useCompetition } from '../competition/context';
@@ -19,15 +22,15 @@ import { Notice } from '../../components/Notice';
 import { RefineChoiceRow, RefineHeader, RefineList, RefinePage, RefineSwitchRow, type ChoiceOption } from '../refine/Refine';
 import './operations.css';
 
-const TIE_OPTIONS: ChoiceOption<string>[] = [
-  { value: String(TieBreakRule.Countback), label: 'Most wins' },
-  { value: String(TieBreakRule.LastRace), label: 'Last race' },
-  { value: String(TieBreakRule.RunOff), label: 'Run-off race' },
-  { value: String(TieBreakRule.Manual), label: 'I decide' },
+const tieOptions = (t: Translate): ChoiceOption<string>[] => [
+  { value: String(TieBreakRule.Countback), label: t('ops.sections.tie.countback') },
+  { value: String(TieBreakRule.LastRace), label: t('ops.sections.tie.lastRace') },
+  { value: String(TieBreakRule.RunOff), label: t('ops.sections.tie.runOff') },
+  { value: String(TieBreakRule.Manual), label: t('ops.sections.tie.manual') },
 ];
-const FORMAT_OPTIONS: ChoiceOption<string>[] = [{ value: 'standard', label: 'Standard' }, { value: 'hhf', label: 'Heat, heat, final' }];
-const TYPE_OPTIONS: ChoiceOption<string>[] = [{ value: '2', label: FORMAT_LABEL[2] }, { value: '1', label: FORMAT_LABEL[1] }, { value: '3', label: FORMAT_LABEL[3] }];
-const LANE_OPTIONS: ChoiceOption<string>[] = ([0, 1, 2] as LaneRotationModeValue[]).map((mode) => ({ value: String(mode), label: LANE_ROTATION_LABELS[mode] }));
+const formatOptions = (t: Translate): ChoiceOption<string>[] => [{ value: 'standard', label: t('ops.sections.standard') }, { value: 'hhf', label: t('ops.sections.hhf') }];
+const typeOptions = (t: Translate): ChoiceOption<string>[] => [{ value: '2', label: t('ops.sections.type.teams') }, { value: '1', label: t('ops.sections.type.pairs') }, { value: '3', label: t('ops.sections.type.individual') }];
+const laneOptions = (t: Translate): ChoiceOption<string>[] => ([0, 1, 2] as LaneRotationModeValue[]).map((mode) => ({ value: String(mode), label: t(`ops.sections.lane.${mode}`) }));
 const AGE_OPTIONS: ChoiceOption<string>[] = AGE_GROUP_PRESETS.map((age) => ({ value: age, label: age }));
 const DEBOUNCE_MS = 400;
 
@@ -40,9 +43,9 @@ const messageOf = (error: unknown, fallback: string) => {
 
 /** How a section's races read in the Races row: one line per session, and the final. */
 function raceLines(section: SectionDraft): string {
-  const text = (races: string[] | null) => (races === null ? 'Left for later' : `${races.length} ${races.length === 1 ? 'race' : 'races'}`);
-  const lines = section.sessions.map((session, i) => (section.sessions.length === 1 && !section.finalSessionId ? text(session.races) : `Session ${i + 1}: ${text(session.races)}`));
-  if (sectionHasFinal(section)) lines.push(`Final: ${text(section.finalRaces ?? null)}`);
+  const text = (races: string[] | null) => (races === null ? tr('ops.sections.laterShort') : tr('ops.sections.raceCount', { count: races.length }));
+  const lines = section.sessions.map((session, i) => (section.sessions.length === 1 && !section.finalSessionId ? text(session.races) : tr('ops.sections.sessionLine', { n: i + 1, text: text(session.races) })));
+  if (sectionHasFinal(section)) lines.push(tr('ops.sections.finalLine', { text: text(section.finalRaces ?? null) }));
   return lines.join('\n');
 }
 
@@ -50,6 +53,7 @@ function raceLines(section: SectionDraft): string {
 export function SectionsPage() {
   const { competition, reload } = useCompetition();
   const { hasRole } = useAuth();
+  const t = useT();
   const isAdmin = Boolean(hasRole?.('Admin'));
   const [draft, setDraft] = useState<CreatorDraft>(() => draftFromCompetition(competition));
   const [seen, setSeen] = useState<CompetitionDetail>(competition);
@@ -95,10 +99,10 @@ export function SectionsPage() {
       if (caught instanceof SaveError && caught.status === 409) {
         // The API said no to the change as things stand (a final that already exists or has scored): show why, then show the saved state again.
         dirty.current = false;
-        setError(messageOf(caught, 'Couldn’t save.'));
+        setError(messageOf(caught, t('ops.sections.saveFailShort')));
         reload();
       } else {
-        setError(messageOf(caught, 'Couldn’t save. Check your signal and try again.'));
+        setError(messageOf(caught, t('ops.sections.saveFail')));
         setRetryable(true);
       }
     } finally {
@@ -129,7 +133,7 @@ export function SectionsPage() {
     setError(null);
     setRetryable(false);
     try { await work(); reload(); }
-    catch (caught) { setError(messageOf(caught, `Couldn’t save ${what}. Check your signal and try again.`)); }
+    catch (caught) { setError(messageOf(caught, t('ops.sections.settingFail', { what }))); }
     finally { setSaving(false); }
   }
 
@@ -148,11 +152,11 @@ export function SectionsPage() {
     if (!section.existingId) return;
     const runoff = section.runoffRaceName.trim() || null;
     // The API clears the number of finalists when it is left out, so send the one the section has.
-    void saveSetting('the tie-break', () => api.put(`/competitions/${competition.id}/sections/${section.existingId}`, { runoffRaceName: runoff, tieBreakRule: Number(rule), finalistCount: parseFinalistCount(section.finalistCount) }));
+    void saveSetting(t('ops.sections.what.tie'), () => api.put(`/competitions/${competition.id}/sections/${section.existingId}`, { runoffRaceName: runoff, tieBreakRule: Number(rule), finalistCount: parseFinalistCount(section.finalistCount) }));
   }
   function setSessionSettings(section: SectionDraft, patch: { laneRotationMode?: number; raceOrderAlternating?: boolean }) {
     if (!section.existingId) return;
-    void saveSetting('this setting', async () => {
+    void saveSetting(t('ops.sections.what.setting'), async () => {
       for (const s of sessionsOf(section.existingId!)) {
         await api.put(`/competitions/${competition.id}/sessions/${s.id}/settings`, {
           minutesPerHeat: s.minutesPerHeat ?? null,
@@ -165,7 +169,7 @@ export function SectionsPage() {
 
   async function remove(index: number) {
     const section = latest.current.sections[index];
-    if (section.existingId && !(await confirmDialog({ title: `Remove ${sectionName(section)} and its sessions?`, message: 'You can’t undo this.', confirmLabel: 'Remove section', destructive: true }))) return;
+    if (section.existingId && !(await confirmDialog({ title: t('ops.sections.removeTitle', { name: sectionName(section) }), message: t('ops.sections.removeMsg'), confirmLabel: t('ops.sections.removeConfirm'), destructive: true }))) return;
     commit({ ...latest.current, sections: latest.current.sections.filter((_, i) => i !== index) });
   }
 
@@ -179,10 +183,10 @@ export function SectionsPage() {
   const busy = saving;
   return (
     <RefinePage>
-      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel="Back to Before the day" context={competition.name} title="Sections and races" />
+      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.hub.back')} context={competition.name} title={t('ops.sections.title')} />
       <div className="ops-sections" aria-busy={busy}>
-        {error && <Notice actionLabel={retryable ? 'Try again' : undefined} onAction={() => void flush()}>{error}</Notice>}
-        {busy && <p role="status" className="rf-note">Saving…</p>}
+        {error && <Notice actionLabel={retryable ? t('common.tryAgain') : undefined} onAction={() => void flush()}>{error}</Notice>}
+        {busy && <p role="status" className="rf-note">{t('common.saving')}</p>}
         <hr className="ops-navybar ops-navybar-first" />
         {draft.sections.map((section, index) => {
           const saved = section.existingId ? sectionsById.get(section.existingId) : undefined;
@@ -198,50 +202,50 @@ export function SectionsPage() {
               <section aria-label={sectionName(section)} className="ops-section">
                 <h2 className="ops-sec-name">{sectionName(section)}</h2>
                 <RefineList as="div">
-                  <RefineChoiceRow label="Format" value={section.usesRaceFinals ? 'hhf' : 'standard'} options={FORMAT_OPTIONS} disabled={busy || locked}
+                  <RefineChoiceRow label={t('ops.sections.format')} value={section.usesRaceFinals ? 'hhf' : 'standard'} options={formatOptions(t)} disabled={busy || locked}
                     onChange={(v) => change(index, (s) => setRaceFinals(s, v === 'hhf'))} />
-                  <RefineChoiceRow label="Arena" value={section.arena} options={arenaOptions} allowOther disabled={busy}
+                  <RefineChoiceRow label={t('ops.sections.arena')} value={section.arena} options={arenaOptions} allowOther disabled={busy}
                     onChange={(arena) => change(index, (s) => ({ ...s, arena }))} />
                   <div className="ops-pair">
-                    <Stepper label="Sessions" value={section.sessions.length} min={1} max={MAX_SESSIONS} disabled={busy || locked || section.usesRaceFinals}
+                    <Stepper label={t('ops.sections.sessions')} value={section.sessions.length} min={1} max={MAX_SESSIONS} disabled={busy || locked || section.usesRaceFinals}
                       onChange={(n) => change(index, (s) => resizeSessions(s, n), true)} />
-                    <Stepper label="Minutes per heat" value={minutes} min={5} max={180} step={5} disabled={busy}
+                    <Stepper label={t('ops.sections.minutes')} value={minutes} min={5} max={180} step={5} disabled={busy}
                       onChange={(n) => change(index, (s) => ({ ...s, minutesPerRace: String(n) }), true)} />
                   </div>
                   <div className="ops-sub">
-                    <h3>Scoring extras</h3>
-                    <RefineChoiceRow label="Tie-break" value={tie} options={TIE_OPTIONS} disabled={busy || !section.existingId} onChange={(v) => setTieBreak(section, v)} />
+                    <h3>{t('ops.sections.extras')}</h3>
+                    <RefineChoiceRow label={t('ops.sections.tieBreak')} value={tie} options={tieOptions(t)} disabled={busy || !section.existingId} onChange={(v) => setTieBreak(section, v)} />
                     {tie === String(TieBreakRule.RunOff) && (
-                      <RefineChoiceRow label="Run-off race" value={section.runoffRaceName} placeholder="None" disabled={busy}
-                        options={[{ value: '', label: 'None' }, ...templates.map((name) => ({ value: name, label: name }))]}
+                      <RefineChoiceRow label={t('ops.sections.runOffRace')} value={section.runoffRaceName} placeholder={t('ops.sections.none')} disabled={busy}
+                        options={[{ value: '', label: t('ops.sections.none') }, ...templates.map((name) => ({ value: name, label: name }))]}
                         onChange={(runoffRaceName) => change(index, (s) => ({ ...s, runoffRaceName }))} />
                     )}
                     {!section.usesRaceFinals && first && (
                       <>
-                        <RefineChoiceRow label="Lane after each race" value={String(first.laneRotationMode ?? 0)} options={LANE_OPTIONS} disabled={busy}
+                        <RefineChoiceRow label={t('ops.sections.laneAfter')} value={String(first.laneRotationMode ?? 0)} options={laneOptions(t)} disabled={busy}
                           onChange={(v) => setSessionSettings(section, { laneRotationMode: Number(v) })} />
-                        <RefineSwitchRow label="Run 2 heats in parallel" on={first.raceOrderAlternating === true} disabled={busy}
+                        <RefineSwitchRow label={t('ops.sections.parallel')} on={first.raceOrderAlternating === true} disabled={busy}
                           onChange={(on) => setSessionSettings(section, { raceOrderAlternating: on })} />
                       </>
                     )}
                     {sectionHasFinal(section) && (
                       <>
-                        <RefineSwitchRow label="Carry points into the final" on={section.carryPointsIntoFinal === true} disabled={busy}
+                        <RefineSwitchRow label={t('ops.sections.carry')} on={section.carryPointsIntoFinal === true} disabled={busy}
                           onChange={(on) => change(index, (s) => ({ ...s, carryPointsIntoFinal: on }))} />
-                        <RefineSwitchRow label="Double points in the final" on={section.doublePointsInFinal === true} disabled={busy}
+                        <RefineSwitchRow label={t('ops.sections.double')} on={section.doublePointsInFinal === true} disabled={busy}
                           onChange={(on) => change(index, (s) => ({ ...s, doublePointsInFinal: on }))} />
                       </>
                     )}
                   </div>
                   <div className="rf-row ops-races">
-                    <span className="rf-grow"><span className="rf-t1">Races</span><span className="rf-t2 ops-lines">{raceLines(section)}</span></span>
-                    <button type="button" className="rf-btn" aria-expanded={editing === key.toString()} onClick={() => setEditing(editing === key.toString() ? null : key.toString())}>{editing === key.toString() ? 'Done' : 'Edit'}</button>
+                    <span className="rf-grow"><span className="rf-t1">{t('ops.sections.races')}</span><span className="rf-t2 ops-lines">{raceLines(section)}</span></span>
+                    <button type="button" className="rf-btn" aria-expanded={editing === key.toString()} onClick={() => setEditing(editing === key.toString() ? null : key.toString())}>{editing === key.toString() ? t('common.done') : t('common.edit')}</button>
                   </div>
                   {editing === key.toString() && (
                     <RaceEditor section={section} templates={templates} disabled={busy} onChange={(next) => change(index, () => next)} />
                   )}
                   {!section.hasEntries && (isAdmin || !section.existingId) && (
-                    <div className="rf-row ops-end"><button type="button" className="ops-danger-link" disabled={busy} onClick={() => void remove(index)}>Remove this section</button></div>
+                    <div className="rf-row ops-end"><button type="button" className="ops-danger-link" disabled={busy} onClick={() => void remove(index)}>{t('ops.sections.removeSection')}</button></div>
                   )}
                 </RefineList>
               </section>
@@ -251,19 +255,19 @@ export function SectionsPage() {
         {pending.map((item) => (
           <Fragment key={`p${item.key}`}>
             <hr className="ops-navybar" />
-            <section aria-label="New section" className="ops-section">
-              <h2 className="ops-sec-name">New section</h2>
+            <section aria-label={t('ops.sections.newSection')} className="ops-section">
+              <h2 className="ops-sec-name">{t('ops.sections.newSection')}</h2>
               <RefineList as="div">
-                <RefineChoiceRow label="Type" value={String(item.format)} options={TYPE_OPTIONS}
+                <RefineChoiceRow label={t('ops.sections.type')} value={String(item.format)} options={typeOptions(t)}
                   onChange={(v) => setPending((list) => list.map((p) => (p.key === item.key ? { ...p, format: Number(v) as Format } : p)))} />
-                <RefineChoiceRow label="Age group" value="" placeholder="Choose" options={AGE_OPTIONS} allowOther disabled={busy}
+                <RefineChoiceRow label={t('ops.sections.ageGroup')} value="" placeholder={t('ops.sections.choose')} options={AGE_OPTIONS} allowOther disabled={busy}
                   onChange={(age) => createFrom(item.key, item.format, age)} />
-                <div className="rf-row ops-end"><button type="button" className="ops-danger-link" onClick={() => setPending((list) => list.filter((p) => p.key !== item.key))}>Remove this section</button></div>
+                <div className="rf-row ops-end"><button type="button" className="ops-danger-link" onClick={() => setPending((list) => list.filter((p) => p.key !== item.key))}>{t('ops.sections.removeSection')}</button></div>
               </RefineList>
             </section>
           </Fragment>
         ))}
-        <button type="button" className="ops-addbar" disabled={busy} onClick={addBlank}><Plus className="h-4 w-4" aria-hidden="true" />Add a section</button>
+        <button type="button" className="ops-addbar" disabled={busy} onClick={addBlank}><Plus className="h-4 w-4" aria-hidden="true" />{t('ops.sections.addSection')}</button>
       </div>
     </RefinePage>
   );
@@ -271,13 +275,14 @@ export function SectionsPage() {
 
 /** A small round − and + with the number on its own between them. */
 function Stepper({ label, value, min, max, step = 1, disabled, onChange }: { label: string; value: number; min: number; max: number; step?: number; disabled?: boolean; onChange: (next: number) => void }) {
+  const t = useT();
   return (
     <div className="ops-step">
       <span className="ops-step-label" id={`step-${label}`}>{label}</span>
       <span className="ops-step-ctl" role="group" aria-labelledby={`step-${label}`}>
-        <button type="button" className="ops-ibtn" aria-label={`Fewer ${label.toLowerCase()}`} disabled={disabled || value <= min} onClick={() => onChange(Math.max(min, value - step))}><Minus className="h-4 w-4" aria-hidden="true" /></button>
+        <button type="button" className="ops-ibtn" aria-label={t('ops.sections.fewer', { label: label.toLowerCase() })} disabled={disabled || value <= min} onClick={() => onChange(Math.max(min, value - step))}><Minus className="h-4 w-4" aria-hidden="true" /></button>
         <output aria-live="polite"><TickerNumber value={value} format={String} /></output>
-        <button type="button" className="ops-ibtn" aria-label={`More ${label.toLowerCase()}`} disabled={disabled || value >= max} onClick={() => onChange(Math.min(max, value + step))}><Plus className="h-4 w-4" aria-hidden="true" /></button>
+        <button type="button" className="ops-ibtn" aria-label={t('ops.sections.more', { label: label.toLowerCase() })} disabled={disabled || value >= max} onClick={() => onChange(Math.min(max, value + step))}><Plus className="h-4 w-4" aria-hidden="true" /></button>
       </span>
     </div>
   );
@@ -285,8 +290,9 @@ function Stepper({ label, value, min, max, step = 1, disabled, onChange }: { lab
 
 /** The race list for each session and the final: reorder, remove, add from the library, or start from a preset. */
 function RaceEditor({ section, templates, disabled, onChange }: { section: SectionDraft; templates: string[]; disabled: boolean; onChange: (next: SectionDraft) => void }) {
+  const t = useT();
   const hasFinal = sectionHasFinal(section);
-  const tabs = [...section.sessions.map((_, i) => `Session ${i + 1}`), ...(hasFinal ? ['Final'] : [])];
+  const tabs = [...section.sessions.map((_, i) => t('ops.sections.sessionTab', { n: i + 1 })), ...(hasFinal ? [t('ops.sections.final')] : [])];
   const [tab, setTab] = useState(0);
   const [query, setQuery] = useState('');
   const [presets, setPresets] = useState(false);
@@ -317,45 +323,45 @@ function RaceEditor({ section, templates, disabled, onChange }: { section: Secti
   return (
     <div className="ops-races-edit">
       {tabs.length > 1 && (
-        <div role="tablist" aria-label="Race list for" className="ops-seg">
+        <div role="tablist" aria-label={t('ops.sections.raceListFor')} className="ops-seg">
           {tabs.map((label, i) => <button key={label} type="button" role="tab" aria-selected={i === active} onClick={() => { setTab(i); setPresets(false); }}>{label}</button>)}
         </div>
       )}
       {!section.usesRaceFinals && !hasFinal && (
         <button type="button" className="ops-addbar ops-addbar-flat" disabled={disabled} onClick={() => { onChange({ ...section, hasFinal: true }); setTab(section.sessions.length); setPresets(false); }}>
-          <Plus className="h-4 w-4" aria-hidden="true" />Add a final
+          <Plus className="h-4 w-4" aria-hidden="true" />{t('ops.sections.addFinal')}
         </button>
       )}
       {onFinal && (
         <div className="ops-final-end">
-          <button type="button" className="ops-danger-link" disabled={disabled} onClick={() => { onChange({ ...section, hasFinal: false }); setTab(0); setPresets(false); }}>Remove the final</button>
+          <button type="button" className="ops-danger-link" disabled={disabled} onClick={() => { onChange({ ...section, hasFinal: false }); setTab(0); setPresets(false); }}>{t('ops.sections.removeFinal')}</button>
         </div>
       )}
-      {fixed && <p className="rf-note">Heats are made, so these races are fixed.</p>}
-      {races === null && !fixed && <p className="rf-note">Left for later. The standard list is used until you choose.</p>}
+      {fixed && <p className="rf-note">{t('ops.sections.fixed')}</p>}
+      {races === null && !fixed && <p className="rf-note">{t('ops.sections.later')}</p>}
       <ol className="ops-race-list">
         {list.map((name, i) => (
           <li key={`${name}-${i}`}>
             <span className="ops-race-n">{i + 1}</span>
             <span className="ops-race-name">{name}</span>
             {!readOnly && <>
-              <button type="button" className="ops-ibtn" aria-label={`Move ${name} up`} onClick={() => move(i, i - 1)} disabled={i === 0}><ArrowUp className="h-4 w-4" aria-hidden="true" /></button>
-              <button type="button" className="ops-ibtn" aria-label={`Move ${name} down`} onClick={() => move(i, i + 1)} disabled={i === list.length - 1}><ArrowDown className="h-4 w-4" aria-hidden="true" /></button>
-              <button type="button" className="ops-ibtn ops-ibtn-red" aria-label={`Remove ${name}`} onClick={() => set(list.filter((_, j) => j !== i))}><X className="h-4 w-4" aria-hidden="true" /></button>
+              <button type="button" className="ops-ibtn" aria-label={t('ops.sections.moveUp', { name })} onClick={() => move(i, i - 1)} disabled={i === 0}><ArrowUp className="h-4 w-4" aria-hidden="true" /></button>
+              <button type="button" className="ops-ibtn" aria-label={t('ops.sections.moveDown', { name })} onClick={() => move(i, i + 1)} disabled={i === list.length - 1}><ArrowDown className="h-4 w-4" aria-hidden="true" /></button>
+              <button type="button" className="ops-ibtn ops-ibtn-red" aria-label={t('ops.sections.removeRace', { name })} onClick={() => set(list.filter((_, j) => j !== i))}><X className="h-4 w-4" aria-hidden="true" /></button>
             </>}
           </li>
         ))}
       </ol>
       {!readOnly && (
         <>
-          <label className="rf-fld">Add a race<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search the library" /></label>
+          <label className="rf-fld">{t('ops.sections.addRace')}<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('ops.sections.search')} /></label>
           <div className="ops-matches">
             {matches.map((name) => <button key={name} type="button" className="rf-btn" onClick={() => add(name)}>{name}</button>)}
-            {typed && !templates.some((name) => name.toLowerCase() === typed.toLowerCase()) && <button type="button" className="rf-btn" onClick={() => add(typed)}>Add “{typed}”</button>}
+            {typed && !templates.some((name) => name.toLowerCase() === typed.toLowerCase()) && <button type="button" className="rf-btn" onClick={() => add(typed)}>{t('ops.sections.addTyped', { name: typed })}</button>}
           </div>
           <div className="ops-race-actions">
-            <button type="button" className="rf-btn rf-btn-text" aria-expanded={presets} onClick={() => setPresets((v) => !v)}>Use a preset list</button>
-            <button type="button" className="rf-btn rf-btn-text" onClick={() => set(null)}>Leave for later</button>
+            <button type="button" className="rf-btn rf-btn-text" aria-expanded={presets} onClick={() => setPresets((v) => !v)}>{t('ops.sections.preset')}</button>
+            <button type="button" className="rf-btn rf-btn-text" onClick={() => set(null)}>{t('ops.sections.leaveLater')}</button>
           </div>
           {presets && (
             <RefineList as="div">
@@ -363,8 +369,8 @@ function RaceEditor({ section, templates, disabled, onChange }: { section: Secti
                 const preset = defaultRaceList(scope, section.format, section.ageGroup);
                 return (
                   <div key={scope} className="rf-row">
-                    <span className="rf-grow"><span className="rf-t1">{SCOPE_LABEL[scope]}</span><span className="rf-t2">{preset.length} races</span></span>
-                    <button type="button" className="rf-btn" onClick={() => { set(preset); setPresets(false); }}>Use this</button>
+                    <span className="rf-grow"><span className="rf-t1">{SCOPE_LABEL[scope]}</span><span className="rf-t2">{t('ops.sections.presetCount', { count: preset.length })}</span></span>
+                    <button type="button" className="rf-btn" onClick={() => { set(preset); setPresets(false); }}>{t('ops.sections.useThis')}</button>
                   </div>
                 );
               })}

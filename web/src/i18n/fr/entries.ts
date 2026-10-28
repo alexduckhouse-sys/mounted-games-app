@@ -159,7 +159,7 @@ export const entries: AreaCatalogue<typeof en> = {
   'entries.dec.missingHeight': 'taille du poney',
   'entries.dec.badDob': 'Utilisez jj/mm/aaaa, par exemple 05/04/2015.',
   'entries.dec.badHeight': 'Utilisez les « hands », par exemple 13.2 (les pouces vont de 0 à 3).',
-  'entries.dec.born': 'né(e) en {value}',
+  'entries.dec.born': 'né(e) : {value}',
   'entries.dec.nonRiding': 'Ne monte pas',
   'entries.dec.nonRidingReserve': 'Remplaçant sans monte (facultatif)',
   'entries.dec.rider': 'Cavalier',

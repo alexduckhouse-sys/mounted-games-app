@@ -90,3 +90,19 @@ describe('API calls', () => {
     await expect(fetchVolunteerShifts(7)).rejects.toThrow('Unexpected response');
   });
 });
+
+describe('rota text in other languages', () => {
+  it('follows the chosen language and returns to English', async () => {
+    const { setActiveLang } = await import('../../i18n/translate');
+    const shift = { id: 1, role: 'Ring Crew', sessionId: null, claimedCount: 1, requiredCount: 2, remainingCount: 1, isFilled: false, claims: [] } as unknown as VolunteerShift;
+    try {
+      setActiveLang('fr');
+      expect(rotaSummaryText([shift])).toBe('1 places prises sur 2, 1 créneau cherche des bénévoles');
+      setActiveLang('cy');
+      expect(groupShiftsBySession([shift], [])[0].title).toBe('Y digwyddiad cyfan');
+    } finally {
+      setActiveLang('en');
+    }
+    expect(rotaSummaryText([shift])).toBe('1 of 2 places taken, 1 shift needs people');
+  });
+});

@@ -34,4 +34,7 @@ export const common = {
   'common.demoPayment.entry': 'This is a demo. No money will be taken or sent, and your entry hasn’t been paid for.',
   'common.demoPayment.order': 'This is a demo. No money will be taken or sent, and your order hasn’t been paid for.',
   'common.demoPayment.payout': 'This is a demo. No money will be taken or sent, and your bank details won’t be used to pay anyone.',
+  'common.qty.group': 'Quantity for {name}',
+  'common.qty.remove': 'Remove one {name}',
+  'common.qty.add': 'Add one {name}',
 } satisfies Record<string, Message>;
