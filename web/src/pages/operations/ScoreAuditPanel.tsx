@@ -28,6 +28,8 @@ interface ScoreAuditProps {
   /** With the heat (staff only), the panel lists this race's protests and can log one. */
   heat?: Heat;
   race?: Race | null;
+  /** Team names, so rows read "Belvoir A" and not "Team 42". Without them every team shows as unnamed. */
+  teams?: Array<{ teamId: number; teamName: string }>;
 }
 
 export function ScoreAuditPanel(props: ScoreAuditProps) {
@@ -35,7 +37,7 @@ export function ScoreAuditPanel(props: ScoreAuditProps) {
   return <ScoreAuditRecord key={`${props.raceId}:${user?.id ?? ''}`} {...props} />;
 }
 
-function ScoreAuditRecord({ raceId, onChanged, heat, race = null }: ScoreAuditProps) {
+function ScoreAuditRecord({ raceId, onChanged, heat, race = null, teams }: ScoreAuditProps) {
   const { canManage } = useAuth();
   const t = useT();
   const { competition } = useCompetition();
@@ -47,6 +49,7 @@ function ScoreAuditRecord({ raceId, onChanged, heat, race = null }: ScoreAuditPr
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
+  const teamName = (id: number) => teams?.find((team) => team.teamId === id)?.teamName?.trim() || t('ops2.audit.unnamedTeam');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -117,7 +120,7 @@ function ScoreAuditRecord({ raceId, onChanged, heat, race = null }: ScoreAuditPr
   const heading = `score-audit-${raceId}`;
   return (
     <section aria-labelledby={heading}>
-      <RefineSection title={t('ops2.audit.record')} meta={t('ops2.audit.revision', { n: score?.revision ?? 0 })} />
+      <RefineSection title={t('ops2.audit.record')} />
       <h2 id={heading} className="sr-only">{t('ops2.audit.record')}</h2>
       {error && <Notice actionLabel={score ? undefined : t('common.tryAgain')} onAction={() => void load()}>{error}</Notice>}
       {toast.node}
@@ -126,7 +129,7 @@ function ScoreAuditRecord({ raceId, onChanged, heat, race = null }: ScoreAuditPr
         <RefineList as="div">
           <div className="rf-row">
             <span className="rf-grow">
-              <span className="rf-t1">{t('ops2.audit.revision', { n: score.revision })}</span>
+              <span className="rf-t1">{t('ops2.audit.refreshAria')}</span>
             </span>
             <button type="button" className="rf-btn rf-btn-text" aria-label={t('ops2.audit.refreshAria')} onClick={() => void load()} disabled={loading || busy}><RefreshCw aria-hidden="true" className={`h-4 w-4 ${loading ? 'animate-spin motion-reduce:animate-none' : ''}`} />{t('common.refresh')}</button>
           </div>
@@ -139,18 +142,18 @@ function ScoreAuditRecord({ raceId, onChanged, heat, race = null }: ScoreAuditPr
               <form className="ops-form ops-panel" onSubmit={updateScore}>
                 <ul className="ops-places">{draft.map((result, index) => (
                   <li key={result.teamId} className="ops-place">
-                    <span className="rf-grow"><span className="rf-t1">{t('ops2.audit.team', { id: result.teamId })}</span><span className="rf-t2">{t('ops2.audit.pointsNow', { points: formatPoints(result.points) })}</span></span>
-                    <label className="rf-fld ops-place-field">{t('ops2.audit.place')}<NumberField aria-label={t('ops2.audit.placeFor', { id: result.teamId })}  min="1" disabled={result.eliminated} value={result.place || 1} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, place: Number(event.target.value) } : item))} /></label>
-                    <label className="rf-fld ops-place-field">{t('ops2.audit.points')}<NumberField decimal aria-label={t('ops2.audit.pointsFor', { id: result.teamId })} min="0" step="0.5" disabled={result.eliminated} value={result.eliminated ? 0 : (result.pointsText ?? String(result.points))} onChange={(event) => {
+                    <span className="rf-grow"><span className="rf-t1">{teamName(result.teamId)}</span><span className="rf-t2">{t('ops2.audit.pointsNow', { points: formatPoints(result.points) })}</span></span>
+                    <label className="rf-fld ops-place-field">{t('ops2.audit.place')}<NumberField aria-label={t('ops2.audit.placeFor', { name: teamName(result.teamId) })}  min="1" disabled={result.eliminated} value={result.place || 1} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, place: Number(event.target.value) } : item))} /></label>
+                    <label className="rf-fld ops-place-field">{t('ops2.audit.points')}<NumberField decimal aria-label={t('ops2.audit.pointsFor', { name: teamName(result.teamId) })} min="0" step="0.5" disabled={result.eliminated} value={result.eliminated ? 0 : (result.pointsText ?? String(result.points))} onChange={(event) => {
                       const raw = event.target.value;
                       const parsed = Number(raw);
                       setDraft((current) => current.map((item, itemIndex) => itemIndex === index
                         ? { ...item, pointsText: raw, points: raw.trim() === '' || Number.isNaN(parsed) ? item.points : parsed, pointsEdited: true }
                         : item));
                     }} /></label>
-                    <label className="ops-elim"><input aria-label={t('ops2.audit.eliminatedFor', { id: result.teamId })} type="checkbox" checked={result.eliminated} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, eliminated: event.target.checked, status: event.target.checked ? effectiveStatus(true, item.status) : 0 } : item))} />{t('competition.status.dnf')}</label>
-                    {result.eliminated && <label className="rf-fld ops-place-field">{t('ops2.audit.why')}<SelectField aria-label={t('ops2.audit.reasonFor', { id: result.teamId })} value={effectiveStatus(true, result.status)} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, status: Number(event.target.value) } : item))}>{STATUS_CHOICES.map((choice) => <option key={choice.value} value={choice.value}>{statusChoiceLabel(choice)}</option>)}</SelectField></label>}
-                    <label className="rf-fld ops-place-field">{t('ops2.audit.refNote')}<input aria-label={t('ops2.audit.refNoteFor', { id: result.teamId })} type="text" maxLength={500} value={result.refereeNote ?? ''} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, refereeNote: event.target.value } : item))} /></label>
+                    <label className="ops-elim"><input aria-label={t('ops2.audit.eliminatedFor', { name: teamName(result.teamId) })} type="checkbox" checked={result.eliminated} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, eliminated: event.target.checked, status: event.target.checked ? effectiveStatus(true, item.status) : 0 } : item))} />{t('competition.status.dnf')}</label>
+                    {result.eliminated && <label className="rf-fld ops-place-field">{t('ops2.audit.why')}<SelectField aria-label={t('ops2.audit.reasonFor', { name: teamName(result.teamId) })} value={effectiveStatus(true, result.status)} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, status: Number(event.target.value) } : item))}>{STATUS_CHOICES.map((choice) => <option key={choice.value} value={choice.value}>{statusChoiceLabel(choice)}</option>)}</SelectField></label>}
+                    <label className="rf-fld ops-place-field">{t('ops2.audit.refNote')}<input aria-label={t('ops2.audit.refNoteFor', { name: teamName(result.teamId) })} type="text" maxLength={500} value={result.refereeNote ?? ''} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, refereeNote: event.target.value } : item))} /></label>
                   </li>
                 ))}</ul>
                 <label className="rf-fld">{t('ops2.audit.reason')}<textarea className="ops-note-input" required maxLength={1000} value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} /></label>
@@ -171,10 +174,10 @@ function ScoreAuditRecord({ raceId, onChanged, heat, race = null }: ScoreAuditPr
             <li key={entry.revision} className="rf-row ops-history">
               <span className="rf-grow">
                 <span className="rf-t1">{eventLabel(entry.kind)}</span>
-                <span className="rf-t2">{t('ops2.audit.revisionAt', { n: entry.revision, when: new Date(entry.createdAt).toLocaleString(activeLocale()) })}</span>
+                <span className="rf-t2">{t('ops2.audit.revisionAt', { when: new Date(entry.createdAt).toLocaleString(activeLocale()) })}</span>
                 <span className="ops-reason">{entry.reason}</span>
-                {(entry.actorLabel || entry.actorUserId) && <span className="rf-t2">{t('ops2.audit.by', { who: '' })}<code className="break-all">{entry.actorLabel || entry.actorUserId}</code></span>}
-                <span className="rf-t2">{scoreSummary(entry.before)} → {scoreSummary(entry.after)}</span>
+                {(entry.actorLabel || entry.actorUserId) && <span className="rf-t2">{t('ops2.audit.by', { who: entry.actorLabel || t('ops2.audit.organiser') })}</span>}
+                <span className="rf-t2">{scoreSummary(entry.before, teamName)} → {scoreSummary(entry.after, teamName)}</span>
               </span>
             </li>
           ))}</RefineList>}
@@ -197,7 +200,7 @@ function eventLabel(kind: RaceScoreEventKind): string {
   return tr(({ 1: 'ops2.audit.ev.recorded', 2: 'ops2.audit.ev.corrected', 3: 'ops2.audit.ev.signedOff', 4: 'ops2.audit.ev.reopened' } as const)[kind]);
 }
 
-function scoreSummary(results: ScorePlace[]): string {
+function scoreSummary(results: ScorePlace[], teamName: (id: number) => string): string {
   if (results.length === 0) return tr('ops2.audit.noResults');
-  return results.map((result) => tr('ops2.audit.teamResult', { id: result.teamId, result: result.isSitOut ? 'S' : result.eliminated ? String(statusLetter(true, result.status)) : result.place })).join(', ');
+  return results.map((result) => tr('ops2.audit.teamResult', { name: teamName(result.teamId), result: result.isSitOut ? 'S' : result.eliminated ? String(statusLetter(true, result.status)) : result.place })).join(', ');
 }

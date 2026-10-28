@@ -31,7 +31,7 @@ it('opens as a sheet with the approved title and description', () => {
 it('closes from the Close pill', async () => {
   const onClose = vi.fn();
   render(<MemoryRouter><QrAccessModal open onClose={onClose} competitionId={1} competitionName="Example competition" /></MemoryRouter>);
-  fireEvent.click(screen.getByRole('button', { name: 'Close QR access modal' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
   await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
 });
 

@@ -566,7 +566,7 @@ it('labels scoped scores honestly and keeps organiser and stream tools off a sco
   await opened('Bending');
   await userEvent.click(await screen.findByRole('button', { name: 'Yes, show them' }));
   const facts = await screen.findByRole('region', { name: 'Live commentator facts' });
-  expect(facts).toHaveTextContent('Available scores: 3 pts');
+  expect(facts).toHaveTextContent('Points so far: 3');
   expect(facts).not.toHaveTextContent('Rank');
   expect(screen.queryByRole('region', { name: 'Live stream control strip' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Score history & correction' })).toBeNull();

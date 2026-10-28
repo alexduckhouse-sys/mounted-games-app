@@ -108,7 +108,7 @@ public class ClubsController : ControllerBase
             || await _db.Set<MountedGames.Api.Entities.Seasons.TeamProfile>().AnyAsync(p => p.ClubId == id)
             || await _db.ClubPayoutAccounts.AnyAsync(p => p.ClubId == id);
         if (inUse)
-            return Conflict(new { message = "This club has linked records and cannot be deleted." });
+            return Conflict(new { message = "This club has teams or members, so it can’t be deleted." });
         _db.Clubs.Remove(club);
         await _db.SaveChangesAsync();
         return NoContent();

@@ -100,8 +100,8 @@ describe('number rules', () => {
   });
 
   it('words the warning', () => {
-    expect(breachWarning('over')).toBe('Above the limit — will be flagged');
-    expect(breachWarning('under')).toBe('Below the minimum — will be flagged');
+    expect(breachWarning('over')).toBe('Above the limit (will be flagged)');
+    expect(breachWarning('under')).toBe('Below the minimum (will be flagged)');
   });
 
   it('describes the limits', () => {
@@ -114,7 +114,7 @@ describe('number rules', () => {
 
   it('lists the breaches for a rider', () => {
     const c = config({ customFields: [girth, notes] });
-    expect(breaches(extras({ custom: { girth: '99' } }), c)).toEqual(['Girth: Above the limit — will be flagged']);
+    expect(breaches(extras({ custom: { girth: '99' } }), c)).toEqual(['Girth: Above the limit (will be flagged)']);
     expect(breaches(extras({ custom: { girth: '50' } }), c)).toEqual([]);
   });
 

@@ -50,8 +50,8 @@ beforeEach(() => {
 afterEach(() => setActiveLang('en'));
 
 describe.each([
-  ['fr' as Lang, { desk: 'Pupitre de commentaire', sideBySide: 'Côte à côte', upNext: 'À suivre', english: 'Side-by-Side' }],
-  ['cy' as Lang, { desk: 'Desg sylwebu', sideBySide: 'Ochr yn ochr', upNext: 'Nesaf', english: 'Side-by-Side' }],
+  ['fr' as Lang, { desk: 'Pupitre de commentaire', sideBySide: 'Côte à côte', upNext: 'À suivre', english: 'Side by side' }],
+  ['cy' as Lang, { desk: 'Desg sylwebu', sideBySide: 'Ochr yn ochr', upNext: 'Nesaf', english: 'Side by side' }],
 ])('commentary desk in %s', (lang, words) => {
   beforeEach(() => {
     vi.mocked(api.get).mockReset();

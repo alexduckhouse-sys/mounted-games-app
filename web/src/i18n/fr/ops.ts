@@ -223,7 +223,7 @@ export const ops: AreaCatalogue<typeof en> = {
   'ops.detail.entries': 'Inscriptions',
   'ops.detail.compNumber': 'Numéro de compétition',
   'ops.detail.contactEmail': 'E-mail de contact',
-  'ops.detail.contactNote': 'L’e-mail de contact s’affiche sur la page de l’événement, pour que les participants puissent vous écrire.',
+  'ops.detail.contactNote': 'Affiché sur la page de l’événement.',
   'ops.detail.payment': 'Paiement',
   'ops.detail.fees': 'Frais d’inscription',
   'ops.detail.payoutsDefault': 'Les versements vont à votre club une fois qu’il les a configurés.',

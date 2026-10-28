@@ -26,7 +26,7 @@ describe('arenaAssistance helpers', () => {
     expect(formatArenaAssistanceMessage('farrier', 'Arena 1')).toBe('Farrier needed at Arena 1');
     expect(formatArenaAssistanceMessage('vet', '   ')).toBe('Vet needed at Main Arena');
     expect(formatArenaAssistanceMessage('first-aid', 'Arena 2', '  Lane 3 rider  ')).toBe(
-      'First Aid needed at Arena 2 — Lane 3 rider',
+      'First Aid needed at Arena 2: Lane 3 rider',
     );
   });
 

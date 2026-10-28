@@ -1021,7 +1021,7 @@ describe('CompetitionEditor: creating', () => {
     mount();
     await userEvent.click(createButton());
     expect(api.post).not.toHaveBeenCalled();
-    expect(screen.getByText('Please fix the highlighted fields.')).toBeInTheDocument();
+    expect(screen.getByText('Check the highlighted boxes.')).toBeInTheDocument();
   });
 
   it('shows what went wrong, keeps the draft, and points to the competition if it was created', async () => {

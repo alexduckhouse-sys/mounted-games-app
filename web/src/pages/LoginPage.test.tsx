@@ -246,9 +246,9 @@ describe('LoginPage', () => {
       expect(await screen.findByRole('alert')).toHaveTextContent('That key or password didn’t work.');
       expect(screen.getByLabelText('Organiser key')).toHaveAttribute('aria-invalid', 'true');
       // A 401 anti-impersonation error shows the specific server message.
-      vi.mocked(api.post).mockRejectedValue({ response: { status: 401, data: { message: 'That email already has an account — enter its password to sign in.' } } });
+      vi.mocked(api.post).mockRejectedValue({ response: { status: 401, data: { message: 'That email already has an account. Enter its password to sign in.' } } });
       await userEvent.type(screen.getByLabelText('Organiser key'), 'x{Enter}');
-      expect(await screen.findByRole('alert')).toHaveTextContent('That email already has an account — enter its password to sign in.');
+      expect(await screen.findByRole('alert')).toHaveTextContent('That email already has an account. Enter its password to sign in.');
       // A 400 validation error shows the server message.
       vi.mocked(api.post).mockRejectedValue({ response: { status: 400, data: { message: 'Enter a valid email address.' } } });
       await userEvent.type(screen.getByLabelText('Organiser key'), 'x{Enter}');

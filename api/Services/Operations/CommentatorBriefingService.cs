@@ -88,7 +88,7 @@ public class CommentatorBriefingService(AppDbContext db)
         foreach (var entry in heat.Entries.OrderBy(e => e.LaneIndex).ThenBy(e => e.Id))
         {
             teamsById.TryGetValue(entry.TeamId, out var team);
-            var teamName = team?.DisplayName ?? entry.Team?.DisplayName ?? $"Team {entry.TeamId}";
+            var teamName = team?.DisplayName ?? entry.Team?.DisplayName ?? "Unnamed team";
             var clubName = team?.Club?.Name ?? entry.Team?.Club?.Name ?? string.Empty;
             var bibColour = string.IsNullOrWhiteSpace(entry.BibColourOverride)
                 ? (team?.BibColour ?? entry.Team?.BibColour)
@@ -115,13 +115,13 @@ public class CommentatorBriefingService(AppDbContext db)
                 else if (!finalsHaveBeenDrawn && standings.Count > cutline && rank.Value <= cutline)
                 {
                     var cushion = pts - firstOutsidePoints;
-                    stakesHeadline = $"#{rank.Value} overall ({PointValues.Format(pts)} pts) — +{PointValues.Format(cushion)} pts above the Top {cutline} A-Final cutline";
+                    stakesHeadline = $"#{rank.Value} overall ({PointValues.Format(pts)} pts), {PointValues.Format(cushion)} pts clear of the A final cut-off";
                 }
                 else if (!finalsHaveBeenDrawn && standings.Count > cutline && rank.Value > cutline)
                 {
                     var deficit = cutlinePoints - pts;
                     if (deficit <= 10)
-                        stakesHeadline = $"#{rank.Value} overall ({PointValues.Format(pts)} pts) — {PointValues.Format(deficit)} pts off the Top {cutline} A-Final cutline";
+                        stakesHeadline = $"#{rank.Value} overall ({PointValues.Format(pts)} pts), {PointValues.Format(deficit)} pts off the A final cut-off";
                     else
                         stakesHeadline = $"#{rank.Value} overall ({PointValues.Format(pts)} pts)";
                 }

@@ -252,8 +252,8 @@ describe('MyTeamsPage joining a team', () => {
     vi.mocked(api.post).mockResolvedValue({ data: { status: 1, teamName: 'Cheshire A' } });
     mount();
     await userEvent.click(await screen.findByRole('button', { name: 'Join a team with a code' }));
-    await userEvent.type(screen.getByLabelText('Join key'), 'abcd');
-    expect(screen.getByLabelText('Join key')).toHaveValue('ABCD');
+    await userEvent.type(screen.getByLabelText('Team join code'), 'abcd');
+    expect(screen.getByLabelText('Team join code')).toHaveValue('ABCD');
     await userEvent.click(screen.getByRole('button', { name: 'Join' }));
     expect(await screen.findByRole('status')).toHaveTextContent("You're now supporting Cheshire A.");
     expect(api.post).toHaveBeenCalledWith('/teams/join', { key: 'ABCD' });
@@ -264,12 +264,12 @@ describe('MyTeamsPage joining a team', () => {
     vi.mocked(api.post).mockResolvedValueOnce({ data: { status: 0, teamName: 'Cheshire A' } }).mockRejectedValueOnce({}).mockRejectedValueOnce({ response: { data: 'Nope' } });
     mount();
     await userEvent.click(await screen.findByRole('button', { name: 'Join a team with a code' }));
-    const box = screen.getByLabelText('Join key');
+    const box = screen.getByLabelText('Team join code');
     await userEvent.type(box, 'one{Enter}');
     expect(await screen.findByText('Request sent for Cheshire A. The trainer needs to accept.')).toBeInTheDocument();
     await userEvent.type(box, 'two');
     await userEvent.click(screen.getByRole('button', { name: 'Join' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t join. Check the key and try again.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t join. Check the code and try again.');
     await userEvent.type(box, 'three');
     await userEvent.click(screen.getByRole('button', { name: 'Join' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Nope'));
@@ -408,7 +408,7 @@ describe('MyTeamsPage design plan A8', () => {
     expect(document.querySelector('.border-dashed')).toBeNull();
     expect(screen.getByTestId('dock')).toHaveTextContent('Join a team with a code');
     await userEvent.click(screen.getByTestId('dock'));
-    expect(screen.getByLabelText('Join key')).toBeInTheDocument();
+    expect(screen.getByLabelText('Team join code')).toBeInTheDocument();
     expect(screen.queryByTestId('dock')).toBeNull();
     expect(screen.getByRole('link', { name: 'Choose a competition' })).not.toHaveClass('border-dashed');
   });
