@@ -97,12 +97,18 @@ function SignupList() {
     return () => { cancelled = true; };
   }, [user, attempt]);
 
+  // The pair request being answered, so its buttons switch off until the answer comes back.
+  const [responding, setResponding] = useState<number | null>(null);
   async function respondPair(signupId: number, accept: boolean) {
+    if (responding !== null) return;
+    setResponding(signupId);
     try {
       const { data } = await api.post<ExtendedMySignup>(`/my/signups/${signupId}/pair-respond`, { accept });
       setSignups((cur) => cur?.map((item) => (item.id === signupId ? data : item)) ?? null);
     } catch {
       setError(t('account.signups.pairFailed'));
+    } finally {
+      setResponding(null);
     }
   }
 
@@ -184,8 +190,8 @@ function SignupList() {
                   <span className="sp-t2">{[s.competitionName, displaySectionName(s.sectionName)].filter(Boolean).join(' · ')}</span>
                 </span>
                 <span className="flex shrink-0 items-center gap-2">
-                  <button type="button" className="sp-red" aria-label={t('account.signups.declinePair', { name: s.pairRequestFromName ?? t('account.signups.anotherRider') })} onClick={() => void respondPair(s.id, false)}>{t('account.signups.decline')}</button>
-                  <button type="button" className="sp-pill sp-pill-fill sp-pill-sm" aria-label={t('account.signups.acceptPair', { name: s.pairRequestFromName ?? t('account.signups.anotherRider') })} onClick={() => void respondPair(s.id, true)}>{t('account.signups.accept')}</button>
+                  <button type="button" className="sp-red sp-red-tall" disabled={responding !== null} aria-label={t('account.signups.declinePair', { name: s.pairRequestFromName ?? t('account.signups.anotherRider') })} onClick={() => void respondPair(s.id, false)}>{t('account.signups.decline')}</button>
+                  <button type="button" className="sp-pill sp-pill-fill" disabled={responding !== null} aria-label={t('account.signups.acceptPair', { name: s.pairRequestFromName ?? t('account.signups.anotherRider') })} onClick={() => void respondPair(s.id, true)}>{t('account.signups.accept')}</button>
                 </span>
               </div>
             ))}
