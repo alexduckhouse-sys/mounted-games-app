@@ -278,6 +278,8 @@ public class ReviewSeedFreshTests
             db.Set<CalendarHeatVersion>().Add(new CalendarHeatVersion { HeatId = heat.Id, TeamId = team.Id, Fingerprint = "x" });
             db.Set<RaceScoreState>().Add(new RaceScoreState { Race = race, Revision = 1 });
             db.Set<RaceScoreEvent>().Add(new RaceScoreEvent { Race = race, Revision = 1, Kind = RaceScoreEventKind.ResultsRecorded, RequestId = Guid.NewGuid().ToString() });
+            db.Set<Protest>().Add(new Protest { Competition = competition, HeatId = heat.Id, Race = race, RaisedByTeam = team, Reason = "Missed a flag", RequestId = Guid.NewGuid().ToString() });
+            db.Set<Protest>().Add(new Protest { Competition = competition, HeatId = heat.Id, Reason = "Whole heat restarted late", Status = ProtestStatus.Dismissed, Decision = "No effect", RequestId = Guid.NewGuid().ToString() });
             db.LiveStreams.Add(new LiveStream { Competition = competition, ArenaName = "Demo main arena", StartedByUserId = user.Id, StartedAt = Today, LastHeartbeatAt = Today });
             db.StreamOverlays.Add(new StreamOverlay { Competition = competition, UpdatedAt = Today });
             var listing = new CompetitionListing { Competition = competition, CatalogueItemId = item.Id, SellerUserId = seller.Id };
@@ -341,6 +343,7 @@ public class ReviewSeedFreshTests
         Assert.Empty(await db.Set<DrawChange>().ToListAsync());
         Assert.Empty(await db.Set<RaceScoreState>().ToListAsync());
         Assert.Empty(await db.Set<RaceScoreEvent>().ToListAsync());
+        Assert.Empty(await db.Set<Protest>().ToListAsync());
         Assert.Empty(await db.Set<CalendarHeatVersion>().ToListAsync());
         Assert.Empty(await db.Set<RiderSwapEvent>().ToListAsync());
         Assert.Empty(await db.Set<TackCheckMark>().ToListAsync());

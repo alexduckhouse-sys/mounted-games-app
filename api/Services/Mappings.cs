@@ -155,14 +155,16 @@ public static class Mappings
     public static RaceDto ToDto(this Race r) => new(
         r.Id, r.HeatId, r.Name, r.OrderIndex, r.IsComplete,
         r.StartedAt, r.FinishedAt,
-        r.Results.OrderBy(x => x.Placing ?? int.MaxValue).Select(x => x.ToDto()).ToList());
+        r.Results.OrderBy(x => x.Placing ?? int.MaxValue).Select(x => x.ToDto()).ToList(),
+        r.HasOpenProtest);
 
     public static HeatDto ToDto(this Heat h) => new(
         h.Id, h.SessionId, h.Label, h.OrderIndex,
         h.DurationMinutes, h.ScheduledStart, h.StartedAt, h.FinishedAt,
         h.RaceRoundId, h.RaceRoundStage,
         h.Entries.OrderBy(e => e.LaneIndex).Select(e => e.ToDto()).ToList(),
-        h.Races.OrderBy(r => r.OrderIndex).Select(r => r.ToDto()).ToList());
+        h.Races.OrderBy(r => r.OrderIndex).Select(r => r.ToDto()).ToList(),
+        h.Races.Any(r => r.HasOpenProtest));
 
     public static SessionDto ToDto(this Session s) => new(
         s.Id, s.CompetitionId, s.CompetitionSectionId, s.Section?.DisplayName,

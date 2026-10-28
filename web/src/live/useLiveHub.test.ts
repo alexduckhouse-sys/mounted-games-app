@@ -170,7 +170,7 @@ describe('useLiveHub', () => {
       onStreamUpdated: vi.fn(), onStreamViewers: vi.fn(), onStreamTelemetry: vi.fn(), onStreamCommand: vi.fn(),
       onOverlayUpdated: vi.fn(), onScoreCardControl: vi.fn(), onSponsorControl: vi.fn(), onPrizeGiving: vi.fn(),
       onReady: vi.fn(), onChatMessage: vi.fn(), onChatMessageDeleted: vi.fn(),
-      onSessionUpdated: vi.fn(), onResultsUpdated: vi.fn(), onAnnouncement: vi.fn(),
+      onSessionUpdated: vi.fn(), onResultsUpdated: vi.fn(), onAnnouncement: vi.fn(), onProtestsChanged: vi.fn(),
     };
     renderHook(() => useLiveHub(1, handlers));
     await flush();
@@ -200,13 +200,15 @@ describe('useLiveHub', () => {
     expect(handlers.onSessionUpdated).toHaveBeenCalledWith({ id: 3 });
     expect(handlers.onResultsUpdated).toHaveBeenCalledWith({ id: 4 });
     expect(handlers.onAnnouncement).toHaveBeenCalledWith({ id: 5 });
+    connection.emit('protestsChanged', { competitionId: 1 });
+    expect(handlers.onProtestsChanged).toHaveBeenCalledTimes(1);
   });
 
   it('ignores events the page has no handler for', async () => {
     const connection = next();
     renderHook(() => useLiveHub(1, {}));
     await flush();
-    for (const event of ['chatMessage', 'chatMessageDeleted', 'sessionUpdated', 'resultsUpdated', 'announcement', 'streamUpdated', 'streamViewers']) {
+    for (const event of ['chatMessage', 'chatMessageDeleted', 'sessionUpdated', 'resultsUpdated', 'announcement', 'streamUpdated', 'streamViewers', 'protestsChanged']) {
       expect(() => connection.emit(event, {})).not.toThrow();
     }
   });

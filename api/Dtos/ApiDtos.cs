@@ -427,6 +427,7 @@ public record AutoTimetableRequest(
     bool ReplaceExisting,
     IReadOnlyList<int>? SectionIds);
 
+/// <param name="UnderReview">An open protest covers at least one of its races. Only the flag: never the protest itself.</param>
 public record HeatDto(
     int Id, int SessionId, string? Label,
     int OrderIndex,
@@ -436,7 +437,8 @@ public record HeatDto(
     int? RaceRoundId,
     RaceRoundStage RaceRoundStage,
     IReadOnlyList<HeatEntryDto> Entries,
-    IReadOnlyList<RaceDto> Races);
+    IReadOnlyList<RaceDto> Races,
+    bool UnderReview = false);
 
 public record UpdateHeatScheduledStartRequest(DateTime? ScheduledStart);
 public record PopulateRaceFinalRequest(int TopN);
@@ -446,11 +448,13 @@ public record GenerateRaceFinalsRequest(
     int? LanesPerHeat,
     bool ReplaceExisting);
 
+/// <param name="UnderReview">An open protest covers this race. Only the flag: never the reason, names or decision.</param>
 public record RaceDto(
     int Id, int HeatId, string Name,
     int OrderIndex, bool IsComplete,
     DateTime? StartedAt, DateTime? FinishedAt,
-    IReadOnlyList<ResultDto> Results);
+    IReadOnlyList<ResultDto> Results,
+    bool UnderReview = false);
 
 public record UpdateHeatDurationRequest(int? DurationMinutes);
 

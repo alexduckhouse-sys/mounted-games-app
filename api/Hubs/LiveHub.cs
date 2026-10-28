@@ -97,6 +97,11 @@ public interface ILiveBroadcaster
     Task SponsorControl(int competitionId, SponsorControlDto control);
     Task StreamTelemetry(int competitionId, StreamTelemetryDto telemetry);
     Task StreamCommand(int competitionId, StreamCommandDto command);
+    /// <summary>
+    /// Tells the competition's staff (site admins, the owner and its competition admins) that its protests
+    /// changed, so their screens re-read the staff-only list. The payload is the competition id only.
+    /// </summary>
+    Task ProtestsChanged(int competitionId);
 }
 
 public class LiveBroadcaster : ILiveBroadcaster
@@ -152,6 +157,24 @@ public class LiveBroadcaster : ILiveBroadcaster
             await _hub.Clients.User(authorUserId).SendAsync("chatMessage", message);
         if (recipientUserId is not null && recipientUserId != authorUserId)
             await _hub.Clients.User(recipientUserId).SendAsync("chatMessage", message);
+    }
+
+    public async Task ProtestsChanged(int competitionId)
+    {
+        using var scope = _scopes.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var adminIds = await (from membership in db.UserRoles
+                              join role in db.Roles on membership.RoleId equals role.Id
+                              where role.Name == Roles.Admin
+                              select membership.UserId).Distinct().ToListAsync();
+        var owner = await db.Competitions.AsNoTracking().Where(c => c.Id == competitionId)
+            .Select(c => c.CreatedByUserId).FirstOrDefaultAsync();
+        var team = await db.CompetitionCollaborators.AsNoTracking().Where(k => k.CompetitionId == competitionId)
+            .Select(k => k.UserId).ToListAsync();
+        var groups = adminIds.Concat(team).Append(owner).OfType<string>().Distinct()
+            .Select(id => LiveHub.UserGroupName(competitionId, id)).ToArray();
+        if (groups.Length > 0)
+            await _hub.Clients.Groups(groups).SendAsync("protestsChanged", new { competitionId });
     }
 
     public Task ChatMessageDeleted(int competitionId, int messageId)

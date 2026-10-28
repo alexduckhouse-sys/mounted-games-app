@@ -386,6 +386,8 @@ public static class ReviewCompetitionSeeder
     var shiftIds = db.Set<VolunteerShift>().Where(x => ids.Contains(x.CompetitionId)).Select(x => x.Id);
     await db.Set<VolunteerClaim>().Where(x => shiftIds.Contains(x.ShiftId)).ExecuteDeleteAsync();
     await db.Set<VolunteerShift>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.Set<Protest>().Where(x => ids.Contains(x.CompetitionId) || heatIds.Contains(x.HeatId)
+        || (x.RaisedByTeamId != null && teamIds.Contains(x.RaisedByTeamId.Value))).ExecuteDeleteAsync();
     await db.Set<RaceScoreEvent>().Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();
     await db.Set<RaceScoreState>().Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();
     await db.Results.Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();

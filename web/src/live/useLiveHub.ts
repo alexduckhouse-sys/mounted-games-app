@@ -40,6 +40,8 @@ export interface LiveHandlers {
   onSessionUpdated?: (session: unknown) => void;
   onResultsUpdated?: (payload: unknown) => void;
   onAnnouncement?: (msg: unknown) => void;
+  /** Staff only: the competition's protests changed, so re-read them. The payload carries nothing else. */
+  onProtestsChanged?: () => void;
 }
 
 export function useLiveHub(competitionId: number | null, handlers: LiveHandlers) {
@@ -138,6 +140,7 @@ export function useLiveHub(competitionId: number | null, handlers: LiveHandlers)
       conn.on('sessionUpdated', broadcastCoalesced('sessionUpdated', (h, s) => h.onSessionUpdated?.(s)));
       conn.on('resultsUpdated', broadcastCoalesced('resultsUpdated', (h, p) => h.onResultsUpdated?.(p)));
       conn.on('announcement', broadcast((h, a) => h.onAnnouncement?.(a)));
+      conn.on('protestsChanged', broadcast((h) => h.onProtestsChanged?.()));
 
       const createdEntry: SharedHubEntry = {
         conn,

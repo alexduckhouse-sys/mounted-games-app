@@ -14,15 +14,25 @@ import { SelectField } from '../../components/SelectField';
 import { NumberField } from '../../components/NumberField';
 import { formatPoints } from '../../lib/formatPoints';
 import { manualPoints } from '../../lib/raceScoring';
+import type { Heat, Race } from '../../types';
+import { ProtestsPanel } from './ProtestsPanel';
 
 type DraftScorePlace = ScorePlace & { pointsEdited?: boolean; pointsText?: string };
 
-export function ScoreAuditPanel(props: { raceId: number; onChanged?: () => void }) {
+interface ScoreAuditProps {
+  raceId: number;
+  onChanged?: () => void;
+  /** With the heat (staff only), the panel lists this race's protests and can log one. */
+  heat?: Heat;
+  race?: Race | null;
+}
+
+export function ScoreAuditPanel(props: ScoreAuditProps) {
   const { user } = useAuth();
   return <ScoreAuditRecord key={`${props.raceId}:${user?.id ?? ''}`} {...props} />;
 }
 
-function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: () => void }) {
+function ScoreAuditRecord({ raceId, onChanged, heat, race = null }: ScoreAuditProps) {
   const { canManage } = useAuth();
   const { competition } = useCompetition();
   const [score, setScore] = useState<RaceScore | null>(null);
@@ -145,6 +155,10 @@ function ScoreAuditRecord({ raceId, onChanged }: { raceId: number; onChanged?: (
             </RefineDisclosure>
           </RefineList>
         </>}
+
+        {heat && canManage(competition) && (
+          <ProtestsPanel competitionId={competition.id} raceId={raceId} heat={heat} race={race} empty="No protests on this race." />
+        )}
 
         <RefineSection title="History" />
         {history.length === 0

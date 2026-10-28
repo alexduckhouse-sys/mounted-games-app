@@ -220,6 +220,9 @@ public class SessionsController : ControllerBase
             var hasUnderReview = s.Heats.Any(h => h.Races.Any(r => r.Results.Any(res => ScoringService.IsUnderReview(res.RefereeNote))));
             if (hasUnderReview)
                 return Conflict(new { message = "Resolve or clear all results flagged under review before confirming official results." });
+            // An open protest (logged against a race or its whole heat) holds the results provisional the same way.
+            if (s.Heats.Any(h => h.Races.Any(r => r.HasOpenProtest)))
+                return Conflict(new { message = "Decide or withdraw the open protests before confirming official results." });
 
             s.OfficialConfirmedAt = now;
             s.ProvisionalUntil = now;

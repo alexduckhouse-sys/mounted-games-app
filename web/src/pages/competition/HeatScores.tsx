@@ -23,6 +23,7 @@ import './heat.css';
 import { formatPoints } from '../../lib/formatPoints';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { resultStatusText } from '../../lib/toplistText';
+import { underReviewNames } from '../../lib/protests';
 
 interface Cell {
   points: number;
@@ -332,6 +333,11 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
     return { teams: ranked, cells, anyScored };
   }, [heat, heats, isRaceFinals, columns, finished, runningIndex, laneRules, competition.id, favHook, showCarriedForward, carriedForwardByTeam, cardsTick, cardsEnabled, t]);
 
+  // An open protest marks races "Under review" for everyone; the protest itself stays with the organisers.
+  const reviewNames = underReviewNames(columns.map((col) => ({
+    label: col.label,
+    underReview: col.roundHeats ? col.roundHeats.some((h) => h.races.some((r) => r.underReview)) : Boolean(col.race.underReview),
+  })));
   const manyRaces = columns.length >= 6;
   // When a race re-ranks the heat, climbers swell and lift and big climbs sparkle.
   const rowsRef = useRankMotion<HTMLTableSectionElement>(grid.teams.map((team) => team.id));
@@ -363,6 +369,7 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
                         {section && <span className="heat-title-section">{section}</span>}
                         <span className="heat-title-name">{heatLabel}</span>
                         <span className={`heat-title-meta ${status === 'live' ? 'heat-title-meta-live' : status === 'late' ? 'heat-title-meta-late' : ''}`}>{tableMeta}</span>
+                        {reviewNames.length > 0 && <span className="heat-title-review" data-testid="heat-under-review">Under review: {reviewNames.join(', ')}</span>}
                       </div>
                       <span>{t('competition.toplist.team')}</span>
                     </th>

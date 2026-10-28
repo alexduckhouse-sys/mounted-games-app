@@ -34,6 +34,7 @@ import { lastUpdatedText, readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, wr
 import { PageSkeleton, TimetableSkeleton, ToplistSkeleton } from '../components/Skeletons';
 import { competitionPhase } from '../lib/competitionPhase';
 import { useLanguage, useT } from '../i18n/LanguageContext';
+import { announceProtestsChanged } from '../lib/protests';
 import { FollowBarPrompt } from './competition/FollowBarPrompt';
 
 function addAnnouncement(current: ChatMessage[], message: ChatMessage) {
@@ -225,7 +226,10 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
       }
       load();
       setReady((value) => value + 1);
+      // Staff screens re-read the protest log after a reconnect, in case a nudge was missed.
+      announceProtestsChanged();
     },
+    onProtestsChanged: announceProtestsChanged,
     onStreamUpdated: streamState.onStreamUpdated,
     onStreamViewers: streamState.onStreamViewers,
     onStreamTelemetry: (t) => setStreamTelemetry((cur) => ({ ...cur, [t.streamId]: t })),

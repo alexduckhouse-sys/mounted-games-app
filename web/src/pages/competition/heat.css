@@ -35,6 +35,10 @@
 }
 .heat-title-meta-live { color: rgb(var(--mg-elim)); font-weight: 600; }
 .heat-title-meta-late { color: rgb(var(--mg-late-time)); font-weight: 600; }
+.heat-title-review {
+  overflow: hidden; padding-top: 4px; color: rgb(var(--mg-late-ink)); font: 600 13px/1.1 var(--mg-font);
+  letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap;
+}
 
 .heat-name,
 .race-rules-btn.heat-name {
