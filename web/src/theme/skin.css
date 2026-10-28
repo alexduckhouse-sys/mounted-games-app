@@ -339,6 +339,19 @@ button.mg-weather-line { cursor: pointer; }
   font: 400 16px/1.3 var(--mg-font);
 }
 .mg-field input::placeholder, .mg-field textarea::placeholder { color: rgb(var(--mg-faint)); }
+/* Our own eye and caps-lock note replace the browser's. Separate rules: one unknown pseudo-element would drop a shared rule. */
+.mg-field input::-ms-reveal { display: none; }
+.mg-field input::-ms-clear { display: none; }
+.mg-field input::-webkit-caps-lock-indicator { display: none !important; }
+.mg-field input::-webkit-credentials-auto-fill-button { visibility: hidden; pointer-events: none; position: absolute; right: 0; }
+.mg-eye { flex: none; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: 0 -8px 0 0; border: 0; border-radius: 8px; background: transparent; color: rgb(var(--mg-muted)); cursor: pointer; }
+.mg-eye:hover { color: rgb(var(--mg-ink)); }
+.mg-eye:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
+/* A box that is pre-filled and locked (the invited email) reads as such, like .rf-fld input[readonly]. */
+.mg-field:has(input[readonly]), .mg-field[data-readonly="true"] { background: rgb(var(--mg-subtle)); color: rgb(var(--mg-muted)); }
+.mg-field input[readonly] { color: rgb(var(--mg-muted)); }
+/* Short fade when a form swaps for another, or for its confirmation. */
+.mg-swap { animation: mg-fade-in var(--mg-dur-base) var(--mg-ease-out) both; }
 .mg-field-suffix { flex: none; font: 500 14px/1 var(--mg-font); color: rgb(var(--mg-muted)); }
 /* An answer that breaks the organiser's limit: accepted, but flagged. Amber in every theme. */
 .mg-flag { border-radius: 8px; padding: 6px 10px; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); font: 600 13px/1.3 var(--mg-font); }

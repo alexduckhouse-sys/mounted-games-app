@@ -24,7 +24,7 @@ interface Attention {
 const NONE: Attention = { pendingEntries: [], flaggedForms: [], payoutsNotReady: false };
 
 /** Work that is waiting on an organiser: unpaid entries for events this week, and the club's payout set-up. */
-function useAttention(events: CompetitionPickerItem[]): Attention {
+function useAttention(events: CompetitionPickerItem[]): { attention: Attention; loaded: boolean } {
   const { user, hasRole, canOrganise } = useAuth();
   const [found, setFound] = useState<{ key: string; value: Attention } | null>(null);
   const clubId = user?.clubId ?? null;
@@ -54,7 +54,10 @@ function useAttention(events: CompetitionPickerItem[]): Attention {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  return found && found.key === key ? found.value : NONE;
+  // Nothing to look up counts as answered.
+  const nothingToCheck = !user || (mine.length === 0 && !(runsClub && clubId != null));
+  const answered = found != null && found.key === key;
+  return { attention: answered ? found.value : NONE, loaded: answered || nothingToCheck };
 }
 
 /**
@@ -62,10 +65,15 @@ function useAttention(events: CompetitionPickerItem[]): Attention {
  * still to fill in, entries of their own still to pay, and for organisers the unpaid entries, flagged dec forms and
  * payout set-up that need a look. Nothing shows when nothing is waiting.
  */
-export function NeedsYouPanel({ events = [], dueEntries = [], pairRequests = [] }: { events?: CompetitionPickerItem[]; dueEntries?: ExtendedMySignup[]; pairRequests?: ExtendedMySignup[] }) {
+export function NeedsYouPanel({ events = [], dueEntries = [], pairRequests = [], onSettled }: {
+  events?: CompetitionPickerItem[]; dueEntries?: ExtendedMySignup[]; pairRequests?: ExtendedMySignup[];
+  /** Called once the panel has everything it looks up, so a page can show it and its neighbours together. */
+  onSettled?: () => void;
+}) {
   const t = useT();
   const { requests, decForms, review, reviewError } = useNeedsYou();
-  const attention = useAttention(events);
+  const { attention, loaded } = useAttention(events);
+  useEffect(() => { if (loaded) onSettled?.(); }, [loaded, onSettled]);
   const [failed, setFailed] = useState<string | null>(null);
   const count = pairRequests.length + requests.length + decForms.length + dueEntries.length + attention.pendingEntries.length + attention.flaggedForms.length + (attention.payoutsNotReady ? 1 : 0);
 
@@ -88,8 +96,8 @@ export function NeedsYouPanel({ events = [], dueEntries = [], pairRequests = [] 
                 <span className="sp-t2">{t(request.requestedRole === 'Manager' ? 'account.needs.wantsManager' : 'account.needs.wantsTrainer')}</span>
               </span>
               <span className="flex shrink-0 items-center gap-2">
-                <button type="button" className="sp-red" aria-label={t('account.needs.declineAria', { name: request.fullName })} onClick={() => decide(request, 'decline')}>{t('account.signups.decline')}</button>
-                <button type="button" className="sp-pill sp-pill-fill sp-pill-sm" aria-label={t('account.needs.approveAria', { name: request.fullName })} onClick={() => decide(request, 'approve')}>{t('account.needs.approve')}</button>
+                <button type="button" className="sp-red sp-red-tall" aria-label={t('account.needs.declineAria', { name: request.fullName })} onClick={() => decide(request, 'decline')}>{t('account.signups.decline')}</button>
+                <button type="button" className="sp-pill sp-pill-fill sp-pill-sm sp-pill-tall" aria-label={t('account.needs.approveAria', { name: request.fullName })} onClick={() => decide(request, 'approve')}>{t('account.needs.approve')}</button>
               </span>
             </div>
             {failed === request.userId && <div className="px-3.5 pb-3"><Notice>{reviewError ?? t('account.needs.updateFailed')}</Notice></div>}

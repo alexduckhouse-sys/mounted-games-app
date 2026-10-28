@@ -43,7 +43,7 @@ export function ForgotPasswordPage() {
   if (sentTo !== null) {
     return (
       <AuthFrame>
-        <div className="flex flex-1 flex-col gap-[18px]">
+        <div className="mg-swap flex flex-1 flex-col gap-[18px]">
           <h1 className="mg-h1 !text-[34px] !leading-none">{t('auth.forgot.checkTitle')}</h1>
           <Notice tone="info" icon={MailCheck}>
             {t('auth.forgot.sentNotice', { email: sentTo })}
@@ -60,7 +60,7 @@ export function ForgotPasswordPage() {
 
   return (
     <AuthFrame>
-      <form onSubmit={submit} className="flex flex-1 flex-col gap-[18px]" noValidate>
+      <form onSubmit={submit} className="mg-swap flex flex-1 flex-col gap-[18px]" noValidate>
         <h1 className="mg-h1 !text-[34px] !leading-none">{t('auth.forgot.title')}</h1>
         <p className="m-0 text-[15px] text-[rgb(var(--mg-body))]">{t('auth.forgot.intro')}</p>
         <Field label={t('auth.field.email')} error={error}>
