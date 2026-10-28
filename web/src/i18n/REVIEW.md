@@ -27,7 +27,7 @@ The sport has no settled Welsh or French terms for several words. Where several 
 | section / age group | grŵp oedran / adran | catégorie d'âge / catégorie | |
 | hatband / bib | bib | dossard | |
 | sit out | eistedd allan | au repos | |
-| elimination | wedi'i ddileu | éliminée | Status words also: did not start `heb ddechrau` / `non partante`, did not finish `heb orffen` / `abandon`, retired `wedi ymddeol`. Check `non classée` for DNF in French. |
+| elimination | wedi’i eithrio | éliminé(e) | Status words also: did not start `heb ddechrau` / `non-partant(e)`, did not finish `heb orffen` / `n’a pas terminé`, retired `wedi rhoi’r gorau iddi` / `abandon`. The `(e)` forms avoid choosing a gender for a rider or a team. |
 | carried forward | cario ymlaen | reporté | |
 | run-off | ras ddatrys | barrage | |
 | draw | tynnu enwau / balot | tirage au sort / tirage | |
