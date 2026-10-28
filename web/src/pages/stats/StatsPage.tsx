@@ -4,7 +4,7 @@ import { usePageWidth } from '../../components/pageWidthState';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { RoundSearch } from '../../components/RoundSearch';
 import { ChevronRight } from 'lucide-react';
-import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { StatsGamesView } from '../../components/stats/StatsGamesView';
 import { StatsSummaryView } from '../../components/stats/StatsSummaryView';
@@ -14,7 +14,7 @@ import {
   pointsOf, statsKindFromPath, statsProfileHref, tidyStatsQuery,
 } from '../../lib/stats';
 import { StatsSubjectKind, type StatsEntry, type StatsHit, type StatsProfile } from '../../types';
-import { Chevron, RefineDisclosure, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection } from '../refine/Refine';
+import { Chevron, RefineDisclosure, RefineList, RefineNote, RefinePage, RefineSection } from '../refine/Refine';
 import { formatPoints } from '../../lib/formatPoints';
 import { useT, useLanguage } from '../../i18n/LanguageContext';
 import type { Translate } from '../../i18n/translate';
@@ -65,7 +65,7 @@ function StatsBrowseView() {
     <nav className="sp-seg sp-gap" aria-label={t('site.stats.show')}>
       {STATS_TABS.map((entry) => <Link key={entry.kind} to={tabHref(entry.kind)} replace aria-current={entry.kind === kind ? 'page' : undefined}>{entry.label}</Link>)}
     </nav>
-    <div>
+    <div key={kind} className="mg-settle">
       {text.trim().length === 1 && <RefineNote>{t('site.stats.twoLetters')}</RefineNote>}
       {list.status === 'loading' && <p role="status" className="rf-note">{t('common.loading')}</p>}
       {list.status === 'error' && <Notice className="mt-3">{list.message}</Notice>}
@@ -127,75 +127,77 @@ function StatsProfileRoute({ segment }: { segment: string }) {
   const valid = kind !== null && isSearchableQuery(name);
   const load = useStatsProfile(valid ? `/stats/${STATS_PATHS[kind]}?name=${encodeURIComponent(name)}` : null, user?.id ?? 'public');
   const label = kind === null ? t('site.stats.statsWord') : t('site.stats.kindStats', { kind: STATS_KIND_LABELS[kind] });
-  const back = <RefineHeader back={kind === null ? '/stats' : `/stats?kind=${STATS_PATHS[kind]}`} backLabel={t('site.stats.backToList')} context={label} title={load.status === 'ready' ? load.data.name : name || t('site.stats.notFound')} />;
+  // One sub-page header (back arrow and the name) in the app bar, rather than a second bar under it.
+  usePageHeader({
+    title: load.status === 'ready' ? load.data.name : name || t('site.stats.notFound'),
+    subtitle: label,
+    plain: true,
+    backTo: kind === null ? '/stats' : `/stats?kind=${STATS_PATHS[kind]}`,
+    backLabel: t('site.stats.backToList'),
+  });
 
-  if (!valid || load.status === 'missing') return <RefinePage>{back}
+  if (!valid || load.status === 'missing') return <RefinePage>
     <div className="py-6 text-[rgb(var(--mg-muted))]"><h2 className="m-0 mb-1 font-['Barlow_Condensed',sans-serif] text-xl font-bold text-[rgb(var(--mg-heading))]">{t('site.stats.noneFound')}</h2>
       <p className="m-0">{t('site.stats.noneFoundBody')} <Link to="/stats" className="font-semibold text-[rgb(var(--mg-heading))]">{t('site.stats.browse')}</Link></p></div>
   </RefinePage>;
-  if (load.status === 'error') return <RefinePage>{back}<Notice className="mt-3">{load.message}</Notice></RefinePage>;
-  if (load.status !== 'ready') return <RefinePage>{back}<p role="status" className="rf-note">{t('site.stats.loading')}</p></RefinePage>;
-  return <RefinePage>{back}<ProfileBody profile={load.data} /></RefinePage>;
+  if (load.status === 'error') return <RefinePage><Notice className="mt-3">{load.message}</Notice></RefinePage>;
+  if (load.status !== 'ready') return <RefinePage><p role="status" className="rf-note">{t('site.stats.loading')}</p></RefinePage>;
+  return <RefinePage><ProfileBody profile={load.data} /></RefinePage>;
 }
 
 const partnerTitle = (kind: StatsSubjectKind, t: Translate) => t(kind === 0 ? 'site.stats.poniesRidden' : kind === 1 ? 'site.stats.ridersTitle' : 'site.stats.ridersAndPonies');
 
-/** The profile itself, shared with nothing else: summary for everyone, then the detail a signed-in viewer gets. */
+/** The profile itself: the summary, then every game, competition, season, club and partnership, for everyone. */
 function ProfileBody({ profile }: { profile: StatsProfile }) {
   const t = useT();
-  const location = useLocation();
   const { summary } = profile;
-  // A team's per-game figures are public; the API leaves them out for riders and ponies until you sign in.
-  const games = profile.detailed || profile.games != null ? <>
-    <RefineSection title={profile.raceFiguresAllFormats ? t('site.stats.games') : t('site.stats.gamesIndividualPairs')} meta={profile.games?.length ?? 0} />
-    <StatsGamesView games={profile.games ?? []} best={profile.bestGames ?? []} worst={profile.worstGames ?? []}
+  const games = profile.games != null ? <>
+    <RefineSection title={profile.raceFiguresAllFormats ? t('site.stats.games') : t('site.stats.gamesIndividualPairs')} meta={profile.games.length} />
+    <StatsGamesView games={profile.games} best={profile.bestGames ?? []} worst={profile.worstGames ?? []}
       emptyText={profile.raceFiguresAllFormats ? t('site.stats.noRaces') : t('site.stats.noIndividualRaces')} />
   </> : null;
   return <>
     <StatsSummaryView summary={summary} raceFiguresAllFormats={profile.raceFiguresAllFormats} />
-    {!profile.detailed ? <>
-      {games}
-      <div className="mt-3 rounded-[10px] border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-subtle))] p-3">
-        <p className="m-0 text-sm">{games ? t('site.stats.signInMore') : t('site.stats.signInAll')}</p>
-        <Link to="/login" state={{ from: location.pathname + location.search }} className="rf-btn rf-btn-primary mt-2">{t('common.signIn')}</Link>
-      </div>
-    </> : <>
-      {games}
-      <RefineSection title={t('site.stats.competitions')} meta={profile.entries?.length ?? 0} />
-      {profile.entries?.length ? <RefineList as="div" label={t('site.stats.competitions')}>{profile.entries.map((entry) => <EntryRow key={`${entry.teamId}`} entry={entry} />)}</RefineList>
-        : <RefineNote>{t('site.stats.noCompetitions')}</RefineNote>}
-      {profile.seasons?.length ? <>
-        <RefineSection title={t('site.stats.seasons')} meta={profile.seasons.length} />
-        <RefineList label={t('site.stats.seasons')}>{profile.seasons.map((season) => <li key={`${season.seasonId}:${season.teamProfileId}`} className="rf-row">
+    {games}
+    <RefineSection title={t('site.stats.competitions')} meta={profile.entries?.length ?? 0} />
+    {profile.entries?.length ? <RefineList as="div" label={t('site.stats.competitions')}>{profile.entries.map((entry) => <EntryRow key={`${entry.teamId}`} entry={entry} />)}</RefineList>
+      : <RefineNote>{t('site.stats.noCompetitions')}</RefineNote>}
+    {profile.seasons?.length ? <>
+      <RefineSection title={t('site.stats.seasons')} meta={profile.seasons.length} />
+      <RefineList label={t('site.stats.seasons')}>{profile.seasons.map((season) => <li key={`${season.seasonId}:${season.teamProfileId}`}>
+        <Link to={`/seasons/${season.seasonId}`} className="rf-row">
           <span className="rf-grow">
-            <Link to={`/seasons/${season.seasonId}`} className="rf-t1">{season.seasonName}</Link>
+            <span className="rf-t1">{season.seasonName}</span>
             <span className="rf-t2">{season.teamName} · {countText('competition', season.eventsEntered)} · {t('site.stats.pts', { points: formatPoints(season.points) })}{season.rank != null ? ` · ${ordinalPlace(season.rank)}` : ''}</span>
           </span>
-        </li>)}</RefineList>
-      </> : null}
-      {profile.clubs?.length ? <>
-        <RefineSection title={t('site.stats.clubsRepresented')} meta={profile.clubs.length} />
-        <RefineList label={t('site.stats.clubsRepresented')}>{profile.clubs.map((club) => <li key={club.clubName}>
-          <Link to={statsProfileHref(StatsSubjectKind.Club, club.clubName.toLowerCase())} className="rf-row">
-            <span className="rf-grow">
-              <span className="rf-t1">{club.clubName}</span>
-              <span className="rf-t2">{countText('entry', club.entries)} · {countText('competition', club.competitions)}</span>
-            </span>
-            <Chevron />
-          </Link>
-        </li>)}</RefineList>
-      </> : null}
-      <RefineSection title={partnerTitle(profile.kind, t)} meta={profile.partnerships?.length ?? 0} />
-      {profile.partnerships?.length ? <RefineList label={partnerTitle(profile.kind, t)}>{profile.partnerships.map((pair) => <li key={`${pair.riderName}|${pair.ponyName}`} className="rf-row">
-        <span className="rf-grow"><span className="rf-t1">{profile.kind === StatsSubjectKind.Rider
-          ? <Link to={statsProfileHref(StatsSubjectKind.Pony, pair.ponyName.toLowerCase())}>{pair.ponyName}</Link>
-          : profile.kind === StatsSubjectKind.Pony
-            ? <Link to={statsProfileHref(StatsSubjectKind.Rider, pair.riderName.toLowerCase())}>{pair.riderName}</Link>
-            : <><Link to={statsProfileHref(StatsSubjectKind.Rider, pair.riderName.toLowerCase())}>{pair.riderName}</Link> {t('site.stats.onPony')} <Link to={statsProfileHref(StatsSubjectKind.Pony, pair.ponyName.toLowerCase())}>{pair.ponyName}</Link></>}</span>
-          <span className="rf-t2">{countText('entry', pair.entries)} · {countText('competition', pair.competitions)}</span></span>
-      </li>)}</RefineList> : <RefineNote>{t('site.stats.noPonies')}</RefineNote>}
-      <RefineNote>{t('site.stats.placesNote')}</RefineNote>
-    </>}
+          <Chevron />
+        </Link>
+      </li>)}</RefineList>
+    </> : null}
+    {profile.clubs?.length ? <>
+      <RefineSection title={t('site.stats.clubsRepresented')} meta={profile.clubs.length} />
+      <RefineList label={t('site.stats.clubsRepresented')}>{profile.clubs.map((club) => <li key={club.clubName}>
+        <Link to={statsProfileHref(StatsSubjectKind.Club, club.clubName.toLowerCase())} className="rf-row">
+          <span className="rf-grow">
+            <span className="rf-t1">{club.clubName}</span>
+            <span className="rf-t2">{countText('entry', club.entries)} · {countText('competition', club.competitions)}</span>
+          </span>
+          <Chevron />
+        </Link>
+      </li>)}</RefineList>
+    </> : null}
+    <RefineSection title={partnerTitle(profile.kind, t)} meta={profile.partnerships?.length ?? 0} />
+    {profile.partnerships?.length ? <RefineList label={partnerTitle(profile.kind, t)}>{profile.partnerships.map((pair) => <li key={`${pair.riderName}|${pair.ponyName}`}>
+      {/* The whole row is the link: to the pony for a rider, to the rider for a pony or a team. */}
+      <Link to={statsProfileHref(profile.kind === StatsSubjectKind.Rider ? StatsSubjectKind.Pony : StatsSubjectKind.Rider, (profile.kind === StatsSubjectKind.Rider ? pair.ponyName : pair.riderName).toLowerCase())} className="rf-row">
+        <span className="rf-grow">
+          <span className="rf-t1">{profile.kind === StatsSubjectKind.Rider ? pair.ponyName : profile.kind === StatsSubjectKind.Pony ? pair.riderName : `${pair.riderName} ${t('site.stats.onPony')} ${pair.ponyName}`}</span>
+          <span className="rf-t2">{countText('entry', pair.entries)} · {countText('competition', pair.competitions)}</span>
+        </span>
+        <Chevron />
+      </Link>
+    </li>)}</RefineList> : <RefineNote>{t('site.stats.noPonies')}</RefineNote>}
+    <RefineNote>{t('site.stats.placesNote')}</RefineNote>
   </>;
 }
 
@@ -211,6 +213,7 @@ function EntryRow({ entry }: { entry: StatsEntry }) {
     sub={`${date} · ${entry.sectionName} (${sectionFormatText(entry.format, t)}) · ${entry.teamName}${who ? ` ${who}` : ''}`}
     trailing={<span className="text-right"><span className="rf-num block">{place}</span>{!entry.isHorsConcours && entry.teamsPlaced > 0 && <span className="rf-t2">{t('site.stats.ofTeams', { count: entry.teamsPlaced })}</span>}</span>}
   >
+    <Link to={`/competitions/${entry.competitionId}`} className="rf-row"><span className="rf-grow rf-t1">{t('site.stats.openCompetition', { name: entry.competitionName })}</span><Chevron /></Link>
     <div className="flex flex-col gap-1 px-4 pb-3 text-sm">
       <p className="m-0">{final ? `${final}. ` : ''}{t('site.stats.quotaLine', { percent: formatPercent(entry.pointQuotaPercent), points: pointsOf(entry.points, entry.maxPoints), races: countText('race', entry.races) })}</p>
       {entry.sessions.length > 0 && <table className="w-full text-left text-sm">

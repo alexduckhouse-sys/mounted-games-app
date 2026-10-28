@@ -25,7 +25,7 @@
 }
 
 /* The heading over a group of rows: its name, then a count (and where). */
-.fk-group-title { display: flex; width: 100%; align-items: baseline; gap: 8px; padding: 0 2px 3px; border-bottom: 1.5px solid rgb(var(--mg-heading)); }
+.fk-group-title { display: flex; width: 100%; align-items: baseline; gap: 8px; padding: 0 2px 3px; }
 .fk-group-title :is(h2, h3) { flex: 1; margin: 0; color: rgb(var(--mg-heading)); font: 700 15px/1.1 var(--mg-font-display); letter-spacing: .05em; text-transform: uppercase; }
 .fk-group-title > span { color: rgb(var(--mg-muted)); font: 500 12px/1 var(--mg-font); }
 

@@ -25,14 +25,23 @@ describe('RunGraph', () => {
     const list = container.querySelector('ul.sr-only')!;
     expect([...list.querySelectorAll('li')].map((item) => item.textContent)).toEqual(['Run 1', 'Run 2', 'Run 3']);
   });
-  it('lets a long run of bars scroll sideways instead of squeezing them', () => {
-    const many = Array.from({ length: 9 }, (_, index) => run(index, index, `${index}`, ['x']));
+  it('fits a long run of bars into the width with slimmer bars, never a sideways scroll', () => {
+    const many = Array.from({ length: 30 }, (_, index) => run(index, index, `${index}`, ['Heat']));
     const { container } = render(<RunGraph runs={many} average={4} ariaLabel="Each run" averageNote="Average" />);
-    expect(container.querySelector('.overflow-x-auto')).not.toBeNull();
-    expect(container.querySelector('svg')!.getAttribute('width')).not.toBe('100%');
-    const few = render(<RunGraph runs={runs} average={null} ariaLabel="Few" averageNote="Average" />);
-    expect(few.container.querySelector('.overflow-x-auto')).toBeNull();
-    expect(few.container.querySelector('svg')!.getAttribute('width')).toBe('100%');
+    expect(container.querySelector('.overflow-x-auto')).toBeNull();
+    const svg = container.querySelector('svg')!;
+    expect(svg.getAttribute('width')).toBe('100%');
+    expect(Number(svg.getAttribute('viewBox')!.split(' ')[2])).toBeLessThanOrEqual(360);
+    expect(container.querySelectorAll('rect')).toHaveLength(30);
+    // Bars too narrow to carry a place or a label drop them; the list for screen readers still has every run.
+    expect([...container.querySelectorAll('svg text')].map((node) => node.textContent)).not.toContain('Heat');
+    expect(container.querySelectorAll('ul.sr-only li')).toHaveLength(30);
+  });
+  it('keeps the place and label when the bars still have room', () => {
+    const nine = Array.from({ length: 9 }, (_, index) => run(index, index, `${index}th`, ['Heat']));
+    const { container } = render(<RunGraph runs={nine} average={null} ariaLabel="Nine" averageNote="Average" />);
+    expect(container.querySelector('.overflow-x-auto')).toBeNull();
+    expect([...container.querySelectorAll('svg text')].map((node) => node.textContent)).toContain('Heat');
   });
   it('keeps even a bar of nothing visible, and cuts long labels', () => {
     const { container } = render(<RunGraph runs={[run(1, 0, 'E', ['Quarter Final Two'])]} average={null} ariaLabel="One" averageNote="Average" />);
