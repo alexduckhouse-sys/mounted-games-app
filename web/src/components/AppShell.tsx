@@ -58,12 +58,15 @@ function Shell({ width }: { width: PageWidth }) {
   // The full-screen scoring screen asks for no app header and no ticker dock (it has its own back button and fits one screen).
   const chromeHidden = useChromeHidden();
   const onLiveFeed = /\/competitions\/\d+\/chat\/?$/.test(location.pathname);
+  // No ticker over a message composer, or behind the creator wizard's Back / Next footer.
+  const noTicker = /^\/competitions\/\d+\/(contact|messages\/[^/]+)\/?$/.test(location.pathname)
+    || /^\/admin\/competitions\/(new|\d+(\/format)?)\/?$/.test(location.pathname);
   // The ticker docks above the tab bar on every page but filming. An event's own pages feed it; elsewhere it follows
   // the event last opened, and it only shows when there is news (or a page button such as the timetable's filters).
   const ticker = useOptionalTicker();
   const feedCompetitionId = !filmingMode && competitionId == null && ticker ? current?.id ?? null : null;
-  const dockShown = !filmingMode && !chromeHidden && current != null && ticker != null
-    && (ticker.items.length > 0 || ticker.watchCompetitionId != null || ticker.dockAction != null);
+  const dockShown = !filmingMode && !chromeHidden && !noTicker && ticker != null
+    && (ticker.dockAction != null || (current != null && (ticker.items.length > 0 || ticker.watchCompetitionId != null)));
   // Public pages get the EGUK look; signed-in tools (dashboard, teams, admin) keep their own.
   const globalTabs = hasGlobalTabs(location.pathname);
   const publicPage = choosingCompetition || competitionId != null || onProfile || globalTabs || location.pathname === '/me/members' || location.pathname === '/settings';
@@ -162,7 +165,7 @@ function Shell({ width }: { width: PageWidth }) {
       </main>
       <PageTransition mainRef={mainRef} disabled={filmingMode} />
       {feedCompetitionId != null && <TickerFeed key={feedCompetitionId} competitionId={feedCompetitionId} />}
-      {!filmingMode && !chromeHidden && <TopBarTicker low={!hasTabs} />}
+      {!filmingMode && !chromeHidden && !noTicker && <TopBarTicker low={!hasTabs} />}
       {!filmingMode && globalTabs && <GlobalTabs meCount={user ? needsYou : 0} />}
       {!filmingMode && tabsCompetitionId != null && <BottomTabs competitionId={tabsCompetitionId} entryOnly={meta?.id === tabsCompetitionId && !!meta.entryPhase && !canOrganise({ id: meta.id, createdByUserId: meta.createdByUserId })} me={user ? { initials: initialsOf(user.fullName, user.email), count: needsYou } : undefined} />}
       {menuOpen && <NavigationDrawer onClose={() => setMenuOpen(false)} />}

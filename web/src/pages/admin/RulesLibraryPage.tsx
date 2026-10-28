@@ -10,6 +10,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { apiErrorMessage } from '../../lib/apiError';
 import type { RaceTemplate } from '../../types';
 import { RulebooksPanel } from '../operations/RulebooksPage';
+import { useDockAction } from '../../components/TickerContext';
 import { Chevron, RefineHeader, RefineList, RefinePage } from '../refine/Refine';
 import '../operations/operations.css';
 
@@ -30,6 +31,8 @@ export function RulesLibraryPage() {
   const [view, setView] = useState<View>({ kind: 'list' });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // "New race" is the + beside the ticker dock while the list shows.
+  const docked = useDockAction(mayEdit && view.kind === 'list' ? { label: t('admin.format.rules.newRace'), icon: 'plus', onClick: () => { setError(null); setView({ kind: 'new' }); } } : null);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,7 +111,7 @@ export function RulesLibraryPage() {
                 {shown.length === 0 && <div className="rf-row"><span className="rf-t2">{races.length === 0 ? t('admin.format.rules.noRaces') : t('admin.format.rules.noMatch')}</span></div>}
               </RefineList>
             )}
-            {mayEdit && <button type="button" className="ops-addbar ops-addbar-gap" onClick={() => { setError(null); setView({ kind: 'new' }); }}><Plus className="h-4 w-4" aria-hidden="true" />{t('admin.format.rules.newRace')}</button>}
+            {mayEdit && !docked && <button type="button" className="ops-addbar ops-addbar-gap" onClick={() => { setError(null); setView({ kind: 'new' }); }}><Plus className="h-4 w-4" aria-hidden="true" />{t('admin.format.rules.newRace')}</button>}
 
             <h2 className="rf-sec ops-tt-head"><span>{t('admin.format.rules.rulebooks')}</span></h2>
             <RefineList as="div" label={t('admin.format.rules.rulebooks')}>

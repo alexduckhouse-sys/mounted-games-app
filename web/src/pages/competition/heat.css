@@ -55,6 +55,11 @@
   position: absolute; left: 0; bottom: 0; width: 130px; height: 1px; background: rgb(var(--mg-ink));
   transform-origin: 0 50%; transform: rotate(-55deg);
 }
+/* Nothing in the header pokes out past the card's right edge (so the card never scrolls sideways): the line before
+   Pts and the last race names are shortened to fit the columns beside them. */
+.heat-grid .heat-pts .heat-sep { width: 82px; }
+.heat-grid thead th.heat-race:nth-last-child(2) .heat-name { max-width: 94px; }
+.heat-grid thead th.heat-race:nth-last-child(2) .heat-sep { width: 120px; }
 
 .heat-grid tbody th, .heat-grid tbody td { height: 52px; border-bottom: 1px solid rgb(var(--mg-ink)); }
 /* The card's own edge closes the table, so the last row has no dark line of its own. */
@@ -109,6 +114,10 @@
 .heat-grid.heat-grid-many td.heat-total { font-size: 17px; }
 .heat-grid.heat-grid-many .heat-name,
 .heat-grid.heat-grid-many .race-rules-btn.heat-name { left: 14px; font-size: 11px; }
+.heat-grid.heat-grid-many .heat-pts .heat-sep { width: 62px; }
+.heat-grid.heat-grid-many thead th.heat-race:nth-last-child(2) .heat-name { max-width: 70px; }
+.heat-grid.heat-grid-many thead th.heat-race:nth-last-child(3) .heat-name { max-width: 100px; }
+.heat-grid.heat-grid-many thead th.heat-race:nth-last-child(2) .heat-sep { width: 95px; }
 
 /* Change heat sheet: every heat of the day by age group; the one on screen is tinted and ticked. */
 .heat-sheet .hc-list { margin: 0 -20px; }

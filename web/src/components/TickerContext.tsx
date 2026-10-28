@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { sameTickerItems, type TickerItem } from '../lib/ticker';
 
 /** A button a page puts beside the ticker dock, such as the timetable's filters. */
@@ -8,9 +8,14 @@ export interface DockAction {
   /** How many filters are set; shown as a small badge when above zero. */
   count: number;
   onClick: () => void;
-  /** The icon on the button: the filters (default) or a list of pages to jump to. */
-  icon?: 'filters' | 'list';
+  /**
+   * The icon on the button: the filters (default), a list of places to jump to, a page's tools or settings,
+   * a plus for the page's one "add" action, or print.
+   */
+  icon?: DockIcon;
 }
+
+export type DockIcon = 'filters' | 'list' | 'settings' | 'plus' | 'print';
 
 interface TickerState {
   watchCompetitionId: number | null;
@@ -47,4 +52,26 @@ export function useTicker() {
 // eslint-disable-next-line react-refresh/only-export-components
 export function useOptionalTicker() {
   return useContext(Ctx);
+}
+
+/**
+ * Puts a page's one button beside the ticker dock while the page is open (pass null for none). Returns false when
+ * there is no dock (a page rendered on its own), so the page can show its own button instead.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function useDockAction(action: { label: string; onClick: () => void; icon?: DockIcon; count?: number } | null): boolean {
+  const setDockAction = useContext(Ctx)?.setDockAction;
+  // The latest handler, so a page can pass a fresh arrow function on every render without re-publishing the button.
+  const onClick = useRef(action?.onClick);
+  useLayoutEffect(() => { onClick.current = action?.onClick; });
+  const shown = action != null;
+  const label = action?.label ?? '';
+  const icon = action?.icon;
+  const count = action?.count ?? 0;
+  useEffect(() => {
+    if (!setDockAction || !shown) return;
+    setDockAction({ label, count, icon, onClick: () => onClick.current?.() });
+    return () => setDockAction(null);
+  }, [setDockAction, shown, label, icon, count]);
+  return setDockAction != null;
 }

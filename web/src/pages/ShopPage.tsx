@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ShoppingBag, Plus, Flag, Trash2, MessageCircle, Lock, X, Send, Image as ImageIcon, Check, ChevronRight, SlidersHorizontal } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
@@ -8,6 +8,7 @@ import { usePageHeader } from '../components/CompactPageBarContext';
 import { LazyImage } from '../components/LazyImage';
 import { RoundSearch } from '../components/RoundSearch';
 import { Sheet } from '../components/Sheet';
+import { useDockAction } from '../components/TickerContext';
 import '../components/sitePages.css';
 import '../components/filterKit.css';
 import { NO_SHOP_FILTERS, POSTED_OPTIONS, PRICE_BANDS, countShopFilters, matchesShopFilters, shopFilterChips, type ShopFilters } from '../lib/shopFilters';
@@ -176,6 +177,10 @@ export function ShopClassifieds({ intro, query = '', filters = NO_SHOP_FILTERS, 
   const needle = query.trim().toLowerCase();
   const filtering = countShopFilters(filters) > 0;
   const shown = posts.filter((p) => (!needle || `${p.title} ${p.body} ${p.authorName} ${p.ponyClubName ?? ''}`.toLowerCase().includes(needle)) && matchesShopFilters(p, filters));
+  const navigate = useNavigate();
+  // "Sell something" is the round + beside the ticker dock; the new post opens in a sheet over the list.
+  const docked = useDockAction(floatingSell ? { label: t('site.shop.sell'), icon: 'plus', onClick: () => (user ? setComposerOpen(true) : navigate('/login')) } : null);
+  const inSheet = floatingSell && docked;
   const buttonClass = floatingSell ? 'sp-pill sp-pill-fill' : 'mg-btn mg-btn-primary !min-h-11 !px-3 !text-sm';
   const sell = user ? (
     <button type="button" onClick={() => setComposerOpen((v) => !v)} aria-expanded={composerOpen} className={buttonClass}>
@@ -196,8 +201,13 @@ export function ShopClassifieds({ intro, query = '', filters = NO_SHOP_FILTERS, 
         </div>
       )}
 
-      {composerOpen && user && (
+      {composerOpen && user && !inSheet && (
         <PostComposer onPosted={() => { setComposerOpen(false); load(); }} defaultName={user.fullName} />
+      )}
+      {composerOpen && user && inSheet && (
+        <Sheet title={t('site.shop.newShopPost')} onClose={() => setComposerOpen(false)}>
+          {({ close }) => <PostComposer bare onPosted={() => close(() => { setComposerOpen(false); load(); })} defaultName={user.fullName} />}
+        </Sheet>
       )}
 
       {loading ? (
@@ -224,12 +234,12 @@ export function ShopClassifieds({ intro, query = '', filters = NO_SHOP_FILTERS, 
           ))}
         </ul>
       )}
-      {floatingSell && <div className="sp-sell-bar">{sell}</div>}
+      {floatingSell && !docked && <div className="sp-sell-bar">{sell}</div>}
     </div>
   );
 }
 
-function PostComposer({ onPosted, defaultName }: { onPosted: () => void; defaultName: string }) {
+function PostComposer({ onPosted, defaultName, bare = false }: { onPosted: () => void; defaultName: string; bare?: boolean }) {
   const t = useT();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -285,8 +295,8 @@ function PostComposer({ onPosted, defaultName }: { onPosted: () => void; default
   }
 
   return (
-    <div className="card p-4 space-y-2 border-l-4 border-brand-500">
-      <h2 className="font-semibold text-sm">{t('site.shop.newShopPost')}</h2>
+    <div className={bare ? 'space-y-2' : 'card p-4 space-y-2 border-l-4 border-brand-500'}>
+      {!bare && <h2 className="font-semibold text-sm">{t('site.shop.newShopPost')}</h2>}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <label className="block">
           <span className="text-xs font-semibold">{t('site.shop.fieldTitle')}</span>
