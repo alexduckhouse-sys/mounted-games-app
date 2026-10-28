@@ -200,8 +200,16 @@ export async function saveCreator(draft: CreatorDraft, opts: {
     if (!keptBreaks.has(old.id)) await step(`Removing ${old.name}…`, () => api.delete(`${base}/sessions/${old.id}`));
   }
   for (const [i, b] of draft.breaks.entries()) {
-    if (b.existingId) continue;
     const window = breakWindow(b);
+    if (b.existingId) {
+      // The session's kind and place in the order stay; its name, time, length and arena follow the edit.
+      const minutes = parseInt(b.minutes, 10);
+      await step(`Saving ${b.name.trim() || 'break'}…`, () => api.put(`${base}/sessions/${b.existingId}`, {
+        name: b.name.trim() || undefined, arenaName: b.arena.trim(), scheduledStart: window?.start.toISOString(),
+        durationMinutes: minutes > 0 ? minutes : undefined,
+      }));
+      continue;
+    }
     await step(`Adding ${b.name.trim() || 'break'}…`, () => api.post(`${base}/sessions`, {
       competitionSectionId: null, name: b.name.trim(), arenaName: b.arena.trim() || null, scheduledStart: window?.start.toISOString() ?? null,
       orderIndex: orderOf(`b${i}`), notes: null, isBreak: b.kind === 1, durationMinutes: parseInt(b.minutes, 10) || null,

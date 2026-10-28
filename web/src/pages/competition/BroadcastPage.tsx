@@ -211,6 +211,8 @@ function BroadcastStudio() {
     const { command, value } = lastStreamCommand;
     if (command === 'setZoom') {
       const z = Number(value) || 1;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- mirrors a remote command into the on-screen controls
+      setCameraZoom(z);
       void publisher.current?.setZoom?.(z);
     } else if (command === 'mute') {
       void publisher.current?.mute(value === 'true');
@@ -220,9 +222,11 @@ function BroadcastStudio() {
       void publisher.current?.switchCamera();
     } else if (command === 'windFilter') {
       const enabled = value === 'true';
+      setWindFilter(enabled);
       void publisher.current?.setWindFilter?.(enabled);
     } else if (command === 'setQualityPreset') {
       if (value === 'auto' || value === '360p' || value === '480p' || value === '720p' || value === '1080p') {
+        setQualityPreset(value);
         void publisher.current?.setQualityPreset?.(value);
       }
     } else if (command === 'saveReplay') {

@@ -81,7 +81,7 @@ export function buildIssueGroups(readiness: CompetitionReadiness, competitionId:
         subject: 'Payment pending',
         section: item.sectionName,
         note: `${money(item.amountMinor)} due`,
-        to: `${base}/details`,
+        to: `${base}/entries`,
         action: 'Open entries',
       })),
     },

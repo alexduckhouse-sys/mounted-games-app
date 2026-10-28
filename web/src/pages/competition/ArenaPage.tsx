@@ -250,7 +250,7 @@ export function ArenaPage() {
         </section>
       )}
 
-      <RaceRulesSheet raceName={rulesFor} open={rulesFor != null} onClose={() => setRulesFor(null)} />
+      <RaceRulesSheet raceName={rulesFor} open={rulesFor != null} onClose={() => setRulesFor(null)} competitionId={competition.id} />
     </>,
   );
 }

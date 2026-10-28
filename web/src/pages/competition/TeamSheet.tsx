@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Link, useInRouterContext } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { Sheet } from '../../components/Sheet';
@@ -11,6 +12,11 @@ import { useT } from '../../i18n/LanguageContext';
 import { formatPoints } from '../../lib/formatPoints';
 import { statsProfileHref } from '../../lib/stats';
 import { StatsSubjectKind } from '../../types';
+
+/** A router Link (no full reload) where there is a router, a plain anchor where there is not (some tests render the sheet bare). */
+function SpaLink({ href, inRouter, ...rest }: { href: string; inRouter: boolean; className?: string; children: ReactNode }) {
+  return inRouter ? <Link to={href} {...rest} /> : <a href={href} {...rest} />;
+}
 
 const eyebrow = 'text-[10px] font-bold uppercase tracking-[0.08em]';
 
@@ -52,7 +58,7 @@ export function TeamSheet({
     <Sheet
       title={<>
         {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="mr-1.5 inline-block h-4 w-6 rounded-[2px] object-cover align-middle" />}
-        <a href={statsProfileHref(StatsSubjectKind.Team, detail.teamName.trim().toLowerCase())} className="!text-inherit !no-underline hover:!underline">{detail.teamName}</a>
+        <SpaLink inRouter={inRouter} href={statsProfileHref(StatsSubjectKind.Team, detail.teamName.trim().toLowerCase())} className="!text-inherit !no-underline hover:!underline">{detail.teamName}</SpaLink>
       </>}
       description={sub || undefined}
       onClose={onClose}
@@ -89,10 +95,10 @@ export function TeamSheet({
               <ul className="overflow-hidden rounded-[10px] border border-[rgb(var(--mg-rule))]">
                 {riders.map((r, i) => (
                   <li key={`${r.fullName}-${i}`} className="flex min-h-10 items-baseline justify-between gap-3 border-b border-[rgb(var(--mg-rule-soft))] px-3 py-2 text-sm last:border-b-0">
-                    <a href={statsProfileHref(StatsSubjectKind.Rider, r.fullName.trim().toLowerCase())} className="min-w-0 font-semibold text-[rgb(var(--mg-heading))]">{r.fullName}</a>
+                    <SpaLink inRouter={inRouter} href={statsProfileHref(StatsSubjectKind.Rider, r.fullName.trim().toLowerCase())} className="min-w-0 font-semibold text-[rgb(var(--mg-heading))]">{r.fullName}</SpaLink>
                     {r.isReserve && <span className="shrink-0 rounded-[4px] border border-[rgb(var(--mg-rule))] px-1.5 text-[11px] font-semibold text-[rgb(var(--mg-muted))]">{t('teams.team.reserve')}</span>}
                     {r.horseName
-                      ? <a href={statsProfileHref(StatsSubjectKind.Pony, r.horseName.trim().toLowerCase())} className="min-w-0 text-right text-[rgb(var(--mg-body))]">{r.horseName}</a>
+                      ? <SpaLink inRouter={inRouter} href={statsProfileHref(StatsSubjectKind.Pony, r.horseName.trim().toLowerCase())} className="min-w-0 text-right text-[rgb(var(--mg-body))]">{r.horseName}</SpaLink>
                       : <span className="text-[rgb(var(--mg-faint))]">–</span>}
                   </li>
                 ))}

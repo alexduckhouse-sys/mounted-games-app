@@ -58,8 +58,13 @@ export function ConfirmDialog({ title, message, confirmLabel = tr('shell.confirm
 // eslint-disable-next-line react-refresh/only-export-components
 export function confirmDialog(options: ConfirmOptions): Promise<boolean> {
   return new Promise((resolve) => {
-    const host = document.createElement('div');
+    // A native modal <dialog> sits in the top layer, so it stacks above (and stays clickable over) any open <Sheet>.
+    const host = document.createElement('dialog');
+    host.className = 'mg-confirm-host';
+    host.addEventListener('cancel', (event) => event.preventDefault());
     document.body.appendChild(host);
+    if (typeof host.showModal === 'function') host.showModal();
+    else host.setAttribute('open', '');
     const root = createRoot(host);
     let answered = false;
     const answer = (confirmed: boolean) => {

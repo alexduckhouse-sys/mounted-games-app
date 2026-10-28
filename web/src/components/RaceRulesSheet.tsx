@@ -204,10 +204,13 @@ export function RaceRulesSheet({
   raceName,
   open,
   onClose,
+  competitionId,
 }: {
   raceName: string | null;
   open: boolean;
   onClose: () => void;
+  /** The competition in context. Without one there is no rulebooks page to link to, so the link is left out. */
+  competitionId?: number;
 }) {
   const t = useT();
   const titleId = useId();
@@ -267,15 +270,17 @@ export function RaceRulesSheet({
           <div className="space-y-3">
             {template.summary && <p className="text-sm text-[rgb(var(--mg-body))]">{template.summary}</p>}
             <RaceRulebookSection template={template} showDiagram diagramHeight={180} />
-            <div className="flex justify-end pt-1">
-              <Link
-                to={`/rulebooks?race=${encodeURIComponent(template.name)}`}
-                onClick={onClose}
-                className="mg-text-link text-xs"
-              >
-                {t('competition.rules.openPage')}
-              </Link>
-            </div>
+            {competitionId != null && (
+              <div className="flex justify-end pt-1">
+                <Link
+                  to={`/competitions/${competitionId}/rulebooks?race=${encodeURIComponent(template.name)}`}
+                  onClick={onClose}
+                  className="mg-text-link text-xs"
+                >
+                  {t('competition.rules.openPage')}
+                </Link>
+              </div>
+            )}
           </div>
         )}
         <div className="kit-acts">

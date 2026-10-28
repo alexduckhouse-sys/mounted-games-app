@@ -10,8 +10,8 @@ const draw: PrintableDraw = {
     { sessionId: 6, sectionName: 'Under 14', sessionName: 'Session 1', arenaName: null, orderIndex: 2, heats: [] },
   ],
 };
-const sheet = (sectionName: string) => ({ heatId: 1, label: 'Heat 1', sectionName, sessionName: 'Session 1', scheduledStart: null, races: [] });
-const sheets: PrintableScoreSheets = { competition, heats: [sheet('Under 12'), sheet('Under 14'), sheet('')] };
+const sheet = (sectionName: string, sessionId: number) => ({ heatId: 1, label: 'Heat 1', sectionName, sessionName: 'Session 1', sessionId, scheduledStart: null, races: [] });
+const sheets: PrintableScoreSheets = { competition, heats: [sheet('Under 12', 5), sheet('Under 14', 6), sheet('', 8), sheet('Under 14', 9)] };
 
 describe('session print helpers', () => {
   it('reads a whole positive session id only', () => {
@@ -33,13 +33,10 @@ describe('session print helpers', () => {
     expect(drawForSession(draw, 99).sessions).toEqual([]);
   });
 
-  it('keeps the score sheets that match the session and section names', () => {
-    expect(scoreSheetsForSession(sheets, draw, 6).heats.map((h) => h.sectionName)).toEqual(['Under 14']);
-    expect(scoreSheetsForSession(sheets, draw, 99).heats).toEqual([]);
-  });
-
-  it('matches a session with no section to sheets with no section', () => {
-    const open: PrintableDraw = { competition, sessions: [{ sessionId: 8, sectionName: '', sessionName: 'Session 1', arenaName: null, orderIndex: 3, heats: [] }] };
-    expect(scoreSheetsForSession(sheets, open, 8).heats.map((h) => h.sectionName)).toEqual(['']);
+  it('keeps the score sheets of the session by id, even when another session shares its name', () => {
+    expect(scoreSheetsForSession(sheets, 6).heats.map((h) => h.sectionName)).toEqual(['Under 14']);
+    expect(scoreSheetsForSession(sheets, 9).heats).toHaveLength(1);
+    expect(scoreSheetsForSession(sheets, 99).heats).toEqual([]);
+    expect(scoreSheetsForSession(sheets, 8).heats.map((h) => h.sectionName)).toEqual(['']);
   });
 });

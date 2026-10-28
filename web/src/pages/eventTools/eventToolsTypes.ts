@@ -88,6 +88,8 @@ export interface PrintableScoreHeat {
   sectionName: string;
   sessionName: string;
   scheduledStart: string | null;
+  /** The session the heat belongs to (absent on older responses). */
+  sessionId?: number;
   races: PrintableScoreRace[];
 }
 export interface PrintableScoreSheets {

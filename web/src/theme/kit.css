@@ -56,6 +56,9 @@ dialog.kit-sheet::backdrop { background: rgb(var(--mg-overlay) / .45); }
 }
 
 /* The confirm sheet (ConfirmDialog): the same sheet, opened over the page by confirmDialog(). */
+/* The host is a native modal <dialog> (top layer, above any open Sheet); it is only a carrier, so strip its chrome. */
+dialog.mg-confirm-host { position: fixed; inset: 0; width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; color: inherit; overflow: visible; }
+dialog.mg-confirm-host::backdrop { background: transparent; }
 .mg-confirm-backdrop { position: fixed; inset: 0; z-index: 200; display: flex; align-items: flex-end; justify-content: center; padding: 0; background: rgb(var(--mg-overlay) / .45); -webkit-backdrop-filter: none; backdrop-filter: none; }
 .mg-confirm { display: flex; flex-direction: column; gap: 12px; box-sizing: border-box; width: 100%; max-width: 36rem; max-height: 92dvh; overflow-y: auto; padding: 8px 20px calc(20px + env(safe-area-inset-bottom, 0px)); border-radius: 26px 26px 0 0; corner-shape: squircle; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); box-shadow: 0 -8px 32px rgb(0 0 0 / .18); font-family: var(--mg-font); }
 .mg-confirm-title { margin: 4px 0 0; font: 800 22px/1.05 var(--mg-font-display); color: rgb(var(--mg-heading)); }
