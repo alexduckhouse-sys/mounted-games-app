@@ -136,7 +136,7 @@ export function ScorerLinksCard({ competitionId, canWrite = true }: { competitio
       {list && (
         <>
           <RefineNote>
-            Phone scoring links — no account needed.
+            Score from a phone without an account.
           </RefineNote>
 
           {mayEdit && (list.arenas.length === 0

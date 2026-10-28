@@ -140,7 +140,7 @@ describe('signed in', () => {
 
   it('says there are no messages yet, plainly', async () => {
     mount();
-    expect(await screen.findByText('No messages yet. Write to the organisers below.')).toBeInTheDocument();
+    expect(await screen.findByText('No messages yet.')).toBeInTheDocument();
   });
 
   it('says so when the messages cannot be loaded, and tries again', async () => {
@@ -148,7 +148,7 @@ describe('signed in', () => {
     mount();
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load messages');
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(await screen.findByText('No messages yet. Write to the organisers below.')).toBeInTheDocument();
+    expect(await screen.findByText('No messages yet.')).toBeInTheDocument();
   });
 
   it('tells the person when a message could not be sent', async () => {

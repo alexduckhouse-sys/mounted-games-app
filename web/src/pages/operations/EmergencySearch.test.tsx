@@ -23,7 +23,7 @@ describe('EmergencySearch', () => {
   it('lists nobody until something is typed, and says searches are recorded', () => {
     render(<EmergencySearch competitionId={7} />);
     expect(screen.getByText(/Every search is recorded/)).toBeInTheDocument();
-    expect(screen.getByText(/Nothing is listed until you do/)).toBeInTheDocument();
+    expect(screen.getByText(/Type at least 2 letters/)).toBeInTheDocument();
     expect(api.get).not.toHaveBeenCalled();
   });
 

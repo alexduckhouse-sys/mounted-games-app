@@ -373,4 +373,9 @@ describe('useDockAction', () => {
     render(<AddPage onClick={vi.fn()} />);
     expect(screen.getByText('on its own')).toBeVisible();
   });
+
+  it('says there is no dock when the shell leaves it off the page, even inside the provider', () => {
+    render(<MemoryRouter><CurrentCompetitionProvider><TickerProvider><AddPage onClick={vi.fn()} /></TickerProvider></CurrentCompetitionProvider></MemoryRouter>);
+    expect(screen.getByText('on its own')).toBeVisible();
+  });
 });

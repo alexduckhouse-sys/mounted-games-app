@@ -7,6 +7,7 @@ import { useT } from '../i18n/LanguageContext';
 import { deletionErrorMessage } from '../lib/accountDeletion';
 import type { ExternalProvider } from '../types';
 import { Notice } from './Notice';
+import { PasswordInput } from './PasswordInput';
 import { Sheet } from './Sheet';
 import { SocialLoginButtons, type SocialCredential } from './SocialLoginButtons';
 import './sitePages.css';
@@ -65,7 +66,7 @@ export function DeleteAccountPanel({ hasPassword = true, linkedProviders = [] }:
 
   return (
     <>
-      <button type="button" className="sp-red" onClick={() => setOpen(true)}>{t('account.delete.button')}</button>
+      <button type="button" className="sp-red sp-red-tall" onClick={() => setOpen(true)}>{t('account.delete.button')}</button>
       {open && (
         <Sheet
           title={t('account.delete.title')}
@@ -76,16 +77,10 @@ export function DeleteAccountPanel({ hasPassword = true, linkedProviders = [] }:
         >
           {hasPassword ? (
             <form onSubmit={submit} className="kit-sheet-inner">
-              <label className="kit-sheet-field" htmlFor="delete-account-password">
-                {t('account.delete.password')}
-                <input
-                  id="delete-account-password"
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </label>
+              <div className="kit-sheet-field">
+                <label htmlFor="delete-account-password">{t('account.delete.password')}</label>
+                <PasswordInput id="delete-account-password" value={password} autoComplete="current-password" onChange={(e) => setPassword(e.target.value)} />
+              </div>
               {error && <Notice>{error}</Notice>}
               <div className="kit-acts-del">
                 <button type="button" className="kit-pill" onClick={cancel} disabled={busy}>{t('account.delete.keep')}</button>

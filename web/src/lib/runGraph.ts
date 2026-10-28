@@ -32,9 +32,11 @@ export interface GraphLayout {
   averageY: number | null;
   /** y of each gridline, in the order of `scale.ticks`. */
   tickYs: number[];
+  /** Width given to each run, narrower than the usual slot when the bars were fitted into a set width. */
+  slot: number;
 }
 
-const SLOT = 52;
+export const SLOT = 52;
 const BAR = 38;
 const LEFT = 30;
 const RIGHT = 8;
@@ -45,19 +47,22 @@ const FOOT = 40;
 /**
  * Where everything goes in a bar graph of one value per run, in a drawing `LEFT + runs * SLOT + RIGHT` wide: a bar a
  * run, the scale up the left, and the dashed average line across. The top margin leaves room for the label over the
- * tallest bar and the foot for two short lines under each.
+ * tallest bar and the foot for two short lines under each. With `fit`, a graph that would be wider than that many units
+ * gets narrower slots and bars instead, so it always fits (a phone never has to scroll it sideways).
  */
-export function layoutRunGraph(values: readonly number[], average: number | null): GraphLayout {
+export function layoutRunGraph(values: readonly number[], average: number | null, fit?: number): GraphLayout {
+  const slot = fit != null && values.length > 0 ? Math.min(SLOT, (fit - LEFT - RIGHT) / values.length) : SLOT;
+  const barWidth = slot >= SLOT ? BAR : Math.max(3, slot * (BAR / SLOT));
   const scale = graphScale(Math.max(0, ...values, average ?? 0));
   const bottom = TOP + PLOT;
   const yOf = (value: number) => bottom - (Math.max(0, value) / scale.max) * PLOT;
   const bars = values.map((value, index) => {
-    const x = LEFT + index * SLOT + (SLOT - BAR) / 2;
+    const x = LEFT + index * slot + (slot - barWidth) / 2;
     const y = yOf(value);
-    return { x, y, width: BAR, height: bottom - y, centre: x + BAR / 2 };
+    return { x, y, width: barWidth, height: bottom - y, centre: x + barWidth / 2 };
   });
   return {
-    width: LEFT + values.length * SLOT + RIGHT,
+    width: LEFT + values.length * slot + RIGHT,
     height: bottom + FOOT,
     left: LEFT,
     top: TOP,
@@ -66,6 +71,7 @@ export function layoutRunGraph(values: readonly number[], average: number | null
     bars,
     averageY: average == null ? null : yOf(average),
     tickYs: scale.ticks.map(yOf),
+    slot,
   };
 }
 

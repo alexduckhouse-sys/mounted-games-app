@@ -1,10 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { Notice } from '../../components/Notice';
 import { PageProblem } from '../../components/PageProblem';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../auth/AuthContext';
+import { useReveal } from '../../hooks/useReveal';
+import { useDockAction } from '../../components/TickerContext';
 import { sectionFormatText } from '../../lib/sectionFormatText';
 import { type CompetitionDetail, type CompetitionSummary } from '../../types';
 import { Chevron, RefineList, RefineNote, RefinePage, RefineSection, RefineStatus } from '../refine/Refine';
@@ -34,12 +36,15 @@ export function SeasonPage() {
 
 function SeasonDetail({ id }: { id: string }) {
   const t = useT();
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const [data, setData] = useState<{ season: SeasonView; table: StandingsView } | null>(null);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
   const [addingRound, setAddingRound] = useState(false);
   const [openRoundId, setOpenRoundId] = useState<string | null>(null);
+  const requestedTab = params.get('tab');
+  // On the Rounds tab the organiser's one action sits by the ticker dock; without a dock the page keeps its own bar.
+  const docked = useDockAction(data?.season.canManage && requestedTab === 'rounds' ? { label: t('site.seasons.addRound'), icon: 'plus', onClick: () => setAddingRound((open) => !open) } : null);
   usePageHeader({ title: data?.season.title ?? t('site.seasons.season'), subtitle: data ? t('site.seasons.seasonYear', { year: data.season.year }) : undefined, plain: true, backTo: '/seasons', backLabel: t('site.seasons.all') });
 
   useEffect(() => {
@@ -63,7 +68,7 @@ function SeasonDetail({ id }: { id: string }) {
 
   const { season, table } = data;
   const canManage = pageCanManage;
-  const requested = params.get('tab');
+  const requested = requestedTab;
   const tab: SeasonTab = requested === 'rounds' ? 'rounds' : requested === 'settings' && canManage ? 'settings' : 'standings';
   const tabLink = (next: SeasonTab) => next === 'standings' ? '?' : `?tab=${next}`;
   const tabs = ([['standings', t('site.seasons.standings')], ['rounds', t('site.seasons.roundsTab')], ...(canManage ? [['settings', t('site.seasons.settings')]] : [])] as [SeasonTab, string][]);
@@ -77,13 +82,17 @@ function SeasonDetail({ id }: { id: string }) {
     <div key={tab} className="mg-settle">
     {tab === 'standings' && <Standings season={season} table={table} canManage={canManage} />}
     {tab === 'rounds' && <>
-      {canManage && <div className="sp-gap"><AddBar onClick={() => setAddingRound((open) => !open)}>{addingRound ? 'Close add round' : 'Add a round'}</AddBar></div>}
-      {addingRound && canManage && <AddRound season={season} onChanged={() => { setAddingRound(false); reload(); }} />}
+      {canManage && !docked && <div className="sp-gap"><AddBar onClick={() => setAddingRound((open) => !open)}>{addingRound ? t('site.seasons.closeAddRound') : t('site.seasons.addRound')}</AddBar></div>}
+      {addingRound && canManage && !docked && <AddRound season={season} onChanged={() => { setAddingRound(false); reload(); }} />}
+      {addingRound && canManage && docked && <Sheet title={t('site.seasons.addRound')} onClose={() => setAddingRound(false)}>
+        <AddRound inSheet season={season} onChanged={() => { setAddingRound(false); reload(); }} />
+      </Sheet>}
       <RoundsList season={season} id={id} canManage={canManage} openRoundId={openRoundId} setOpenRoundId={setOpenRoundId} onChanged={reload} />
     </>}
     {tab === 'settings' && canManage && <>
-      <SeasonSettingsForm key={JSON.stringify(season.placePoints) + season.title + season.bestResultsToCount} value={season} onSave={async (settings) => { await api.put(`/seasons/${id}`, settings); reload(); setParams({}); }} />
-      <p className="rf-note">Need to connect a team across events? <Link to="/team-profiles">Open team profiles</Link>.</p>
+      {/* Settings save as they're changed, so the form stays put (and keeps focus) while the season reloads behind it. */}
+      <SeasonSettingsForm key={season.id} value={season} onSave={async (settings) => { await api.put(`/seasons/${id}`, settings); reload(); }} />
+      <p className="rf-note">{t('site.seasons.connectTeam')} <Link to="/team-profiles">{t('site.seasons.openProfiles')}</Link>.</p>
       <EmbedCard kind="season" seasonId={id} title={season.title} />
     </>}
     </div>
@@ -92,6 +101,7 @@ function SeasonDetail({ id }: { id: string }) {
 
 function Standings({ season, table, canManage }: { season: SeasonView; table: StandingsView; canManage: boolean }) {
   const t = useT();
+  const location = useLocation();
   const formats = [...new Set(season.rounds.filter((round) => round.isIncluded).map((round) => round.format ?? season.format))];
   const [selectedFormat, setSelectedFormat] = useState(season.format);
   const activeFormat = formats.includes(selectedFormat) ? selectedFormat : formats[0] ?? season.format;
@@ -114,12 +124,19 @@ function Standings({ season, table, canManage }: { season: SeasonView; table: St
   const ageLabel = ageOptions.find((option) => option.value === activeDivision)?.label ?? season.ageGroup;
   const formatLabel = sectionFormatText(activeFormat, t);
   const changeable = hasMultipleDivisions || formats.length > 1;
+  const anyDropped = visibleStandings.some((row) => row.rounds.some((cell) => !cell.counted && publishedRounds.some((round) => round.id === cell.roundId)));
+  // One column a round: the more rounds, the smaller the type, so up to about ten still fit a phone.
+  // Position and points take about a fifth of the width and the team name at least a quarter; the rounds share the rest.
+  const roundWidth = Math.round(Math.min(13, 50 / Math.max(1, publishedRounds.length)) * 10) / 10;
+  const roundsSize = publishedRounds.length >= 8 ? 'sv-rounds-many' : publishedRounds.length >= 5 ? 'sv-rounds-some' : '';
   return <>
-    <button type="button" className="fk-where sp-gap" disabled={!changeable} aria-haspopup={changeable ? 'dialog' : undefined}
-      aria-label={changeable ? t('site.seasons.changeAria', { age: ageLabel, format: formatLabel }) : `${ageLabel}, ${formatLabel}`} onClick={() => setSheetOpen(true)}>
-      <span>{ageLabel}<small>· {formatLabel}</small></span>
-      {changeable && <ChevronDown aria-hidden="true" className="h-[18px] w-[18px] shrink-0" strokeWidth={2.2} />}
-    </button>
+    {changeable
+      ? <button type="button" className="fk-where sp-gap" aria-haspopup="dialog" aria-label={t('site.seasons.changeAria', { age: ageLabel, format: formatLabel })} onClick={() => setSheetOpen(true)}>
+        <span>{ageLabel}<small>· {formatLabel}</small></span>
+        <ChevronDown aria-hidden="true" className="h-[18px] w-[18px] shrink-0" strokeWidth={2.2} />
+      </button>
+      // With one age group and one format there is nothing to change, so it is a plain heading, not a dead button.
+      : <h2 className="sp-sec sp-first sv-where-plain">{ageLabel}<small>· {formatLabel}</small></h2>}
     {sheetOpen && changeable && (
       <Sheet title={t('site.seasons.sheetTitle')} className="fk-sheet" onClose={() => setSheetOpen(false)}>
         {({ close }) => (
@@ -156,8 +173,9 @@ function Standings({ season, table, canManage }: { season: SeasonView; table: St
     )}
     {stale && canManage && <Notice className="sv-msg" role={null}>{t('site.seasons.stale')}</Notice>}
     {!visibleStandings.length ? <div className="sv-empty"><h2>{t('site.seasons.noStandings')}</h2><p>{t('site.seasons.noStandingsBody')}</p></div> : <>
-      <div className="rf-table-wrap sp-gap"><table className="rf-table sv-table sv-standings">
+      <div className="rf-table-wrap rf-table-fit sp-gap"><table className={`rf-table sv-table sv-standings ${roundsSize}`.trim()}>
         <caption className="sr-only">{t('site.seasons.caption')}</caption>
+        <colgroup><col className="sv-c-pos" /><col />{publishedRounds.map((round) => <col key={round.id} className="sv-c-round" style={{ width: `${roundWidth}%` }} />)}<col className="sv-c-pts" /></colgroup>
         <thead>
           <tr>
             <th scope="col" className="sv-pos"><span className="sr-only">{t('site.seasons.position')}</span></th>
@@ -170,18 +188,19 @@ function Standings({ season, table, canManage }: { season: SeasonView; table: St
         </thead>
         <tbody>{visibleStandings.map((row) => <tr key={row.teamProfileId}>
           <td className="rf-num">{labels.get(row.teamProfileId)}</td>
-          <td><Link to={`/team-profiles/${row.teamProfileId}`} className="sv-team">{teamNameForAge(row.teamName, ageLabel)}</Link></td>
+          <td><Link to={`/team-profiles/${row.teamProfileId}`} state={{ from: location.pathname }} className="sv-team">{teamNameForAge(row.teamName, ageLabel)}</Link></td>
           {publishedRounds.map((round) => {
             const cell = row.rounds.find((r) => r.roundId === round.id);
             if (!cell) return <td key={round.id} className="sv-mid sv-dim">–</td>;
             if (!cell.counted) {
-              return <td key={round.id} className="sv-mid"><span className="sv-struck line-through opacity-55" title={t('site.seasons.dropped')}>{cell.seasonPoints}</span></td>;
+              return <td key={round.id} className="sv-mid"><span className="sv-struck" title={t('site.seasons.dropped')}>{cell.seasonPoints}</span></td>;
             }
             return <td key={round.id} className="sv-mid">{cell.seasonPoints}</td>;
           })}
           <td className="rf-num sv-end">{row.totalPoints}</td>
         </tr>)}</tbody>
       </table></div>
+      {anyDropped && <p className="rf-note">{t('site.seasons.droppedNote')}</p>}
     </>}
   </>;
 }
@@ -200,7 +219,9 @@ function RoundsList({ season, id, canManage, openRoundId, setOpenRoundId, onChan
   </>;
 }
 
-function AddRound({ season, onChanged }: { season: SeasonView; onChanged: () => void }) {
+/** `inSheet`: the sheet's own heading already says what this is, so the form's is kept for screen readers only. */
+function AddRound({ season, onChanged, inSheet = false }: { season: SeasonView; onChanged: () => void; inSheet?: boolean }) {
+  const t = useT();
   const { canOrganise } = useAuth();
   const [competitions, setCompetitions] = useState<CompetitionSummary[] | null>(null);
   const [competitionId, setCompetitionId] = useState('');
@@ -219,19 +240,19 @@ function AddRound({ season, onChanged }: { season: SeasonView; onChanged: () => 
     const controller = new AbortController();
     api.get<CompetitionSummary[]>('/competitions', { params: { includeArchived: true }, signal: controller.signal }).then(({ data }) => {
       if (!controller.signal.aborted) setCompetitions(data);
-    }).catch((reason) => { if (!controller.signal.aborted) setListError(seasonError(reason, 'Competitions couldn’t be loaded. Check your signal and try again.')); });
+    }).catch((reason) => { if (!controller.signal.aborted) setListError(seasonError(reason, t('site.seasons.competitionsFailed'))); });
     return () => controller.abort();
-  }, [listAttempt]);
+  }, [listAttempt, t]);
 
   useEffect(() => {
     if (!competitionId) return;
     const controller = new AbortController();
     api.get<CompetitionDetail>(`/competitions/${competitionId}`, { signal: controller.signal }).then(({ data }) => {
       if (!controller.signal.aborted) setDetail(data);
-    }).catch((reason) => { if (!controller.signal.aborted) setDetailError(seasonError(reason, 'The competition couldn’t be loaded. Check your signal and try again.')); })
+    }).catch((reason) => { if (!controller.signal.aborted) setDetailError(seasonError(reason, t('site.seasons.competitionFailed'))); })
       .finally(() => { if (!controller.signal.aborted) setDetailLoading(false); });
     return () => controller.abort();
-  }, [competitionId, detailAttempt]);
+  }, [competitionId, detailAttempt, t]);
 
   const sections = detail && canOrganise(detail) ? detail.sections.filter((section) => !season.rounds.some((round) => round.competitionSectionId === section.id)) : [];
   function chooseCompetition(next: string) {
@@ -248,24 +269,24 @@ function AddRound({ season, onChanged }: { season: SeasonView; onChanged: () => 
       });
       setSectionId(''); setMultiplier('1'); onChanged();
     }
-    catch (reason) { setActionError(seasonError(reason, 'This round couldn’t be added. Check your signal and try again.')); }
+    catch (reason) { setActionError(seasonError(reason, t('site.seasons.roundAddFailed'))); }
     finally { setBusy(false); }
   }
 
   return <form className="sv-add" onSubmit={submit}>
     <fieldset disabled={busy} className="sv-fieldset sv-stack">
-      <legend className="rf-sec">Add an event round</legend>
-      {listError && <Notice actionLabel="Try again" onAction={() => { setListError(''); setListAttempt((value) => value + 1); }}>{listError}</Notice>}
+      <legend className={inSheet ? 'sr-only' : 'rf-sec'}>{t('site.seasons.addEventRound')}</legend>
+      {listError && <Notice actionLabel={t('common.tryAgain')} onAction={() => { setListError(''); setListAttempt((value) => value + 1); }}>{listError}</Notice>}
       {actionError && <Notice>{actionError}</Notice>}
-      <label className="rf-fld">Competition<SelectField required value={competitionId} onChange={(event) => chooseCompetition(event.target.value)}><option value="">{competitions ? 'Choose a competition' : 'Loading competitions…'}</option>{competitions?.map((competition) => <option key={competition.id} value={competition.id}>{competition.name} · {new Date(competition.startDate).getFullYear()}</option>)}</SelectField></label>
-      {competitionId && detailLoading && <p role="status" className="rf-note sv-flush">Loading sections…</p>}
-      {detailError && <Notice actionLabel="Try again" onAction={() => { setDetailLoading(true); setDetailError(''); setDetailAttempt((value) => value + 1); }}>{detailError}</Notice>}
+      <label className="rf-fld">{t('site.seasons.competition')}<SelectField required value={competitionId} onChange={(event) => chooseCompetition(event.target.value)}><option value="">{competitions ? t('site.seasons.chooseCompetition') : t('site.seasons.loadingCompetitions')}</option>{competitions?.map((competition) => <option key={competition.id} value={competition.id}>{competition.name} · {new Date(competition.startDate).getFullYear()}</option>)}</SelectField></label>
+      {competitionId && detailLoading && <p role="status" className="rf-note sv-flush">{t('site.seasons.loadingSections')}</p>}
+      {detailError && <Notice actionLabel={t('common.tryAgain')} onAction={() => { setDetailLoading(true); setDetailError(''); setDetailAttempt((value) => value + 1); }}>{detailError}</Notice>}
       {detail && (sections.length ? <>
-        <label className="rf-fld">Section<SelectField required value={sectionId} onChange={(event) => setSectionId(event.target.value)}><option value="">Choose a section</option>{sections.map((section) => <option key={section.id} value={section.id}>{section.displayName}</option>)}</SelectField></label>
-        <label className="rf-fld">Points multiplier<SelectField value={multiplier} onChange={(event) => setMultiplier(event.target.value)}><option value="1">1× (standard)</option><option value="1.5">1.5× (major)</option><option value="2">2× (championship)</option></SelectField></label>
-      </> : <p className="rf-note sv-flush">There isn’t an unlinked section in this competition.</p>)}
+        <label className="rf-fld">{t('site.seasons.section')}<SelectField required value={sectionId} onChange={(event) => setSectionId(event.target.value)}><option value="">{t('site.seasons.chooseSection')}</option>{sections.map((section) => <option key={section.id} value={section.id}>{section.displayName}</option>)}</SelectField></label>
+        <label className="rf-fld">{t('site.seasons.multiplier')}<SelectField value={multiplier} onChange={(event) => setMultiplier(event.target.value)}><option value="1">{t('site.seasons.multStandard')}</option><option value="1.5">{t('site.seasons.multMajor')}</option><option value="2">{t('site.seasons.multChampionship')}</option></SelectField></label>
+      </> : <p className="rf-note sv-flush">{t('site.seasons.noUnlinkedSection')}</p>)}
     </fieldset>
-    <button className="rf-btn rf-btn-primary" disabled={busy || !sectionId}>{busy ? 'Adding round…' : 'Add round'}</button>
+    <button className="rf-btn rf-btn-primary" disabled={busy || !sectionId}>{busy ? t('site.seasons.addingRound') : t('site.seasons.addRoundButton')}</button>
   </form>;
 }
 
@@ -278,6 +299,7 @@ function Round({ seasonId, round, canManage, expanded, onToggle, onChanged }: { 
   const { locale } = useLanguage();
   const base = `/seasons/${seasonId}/rounds/${round.id}`;
   const mult = round.pointsMultiplier && round.pointsMultiplier > 0 ? round.pointsMultiplier : 1;
+  const { mounted, leaving } = useReveal(expanded);
 
   async function act(action: () => Promise<void>) {
     setBusy(true); setError('');
@@ -310,21 +332,21 @@ function Round({ seasonId, round, canManage, expanded, onToggle, onChanged }: { 
       <RefineStatus tone={status.tone}>{status.label}</RefineStatus>
       <Chevron down />
     </button>
-    {expanded && <div className="sv-round-detail">
+    {mounted && <div className={`sv-reveal${leaving ? ' sv-reveal-out' : ''}`} inert={leaving || undefined}><div className="sv-reveal-clip"><div className="sv-round-detail">
       {error && <Notice>{error}</Notice>}{toast.node}
       <p className="rf-note sv-flush"><strong>{publicationStatus}</strong> · {round.isIncluded ? t('site.seasons.counts') : t('site.seasons.excludedFrom')}{mult !== 1 ? ` · ${t('site.seasons.multPoints', { n: mult })}` : ''}. <Link className="sv-link" to={`/competitions/${round.competitionId}`}>{t('site.seasons.open', { name: round.competitionName })}</Link></p>
       {canManage && <div className="sv-actions">
         <label className="rf-fld">
-          <span className="sr-only">Points multiplier</span>
+          <span className="sr-only">{t('site.seasons.multiplier')}</span>
           <SelectField
-            aria-label="Points multiplier"
+            aria-label={t('site.seasons.multiplier')}
             disabled={busy}
             value={String(mult)}
             onChange={(event) => void act(async () => { await api.put(`${base}/multiplier`, { pointsMultiplier: Number(event.target.value) }); onChanged(); })}
           >
-            <option value="1">1× (standard)</option>
-            <option value="1.5">1.5× (major)</option>
-            <option value="2">2× (championship)</option>
+            <option value="1">{t('site.seasons.multStandard')}</option>
+            <option value="1.5">{t('site.seasons.multMajor')}</option>
+            <option value="2">{t('site.seasons.multChampionship')}</option>
           </SelectField>
         </label>
         <button type="button" className="rf-btn" disabled={busy} onClick={() => void act(async () => { await api.put(`${base}/included`, { isIncluded: !round.isIncluded }); onChanged(); })}>{round.isIncluded ? 'Exclude round' : 'Include round'}</button>
@@ -337,7 +359,7 @@ function Round({ seasonId, round, canManage, expanded, onToggle, onChanged }: { 
         <button type="button" className="rf-btn rf-btn-primary" disabled={busy} onClick={() => void act(async () => { await api.post(`${base}/publications`, { sourceFingerprint: preview.sourceFingerprint, expectedVersion: preview.nextVersion }); setPreview(null); toast.show('Round results published'); onChanged(); })}>{busy ? 'Publishing…' : `Publish version ${preview.nextVersion}`}</button>
       </section>}
       {round.publishedVersion ? <PublicationHistory base={base} latest={round.publishedVersion} /> : !canManage && <p className="rf-note sv-flush">{t('site.seasons.noResults')}</p>}
-    </div>}
+    </div></div></div>}
   </li>;
 }
 

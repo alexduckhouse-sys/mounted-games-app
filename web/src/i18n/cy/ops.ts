@@ -223,7 +223,7 @@ export const ops: AreaCatalogue<typeof en> = {
   'ops.detail.entries': 'Cofrestriadau',
   'ops.detail.compNumber': 'Rhif y gystadleuaeth',
   'ops.detail.contactEmail': 'E-bost cyswllt',
-  'ops.detail.contactNote': 'Mae’r e-bost cyswllt yn dangos ar dudalen y digwyddiad, fel y gall cystadleuwyr ysgrifennu atoch.',
+  'ops.detail.contactNote': 'Yn dangos ar dudalen y digwyddiad.',
   'ops.detail.payment': 'Taliad',
   'ops.detail.fees': 'Ffioedd cofrestru',
   'ops.detail.payoutsDefault': 'Mae taliadau’n mynd i’ch clwb unwaith y bydd wedi’u sefydlu.',

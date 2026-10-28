@@ -98,7 +98,7 @@ public sealed class SeasonsController(AppDbContext db) : ControllerBase
         var compIds = request.CompetitionIds?.Distinct().ToArray() ?? [];
         var secIds = request.CompetitionSectionIds?.Distinct().ToArray() ?? [];
         if (request.CompetitionIds?.Count > 1000 || request.CompetitionSectionIds?.Count > 1000 || compIds.Any(x => x <= 0) || secIds.Any(x => x <= 0))
-            return BadRequest(new ProblemDetails { Status = 400, Title = "Choose up to 1000 competitions or sections with valid IDs" });
+            return BadRequest(new ProblemDetails { Status = 400, Title = "Choose up to 1,000 competitions or age groups." });
         if (compIds.Length > 0 || secIds.Length > 0)
         {
             var competitions = await db.Competitions.AsNoTracking().Where(x => compIds.Contains(x.Id)).ToListAsync(ct);

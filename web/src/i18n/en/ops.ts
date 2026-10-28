@@ -223,7 +223,7 @@ export const ops = {
   'ops.detail.entries': 'Entries',
   'ops.detail.compNumber': 'Competition number',
   'ops.detail.contactEmail': 'Contact email',
-  'ops.detail.contactNote': 'The contact email shows on the event page, so entrants can write to you.',
+  'ops.detail.contactNote': 'Shown on the event page.',
   'ops.detail.payment': 'Payment',
   'ops.detail.fees': 'Entry fees',
   'ops.detail.payoutsDefault': 'Payouts go to your club once it has set them up.',

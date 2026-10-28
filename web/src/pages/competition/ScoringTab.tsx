@@ -492,7 +492,7 @@ function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
           ) : (<>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="text-xs font-semibold">Top N teams</span>
+              <span className="text-xs font-semibold">Teams in the A final</span>
               <NumberField  min={1} max={50} className="input mt-1 text-sm"
                 value={topN} onChange={(e) => setTopN(Math.max(1, parseInt(e.target.value, 10) || 1))} />
             </label>

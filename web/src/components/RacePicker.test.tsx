@@ -123,7 +123,7 @@ describe('RacePicker', () => {
       />,
     );
 
-    expect(screen.getByText(/No races selected yet/)).toBeInTheDocument();
+    expect(screen.getByText(/No races yet/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Use Pony Club Zone list' }));
     expect(onChange).toHaveBeenCalled();

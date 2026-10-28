@@ -94,7 +94,7 @@ describe('DeclarationsIndexPage: the current competition', () => {
     teams = [];
     forms = [];
     mount();
-    expect(await screen.findByText(/No dec forms for Spring Open yet\./)).toBeInTheDocument();
+    expect(await screen.findByText(/No declaration forms for Spring Open yet\./)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Spring Open' })).toHaveAttribute('href', '/competitions/4/declarations');
   });
 
@@ -155,13 +155,13 @@ describe('DeclarationsIndexPage: all my forms', () => {
     teams = [];
     forms = [];
     mount();
-    expect(await screen.findByText('No dec forms yet. Open a competition to start one.')).toBeInTheDocument();
+    expect(await screen.findByText('No declaration forms yet. Open a competition to start one.')).toBeInTheDocument();
   });
 
   it('treats a failed request as an empty list', async () => {
     hoisted.current = null;
     vi.mocked(api.get).mockRejectedValue(new Error('offline'));
     mount();
-    expect(await screen.findByText('No dec forms yet. Open a competition to start one.')).toBeInTheDocument();
+    expect(await screen.findByText('No declaration forms yet. Open a competition to start one.')).toBeInTheDocument();
   });
 });

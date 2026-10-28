@@ -261,14 +261,14 @@ export function buildToplist(standings: StandingRow[], sessions: Session[], team
       const prev = idx > 0 ? ordered[idx - 1] : undefined;
       if (next && tier(row) === tier(next) && (row.totalPoints === next.totalPoints || Math.abs(row.totalPoints - next.totalPoints) < 0.1)) {
         tieBreakReason = !hasRaceResults && row.tieBreakOrder == null && next.tieBreakOrder == null && (row.wins ?? 0) === (next.wins ?? 0) && row.totalPoints === next.totalPoints
-          ? 'Level on points and countback — run-off if on cut-off'
+          ? 'Level on points and countback (run-off if on cut-off)'
           : explainTieBreak(row, next, sessions, sectionId, sectionTeamIds);
       } else if (prev && level(prev, row)) {
         const prevReason = prev.tieBreakReason
           ?? (!hasRaceResults && prev.tieBreakOrder == null && row.tieBreakOrder == null && (prev.wins ?? 0) === (row.wins ?? 0)
-            ? 'Level on points and countback — run-off if on cut-off'
+            ? 'Level on points and countback (run-off if on cut-off)'
             : explainTieBreak(prev, row, sessions, sectionId, sectionTeamIds));
-        if (prevReason === 'Level on points and countback — run-off if on cut-off') {
+        if (prevReason === 'Level on points and countback (run-off if on cut-off)') {
           tieBreakReason = prevReason;
         }
       }
@@ -945,7 +945,7 @@ export function explainTieBreak(
     return 'Settled by run-off / referee order';
   }
 
-  return 'Level on points and countback — run-off if on cut-off';
+  return 'Level on points and countback (run-off if on cut-off)';
 }
 
 /** The small line under a team's name, or null when there is nothing worth saying. */

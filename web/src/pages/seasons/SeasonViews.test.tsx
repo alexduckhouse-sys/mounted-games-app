@@ -1,10 +1,11 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { SeasonPage } from './SeasonPage';
+import { TickerProvider, useDockHost, useTicker } from '../../components/TickerContext';
 import { SeasonsPage } from './SeasonsPage';
 import { SeasonSettingsForm } from './SeasonSettingsForm';
 import type { SeasonView } from './seasonViewTypes';
@@ -42,10 +43,19 @@ beforeEach(() => {
   vi.mocked(useAuth).mockReturnValue({ user: { id: 'example-organiser' }, canOrganise: () => true, hasRole: () => false, canEdit: () => true } as unknown as ReturnType<typeof useAuth>);
 });
 
+/** Stands in for the ticker dock: shows the page's one button and lets a test press it. */
+function DockProbe() {
+  const { dockAction } = useTicker();
+  useDockHost();
+  return dockAction ? <button type="button" data-testid="dock" onClick={dockAction.onClick}>{dockAction.label}</button> : null;
+}
+
 describe('SeasonSettingsForm', () => {
-  it('saves custom points and a best-results limit', async () => {
+  it('saves custom points and a best-results limit as they are changed, with no Save button', async () => {
     const save = vi.fn().mockResolvedValue(undefined);
     render(<SeasonSettingsForm value={season} onSave={save} />);
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Discard' })).not.toBeInTheDocument();
     await userEvent.clear(screen.getByLabelText('1st'));
     await userEvent.type(screen.getByLabelText('1st'), '12');
     await userEvent.clear(screen.getByLabelText('2nd'));
@@ -58,41 +68,44 @@ describe('SeasonSettingsForm', () => {
     await userEvent.type(screen.getByLabelText('4th'), '0');
     await userEvent.clear(screen.getByLabelText('Best results to count'));
     await userEvent.type(screen.getByLabelText('Best results to count'), '3');
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-    expect(save).toHaveBeenCalledWith(expect.objectContaining({ bestResultsToCount: 3, placePoints: [{ place: 1, points: 12 }, { place: 2, points: 9 }, { place: 3, points: 6 }, { place: 4, points: 0 }] }));
+    await userEvent.tab();
+    await waitFor(() => expect(save).toHaveBeenLastCalledWith(expect.objectContaining({ bestResultsToCount: 3, placePoints: [{ place: 1, points: 12 }, { place: 2, points: 9 }, { place: 3, points: 6 }, { place: 4, points: 0 }] })));
+    expect(await screen.findByText('Saved')).toBeInTheDocument();
   });
-  it('shows the unsaved-changes bar only when something differs, and Discard restores the saved settings', async () => {
-    render(<SeasonSettingsForm value={season} onSave={vi.fn()} />);
-    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+  it('saves a change by itself after a short pause, and says so quietly', async () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    render(<SeasonSettingsForm value={season} onSave={save} />);
     expect(screen.getByLabelText('1st')).toHaveValue('10');
     expect(screen.getByLabelText('Did not finish / eliminated')).toHaveAttribute('readonly');
     await userEvent.clear(screen.getByLabelText('1st'));
     await userEvent.type(screen.getByLabelText('1st'), '11');
-    expect(screen.getByText('1 unsaved change')).toBeInTheDocument();
-    await userEvent.clear(screen.getByLabelText('2nd'));
-    await userEvent.type(screen.getByLabelText('2nd'), '7');
-    expect(screen.getByText('2 unsaved changes')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Discard' }));
-    expect(screen.getByLabelText('1st')).toHaveValue('10');
-    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+    expect(save).not.toHaveBeenCalled();
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ placePoints: [{ place: 1, points: 11 }, { place: 2, points: 8 }] }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Saved');
   });
-  it('rejects increasing place points before sending them', async () => {
+  it('holds back a change that is not valid yet, and says why', async () => {
     const save = vi.fn();
     render(<SeasonSettingsForm value={season} onSave={save} />);
     await userEvent.clear(screen.getByLabelText('1st'));
     await userEvent.type(screen.getByLabelText('1st'), '5');
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-    expect(screen.getByRole('alert')).toHaveTextContent('no increase for a lower place');
+    await userEvent.tab();
+    expect(await screen.findByRole('alert')).toHaveTextContent('no increase for a lower place');
+    await new Promise((resolve) => setTimeout(resolve, 900));
     expect(save).not.toHaveBeenCalled();
   });
-  it('shows a failed save and leaves the entered settings available to retry', async () => {
-    render(<SeasonSettingsForm value={season} onSave={vi.fn().mockRejectedValue(new Error('offline'))} />);
+  it('shows a failed save, keeps the entered settings and retries from the message', async () => {
+    const save = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue(undefined);
+    render(<SeasonSettingsForm value={season} onSave={save} />);
     await userEvent.clear(screen.getByLabelText('Season name'));
     await userEvent.type(screen.getByLabelText('Season name'), 'Renamed league');
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.tab();
     expect(await screen.findByRole('alert')).toHaveTextContent('couldn’t be saved');
     expect(screen.getByLabelText('Season name')).toHaveValue('Renamed league');
-    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(save).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Renamed league' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
   });
   it('offers a retry when eligible competitions cannot be loaded', async () => {
     vi.mocked(api.get).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ data: [
@@ -101,7 +114,7 @@ describe('SeasonSettingsForm', () => {
     render(<SeasonSettingsForm create onSave={vi.fn()} />);
     expect(await screen.findByRole('alert')).toHaveTextContent('Competitions couldn’t be loaded');
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(await screen.findByRole('checkbox', { name: /Fake eligible event/ })).toBeInTheDocument();
+    expect(await screen.findByRole('switch', { name: /Fake eligible event/ })).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(api.get).toHaveBeenCalledWith('/seasons/available-competitions', expect.anything());
   });
@@ -138,7 +151,9 @@ describe('SeasonPage', () => {
     // The position column has no visible heading; screen readers still get one.
     expect(screen.getByText('Position')).toHaveClass('sr-only');
     const droppedScore = screen.getByText('8');
-    expect(droppedScore).toHaveClass('line-through', 'opacity-55');
+    expect(droppedScore).toHaveClass('sv-struck');
+    expect(droppedScore).not.toHaveClass('line-through');
+    expect(screen.getByText('Crossed-out scores are dropped rounds')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Example Blue' })).toHaveAttribute('href', '/team-profiles/team-a');
     // The team's name is what each row shows: no club line, and no footnote under the table.
     expect(screen.queryByText('Example Club')).not.toBeInTheDocument();
@@ -146,9 +161,9 @@ describe('SeasonPage', () => {
     expect(screen.queryByText(/Best 1 of 1 round/)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Example Blue' })).toHaveClass('sv-team');
     // Age group and what to show are one row, "Seniors · Teams". With one choice each, it has nothing to open.
-    const where = screen.getByRole('button', { name: 'Seniors, Teams' });
-    expect(where).toHaveTextContent('Seniors· Teams');
-    expect(where).toBeDisabled();
+    // It is a plain heading, not a button that does nothing.
+    expect(screen.queryByRole('button', { name: /Seniors/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Seniors/ })).toHaveTextContent('Seniors· Teams');
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument();
   });
@@ -215,10 +230,11 @@ describe('SeasonPage', () => {
     });
     const save = vi.fn().mockResolvedValue(undefined);
     render(<SeasonSettingsForm create label="Create season" onSave={save} onCancel={vi.fn()} />);
-    const comp1 = await screen.findByRole('checkbox', { name: /Spring Qualifier/ });
-    const comp2 = screen.getByRole('checkbox', { name: /Summer Nationals/ });
+    const comp1 = await screen.findByRole('switch', { name: /Spring Qualifier/ });
+    const comp2 = screen.getByRole('switch', { name: /Summer Nationals/ });
     await userEvent.click(comp1);
     await userEvent.click(comp2);
+    expect(comp1).toHaveAttribute('aria-checked', 'true');
     await userEvent.type(screen.getByLabelText('Season name'), '2026 National League');
     await userEvent.click(screen.getByRole('button', { name: 'Create season' }));
     expect(save).toHaveBeenCalledWith(expect.objectContaining({
@@ -267,17 +283,89 @@ describe('SeasonPage', () => {
     expect(screen.getByRole('link', { name: 'Standings' })).toHaveAttribute('aria-current', 'page');
     expect(screen.queryByText('Place points')).not.toBeInTheDocument();
   });
-  it('lets an organiser edit settings, saves them and returns to the standings', async () => {
+  it('hands the season address to the team profile, so Back returns to that season', async () => {
+    function ProfileProbe() { const location = useLocation(); return <p>Profile opened from {(location.state as { from?: string } | null)?.from}</p>; }
+    vi.mocked(api.get).mockImplementation(async (url) => ({ data: url.endsWith('/standings') ? standings : season }));
+    render(<MemoryRouter initialEntries={['/seasons/example-season']}><Routes><Route path="/seasons/:seasonId" element={<SeasonPage />} /><Route path="/team-profiles/:id" element={<ProfileProbe />} /></Routes></MemoryRouter>);
+    await userEvent.click(await screen.findByRole('link', { name: 'Example Blue' }));
+    expect(await screen.findByText('Profile opened from /seasons/example-season')).toBeInTheDocument();
+  });
+  it('fits ten rounds on a phone: one fixed narrow column each, smaller type, no scrolling', async () => {
+    const rounds = Array.from({ length: 10 }, (_, index) => ({ ...season.rounds[0], id: `r${index + 1}`, orderIndex: index + 1, competitionName: `Example Cup ${index + 1}` }));
+    const wide = { standings: [{ rank: 1, teamProfileId: 'team-a', teamName: 'Example Blue', clubName: 'Example Club', totalPoints: 85, rounds: rounds.map((round, index) => ({ roundId: round.id, eventRank: 1, seasonPoints: 10, counted: index !== 2 })) }] };
+    vi.mocked(api.get).mockImplementation(async (url) => ({ data: url.endsWith('/standings') ? wide : { ...season, rounds } }));
+    render(<MemoryRouter initialEntries={['/seasons/example-season']}><Routes><Route path="/seasons/:seasonId" element={<SeasonPage />} /></Routes></MemoryRouter>);
+    const table = (await screen.findByRole('table')) as HTMLTableElement;
+    expect(table.closest('.rf-table-wrap')).toHaveClass('rf-table-fit');
+    expect(table).toHaveClass('sv-rounds-many');
+    const roundCols = [...table.querySelectorAll<HTMLElement>('colgroup col.sv-c-round')];
+    expect(roundCols).toHaveLength(10);
+    // Ten rounds share half the width; fewer get wider columns, up to a limit.
+    expect(roundCols[0].style.width).toBe('5%');
+    expect(screen.getAllByRole('columnheader')).toHaveLength(13);
+    // The one dropped round is dimmed and slashed (not struck through) and explained under the table.
+    expect(table.querySelectorAll('.sv-struck')).toHaveLength(1);
+    expect(screen.getByText('Crossed-out scores are dropped rounds')).toBeInTheDocument();
+  });
+  it('leaves the dropped-rounds note off when nothing was dropped', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => ({ data: url.endsWith('/standings') ? { standings: [standings.standings[0]] } : season }));
+    render(<MemoryRouter initialEntries={['/seasons/example-season']}><Routes><Route path="/seasons/:seasonId" element={<SeasonPage />} /></Routes></MemoryRouter>);
+    await screen.findByRole('table');
+    expect(screen.queryByText('Crossed-out scores are dropped rounds')).not.toBeInTheDocument();
+  });
+  it('unfolds a round and keeps it on screen while it folds away', async () => {
+    mount();
+    await userEvent.click(await screen.findByRole('link', { name: 'Rounds' }));
+    const round = screen.getByRole('button', { name: /Round 1.*Example Meadow Cup/ });
+    expect(round).toHaveAttribute('aria-expanded', 'false');
+    expect(document.querySelector('.sv-reveal')).toBeNull();
+    await userEvent.click(round);
+    expect(round).toHaveAttribute('aria-expanded', 'true');
+    expect(document.querySelector('.sv-reveal')).not.toBeNull();
+    expect(round.querySelector('.rf-chev-down')).not.toBeNull();
+    await userEvent.click(round);
+    expect(round).toHaveAttribute('aria-expanded', 'false');
+    expect(document.querySelector('.sv-reveal-out')).not.toBeNull();
+    await waitFor(() => expect(document.querySelector('.sv-reveal')).toBeNull());
+  });
+  it('lets an organiser edit settings, which save as they go and keep the Settings tab open', async () => {
     vi.mocked(api.put).mockResolvedValue({ data: {} });
     mount(true);
     await userEvent.click(await screen.findByRole('link', { name: 'Settings' }));
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
     await userEvent.clear(screen.getByLabelText('1st'));
     await userEvent.type(screen.getByLabelText('1st'), '12');
-    expect(screen.getByText('1 unsaved change')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.tab();
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/seasons/example-season', expect.objectContaining({ placePoints: [{ place: 1, points: 12 }, { place: 2, points: 8 }] })));
-    await waitFor(() => expect(screen.getByRole('link', { name: 'Standings' })).toHaveAttribute('aria-current', 'page'));
+    expect(await screen.findByText('Saved')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByLabelText('1st')).toHaveValue('12');
+  });
+  it('puts Add a round by the ticker dock on the Rounds tab, and opens the form in a sheet', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url.endsWith('/standings')) return { data: standings };
+      if (url === '/competitions') return { data: [] };
+      return { data: { ...season, canManage: true } };
+    });
+    const user = userEvent.setup();
+    render(<TickerProvider><DockProbe /><MemoryRouter initialEntries={['/seasons/example-season?tab=rounds']}><Routes><Route path="/seasons/:seasonId" element={<SeasonPage />} /></Routes></MemoryRouter></TickerProvider>);
+    const dock = await screen.findByTestId('dock');
+    expect(dock).toHaveTextContent('Add a round');
+    await user.click(dock);
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Add an event round');
+  });
+  it('has no dock button on Standings, or on Rounds for people who cannot manage the season', async () => {
+    const mountDocked = (canManage: boolean, tab: string) => {
+      vi.mocked(api.get).mockImplementation(async (url) => (url.endsWith('/standings') ? { data: standings } : { data: { ...season, canManage } }));
+      return render(<TickerProvider><DockProbe /><MemoryRouter initialEntries={[`/seasons/example-season${tab}`]}><Routes><Route path="/seasons/:seasonId" element={<SeasonPage />} /></Routes></MemoryRouter></TickerProvider>);
+    };
+    const first = mountDocked(true, '');
+    await screen.findByRole('heading', { name: 'Example Summer League' });
+    expect(screen.queryByTestId('dock')).not.toBeInTheDocument();
+    first.unmount();
+    mountDocked(false, '?tab=rounds');
+    await screen.findByRole('heading', { name: 'Example Summer League' });
+    expect(screen.queryByTestId('dock')).not.toBeInTheDocument();
   });
   it('requires a reviewed preview before publication and handles changed source results', async () => {
     vi.mocked(api.post).mockRejectedValue({ isAxiosError: true, response: { data: { message: 'Results changed. Preview again.' } } });
@@ -337,6 +425,18 @@ describe('SeasonsPage', () => {
     expect(screen.queryByText(/Published standings/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/\b1 season\b/)).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Season tables|Rider & pony stats|Past competitions/ })).not.toBeInTheDocument();
+  });
+  it('puts Create a season by the ticker dock instead of an inline bar', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: [other, season] });
+    vi.mocked(useAuth).mockReturnValue({ user: { id: 'u' }, canOrganise: () => true, hasRole: () => false, canEdit: () => true } as unknown as ReturnType<typeof useAuth>);
+    const user = userEvent.setup();
+    render(<TickerProvider><DockProbe /><MemoryRouter initialEntries={['/seasons']}><Routes><Route path="/seasons" element={<SeasonsPage />} /></Routes></MemoryRouter></TickerProvider>);
+    const dock = await screen.findByTestId('dock');
+    expect(dock).toHaveTextContent('Create a season');
+    expect(screen.getAllByRole('button', { name: 'Create a season' })).toHaveLength(1);
+    await user.click(dock);
+    expect(await screen.findByRole('heading', { name: 'Create a season' })).toBeInTheDocument();
+    expect(screen.queryByTestId('dock')).not.toBeInTheDocument();
   });
   it('opens the create form from the header action even when admin edit mode is off, and cancels back to the list', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: [other, season] });

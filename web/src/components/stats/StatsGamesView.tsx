@@ -1,6 +1,7 @@
 import type { StatsGame } from '../../types';
 import { formatPoints } from '../../lib/formatPoints';
 import { formatPercent } from '../../lib/stats';
+import './statsViews.css';
 import { useT } from '../../i18n/LanguageContext';
 import type { Translate } from '../../i18n/translate';
 
@@ -31,8 +32,9 @@ export function StatsGamesView({ games, best, worst, emptyText }: Props) {
           {worst.length > 0 && <div className="flex gap-2"><dt className="font-semibold text-[rgb(var(--mg-elim))]">{t('site.stats.weakest')}</dt><dd className="m-0">{worst.join(', ')}</dd></div>}
         </dl>
       )}
-      <div className="rf-table-wrap overflow-x-auto">
-        <table className="rf-table">
+      <div className="rf-table-wrap rf-table-fit">
+        <table className="rf-table sg-table">
+          <colgroup><col className="sg-game" /><col className="sg-n" /><col className="sg-won" /><col className="sg-avg" /><col className="sg-nf" /><col className="sg-quota" /></colgroup>
           <caption className="sr-only">{t('site.stats.gamesCaption')}</caption>
           <thead>
             <tr><th scope="col">{t('site.stats.game')}</th><th scope="col">{t('site.stats.races')}</th><th scope="col">{t('site.stats.won')}</th><th scope="col">{t('site.stats.avg')}</th><th scope="col">{t('site.stats.notFinished')}</th><th scope="col">{t('site.stats.quota')}</th></tr>
@@ -42,7 +44,7 @@ export function StatsGamesView({ games, best, worst, emptyText }: Props) {
               <tr key={game.name}>
                 <td className="font-semibold">{game.name}</td>
                 <td className="tabular-nums">{game.races}</td>
-                <td className="tabular-nums">{game.wins} <span className="text-[13px] text-[rgb(var(--mg-muted))]">({formatPercent(game.winPercent)})</span></td>
+                <td className="tabular-nums">{game.wins} <span className="whitespace-nowrap text-[12px] text-[rgb(var(--mg-muted))]">({formatPercent(game.winPercent)})</span></td>
                 <td className="tabular-nums">{formatGameAvg(game, t)}</td>
                 <td className="tabular-nums">{game.nonFinishes}</td>
                 <td className="tabular-nums font-semibold">{formatPercent(game.pointQuotaPercent)}</td>

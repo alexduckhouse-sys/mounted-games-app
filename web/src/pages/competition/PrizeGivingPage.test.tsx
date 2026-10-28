@@ -81,7 +81,7 @@ describe('PrizeGivingPage', () => {
     mount('/competitions/1/prize-giving?section=5');
     expect(await screen.findByText('Up next: 3rd')).toBeInTheDocument();
     expect(api.get).toHaveBeenCalledWith('/competitions/1/standings', { params: { sectionId: 5 } });
-    expect(screen.getByText('No dec form for this team, so no riders to read out.')).toBeInTheDocument();
+    expect(screen.getByText('No declaration form for this team, so no riders to read out.')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Reveal 3rd' }));
     expect(posted()[0]).toEqual({ action: 'show', sectionId: 5, places: [{ teamId: 13, place: 3, points: 30 }], champions: false });

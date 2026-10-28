@@ -30,7 +30,7 @@ export function formatArenaAssistanceMessage(
   const arena = arenaName?.trim() || 'Main Arena';
   const title = arenaAssistanceLabel(service);
   const extra = note?.trim();
-  return extra ? `${title} needed at ${arena} — ${extra}` : `${title} needed at ${arena}`;
+  return extra ? `${title} needed at ${arena}: ${extra}` : `${title} needed at ${arena}`;
 }
 
 /** Post a priority arena assistance call (`Farrier` / `Vet` / `First Aid`) and optionally hold the arena session. */
