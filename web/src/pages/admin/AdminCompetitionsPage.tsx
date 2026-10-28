@@ -86,7 +86,7 @@ export function AdminCompetitionsPage() {
         {error && <Notice>{error}</Notice>}
         {comps === null && <p role="status" className="rf-note">{t('common.loading')}</p>}
         {comps !== null && comps.length > 0 && (
-          <RoundSearch label={t('admin.accounts.comps.search')} placeholder={t('admin.accounts.comps.searchPlaceholder')} value={query} onChange={setQuery} />
+          <RoundSearch label={t('admin.accounts.comps.search')} placeholder={t('admin.accounts.comps.searchPlaceholder')} value={query} onChange={setQuery} className="mt-3" />
         )}
         {comps !== null && rows.length === 0 && !error && (
           <RefineList as="div"><div className="rf-row"><span className="rf-t2">{comps.length > 0 ? t('admin.accounts.comps.noMatch', { query: query.trim() }) : t('admin.accounts.noCompetitionsYet')}</span></div></RefineList>
