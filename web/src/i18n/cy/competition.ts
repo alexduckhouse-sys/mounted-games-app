@@ -229,4 +229,10 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.rules.openPage': 'Agor tudalen llyfr rheolau’r ras',
   'competition.rules.pairsVersion': 'Fersiwn parau',
   'competition.rules.individualVersion': 'Fersiwn unigol',
+  'competition.seasonRound.remove': 'Tynnu o’r tymor',
+  'competition.seasonRound.confirmTitle': 'Tynnu’r rownd hon?',
+  'competition.seasonRound.confirmMessage': 'Nid yw {name} yn cyfrif tuag at y tymor hwn mwyach. Gallwch ei ychwanegu’n ôl yn nes ymlaen.',
+  'competition.seasonRound.confirmMessagePublished': 'Nid yw {name} yn cyfrif tuag at y tymor hwn mwyach ac mae’r canlyniadau cyhoeddedig yn cael eu dileu. Gallwch ei ychwanegu’n ôl yn nes ymlaen, ond bydd rhaid cyhoeddi eto.',
+  'competition.seasonRound.confirmLabel': 'Tynnu’r rownd',
+  'competition.seasonRound.error': 'Methwyd tynnu’r rownd hon. Gwiriwch eich signal a rhowch gynnig arall arni.',
 };

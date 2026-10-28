@@ -10,7 +10,7 @@ import { SeasonSettingsForm } from './SeasonSettingsForm';
 import type { SeasonView } from './seasonViewTypes';
 import { chooseOption } from '../../test/select';
 
-vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn() } }));
+vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: vi.fn() }));
 const season: SeasonView = {
   id: 'example-season', title: 'Example Summer League', year: 2026, format: 2, ageGroup: 'Seniors',
@@ -235,6 +235,31 @@ describe('SeasonPage', () => {
     await userEvent.click(round);
     expect(screen.getByText('Published versions')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Preview publication' })).not.toBeInTheDocument();
+  });
+  it('lets an organiser remove a round after confirming, and keeps it when they cancel or the request fails', async () => {
+    vi.mocked(api.delete).mockResolvedValue({ data: {} });
+    mount(true);
+    await userEvent.click(await screen.findByRole('link', { name: 'Rounds' }));
+    await userEvent.click(screen.getByRole('button', { name: /Round 1.*Example Meadow Cup/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Remove from season' }));
+    expect(await screen.findByText(/its published results are deleted/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(api.delete).not.toHaveBeenCalled();
+
+    vi.mocked(api.delete).mockRejectedValueOnce(new Error('offline'));
+    await userEvent.click(screen.getByRole('button', { name: 'Remove from season' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove round' }));
+    expect(await screen.findByText('This round couldn’t be removed. Check your signal and try again.')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove from season' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove round' }));
+    await waitFor(() => expect(api.delete).toHaveBeenLastCalledWith('/seasons/example-season/rounds/round-1'));
+  });
+  it('does not offer round removal to people who cannot manage the season', async () => {
+    mount(false);
+    await userEvent.click(await screen.findByRole('link', { name: 'Rounds' }));
+    await userEvent.click(screen.getByRole('button', { name: /Round 1.*Example Meadow Cup/ }));
+    expect(screen.queryByRole('button', { name: 'Remove from season' })).not.toBeInTheDocument();
   });
   it('keeps the active tab in the URL and hides Settings from people who cannot edit', async () => {
     mount(false, '/seasons/example-season?tab=settings');
