@@ -160,6 +160,12 @@
 .ops-end-left { margin-top: 10px; }
 .ops-draw-actions { margin-top: 10px; }
 .ops-lane-label { flex: none; width: 60px; }
+.ops-grip { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 44px; margin: 0 -6px 0 -10px; border: 0; border-radius: 10px; background: transparent; color: rgb(var(--mg-faint)); cursor: grab; touch-action: none; }
+.ops-grip:hover:not(:disabled), .ops-grip:focus-visible { background: rgb(var(--mg-tint) / .7); color: rgb(var(--mg-heading)); }
+.ops-grip:disabled { opacity: .4; cursor: default; }
+.ops-grip-gap { flex: none; width: 40px; margin: 0 -6px 0 -10px; }
+.ops-tt-row[data-lifted="true"] { position: relative; z-index: 2; box-shadow: var(--mg-shadow-sm); background: rgb(var(--mg-tint)); }
+.ops-tt-row[data-lifted="true"] .ops-grip { cursor: grabbing; }
 .ops-addrow { margin: 0; border-radius: 0; border-top: 1px solid rgb(var(--mg-rule-soft)); background: transparent; min-height: 52px; }
 /* Entries and dec forms */
 .ops-entries .rf-sec { margin-top: 20px; border-bottom: 0; font-size: 22px; }
