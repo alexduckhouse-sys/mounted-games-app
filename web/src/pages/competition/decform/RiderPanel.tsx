@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { api } from '../../../api';
 import { Field } from '../../auth/Field';
@@ -48,7 +48,20 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
   const [certLookup, setCertLookup] = useState<{ key: string; data: CertifiedHorseLookup } | null>(null);
   const slotKey = `${title}|${editing}`;
   // On a laptop the cursor goes straight to the name; on a phone that would only throw the keyboard up.
-  useEffect(() => { if (wide()) nameRef.current?.focus(); }, [slotKey]);
+  useEffect(() => { (wide() ? nameRef.current : closeRef.current)?.focus(); }, [slotKey]);
+  // Escape closes the panel wherever focus is, and focus goes back to what opened it.
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const escape = (event: globalThis.KeyboardEvent) => { if (event.key === 'Escape') onCloseRef.current(); };
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('keydown', escape);
+      if (opener?.isConnected) opener.focus();
+    };
+  }, []);
 
   const passportQuery = form.extra.ponyPassport.trim();
   const ponyQuery = form.pony.trim();
@@ -86,10 +99,6 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
 
   const activeCertLookup = canLookup && certLookup?.key === lookupKey ? certLookup.data : null;
 
-  function keys(event: KeyboardEvent) {
-    if (event.key === 'Escape') onClose();
-  }
-
   const issues = riderIssues(form, reserve, config);
   const dobBad = !!issues.invalid.dob;
   const heightBad = !!issues.invalid.height;
@@ -100,11 +109,11 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
   return (
     <>
       <button type="button" aria-hidden="true" tabIndex={-1} onClick={onClose} className="fixed inset-0 z-40 bg-[rgb(var(--mg-overlay)/0.55)] lg:hidden" />
-      <section aria-label={title} onKeyDown={keys}
+      <section aria-label={title}
         className="z-50 flex flex-col gap-4 bg-[rgb(var(--mg-surface))] p-4 max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:max-h-[88vh] max-lg:overflow-y-auto max-lg:rounded-t-2xl max-lg:pb-[calc(20px+env(safe-area-inset-bottom))] max-lg:shadow-[0_-12px_32px_rgb(var(--mg-overlay)/0.25)] lg:sticky lg:top-6 lg:gap-[18px] lg:rounded-xl lg:border-[1.5px] lg:border-[rgb(var(--mg-heading))] lg:p-6">
         <div className="flex items-center gap-3">
           <h2 className="mg-display flex-1 text-[26px] font-bold leading-tight text-[rgb(var(--mg-heading))] lg:text-[28px]">{title}</h2>
-          <button type="button" className="mg-icon-btn" aria-label={t('common.close')} onClick={onClose}><X aria-hidden="true" className="h-[18px] w-[18px]" /></button>
+          <button ref={closeRef} type="button" className="mg-icon-btn" aria-label={t('common.close')} onClick={onClose}><X aria-hidden="true" className="h-[18px] w-[18px]" /></button>
         </div>
 
         {!editing && choices.length > 0 && (

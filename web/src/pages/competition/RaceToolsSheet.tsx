@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { useDialogFocus } from '../../components/useDialogFocus';
 import { ChevronRight, MoreHorizontal } from 'lucide-react';
 import { formatPoints } from '../../lib/formatPoints';
 import { redLabel, yellowLabel, type CardMark } from '../../lib/refereeCards';
@@ -57,6 +58,8 @@ export function RaceToolsSheet({
   teams, canHc, canCards, canChangePoints, onHc, onYellow, onRed, onStepPoints, onEliminate, onDeadHeat, onClearDeadHeat, factsOn, onToggleFacts, links, onClose,
 }: RaceToolsSheetProps) {
   const [menuFor, setMenuFor] = useState<number | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onClose, '.sc-link');
   const [editing, setEditing] = useState<number | null>(null);
   const [tieMode, setTieMode] = useState(false);
   const [ticked, setTicked] = useState<number[]>([]);
@@ -80,7 +83,7 @@ export function RaceToolsSheet({
   return (
     <div className="rt-overlay">
       <button type="button" className="rt-scrim" aria-label="Close race tools" onClick={onClose} />
-      <div role="dialog" aria-modal="true" aria-label="Race tools" className="rt-sheet">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Race tools" className="rt-sheet">
         <div className="rt-head">
           <span className="rt-title">Race tools</span>
           <button type="button" className="sc-link" onClick={onClose}>Close</button>

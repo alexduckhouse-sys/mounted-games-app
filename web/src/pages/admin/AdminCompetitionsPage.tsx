@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { api } from '../../api';
@@ -12,6 +12,26 @@ import { STAGE_TONE, deleteWarning } from './adminShared';
 import '../operations/operations.css';
 
 /** Every competition, with Organise and Delete. Delete asks first, in place, and says what goes with it. */
+/** The delete question under a row: focus moves to Keep it, Escape cancels and focus goes back to the Delete button. */
+function DeleteAsk({ competition: c, stage, busy, onKeep, onDelete }: { competition: CompetitionSummary; stage: ReturnType<typeof stageOf>; busy: boolean; onKeep: () => void; onDelete: () => void }) {
+  const keepRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    keepRef.current?.focus();
+    return () => { if (opener?.isConnected) opener.focus(); };
+  }, []);
+  return (
+    <div role="alertdialog" aria-label={`Delete ${c.name}?`} className="ops-warnbox" onKeyDown={(e) => { if (e.key === 'Escape') onKeep(); }}>
+      <strong>Delete {c.name}?</strong>
+      <p>{deleteWarning(c, stage === 'live')}</p>
+      <div className="ops-warn-actions">
+        <button ref={keepRef} type="button" className="rf-btn" onClick={onKeep}>Keep it</button>
+        <button type="button" className="ops-danger-link" disabled={busy} onClick={onDelete}>Delete for good</button>
+      </div>
+    </div>
+  );
+}
+
 export function AdminCompetitionsPage() {
   const [comps, setComps] = useState<CompetitionSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,14 +88,7 @@ export function AdminCompetitionsPage() {
                       <button type="button" className="ops-danger-link" aria-expanded={open} aria-label={`Delete ${c.name}`} disabled={busy} onClick={() => setAsking(open ? null : c.id)}>Delete</button>
                     </div>
                     {open && (
-                      <div role="alertdialog" aria-label={`Delete ${c.name}?`} className="ops-warnbox">
-                        <strong>Delete {c.name}?</strong>
-                        <p>{deleteWarning(c, stage === 'live')}</p>
-                        <div className="ops-warn-actions">
-                          <button type="button" className="rf-btn" onClick={() => setAsking(null)}>Keep it</button>
-                          <button type="button" className="ops-danger-link" disabled={busy} onClick={() => void remove(c)}>Delete for good</button>
-                        </div>
-                      </div>
+                      <DeleteAsk competition={c} stage={stage} busy={busy} onKeep={() => setAsking(null)} onDelete={() => void remove(c)} />
                     )}
                   </Fragment>
                 );

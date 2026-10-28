@@ -196,3 +196,21 @@ describe('race rules sheet loading and closing', () => {
     expect(screen.queryByRole('link', { name: 'Open race rulebook page' })).not.toBeInTheDocument();
   });
 });
+
+describe('race rules sheet focus', () => {
+  it('takes focus, closes on Escape and gives focus back', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: template() });
+    const opener = document.createElement('button');
+    document.body.appendChild(opener);
+    opener.focus();
+    const onClose = vi.fn();
+    const { unmount } = render(sheet('Fake Race', true, onClose));
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await act(async () => { unmount(); });
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+});

@@ -1,5 +1,6 @@
 import { useAudioLevel } from '../../hooks/useAudioLevel';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useDialogFocus } from '../../components/useDialogFocus';
 import { createPortal } from 'react-dom';
 import { AnimatePresence } from 'framer-motion';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -626,24 +627,15 @@ function BroadcastStudio() {
       {(snapshot.state === 'starting' || snapshot.state === 'reconnecting') && <p role="status" className="mg-stream-glass absolute left-4 top-1/2 p-3">{snapshot.state === 'starting' ? 'Starting stream…' : 'Reconnecting…'}</p>}
       {error && <p role="alert" className="mg-stream-glass absolute left-4 right-24 top-20 p-3">{error}</p>}
       {screenDimmed && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Screen dimmed for tripod battery saving"
+        <DimmedLock
+          label="Screen dimmed for tripod battery saving"
           className="pointer-events-auto fixed inset-0 z-[120] flex flex-col items-center justify-center gap-3 bg-black text-white/35 select-none"
-          onDoubleClick={() => setScreenDimmed(false)}
+          onUnlock={() => setScreenDimmed(false)}
         >
           <Lock className="h-8 w-8" />
           <h2 className="text-lg font-bold">Screen locked</h2>
           <p className="text-sm font-semibold">LIVE {time} · {arena} · {angle}</p>
-          <button
-            type="button"
-            className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/50 hover:text-white"
-            onClick={() => setScreenDimmed(false)}
-          >
-            Double-tap to unlock.
-          </button>
-        </div>
+        </DimmedLock>
       )}
       <SavedReplaysDrawer
         competitionId={competition.id}
@@ -788,4 +780,22 @@ export function SponsorButtons({ competitionId }: { competitionId: number }) {
       aria-label={on ? 'Turn sponsors off' : 'Turn sponsors on'}><Handshake />{on ? 'Sponsors on' : 'Sponsors off'}</button>
     {on && <button className="mg-stream-control flex-col !rounded-xl p-2" disabled={busy} onClick={() => void skip()} aria-label="Skip sponsor"><SkipForward />Skip</button>}
   </>;
+}
+
+/** The tripod lock screen: focus sits on the unlock button, Escape unlocks, and Tab stays on the screen. */
+function DimmedLock({ label, className, onUnlock, children }: { label: string; className: string; onUnlock: () => void; children: ReactNode }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onUnlock, 'button');
+  return (
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={label} className={className} onDoubleClick={onUnlock}>
+      {children}
+      <button
+        type="button"
+        className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/50 hover:text-white"
+        onClick={onUnlock}
+      >
+        Double-tap to unlock.
+      </button>
+    </div>
+  );
 }

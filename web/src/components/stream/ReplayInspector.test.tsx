@@ -94,7 +94,7 @@ describe('ReplayInspector component', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
 
     // Escape key
-    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(2);
 
     unmount();
@@ -329,12 +329,12 @@ describe('ReplayInspector component', () => {
     expect(within(strip).getByText('Race 2')).toBeInTheDocument();
 
     // Click race 2 to select
-    const race2Btn = within(strip).getByText('Race 2').closest('[role="button"]')!;
+    const race2Btn = within(strip).getByText('Race 2').closest('button')!;
     fireEvent.click(race2Btn);
     expect(onSelectClip).toHaveBeenCalledWith(clip2);
 
     // Keydown Enter on clip
-    fireEvent.keyDown(race2Btn, { key: 'Enter' });
+    fireEvent.click(race2Btn);
     expect(onSelectClip).toHaveBeenCalledTimes(2);
 
     // Delete button inside strip
@@ -536,10 +536,10 @@ describe('ReplayInspector component', () => {
     );
 
     const strip = screen.getByRole('region', { name: 'Saved clips' });
-    const race2Btn = within(strip).getByText('Race 2').closest('[role="button"]')!;
+    const race2Btn = within(strip).getByText('Race 2').closest('button')!;
 
     // Space key on strip clip
-    fireEvent.keyDown(race2Btn, { key: ' ' });
+    fireEvent.click(race2Btn);
     expect(onSelectClip).toHaveBeenCalledWith(clip2);
 
     // Extreme pointer drag clamping
@@ -784,10 +784,10 @@ describe('ReplayInspector component', () => {
         onClose={vi.fn()}
       />
     );
-    const stripCard = screen.getByText('Race 2').closest('[role="button"]')!;
+    const stripCard = screen.getByText('Race 2').closest('button')!;
     fireEvent.keyDown(stripCard, { key: 'ArrowDown' });
     expect(onSelectClip).not.toHaveBeenCalled();
-    fireEvent.keyDown(stripCard, { key: 'Enter' });
+    fireEvent.click(stripCard);
     expect(onSelectClip).toHaveBeenCalledWith(multiClips[1]);
   });
 
@@ -1091,4 +1091,20 @@ it('refuses invalid canvas image output instead of downloading a corrupted photo
   HTMLCanvasElement.prototype.getContext = vi.fn(() => ({ save: vi.fn(), restore: vi.fn(), translate: vi.fn(), scale: vi.fn(), drawImage: vi.fn(), fillRect: vi.fn(), fillText: vi.fn() })) as unknown as typeof HTMLCanvasElement.prototype.getContext;
   HTMLCanvasElement.prototype.toDataURL = vi.fn(() => 'data:,');
   expect(() => capturePhotoFinishSnapshot({ videoWidth: 1920, videoHeight: 1080 } as HTMLVideoElement, createMockClip(), 0, { zoom: 1, panX: 0, panY: 0 })).toThrow('photo');
+});
+
+describe('SavedReplaysDrawer keyboard access', () => {
+  it('opens a clip from its title button, closes on Escape and moves focus in', () => {
+    const clip = createMockClip({ id: 'c-kb', label: 'Keyboard Clip' });
+    addSavedReplay(clip);
+    const onSelectClip = vi.fn();
+    const onClose = vi.fn();
+    render(<SavedReplaysDrawer open competitionId={42} onClose={onClose} onSelectClip={onSelectClip} />);
+    const dialog = screen.getByRole('dialog', { name: 'Saved replays' });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Keyboard Clip' }));
+    expect(onSelectClip).toHaveBeenCalledTimes(1);
+  });
 });

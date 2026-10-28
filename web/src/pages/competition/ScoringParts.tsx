@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { motion, type PanInfo } from 'framer-motion';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useDialogFocus } from '../../components/useDialogFocus';
 import { BibSwatch, HatbandSwatch } from '../../components/BibSwatch';
 import { dotColour } from '../../lib/teamColours';
 import { hatbandColour } from '../../lib/hatbands';
@@ -334,9 +335,11 @@ export function ScoreRow({
 }
 
 function Overlay({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onClose, 'button');
   return (
     <div className="sc-overlay" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-label={label} className="sc-sheet" onClick={(e) => e.stopPropagation()}>{children}</div>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={label} className="sc-sheet" onClick={(e) => e.stopPropagation()}>{children}</div>
     </div>
   );
 }
