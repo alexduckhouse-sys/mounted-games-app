@@ -157,7 +157,7 @@ export function ToplistView({
     <>
       <div className="flex flex-col gap-3 pt-3">
         {viewRow}
-        <motion.div key={viewKey} className="flex flex-col gap-3" initial={still || !viewChanged ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: EASE_OUT }}>
+        <div key={viewKey} className={`flex flex-col gap-3${still || !viewChanged ? '' : ' mg-settle'}`}>
         {view === 'finals' && (
           <FinalsList
             groups={list.finals}
@@ -298,7 +298,7 @@ export function ToplistView({
             </ol>
           </section>
         )}
-        </motion.div>
+        </div>
       </div>
       {sheet && (
         <TeamSheet
