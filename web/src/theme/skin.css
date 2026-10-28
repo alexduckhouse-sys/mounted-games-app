@@ -55,6 +55,21 @@
   --mg-dur-base: 200ms;
 }
 :root, [data-theme] {
+  /* Race diagram arena: sand in every light theme, slate and chalk in Stable Night (overridden below). */
+  --mg-arena-ground: 254 243 199;
+  --mg-arena-lane: 253 230 138;
+  --mg-arena-line: 146 64 14;
+  --mg-arena-label: 146 64 14;
+  --mg-arena-ink: 30 41 59;
+  --mg-arena-start: 20 83 45;
+  --mg-arena-top: 153 27 27;
+  --mg-arena-midline: 71 85 105;
+  --mg-arena-midline-text: 51 65 85;
+  --mg-arena-mark: 180 83 9;
+  --mg-arena-tag: 254 243 199;
+  --mg-arena-tag-line: 217 119 6;
+  --mg-arena-pole-ink: 127 29 29;
+  --mg-arena-cone-ink: 124 45 18;
   --mg-line: var(--mg-rule);
   --mg-border: var(--mg-control);
   --mg-header-bg: var(--mg-header);
@@ -100,6 +115,20 @@
   --mg-overlay: 67 20 7;
 }
 [data-theme="dark"] {
+  --mg-arena-ground: 33 41 54;
+  --mg-arena-lane: 54 56 56;
+  --mg-arena-line: 226 232 240;
+  --mg-arena-label: 226 232 240;
+  --mg-arena-ink: 241 245 249;
+  --mg-arena-start: 134 239 172;
+  --mg-arena-top: 252 165 165;
+  --mg-arena-midline: 203 213 225;
+  --mg-arena-midline-text: 203 213 225;
+  --mg-arena-mark: 203 213 225;
+  --mg-arena-tag: 33 41 54;
+  --mg-arena-tag-line: 148 163 184;
+  --mg-arena-pole-ink: 252 165 165;
+  --mg-arena-cone-ink: 253 186 140;
   --mg-ground: 11 17 30;
   --mg-surface: 21 30 46;
   --mg-subtle: 27 38 56;

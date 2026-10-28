@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
@@ -17,8 +17,8 @@ function deferred<T>() {
   const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
   return { promise, resolve, reject };
 }
-const sheet = (raceName: string | null, open = true, onClose = vi.fn(), competitionId?: number) =>
-  <MemoryRouter><RaceRulesSheet raceName={raceName} open={open} onClose={onClose} competitionId={competitionId} /></MemoryRouter>;
+const sheet = (raceName: string | null, open = true, onClose = vi.fn()) =>
+  <MemoryRouter><RaceRulesSheet raceName={raceName} open={open} onClose={onClose} /></MemoryRouter>;
 
 beforeEach(() => { clearRaceDetailCache(); vi.mocked(api.get).mockReset(); });
 
@@ -171,46 +171,63 @@ describe('race rules sheet loading and closing', () => {
     expect(api.get).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps inside taps open, closes on backdrop/button/page-link, and encodes the race name in the link', async () => {
+  it('keeps inside taps open and closes on the backdrop or the pinned close button', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { ...template('Fake race & poles'), summary: 'Fake setup summary' } });
     const close = vi.fn();
-    render(sheet('Fake race & poles', true, close, 9));
+    render(sheet('Fake race & poles', true, close));
     await screen.findByText('Fake setup summary');
     const dialog = screen.getByRole('dialog');
-    fireEvent.pointerDown(within(dialog).getByRole('heading'));
+    fireEvent.click(within(dialog).getByRole('heading'));
     expect(close).not.toHaveBeenCalled();
-    fireEvent.pointerDown(dialog.parentElement!);
-    expect(close).toHaveBeenCalledTimes(1);
+    fireEvent.click(dialog);
+    await waitFor(() => expect(close).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole('button', { name: 'Close rules' }));
-    expect(close).toHaveBeenCalledTimes(2);
-    const link = screen.getByRole('link', { name: 'Open race rulebook page' });
-    expect(link).toHaveAttribute('href', '/competitions/9/rulebooks?race=Fake%20race%20%26%20poles');
-    fireEvent.click(link);
-    expect(close).toHaveBeenCalledTimes(3);
+    await waitFor(() => expect(close).toHaveBeenCalledTimes(2));
   });
 
-  it('leaves out the full-page link when no competition is in context', async () => {
+  it('has no link to a full rulebook page, whether or not a competition is in context', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { ...template('Fake race'), summary: 'Plain summary' } });
-    render(sheet('Fake race', true));
+    render(sheet('Fake race', true, vi.fn()));
     await screen.findByText('Plain summary');
-    expect(screen.queryByRole('link', { name: 'Open race rulebook page' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+
+  it('puts the rulebook in one settings row, not a row of small tabs, and lets you switch it', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: template('Fake race') });
+    render(sheet('Fake race'));
+    const row = await screen.findByRole('combobox', { name: 'Rulebook' });
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    expect(row).toHaveClass('min-h-14');
+    expect(row).toHaveTextContent('EGUK');
+    fireEvent.click(row);
+    fireEvent.click(await screen.findByRole('option', { name: 'MGA' }));
+    expect(screen.getByRole('combobox', { name: 'Rulebook' })).toHaveTextContent('MGA');
+    expect(screen.getByRole('group', { name: 'MGA rules' })).toBeInTheDocument();
+  });
+
+  it('keeps the close button and title outside the scrolling rules, and fits the diagram to its own shape', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { ...template('Fake race'), diagramJson: '[]' } });
+    render(sheet('Fake race'));
+    await screen.findByRole('combobox', { name: 'Rulebook' });
+    const close = screen.getByRole('button', { name: 'Close rules' });
+    const scroller = document.querySelector('.rules-sheet-body')!;
+    expect(scroller.contains(close)).toBe(false);
+    expect(scroller.contains(screen.getByRole('heading', { name: 'Fake race' }))).toBe(false);
+    const svg = within(scroller as HTMLElement).getByRole('img', { name: 'Arena setup diagram' });
+    expect(svg.style.height).toBe('auto');
+    expect(svg.style.aspectRatio).toMatch(/^\d+ \/ 240$/);
   });
 });
 
 describe('race rules sheet focus', () => {
-  it('takes focus, closes on Escape and gives focus back', async () => {
+  it('is a modal dialog (the browser traps focus and returns it) and closes on Escape', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: template() });
-    const opener = document.createElement('button');
-    document.body.appendChild(opener);
-    opener.focus();
     const onClose = vi.fn();
-    const { unmount } = render(sheet('Fake Race', true, onClose));
+    render(sheet('Fake Race', true, onClose));
     const dialog = screen.getByRole('dialog');
-    expect(dialog.contains(document.activeElement)).toBe(true);
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(onClose).toHaveBeenCalledTimes(1);
-    await act(async () => { unmount(); });
-    expect(document.activeElement).toBe(opener);
-    opener.remove();
+    expect(dialog).toHaveAttribute('open');
+    expect(dialog.tagName).toBe('DIALOG');
+    fireEvent(dialog, new Event('cancel', { cancelable: true }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 });

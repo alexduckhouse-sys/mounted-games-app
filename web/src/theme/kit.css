@@ -120,3 +120,12 @@ html[data-lite="true"] .mg-remember { box-shadow: none; }
 .mg-install-step b { font-weight: 700; }
 .mg-install-n { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); font: 700 13px/1 var(--mg-font); }
 .mg-install-icon { width: 22px; height: 22px; color: rgb(var(--mg-heading)); }
+
+/* The race rules sheet: title and close button stay put, only the rules scroll. */
+dialog.rules-sheet { overflow: hidden; }
+.rules-sheet > .kit-sheet-inner { max-height: 92dvh; overflow: hidden; }
+.rules-sheet .kit-sheet-title { padding-right: 48px; flex: none; }
+.rules-sheet-close { position: absolute; top: 6px; right: 10px; z-index: 1; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: rgb(var(--mg-heading)); cursor: pointer; }
+.rules-sheet-close:hover { background: rgb(var(--mg-subtle)); }
+.rules-sheet-close:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
+.rules-sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 4px; }
