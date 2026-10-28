@@ -15,7 +15,7 @@ services:
     plan: free
     region: frankfurt
     healthCheckPath: /healthz
-    autoDeploy: true
+    autoDeploy: false
     envVars:
       - key: ASPNETCORE_ENVIRONMENT
         value: Production
