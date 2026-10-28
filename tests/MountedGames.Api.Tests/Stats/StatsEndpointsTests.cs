@@ -197,7 +197,7 @@ public class StatsEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task RiderProfile_Anonymous_GetsHeadlineNumbersOnly()
+    public async Task RiderProfile_Anonymous_GetsTheSameDetailAsSignedIn_WithInitialsOnlyNames()
     {
         var s = await SeedScenarioAsync();
         var anon = _f.CreateClient();
@@ -205,12 +205,19 @@ public class StatsEndpointsTests : IClassFixture<ApiFactory>
         var raw = await response.Content.ReadAsStringAsync();
         var profile = await response.ReadAsync<StatsProfileDto>();
 
-        Assert.Equal((StatsSubjectKind.Rider, s.OllyShown, false, false), (profile.Kind, profile.Name, profile.Detailed, profile.RaceFiguresAllFormats));
-        Assert.Null(profile.Games);
-        Assert.Null(profile.BestGames);
-        Assert.Null(profile.WorstGames);
-        Assert.Null(profile.Entries);
-        Assert.Null(profile.Partnerships);
+        Assert.Equal((StatsSubjectKind.Rider, s.OllyShown, true, false), (profile.Kind, profile.Name, profile.Detailed, profile.RaceFiguresAllFormats));
+        // Anonymous viewers now get the games, entries and partnerships a signed-in member gets.
+        Assert.Equal(["Bending", "Flag Race"], profile.Games!.Select(g => g.Name));
+        Assert.Equal(["Bending"], profile.BestGames!);
+        Assert.Equal(["Flag Race"], profile.WorstGames!);
+        Assert.Equal(2, profile.Entries!.Count);
+        var partnership = Assert.Single(profile.Partnerships!);
+        Assert.Equal((s.OllyShown, s.Pony, 2, 2), (partnership.RiderName, partnership.PonyName, partnership.Entries, partnership.Competitions));
+        var (member, _) = await _f.SignupAsync("Member");
+        var signedIn = await (await member.GetAsync(Url("riders", s.OllyShown))).ReadAsync<StatsProfileDto>();
+        Assert.Equal(signedIn.Games!.Select(g => g.Name), profile.Games.Select(g => g.Name));
+        Assert.Equal(signedIn.Entries!.Count, profile.Entries.Count);
+        Assert.Equal(signedIn.Partnerships!.Count, profile.Partnerships.Count);
         var sum = profile.Summary;
         Assert.Equal((2, 2, 2), (sum.Competitions, sum.Entries, sum.PlacedEntries));
         Assert.Equal((1, 1, 0, 1.5), (sum.Firsts, sum.Seconds, sum.Thirds, sum.AveragePlace));
@@ -218,7 +225,6 @@ public class StatsEndpointsTests : IClassFixture<ApiFactory>
         // Race figures are from the pairs event only: Bending won (3 of 3), Flag Race not finished (0 of 3).
         Assert.Equal((2, 1, 50.0, 3, 6, 50.0), (sum.Races, sum.Wins, sum.WinPercent, sum.Points, sum.MaxPoints, sum.PointQuotaPercent));
         Assert.DoesNotContain($"Smith{s.U}", raw, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(s.Pony, raw);
 
         // The surname finds nothing, by search or by profile.
         Assert.Equal(HttpStatusCode.NotFound, (await anon.GetAsync(Url("riders", s.OllyFull))).StatusCode);
@@ -290,7 +296,7 @@ public class StatsEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal(seasonId, standing.SeasonId);
         Assert.Equal(("Example league", 1, 8L, 1), (standing.SeasonName, standing.Rank, standing.Points, standing.EventsEntered));
         var anonymous = await (await _f.CreateClient().GetAsync(Url("riders", scenario.OllyShown))).ReadAsync<StatsProfileDto>();
-        Assert.Null(anonymous.Seasons);
+        Assert.Equal(seasonId, Assert.Single(anonymous.Seasons!).SeasonId);
     }
 
     [Fact]
@@ -309,11 +315,11 @@ public class StatsEndpointsTests : IClassFixture<ApiFactory>
     {
         var s = await SeedScenarioAsync();
         var anon = await (await _f.CreateClient().GetAsync(Url("ponies", s.Pony.ToUpperInvariant()))).ReadAsync<StatsProfileDto>();
-        Assert.Equal((StatsSubjectKind.Pony, s.Pony, false), (anon.Kind, anon.Name, anon.Detailed));
+        Assert.Equal((StatsSubjectKind.Pony, s.Pony, true), (anon.Kind, anon.Name, anon.Detailed));
         // Club A twice and the HC team once; HC has no place. Races: both pairs teams' two races.
         Assert.Equal((2, 3, 2, 4), (anon.Summary.Competitions, anon.Summary.Entries, anon.Summary.PlacedEntries, anon.Summary.Races));
         Assert.Equal((1, 1), (anon.Summary.Firsts, anon.Summary.Seconds));
-        Assert.Null(anon.Partnerships);
+        Assert.Equal([(s.OllyShown, 2, 2), ($"Hc{s.U} Rider", 1, 1)], anon.Partnerships!.Select(p => (p.RiderName, p.Entries, p.Competitions)));
 
         var (member, _) = await _f.SignupAsync("Member");
         var profile = await (await member.GetAsync(Url("ponies", s.Pony))).ReadAsync<StatsProfileDto>();
@@ -350,25 +356,23 @@ public class StatsEndpointsTests : IClassFixture<ApiFactory>
         // Runs are for a team profile's games only.
         Assert.All(club.Games!, g => Assert.Null(g.Runs));
 
-        // A team's per-game figures are public. The entries and the partnerships, which name riders, are not.
+        // Anonymous viewers get the same detail as a signed-in one; rider names follow each rider's own choice.
         var anon = await (await _f.CreateClient().GetAsync(Url("teams", s.ClubA))).ReadAsync<StatsProfileDto>();
-        Assert.False(anon.Detailed);
+        Assert.True(anon.Detailed);
         Assert.Equal(team.Games!.Select(g => g.Name), anon.Games!.Select(g => g.Name));
         Assert.Equal(team.BestGames, anon.BestGames);
         Assert.Equal(team.WorstGames, anon.WorstGames);
-        Assert.Null(anon.Entries);
-        Assert.Null(anon.Partnerships);
+        Assert.Equal(team.Entries!.Count, anon.Entries!.Count);
+        Assert.Equal(team.Partnerships!.Select(p => p.RiderName), anon.Partnerships!.Select(p => p.RiderName));
         Assert.Equal(2, anon.Summary.Entries);
 
-        // A club is not a team profile: its games still need a sign-in.
         var anonClub = await (await _f.CreateClient().GetAsync(Url("clubs", s.Club))).ReadAsync<StatsProfileDto>();
-        Assert.Null(anonClub.Games);
-        Assert.Null(anonClub.BestGames);
-        Assert.Null(anonClub.WorstGames);
+        Assert.Equal(club.Games!.Select(g => g.Name), anonClub.Games!.Select(g => g.Name));
+        Assert.Equal(club.Entries!.Count, anonClub.Entries!.Count);
     }
 
     [Fact]
-    public async Task TeamGames_ArePublic_ButRiderAndPonyGamesAndEveryKindsRiderNamesAreNot()
+    public async Task AnonymousProfiles_NeverShowSurnamesOrNotes_ForRidersWhoChoseInitials()
     {
         var s = await SeedScenarioAsync();
         var anon = _f.CreateClient();
@@ -390,19 +394,21 @@ public class StatsEndpointsTests : IClassFixture<ApiFactory>
         Assert.Null(flagRun.Place);
         Assert.True(flagRun.Eliminated);
         Assert.True(flagRun.MaxPoints > 0);
-        // Nothing that names a rider or a pony, and no referee's note, comes with the games.
-        Assert.DoesNotContain(s.Pony, raw);
+        // The partnerships name riders, but a rider who asked for initials only is never shown in full, and no referee's note comes with it.
+        Assert.Contains(profile.Partnerships!, p => p.RiderName == s.OllyShown);
         Assert.DoesNotContain($"Smith{s.U}", raw, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(s.Secret, raw);
 
         foreach (var (path, name) in new[] { ("riders", s.OllyShown), ("ponies", s.Pony), ("clubs", s.Club) })
         {
-            var other = await (await anon.GetAsync(Url(path, name))).ReadAsync<StatsProfileDto>();
-            Assert.Null(other.Games);
-            Assert.Null(other.BestGames);
-            Assert.Null(other.WorstGames);
-            Assert.Null(other.Entries);
-            Assert.Null(other.Partnerships);
+            var response = await anon.GetAsync(Url(path, name));
+            var body = await response.Content.ReadAsStringAsync();
+            var other = await response.ReadAsync<StatsProfileDto>();
+            Assert.NotEmpty(other.Games!);
+            Assert.NotEmpty(other.Entries!);
+            Assert.NotEmpty(other.Partnerships!);
+            Assert.DoesNotContain($"Smith{s.U}", body, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(s.Secret, body);
         }
     }
 
@@ -489,13 +495,12 @@ public class StatsEndpointsTests : IClassFixture<ApiFactory>
         });
 
         var anon = await (await _f.CreateClient().GetAsync($"/api/stats/team-profiles/{profileId}")).ReadAsync<StatsProfileDto>();
-        Assert.Equal((StatsSubjectKind.Team, s.ClubA, profileId.ToString(), false), (anon.Kind, anon.Name, anon.Key, anon.Detailed));
+        Assert.Equal((StatsSubjectKind.Team, s.ClubA, profileId.ToString(), true), (anon.Kind, anon.Name, anon.Key, anon.Detailed));
         Assert.Equal((2, 3), (anon.Summary.Entries, anon.Summary.Races));
-        // The per-game figures are public for a team profile; the entries and partnerships are not.
         Assert.Equal(3, anon.Games!.Count);
         Assert.NotEmpty(anon.BestGames!);
-        Assert.Null(anon.Entries);
-        Assert.Null(anon.Partnerships);
+        Assert.NotNull(anon.Entries);
+        Assert.NotNull(anon.Partnerships);
 
         var (member, _) = await _f.SignupAsync("Member");
         var detailed = await (await member.GetAsync($"/api/stats/team-profiles/{profileId}")).ReadAsync<StatsProfileDto>();
