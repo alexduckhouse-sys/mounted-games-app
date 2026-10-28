@@ -15,8 +15,10 @@ import { ops2 } from './ops2.ts';
 import { ops3 } from './ops3.ts';
 import { shell } from './shell.ts';
 import { site } from './site.ts';
+import { admin } from './admin.ts';
+import { desk } from './desk.ts';
 import { teams } from './teams.ts';
 
-export const AREAS = { common, shell, auth, account, entries, competition, teams, site, ops, ops2, ops3, screen } as const;
+export const AREAS = { common, shell, auth, account, entries, competition, teams, site, ops, screen, admin, desk, ops2, ops3 } as const;
 
-export const cy: Catalogue = { ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...site, ...ops, ...ops2, ...ops3, ...screen };
+export const cy: Catalogue = { ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...site, ...ops, ...screen, ...admin, ...desk, ...ops2, ...ops3 };

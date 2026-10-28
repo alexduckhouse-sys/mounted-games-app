@@ -1,3 +1,4 @@
+import { tr } from '../i18n/translate.ts';
 import { finalCountOf, FINAL_LETTERS, isLocked, type SectionDraft } from './creatorDraft';
 
 /**
@@ -16,8 +17,8 @@ export function raceKeys(section: SectionDraft, lanes?: number): RaceKey[] {
 
 /** "Session 2", "Final" or, with more than one, "A final". */
 export function raceKeyLabel(key: RaceKey, finals: number): string {
-  if (!isFinalKey(key)) return `Session ${key}`;
-  return finals > 1 ? `${FINAL_LETTERS[FINAL_KEYS.indexOf(key)]} final` : 'Final';
+  if (!isFinalKey(key)) return tr('admin.creator.races.sessionN', { n: key });
+  return finals > 1 ? tr('admin.creator.races.letterFinal', { letter: FINAL_LETTERS[FINAL_KEYS.indexOf(key)] }) : tr('admin.creator.races.final');
 }
 
 /** Whether a tab's list can still be changed: not once its heats are made or it has been scored. */
