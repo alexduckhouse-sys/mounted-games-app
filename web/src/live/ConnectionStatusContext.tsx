@@ -27,3 +27,9 @@ export function useConnectionStatus() {
   if (!ctx) throw new Error('useConnectionStatus must be used within ConnectionStatusProvider');
   return ctx;
 }
+
+/** The same as `useConnectionStatus`, but null outside the provider (for parts that also render outside the app shell). */
+// eslint-disable-next-line react-refresh/only-export-components
+export function useOptionalConnectionStatus() {
+  return useContext(Ctx);
+}

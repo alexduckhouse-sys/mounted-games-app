@@ -2,6 +2,8 @@ import { HeatBibClash } from './HeatBibClash';
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react';
 import { BackLink } from '../../components/BackLink';
+import { ConnectionPill } from '../../components/ConnectionPill';
+import { useOptionalConnectionStatus } from '../../live/ConnectionStatusContext';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { hatbandFor } from '../../lib/laneOrder';
 import { publicRiderName } from '../../lib/riderNames';
@@ -15,6 +17,7 @@ export interface HeatPickItem { key: string; label: string; status: string; sele
 /**
  * The bar at the top of the scoring screen: the arena in bold, then the age group and heat. It opens the list of heats.
  * `back` puts a back arrow at its left: it returns to the page the scorer came from, or to `back.to` on a fresh load.
+ * With `back` the app header is hidden, so the bar also shows the offline pill when the signal drops.
  */
 export function HeatPickerBar({ arena, label, items, back }: { arena: string; label: string; items: HeatPickItem[]; back?: { to: string; label: string } }) {
   const [open, setOpen] = useState(false);
@@ -33,6 +36,7 @@ export function HeatPickerBar({ arena, label, items, back }: { arena: string; la
         <span className="hb-name">{label}</span>
         <ChevronRight className="hb-chev" aria-hidden="true" />
       </button>
+      {back && <BarConnection />}
       {open && (
         <span className="hb-menu" role="listbox" aria-label="Heats">
           {items.map((item) => (
@@ -51,6 +55,11 @@ export function HeatPickerBar({ arena, label, items, back }: { arena: string; la
       )}
     </div>
   );
+}
+
+/** The offline pill, when the app's connection status is known (it isn't outside the app shell). */
+function BarConnection() {
+  return useOptionalConnectionStatus() ? <span className="hb-conn"><ConnectionPill /></span> : null;
 }
 
 /** A heat you aren't scoring: its table, read only, with a way to score it anyway once the scorer has said they mean it. */

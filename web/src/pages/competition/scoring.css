@@ -504,6 +504,8 @@ button.sc-done-name { background: none; border: 0; padding: 0; text-align: left;
 .hb-bar { position: relative; display: flex; align-items: center; background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); border-radius: 12px; }
 .hb-back { flex: none; width: 44px; min-height: 46px; display: inline-flex; align-items: center; justify-content: center; border-radius: 12px 0 0 12px; color: rgb(var(--mg-heading)) !important; text-decoration: none !important; }
 .hb-back + .hb-btn { padding-left: 4px; }
+.hb-conn { flex: none; display: inline-flex; padding-right: 8px; }
+.hb-conn:empty { display: none; }
 .hb-btn { border-radius: 12px; }
 .hb-btn { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 46px; padding: 0 14px; border: 0; background: transparent; color: rgb(var(--mg-heading)); font: 600 14px/1 var(--mg-font); text-align: left; cursor: pointer; }
 .hb-arena { font-weight: 800; }
