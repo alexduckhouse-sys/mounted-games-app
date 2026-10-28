@@ -4,6 +4,7 @@ import { api } from '../../api';
 import { Notice } from '../../components/Notice';
 import { RefineNote, RefineSection } from '../refine/Refine';
 import type { PassportCheckBoard, PassportCheckPony } from '../../types';
+import { clubLabel } from '../../lib/clubName';
 
 function message(error: unknown, fallback: string) {
   const candidate = error as { response?: { data?: { message?: string; detail?: string; title?: string } } };
@@ -168,7 +169,7 @@ export function PassportCheckTab({ competitionId }: { competitionId: string }) {
             <RefineSection title={section.sectionName} />
             {teams.map((team) => <div key={team.teamId} className="tools-team">
               <div className="tools-team-head">
-                <span><span className="tools-team-name">{team.teamName}</span> <span className="tools-muted">{team.clubName}{team.withdrawn ? ' (withdrawn)' : ''}</span></span>
+                <span><span className="tools-team-name">{team.teamName}</span> <span className="tools-muted">{clubLabel(team.clubName)}{team.withdrawn ? ' (withdrawn)' : ''}</span></span>
               </div>
               {!team.hasDeclaration && <p className="tools-muted">No declaration yet, so no ponies to check.</p>}
               {team.hasDeclaration && team.ponies.length === 0 && <p className="tools-muted">The declaration has no pony names.</p>}

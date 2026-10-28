@@ -5,6 +5,7 @@ import { embedHomePath, embedPollMs, isSeasonStandings, isSeasonSummary, parseEm
 import { positionLabels } from '../seasons/seasonModel';
 import type { StandingView } from '../seasons/seasonViewTypes';
 import { EmbedFrame, EmbedMessage, StaleNotice } from './EmbedFrame';
+import { clubLabel } from '../../lib/clubName';
 
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -49,7 +50,7 @@ export function SeasonEmbed() {
             {rows.map((row) => (
               <tr key={row.teamProfileId}>
                 <td>{labels.get(row.teamProfileId)}</td>
-                <td>{row.teamName}{row.clubName && !row.teamName.toLowerCase().includes(row.clubName.toLowerCase()) && <small>{row.clubName}</small>}</td>
+                <td>{row.teamName}{clubLabel(row.clubName) && !row.teamName.toLowerCase().includes(row.clubName.toLowerCase()) && <small>{row.clubName}</small>}</td>
                 <td className="emb-num">{row.rounds.length}</td>
                 <td className="emb-num">{row.totalPoints}</td>
               </tr>

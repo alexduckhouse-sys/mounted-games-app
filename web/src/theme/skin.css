@@ -580,6 +580,9 @@ dialog.is-closing::backdrop { animation: mg-fade-out .38s ease-in-out forwards; 
   .mg-confirm-leaving { display: none; }
 }
 html[data-lite="true"] dialog::backdrop { animation: none !important; }
+/* The dim lightens as a sheet is pulled down, and keeps that level while it leaves. */
+dialog.mg-sheet[style*="--fade"]::backdrop { opacity: var(--fade); }
+@media (prefers-reduced-motion: reduce) { dialog.mg-sheet[style*="--fade"]::backdrop { opacity: 1; } }
 
 /* Content fades in over its loading placeholder. */
 .mg-settle { animation: mg-fade-in .26s ease-out; }
@@ -822,3 +825,15 @@ html[data-lite="true"] .mg-heat-ring[data-tone="live"] svg { animation: none !im
 .mg-pg-kicker { font-size: .85em; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--ov-accent, #F5B82E); }
 .mg-pg-champ-name { font: 800 2.6em/.95 var(--mg-font-display); overflow-wrap: anywhere; }
 .mg-pg-champ-sub { font-size: .9em; font-weight: 600; opacity: .8; }
+
+/* The header refresh icon turns once when tapped. */
+@keyframes mg-spin-once { to { transform: rotate(360deg); } }
+.mg-spin-once { animation: mg-spin-once .8s var(--mg-sheet-ease, ease-in-out); }
+@media (prefers-reduced-motion: reduce) { .mg-spin-once { animation: none; } }
+html[data-lite="true"] .mg-spin-once { animation: none; }
+
+/* A row's light sweep when its team is followed. */
+.mg-follow-glimmer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.mg-follow-glimmer::after { content: ''; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 30%, rgb(255 222 120 / .55) 50%, transparent 70%); transform: translateX(-120%); animation: mg-champion-shine 800ms ease-in-out 120ms both; }
+@media (prefers-reduced-motion: reduce) { .mg-follow-glimmer { display: none; } }
+html[data-lite="true"] .mg-follow-glimmer { display: none; }

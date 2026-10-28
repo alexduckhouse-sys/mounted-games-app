@@ -1,4 +1,4 @@
-import { Suspense, useLayoutEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronLeft, Menu, Pencil, RotateCw } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
@@ -135,7 +135,7 @@ function Shell({ width }: { width: PageWidth }) {
               ) : (
                 <span className="min-w-0 flex-1 truncate text-base font-semibold">{t('common.mountedGames')}</span>
               )}
-              {pageHeader?.refresh && <button type="button" onClick={pageHeader.refresh} className="mg-nav-btn !px-0" aria-label={pageHeader.refreshLabel ?? t('shell.header.refresh')}><RotateCw className="h-[18px] w-[18px]" /></button>}
+              {pageHeader?.refresh && <RefreshButton onRefresh={pageHeader.refresh} label={pageHeader.refreshLabel ?? t('shell.header.refresh')} />}
               {pageHeader?.edit && <button type="button" onClick={pageHeader.edit} className="mg-nav-btn !px-0" aria-label={pageHeader.editLabel ?? 'Edit'} aria-pressed={!!pageHeader.editing}><Pencil className="h-[18px] w-[18px]" /></button>}
               <ConnectionPill />
               {!user && choosingCompetition && <Link to="/login" className="mg-nav-btn">{t('common.signIn')}</Link>}
@@ -166,4 +166,18 @@ function Shell({ width }: { width: PageWidth }) {
       {current && !choosingCompetition && rememberChoice === 'ask' && !menuOpen && <RememberCompetitionDialog />}
     </div>
   );
+}
+
+/** The header's refresh button. The icon turns for a moment after a tap so you can see it took (the data often hasn't changed). */
+function RefreshButton({ onRefresh, label }: { onRefresh: () => void; label: string }) {
+  const [spinning, setSpinning] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const tap = () => {
+    onRefresh();
+    setSpinning(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setSpinning(false), 900);
+  };
+  return <button type="button" onClick={tap} className="mg-nav-btn !px-0" aria-label={label}><RotateCw className={`h-[18px] w-[18px]${spinning ? ' mg-spin-once' : ''}`} /></button>;
 }

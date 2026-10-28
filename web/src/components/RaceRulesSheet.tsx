@@ -9,6 +9,7 @@ import { findRaceTemplate } from '../lib/raceTemplates';
 import type { RaceTemplate, SectionFormat } from '../types';
 import { Notice } from './Notice';
 import { RaceDiagram } from './RaceDiagram';
+import { SwipeSheet } from './SwipeSheet';
 
 import { useT } from '../i18n/LanguageContext';
 
@@ -288,15 +289,16 @@ function RulesFrame({ titleId, onClose, children }: { titleId: string; onClose: 
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div
+      <SwipeSheet
         ref={dialogRef}
+        onClose={onClose}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         className="flex max-h-[90vh] w-full max-w-2xl flex-col gap-3 overflow-y-auto rounded-t-[26px] bg-[rgb(var(--mg-surface))] px-5 pb-6 pt-2 shadow-xl [corner-shape:squircle] sm:rounded-[20px]"
       >
         {children}
-      </div>
+      </SwipeSheet>
     </div>
   );
 }

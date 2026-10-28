@@ -23,6 +23,7 @@ import { RoundSearch } from '../../components/RoundSearch';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { AddBar } from '../admin/creator/controls';
 import '../../components/sitePages.css';
+import { clubLabel } from '../../lib/clubName';
 
 type ProfileTab = 'history' | 'edit' | 'link';
 
@@ -216,7 +217,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
       {error && <Notice className="sv-msg" actionLabel="Try again" onAction={() => { setLoading(true); setError(null); setRefresh((value) => value + 1); }}>{error}</Notice>}
       {!error && (profiles?.length ? <>
         <RoundSearch label="Find a team or club" placeholder="Team or club" value={search} onChange={setSearch} />
-        {shown.length > 0 && <ul className="sp-card sp-gap m-0 list-none p-0" aria-label="Team profiles">{[...shown].sort((a, b) => a.displayName.localeCompare(b.displayName)).map((profile) => <li key={profile.id}><Link to={`/team-profiles/${profile.id}`} className="sp-row"><span className="sp-grow"><span className="sp-t1">{profile.displayName}</span><span className="sp-t2">{profile.clubName}{profile.suffix ? ` · suffix ${profile.suffix}` : ''}</span></span><ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} /></Link></li>)}</ul>}
+        {shown.length > 0 && <ul className="sp-card sp-gap m-0 list-none p-0" aria-label="Team profiles">{[...shown].sort((a, b) => a.displayName.localeCompare(b.displayName)).map((profile) => <li key={profile.id}><Link to={`/team-profiles/${profile.id}`} className="sp-row"><span className="sp-grow"><span className="sp-t1">{profile.displayName}</span><span className="sp-t2">{clubLabel(profile.clubName)}{profile.suffix ? `${clubLabel(profile.clubName) ? ' · ' : ''}suffix ${profile.suffix}` : ''}</span></span><ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} /></Link></li>)}</ul>}
         {shown.length === 0 && <p className="sp-note">No team or club matches “{search.trim()}”.</p>}
       </> : <div className="sv-empty"><h2>No team profiles yet</h2><p>Profiles will appear here once an organiser creates them.</p></div>)}
       {mayManage && <div className="sp-gap"><AddBar onClick={() => setCreating(true)}>New profile</AddBar></div>}

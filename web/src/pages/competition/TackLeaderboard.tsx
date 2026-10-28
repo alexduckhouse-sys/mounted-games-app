@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api';
 import type { TackLeaderboard as Board } from '../../types';
 import { useT } from '../../i18n/LanguageContext';
+import { clubLabel } from '../../lib/clubName';
 
 /**
  * The Tack & Turnout table for one age group: team points per tack sector. Shown only when the organiser scores
@@ -45,7 +46,7 @@ export function TackLeaderboard({ competitionId, sectionId, refresh = 0 }: { com
                 <td className="mg-display h-11 py-0 pl-3 text-base font-bold">{row.rank ?? 'HC'}</td>
                 <th scope="row" className="py-0 pr-2 text-left text-[15px] font-semibold leading-tight">
                   {row.teamName}
-                  {row.clubName && <span className="block text-xs font-medium text-[rgb(var(--mg-muted))]">{row.clubName}</span>}
+                  {clubLabel(row.clubName) && <span className="block text-xs font-medium text-[rgb(var(--mg-muted))]">{row.clubName}</span>}
                 </th>
                 {row.points.map((points, i) => (
                   <td key={table.sectors[i] ?? i} className="mg-display text-center text-base font-semibold tabular-nums">

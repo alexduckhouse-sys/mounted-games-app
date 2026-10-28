@@ -6,6 +6,7 @@ import type { EmergencyContactEntry } from '../../types';
 import { MAX_SHOWN, MIN_SEARCH_LENGTH, fetchEmergencyContacts } from './contactLookup';
 import { RefineList, RefineNote, RefineSection } from '../refine/Refine';
 import './operations.css';
+import { clubLabel } from '../../lib/clubName';
 
 function CallLink({ name, phone }: { name?: string | null; phone?: string | null }) {
   const href = telHref(phone);
@@ -62,7 +63,7 @@ export function EmergencySearch({ competitionId }: { competitionId: number }) {
               <div key={entry.riderEntryId} className="rf-row ops-wrap">
                 <span className="rf-grow">
                   <span className="rf-t1">{entry.riderName}{entry.ponyName ? ` on ${entry.ponyName}` : ''}{entry.isReserve ? ' (reserve)' : ''}</span>
-                  <span className="rf-t2">{[entry.teamName, entry.sectionName, entry.clubName, entry.bibColour].filter(Boolean).join(' · ')}</span>
+                  <span className="rf-t2">{[entry.teamName, entry.sectionName, clubLabel(entry.clubName), entry.bibColour].filter(Boolean).join(' · ')}</span>
                   <span className="rf-t2">Emergency contact</span>
                   <CallLink name={entry.emergencyContactName} phone={entry.emergencyContactPhone} />
                   {(entry.trainerName || entry.trainerPhone) && <span className="rf-t2">Coach</span>}
