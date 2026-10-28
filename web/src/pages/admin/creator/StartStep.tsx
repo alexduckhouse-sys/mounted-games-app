@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Check } from 'lucide-react';
+import { useT } from '../../../i18n/LanguageContext';
 import { api } from '../../../api';
 import { Notice } from '../../../components/Notice';
 import { competitionDateText } from '../../../lib/competitionDates';
@@ -19,6 +20,7 @@ export function StartStep({ draft, replace }: {
   /** Swaps the whole draft. */
   replace: (next: CreatorDraft) => void;
 }) {
+  const t = useT();
   const copying = draft.startFrom === 'copy';
   const [list, setList] = useState<CompetitionSummary[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -50,26 +52,26 @@ export function StartStep({ draft, replace }: {
   }
 
   return (
-    <section aria-label="Start" className="flex flex-col">
-      <StepHeading>Start</StepHeading>
+    <section aria-label={t('admin.creator.step.start')} className="flex flex-col">
+      <StepHeading>{t('admin.creator.step.start')}</StepHeading>
       <div className="mt-3 flex flex-col gap-3.5">
-        <div role="group" aria-label="How to start" className="cw-tiles">
+        <div role="group" aria-label={t('admin.creator.start.howToStart')} className="cw-tiles">
           <button type="button" className="cw-tile" aria-pressed={!copying} onClick={fresh}>
-            <strong>Start from scratch</strong>
-            <span className="cw-t2">Fill in each step yourself</span>
+            <strong>{t('admin.creator.start.scratch')}</strong>
+            <span className="cw-t2">{t('admin.creator.start.scratchSub')}</span>
             <span className="cw-tick" aria-hidden="true"><Check className="h-3 w-3" strokeWidth={3.5} /></span>
           </button>
           <button type="button" className="cw-tile" aria-pressed={copying} onClick={wantCopy}>
-            <strong>Copy a past competition</strong>
-            <span className="cw-t2">Every step filled in, dates left empty</span>
+            <strong>{t('admin.creator.start.copy')}</strong>
+            <span className="cw-t2">{t('admin.creator.start.copySub')}</span>
             <span className="cw-tick" aria-hidden="true"><Check className="h-3 w-3" strokeWidth={3.5} /></span>
           </button>
         </div>
         {copying && (
           <>
-            <div className="cw-card" role="group" aria-label="Copy from" aria-busy={list === null}>
-              {list === null && <div className="cw-row"><span className="cw-t2" role="status">Loading…</span></div>}
-              {list?.length === 0 && <div className="cw-row"><span className="cw-t2">{failed ? 'Couldn’t load your competitions. Check your signal and try again.' : 'No past competitions yet.'}</span></div>}
+            <div className="cw-card" role="group" aria-label={t('admin.creator.start.copyFrom')} aria-busy={list === null}>
+              {list === null && <div className="cw-row"><span className="cw-t2" role="status">{t('common.loading')}</span></div>}
+              {list?.length === 0 && <div className="cw-row"><span className="cw-t2">{failed ? t('admin.creator.start.loadFailed') : t('admin.creator.start.noPast')}</span></div>}
               {list?.map((c) => {
                 const on = copying && draft.copiedFrom === c.name;
                 return (
@@ -77,15 +79,15 @@ export function StartStep({ draft, replace }: {
                     style={on ? { background: 'rgb(var(--mg-tint) / .5)', boxShadow: 'inset 4px 0 0 rgb(var(--mg-heading))' } : undefined}>
                     <span className="cw-grow">
                       <span className="cw-t1">{c.name}</span>
-                      <span className="cw-t2">{[competitionDateText(c.startDate, c.endDate ?? null), c.location, `${c.sectionCount} ${c.sectionCount === 1 ? 'section' : 'sections'}`].filter(Boolean).join(' · ')}</span>
+                      <span className="cw-t2">{[competitionDateText(c.startDate, c.endDate ?? null), c.location, t('admin.creator.start.sections', { count: c.sectionCount })].filter(Boolean).join(' · ')}</span>
                     </span>
-                    <span className="cw-chip">{loadingId === c.id ? 'Copying…' : new Date(c.startDate) < new Date() ? 'Past competition' : 'Upcoming'}</span>
+                    <span className="cw-chip">{loadingId === c.id ? t('admin.creator.start.copying') : new Date(c.startDate) < new Date() ? t('admin.creator.start.past') : t('admin.creator.start.upcoming')}</span>
                   </button>
                 );
               })}
             </div>
-            {failed && list !== null && list.length > 0 && <Notice>Couldn’t copy that one. Check your signal and try again.</Notice>}
-            <p className="cw-note">Dates are left empty. Entries and results aren’t copied.</p>
+            {failed && list !== null && list.length > 0 && <Notice>{t('admin.creator.start.copyFailed')}</Notice>}
+            <p className="cw-note">{t('admin.creator.start.note')}</p>
           </>
         )}
       </div>

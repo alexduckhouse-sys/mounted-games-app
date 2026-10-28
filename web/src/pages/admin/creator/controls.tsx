@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { Minus, Plus } from 'lucide-react';
+import { useT } from '../../../i18n/LanguageContext';
 import './wizard.css';
+
 
 /** Small controls shared by the creator's steps. The dropdown rows, switches, menus and calendar come from `pages/refine/Refine.tsx`. */
 
@@ -51,12 +53,13 @@ const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(mi
 export function Stepper({ name, value, min, max, step = 1, onChange, empty = 'â€“', start }: {
   name: string; value: string; min: number; max: number; step?: number; onChange: (next: number) => void; empty?: string; start?: number;
 }) {
+  const t = useT();
   const parsed = parseFloat(value);
   const has = Number.isFinite(parsed);
   const now = has ? parsed : null;
   return (
     <span className="cw-stp" role="group" aria-label={name}>
-      <button type="button" aria-label={`Less: ${name}`} disabled={now === null || now <= min} onClick={() => onChange(clamp(Math.round((now ?? min) - step), min, max))}>
+      <button type="button" aria-label={t('admin.creator.stepper.less', { name })} disabled={now === null || now <= min} onClick={() => onChange(clamp(Math.round((now ?? min) - step), min, max))}>
         <Minus className="h-[18px] w-[18px]" aria-hidden="true" />
       </button>
       <input type="number" inputMode="numeric" min={min} max={max} aria-label={name} placeholder={empty} value={has ? String(Math.round(parsed * 100) / 100) : ''}
@@ -66,7 +69,7 @@ export function Stepper({ name, value, min, max, step = 1, onChange, empty = 'â€
           const n = Math.round(Number(text));
           if (Number.isFinite(n)) onChange(clamp(n, min, max));
         }} />
-      <button type="button" aria-label={`More: ${name}`} disabled={now !== null && now >= max} onClick={() => onChange(clamp(now === null ? (start ?? min) : Math.round(now + step), min, max))}>
+      <button type="button" aria-label={t('admin.creator.stepper.more', { name })} disabled={now !== null && now >= max} onClick={() => onChange(clamp(now === null ? (start ?? min) : Math.round(now + step), min, max))}>
         <Plus className="h-[18px] w-[18px]" aria-hidden="true" />
       </button>
     </span>

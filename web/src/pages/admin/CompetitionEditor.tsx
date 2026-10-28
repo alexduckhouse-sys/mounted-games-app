@@ -4,10 +4,12 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import {
-  defaultDraft, firstProblemStep, readDraft, STEP_IDS, STEP_LABEL, validateStep, type CreatorDraft, type Problems, type StepId,
+  defaultDraft, firstProblemStep, readDraft, STEP_IDS, validateStep, type CreatorDraft, type Problems, type StepId,
 } from '../../lib/creatorDraft';
 import { draftFromCompetition, realFixedItems, teamCountsOf } from '../../lib/creatorLoad';
-import { payoutsLine } from '../../lib/payouts';
+import { useT } from '../../i18n/LanguageContext';
+import { activeLocale, tr } from '../../i18n/translate';
+import type { MessageKey } from '../../i18n/en';
 import { loadRaceTemplates, raceListNames } from '../../lib/raceTemplates';
 import type { CompetitionDetail, PayoutsTo } from '../../types';
 import { AboutStep } from './creator/AboutStep';
@@ -44,10 +46,25 @@ function store(key: string, draft: CreatorDraft) {
 
 function clockTime(iso: string): string {
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString(activeLocale(), { hour: '2-digit', minute: '2-digit' });
+}
+
+const STEP_KEY: Record<StepId, MessageKey> = {
+  start: 'admin.accounts.ed.step.start', about: 'admin.accounts.ed.step.about', when: 'admin.accounts.ed.step.when', arenas: 'admin.accounts.ed.step.arenas',
+  sections: 'admin.accounts.ed.step.sections', structure: 'admin.accounts.ed.step.structure', races: 'admin.accounts.ed.step.races', dec: 'admin.accounts.ed.step.dec',
+  payment: 'admin.accounts.ed.step.payment', review: 'admin.accounts.ed.step.review',
+};
+
+/** The line the review step shows about where entry fees are paid out. */
+function payoutsText(p: PayoutsTo | null): string {
+  if (!p) return tr('admin.accounts.ed.payoutsDefault');
+  return p.ready && p.maskedAccount
+    ? tr('admin.accounts.ed.payoutsReady', { club: p.clubName, account: p.maskedAccount })
+    : tr('admin.accounts.ed.payoutsNotReady', { club: p.clubName });
 }
 
 export function CompetitionEditor() {
+  const t = useT();
   usePageWidth('wide');
   const navigate = useNavigate();
   const { canOrganise, user, hasRole } = useAuth();
@@ -176,7 +193,7 @@ export function CompetitionEditor() {
       if (isEdit) navigate(`/competitions/${savedId}`);
       else { setCreatedId(savedId); window.scrollTo?.({ top: 0 }); }
     } catch (e) {
-      setError({ message: e instanceof Error ? e.message : 'Couldn’t save the competition. Check your signal and try again.', competitionId: e instanceof SaveError ? e.competitionId : null });
+      setError({ message: e instanceof Error ? e.message : t('admin.accounts.ed.saveFailed'), competitionId: e instanceof SaveError ? e.competitionId : null });
     } finally {
       setBusy(false);
       setProgress(null);
@@ -184,25 +201,26 @@ export function CompetitionEditor() {
   }
 
   async function discardDraft() {
-    if (!(await confirmDialog({ title: 'Discard this draft?', message: 'You’ll start again from a blank form.', cancelLabel: 'Keep editing', confirmLabel: 'Discard draft', destructive: true }))) return;
+    if (!(await confirmDialog({ title: t('admin.accounts.ed.discardTitle'), message: t('admin.accounts.ed.discardMessage'), cancelLabel: t('admin.accounts.ed.keepEditing'), confirmLabel: t('admin.accounts.ed.discardDraft'), destructive: true }))) return;
     try { window.localStorage.removeItem(storageKey); } catch { /* ignore */ }
     window.location.reload();
   }
 
-  if (loading) return <div className="p-6 text-sm text-slate-500">Loading…</div>;
+  if (loading) return <div className="p-6 text-sm text-slate-500">{t('common.loading')}</div>;
   if (loadFailed && !stored) {
     return (
-      <PageProblem title="Couldn’t load this competition" primaryLabel="Reload page" onPrimary={() => window.location.reload()} secondaryLabel="Go back" onSecondary={() => navigate(-1)}>
-        Check your signal and try again.
+      <PageProblem title={t('admin.accounts.ed.loadFailed')} primaryLabel={t('common.reload')} onPrimary={() => window.location.reload()} secondaryLabel={t('common.goBack')} onSecondary={() => navigate(-1)}>
+        {t('admin.accounts.checkSignal')}
       </PageProblem>
     );
   }
 
   const props = { draft, change, problems, clear };
-  const savedText = savedAt && clockTime(savedAt) ? `Draft saved ${clockTime(savedAt)}` : '';
+  const savedText = savedAt && clockTime(savedAt) ? t('admin.accounts.ed.draftSaved', { time: clockTime(savedAt) }) : '';
   const payoutsToShow = isEdit ? competition?.payoutsTo ?? null : clubPayouts;
   const waitingForCopy = stepId === 'start' && draft.startFrom === 'copy' && !draft.copiedFrom;
-  const title = isEdit ? 'Edit competition' : 'New competition';
+  const title = isEdit ? t('admin.accounts.ed.edit') : t('admin.accounts.ed.new');
+  const [openBefore, openAfter = ''] = t('admin.accounts.ed.createdOpen', { link: '\u0001' }).split('\u0001');
 
   return (
     <div ref={pageRef} className="skin cw mx-auto flex w-full max-w-6xl flex-col gap-4 pt-6 sm:pt-10">
@@ -212,7 +230,7 @@ export function CompetitionEditor() {
           {savedText && createdId === null && (
             <p className="text-sm font-medium text-[rgb(var(--mg-muted))]">
               {savedText}<span aria-hidden="true"> · </span>
-              <button type="button" onClick={discardDraft} className="underline">Discard draft</button>
+              <button type="button" onClick={discardDraft} className="underline">{t('admin.accounts.ed.discardDraft')}</button>
             </p>
           )}
         </div>
@@ -223,14 +241,14 @@ export function CompetitionEditor() {
           timetable={isEdit ? null : { available: createdId !== null, current: createdId !== null }} onTimetable={() => undefined} title={title} />
         <div className="cw-main">
           {createdId !== null ? (
-            <section aria-label="Competition created" className="cw-step-in flex flex-col">
-              <StepHeading>Competition created</StepHeading>
+            <section aria-label={t('admin.accounts.ed.created')} className="cw-step-in flex flex-col">
+              <StepHeading>{t('admin.accounts.ed.created')}</StepHeading>
               <div className="cw-card mt-3"><div className="cw-panel" style={{ alignItems: 'flex-start', gap: 10 }}>
-                <span className="mg-display text-[22px] font-bold leading-tight text-[rgb(var(--mg-heading))]">Want an example timetable?</span>
-                <span className="cw-t2">{draft.name.trim() || 'Your competition'} is set up. You don’t need a timetable until nearer the day.</span>
+                <span className="mg-display text-[22px] font-bold leading-tight text-[rgb(var(--mg-heading))]">{t('admin.accounts.ed.wantTimetable')}</span>
+                <span className="cw-t2">{t('admin.accounts.ed.setUp', { name: draft.name.trim() || t('admin.accounts.ed.yourCompetition') })}</span>
                 <div className="cw-acts" style={{ marginTop: 4 }}>
-                  <button type="button" className="cw-btn cw-btn-p" onClick={() => navigate(`/competitions/${createdId}/timetable-and-draw`)}>Make one now</button>
-                  <button type="button" className="cw-btn" onClick={() => navigate(`/competitions/${createdId}`)}>Later</button>
+                  <button type="button" className="cw-btn cw-btn-p" onClick={() => navigate(`/competitions/${createdId}/timetable-and-draw`)}>{t('admin.accounts.ed.makeNow')}</button>
+                  <button type="button" className="cw-btn" onClick={() => navigate(`/competitions/${createdId}`)}>{t('admin.accounts.ed.later')}</button>
                 </div>
               </div></div>
             </section>
@@ -238,7 +256,7 @@ export function CompetitionEditor() {
             <>
               {draft.copiedFrom && stepId !== 'start' && !isEdit && (
                 <p className="cw-note" style={{ margin: '0 2px 4px' }}>
-                  Copied from {draft.copiedFrom}.{!draft.startDate || !draft.endDate ? ' Set the new dates on When and where.' : ''}
+                  {t(!draft.startDate || !draft.endDate ? 'admin.accounts.ed.copiedFromDates' : 'admin.accounts.ed.copiedFrom', { name: draft.copiedFrom })}
                 </p>
               )}
               <div key={stepId} className="cw-step-in" data-dir={slide.dir}>
@@ -253,7 +271,7 @@ export function CompetitionEditor() {
                 {stepId === 'payment' && <PaymentNotesStep {...props} payoutsTo={payoutsToShow} canSetUpPayouts={hasRole('Manager') || hasRole('Admin')} canSetPassportCheck={!isEdit} />}
                 {stepId === 'review' && (
                   <ReviewStep {...props} teamCounts={teamCounts} real={real} onEdit={go} isEdit={isEdit}
-                    payoutsText={payoutsToShow ? payoutsLine(payoutsToShow) : 'Payouts go to your club once it has set them up.'} />
+                    payoutsText={payoutsText(payoutsToShow)} />
                 )}
               </div>
             </>
@@ -265,12 +283,12 @@ export function CompetitionEditor() {
         <footer className="cw-bar">
           {(!mayOrganise || Object.keys(problems).length > 0 || error || (busy && progress)) && (
             <div className="cw-msgs">
-              {!mayOrganise && <Notice tone="info">Only admins and trainers can save changes.</Notice>}
-              {Object.keys(problems).length > 0 && <Notice>Please fix the highlighted fields.</Notice>}
+              {!mayOrganise && <Notice tone="info">{t('admin.accounts.ed.onlyAdmins')}</Notice>}
+              {Object.keys(problems).length > 0 && <Notice>{t('admin.accounts.ed.fixFields')}</Notice>}
               {error && (
-                <Notice actionLabel={error.competitionId == null ? 'Try again' : undefined} onAction={error.competitionId == null ? () => { void create(); } : undefined} actionDisabled={busy}>
+                <Notice actionLabel={error.competitionId == null ? t('common.tryAgain') : undefined} onAction={error.competitionId == null ? () => { void create(); } : undefined} actionDisabled={busy}>
                   {error.message}
-                  {error.competitionId != null && !isEdit && <> The competition was created. <Link className="underline" to={`/admin/competitions/${error.competitionId}`}>Open it to finish</Link>.</>}
+                  {error.competitionId != null && !isEdit && <> {openBefore}<Link className="underline" to={`/admin/competitions/${error.competitionId}`}>{t('admin.accounts.ed.openToFinish')}</Link>{openAfter}</>}
                 </Notice>
               )}
               {busy && progress && <span role="status">{progress}</span>}
@@ -280,20 +298,20 @@ export function CompetitionEditor() {
             <div className="cw-bar-side">
               {position > 0 && (
                 <button type="button" onClick={() => go(steps[position - 1])} disabled={busy} className="cw-btn">
-                  <ChevronLeft className="h-[18px] w-[18px]" aria-hidden="true" />Back
+                  <ChevronLeft className="h-[18px] w-[18px]" aria-hidden="true" />{t('common.back')}
                 </button>
               )}
             </div>
-            <span className="cw-count">Step {position + 1} of {steps.length}</span>
+            <span className="cw-count">{t('admin.accounts.ed.stepOf', { n: position + 1, total: steps.length })}</span>
             <div className="cw-bar-side">
               {last
-                ? <button type="button" onClick={() => void create()} disabled={busy || !mayOrganise} className="cw-btn cw-btn-p" style={{ minHeight: 48, paddingInline: 24 }}>{busy ? 'Saving…' : isEdit ? 'Save changes' : 'Create competition'}</button>
-                : <button type="button" onClick={next} disabled={waitingForCopy} className="cw-btn cw-btn-p" style={{ minHeight: 48, paddingInline: 24 }}>Next<ChevronRight className="h-[18px] w-[18px]" aria-hidden="true" /></button>}
+                ? <button type="button" onClick={() => void create()} disabled={busy || !mayOrganise} className="cw-btn cw-btn-p" style={{ minHeight: 48, paddingInline: 24 }}>{busy ? t('common.saving') : isEdit ? t('admin.accounts.ed.saveChanges') : t('admin.accounts.ed.create')}</button>
+                : <button type="button" onClick={next} disabled={waitingForCopy} className="cw-btn cw-btn-p" style={{ minHeight: 48, paddingInline: 24 }}>{t('common.next')}<ChevronRight className="h-[18px] w-[18px]" aria-hidden="true" /></button>}
             </div>
           </div>
         </footer>
       )}
-      <span className="sr-only" aria-live="polite">{STEP_LABEL[stepId]}</span>
+      <span className="sr-only" aria-live="polite">{t(STEP_KEY[stepId])}</span>
     </div>
   );
 }

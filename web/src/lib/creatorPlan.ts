@@ -1,3 +1,4 @@
+import { tr } from '../i18n/translate.ts';
 import { defaultRaceList } from './defaultRaces';
 import { heatSizes, planTimetable, type FixedItem, type PlanSession } from './formatPlan';
 import {
@@ -26,7 +27,7 @@ export function expectedTeams(section: SectionDraft, actualTeams = 0): TeamEstim
 }
 
 export const estimateText = (e: TeamEstimate) =>
-  e.basis === 'teams' ? `${e.count} teams entered` : e.basis === 'cap' ? `about ${e.count} teams, from the entry limit` : `a guess of ${e.count} teams`;
+  tr(e.basis === 'teams' ? 'admin.creator.estimate.teams' : e.basis === 'cap' ? 'admin.creator.estimate.cap' : 'admin.creator.estimate.guess', { count: e.count });
 
 /** Races in each heat for planning: the chosen list, or the standard one when the races are being left for later. */
 export function raceCountFor(section: SectionDraft, session: SessionDraft): number {
@@ -168,5 +169,5 @@ export function sectionEstimate(section: SectionDraft, actualTeams = 0): { teams
 export function durationText(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = Math.round(minutes % 60);
-  return h > 0 ? `${h} h${m ? ` ${m} min` : ''}` : `${m} min`;
+  return h > 0 ? (m ? tr('admin.creator.duration.hm', { h, m }) : tr('admin.creator.duration.h', { h })) : tr('admin.creator.duration.m', { m });
 }
