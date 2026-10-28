@@ -42,6 +42,7 @@ export const deskCommentary = {
   'desk.commentary.currentLanes': 'Current Heat Lanes',
   'desk.commentary.standingsInOrder': 'Standings in Order',
   'desk.commentary.heat': 'Heat',
+  'desk.commentary.controls': 'Commentary desk controls',
   'desk.commentary.selectHeat': 'Select heat',
   'desk.commentary.keyPoints': 'Key talking points',
   'desk.commentary.sectionLeader': 'Section Leader',

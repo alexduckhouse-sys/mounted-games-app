@@ -43,6 +43,7 @@ export const deskCommentary: AreaCatalogue<typeof en> = {
   'desk.commentary.currentLanes': 'Couloirs de la manche en cours',
   'desk.commentary.standingsInOrder': 'Classement dans l’ordre',
   'desk.commentary.heat': 'Manche',
+  'desk.commentary.controls': 'Commandes du pupitre de commentaire',
   'desk.commentary.selectHeat': 'Choisir la manche',
   'desk.commentary.keyPoints': 'Points clés à commenter',
   'desk.commentary.sectionLeader': 'Leader de la catégorie',

@@ -43,6 +43,7 @@ export const deskCommentary: AreaCatalogue<typeof en> = {
   'desk.commentary.currentLanes': 'Lonydd y rhagras presennol',
   'desk.commentary.standingsInOrder': 'Safleoedd yn eu trefn',
   'desk.commentary.heat': 'Rhagras',
+  'desk.commentary.controls': 'Rheolyddion y ddesg sylwebu',
   'desk.commentary.selectHeat': 'Dewis rhagras',
   'desk.commentary.keyPoints': 'Prif bwyntiau sylwebu',
   'desk.commentary.sectionLeader': 'Arweinydd y grŵp oedran',

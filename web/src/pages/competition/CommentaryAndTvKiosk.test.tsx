@@ -12,6 +12,9 @@ import { CompetitionContext } from './context';
 import { TvKioskPage } from './TvKioskPage';
 import { StreamControlStrip } from '../../components/stream/StreamControlStrip';
 import { QrAccessModal } from '../../components/QrAccessModal';
+import { CurrentCompetitionProvider } from '../../competition/CurrentCompetitionContext';
+import { TickerProvider } from '../../components/TickerContext';
+import { TopBarTicker } from '../../components/TopBarTicker';
 
 vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canManage: () => true, canOrganise: () => true }) }));
 const saveOverlay = vi.fn().mockResolvedValue('saved');
@@ -368,5 +371,36 @@ describe('TvKioskPage', () => {
 
     render(<StreamControlStrip competitionId={1} useScorerClient />);
     render(<MemoryRouter><QrAccessModal open onClose={vi.fn()} competitionId={1} competitionName="Spring" /></MemoryRouter>);
+  });
+});
+
+describe('CommentaryDeskPage in the dock', () => {
+  it('moves the header controls into a sheet and keeps the title on the page', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/competitions/1/commentary?section=9']}>
+        <CurrentCompetitionProvider>
+          <TickerProvider>
+            <CompactPageBarProvider>
+              <CompetitionContext.Provider value={{ competition: makeComp(), saveOverlay, reload: vi.fn(), streams: sampleStreams, streamingEnabled: true, invoke: vi.fn(), ready: 1, streamMessages: [], sponsors: [] }}>
+                <Routes><Route path="/competitions/:id/commentary" element={<CommentaryDeskPage />} /></Routes>
+              </CompetitionContext.Provider>
+            </CompactPageBarProvider>
+            <TopBarTicker />
+          </TickerProvider>
+        </CurrentCompetitionProvider>
+      </MemoryRouter>,
+    );
+    await screen.findByRole('region', { name: 'Current Heat — Lanes in Order' });
+    expect(screen.queryByRole('button', { name: /QR Access/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: /TV kiosk/i })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Commentary desk controls' }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Commentary desk controls' }));
+    expect(sheet.getByRole('group', { name: /view/i })).toBeInTheDocument();
+    expect(sheet.getByRole('link', { name: /TV kiosk/i })).toBeInTheDocument();
+    expect(sheet.getByRole('link', { name: /Score & commentate/i })).toBeInTheDocument();
+    expect(sheet.getByRole('button', { name: /^Heat/ })).toBeInTheDocument();
+    await user.click(sheet.getByRole('button', { name: /QR Access/ }));
+    expect(await screen.findByRole('dialog', { name: 'Share with QR codes' })).toBeInTheDocument();
   });
 });
