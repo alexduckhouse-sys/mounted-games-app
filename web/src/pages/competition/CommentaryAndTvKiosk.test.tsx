@@ -392,15 +392,15 @@ describe('CommentaryDeskPage in the dock', () => {
       </MemoryRouter>,
     );
     await screen.findByRole('region', { name: 'Current heat · lanes in order' });
-    expect(screen.queryByRole('button', { name: /QR Access/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /QR access/ })).toBeNull();
     expect(screen.queryByRole('link', { name: /TV kiosk/i })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Commentary desk controls' }));
     const sheet = within(await screen.findByRole('dialog', { name: 'Commentary desk controls' }));
     expect(sheet.getByRole('group', { name: /view/i })).toBeInTheDocument();
     expect(sheet.getByRole('link', { name: /TV kiosk/i })).toBeInTheDocument();
-    expect(sheet.getByRole('link', { name: /Score & commentate/i })).toBeInTheDocument();
+    expect(sheet.getByRole('link', { name: /Score and commentate/i })).toBeInTheDocument();
     expect(sheet.getByRole('button', { name: /^Heat/ })).toBeInTheDocument();
-    await user.click(sheet.getByRole('button', { name: /QR Access/ }));
+    await user.click(sheet.getByRole('button', { name: /QR access/ }));
     expect(await screen.findByRole('dialog', { name: 'Share with QR codes' })).toBeInTheDocument();
   });
 });
