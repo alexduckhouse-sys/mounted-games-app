@@ -21,6 +21,7 @@ import { TimetableClashes } from './TimetableClashes';
 import { ShareTextButtons } from './ShareTextButtons';
 import { timetableShareText } from './shareText';
 import type { DrawPreview } from './types';
+import { isSessionLocked } from '../../lib/sessionLock';
 import './operations.css';
 
 const DEFAULT_MINUTES = 10;
@@ -59,9 +60,9 @@ function GripIcon() {
 
 interface Drag { id: number; from: number; to: number; dy: number; height: number }
 
-/** Keeps its own time when the order changes: drawn or started, a final (its start is set by the organiser), or no start yet. */
+/** Keeps its own time when the order changes: started or scored, a final (its start is set by the organiser), or no start yet. */
 const stays = (item: Item) => item.locked || item.final || !item.start;
-/** Moves with the others when times are pushed: not drawn or started, and not a final that has no start of its own yet. */
+/** Moves with the others when times are pushed: not started or scored, and not a final that has no start of its own yet. */
 const shifts = (item: Item) => !!item.start && !item.locked && !(item.final && !item.session.scheduledStart);
 
 /** Timetable and draw: the day's running order for each arena, the hatbands, and the lane draw. Every change saves as it is made. */
@@ -102,7 +103,7 @@ export function TimetablePage() {
       const heats = brk ? 0 : s.heats.length > 0 ? s.heats.length : heatSizes(teamsIn(s.competitionSectionId), s.lanesPerHeat ?? lanesFor(section?.format ?? 2)).length;
       const minutes = brk ? s.durationMinutes ?? 0 : section?.usesRaceFinals ? 3 * perHeat : s.heats.length > 0 || !s.durationMinutes ? heats * perHeat || row?.minutes || 0 : s.durationMinutes;
       const start = s.scheduledStart ? new Date(s.scheduledStart) : row && row.minutes > 0 ? row.start : null;
-      return { session: s, isBreak: brk, arena: s.arenaName?.trim() ?? '', start, minutes, heats, perHeat, locked: !brk && (s.heats.length > 0 || s.status !== 0), final: !brk && /\bfinals?\b/i.test(s.name) };
+      return { session: s, isBreak: brk, arena: s.arenaName?.trim() ?? '', start, minutes, heats, perHeat, locked: !brk && isSessionLocked(s), final: !brk && /\bfinals?\b/i.test(s.name) };
     });
   }, [competition]);
 
@@ -356,6 +357,7 @@ export function TimetablePage() {
                               <button type="button" className="rf-btn" disabled={busy || item.locked || !prev} onClick={() => void followOn(group.list, item)}>Follow on from the one before</button>
                             </div>
                           )}
+                          {item.locked && !item.isBreak && <p className="rf-t2 ops-lock-note">This one has started or has scores, so its time can’t be changed here. “Move everything” still moves what is left.</p>}
                           {shifts(item) && <ShiftFrom name={item.session.name} busy={busy} onShift={(minutes) => void shiftFrom(group.list, item, minutes)} />}
                           <div className="ops-pair">
                             {item.isBreak

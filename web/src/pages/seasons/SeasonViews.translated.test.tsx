@@ -1,3 +1,4 @@
+import type { ReactElement } from 'react';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -19,7 +20,7 @@ const season: SeasonView = {
 };
 const standings = { standings: [{ rank: 1, teamProfileId: 'team-a', teamName: 'Example Blue', clubName: 'Example Club', totalPoints: 10, rounds: [{ roundId: 'round-1', eventRank: 1, seasonPoints: 10, counted: true }] }] };
 
-function mount(ui: JSX.Element, path: string, lang: Lang) {
+function mount(ui: ReactElement, path: string, lang: Lang) {
   return render(<LanguageProvider initial={lang}><MemoryRouter initialEntries={[path]}><Routes>
     <Route path="/seasons" element={<SeasonsPage />} />
     <Route path="/seasons/:seasonId" element={ui} />

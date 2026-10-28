@@ -11,6 +11,8 @@ import { useCompetition } from '../../pages/competition/context';
 import { displaySectionName } from '../../lib/section';
 import { api } from '../../api';
 import { buildToplist } from '../../lib/toplist';
+import { likelyWinners, parseFavouriteHistory, type FavouriteHistory } from '../../lib/likelyWinners';
+import { readLiveOptions } from '../../lib/streamOverlayTiles';
 import { computeTimings } from '../../lib/time';
 import { timetableRows } from '../../lib/timetableRows';
 import { EASE_OUT, ENTER, LEAVE, previousSlots, ROW_STAGGER_S, SHUFFLE_DELAY_S, SHUFFLE_S, SPRING, WIPE_HIDDEN_BOTTOM, WIPE_HIDDEN_LEFT, WIPE_HIDDEN_RIGHT, WIPE_SHOWN } from '../../lib/motion';
@@ -49,7 +51,7 @@ export function BibSwatch({
   );
 }
 
-export type LiveOverlayCardMode = 'none' | 'toplist' | 'heat' | 'lanes' | 'next';
+export type LiveOverlayCardMode = 'none' | 'toplist' | 'heat' | 'lanes' | 'next' | 'favourites';
 
 const DATA_CARD_MODES = new Set<string>(['toplist', 'heat', 'lanes', 'next']);
 
@@ -57,7 +59,7 @@ const DATA_CARD_MODES = new Set<string>(['toplist', 'heat', 'lanes', 'next']);
 export function readLiveOverlayCard(overlay: StreamOverlay): { mode: LiveOverlayCardMode; sectionId: number | null } {
   const look = (overlay.look ?? {}) as Record<string, unknown>;
   const rawMode = typeof look.liveCard === 'string' ? look.liveCard : overlay.bannerText;
-  const mode: LiveOverlayCardMode = rawMode === 'toplist' || rawMode === 'heat' || rawMode === 'lanes' || rawMode === 'next' ? rawMode : 'none';
+  const mode: LiveOverlayCardMode = rawMode === 'toplist' || rawMode === 'heat' || rawMode === 'lanes' || rawMode === 'next' || rawMode === 'favourites' ? rawMode : 'none';
   const sectionId = typeof look.liveSectionId === 'number' ? look.liveSectionId : null;
   return { mode, sectionId };
 }
@@ -403,6 +405,47 @@ function LiveToplistCard({ competition, sectionId }: { competition: CompetitionD
   );
 }
 
+/**
+ * Who is most likely to win the age group: the best average places, from this event's races and the teams' earlier
+ * finishes (see lib/likelyWinners.ts). The figure is an average place, never odds. History is fetched once per age group;
+ * if it can't be reached the card still ranks on this event alone.
+ */
+function LiveFavouritesCard({ competition, sectionId, rows }: { competition: CompetitionDetail; sectionId: number; rows: 3 | 5 }) {
+  const still = useStillMotion();
+  const [history, setHistory] = useState<{ sectionId: number; rows: FavouriteHistory[] } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const abort = new AbortController();
+    api.get<unknown>(`/stats/competitions/${competition.id}/favourites-history`, { params: { sectionId }, signal: abort.signal })
+      .then(({ data }) => { if (!cancelled) setHistory({ sectionId, rows: parseFavouriteHistory(data) }); })
+      .catch(() => { if (!cancelled) setHistory({ sectionId, rows: [] }); });
+    return () => { cancelled = true; abort.abort(); };
+  }, [competition.id, sectionId]);
+  const section = competition.sections.find((item) => item.id === sectionId)!;
+  const known = history?.sectionId === sectionId ? history.rows : [];
+  const list = likelyWinners(competition.sessions, competition.teams, known, sectionId).slice(0, rows);
+  const name = displaySectionName(section.displayName);
+  return (
+    <CentreCard label={`Favourites: ${name}`} heading={`${name} · Favourites`} subtitle={history === null ? 'Working it out…' : 'Best average place'}>
+      {list.length === 0
+        ? <p className="mg-ov-card-empty">No results to go on yet.</p>
+        : (
+          <ol>
+            {list.map((row, idx) => (
+              <motion.li key={row.teamId} initial={still ? false : { opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: still ? 0 : idx * ROW_STAGGER_S }}>
+                <span className="mg-ov-card-place">{idx + 1}</span>
+                <span className="mg-ov-card-team" data-grow="start">{row.teamName}</span>
+                <span className="mg-ov-card-total" data-grow="end">avg place {row.avgPlace.toFixed(1)}</span>
+                <span />
+                <span />
+              </motion.li>
+            ))}
+          </ol>
+        )}
+    </CentreCard>
+  );
+}
+
 export function LanesBody({
   lanes,
   competition,
@@ -540,6 +583,14 @@ function liveDataCard(competition: CompetitionDetail, arenaName: string, overlay
     const section = competition.sections.find((s) => s.id === secId);
     if (!section) return null;
     return <LiveToplistCard key={`toplist-${competition.id}-${section.id}`} competition={competition} sectionId={section.id} />;
+  }
+
+  if (mode === 'favourites') {
+    const active = activeArenaHeat(competition, arenaName, 'current');
+    const secId = sectionId ?? active?.session.competitionSectionId;
+    const section = competition.sections.find((s) => s.id === secId);
+    if (!section) return null;
+    return <LiveFavouritesCard key={`favourites-${competition.id}-${section.id}`} competition={competition} sectionId={section.id} rows={readLiveOptions(overlay).favouritesRows} />;
   }
 
   const pair = activeArenaHeat(competition, arenaName, mode === 'next' ? 'next' : 'current');

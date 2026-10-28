@@ -109,3 +109,5 @@
   .live-page-public .live-col-rail .live-announcement-list { max-height: calc(100dvh - var(--mg-shell-h, 104px) - 260px); overflow-y: auto; }
   .staff-stream-thumb { width: 96px; height: 60px; }
 }
+
+.live-all-dialog.is-dragging, .staff-stream-dialog.is-dragging { transition: none; }

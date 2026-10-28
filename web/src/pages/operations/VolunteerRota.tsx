@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
+import type { MessageKey } from '../../i18n/en';
 import { useT } from '../../i18n/LanguageContext';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
@@ -17,6 +18,16 @@ import {
 import './operations.css';
 
 const WHOLE_EVENT = 'event';
+
+/** The stored role stays the English preset; only what the organiser reads is translated. */
+const ROLE_PRESET_KEYS: Record<(typeof VOLUNTEER_ROLE_PRESETS)[number], MessageKey> = {
+  'Ring Crew': 'site.volunteers.preset.ringCrew',
+  'Line Judge': 'site.volunteers.preset.lineJudge',
+  'Collecting Ring': 'site.volunteers.preset.collectingRing',
+  'Tack Steward': 'site.volunteers.preset.tackSteward',
+  'Gate Steward': 'site.volunteers.preset.gateSteward',
+  'First Aid Liaison': 'site.volunteers.preset.firstAid',
+};
 
 interface Draft { id: number | null; role: string; session: string; time: string; notes: string; places: number }
 const blank = (): Draft => ({ id: null, role: VOLUNTEER_ROLE_PRESETS[0], session: WHOLE_EVENT, time: '', notes: '', places: 1 });
@@ -147,7 +158,7 @@ export function VolunteerRota({ competition, manage }: { competition: Competitio
         <>
           {draft ? (
             <div className="ops-dup" role="group" aria-label={draft.id === null ? t('site.volunteers.newShift') : t('site.volunteers.changeShift')}>
-              <RefineChoiceRow label={t('site.volunteers.role')} value={draft.role} options={VOLUNTEER_ROLE_PRESETS.map((role) => ({ value: role, label: role }))} allowOther onChange={(role) => setDraft({ ...draft, role })} />
+              <RefineChoiceRow label={t('site.volunteers.role')} value={draft.role} options={VOLUNTEER_ROLE_PRESETS.map((role) => ({ value: role, label: t(ROLE_PRESET_KEYS[role]) }))} allowOther onChange={(role) => setDraft({ ...draft, role })} />
               <RefineChoiceRow label={t('site.volunteers.session')} value={draft.session} options={sessionOptions} onChange={(session) => setDraft({ ...draft, session })} />
               <label className="rf-fld">{t('site.volunteers.time')}<input value={draft.time} maxLength={80} placeholder={t('site.volunteers.timePlaceholder')} onChange={(event) => setDraft({ ...draft, time: event.target.value })} /></label>
               <label className="rf-fld">{t('site.volunteers.notes')}<input value={draft.notes} maxLength={500} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} /></label>

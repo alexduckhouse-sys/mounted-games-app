@@ -34,16 +34,16 @@ export function unfilledShifts(shifts: readonly VolunteerShift[]): VolunteerShif
 /** A message for a group chat asking for help with the shifts that are not full. Roles and times only, no names. */
 export function unfilledShareText(eventName: string, shifts: readonly VolunteerShift[], sessions: readonly Pick<Session, 'id' | 'name' | 'orderIndex'>[], link: string): string {
   const open = unfilledShifts(shifts);
-  if (open.length === 0) return `${eventName}: every volunteer shift is covered. Thank you.`;
-  const lines = [`${eventName}: we still need volunteers`];
+  if (open.length === 0) return tr('site.share.allCovered', { event: eventName });
+  const lines = [tr('site.share.stillNeed', { event: eventName })];
   for (const group of groupShiftsBySession(open, sessions)) {
     lines.push('', group.title);
     for (const shift of group.shifts) {
       const when = shift.startTimeLabel?.trim() ? `, ${shift.startTimeLabel.trim()}` : '';
-      lines.push(`${shift.role}${when}: ${shift.remainingCount} ${shift.remainingCount === 1 ? 'place' : 'places'} left`);
+      lines.push(tr('site.share.placesLeft', { role: shift.role, when, count: shift.remainingCount }));
     }
   }
-  lines.push('', `Sign up here: ${link}`);
+  lines.push('', tr('site.share.signUp', { link }));
   return lines.join('\n');
 }
 

@@ -80,7 +80,7 @@ function ContactOrganisersSession() {
   usePageHeader(isAdmin
     ? withId
       ? { title: personName, subtitle: teamOf(withId) ?? competition.name, plain: true, backTo: location.pathname, backLabel: t('site.contact.backToMessages') }
-      : { title: t('site.contact.messages'), subtitle: competition.name, plain: true, backTo: `/competitions/${competition.id}/details`, backLabel: t('site.contact.backToDetails') }
+      : { title: t('site.contact.messages'), subtitle: competition.name, plain: true, backTo: `/competitions/${competition.id}/chat`, backLabel: t('site.contact.backToStream') }
     : { title: t('site.contact.title'), subtitle: competition.name, plain: true, backTo: `/competitions/${competition.id}/details`, backLabel: t('site.contact.backToDetails') });
   // Go back to where you came from, or to the details when this page was opened directly.
   const goBack = () => (location.key === 'default' ? navigate(`/competitions/${competition.id}/details`) : navigate(-1));

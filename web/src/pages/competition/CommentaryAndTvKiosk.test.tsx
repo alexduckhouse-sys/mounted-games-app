@@ -220,7 +220,7 @@ describe('CommentaryDeskPage', () => {
     const overlays = await screen.findByRole('region', { name: 'Stream overlays' });
     expect(screen.queryByRole('region', { name: 'Live stream control strip' })).toBeNull();
     const tiles = within(within(overlays).getByRole('radiogroup', { name: 'On screen' })).getAllByRole('radio');
-    expect(tiles.map((tile) => tile.textContent)).toEqual(['Off', 'Toplist', 'Heat table', 'Podium', 'Race result', 'Up next', 'Race title', 'Sponsors']);
+    expect(tiles.map((tile) => tile.textContent)).toEqual(['Off', 'Toplist', 'Heat table', 'Podium', 'Race result', 'Up next', 'Favourites', 'Race title', 'Sponsors']);
     expect(tiles[0]).toHaveAttribute('aria-checked', 'true');
     await user.click(within(overlays).getByRole('radio', { name: 'Toplist' }));
     expect(saveOverlay.mock.calls.at(-1)![0]({ look: {}, sponsorMode: 0 })).toMatchObject({ look: { liveCard: 'toplist' } });
