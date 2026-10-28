@@ -130,7 +130,7 @@ describe('PrizeGivingPage in French and Welsh', () => {
   it('reads in French, with a French ordinal on the button', async () => {
     mount('/competitions/1/prize-giving?section=5', 'fr');
     expect(await screen.findByText('À suivre : 3e')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Révéler la 3e place' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Révéler : 3e' })).toBeInTheDocument();
     expect(screen.getByText('Pas de fiche de déclaration pour cette équipe, donc pas de cavaliers à annoncer.')).toBeInTheDocument();
   });
 
