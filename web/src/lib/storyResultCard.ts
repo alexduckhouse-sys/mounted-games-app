@@ -369,36 +369,47 @@ export async function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob |
   });
 }
 
-export async function shareOrDownloadStoryResultCard(
-  data: StoryResultCardData,
-): Promise<'shared' | 'downloaded' | 'unsupported'> {
-  if (typeof document === 'undefined') return 'unsupported';
+/** Draws the card as a PNG, or null when this browser can't draw one. */
+export async function makeStoryResultCardPng(data: StoryResultCardData): Promise<Blob | null> {
+  if (typeof document === 'undefined') return null;
   await loadStoryCardFonts();
-  const canvas = renderStoryResultCardCanvas(data);
-  const blob = await canvasToPngBlob(canvas);
-  if (!blob) return 'unsupported';
+  return canvasToPngBlob(renderStoryResultCardCanvas(data));
+}
 
-  const file = new File([blob], data.suggestedFileName, { type: 'image/png' });
+function storyCardFile(blob: Blob, data: StoryResultCardData): File {
+  return new File([blob], data.suggestedFileName, { type: 'image/png' });
+}
+
+/** True when the phone's share sheet takes image files, so a Share button can hand the card straight over. */
+export function canShareStoryResultCard(blob: Blob, data: StoryResultCardData): boolean {
   const nav = typeof navigator !== 'undefined' ? navigator : undefined;
+  if (!nav || typeof nav.share !== 'function') return false;
+  return typeof nav.canShare === 'function' ? nav.canShare({ files: [storyCardFile(blob, data)] }) : true;
+}
 
-  if (nav && typeof nav.share === 'function') {
-    const shareData: ShareData = {
-      title: `${data.competitionName} — ${data.sectionName}`,
-      text: data.captionText,
-      files: [file],
-    };
-    const canShareFiles = typeof nav.canShare === 'function' ? nav.canShare({ files: [file] }) : true;
-    if (canShareFiles) {
-      await nav.share(shareData);
-      return 'shared';
-    }
-  }
+/** Opens the share sheet with the card. Call it straight from a tap: iOS refuses a share that follows other async work. */
+export async function shareStoryResultCardPng(blob: Blob, data: StoryResultCardData): Promise<void> {
+  await navigator.share({ title: `${data.competitionName} — ${data.sectionName}`, text: data.captionText, files: [storyCardFile(blob, data)] });
+}
 
+export function downloadStoryResultCardPng(blob: Blob, data: StoryResultCardData): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = data.suggestedFileName;
   anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+export async function shareOrDownloadStoryResultCard(
+  data: StoryResultCardData,
+): Promise<'shared' | 'downloaded' | 'unsupported'> {
+  const blob = await makeStoryResultCardPng(data);
+  if (!blob) return 'unsupported';
+  if (canShareStoryResultCard(blob, data)) {
+    await shareStoryResultCardPng(blob, data);
+    return 'shared';
+  }
+  downloadStoryResultCardPng(blob, data);
   return 'downloaded';
 }

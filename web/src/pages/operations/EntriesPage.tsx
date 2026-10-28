@@ -214,13 +214,10 @@ export function EntriesPage() {
             <span className="rf-grow"><span className="rf-t1">Tools</span><span className="rf-t2">Bank statement, reminders, clubs, arrivals, refunds, exports</span></span>
             <EntryTools competition={competition} signups={signups} capacity={capacity} onChanged={reloadAll} />
           </div>
+          {/* One dropdown, not a row of pills. "All" lists teams by section, so it carries no sign-up count. */}
+          <RefineChoiceRow label="Show" value={filter} onChange={setFilter}
+            options={FILTERS.map((f) => ({ value: f.value, label: f.value === 'all' ? 'All teams' : `${f.label} (${counts[f.value]})` }))} />
         </RefineList>
-
-        <div className="ops-chips et-filters" role="group" aria-label="Show entries">
-          {FILTERS.map((f) => (
-            <button key={f.value} type="button" className="rf-btn et-chip" aria-pressed={filter === f.value} onClick={() => setFilter(f.value)}>{f.label} · {counts[f.value]}</button>
-          ))}
-        </div>
 
         {filter !== 'all' && (
           <SignupList

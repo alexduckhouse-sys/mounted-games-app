@@ -19,7 +19,6 @@
 .et-card { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid rgb(var(--mg-rule-soft)); border-radius: 12px; background: rgb(var(--mg-surface)); }
 .et-preview { margin: 0; padding: 12px; border-radius: 10px; background: rgb(var(--mg-subtle)); color: rgb(var(--mg-ink)); font: 500 14px/1.45 var(--mg-font); white-space: pre-wrap; overflow-wrap: anywhere; }
 .et-chip[aria-pressed="true"] { background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); border-color: rgb(var(--mg-button)); }
-.et-filters { padding: 4px 0; }
 .et-cap { color: rgb(var(--mg-muted)); }
 .et-sub { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; border-top: 1px solid rgb(var(--mg-rule-soft)); }
 .et-sub:first-child { border-top: 0; padding-top: 0; }
