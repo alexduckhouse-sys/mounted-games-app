@@ -185,7 +185,10 @@ public record HeatDutyRoleTemplateInput(
 public record AutoFillHeatDutiesRequest(
     IReadOnlyList<HeatDutyRoleTemplateInput>? Roles = null,
     IReadOnlyList<int>? HeatIds = null,
-    bool IncludeChangeoverLineStewards = false);
+    bool IncludeChangeoverLineStewards = false,
+    IReadOnlyList<int>? TeamSessionIds = null,
+    bool AvoidNeighbouringHeats = true,
+    bool KeepExisting = false);
 
 public record ProposedHeatDutyDto(
     int SessionId,

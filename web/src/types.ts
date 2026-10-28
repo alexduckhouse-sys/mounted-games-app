@@ -1688,6 +1688,9 @@ export interface AutoFillHeatDutiesInput {
   roles?: HeatDutyRoleTemplateInput[] | null;
   heatIds?: number[] | null;
   includeChangeoverLineStewards?: boolean;
+  teamSessionIds?: number[] | null;
+  avoidNeighbouringHeats?: boolean;
+  keepExisting?: boolean;
 }
 
 export interface ProposedHeatDuty {

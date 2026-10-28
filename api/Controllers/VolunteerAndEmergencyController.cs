@@ -845,6 +845,25 @@ public class VolunteerAndEmergencyController(
             }
         }
 
+        // Optionally limit the candidates to teams that ride in at least one heat of the chosen sessions.
+        HashSet<int>? candidateTeamIds = null;
+        if (req?.TeamSessionIds is { Count: > 0 })
+        {
+            var wantedSessionIds = req.TeamSessionIds.Distinct().ToList();
+            var ownedSessionCount = await db.Sessions
+                .Where(s => s.CompetitionId == id && wantedSessionIds.Contains(s.Id))
+                .CountAsync(ct);
+            if (ownedSessionCount != wantedSessionIds.Count)
+                return BadRequest(new { message = "One or more sessions do not belong to this competition." });
+
+            candidateTeamIds = (await db.HeatEntries
+                .AsNoTracking()
+                .Where(e => wantedSessionIds.Contains(e.Heat!.SessionId))
+                .Select(e => e.TeamId)
+                .Distinct()
+                .ToListAsync(ct)).ToHashSet();
+        }
+
         // All active teams in the competition (including HC teams) share stewarding duties.
         var activeTeams = await db.Teams
             .AsNoTracking()
@@ -852,6 +871,8 @@ public class VolunteerAndEmergencyController(
             .Where(t => t.CompetitionId == id && t.EntryStatus == TeamEntryStatus.Active)
             .OrderBy(t => t.Id)
             .ToListAsync(ct);
+        if (candidateTeamIds is not null)
+            activeTeams = activeTeams.Where(t => candidateTeamIds.Contains(t.Id)).ToList();
 
         var targetHeatIds = targetHeats.Select(h => h.Id).ToHashSet();
         var existingCountsFromDb = await db.VolunteerShifts
@@ -867,6 +888,30 @@ public class VolunteerAndEmergencyController(
         foreach (var team in activeTeams)
             dutyCounts[team.Id] = existingCountsFromDb.GetValueOrDefault(team.Id, 0);
 
+        var avoidNeighbours = req?.AvoidNeighbouringHeats ?? true;
+
+        // With KeepExisting, heat-level shifts that already name a team count as filled and are returned unchanged.
+        var keptByHeat = new Dictionary<int, List<VolunteerShift>>();
+        if (req?.KeepExisting == true)
+        {
+            var kept = await db.VolunteerShifts
+                .AsNoTracking()
+                .Include(s => s.AssignedTeam).ThenInclude(t => t!.Club)
+                .Where(s => s.CompetitionId == id
+                    && s.AssignedTeamId != null
+                    && s.HeatId != null
+                    && targetHeatIds.Contains(s.HeatId.Value))
+                .OrderBy(s => s.LaneNumber ?? int.MaxValue)
+                .ThenBy(s => s.Id)
+                .ToListAsync(ct);
+            foreach (var shift in kept)
+            {
+                keptByHeat.TryAdd(shift.HeatId!.Value, []);
+                keptByHeat[shift.HeatId.Value].Add(shift);
+                dutyCounts[shift.AssignedTeamId!.Value] = dutyCounts.GetValueOrDefault(shift.AssignedTeamId.Value, 0) + 1;
+            }
+        }
+
         var proposedDuties = new List<ProposedHeatDutyDto>();
         var warnings = new List<string>();
         var totalUnfilled = 0;
@@ -880,12 +925,12 @@ public class VolunteerAndEmergencyController(
             var ridingInHeat = heat.Entries.Select(e => e.TeamId).ToHashSet();
 
             var adjacentRidingTeamIds = new HashSet<int>();
-            if (i > 0)
+            if (avoidNeighbours && i > 0)
             {
                 foreach (var entry in allSessionHeats[i - 1].Entries)
                     adjacentRidingTeamIds.Add(entry.TeamId);
             }
-            if (i + 1 < allSessionHeats.Count)
+            if (avoidNeighbours && i + 1 < allSessionHeats.Count)
             {
                 foreach (var entry in allSessionHeats[i + 1].Entries)
                     adjacentRidingTeamIds.Add(entry.TeamId);
@@ -894,8 +939,34 @@ public class VolunteerAndEmergencyController(
             var assignedInHeat = new HashSet<int>();
             var unfilledInHeat = 0;
 
+            var keptInHeat = keptByHeat.GetValueOrDefault(heat.Id) ?? [];
+            foreach (var k in keptInHeat) assignedInHeat.Add(k.AssignedTeamId!.Value);
+            var unusedKept = keptInHeat.ToList();
+
+            ProposedHeatDutyDto KeptDuty(VolunteerShift k, int requiredCount) => new(
+                SessionId: session.Id,
+                HeatId: heat.Id,
+                HeatLabel: heatLabel,
+                Role: k.Role,
+                DutyCategory: k.DutyCategory,
+                LaneNumber: k.LaneNumber,
+                AssignedTeamId: k.AssignedTeamId,
+                AssignedTeamName: k.AssignedTeam?.DisplayName,
+                AssignedClubName: k.AssignedClubName ?? k.AssignedTeam?.Club?.Name,
+                RequiredCount: requiredCount);
+
             foreach (var template in roleTemplates)
             {
+                var keptMatch = unusedKept.FirstOrDefault(k =>
+                    k.LaneNumber == template.LaneNumber
+                    && string.Equals(k.Role.Trim(), template.Role, StringComparison.OrdinalIgnoreCase));
+                if (keptMatch is not null)
+                {
+                    unusedKept.Remove(keptMatch);
+                    proposedDuties.Add(KeptDuty(keptMatch, keptMatch.RequiredCount));
+                    continue;
+                }
+
                 var chosen = activeTeams
                     .Where(t => !ridingInHeat.Contains(t.Id) && !assignedInHeat.Contains(t.Id))
                     .OrderBy(t => dutyCounts.GetValueOrDefault(t.Id, 0))
@@ -936,6 +1007,10 @@ public class VolunteerAndEmergencyController(
                         RequiredCount: template.RequiredCount));
                 }
             }
+
+            // Kept shifts that match none of the templates stay in the proposal as they are.
+            foreach (var k in unusedKept)
+                proposedDuties.Add(KeptDuty(k, k.RequiredCount));
 
             if (unfilledInHeat > 0)
             {

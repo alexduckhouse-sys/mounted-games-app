@@ -403,6 +403,176 @@ public class HeatDutiesTests(ApiFactory factory) : IClassFixture<ApiFactory>
         Assert.Equal(3, underResult.Duties.Count(d => d.AssignedTeamId is null));
     }
 
+    private static string AutoFillUrl(SeededEvent ev, int? sessionId = null) =>
+        $"/api/competitions/{ev.CompetitionId}/sessions/{sessionId ?? ev.SessionId}/heat-duties/auto-fill";
+
+    private static readonly List<HeatDutyRoleTemplateInput> TwoLanes =
+    [
+        new("Start/Finish Line Steward — Lane 1", "LineSteward", 1),
+        new("Start/Finish Line Steward — Lane 2", "LineSteward", 2),
+    ];
+
+    private async Task<int> AddSecondSessionRidingAsync(SeededEvent ev, int teamId)
+    {
+        return await factory.WithDbAsync(async db =>
+        {
+            var session = new Session
+            {
+                CompetitionId = ev.CompetitionId,
+                CompetitionSectionId = ev.SectionId,
+                Name = "Session 2",
+                ArenaName = "Second Ring",
+                OrderIndex = 2,
+                LanesPerHeat = 2,
+                ScheduledStart = new DateTime(2026, 7, 11, 15, 0, 0, DateTimeKind.Utc),
+            };
+            db.Sessions.Add(session);
+            await db.SaveChangesAsync();
+            var heat = new Heat { SessionId = session.Id, OrderIndex = 1, Label = "S2 Heat 1", DurationMinutes = 20 };
+            db.Heats.Add(heat);
+            await db.SaveChangesAsync();
+            db.HeatEntries.Add(new HeatEntry { HeatId = heat.Id, TeamId = teamId, LaneIndex = 1 });
+            await db.SaveChangesAsync();
+            return session.Id;
+        });
+    }
+
+    [Fact]
+    public async Task AutoFillHeatDuties_TeamSessionIdsLimitsCandidatesAndRejectsForeignSessions()
+    {
+        // 8 teams: 0-5 ride in session 1, team 6 rides only in session 2, team 7 rides nowhere.
+        var ev = await SeedSessionWithHeatsAsync(teamCount: 8);
+        var trainer = await factory.TrainerAsync();
+        var session2 = await AddSecondSessionRidingAsync(ev, ev.Teams[6].Id);
+
+        // Default: every active team is a candidate, so the idle teams 6 and 7 get picked.
+        var all = await (await trainer.PostAsJsonAsync(AutoFillUrl(ev), new AutoFillHeatDutiesRequest(TwoLanes)))
+            .ReadAsync<AutoFillHeatDutiesResultDto>();
+        Assert.Contains(all.Duties, d => d.AssignedTeamId == ev.Teams[7].Id);
+
+        // This session only: teams 6 and 7 are not candidates; riders still skip their own heat.
+        var thisSession = await (await trainer.PostAsJsonAsync(AutoFillUrl(ev),
+            new AutoFillHeatDutiesRequest(TwoLanes, TeamSessionIds: [ev.SessionId]))).ReadAsync<AutoFillHeatDutiesResultDto>();
+        var session1TeamIds = ev.Teams.Take(6).Select(t => t.Id).ToHashSet();
+        Assert.All(thisSession.Duties, d => Assert.Contains(d.AssignedTeamId!.Value, session1TeamIds));
+        Assert.Equal(0, thisSession.UnfilledCount);
+        foreach (var d in thisSession.Duties)
+        {
+            var heatRiders = d.HeatId == ev.Heat1Id ? new[] { 0, 1 } : d.HeatId == ev.Heat2Id ? new[] { 2, 3 } : new[] { 4, 5 };
+            Assert.DoesNotContain(d.AssignedTeamId!.Value, heatRiders.Select(ix => ev.Teams[ix].Id));
+        }
+
+        // Another session's teams: only team 6 qualifies, so each heat fills one lane and leaves one empty.
+        var other = await (await trainer.PostAsJsonAsync(AutoFillUrl(ev),
+            new AutoFillHeatDutiesRequest(TwoLanes, TeamSessionIds: [session2]))).ReadAsync<AutoFillHeatDutiesResultDto>();
+        Assert.All(other.Duties.Where(d => d.AssignedTeamId is not null), d => Assert.Equal(ev.Teams[6].Id, d.AssignedTeamId));
+        Assert.Equal(3, other.UnfilledCount);
+
+        // A session from another competition is rejected.
+        var foreign = await SeedSessionWithHeatsAsync();
+        var bad = await trainer.PostAsJsonAsync(AutoFillUrl(ev),
+            new AutoFillHeatDutiesRequest(TwoLanes, TeamSessionIds: [ev.SessionId, foreign.SessionId]));
+        Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
+    }
+
+    [Fact]
+    public async Task AutoFillHeatDuties_AvoidNeighbouringHeatsCanBeSwitchedOff()
+    {
+        var ev = await SeedSessionWithHeatsAsync();
+        var trainer = await factory.TrainerAsync();
+        var oneRole = new List<HeatDutyRoleTemplateInput> { TwoLanes[0] };
+
+        // Heat 1: teams 2-5 are free and tied on duties. Teams 2 and 3 ride in Heat 2, straight after.
+        var avoid = await (await trainer.PostAsJsonAsync(AutoFillUrl(ev),
+            new AutoFillHeatDutiesRequest(oneRole, HeatIds: [ev.Heat1Id]))).ReadAsync<AutoFillHeatDutiesResultDto>();
+        Assert.Equal(ev.Teams[4].Id, avoid.Duties.Single().AssignedTeamId);
+
+        var explicitTrue = await (await trainer.PostAsJsonAsync(AutoFillUrl(ev),
+            new AutoFillHeatDutiesRequest(oneRole, HeatIds: [ev.Heat1Id], AvoidNeighbouringHeats: true))).ReadAsync<AutoFillHeatDutiesResultDto>();
+        Assert.Equal(ev.Teams[4].Id, explicitTrue.Duties.Single().AssignedTeamId);
+
+        var allow = await (await trainer.PostAsJsonAsync(AutoFillUrl(ev),
+            new AutoFillHeatDutiesRequest(oneRole, HeatIds: [ev.Heat1Id], AvoidNeighbouringHeats: false))).ReadAsync<AutoFillHeatDutiesResultDto>();
+        Assert.Equal(ev.Teams[2].Id, allow.Duties.Single().AssignedTeamId);
+
+        // Fairness still wins: with team 2 already carrying a duty elsewhere, the next fairest is picked.
+        await factory.InDbAsync(async db =>
+        {
+            db.VolunteerShifts.Add(new VolunteerShift
+            {
+                CompetitionId = ev.CompetitionId,
+                SessionId = ev.SessionId,
+                Role = "Whole Session Marshal",
+                AssignedTeamId = ev.Teams[2].Id,
+            });
+            await db.SaveChangesAsync();
+        });
+        var fair = await (await trainer.PostAsJsonAsync(AutoFillUrl(ev),
+            new AutoFillHeatDutiesRequest(oneRole, HeatIds: [ev.Heat1Id], AvoidNeighbouringHeats: false))).ReadAsync<AutoFillHeatDutiesResultDto>();
+        Assert.Equal(ev.Teams[3].Id, fair.Duties.Single().AssignedTeamId);
+    }
+
+    [Fact]
+    public async Task AutoFillHeatDuties_KeepExistingKeepsAssignedSlotsFillsGapsAndNeverDoublesATeam()
+    {
+        var ev = await SeedSessionWithHeatsAsync();
+        var trainer = await factory.TrainerAsync();
+        await factory.InDbAsync(async db =>
+        {
+            db.VolunteerShifts.AddRange(
+                // Heat 1 lane 1 is assigned, lane 2 is an empty slot.
+                new VolunteerShift { CompetitionId = ev.CompetitionId, SessionId = ev.SessionId, HeatId = ev.Heat1Id, Role = "Start/Finish Line Steward — Lane 1", DutyCategory = "LineSteward", LaneNumber = 1, AssignedTeamId = ev.Teams[4].Id },
+                new VolunteerShift { CompetitionId = ev.CompetitionId, SessionId = ev.SessionId, HeatId = ev.Heat1Id, Role = "Start/Finish Line Steward — Lane 2", DutyCategory = "LineSteward", LaneNumber = 2 },
+                // Heat 2 has an assigned duty that matches no requested role.
+                new VolunteerShift { CompetitionId = ev.CompetitionId, SessionId = ev.SessionId, HeatId = ev.Heat2Id, Role = "Medic Liaison", DutyCategory = "Custom", AssignedTeamId = ev.Teams[0].Id });
+            await db.SaveChangesAsync();
+        });
+        var before = await (await trainer.GetAsync($"/api/competitions/{ev.CompetitionId}/volunteer-shifts")).ReadAsync<List<VolunteerShiftDto>>();
+
+        var result = await (await trainer.PostAsJsonAsync(AutoFillUrl(ev),
+            new AutoFillHeatDutiesRequest(TwoLanes, KeepExisting: true))).ReadAsync<AutoFillHeatDutiesResultDto>();
+
+        var heat1 = result.Duties.Where(d => d.HeatId == ev.Heat1Id).ToList();
+        var kept = heat1.Single(d => d.LaneNumber == 1);
+        Assert.Equal(ev.Teams[4].Id, kept.AssignedTeamId);
+        Assert.Equal(ev.Teams[4].DisplayName, kept.AssignedTeamName);
+        Assert.Equal("Start/Finish Line Steward — Lane 1", kept.Role);
+        var gap = heat1.Single(d => d.LaneNumber == 2);
+        Assert.NotNull(gap.AssignedTeamId);
+        Assert.NotEqual(ev.Teams[4].Id, gap.AssignedTeamId);
+
+        var heat2 = result.Duties.Where(d => d.HeatId == ev.Heat2Id).ToList();
+        Assert.Equal(3, heat2.Count);
+        Assert.Contains(heat2, d => d.Role == "Medic Liaison" && d.AssignedTeamId == ev.Teams[0].Id);
+
+        foreach (var byHeat in result.Duties.GroupBy(d => d.HeatId))
+            Assert.Equal(byHeat.Count(), byHeat.Select(d => d.AssignedTeamId!.Value).Distinct().Count());
+        Assert.Equal(0, result.UnfilledCount);
+
+        // Nothing is saved, and without KeepExisting the proposal ignores the existing shifts.
+        var after = await (await trainer.GetAsync($"/api/competitions/{ev.CompetitionId}/volunteer-shifts")).ReadAsync<List<VolunteerShiftDto>>();
+        Assert.Equal(before.Count, after.Count);
+        var plain = await (await trainer.PostAsJsonAsync(AutoFillUrl(ev), new AutoFillHeatDutiesRequest(TwoLanes)))
+            .ReadAsync<AutoFillHeatDutiesResultDto>();
+        Assert.DoesNotContain(plain.Duties, d => d.Role == "Medic Liaison");
+    }
+
+    [Fact]
+    public async Task AutoFillHeatDuties_ExplicitDefaultsMatchOmittedOptions()
+    {
+        var ev = await SeedSessionWithHeatsAsync(teamCount: 6, markLastTeamHc: true);
+        var trainer = await factory.TrainerAsync();
+        var plain = await (await trainer.PostAsJsonAsync(AutoFillUrl(ev), new AutoFillHeatDutiesRequest(TwoLanes)))
+            .ReadAsync<AutoFillHeatDutiesResultDto>();
+        var explicitDefaults = await (await trainer.PostAsJsonAsync(AutoFillUrl(ev),
+            new AutoFillHeatDutiesRequest(TwoLanes, TeamSessionIds: [], AvoidNeighbouringHeats: true, KeepExisting: false)))
+            .ReadAsync<AutoFillHeatDutiesResultDto>();
+        Assert.Equal(
+            plain.Duties.Select(d => (d.HeatId, d.Role, d.AssignedTeamId)),
+            explicitDefaults.Duties.Select(d => (d.HeatId, d.Role, d.AssignedTeamId)));
+        Assert.Equal(plain.TeamDutyCounts, explicitDefaults.TeamDutyCounts);
+    }
+
     [Fact]
     public async Task TeamHere_AllowsAnonymous_IsIdempotent_DoesNotOverwriteStaffHere_RejectsNonHeatShifts_AndRateLimitsPerIp()
     {
