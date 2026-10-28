@@ -20,6 +20,38 @@ The explicit `npm run db:seed-review` command creates missing demo events withou
 
 To refresh stale demo data, run `npm run db:reseed-review`. It deletes the eight seeder-named events ("Demo Meadow Cup" and so on) with everything under them, but only those that carry the demo mark; any other event, including one that merely shares a name, is left alone and reported. It then creates all eight again from the current time. Back up or branch the database first if you are unsure; the deletes run in one transaction.
 
+## Clear the demo data (one-off)
+
+The owner asked for all demo data to go from production, keeping the one real event, West Mids Pairs (competition 44). `--clear-demo-data` does that (`api/Services/DemoDataCleaner.cs`; what it keeps and deletes is in `docs/decisions.md`, 28 October). Without `--apply` it is a dry run: it runs every delete inside a transaction, prints the counts and rolls back, so nothing is saved and the counts are exactly what `--apply` would remove. It prints which database it is on (host and database name, never credentials), counts per table, competition ids and names, and the names of the clubs it would delete; never a person's name or address. `--expect-name` must match the kept competition's name exactly, so a mistyped id stops the run.
+
+1. Take a backup branch of production first, and keep it until the site has been checked:
+
+   ```sh
+   neon branches create --name backup-before-demo-clear --parent production
+   ```
+
+2. Dry run against production. The command starts the API in Production mode, so it needs a JWT key of at least 32 bytes (a throwaway one is fine, nothing is signed) and an empty `Admin__Key` so the development value in `appsettings.json` isn't picked up:
+
+   ```sh
+   NEON_ENV_FILE=.env.production.local Jwt__Key="$(openssl rand -base64 48)" Admin__Key= \
+     node scripts/api.mjs --clear-demo-data --keep-competition 44 --expect-name "West Mids Pairs" --venue-postcode "<postcode>"
+   ```
+
+   Check the first line names the production host and database. Check that it keeps competition 44 "West Mids Pairs" with its 32 teams, that the list of competitions to delete is what you expect, the account counts, and the list of clubs to delete. The postcode is looked up in the dry run too (it only reads), so a postcode that can't be found shows up here.
+
+3. Apply with the same arguments plus `--apply` (`--venue-postcode` is optional; a postcode that can't be found stops the run before anything is deleted):
+
+   ```sh
+   NEON_ENV_FILE=.env.production.local Jwt__Key="$(openssl rand -base64 48)" Admin__Key= \
+     node scripts/api.mjs --clear-demo-data --keep-competition 44 --expect-name "West Mids Pairs" --venue-postcode "<postcode>" --apply
+   ```
+
+   Everything goes in one transaction. Before committing, it checks that competition 44 still has every session, team, result, entry and so on that it had, and that no row points at something deleted; if either check fails it rolls back and says why. Run it when nobody is using the site: a write to a demo event during the run makes it fail (safely), and the deletes briefly lock those rows.
+
+4. Check the live site (`/api/competitions`, the West Mids Pairs page, signing in). To undo, restore production from the backup branch (`neon branches restore production backup-before-demo-clear`).
+
+The command refuses to run without `--keep-competition` and `--expect-name`, for an id that doesn't exist or whose name doesn't match, or for an event carrying the demo mark. Any unexpected error is reported by its kind only (no database detail) and rolls back. It doesn't run the startup seeding, and it refuses a database with pending migrations. After it, production holds only the real event; `npm run db:seed-review` and `db:seed-history` can still fill a separate review branch.
+
 ## Run locally
 
 Install dependencies in the repository root and in `web`, then build:

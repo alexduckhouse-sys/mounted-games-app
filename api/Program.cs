@@ -301,6 +301,14 @@ if (args.Contains("--import-competition"))
     return;
 }
 
+if (args.Contains(DemoDataCleaner.Flag))
+{
+    // One-off: deletes every competition but --keep-competition, with seasons, seeder accounts and unused clubs.
+    // A dry run unless --apply. Doesn't run DbInitializer, so a dry run writes nothing. See docs/neon-setup.md.
+    Environment.ExitCode = await DemoDataCleaner.RunCommandAsync(app.Services, args, Console.Out, Console.Error);
+    return;
+}
+
 if (migrateDatabase)
 {
     if (!DatabaseConfiguration.UsesPostgres(builder.Configuration))
