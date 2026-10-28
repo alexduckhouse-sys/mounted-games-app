@@ -53,6 +53,8 @@
 }
 
 .heat-grid tbody th, .heat-grid tbody td { height: 52px; border-bottom: 1px solid rgb(var(--mg-ink)); }
+/* The card's own edge closes the table, so the last row has no dark line of its own. */
+.heat-grid tbody tr:last-child > th, .heat-grid tbody tr:last-child > td { border-bottom: 0; }
 .heat-grid tbody tr.heat-row-fav { background: rgb(var(--mg-tint)); box-shadow: inset 3px 0 0 #C08308; }
 .heat-grid tbody tr.heat-row-me { background: rgb(var(--mg-tint)); box-shadow: inset 4px 0 0 rgb(var(--mg-button)); }
 .heat-grid tbody td.heat-rank-cell { padding-left: 12px; text-align: left; font: 700 17px/1 var(--mg-font-display); color: rgb(var(--mg-muted)); }
