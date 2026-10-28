@@ -163,7 +163,7 @@ export const adminCreator: AreaCatalogue<typeof en> = {
   'admin.creator.sections.priceIn': 'Pris mewn punnoedd, {name}',
   'admin.creator.sections.maxEntries': 'Nifer mwyaf y cofrestriadau',
   'admin.creator.sections.maxEntriesFor': 'Nifer mwyaf y cofrestriadau, {name}',
-  'admin.creator.sections.none': 'Dim',
+  'admin.creator.sections.none': 'Dim terfyn',
   'admin.creator.sections.fixed': 'Ni ellir newid y math na’r grŵp oedran ar ôl cadw.',
   'admin.creator.sections.fixedEntries': 'Ni ellir newid y math na’r grŵp oedran ar ôl cadw. Mae ganddi gofrestriadau, felly ni ellir ei thynnu.',
   'admin.creator.sections.removeAria': 'Tynnu {name}',

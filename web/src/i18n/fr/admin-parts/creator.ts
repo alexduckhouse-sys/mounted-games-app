@@ -163,7 +163,7 @@ export const adminCreator: AreaCatalogue<typeof en> = {
   'admin.creator.sections.priceIn': 'Prix en livres, {name}',
   'admin.creator.sections.maxEntries': 'Inscriptions max.',
   'admin.creator.sections.maxEntriesFor': 'Inscriptions max., {name}',
-  'admin.creator.sections.none': 'Aucune',
+  'admin.creator.sections.none': 'Sans limite',
   'admin.creator.sections.fixed': 'Le type et la catégorie d’âge ne peuvent plus être modifiés une fois enregistrés.',
   'admin.creator.sections.fixedEntries': 'Le type et la catégorie d’âge ne peuvent plus être modifiés une fois enregistrés. Elle a des inscriptions, donc elle ne peut pas être retirée.',
   'admin.creator.sections.removeAria': 'Retirer {name}',

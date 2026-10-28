@@ -25,6 +25,8 @@
 .cw-drawer .cw-step[aria-current="step"] { background: rgb(var(--mg-tint) / .6); color: rgb(var(--mg-heading)); }
 .cw-badge { flex: none; width: 24px; height: 24px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; border: 2px solid rgb(var(--mg-control)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-muted)); font: 700 12px/1 var(--mg-font); }
 .cw-step[data-done="true"] .cw-badge { background: rgb(var(--mg-ok)); border-color: rgb(var(--mg-ok)); color: #fff; }
+/* Stable Night's mint is light, so the tick on it is dark navy. */
+[data-theme="dark"] .cw-step[data-done="true"] .cw-badge { color: rgb(var(--mg-ground)); }
 .cw-step[aria-current="step"] .cw-badge { background: rgb(var(--mg-button-ink)); border-color: rgb(var(--mg-button-ink)); color: rgb(var(--mg-button)); }
 .cw-drawer .cw-step[aria-current="step"] .cw-badge { border-color: rgb(var(--mg-heading)); }
 
@@ -89,6 +91,7 @@
 .cw-stp button { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; border: 1.5px solid rgb(var(--mg-heading)); border-radius: 17px; background: transparent; color: rgb(var(--mg-heading)); cursor: pointer; }
 .cw-stp button:disabled { opacity: .35; cursor: default; }
 .cw-stp input { width: 44px; min-height: 34px; padding: 0; border: 0; background: transparent; text-align: center; font: 700 22px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); -moz-appearance: textfield; appearance: textfield; }
+.cw-stp input::placeholder { font: 600 14px/1 var(--mg-font); color: rgb(var(--mg-muted)); }
 .cw-stp input::-webkit-inner-spin-button, .cw-stp input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .cw-stp input:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; border-radius: 8px; }
 .cw-stp-field { display: flex; flex-direction: column; gap: 6px; font: 600 13px/1.2 var(--mg-font); color: rgb(var(--mg-body)); }

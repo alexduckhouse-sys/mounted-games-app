@@ -523,10 +523,37 @@ describe('CompetitionEditor: sections', () => {
     expect(stored().sections[0].maxParticipants).toBe('10');
     fireEvent.change(entries, { target: { value: '99' } });
     expect(stored().sections[0].maxParticipants).toBe('60');
+    fireEvent.change(entries, { target: { value: '1' } });
+    expect(stored().sections[0].maxParticipants).toBe('1');
+    // Down from 1 is "No limit", which is stored as empty (the API treats empty and 0 alike).
+    await userEvent.click(screen.getByRole('button', { name: 'Less: Max entries, Seniors' }));
+    expect(stored().sections[0].maxParticipants).toBe('');
+    expect(entries).toHaveAttribute('placeholder', 'No limit');
+    expect(entries).toHaveValue(null);
+    expect(screen.getByRole('button', { name: 'Less: Max entries, Seniors' })).toBeDisabled();
+    fireEvent.change(entries, { target: { value: '5' } });
+    expect(stored().sections[0].maxParticipants).toBe('5');
     fireEvent.change(entries, { target: { value: '0' } });
-    expect(stored().sections[0].maxParticipants).toBe('1');
-    fireEvent.change(entries, { target: { value: '' } });
-    expect(stored().sections[0].maxParticipants).toBe('1');
+    expect(stored().sections[0].maxParticipants).toBe('');
+  });
+
+  it('lets the price be typed exactly, pence and all, and the box be emptied for free', async () => {
+    seed('sections');
+    mount();
+    const price = screen.getByRole('spinbutton', { name: 'Price in pounds, Seniors' });
+    await userEvent.click(price);
+    await userEvent.type(price, '12.5');
+    expect(stored().sections[0].priceGbp).toBe('12.5');
+    expect(price).toHaveValue(12.5);
+    await userEvent.type(price, '5');
+    expect(stored().sections[0].priceGbp).toBe('12.55');
+    // The steppers move by whole pounds and keep the pence.
+    await userEvent.click(screen.getByRole('button', { name: 'More: Price in pounds, Seniors' }));
+    expect(stored().sections[0].priceGbp).toBe('13.55');
+    await userEvent.clear(price);
+    expect(stored().sections[0].priceGbp).toBe('');
+    await userEvent.tab();
+    expect(price).toHaveValue(0);
   });
 });
 

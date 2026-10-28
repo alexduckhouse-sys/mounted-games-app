@@ -175,7 +175,7 @@ export const adminCreator = {
   'admin.creator.sections.priceIn': 'Price in pounds, {name}',
   'admin.creator.sections.maxEntries': 'Max entries',
   'admin.creator.sections.maxEntriesFor': 'Max entries, {name}',
-  'admin.creator.sections.none': 'None',
+  'admin.creator.sections.none': 'No limit',
   'admin.creator.sections.fixed': 'The type and age group can’t change once saved.',
   'admin.creator.sections.fixedEntries': 'The type and age group can’t change once saved. It has entries, so it can’t be removed.',
   'admin.creator.sections.removeAria': 'Remove {name}',

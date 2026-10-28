@@ -55,10 +55,10 @@ export function SectionsStep({ draft, change, problems, clear }: StepProps<Creat
                 onChange={(v) => update(i, (cur) => setFormat(cur, parseInt(v, 10) as Format))} />
               <RefineChoiceRow label={t('admin.creator.sections.ageGroup')} value={s.ageGroup} options={ages} allowOther disabled={fixed} placeholder={t('admin.creator.choose')}
                 onChange={(ageGroup) => { update(i, { ageGroup }); clear(`section.${i}.ageGroup`); }} />
-              <StepperRow label={t('admin.creator.sections.price')} name={t('admin.creator.sections.priceIn', { name })} value={s.priceGbp || '0'} min={0} max={500}
+              <StepperRow label={t('admin.creator.sections.price')} name={t('admin.creator.sections.priceIn', { name })} value={s.priceGbp || '0'} min={0} max={500} decimals={2} width={76}
                 onChange={(n) => update(i, { priceGbp: n === 0 ? '' : String(n) })} />
-              <StepperRow label={t('admin.creator.sections.maxEntries')} name={t('admin.creator.sections.maxEntriesFor', { name })} value={s.maxParticipants} min={1} max={60} start={10} empty={t('admin.creator.sections.none')}
-                onChange={(n) => update(i, { maxParticipants: String(n) })} />
+              <StepperRow label={t('admin.creator.sections.maxEntries')} name={t('admin.creator.sections.maxEntriesFor', { name })} value={s.maxParticipants} min={0} max={60} start={10} width={88} empty={t('admin.creator.sections.none')}
+                onChange={(n) => update(i, { maxParticipants: n === 0 ? '' : String(n) })} />
               <div className="cw-row" style={{ justifyContent: 'space-between' }}>
                 <span className="cw-t2">{fixed ? t(s.hasEntries ? 'admin.creator.sections.fixedEntries' : 'admin.creator.sections.fixed') : ''}</span>
                 <button type="button" className="cw-btn cw-btn-s cw-btn-d" disabled={draft.sections.length < 2 || !!s.hasEntries} aria-label={t('admin.creator.sections.removeAria', { name })}
