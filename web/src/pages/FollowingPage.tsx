@@ -115,7 +115,7 @@ export function FollowingPage() {
     }
     if (row.last) return <>{t('teams.following.lastOut')} <b className={strong}>{localOrdinal(row.last.place)}</b> · {row.last.competitionName}, {shortDate(row.last.date, false, locale)}</>;
     const count = details.profiles ? clubTeamCount(row.profile.id, details.profiles) : null;
-    return count ? t('teams.following.clubTeams', { count }) : row.history?.profile.clubName ?? row.profile.clubName;
+    return count ? t('teams.following.clubTeams', { count }) : null;
   };
   const group = (list: Row[], label: string) => list.length > 0 && (
     <section aria-label={label}>
@@ -125,7 +125,7 @@ export function FollowingPage() {
           <li key={row.profile.id} className="sp-row !gap-1 !pr-1">
             <Link to={row.entry ? `/competitions/${row.entry.competitionId}/teams/${row.entry.teamId}` : `/team-profiles/${row.profile.id}`} className="sp-grow !text-[rgb(var(--mg-heading))] !no-underline">
               <span className="text-[21px] font-semibold leading-tight">{row.name}</span>
-              <span className="sp-t2">{subOf(row)}</span>
+              {subOf(row) && <span className="sp-t2">{subOf(row)}</span>}
             </Link>
             <button type="button" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[rgb(var(--mg-late-time))]" aria-pressed="true" aria-label={t('teams.unfollow', { name: row.name })} onClick={() => unfollow(row)}>
               <FollowStar on className="h-[22px] w-[22px]" />

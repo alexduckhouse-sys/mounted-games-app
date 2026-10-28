@@ -8,6 +8,10 @@ import { BREAK_CARD_MS, onBreak, SPONSOR_TIERS, sponsorsFor, STREAM_LOGO_MS } fr
 import { SponsorBadge } from '../SponsorBadge';
 import { LEAVE, SPRING } from '../../lib/motion';
 import { useStillMotion } from '../../lite/useStillMotion';
+import { useT } from '../../i18n/LanguageContext';
+import type { MessageKey } from '../../i18n/en';
+
+const TIER_KEYS: MessageKey[] = ['screen.sponsor.headline', 'screen.sponsor.major', 'screen.sponsor.supporter'];
 
 /**
  * Sponsors over the live video. During a break or briefing in this arena, cards (logo and name) rotate in the
@@ -17,6 +21,7 @@ import { useStillMotion } from '../../lite/useStillMotion';
  */
 export function SponsorOverlay({ arenaName, track = true }: { arenaName: string; track?: boolean }) {
   const still = useStillMotion();
+  const t = useT();
   const { overlay } = useOverlay();
   const { competitionId, sponsors, sessions, skip } = useSponsors();
   const cards = sponsorsFor(sponsors, 'BreakStream');
@@ -40,7 +45,9 @@ export function SponsorOverlay({ arenaName, track = true }: { arenaName: string;
     return () => clearInterval(timer);
   }, [track, competitionId, shownId, placement]);
 
-  const tier = sponsor ? (SPONSOR_TIERS.find((t) => t.tier === sponsor.tier)?.label ?? 'Supporter') : '';
+  const tierKey = sponsor ? (SPONSOR_TIERS.some((item) => item.tier === sponsor.tier) ? TIER_KEYS[sponsor.tier] : 'screen.sponsor.supporter') : null;
+  const tier = tierKey ? t(tierKey) : '';
+  const isSupporter = tierKey === 'screen.sponsor.supporter';
   // One sponsor hands over to the next: the old card drops away before the new one lifts in.
   return (
     <AnimatePresence mode="wait">
@@ -53,8 +60,8 @@ export function SponsorOverlay({ arenaName, track = true }: { arenaName: string;
           exit={still ? undefined : { opacity: 0, y: 8, transition: LEAVE }}
           transition={SPRING}
         >
-          <aside className="mg-ov-sponsor-card pointer-events-auto" aria-label={`${tier} sponsor`}>
-            <span className="mg-ov-sponsor-tier">{tier === 'Supporter' ? tier : `${tier} sponsor`}</span>
+          <aside className="mg-ov-sponsor-card pointer-events-auto" aria-label={t('screen.sponsor.tierLabel', { tier })}>
+            <span className="mg-ov-sponsor-tier">{isSupporter ? tier : t('screen.sponsor.tierLabel', { tier })}</span>
             <motion.div
               initial={still ? false : { y: 8, scale: 0.98 }}
               animate={{ y: 0, scale: 1 }}
@@ -69,7 +76,7 @@ export function SponsorOverlay({ arenaName, track = true }: { arenaName: string;
         <motion.aside
           key={`bug-${sponsor.id}`}
           className="mg-ov-sponsor-bug pointer-events-auto absolute bottom-14 right-3"
-          aria-label="Sponsor"
+          aria-label={t('screen.sponsor.one')}
           initial={still ? false : { opacity: 0, y: 8, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={still ? undefined : { opacity: 0, scale: 0.96, transition: LEAVE }}

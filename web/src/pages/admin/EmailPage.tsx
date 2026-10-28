@@ -3,23 +3,25 @@ import { api } from '../../api';
 import { Notice } from '../../components/Notice';
 import { Sheet } from '../../components/Sheet';
 import { useToast } from '../../components/Toast';
+import { useT } from '../../i18n/LanguageContext';
+import { activeLocale, tr } from '../../i18n/translate';
 import { problemMessage } from '../../lib/apiError';
 import type { CompetitionSummary } from '../../types';
 import { RefineHeader, RefineChoiceRow, RefineList, RefinePage, RefineSection } from '../refine/Refine';
 import type { CustomEmailAudienceCount, CustomEmailSummary } from './customEmailTypes';
 import {
-  AUDIENCES, LINK_TO_OPTIONS, MAX_LINKS, audienceLabel, buildBlocks, defaultFooter, describeTarget, emptyTarget, isHttps, linkedParagraphs, loadDraft, saveDraft,
+  AUDIENCES, MAX_LINKS, linkToOptions, audienceLabel, buildBlocks, defaultFooter, describeTarget, emptyTarget, isHttps, linkedParagraphs, loadDraft, saveDraft,
   targetFields, whyNot, withWords, emptyDraft, type EmailDraft, type LinkTarget, type LinkTo,
 } from './emailDraft';
 import { EmailPicture } from './EmailPicture';
 import { pictureFrom, uploadPicture } from './emailUpload';
 import { EmailPreview } from './EmailPreview';
 import { EntriesDigestCard } from './EntriesDigestCard';
+import { people } from './entriesDigestText';
 import '../operations/operations.css';
 import './emailPage.css';
 
-const people = (n: number) => `${n} ${n === 1 ? 'person' : 'people'}`;
-const shortDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+const shortDate = (iso: string) => new Date(iso).toLocaleDateString(activeLocale(), { day: 'numeric', month: 'short' });
 
 /** Problems the API listed for a 400 (what to fix), else its message. */
 function sendProblem(caught: unknown, fallback: string): string {
@@ -35,14 +37,15 @@ type Note = { kind: 'sent'; id: number; sent: number; failed: number } | { kind:
 function TargetFields({ target, onChange, comps, withNothing = false }: {
   target: LinkTarget | null; onChange: (next: LinkTarget | null) => void; comps: CompetitionSummary[]; withNothing?: boolean;
 }) {
-  const options = withNothing ? [{ value: 'nothing' as const, label: 'Nothing' }, ...LINK_TO_OPTIONS] : LINK_TO_OPTIONS;
+  const t = useT();
+  const options = withNothing ? [{ value: 'nothing' as const, label: t('admin.email.nothing') }, ...linkToOptions()] : linkToOptions();
   const value = target?.to ?? 'nothing';
   const needsEvent = target !== null && target.to !== 'address';
   const bad = target?.to === 'address' && target.address.trim() !== '' && !isHttps(target.address);
   return (
     <>
       <RefineChoiceRow<LinkTo | 'nothing'>
-        label="Links to" value={value} options={options}
+        label={t('admin.email.linksTo')} value={value} options={options}
         onChange={(next) => {
           if (next === 'nothing') { onChange(null); return; }
           onChange({ ...(target ?? emptyTarget(comps[0]?.id ?? null)), to: next });
@@ -50,16 +53,16 @@ function TargetFields({ target, onChange, comps, withNothing = false }: {
       />
       {needsEvent && (
         <RefineChoiceRow
-          label="Event" value={target.competitionId === null && comps.length > 0 ? String(comps[0].id) : target.competitionId === null ? '' : String(target.competitionId)} placeholder={comps.length === 0 ? 'No events yet' : 'Choose'}
+          label={t('admin.email.event')} value={target.competitionId === null && comps.length > 0 ? String(comps[0].id) : target.competitionId === null ? '' : String(target.competitionId)} placeholder={comps.length === 0 ? t('admin.email.noEvents') : t('admin.email.choose')}
           options={comps.map((c) => ({ value: String(c.id), label: c.name }))} onChange={(next) => onChange({ ...target, competitionId: Number(next) })}
         />
       )}
       {target?.to === 'address' && (
         <div className="em-addr">
-          <label className="rf-fld">Web address
+          <label className="rf-fld">{t('admin.email.webAddress')}
             <input type="url" inputMode="url" placeholder="https://" value={target.address} onChange={(event) => onChange({ ...target, address: event.target.value })} />
           </label>
-          {bad && <span className="rf-t2 em-err">Web addresses must start with https://</span>}
+          {bad && <span className="rf-t2 em-err">{t('admin.email.httpsOnly')}</span>}
         </div>
       )}
     </>
@@ -68,6 +71,7 @@ function TargetFields({ target, onChange, comps, withNothing = false }: {
 
 /** Write an email to one of the site's lists, as plain text with links or as one picture, and send it a batch at a time. */
 export function EmailPage() {
+  const t = useT();
   const [draft, setDraftState] = useState<EmailDraft>(loadDraft);
   const [counts, setCounts] = useState<CustomEmailAudienceCount[] | null>(null);
   const [comps, setComps] = useState<CompetitionSummary[]>([]);
@@ -97,7 +101,7 @@ export function EmailPage() {
     let cancelled = false;
     api.get<CustomEmailAudienceCount[]>('/admin/custom-emails/audiences')
       .then(({ data }) => { if (!cancelled) setCounts(Array.isArray(data) ? data : []); })
-      .catch(() => { if (!cancelled) { setCounts([]); setError('Couldn’t count who is on each list. Check your signal and try again.'); } });
+      .catch(() => { if (!cancelled) { setCounts([]); setError(tr('admin.email.err.counts')); } });
     api.get<CompetitionSummary[]>('/competitions')
       .then(({ data }) => { if (!cancelled) setComps(Array.isArray(data) ? data : []); }).catch(() => undefined);
     api.get<CustomEmailSummary[]>('/admin/custom-emails')
@@ -166,7 +170,7 @@ export function EmailPage() {
           setSending(null);
           if (data.status === 2) setNote({ kind: 'stopped', done: data.sent + data.failed + data.skipped });
           else if (data.failed > 0) setNote({ kind: 'sent', id, sent: data.sent, failed: data.failed });
-          else toast.show(`Sent to ${people(data.sent)}`);
+          else toast.show(tr('admin.email.sentToast', { people: people(data.sent) }));
           void loadSent();
           return;
         }
@@ -175,7 +179,7 @@ export function EmailPage() {
     } catch (caught) {
       if (!alive.current) return;
       setSending((current) => (current ? { ...current, paused: true } : current));
-      setError(problemMessage(caught, 'Sending stopped because the connection dropped. Carry on when you’re back online.'));
+      setError(problemMessage(caught, tr('admin.email.err.dropped')));
     }
   }
 
@@ -195,7 +199,7 @@ export function EmailPage() {
       void api.get<CustomEmailAudienceCount[]>('/admin/custom-emails/audiences').then(({ data: next }) => { if (alive.current && Array.isArray(next)) setCounts(next); }).catch(() => undefined);
       await drive(data.id, { id: data.id, total: data.total, done: 0, paused: false });
     } catch (caught) {
-      setError(sendProblem(caught, 'Couldn’t send the email. Nothing was sent.'));
+      setError(sendProblem(caught, tr('admin.email.err.send')));
     } finally {
       setBusy(false);
     }
@@ -211,7 +215,7 @@ export function EmailPage() {
       void loadSent();
     } catch (caught) {
       stop.current = false;
-      setError(problemMessage(caught, 'Couldn’t stop the send. Check your signal and try again.'));
+      setError(problemMessage(caught, tr('admin.email.err.stop')));
     }
   }
 
@@ -222,7 +226,7 @@ export function EmailPage() {
       setBusy(false);
       await drive(id, { id, total: data.total, done: data.total - data.remaining, paused: false });
     } catch (caught) {
-      setError(problemMessage(caught, 'Couldn’t try those again. Check your signal and try again.'));
+      setError(problemMessage(caught, tr('admin.email.err.retry')));
     } finally {
       setBusy(false);
     }
@@ -235,81 +239,81 @@ export function EmailPage() {
     try {
       const { data } = await api.post<{ status: number }>('/admin/custom-emails/test', { subject: draft.subject.trim(), audience: draft.audience, blocks });
       if (data.status === 1) setTest('sent');
-      else { setTest('idle'); setError('The test email wasn’t sent. Email may be switched off on this server.'); }
+      else { setTest('idle'); setError(tr('admin.email.err.testOff')); }
     } catch (caught) {
       setTest('idle');
-      setError(sendProblem(caught, 'Couldn’t send the test. Check your signal and try again.'));
+      setError(sendProblem(caught, tr('admin.email.err.test')));
     }
   }
 
-  const sendLabel = recipients === null ? 'Send' : `Send to ${people(recipients)}`;
+  const sendLabel = recipients === null ? t('admin.email.send') : t('admin.email.sendTo', { people: people(recipients) });
   const editing = (patch: Partial<EmailDraft>) => { setTest('idle'); setDraft(patch); };
 
   return (
     <RefinePage wide>
-      <RefineHeader back="/admin" backLabel="Back to site admin" context="Site admin" title="Email" />
+      <RefineHeader back="/admin" backLabel={t('admin.email.backLabel')} context={t('admin.email.context')} title={t('admin.email.title')} />
       <div className="ops-cards ops-tt ops-admin em-page" aria-busy={busy}>
         {error && <Notice>{error}</Notice>}
-        {note?.kind === 'stopped' && <Notice tone="info">Stopped after {people(note.done)}.</Notice>}
+        {note?.kind === 'stopped' && <Notice tone="info">{t('admin.email.stopped', { people: people(note.done) })}</Notice>}
         {note?.kind === 'sent' && (
-          <Notice actionLabel="Send those again" onAction={() => void retry(note.id)} actionDisabled={busy}>
-            Sent to {people(note.sent)}. {note.failed} didn’t go through.
+          <Notice actionLabel={t('admin.email.sendAgain')} onAction={() => void retry(note.id)} actionDisabled={busy}>
+            {t('admin.email.sentSome', { people: people(note.sent), failed: note.failed })}
           </Notice>
         )}
         {toast.node}
 
-        <div className="em-tabs" role="tablist" aria-label="Email">
+        <div className="em-tabs" role="tablist" aria-label={t('admin.email.title')}>
           {(['write', 'preview'] as const).map((id) => (
-            <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)}>{id === 'write' ? 'Write' : 'Preview'}</button>
+            <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)}>{id === 'write' ? t('admin.email.tab.write') : t('admin.email.tab.preview')}</button>
           ))}
         </div>
 
         <div className="em-grid" data-view={view}>
           <div className="em-write">
-            <RefineList as="div" label="Who it goes to">
+            <RefineList as="div" label={t('admin.email.who')}>
               <RefineChoiceRow<`${number}`>
-                label="To" value={`${draft.audience}`}
-                options={AUDIENCES.map((a) => ({ value: `${a.audience}` as `${number}`, label: `${a.label} · ${countOf(a.audience) ?? '…'}` }))}
+                label={t('admin.email.to')} value={`${draft.audience}`}
+                options={AUDIENCES.map((a) => ({ value: `${a.audience}` as `${number}`, label: `${t(a.label)} · ${countOf(a.audience) ?? '…'}` }))}
                 onChange={(next) => editing({ audience: Number(next) as EmailDraft['audience'] })}
               />
               <RefineChoiceRow<'text' | 'picture'>
-                label="Email" value={draft.kind} options={[{ value: 'text', label: 'Text' }, { value: 'picture', label: 'A picture' }]}
+                label={t('admin.email.title')} value={draft.kind} options={[{ value: 'text', label: t('admin.email.kind.text') }, { value: 'picture', label: t('admin.email.kind.picture') }]}
                 onChange={(next) => editing({ kind: next })}
               />
-              <label className="rf-fld em-subj">Subject
+              <label className="rf-fld em-subj">{t('admin.email.subject')}
                 <input value={draft.subject} maxLength={150} placeholder="New: Two-Day Zone Champs" onChange={(event) => editing({ subject: event.target.value })} />
               </label>
             </RefineList>
 
             {draft.kind === 'text' && (
-              <RefineList as="div" label="Email text">
+              <RefineList as="div" label={t('admin.email.textLabel')}>
                 <div className="em-body">
-                  <label className="rf-fld">Message
-                    <textarea className="ops-textarea em-msg" value={draft.message} placeholder="Write your email" maxLength={5000} onChange={(event) => editing({ message: event.target.value })} />
+                  <label className="rf-fld">{t('admin.email.message')}
+                    <textarea className="ops-textarea em-msg" value={draft.message} placeholder={t('admin.email.messagePlaceholder')} maxLength={5000} onChange={(event) => editing({ message: event.target.value })} />
                   </label>
                   {draft.links.length > 0 && (
-                    <ul className="em-links" aria-label="Links in the message">
+                    <ul className="em-links" aria-label={t('admin.email.linksAria')}>
                       {draft.links.map((link, i) => (
                         <li key={`${link.words}-${i}`} className="rf-row">
                           <span className="rf-grow">
                             <span className="rf-t1 em-lnk">{link.words}</span>
-                            <span className="rf-t2">{missing.includes(link.words) ? 'Not in the message any more' : describeTarget(link, eventName)}</span>
+                            <span className="rf-t2">{missing.includes(link.words) ? t('admin.email.notInMessage') : describeTarget(link, eventName)}</span>
                           </span>
-                          <button type="button" className="ops-danger-link" aria-label={`Remove the link on ${link.words}`} onClick={() => editing({ links: draft.links.filter((_, j) => j !== i) })}>Remove</button>
+                          <button type="button" className="ops-danger-link" aria-label={t('admin.email.removeLinkAria', { words: link.words })} onClick={() => editing({ links: draft.links.filter((_, j) => j !== i) })}>{t('admin.email.remove')}</button>
                         </li>
                       ))}
                     </ul>
                   )}
-                  {adder === null && draft.links.length < MAX_LINKS && <button type="button" className="rf-btn em-addbtn" onClick={openAdder}>Add a link</button>}
+                  {adder === null && draft.links.length < MAX_LINKS && <button type="button" className="rf-btn em-addbtn" onClick={openAdder}>{t('admin.email.addLinkOpen')}</button>}
                   {adder !== null && (
                     <div className="em-adder">
-                      <label className="rf-fld">Words to link
+                      <label className="rf-fld">{t('admin.email.wordsToLink')}
                         <input value={adder.words} maxLength={100} placeholder="enter now" onChange={(event) => setAdder({ ...adder, words: event.target.value })} />
                       </label>
                       <TargetFields target={adder.target} comps={comps} onChange={(next) => next && setAdder({ ...adder, target: next })} />
                       <span className="ops-acts em-adder-acts">
-                        <button type="button" className="rf-btn rf-btn-primary" disabled={!adderOk} onClick={addLink}>Add link</button>
-                        <button type="button" className="rf-btn" onClick={() => setAdder(null)}>Cancel</button>
+                        <button type="button" className="rf-btn rf-btn-primary" disabled={!adderOk} onClick={addLink}>{t('admin.email.addLink')}</button>
+                        <button type="button" className="rf-btn" onClick={() => setAdder(null)}>{t('common.cancel')}</button>
                       </span>
                     </div>
                   )}
@@ -318,34 +322,34 @@ export function EmailPage() {
             )}
 
             {draft.kind === 'picture' && (
-              <RefineList as="div" label="Email picture options">
+              <RefineList as="div" label={t('admin.email.pictureOptions')}>
                 <div className="em-body">
-                  <EmailPicture big label="Email picture" title="Drop the picture here, or paste it" picture={draft.picture} onError={setError} onChange={(picture) => editing({ picture })} />
+                  <EmailPicture big label={t('admin.email.pictureLabel')} title={t('admin.email.pictureTitle')} picture={draft.picture} onError={setError} onChange={(picture) => editing({ picture })} />
                 </div>
                 <TargetFields withNothing target={draft.pictureLink} comps={comps} onChange={(next) => editing({ pictureLink: next })} />
               </RefineList>
             )}
 
-            <RefineList as="div" label="Footer">
+            <RefineList as="div" label={t('admin.email.footer')}>
               <div className="rf-row em-foot-head">
-                <span className="rf-grow rf-t1">Footer</span>
-                {draft.footerText !== null && <button type="button" className="rf-btn" onClick={() => editing({ footerText: null })}>Use the usual one</button>}
+                <span className="rf-grow rf-t1">{t('admin.email.footer')}</span>
+                {draft.footerText !== null && <button type="button" className="rf-btn" onClick={() => editing({ footerText: null })}>{t('admin.email.footerUsual')}</button>}
               </div>
               <div className="em-body">
-                <EmailPicture label="Footer picture" title="Add a picture to the footer" picture={draft.footerPicture} onError={setError} onChange={(footerPicture) => editing({ footerPicture })} />
-                {draft.footerPicture && <button type="button" className="ops-danger-link em-rm" onClick={() => editing({ footerPicture: null })}>Remove the picture</button>}
+                <EmailPicture label={t('admin.email.footerPictureLabel')} title={t('admin.email.footerPictureTitle')} picture={draft.footerPicture} onError={setError} onChange={(footerPicture) => editing({ footerPicture })} />
+                {draft.footerPicture && <button type="button" className="ops-danger-link em-rm" onClick={() => editing({ footerPicture: null })}>{t('admin.email.removePicture')}</button>}
                 <textarea
-                  className="em-foottext" aria-label="Footer text" maxLength={1000}
+                  className="em-foottext" aria-label={t('admin.email.footerTextAria')} maxLength={1000}
                   value={draft.footerText ?? defaultFooter(draft.audience)}
                   onChange={(event) => editing({ footerText: event.target.value === defaultFooter(draft.audience) ? null : event.target.value })}
                 />
-                {draft.audience === 0 && <span className="rf-t2">An unsubscribe link is always added for the news list.</span>}
+                {draft.audience === 0 && <span className="rf-t2">{t('admin.email.unsubNote')}</span>}
               </div>
             </RefineList>
           </div>
 
           <div className="em-side">
-            <span className="em-side-lbl">Preview</span>
+            <span className="em-side-lbl">{t('admin.email.sidePreview')}</span>
             <EmailPreview draft={draft} to={toText} />
           </div>
         </div>
@@ -354,52 +358,52 @@ export function EmailPage() {
           <>
             <div className="em-acts">
               <button type="button" className="rf-btn rf-btn-primary" disabled={!canSend} onClick={() => setConfirming(true)}>{sendLabel}</button>
-              <button type="button" className="rf-btn" disabled={!canSend || test === 'sending'} onClick={() => void sendTest()}>{test === 'sent' ? 'Test sent to you' : 'Send me a test'}</button>
+              <button type="button" className="rf-btn" disabled={!canSend || test === 'sending'} onClick={() => void sendTest()}>{test === 'sent' ? t('admin.email.testSent') : t('admin.email.testSend')}</button>
             </div>
             {reason && (draft.subject.trim() || draft.message.trim() || draft.picture) && <p className="rf-note">{reason}</p>}
           </>
         )}
         {sending !== null && (
           <div role="status" className="em-note">
-            <span className="rf-t1">{sending.paused ? `Paused. ${sending.done} of ${sending.total}` : `Sending… ${sending.done} of ${sending.total}`}</span>
+            <span className="rf-t1">{t(sending.paused ? 'admin.email.paused' : 'admin.email.sending', { done: sending.done, total: sending.total })}</span>
             <span className="em-bar" aria-hidden="true"><span style={{ width: `${sending.total > 0 ? Math.round((100 * sending.done) / sending.total) : 0}%` }} /></span>
-            <span className="rf-t2">Keep this page open while it sends.</span>
+            <span className="rf-t2">{t('admin.email.keepOpen')}</span>
             <span className="ops-acts">
-              {sending.paused && <button type="button" className="rf-btn" onClick={() => void drive(sending.id, sending)}>Carry on</button>}
-              <button type="button" className="ops-danger-link" onClick={() => void stopSending()}>Stop sending</button>
+              {sending.paused && <button type="button" className="rf-btn" onClick={() => void drive(sending.id, sending)}>{t('admin.email.carryOn')}</button>}
+              <button type="button" className="ops-danger-link" onClick={() => void stopSending()}>{t('admin.email.stopSending')}</button>
             </span>
           </div>
         )}
 
         <EntriesDigestCard />
 
-        <RefineSection title="Sent" />
-        <RefineList as="div" label="Sent">
-          {sentList === null && <div className="rf-row"><span className="rf-t2" role="status">Loading…</span></div>}
+        <RefineSection title={t('admin.email.sent')} />
+        <RefineList as="div" label={t('admin.email.sent')}>
+          {sentList === null && <div className="rf-row"><span className="rf-t2" role="status">{t('common.loading')}</span></div>}
           {sentList?.map((email) => (
             <div key={email.id} className="rf-row">
               <span className="rf-grow">
                 <span className="rf-t1">{email.subject}</span>
                 <span className="rf-t2">{[
                   shortDate(email.createdAt), audienceLabel(email.audience),
-                  email.status === 0 ? `sending, ${email.total - email.remaining} of ${email.total}` : `${email.sent} sent`,
-                  email.status === 2 ? 'stopped' : `${email.failed} didn’t go`,
+                  email.status === 0 ? t('admin.email.sentList.sending', { done: email.total - email.remaining, total: email.total }) : t('admin.email.sentList.sent', { sent: email.sent }),
+                  email.status === 2 ? t('admin.email.sentList.stopped') : t('admin.email.sentList.failed', { failed: email.failed }),
                 ].join(' · ')}</span>
               </span>
             </div>
           ))}
-          {sentList?.length === 0 && <div className="rf-row"><span className="rf-t2">Nothing sent yet</span></div>}
+          {sentList?.length === 0 && <div className="rf-row"><span className="rf-t2">{t('admin.email.sentList.none')}</span></div>}
         </RefineList>
       </div>
 
       {confirming && (
-        <Sheet title="Send this email?" description={`To ${AUDIENCES.find((a) => a.audience === draft.audience)?.list}, ${people(recipients ?? 0)}. You can’t unsend it.`} onClose={() => setConfirming(false)}>
+        <Sheet title={t('admin.email.sheet.title')} description={t(AUDIENCES.find((a) => a.audience === draft.audience)?.sheet ?? 'admin.email.sheet.descNews', { people: people(recipients ?? 0) })} onClose={() => setConfirming(false)}>
           {({ close }) => (
             <div className="em-confirm">
               <div className="em-confirm-prev"><EmailPreview draft={draft} to={toText} /></div>
               <div className="kit-acts">
                 <button type="button" className="kit-pill kit-pill-fill" onClick={() => close(() => void send())}>{sendLabel}</button>
-                <button type="button" className="kit-pill" onClick={() => close()}>Not yet</button>
+                <button type="button" className="kit-pill" onClick={() => close()}>{t('admin.email.sheet.notYet')}</button>
               </div>
             </div>
           )}

@@ -89,6 +89,11 @@ describe('ToplistView positions', () => {
     expect(items[1]).toHaveTextContent('24');
     expect(items[1]).not.toHaveTextContent('24.01');
     expect(items[1]).toHaveAttribute('data-followed', 'true');
+    // The gold star comes after the name, and only on the followed team.
+    const name = within(items[1]).getByText('Team 2');
+    expect(name.querySelector('.mg-follow-star')).not.toBeNull();
+    expect(name.lastElementChild?.querySelector('.mg-follow-star')).not.toBeNull();
+    expect(items[0].querySelector('.mg-follow-star')?.closest('.hidden')).not.toBeNull();
     expect(items[2]).toHaveTextContent('Team 1');
     expect(screen.getByRole('button', { name: /Team 2/ })).toHaveAttribute('aria-haspopup', 'dialog');
   });

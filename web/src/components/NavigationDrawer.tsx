@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useExitDelay } from '../hooks/useExitDelay';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { CalendarDays, X, Settings, History, SlidersHorizontal, CloudSun, Star, ShoppingBag, ChevronRight, ChevronDown, BarChart3, Trophy, QrCode, Users, IdCard, Mic, Monitor } from 'lucide-react';
+import { CalendarDays, X, Settings, History, SlidersHorizontal, CloudSun, Star, ShoppingBag, ChevronRight, ChevronDown, BarChart3, Trophy, QrCode, Users, IdCard, Mic, Monitor, ClipboardList } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { useLiteMode } from '../lite/LiteModeContext';
@@ -118,6 +118,14 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
 
         <div className="flex flex-1 flex-col gap-5 p-4">
           {groupList.length > 0 && <AgeGroupMenu groups={groupList} base={base} selectedSection={selectedSection} onPick={close} />}
+
+          {organiser && (
+            <nav aria-label="Before the day" className="flex flex-col">
+              <NavLink to={`${base}/operations`} onClick={close} className={({ isActive }) => itemClass(isActive)}>
+                {({ isActive }) => <><ClipboardList className={iconClass(isActive)} />Before the day</>}
+              </NavLink>
+            </nav>
+          )}
 
           {organiser && (
             <nav aria-label="On the day" className="flex flex-col">

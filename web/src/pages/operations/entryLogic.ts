@@ -1,4 +1,5 @@
 import { api } from '../../api';
+import { tr } from '../../i18n/translate';
 import { QR_QUIET_ZONE, qrShape } from '../../lib/qr';
 import { displaySectionName } from '../../lib/section';
 import type {
@@ -23,29 +24,29 @@ export function bucketCounts(signups: SectionSignup[]): Record<EntryFilter, numb
 }
 
 export const FILTERS: Array<{ value: EntryFilter; label: string }> = [
-  { value: 'all', label: 'All' },
-  { value: 'paid', label: 'Paid' },
-  { value: 'pending', label: 'Pending payment' },
-  { value: 'waitlist', label: 'Waitlist' },
-  { value: 'withdrawn', label: 'Withdrawn' },
+  { value: 'all', get label() { return tr('ops2.entries.f.all'); } },
+  { value: 'paid', get label() { return tr('ops2.entries.f.paid'); } },
+  { value: 'pending', get label() { return tr('ops2.entries.pendingPayment'); } },
+  { value: 'waitlist', get label() { return tr('ops2.entries.f.waitlist'); } },
+  { value: 'withdrawn', get label() { return tr('ops2.protest.withdrawn'); } },
 ];
 
 export const ARRIVAL_OPTIONS: Array<{ value: ArrivalWindow | ''; label: string }> = [
-  { value: '', label: 'Not said' },
-  { value: 'FridayEvening', label: 'Friday evening' },
-  { value: 'SaturdayMorning', label: 'Saturday morning' },
-  { value: 'Other', label: 'Other' },
+  { value: '', get label() { return tr('ops2.entries.arr.none'); } },
+  { value: 'FridayEvening', get label() { return tr('ops2.entries.arr.fri'); } },
+  { value: 'SaturdayMorning', get label() { return tr('ops2.entries.arr.sat'); } },
+  { value: 'Other', get label() { return tr('ops2.entries.arr.other'); } },
 ];
 
 export const FEE_DISPOSITION_OPTIONS: Array<{ value: FeeDisposition; label: string; hint: string }> = [
-  { value: 'None', label: 'Nothing recorded', hint: 'No decision on the fee yet.' },
-  { value: 'RefundPending', label: 'Refund to pay', hint: 'You owe them a refund and haven’t sent it.' },
-  { value: 'Refunded', label: 'Refunded', hint: 'You have paid it back. This marks the entry refunded.' },
-  { value: 'Retained', label: 'Fee kept', hint: 'The fee is kept under your rules.' },
-  { value: 'CreditRollover', label: 'Credit for next event', hint: 'The fee carries over as credit.' },
+  { value: 'None', get label() { return tr('ops2.entries.fee.none'); }, get hint() { return tr('ops2.entries.fee.noneHint'); } },
+  { value: 'RefundPending', get label() { return tr('ops2.entries.fee.pending'); }, get hint() { return tr('ops2.entries.fee.pendingHint'); } },
+  { value: 'Refunded', get label() { return tr('ops2.entries.fee.refunded'); }, get hint() { return tr('ops2.entries.fee.refundedHint'); } },
+  { value: 'Retained', get label() { return tr('ops2.entries.fee.kept'); }, get hint() { return tr('ops2.entries.fee.keptHint'); } },
+  { value: 'CreditRollover', get label() { return tr('ops2.entries.fee.credit'); }, get hint() { return tr('ops2.entries.fee.creditHint'); } },
 ];
 
-export const dispositionLabel = (d: FeeDisposition | undefined): string => FEE_DISPOSITION_OPTIONS.find((o) => o.value === (d ?? 'None'))?.label ?? 'Nothing recorded';
+export const dispositionLabel = (d: FeeDisposition | undefined): string => FEE_DISPOSITION_OPTIONS.find((o) => o.value === (d ?? 'None'))?.label ?? tr('ops2.entries.fee.none');
 
 /** A reminder goes out at most once a day to the same entry. */
 export const REMINDER_COOLDOWN_HOURS = 24;
@@ -67,9 +68,9 @@ export function waitlistOfferState(expiresAt: string | null | undefined, now: Da
   const end = new Date(expiresAt).getTime();
   if (!Number.isFinite(end)) return { state: 'none' };
   const ms = end - now.getTime();
-  if (ms <= 0) return { state: 'expired', text: 'Offer ran out' };
+  if (ms <= 0) return { state: 'expired', text: tr('ops2.entries.offerRanOut') };
   const { h, m } = offerTimeLeft(ms);
-  return { state: 'open', text: h > 0 ? `${h}h ${m}m left` : `${m}m left` };
+  return { state: 'open', text: h > 0 ? tr('ops2.entries.hmLeft', { h, m }) : tr('ops2.sponsors.mLeft', { m }) };
 }
 
 /** Whole hours and minutes left of an offer, rounding up to the minute (at least one), for text in any language. */
@@ -99,7 +100,7 @@ export function entriesSummaryText(competitionName: string, signups: SectionSign
       bySection.set(name, (bySection.get(name) ?? 0) + 1);
     }
   }
-  const lines = [`${competitionName} entries`, `Paid ${counts.paid} · Pending payment ${counts.pending} · Waiting list ${counts.waitlist} · Withdrawn ${counts.withdrawn}`];
+  const lines = [tr('ops2.entries.summaryTitle', { name: competitionName }), tr('ops2.entries.summaryCounts', { paid: counts.paid, pending: counts.pending, waitlist: counts.waitlist, withdrawn: counts.withdrawn })];
   for (const [name, n] of bySection) lines.push(`${name}: ${n}`);
   const cap = capacityLines(capacity);
   if (cap.length > 0) lines.push(cap.join(' · '));
@@ -110,10 +111,10 @@ export function entriesSummaryText(competitionName: string, signups: SectionSign
 export function capacityLines(c: CompetitionEntrySettings | null): string[] {
   if (!c) return [];
   const line = (label: string, booked: number | undefined, max: number | null | undefined) => {
-    if (max != null && max > 0) return `${label} ${booked ?? 0} of ${max} booked`;
-    return booked ? `${label} ${booked} booked` : '';
+    if (max != null && max > 0) return tr('ops2.entries.cap.of', { label, booked: booked ?? 0, max });
+    return booked ? tr('ops2.entries.cap.booked', { label, booked }) : '';
   };
-  return [line('Stables', c.stablesBooked, c.maxStables), line('Hook-ups', c.hookupsBooked, c.maxHookups)].filter(Boolean);
+  return [line(tr('ops2.entries.cap.stables'), c.stablesBooked, c.maxStables), line(tr('ops2.entries.cap.hookups'), c.hookupsBooked, c.maxHookups)].filter(Boolean);
 }
 
 /** The stabling pass's QR code as inline SVG markup for the printable page. */
@@ -121,7 +122,7 @@ export function qrSvgMarkup(value: string): string {
   const shape = qrShape(value);
   if (!shape) return '';
   const total = shape.size + QR_QUIET_ZONE * 2;
-  return `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="QR code for this pass" width="160" height="160" viewBox="${-QR_QUIET_ZONE} ${-QR_QUIET_ZONE} ${total} ${total}" shape-rendering="crispEdges"><rect x="${-QR_QUIET_ZONE}" y="${-QR_QUIET_ZONE}" width="${total}" height="${total}" fill="#fff"/><path d="${shape.path}" fill="#000"/></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${tr('ops2.entries.passQr')}" width="160" height="160" viewBox="${-QR_QUIET_ZONE} ${-QR_QUIET_ZONE} ${total} ${total}" shape-rendering="crispEdges"><rect x="${-QR_QUIET_ZONE}" y="${-QR_QUIET_ZONE}" width="${total}" height="${total}" fill="#fff"/><path d="${shape.path}" fill="#000"/></svg>`;
 }
 
 /* ---- API calls (all staff-only; the server checks access to the competition) ---- */

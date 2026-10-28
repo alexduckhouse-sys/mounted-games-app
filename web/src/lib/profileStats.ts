@@ -1,5 +1,6 @@
 import type { StatsGame, StatsRun, StatsSummary } from '../types';
-import { formatPercent, plural } from './stats';
+import { activeLocale, getActiveLang, tr } from '../i18n/translate';
+import { countText, formatPercent } from './stats';
 import { localOrdinal } from './ordinalText';
 
 export interface HeadlineFact { value: string; label: string }
@@ -10,10 +11,10 @@ const oneDecimal = (value: number) => (Math.round(value * 10) / 10).toFixed(1);
 export function headlineFacts(summary: StatsSummary): HeadlineFact[] {
   const podiums = summary.firsts + summary.seconds + summary.thirds;
   return [
-    { value: formatPercent(summary.winPercent), label: `Races won (${summary.wins} of ${summary.races})` },
-    { value: summary.races > 0 ? oneDecimal(summary.points / summary.races) : '—', label: 'Points per race' },
-    { value: summary.averagePlace == null ? '—' : oneDecimal(summary.averagePlace), label: 'Average place' },
-    { value: String(podiums), label: `Podiums in ${plural(summary.competitions, 'competition')}` },
+    { value: formatPercent(summary.winPercent), label: tr('site.stats.racesWonOf', { wins: summary.wins, races: summary.races }) },
+    { value: summary.races > 0 ? oneDecimal(summary.points / summary.races) : '—', label: tr('site.stats.pointsPerRace') },
+    { value: summary.averagePlace == null ? '—' : oneDecimal(summary.averagePlace), label: tr('site.stats.averagePlace') },
+    { value: String(podiums), label: tr('site.stats.podiumsIn', { competitions: countText('competition', summary.competitions) }) },
   ];
 }
 
@@ -32,6 +33,13 @@ export function distinctNames(names: readonly string[]): string[] {
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+/** A short month name: the fixed English abbreviations in English, the browser's own in Welsh and French. */
+function monthName(index: number): string | undefined {
+  if (getActiveLang() === 'en') return MONTHS[index];
+  if (index < 0 || index > 11) return undefined;
+  return new Date(Date.UTC(2000, index, 1)).toLocaleDateString(activeLocale(), { month: 'short', timeZone: 'UTC' });
+}
+
 /**
  * The two short lines under each bar: the competition (its first distinguishing word) and its month, with the year
  * too when the runs span more than one. The date is read as written (its first ten characters), so the viewer's time zone
@@ -43,7 +51,7 @@ export function runLabels(runs: readonly StatsRun[]): string[][] {
   const years = new Set(dates.map((match) => match?.[1]));
   return runs.map((_, index) => {
     const match = dates[index];
-    const month = match ? MONTHS[Number(match[2]) - 1] : undefined;
+    const month = match ? monthName(Number(match[2]) - 1) : undefined;
     const when = month ? (years.size > 1 ? `${month} ${match![1].slice(2)}` : month) : '';
     return [names[index].split(/\s+/)[0], when].filter(Boolean);
   });
@@ -51,23 +59,23 @@ export function runLabels(runs: readonly StatsRun[]): string[][] {
 
 /** What goes over a bar: the place, E for a run that was put out, a dash for one with no place. */
 export function runPlaceText(run: StatsRun): string {
-  if (run.eliminated) return 'E';
-  return run.place != null && run.place > 0 ? localOrdinal(run.place, 'en') : '–';
+  if (run.eliminated) return tr('site.stats.eliminatedInitial');
+  return run.place != null && run.place > 0 ? localOrdinal(run.place) : '–';
 }
 
 /** The whole run in words, for the bar's tip and screen readers: "National, Aug 2026: 2nd, 4 points". */
 export function runDescription(run: StatsRun): string {
-  const result = run.eliminated ? 'put out' : run.place != null && run.place > 0 ? localOrdinal(run.place, 'en') : 'not placed';
-  return `${run.competitionName}, ${run.startDate.slice(0, 10)}: ${result}, ${plural(run.points, 'point')}`;
+  const result = run.eliminated ? tr('site.stats.putOut') : run.place != null && run.place > 0 ? localOrdinal(run.place) : tr('site.stats.notPlaced');
+  return tr('site.stats.runDescription', { name: run.competitionName, date: run.startDate.slice(0, 10), result, points: countText('point', run.points) });
 }
 
 /** "Every Bending run · best 6, worst 3, won 4 of 7": the line above a game's graph. */
 export function gameRunsLine(game: StatsGame, runs: readonly StatsRun[]): string {
-  if (runs.length === 0) return `${game.name} · won ${game.wins} of ${game.races}`;
+  if (runs.length === 0) return tr('site.stats.gameWon', { name: game.name, wins: game.wins, races: game.races });
   const points = runs.map((run) => run.points);
-  const spread = `best ${Math.max(...points)}, worst ${Math.min(...points)}, `;
-  const shown = runs.length < game.races ? `Latest ${plural(runs.length, 'run')} of ${game.name}` : `Every ${game.name} run`;
-  return `${shown} · ${spread}won ${game.wins} of ${game.races}`;
+  const spread = tr('site.stats.bestWorst', { best: Math.max(...points), worst: Math.min(...points) });
+  const shown = runs.length < game.races ? tr('site.stats.latestRuns', { runs: countText('run', runs.length), name: game.name }) : tr('site.stats.everyRun', { name: game.name });
+  return tr('site.stats.runsLine', { shown, spread, wins: game.wins, races: game.races });
 }
 
 /** The average points a run for a game, as the API sent it or worked out from its totals. */

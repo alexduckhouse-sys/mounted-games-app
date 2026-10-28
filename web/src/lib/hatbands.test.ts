@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { HATBAND_PALETTE, formatHatband, hatbandBoxStyle, hatbandColour, hatbandHex, hatbandName, isHatbandHex, parseHatband } from './hatbands';
+import { HATBAND_PALETTE, formatHatband, hatbandBoxStyle, hatbandColour, hatbandHex, hatbandName, isHatbandHex, localHatbandName, parseHatband } from './hatbands';
+import { translate } from '../i18n/translate';
 
 describe('parseHatband', () => {
   it('reads a fixed colour as just a name', () => {
@@ -50,6 +51,18 @@ describe('formatHatband', () => {
   it('round-trips through parseHatband', () => {
     const stored = formatHatband('Lilac', '#B79CED');
     expect(parseHatband(stored)).toEqual({ name: 'Lilac', hex: '#B79CED' });
+  });
+});
+
+describe('localHatbandName', () => {
+  it('translates the fixed colours and the custom label, and leaves typed names alone', () => {
+    const cy = (key: Parameters<typeof translate>[1], values?: Parameters<typeof translate>[2]) => translate('cy', key, values);
+    expect(localHatbandName('Red', cy)).toBe('Coch');
+    expect(localHatbandName('pink', cy)).toBe('Pinc');
+    expect(localHatbandName('#B79CED', cy)).toBe('Lliw personol');
+    expect(localHatbandName('Lilac #B79CED', cy)).toBe('Lilac');
+    expect(localHatbandName('', cy)).toBe('');
+    expect(localHatbandName(null, cy)).toBe('');
   });
 });
 

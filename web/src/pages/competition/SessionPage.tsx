@@ -5,6 +5,7 @@ import { OutboxTransfer } from '../../components/OutboxTransfer';
 import { ArenaHelpSheet } from './ArenaHelpSheet';
 import { setHeatEntryBibOverride } from '../../lib/heatBibOverride';
 import { useWakeLock } from '../../hooks/useWakeLock';
+import { useHideChrome } from '../../components/ScreenChrome';
 import { stripInternalSessionNotes } from '../../lib/gateCheck';
 import { ConfirmOfficialButton } from '../../components/ProvisionalStatus';
 import { useProvisionalState } from '../../hooks/useProvisionalState';
@@ -55,6 +56,7 @@ import { bibAccent } from '../../lib/bib';
 import { StreamControlStrip } from '../../components/stream/StreamControlStrip';
 import { ordinal } from '../../lib/toplist';
 import { statusLetter } from '../../lib/resultStatus';
+import { clubLabel } from '../../lib/clubName';
 
 // Official totals include bonuses, HC exclusions and organiser tie decisions.
 function useCommentatorStandings(competition: CompetitionDetail, sectionId: number, enabled = true): StandingRow[] {
@@ -246,6 +248,8 @@ function SessionScoring() {
   const activeHeat = orderedHeats.find((h) => h.id === activeHeatId) ?? null;
   // Keep the screen on while staff are scoring a heat.
   useWakeLock(Boolean(session && activeHeat && view === 'score' && canManage(competition)));
+  // The scoring screen has its own back button, and no app header or ticker above it.
+  useHideChrome(canManage(competition));
 
   const orderedRaces = useMemo(
     () => (activeHeat?.races ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex),
@@ -687,8 +691,9 @@ function SessionScoring() {
       {canManage(competition) ? (
         <>
           {activeRef && (
-            <div className="-mx-4">
+            <div>
               <HeatPickerBar
+                back={{ to: `/competitions/${competition.id}/scoring${sectionQuery}`, label: 'Back to scoring' }}
                 arena={arena}
                 label={heatBarLabel(activeRef)}
                 items={[
@@ -1729,13 +1734,13 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
     const visible = sectionTeams.filter((t) => showAll || decdTeamIds.has(t.id));
     const m = new Map<string, typeof sectionTeams>();
     for (const t of visible) {
-      const key = t.clubName ?? 'No club';
+      const key = clubLabel(t.clubName);
       if (!m.has(key)) m.set(key, []);
       m.get(key)!.push(t);
     }
     return Array.from(m.entries())
       .map(([club, ts]) => ({ club, teams: ts.slice().sort((a, b) => a.suffix.localeCompare(b.suffix)) }))
-      .sort((a, b) => a.club.localeCompare(b.club));
+      .sort((a, b) => (a.club === '' ? 1 : b.club === '' ? -1 : a.club.localeCompare(b.club)));
   }, [sectionTeams, decdTeamIds, showAll]);
 
   const defaultRaces = 'Litter Lifter\nFlag\nBottle\nMug\nBall and Cone';
@@ -1832,7 +1837,7 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
               )}
               {groupedByClub.map((g) => (
                 <div key={g.club}>
-                  <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400 font-semibold px-1">{g.club}</div>
+                  {g.club && <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400 font-semibold px-1">{g.club}</div>}
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
                     {g.teams.map((t) => {
                       const hasDec = decdTeamIds.has(t.id);

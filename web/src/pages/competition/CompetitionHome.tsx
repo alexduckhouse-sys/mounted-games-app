@@ -6,6 +6,7 @@ import { competitionPhase, entryPhaseOnly } from '../../lib/competitionPhase';
 import { useCompetition } from './context';
 import { MyStewardDutyBanner } from './MyStewardDutyBanner';
 import { SessionsTab } from './SessionsTab';
+import { BeforeTheDayRow } from './BeforeTheDayRow';
 
 const EntryPage = lazy(() => import('./EntryPage').then((module) => ({ default: module.EntryPage })));
 const ScoringTab = lazy(() => import('./ScoringTab').then((module) => ({ default: module.ScoringTab })));
@@ -25,7 +26,7 @@ export function CompetitionHome() {
       </>
     );
   }
-  if (!entryPhaseOnly(competition, canOrganise(competition))) return <><MyStewardDutyBanner /><SessionsTab /></>;
+  if (!entryPhaseOnly(competition, canOrganise(competition))) return <><BeforeTheDayRow competition={competition} /><MyStewardDutyBanner /><SessionsTab /></>;
   return <Suspense fallback={null}><EntryPage /></Suspense>;
 }
 

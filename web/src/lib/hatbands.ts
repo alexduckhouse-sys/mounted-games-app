@@ -1,4 +1,6 @@
 import type { CSSProperties } from 'react';
+import type { MessageKey } from '../i18n/en';
+import type { Translate } from '../i18n/translate';
 import { dotColour, teamBoxStyle } from './teamColours';
 
 /**
@@ -40,6 +42,19 @@ export function formatHatband(name: string, hex?: string | null): string {
 export function hatbandName(stored: string | null | undefined): string {
   const { name, hex } = parseHatband(stored);
   return name || (hex ? 'Custom colour' : '');
+}
+
+const COLOUR_KEYS: Readonly<Record<string, MessageKey>> = {
+  red: 'screen.colour.red', white: 'screen.colour.white', blue: 'screen.colour.blue', yellow: 'screen.colour.yellow',
+  green: 'screen.colour.green', black: 'screen.colour.black', orange: 'screen.colour.orange', pink: 'screen.colour.pink',
+};
+
+/** `hatbandName` in the reader's language: the fixed list's colour names and "Custom colour" are translated, a name an organiser typed is left alone. */
+export function localHatbandName(stored: string | null | undefined, t: Translate): string {
+  const { name, hex } = parseHatband(stored);
+  if (!name) return hex ? t('screen.colour.custom') : '';
+  const key = COLOUR_KEYS[name.toLowerCase()];
+  return key ? t(key) : name;
 }
 
 /** The colour to paint for a hatband: its own colour, else the fixed list, else a guess from the colour word. */

@@ -28,6 +28,7 @@ import { heatName, nextHeats } from '../../lib/following';
 import { computeTeamStats } from '../../lib/teamStats';
 import type { TeamProfile, TeamProfileHistory } from '../seasons/teamProfileTypes';
 import { byDrawnLane } from './laneRules';
+import { clubLabel } from '../../lib/clubName';
 import { blockLabelText, blockNoteText } from '../../lib/toplistText';
 
 
@@ -236,7 +237,7 @@ export function CompetitionTeamPage() {
                 <span>{team.displayName}</span>
               </h1>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-[rgb(var(--mg-muted))]">
-                <span>{[sectionLabel, team.clubName].filter(Boolean).join(' · ')}</span>
+                <span>{[sectionLabel, clubLabel(team.clubName)].filter(Boolean).join(' · ')}</span>
                 {team.isHorsConcours && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
                     <Ban aria-hidden="true" className="h-3 w-3" /> {t('teams.team.horsConcours')}

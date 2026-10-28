@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Check } from 'lucide-react';
+import { Check, ChevronRight } from 'lucide-react';
+import { QrCode } from '../../components/QrCode';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { useLanguage } from '../../i18n/LanguageContext';
@@ -9,7 +10,7 @@ import type { DeclarationForm, SectionSignup, Team } from '../../types';
 import { downloadCsv, safeFilename } from '../../lib/csv';
 import { decFormsCsv } from '../../lib/decFormCsv';
 import type { LockInfo } from '../../lib/decFormDeadline';
-import { decDraftKey, parseDraft, ridersRequired, type DecFormDraft } from '../../lib/decForm';
+import { decDraftKey, decFormStat, parseDraft, ridersRequired, type DecFormDraft } from '../../lib/decForm';
 import { DecFormEditor } from './decform/DecFormEditor';
 import { DecFormList } from './DecFormList';
 import { confirmDialog } from '../../components/ConfirmDialog';
@@ -37,6 +38,7 @@ export function DeclarationsTab() {
   const [forms, setForms] = useState<DeclarationForm[] | null>(null);
   const [signupResult, setSignupResult] = useState<{ userId: string; items: (SectionSignup & { competitionId?: number; declarationAccessGranted?: boolean; linkedTeams?: { id: number; name: string }[] })[] } | null>(null);
   const signupUserId = user?.id;
+  const [showQr, setShowQr] = useState(false);
   const [chosen, setChosen] = useState<number | null>(null);
   // What this competition's dec form asks. Null until it has come back; the standard form if it can't be fetched.
   const [config, setConfig] = useState<DecFormConfig | null>(null);
@@ -203,6 +205,28 @@ export function DeclarationsTab() {
     </button>
   );
 
+  // Teams that are still in the event are the ones expected to send a form.
+  const expected = competition.teams.filter((item) => !item.isWithdrawn);
+  const formsIn = expected.filter((item) => forms?.some((f) => f.teamId === item.id)).length;
+  const stat = forms !== null && expected.length > 0 && (
+    <p className="sp-note !m-0" role="status">{decFormStat(formsIn, expected.length)}</p>
+  );
+  const qr = (
+    <div className="sp-card">
+      <button type="button" className="sp-row" aria-expanded={showQr} onClick={() => setShowQr((open) => !open)}>
+        <span className="sp-grow"><span className="sp-t1 !font-medium">Show dec form QR code</span></span>
+        <ChevronRight aria-hidden="true" className={`sp-chev h-4 w-4 transition-transform ${showQr ? 'rotate-90' : ''}`} strokeWidth={2.5} />
+      </button>
+      {showQr && (
+        <div className="flex items-center gap-3 border-t border-[rgb(var(--mg-rule-soft))] px-4 py-3">
+          <QrCode value={`${window.location.origin}/competitions/${competition.id}/declarations`} label={`QR code for the ${competition.name} dec forms`} className="w-36 rounded-lg border border-[rgb(var(--mg-rule))] bg-white p-2" />
+          <p className="m-0 text-xs text-[rgb(var(--mg-muted))]">Scan to open the dec forms for {competition.name}.</p>
+        </div>
+      )}
+    </div>
+  );
+  const exportFooter = isOrganiser && <div className="flex justify-end">{exportButton}</div>;
+
   const deadlineHeader = (
     <>
       {isOrganiser && (
@@ -211,7 +235,6 @@ export function DeclarationsTab() {
             <RefineDateTimeRow label="Dec forms close" value={lockInfo?.declarationsCloseAt ?? null} disabled={lockBusy}
               eventDays={[new Date(competition.startDate)].filter((d) => !Number.isNaN(d.getTime()))} onChange={(iso) => { void updateLockTime(iso); }} />
           </div>
-          <div className="flex justify-end">{exportButton}</div>
         </div>
       )}
       {lockInfo?.declarationsCloseAt && declarationsClosed && (
@@ -227,6 +250,8 @@ export function DeclarationsTab() {
 
       {lockError && <Notice>{lockError}</Notice>}
       {deleteError && <Notice onDismiss={() => setDeleteError('')}>{deleteError}</Notice>}
+      {stat}
+      {qr}
     </>
   );
 
@@ -237,6 +262,7 @@ export function DeclarationsTab() {
         <PageGrid variant="left" aside={rail}>
           <div className="flex flex-col gap-3">{editor}{cards}</div>
         </PageGrid>
+        {exportFooter}
       </div>
     );
   }
@@ -255,7 +281,7 @@ export function DeclarationsTab() {
       ) : (
         <>
           {myTeams.length > 1 && (
-            <div role="group" aria-label={t('entries.tab.chooseTeam')} className="mg-chips">
+            <div role="group" aria-label={t('entries.tab.chooseTeam')} className="mg-chips !flex-wrap !overflow-visible">
               {myTeams.map((t) => (
                 <button key={t.id} type="button" className="mg-chip" aria-pressed={team?.id === t.id} onClick={() => setChosen(t.id)}>
                   {forms?.some((f) => f.teamId === t.id) && <Check aria-hidden="true" className="h-4 w-4" />}
@@ -269,6 +295,7 @@ export function DeclarationsTab() {
       )}
 
       {cards}
+      {exportFooter}
     </div>
   );
 }

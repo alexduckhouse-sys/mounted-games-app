@@ -6,6 +6,7 @@ import { useToast } from '../../components/Toast';
 import { priceLabel } from '../../lib/money';
 import { paidWord } from '../../lib/paidWord';
 import type { CompetitionDetail, SectionSignup } from '../../types';
+import { clubLabel } from '../../lib/clubName';
 
 export interface ExtendedSectionSignup extends SectionSignup {
   waitingForGuestSpot?: boolean;
@@ -50,7 +51,7 @@ export function EntryManagement({ competition, signups, entriesCloseAt, onChange
     <button type="button" disabled={busy} onClick={() => void saveDate()} className="mg-btn mg-btn-secondary">Save closing date</button>
     {error && <Notice actionLabel="Try again" onAction={() => void saveDate()} actionDisabled={busy}>{error}</Notice>}{toast.node}
     <details><summary className="min-h-11 cursor-pointer font-semibold">Stabling list · {bookings.reduce((sum, s) => sum + (s.stablesCount ?? 0), 0)} stables</summary>
-      {bookings.length === 0 ? <p>No stables booked yet.</p> : <ul>{bookings.map((s) => <li key={s.id}>{s.fullName} · {s.stablingClubOrTeam || s.ponyClubName || s.teamName || 'Unaffiliated'} · {s.stablesCount} {s.stablesCount === 1 ? 'stable' : 'stables'}</li>)}</ul>}
+      {bookings.length === 0 ? <p>No stables booked yet.</p> : <ul>{bookings.map((s) => <li key={s.id}>{[s.fullName, clubLabel(s.stablingClubOrTeam) || clubLabel(s.ponyClubName) || clubLabel(s.teamName), `${s.stablesCount} ${s.stablesCount === 1 ? 'stable' : 'stables'}`].filter(Boolean).join(' · ')}</li>)}</ul>}
     </details>
     <details><summary className="min-h-11 cursor-pointer font-semibold">Entries · {signups.length}</summary>
       <ul className="divide-y divide-[rgb(var(--mg-rule-soft))]">{signups.map((s) => <ManagedSignup key={s.id} signup={s} competition={competition} onChanged={onChanged} />)}</ul>

@@ -8,7 +8,7 @@ describe('tiles', () => {
   it('lists None, Automatic and Back soon first, then the cards', () => {
     expect(OVERLAY_TILES.slice(0, 3).map((t) => t.label)).toEqual(['None', 'Automatic', 'Back soon']);
     expect(OVERLAY_TILES.filter((t) => !t.drawn).map((t) => t.id)).toEqual(['podium', 'result', 'title']);
-    expect(DESK_TILES.map((t) => t.label)).toEqual(['Off', 'Toplist', 'Heat table', 'Podium', 'Race result', 'Up next', 'Race title', 'Sponsors']);
+    expect(DESK_TILES.map((t) => t.label)).toEqual(['Off', 'Toplist', 'Heat table', 'Podium', 'Race result', 'Up next', 'Favourites', 'Race title', 'Sponsors']);
   });
 });
 

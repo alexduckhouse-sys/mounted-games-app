@@ -1,6 +1,4 @@
-import { cy } from './cy/index.ts';
 import { en, type Catalogue, type MessageKey } from './en/index.ts';
-import { fr } from './fr/index.ts';
 import type { Message, MessageValues, PluralForms } from './messages.ts';
 
 /** The languages people can pick, each named in itself. English is the source and the fallback. */
@@ -15,7 +13,43 @@ export type Lang = (typeof LANGUAGES)[number]['id'];
 export const DEFAULT_LANG: Lang = 'en';
 export const LANG_KEY = 'mg.lang';
 
-const CATALOGUES: Record<Lang, Catalogue> = { en, cy, fr };
+// English is bundled: it is the source, the fallback, and what shows while another language is on its way. Welsh and
+// French are separate chunks, fetched only when someone's language is one of them.
+const loaded: Partial<Record<Lang, Catalogue>> = { en };
+const loaders: Record<Exclude<Lang, 'en'>, () => Promise<Catalogue>> = {
+  cy: () => import('./cy/index.ts').then((module) => module.cy),
+  fr: () => import('./fr/index.ts').then((module) => module.fr),
+};
+const loading = new Map<Lang, Promise<boolean>>();
+
+/** True once the language's catalogue is available, so `translate` can answer in it. English always is. */
+export function isLoaded(lang: Lang): boolean {
+  return loaded[lang] !== undefined;
+}
+
+/**
+ * Fetches a language's catalogue (once; repeat calls share the request). Resolves true when it is ready and false when
+ * the chunk failed to load, in which case text stays English and a later call tries again.
+ */
+export function loadCatalogue(lang: Lang): Promise<boolean> {
+  if (isLoaded(lang)) return Promise.resolve(true);
+  const existing = loading.get(lang);
+  if (existing) return existing;
+  const request = loaders[lang as Exclude<Lang, 'en'>]()
+    .then((catalogue) => {
+      loaded[lang] = catalogue;
+      return true;
+    })
+    .catch(() => false)
+    .finally(() => loading.delete(lang));
+  loading.set(lang, request);
+  return request;
+}
+
+/** Forgets a loaded catalogue so tests can exercise the not-yet-loaded state. */
+export function unloadCatalogueForTests(lang: Lang): void {
+  if (lang !== 'en') delete loaded[lang];
+}
 
 export function isLang(value: unknown): value is Lang {
   return LANGUAGES.some((language) => language.id === value);
@@ -93,7 +127,7 @@ function usable(message: Message | undefined): message is Message {
 
 /** Looks a key up in the language's catalogue, falling back to English for anything missing. */
 export function translate(lang: Lang, key: MessageKey, values?: MessageValues): string {
-  const own: Message | undefined = CATALOGUES[lang]?.[key];
+  const own: Message | undefined = loaded[lang]?.[key];
   const fallback: Message | undefined = en[key];
   // English is complete by construction (the key type comes from it). If a key somehow has no text anywhere,
   // show nothing rather than the raw key.

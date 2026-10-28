@@ -1,6 +1,8 @@
+import { useT } from '../../i18n/LanguageContext';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { RefreshCw, Save } from 'lucide-react';
 import { api } from '../../api';
+import { activeLocale, tr } from '../../i18n/translate';
 import { Notice } from '../../components/Notice';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../auth/AuthContext';
@@ -14,6 +16,7 @@ import { SelectField } from '../../components/SelectField';
 import { NumberField } from '../../components/NumberField';
 import { formatPoints } from '../../lib/formatPoints';
 import { manualPoints } from '../../lib/raceScoring';
+import type { MessageKey } from '../../i18n/en/index';
 import type { Heat, Race } from '../../types';
 import { ProtestsPanel } from './ProtestsPanel';
 
@@ -34,6 +37,7 @@ export function ScoreAuditPanel(props: ScoreAuditProps) {
 
 function ScoreAuditRecord({ raceId, onChanged, heat, race = null }: ScoreAuditProps) {
   const { canManage } = useAuth();
+  const t = useT();
   const { competition } = useCompetition();
   const [score, setScore] = useState<RaceScore | null>(null);
   const [history, setHistory] = useState<RaceScoreHistory[]>([]);
@@ -56,11 +60,11 @@ function ScoreAuditRecord({ raceId, onChanged, heat, race = null }: ScoreAuditPr
       setDraft(scoreResponse.data.results.filter((result) => !result.isSitOut).map((result) => ({ ...result })));
       setHistory(historyResponse.data);
     } catch (loadError) {
-      setError(apiMessage(loadError, 'Couldn’t load the score record. Check your signal and try again.'));
+      setError(apiMessage(loadError, t('ops2.audit.loadError')));
     } finally {
       setLoading(false);
     }
-  }, [raceId]);
+  }, [raceId, t]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -71,7 +75,7 @@ function ScoreAuditRecord({ raceId, onChanged, heat, race = null }: ScoreAuditPr
     event.preventDefault();
     if (!score || busy || loading) return;
     if (!correctionReason.trim()) {
-      setError('Add a reason for this correction.');
+      setError(t('ops2.audit.needReason'));
       return;
     }
     setBusy(true);
@@ -98,78 +102,78 @@ function ScoreAuditRecord({ raceId, onChanged, heat, race = null }: ScoreAuditPr
         reason: correctionReason.trim(),
       });
       setCorrectionReason('');
-      toast.show('Correction saved');
+      toast.show(t('ops2.audit.saved'));
       await load();
       onChanged?.();
     } catch (saveError) {
-      setError(apiMessage(saveError, 'Couldn’t save the correction. Refresh the score, check your signal and try again.'));
+      setError(apiMessage(saveError, t('ops2.audit.saveError')));
     } finally {
       setBusy(false);
     }
   }
 
-  if (loading) return <div>{toast.node}<p role="status" className="rf-note">Loading score history…</p></div>;
+  if (loading) return <div>{toast.node}<p role="status" className="rf-note">{t('ops2.audit.loading')}</p></div>;
 
   const heading = `score-audit-${raceId}`;
   return (
     <section aria-labelledby={heading}>
-      <RefineSection title="Score record" meta={`Revision ${score?.revision ?? 0}`} />
-      <h2 id={heading} className="sr-only">Score record</h2>
-      {error && <Notice actionLabel={score ? undefined : 'Try again'} onAction={() => void load()}>{error}</Notice>}
+      <RefineSection title={t('ops2.audit.record')} meta={t('ops2.audit.revision', { n: score?.revision ?? 0 })} />
+      <h2 id={heading} className="sr-only">{t('ops2.audit.record')}</h2>
+      {error && <Notice actionLabel={score ? undefined : t('common.tryAgain')} onAction={() => void load()}>{error}</Notice>}
       {toast.node}
 
       {score && <>
         <RefineList as="div">
           <div className="rf-row">
             <span className="rf-grow">
-              <span className="rf-t1">Revision {score.revision}</span>
+              <span className="rf-t1">{t('ops2.audit.revision', { n: score.revision })}</span>
             </span>
-            <button type="button" className="rf-btn rf-btn-text" aria-label="Refresh score record" onClick={() => void load()} disabled={loading || busy}><RefreshCw aria-hidden="true" className={`h-4 w-4 ${loading ? 'animate-spin motion-reduce:animate-none' : ''}`} />Refresh</button>
+            <button type="button" className="rf-btn rf-btn-text" aria-label={t('ops2.audit.refreshAria')} onClick={() => void load()} disabled={loading || busy}><RefreshCw aria-hidden="true" className={`h-4 w-4 ${loading ? 'animate-spin motion-reduce:animate-none' : ''}`} />{t('common.refresh')}</button>
           </div>
         </RefineList>
 
         {canManage(competition) && draft.length > 0 && <>
-          <RefineSection title="Corrections" />
+          <RefineSection title={t('ops2.audit.corrections')} />
           <RefineList as="div">
-            <RefineDisclosure title="Correct placings" sub="Every correction needs a reason">
+            <RefineDisclosure title={t('ops2.audit.correctPlacings')} sub={t('ops2.audit.everyReason')}>
               <form className="ops-form ops-panel" onSubmit={updateScore}>
                 <ul className="ops-places">{draft.map((result, index) => (
                   <li key={result.teamId} className="ops-place">
-                    <span className="rf-grow"><span className="rf-t1">Team {result.teamId}</span><span className="rf-t2">Points now {formatPoints(result.points)}</span></span>
-                    <label className="rf-fld ops-place-field">Place<NumberField aria-label={`Place for team ${result.teamId}`}  min="1" disabled={result.eliminated} value={result.place || 1} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, place: Number(event.target.value) } : item))} /></label>
-                    <label className="rf-fld ops-place-field">Points<NumberField decimal aria-label={`Points for team ${result.teamId}`} min="0" step="0.5" disabled={result.eliminated} value={result.eliminated ? 0 : (result.pointsText ?? String(result.points))} onChange={(event) => {
+                    <span className="rf-grow"><span className="rf-t1">{t('ops2.audit.team', { id: result.teamId })}</span><span className="rf-t2">{t('ops2.audit.pointsNow', { points: formatPoints(result.points) })}</span></span>
+                    <label className="rf-fld ops-place-field">{t('ops2.audit.place')}<NumberField aria-label={t('ops2.audit.placeFor', { id: result.teamId })}  min="1" disabled={result.eliminated} value={result.place || 1} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, place: Number(event.target.value) } : item))} /></label>
+                    <label className="rf-fld ops-place-field">{t('ops2.audit.points')}<NumberField decimal aria-label={t('ops2.audit.pointsFor', { id: result.teamId })} min="0" step="0.5" disabled={result.eliminated} value={result.eliminated ? 0 : (result.pointsText ?? String(result.points))} onChange={(event) => {
                       const raw = event.target.value;
                       const parsed = Number(raw);
                       setDraft((current) => current.map((item, itemIndex) => itemIndex === index
                         ? { ...item, pointsText: raw, points: raw.trim() === '' || Number.isNaN(parsed) ? item.points : parsed, pointsEdited: true }
                         : item));
                     }} /></label>
-                    <label className="ops-elim"><input aria-label={`Eliminated team ${result.teamId}`} type="checkbox" checked={result.eliminated} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, eliminated: event.target.checked, status: event.target.checked ? effectiveStatus(true, item.status) : 0 } : item))} />Did not finish</label>
-                    {result.eliminated && <label className="rf-fld ops-place-field">Why<SelectField aria-label={`Reason for team ${result.teamId}`} value={effectiveStatus(true, result.status)} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, status: Number(event.target.value) } : item))}>{STATUS_CHOICES.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</SelectField></label>}
-                    <label className="rf-fld ops-place-field">Referee note<input aria-label={`Referee note for team ${result.teamId}`} type="text" maxLength={500} value={result.refereeNote ?? ''} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, refereeNote: event.target.value } : item))} /></label>
+                    <label className="ops-elim"><input aria-label={t('ops2.audit.eliminatedFor', { id: result.teamId })} type="checkbox" checked={result.eliminated} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, eliminated: event.target.checked, status: event.target.checked ? effectiveStatus(true, item.status) : 0 } : item))} />{t('competition.status.dnf')}</label>
+                    {result.eliminated && <label className="rf-fld ops-place-field">{t('ops2.audit.why')}<SelectField aria-label={t('ops2.audit.reasonFor', { id: result.teamId })} value={effectiveStatus(true, result.status)} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, status: Number(event.target.value) } : item))}>{STATUS_CHOICES.map((choice) => <option key={choice.value} value={choice.value}>{statusChoiceLabel(choice)}</option>)}</SelectField></label>}
+                    <label className="rf-fld ops-place-field">{t('ops2.audit.refNote')}<input aria-label={t('ops2.audit.refNoteFor', { id: result.teamId })} type="text" maxLength={500} value={result.refereeNote ?? ''} onChange={(event) => setDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, refereeNote: event.target.value } : item))} /></label>
                   </li>
                 ))}</ul>
-                <label className="rf-fld">Correction reason<textarea className="ops-note-input" required maxLength={1000} value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} /></label>
-                <button type="submit" className="rf-btn rf-btn-primary" disabled={busy || loading}><Save aria-hidden="true" className="h-4 w-4" />{busy ? 'Saving…' : 'Save correction'}</button>
+                <label className="rf-fld">{t('ops2.audit.reason')}<textarea className="ops-note-input" required maxLength={1000} value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} /></label>
+                <button type="submit" className="rf-btn rf-btn-primary" disabled={busy || loading}><Save aria-hidden="true" className="h-4 w-4" />{busy ? t('common.saving') : t('ops2.audit.saveCorrection')}</button>
               </form>
             </RefineDisclosure>
           </RefineList>
         </>}
 
         {heat && canManage(competition) && (
-          <ProtestsPanel competitionId={competition.id} raceId={raceId} heat={heat} race={race} empty="No protests on this race." />
+          <ProtestsPanel competitionId={competition.id} raceId={raceId} heat={heat} race={race} empty={t('ops2.audit.noProtests')} />
         )}
 
-        <RefineSection title="History" />
+        <RefineSection title={t('ops2.audit.history')} />
         {history.length === 0
-          ? <RefineNote>No score changes have been recorded yet.</RefineNote>
-          : <RefineList as="ol" label="Score history">{history.map((entry) => (
+          ? <RefineNote>{t('ops2.audit.noChanges')}</RefineNote>
+          : <RefineList as="ol" label={t('ops2.audit.historyLabel')}>{history.map((entry) => (
             <li key={entry.revision} className="rf-row ops-history">
               <span className="rf-grow">
                 <span className="rf-t1">{eventLabel(entry.kind)}</span>
-                <span className="rf-t2">Revision {entry.revision} · {new Date(entry.createdAt).toLocaleString('en-GB')}</span>
+                <span className="rf-t2">{t('ops2.audit.revisionAt', { n: entry.revision, when: new Date(entry.createdAt).toLocaleString(activeLocale()) })}</span>
                 <span className="ops-reason">{entry.reason}</span>
-                {(entry.actorLabel || entry.actorUserId) && <span className="rf-t2">By <code className="break-all">{entry.actorLabel || entry.actorUserId}</code></span>}
+                {(entry.actorLabel || entry.actorUserId) && <span className="rf-t2">{t('ops2.audit.by', { who: '' })}<code className="break-all">{entry.actorLabel || entry.actorUserId}</code></span>}
                 <span className="rf-t2">{scoreSummary(entry.before)} → {scoreSummary(entry.after)}</span>
               </span>
             </li>
@@ -179,16 +183,21 @@ function ScoreAuditRecord({ raceId, onChanged, heat, race = null }: ScoreAuditPr
   );
 }
 
+const STATUS_KEYS: Record<string, MessageKey> = {
+  E: 'competition.status.eliminated', DNS: 'competition.status.dns', DNF: 'competition.status.dnf', R: 'competition.status.retired',
+};
+const statusChoiceLabel = (choice: { letter: string; label: string }): string => (STATUS_KEYS[choice.letter] ? tr(STATUS_KEYS[choice.letter]) : choice.label);
+
 function requestId(action: string): string {
   const id = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   return `${action}-${id}`;
 }
 
 function eventLabel(kind: RaceScoreEventKind): string {
-  return ({ 1: 'Results recorded', 2: 'Results corrected', 3: 'Signed off', 4: 'Reopened' } as const)[kind];
+  return tr(({ 1: 'ops2.audit.ev.recorded', 2: 'ops2.audit.ev.corrected', 3: 'ops2.audit.ev.signedOff', 4: 'ops2.audit.ev.reopened' } as const)[kind]);
 }
 
 function scoreSummary(results: ScorePlace[]): string {
-  if (results.length === 0) return 'No results';
-  return results.map((result) => result.isSitOut ? `Team ${result.teamId}: S` : result.eliminated ? `Team ${result.teamId}: ${statusLetter(true, result.status)}` : `Team ${result.teamId}: ${result.place}`).join(', ');
+  if (results.length === 0) return tr('ops2.audit.noResults');
+  return results.map((result) => tr('ops2.audit.teamResult', { id: result.teamId, result: result.isSitOut ? 'S' : result.eliminated ? String(statusLetter(true, result.status)) : result.place })).join(', ');
 }

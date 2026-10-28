@@ -15,9 +15,13 @@ import { formatPoints } from '../../lib/formatPoints';
 import { advanceTvStandingsOrSlide, paginateTvStandings } from '../../lib/tvStandingsPagination';
 import { DIAGONAL_HIDDEN_LEFT, DIAGONAL_HIDDEN_RIGHT, DIAGONAL_SHOWN, EASE_IN, EASE_OUT } from '../../lib/motion';
 import { useStillMotion } from '../../lite/useStillMotion';
-import { statusLabel, statusLetter } from '../../lib/resultStatus';
+import { statusLetter } from '../../lib/resultStatus';
 import { displaySectionName } from '../../lib/section';
-import { buildToplist, ordinal, sectionScoreVersion } from '../../lib/toplist';
+import { buildToplist, sectionScoreVersion } from '../../lib/toplist';
+import { localOrdinal as ordinal } from '../../lib/ordinalText';
+import { resultStatusText } from '../../lib/toplistText';
+import { useT } from '../../i18n/LanguageContext';
+import type { MessageKey } from '../../i18n/en';
 import { useLiveHub } from '../../live/useLiveHub';
 import type { Heat, Race, Session, StandingRow, Team } from '../../types';
 import { useCompetition } from './context';
@@ -30,11 +34,11 @@ import { SAVED_STANDINGS_NOTICE_MS } from '../../offline/savedCopies';
 
 type TvSlide = 'lanes' | 'heat' | 'latest' | 'standings';
 
-const SLIDES: { id: TvSlide; label: string }[] = [
-  { id: 'lanes', label: 'In the Ring & Next Heat' },
-  { id: 'heat', label: 'Current Heat Table' },
-  { id: 'latest', label: 'Latest Race Result' },
-  { id: 'standings', label: 'Live Section Standings' },
+const SLIDES: { id: TvSlide; label: MessageKey }[] = [
+  { id: 'lanes', label: 'screen.tv.slide.lanes' },
+  { id: 'heat', label: 'screen.tv.slide.heat' },
+  { id: 'latest', label: 'screen.tv.slide.latest' },
+  { id: 'standings', label: 'screen.tv.slide.standings' },
 ];
 
 const SLIDE_IDS = SLIDES.map((s) => s.id);
@@ -52,6 +56,7 @@ function pickInitialSectionId(sessions: Session[], sectionIds: number[], request
 
 export function TvKioskPage() {
   usePageWidth('full');
+  const t = useT();
   const { competition, reload, sponsors = [] } = useCompetition();
   const { canOrganise } = useAuth();
   const canControlStreams = canOrganise(competition);
@@ -109,10 +114,10 @@ export function TvKioskPage() {
   });
 
   usePageHeader({
-    title: 'TV Kiosk',
+    title: t('screen.tv.title'),
     subtitle: competition.name,
     backTo: `/competitions/${competition.id}/scoring${sectionId != null ? `?section=${sectionId}` : ''}`,
-    backLabel: 'Back to scoring',
+    backLabel: t('screen.tv.backToScoring'),
   });
 
   const scoreVersion = useMemo(
@@ -168,7 +173,7 @@ export function TvKioskPage() {
   };
 
   const section = competition.sections.find((s) => s.id === sectionId) ?? null;
-  const sectionName = displaySectionName(section?.displayName) || 'All sections';
+  const sectionName = displaySectionName(section?.displayName) || t('screen.tv.allSections');
 
   const teamById = useMemo(() => {
     const map = new Map<number, Team>();
@@ -204,7 +209,8 @@ export function TvKioskPage() {
         const finalsPoints = detail?.final?.points ?? 0;
         return {
           teamId: row.teamId,
-          rankLabel: toplist.started ? `${ordinal(row.position)}${row.joint ? '=' : ''}` : '—',
+          rank: toplist.started ? row.position : null,
+          joint: row.joint,
           bibColour: team?.bibColour ?? st?.bibColour ?? null,
           teamName: row.teamName,
           heatPoints,
@@ -219,7 +225,8 @@ export function TvKioskPage() {
       .sort((a, b) => a.displayName.localeCompare(b.displayName));
     return sectionTeams.map((t, index) => ({
       teamId: t.id,
-      rankLabel: ordinal(index + 1),
+      rank: index + 1,
+      joint: false,
       bibColour: t.bibColour ?? null,
       teamName: t.displayName,
       heatPoints: 0,
@@ -282,7 +289,7 @@ export function TvKioskPage() {
 
   return (
     <div className="flex min-h-[82vh] flex-col justify-between gap-4 rounded-xl bg-[rgb(var(--mg-surface))] p-4 shadow-sm sm:p-6">
-      {standingsStale && (standings.length ? savedNotice && <Notice tone="info">Showing saved standings while results refresh.</Notice> : <Notice tone="info">Waiting for official standings.</Notice>)}
+      {standingsStale && (standings.length ? savedNotice && <Notice tone="info">{t('competition.scoring.savedStandings')}</Notice> : <Notice tone="info">{t('screen.tv.waitingStandings')}</Notice>)}
       {/* Top TV Header & Controls */}
       <header className="flex flex-col gap-3 border-b-2 border-[rgb(var(--mg-heading))] pb-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -295,7 +302,7 @@ export function TvKioskPage() {
               }`}
             >
               <Radio className="h-3.5 w-3.5" aria-hidden="true" />
-              {connected ? 'Live Arena Feed' : 'Standby Feed'}
+              {connected ? t('screen.tv.feedLive') : t('screen.tv.feedStandby')}
             </span>
             <div>
               <h1 className="mg-display m-0 text-2xl font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))] sm:text-3xl">
@@ -308,9 +315,9 @@ export function TvKioskPage() {
             {competition.sections.length > 1 && (
               <>
                 <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
-                  <span>Section</span>
+                  <span>{t('teams.list.section')}</span>
                   <select
-                    aria-label="Section filter"
+                    aria-label={t('screen.tv.sectionFilter')}
                     value={sectionId ?? ''}
                     onChange={(e) => chooseSection(Number(e.target.value))}
                     className="min-h-10 rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] px-2.5 py-1.5 text-sm font-semibold text-[rgb(var(--mg-ink))]"
@@ -338,7 +345,7 @@ export function TvKioskPage() {
                     autoFollowLive ? 'mg-btn-primary' : 'mg-btn-secondary'
                   }`}
                 >
-                  Auto-follow live section
+                  {t('screen.tv.autoFollow')}
                 </button>
               </>
             )}
@@ -346,7 +353,7 @@ export function TvKioskPage() {
             <button
               type="button"
               onClick={() => stepSlide(-1)}
-              aria-label="Previous slide"
+              aria-label={t('screen.tv.prevSlide')}
               className="mg-btn mg-btn-secondary !min-h-10 !px-2.5"
             >
               <ChevronLeft className="h-4 w-4" aria-hidden="true" />
@@ -355,16 +362,16 @@ export function TvKioskPage() {
               type="button"
               onClick={() => setPlaying((p) => !p)}
               aria-pressed={!playing}
-              aria-label={playing ? 'Pause rotation' : 'Resume rotation'}
+              aria-label={playing ? t('screen.tv.pauseRotation') : t('screen.tv.resumeRotation')}
               className="mg-btn mg-btn-secondary !min-h-10 !px-3 text-xs font-bold"
             >
               {playing ? <Pause className="h-4 w-4" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
-              {playing ? 'Pause' : 'Play'}
+              {playing ? t('screen.tv.pause') : t('teams.stream.play')}
             </button>
             <button
               type="button"
               onClick={() => stepSlide(1)}
-              aria-label="Next slide"
+              aria-label={t('screen.tv.nextSlide')}
               className="mg-btn mg-btn-secondary !min-h-10 !px-2.5"
             >
               <ChevronRight className="h-4 w-4" aria-hidden="true" />
@@ -378,7 +385,7 @@ export function TvKioskPage() {
                 showStreamControls ? 'mg-btn-primary' : 'mg-btn-secondary'
               }`}
             >
-              <SlidersHorizontal className="h-4 w-4" aria-hidden="true" /> Stream Controls
+              <SlidersHorizontal className="h-4 w-4" aria-hidden="true" /> {t('screen.tv.streamControls')}
             </button>)}
 
             <button
@@ -386,7 +393,7 @@ export function TvKioskPage() {
               onClick={() => setShowQrModal(true)}
               className="mg-btn mg-btn-secondary !min-h-10 !px-3 text-xs font-bold"
             >
-              <QrCodeIcon className="h-4 w-4" aria-hidden="true" /> QR Access
+              <QrCodeIcon className="h-4 w-4" aria-hidden="true" /> {t('screen.tv.qrAccess')}
             </button>
 
             <button
@@ -402,20 +409,20 @@ export function TvKioskPage() {
               }}
               className="mg-btn mg-btn-secondary !min-h-10 !px-3 text-xs font-bold"
             >
-              <Maximize2 className="h-4 w-4" aria-hidden="true" /> Full screen
+              <Maximize2 className="h-4 w-4" aria-hidden="true" /> {t('teams.stream.fullScreen')}
             </button>
 
             <Link
               to={`/competitions/${competition.id}/commentary${sectionId != null ? `?section=${sectionId}` : ''}`}
               className="mg-btn mg-btn-secondary !min-h-10 !px-3 text-xs font-bold"
             >
-              <Mic className="h-4 w-4" aria-hidden="true" /> PA Desk
+              <Mic className="h-4 w-4" aria-hidden="true" /> {t('screen.tv.paDesk')}
             </Link>
             <Link
               to={`/competitions/${competition.id}/scoring${sectionId != null ? `?section=${sectionId}` : ''}`}
               className="mg-btn mg-btn-secondary !min-h-10 !px-3 text-xs font-bold"
             >
-              Scoring
+              {t('screen.tv.scoring')}
             </Link>
           </div>
         </div>
@@ -432,7 +439,7 @@ export function TvKioskPage() {
 
         {/* Slide selector pills + Top Sponsor Logos */}
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="mg-seg" role="group" aria-label="TV scoreboard slide">
+          <div className="mg-seg" role="group" aria-label={t('screen.tv.slideGroup')}>
             {SLIDES.map((s) => (
               <button
                 key={s.id}
@@ -440,14 +447,14 @@ export function TvKioskPage() {
                 aria-pressed={slide === s.id}
                 onClick={() => setSlide(s.id)}
               >
-                {s.label}
+                {t(s.label)}
               </button>
             ))}
           </div>
 
           {sponsors.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2" aria-label="Event sponsors">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">Sponsored by</span>
+            <div className="flex flex-wrap items-center gap-2" aria-label={t('screen.tv.sponsorsLabel')}>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">{t('screen.tv.sponsoredBy')}</span>
               {sponsors.slice(0, 4).map((sp) => (
                 <div key={sp.id} className="rounded border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] px-2 py-1">
                   <SponsorBadge sponsor={sp} />
@@ -469,28 +476,28 @@ export function TvKioskPage() {
             exit={still ? undefined : { clipPath: DIAGONAL_HIDDEN_RIGHT, transition: { duration: 0.34, ease: EASE_IN } }}
           >
             {slide === 'lanes' && (
-              <section aria-label="In the Ring and Next Heat Lane Draw" className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <section aria-label={t('screen.tv.laneDrawLabel')} className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                 <HeatLaneCard
-                  badge="In the Ring"
+                  badge={t('screen.tv.badgeRing')}
                   item={currentHeatItem}
                   teamById={teamById}
                   standingByTeamId={standingByTeamId}
                   laneHatbands={competition.laneHatbands}
-                  emptyText="No active heat in the ring right now."
+                  emptyText={t('screen.tv.emptyRing')}
                 />
                 <HeatLaneCard
-                  badge="Next Heat Lane Draw"
+                  badge={t('screen.tv.badgeNext')}
                   item={nextHeatItem}
                   teamById={teamById}
                   standingByTeamId={standingByTeamId}
                   laneHatbands={competition.laneHatbands}
-                  emptyText="No upcoming heat scheduled after the current heat."
+                  emptyText={t('screen.tv.emptyNext')}
                 />
               </section>
             )}
 
             {slide === 'heat' && (
-              <section aria-label="Current Heat Table" className="mg-card overflow-hidden p-4">
+              <section aria-label={t('screen.tv.slide.heat')} className="mg-card overflow-hidden p-4">
                 {currentHeatItem ? (
                   <HeatScores
                     session={currentHeatItem.session}
@@ -499,38 +506,38 @@ export function TvKioskPage() {
                     embedded
                   />
                 ) : (
-                  <p className="p-4 text-base text-[rgb(var(--mg-muted))]">No active heat in this section yet.</p>
+                  <p className="p-4 text-base text-[rgb(var(--mg-muted))]">{t('screen.tv.noActiveHeat')}</p>
                 )}
               </section>
             )}
 
             {slide === 'latest' && (
-              <section aria-label="Latest Race Result" className="mg-card overflow-hidden">
+              <section aria-label={t('screen.tv.slide.latest')} className="mg-card overflow-hidden">
                 <div className="flex flex-wrap items-baseline justify-between gap-2 border-b-2 border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-ground))] px-4 py-3">
                   <div className="flex items-center gap-2">
                     <Monitor className="h-5 w-5 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
                     <h2 className="mg-display m-0 text-xl font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-                      Latest Race Result
+                      {t('screen.tv.slide.latest')}
                     </h2>
                   </div>
                   {latestRaceItem && (
                     <span className="text-sm font-bold text-[rgb(var(--mg-body))]">
-                      {latestRaceItem.session.name} · {latestRaceItem.heat.label || 'Heat'} · {latestRaceItem.race.name}
+                      {latestRaceItem.session.name} · {latestRaceItem.heat.label || t('screen.tv.heatFallback')} · {latestRaceItem.race.name}
                     </span>
                   )}
                 </div>
                 {!latestRaceItem ? (
-                  <p className="p-6 text-base text-[rgb(var(--mg-muted))]">No race results recorded yet for this section.</p>
+                  <p className="p-6 text-base text-[rgb(var(--mg-muted))]">{t('screen.tv.noResults')}</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse text-left">
                       <thead>
                         <tr className="mg-display border-b border-[rgb(var(--mg-rule))] text-xs font-bold uppercase tracking-[0.05em] text-[rgb(var(--mg-muted))]">
-                          <th scope="col" className="py-2.5 pl-4 pr-2">Place</th>
-                          <th scope="col" className="py-2.5 px-2">Bib</th>
-                          <th scope="col" className="py-2.5 px-2">Team</th>
-                          <th scope="col" className="py-2.5 px-2 text-right">Race Pts</th>
-                          <th scope="col" className="py-2.5 pl-2 pr-4 text-right">Total Pts</th>
+                          <th scope="col" className="py-2.5 pl-4 pr-2">{t('screen.tv.colPlace')}</th>
+                          <th scope="col" className="py-2.5 px-2">{t('screen.tv.colBib')}</th>
+                          <th scope="col" className="py-2.5 px-2">{t('competition.toplist.team')}</th>
+                          <th scope="col" className="py-2.5 px-2 text-right">{t('screen.tv.colRacePts')}</th>
+                          <th scope="col" className="py-2.5 pl-2 pr-4 text-right">{t('screen.tv.colTotalPts')}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[rgb(var(--mg-rule-soft))]">
@@ -554,7 +561,7 @@ export function TvKioskPage() {
                             return (
                               <tr key={res.id || res.teamId} className="text-base">
                                 <td className="mg-display py-3 pl-4 pr-2 text-xl font-bold text-[rgb(var(--mg-heading))]">
-                                  <span title={res.eliminated ? (statusLabel(true, res.status) ?? undefined) : undefined}>{placeText}</span>
+                                  <span title={res.eliminated ? (resultStatusText(true, res.status, t) ?? undefined) : undefined}>{placeText}</span>
                                 </td>
                                 <td className="py-3 px-2">
                                   <BibSwatch colour={team?.bibColour ?? st?.bibColour} />
@@ -577,40 +584,40 @@ export function TvKioskPage() {
             )}
 
             {slide === 'standings' && (
-              <section aria-label="Live Section Standings" className="mg-card overflow-hidden">
+              <section aria-label={t('screen.tv.slide.standings')} className="mg-card overflow-hidden">
                 <div className="flex flex-wrap items-baseline justify-between gap-2 border-b-2 border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-ground))] px-4 py-3">
                   <div className="flex items-center gap-2">
                     <Trophy className="h-5 w-5 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
                     <h2 className="mg-display m-0 text-xl font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-                      {sectionName} · Standings (Each Team in Order)
+                      {t('screen.tv.standingsTitle', { section: sectionName })}
                     </h2>
                   </div>
                   <span className="text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-muted))]">
-                    {orderedStandingRows.length} {orderedStandingRows.length === 1 ? 'team' : 'teams'}
+                    {t('competition.scoring.teamCount', { count: orderedStandingRows.length })}
                     {standingsView.hasMultiplePages && <span className="ml-2 font-semibold normal-case tracking-normal" data-testid="tv-standings-page">{standingsView.pageLabel}</span>}
                   </span>
                 </div>
 
                 {orderedStandingRows.length === 0 ? (
-                  <p className="p-6 text-base text-[rgb(var(--mg-muted))]">No teams in this section yet.</p>
+                  <p className="p-6 text-base text-[rgb(var(--mg-muted))]">{t('screen.tv.noTeams')}</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse text-left">
                       <thead>
                         <tr className="mg-display border-b border-[rgb(var(--mg-rule))] text-xs font-bold uppercase tracking-[0.05em] text-[rgb(var(--mg-muted))]">
-                          <th scope="col" className="py-2.5 pl-4 pr-2">Rank</th>
-                          <th scope="col" className="py-2.5 px-2">Bib</th>
-                          <th scope="col" className="py-2.5 px-2">Team</th>
-                          <th scope="col" className="py-2.5 px-2 text-right">Heat Pts</th>
-                          <th scope="col" className="py-2.5 px-2 text-right">Finals Pts</th>
-                          <th scope="col" className="py-2.5 pl-2 pr-4 text-right">Total Pts</th>
+                          <th scope="col" className="py-2.5 pl-4 pr-2">{t('screen.tv.colRank')}</th>
+                          <th scope="col" className="py-2.5 px-2">{t('screen.tv.colBib')}</th>
+                          <th scope="col" className="py-2.5 px-2">{t('competition.toplist.team')}</th>
+                          <th scope="col" className="py-2.5 px-2 text-right">{t('screen.tv.colHeatPts')}</th>
+                          <th scope="col" className="py-2.5 px-2 text-right">{t('screen.tv.colFinalsPts')}</th>
+                          <th scope="col" className="py-2.5 pl-2 pr-4 text-right">{t('screen.tv.colTotalPts')}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[rgb(var(--mg-rule-soft))]">
                         {standingsView.rows.map((row) => (
                           <tr key={row.teamId} className="text-base">
                             <td className="mg-display py-3 pl-4 pr-2 text-xl font-bold text-[rgb(var(--mg-heading))]">
-                              {row.rankLabel}
+                              {row.rank == null ? '—' : `${ordinal(row.rank)}${row.joint ? '=' : ''}`}
                             </td>
                             <td className="py-3 px-2">
                               <BibSwatch colour={row.bibColour} />
@@ -669,6 +676,7 @@ function HeatLaneCard({
   laneHatbands: string[] | null | undefined;
   emptyText: string;
 }) {
+  const t = useT();
   if (!item) {
     return (
       <div className="mg-card flex flex-col justify-center p-6">
@@ -690,17 +698,17 @@ function HeatLaneCard({
         <div>
           <span className="block text-xs font-bold uppercase tracking-wider text-[rgb(var(--mg-red))]">{badge}</span>
           <h2 className="mg-display m-0 text-xl font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-            {session.name} · {heat.label || `Heat ${indexInSession + 1}`}
+            {session.name} · {heat.label || t('competition.timetable.heat', { n: indexInSession + 1 })}
           </h2>
         </div>
         <div className="text-right text-xs font-semibold text-[rgb(var(--mg-body))]">
           {session.arenaName && <span className="block">{session.arenaName}</span>}
-          {nextOpenRace && <span className="block font-bold text-[rgb(var(--mg-heading))]">Next race: {nextOpenRace.name}</span>}
+          {nextOpenRace && <span className="block font-bold text-[rgb(var(--mg-heading))]">{t('screen.tv.nextRace', { name: nextOpenRace.name })}</span>}
         </div>
       </div>
 
       {lanes.length === 0 ? (
-        <p className="p-4 text-sm text-[rgb(var(--mg-muted))]">No lanes assigned for this heat yet.</p>
+        <p className="p-4 text-sm text-[rgb(var(--mg-muted))]">{t('screen.tv.noLanes')}</p>
       ) : (
         <ol className="m-0 divide-y divide-[rgb(var(--mg-rule-soft))] list-none p-0">
           {lanes.map(({ entry, lane, sitting }) => {
@@ -710,7 +718,7 @@ function HeatLaneCard({
               <li key={entry.id} className="flex items-center justify-between gap-3 px-4 py-3">
                 <div className="flex min-w-0 items-center gap-3">
                   <span className="mg-display min-w-16 shrink-0 whitespace-nowrap text-lg font-bold uppercase text-[rgb(var(--mg-heading))]">
-                    {sitting ? 'Sits out' : `Lane ${lane}`}
+                    {sitting ? t('screen.tv.sitsOut') : t('competition.toplist.lane', { n: lane })}
                   </span>
                   <BibSwatch colour={entry.bibColour ?? team?.bibColour ?? st?.bibColour} />
                   <div className="min-w-0">
@@ -721,7 +729,7 @@ function HeatLaneCard({
                   <span className="mg-display text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]">
                     {formatPoints(st?.totalPoints ?? 0)}
                   </span>
-                  <span className="ml-1 text-xs font-semibold text-[rgb(var(--mg-muted))]">pts</span>
+                  <span className="ml-1 text-xs font-semibold text-[rgb(var(--mg-muted))]">{t('screen.tv.pts')}</span>
                 </div>
               </li>
             );
