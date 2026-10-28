@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { usePageWidth } from '../../components/pageWidthState';
-import { loadRaceTemplates } from '../../lib/raceTemplates';
+import { loadRaceTemplates, sessionFormat } from '../../lib/raceTemplates';
 import {
   buildOfflineArenaCrewPropSheet,
   filterRaceCardZones,
@@ -65,6 +65,7 @@ function NowCard({ card, filter }: { card: ArenaCrewRaceCard; filter: ArenaCrewZ
 export function ArenaCrewPage() {
   usePageWidth('narrow');
   const { competition } = useCompetition();
+  const sections = competition.sections;
   const [params, setParams] = useSearchParams();
   usePageHeader({ title: 'Arena crew sheet', subtitle: competition.name, backTo: `/competitions/${competition.id}`, backLabel: 'Timetable' });
 
@@ -105,9 +106,9 @@ export function ArenaCrewPage() {
     } catch {
       let templates: RaceTemplate[] = [];
       try { templates = await loadRaceTemplates(); } catch { /* build from the timetable alone */ }
-      return { sheet: buildOfflineArenaCrewPropSheet(competition.id, sessionRef.current, heatRef.current, templates), offline: true };
+      return { sheet: buildOfflineArenaCrewPropSheet(competition.id, sessionRef.current, heatRef.current, templates, sessionFormat({ sections }, sessionRef.current)), offline: true };
     }
-  }, [competition.id, sessionId, heatId]);
+  }, [competition.id, sections, sessionId, heatId]);
 
   // heatSignature is only a trigger: it changes when a race in this heat completes.
   useEffect(() => {

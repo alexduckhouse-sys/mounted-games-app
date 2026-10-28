@@ -222,4 +222,6 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.rules.penalties': 'Règles et pénalités',
   'competition.rules.loadingRace': 'Chargement des règles de la course…',
   'competition.rules.openPage': 'Ouvrir la page du règlement de la course',
+  'competition.rules.pairsVersion': 'Version en paires',
+  'competition.rules.individualVersion': 'Version individuelle',
 };

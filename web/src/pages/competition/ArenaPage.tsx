@@ -11,6 +11,7 @@ import { RaceRulesSheet, buildRaceRulebooks, type RaceTemplateDetail } from '../
 import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { crewGroups, diffRaceEquipment, equipmentFromDiagram } from '../../lib/raceEquipment';
+import { findRaceTemplate, sessionFormat } from '../../lib/raceTemplates';
 import { displaySectionName } from '../../lib/section';
 import { roundTo5Min, computeTimings } from '../../lib/time';
 import '../../components/sitePages.css';
@@ -78,12 +79,6 @@ export function ArenaPage() {
     api.get<RaceTemplate[]>('/race-templates').then((r) => setTemplates(r.data)).catch(() => {});
   }, []);
 
-  const tmplByName = useMemo(() => {
-    const m = new Map<string, RaceTemplate>();
-    for (const template of templates) m.set(template.name.toLowerCase().trim(), template);
-    return m;
-  }, [templates]);
-
   // With several arenas, only that arena's sessions (plus any shared "all arenas" ones) are listed.
   const choices = useMemo(() => heatChoices(selectedArena
     ? competition.sessions.filter((s) => !arenaOf(s) || arenaOf(s) === selectedArena)
@@ -99,7 +94,9 @@ export function ArenaPage() {
   const activeIdx = target ? Math.max(0, Math.min(orderedRaces.length - 1, raceByHeat[target.heat.id] ?? firstOpen)) : 0;
   const activeRace = orderedRaces[activeIdx];
   const activeRaceName = activeRace?.name?.trim() ?? '';
-  const activeKey = activeRaceName.toLowerCase();
+  // A Pairs or Individual heat sets out its section's version of each race.
+  const format = sessionFormat(competition, target?.session);
+  const activeKey = `${activeRaceName.toLowerCase()}|${format ?? ''}`;
   function goToRace(index: number) {
     if (target) setRaceByHeat((cur) => ({ ...cur, [target.heat.id]: index }));
   }
@@ -108,7 +105,7 @@ export function ArenaPage() {
     if (!activeRaceName || byNameDetails[activeKey]) return;
     let cancelled = false;
     api
-      .get<RaceTemplateDetail>(`/race-templates/by-name/${encodeURIComponent(activeRaceName)}`)
+      .get<RaceTemplateDetail>(`/race-templates/by-name/${encodeURIComponent(activeRaceName)}`, format ? { params: { format } } : undefined)
       .then((res) => {
         if (!cancelled && res?.data && typeof res.data.name === 'string') {
           setByNameDetails((cur) => ({
@@ -121,7 +118,7 @@ export function ArenaPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeRaceName, activeKey, byNameDetails]);
+  }, [activeRaceName, activeKey, format, byNameDetails]);
 
   const timeOf = (c: HeatChoice) => {
     const timing = timings.get(c.session.id)?.heats[c.heatIndex];
@@ -182,10 +179,10 @@ export function ArenaPage() {
     );
   }
 
-  const template = activeRace ? (byNameDetails[activeKey] ?? tmplByName.get(activeKey) ?? null) : null;
+  const template = activeRace ? (byNameDetails[activeKey] ?? findRaceTemplate(templates, activeRaceName, format)) : null;
   const equipment = equipmentFromDiagram(template?.diagramJson);
   const prevRace = activeIdx > 0 ? orderedRaces[activeIdx - 1] : null;
-  const prevTemplate = prevRace ? tmplByName.get(prevRace.name.toLowerCase().trim()) : null;
+  const prevTemplate = prevRace ? findRaceTemplate(templates, prevRace.name, format) : null;
   const crew = template ? crewGroups(diffRaceEquipment(prevTemplate?.diagramJson, template.diagramJson)) : [];
 
   return shell(
@@ -250,7 +247,7 @@ export function ArenaPage() {
         </section>
       )}
 
-      <RaceRulesSheet raceName={rulesFor} open={rulesFor != null} onClose={() => setRulesFor(null)} />
+      <RaceRulesSheet raceName={rulesFor} format={format} open={rulesFor != null} onClose={() => setRulesFor(null)} />
     </>,
   );
 }

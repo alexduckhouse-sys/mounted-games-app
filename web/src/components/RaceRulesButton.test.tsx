@@ -98,6 +98,28 @@ describe('RaceRulesButton', () => {
     expect(api.get).toHaveBeenCalledTimes(2);
   });
 
+  it('opens the pairs version for a pairs section and says so', async () => {
+    const pairs: RaceTemplate = { id: 3, name: 'Bending (Pairs)', isBuiltIn: true, baseName: 'Bending', format: 1, summary: 'Both riders bend in turn.' };
+    vi.mocked(api.get).mockResolvedValue({ data: [bending, pairs] });
+    render(<><RaceRulesButton raceName="Bending" format={1} /><RaceRulesButton raceName="Bending" format={3} /></>);
+    const [pairsButton, individualButton] = screen.getAllByRole('button', { name: 'Rules for Bending' });
+    await userEvent.click(pairsButton);
+    expect((await screen.findAllByText('Both riders bend in turn.')).length).toBeGreaterThan(0);
+    expect(screen.getByText('Pairs version')).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(individualButton);
+    expect((await screen.findAllByText('Weave through the poles.')).length).toBeGreaterThan(0);
+    expect(screen.queryByText('Individual version')).not.toBeInTheDocument();
+  });
+
+  it('labels an individual version', async () => {
+    const solo: RaceTemplate = { id: 4, name: 'Sack (Individual)', isBuiltIn: true, baseName: 'Sack', format: 3, summary: 'One rider.' };
+    vi.mocked(api.get).mockResolvedValue({ data: [bare, solo] });
+    render(<RaceRulesButton raceName="Sack" format={3} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Rules for Sack' }));
+    expect(await screen.findByText('Individual version')).toBeInTheDocument();
+  });
+
   it('does not trigger a click on a parent link or row', async () => {
     const parent = vi.fn();
     render(<div onClick={parent}><RaceRulesButton raceName="Bending" /></div>);

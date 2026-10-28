@@ -6,7 +6,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { competitionDateText } from '../../lib/competitionDates';
 import { defaultRaceList } from '../../lib/defaultRaces';
 import { defaultEventStart, describeHeats, heatSizes, planTimetable, type PlanRow } from '../../lib/formatPlan';
-import { loadRaceTemplates } from '../../lib/raceTemplates';
+import { loadRaceTemplates, raceListNames } from '../../lib/raceTemplates';
 import { displaySectionName } from '../../lib/section';
 import { formatTime } from '../../lib/time';
 import type { CompetitionDetail, CompetitionSection, FormTeamsResult, SectionSignup, Session } from '../../types';
@@ -91,7 +91,7 @@ export function FormatPage() {
         } else setSignups([]);
       } catch { if (!cancelled) setError('Couldn’t load the organiser details. Check your signal and try again.'); }
     })();
-    loadRaceTemplates().then((list) => { if (!cancelled) setTemplates(list.map((t) => t.name)); }).catch(() => {});
+    loadRaceTemplates().then((list) => { if (!cancelled) setTemplates(raceListNames(list)); }).catch(() => {});
     return () => { cancelled = true; };
   }, [editingId, canOrganise]);
 

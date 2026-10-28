@@ -9,7 +9,9 @@ namespace MountedGames.Api.Services;
 /// Walks a competition's sessions, looks up the diagram for each race in each
 /// heat, counts equipment elements, multiplies by the largest heat size in
 /// the session, takes the MAX across sequential sessions within the same
-/// arena, and SUMS across distinct concurrent arenas.
+/// arena, and SUMS across distinct concurrent arenas. A Pairs or Individual
+/// session counts its section's version of each race (<see cref="RaceVariants"/>),
+/// which usually needs less kit per lane than the team race.
 ///
 /// Within a session, arena fixtures that stay put between races (poles,
 /// cones, tables / stations) are reused: the session needs the MAX any single
@@ -35,15 +37,14 @@ public class EquipmentCalculator
     public async Task<CalculatorResult> ComputeAsync(int competitionId)
     {
         var sessions = await _db.Sessions
+            .Include(s => s.Section)
             .Include(s => s.Heats).ThenInclude(h => h.Entries)
             .Include(s => s.Heats).ThenInclude(h => h.Races)
             .Where(s => s.CompetitionId == competitionId && s.Kind == Entities.SessionKind.Race)
             .ToListAsync();
 
         var raceNames = sessions
-            .SelectMany(s => s.Heats)
-            .SelectMany(h => h.Races)
-            .Select(r => r.Name)
+            .SelectMany(s => s.Heats.SelectMany(h => h.Races).Select(r => RaceVariants.Resolve(r.Name, s.Section?.Format)))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         // Race names are free text, so match templates case-insensitively. The
@@ -77,7 +78,7 @@ public class EquipmentCalculator
             if (largest == 0) continue;
             foreach (var race in session.Heats.SelectMany(h => h.Races).GroupBy(r => r.Name, StringComparer.OrdinalIgnoreCase).Select(g => g.First()))
             {
-                if (!templates.TryGetValue(race.Name, out var template)) continue;
+                if (!templates.TryGetValue(RaceVariants.Resolve(race.Name, session.Section?.Format), out var template)) continue;
                 racesCounted++;
                 var elements = ParseElements(template.DiagramJson);
                 var raceReusable = new Dictionary<(string Kind, string Bucket), int>();

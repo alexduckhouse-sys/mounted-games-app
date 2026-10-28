@@ -160,20 +160,24 @@ public class EquipmentCalculatorTests : IClassFixture<ApiFactory>
             .ToDictionary(t => t.Name, StringComparer.OrdinalIgnoreCase);
         var updates = MountedGames.Api.Services.RaceLibraryUpdates.ByName;
 
-        Assert.Contains("bucket on the Centre Line", templates["Old Sock"].Rules, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("bucket on the Centre Line", updates["Old Sock"].Rules!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("across the Centre Line", templates["Old Sock"].Rules, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(templates["Old Sock"].Rules, updates["Old Sock"].Rules);
         Assert.Equal(templates["Old Sock"].DiagramJson, updates["Old Sock"].DiagramJson);
 
-        Assert.Contains("Penny Dish containing four sock-balls", templates["Old Sock (JV)"].Rules, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Bucket is placed on the Centre Line", updates["Old Sock (JV)"].Rules!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Penny Dish containing four socks", templates["Old Sock (JV)"].Rules, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(templates["Old Sock (JV)"].Rules, updates["Old Sock (JV)"].Rules);
 
         Assert.Contains("3 m behind the Changeover Line", templates["Five Flag"].Rules, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("3 metres behind the Changeover Line", updates["Five Flag"].Rules!, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(templates["Five Flag"].Rules, updates["Five Flag"].Rules);
 
         Assert.Contains("four hooks facing", templates["Spell EGUK (JV)"].Rules, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Bending Pole is placed on the Centre Line", templates["STRUK Pole (JV)"].Rules, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("14 m from the Start/Finish Line", templates["Bending"].Rules, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("14 m from the line", updates["Bending"].Rules!, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(templates["Bending"].Rules, updates["Bending"].Rules);
+
+        // The Zone name "Spell EGUK" reads the same as its base race.
+        Assert.Equal(templates["Spell E G U K"].Rules, templates["Spell EGUK"].Rules);
+        Assert.Equal(templates["Spell E G U K"].DiagramJson, templates["Spell EGUK"].DiagramJson);
 
         var comp = await _f.SeedCompetitionAsync();
         await SeedArenaSessionAsync(comp, "Main Arena", 4, "Old Sock", "Five Flag", "STRUK Pole (JV)");

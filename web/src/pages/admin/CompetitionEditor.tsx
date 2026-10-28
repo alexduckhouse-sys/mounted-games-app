@@ -8,7 +8,7 @@ import {
 } from '../../lib/creatorDraft';
 import { draftFromCompetition, realFixedItems, teamCountsOf } from '../../lib/creatorLoad';
 import { payoutsLine } from '../../lib/payouts';
-import { loadRaceTemplates } from '../../lib/raceTemplates';
+import { loadRaceTemplates, raceListNames } from '../../lib/raceTemplates';
 import type { CompetitionDetail, PayoutsTo } from '../../types';
 import { AboutStep } from './creator/AboutStep';
 import { ArenasStep } from './creator/ArenasStep';
@@ -103,7 +103,7 @@ export function CompetitionEditor() {
 
   useEffect(() => {
     let cancelled = false;
-    loadRaceTemplates().then((list) => { if (!cancelled) setTemplates(list.map((t) => t.name)); }).catch(() => {});
+    loadRaceTemplates().then((list) => { if (!cancelled) setTemplates(raceListNames(list)); }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
 

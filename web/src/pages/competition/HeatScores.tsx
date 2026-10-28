@@ -13,6 +13,7 @@ import { displaySectionName } from '../../lib/section';
 import { timetableRows } from '../../lib/timetableRows';
 import { useCompactPageBar } from '../../components/CompactPageBarContext';
 import { RaceRulesButton } from '../../components/RaceRulesButton';
+import { sessionFormat } from '../../lib/raceTemplates';
 import { parseBibAndFlag } from '../../lib/bib';
 import { statusLetter } from '../../lib/resultStatus';
 import { useFavourites } from '../../hooks/useFavourites';
@@ -101,6 +102,7 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
     return timetableRows(competition.sessions, computeTimings(competition.sessions), true).find((item) => item.heat?.id === heat.id) ?? null;
   }, [competition.sessions, heat]);
   const section = displaySectionName(session.sectionName || session.name);
+  const format = sessionFormat(competition, session);
 
   // In a Heat-Heat-Final session (raceRoundId present), render ONE unified table for the whole session:
   // all session teams down the side, one column per race (round) across the top.
@@ -374,7 +376,7 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
                     {columns.map(({ key, race, label }, i) => (
                       <th key={key} scope="col" className="heat-race" title={label}>
                         {(i > 0 || showCarriedForward) && <span aria-hidden="true" className="heat-sep" />}
-                        <RaceRulesButton raceName={race.name} className={`heat-name ${i === runningIndex ? 'heat-name-running' : ''}`} label={<>{label}{i === runningIndex && <span className="sr-only"> ({t('competition.heat.running')})</span>}</>} />
+                        <RaceRulesButton raceName={race.name} format={format} className={`heat-name ${i === runningIndex ? 'heat-name-running' : ''}`} label={<>{label}{i === runningIndex && <span className="sr-only"> ({t('competition.heat.running')})</span>}</>} />
                       </th>
                     ))}
                     <th scope="col" className="heat-pts">
@@ -456,7 +458,7 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
             {columns.map(({ key, race, label }, i) => (
               <li key={key} className="flex items-center gap-2">
                 <span className="min-w-0 flex-1 truncate py-2">{label}{i === runningIndex && <span className="mg-meta"> · {t('competition.heat.running')}</span>}</span>
-                <RaceRulesButton raceName={race.name} className="!h-11 !w-11" />
+                <RaceRulesButton raceName={race.name} format={format} className="!h-11 !w-11" />
               </li>
             ))}
           </ol>
