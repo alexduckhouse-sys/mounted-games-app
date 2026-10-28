@@ -56,7 +56,7 @@ public class SectionSignup
 
     /// <summary>Show only the surname's initial on public pages ("Oliver S.").</summary>
     public bool UseInitialOnly { get; set; }
-    /// <summary>Opt out of close-up filming and photography; shown to stream staff only.</summary>
+    /// <summary>Legacy column from the removed per-rider filming opt-out. Nothing reads or writes it; kept so no migration is needed.</summary>
     public bool NoFilming { get; set; }
 
     /// <summary>Amount captured from the section's price at signup time (in pence).</summary>
@@ -71,7 +71,7 @@ public class SectionSignup
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// The sign-up tick: parental consent for the riders on this entry (filming opt-outs are <see cref="NoFilming"/>)
+    /// The sign-up tick: parental consent for the riders on this entry
     /// plus acceptance of the event terms. Entries made before the tick existed have <c>false</c> and no date.
     /// </summary>
     public bool TermsAccepted { get; set; }

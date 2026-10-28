@@ -13,7 +13,6 @@ using MountedGames.Api.Services;
 
 namespace MountedGames.Api.Controllers;
 
-// Unused in web UI yet — reserved for iOS / upcoming wiring
 [ApiController]
 [Route("api/competitions/{id:int}")]
 public class VolunteerAndEmergencyController(
@@ -423,8 +422,10 @@ public class VolunteerAndEmergencyController(
         return loaded.Select(s => ToShiftDto(s, isStaff: true, currentUserId)).ToList();
     }
 
+    // Low-friction on purpose: anyone following a team can mark a duty as "here", signed in or not. The
+    // network block and the write rate limit still apply; a signed-in caller is recorded, an anonymous one is not.
     [HttpPost("volunteer-shifts/{shiftId:int}/check-in")]
-    [Authorize]
+    [AllowAnonymous]
     public async Task<ActionResult<VolunteerShiftDto>> CheckInVolunteerShift(
         int id, int shiftId, [FromBody] CheckInVolunteerShiftRequest? req = null, CancellationToken ct = default)
     {
@@ -432,7 +433,6 @@ public class VolunteerAndEmergencyController(
             return StatusCode(StatusCodes.Status403Forbidden, new { message = "Posting from this network is blocked." });
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (string.IsNullOrEmpty(userId)) return Unauthorized();
 
         var shift = await db.VolunteerShifts
             .Include(s => s.Session)
@@ -441,23 +441,24 @@ public class VolunteerAndEmergencyController(
             .FirstOrDefaultAsync(s => s.Id == shiftId && s.CompetitionId == id, ct);
         if (shift is null) return NotFound();
 
-        var isStaff = await db.CanManageAsync(User, id, ct);
+        var isStaff = !string.IsNullOrEmpty(userId) && await db.CanManageAsync(User, id, ct);
         var checkInTeamIds = await GetViewerCheckInTeamIdsAsync(id, userId, isStaff, ct);
         var viewerClubName = await GetViewerClubNameAsync(userId, ct);
 
-        if (!CanViewerCheckInShift(shift, isStaff, userId, checkInTeamIds, viewerClubName))
-            return Forbid();
-
-        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
-        var checkedInName = CompetitionFields.Trimmed(req?.CheckedInByName)
-            ?? CompetitionFields.Trimmed(user?.FullName)
-            ?? shift.AssignedTeam?.DisplayName
-            ?? shift.AssignedClubName
-            ?? "Volunteer";
+        string? checkedInName = null;
+        if (!string.IsNullOrEmpty(userId))
+        {
+            var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
+            checkedInName = CompetitionFields.Trimmed(req?.CheckedInByName)
+                ?? CompetitionFields.Trimmed(user?.FullName)
+                ?? shift.AssignedTeam?.DisplayName
+                ?? shift.AssignedClubName
+                ?? "Volunteer";
+        }
 
         shift.AttendanceStatus = "Here";
         shift.CheckedInAt = DateTime.UtcNow;
-        shift.CheckedInByUserId = userId;
+        shift.CheckedInByUserId = string.IsNullOrEmpty(userId) ? null : userId;
         shift.CheckedInByName = checkedInName;
         shift.CheckedInByStaffOverride = false;
 
@@ -930,7 +931,8 @@ public class VolunteerAndEmergencyController(
             LaneNumber: s.LaneNumber,
             AttendanceStatus: string.IsNullOrWhiteSpace(s.AttendanceStatus) ? "Assigned" : s.AttendanceStatus,
             CheckedInAt: s.CheckedInAt.HasValue ? DateTime.SpecifyKind(s.CheckedInAt.Value, DateTimeKind.Utc) : null,
-            CheckedInByName: s.CheckedInByName,
+            // Who checked in is for staff and for the person who did it; the public list never shows it.
+            CheckedInByName: isStaff || (!string.IsNullOrEmpty(currentUserId) && s.CheckedInByUserId == currentUserId) ? s.CheckedInByName : null,
             CheckedInByStaffOverride: s.CheckedInByStaffOverride,
             CanViewerCheckIn: canCheckIn);
     }

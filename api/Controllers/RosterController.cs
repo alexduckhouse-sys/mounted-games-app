@@ -19,8 +19,7 @@ public record SaveToRosterRequest(
     decimal? PonyHeightHands = null,
     string? PonyPassportNumber = null,
     string? PonyOwnerFullName = null,
-    bool? UseInitialOnly = null,
-    bool? NoFilming = null
+    bool? UseInitialOnly = null
 );
 
 public record UpdateSavedRiderRequest(
@@ -30,8 +29,7 @@ public record UpdateSavedRiderRequest(
     decimal? PonyHeightHands = null,
     string? PonyPassportNumber = null,
     string? PonyOwnerFullName = null,
-    bool? UseInitialOnly = null,
-    bool? NoFilming = null
+    bool? UseInitialOnly = null
 );
 
 // Unused in web UI yet — reserved for iOS / upcoming wiring
@@ -103,9 +101,7 @@ public class RosterController(AppDbContext db) : ControllerBase
             if (owner is not null) match.PonyOwnerFullName = owner;
             if (req.UseInitialOnly.HasValue)
                 match.UseInitialOnly = req.UseInitialOnly.Value || singleLetter;
-            if (req.NoFilming.HasValue)
-                match.NoFilming = req.NoFilming.Value || singleLetter;
-            if (singleLetter) { match.UseInitialOnly = true; match.NoFilming = true; }
+            if (singleLetter) match.UseInitialOnly = true;
             await db.SaveChangesAsync(ct);
             return match.ToDto();
         }
@@ -121,7 +117,6 @@ public class RosterController(AppDbContext db) : ControllerBase
             PonyPassportNumber = passport,
             PonyOwnerFullName = owner,
             UseInitialOnly = (req.UseInitialOnly ?? false) || singleLetter,
-            NoFilming = (req.NoFilming ?? false) || singleLetter,
         };
         db.SavedRiders.Add(saved);
         await db.SaveChangesAsync(ct);
@@ -165,9 +160,7 @@ public class RosterController(AppDbContext db) : ControllerBase
             saved.PonyOwnerFullName = string.IsNullOrWhiteSpace(req.PonyOwnerFullName) ? null : req.PonyOwnerFullName.Trim();
         if (req.UseInitialOnly.HasValue)
             saved.UseInitialOnly = req.UseInitialOnly.Value || singleLetter;
-        if (req.NoFilming.HasValue)
-            saved.NoFilming = req.NoFilming.Value || singleLetter;
-        if (singleLetter) { saved.UseInitialOnly = true; saved.NoFilming = true; }
+        if (singleLetter) saved.UseInitialOnly = true;
 
         await db.SaveChangesAsync(ct);
         return saved.ToDto();

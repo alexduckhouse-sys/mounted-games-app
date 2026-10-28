@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useDialogFocus } from '../../components/useDialogFocus';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { CheckCircle2, ArrowRight, Coffee, X, Users, Phone } from 'lucide-react';
@@ -93,6 +94,8 @@ function buildPrizeGivingOrder(heat: Heat) {
 }
 
 export function SessionEndTransition({ competition, finishedSession, onClose, onAdvanced }: Props) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onClose, 'button[aria-label="Close"]');
   const nav = useNavigate();
   const { canManage } = useAuth();
   const [allForms, setAllForms] = useState<DeclarationForm[]>([]);
@@ -190,6 +193,7 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
       className="fixed inset-0 z-50 flex items-center justify-center bg-[rgb(var(--mg-overlay)/0.6)] p-3 backdrop-blur"
     >
       <motion.div
+        ref={dialogRef} role="dialog" aria-modal="true" aria-label="Session complete"
         initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95 }}
         className="mg-card max-h-[90vh] w-full max-w-2xl overflow-y-auto !rounded-2xl"
       >

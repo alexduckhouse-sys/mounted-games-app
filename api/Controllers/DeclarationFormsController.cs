@@ -396,8 +396,7 @@ public class DeclarationFormsController : ControllerBase
                 IsReserve = r.IsReserve,
                 IsGuestRider = r.IsGuestRider,
                 OrderIndex = r.OrderIndex == 0 ? order : r.OrderIndex,
-                UseInitialOnly = kept.UseInitialOnly,
-                NoFilming = kept.NoFilming
+                UseInitialOnly = kept.UseInitialOnly
             });
             order++;
         }
@@ -462,8 +461,7 @@ public class DeclarationFormsController : ControllerBase
                         PonyHeightHands = kept.PonyHeightHands,
                         PonyPassportNumber = rosterPassport,
                         PonyOwnerFullName = rosterOwner,
-                        UseInitialOnly = kept.UseInitialOnly,
-                        NoFilming = kept.NoFilming
+                        UseInitialOnly = kept.UseInitialOnly
                     };
                     _db.SavedRiders.Add(added);
                     clubRiders.Add(added);
@@ -477,7 +475,6 @@ public class DeclarationFormsController : ControllerBase
                     existing.PonyPassportNumber = rosterPassport ?? existing.PonyPassportNumber;
                     existing.PonyOwnerFullName = rosterOwner ?? existing.PonyOwnerFullName;
                     existing.UseInitialOnly = kept.UseInitialOnly;
-                    existing.NoFilming = kept.NoFilming;
                     existing.UpdatedAt = DateTime.UtcNow;
                 }
                 // Link a first saved entry, while retaining an explicitly selected rider's identity.

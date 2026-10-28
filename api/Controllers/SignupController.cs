@@ -24,7 +24,6 @@ public record CreateSectionSignupInput(
     string? ContactInfo,
     string? TeamCode = null,
     bool UseInitialOnly = false,
-    bool NoFilming = false,
     bool AcceptTerms = false,
     string? ConsentVersion = null,
     [MaxLength(EmailAddresses.MaxLength)] string? ContactEmail = null,
@@ -42,8 +41,6 @@ public record CreateSectionSignupInput(
     [StringLength(20)] string? PaymentMethod = null,
     bool IsWaitlist = false,
     [Range(1, 20)] int TeamsCount = 1,
-    [Range(0, 100_000_000)] int StableFeeMinor = 0,
-    [Range(1, 30)] int? StablingNights = null,
     [StringLength(120)] string? RiderName = null,
     [StringLength(32)] string? RiderDateOfBirth = null,
     [StringLength(120)] string? PonyName = null,
@@ -75,7 +72,7 @@ public record SectionSignupExtendedDto(
     string FullName, string? PonyClubName, string? ContactInfo,
     int AmountMinor, SignupPaymentStatus Status, DateTime? PaidAt,
     int? TeamId, DateTime CreatedAt,
-    bool UseInitialOnly = false, bool NoFilming = false,
+    bool UseInitialOnly = false,
     bool TermsAccepted = false, DateTime? TermsAcceptedAt = null, string? TermsWordingVersion = null,
     string? ContactEmail = null, EmailDeliveryStatus ConfirmationEmailStatus = EmailDeliveryStatus.NotRequested,
     DateTime? ConfirmationEmailAt = null,
@@ -101,7 +98,7 @@ public record SectionSignupExtendedDto(
 ) : SectionSignupDto(
     Id, CompetitionSectionId, SectionName, FullName, PonyClubName, ContactInfo,
     AmountMinor, Status, PaidAt, TeamId, CreatedAt,
-    UseInitialOnly, NoFilming, TermsAccepted, TermsAcceptedAt, TermsWordingVersion,
+    UseInitialOnly, TermsAccepted, TermsAcceptedAt, TermsWordingVersion,
     ContactEmail, ConfirmationEmailStatus, ConfirmationEmailAt, TeamName, IsWholeTeam
 );
 
@@ -303,13 +300,6 @@ public class SignupController : ControllerBase
 {
     private readonly AppDbContext _db;
     public SignupController(AppDbContext db) => _db = db;
-
-    public static long CalculateStablingFeeMinor(int stablesCount, int feePerStableMinor, int? stablingNights = null)
-    {
-        if (stablesCount <= 0 || feePerStableMinor <= 0) return 0L;
-        var nights = stablingNights is > 0 ? stablingNights.Value : 1;
-        return (long)stablesCount * feePerStableMinor * nights;
-    }
 
     private Task<Dictionary<int, SignupMatchmaking>> LoadMatchmakingMapAsync(IEnumerable<int> signupIds)
     {
@@ -550,7 +540,7 @@ public class SignupController : ControllerBase
         return new SectionSignupExtendedDto(
             b.Id, b.CompetitionSectionId, b.SectionName, b.FullName, b.PonyClubName, b.ContactInfo,
             b.AmountMinor, b.Status, b.PaidAt, b.TeamId, b.CreatedAt,
-            b.UseInitialOnly, b.NoFilming, b.TermsAccepted, b.TermsAcceptedAt, b.TermsWordingVersion,
+            b.UseInitialOnly, b.TermsAccepted, b.TermsAcceptedAt, b.TermsWordingVersion,
             b.ContactEmail, b.ConfirmationEmailStatus, b.ConfirmationEmailAt,
             b.TeamName, b.IsWholeTeam,
             m?.LookingForPair == true, m?.LookingForGuestRiders == true, m?.WaitingForGuestSpot == true,
@@ -858,18 +848,15 @@ public class SignupController : ControllerBase
         // Free entries (including "Wait for a Guest Ride Spot") are complete immediately.
         // Waitlist entries start at 0 amount and Pending until promoted.
         // "Looking for a Pair" pays 50% of the section price; standard entries pay 100% upfront (multiplied by teamsCount).
-        var stablingFee = (req.WaitingForGuestSpot || req.IsWaitlist)
-            ? 0L
-            : CalculateStablingFeeMinor(req.StablesCount, req.StableFeeMinor, req.StablingNights);
         var amount = (req.WaitingForGuestSpot || req.IsWaitlist)
             ? 0L
             : (req.LookingForPair
                 ? section.PriceMinor / 2
-                : (long)section.PriceMinor * teamsCount) + stablingFee;
+                : (long)section.PriceMinor * teamsCount);
         if (amount > int.MaxValue) return BadRequest(new { message = "The total entry fee is too large." });
         var amountMinor = (int)amount;
         var isFree = amountMinor == 0 && !req.IsWaitlist;
-        // Same safeguarding rule as declaration forms: a single-letter surname ("Oliver S.") means initial-only and no filming.
+        // Same safeguarding rule as declaration forms: a single-letter surname ("Oliver S.") means initial-only.
         var singleLetterSurname = DecFormRules.HasSingleLetterSurnameInitial(name)
             || DecFormRules.HasSingleLetterSurnameInitial(guestDetails?.RiderName);
         var signup = new SectionSignup
@@ -884,7 +871,6 @@ public class SignupController : ControllerBase
             ContactEmail = contactEmail,
             ClientRequestId = requestId,
             UseInitialOnly = req.UseInitialOnly || singleLetterSurname,
-            NoFilming = req.NoFilming || singleLetterSurname,
             TermsAccepted = true,
             TermsAcceptedAt = DateTime.UtcNow,
             TermsAcceptedByUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
@@ -954,6 +940,12 @@ public class SignupController : ControllerBase
         }
         await _db.SaveChangesAsync();
         await transaction.CommitAsync();
+
+        // A free entry is paid at once, so it forms its team exactly as marking it paid would.
+        // Pair seekers and guest-spot waiters keep their own flows.
+        if (isFree && !req.LookingForPair && !req.WaitingForGuestSpot)
+            await FormTeamsCoreAsync(competitionId, signup.CompetitionSectionId,
+                new FormTeamsFromSignupsRequest(null, Preview: false, ReplaceExisting: false), signup.Id);
 
         // One confirmation, sent here and now (the API can be asleep a moment later). Whatever happens, the entry stays.
         if (contactEmail is not null)
@@ -1536,6 +1528,11 @@ public class SignupController : ControllerBase
             return BadRequest(new { message = "No paid signups to form teams from." });
         return result;
     }
+
+    /// <summary>Forms the team for one paid entry from outside this controller (the demo checkout), the same way marking it paid does.</summary>
+    internal static Task<FormTeamsResult?> FormTeamForPaidSignupAsync(AppDbContext db, int competitionId, int sectionId, int signupId) =>
+        new SignupController(db).FormTeamsCoreAsync(competitionId, sectionId,
+            new FormTeamsFromSignupsRequest(null, Preview: false, ReplaceExisting: false), signupId);
 
     private async Task<FormTeamsResult?> FormTeamsCoreAsync(
         int competitionId, int sectionId, FormTeamsFromSignupsRequest req,

@@ -25,7 +25,6 @@ public static class DecFormRules
 
         var autoPrivacy = HasSingleLetterSurnameInitial(input.FullName);
         entry.UseInitialOnly = input.UseInitialOnly || autoPrivacy;
-        entry.NoFilming = input.NoFilming || autoPrivacy;
 
         // Date of birth, in whichever form the organiser chose.
         entry.DateOfBirth = null; entry.BirthYear = null; entry.AgeGroup = null;
@@ -173,8 +172,7 @@ public static class DecFormRules
 
     /// <summary>
     /// True when the rider's name has at least two words and the last word is a single letter or a single letter
-    /// followed by a full stop (e.g. "Oliver S" or "Oliver S."). Automatically enables surname-initial privacy and
-    /// filming opt-out without requiring separate checkboxes on the form.
+    /// followed by a full stop (e.g. "Oliver S" or "Oliver S."). Automatically enables surname-initial privacy.
     /// </summary>
     public static bool HasSingleLetterSurnameInitial(string? fullName)
     {

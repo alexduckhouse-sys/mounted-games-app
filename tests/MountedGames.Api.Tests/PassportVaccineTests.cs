@@ -191,13 +191,11 @@ public class PassportVaccineTests(ApiFactory f) : IClassFixture<ApiFactory>
             IsReserve: false,
             OrderIndex: 0,
             UseInitialOnly: false,
-            NoFilming: false,
             PonyHeightHands: 13.2m,
             PonyOwnerFullName: "Jane Doe");
         var err = DecFormRules.Apply(DecFormConfig.Standard, lenient: false, input, isReserve: false, entry, 2031);
         Assert.Null(err);
         Assert.Equal(expected, entry.UseInitialOnly);
-        Assert.Equal(expected, entry.NoFilming);
         Assert.Equal("Jane Doe", entry.PonyOwnerFullName);
     }
 

@@ -1,4 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
+import { useDialogFocus } from '../useDialogFocus';
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ChangeEvent, type MouseEvent } from 'react';
 import {
   Camera,
@@ -178,6 +179,8 @@ export function ReplayInspector({
   onClose,
   videoRef: externalVideoRef,
 }: ReplayInspectorProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onClose, 'button[aria-label="Close replay"]');
   const internalVideoRef = useRef<HTMLVideoElement>(null);
   const videoRef = externalVideoRef || internalVideoRef;
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -547,10 +550,6 @@ export function ReplayInspector({
   // Keyboard accessibility
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-        return;
-      }
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'BUTTON')) {
         return;
@@ -568,7 +567,7 @@ export function ReplayInspector({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose, togglePlay, stepFrame]);
+  }, [togglePlay, stepFrame]);
 
   const downloadFilename = `${clip.label.replace(/\s+/g, '_')}_${clip.arenaName.replace(/\s+/g, '_')}.${clip.mimeType.includes('mp4') ? 'mp4' : 'webm'}`;
 
@@ -597,6 +596,7 @@ export function ReplayInspector({
 
   return (
     <motion.div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label="Replay inspector"
@@ -1037,28 +1037,24 @@ export function ReplayInspector({
               return (
                 <div
                   key={c.id}
-                  role="button"
-                  tabIndex={0}
-                  aria-current={isSelected ? 'true' : undefined}
                   className={`group flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-colors cursor-pointer shrink-0 ${
                     isSelected
                       ? 'border-amber-400 bg-amber-400/15 text-white'
                       : 'border-white/15 bg-white/5 text-white/80 hover:border-white/40 hover:text-white'
                   }`}
                   onClick={() => onSelectClip?.(c)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      onSelectClip?.(c);
-                    }
-                  }}
                 >
-                  <div className="flex flex-col text-left">
+                  <button
+                    type="button"
+                    aria-current={isSelected ? 'true' : undefined}
+                    className="flex flex-col text-left"
+                    onClick={(e) => { e.stopPropagation(); onSelectClip?.(c); }}
+                  >
                     <span className="font-semibold truncate max-w-[140px]">{c.label}</span>
                     <span className="text-[10px] text-[rgb(var(--mg-header-sub))]">
                       {c.arenaName} · {c.durationSeconds}s
                     </span>
-                  </div>
+                  </button>
 
                   {onDeleteClip && (
                     <button
@@ -1083,7 +1079,11 @@ export function ReplayInspector({
   );
 }
 
-export function SavedReplaysDrawer({
+export function SavedReplaysDrawer(props: SavedReplaysDrawerProps) {
+  return props.open ? <SavedReplaysDialog {...props} /> : null;
+}
+
+function SavedReplaysDialog({
   competitionId,
   open,
   onClose,
@@ -1092,6 +1092,8 @@ export function SavedReplaysDrawer({
   onCaptureBufferClip,
   bufferedSeconds,
 }: SavedReplaysDrawerProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onClose, 'button[aria-label="Close saved replays"]');
   const [clips, setClips] = useState<SavedReplayClip[]>(() => getSavedReplays(competitionId));
 
   useEffect(() => {
@@ -1101,10 +1103,9 @@ export function SavedReplaysDrawer({
     return subscribeSavedReplays(update);
   }, [open, competitionId]);
 
-  if (!open) return null;
-
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label="Saved replays"
@@ -1173,7 +1174,7 @@ export function SavedReplaysDrawer({
                 }}
               >
                 <div className="min-w-0 flex-1">
-                  <div className="font-semibold truncate">{clip.label}</div>
+                  <button type="button" className="block max-w-full truncate text-left font-semibold">{clip.label}</button>
                   {clip.storageWarning && <Notice role={null} className="my-1">{clip.storageWarning}</Notice>}
                   <div className="text-xs text-[rgb(var(--mg-header-sub))]">
                     {clip.arenaName} · {clip.durationSeconds}s · {formatTimestamp(clip.createdAt)}

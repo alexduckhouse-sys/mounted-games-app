@@ -312,11 +312,11 @@ public static class HistorySeeder
                 }
         foreach (var rider in riders)
         {
-            // Full names and no initial-only or no-filming flags: these riders have consented to appear in public stats.
+            // Full names and no initial-only flags: these riders have consented to appear in public stats.
             rider.Saved = new SavedRider
             {
                 Club = clubs[rider.ClubIndex], CreatedByUserId = OrganiserId, FullName = rider.Name,
-                HorseName = rider.Pony, PonyHeightHands = rider.Hands, UseInitialOnly = false, NoFilming = false,
+                HorseName = rider.Pony, PonyHeightHands = rider.Hands, UseInitialOnly = false,
             };
             db.SavedRiders.Add(rider.Saved);
         }
@@ -535,7 +535,7 @@ public static class HistorySeeder
                         DeclarationForm = form, SavedRider = rider.Saved, FullName = rider.Name,
                         HorseName = altPony ? rider.AltPony : rider.Pony, PonyHeightHands = rider.Hands,
                         BibColour = Clubs[c].Bib, IsCaptain = m == 0, IsReserve = reserve, OrderIndex = order++,
-                        UseInitialOnly = false, NoFilming = false,
+                        UseInitialOnly = false,
                     });
                 }
                 team.DeclarationForms.Add(form);

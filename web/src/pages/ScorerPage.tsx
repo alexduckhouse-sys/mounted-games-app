@@ -1,5 +1,6 @@
 import { useWakeLock } from '../hooks/useWakeLock';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useDialogFocus } from '../components/useDialogFocus';
 import { Camera, CloudOff, Eye, Film, Lock, Mic, MicOff, Pause, Play, RefreshCw, Square, Table2, Trophy, Video } from 'lucide-react';
 import { Notice } from '../components/Notice';
 import { PageProblem } from '../components/PageProblem';
@@ -652,26 +653,35 @@ function TripodCameraBroadcaster({ session }: { session: ScorerSession }) {
       )}
 
       {dimmed && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Tripod screen dimmed"
+        <DimmedLock
+          label="Tripod screen dimmed"
           className="fixed inset-0 z-[120] flex flex-col items-center justify-center gap-3 bg-black text-white/35 select-none"
-          onDoubleClick={() => setDimmed(false)}
+          onUnlock={() => setDimmed(false)}
         >
           <Lock className="h-8 w-8" />
           <p className="text-sm font-semibold">LIVE · {session.arenaName} · {angle}</p>
           <p className="text-xs">Screen locked</p>
-          <button
-            type="button"
-            className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/50"
-            onClick={() => setDimmed(false)}
-          >
-            Double-tap to unlock.
-          </button>
-        </div>
+        </DimmedLock>
       )}
     </section>
+  );
+}
+
+/** The tripod lock screen: focus sits on the unlock button, Escape unlocks, and Tab stays on the screen. */
+function DimmedLock({ label, className, onUnlock, children }: { label: string; className: string; onUnlock: () => void; children: ReactNode }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onUnlock, 'button');
+  return (
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={label} className={className} onDoubleClick={onUnlock}>
+      {children}
+      <button
+        type="button"
+        className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/50"
+        onClick={onUnlock}
+      >
+        Double-tap to unlock.
+      </button>
+    </div>
   );
 }
 

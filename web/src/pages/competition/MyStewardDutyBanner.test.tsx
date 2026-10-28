@@ -56,7 +56,20 @@ it('shows a blank time label for an unreadable time', async () => {
   expect(await screen.findByRole('status')).toHaveTextContent(/^Checked in$/);
 });
 
-it('stays hidden when signed out, when nothing applies or when the load fails', async () => {
+it('lets a signed-out follower check in to their team’s duty', async () => {
+  state.user = null;
+  localStorage.setItem('mg.favourites.v1', JSON.stringify([{ competitionId: 1, teamId: 9 }]));
+  vi.mocked(api.get).mockResolvedValue({ data: [shift(1, { assignedTeamId: 9, canViewerCheckIn: false }), shift(2, { assignedTeamId: 10, canViewerCheckIn: false })] });
+  vi.mocked(api.post).mockResolvedValue({ data: shift(1, { assignedTeamId: 9, attendanceStatus: 'Here', checkedInAt: '2026-10-27T10:42:00' }) });
+  render(<MemoryRouter><MyStewardDutyBanner /></MemoryRouter>);
+  await userEvent.click(await screen.findByRole('button', { name: 'We’re here' }));
+  expect(screen.queryAllByRole('button', { name: 'We’re here' })).toHaveLength(0);
+  expect(api.post).toHaveBeenCalledWith('/competitions/1/volunteer-shifts/1/check-in', {});
+  expect(await screen.findByRole('status')).toHaveTextContent('Checked in at 10:42');
+  localStorage.clear();
+});
+
+it('stays hidden when signed out and following nobody, when nothing applies or when the load fails', async () => {
   state.user = null;
   const { container, unmount } = render(<MemoryRouter><MyStewardDutyBanner /></MemoryRouter>);
   expect(container).toBeEmptyDOMElement();
