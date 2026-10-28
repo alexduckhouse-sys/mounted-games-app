@@ -31,6 +31,17 @@ const mount = () => {
   return within(screen.getByRole('dialog', { name: 'Change password' }));
 };
 
+describe('ChangePasswordSheet show and hide', () => {
+  it('has an eye on each password box', async () => {
+    const sheet = mount();
+    const eyes = sheet.getAllByRole('button', { name: 'Show password' });
+    expect(eyes).toHaveLength(2);
+    await userEvent.click(eyes[1]);
+    expect(sheet.getByLabelText('New password')).toHaveAttribute('type', 'text');
+    expect(sheet.getByLabelText('Current password')).toHaveAttribute('type', 'password');
+  });
+});
+
 describe('ChangePasswordSheet', () => {
   it('asks for the current and a new password, and starts with nothing to send', () => {
     const sheet = mount();

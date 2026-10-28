@@ -129,7 +129,9 @@ body:has(.mg-dock:not(.mg-dock-low)) .sp-sell-bar { bottom: calc(130px + env(saf
 .sp-num { flex: none; min-width: 28px; text-align: center; font: 700 20px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
 .sp-num[data-tone="warn"] { color: rgb(var(--mg-late-ink)); }
 .sp-pill-sm { min-height: 36px; padding: 0 14px; font-size: 14px; }
+.sp-pill-tall { min-height: 44px; }
 .sp-red { min-height: 36px; padding: 0 6px; border: 0; background: transparent; color: rgb(var(--mg-elim)); font: 700 14px/1 var(--mg-font); text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 4px; cursor: pointer; }
+.sp-red-tall { min-height: 44px; }
 .sp-red:disabled { opacity: .5; cursor: default; }
 .sp-red:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
 .sp-st-amber { color: rgb(var(--mg-late-ink)); font-weight: 700; }
@@ -155,3 +157,10 @@ a.sp-row:active, button.sp-row:active:not(:disabled), .sp-listing-head:active { 
    doesn't replay the slide). */
 :has(> .sp-tab-row[data-dragging]) > .sp-tab-row:not([data-dragging]) { transition: transform .2s var(--mg-ease-out); }
 @media (prefers-reduced-motion: reduce) { :has(> .sp-tab-row[data-dragging]) > .sp-tab-row:not([data-dragging]) { transition: none; } }
+
+/* A list that opens and closes smoothly: the inner box grows from nothing, so its own height never has to be known. */
+.sp-reveal { display: grid; grid-template-rows: 1fr; animation: sp-reveal-in var(--mg-dur-base) var(--mg-ease-out); }
+.sp-reveal[data-open="false"] { grid-template-rows: 0fr; opacity: 0; animation: sp-reveal-out var(--mg-dur-base) var(--mg-ease-out); }
+.sp-reveal > * { min-height: 0; overflow: hidden; }
+@keyframes sp-reveal-in { from { grid-template-rows: 0fr; opacity: 0; } }
+@keyframes sp-reveal-out { from { grid-template-rows: 1fr; opacity: 1; } }

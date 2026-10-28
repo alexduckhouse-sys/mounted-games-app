@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useId, useMemo, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Plus, Send } from 'lucide-react';
+import { Check, Plus, Send } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { useT } from '../i18n/LanguageContext';
 import { Notice } from '../components/Notice';
 import { PasswordChecklist } from '../components/PasswordChecklist';
+import { PasswordInput } from '../components/PasswordInput';
 import { SocialLoginButtons, type SocialCredential } from '../components/SocialLoginButtons';
 import { isRealisticEmail, suggestEmailFix } from '../lib/emailCheck';
 import { externalErrorMessage } from '../lib/externalAuthError';
@@ -18,10 +19,10 @@ import { Field } from './auth/Field';
 
 type RoleId = 'member' | 'trainer' | 'manager';
 
-const ROLES: { id: RoleId; label: MessageKey; api: 'Member' | 'Trainer' | 'Manager'; sentence: MessageKey; byAdmins: boolean }[] = [
-  { id: 'member', label: 'auth.signup.roleRider', api: 'Member', sentence: 'auth.signup.asMember', byAdmins: false },
-  { id: 'trainer', label: 'auth.signup.roleTrainer', api: 'Trainer', sentence: 'auth.signup.asTrainer', byAdmins: false },
-  { id: 'manager', label: 'auth.signup.roleManager', api: 'Manager', sentence: 'auth.signup.asManager', byAdmins: true },
+const ROLES: { id: RoleId; label: MessageKey; hint: MessageKey; api: 'Member' | 'Trainer' | 'Manager'; sentence: MessageKey; byAdmins: boolean }[] = [
+  { id: 'member', label: 'auth.signup.roleRider', hint: 'auth.signup.roleRiderHint', api: 'Member', sentence: 'auth.signup.asMember', byAdmins: false },
+  { id: 'trainer', label: 'auth.signup.roleTrainer', hint: 'auth.signup.roleTrainerHint', api: 'Trainer', sentence: 'auth.signup.asTrainer', byAdmins: false },
+  { id: 'manager', label: 'auth.signup.roleManager', hint: 'auth.signup.roleManagerHint', api: 'Manager', sentence: 'auth.signup.asManager', byAdmins: true },
 ];
 
 interface FieldErrors { email?: string; password?: string; form?: string }
@@ -46,9 +47,9 @@ export function SignUpPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [emailLeft, setEmailLeft] = useState(false);
   const rulesId = useId();
+  const roleId = useId();
   const [club, setClub] = useState('');
   const [clubPicked, setClubPicked] = useState(false);
   const [role, setRole] = useState<RoleId | null>(null);
@@ -184,26 +185,15 @@ export function SignUpPage() {
         <div className="flex flex-col gap-2.5">
           <Field label={t('auth.field.password')} error={errors.password}>
             {({ id, invalid, describedBy }) => (
-              <div className="mg-field" data-invalid={invalid}>
-                <input id={id} type={showPassword ? 'text' : 'password'} value={password} autoComplete="new-password" aria-invalid={invalid}
-                  aria-describedby={[describedBy, rulesId].filter(Boolean).join(' ')}
-                  onChange={(e) => { setPassword(e.target.value); setErrors((cur) => ({ ...cur, password: undefined })); }} />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? t('auth.password.hide') : t('auth.password.show')}
-                  aria-pressed={showPassword}
-                  className="-mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[rgb(var(--mg-muted))] hover:text-[rgb(var(--mg-ink))]"
-                >
-                  {showPassword ? <EyeOff aria-hidden="true" className="h-[18px] w-[18px]" /> : <Eye aria-hidden="true" className="h-[18px] w-[18px]" />}
-                </button>
-              </div>
+              <PasswordInput id={id} value={password} autoComplete="new-password" invalid={invalid}
+                describedBy={[describedBy, rulesId].filter(Boolean).join(' ')}
+                onChange={(e) => { setPassword(e.target.value); setErrors((cur) => ({ ...cur, password: undefined })); }} />
             )}
           </Field>
           <PasswordChecklist password={password} id={rulesId} />
         </div>
 
-        <div className="flex flex-col gap-1.5">
+        <div className="relative">
           <Field label={t('auth.signup.club')}>
             {({ id }) => (
               <div className="mg-field">
@@ -213,7 +203,7 @@ export function SignUpPage() {
             )}
           </Field>
           {!clubPicked && typed !== '' && (
-            <div role="group" aria-label={t('auth.signup.clubSuggestions')} className="mg-card mg-list">
+            <div role="group" aria-label={t('auth.signup.clubSuggestions')} className="mg-card mg-list mg-swap absolute inset-x-0 top-full z-20 mt-1 overflow-hidden shadow-lg">
               {matches.map((c) => (
                 <button key={c.id} type="button" onClick={() => pickClub(c.name)}
                   className="flex min-h-11 w-full items-center px-3.5 text-left text-base font-medium text-[rgb(var(--mg-ink))] hover:bg-[rgb(var(--mg-subtle))]">{c.name}</button>
@@ -230,16 +220,21 @@ export function SignUpPage() {
 
         <div role="radiogroup" aria-labelledby="signup-role" className="flex flex-col gap-2">
           <span id="signup-role" className="text-sm font-semibold text-[rgb(var(--mg-body))]">{t('auth.signup.iAmA')}</span>
-          {ROLES.map((r) => {
-            const on = r.id === role;
-            return (
-              <button key={r.id} type="button" role="radio" aria-checked={on} onClick={() => setRole(r.id)}
-                className={`flex min-h-14 w-full items-center gap-3 rounded-[10px] bg-[rgb(var(--mg-surface))] px-3.5 text-left ${on ? 'border-2 border-[rgb(var(--mg-heading))]' : 'border border-[rgb(var(--mg-control))]'}`}>
-                <span aria-hidden="true" className={`box-border h-[22px] w-[22px] shrink-0 rounded-full ${on ? 'border-[7px] border-[rgb(var(--mg-heading))]' : 'border-[1.5px] border-[rgb(var(--mg-control))]'}`} />
-                <span className={`flex-1 text-base font-semibold ${on ? 'text-[rgb(var(--mg-heading))]' : 'text-[rgb(var(--mg-ink))]'}`}>{t(r.label)}</span>
-              </button>
-            );
-          })}
+          <div className="mg-card mg-list overflow-hidden">
+            {ROLES.map((r) => {
+              const on = r.id === role;
+              return (
+                <button key={r.id} type="button" role="radio" aria-checked={on} aria-labelledby={`${roleId}-${r.id}`} aria-describedby={`${roleId}-${r.id}-hint`} onClick={() => setRole(r.id)}
+                  className={`flex min-h-14 w-full items-center gap-3 px-3.5 py-2 text-left ${on ? 'bg-[rgb(var(--mg-tint))]' : ''}`}>
+                  <span className="flex flex-1 flex-col gap-0.5">
+                    <span id={`${roleId}-${r.id}`} className={`text-base font-semibold ${on ? 'text-[rgb(var(--mg-heading))]' : 'text-[rgb(var(--mg-ink))]'}`}>{t(r.label)}</span>
+                    <span id={`${roleId}-${r.id}-hint`} className="text-[13px] leading-[1.3] text-[rgb(var(--mg-muted))]">{t(r.hint)}</span>
+                  </span>
+                  <Check aria-hidden="true" strokeWidth={3} className={`h-5 w-5 shrink-0 text-[rgb(var(--mg-heading))] transition-opacity ${on ? 'opacity-100' : 'opacity-0'}`} />
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {clubPicked && chosenRole && <p className="text-sm font-medium leading-[1.4] text-[rgb(var(--mg-muted))]">{approvedBy}</p>}
@@ -251,7 +246,7 @@ export function SignUpPage() {
           <p className="text-center text-[15px] font-medium text-[rgb(var(--mg-body))]">
             {t('auth.signup.gotAccount')} <Link to="/login" state={loc.state} className="font-semibold text-[rgb(var(--mg-heading))] !underline">{t('common.signIn')}</Link>
           </p>
-          <p className="text-center text-[13px] text-[rgb(var(--mg-muted))]"><Link to="/privacy" className="!underline">{t('auth.signup.privacy')}</Link></p>
+          <p className="text-center text-[13px] text-[rgb(var(--mg-muted))]"><Link to="/privacy" className="inline-flex min-h-11 items-center !underline">{t('auth.signup.privacy')}</Link></p>
         </div>
       </form>
     </AuthFrame>
