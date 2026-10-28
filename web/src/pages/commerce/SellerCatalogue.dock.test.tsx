@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
-import { TickerProvider, useTicker } from '../../components/TickerContext';
+import { TickerProvider, useDockHost, useTicker } from '../../components/TickerContext';
 import { LanguageProvider } from '../../i18n/LanguageContext';
 import type { Lang } from '../../i18n/translate';
 import { SellerCataloguePage } from './SellerCataloguePage';
@@ -20,6 +20,7 @@ const mug = {
 const listing = (status: 0 | 1 | 2 | 3) => ({ id: 1, competitionId: 5, catalogueItemId: 20, sellerUserId: 's', status, reviewNote: null, reviewedAt: null, item: mug, createdAt: '', updatedAt: '' });
 
 function Probe() {
+  useDockHost();
   const { dockAction } = useTicker();
   return dockAction ? <button type="button" data-testid="dock" onClick={dockAction.onClick}>{dockAction.label}</button> : null;
 }

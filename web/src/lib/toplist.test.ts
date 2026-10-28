@@ -778,7 +778,7 @@ describe('explainTieBreak and tieBreakReason (#71)', () => {
         [],
         SECTION,
       ),
-    ).toBe('Level on points and countback — run-off if on cut-off');
+    ).toBe('Level on points and countback (run-off if on cut-off)');
 
     expect(
       explainTieBreak(

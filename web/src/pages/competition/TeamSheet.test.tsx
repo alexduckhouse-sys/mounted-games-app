@@ -25,6 +25,13 @@ describe('TeamSheet', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 
+  it('does not say the team rode until a race has a result', () => {
+    const early = { ...detail, blocks: [{ ...detail.blocks[0], races: [] } as never] };
+    render(<MemoryRouter><TeamSheet detail={early} sectionName="Seniors" competitionId={4} onClose={vi.fn()} /></MemoryRouter>);
+    expect(screen.getByRole('dialog', { name: 'Meadow Cup Seniors 1' })).toHaveAccessibleDescription('Seniors');
+    expect(screen.getByText('Not ridden yet')).toBeInTheDocument();
+  });
+
   it('shows the bib, the riders with their ponies and the scores heat by heat', () => {
     const team = { id: 7, bibDescription: 'Red with white stars' } as never;
     render(<MemoryRouter><TeamSheet detail={detail} sectionName="Seniors" competitionId={4} team={team} riders={[{ fullName: 'Ella Hughes', horseName: 'Pickle' }, { fullName: 'Sam Reid', horseName: null }]} onClose={vi.fn()} /></MemoryRouter>);

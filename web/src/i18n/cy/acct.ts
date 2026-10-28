@@ -181,7 +181,6 @@ export const acct: AreaCatalogue<typeof en> = {
   'acct.tp.eventTeam': 'Tîm y digwyddiad',
   'acct.tp.chooseTeam': 'Dewiswch y tîm cyfatebol',
   'acct.tp.noUnlinked': 'Does dim tîm heb ei gysylltu o glwb y proffil hwn yn y gystadleuaeth honno.',
-  'acct.tp.linkNote': 'Dewiswch dîm y digwyddiad eich hun. Fydd y system ddim yn paru timau yn ôl enw.',
   'acct.tp.linking': 'Yn cysylltu…',
   'acct.tp.link': 'Cysylltu tîm y digwyddiad',
 

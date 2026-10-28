@@ -181,7 +181,6 @@ export const acct: AreaCatalogue<typeof en> = {
   'acct.tp.eventTeam': 'Équipe de l’événement',
   'acct.tp.chooseTeam': 'Choisir l’équipe correspondante',
   'acct.tp.noUnlinked': 'Aucune équipe non liée du club de ce profil dans cette compétition.',
-  'acct.tp.linkNote': 'Choisissez vous-même l’équipe d’événement. Le système ne rapproche pas les équipes par leur nom.',
   'acct.tp.linking': 'Liaison…',
   'acct.tp.link': 'Lier l’équipe d’événement',
 

@@ -166,7 +166,7 @@ export const adminAccounts: AreaCatalogue<typeof en> = {
   'admin.accounts.ed.payoutsReady': 'Telir ffioedd cofrestru i {club} — {account} · Yn barod',
   'admin.accounts.ed.payoutsNotReady': 'Dyw {club} ddim wedi gorffen sefydlu taliadau eto.',
   'admin.accounts.ed.onlyAdmins': 'Dim ond gweinyddwyr a hyfforddwyr all gadw newidiadau.',
-  'admin.accounts.ed.fixFields': 'Cywirwch y meysydd sydd wedi’u hamlygu.',
+  'admin.accounts.ed.fixFields': 'Gwiriwch y blychau sydd wedi’u hamlygu.',
   'admin.accounts.ed.createdOpen': 'Crëwyd y gystadleuaeth. {link}.',
   'admin.accounts.ed.openToFinish': 'Agorwch hi i orffen',
   'admin.accounts.ed.stepOf': 'Cam {n} o {total}',

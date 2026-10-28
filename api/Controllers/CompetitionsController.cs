@@ -1027,7 +1027,7 @@ public class CompetitionsController : ControllerBase
                 var heatLabel = !string.IsNullOrWhiteSpace(heat.Label) ? heat.Label! : $"Heat {heat.OrderIndex}";
                 foreach (var entry in heat.Entries.OrderBy(e => e.LaneIndex))
                 {
-                    var teamName = entry.Team?.DisplayName ?? $"Team {entry.TeamId}";
+                    var teamName = entry.Team?.DisplayName ?? "Unnamed team";
                     messages.Add((entry.TeamId, new PushPayload(
                         Title: "Finals draw published",
                         Body: $"You are in the {heatLabel}, Lane {entry.LaneIndex} ({teamName})",

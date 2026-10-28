@@ -9,6 +9,13 @@ import { LanguageProvider } from '../i18n/LanguageContext';
 import type { Lang } from '../i18n/translate';
 import { SocialLoginButtons, clearSocialProvidersCache } from './SocialLoginButtons';
 
+/** Forgets the in-memory list but keeps what the device remembered, as a fresh page load would. */
+function clearModuleCacheOnly() {
+  const seen = localStorage.getItem('mg.socialProviders');
+  clearSocialProvidersCache();
+  if (seen) localStorage.setItem('mg.socialProviders', seen);
+}
+
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
   api: { get: vi.fn(), post: vi.fn() },
@@ -428,5 +435,49 @@ describe('in Welsh and French', () => {
     expect(await screen.findByRole('button', { name: 'Continue with Apple' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Continue with Facebook' })).toBeInTheDocument();
     expect(screen.getByText('neu')).toBeInTheDocument();
+  });
+});
+
+describe('no shifting on arrival', () => {
+  it('holds the space of the buttons while the first ever list is on its way, then lets it go if there is none', async () => {
+    get.mockResolvedValue({ data: [] });
+    const { container } = mount();
+    expect(screen.getByTestId('social-placeholder')).toBeInTheDocument();
+    await waitFor(() => expect(container).toBeEmptyDOMElement());
+  });
+
+  it('draws the buttons on the first paint when an earlier visit saw them', async () => {
+    mount();
+    await screen.findByRole('button', { name: 'Sign in with Apple' });
+    clearModuleCacheOnly();
+    get.mockReturnValue(new Promise(() => {}));
+    mount();
+    expect(screen.queryByTestId('social-placeholder')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Sign in with Apple' }).length).toBeGreaterThan(0);
+  });
+
+  it('keeps what an earlier visit saw when the list can’t be fetched', async () => {
+    mount();
+    await screen.findByRole('button', { name: 'Sign in with Apple' });
+    clearModuleCacheOnly();
+    get.mockRejectedValue(new Error('offline'));
+    const second = mount();
+    await act(async () => { await Promise.resolve(); });
+    expect(second.container.querySelector('button')).not.toBeNull();
+  });
+});
+
+describe('Google in Stable Night', () => {
+  afterEach(() => { delete document.documentElement.dataset.theme; });
+
+  it('asks Google for its black button on the dark theme, and the outline one otherwise', async () => {
+    get.mockResolvedValue({ data: [both[0]] });
+    mount();
+    await waitFor(() => expect(google.renderButton).toHaveBeenCalled());
+    expect(google.renderButton.mock.calls.at(-1)![1]).toEqual(expect.objectContaining({ theme: 'outline' }));
+    google.renderButton.mockClear();
+    await act(async () => { document.documentElement.dataset.theme = 'dark'; });
+    await waitFor(() => expect(google.renderButton).toHaveBeenCalled());
+    expect(google.renderButton.mock.calls.at(-1)![1]).toEqual(expect.objectContaining({ theme: 'filled_black' }));
   });
 });

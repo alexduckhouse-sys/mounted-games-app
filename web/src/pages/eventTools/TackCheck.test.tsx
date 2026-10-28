@@ -71,7 +71,7 @@ describe('tack check tab', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save tack check' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Give every sector a name');
     await userEvent.type(first, 'Hat');
-    await userEvent.click(screen.getByLabelText(/Tack & Turnout table/));
+    await userEvent.click(screen.getByLabelText(/Tack and turnout table/));
     const max = screen.getByLabelText('Most points per rider per sector');
     await userEvent.clear(max);
     await userEvent.type(max, '0');

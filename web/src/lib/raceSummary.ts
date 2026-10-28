@@ -117,7 +117,7 @@ export function summariseRace(input: SummaryInput): RaceSummary | null {
   const { heat, races, raceIndex, hcTeamIds, rule, notes } = input;
   const race = races[raceIndex];
   if (!race || !race.isComplete) return null;
-  const nameOf = (id: number) => heat.entries.find((e) => e.teamId === id)?.teamName ?? `Team ${id}`;
+  const nameOf = (id: number) => heat.entries.find((e) => e.teamId === id)?.teamName ?? 'Unnamed team';
 
   const placings = race.results.filter((r) => real(r) && !r.eliminated && (r.placing ?? 0) > 0)
     .sort((a, b) => a.placing! - b.placing!)
@@ -132,7 +132,7 @@ export function summariseRace(input: SummaryInput): RaceSummary | null {
 
 function ending(input: SummaryInput, totals: TotalRow[]): { heading: string; lines: string[] } {
   const { heat, races, qualifiers, hcTeamIds, notes } = input;
-  const nameOf = (id: number) => heat.entries.find((e) => e.teamId === id)?.teamName ?? `Team ${id}`;
+  const nameOf = (id: number) => heat.entries.find((e) => e.teamId === id)?.teamName ?? 'Unnamed team';
   if (heat.raceRoundStage === 1) {
     // The same pick the server makes: finishers by placing, hors concours teams skipped, the top N.
     const all = races.flatMap((r) => r.results).filter((r) => real(r) && !r.eliminated && (r.placing ?? 0) > 0)

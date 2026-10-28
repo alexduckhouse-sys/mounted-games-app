@@ -183,7 +183,7 @@ describe('buildCommentatorBriefing (#11)', () => {
     expect(briefing.currentRaceName).toBe('Pole Bending');
     expect(briefing.lanes[0].ridersAndPonies).toEqual(['Ella H. on Pickle (Capt)']);
     expect(briefing.lanes[0].gameSpecialistNote).toBe('Won their previous Bending run');
-    expect(briefing.lanes[1].stakesHeadline).toContain('above the Top 2 A-Final cutline');
-    expect(briefing.lanes[2].stakesHeadline).toContain('off the Top 2 A-Final cutline');
+    expect(briefing.lanes[1].stakesHeadline).toContain('pts clear of the A final cut-off');
+    expect(briefing.lanes[2].stakesHeadline).toContain('pts off the A final cut-off');
   });
 });

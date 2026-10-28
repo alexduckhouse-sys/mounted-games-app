@@ -148,12 +148,12 @@ describe('ReplayInspector component', () => {
 
     const video = screen.getByLabelText('Heat 3 Decider video') as HTMLVideoElement;
 
-    // Slow-Mo 0.25x Photo-Finish
+    // Slow-mo 0.25x Photo finish
     const speed025 = screen.getByRole('button', { name: 'Playback speed 0.25x' });
     fireEvent.click(speed025);
     expect(video.playbackRate).toBe(0.25);
 
-    // Slow-Mo 0.5x
+    // Slow-mo 0.5x
     const speed05 = screen.getByRole('button', { name: 'Playback speed 0.5x' });
     fireEvent.click(speed05);
     expect(video.playbackRate).toBe(0.5);
@@ -245,7 +245,7 @@ describe('ReplayInspector component', () => {
     fireEvent.timeUpdate(video);
     fireEvent.click(setEndBtn);
 
-    // Reset Trim restores to 0 and duration
+    // Reset trim restores to 0 and duration
     const resetTrimBtn = screen.getByRole('button', { name: 'Reset trim' });
     fireEvent.click(resetTrimBtn);
     expect(screen.getByText(/Trimmed: 00:00.0 – 00:10.0 \(10.0s\)/)).toBeInTheDocument();
@@ -254,7 +254,7 @@ describe('ReplayInspector component', () => {
     fireEvent.change(trimEndInput, { target: { value: '5.5' } });
     fireEvent.change(trimStartInput, { target: { value: '2.5' } });
 
-    // Replay Clip button jumps to trimStart and plays
+    // Replay clip button jumps to trimStart and plays
     const replayBtn = screen.getByRole('button', { name: 'Replay clip' });
     fireEvent.click(replayBtn);
     expect(video.currentTime).toBe(2.5);
@@ -268,7 +268,7 @@ describe('ReplayInspector component', () => {
     expect(video.currentTime).toBe(2.5);
   });
 
-  it('handles post-review decision bar: Save Highlight and Remove Line Review', async () => {
+  it('handles post-review decision bar: Save highlight and Remove Line Review', async () => {
     const clip = createMockClip();
     addSavedReplay(clip);
     const onSaveHighlight = vi.fn();
@@ -430,10 +430,10 @@ describe('ReplayInspector component', () => {
         bufferedSeconds={120}
       />
     );
-    expect(screen.getByText('120s buffered')).toBeInTheDocument();
+    expect(screen.getByText('120s recorded')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Save last 15s' }));
     expect(onCaptureBufferClip).toHaveBeenCalledWith(15);
-    fireEvent.click(screen.getByRole('button', { name: 'Save full buffer (30m)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save last 30 minutes' }));
     expect(onCaptureBufferClip).toHaveBeenCalledWith(1800);
 
     // Without bufferedSeconds prop, shows 'Ready'
@@ -633,7 +633,7 @@ describe('ReplayInspector component', () => {
     expect(onClose).toHaveBeenCalled();
 
     // Click inside modal content should stop propagation
-    const drawerTitle = screen.getByText('Saved Replays');
+    const drawerTitle = screen.getByText('Saved replays');
     fireEvent.click(drawerTitle);
     // Should not call onClose again
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -835,7 +835,7 @@ describe('ReplayInspector component', () => {
     // Add Keyframe button (with zoom <= 1 sets zoom to 2)
     video.currentTime = 1.0;
     fireEvent.timeUpdate(video);
-    const addKeyframeBtn = screen.getByRole('button', { name: 'Add follow keyframe' });
+    const addKeyframeBtn = screen.getByRole('button', { name: 'Add camera point' });
     fireEvent.click(addKeyframeBtn);
     expect(screen.getAllByTestId('follow-keyframe-dot')).toHaveLength(1);
 
@@ -896,8 +896,8 @@ describe('ReplayInspector component', () => {
     await waitFor(() => expect(onSaveHighlight).toHaveBeenCalledWith(expect.objectContaining({ savedHighlight: true, followKeyframes: undefined })));
     expect(vi.mocked(encodeReplay).mock.calls.at(-1)![1]?.transform).toBeTypeOf('function');
 
-    // Clear follow keyframes
-    const clearFollowBtn = screen.getByRole('button', { name: 'Clear follow keyframes' });
+    // Clear camera points
+    const clearFollowBtn = screen.getByRole('button', { name: 'Clear camera points' });
     fireEvent.click(clearFollowBtn);
     expect(screen.queryByTestId('follow-keyframe-dot')).toBeNull();
     expect(video.style.transform).toContain('scale(1)');
@@ -915,7 +915,7 @@ describe('ReplayInspector component', () => {
     Object.defineProperty(video, 'clientWidth', { configurable: true, value: 360 });
     Object.defineProperty(video, 'clientHeight', { configurable: true, value: 202.5 });
     fireEvent.click(screen.getByRole('button', { name: 'Zoom 2x' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Add follow keyframe' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add camera point' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save highlight' }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     expect(vi.mocked(encodeReplay).mock.calls.at(-1)![1]?.transform?.(0, 1920, 1080)).toEqual({ zoom: 2, panX: 0, panY: 0 });
@@ -941,7 +941,7 @@ describe('ReplayInspector component', () => {
     const video = screen.getByLabelText('Heat 3 Decider video') as HTMLVideoElement;
     Object.defineProperty(video, 'clientWidth', { configurable: true, value: 720 }); Object.defineProperty(video, 'clientHeight', { configurable: true, value: 405 });
     fireEvent.timeUpdate(video); expect(video.style.transform).toContain('translate(60px, 20px)');
-    fireEvent.click(screen.getByRole('button', { name: 'Clear follow keyframes' })); fireEvent.timeUpdate(video); expect(video.style.transform).toContain('scale(1)');
+    fireEvent.click(screen.getByRole('button', { name: 'Clear camera points' })); fireEvent.timeUpdate(video); expect(video.style.transform).toContain('scale(1)');
   });
   it('keeps snapshot failures visible and never offers a fake download before video has loaded', () => {
     render(<ReplayInspector clip={createMockClip()} onClose={vi.fn()} />);
@@ -1050,13 +1050,13 @@ describe('ReplayInspector followKeyframes initialization and sync', () => {
     const { rerender } = render(
       <ReplayInspector clip={clipWithKf} clips={[clipWithKf, clipWithoutKf]} onClose={vi.fn()} />
     );
-    expect(screen.getByRole('button', { name: 'Clear follow keyframes' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Clear camera points' })).toBeInTheDocument();
 
     // Change active clip to another clip with followKeyframes to test useEffect branch
     rerender(
       <ReplayInspector clip={clipWithoutKf} clips={[clipWithKf, clipWithoutKf]} onClose={vi.fn()} />
     );
-    expect(screen.getByRole('button', { name: 'Clear follow keyframes' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Clear camera points' })).toBeInTheDocument();
   });
 
   it('records keyframe with existing zoom > 1 when Add Keyframe is clicked', () => {
@@ -1066,7 +1066,7 @@ describe('ReplayInspector followKeyframes initialization and sync', () => {
     const video = screen.getByLabelText('Heat 3 Decider video') as HTMLVideoElement;
     video.currentTime = 1.5;
     fireEvent.timeUpdate(video);
-    const addKeyframeBtn = screen.getByRole('button', { name: 'Add follow keyframe' });
+    const addKeyframeBtn = screen.getByRole('button', { name: 'Add camera point' });
     fireEvent.click(addKeyframeBtn);
     expect(screen.getAllByTestId('follow-keyframe-dot')).toHaveLength(1);
   });

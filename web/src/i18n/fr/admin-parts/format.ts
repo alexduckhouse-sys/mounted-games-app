@@ -249,7 +249,7 @@ export const adminFormat: AreaCatalogue<typeof en> = {
   'admin.format.diagram.editorLabel': 'Éditeur de schéma de course',
   'admin.format.diagram.places': 'Emplacements sur le couloir',
   'admin.format.diagram.tapToPlace': 'Touchez un piquet ou un intervalle pour placer du matériel.',
-  'admin.format.diagram.tapToEdit': 'Touchez un élément pour le modifier, ou un emplacement pour ajouter du matériel.',
+  'admin.format.diagram.tapToEdit': 'Touchez un équipement pour le modifier, ou un emplacement vide pour en ajouter.',
   'admin.format.diagram.addHere': 'Ajouter ici :',
   'admin.format.diagram.group.lane': 'Couloir',
   'admin.format.diagram.group.cones': 'Cônes',

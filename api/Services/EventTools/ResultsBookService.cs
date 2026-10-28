@@ -244,6 +244,6 @@ public sealed class ResultsBookService(AppDbContext db, StandingsService standin
             .SelectMany(h => h.Races.OrderBy(r => r.OrderIndex).ThenBy(r => r.Id).SelectMany(r =>
                 r.Results.Where(x => !string.IsNullOrWhiteSpace(x.RefereeNote)).Select(x =>
                     new ResultsBookNoteDto(sectionName, h.Label ?? $"Heat {h.OrderIndex}", r.Name,
-                        h.Entries.FirstOrDefault(e => e.TeamId == x.TeamId)?.Team?.DisplayName ?? $"Team {x.TeamId}",
+                        h.Entries.FirstOrDefault(e => e.TeamId == x.TeamId)?.Team?.DisplayName ?? "Unnamed team",
                         ResultStatuses.Letter(x.Eliminated, x.Status), x.RefereeNote!))));
 }

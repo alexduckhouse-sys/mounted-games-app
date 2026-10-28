@@ -30,12 +30,12 @@ describe('DecFormConfigEditor', () => {
   it('explains when it can’t load or hasn’t yet', async () => {
     api.get.mockRejectedValueOnce(new Error('offline'));
     const { unmount } = render(<DecFormConfigEditor competitionId={9} />);
-    expect(await screen.findByText(/Couldn’t load the dec form setup/)).toBeInTheDocument();
+    expect(await screen.findByText(/Couldn’t load the declaration form setup/)).toBeInTheDocument();
     unmount();
     api.get.mockResolvedValueOnce({ data: '<html>' });
     render(<DecFormConfigEditor competitionId={9} />);
-    expect(screen.getByText(/Loading the dec form setup/)).toBeInTheDocument();
-    expect(await screen.findByText(/Couldn’t load the dec form setup/)).toBeInTheDocument();
+    expect(screen.getByText(/Loading the declaration form setup/)).toBeInTheDocument();
+    expect(await screen.findByText(/Couldn’t load the declaration form setup/)).toBeInTheDocument();
   });
 
   it('turns parts on, picks their format and saves the setup', async () => {

@@ -421,10 +421,10 @@ describe('NavigationDrawer: settings, QR scanner and weather', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Scan the QR code' })).not.toBeInTheDocument());
 
     await userEvent.click(scanBtn);
-    fireEvent.change(screen.getByLabelText('Permission link or key'), {
+    fireEvent.change(screen.getByLabelText('Scoring or camera link'), {
       target: { value: '/competitions/4/broadcast?pair=pair_secret_1234567890' },
     });
-    await userEvent.click(screen.getByRole('button', { name: 'Verify permission key' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Open link' }));
     expect(screen.getByRole('alert')).toHaveTextContent('That QR code isn’t a scoring or camera code');
     expect(onClose).not.toHaveBeenCalled();
   });
@@ -516,8 +516,8 @@ describe('NavigationDrawer: permission scanner', () => {
     const verify = vi.spyOn(scorerApi, 'get').mockResolvedValue({ data: session });
     mount();
     await userEvent.click(screen.getByRole('button', { name: 'Scan a QR code' }));
-    fireEvent.change(screen.getByLabelText('Permission link or key'), { target: { value: `/score#t=${token}` } });
-    fireEvent.click(screen.getByRole('button', { name: 'Verify permission key' }));
+    fireEvent.change(screen.getByLabelText('Scoring or camera link'), { target: { value: `/score#t=${token}` } });
+    fireEvent.click(screen.getByRole('button', { name: 'Open link' }));
     await waitFor(() => expect(screen.getByTestId('probe')).toHaveTextContent(`/score#t=${token}`));
     expect(verify).toHaveBeenCalledExactlyOnceWith('/scorer/session', { headers: { 'X-Scorer-Token': token } });
     expect(readScorerToken()).toBe(token);
@@ -530,8 +530,8 @@ describe('NavigationDrawer: permission scanner', () => {
     vi.spyOn(scorerApi, 'get').mockRejectedValue({ response: { status: 410 } });
     mount();
     await userEvent.click(screen.getByRole('button', { name: 'Scan a QR code' }));
-    fireEvent.change(screen.getByLabelText('Permission link or key'), { target: { value: 'mgs_fake_expired_permission' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Verify permission key' }));
+    fireEvent.change(screen.getByLabelText('Scoring or camera link'), { target: { value: 'mgs_fake_expired_permission' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Open link' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('That QR code isn’t a scoring or camera code, or it has stopped working');
     expect(onClose).not.toHaveBeenCalled();
     expect(readScorerToken()).toBeNull();

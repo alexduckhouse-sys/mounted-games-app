@@ -336,7 +336,6 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
           <label className="rf-fld">{t('acct.tp.eventTeam')}<SelectField value={teamId} onChange={(event) => setTeamId(event.target.value)} required disabled={!competition}><option value="">{t('acct.tp.chooseTeam')}</option>{matchingTeams.map((team) => <option key={team.id} value={team.id}>{team.displayName}</option>)}</SelectField></label>
           {competition && matchingTeams.length === 0 && <p className="rf-note sv-flush">{t('acct.tp.noUnlinked')}</p>}
         </fieldset>
-        <RefineNote>{t('acct.tp.linkNote')}</RefineNote>
         <button className="rf-btn rf-btn-primary" disabled={busy || !teamId}><Link2 className="h-4 w-4" aria-hidden="true" />{busy ? t('acct.tp.linking') : t('acct.tp.link')}</button>
       </form>
     </>}

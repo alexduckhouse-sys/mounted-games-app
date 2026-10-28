@@ -96,3 +96,16 @@ describe('PrivacyPage', () => {
     expect(screen.getByText(/Full account numbers are checked and then discarded, never stored/)).toBeInTheDocument();
   });
 });
+
+describe('PrivacyPage wording', () => {
+  it('no longer mentions trainer notes, hashes or the hosting products by name', () => {
+    mount('/privacy');
+    expect(document.body.textContent).not.toMatch(/trainer notes|stored as a hash|Neon|Vercel/i);
+    expect(document.body.textContent).toMatch(/scrambled securely/);
+  });
+
+  it('opens the safeguarding page without pointing back at text above', () => {
+    mount('/safeguarding');
+    expect(document.body.textContent).not.toMatch(/as described above/i);
+  });
+});

@@ -302,13 +302,13 @@ function QrPermissionScannerDialog({
             <label className="kit-sheet-field">
               <span className="flex items-center gap-1.5">
                 <KeyRound className="h-3.5 w-3.5" aria-hidden="true" />
-                Or enter permission link / access code
+                Or paste your scoring or camera link
               </span>
               <input
                 ref={pasteRef}
                 type="text"
-                aria-label="Permission link or key"
-                placeholder="Paste /score#t=… link or mgs_… key"
+                aria-label="Scoring or camera link"
+                placeholder="Paste the link from the organiser"
                 value={manualValue}
                 onChange={(e) => setManualValue(e.target.value)}
               />
@@ -318,7 +318,7 @@ function QrPermissionScannerDialog({
               disabled={verifying || !manualValue.trim()}
               className="kit-pill kit-pill-fill"
             >
-              {verifying ? 'Verifying key…' : 'Verify permission key'}
+              {verifying ? 'Opening…' : 'Open link'}
             </button>
           </form>
         </>

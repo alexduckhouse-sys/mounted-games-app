@@ -185,7 +185,6 @@ export const acct = {
   'acct.tp.eventTeam': 'Event team',
   'acct.tp.chooseTeam': 'Choose the matching team',
   'acct.tp.noUnlinked': 'There’s no unlinked team from this profile’s club in that competition.',
-  'acct.tp.linkNote': 'Choose the event team yourself. The system won’t match teams by name.',
   'acct.tp.linking': 'Linking…',
   'acct.tp.link': 'Link event team',
 
