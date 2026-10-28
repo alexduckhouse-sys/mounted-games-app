@@ -156,7 +156,7 @@ it('filters by arena from the slider in the filter sheet, shows it as a chip and
   expect(screen.getByText('Heat 2')).toBeVisible();
   expect(screen.queryByText('Heat 1')).toBeNull();
   expect(within(sheet).getByRole('button', { name: 'Show 1 heat' })).toBeVisible();
-  expect(header().subtitle).toBe(`${weekday(day)} · Arena Two`);
+  expect(header().subtitle).toBe('Spring Games');
   expect(filterButton()).toHaveTextContent('(1)');
 
   // The chip under the header clears it again.
@@ -222,7 +222,7 @@ it('offers day tabs, named by weekday, when the event runs over several days, an
   fireEvent.click(days[1]);
   expect(screen.getByText('Nothing scheduled for this day.')).toBeVisible();
   expect(container.querySelector('.tt-body')).toHaveClass('tt-in-right-1');
-  expect(header().subtitle).toBe(weekday(tomorrow));
+  expect(header().subtitle).toBe('Spring Games');
   fireEvent.click(days[0]);
   expect(screen.getByText('Heat 1')).toBeVisible();
   expect(container.querySelector('.tt-body')).toHaveClass('tt-in-left-0');
@@ -262,13 +262,14 @@ it('defaults the header title to Timetable and leaves the time out until loaded'
   expect(JSON.parse(screen.getByTestId('header').textContent!)).toMatchObject({ title: 'Timetable', subtitle: 'Spring Games' });
 });
 
-it('says in the header line what is showing once there is something to filter', () => {
+it('keeps the competition name and update time in the header line, with no day or age-group summary, once there is something to filter', () => {
   setCompetition({ sections: [
     { id: 10, competitionId: 1, format: 2, ageGroup: 'Under 12', displayName: 'Teams Under 12' },
     { id: 20, competitionId: 1, format: 2, ageGroup: 'Under 15', displayName: 'Teams Under 15' },
   ] }, new Date(2026, 5, 1, 10, 54));
   renderWithDock();
-  expect(header().subtitle).toBe(`${weekday(day)} · All ages`);
+  expect(header().subtitle).toBe('Spring Games · 10:54');
+  expect(header().subtitle).not.toMatch(/All ages|▾/);
 });
 
 it('renders the bandExtra and lead slots, places Status colours above Show full timetable, and reveals footer inside Show full timetable', () => {
@@ -422,7 +423,7 @@ it('filters the timetable by age group (section) when the competition has multip
   expect(tiles[1]).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByText('U15 Heat 1')).toBeVisible();
   expect(screen.queryByText('U12 Heat 1')).toBeNull();
-  expect(header().subtitle).toBe(`${weekday(day)} · Under 15`);
+  expect(header().subtitle).toBe('Spring Games');
   expect(screen.getByRole('button', { name: 'Remove Under 15' })).toBeVisible();
 
   // Tapping the chosen tile again goes back to every age.

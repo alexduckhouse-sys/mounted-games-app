@@ -230,11 +230,10 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
   const filterable = days.length > 1 || showArenaSelect || showSectionSelect;
   const dayLabel = dayLabels(days, locale);
   const sectionLabel = sections.find((s) => String(s.id) === selectedSection)?.label;
-  // With filters the header line says what is showing; otherwise it keeps the competition and update time.
-  const summary = [dayLabel(selectedDay), selectedArena, showSectionSelect ? sectionLabel ?? t('competition.timetable.allAges') : ''].filter(Boolean).join(' · ');
   usePageHeader({
     title,
-    subtitle: filterable ? summary : updated ? `${competition.name} · ${updated}` : competition.name,
+    // What is filtered is shown by the chips under the header and the badge on the dock button, not in this line.
+    subtitle: updated ? `${competition.name} · ${updated}` : competition.name,
     onRefresh: reload,
     refreshLabel: t('competition.timetable.refresh'),
     onEdit: showQualifiers ? () => setDelayOpen(true) : undefined,
