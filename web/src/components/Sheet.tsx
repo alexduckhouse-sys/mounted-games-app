@@ -1,7 +1,6 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useId, type ReactNode } from 'react';
 import { useExitDelay } from '../hooks/useExitDelay';
-
-const SWIPE_DISMISS_PX = 48;
+import { useSwipeToClose } from '../hooks/useSwipeToClose';
 
 export interface SheetProps {
   /** The heading: a short question or name, in Barlow Condensed. */
@@ -27,12 +26,10 @@ export interface SheetProps {
  * `kit-pill kit-pill-del`). Dropdowns are not sheets.
  */
 export function Sheet({ title, description, onClose, dismissible = true, initialFocus, className = '', children }: SheetProps) {
-  const ref = useRef<HTMLDialogElement>(null);
-  const startY = useRef<number | null>(null);
-  const [dragY, setDragY] = useState(0);
   const titleId = useId();
   const descriptionId = useId();
   const { closing, close } = useExitDelay((after?: () => void) => (after ?? onClose)());
+  const { ref, handlers, style, dragging } = useSwipeToClose<HTMLDialogElement>(() => close(), dismissible);
 
   useEffect(() => {
     const dialog = ref.current;
@@ -41,30 +38,7 @@ export function Sheet({ title, description, onClose, dismissible = true, initial
     else dialog.setAttribute('open', '');
     if (initialFocus) dialog.querySelector<HTMLElement>(initialFocus)?.focus();
     return () => { if (typeof dialog.close === 'function') dialog.close(); };
-  }, [initialFocus]);
-
-  // A drag that starts in a field, button/link, or on a scrolled sheet, is the person typing, tapping or scrolling, not closing.
-  function begin(y: number, target: EventTarget | null) {
-    if (!dismissible || (ref.current?.scrollTop ?? 0) !== 0) return;
-    if (target instanceof Element && target.closest('input, textarea, select, button, a, [data-no-swipe]')) return;
-    startY.current = y;
-  }
-  function move(y: number) {
-    if (startY.current === null) return;
-    setDragY(Math.max(0, y - startY.current));
-  }
-  function cancel() {
-    if (startY.current === null) return;
-    startY.current = null;
-    setDragY(0);
-  }
-  function end(y?: number) {
-    if (startY.current === null) return;
-    const distance = Math.max(dragY, (y ?? startY.current) - startY.current);
-    startY.current = null;
-    setDragY(0);
-    if (distance >= SWIPE_DISMISS_PX) close();
-  }
+  }, [initialFocus, ref]);
 
   return (
     <dialog
@@ -73,16 +47,9 @@ export function Sheet({ title, description, onClose, dismissible = true, initial
       aria-describedby={description ? descriptionId : undefined}
       onCancel={(event) => { event.preventDefault(); if (dismissible) close(); }}
       onClick={(event) => { if (dismissible && event.target === event.currentTarget) close(); }}
-      onTouchStart={(event) => begin(event.touches[0].clientY, event.target)}
-      onTouchMove={(event) => move(event.touches[0].clientY)}
-      onTouchEnd={(event) => end(event.changedTouches[0]?.clientY)}
-      onTouchCancel={cancel}
-      onPointerDown={(event) => { if (event.button === 0) begin(event.clientY, event.target); }}
-      onPointerMove={(event) => { if (event.buttons === 0 && event.pointerType === 'mouse') { cancel(); return; } move(event.clientY); }}
-      onPointerUp={(event) => end(event.clientY)}
-      onPointerCancel={cancel}
-      style={dragY > 0 ? { transform: `translateY(${dragY}px)`, '--drag': `${dragY}px` } as CSSProperties : undefined}
-      className={`mg-sheet kit-sheet${closing ? ' is-closing' : ''} ${className}`.trim()}
+      {...handlers}
+      style={style}
+      className={`mg-sheet kit-sheet${dragging ? ' is-dragging' : ''}${closing ? ' is-closing' : ''} ${className}`.trim()}
     >
       <div className="kit-sheet-inner">
         <span aria-hidden="true" className="kit-sheet-grip" />

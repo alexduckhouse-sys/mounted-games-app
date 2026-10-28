@@ -173,7 +173,8 @@ The owner reviewed each public page as "live capture beside a tidier version" on
 - **Back button:** a boxed 44px arrow matching the menu button (`.mg-nav-btn`) on every page that has a back button.
 - **Page transitions** (picked by the owner, so they're an exception to "leave animations alone"):
   - opening a page and going back use a push;
-  - switching tabs uses a quick 160ms crossfade.
+  - switching tabs uses a quick 160ms crossfade, starting part-faded (never from a blank page);
+  - bottom pop-ups (sheets, confirm boxes, the "Save quick access" card, organiser sheets) use the **quick slide** picked on 28 October 2026: straight up in about 280ms, straight down in about 200ms, no bounce. Any of them can be swiped down: it follows the finger, and letting go past a quarter of its height (or after a quick flick) closes it, otherwise it slides back. Reduced motion and Lite mode skip the movement. Spring and lift-and-fade were the other options.
 - **Heat page:**
   - built as it is now, with bigger team names;
   - no "Lane N" line, no ‹ › arrows, no Official mark, nothing underlined;
