@@ -226,7 +226,10 @@ describe('EmailPage', () => {
     const dialog = screen.getByRole('dialog', { name: 'Send this email?' });
     expect(within(dialog).getByText(/To the news list, 3 people\. You can’t unsend it\./)).toBeInTheDocument();
     expect(within(dialog).getByText('Entries are open.')).toBeInTheDocument();
-    await user.click(within(dialog).getByRole('button', { name: 'Not yet' }));
+    // One navy pill for the main action; Cancel is red underlined text.
+    expect(within(dialog).getByRole('button', { name: 'Send to 3 people' })).toHaveClass('kit-pill-fill');
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveClass('kit-redtext');
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(api.post).not.toHaveBeenCalled();
 
@@ -263,6 +266,8 @@ describe('EmailPage', () => {
     const status = await screen.findByText('Sending… 0 of 3');
     expect(status).toBeInTheDocument();
     expect(screen.getByText('Keep this page open while it sends.')).toBeInTheDocument();
+    // The bar's fill is set by width; the stylesheet eases it from one value to the next.
+    expect(document.querySelector('.em-bar > span')).toHaveStyle({ width: '0%' });
     expect(screen.queryByRole('button', { name: 'Send to 3 people' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Stop sending' }));
     expect(await screen.findByText('Stopped after 1 person.')).toBeInTheDocument();
