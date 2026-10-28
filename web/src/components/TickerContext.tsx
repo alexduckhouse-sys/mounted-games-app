@@ -27,6 +27,9 @@ interface TickerState {
   /** True while the dock is actually on screen (the shell leaves it off on some pages, such as print and scoring). */
   docked: boolean;
   setDockHosts: (change: (count: number) => number) => void;
+  /** True while a quiet page (such as the not-found page) is open: the dock keeps its page button but shows no ticker line. */
+  quiet: boolean;
+  setQuiet: (quiet: boolean) => void;
 }
 const Ctx = createContext<TickerState | null>(null);
 
@@ -35,12 +38,13 @@ export function TickerProvider({ children }: { children: ReactNode }) {
   const [items, setRawItems] = useState<TickerItem[]>([]);
   const [dockAction, setDockAction] = useState<DockAction | null>(null);
   const [dockHosts, setDockHosts] = useState(0);
+  const [quiet, setQuiet] = useState(false);
   const docked = dockHosts > 0;
   // The page republishes every minute; keep the same list when nothing changed so the rotation is not reset.
   const setItems = useCallback((next: TickerItem[]) => setRawItems((current) => (sameTickerItems(current, next) ? current : next)), []);
   const value = useMemo(
-    () => ({ items, setItems, watchCompetitionId, setWatchCompetitionId, dockAction, setDockAction, docked, setDockHosts }),
-    [items, setItems, watchCompetitionId, dockAction, docked],
+    () => ({ items, setItems, watchCompetitionId, setWatchCompetitionId, dockAction, setDockAction, docked, setDockHosts, quiet, setQuiet }),
+    [items, setItems, watchCompetitionId, dockAction, docked, quiet],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -93,4 +97,18 @@ export function useDockAction(action: { label: string; onClick: () => void; icon
     return () => setDockAction(null);
   }, [setDockAction, shown, label, icon, count]);
   return ctx?.docked ?? false;
+}
+
+/**
+ * Marks the page as a quiet one: no ticker line over it (a page's own dock button still shows). Pages that can be
+ * recognised by their address are listed in `AppShell` instead; this is for the ones that can't, such as "not found".
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function useQuietTicker() {
+  const setQuiet = useContext(Ctx)?.setQuiet;
+  useLayoutEffect(() => {
+    if (!setQuiet) return;
+    setQuiet(true);
+    return () => setQuiet(false);
+  }, [setQuiet]);
 }

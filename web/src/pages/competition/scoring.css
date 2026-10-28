@@ -487,7 +487,6 @@ button.sc-done-name { background: none; border: 0; padding: 0; text-align: left;
 .rt-link-name { font: 600 15px/1.25 var(--mg-font); }
 .rt-link-sub { font: 500 13px/1.3 var(--mg-font); color: rgb(var(--mg-muted)); }
 .rt-link .rf-sw { margin-left: auto; }
-.rt-link .rf-sw::after { content: ''; position: absolute; inset: -11px -4px; }
 
 /* Heat picker bar, heat table and between-heats pages. */
 .hb-bar { position: relative; display: flex; align-items: center; background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); border-radius: 12px; }

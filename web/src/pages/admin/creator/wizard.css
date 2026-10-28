@@ -89,6 +89,9 @@
 /* Round - and + with the number between (S3). */
 .cw-stp { display: inline-flex; align-items: center; gap: 10px; flex: none; }
 .cw-stp button { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; border: 1.5px solid rgb(var(--mg-heading)); border-radius: 17px; background: transparent; color: rgb(var(--mg-heading)); cursor: pointer; }
+.cw-stp button { position: relative; }
+/* The ring stays 34px; an invisible 44px area around it is what a thumb hits. */
+.cw-stp button::after { content: ''; position: absolute; inset: -5px; }
 .cw-stp button:disabled { opacity: .35; cursor: default; }
 .cw-stp input { width: 44px; min-height: 34px; padding: 0; border: 0; background: transparent; text-align: center; font: 700 22px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); -moz-appearance: textfield; appearance: textfield; }
 .cw-stp input::placeholder { font: 600 14px/1 var(--mg-font); color: rgb(var(--mg-muted)); }

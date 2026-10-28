@@ -1,10 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
 import { describe, expect, it, vi } from 'vitest';
-import { RefineDisclosure, RefineFoot, RefineHeader, RefineList, RefineMenu, RefineQty, RefineSection, RefineSheet, RefineStatus } from './Refine';
+import { RefineChoiceRow, RefineDisclosure, RefineFoot, RefineHeader, RefineList, RefineMenu, RefineQty, RefineSection, RefineSheet, RefineStatus } from './Refine';
 
 describe('RefineHeader', () => {
   it('shows the context, title and DEMO chip, with a back link or an in-page back button', async () => {
@@ -158,5 +158,67 @@ describe('RefineMenu', () => {
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     expect(remove).not.toHaveBeenCalled();
+  });
+});
+
+describe('floating panels (menus and choice rows)', () => {
+  const items = [{ label: 'One', onSelect: vi.fn() }, { label: 'Two', onSelect: vi.fn() }, { label: 'Three', onSelect: vi.fn() }];
+
+  it('moves focus in, points the button at the panel, and moves with the arrow keys', async () => {
+    const user = userEvent.setup();
+    render(<RefineMenu label="More" items={items} />);
+    const button = screen.getByRole('button', { name: 'More' });
+    expect(button).not.toHaveAttribute('aria-controls');
+    await user.click(button);
+    expect(screen.getByRole('menuitem', { name: 'One' })).toHaveFocus();
+    expect(button).toHaveAttribute('aria-controls', screen.getByRole('menu').parentElement!.id);
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menuitem', { name: 'Two' })).toHaveFocus();
+    await user.keyboard('{End}');
+    expect(screen.getByRole('menuitem', { name: 'Three' })).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menuitem', { name: 'One' })).toHaveFocus();
+    await user.keyboard('{ArrowUp}');
+    expect(screen.getByRole('menuitem', { name: 'Three' })).toHaveFocus();
+    await user.keyboard('{Home}');
+    expect(screen.getByRole('menuitem', { name: 'One' })).toHaveFocus();
+  });
+
+  it('gives focus back to the button on Escape and after choosing something, and closes when focus leaves it', async () => {
+    const user = userEvent.setup();
+    render(<><RefineMenu label="More" items={items} /><button type="button">Elsewhere</button></>);
+    const button = screen.getByRole('button', { name: 'More' });
+    await user.click(button);
+    await user.keyboard('{Escape}');
+    expect(button).toHaveFocus();
+    await user.click(button);
+    await user.click(screen.getByRole('menuitem', { name: 'Two' }));
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(button).toHaveFocus();
+    await user.click(button);
+    await user.keyboard('{Tab}');
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    act(() => { screen.getByRole('button', { name: 'Elsewhere' }).focus(); });
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  it('closes when the page scrolls, but not when the panel itself scrolls', async () => {
+    const user = userEvent.setup();
+    render(<RefineMenu label="More" items={items} />);
+    await user.click(screen.getByRole('button', { name: 'More' }));
+    act(() => { screen.getByRole('menu').parentElement!.dispatchEvent(new Event('scroll')); });
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    act(() => { document.dispatchEvent(new Event('scroll')); });
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  it('stays open when the page scrolls to bring a field in the panel into view', async () => {
+    const user = userEvent.setup();
+    render(<RefineChoiceRow label="Colour" value="red" allowOther options={[{ value: 'red', label: 'Red' }]} onChange={() => undefined} />);
+    await user.click(screen.getByRole('button', { name: /Colour/ }));
+    await user.click(screen.getByRole('option', { name: 'Other…' }));
+    expect(screen.getByRole('textbox')).toHaveFocus();
+    act(() => { document.dispatchEvent(new Event('scroll')); });
+    expect(screen.getByRole('textbox')).toBeInTheDocument();
   });
 });

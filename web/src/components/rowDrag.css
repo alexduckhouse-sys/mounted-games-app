@@ -7,3 +7,6 @@
 .mg-grip:hover, .mg-grip:focus-visible { background: rgb(var(--mg-tint) / .7); color: rgb(var(--mg-heading)); }
 [data-race-row][data-lifted="true"] .mg-grip { cursor: grabbing; background: rgb(var(--mg-tint) / .7); }
 @media (prefers-reduced-motion: reduce) { [data-race-row] { transition: none !important; } }
+/* The grip is 40px wide; its tap area reaches the full 44px. */
+.mg-grip { position: relative; }
+.mg-grip::after { content: ''; position: absolute; inset: 0 -2px; }

@@ -55,9 +55,10 @@ function Line({ item, className }: { item: TickerItem; className: string }) {
  * The ticker dock just above the tab bar: one line that rolls through what is on now, delays, what is next and
  * organiser announcements, each new line pushing the last one up and out. The arrow opens every update above it;
  * a tap anywhere else closes that list. A page can put one button beside it (the timetable's filters). On a page
- * with no tab bar it sits at the bottom of the screen (`low`).
+ * with no tab bar it sits at the bottom of the screen (`low`). On a quiet page (`quiet`) the news line is left out and
+ * only the page's own button shows.
  */
-export function TopBarTicker({ low = false }: { low?: boolean }) {
+export function TopBarTicker({ low = false, quiet = false }: { low?: boolean; quiet?: boolean }) {
   const t = useT();
   const cap = PAGE_WIDTH_CLASS[usePageWidthValue()];
   const { current } = useCurrentCompetition();
@@ -106,7 +107,7 @@ export function TopBarTicker({ low = false }: { low?: boolean }) {
   }, [items, index, holdMs, reduceMotion, open]);
 
   // A page's button shows on its own (bottom right) on pages outside any competition, such as the shop's "+".
-  if (!dockAction && (!current || !active)) return null;
+  if (!dockAction && (quiet || !current || !active)) return null;
   const feed = current ? `/competitions/${current.id}/chat` : '/events';
   const timetable = current ? `/competitions/${current.id}` : '/events';
   const DockActionIcon = DOCK_ICONS[dockAction?.icon ?? 'filters'];
@@ -119,7 +120,7 @@ export function TopBarTicker({ low = false }: { low?: boolean }) {
   return (
     <div className={`mg-dock${low ? ' mg-dock-low' : ''}`}>
       <div ref={dockRef} className={`mx-auto ${cap} mg-dock-row`}>
-        {active && current && (
+        {active && current && !quiet && (
           <div className="mg-dock-wrap">
             <ul className="sr-only" aria-label={t('shell.ticker.updates')}>
               {items.map((item) => {

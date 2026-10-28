@@ -9,11 +9,13 @@
   --mg-ink: 33 33 33;
   --mg-body: 74 80 90;
   --mg-muted: 90 98 112;
-  --mg-faint: 110 116 128;
+  --mg-faint: 100 106 118;
   --mg-dash: 163 169 179;
   --mg-rule: 218 218 218;
   --mg-rule-soft: 235 235 235;
-  --mg-control: 196 201 209;
+  --mg-control: 170 176 186;
+  /* An off switch needs 3:1 against the page to read in sunlight; borders stay lighter so pages don't turn heavy. */
+  --mg-switch-off: 136 143 155;
   --mg-tint: 227 231 236;
   --mg-heading: 23 56 95;
   --mg-button: 23 56 95;
@@ -111,6 +113,7 @@
   --mg-rule: 51 65 85;
   --mg-rule-soft: 38 50 70;
   --mg-control: 71 85 105;
+  --mg-switch-off: var(--mg-control);
   --mg-tint: 35 52 80;
   --mg-heading: 191 210 235;
   --mg-button: 47 84 135;
@@ -851,3 +854,9 @@ html[data-lite="true"] .mg-spin-once { animation: none; }
 .mg-follow-glimmer::after { content: ''; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 30%, rgb(255 222 120 / .55) 50%, transparent 70%); transform: translateX(-120%); animation: mg-champion-shine 800ms ease-in-out 120ms both; }
 @media (prefers-reduced-motion: reduce) { .mg-follow-glimmer { display: none; } }
 html[data-lite="true"] .mg-follow-glimmer { display: none; }
+
+/* Printing: the app's own header, tab bars, ticker dock and pop-ups never print, on any page. */
+@media print {
+  .mg-header, .mg-tabs, .mg-dock, .kit-toast, .mg-remember { display: none !important; }
+  main { padding-top: 0 !important; padding-bottom: 0 !important; }
+}

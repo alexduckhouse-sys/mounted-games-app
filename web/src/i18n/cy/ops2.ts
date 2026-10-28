@@ -235,6 +235,7 @@ export const ops2: AreaCatalogue<typeof en> = {
   'ops2.print.p.scan': 'Sganiwch am yr amserlen, y sgoriau a’r ffrwd fyw',
   'ops2.print.p.emergency': 'Gwybodaeth argyfwng am y lleoliad (ffoniwch 999 neu 112)',
   'ops2.print.p.venueLoc': 'Lleoliad:',
+  'ops2.print.p.postcode': 'Cod post:',
   'ops2.print.p.locDetails': 'Manylion y lleoliad ar amserlen y digwyddiad',
   'ops2.print.p.w3w': 'Lleoliad what3words:',
   'ops2.print.p.gps': 'Safle GPS:',

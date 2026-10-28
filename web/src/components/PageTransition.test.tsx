@@ -117,11 +117,11 @@ describe('PageTransition', () => {
     expect(document.getElementById('main')!.style.visibility).toBe('');
   });
 
-  it('leaves the fade to a page that has its own entrance', () => {
+  it('still fades a page that carries the shared page class (the page has no entrance of its own)', () => {
     mount('/competitions/4/chat');
     document.getElementById('main')!.classList.add('rf-page');
     act(() => go('/competitions/4'));
-    expect(animations).toHaveLength(0);
+    expect(animations).toHaveLength(1);
     expect(frames()).toHaveLength(0);
   });
 
