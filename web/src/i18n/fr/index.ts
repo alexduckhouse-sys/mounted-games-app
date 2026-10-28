@@ -8,10 +8,11 @@ import { account } from './account.ts';
 import { auth } from './auth.ts';
 import { common } from './common.ts';
 import { competition } from './competition.ts';
+import { duties } from './duties.ts';
 import { entries } from './entries.ts';
 import { shell } from './shell.ts';
 import { teams } from './teams.ts';
 
-export const AREAS = { common, shell, auth, account, entries, competition, teams } as const;
+export const AREAS = { common, shell, auth, account, entries, competition, teams, duties } as const;
 
-export const fr: Catalogue = { ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams };
+export const fr: Catalogue = { ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...duties };

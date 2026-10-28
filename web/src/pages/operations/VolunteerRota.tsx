@@ -4,10 +4,12 @@ import { Plus } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
+import { useT } from '../../i18n/LanguageContext';
+import { dutySessions, heatCount, heatDutySummary } from '../../lib/heatDuties';
 import { VOLUNTEER_ROLE_PRESETS } from '../../lib/lorryAndVolunteers';
 import { apiErrorMessage } from '../../lib/apiError';
 import type { CompetitionDetail, CreateVolunteerShiftInput, VolunteerShift } from '../../types';
-import { RefineChoiceRow, RefineList, RefineNote, RefineQty, RefineSection } from '../refine/Refine';
+import { Chevron, RefineChoiceRow, RefineList, RefineNote, RefineQty, RefineSection } from '../refine/Refine';
 import { ShareTextButtons } from './ShareTextButtons';
 import {
   claimVolunteerShift, createVolunteerShift, deleteVolunteerShift, fetchVolunteerShifts, groupShiftsBySession, isRotaShift,
@@ -30,15 +32,19 @@ export function VolunteerRota({ competition, manage }: { competition: Competitio
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<number | 'form' | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [dutySummary, setDutySummary] = useState<ReturnType<typeof heatDutySummary> | null>(null);
+  const t = useT();
   const id = competition.id;
 
   useEffect(() => {
     let active = true;
     fetchVolunteerShifts(id).then(
-      (data) => { if (active) { setShifts(data.filter(isRotaShift)); setError(null); } },
+      (data) => { if (active) { setShifts(data.filter(isRotaShift)); setDutySummary(heatDutySummary(data, heatCount(dutySessions(competition.sessions)))); setError(null); } },
       (caught) => { if (active) { setError(apiErrorMessage(caught, 'Couldn’t load the volunteer shifts. Check your signal and try again.')); setShifts((current) => current ?? []); } },
     );
     return () => { active = false; };
+  // The summary is worked out from the first load; the sessions only matter for the heat count.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const sessions = useMemo(() => competition.sessions.filter((s) => !s.isBreak).slice().sort((a, b) => a.orderIndex - b.orderIndex), [competition.sessions]);
@@ -99,6 +105,17 @@ export function VolunteerRota({ competition, manage }: { competition: Competitio
 
   return (
     <div className="ops-cards" aria-busy={busy !== null}>
+      {manage && (
+        <RefineList as="div">
+          <Link to={`/competitions/${id}/operations/heat-duties`} className="rf-row">
+            <span className="rf-grow">
+              <span className="rf-t1">{t('duties.title')}</span>
+              <span className="rf-t2">{dutySummary === null ? t('common.loading') : dutySummary.heats === 0 ? t('duties.row.noHeats') : dutySummary.started ? t('duties.row.summary', { filled: dutySummary.filled, total: dutySummary.heats }) : t('duties.row.none')}</span>
+            </span>
+            <Chevron />
+          </Link>
+        </RefineList>
+      )}
       {error && <Notice>{error}</Notice>}
       {shifts === null && <p role="status" className="rf-note">Loading the volunteer shifts…</p>}
       {list.length > 0 && <RefineNote>{rotaSummaryText(list)}</RefineNote>}

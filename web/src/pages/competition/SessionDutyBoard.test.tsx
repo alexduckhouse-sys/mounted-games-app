@@ -118,3 +118,12 @@ it('isDutyShift ignores other sessions and plain volunteer slots', () => {
   expect(isDutyShift(shift(1, { dutyCategory: undefined, assignedTeamId: null, assignedClubName: ' Club ' }), 5)).toBe(true);
   expect(isDutyShift(shift(1, { dutyCategory: 'General', assignedTeamId: null }), 5)).toBe(false);
 });
+
+it('shows a team’s own “here” as Team says here, apart from staff’s Here, and still lets staff confirm it', async () => {
+  vi.mocked(api.get).mockResolvedValue({ data: [shift(1, { attendanceStatus: 'TeamSaysHere' }), shift(2, { attendanceStatus: 'Here' })] });
+  board();
+  const pill = await screen.findByText('Team says here');
+  expect(pill).toHaveClass('border-dashed');
+  expect(screen.getByText('Here')).not.toHaveClass('border-dashed');
+  expect(screen.getAllByRole('button', { name: 'They’re here' })).toHaveLength(1);
+});
