@@ -331,7 +331,8 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
     <section aria-label={sectionLabel} className="flex flex-col">
       <div className="flex flex-col gap-2.5 pt-3 empty:hidden">{notices}</div>
       {standings.length > 0 && provisional && <div className="pt-3"><ProvisionalBadge state={provisional} /></div>}
-      {standings.length > 0 && <ToplistView list={list} section={section} competitionId={competition.id} teams={competition.teams} chosenView={chosenView} onChooseView={chooseView} heatTables={sectionSessions.some((s) => s.heats.length > 0) ? scores : undefined} />}
+      {/* The rows fade in over the placeholder they replace, rather than popping in. */}
+      {standings.length > 0 && <div key={sectionId} className="mg-settle"><ToplistView list={list} section={section} competitionId={competition.id} teams={competition.teams} chosenView={chosenView} onChooseView={chooseView} heatTables={sectionSessions.some((s) => s.heats.length > 0) ? scores : undefined} /></div>}
       {sectionId != null && <div className="pt-3"><TackLeaderboard competitionId={competition.id} sectionId={sectionId} refresh={retry} /></div>}
     </section>
   );
