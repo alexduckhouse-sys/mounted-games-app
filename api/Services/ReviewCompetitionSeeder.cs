@@ -187,18 +187,19 @@ public static class ReviewCompetitionSeeder
 
                     // Heat points earned so far by each team; the A Final of a finished event is drawn from them.
                     var heatPoints = teams.ToDictionary(t => t, _ => 0);
+                    var heatsFinished = false;
                     for (var round = 0; round < (hasFinal ? 2 : 1); round++)
                     {
                         var finished = offset < 0 || (offset == 0 && sessionOrder == 0);
                         var running = offset == 0 && sessionOrder == 1;
                         var arenaName = round == 0 ? "Main Arena" : "Arena 2";
                         // Heats: balanced groups of at most 6. Finals: one heat of the top 6 by heat points, drawn only once
-                        // the event is over; before that the final has no teams yet.
+                        // the heats are over (a finished event, or the running one's finished heats); before that the final has no teams yet.
                         var groups = round == 0
                             ? SplitBalanced(teams, LanesPerHeat)
                             : new List<Team[]>
                             {
-                                offset < 0
+                                heatsFinished
                                     ? teams.OrderByDescending(t => heatPoints[t]).Take(LanesPerHeat).ToArray()
                                     : Array.Empty<Team>(),
                             };
@@ -218,6 +219,7 @@ public static class ReviewCompetitionSeeder
                             if (!finished) arenaFree[arenaName] = new[] { free, start.AddMinutes(duration + ChangeoverMinutes) }.Max();
                             if (start.AddMinutes(duration) > latestEnd) latestEnd = start.AddMinutes(duration);
                         }
+                        if (round == 0) heatsFinished = finished;
                         var session = new Session
                         {
                             Competition = competition,
