@@ -14,6 +14,8 @@ public record PushPayload(
     string? Tag = null,
     string? Url = null);
 
+public enum PushSendOutcome { Accepted, RetryableFailure, PermanentFailure, Expired }
+
 public class PushNotifier
 {
     private readonly AppDbContext _db;
@@ -107,6 +109,43 @@ public class PushNotifier
             3 => $"{n}rd",
             _ => $"{n}th",
         };
+    }
+
+    /// <summary>One durable delivery attempt; acceptance is not evidence that anyone saw it.</summary>
+    internal async Task<PushSendOutcome> SendDestinationAsync(Entities.PushSubscription subscription,
+        PushPayload payload, string reminderKey, DateTime expiresAt, DateTime now, CancellationToken ct)
+    {
+        if (expiresAt <= now) return PushSendOutcome.Expired;
+        if (!PushEndpointPolicy.IsAllowed(subscription.Endpoint)) return PushSendOutcome.PermanentFailure;
+        var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        // Web Push Topic is at most 32 URL-safe characters; the public notification tag stays unchanged.
+        var topic = Convert.ToBase64String(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(reminderKey)))
+            .Replace('+', '-').Replace('/', '_')[..32];
+        var options = new Dictionary<string, object>
+        {
+            ["headers"] = new Dictionary<string, object> { ["Topic"] = topic },
+            ["vapidDetails"] = _vapid.Details(),
+            ["TTL"] = Math.Max(0, (int)(expiresAt - now).TotalSeconds),
+        };
+        using var client = new WebPushClient(_http.CreateClient(HttpClientName));
+        try
+        {
+            await client.SendNotificationAsync(new WebPush.PushSubscription(subscription.Endpoint, subscription.P256dh, subscription.Auth),
+                json, options, ct);
+            return PushSendOutcome.Accepted;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (WebPushException ex) when (ex.StatusCode is System.Net.HttpStatusCode.Gone or System.Net.HttpStatusCode.NotFound)
+        {
+            await _db.PushSubscriptions.Where(s => s.Id == subscription.Id).ExecuteDeleteAsync(ct);
+            return PushSendOutcome.PermanentFailure;
+        }
+        catch (Exception)
+        {
+            // Provider exception text can contain an endpoint/token. Record only a non-identifying error category.
+            _log.LogWarning("Reminder provider attempt failed for subscription {Id}", subscription.Id);
+            return PushSendOutcome.RetryableFailure;
+        }
     }
 
     private async Task SendAsync(IReadOnlyList<Entities.PushSubscription> subs, PushPayload payload)

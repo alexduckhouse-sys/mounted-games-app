@@ -22,6 +22,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<DeclarationForm> DeclarationForms => Set<DeclarationForm>();
     public DbSet<RiderEntry> RiderEntries => Set<RiderEntry>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+    public DbSet<ChatReport> ChatReports => Set<ChatReport>();
+    public DbSet<ChatUserBlock> ChatUserBlocks => Set<ChatUserBlock>();
     public DbSet<LiveStream> LiveStreams => Set<LiveStream>();
     public DbSet<StreamOverlay> StreamOverlays => Set<StreamOverlay>();
     public DbSet<Sponsor> Sponsors => Set<Sponsor>();
@@ -37,6 +39,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     public DbSet<RaceTemplate> RaceTemplates => Set<RaceTemplate>();
     public DbSet<TeamSupporter> TeamSupporters => Set<TeamSupporter>();
+    public DbSet<ScheduledNotification> ScheduledNotifications => Set<ScheduledNotification>();
+    public DbSet<NotificationDelivery> NotificationDeliveries => Set<NotificationDelivery>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
     public DbSet<SectionSignup> SectionSignups => Set<SectionSignup>();
     public DbSet<EmailOptIn> EmailOptIns => Set<EmailOptIn>();
@@ -429,6 +433,21 @@ public class AppDbContext : IdentityDbContext<AppUser>
             e.HasIndex(m => new { m.CompetitionId, m.CreatedAt });
         });
 
+        b.Entity<ChatReport>(e =>
+        {
+            e.Property(r => r.Reason).HasMaxLength(1000).IsRequired();
+            e.HasOne(r => r.Message).WithMany().HasForeignKey(r => r.MessageId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<AppUser>().WithMany().HasForeignKey(r => r.ReporterUserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(r => new { r.MessageId, r.ReporterUserId }).IsUnique();
+        });
+
+        b.Entity<ChatUserBlock>(e =>
+        {
+            e.HasKey(b => new { b.UserId, b.BlockedUserId });
+            e.HasOne<AppUser>().WithMany().HasForeignKey(b => b.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<AppUser>().WithMany().HasForeignKey(b => b.BlockedUserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         b.Entity<TrainerNote>(e =>
         {
             e.Property(n => n.Body).IsRequired();
@@ -471,6 +490,25 @@ public class AppDbContext : IdentityDbContext<AppUser>
                 .HasForeignKey(s => s.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(s => new { s.TeamId, s.UserId }).IsUnique();
+        });
+
+        b.Entity<ScheduledNotification>(e =>
+        {
+            e.Property(n => n.ReminderKey).HasMaxLength(160);
+            e.Property(n => n.TimetableVersion).HasMaxLength(64);
+            e.HasIndex(n => n.ReminderKey).IsUnique();
+            e.HasIndex(n => n.ExpiresAt);
+            e.HasOne<Competition>().WithMany().HasForeignKey(n => n.CompetitionId).OnDelete(DeleteBehavior.Cascade);
+        });
+        b.Entity<NotificationDelivery>(e =>
+        {
+            e.Property(d => d.TimetableVersion).HasMaxLength(64);
+            e.Property(d => d.ClaimToken).HasMaxLength(32);
+            e.Property(d => d.LastError).HasMaxLength(64);
+            e.HasOne(d => d.Notification).WithMany().HasForeignKey(d => d.ScheduledNotificationId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(d => d.Subscription).WithMany().HasForeignKey(d => d.PushSubscriptionId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(d => new { d.ScheduledNotificationId, d.PushSubscriptionId }).IsUnique();
+            e.HasIndex(d => new { d.Status, d.NextAttemptAt, d.ClaimedUntil });
         });
 
         b.Entity<PushSubscription>(e =>

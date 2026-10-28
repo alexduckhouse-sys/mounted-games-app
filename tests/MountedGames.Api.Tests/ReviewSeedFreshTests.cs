@@ -31,6 +31,46 @@ public class ReviewSeedFreshTests
             .SingleAsync(c => c.Name == "EGUK Winter Pairs Series — Round 1");
     }
 
+    [Fact]
+    public async Task RemovingEventClearsRemindersButKeepsSubscription()
+    {
+        await using var db = await Database();
+        var comp = new Competition { Name = "Synthetic event", StartDate = Today };
+        var user = new AppUser { UserName = "synthetic-user" };
+        var sub = new PushSubscription { User = user, Endpoint = "https://fcm.googleapis.com/fcm/send/synthetic" };
+        db.AddRange(comp, sub);
+        await db.SaveChangesAsync();
+        var reminder = new ScheduledNotification { CompetitionId = comp.Id, ReminderKey = "synthetic-key",
+            DueAt = Today, ExpiresAt = Today.AddMinutes(5), TimetableVersion = "synthetic" };
+        db.Add(new NotificationDelivery { Notification = reminder, Subscription = sub, TimetableVersion = "synthetic",
+            NextAttemptAt = Today, UpdatedAt = Today });
+        await db.SaveChangesAsync();
+        await ReviewCompetitionSeeder.DeleteCompetitionGraphAsync(db, [comp.Id]);
+        Assert.Empty(await db.ScheduledNotifications.ToListAsync());
+        Assert.Empty(await db.NotificationDeliveries.ToListAsync());
+        Assert.True(await db.PushSubscriptions.AnyAsync(p => p.Id == sub.Id));
+    }
+
+    [Fact]
+    public async Task RemovingEventClearsChatReportsButKeepsPersonalBlocks()
+    {
+        await using var db = await Database();
+        var comp = new Competition { Name = "Synthetic moderation event", StartDate = Today };
+        var author = new AppUser { UserName = "synthetic-chat-author" };
+        var reporter = new AppUser { UserName = "synthetic-chat-reporter" };
+        db.AddRange(comp, author, reporter);
+        var message = new ChatMessage { Competition = comp, User = author, AuthorName = "Synthetic", Body = "Synthetic message" };
+        db.Add(message);
+        await db.SaveChangesAsync();
+        db.ChatReports.Add(new ChatReport { MessageId = message.Id, ReporterUserId = reporter.Id, Reason = "Synthetic report", CreatedAt = Today });
+        db.ChatUserBlocks.Add(new ChatUserBlock { UserId = reporter.Id, BlockedUserId = author.Id, CreatedAt = Today });
+        await db.SaveChangesAsync();
+        await ReviewCompetitionSeeder.DeleteCompetitionGraphAsync(db, [comp.Id]);
+        Assert.Empty(await db.ChatReports.ToListAsync());
+        Assert.Empty(await db.ChatMessages.ToListAsync());
+        Assert.Single(await db.ChatUserBlocks.ToListAsync());
+    }
+
     [Theory]
     [InlineData(14, 23)]
     [InlineData(9, 0)]

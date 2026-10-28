@@ -382,6 +382,11 @@ public static class ReviewCompetitionSeeder
     await db.Set<CompetitionListing>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
     await db.Set<EventCommerceSettings>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
 
+    // Durable reminders point at the event and subscriptions; retain the subscriptions themselves.
+    var notificationIds = db.ScheduledNotifications.Where(n => ids.Contains(n.CompetitionId)).Select(n => n.Id);
+    await db.NotificationDeliveries.Where(d => notificationIds.Contains(d.ScheduledNotificationId)).ExecuteDeleteAsync();
+    await db.ScheduledNotifications.Where(n => ids.Contains(n.CompetitionId)).ExecuteDeleteAsync();
+
     // Timetable and scoring, deepest first.
     var shiftIds = db.Set<VolunteerShift>().Where(x => ids.Contains(x.CompetitionId)).Select(x => x.Id);
     await db.Set<VolunteerClaim>().Where(x => shiftIds.Contains(x.ShiftId)).ExecuteDeleteAsync();
@@ -429,6 +434,7 @@ public static class ReviewCompetitionSeeder
     await db.CompetitionSections.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
 
     // Everything else that hangs off the event itself.
+    await db.ChatReports.Where(r => ids.Contains(r.Message.CompetitionId)).ExecuteDeleteAsync();
     await db.ChatMessages.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
     await db.LiveStreams.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
     await db.StreamOverlays.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();

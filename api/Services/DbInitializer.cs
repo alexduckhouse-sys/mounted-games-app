@@ -463,6 +463,8 @@ public static class DbInitializer
         await TackCheck.TackCheckSqliteSchema.EnsureAsync(db);
         await EntryExtensionsSqliteSchema.EnsureAsync(db);
         await Accounts.AccountAccessSqliteSchema.EnsureAsync(db);
+        await Notifications.NotificationSqliteSchema.EnsureAsync(db);
+        await ChatModerationSqliteSchema.EnsureAsync(db);
 
     }
 

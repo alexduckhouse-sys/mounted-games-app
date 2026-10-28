@@ -20,7 +20,7 @@ public enum AccountDeletionOutcome
 }
 
 /// <summary>
-/// Removes a person's account and what only they could see, and detaches them from everything else.
+/// Removes a person's account, private data and authored chat/marketplace content, and detaches retained event records.
 /// The per-relation choices are written up in <c>docs/decisions.md</c>. Every step is explicit rather than left to
 /// foreign-key cascades, so a local SQLite file built from guard SQL behaves the same as Postgres.
 /// </summary>
@@ -65,40 +65,48 @@ public sealed class AccountDeletionService(AppDbContext db, UserManager<AppUser>
         await db.RiderEntries.Where(e => e.SavedRiderId != null && riders.Select(r => r.Id).Contains(e.SavedRiderId.Value))
             .ExecuteUpdateAsync(s => s.SetProperty(e => e.SavedRiderId, (int?)null), ct);
         await riders.ExecuteDeleteAsync(ct);
-        // Volunteer duties they signed up for, with the name and phone number they gave. A claim can't exist without its
-        // account (the row would take it anyway), so it goes either way and the duty is open again.
-        await db.VolunteerClaims.Where(c => c.UserId == id).ExecuteDeleteAsync(ct);
-        // Private marketplace messages they wrote; ones sent to them stay for the other person, no longer addressed to anyone.
-        await db.ShopComments.Where(c => c.IsPrivate && c.AuthorUserId == id).ExecuteDeleteAsync(ct);
+        // Explicit cleanup also applies when accounting records keep an emptied account row alive.
+        await db.ChatUserBlocks.Where(b => b.UserId == id || b.BlockedUserId == id).ExecuteDeleteAsync(ct);
+        await db.ChatReports.Where(r => r.ReporterUserId == id || r.Message.UserId == id).ExecuteDeleteAsync(ct);
+        // Authored content is removed, including announcements, private messages and previously hidden comments.
+        await db.ChatMessages.Where(m => m.UserId == id).ExecuteDeleteAsync(ct);
+        await db.ChatMessages.Where(m => m.RecipientUserId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.RecipientUserId, (string?)null), ct);
+        await db.ShopComments.Where(c => c.AuthorUserId == id).ExecuteDeleteAsync(ct);
+        // Messages written by other people stay, no longer addressed to the deleted account.
         await db.ShopComments.Where(c => c.ToUserId == id)
             .ExecuteUpdateAsync(s => s.SetProperty(c => c.ToUserId, (string?)null), ct);
 
-        // --- Event and community history: kept, with the person removed. ---
-        await db.ChatMessages.Where(m => m.UserId == id).ExecuteUpdateAsync(s => s
-            .SetProperty(m => m.UserId, (string?)null)
-            .SetProperty(m => m.AuthorName, DeletedName)
-            .SetProperty(m => m.IpAddress, (string?)null), ct);
-        // Organisers' private replies to them stay private (they are staff-only), addressed to no one.
-        await db.ChatMessages.Where(m => m.RecipientUserId == id)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.RecipientUserId, (string?)null), ct);
+        // Volunteer duties they signed up for, with the name and phone number they gave. A claim can't exist without its
+        // account (the row would take it anyway), so it goes either way and the duty is open again.
+        await db.VolunteerClaims.Where(c => c.UserId == id).ExecuteDeleteAsync(ct);
         // Duties they checked people in to keep the check-in, not who did it.
         await db.VolunteerShifts.Where(v => v.CheckedInByUserId == id).ExecuteUpdateAsync(s => s
             .SetProperty(v => v.CheckedInByUserId, (string?)null)
             .SetProperty(v => v.CheckedInByName, DeletedName), ct);
+
+        // Keep empty post shells so deleting one seller cannot cascade through other people's comments or reports.
+        var deletedAt = DateTime.UtcNow;
         await db.ShopPosts.Where(p => p.AuthorUserId == id).ExecuteUpdateAsync(s => s
             .SetProperty(p => p.AuthorUserId, (string?)null)
             .SetProperty(p => p.AuthorName, DeletedName)
+            .SetProperty(p => p.PonyClubName, (string?)null)
+            .SetProperty(p => p.Title, string.Empty)
+            .SetProperty(p => p.Body, string.Empty)
+            .SetProperty(p => p.PriceMinor, (int?)null)
             .SetProperty(p => p.ContactInfo, (string?)null)
+            .SetProperty(p => p.ImageBase64, (string?)null)
+            .SetProperty(p => p.IsDeleted, true)
+            .SetProperty(p => p.DeletedAt, p => p.DeletedAt ?? deletedAt)
             .SetProperty(p => p.IpAddress, (string?)null), ct);
         await db.ShopPosts.Where(p => p.DeletedByUserId == id)
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.DeletedByUserId, (string?)null), ct);
-        await db.ShopComments.Where(c => c.AuthorUserId == id).ExecuteUpdateAsync(s => s
-            .SetProperty(c => c.AuthorUserId, (string?)null)
-            .SetProperty(c => c.AuthorName, DeletedName)
-            .SetProperty(c => c.IpAddress, (string?)null), ct);
         await db.ShopReports.Where(r => r.ReporterUserId == id).ExecuteUpdateAsync(s => s
             .SetProperty(r => r.ReporterUserId, (string?)null)
+            .SetProperty(r => r.Reason, (string?)null)
             .SetProperty(r => r.IpAddress, (string?)null), ct);
+
+        // --- Event and accounting history: kept, with the account link removed. ---
         await db.DeclarationForms.Where(d => d.SubmittedByUserId == id)
             .ExecuteUpdateAsync(s => s.SetProperty(d => d.SubmittedByUserId, (string?)null), ct);
         // A signup is also a payment record, so it stays with the name the organiser took payment from; the contact details go.

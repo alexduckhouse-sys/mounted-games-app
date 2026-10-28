@@ -149,7 +149,7 @@ public class AccountDeletionTests : IClassFixture<ApiFactory>
             var collaborator = new CompetitionCollaborator { CompetitionId = other.CompetitionId, UserId = userId, Role = CollaboratorRole.CompetitionAdmin, AddedByUserId = bystander.User.Id, AddedAt = DateTime.UtcNow };
             var chat = new ChatMessage { CompetitionId = arena.CompetitionId, UserId = userId, AuthorName = "Real Name", Body = "Hello", IpAddress = "203.0.113.50" };
             var othersChat = new ChatMessage { CompetitionId = arena.CompetitionId, UserId = bystander.User.Id, AuthorName = "Bystander", Body = "Hi", IpAddress = "203.0.113.51" };
-            var post = new ShopPost { AuthorUserId = userId, AuthorName = "Real Name", Title = "Saddle", Body = "For sale", ContactInfo = "07700 900000", IpAddress = "203.0.113.50", DeletedByUserId = userId };
+            var post = new ShopPost { AuthorUserId = userId, AuthorName = "Synthetic seller", Title = "Synthetic saddle", Body = "For sale", PonyClubName = "Synthetic club", PriceMinor = 1234, ImageBase64 = "data:image/png;base64,c3ludGhldGlj", ContactInfo = "seller@example.invalid", IpAddress = "203.0.113.50", DeletedByUserId = userId };
             var othersPost = new ShopPost { AuthorUserId = bystander.User.Id, AuthorName = "Bystander", Title = "Boots", Body = "For sale" };
             db.AddRange(collaborator, chat, othersChat, post, othersPost);
             await db.SaveChangesAsync();
@@ -180,7 +180,7 @@ public class AccountDeletionTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Deleting_RemovesPrivateData_AnonymisesHistory_AndClearsOwnership()
+    public async Task Deleting_RemovesAuthoredContent_PreservesAccounting_AndClearsOwnership()
     {
         var (client, auth) = await _f.SignupAsync();
         var id = auth.User.Id;
@@ -213,18 +213,28 @@ public class AccountDeletionTests : IClassFixture<ApiFactory>
             var form = await db.DeclarationForms.SingleAsync(x => x.Id == s.FormId);
             Assert.Null(form.SubmittedByUserId);
 
-            // Chat and marketplace content stays, anonymised, with no IP.
-            var chat = await db.ChatMessages.SingleAsync(x => x.Id == s.ChatId);
-            Assert.Equal((null, AccountDeletionService.DeletedName, null, "Hello"), (chat.UserId, chat.AuthorName, chat.IpAddress, chat.Body));
+            // Authored text and images are gone, including content an admin could otherwise still read.
+            Assert.False(await db.ChatMessages.AnyAsync(x => x.Id == s.ChatId));
             var post = await db.ShopPosts.SingleAsync(x => x.Id == s.PostId);
-            Assert.Equal((null, AccountDeletionService.DeletedName, null, null, null, "For sale"),
+            Assert.Equal((null, AccountDeletionService.DeletedName, null, null, null, string.Empty),
                 (post.AuthorUserId, post.AuthorName, post.ContactInfo, post.IpAddress, post.DeletedByUserId, post.Body));
-            var comment = await db.ShopComments.SingleAsync(x => x.Id == s.PublicCommentId);
-            Assert.Equal((null, AccountDeletionService.DeletedName, null, "Interested"), (comment.AuthorUserId, comment.AuthorName, comment.IpAddress, comment.Body));
+            Assert.Equal(string.Empty, post.Title);
+            Assert.Null(post.PonyClubName);
+            Assert.Null(post.PriceMinor);
+            Assert.Null(post.ImageBase64);
+            Assert.True(post.IsDeleted);
+            Assert.NotNull(post.DeletedAt);
+            Assert.False(await db.ShopComments.AnyAsync(x => x.Id == s.PublicCommentId));
             var report = await db.ShopReports.SingleAsync(x => x.Id == s.ReportId);
-            Assert.Equal((null, null, "Spam"), (report.ReporterUserId, report.IpAddress, report.Reason));
+            Assert.Null(report.ReporterUserId);
+            Assert.Null(report.IpAddress);
+            Assert.Null(report.Reason);
             // A private message sent to them stays for its author but is no longer addressed to anyone.
-            Assert.Null((await db.ShopComments.SingleAsync(x => x.Id == s.DmToUserId)).ToUserId);
+            var incoming = await db.ShopComments.SingleAsync(x => x.Id == s.DmToUserId);
+            Assert.Null(incoming.ToUserId);
+            Assert.Equal("Their DM", incoming.Body);
+            Assert.Equal("Bystander", incoming.AuthorName);
+            Assert.NotNull(incoming.AuthorUserId);
 
             // A signup is a payment record: kept with the payer's name, linked to no account, contact details gone.
             var signup = await db.SectionSignups.SingleAsync(x => x.Id == s.SignupId);
@@ -239,6 +249,120 @@ public class AccountDeletionTests : IClassFixture<ApiFactory>
             Assert.True(await db.TrainerNotes.AnyAsync(x => x.Id == s.OthersNoteId));
             var others = await db.ChatMessages.SingleAsync(x => x.Id == s.OthersChatId);
             Assert.Equal(("Bystander", "203.0.113.51"), (others.AuthorName, others.IpAddress));
+        });
+        Assert.Equal(HttpStatusCode.NotFound, (await _f.CreateClient().GetAsync($"/api/shop/posts/{s.PostId}")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Deleting_RemovesAnnouncementsAndPrivateChat_ButPreservesOtherAuthors()
+    {
+        var (client, auth) = await _f.SignupAsync();
+        var (_, bystander) = await _f.SignupAsync();
+        var arena = await _f.CreateArenaAsync(1);
+        var ids = await _f.WithDbAsync(async db =>
+        {
+            var announcement = new ChatMessage
+            {
+                CompetitionId = arena.CompetitionId, UserId = auth.User.Id, AuthorName = "Synthetic author",
+                Type = ChatMessageType.Announcement, Tag = "pinned", Body = "Synthetic announcement",
+            };
+            var outgoing = new ChatMessage
+            {
+                CompetitionId = arena.CompetitionId, UserId = auth.User.Id, AuthorName = "Synthetic author",
+                AdminOnly = true, RecipientUserId = bystander.User.Id, Body = "Synthetic outgoing message",
+            };
+            var incoming = new ChatMessage
+            {
+                CompetitionId = arena.CompetitionId, UserId = bystander.User.Id, AuthorName = "Synthetic bystander",
+                AdminOnly = true, RecipientUserId = auth.User.Id, Body = "Synthetic incoming message",
+            };
+            db.AddRange(announcement, outgoing, incoming);
+            await db.SaveChangesAsync();
+            return (Announcement: announcement.Id, Outgoing: outgoing.Id, Incoming: incoming.Id);
+        });
+
+        using var response = await Delete(client, Password);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        await _f.WithDbAsync(async db =>
+        {
+            Assert.False(await db.ChatMessages.AnyAsync(m => m.Id == ids.Announcement || m.Id == ids.Outgoing));
+            var retained = await db.ChatMessages.SingleAsync(m => m.Id == ids.Incoming);
+            Assert.Equal(bystander.User.Id, retained.UserId);
+            Assert.Equal("Synthetic incoming message", retained.Body);
+            Assert.True(retained.AdminOnly);
+            Assert.Null(retained.RecipientUserId);
+        });
+        // Clearing the recipient never turns someone else's private reply into a public message.
+        var feed = await _f.CreateClient().GetFromJsonAsync<MountedGames.Api.Dtos.ChatMessageDto[]>(
+            $"/api/competitions/{arena.CompetitionId}/chat");
+        Assert.NotNull(feed);
+        Assert.DoesNotContain(feed, message => message.Id == ids.Incoming);
+    }
+
+    [Fact]
+    public async Task Deleting_ClearsPreviouslyHiddenMarketplaceContent_WithoutCascadingToOtherPeople()
+    {
+        var (client, auth) = await _f.SignupAsync();
+        var (_, bystander) = await _f.SignupAsync();
+        var earlierDeletion = new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var ids = await _f.WithDbAsync(async db =>
+        {
+            var post = new ShopPost
+            {
+                AuthorUserId = auth.User.Id, AuthorName = "Synthetic seller", Title = "Synthetic listing",
+                Body = "Synthetic description", ContactInfo = "seller@example.invalid", PonyClubName = "Synthetic club",
+                PriceMinor = 1000, ImageBase64 = "data:image/png;base64,c3ludGhldGlj", IpAddress = "203.0.113.52",
+                IsDeleted = true, DeletedAt = earlierDeletion, DeletedByUserId = bystander.User.Id,
+            };
+            db.ShopPosts.Add(post);
+            await db.SaveChangesAsync();
+            var ownComment = new ShopComment
+            {
+                PostId = post.Id, AuthorUserId = auth.User.Id, AuthorName = "Synthetic seller",
+                Body = "Synthetic hidden comment", IsDeleted = true,
+            };
+            var otherComment = new ShopComment
+            {
+                PostId = post.Id, AuthorUserId = bystander.User.Id, AuthorName = "Synthetic bystander",
+                Body = "Synthetic retained comment",
+            };
+            var ownReport = new ShopReport { PostId = post.Id, ReporterUserId = auth.User.Id, Reason = "Synthetic resolved report", IsResolved = true };
+            var otherReport = new ShopReport { PostId = post.Id, ReporterUserId = bystander.User.Id, Reason = "Synthetic retained report" };
+            db.AddRange(ownComment, otherComment, ownReport, otherReport);
+            await db.SaveChangesAsync();
+            return (Post: post.Id, OwnComment: ownComment.Id, OtherComment: otherComment.Id, OwnReport: ownReport.Id, OtherReport: otherReport.Id);
+        });
+
+        using var response = await Delete(client, Password);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        await _f.WithDbAsync(async db =>
+        {
+            var retained = await db.ShopPosts.SingleAsync(p => p.Id == ids.Post);
+            Assert.True(retained.IsDeleted);
+            Assert.Equal(earlierDeletion, retained.DeletedAt);
+            Assert.Equal(bystander.User.Id, retained.DeletedByUserId);
+            Assert.Null(retained.AuthorUserId);
+            Assert.Equal(AccountDeletionService.DeletedName, retained.AuthorName);
+            Assert.Equal(string.Empty, retained.Title);
+            Assert.Equal(string.Empty, retained.Body);
+            Assert.Null(retained.ContactInfo);
+            Assert.Null(retained.PonyClubName);
+            Assert.Null(retained.ImageBase64);
+            Assert.Null(retained.PriceMinor);
+            Assert.Null(retained.IpAddress);
+            Assert.False(await db.ShopComments.AnyAsync(c => c.Id == ids.OwnComment));
+            var otherComment = await db.ShopComments.SingleAsync(c => c.Id == ids.OtherComment);
+            Assert.Equal(bystander.User.Id, otherComment.AuthorUserId);
+            Assert.Equal("Synthetic retained comment", otherComment.Body);
+            var ownReport = await db.ShopReports.SingleAsync(r => r.Id == ids.OwnReport);
+            Assert.Null(ownReport.ReporterUserId);
+            Assert.Null(ownReport.Reason);
+            Assert.True(ownReport.IsResolved);
+            var otherReport = await db.ShopReports.SingleAsync(r => r.Id == ids.OtherReport);
+            Assert.Equal(bystander.User.Id, otherReport.ReporterUserId);
+            Assert.Equal("Synthetic retained report", otherReport.Reason);
         });
     }
 
@@ -284,7 +408,7 @@ public class AccountDeletionTests : IClassFixture<ApiFactory>
             Assert.False((await db.Set<CatalogueItem>().SingleAsync(x => x.SellerUserId == id)).IsActive);
             // And the rest of the clean-up still happened.
             Assert.False(await db.TrainerNotes.AnyAsync(x => x.UserId == id));
-            Assert.Null((await db.ChatMessages.SingleAsync(m => m.CompetitionId == arena.CompetitionId && m.AuthorName == AccountDeletionService.DeletedName)).IpAddress);
+            Assert.False(await db.ChatMessages.AnyAsync(m => m.CompetitionId == arena.CompetitionId));
         });
     }
 
@@ -401,10 +525,10 @@ public class AccountDeletionTests : IClassFixture<ApiFactory>
             Assert.Equal((null, AccountDeletionService.DeletedName), (shift.CheckedInByUserId, shift.CheckedInByName));
             Assert.NotNull(shift.CheckedInAt);
 
-            // The organiser's reply stays staff-only, addressed to nobody; replies to other people keep their address.
+            // The organiser's reply stays staff-only, addressed to nobody; what the deleted person wrote is gone.
             var reply = await db.ChatMessages.SingleAsync(m => m.Id == replyId);
             Assert.Equal((null, true, "Private reply"), (reply.RecipientUserId, reply.AdminOnly, reply.Body));
-            Assert.Equal(bystander.User.Id, (await db.ChatMessages.SingleAsync(m => m.Id == othersReplyId)).RecipientUserId);
+            Assert.False(await db.ChatMessages.AnyAsync(m => m.Id == othersReplyId));
         });
     }
 }
