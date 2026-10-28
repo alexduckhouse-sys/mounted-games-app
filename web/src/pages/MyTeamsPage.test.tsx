@@ -8,7 +8,7 @@ import type { CompetitionDetail, Team } from '../types';
 import { formatTime, roundTo5Min } from '../lib/time';
 import { FAVOURITES_KEY } from '../lib/favourites';
 import { MyTeamsPage } from './MyTeamsPage';
-import { TickerProvider, useTicker } from '../components/TickerContext';
+import { TickerProvider, useDockHost, useTicker } from '../components/TickerContext';
 import { chooseOption, optionLabels } from '../test/select';
 
 import { autoConfirm } from '../test/confirm';
@@ -399,6 +399,7 @@ describe('MyTeamsPage design plan A8', () => {
 
   it('moves Join a team with a code to the dock, and turns Choose a competition into a quiet row', async () => {
     function Probe() {
+      useDockHost();
       const { dockAction } = useTicker();
       return dockAction ? <button type="button" data-testid="dock" onClick={dockAction.onClick}>{dockAction.label}</button> : null;
     }

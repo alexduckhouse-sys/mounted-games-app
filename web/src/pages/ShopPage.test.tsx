@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { ShopClassifieds, ShopPage } from './ShopPage';
-import { TickerProvider, useTicker } from '../components/TickerContext';
+import { TickerProvider, useDockHost, useTicker } from '../components/TickerContext';
 
 import { autoConfirm } from '../test/confirm';
 vi.mock('../api', () => ({ api: { get: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
@@ -262,6 +262,7 @@ describe('the shop comments', () => {
 
 describe('the Sell something button beside the ticker dock', () => {
   function Probe() {
+    useDockHost();
     const { dockAction } = useTicker();
     return dockAction ? <button type="button" data-testid="dock" onClick={dockAction.onClick}>{dockAction.label}</button> : null;
   }

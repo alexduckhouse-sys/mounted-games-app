@@ -7,7 +7,7 @@ import { FAVOURITES_KEY } from '../lib/favourites';
 import { FOLLOWED_PROFILES_KEY } from '../lib/followedProfiles';
 import { competition, team } from '../test/factories';
 import { FollowingPage } from './FollowingPage';
-import { TickerProvider, useTicker } from '../components/TickerContext';
+import { TickerProvider, useDockHost, useTicker } from '../components/TickerContext';
 
 vi.mock('../api', () => ({ api: { get: vi.fn() } }));
 const get = vi.mocked(api.get);
@@ -185,6 +185,7 @@ describe('FollowingPage: teams followed from their profile', () => {
 
 describe('FollowingPage: the Follow a team button beside the ticker dock', () => {
   function Probe() {
+    useDockHost();
     const { dockAction } = useTicker();
     return dockAction ? <button type="button" data-testid="dock" onClick={dockAction.onClick}>{dockAction.label}</button> : null;
   }
