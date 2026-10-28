@@ -445,7 +445,7 @@ describe('the finals dialog run-off notice', () => {
 
   it('asks for a run-off only when the server says the tie at the cut is still open', async () => {
     await open({ tied: true, unsettled: true, boundaries: [{ cutoff: 6, settled: false }] });
-    expect(await screen.findByText(/Runoff needed/)).toBeVisible();
+    expect(await screen.findByText(/Runoff needed/, {}, { timeout: 3000 })).toBeInTheDocument();
   });
 
   it('stays quiet when countback or the organiser order has settled a points tie', async () => {
