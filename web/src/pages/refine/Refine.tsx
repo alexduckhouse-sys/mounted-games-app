@@ -228,14 +228,15 @@ function FloatingPanel({ anchor, place, onClose, children }: { anchor: RefObject
       const target = event.target as Node;
       if (!ref.current?.contains(target) && !anchor.current?.contains(target)) closeRef.current();
     };
-    const esc = (event: KeyboardEvent) => { if (event.key === 'Escape') { closeRef.current(); anchor.current?.focus(); } };
+    // preventDefault keeps a sheet around the row from closing along with the list.
+    const esc = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); anchor.current?.focus(); } };
     const resize = () => closeRef.current();
     document.addEventListener('mousedown', away);
     document.addEventListener('keydown', esc);
     window.addEventListener('resize', resize);
     return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); window.removeEventListener('resize', resize); };
   }, [anchor]);
-  return createPortal(<div ref={ref} className="skin rf-pop" style={{ top: place.top, right: place.right, maxHeight: place.max }}>{children}</div>, document.body);
+  return createPortal(<div ref={ref} className="skin rf-pop" style={{ top: place.top, right: place.right, maxHeight: place.max }}>{children}</div>, anchor.current?.closest('dialog') ?? document.body);
 }
 
 /**

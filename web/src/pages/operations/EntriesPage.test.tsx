@@ -4,6 +4,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { autoConfirm } from '../../test/confirm';
+import { CurrentCompetitionProvider } from '../../competition/CurrentCompetitionContext';
+import { TickerProvider } from '../../components/TickerContext';
+import { TopBarTicker } from '../../components/TopBarTicker';
 import { EntriesPage } from './EntriesPage';
 
 const reload = vi.fn();
@@ -28,6 +31,19 @@ const config = { config: { dob: 2, dobFormat: 0, weight: 0, weightUnit: 0, ponyH
 
 function show() {
   return render(<MemoryRouter><EntriesPage /></MemoryRouter>);
+}
+
+function showDocked() {
+  return render(
+    <MemoryRouter>
+      <CurrentCompetitionProvider>
+        <TickerProvider>
+          <EntriesPage />
+          <TopBarTicker />
+        </TickerProvider>
+      </CurrentCompetitionProvider>
+    </MemoryRouter>,
+  );
 }
 
 describe('EntriesPage', () => {
@@ -218,5 +234,21 @@ describe('EntriesPage', () => {
     show();
     await user.click(await screen.findByRole('button', { name: 'Close entries' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Nope.');
+  });
+
+  it('puts the entry and dec form tools in a sheet opened from the dock', async () => {
+    const user = userEvent.setup();
+    showDocked();
+    await screen.findByRole('button', { name: /Oak A/ });
+    expect(screen.queryByText('Entries open')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Close entries' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Entries and dec form tools' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Entries and dec form tools' });
+    expect(within(sheet).getByText('Entries open')).toBeInTheDocument();
+    expect(within(sheet).getByRole('button', { name: 'Entry tools' })).toBeInTheDocument();
+    expect(within(sheet).getByText('Show')).toBeInTheDocument();
+    expect(within(sheet).getByText('Questions and flags')).toBeInTheDocument();
+    await user.click(within(sheet).getByRole('button', { name: 'Close entries' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/7/signups-locked', { locked: true }));
   });
 });

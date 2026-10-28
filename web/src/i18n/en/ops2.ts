@@ -431,6 +431,7 @@ export const ops2 = {
   'ops2.entries.deadlineError': 'Couldn’t save the deadline.',
   'ops2.entries.decError': 'Couldn’t save the dec form.',
   'ops2.entries.title': 'Entries and dec forms',
+  'ops2.entries.toolsSheet': 'Entries and dec form tools',
   'ops2.entries.closed': 'Entries closed',
   'ops2.entries.open': 'Entries open',
   'ops2.entries.paidNot': '{paid} paid · {unpaid} not paid',

@@ -11,6 +11,8 @@ import { api } from '../../api';
 import { activeLocale, tr } from '../../i18n/translate';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
+import { Sheet } from '../../components/Sheet';
+import { useDockAction } from '../../components/TickerContext';
 import { useToast } from '../../components/Toast';
 import { apiErrorMessage } from '../../lib/apiError';
 import { downloadCsv, safeFilename } from '../../lib/csv';
@@ -202,14 +204,12 @@ export function EntriesPage() {
 
   const days = eventDays(competition.startDate, competition.endDate);
 
-  return (
-    <RefinePage>
-      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.hub.back')} context={competition.name} title={t('ops2.entries.title')} />
-      <div className="ops-cards ops-entries" aria-busy={busy}>
-        {error && <Notice>{error}</Notice>}
-        {passNotice && <Notice>{passNotice}</Notice>}
-        {toast.node}
+  // The tools live in one sheet opened from the dock; with no dock (page on its own) they stay on the page.
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const docked = useDockAction({ label: t('ops2.entries.toolsSheet'), icon: 'settings', onClick: () => setToolsOpen(true) });
 
+  const controls = (
+    <>
         <RefineList as="div">
           <div className="rf-row">
             <span className="rf-grow">
@@ -227,6 +227,40 @@ export function EntriesPage() {
           <RefineChoiceRow label={t('ops2.entries.show')} value={filter} onChange={setFilter}
             options={FILTERS.map((f) => ({ value: f.value, label: f.value === 'all' ? t('ops2.entries.allTeams') : `${f.label} (${counts[f.value]})` }))} />
         </RefineList>
+    </>
+  );
+  const decForm = (
+    <>
+        <RefineSection title={t('ops2.entries.decForm')} />
+        <RefineList as="div">
+          <div className="rf-row">
+            <span className="rf-grow"><span className="rf-t1">{t('ops2.entries.qAndFlags')}</span>{config && <span className="rf-t2">{t('ops2.entries.qCount', { questions: questionCount(config), rules: rulesOf(config).length })}</span>}</span>
+            <button type="button" className="rf-btn" aria-expanded={setup} onClick={() => setSetup((v) => !v)}>{setup ? t('common.done') : t('common.edit')}</button>
+          </div>
+          {setup && config && (
+            <>
+              <RefineDateTimeRow label={t('ops2.entries.deadline')} value={lock} eventDays={days} disabled={busy} onChange={(iso) => void saveLock(iso)} />
+              <div className="rf-row">
+                <span className="rf-grow"><span className="rf-t1">{t('ops2.entries.download')}</span><span className="rf-t2">{t('ops2.entries.downloadSub')}</span></span>
+                <button type="button" className="rf-btn" disabled={forms.length === 0}
+                  onClick={() => downloadCsv(`${safeFilename(competition.name)}-dec-forms.csv`, decFormsCsv(forms, config.customFields))}>CSV</button>
+              </div>
+            </>
+          )}
+        </RefineList>
+        {setup && config && <SetupEditor config={config} busy={busy} onSave={saveConfig} />}
+    </>
+  );
+
+  return (
+    <RefinePage>
+      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.hub.back')} context={competition.name} title={t('ops2.entries.title')} />
+      <div className="ops-cards ops-entries" aria-busy={busy}>
+        {error && <Notice>{error}</Notice>}
+        {passNotice && <Notice>{passNotice}</Notice>}
+        {toast.node}
+
+        {!docked && controls}
 
         {filter !== 'all' && (
           <SignupList
@@ -315,25 +349,14 @@ export function EntriesPage() {
           </Fragment>
         ))}
 
-        <RefineSection title={t('ops2.entries.decForm')} />
-        <RefineList as="div">
-          <div className="rf-row">
-            <span className="rf-grow"><span className="rf-t1">{t('ops2.entries.qAndFlags')}</span>{config && <span className="rf-t2">{t('ops2.entries.qCount', { questions: questionCount(config), rules: rulesOf(config).length })}</span>}</span>
-            <button type="button" className="rf-btn" aria-expanded={setup} onClick={() => setSetup((v) => !v)}>{setup ? t('common.done') : t('common.edit')}</button>
-          </div>
-          {setup && config && (
-            <>
-              <RefineDateTimeRow label={t('ops2.entries.deadline')} value={lock} eventDays={days} disabled={busy} onChange={(iso) => void saveLock(iso)} />
-              <div className="rf-row">
-                <span className="rf-grow"><span className="rf-t1">{t('ops2.entries.download')}</span><span className="rf-t2">{t('ops2.entries.downloadSub')}</span></span>
-                <button type="button" className="rf-btn" disabled={forms.length === 0}
-                  onClick={() => downloadCsv(`${safeFilename(competition.name)}-dec-forms.csv`, decFormsCsv(forms, config.customFields))}>CSV</button>
-              </div>
-            </>
-          )}
-        </RefineList>
-        {setup && config && <SetupEditor config={config} busy={busy} onSave={saveConfig} />}
+        {!docked && decForm}
       </div>
+      {docked && toolsOpen && (
+        <Sheet title={t('ops2.entries.toolsSheet')} onClose={() => setToolsOpen(false)}>
+          {controls}
+          {decForm}
+        </Sheet>
+      )}
     </RefinePage>
   );
 }
