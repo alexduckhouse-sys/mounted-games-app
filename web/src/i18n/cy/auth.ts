@@ -9,6 +9,7 @@ export const auth: AreaCatalogue<typeof en> = {
   'auth.field.yourName': 'Eich enw',
   'auth.password.hide': 'Cuddio’r cyfrinair',
   'auth.password.show': 'Dangos y cyfrinair',
+  'auth.password.capsLock': 'Mae Caps Lock ymlaen',
   'auth.createAccount': 'Creu cyfrif',
 
   'auth.login.organiserTitle': 'Mewngofnodi trefnydd',
@@ -30,6 +31,9 @@ export const auth: AreaCatalogue<typeof en> = {
   'auth.signup.roleRider': 'Marchog neu riant',
   'auth.signup.roleTrainer': 'Hyfforddwr',
   'auth.signup.roleManager': 'Rheolwr tîm',
+  'auth.signup.roleRiderHint': 'Dilyn digwyddiadau, canlyniadau a’ch tîm',
+  'auth.signup.roleTrainerHint': 'Trefnu cystadlaethau ac anfon datganiadau',
+  'auth.signup.roleManagerHint': 'Rhedeg clwb a chymeradwyo ei hyfforddwyr',
   'auth.signup.asMember': 'aelod',
   'auth.signup.asTrainer': 'hyfforddwr',
   'auth.signup.asManager': 'rheolwr tîm',

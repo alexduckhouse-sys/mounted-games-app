@@ -19,7 +19,7 @@ describe('StatsSummaryView', () => {
     const region = screen.getByRole('region', { name: 'Summary' });
     expect(within(region).getByText('Podiums').nextSibling).toHaveTextContent('2');
     expect(within(region).getByText('1st 1 · 2nd 1 · 3rd 0')).toBeInTheDocument();
-    expect(within(region).getByText('Point quota').nextSibling).toHaveTextContent('50%');
+    expect(within(region).getByText('Avg points').nextSibling).toHaveTextContent('50%');
     expect(screen.getByText(/count individual and pairs competitions/)).toBeInTheDocument();
   });
 
@@ -42,6 +42,16 @@ describe('StatsGamesView', () => {
     expect(rows).toHaveLength(3);
     expect(rows[1]).toHaveTextContent('Bending21 (50%)2.5 pts (1.5)062.5%');
     expect(rows[2]).toHaveTextContent('Flag Race00 (0%)—1—');
+  });
+
+  it('fits its card (fixed columns, no sideways scroll) and names the average-points column', () => {
+    const { container } = render(<StatsGamesView games={[game('Bending')]} best={[]} worst={[]} />);
+    const wrap = container.querySelector('.rf-table-wrap')!;
+    expect(wrap).toHaveClass('rf-table-fit');
+    expect(wrap).not.toHaveClass('overflow-x-auto');
+    expect(container.querySelectorAll('colgroup col')).toHaveLength(6);
+    expect(within(screen.getByRole('table')).getByRole('columnheader', { name: 'Avg pts' })).toBeInTheDocument();
+    expect(screen.queryByText(/quota/i)).not.toBeInTheDocument();
   });
 
   it('skips the best and weakest lines when there are none', () => {

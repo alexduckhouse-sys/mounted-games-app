@@ -2,6 +2,7 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { Check, ChevronRight } from 'lucide-react';
 import { Sheet } from '../../components/Sheet';
 import { initialsOf } from '../../lib/profile';
+import { tr } from '../../i18n/translate';
 import './clubShop.css';
 
 export type ChipTone = 'good' | 'warn' | 'bad' | 'grey' | 'plain';
@@ -110,7 +111,7 @@ export function FormSheet({ title, description, saveLabel = 'Done', canSave = tr
             {children}
             {error && <p role="alert" className="cs-field-error m-0">{error}</p>}
             <div className="kit-acts">
-              <button type="submit" className="kit-pill kit-pill-fill" disabled={busy || !canSave}>{busy ? 'Saving…' : saveLabel}</button>
+              <button type="submit" className="kit-pill kit-pill-fill" disabled={busy || !canSave}>{busy ? tr('common.saving') : saveLabel}</button>
               {extra}
             </div>
           </form>

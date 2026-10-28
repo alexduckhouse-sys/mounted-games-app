@@ -42,13 +42,34 @@ export interface SocialLoginButtonsProps {
 const GOOGLE_LOCALE: Record<Lang, string> = { en: 'en-GB', cy: 'cy', fr: 'fr' };
 
 let cachedProviders: ExternalProvider[] | null = null;
-let pendingFetch: Promise<ExternalProvider[]> | null = null;
+let pendingFetch: Promise<ExternalProvider[] | null> | null = null;
+
+/**
+ * What the last visit saw, kept on this device so the buttons (or their absence) are right on the first paint and
+ * nothing slides down when the list arrives. Only a list the API really gave is kept, never a failed fetch.
+ */
+const SEEN_KEY = 'mg.socialProviders';
+
+function readSeen(): ExternalProvider[] | null {
+  try {
+    const raw = localStorage.getItem(SEEN_KEY);
+    const list: unknown = raw ? JSON.parse(raw) : null;
+    return Array.isArray(list) ? list.filter(isProvider) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSeen(list: ExternalProvider[]) {
+  try { localStorage.setItem(SEEN_KEY, JSON.stringify(list)); } catch { /* storage may be blocked */ }
+}
 
 /** Forgets the provider list between tests. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function clearSocialProvidersCache() {
   cachedProviders = null;
   pendingFetch = null;
+  try { localStorage.removeItem(SEEN_KEY); } catch { /* storage may be blocked */ }
 }
 
 function isProvider(item: unknown): item is ExternalProvider {
@@ -57,15 +78,18 @@ function isProvider(item: unknown): item is ExternalProvider {
     && typeof p.name === 'string' && typeof p.clientId === 'string' && p.clientId.length > 0);
 }
 
-function fetchProviders(): Promise<ExternalProvider[]> {
+/** The list the API gave (empty when none is on), or null when it couldn't be fetched. */
+function fetchProviders(): Promise<ExternalProvider[] | null> {
   if (cachedProviders) return Promise.resolve(cachedProviders);
   pendingFetch ??= api.get<unknown>('/auth/providers')
     .then(({ data }) => {
-      const list = Array.isArray(data) ? data.filter(isProvider) : [];
+      if (!Array.isArray(data)) return null;
+      const list = data.filter(isProvider);
       if (list.length > 0) cachedProviders = list;
+      writeSeen(list);
       return list;
     })
-    .catch(() => [])
+    .catch(() => null)
     .finally(() => { pendingFetch = null; });
   return pendingFetch;
 }
@@ -73,13 +97,36 @@ function fetchProviders(): Promise<ExternalProvider[]> {
 /** The sign-in providers the API has switched on, fetched once per page load and remembered. Empty until then, or offline. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function useSocialProviders(): ExternalProvider[] {
-  const [providers, setProviders] = useState<ExternalProvider[]>(() => cachedProviders ?? []);
+  return useSocialProviderState().providers;
+}
+
+/** The list, and whether it is still unknown (nothing cached or remembered from an earlier visit, and no answer yet). */
+function useSocialProviderState(): { providers: ExternalProvider[]; settled: boolean } {
+  const [state, setState] = useState<{ providers: ExternalProvider[]; settled: boolean }>(() => {
+    const known = cachedProviders ?? readSeen();
+    return { providers: known ?? [], settled: known != null };
+  });
   useEffect(() => {
     let cancelled = false;
-    fetchProviders().then((list) => { if (!cancelled && list.length > 0) setProviders(list); });
+    fetchProviders().then((list) => {
+      // A failed fetch keeps what was remembered; it only ends the wait.
+      if (!cancelled) setState((cur) => ({ providers: list ?? cur.providers, settled: true }));
+    });
     return () => { cancelled = true; };
   }, []);
-  return providers;
+  return state;
+}
+
+/** True while Stable Night (the dark theme) is showing, following the theme as it changes. */
+function useDarkTheme(): boolean {
+  const read = () => document.documentElement.dataset.theme === 'dark';
+  const [dark, setDark] = useState(read);
+  useEffect(() => {
+    const watcher = new MutationObserver(() => setDark(read()));
+    watcher.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => watcher.disconnect();
+  }, []);
+  return dark;
 }
 
 /** Keeps the latest callbacks without re-running the provider set-up when a parent re-renders. */
@@ -102,6 +149,8 @@ function GoogleButton({ clientId, disabled, label, onCredential, onError }: Butt
   const { t, lang } = useLanguage();
   const latest = useLatest({ onCredential, onError, t });
   const locale = GOOGLE_LOCALE[lang];
+  // Google's own dark version, so the button isn't a white slab on Stable Night.
+  const dark = useDarkTheme();
 
   useEffect(() => {
     let live = true;
@@ -120,10 +169,11 @@ function GoogleButton({ clientId, disabled, label, onCredential, onError }: Butt
           else latest.current.onError(latest.current.t('auth.social.googleFailed'));
         },
       });
+      slot.current.replaceChildren();
       const width = Math.round(slot.current.getBoundingClientRect().width) || 320;
       google.renderButton(slot.current, {
         type: 'standard',
-        theme: 'outline',
+        theme: dark ? 'filled_black' : 'outline',
         size: 'large',
         text: label === 'continue' ? 'continue_with' : 'signin_with',
         shape: 'rectangular',
@@ -134,7 +184,7 @@ function GoogleButton({ clientId, disabled, label, onCredential, onError }: Butt
       setStatus('ready');
     }).catch(() => { if (live) setStatus('failed'); });
     return () => { live = false; };
-  }, [clientId, label, locale, latest]);
+  }, [clientId, label, locale, dark, latest]);
 
   if (status === 'failed') {
     return <p role="status" className="m-0 text-center text-sm text-[rgb(var(--mg-muted))]">{t('auth.social.googleUnavailable')}</p>;
@@ -279,8 +329,10 @@ function AppleButton({ clientId, disabled, label, onCredential, onError }: Butto
  */
 export function SocialLoginButtons({ only, divider = true, ...props }: SocialLoginButtonsProps) {
   const t = useT();
-  const providers = useSocialProviders();
+  const { providers, settled } = useSocialProviderState();
   const shown = only ? providers.filter((p) => only.includes(p.id)) : providers;
+  // First ever visit, still asking: hold the space two buttons and the "or" take, so the form doesn't jump when they arrive.
+  if (!settled && !only) return <div aria-hidden="true" data-testid="social-placeholder" className="h-[132px]" />;
   if (shown.length === 0) return null;
   return (
     <div className="flex flex-col gap-2.5">
