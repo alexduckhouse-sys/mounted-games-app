@@ -6,7 +6,7 @@ import { ArenaHelpSheet } from './ArenaHelpSheet';
 import { setHeatEntryBibOverride } from '../../lib/heatBibOverride';
 import { useWakeLock } from '../../hooks/useWakeLock';
 import { stripInternalSessionNotes } from '../../lib/gateCheck';
-import { ConfirmOfficialButton, ProvisionalBadge } from '../../components/ProvisionalStatus';
+import { ConfirmOfficialButton } from '../../components/ProvisionalStatus';
 import { useProvisionalState } from '../../hooks/useProvisionalState';
 import { getSessionProvisionalState } from '../../lib/provisionalResults';
 import { usePageWidth } from '../../components/pageWidthState';
@@ -670,10 +670,10 @@ function SessionScoring() {
     <div className="space-y-3 pt-3">
       {saveError && <Notice>{saveError}</Notice>}
       <ScoreClashBanner clashes={clashes} teamNamesById={teamNamesById} onResolve={resolveClash} />
-      {provisional && provisional.status !== 'in-progress' && (
+      {/* The Official / Provisional mark is not shown on the heat page; organisers keep the Confirm official button. */}
+      {provisional && provisional.status !== 'in-progress' && canOrganise(competition) && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2" aria-label="Results status">
-          <ProvisionalBadge state={provisional} />
-          {canOrganise(competition) && <ConfirmOfficialButton competitionId={competition.id} sessionId={session.id} state={provisional} onDone={reload} />}
+          <ConfirmOfficialButton competitionId={competition.id} sessionId={session.id} state={provisional} onDone={reload} />
         </div>
       )}
 

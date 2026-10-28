@@ -24,6 +24,8 @@ import { OverlayLayer, StreamNotice } from '../../components/stream/StreamOverla
 import { FilmingBanner } from '../../components/FilmingBanner';
 import { SelectField } from '../../components/SelectField';
 import { Notice } from '../../components/Notice';
+import { PageProblem } from '../../components/PageProblem';
+import { CameraLockButtons } from '../../components/stream/CameraLocks';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { usePageWidth } from '../../components/pageWidthState';
 import type { StreamPublisher, StreamQualityPreset } from '../../types';
@@ -52,12 +54,12 @@ export function BroadcastPage() {
   usePageWidth('wide');
   const { competition, streamingEnabled } = useCompetition();
   const { canOrganise } = useAuth();
+  // Any signed-in account reaches this page (a competition team member may film); the API makes the real check.
   if (!canOrganise(competition)) {
     return (
-      <div className="mx-auto max-w-md space-y-3 p-4">
-        <p>Only the organiser can broadcast.</p>
-        <Link to={`/competitions/${competition.id}`} className="mg-btn mg-btn-secondary inline-flex">Back to competition</Link>
-      </div>
+      <PageProblem title="Only the organiser’s team can go live" secondaryLabel="Back to competition" secondaryTo={`/competitions/${competition.id}`}>
+        Ask the organiser to add you to the competition team, or to send you a camera link.
+      </PageProblem>
     );
   }
   if (!streamingEnabled) {
@@ -160,6 +162,13 @@ function BroadcastStudio() {
     const unsubscribe = next.subscribe(() => setSnapshot(next.getSnapshot()));
     return () => { unsubscribe(); next.dispose(); setBroadcasting(false); };
   }, [competition.id]);
+
+  // Once the camera is allowed, keep the camera and microphone lists current as devices are plugged in or out.
+  const hasMedia = Boolean(snapshot.media);
+  useEffect(() => {
+    if (!hasMedia) return;
+    return publisher.current?.watchDevices((cameras, microphones) => { setDevices(cameras); setMics(microphones); });
+  }, [hasMedia]);
 
   // Attach 30-minute rolling replay buffer while live
   useEffect(() => {
@@ -716,6 +725,8 @@ function BroadcastStudio() {
               </SelectField>
             </label>
           )}
+          <CameraLockButtons locks={snapshot.cameraLocks} disabled={busy} className="flex flex-wrap items-center gap-2" buttonClassName="mg-stream-chip"
+            onChange={(kind, locked) => void run(() => publisher.current!.setCameraLock(kind, locked))} />
           {occupied && <Notice tone="info">{occupantName ?? 'Someone'} is already streaming {arena} · {angle}. Going live takes over from them.</Notice>}
           <Notice tone="info" role={null}>Anyone can watch. Check families know the event is being filmed. Keep this screen on: locking the phone pauses the stream.</Notice>
           <button disabled={busy || !arena.trim() || !angle.trim()} className="mg-btn mg-btn-primary !min-h-[52px] !bg-[rgb(var(--mg-red))] !text-white" onClick={() => run(async () => { const t = Date.now(); setStartedAt(t); setNow(t); setLimitSeconds(DEFAULT_STREAM_LIMIT_SECONDS); await publisher.current!.start(arena, angle, occupied); })}><VideoIcon />{occupied ? 'Take over and go live' : 'Go live'}</button>

@@ -6,7 +6,9 @@ import { Notice } from '../../components/Notice';
 import { PageProblem } from '../../components/PageProblem';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../auth/AuthContext';
-import { FAVOURITES_CHANGED, readFavourites, toggleFavourite } from '../../lib/favourites';
+import { FAVOURITES_CHANGED, readFavourites, setFavourites as setManyFavourites } from '../../lib/favourites';
+import { useFollowedProfiles } from '../../hooks/useFollowedProfiles';
+import { setFollowedProfile } from '../../lib/followedProfiles';
 import { SectionFormatLabel } from '../../types';
 import { Chevron, RefineDisclosure, RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection } from '../refine/Refine';
 import { ordinal, positionLabels, shortDate } from './seasonModel';
@@ -81,6 +83,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
   const [refresh, setRefresh] = useState(0);
   const [search, setSearch] = useState('');
   const [favourites, setFavourites] = useState(readFavourites);
+  const followedProfiles = useFollowedProfiles();
   const [seasonData, setSeasonData] = useState<{ seasonId: string; season: SeasonView; standings: StandingView[] } | null>(null);
   const canManageProfile = !!history?.profile.canManage && mayManage;
 
@@ -232,15 +235,16 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
   const tabs = canManageProfile ? ([['history', 'History'], ['edit', 'Edit profile'], ['link', 'Link event']] as [ProfileTab, string][]) : [];
 
   const eventTeams = history.eventTeams;
-  const following = eventTeams.length > 0 && eventTeams.every((team) => favourites.some((item) => item.competitionId === team.competitionId && item.teamId === team.teamId));
+  const eventPairs = eventTeams.map((team) => ({ competitionId: team.competitionId, teamId: team.teamId }));
+  // Followed as a profile on this device (works with no event yet), or, as before, through every linked event team.
+  const following = followedProfiles.isFollowed(profile.id)
+    || (eventTeams.length > 0 && eventTeams.every((team) => favourites.some((item) => item.competitionId === team.competitionId && item.teamId === team.teamId)));
   function toggleStar() {
-    let problem: string | null = null;
-    for (const team of eventTeams) {
-      const isFollowed = favourites.some((item) => item.competitionId === team.competitionId && item.teamId === team.teamId);
-      if (following === isFollowed) problem = toggleFavourite({ competitionId: team.competitionId, teamId: team.teamId }) ?? problem;
-    }
+    const follow = !following;
+    const eventProblem = setManyFavourites(eventPairs, follow);
+    const profileProblem = setFollowedProfile({ id: profile.id, name: profile.displayName, clubName: profile.clubName }, follow);
     setFavourites(readFavourites());
-    setError(problem);
+    setError(eventProblem ?? profileProblem);
   }
 
   const seasonResults = history.publishedResults.filter((result) => result.seasonId === selectedId);
@@ -277,7 +281,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
       <div className="sp-card sp-gap">
         <div className="sp-row">
           <span className="sp-grow"><span className="sp-t2">{club}</span>{seasonLine && <span className="sp-t1">{seasonLine}</span>}</span>
-          {history.eventTeams.length > 0 && <button type="button" className="rf-ib sv-star" aria-pressed={following} aria-label={`${following ? 'Unstar' : 'Star'} ${profile.displayName}`} title="Follow on this device" onClick={toggleStar}><Star className="h-5 w-5" aria-hidden="true" /></button>}
+          <button type="button" className="rf-ib sv-star" aria-pressed={following} aria-label={`${following ? 'Unstar' : 'Star'} ${profile.displayName}`} title="Follow on this device" onClick={toggleStar}><Star className="h-5 w-5" aria-hidden="true" /></button>
         </div>
       </div>
       {history.publishedResults.length === 0 ? <div className="sv-empty"><h2>No published results</h2><p>This team hasn’t appeared in a published season round yet.</p></div> : <>

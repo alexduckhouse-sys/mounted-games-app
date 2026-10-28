@@ -12,11 +12,7 @@ namespace MountedGames.Api.Tests;
 public class ReviewSeedFreshTests
 {
     private static readonly DateTime Today = new(2030, 6, 1, 0, 0, 0, DateTimeKind.Utc);
-    private static readonly string[] DemoNames =
-    {
-        "Demo Meadow Cup", "Demo Clover Challenge", "Demo River Games", "Demo Forest Trophy",
-        "Demo Windmill Open", "Demo World Festival", "Demo Valley Finals", "Demo Lakeside Games",
-    };
+    private static readonly string[] DemoNames = ReviewCompetitionSeeder.EventNames.ToArray();
 
     private static async Task<AppDbContext> Database()
     {
@@ -32,7 +28,7 @@ public class ReviewSeedFreshTests
         db.ChangeTracker.Clear();
         return await db.Competitions
             .Include(c => c.Sessions).ThenInclude(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results)
-            .SingleAsync(c => c.Name == "Demo Meadow Cup");
+            .SingleAsync(c => c.Name == "EGUK Winter Pairs Series — Round 1");
     }
 
     [Theory]
@@ -121,7 +117,7 @@ public class ReviewSeedFreshTests
         var now = Today.AddHours(15);
         await ReviewCompetitionSeeder.SeedAsync(db, Today, now);
         db.ChangeTracker.Clear();
-        var clover = await db.Competitions.Include(c => c.Sessions).SingleAsync(c => c.Name == "Demo Clover Challenge");
+        var clover = await db.Competitions.Include(c => c.Sessions).SingleAsync(c => c.Name == "Midlands Series — Open & Pairs");
         Assert.Equal(Today.AddDays(3).AddHours(9), clover.Sessions.Min(s => s.ScheduledStart));
         Assert.All(clover.Sessions, s => Assert.Equal(SessionStatus.Upcoming, s.Status));
 
@@ -192,8 +188,8 @@ public class ReviewSeedFreshTests
         await using var db = await Database();
         var club = new Club { Name = "Real club", Region = "Somewhere" };
         // Looks like a demo event but has no demo mark; another is marked but not one of the seeder names.
-        var lookAlike = new Competition { Name = "Demo Meadow Cup", StartDate = Today, Description = "A real event" };
-        var otherDemo = new Competition { Name = "Demo Meadow Cup (copy)", StartDate = Today };
+        var lookAlike = new Competition { Name = "EGUK Winter Pairs Series — Round 1", StartDate = Today, Description = "A real event" };
+        var otherDemo = new Competition { Name = "EGUK Winter Pairs Series — Round 1 (copy)", StartDate = Today };
         var ordinary = new Competition { Name = "Spring Show", StartDate = Today.AddDays(5) };
         var section = new CompetitionSection { Competition = ordinary, AgeGroup = "U12", DisplayName = "U12", Format = SectionFormat.Teams, PriceMinor = 1000 };
         var teamA = new Team { Competition = ordinary, Section = section, Club = club, DisplayName = "A", Suffix = "1" };
@@ -217,13 +213,13 @@ public class ReviewSeedFreshTests
 
         Assert.Equal(0, result.Removed);
         Assert.Equal(7, result.Created); // the look-alike's name is taken, so only seven are made
-        Assert.Equal(new[] { "Demo Meadow Cup" }, result.Skipped);
+        Assert.Equal(new[] { "EGUK Winter Pairs Series — Round 1" }, result.Skipped);
         db.ChangeTracker.Clear();
         var kept = await db.Competitions.SingleAsync(c => c.Id == lookAlikeId);
         Assert.Equal("A real event", kept.Description);
         // Not even given the demo mark.
         Assert.False(await db.Set<EventCommerceSettings>().AnyAsync(x => x.CompetitionId == lookAlikeId));
-        Assert.True(await db.Competitions.AnyAsync(c => c.Name == "Demo Meadow Cup (copy)"));
+        Assert.True(await db.Competitions.AnyAsync(c => c.Name == "EGUK Winter Pairs Series — Round 1 (copy)"));
         Assert.True(await db.Set<EventCommerceSettings>().AnyAsync(x => x.CompetitionId == otherDemo.Id && x.IsDemo));
         Assert.Equal(2, await db.Teams.CountAsync(t => t.CompetitionId == ordinary.Id));
         Assert.Equal(2, await db.Results.CountAsync(r => r.Race!.Heat!.Session!.CompetitionId == ordinary.Id));
@@ -236,7 +232,7 @@ public class ReviewSeedFreshTests
         Assert.Equal(7, next.Removed);
         Assert.Equal(7, next.Created);
         Assert.Equal(2, await db.Teams.CountAsync(t => t.CompetitionId == ordinary.Id));
-        Assert.Equal(lookAlikeId, (await db.Competitions.SingleAsync(c => c.Name == "Demo Meadow Cup")).Id);
+        Assert.Equal(lookAlikeId, (await db.Competitions.SingleAsync(c => c.Name == "EGUK Winter Pairs Series — Round 1")).Id);
     }
 
     [Fact]
@@ -255,7 +251,7 @@ public class ReviewSeedFreshTests
 
         var targets = await db.Competitions.Include(c => c.Teams).Include(c => c.Sections)
             .Include(c => c.Sessions).ThenInclude(s => s.Heats).ThenInclude(h => h.Races)
-            .Where(c => c.Name == "Demo Meadow Cup" || c.Name == "Demo Valley Finals").ToListAsync();
+            .Where(c => c.Name == "EGUK Winter Pairs Series — Round 1" || c.Name == "End of Season Championships").ToListAsync();
         db.Set<Rulebook>().Add(new Rulebook { Title = "Rules", Edition = "1", Text = "Shared rules" });
         foreach (var competition in targets)
         {
@@ -372,7 +368,7 @@ public class ReviewSeedFreshTests
     {
         await using var db = await Database();
         await ReviewCompetitionSeeder.SeedAsync(db, Today, Today.AddHours(10));
-        var competition = await db.Competitions.Include(c => c.Sections).FirstAsync(c => c.Name == "Demo Meadow Cup");
+        var competition = await db.Competitions.Include(c => c.Sections).FirstAsync(c => c.Name == "EGUK Winter Pairs Series — Round 1");
         var owner = new AppUser { UserName = "owner@example.test", Email = "owner@example.test", FullName = "Owner" };
         var season = new Season { Owner = owner, Title = "League", Year = 2030, AgeGroup = "Seniors" };
         db.Set<Season>().Add(season);

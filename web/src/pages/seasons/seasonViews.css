@@ -16,6 +16,7 @@
 .sv-table .sv-mid { text-align: center; }
 .sv-table td.sv-mid { color: rgb(var(--mg-muted)); font-variant-numeric: tabular-nums; }
 .sv-table td.sv-end { text-align: right; }
+.sv-standings th:last-child, .sv-standings td.sv-end { padding-right: 18px; }
 .sv-table .rf-num { font: 700 20px/1 var(--mg-font-display); }
 .sv-table .sv-team { font: 600 17px/1.2 var(--mg-font); color: rgb(var(--mg-ink)); }
 .sv-struck { text-decoration: line-through; color: rgb(var(--mg-muted)); font-weight: 600; font-variant-numeric: tabular-nums; }

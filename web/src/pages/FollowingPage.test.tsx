@@ -3,8 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
-import { FAVOURITES_KEY } from '../lib/favourites';
-import { competition, heat, session, team } from '../test/factories';
+import { FAVOURITES_KEY } from '../lib/favourites';import { competition, heat, session, team } from '../test/factories';
 import { FollowingPage } from './FollowingPage';
 
 vi.mock('../api', () => ({ api: { get: vi.fn() } }));
@@ -34,11 +33,13 @@ describe('FollowingPage', () => {
   it('has a way to choose a competition when nothing is starred', () => {
     mount();
     // One short sentence, no empty box, and the grey add bar.
-    expect(screen.getByText('Star teams at a competition and they show up here with their next heats.')).toBeInTheDocument();
+    expect(screen.getByText('Star a team and it shows up here with its next event or heat.')).toBeInTheDocument();
     expect(screen.queryByText('No starred teams yet')).not.toBeInTheDocument();
     const add = screen.getByRole('link', { name: 'Choose a competition' });
     expect(add).toHaveAttribute('href', '/events');
-    expect(add).toHaveClass('sp-add');
+    // The grey bar is for following a team or club from its profile.
+    expect(screen.getByRole('button', { name: 'Follow a team or club' })).toHaveClass('sp-add');
+    expect(screen.getByRole('searchbox', { name: 'Find a team or club to follow' })).toBeInTheDocument();
   });
 
   it('shows one block per event, with each starred team and its next heat', async () => {
@@ -58,7 +59,6 @@ describe('FollowingPage', () => {
     expect(within(second).getByText('Thu 7 Nov')).toBeInTheDocument();
     const add = screen.getByRole('link', { name: 'Follow teams at another competition' });
     expect(add).toHaveAttribute('href', '/events');
-    expect(add).toHaveClass('sp-add');
   });
 
   it('keeps the rows plain: no star, no coloured time, no hatband bar and no note about where stars are kept', async () => {

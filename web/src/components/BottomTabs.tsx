@@ -1,117 +1,17 @@
 import { Link, useLocation } from 'react-router-dom';
-import {
-  ClipboardList,
-  Clock,
-  Info,
-  MapPin,
-  MessageSquare,
-  ShoppingBag,
-  Sliders,
-  Star,
-  Ticket,
-  Trophy,
-  Users,
-  type LucideIcon,
-} from 'lucide-react';
+import { Info, Ticket } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
-import {
-  DEFAULT_BOTTOM_TABS,
-  useUserPrefs,
-  type BottomTabId,
-} from '../lib/userPrefs';
+import { DEFAULT_BOTTOM_TABS, useUserPrefs } from '../lib/userPrefs';
 import { useT } from '../i18n/LanguageContext';
 import type { MessageKey } from '../i18n/en';
 import { useCompetitionMeta } from './competitionMeta';
+import { TAB_DEFS } from './bottomTabDefs';
 
 /** The signed-in person's tab: their initials, and how many things are waiting on them. */
 export interface MeTab {
   initials: string;
   count: number;
 }
-
-interface TabDef {
-  id: BottomTabId;
-  label: MessageKey;
-  icon: LucideIcon;
-  to: (base: string) => string;
-  isActive: (section: string | undefined) => boolean;
-  organiserOnly?: boolean;
-}
-
-const TAB_DEFS: Record<BottomTabId, TabDef> = {
-  timetable: {
-    id: 'timetable',
-    label: 'shell.tab.timetable',
-    icon: Clock,
-    to: (base) => base,
-    isActive: (section) =>
-      section === '' || section === 'session' || section === 'scoring',
-  },
-  toplists: {
-    id: 'toplists',
-    label: 'shell.tab.toplists',
-    icon: Trophy,
-    to: (base) => `${base}/toplists`,
-    isActive: (section) => section === 'toplists',
-  },
-  following: {
-    id: 'following',
-    label: 'shell.tab.following',
-    icon: Star,
-    to: (base) => `${base}/following`,
-    isActive: (section) => section === 'following',
-  },
-  chat: {
-    id: 'chat',
-    label: 'shell.tab.chat',
-    icon: MessageSquare,
-    to: (base) => `${base}/chat`,
-    isActive: (section) => section === 'chat',
-  },
-  teams: {
-    id: 'teams',
-    label: 'shell.tab.teams',
-    icon: Users,
-    to: (base) => `${base}/teams`,
-    isActive: (section) => section === 'teams',
-  },
-  arena: {
-    id: 'arena',
-    label: 'shell.tab.arena',
-    icon: MapPin,
-    to: (base) => `${base}/arena`,
-    isActive: (section) => section === 'arena',
-  },
-  declarations: {
-    id: 'declarations',
-    label: 'shell.tab.declarations',
-    icon: ClipboardList,
-    to: (base) => `${base}/declarations`,
-    isActive: (section) => section === 'declarations',
-  },
-  shop: {
-    id: 'shop',
-    label: 'shell.tab.shop',
-    icon: ShoppingBag,
-    to: (base) => `${base}/shop`,
-    isActive: (section) => section === 'shop',
-  },
-  details: {
-    id: 'details',
-    label: 'shell.tab.details',
-    icon: Info,
-    to: (base) => `${base}/details`,
-    isActive: (section) => section === 'details' || section === 'sponsors',
-  },
-  operations: {
-    id: 'operations',
-    label: 'shell.tab.operations',
-    icon: Sliders,
-    organiserOnly: true,
-    to: (base) => `${base}/operations`,
-    isActive: (section) => section === 'operations',
-  },
-};
 
 const GRID_COLS_CLASS: Record<number, string> = {
   2: 'grid-cols-2',

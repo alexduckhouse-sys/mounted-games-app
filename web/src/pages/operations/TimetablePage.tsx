@@ -40,6 +40,8 @@ interface Item {
   perHeat: number;
   /** Heats exist or it has started: its times are the real ones and it can't be nudged. */
   locked: boolean;
+  /** An age group's finals: they keep their own start time, and the public timetable shows them only once it is set. */
+  final: boolean;
 }
 
 /** Timetable and draw: the day's running order for each arena, the hatbands, and the lane draw. Every change saves as it is made. */
@@ -77,7 +79,7 @@ export function TimetablePage() {
       const heats = brk ? 0 : s.heats.length > 0 ? s.heats.length : heatSizes(teamsIn(s.competitionSectionId), s.lanesPerHeat ?? lanesFor(section?.format ?? 2)).length;
       const minutes = brk ? s.durationMinutes ?? 0 : section?.usesRaceFinals ? 3 * perHeat : s.heats.length > 0 || !s.durationMinutes ? heats * perHeat || row?.minutes || 0 : s.durationMinutes;
       const start = s.scheduledStart ? new Date(s.scheduledStart) : row && row.minutes > 0 ? row.start : null;
-      return { session: s, isBreak: brk, arena: s.arenaName?.trim() ?? '', start, minutes, heats, perHeat, locked: !brk && (s.heats.length > 0 || s.status !== 0) };
+      return { session: s, isBreak: brk, arena: s.arenaName?.trim() ?? '', start, minutes, heats, perHeat, locked: !brk && (s.heats.length > 0 || s.status !== 0), final: !brk && /\bfinals?\b/i.test(s.name) };
     });
   }, [competition]);
 
@@ -245,7 +247,8 @@ export function TimetablePage() {
                   const gap = prevEnd && item.start ? Math.round((item.start.getTime() - prevEnd.getTime()) / 60_000) : 0;
                   const open = editing === item.session.id;
                   const end = endOf(item);
-                  const meta = item.isBreak ? `Break · ${lengthText(item.minutes)}` : `${item.heats} ${item.heats === 1 ? 'heat' : 'heats'} · ${item.perHeat} min a heat · ${lengthText(item.minutes)}`;
+                  const unsetFinal = item.final && !item.locked && !item.session.scheduledStart;
+                  const meta = item.isBreak ? `Break · ${lengthText(item.minutes)}` : unsetFinal ? 'Set a start time so it shows on the public timetable' : `${item.heats} ${item.heats === 1 ? 'heat' : 'heats'} · ${item.perHeat} min a heat · ${lengthText(item.minutes)}`;
                   const canMove = (dir: -1 | 1) => { const o = group.list[i + dir]; return !!o && !item.locked && !o.locked && !!item.start && !!o.start; };
                   return (
                     <Fragment key={item.session.id}>
@@ -270,11 +273,11 @@ export function TimetablePage() {
                           {item.isBreak && (
                             <RefineChoiceRow label="Name" value={item.session.name} options={BREAK_NAMES} allowOther disabled={busy} onChange={(name) => void setBreakName(item, name)} />
                           )}
-                          {!follow && item.start && (
+                          {(!follow || item.final) && item.start && (
                             <div className="rf-row">
                               <label className="rf-grow rf-t1" htmlFor={`start-${item.session.id}`}>Start</label>
                               <input id={`start-${item.session.id}`} type="time" className="ops-time-input" defaultValue={hhmm(item.start)} disabled={busy || item.locked}
-                                onBlur={(event) => { if (event.target.value && event.target.value !== hhmm(item.start!)) void setStart(item, event.target.value); }} />
+                                onBlur={(event) => { if (event.target.value && (event.target.value !== hhmm(item.start!) || unsetFinal)) void setStart(item, event.target.value); }} />
                               <button type="button" className="rf-btn" disabled={busy || item.locked || !prev} onClick={() => void followOn(group.list, item)}>Follow on from the one before</button>
                             </div>
                           )}

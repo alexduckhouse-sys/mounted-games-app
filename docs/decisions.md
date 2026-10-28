@@ -233,6 +233,12 @@
 - Unchanged: riders, ponies and clubs still need a sign-in for their games, and every kind still needs one for `Entries`, `Partnerships`, `Clubs` and `Seasons` (partnerships name riders and ponies). `Detailed` still means "signed in".
 - Files: `api/Services/Stats/StatsService.cs`, tests in `tests/MountedGames.Api.Tests/Stats/StatsEndpointsTests.cs`.
 
+## 2026-10-27: A team profile's games also list their runs
+- Why: the team profile's stats page (`/team-profiles/:id/stats`) draws a bar graph of every run of a game (place on each bar, competition and month under it). Totals alone can't draw that.
+- Rule: for a **team** profile (`StatsSubjectKind.Team`) each `StatsGameDto` now carries `Runs`: competition name, start date, place (null when put out or unplaced), whether it was eliminated, points and the points on offer. Oldest first, at most the 40 most recent per game (`StatsService.MaxRunsPerGame`), so a long history stays a small answer. Same visibility as the games themselves (public for a team profile); for riders, ponies and clubs `Runs` is null.
+- Same rules as the figures beside it: finished competitions only, completed races, sit-outs left out; no rider or pony is named and no referee's note is read. No entity, migration or new endpoint.
+- Files: `api/Dtos/StatsDtos.cs` (`StatsRunDto`), `api/Services/Stats/StatsService.cs`, tests in `tests/MountedGames.Api.Tests/Stats/StatsEndpointsTests.cs`.
+
 ## 2026-10-26: Design direction: modern, calm and outdoor-proof, in the sport's own visual language
 - Why: "modern" alone doesn't settle design choices. The app is used on phones at showgrounds by organisers, scorers, stewards, trainers, parents and spectators, so the look has to come from that setting. Earlier briefs said "Countryfile meets Linear/Stripe"; this keeps the polish but designs for the field rather than a desk.
 - **Outdoor-proof.** Bright sun, rain, gloves, one hand, weak signal. Text and solid controls reach 7:1 contrast in every theme (`web/tests/theme-contrast.test.mjs`); tap targets are at least 44px; inputs are 16px on phones; results and timings read at arm's length; sticky bars clear the home indicator. Functional indicators (hold-to-eliminate, countdowns) stay visible in lite mode and with reduced motion.
@@ -250,3 +256,7 @@
 - **The events list:** `GET /api/competitions/picker/near-you` is separate from the public `/picker` because its answer differs per viewer and so must stay out of the shared and service-worker caches; the web falls back to `/picker` if it fails. It sorts the whole upcoming set before paging.
 - **No Vercel cron** (not documented for container services under `services`, so not added blind): the evening send needs an awake instance, and Send now on Admin → Email covers a gap. Follow-up if wanted: verify a cron on a preview, then add a `CRON_SECRET`-protected GET that calls the same tick.
 - Files: `api/Services/Email/EntriesDigest*.cs`, `api/Services/Geo/`, `api/Services/UkTime.cs`, `api/Controllers/EntriesDigestController.cs`, migration `AddEntriesDigest`, `web/src/pages/admin/EntriesDigestCard.tsx`, `web/src/competition/CompetitionPicker.tsx`.
+
+## 2026-10-28: The events page goes back to soonest first
+- The owner asked for the Nearest first / Soonest first pills to go and the list to be in date order. The web events page now uses only the public `/competitions/picker` (soonest first, no distances).
+- Kept: the entries-open email still orders events by where someone is, and `GET /api/competitions/picker/near-you` stays in the API, unused by the web.

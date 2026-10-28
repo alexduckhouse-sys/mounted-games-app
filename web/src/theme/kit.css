@@ -98,3 +98,11 @@ html[data-lite="true"] .mg-remember { box-shadow: none; }
 /* Kind 8: field errors stay red, with a small icon. */
 .mg-field-msg { display: flex; align-items: flex-start; gap: 5px; }
 .mg-field-msg > svg { flex: none; width: 14px; height: 14px; margin-top: 2px; }
+
+/* Add to Home Screen steps (InstallAppSheet): a number, the icon the person looks for, then the words. */
+.mg-install-steps { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; border: 1px solid rgb(var(--mg-line)); border-radius: 12px; }
+.mg-install-step { display: grid; grid-template-columns: 24px 22px minmax(0, 1fr); align-items: center; gap: 10px; padding: 12px 14px; font: 500 15px/1.4 var(--mg-font); color: rgb(var(--mg-ink)); }
+.mg-install-step + .mg-install-step { border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.mg-install-step b { font-weight: 700; }
+.mg-install-n { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); font: 700 13px/1 var(--mg-font); }
+.mg-install-icon { width: 22px; height: 22px; color: rgb(var(--mg-heading)); }

@@ -4,6 +4,7 @@ using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Commerce;
 using MountedGames.Api.Entities.Seasons;
+using MountedGames.Api.Services.Stats;
 using MountedGames.Api.Tests.Infrastructure;
 
 namespace MountedGames.Api.Tests.Stats;
@@ -346,6 +347,8 @@ public class StatsEndpointsTests : IClassFixture<ApiFactory>
         var club = await (await member.GetAsync(Url("clubs", s.Club))).ReadAsync<StatsProfileDto>();
         Assert.Equal((StatsSubjectKind.Club, 2, 3, 2), (club.Kind, club.Summary.Competitions, club.Summary.Entries, club.Summary.PlacedEntries));
         Assert.Contains(club.Partnerships!, p => p.RiderName == $"Hc{s.U} Rider");
+        // Runs are for a team profile's games only.
+        Assert.All(club.Games!, g => Assert.Null(g.Runs));
 
         // A team's per-game figures are public. The entries and the partnerships, which name riders, are not.
         var anon = await (await _f.CreateClient().GetAsync(Url("teams", s.ClubA))).ReadAsync<StatsProfileDto>();
@@ -378,6 +381,15 @@ public class StatsEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal((1, 1, 100.0), (bending.Races, bending.Wins, bending.PointQuotaPercent));
         Assert.NotNull(bending.AveragePoints);
         Assert.NotNull(bending.AveragePlace);
+        // Each game also lists its runs: the competition, where the team came and what it scored.
+        Assert.All(profile.Games!, g => Assert.Equal(g.Races, g.Runs!.Count));
+        var bendingRun = Assert.Single(bending.Runs!);
+        Assert.Equal($"Pairs{s.U}", bendingRun.CompetitionName);
+        Assert.Equal((1, false, 3.0), (bendingRun.Place, bendingRun.Eliminated, bendingRun.Points));
+        var flagRun = Assert.Single(profile.Games.Single(g => g.Name == "Flag Race").Runs!);
+        Assert.Null(flagRun.Place);
+        Assert.True(flagRun.Eliminated);
+        Assert.True(flagRun.MaxPoints > 0);
         // Nothing that names a rider or a pony, and no referee's note, comes with the games.
         Assert.DoesNotContain(s.Pony, raw);
         Assert.DoesNotContain($"Smith{s.U}", raw, StringComparison.OrdinalIgnoreCase);
@@ -392,6 +404,30 @@ public class StatsEndpointsTests : IClassFixture<ApiFactory>
             Assert.Null(other.Entries);
             Assert.Null(other.Partnerships);
         }
+    }
+
+    [Fact]
+    public async Task TeamGameRuns_AreOldestFirst_AndKeepOnlyTheMostRecent()
+    {
+        var u = Guid.NewGuid().ToString("N")[..8];
+        var today = DateTime.UtcNow.Date;
+        TeamSpec Team() => new($"Club{u}", $"Club{u} A", [new RiderSpec($"Ann{u} Jones", $"Dobbin{u}")]);
+        // Two events a week apart, ridden out of order, then one with more runs than are sent.
+        await SeedEventAsync($"Later{u}", today.AddDays(-5), SectionFormat.Teams, [Team()], [new RaceSpec("Bending", [(0, 2, 2)])]);
+        await SeedEventAsync($"Earlier{u}", today.AddDays(-12), SectionFormat.Teams, [Team()], [new RaceSpec("Bending", [(0, 1, 3)])]);
+        var anon = _f.CreateClient();
+        var two = await (await anon.GetAsync(Url("teams", $"Club{u} A"))).ReadAsync<StatsProfileDto>();
+        var runs = Assert.Single(two.Games!).Runs!;
+        Assert.Equal([$"Earlier{u}", $"Later{u}"], runs.Select(r => r.CompetitionName));
+        Assert.Equal([1, 2], runs.Select(r => r.Place));
+
+        var v = Guid.NewGuid().ToString("N")[..8];
+        var many = Enumerable.Range(0, StatsService.MaxRunsPerGame + 5).Select(_ => new RaceSpec("Bending", [(0, 1, 1)])).ToArray();
+        await SeedEventAsync($"Many{v}", today.AddDays(-2), SectionFormat.Teams, [new TeamSpec($"Club{v}", $"Club{v} A", [new RiderSpec($"Bob{v} Day", $"Pip{v}")])], many);
+        var big = await (await anon.GetAsync(Url("teams", $"Club{v} A"))).ReadAsync<StatsProfileDto>();
+        var game = Assert.Single(big.Games!);
+        Assert.Equal(StatsService.MaxRunsPerGame + 5, game.Races);
+        Assert.Equal(StatsService.MaxRunsPerGame, game.Runs!.Count);
     }
 
     [Fact]

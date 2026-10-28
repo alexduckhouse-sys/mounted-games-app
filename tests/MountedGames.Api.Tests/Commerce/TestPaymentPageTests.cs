@@ -222,17 +222,18 @@ public class TestPaymentPageTests : IClassFixture<ApiFactory>
         var today = new DateTime(2031, 3, 1, 0, 0, 0, DateTimeKind.Utc);
         await _f.InDbAsync(async db =>
         {
-            db.Competitions.Add(new Competition { Name = "Demo Meadow Cup", StartDate = today });
-            var optedOut = new Competition { Name = "Demo Clover Challenge", StartDate = today };
+            db.Competitions.Add(new Competition { Name = "EGUK Winter Pairs Series — Round 1", StartDate = today });
+            var optedOut = new Competition { Name = "Midlands Series — Open & Pairs", StartDate = today };
             db.Competitions.Add(optedOut);
             await db.SaveChangesAsync();
             db.Set<EventCommerceSettings>().Add(new EventCommerceSettings { CompetitionId = optedOut.Id, IsDemo = false });
             await db.SaveChangesAsync();
         });
         var created = await _f.InDbAsync(db => ReviewCompetitionSeeder.SeedAsync(db, today));
+        var reviewNames = ReviewCompetitionSeeder.EventNames;
 
         var rows = await _f.InDbAsync(db => db.Competitions
-            .Where(c => c.Name.StartsWith("Demo "))
+            .Where(c => reviewNames.Contains(c.Name))
             .Select(c => new
             {
                 c.Name,
@@ -241,9 +242,9 @@ public class TestPaymentPageTests : IClassFixture<ApiFactory>
             }).ToListAsync());
 
         Assert.Equal(6, created);
-        Assert.Equal(false, rows.Single(x => x.Name == "Demo Clover Challenge").Demo);
-        Assert.Equal(true, rows.Single(x => x.Name == "Demo Meadow Cup").Demo);
-        Assert.Equal(true, rows.Single(x => x.Name == "Demo River Games").Demo);
-        Assert.Equal(1500, rows.Single(x => x.Name == "Demo River Games").Price);
+        Assert.Equal(false, rows.Single(x => x.Name == "Midlands Series — Open & Pairs").Demo);
+        Assert.Equal(true, rows.Single(x => x.Name == "EGUK Winter Pairs Series — Round 1").Demo);
+        Assert.Equal(true, rows.Single(x => x.Name == "Northern Challenge Pairs").Demo);
+        Assert.Equal(1500, rows.Single(x => x.Name == "Northern Challenge Pairs").Price);
     }
 }

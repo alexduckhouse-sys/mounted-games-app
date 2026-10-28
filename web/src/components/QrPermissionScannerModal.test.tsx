@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { scorerApi, readScorerToken, readSavedScorerSession, writeScorerToken } from '../offline/scorerLink';
+import { scorerApi, readScorerAngle, readScorerToken, readSavedScorerSession, writeScorerAngle, writeScorerToken } from '../offline/scorerLink';
 import { QrPermissionScannerModal } from './QrPermissionScannerModal';
 const session = { label: 'Test camera', competitionId: 4, competitionName: 'Test event', arenaName: 'Main', scope: 1, sessions: [] };
 const close = vi.fn(), navigate = vi.fn(), verified = vi.fn();
@@ -49,6 +49,18 @@ describe('permission QR verification', () => {
     expect(scorerApi.get).toHaveBeenCalledWith('/scorer/session', { headers: { 'X-Scorer-Token': token } });
     expect(readScorerToken()).toBe(token); expect(readSavedScorerSession()).toMatchObject(session);
     expect(verified).toHaveBeenCalledWith(token, expect.objectContaining(session)); expect(close).toHaveBeenCalled();
+  });
+  it.each([`https://example.test/score#t=${token}&angle=Finish%20line`, `#t=${token}&angle=Finish%20line`])('keeps the camera position a camera link carries (%s)', async (value) => {
+    writeScorerAngle('Old spot');
+    mount(); submit(value);
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/score#t=${token}&angle=Finish%20line`));
+    expect(readScorerAngle()).toBe('Finish line');
+  });
+  it('forgets an old camera position when the new link has none', async () => {
+    writeScorerAngle('Old spot');
+    mount(); submit(`/score#t=${token}`);
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/score#t=${token}`));
+    expect(readScorerAngle()).toBeNull();
   });
   it.each(['#t=', 'unknown', '/score', '/score?t=bad', '/competitions/4/broadcast?pair=abcdefghijklmnop', 'javascript:alert(1)', 'ftp://example.test/score#t=mgs_bad', 'https://user:pass@example.test/score#t=mgs_bad', 'http://[invalid', '/elsewhere#t=mgs_bad', `mgs_${'a'.repeat(61)}`])('rejects unsupported or malformed permission %s', async (value) => {
     mount(); submit(value);
