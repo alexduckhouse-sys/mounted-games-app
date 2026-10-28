@@ -53,7 +53,8 @@ public sealed record PasswordResetResult(PasswordResetOutcome Outcome, IReadOnly
 /// gives the same answer either way. The link works once, for 30 minutes, and asking again ends earlier links at least five minutes old. Using it
 /// sets the new password under the usual Identity rules (or the first one, for an account that only signed in with Google
 /// or Apple), clears the wrong-password lockout, raises <see cref="AppUser.SessionVersion"/> so every existing sign-in stops working (<see cref="LiveAccounts"/>), disconnects
-/// any Google, Apple or Facebook sign-in (one an intruder linked would otherwise survive), takes away <see cref="Roles.MasterAdmin"/> (the key holder gets it back with the key, so
+/// any Google, Apple or Facebook sign-in (one an intruder linked would otherwise survive), records that the password came
+/// through the mailbox (<see cref="LinkByEmail.PasswordFromMailbox"/>), takes away <see cref="Roles.MasterAdmin"/> (the key holder gets it back with the key, so
 /// a stolen mailbox can't reach it), and sends a "your password was changed" notice. Emails never throw and never log the
 /// address or the link, and none outlives its request (the API scales to zero): see <see cref="RequestAsync"/>.
 /// <para>A reset never confirms the address. Reading the mailbox proves nothing about who uses the account (an address can
@@ -122,11 +123,16 @@ public sealed class PasswordResetService(
     /// <summary>
     /// <see cref="CanReset"/>, plus:
     /// <list type="bullet">
-    /// <item>an organiser, team manager, admin, someone asking to be an organiser or team manager, or a competition admin (a
-    /// <c>CompetitionCollaborators</c> row, which is staff access without a role) needs a confirmed address: an unconfirmed one may belong to someone other than the person who
-    /// uses the account (an admin-key admin can type any address);</item>
-    /// <item>an account with no password (one that only signs in with Google or Apple) gets its first password this way only
-    /// with a confirmed address, and never an admin, so the link can't add a second way into an admin account.</item>
+    /// <item>an account with no password (one that only signs in with Google, Apple or Facebook) never gets its first
+    /// password this way if it is an admin, so the link can't add a second way into an admin account;</item>
+    /// <item>with an unconfirmed address (with or without a password), an organiser, team manager, admin, someone asking to
+    /// be an organiser or team manager, or a competition admin (a <c>CompetitionCollaborators</c> row, which is staff access
+    /// without a role) gets no link: the address may belong to someone other than the person who uses the account (an
+    /// admin-key admin can type any address);</item>
+    /// <item>anyone else gets one, unconfirmed or not. That is how the owner of an address takes back an account someone
+    /// else made with it (a password sign-up, or a Facebook account whose address nobody checked): the reset ends every
+    /// session and removes every provider sign-in, so the squatter's way in goes, and the account holds nothing a mailbox
+    /// can't already reach.</item>
     /// </list>
     /// </summary>
     private async Task<bool> MayResetAsync(AppUser user)
@@ -135,7 +141,8 @@ public sealed class PasswordResetService(
         var hasPassword = !string.IsNullOrEmpty(user.PasswordHash);
         if (hasPassword && user.EmailConfirmed) return true;
         var roles = await users.GetRolesAsync(user);
-        if (!hasPassword) return user.EmailConfirmed && !roles.Any(role => role is Roles.Admin or Roles.MasterAdmin);
+        if (!hasPassword && roles.Any(role => role is Roles.Admin or Roles.MasterAdmin)) return false;
+        if (user.EmailConfirmed) return true;
         if (roles.Any(role => NeedConfirmedAddress.Contains(role))) return false;
         return !await db.CompetitionCollaborators.AnyAsync(c => c.UserId == user.Id);
     }
@@ -285,6 +292,8 @@ public sealed class PasswordResetService(
             // A Google, Apple or Facebook sign-in someone else linked would outlive the reset, so they all go; the owner can link
             // theirs again once signed in.
             var signInsRemoved = await db.UserLogins.Where(l => l.UserId == userId).ExecuteDeleteAsync(ct);
+            // The password now comes from the mailbox, so a provider that runs the mailbox may link by email (LinkByEmail).
+            await LinkByEmail.RecordPasswordFromMailboxAsync(db, userId, LinkByEmail.FromReset, ct);
             // Any other link still open for the account stops working too.
             await db.PasswordResetTokens.Where(t => t.UserId == userId && t.Id != linkId && t.UsedAt == null && t.ExpiresAt > now)
                 .ExecuteUpdateAsync(s => s.SetProperty(t => t.ExpiresAt, now), ct);

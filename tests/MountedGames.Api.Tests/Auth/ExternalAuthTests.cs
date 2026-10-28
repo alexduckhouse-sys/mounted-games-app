@@ -79,13 +79,20 @@ public class ExternalAuthTests : IClassFixture<ExternalAuthFactory>
         return await response.ReadAsync<AuthResponse>();
     }
 
-    private async Task<(string Id, string Email)> PasswordAccountAsync(string email, bool confirmed)
+    /// <summary>
+    /// A Member signed up with a password. <paramref name="passwordFromMailbox"/> marks the password as set through a mailed
+    /// link (a reset or an invitation), which a provider that runs the mailbox needs before it links by email
+    /// (<see cref="LinkByEmail"/>); a password chosen at sign-up proves nothing about the mailbox.
+    /// </summary>
+    private async Task<(string Id, string Email)> PasswordAccountAsync(string email, bool confirmed, bool passwordFromMailbox = false)
     {
         var response = await _f.CreateClient().PostAsJsonAsync("/api/auth/signup-trainer",
             new SignupTrainerRequest(email, Password, Roles.Member, "Password Club", "Pat Password"));
         response.EnsureSuccessStatusCode();
         var auth = await response.ReadAsync<AuthResponse>();
         await SetAsync(auth.User.Id, u => u.EmailConfirmed = confirmed);
+        if (passwordFromMailbox)
+            await _f.InDbAsync(db => LinkByEmail.RecordPasswordFromMailboxAsync(db, auth.User.Id, LinkByEmail.FromReset, CancellationToken.None));
         return (auth.User.Id, email);
     }
 
@@ -353,7 +360,7 @@ public class ExternalAuthTests : IClassFixture<ExternalAuthFactory>
     [Fact]
     public async Task AVerifiedGmailAddressLinksToTheConfirmedAccountAndTellsIt()
     {
-        var (id, email) = await PasswordAccountAsync(Gmail(), confirmed: true);
+        var (id, email) = await PasswordAccountAsync(Gmail(), confirmed: true, passwordFromMailbox: true);
         var attempt = Google(email);
 
         var auth = await SignInAsync(attempt, providerName: "Not Used");
@@ -386,7 +393,7 @@ public class ExternalAuthTests : IClassFixture<ExternalAuthFactory>
     [Fact]
     public async Task AGoogleAccountIsLinkedByEmailOnlyWhenGoogleRunsTheMailbox()
     {
-        var (id, email) = await PasswordAccountAsync($"{Guid.NewGuid():N}"[..12] + "@ponyclub.example", confirmed: true);
+        var (id, email) = await PasswordAccountAsync($"{Guid.NewGuid():N}"[..12] + "@ponyclub.example", confirmed: true, passwordFromMailbox: true);
 
         await AssertRefusedAsync(await PostAsync(Google(email)), HttpStatusCode.Conflict, "external_link_refused");
         Assert.Empty(await LoginsAsync(id));
@@ -486,7 +493,7 @@ public class ExternalAuthTests : IClassFixture<ExternalAuthFactory>
         await SetAsync(created.User.Id, u => u.LockoutEnd = DateTimeOffset.UtcNow.AddMinutes(15));
         Assert.Equal(created.User.Id, (await SignInAsync(Google(linkedEmail, linked.Subject))).User.Id);
 
-        var (id, email) = await PasswordAccountAsync(Gmail(), confirmed: true);
+        var (id, email) = await PasswordAccountAsync(Gmail(), confirmed: true, passwordFromMailbox: true);
         for (var i = 0; i < 5; i++)
             await _f.CreateClient().PostAsJsonAsync("/api/auth/login", new LoginRequest(email, "wrong-password-1A!"));
         Assert.Equal(id, (await SignInAsync(Google(email))).User.Id);
@@ -576,7 +583,7 @@ public class ExternalAuthTests : IClassFixture<ExternalAuthFactory>
     [Fact]
     public async Task AnICloudAddressLinksToTheConfirmedAccountThatUsesItButNoOtherAppleAddressDoes()
     {
-        var (id, email) = await PasswordAccountAsync(ICloud(), confirmed: true);
+        var (id, email) = await PasswordAccountAsync(ICloud(), confirmed: true, passwordFromMailbox: true);
         Assert.Equal(id, (await SignInAsync(Apple(email))).User.Id);
         Assert.Equal("apple", Assert.Single(await LoginsAsync(id)).LoginProvider);
         Assert.Single(SentTo(email), m => m.Subject == "Apple sign-in added to your account");

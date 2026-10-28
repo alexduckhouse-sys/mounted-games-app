@@ -207,6 +207,12 @@ public class PasswordResetTests : IClassFixture<PasswordResetTests.Factory>
             await db.Users.Where(u => u.Id == locked.User.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.LockedAt, now));
             await db.Users.Where(u => u.Id == passwordless.User.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.PasswordHash, (string?)null));
         });
+        // Without a password and with an unconfirmed address, asking to be an organiser is enough to get no link.
+        using (var scope = _f.Services.CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+            Assert.True((await users.AddToRoleAsync((await users.FindByIdAsync(passwordless.User.Id))!, Roles.TrainerRequest)).Succeeded);
+        }
         // A link asked for before deletion goes with the account.
         await _f.LinkAsync(deleted.User.Email);
         Assert.Equal(HttpStatusCode.NoContent, (await _f.WithToken(deleted.Token).SendAsync(new HttpRequestMessage(HttpMethod.Delete, "/api/auth/me")
@@ -683,23 +689,51 @@ public class PasswordResetTests : IClassFixture<PasswordResetTests.Factory>
     }
 
     [Fact]
-    public async Task AnAccountWithoutAPasswordSetsItsFirstOne_OnceItsAddressIsConfirmed()
+    public async Task AnAccountWithoutAPasswordSetsItsFirstOne_EvenWithAnUnconfirmedAddress()
+    {
+        // A Member made with a provider whose address nobody checked: the mailbox's owner can take it back.
+        var account = await _f.AccountAsync();
+        await _f.WithDbAsync(db => db.Users.Where(u => u.Id == account.User.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.PasswordHash, (string?)null)));
+        await _f.AddSignInsAsync(account.User.Id, "Facebook");
+        Assert.False((await _f.UserAsync(account.User.Email)).EmailConfirmed);
+
+        Assert.Equal(HttpStatusCode.OK, (await _f.ConfirmAsync(await _f.LinkAsync(account.User.Email))).StatusCode);
+
+        Assert.Equal(HttpStatusCode.OK, await _f.SignInAsync(account.User.Email, ResetSteps.NewPassword));
+        Assert.Equal(0, await _f.SignInsAsync(account.User.Id));
+        // The reset doesn't confirm the address, but it does record that the password came through the mailbox.
+        Assert.False((await _f.UserAsync(account.User.Email)).EmailConfirmed);
+        Assert.Equal(LinkByEmail.FromReset, await _f.WithDbAsync(db => db.UserClaims
+            .Where(c => c.UserId == account.User.Id && c.ClaimType == LinkByEmail.PasswordFromMailbox).Select(c => c.ClaimValue).SingleAsync()));
+        var notice = Assert.Single(_f.Mail(account.User.Email, "A password was set on your Mounted Games account"));
+        Assert.Contains("A password has just been set for the Mounted Games account", notice.Text);
+        Assert.Contains("disconnected any Google, Apple or Facebook sign-in", notice.Text);
+
+        // A second reset keeps the one record.
+        _f.Clock.Advance(PasswordResetService.MinGap);
+        Assert.Equal(HttpStatusCode.OK, (await _f.ConfirmAsync(await _f.LinkAsync(account.User.Email), "An0ther-passw0rd!")).StatusCode);
+        Assert.Equal(1, await _f.WithDbAsync(db => db.UserClaims.CountAsync(c => c.UserId == account.User.Id && c.ClaimType == LinkByEmail.PasswordFromMailbox)));
+    }
+
+    [Fact]
+    public async Task AnAccountWithoutAPasswordThatAskedForStaffAccessSetsItsFirstOne_OnlyOnceItsAddressIsConfirmed()
     {
         var account = await _f.AccountAsync();
         await _f.WithDbAsync(db => db.Users.Where(u => u.Id == account.User.Id).ExecuteUpdateAsync(s => s.SetProperty(u => u.PasswordHash, (string?)null)));
         await _f.AddSignInsAsync(account.User.Id, "Google");
+        using (var scope = _f.Services.CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+            Assert.True((await users.AddToRoleAsync((await users.FindByIdAsync(account.User.Id))!, Roles.ManagerRequest)).Succeeded);
+        }
         var before = _f.Sent.Count;
         Assert.Equal(HttpStatusCode.Accepted, (await _f.RequestResetAsync(account.User.Email)).StatusCode);
         Assert.Equal(before, _f.Sent.Count);
 
         await _f.ConfirmAddressAsync(account.User.Id);
         Assert.Equal(HttpStatusCode.OK, (await _f.ConfirmAsync(await _f.LinkAsync(account.User.Email))).StatusCode);
-
         Assert.Equal(HttpStatusCode.OK, await _f.SignInAsync(account.User.Email, ResetSteps.NewPassword));
         Assert.Equal(0, await _f.SignInsAsync(account.User.Id));
-        var notice = Assert.Single(_f.Mail(account.User.Email, "A password was set on your Mounted Games account"));
-        Assert.Contains("A password has just been set for the Mounted Games account", notice.Text);
-        Assert.Contains("disconnected any Google, Apple or Facebook sign-in", notice.Text);
     }
 
     [Fact]

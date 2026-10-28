@@ -86,7 +86,7 @@ public class AuthController : ControllerBase
     /// <summary>Someone signed in with a provider whose address belongs to an account it can't simply open.</summary>
     private ConflictObjectResult AccountExistsUsePassword(string providerName) => Conflict(new
     {
-        message = $"There's already an account with this email address. Sign in with your email and password, then add {providerName} from My account.",
+        message = $"There's already an account with this email address. Sign in with your email and password, then add {providerName} from My account. If you don't have a password or can't remember it, reset your password first.",
         code = "external_link_refused",
     });
 
@@ -97,8 +97,10 @@ public class AuthController : ControllerBase
     /// for Google and Apple not used before; Facebook's SDK reuses its token, so a Facebook one may sign in again).</item>
     /// <item>A provider sign-in already linked to an account signs in to that account.</item>
     /// <item>Otherwise an account with the same email is linked only when the provider runs that mailbox
-    /// (<see cref="ExternalIdentity.MayLinkByEmail"/>) and the account's own email is confirmed, so nobody can register
-    /// someone else's address with a password and wait for its owner to sign in. The account's address is told.</item>
+    /// (<see cref="ExternalIdentity.MayLinkByEmail"/>), the account's own email is confirmed, and nobody else can already
+    /// hold a way in (<see cref="LinkByEmail"/>: no provider sign-in, and no password unless one set through a mailed link),
+    /// so nobody can register someone else's address, by password or with an unchecked Facebook address, and wait for its
+    /// owner to sign in. The account's address is told.</item>
     /// <item>Admin accounts and locked, blocked or deleted accounts are never signed in or linked this way. A lockout
     /// after wrong passwords doesn't stop it: that only guards the password.</item>
     /// <item>Nobody found: a ten-minute sign-up ticket (<see cref="ExternalSignupTickets"/>) for
@@ -163,6 +165,10 @@ public class AuthController : ControllerBase
                 return AccountExistsUsePassword(provider.Name);
             if (await RefuseExternalSignInAsync(existing) is { } refused) return refused;
             if (await LinkProblemAsync(existing, provider) is { } problem) return problem;
+            // An account someone else may already hold a way into (a password chosen at sign-up, another provider) isn't
+            // linked: see LinkByEmail.
+            if (!await LinkByEmail.MayLinkAsync(_users, existing))
+                return AccountExistsUsePassword(provider.Name);
             var linked = await _users.AddLoginAsync(existing, new UserLoginInfo(provider.Id, identity.Subject, provider.Name));
             if (!linked.Succeeded)
                 return AccountExistsUsePassword(provider.Name);

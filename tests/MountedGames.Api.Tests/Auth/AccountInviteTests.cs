@@ -141,6 +141,9 @@ public class AccountInviteTests : IClassFixture<EmailApiFactory>
         var stored = await _f.WithDbAsync(db => db.AccountInvites.SingleAsync(i => i.Id == invite.Id));
         Assert.Equal(auth.User.Id, stored.AcceptedUserId);
         Assert.NotNull(stored.AcceptedAt);
+        // The password came through a link sent to the address, so Google or Apple may later link by email (LinkByEmail).
+        Assert.Equal(LinkByEmail.FromInvite, await _f.WithDbAsync(db => db.UserClaims
+            .Where(c => c.UserId == auth.User.Id && c.ClaimType == LinkByEmail.PasswordFromMailbox).Select(c => c.ClaimValue).SingleAsync()));
     }
 
     [Fact]
