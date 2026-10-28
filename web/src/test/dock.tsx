@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
-import { TickerProvider, useTicker } from '../components/TickerContext';
+import { TickerProvider, useDockHost, useTicker } from '../components/TickerContext';
 
 /** Shows the page's dock button the way the shell does, so a test can click it and read its badge. */
 function DockProbe() {
+  useDockHost();
   const { dockAction } = useTicker();
   if (!dockAction) return null;
   return (

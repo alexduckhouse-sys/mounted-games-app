@@ -147,7 +147,7 @@ describe('FormatPage', () => {
     mount();
     await screen.findByRole('heading', { level: 1, name: 'On the day' });
     const before = vi.mocked(api.get).mock.calls.length;
-    await userEvent.click(screen.getByRole('button', { name: 'Close signups now' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Close entries now' }));
     expect(api.post).toHaveBeenCalledWith('/competitions/4/signups-locked', { locked: true });
     await waitFor(() => expect(vi.mocked(api.get).mock.calls.length).toBeGreaterThan(before));
   });

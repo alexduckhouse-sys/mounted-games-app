@@ -287,7 +287,7 @@ describe('exportCompetitionOutbox, importCompetitionOutbox and shareOrCopyOutbox
   it('returns the validation error when importing invalid JSON or storage error when full', () => {
     expect(importCompetitionOutbox('not-json')).toEqual({
       ok: false,
-      error: 'That backup could not be read. Check that the whole JSON backup was copied.',
+      error: 'That backup couldn’t be read. Check you copied the whole message and try again.',
     });
 
     const backup = JSON.stringify([queued(1)]);
@@ -304,7 +304,7 @@ describe('exportCompetitionOutbox, importCompetitionOutbox and shareOrCopyOutbox
     Object.defineProperty(navigator, 'share', { value: shareMock, configurable: true, writable: true });
 
     await expect(shareOrCopyOutboxBackup(1, 'Spring Opener')).resolves.toBe('shared');
-    expect(shareMock).toHaveBeenCalledWith(expect.objectContaining({ title: 'Spring Opener — offline score backup' }));
+    expect(shareMock).toHaveBeenCalledWith(expect.objectContaining({ title: 'Spring Opener: offline score backup' }));
 
     shareMock.mockRejectedValueOnce(new Error('dismissed'));
     const writeTextMock = vi.fn().mockResolvedValue(undefined);

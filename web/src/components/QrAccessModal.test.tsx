@@ -25,13 +25,13 @@ it('shows scorer management only when the caller grants organiser access', () =>
 it('opens as a sheet with the approved title and description', () => {
   show();
   const dialog = screen.getByRole('dialog', { name: 'Share with QR codes' });
-  expect(dialog).toHaveAccessibleDescription('Pick what to share: the public results page, the TV display or the commentator desk. Scorer links are in Set up.');
+  expect(dialog).toHaveAccessibleDescription('Pick what to share: the public results page, the TV display or the commentator desk. Scorer links are under Scorers & team.');
 });
 
 it('closes from the Close pill', async () => {
   const onClose = vi.fn();
   render(<MemoryRouter><QrAccessModal open onClose={onClose} competitionId={1} competitionName="Example competition" /></MemoryRouter>);
-  fireEvent.click(screen.getByRole('button', { name: 'Close QR access modal' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
   await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
 });
 

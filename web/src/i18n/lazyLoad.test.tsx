@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { LanguageProvider, useLanguage, useT } from './LanguageContext';
 import { activeLocale, isLoaded, LANG_KEY, loadCatalogue, tr, unloadCatalogueForTests } from './translate';
@@ -43,8 +43,9 @@ describe('lazy Welsh and French catalogues', () => {
     expect(isLoaded('cy')).toBe(true);
     expect(isLoaded('fr')).toBe(false);
     expect(tr('common.back')).toBe('Yn ôl');
+    // The page language is set in an effect after the text changes, so wait for it rather than race it.
+    await waitFor(() => expect(document.documentElement.lang).toBe('cy'));
     expect(activeLocale()).toBe('cy-GB');
-    expect(document.documentElement.lang).toBe('cy');
   });
 
   it('starts with a stored French choice in English, then switches to French once it arrives', async () => {
@@ -53,7 +54,7 @@ describe('lazy Welsh and French catalogues', () => {
     expect(screen.getByTestId('back')).toHaveTextContent('Back');
     expect(document.documentElement.lang).toBe('en');
     expect(await screen.findByText('Retour')).toBeInTheDocument();
-    expect(document.documentElement.lang).toBe('fr');
+    await waitFor(() => expect(document.documentElement.lang).toBe('fr'));
   });
 
   it('shares one request between repeat calls', async () => {

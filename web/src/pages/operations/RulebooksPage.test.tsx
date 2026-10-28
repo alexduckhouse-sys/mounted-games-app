@@ -231,7 +231,7 @@ describe('RulebooksPage', () => {
     await user.click(await screen.findByRole('button', { name: 'Speed Weave' }));
     expect(await screen.findByRole('dialog', { name: 'Speed Weave' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Close rules' }));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
   it('says so when the game rules cannot be loaded or there are none', async () => {

@@ -7,6 +7,7 @@ import { FAVOURITES_KEY } from '../lib/favourites';
 import { FOLLOWED_PROFILES_KEY } from '../lib/followedProfiles';
 import { competition, team } from '../test/factories';
 import { FollowingPage } from './FollowingPage';
+import { TickerProvider, useDockHost, useTicker } from '../components/TickerContext';
 
 vi.mock('../api', () => ({ api: { get: vi.fn() } }));
 const get = vi.mocked(api.get);
@@ -81,10 +82,47 @@ describe('FollowingPage: teams followed from their profile', () => {
     followProfiles('p1', 'p3');
     localStorage.setItem(FAVOURITES_KEY, JSON.stringify([{ competitionId: 7, teamId: 70 }]));
     mount();
-    await userEvent.click(await screen.findByRole('button', { name: 'Unfollow Atherstone U14' }));
+    // The rows are drawn straight away and then settle into their groups, so wait for that before tapping.
+    await screen.findByRole('region', { name: 'Coming up' });
+    await userEvent.click(screen.getByRole('button', { name: 'Unfollow Atherstone U14' }));
     expect(JSON.parse(localStorage.getItem(FOLLOWED_PROFILES_KEY) ?? '[]').map((item: { id: string }) => item.id)).toEqual(['p3']);
     expect(localStorage.getItem(FAVOURITES_KEY)).toBeNull();
+    // The row folds away (it is out of reach while it does) and the toast offers to undo it.
+    expect(screen.getByRole('status')).toHaveTextContent('Unfollowed');
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Coming up' })).toBeNull());
+  });
+
+  it('puts the team back, with its competition follow, when Undo is pressed', async () => {
+    followProfiles('p1', 'p3');
+    localStorage.setItem(FAVOURITES_KEY, JSON.stringify([{ competitionId: 7, teamId: 70 }]));
+    mount();
+    await screen.findByRole('region', { name: 'Coming up' });
+    await userEvent.click(screen.getByRole('button', { name: 'Unfollow Atherstone U14' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(JSON.parse(localStorage.getItem(FOLLOWED_PROFILES_KEY) ?? '[]').map((item: { id: string }) => item.id).sort()).toEqual(['p1', 'p3']);
+    expect(JSON.parse(localStorage.getItem(FAVOURITES_KEY) ?? '[]')).toEqual([{ competitionId: 7, teamId: 70 }]);
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
+    expect(screen.getByRole('button', { name: 'Unfollow Atherstone U14' })).toBeEnabled();
+  });
+
+  it('draws the followed teams at once, before their results arrive, then sorts them into groups', async () => {
+    followProfiles('p1', 'p3');
+    let release: (value: unknown) => void = () => {};
+    const slow = new Promise((resolve) => { release = resolve; });
+    get.mockImplementation(async (url) => {
+      if (url === '/team-profiles') return { data: everyone, headers: {} } as never;
+      await slow;
+      if (url === '/competitions') return { data: [{ id: 7, name: 'Midlands Series', startDate: '2031-10-29T09:00:00Z', endDate: null, isArchived: false }], headers: {} } as never;
+      const history = /^\/team-profiles\/(\w+)\/history$/.exec(url)?.[1];
+      return { data: history ? histories[history] : winter, headers: {} } as never;
+    });
+    mount();
+    expect(screen.getByRole('link', { name: /Atherstone U14/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Leicester Forest/ })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Coming up' })).toBeNull();
+    expect(screen.queryByText('Loading event…')).toBeNull();
+    release(undefined);
+    expect(await screen.findByRole('region', { name: 'Coming up' })).toBeInTheDocument();
   });
 
   it('falls back to the club name when the team has no events or results to show', async () => {
@@ -142,5 +180,22 @@ describe('FollowingPage: teams followed from their profile', () => {
     await userEvent.click(button);
     expect(await screen.findByText(/couldn’t be saved on this device/)).toBeInTheDocument();
     block.mockRestore();
+  });
+});
+
+describe('FollowingPage: the Follow a team button beside the ticker dock', () => {
+  function Probe() {
+    useDockHost();
+    const { dockAction } = useTicker();
+    return dockAction ? <button type="button" data-testid="dock" onClick={dockAction.onClick}>{dockAction.label}</button> : null;
+  }
+
+  it('moves the grey bar to the dock, where it opens the follow search', async () => {
+    render(<MemoryRouter><TickerProvider><FollowingPage /><Probe /></TickerProvider></MemoryRouter>);
+    expect(document.querySelector('.sp-add')).toBeNull();
+    expect(screen.getAllByRole('searchbox')).toHaveLength(1);
+    await userEvent.click(screen.getByTestId('dock'));
+    const sheet = screen.getByRole('dialog', { name: 'Follow a team or club' });
+    expect(within(sheet).getByRole('searchbox')).toBeInTheDocument();
   });
 });

@@ -67,7 +67,7 @@ export function buildRaceRulebooks(template: RaceTemplateDetail | RaceTemplate):
 
   return GOVERNING_BODIES.map((body) => existing.get(body) ?? {
     body,
-    title: `${body} — ${template.name}`,
+    title: `${body} · ${template.name}`,
     edition: UNVERIFIED_EDITION,
     equipment: equipmentStr,
     setup: firstSentence,

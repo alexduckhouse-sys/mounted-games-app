@@ -259,8 +259,12 @@ export function CommentaryDeskPage() {
         const gapLabel = idx === 0
           ? t('desk.commentary.leader')
           : idx < cutoffPlaces
-            ? t('desk.commentary.gapTop', { gap: formatPoints(gapToFirst), places: cutoffPlaces })
-            : t('desk.commentary.gapCutoff', { gap: formatPoints(gapToFirst), cut: formatPoints(gapToCutoff), places: cutoffPlaces });
+            ? (gapToFirst === 0
+              ? t('desk.commentary.levelTop', { places: cutoffPlaces })
+              : t('desk.commentary.gapTop', { gap: t('desk.commentary.pointsN', { count: gapToFirst }), places: cutoffPlaces }))
+            : (gapToCutoff === 0
+              ? t('desk.commentary.levelCutoff', { gap: formatPoints(gapToFirst), places: cutoffPlaces })
+              : t('desk.commentary.gapCutoff', { gap: formatPoints(gapToFirst), cut: formatPoints(gapToCutoff), places: cutoffPlaces }));
 
         return {
           teamId: row.teamId,
@@ -345,7 +349,7 @@ export function CommentaryDeskPage() {
       const chasing = orderedStandings[cutoffPlaces];
       if (onBubble && chasing) {
         const diff = Math.max(0, onBubble.totalPoints - chasing.totalPoints);
-        cutoffText = t('desk.commentary.cutoffBubble', { team: onBubble.teamName, points: formatPoints(onBubble.totalPoints), place: localOrdinal(cutoffPlaces, lang), chasing: chasing.teamName, diff: formatPoints(diff) });
+        cutoffText = t('desk.commentary.cutoffBubble', { team: onBubble.teamName, points: t('desk.commentary.pointsN', { count: onBubble.totalPoints }), place: localOrdinal(cutoffPlaces, lang), chasing: chasing.teamName, ahead: t('desk.commentary.pointsN', { count: diff }) });
       }
     }
 

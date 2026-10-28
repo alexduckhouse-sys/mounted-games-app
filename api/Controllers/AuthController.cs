@@ -588,7 +588,7 @@ public class AuthController : ControllerBase
                     return Unauthorized(new { message = "This account cannot use organiser-key sign-in. Use your account recovery process or a different address." });
                 var check = await _signIn.CheckPasswordSignInAsync(existing, req.Password, lockoutOnFailure: true);
                 if (!check.Succeeded)
-                    return Unauthorized(new { message = "That email already has an account — enter its password to sign in." });
+                    return Unauthorized(new { message = "That email already has an account. Enter its password to sign in." });
                 if (existing.IsAccessStopped)
                     return StatusCode(StatusCodes.Status403Forbidden, new { message = AccessStoppedMessage, code = "account_stopped" });
                 await ipRecorder.RecordAsync(existing.Id, HttpContext.Connection.RemoteIpAddress?.ToString(), HttpContext.RequestAborted);
@@ -649,7 +649,7 @@ public class AuthController : ControllerBase
         }
 
         var user = await _users.FindByEmailAsync("admin@mg.local");
-        if (user is null) return StatusCode(500, new { message = "Shared admin account missing — re-seed the database." });
+        if (user is null) return StatusCode(500, new { message = "The shared admin account isn’t set up yet." });
 
         var (token, expiresAt, roles) = await _tokens.CreateTokenAsync(user, titleOverride, emailOverride);
         return new AuthResponse(token, expiresAt,

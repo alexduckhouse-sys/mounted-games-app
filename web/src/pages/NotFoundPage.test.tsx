@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
+import { CompactPageBarProvider, useCompactPageBarState } from '../components/CompactPageBarContext';
 import { NotFoundPage } from './NotFoundPage';
 
 function Where() {
@@ -44,5 +45,16 @@ describe('NotFoundPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Go back' }));
     expect(screen.getByTestId('where')).toHaveTextContent('/events');
     expect(screen.getByText('Somewhere else')).toBeInTheDocument();
+  });
+});
+
+function Title() {
+  return <span data-testid="title">{useCompactPageBarState().header?.title}</span>;
+}
+
+describe('NotFoundPage top bar', () => {
+  it('names the page in the top bar', () => {
+    render(<MemoryRouter><CompactPageBarProvider><NotFoundPage /><Title /></CompactPageBarProvider></MemoryRouter>);
+    expect(screen.getByTestId('title')).toHaveTextContent('Page not found');
   });
 });

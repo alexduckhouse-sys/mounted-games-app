@@ -109,6 +109,11 @@ details[open] > summary ~ * { animation: rf-reveal 220ms var(--mg-ease-out); }
     bottom: 0;
   }
 }
+/* A sticky footer also clears the ticker dock when it shows (on desktop too, where the dock still sits at the bottom). */
+body:has(.mg-dock-low) .rf-foot:not(.rf-foot-inline) { --rf-foot-offset: calc(64px + env(safe-area-inset-bottom, 0px)); bottom: var(--rf-foot-offset); }
+body:has(.mg-dock:not(.mg-dock-low)) .rf-foot:not(.rf-foot-inline) { --rf-foot-offset: calc(128px + env(safe-area-inset-bottom, 0px)); bottom: var(--rf-foot-offset); }
+/* Inline: the page's last row of buttons, in the flow like any other content. */
+.rf-foot.rf-foot-inline { position: static; margin-inline: 0; margin-top: 16px; padding: 0; background: none; border-top: 0; }
 
 /* Bottom sheet */
 .rf-scrim { position: fixed; inset: 0; z-index: 60; background: rgb(var(--mg-overlay) / .55); animation: rf-fade 160ms var(--mg-ease-out); }
@@ -193,3 +198,13 @@ details[open] > summary ~ * { animation: rf-reveal 220ms var(--mg-ease-out); }
 @keyframes rf-pop-in { from { opacity: 0; transform: scale(.95) translateY(-4px); } }
 .rf-menu-danger { color: rgb(var(--mg-elim)); text-decoration: underline; }
 .rf-menu-danger:hover { color: rgb(var(--mg-elim)); }
+/* My Teams' alerts switch: the same look, with a 44px area around it for a thumb. */
+.tm-sw::after { content: ''; position: absolute; inset: -11px -3px; }
+/* A team card folds its body away rather than snapping shut. */
+.tm-body { display: grid; grid-template-rows: 1fr; animation: tm-open var(--mg-dur-base) var(--mg-ease-out); }
+.tm-body > div { min-height: 0; overflow: hidden; }
+.tm-body[data-closing='true'] { grid-template-rows: 0fr; animation: tm-close 180ms var(--mg-ease-out) forwards; }
+@keyframes tm-open { from { grid-template-rows: 0fr; opacity: .4; } to { grid-template-rows: 1fr; opacity: 1; } }
+@keyframes tm-close { from { grid-template-rows: 1fr; opacity: 1; } to { grid-template-rows: 0fr; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .tm-body, .tm-body[data-closing='true'] { animation: none; } }
+html[data-lite='true'] .tm-body { animation: none; }

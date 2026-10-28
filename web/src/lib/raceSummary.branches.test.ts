@@ -53,7 +53,7 @@ describe('summariseRace placings and outs', () => {
       row(2, null, 0, { eliminated: true, status: 3 }),
     ]);
     const s = summariseRace(input(h, [r], 0, { notes: { 1: '   ', 2: '  Missed a pot  ' } }))!;
-    expect(s.placings.map((p) => [p.teamName, p.place])).toEqual([['Team A', 1], ['Team B', 2], ['Team 9', 3]]);
+    expect(s.placings.map((p) => [p.teamName, p.place])).toEqual([['Team A', 1], ['Team B', 2], ['Unnamed team', 3]]);
     expect(s.out.map((o) => [o.teamName, o.reason])).toEqual([
       ['Team C', 'Did not start'], ['Team A', 'Eliminated'], ['Team B', 'Missed a pot'],
     ]);
@@ -182,7 +182,7 @@ describe('summariseRace endings', () => {
     const s = summariseRace(input(h, [r0, r1], 1, { hcTeamIds: new Set([1]), qualifiers: 1, notes: { 4: 'Fell off' } }))!;
     expect(s.ending!.heading).toBe('Through to the final');
     expect(s.ending!.lines).toEqual([
-      'Team 9: qualified 1st, through to the final',
+      'Unnamed team: qualified 1st, through to the final',
       'Team B: not through. Placed 2nd and only the top 1 go through',
       'Team C: not through. Placed 3rd and only the top 1 go through',
       'Team A (HC): hors concours, does not take a place in the final',
