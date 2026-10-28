@@ -101,7 +101,8 @@
   .live-composer .mg-seg > button { min-height: 40px; padding: 0 18px; }
   .live-compose-row { align-items: flex-end; }
   .live-announcements { flex: none; }
-  .live-announcement-list { overflow: visible; }
+  /* It grows to fit on desktop rather than scrolling; it still clips its rows to its rounded corners. */
+  .live-announcement-list { overflow: hidden; }
   .live-announcement-row { grid-template-columns: 56px minmax(0, 1fr); padding: 10px 16px; }
   .live-announcement-row-staff { grid-template-columns: 56px minmax(0, 1fr) auto; }
   .live-announcement-copy > span, .live-announcement-row-staff .live-announcement-copy > span { display: block; overflow: visible; overflow-wrap: anywhere; white-space: normal; font-size: 15px; }

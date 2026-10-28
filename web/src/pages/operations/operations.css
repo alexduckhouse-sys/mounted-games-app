@@ -103,7 +103,6 @@
 /* Sections and races: cards with the section name above, navy bars between sections, even 52px rows. */
 .ops-sections { padding-bottom: 32px; }
 .ops-sections .rf-row, .ops-sections .rf-choice-row { min-height: 52px; padding-block: 0; }
-.ops-sections .rf-list { overflow: visible; }
 .ops-navybar { height: 3px; margin: 20px 0 14px; border: 0; background: rgb(var(--mg-heading)); }
 .ops-navybar-first { margin-top: 8px; }
 @media (max-width: 1023px) { .ops-navybar-first { display: none; } .ops-sections > .ops-section:first-of-type { margin-top: 12px; } }
@@ -141,7 +140,6 @@
 .ops-addbar:disabled { opacity: .6; cursor: default; }
 
 /* Timetable and draw */
-.ops-tt .rf-list { overflow: visible; }
 .ops-tt .rf-row { min-height: 52px; }
 .ops-tt-head { margin-top: 22px; border-bottom: 0; }
 .rf-sec.ops-tt-head > span:first-child { font: 800 22px/1.1 var(--mg-font-display); letter-spacing: 0; text-transform: none; color: rgb(var(--mg-heading)); }
@@ -169,7 +167,6 @@
 .ops-addrow { margin: 0; border-radius: 0; border-top: 1px solid rgb(var(--mg-rule-soft)); background: transparent; min-height: 52px; }
 /* Entries and dec forms */
 .ops-entries .rf-sec { margin-top: 20px; border-bottom: 0; font-size: 22px; }
-.ops-entries .rf-list { overflow: visible; }
 .ops-entries .rf-row { min-height: 52px; }
 .ops-paid { color: rgb(var(--mg-ok)); font-weight: 700; }
 .ops-unpaid { color: rgb(var(--mg-elim)); font-weight: 700; }
@@ -204,7 +201,6 @@
 
 /* Site admin */
 .ops-admin .rf-row { min-height: 52px; }
-.ops-admin .rf-list { overflow: visible; }
 .ops-badge { flex: none; min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box; border-radius: 11px; background: rgb(var(--mg-red)); color: #fff; font: 700 12px/22px var(--mg-font); text-align: center; }
 .ops-comp-row { flex-wrap: wrap; padding-block: 8px; }
 .ops-comp-name { flex: 1 1 160px; }
