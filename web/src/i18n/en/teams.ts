@@ -329,4 +329,5 @@ export const teams = {
   'teams.following.followPromptPreview': 'Your bottom bar with Following added',
   'teams.following.followPromptNotNow': 'Not now',
   'teams.following.followPromptAdd': 'Add to bottom bar',
+  'teams.following.unfollowed': 'Unfollowed',
 } satisfies Record<string, Message>;

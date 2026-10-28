@@ -139,7 +139,7 @@ export const teams: AreaCatalogue<typeof en> = {
   'teams.following.teamCount': { one: '{count} équipe', other: '{count} équipes' },
   'teams.following.unfollowClubAria': 'Ne plus suivre le club {name}',
   'teams.following.followClubAria': 'Suivre le club {name}',
-  'teams.following.unfollowClub': 'Ne plus suivre',
+  'teams.following.unfollowClub': 'Suivi retiré',
   'teams.following.followClub': 'Suivre le club',
   'teams.following.eventCount': { one: '{count} événement', other: '{count} événements' },
   'teams.following.pageEmpty': 'Mettez une équipe en favori et elle apparaîtra ici avec son prochain événement ou sa prochaine manche.',
@@ -330,4 +330,5 @@ export const teams: AreaCatalogue<typeof en> = {
   'teams.following.followPromptPreview': 'Votre barre du bas avec Suivis ajouté',
   'teams.following.followPromptNotNow': 'Pas maintenant',
   'teams.following.followPromptAdd': 'Ajouter à la barre du bas',
+  'teams.following.unfollowed': 'Suivi retiré',
 };

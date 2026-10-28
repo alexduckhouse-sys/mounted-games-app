@@ -38,6 +38,9 @@
 /* Smaller pills and red text inside rows */
 .cs-page .cs-pill-s { min-height: 36px; padding: 0 14px; font-size: 14px; }
 .cs-page .cs-redtext-s { min-height: 36px; font-size: 14px; }
+/* They look 36px tall; an invisible 44px area around each is what a thumb hits. */
+.cs-page .cs-pill-s, .cs-page .cs-redtext-s { position: relative; }
+.cs-page .cs-pill-s::after, .cs-page .cs-redtext-s::after { content: ''; position: absolute; inset: -4px 0; }
 
 /* The round ⋯ button on a row */
 .cs-more { flex: none; width: 40px; height: 40px; border: 0; border-radius: 20px; background: transparent; color: rgb(var(--mg-body)); font: 700 20px/1 var(--mg-font); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }

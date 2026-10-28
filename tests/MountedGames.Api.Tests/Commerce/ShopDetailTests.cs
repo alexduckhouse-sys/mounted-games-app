@@ -73,6 +73,18 @@ public class ShopDetailTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task TheShopPageCanAskWhichEventsHaveItemsOnSale()
+    {
+        var (withItems, _, _) = await ApprovedAsync("Ribbons", null);
+        var without = await _f.SeedCompetitionAsync();
+
+        var ids = await (await _f.CreateClient().GetAsync("/api/commerce/competitions/with-items")).ReadAsync<List<int>>();
+
+        Assert.Contains(withItems, ids);
+        Assert.DoesNotContain(without, ids);
+    }
+
+    [Fact]
     public async Task APromptOrHintThatIsTooLong_IsRefused()
     {
         var (seller, _) = await _f.SignupAsync();

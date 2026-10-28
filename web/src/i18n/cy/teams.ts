@@ -330,4 +330,5 @@ export const teams: AreaCatalogue<typeof en> = {
   'teams.following.followPromptPreview': 'Eich bar gwaelod gyda Dilyn wedi’i ychwanegu',
   'teams.following.followPromptNotNow': 'Nid nawr',
   'teams.following.followPromptAdd': 'Ychwanegu at y bar gwaelod',
+  'teams.following.unfollowed': 'Dim yn dilyn mwyach',
 };
