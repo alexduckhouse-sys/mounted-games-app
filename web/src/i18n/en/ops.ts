@@ -376,6 +376,8 @@ export const ops = {
   'ops.tt.longer': 'Longer {label}',
   'ops.tt.addAfter': 'Add a break after this',
   'ops.tt.addBreak': 'Add a break',
+  'ops.tt.toolsSheet': 'Timetable tools',
+  'ops.tt.addBreakIn': 'Add a break in {arena}',
   'ops.tt.hatbands': 'Hatbands',
   'ops.tt.moveBandUp': 'Move {name} up',
   'ops.tt.moveBandDown': 'Move {name} down',
