@@ -92,6 +92,8 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.timetable.heat': 'Manche {n}',
   'competition.timetable.heatsToFollow': 'Manches à venir',
   'competition.timetable.provisionalLabel': 'Provisoire',
+  'competition.timetable.finalsStart': 'Début des finales',
+  'competition.timetable.finalsByHeats': 'Équipes décidées par les manches',
   'competition.timetable.briefing': 'Briefing',
   'competition.timetable.break': 'Pause',
   'competition.timetable.onNow': 'EN COURS',

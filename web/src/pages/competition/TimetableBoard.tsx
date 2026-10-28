@@ -15,7 +15,7 @@ import { useFavourites } from '../../hooks/useFavourites';
 import { computeTimings, formatDelayDuration, formatShiftDelta, formatTime, parsePausedAtMs, predictMinutesPerRace } from '../../lib/time';
 import { displaySectionName } from '../../lib/section';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
-import { arenaDelays, lastFinishedRow, sessionOrdinals, TIMETABLE_COLOURS, timetableRows, type TimetableRow, type TimetableStatus } from '../../lib/timetableRows';
+import { arenaDelays, isPlannedFinal, lastFinishedRow, sessionOrdinals, TIMETABLE_COLOURS, timetableRows, type TimetableRow, type TimetableStatus } from '../../lib/timetableRows';
 import { HeatRing } from '../../components/HeatRing';
 import { DelaySheet } from './DelaySheet';
 import { useLanguage, useT } from '../../i18n/LanguageContext';
@@ -78,7 +78,7 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
   const timings = useMemo(() => computeTimings(competition.sessions, { nowMs }), [competition.sessions, nowMs]);
   const showQualifiers = canOrganise(competition);
   // A race session with no heats yet is the provisional timetable (an estimate from the creator): organisers see it,
-  // the public sees sessions once heats exist.
+  // the public sees sessions once heats exist. Finals the organiser has given a start time show to everyone before the draw.
   const rows = useMemo(
     () => timetableRows(competition.sessions, timings, showQualifiers)
       .filter((row) => sectionId == null || row.session.competitionSectionId === sectionId)
@@ -219,7 +219,8 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
         rows: group.rows,
       }));
   })();
-  const finalGroups = finalsByAgeGroup(shownRows).map((group) => ({ ...group, title: t('competition.timetable.finalsTitle', { name: group.name }), noun: 'finals' as const, length: null }));
+  // Before the draw nobody knows how many finals there will be, so the heading leaves the count out.
+  const finalGroups = finalsByAgeGroup(shownRows).map((group) => ({ ...group, title: t('competition.timetable.finalsTitle', { name: group.name }), noun: 'finals' as const, length: group.rows.every(isPlannedFinal) ? '' : null }));
   const groups = [...sessionGroups, ...finalGroups].sort((a, b) => {
     const aStart = (a.rows[0]?.effective ?? a.rows[0]?.scheduled)?.getTime() ?? Infinity;
     const bStart = (b.rows[0]?.effective ?? b.rows[0]?.scheduled)?.getTime() ?? Infinity;
@@ -404,8 +405,8 @@ function dayLabels(days: string[]) {
     : at(day).toLocaleDateString('en-GB', { weekday });
 }
 
-/** A race session with no heats yet: its time is an estimate. */
-const isProvisionalRow = (row: TimetableRow) => !row.heat && (row.session.kind ?? (row.session.isBreak ? 1 : 0)) === 0;
+/** A race session with no heats yet: its time is an estimate, unless it is finals with a start time the organiser set. */
+const isProvisionalRow = (row: TimetableRow) => !row.heat && (row.session.kind ?? (row.session.isBreak ? 1 : 0)) === 0 && !isPlannedFinal(row);
 
 /** Final heats, one block per age group (in running order), after all the sessions. */
 function finalsByAgeGroup(rows: TimetableRow[]) {
@@ -439,10 +440,11 @@ function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false
   if (timeSeen.at !== at) setTimeSeen({ at, shifts: timeSeen.shifts + 1 });
   const shifts = timeSeen.at === at ? timeSeen.shifts : timeSeen.shifts + 1;
   const race = (session.kind ?? (session.isBreak ? 1 : 0)) === 0;
-  const heatName = heat ? heat.label || t('competition.timetable.heat', { n: row.heatIndex + 1 }) : t('competition.timetable.heatsToFollow');
+  const plannedFinal = isPlannedFinal(row);
+  const heatName = heat ? heat.label || t('competition.timetable.heat', { n: row.heatIndex + 1 }) : plannedFinal ? t('competition.timetable.finalsStart') : t('competition.timetable.heatsToFollow');
   const name = race ? heatName : session.name;
   // A break has its own heading line, so its row needs no "Break" label.
-  const label = race ? (heat ? '' : t('competition.timetable.provisionalLabel')) : session.kind === 2 ? t('competition.timetable.briefing') : isBreakSession(session) ? '' : session.location || '';
+  const label = race ? (heat ? '' : plannedFinal ? t('competition.timetable.finalsByHeats') : t('competition.timetable.provisionalLabel')) : session.kind === 2 ? t('competition.timetable.briefing') : isBreakSession(session) ? '' : session.location || '';
   const sub = [label, showArena ? session.arenaName?.trim() : ''].filter(Boolean).join(' · ');
   const rawDrift = row.scheduled && row.effective
     ? Math.round((row.effective.getTime() - row.scheduled.getTime()) / 60_000)

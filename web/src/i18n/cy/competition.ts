@@ -92,6 +92,8 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.timetable.heat': 'Rhagras {n}',
   'competition.timetable.heatsToFollow': 'Rhagrasys i ddilyn',
   'competition.timetable.provisionalLabel': 'Dros dro',
+  'competition.timetable.finalsStart': 'Y rowndiau terfynol yn dechrau',
+  'competition.timetable.finalsByHeats': 'Timau wedi’u penderfynu gan y rhagrasys',
   'competition.timetable.briefing': 'Briffio',
   'competition.timetable.break': 'Egwyl',
   'competition.timetable.onNow': 'AR Y GWEILL',
