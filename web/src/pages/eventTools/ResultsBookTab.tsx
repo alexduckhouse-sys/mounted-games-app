@@ -1,3 +1,4 @@
+import { useT } from '../../i18n/LanguageContext';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
@@ -21,6 +22,7 @@ function message(error: unknown, fallback: string) {
 
 /** The results book links, and the special awards that go in it. */
 export function ResultsBookTab({ competitionId }: { competitionId: string }) {
+  const t = useT();
   const [sections, setSections] = useState<SectionOption[]>([]);
   const [awards, setAwards] = useState<AwardDraft[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -39,9 +41,9 @@ export function ResultsBookTab({ competitionId }: { competitionId: string }) {
       setSections(competition.data.sections ?? []);
       setAwards(list.data.map((a) => ({ key: nextKey++, competitionSectionId: a.competitionSectionId, title: a.title, recipient: a.recipient, note: a.note ?? '' })));
       setLoaded(true);
-    }).catch((caught) => { if (!cancelled) { setError(message(caught, 'Couldn’t load the awards. Check your signal and try again.')); setLoadFailed(true); setLoaded(true); } });
+    }).catch((caught) => { if (!cancelled) { setError(message(caught, t('ops3.rb.loadError'))); setLoadFailed(true); setLoaded(true); } });
     return () => { cancelled = true; };
-  }, [competitionId]);
+  }, [competitionId, t]);
 
   function change(key: number, patch: Partial<AwardDraft>) {
     setAwards((current) => current.map((a) => (a.key === key ? { ...a, ...patch } : a)));
@@ -55,46 +57,46 @@ export function ResultsBookTab({ competitionId }: { competitionId: string }) {
           competitionSectionId: a.competitionSectionId, title: a.title, recipient: a.recipient, note: a.note.trim() || null,
         })),
       });
-      toast.show('Awards saved');
-    } catch (caught) { setError(message(caught, 'Couldn’t save the awards. Check your signal and try again.')); }
+      toast.show(t('ops3.rb.saved'));
+    } catch (caught) { setError(message(caught, t('ops3.rb.saveError'))); }
     finally { setBusy(false); }
   }
 
   const base = `/event-tools/${competitionId}/print`;
   return <section aria-labelledby="book-title">
-    <RefineSection title="Results book" />
-    <h2 id="book-title" className="sr-only">Results book</h2>
-    <RefineNote>The final standings for every age group, each final and any special awards. Print it, or download it as a CSV from the page.</RefineNote>
-    <nav aria-label="Results book"><RefineList as="div">
+    <RefineSection title={t('ops3.rb.title')} />
+    <h2 id="book-title" className="sr-only">{t('ops3.rb.title')}</h2>
+    <RefineNote>{t('ops3.rb.intro')}</RefineNote>
+    <nav aria-label={t('ops3.rb.title')}><RefineList as="div">
       <Link className="rf-row" to={`${base}/results-book`}>
-        <span className="rf-grow"><span className="rf-t1">Results book</span><span className="rf-t2">The public version, to hand out or publish</span></span><Chevron />
+        <span className="rf-grow"><span className="rf-t1">{t('ops3.rb.title')}</span><span className="rf-t2">{t('ops3.rb.public')}</span></span><Chevron />
       </Link>
       <Link className="rf-row" to={`${base}/results-book-organiser`}>
-        <span className="rf-grow"><span className="rf-t1">Organiser copy</span><span className="rf-t2">The same, plus the referee’s private notes</span></span><Chevron />
+        <span className="rf-grow"><span className="rf-t1">{t('ops3.rb.organiser')}</span><span className="rf-t2">{t('ops3.rb.organiserSub')}</span></span><Chevron />
       </Link>
     </RefineList></nav>
 
-    <RefineSection title="Special awards" />
+    <RefineSection title={t('ops3.book.awards')} />
     {error && <Notice className="tools-msg">{error}</Notice>}
     {/* Without the saved list, saving would replace the real awards with an empty one, so the editor stays hidden. */}
     {loaded && !loadFailed && <div className="tools-form">
-      {awards.length === 0 && <RefineNote>No special awards yet. Add one for best turned out, spirit of the games and so on.</RefineNote>}
-      {awards.map((award, index) => <fieldset key={award.key} className="tools-fields"><legend className="sr-only">Award {index + 1}</legend>
-        <label className="rf-fld">Award<input value={award.title} maxLength={100} onChange={(event) => change(award.key, { title: event.target.value })} /></label>
-        <label className="rf-fld">Winner<input value={award.recipient} maxLength={200} onChange={(event) => change(award.key, { recipient: event.target.value })} /></label>
-        <label className="rf-fld">Age group
+      {awards.length === 0 && <RefineNote>{t('ops3.rb.noAwards')}</RefineNote>}
+      {awards.map((award, index) => <fieldset key={award.key} className="tools-fields"><legend className="sr-only">{t('ops3.rb.award', { n: index + 1 })}</legend>
+        <label className="rf-fld">{t('ops3.rb.awardName')}<input value={award.title} maxLength={100} onChange={(event) => change(award.key, { title: event.target.value })} /></label>
+        <label className="rf-fld">{t('ops3.rb.winner')}<input value={award.recipient} maxLength={200} onChange={(event) => change(award.key, { recipient: event.target.value })} /></label>
+        <label className="rf-fld">{t('ops3.book.ageGroup')}
           <SelectField value={award.competitionSectionId ?? ''} onChange={(event) => change(award.key, { competitionSectionId: event.target.value ? Number(event.target.value) : null })}>
-            <option value="">Whole event</option>
+            <option value="">{t('ops3.rb.whole')}</option>
             {sections.map((section) => <option key={section.id} value={section.id}>{section.displayName}</option>)}
           </SelectField>
         </label>
-        <label className="rf-fld">Note (optional)<input value={award.note} maxLength={300} onChange={(event) => change(award.key, { note: event.target.value })} /></label>
+        <label className="rf-fld">{t('ops2.pd.noteOptional')}<input value={award.note} maxLength={300} onChange={(event) => change(award.key, { note: event.target.value })} /></label>
         <button type="button" className="rf-btn rf-btn-text" onClick={() => { setAwards((current) => current.filter((a) => a.key !== award.key)); }}>
-          <Trash2 className="h-4 w-4" aria-hidden="true" />Remove award {index + 1}
+          <Trash2 className="h-4 w-4" aria-hidden="true" />{t('ops3.rb.remove', { n: index + 1 })}
         </button>
       </fieldset>)}
-      <button type="button" className="rf-btn rf-btn-text" onClick={() => { setAwards((current) => [...current, blank()]); }}><Plus className="h-4 w-4" aria-hidden="true" />Add an award</button>
-      <button type="button" className="rf-btn rf-btn-primary rf-wide" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save awards'}</button>
+      <button type="button" className="rf-btn rf-btn-text" onClick={() => { setAwards((current) => [...current, blank()]); }}><Plus className="h-4 w-4" aria-hidden="true" />{t('ops3.rb.add')}</button>
+      <button type="button" className="rf-btn rf-btn-primary rf-wide" disabled={busy} onClick={save}>{busy ? t('common.saving') : t('ops3.rb.save')}</button>
       {toast.node}
     </div>}
   </section>;

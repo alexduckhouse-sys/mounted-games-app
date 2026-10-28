@@ -1,3 +1,4 @@
+import { useT } from '../../i18n/LanguageContext';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
@@ -25,6 +26,7 @@ interface SectorDraft { key: number; id: number | null; name: string }
 
 /** Set up the tack check for each age group and record each team's result. */
 export function TackCheckTab({ competitionId }: { competitionId: string }) {
+  const t = useT();
   const [board, setBoard] = useState<TackCheckBoard | null>(null);
   const [sectionId, setSectionId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -34,27 +36,27 @@ export function TackCheckTab({ competitionId }: { competitionId: string }) {
     let cancelled = false;
     api.get<TackCheckBoard>(`/event-tools/competitions/${competitionId}/tack-check`)
       .then(({ data }) => { if (!cancelled) { setBoard(data); setError(null); } })
-      .catch((caught) => { if (!cancelled) setError(message(caught, 'Couldn’t load the tack check. Check your signal and try again.')); });
+      .catch((caught) => { if (!cancelled) setError(message(caught, t('ops3.tc.loadError'))); });
     return () => { cancelled = true; };
-  }, [competitionId, attempt]);
+  }, [competitionId, attempt, t]);
 
   const replace = (section: TackCheckSection) =>
     setBoard((current) => current && { ...current, sections: current.sections.map((s) => (s.sectionId === section.sectionId ? section : s)) });
 
   const section = board?.sections.find((s) => s.sectionId === sectionId) ?? board?.sections[0] ?? null;
   return <section aria-labelledby="tack-title">
-    <RefineSection title="Tack check" />
-    <h2 id="tack-title" className="sr-only">Tack check</h2>
-    <nav aria-label="Tack check form"><RefineList as="div">
+    <RefineSection title={t('ops3.tc.title')} />
+    <h2 id="tack-title" className="sr-only">{t('ops3.tc.title')}</h2>
+    <nav aria-label={t('ops3.tc.form')}><RefineList as="div">
       <Link className="rf-row" to={`/event-tools/${competitionId}/print/tack-check`}>
-        <span className="rf-grow"><span className="rf-t1">Print tack check forms</span><span className="rf-t2">One form per age group, with each team’s riders and ponies</span></span><Chevron />
+        <span className="rf-grow"><span className="rf-t1">{t('ops3.tc.print')}</span><span className="rf-t2">{t('ops3.tc.printSub')}</span></span><Chevron />
       </Link>
     </RefineList></nav>
-    {error && <Notice className="tools-msg" actionLabel="Try again" onAction={() => setAttempt((n) => n + 1)}>{error}</Notice>}
-    {!board && !error && <p role="status" className="rf-note">Loading the tack check…</p>}
-    {board && board.sections.length === 0 && <RefineNote>Add an age group to this competition first.</RefineNote>}
+    {error && <Notice className="tools-msg" actionLabel={t('common.tryAgain')} onAction={() => setAttempt((n) => n + 1)}>{error}</Notice>}
+    {!board && !error && <p role="status" className="rf-note">{t('ops3.tc.loading')}</p>}
+    {board && board.sections.length === 0 && <RefineNote>{t('ops3.tc.addGroup')}</RefineNote>}
     {board && section && <div className="tools-form">
-      {board.sections.length > 1 && <label className="rf-fld">Age group
+      {board.sections.length > 1 && <label className="rf-fld">{t('ops3.book.ageGroup')}
         <SelectField value={section.sectionId} onChange={(event) => setSectionId(Number(event.target.value))}>
           {board.sections.map((s) => <option key={s.sectionId} value={s.sectionId}>{s.sectionName}</option>)}
         </SelectField>
@@ -66,6 +68,7 @@ export function TackCheckTab({ competitionId }: { competitionId: string }) {
 }
 
 function SettingsForm({ competitionId, section, onSaved }: { competitionId: string; section: TackCheckSection; onSaved: (s: TackCheckSection) => void }) {
+  const t = useT();
   const [enabled, setEnabled] = useState(section.configured ? section.isEnabled : true);
   const [mode, setMode] = useState<TackCheckMode>(section.mode);
   const [maxPoints, setMaxPoints] = useState(String(section.maxPoints));
@@ -80,7 +83,7 @@ function SettingsForm({ competitionId, section, onSaved }: { competitionId: stri
     event.preventDefault();
     const max = Number(maxPoints);
     const issue = sectorProblem(sectors.map((s) => s.name))
-      ?? (Number.isInteger(max) && max >= 1 && max <= 100 ? null : 'The most points per rider per sector must be a whole number from 1 to 100.');
+      ?? (Number.isInteger(max) && max >= 1 && max <= 100 ? null : t('ops3.tc.maxPoints'));
     if (issue) { setProblem(issue); return; }
     setBusy(true); setProblem(null);
     try {
@@ -90,43 +93,45 @@ function SettingsForm({ competitionId, section, onSaved }: { competitionId: stri
       onSaved(data);
       // New sectors now have ids; keep them so the next save updates rather than adds.
       setSectors(data.sectors.map((s) => ({ key: nextKey++, id: s.id, name: s.name })));
-      toast.show('Tack check saved');
-    } catch (caught) { setProblem(message(caught, 'Couldn’t save the tack check. Check your signal and try again.')); }
+      toast.show(t('ops3.tc.saved'));
+    } catch (caught) { setProblem(message(caught, t('ops3.tc.saveError'))); }
     finally { setBusy(false); }
   }
 
-  return <form onSubmit={save} noValidate><fieldset className="tools-fields" disabled={busy}><legend className="sr-only">Tack check set-up for {section.sectionName}</legend>
-    <label className="tools-check"><input type="checkbox" checked={enabled} onChange={(event) => edit(() => setEnabled(event.target.checked))} />Run a tack check for {section.sectionName}</label>
-    <fieldset className="tools-fields"><legend className="rf-fld">What it counts for</legend>
+  return <form onSubmit={save} noValidate><fieldset className="tools-fields" disabled={busy}><legend className="sr-only">{t('ops3.tc.setupFor', { name: section.sectionName })}</legend>
+    <label className="tools-check"><input type="checkbox" checked={enabled} onChange={(event) => edit(() => setEnabled(event.target.checked))} />{t('ops3.tc.runFor', { name: section.sectionName })}</label>
+    <fieldset className="tools-fields"><legend className="rf-fld">{t('ops3.tc.counts')}</legend>
       {TACK_MODES.map((option) => <label key={option.mode} className="tools-check">
         <input type="radio" name={`tack-mode-${section.sectionId}`} checked={mode === option.mode} onChange={() => edit(() => setMode(option.mode))} />
         <span>{option.label}<span className="tools-check-sub">{option.detail}</span></span>
       </label>)}
     </fieldset>
-    {isScored(mode) && <label className="rf-fld">Most points per rider per sector<NumberField min={1} max={100} value={maxPoints} onChange={(event) => edit(() => setMaxPoints(event.target.value))} /></label>}
-    <fieldset className="tools-fields"><legend className="rf-fld">Sectors</legend>
+    {isScored(mode) && <label className="rf-fld">{t('ops3.tc.mostPoints')}<NumberField min={1} max={100} value={maxPoints} onChange={(event) => edit(() => setMaxPoints(event.target.value))} /></label>}
+    <fieldset className="tools-fields"><legend className="rf-fld">{t('ops3.tc.sectors')}</legend>
       {sectors.map((sector, index) => <div key={sector.key} className="tools-row">
-        <label className="rf-fld">Sector {index + 1}<input value={sector.name} maxLength={MAX_SECTOR_NAME} onChange={(event) => edit(() => setSectors((list) => list.map((s) => (s.key === sector.key ? { ...s, name: event.target.value } : s))))} /></label>
-        <button type="button" className="rf-btn rf-btn-text" aria-label={`Remove sector ${index + 1}`} onClick={() => edit(() => setSectors((list) => list.filter((s) => s.key !== sector.key)))}><Trash2 className="h-4 w-4" aria-hidden="true" /></button>
+        <label className="rf-fld">{t('ops3.tc.sectorN', { n: index + 1 })}<input value={sector.name} maxLength={MAX_SECTOR_NAME} onChange={(event) => edit(() => setSectors((list) => list.map((s) => (s.key === sector.key ? { ...s, name: event.target.value } : s))))} /></label>
+        <button type="button" className="rf-btn rf-btn-text" aria-label={t('ops3.tc.removeSector', { n: index + 1 })} onClick={() => edit(() => setSectors((list) => list.filter((s) => s.key !== sector.key)))}><Trash2 className="h-4 w-4" aria-hidden="true" /></button>
       </div>)}
-      {sectors.length < MAX_TACK_SECTORS && <button type="button" className="rf-btn rf-btn-text" onClick={() => edit(() => setSectors((list) => [...list, { key: nextKey++, id: null, name: '' }]))}><Plus className="h-4 w-4" aria-hidden="true" />Add a sector</button>}
-      {section.configured && <p className="tools-muted">Removing a sector also removes the results recorded in it.</p>}
+      {sectors.length < MAX_TACK_SECTORS && <button type="button" className="rf-btn rf-btn-text" onClick={() => edit(() => setSectors((list) => [...list, { key: nextKey++, id: null, name: '' }]))}><Plus className="h-4 w-4" aria-hidden="true" />{t('ops3.tc.addSector')}</button>}
+      {section.configured && <p className="tools-muted">{t('ops3.tc.removeNote')}</p>}
     </fieldset>
     {problem && <Notice>{problem}</Notice>}
-    <button className="rf-btn rf-btn-primary rf-wide">{busy ? 'Saving…' : 'Save tack check'}</button>
+    <button className="rf-btn rf-btn-primary rf-wide">{busy ? t('common.saving') : t('ops3.tc.save')}</button>
     {toast.node}
   </fieldset></form>;
 }
 
 function Marks({ competitionId, section, onSaved }: { competitionId: string; section: TackCheckSection; onSaved: (s: TackCheckSection) => void }) {
-  if (section.teams.length === 0) return <RefineNote>No teams in this age group yet.</RefineNote>;
+  const t = useT();
+  if (section.teams.length === 0) return <RefineNote>{t('ops3.tc.noTeams')}</RefineNote>;
   return <>
-    <RefineSection title="Results" meta={isScored(section.mode) ? `Points out of ${section.maxPoints} per rider in each sector` : 'Pass or fail for each sector'} />
+    <RefineSection title={t('ops2.sp.results')} meta={isScored(section.mode) ? t('ops3.tc.outOf', { max: section.maxPoints }) : t('ops3.tc.passFail')} />
     {section.teams.map((team) => <TeamMarks key={`${team.teamId}:${section.mode}:${section.sectors.map((s) => s.id).join(',')}:${JSON.stringify(team.marks)}`}competitionId={competitionId} section={section} team={team} onSaved={onSaved} />)}
   </>;
 }
 
 function TeamMarks({ competitionId, section, team, onSaved }: { competitionId: string; section: TackCheckSection; team: TackCheckTeam; onSaved: (s: TackCheckSection) => void }) {
+  const t = useT();
   const riders = teamRiders(team as TackTeamWithRiders);
   const [draft, setDraft] = useState<Record<number, MarkDraft>>(() => draftFromMarks(section.sectors, team.marks));
   const [grid, setGrid] = useState<RiderGridDraft>(() => riderGridFromMarks(section.sectors, (team as TackTeamWithRiders).marks, riders.length));
@@ -159,13 +164,13 @@ function TeamMarks({ competitionId, section, team, onSaved }: { competitionId: s
         `/event-tools/competitions/${competitionId}/tack-check/sections/${section.sectionId}/teams/${team.teamId}`, { marks: result.marks });
       onSaved(data);
       setDirty(false);
-    } catch (caught) { setProblem(message(caught, 'Couldn’t save these results. Check your signal and try again.')); }
+    } catch (caught) { setProblem(message(caught, t('ops3.tc.resultsError'))); }
     finally { setBusy(false); }
   }
 
-  const tags = [team.isHorsConcours ? 'HC' : null, team.withdrawn ? 'withdrawn' : null].filter(Boolean).join(', ');
+  const tags = [team.isHorsConcours ? 'HC' : null, team.withdrawn ? t('ops3.withdrawn') : null].filter(Boolean).join(', ');
   const teamTotal = riderGridTotal(grid, section.maxPoints);
-  const summary = scored ? `${teamTotal} pts` : `${team.passed} passed, ${team.failed} failed`;
+  const summary = scored ? t('ops3.digest.pts', { points: teamTotal }) : t('ops3.tc.summary', { passed: team.passed, failed: team.failed });
   return <form className="tools-team" onSubmit={save} aria-label={team.teamName} noValidate><fieldset className="tools-fields" disabled={busy}><legend className="sr-only">{team.teamName}</legend>
     <div className="tools-team-head">
       <span><span className="tools-team-name">{team.teamName}</span> <span className="tools-muted">{clubLabel(team.clubName)}{tags ? ` (${tags})` : ''}</span></span>
@@ -176,9 +181,9 @@ function TeamMarks({ competitionId, section, team, onSaved }: { competitionId: s
         <table className="w-full text-sm">
           <thead>
             <tr>
-              <th scope="col" className="text-left py-1 pr-2">Rider</th>
+              <th scope="col" className="text-left py-1 pr-2">{t('ops3.rider')}</th>
               {section.sectors.map((sector) => <th key={sector.id} scope="col" className="text-left py-1 px-1">{sector.name}</th>)}
-              <th scope="col" className="text-right py-1 pl-2">Rider total</th>
+              <th scope="col" className="text-right py-1 pl-2">{t('ops3.tc.riderTotal')}</th>
             </tr>
           </thead>
           <tbody>
@@ -204,11 +209,11 @@ function TeamMarks({ competitionId, section, team, onSaved }: { competitionId: s
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-[rgb(var(--mg-rule-soft))] font-semibold">
-              <th scope="row" className="py-1.5 pr-2 text-left">Team total</th>
+              <th scope="row" className="py-1.5 pr-2 text-left">{t('ops3.tc.teamTotal')}</th>
               {section.sectors.map((sector) => (
                 <td key={sector.id} className="py-1.5 px-1 tabular-nums">{sectorColumnTotal(grid, sector.id, section.maxPoints)}</td>
               ))}
-              <td className="py-1.5 pl-2 text-right tabular-nums" data-testid="team-total">{teamTotal} pts</td>
+              <td className="py-1.5 pl-2 text-right tabular-nums" data-testid="team-total">{t('ops3.digest.pts', { points: teamTotal })}</td>
             </tr>
           </tfoot>
         </table>
@@ -218,13 +223,13 @@ function TeamMarks({ competitionId, section, team, onSaved }: { competitionId: s
         {section.sectors.map((sector) => (
           <label key={sector.id} className="rf-fld">{sector.name}
             <SelectField value={draft[sector.id]?.passed ?? ''} onChange={(event) => change(sector.id, { passed: event.target.value as MarkDraft['passed'] })}>
-              <option value="">Not checked</option><option value="pass">Pass</option><option value="fail">Fail</option>
+              <option value="">{t('ops3.tc.notChecked')}</option><option value="pass">{t('ops3.tc.pass')}</option><option value="fail">{t('ops3.tc.fail')}</option>
             </SelectField>
           </label>
         ))}
       </div>
     )}
     {problem && <Notice>{problem}</Notice>}
-    <button className="rf-btn rf-btn-primary" disabled={!dirty}>{busy ? 'Saving…' : `Save ${team.teamName}`}</button>
+    <button className="rf-btn rf-btn-primary" disabled={!dirty}>{busy ? t('common.saving') : t('ops3.tc.saveTeam', { name: team.teamName })}</button>
   </fieldset></form>;
 }

@@ -12,10 +12,11 @@ import { entries } from './entries.ts';
 import { screen } from './screen.ts';
 import { ops } from './ops.ts';
 import { ops2 } from './ops2.ts';
+import { ops3 } from './ops3.ts';
 import { shell } from './shell.ts';
 import { site } from './site.ts';
 import { teams } from './teams.ts';
 
-export const AREAS = { common, shell, auth, account, entries, competition, teams, site, ops, ops2, screen } as const;
+export const AREAS = { common, shell, auth, account, entries, competition, teams, site, ops, ops2, ops3, screen } as const;
 
-export const fr: Catalogue = { ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...site, ...ops, ...ops2, ...screen };
+export const fr: Catalogue = { ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...site, ...ops, ...ops2, ...ops3, ...screen };

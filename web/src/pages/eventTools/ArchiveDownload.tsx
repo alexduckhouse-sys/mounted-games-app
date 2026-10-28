@@ -1,5 +1,7 @@
+import { useT } from '../../i18n/LanguageContext';
 import { useState } from 'react';
 import { Download } from 'lucide-react';
+import { tr } from '../../i18n/translate';
 import { Notice } from '../../components/Notice';
 import { apiErrorMessage } from '../../lib/apiError';
 import { createZipArchive, eventArchiveFileName, fetchEventArchive } from '../../lib/eventArchive';
@@ -9,6 +11,7 @@ import { createZipArchive, eventArchiveFileName, fetchEventArchive } from '../..
  * zip made on this device from the server's files. Dec forms hold riders' details, so it stays on staff pages.
  */
 export function ArchiveDownload({ competitionId }: { competitionId: number }) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,8 +31,8 @@ export function ArchiveDownload({ competitionId }: { competitionId: number }) {
       setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (err) {
       setError(err instanceof Error && err.message === 'empty'
-        ? 'There’s nothing to archive yet.'
-        : apiErrorMessage(err, 'Couldn’t make the archive. Check your signal and try again.'));
+        ? tr('ops3.archive.nothing')
+        : apiErrorMessage(err, tr('ops3.archive.error')));
     } finally {
       setBusy(false);
     }
@@ -39,8 +42,8 @@ export function ArchiveDownload({ competitionId }: { competitionId: number }) {
     <>
       <button type="button" className="rf-row w-full text-left" onClick={() => { void download(); }} disabled={busy}>
         <span className="rf-grow">
-          <span className="rf-t1">{busy ? 'Making the archive…' : 'Download event archive'}</span>
-          <span className="rf-t2">Results, standings, timetable, dec forms and entries in one zip file</span>
+          <span className="rf-t1">{busy ? t('ops3.archive.making') : t('ops3.archive.download')}</span>
+          <span className="rf-t2">{t('ops3.archive.sub')}</span>
         </span>
         <Download aria-hidden="true" className="h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-heading))]" strokeWidth={2.25} />
       </button>
