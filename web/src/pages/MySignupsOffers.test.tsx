@@ -47,6 +47,7 @@ describe('my entries: rider, offers and arrival pass', () => {
     await userEvent.click(sheet.getByRole('button', { name: 'Accept the place' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/11/signups/1/accept-waitlist-spot', {}));
     expect(asked.titles).toContain('Take this place?');
+    expect(asked).toHaveBeenCalledWith(expect.stringContaining('This is a demo. No money will be taken or sent, and your entry hasn’t been paid for.'));
     expect(await screen.findByText('Not paid')).toBeInTheDocument();
   });
 

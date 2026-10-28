@@ -77,6 +77,29 @@ describe('MySignupsPage', () => {
     expect(screen.queryByRole('link', { name: /How to pay/ })).not.toBeInTheDocument();
   });
 
+  it('says Demo paid for an entry paid through the demo checkout, and Paid for the rest', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => (String(url) === '/commerce/entry-payments/mine'
+      ? { data: [{ id: 5, target: 1, targetId: 1, isTest: true, status: 0 }, { id: 6, target: 0, targetId: 2, isTest: true, status: 0 }] }
+      : { data: [signup(1, { status: 1, paidAt: '2026-10-12T10:00:00Z' }), signup(2, { status: 1, paidAt: '2026-10-12T10:00:00Z' })] }) as never);
+    mount();
+    const coming = await screen.findByRole('region', { name: 'Coming up' });
+    await waitFor(() => expect(within(coming).getByRole('button', { name: /Event 1/ })).toHaveTextContent('Demo paid'));
+    // A test payment for an order (target 0) with the same number doesn't count.
+    expect(within(coming).getByRole('button', { name: /Event 2/ })).not.toHaveTextContent('Demo');
+    expect(within(coming).getByRole('button', { name: /Event 2/ })).toHaveTextContent('Paid');
+    const sheet = await openRow(/^Event 1/);
+    expect(sheet.getByText(/Demo paid on/)).toBeInTheDocument();
+  });
+
+  it('reads Paid when the list of demo payments can’t be loaded', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (String(url) === '/commerce/entry-payments/mine') throw new Error('offline');
+      return { data: [signup(1, { status: 1 })] } as never;
+    });
+    mount();
+    expect(await screen.findByRole('button', { name: /Event 1/ })).toHaveTextContent('Paid');
+  });
+
   it('opens a sheet for an unpaid entry with How to pay, to the event’s details', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: [signup(1), signup(2, { status: 1 })] });
     mount();

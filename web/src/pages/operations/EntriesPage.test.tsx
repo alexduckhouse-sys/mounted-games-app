@@ -44,6 +44,16 @@ describe('EntriesPage', () => {
     vi.mocked(api.post).mockResolvedValue({ data: {} });
   });
 
+  it('says Demo paid on a demo event', async () => {
+    Object.assign(competition, { isDemo: true });
+    try {
+      show();
+      expect(await screen.findByRole('button', { name: /Oak A/ })).toHaveTextContent('Demo paid');
+    } finally {
+      delete (competition as { isDemo?: boolean }).isDemo;
+    }
+  });
+
   it('shows entries grouped by section, closed up, with payment, form and status', async () => {
     show();
     const first = await screen.findByRole('button', { name: /Oak A/ });

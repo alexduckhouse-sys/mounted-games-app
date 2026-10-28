@@ -5,6 +5,7 @@ import { ChevronDown } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { LeavingRow } from '../../components/LeavingRow';
 import { feeText } from '../../lib/entryOptions';
+import { paidWord } from '../../lib/paidWord';
 import { api } from '../../api';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
@@ -248,7 +249,7 @@ export function EntriesPage() {
                       <span className="rf-grow">
                         <span className="rf-t1">{team.teamName}</span>
                         <span className="rf-t2">
-                          {mine.length > 0 && !pending && <span className={paid ? 'ops-paid' : 'ops-unpaid'}><ChangePop value={paid ? 'Paid' : 'Not paid'} tick={paid}>{paid ? 'Paid' : 'Not paid'}</ChangePop></span>}
+                          {mine.length > 0 && !pending && <span className={paid ? 'ops-paid' : 'ops-unpaid'}><ChangePop value={paid ? paidWord(competition.isDemo) : 'Not paid'} tick={paid}>{paid ? paidWord(competition.isDemo) : 'Not paid'}</ChangePop></span>}
                           {mine.length > 0 && !pending && form ? ' · ' : ''}{form ? `Form in ${whenText(form.submittedAt)}` : ''}
                         </span>
                       </span>
@@ -266,7 +267,7 @@ export function EntriesPage() {
                       <div className="ops-entry-body">
                         {mine.length > 0 && (
                           <div className="ops-line">
-                            <span className="rf-grow"><span className="rf-t1"><ChangePop value={paid ? 'Paid' : 'Not paid yet'} tick={paid}>{paid ? 'Paid' : 'Not paid yet'}</ChangePop></span></span>
+                            <span className="rf-grow"><span className="rf-t1"><ChangePop value={paid ? paidWord(competition.isDemo) : 'Not paid yet'} tick={paid}>{paid ? paidWord(competition.isDemo) : 'Not paid yet'}</ChangePop></span></span>
                             <button type="button" className="rf-btn" disabled={busy} onClick={() => void setPaid(team, !paid)}>{paid ? 'Mark not paid' : 'Mark paid'}</button>
                           </div>
                         )}
@@ -332,7 +333,7 @@ function SignupList({ signups, filter, busy, openId, competition, onOpen, onMark
       {signups.map((s) => {
         const bucket = signupBucket(s);
         const isOpen = openId === s.id;
-        const tag = bucket === 'paid' ? { text: 'Paid', tone: 'ok' } : bucket === 'pending' ? { text: 'Pending payment', tone: 'warn' } : bucket === 'waitlist' ? { text: 'Waitlist', tone: 'mut' } : { text: 'Withdrawn', tone: 'mut' };
+        const tag = bucket === 'paid' ? { text: paidWord(competition.isDemo), tone: 'ok' } : bucket === 'pending' ? { text: 'Pending payment', tone: 'warn' } : bucket === 'waitlist' ? { text: 'Waitlist', tone: 'mut' } : { text: 'Withdrawn', tone: 'mut' };
         return (
           <div key={s.id}>
             <button type="button" className="rf-row ops-entry-row" aria-expanded={isOpen} onClick={() => onOpen(s.id)}>

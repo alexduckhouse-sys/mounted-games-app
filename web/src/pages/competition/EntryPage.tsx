@@ -5,6 +5,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { useT } from '../../i18n/LanguageContext';
 import { Notice } from '../../components/Notice';
 import { usePageHeader } from '../../components/CompactPageBarContext';
+import { DemoPaymentNotice } from '../../components/DemoPaymentNotice';
 import { EntryStepper } from '../../components/EntryStepper';
 import { usePageWidth } from '../../components/pageWidthState';
 import { EntryRosette } from '../../components/Rosette';
@@ -76,6 +77,7 @@ export function EntryPage() {
       <div className="ev-card flex flex-col gap-2.5 p-5">
         <h2 className="ev-title">{t('entries.page.submitted')}</h2>
         <p className="ev-body">{sent.text}</p>
+        {sent.hasFee && <DemoPaymentNotice what="entry" />}
         {sent.bank && <BankDetailsCard details={sent.bank} />}
         {sent.bank && sent.paymentLinkUrl && (
           <div className="flex flex-col gap-1">

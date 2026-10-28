@@ -4,6 +4,7 @@ import { Notice } from '../../components/Notice';
 import { apiErrorMessage } from '../../lib/apiError';
 import { downloadCsv, safeFilename } from '../../lib/csv';
 import { feeText } from '../../lib/entryOptions';
+import { paidWord } from '../../lib/paidWord';
 import { arrivalManifestCsv, arrivalWindowLabel, computeFeeDispositionLedger, groupArrivalManifest } from '../../lib/entryWorkflows';
 import { displaySectionName } from '../../lib/section';
 import { treasurerCsv } from '../../lib/treasurerCsv';
@@ -96,7 +97,7 @@ function ArrivalListSheet({ competition, signups, onClose }: { competition: Comp
                   <span className="rf-t2">{(s.stablingClubOrTeam || s.ponyClubName || s.teamName || 'Unaffiliated').trim()} · {displaySectionName(s.sectionName)}</span>
                   <span className="rf-t2">{arrivalWindowLabel(s.arrivalWindow)} · {s.vehicleRegistration?.trim() || 'No vehicle given'} · {s.stablesCount ?? 0} {(s.stablesCount ?? 0) === 1 ? 'stable' : 'stables'}</span>
                 </span>
-                <span className={`rf-st ${s.status === 1 ? 'rf-ok' : 'rf-warn'}`}>{s.status === 1 ? 'Paid' : 'Pending payment'}</span>
+                <span className={`rf-st ${s.status === 1 ? 'rf-ok' : 'rf-warn'}`}>{s.status === 1 ? paidWord(competition.isDemo) : 'Pending payment'}</span>
               </div>
             ))}
           </RefineList>

@@ -16,6 +16,7 @@ import { buildLorryStablingPassFromMySignup, downloadOfflineWalletPass } from '.
 import { displaySectionName } from '../lib/section';
 import type { MySignup } from '../types';
 import { DemoEntryPayment } from './commerce/DemoEntryPayment';
+import type { TestPayment } from './commerce/types';
 import { qrSvgMarkup, waitlistOfferState } from './operations/entryLogic';
 import '../components/sitePages.css';
 
@@ -42,13 +43,14 @@ export interface ExtendedMySignup extends MySignup {
 }
 
 /** The status word on the right of a row, and whether it is the one that needs the person (an unpaid entry). */
-function statusOf(s: ExtendedMySignup): { label: string; due: boolean } {
+/** `demoPaid`: the entry was paid through the demo checkout, so it says so instead of "Paid". */
+function statusOf(s: ExtendedMySignup, demoPaid = false): { label: string; due: boolean } {
   if (s.status === 2) return { label: tr('account.signups.refunded'), due: false };
   if (s.refundPending) return { label: tr('account.signups.refundPending'), due: false };
   if (s.isWithdrawn) return { label: tr('account.signups.withdrawn'), due: false };
   if (s.status === 3) return { label: tr('account.signups.cancelled'), due: false };
   if (s.status === 0) return s.isWaitlist ? { label: waitlistOfferState(s.waitlistOfferExpiresAt).state === 'open' ? 'Place offered' : tr('account.signups.waitingList'), due: false } : { label: tr('account.signups.notPaid'), due: true };
-  return { label: tr('account.signups.paid'), due: false };
+  return { label: tr(demoPaid ? 'account.signups.demoPaid' : 'account.signups.paid'), due: false };
 }
 
 export function MySignupsPage() {
@@ -64,6 +66,8 @@ function SignupList() {
   const [loadFailed, setLoadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [openId, setOpenId] = useState<number | null>(null);
+  // Entries paid through the demo checkout. A failed or odd answer leaves it empty, and they read "Paid" as before.
+  const [demoPaid, setDemoPaid] = useState<ReadonlySet<number>>(new Set());
   const now = useMemo(() => new Date(), []);
 
   useEffect(() => {
@@ -72,6 +76,18 @@ function SignupList() {
     api.get<ExtendedMySignup[]>('/me/signups')
       .then((r) => { if (!cancelled) { setSignups(r.data); setError(null); setLoadFailed(false); } })
       .catch(() => { if (!cancelled) setLoadFailed(true); });
+    return () => { cancelled = true; };
+  }, [user, attempt]);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    api.get<TestPayment[]>('/commerce/entry-payments/mine')
+      .then((r) => {
+        if (cancelled || !Array.isArray(r.data)) return;
+        setDemoPaid(new Set(r.data.filter((p) => p?.isTest === true && p.target === 1).map((p) => p.targetId)));
+      })
+      .catch(() => { /* without the list, entries read "Paid" */ });
     return () => { cancelled = true; };
   }, [user, attempt]);
 
@@ -105,7 +121,7 @@ function SignupList() {
     const entry = signups?.find((item) => item.id === signupId);
     if (!entry) return;
     const fee = entry.amountMinor > 0
-      ? `The entry fee is ${priceLabel(entry.amountMinor)}, paid by bank transfer or the organiser’s payment link once you accept.`
+      ? `The entry fee is ${priceLabel(entry.amountMinor)}, paid by bank transfer or the organiser’s payment link once you accept. ${t('common.demoPayment.entry')}`
       : 'It’s free, so nothing to pay.';
     if (!(await confirmDialog({ title: 'Take this place?', message: `${entry.competitionName}, ${displaySectionName(entry.sectionName)}. ${fee}`, confirmLabel: 'Accept the place' }))) return;
     setError(null);
@@ -176,7 +192,7 @@ function SignupList() {
           <h2 className={`sp-sec ${part === 'up' && pairRequests.length === 0 ? 'sp-first' : ''}`}>{part === 'up' ? t('account.signups.comingUp') : t('account.signups.past')}</h2>
           <ul className="sp-card m-0 list-none p-0">
             {rows.map((s) => {
-              const status = statusOf(s as ExtendedMySignup);
+              const status = statusOf(s as ExtendedMySignup, demoPaid.has(s.id));
               return (
                 <li key={s.id}>
                   <button type="button" className="sp-row" onClick={() => setOpenId(s.id)}>
@@ -194,15 +210,15 @@ function SignupList() {
         </section>
       ))}
 
-      {open && <EntrySheet signup={open} onClose={() => setOpenId(null)} onWithdraw={withdrawSignup} onAccept={acceptSpot} />}
+      {open && <EntrySheet signup={open} demoPaid={demoPaid.has(open.id)} onClose={() => setOpenId(null)} onWithdraw={withdrawSignup} onAccept={acceptSpot} />}
     </div>
   );
 }
 
 /** One entry: what it is, then what can be done with it. Withdrawing closes the sheet first, then asks. */
-function EntrySheet({ signup: s, onClose, onWithdraw, onAccept }: { signup: ExtendedMySignup; onClose: () => void; onWithdraw: (signupId: number) => Promise<void>; onAccept: (signupId: number) => Promise<void> }) {
+function EntrySheet({ signup: s, demoPaid, onClose, onWithdraw, onAccept }: { signup: ExtendedMySignup; demoPaid: boolean; onClose: () => void; onWithdraw: (signupId: number) => Promise<void>; onAccept: (signupId: number) => Promise<void> }) {
   const { t, locale } = useLanguage();
-  const status = statusOf(s);
+  const status = statusOf(s, demoPaid);
   // Re-read every 30 seconds so the offer's countdown moves while the sheet is open.
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {

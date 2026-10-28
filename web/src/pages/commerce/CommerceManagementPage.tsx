@@ -9,6 +9,7 @@ import { useCompetition } from '../competition/context';
 import { Chip, FormSheet, SheetField, type ChipTone } from '../clubShop/ui';
 import { LoadError } from './commerceUi';
 import { errorMessage, orderLineText, pounds } from './commerceFormat';
+import { paidWord } from '../../lib/paidWord';
 import type { CommerceOrderStatus, CompetitionListing, EventCommerceSettings, EventOrder } from './types';
 import '../../components/sitePages.css';
 import '../clubShop/clubShop.css';
@@ -209,7 +210,7 @@ function CommerceManagementContent() {
                       </span>
                       <span className="cs-right">
                         <span className="sp-price !text-[18px]">{pounds(order.totalMinor)}</span>
-                        <Chip tone={status.tone}>{order.isTestOrder ? `Demo · ${status.text}` : status.text}</Chip>
+                        <Chip tone={status.tone}>{order.isTestOrder ? (order.status === 2 ? paidWord(true) : `Demo · ${status.text}`) : status.text}</Chip>
                       </span>
                     </span>
                     {(canMarkPaid || canMarkRefunded) && (

@@ -69,7 +69,7 @@ export const entries: AreaCatalogue<typeof en> = {
   'entries.form.bankCopied': 'Manylion y banc wedi’u copïo',
   'entries.form.payAmount': 'Talu {fee}',
   'entries.form.payByTransfer': 'Talu {fee} drwy drosglwyddiad banc',
-  'entries.form.demoNote': 'Digwyddiad arddangos yw hwn. Ar ôl i chi gyflwyno, fe welwch dudalen dalu brawf. Ni chymerir unrhyw arian.',
+  'entries.form.demoNote': 'Ar ôl i chi gyflwyno, fe welwch dudalen dalu brawf.',
   'entries.form.bankDetails': 'Manylion y banc',
   'entries.form.payTo': 'Talu i',
   'entries.form.reference': 'Cyfeirnod',

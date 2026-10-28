@@ -69,7 +69,7 @@ export const entries: AreaCatalogue<typeof en> = {
   'entries.form.bankCopied': 'Coordonnées bancaires copiées',
   'entries.form.payAmount': 'Payer {fee}',
   'entries.form.payByTransfer': 'Payer {fee} par virement bancaire',
-  'entries.form.demoNote': 'Ceci est un événement de démonstration. Après l’envoi, vous verrez une page de paiement test. Aucun argent n’est prélevé.',
+  'entries.form.demoNote': 'Après l’envoi, vous verrez une page de paiement test.',
   'entries.form.bankDetails': 'Coordonnées bancaires',
   'entries.form.payTo': 'À payer à',
   'entries.form.reference': 'Référence',
