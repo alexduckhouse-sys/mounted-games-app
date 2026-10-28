@@ -124,13 +124,20 @@ describe('the Heat duties page', () => {
     expect(screen.getByRole('region', { name: 'Morning · Arena 1' })).toHaveTextContent('3 heats · 15 duties to fill');
     expect(screen.queryByText('Lunch')).not.toBeInTheDocument();
     const one = heatCard('Heat 1');
-    expect(one).toHaveTextContent('Referee, Starter, Scorer, 2 line steward');
+    expect(one).toHaveTextContent('Nothing set yet');
     await userEvent.click(heatBtn('Heat 1'));
     expect(within(one).getByText('Riding: Team 1, Team 2')).toBeInTheDocument();
     expect(within(one).getAllByText('Choose')).toHaveLength(5);
     expect(within(one).getByText('Lane 2')).toBeInTheDocument();
     await userEvent.click(heatBtn('Heat 1'));
     expect(within(one).queryByText('Riding: Team 1, Team 2')).not.toBeInTheDocument();
+  });
+
+  it('summarises what is left with proper plurals, and says nothing is set when nothing is', async () => {
+    await toHeats();
+    expect(heatCard('Heat 2')).toHaveTextContent('Nothing set yet');
+    await pickTeam('Heat 2', /^Referee/, /^Team A/);
+    await waitFor(() => expect(heatCard('Heat 2')).toHaveTextContent('Starter, Scorer, 2 line stewards'));
   });
 
   it('picks a team: fewest duties first, riders and teams already on duty blocked, neighbours warned, Leave empty last', async () => {
@@ -166,7 +173,7 @@ describe('the Heat duties page', () => {
 
     await userEvent.click(within(heatCard('Heat 2')).getByRole('button', { name: /^Starter/ }));
     await userEvent.click(await screen.findByRole('button', { name: 'Remove this duty from Heat 2' }));
-    await waitFor(() => expect(heatCard('Heat 2')).toHaveTextContent('Referee, Scorer'));
+    await waitFor(() => expect(within(heatCard('Heat 2')).queryByRole('button', { name: /^Starter/ })).not.toBeInTheDocument());
     expect(within(heatCard('Heat 2')).getByText('Own list of duties')).toBeInTheDocument();
 
     await userEvent.click(within(heatCard('Heat 2')).getByRole('button', { name: 'Add a duty' }));

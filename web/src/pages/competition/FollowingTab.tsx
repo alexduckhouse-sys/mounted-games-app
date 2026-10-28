@@ -117,7 +117,7 @@ export function FollowingTab() {
     return { id, title, teams: id === 'next' ? members.sort((a, b) => startsAt(a) - startsAt(b)) : members };
   }).filter((group) => group.teams.length > 0);
 
-  const where = (row: FollowedHeat, team: Team) => `${displaySectionName(row.session.sectionName || team.sectionName)} ${heatName(row)}`.trim();
+  const where = (row: Pick<FollowedHeat, 'session' | 'heat' | 'heatIndex'>, team: Team) => `${displaySectionName(row.session.sectionName || team.sectionName)} ${heatName(row)}`.trim();
   const arenaLane = (row: FollowedHeat, lane: number) => [arenaToShow(row.session, arenas), t('teams.following.laneLower', { number: lane })].filter(Boolean).join(' · ');
   const chevron = <ChevronRight className="fc-chev h-3.5 w-3.5" aria-hidden="true" />;
 
@@ -139,12 +139,12 @@ export function FollowingTab() {
     return <Link key="heat" to={to} state={PUSH} className="fc-line"><time className={`fc-lead${row.status === 'late' ? ' is-late' : ''}`} dateTime={row.effective?.toISOString()}>{formatTime(row.effective)}</time><span className="fc-what"><strong>{title}</strong><span>{arenaLane(row, lane)}</span></span>{chevron}</Link>;
   };
   /** The team's next duty, timed like a heat, with a button to tell the organisers the team is there. */
-  const dutyLine = ({ shift, row }: TeamDuty) => {
+  const dutyLine = ({ shift, row }: TeamDuty, owner: Team) => {
     const lead = shift.laneNumber != null
       ? t('duties.follow.roleLane', { role: roleLabel({ role: shift.role, category: shift.dutyCategory ?? 'General' }, t), number: shift.laneNumber })
       : roleLabel({ role: shift.role, category: shift.dutyCategory ?? 'General' }, t);
     const arena = arenaToShow(row.session, arenas);
-    const sub = arena ? t('duties.follow.subArena', { heat: heatName(row), arena }) : t('duties.follow.sub', { heat: heatName(row) });
+    const sub = arena ? t('duties.follow.subArena', { heat: where(row, owner), arena }) : t('duties.follow.sub', { heat: where(row, owner) });
     const done = isDutyHere(shift) || here.has(shift.id);
     return <div key="duty" className="fc-line fc-duty">
       <time className={`fc-lead${row.status === 'late' ? ' is-late' : ''}`} dateTime={row.effective?.toISOString()}>{formatTime(row.effective)}</time>
@@ -182,7 +182,7 @@ export function FollowingTab() {
     // A team with a heat ahead shows it, then its place; a team that has no place yet shows its last heat in that slot.
     // A team with nothing left to ride shows its last heat first, then its place.
     const duty = duties.get(team.id);
-    const dutyEl = duty ? dutyLine(duty) : null;
+    const dutyEl = duty ? dutyLine(duty, team) : null;
     const heatState = next.get(team.id);
     const heatFirst = heatState?.kind !== 'heat' || group === 'now' || !duty || (heatState.row.effective?.getTime() ?? Infinity) <= (duty.row.effective?.getTime() ?? Infinity);
     // The duty sits in time order with the heats: before the next heat when it falls first, otherwise just after it.

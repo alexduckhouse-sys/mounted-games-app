@@ -5,7 +5,7 @@ import {
   addableSpecs, addHeatSlot, allSlots, applySetup, autoFillRoles, buildSavePayload, clearDraft, copyRoles, customSpec, defaultSetup, draftKey, dutiesPerHeat,
   dutiesToFill, dutySessions, emptySlots, findClashes, freshenDraft, gapGroups, gridCell, gridColumns, heatCount, heatDutySummary, heatTitle, initialSlots,
   isRaceSession, loadDraft, matchesSetup, mergeProposal, newUid, pickerOptions, reconcileSlots, removeHeatSlot, ridingTeamIds, roleKind, saveDraft,
-  sessionLanes, setSlotTeam, setupFromShifts, shortHeatTitle, slotName, teamDutyCounts, teamLabel, teamLoad, templateSpecs,
+  sessionChipLabels, sessionLanes, setSlotTeam, setupFromShifts, shortHeatTitle, slotName, teamDutyCounts, teamLabel, teamLoad, templateSpecs,
   type DutySlot, type RoleSetup, type SlotState,
 } from './heatDuties';
 
@@ -46,6 +46,22 @@ describe('sessions and heats', () => {
     expect(sessionLanes(session(1, { heats: [heat(1, { entries: [entry(1, 3)] })] }))).toBe(3);
     expect(sessionLanes(session(1, { heats: [heat(1, { entries: [entry(1, 30)] })] }))).toBe(12);
     expect(sessionLanes(session(1))).toBe(5);
+  });
+});
+
+describe('session chip labels', () => {
+  const day = (id: number, name: string, start: string | null, extra = {}) => dutySessions([session(id, { name, orderIndex: id, scheduledStart: start, heats: [heat(id * 10, extra)] })])[0];
+  it('adds the short day when the event runs over more than one day', () => {
+    const labels = sessionChipLabels([day(1, 'Juniors A', '2026-11-11T09:00:00'), day(2, 'Pairs', '2026-11-11T11:00:00'), day(3, 'Juniors A', '2026-11-12T09:00:00'), day(4, 'Pairs', '2026-11-12T11:00:00')]);
+    expect([...labels.values()]).toEqual(['Wed · Juniors A', 'Wed · Pairs', 'Thu · Juniors A', 'Thu · Pairs']);
+  });
+  it('uses a heat’s own time when the session has none, and leaves a one-day event with clear names alone', () => {
+    const labels = sessionChipLabels([day(1, 'Morning', null, { scheduledStart: '2026-11-11T09:00:00' }), day(2, 'Afternoon', '2026-11-11T13:00:00')]);
+    expect([...labels.values()]).toEqual(['Morning', 'Afternoon']);
+    expect([...sessionChipLabels([day(1, 'Open', null, { scheduledStart: '2026-11-11T09:00:00' }), day(2, 'Open', '2026-11-11T13:00:00')]).values()]).toEqual(['Wed · Open', 'Wed · Open']);
+  });
+  it('has nothing to add when no session has a time', () => {
+    expect([...sessionChipLabels([day(1, 'Open', null), day(2, 'Open', null)]).values()]).toEqual(['Open', 'Open']);
   });
 });
 
@@ -244,6 +260,17 @@ describe('auto-fill merge', () => {
     expect(keep.slots[1][0].teamId).toBeNull();
     const replace = mergeProposal({ ...taken, slots: { ...taken.slots, 1: taken.slots[1].map((s) => ({ ...s, teamId: s.role === 'Referee' ? 5 : 7 })) } }, [duty({ assignedTeamId: 7 })], false);
     expect(replace.slots[1][0].teamId).toBeNull();
+  });
+  it('lets a replacing fill swap two teams between duties without a false clash', () => {
+    const base = start();
+    const [referee, line] = base.slots[1];
+    const placed: SlotState = { ...base, slots: { ...base.slots, 1: [{ ...referee, teamId: 7 }, { ...line, teamId: 6 }] } };
+    const swap = mergeProposal(placed, [duty({ role: 'Line steward', dutyCategory: 'LineSteward', laneNumber: 1, assignedTeamId: 7 }), duty({ assignedTeamId: 6 })], false);
+    expect(swap.slots[1].map((s) => s.teamId)).toEqual([6, 7]);
+    expect(swap.stillEmpty).toBe(0);
+    // A team on a duty the proposal doesn't cover still blocks the proposal.
+    const other: SlotState = { ...placed, slots: { ...placed.slots, 1: [...placed.slots[1], slot({ role: 'Water', teamId: 5 })] } };
+    expect(mergeProposal(other, [duty({ assignedTeamId: 5 })], false).slots[1][0].teamId).toBeNull();
   });
   it('matches each proposal to its own slot when a role repeats, and ignores one with no slot', () => {
     const state = initialSlots(sessions, setup({ referee: false, starter: false, scorer: false, lines: 0, ring: 2 }), []);

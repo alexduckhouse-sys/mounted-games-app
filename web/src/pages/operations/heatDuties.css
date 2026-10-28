@@ -45,7 +45,7 @@
 .hd-heat-state { display: flex; flex: 1; min-width: 0; align-items: center; justify-content: flex-end; gap: 8px; text-align: right; font: 500 13px/1.2 var(--mg-font); }
 .hd-ok { color: rgb(var(--mg-muted)); }
 .hd-tick { flex: none; padding: 2px; border-radius: 999px; background: rgb(var(--mg-ok)); color: rgb(var(--mg-surface)); }
-.hd-gap { color: rgb(var(--mg-late-ink)); font-weight: 600; overflow-wrap: anywhere; }
+.hd-gap { flex: 1; min-width: 0; color: rgb(var(--mg-late-ink)); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hd-count { flex: none; min-width: 24px; padding: 3px 7px; border-radius: 999px; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); font: 700 13px/1 var(--mg-font); text-align: center; }
 .hd-panel { display: flex; flex-direction: column; gap: 8px; padding: 0 0 8px; border-top: 1px solid rgb(var(--mg-rule-soft)); animation: hd-open 180ms var(--mg-ease-out); }
 .hd-panel .rf-list { border: 0; border-radius: 0; box-shadow: none; }

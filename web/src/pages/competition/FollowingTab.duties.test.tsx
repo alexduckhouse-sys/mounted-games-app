@@ -36,11 +36,11 @@ describe('the duty line on a followed team’s card', () => {
   it('sits in time order after the heat it follows, with the role, lane, heat and arena', async () => {
     mount();
     const line = (await within(card()).findByText('Line steward, lane 2')).closest('.fc-line')!;
-    expect(within(line as HTMLElement).getByText('Duty · Heat 2 · Arena 1')).toBeInTheDocument();
+    expect(within(line as HTMLElement).getByText('Duty · Seniors Heat 2 · Arena 1')).toBeInTheDocument();
     const lines = [...card().querySelectorAll('.fc-line')];
     expect(lines.indexOf(line)).toBe(lines.length - 1);
     expect(card().querySelectorAll('.fc-duty')).toHaveLength(1);
-    expect(screen.queryByText('Duty · Heat 1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Duty · Seniors Heat 1')).not.toBeInTheDocument();
   });
 
   it('goes above the heat when it comes first', async () => {
@@ -48,7 +48,7 @@ describe('the duty line on a followed team’s card', () => {
     mount();
     const line = (await within(card()).findByText('Scorer')).closest('.fc-line')!;
     expect(line).toBe(card().querySelectorAll('.fc-line')[0]);
-    expect(within(line as HTMLElement).getByText('Duty · Heat 1 · Arena 2')).toBeInTheDocument();
+    expect(within(line as HTMLElement).getByText('Duty · Seniors Heat 1 · Arena 2')).toBeInTheDocument();
   });
 
   it('is left out once its heat has been scored', async () => {

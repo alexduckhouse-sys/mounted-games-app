@@ -4,11 +4,12 @@ import { api } from '../../api';
 import { Notice } from '../../components/Notice';
 import { Sheet } from '../../components/Sheet';
 import { useT } from '../../i18n/LanguageContext';
+import type { Translate } from '../../i18n/translate';
 import { apiErrorMessage } from '../../lib/apiError';
 import {
-  addableSpecs, addHeatSlot, autoFillRoles, copyRoles, customSpec, dutiesToFill, emptySlots, gapGroups, heatTitle, matchesSetup, mergeProposal,
-  pickerOptions, removeHeatSlot, setSlotTeam, teamDutyCounts, MAX_ROLE_NAME,
-  type DutySession, type DutySlot, type RoleSetup, type SlotSpec, type SlotState,
+  addableSpecs, addHeatSlot, autoFillRoles, copyRoles, customSpec, dutiesToFill, emptySlots, gapGroups, heatTitle, matchesSetup, mergeProposal, sessionChipLabels,
+  pickerOptions, removeHeatSlot, roleKind, setSlotTeam, teamDutyCounts, MAX_ROLE_NAME,
+  type DutySession, type DutySlot, type GapGroup, type RoleSetup, type SlotSpec, type SlotState,
 } from '../../lib/heatDuties';
 import type { AutoFillHeatDutiesInput, AutoFillHeatDutiesResult, Heat, Team } from '../../types';
 import { Chevron, RefineList } from '../refine/Refine';
@@ -72,7 +73,7 @@ export function HeatDutiesHeats({ competitionId, sessions, setup, state, teams, 
                       <span className="hd-heat-state">
                         {slots.length === 0 ? <span className="hd-muted">{t('duties.heat.noDuties')}</span>
                           : empty === 0 ? <><span className="hd-ok">{t('duties.heat.allFilled', { count: slots.length })}</span><Check className="hd-tick h-4 w-4" aria-hidden="true" /></>
-                          : <><span className="hd-gap">{gaps.map((gap) => (gap.counted ? t('duties.gap.counted', { count: gap.count, role: roleLabel(gap, t).toLowerCase() }) : roleLabel(gap, t))).join(', ')}</span><b className="hd-count" aria-label={t('duties.gap.aria', { count: empty })}>{empty}</b></>}
+                          : <><span className="hd-gap">{empty === slots.length ? t('duties.heat.nothingSet') : gaps.map((gap) => gapText(gap, t)).join(', ')}</span><b className="hd-count" aria-label={t('duties.gap.aria', { count: empty })}>{empty}</b></>}
                       </span>
                       <Chevron down={isOpen} />
                     </button>
@@ -129,6 +130,15 @@ export function HeatDutiesHeats({ competitionId, sessions, setup, state, teams, 
       )}
     </div>
   );
+}
+
+/** "Scorer", "6 line stewards": one entry of a heat's summary of what is still empty. */
+function gapText(gap: GapGroup, t: Translate): string {
+  const kind = roleKind(gap);
+  if (kind === 'line') return t('duties.gap.line', { count: gap.count });
+  if (kind === 'changeover') return t('duties.gap.changeover', { count: gap.count });
+  if (kind === 'ring') return t('duties.gap.ring', { count: gap.count });
+  return gap.counted ? t('duties.gap.counted', { count: gap.count, role: roleLabel(gap, t).toLowerCase() }) : roleLabel(gap, t);
 }
 
 /** Do the two heats hold the same list of roles? Then "Same roles as…" has nothing to do. */
@@ -224,6 +234,8 @@ function AutoSheet({ competitionId, target, others, setup, state, onClose, onDon
   const roles = autoFillRoles(setup);
   const count = dutiesToFill(state.slots, heatIds, keep);
   const needSessions = from === 'other' && chosen.size === 0;
+  // Names can repeat across days, so the chips carry the day; the chips stay in running order (`others` already is).
+  const chipLabels = useMemo(() => sessionChipLabels([target, ...others]), [target, others]);
   const arena = session.arenaName?.trim();
   const title = arena && !session.name.includes(arena) ? `${session.name} · ${arena}` : session.name;
 
@@ -274,7 +286,7 @@ function AutoSheet({ competitionId, target, others, setup, state, onClose, onDon
           {from === 'other' && (others.length === 0
             ? <p className="rf-note">{t('duties.auto.noOthers')}</p>
             : <div className="hd-chips" role="group" aria-label={t('duties.auto.other')}>
-              {others.map((item) => <button key={item.session.id} type="button" className="hd-chip" aria-pressed={chosen.has(item.session.id)} onClick={() => toggleSession(item.session.id)}>{item.session.name}</button>)}
+              {others.map((item) => <button key={item.session.id} type="button" className="hd-chip" aria-pressed={chosen.has(item.session.id)} onClick={() => toggleSession(item.session.id)}>{chipLabels.get(item.session.id)}</button>)}
             </div>)}
           <h3 className="hd-sheet-h">{t('duties.auto.rules')}</h3>
           <div className="hd-sw-list">

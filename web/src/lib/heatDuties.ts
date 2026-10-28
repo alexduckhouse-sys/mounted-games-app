@@ -1,6 +1,8 @@
 import type { Heat, HeatDutyRoleTemplateInput, ProposedHeatDuty, SaveHeatDutiesInput, Session, Team, VolunteerShift } from '../types';
 import { tr } from '../i18n/translate';
+import { activeLocale } from '../i18n/translate';
 import { displaySectionName } from './section';
+import { dayKey } from './timetableDay';
 
 /**
  * The pure logic behind the Heat duties wizard: the roles every heat needs, the duty slots they turn into, who may be
@@ -81,6 +83,25 @@ export function dutySessions(sessions: readonly Session[]): DutySession[] {
 /** "Heat 3", or the label the organiser gave the heat. `index` counts from 0 within its session. */
 export function heatTitle(heat: Pick<Heat, 'label'>, index: number): string {
   return heat.label?.trim() || tr('teams.team.heatN', { number: index + 1 });
+}
+
+/** The day a session starts on, from its own time or its first heat's. */
+const sessionStart = ({ session, heats }: DutySession): string | undefined => session.scheduledStart ?? heats.find((heat) => heat.scheduledStart)?.scheduledStart ?? undefined;
+const sessionDay = (item: DutySession): string => { const start = sessionStart(item); return start ? dayKey(new Date(start)) : ''; };
+
+/**
+ * The words on each session chip in the Auto sheet, by session id. A session is labelled with its short day ("Wed · Juniors A")
+ * when the sessions span more than one day, or when two share a name and a day tells them apart.
+ */
+export function sessionChipLabels(list: readonly DutySession[]): Map<number, string> {
+  const days = new Set(list.map(sessionDay).filter(Boolean));
+  const clash = new Set(list.map((item) => item.session.name).filter((name, index, all) => all.indexOf(name) !== index));
+  return new Map(list.map((item) => {
+    const day = sessionDay(item);
+    const useDay = day !== '' && (days.size > 1 || (clash.has(item.session.name) && days.size > 0));
+    const weekday = useDay ? new Date(sessionStart(item)!).toLocaleDateString(activeLocale(), { weekday: 'short' }) : '';
+    return [item.session.id, useDay ? `${weekday} · ${item.session.name}` : item.session.name];
+  }));
 }
 
 export const heatCount = (list: readonly DutySession[]): number => list.reduce((sum, item) => sum + item.heats.length, 0);
@@ -403,7 +424,8 @@ export function mergeProposal(state: SlotState, proposal: readonly ProposedHeatD
   const slots: SlotsByHeat = Object.fromEntries(Object.entries(state.slots).map(([key, list]) => [key, list.map((slot) => ({ ...slot }))]));
   const touched = new Set<number>();
   const claimed = new Set<string>();
-  let filled = 0;
+  // First find each item's slot, so every slot the proposal covers can be cleared before any team is placed.
+  const matches: { item: ProposedHeatDuty; slot: DutySlot }[] = [];
   for (const item of proposal) {
     const list = slots[item.heatId];
     if (!list) continue;
@@ -412,10 +434,16 @@ export function mergeProposal(state: SlotState, proposal: readonly ProposedHeatD
     const slot = list.find((candidate) => !claimed.has(candidate.uid) && matchKey(candidate) === matchKey(spec));
     if (!slot) continue;
     claimed.add(slot.uid);
-    if (keepExisting && slot.teamId != null) continue;
+    if (!(keepExisting && slot.teamId != null)) matches.push({ item, slot });
+  }
+  // Replacing: a team the proposal moves between two duties must not look like a clash with its old place.
+  const before = new Map(matches.map(({ slot }) => [slot.uid, slot.teamId]));
+  if (!keepExisting) for (const { slot } of matches) slot.teamId = null;
+  let filled = 0;
+  for (const { item, slot } of matches) {
     const team = item.assignedTeamId ?? null;
-    if (team != null && list.some((other) => other.uid !== slot.uid && other.teamId === team)) { if (!keepExisting) slot.teamId = null; continue; }
-    if (team != null && slot.teamId !== team) filled += 1;
+    if (team != null && slots[item.heatId].some((other) => other.uid !== slot.uid && other.teamId === team)) continue;
+    if (team != null && before.get(slot.uid) !== team) filled += 1;
     slot.teamId = team;
   }
   const stillEmpty = [...touched].reduce((sum, heatId) => sum + emptySlots(slots[heatId]).length, 0);
