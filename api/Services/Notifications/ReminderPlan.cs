@@ -30,6 +30,14 @@ internal static class ReminderPlan
             .Select(s => new { s.TeamId, s.UserId }).ToListAsync(ct);
         var usersByTeam = teams.ToDictionary(t => t.Id, t => supporters.Where(s => s.TeamId == t.Id).Select(s => s.UserId)
             .Concat(string.IsNullOrEmpty(t.TrainerUserId) ? [] : new[] { t.TrainerUserId }).ToHashSet());
+        var heatIds = sessions.SelectMany(s => s.Heats).Select(h => h.Id).ToList();
+        var heatDuties = heatIds.Count == 0
+            ? []
+            : await db.VolunteerShifts.AsNoTracking()
+                .Where(v => v.HeatId != null && heatIds.Contains(v.HeatId.Value) && v.AssignedTeamId != null)
+                .OrderBy(v => v.Id)
+                .ToListAsync(ct);
+        var dutiesByHeat = heatDuties.GroupBy(v => v.HeatId!.Value).ToDictionary(g => g.Key, g => g.ToList());
         var plans = new List<PlannedReminder>();
         foreach (var competition in sessions.GroupBy(s => s.CompetitionId))
         {
@@ -65,6 +73,29 @@ internal static class ReminderPlan
                             $"Starts at {NotificationScheduler.UkTime(scheduled):HH:mm} — {s.Section?.DisplayName ?? "—"}.", users);
                     if (s.Kind == SessionKind.Briefing)
                         Add($"brief:{s.Id}", s.CompetitionId, scheduled, 30, "Briefing in 30 minutes", s.Name, users);
+                }
+
+                if (s.Kind == SessionKind.Race)
+                {
+                    foreach (var h in s.Heats.OrderBy(h => h.OrderIndex))
+                    {
+                        if (!dutiesByHeat.TryGetValue(h.Id, out var shifts)) continue;
+                        if (h.StartedAt.HasValue || h.FinishedAt.HasValue || (h.Races.Count > 0 && h.Races.All(r => r.IsComplete))) continue;
+                        if (timings.GetValueOrDefault(h.Id).Start is not { } heatStart) continue;
+                        var label = string.IsNullOrWhiteSpace(h.Label) ? $"Heat {h.OrderIndex + 1}" : h.Label;
+                        foreach (var shift in shifts)
+                        {
+                            var team = teams.FirstOrDefault(t => t.Id == shift.AssignedTeamId);
+                            if (team is null) continue;
+                            var rolePart = shift.LaneNumber.HasValue && !shift.Role.Contains($"lane {shift.LaneNumber.Value}", StringComparison.OrdinalIgnoreCase)
+                                ? $"{shift.Role}, lane {shift.LaneNumber.Value}"
+                                : shift.Role;
+                            Add($"duty:{shift.Id}", s.CompetitionId, heatStart, 15,
+                                "15 minutes until your duty",
+                                $"{team.DisplayName}: {rolePart}, {label} around {NotificationScheduler.UkTime(heatStart):HH:mm}.",
+                                usersByTeam[team.Id]);
+                        }
+                    }
                 }
             }
         }

@@ -145,4 +145,30 @@ describe('VolunteerRota', () => {
     expect(text).toContain('/competitions/7/volunteers');
     expect(text).not.toContain('Pat Helper');
   });
+
+  describe('the Heat duties row', () => {
+    const heats = makeCompetition({ id: 7, name: 'Spring Games', sessions: [session(10, { name: 'Under 12', heats: [{ id: 1, sessionId: 10, orderIndex: 1, entries: [], races: [] }, { id: 2, sessionId: 10, orderIndex: 2, entries: [], races: [] }] })] });
+    const open = (competition = heats, manage = true) => render(<MemoryRouter><VolunteerRota competition={competition} manage={manage} /></MemoryRouter>);
+
+    it('opens the wizard and says how far along it is', async () => {
+      vi.mocked(api.get).mockResolvedValue({ data: [shift({ id: 5, heatId: 1, assignedTeamId: 3 }), shift({ id: 6, heatId: 2, assignedTeamId: null })] });
+      open();
+      const row = await screen.findByRole('link', { name: /Heat duties/ });
+      expect(row).toHaveAttribute('href', '/competitions/7/operations/heat-duties');
+      expect(row).toHaveTextContent('1 of 2 heats filled');
+    });
+
+    it('says when nothing is set up, or the heats aren’t drawn', async () => {
+      open();
+      expect(await screen.findByRole('link', { name: /Not set up yet/ })).toBeInTheDocument();
+      open(comp);
+      expect(await screen.findByRole('link', { name: /Needs the draw first/ })).toBeInTheDocument();
+    });
+
+    it('is for organisers only', async () => {
+      open(heats, false);
+      await screen.findByText('Ring Crew, 9:30');
+      expect(screen.queryByRole('link', { name: /Heat duties/ })).not.toBeInTheDocument();
+    });
+  });
 });

@@ -162,8 +162,8 @@ export function RefineQty({ name, value, onChange, max = 99, disabled = false }:
  * The screen's actions at the bottom. Sticky only where it must stay in reach (the creator wizard, a message composer);
  * `inline` puts the buttons at the end of the page instead, which is the house default ("no Back/Next footers").
  */
-export function RefineFoot({ children, column = false, aboveTabs = false, inline = false, label }: { children: ReactNode; column?: boolean; aboveTabs?: boolean; inline?: boolean; label?: string }) {
-  return <div className={`rf-foot ${inline ? 'rf-foot-inline' : ''} ${column ? 'rf-foot-col' : ''} ${aboveTabs && !inline ? 'rf-above-tabs' : ''}`.replace(/\s+/g, ' ').trim()} role={label ? 'region' : undefined} aria-label={label}>{children}</div>;
+export function RefineFoot({ children, column = false, aboveTabs = false, inline = false, label, className = '' }: { children: ReactNode; column?: boolean; aboveTabs?: boolean; inline?: boolean; label?: string; className?: string }) {
+  return <div className={`rf-foot ${inline ? 'rf-foot-inline' : ''} ${column ? 'rf-foot-col' : ''} ${aboveTabs && !inline ? 'rf-above-tabs' : ''} ${className}`.replace(/\s+/g, ' ').trim()} role={label ? 'region' : undefined} aria-label={label}>{children}</div>;
 }
 
 interface SheetProps { title: string; onClose: () => void; children: ReactNode }

@@ -39,6 +39,7 @@ public static class OperationsSqliteSchema
             ("CheckedInByName", "TEXT NULL"),
             ("CheckedInByUserId", "TEXT NULL"),
             ("CheckedInByStaffOverride", "INTEGER NOT NULL DEFAULT 0"),
+            ("HeatId", "INTEGER NULL REFERENCES \"Heats\" (\"Id\") ON DELETE CASCADE"),
         };
         foreach (var (name, typeSql) in columns)
         {
@@ -48,6 +49,7 @@ public static class OperationsSqliteSchema
                 await db.Database.ExecuteSqlRawAsync($"ALTER TABLE \"VolunteerShift\" ADD COLUMN \"{name}\" {typeSql};");
 #pragma warning restore EF1002
         }
+        await db.Database.ExecuteSqlRawAsync("""CREATE INDEX IF NOT EXISTS "IX_VolunteerShift_HeatId" ON "VolunteerShift" ("HeatId");""");
     }
 
     private static async Task EnsureHeatEntryColumnsAsync(AppDbContext db)
@@ -196,6 +198,7 @@ public static class OperationsSqliteSchema
             "Id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             "CompetitionId" INTEGER NOT NULL,
             "SessionId" INTEGER NULL,
+            "HeatId" INTEGER NULL,
             "ArenaName" TEXT NULL,
             "Role" TEXT NOT NULL,
             "DutyCategory" TEXT NOT NULL DEFAULT 'Custom',
@@ -213,12 +216,15 @@ public static class OperationsSqliteSchema
             "CreatedAt" TEXT NOT NULL,
             CONSTRAINT "FK_VolunteerShift_Competitions_CompetitionId" FOREIGN KEY ("CompetitionId") REFERENCES "Competitions" ("Id") ON DELETE CASCADE,
             CONSTRAINT "FK_VolunteerShift_Sessions_SessionId" FOREIGN KEY ("SessionId") REFERENCES "Sessions" ("Id") ON DELETE SET NULL,
+            CONSTRAINT "FK_VolunteerShift_Heats_HeatId" FOREIGN KEY ("HeatId") REFERENCES "Heats" ("Id") ON DELETE CASCADE,
             CONSTRAINT "FK_VolunteerShift_Teams_AssignedTeamId" FOREIGN KEY ("AssignedTeamId") REFERENCES "Teams" ("Id") ON DELETE SET NULL
         );
 
         CREATE INDEX IF NOT EXISTS "IX_VolunteerShift_CompetitionId" ON "VolunteerShift" ("CompetitionId");
 
         CREATE INDEX IF NOT EXISTS "IX_VolunteerShift_SessionId" ON "VolunteerShift" ("SessionId");
+
+        CREATE INDEX IF NOT EXISTS "IX_VolunteerShift_HeatId" ON "VolunteerShift" ("HeatId");
 
         CREATE INDEX IF NOT EXISTS "IX_VolunteerShift_AssignedTeamId" ON "VolunteerShift" ("AssignedTeamId");
 

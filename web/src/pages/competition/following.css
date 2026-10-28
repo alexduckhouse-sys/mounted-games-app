@@ -25,6 +25,13 @@ a.fc-line:active { background: rgb(var(--mg-tint) / .65); }
 .fc-what span.is-safe { color: rgb(var(--mg-ok)); }
 .fc-chev { color: rgb(var(--mg-faint)); }
 
+/* A duty the team has at the event: a light blue line with a "We're here" button on the right. */
+.fc-line.fc-duty { grid-template-columns: 62px minmax(0, 1fr) auto; background: rgb(var(--mg-info-bg)); }
+.fc-here { min-height: 40px; padding: 0 14px; border: 0; border-radius: 999px; background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); font: 700 14px/1 var(--mg-font); cursor: pointer; white-space: nowrap; }
+.fc-here:disabled { opacity: .6; cursor: wait; }
+.fc-here:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
+.fc-here-done { display: inline-flex; align-items: center; gap: 4px; color: rgb(var(--mg-ok)); font: 700 14px/1 var(--mg-font); white-space: nowrap; }
+
 /* "Add Following to your bottom bar": the bar as it will look, drawn small and still. */
 .fc-bar { display: flex; margin: 4px 0 16px; padding: 6px 2px; border: 1px solid rgb(var(--mg-line)); border-radius: 14px; background: rgb(var(--mg-surface)); }
 .fc-bar-tab { display: flex; flex: 1; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 52px; color: rgb(var(--mg-muted)); font: 500 11.5px/1 var(--mg-font); text-align: center; }
