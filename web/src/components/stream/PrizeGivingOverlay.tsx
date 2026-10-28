@@ -5,7 +5,8 @@ import { confettiBurst } from '../bursts';
 import { Rosette } from '../Rosette';
 import { CountUp } from './CountUp';
 import { DIAGONAL_HIDDEN_LEFT, DIAGONAL_HIDDEN_RIGHT, DIAGONAL_SHOWN, ENTER, EASE_OUT, LEAVE } from '../../lib/motion';
-import { ordinal } from '../../lib/toplist';
+import { localOrdinal as ordinal } from '../../lib/ordinalText';
+import { useT } from '../../i18n/LanguageContext';
 import type { PrizeGiving, PrizeGivingPlace } from '../../lib/prizeGiving';
 import { useStillMotion } from '../../lite/useStillMotion';
 
@@ -16,13 +17,15 @@ const points = (value: number) => (Number.isInteger(value) ? String(value) : val
  * (in on the gold diagonal wipe, its points counting up), the places already given in a card down the right like the
  * score card, and for the winners a centred card with the rosette and confetti.
  */
-export function PrizeGivingOverlay() {
-  const prizeGiving = useContext(CompetitionContext)?.prizeGiving ?? null;
+export function PrizeGivingOverlay({ auto = null }: { auto?: PrizeGiving | null }) {
+  // The organiser's own stepping wins over the one that plays itself after a final.
+  const prizeGiving = useContext(CompetitionContext)?.prizeGiving ?? auto;
   return <AnimatePresence>{prizeGiving && <PrizeGivingShown key={prizeGiving.sectionId} prizeGiving={prizeGiving} />}</AnimatePresence>;
 }
 
 function PrizeGivingShown({ prizeGiving }: { prizeGiving: PrizeGiving }) {
   const still = useStillMotion();
+  const t = useT();
   const { places, champions, sectionName } = prizeGiving;
   const current = places[places.length - 1];
   const given = (champions ? places : places.slice(0, -1)).slice().sort((a, b) => a.place - b.place);
@@ -30,9 +33,9 @@ function PrizeGivingShown({ prizeGiving }: { prizeGiving: PrizeGiving }) {
     <motion.div className="absolute inset-0" initial={false} exit={still ? undefined : { opacity: 0, transition: LEAVE }}>
       <AnimatePresence>
         {!champions && given.length > 0 && (
-          <motion.aside key="ladder" className="mg-pg-ladder" aria-label={`Prize-giving, ${sectionName}`}
+          <motion.aside key="ladder" className="mg-pg-ladder" aria-label={t('screen.pgo.ladderLabel', { section: sectionName })}
             initial={still ? false : { opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={still ? undefined : { opacity: 0, transition: LEAVE }} transition={ENTER}>
-            <header><b>Prize-giving</b><span>{sectionName}</span></header>
+            <header><b>{t('screen.pgo.title')}</b><span>{sectionName}</span></header>
             <motion.span className="mg-pg-rule" initial={still ? false : { scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ ...ENTER, delay: 0.1 }} />
             <ol>
               {given.map((place) => (
@@ -56,8 +59,9 @@ function PrizeGivingShown({ prizeGiving }: { prizeGiving: PrizeGiving }) {
 }
 
 function LowerThird({ place, still }: { place: PrizeGivingPlace; still: boolean }) {
+  const t = useT();
   return (
-    <motion.div className="mg-pg-lower" role="status" aria-label={`${ordinal(place.place)}: ${place.teamName}, ${points(place.points)} points`}
+    <motion.div className="mg-pg-lower" role="status" aria-label={t('screen.pgo.lowerLabel', { place: ordinal(place.place), team: place.teamName, points: points(place.points) })}
       initial={still ? false : { clipPath: DIAGONAL_HIDDEN_LEFT }} animate={{ clipPath: DIAGONAL_SHOWN }}
       exit={still ? undefined : { clipPath: DIAGONAL_HIDDEN_RIGHT, transition: LEAVE }} transition={{ ...ENTER, delay: 0.14 }}>
       {/* A gold band sweeps across ahead of the bar, like the replay wipe. */}
@@ -70,13 +74,14 @@ function LowerThird({ place, still }: { place: PrizeGivingPlace; still: boolean 
         {place.clubName && <motion.span initial={still ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ ...ENTER, delay: 0.5 }}>{place.clubName}</motion.span>}
       </span>
       <span className="mg-pg-pts" aria-hidden="true">
-        <CountUp from={Math.round(place.points * 0.6)} to={place.points} delay={0.45} duration={0.9} format={points} /><small>points</small>
+        <CountUp from={Math.round(place.points * 0.6)} to={place.points} delay={0.45} duration={0.9} format={points} /><small>{t('screen.pgo.points')}</small>
       </span>
     </motion.div>
   );
 }
 
 function Champions({ place, sectionName, still }: { place: PrizeGivingPlace; sectionName: string; still: boolean }) {
+  const t = useT();
   const card = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (still || !card.current) return;
@@ -86,7 +91,7 @@ function Champions({ place, sectionName, still }: { place: PrizeGivingPlace; sec
   }, [still]);
   const rise = (delay: number) => ({ initial: still ? false as const : { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { ...ENTER, delay } });
   return (
-    <motion.div className="mg-pg-champ" role="status" aria-label={`${sectionName} champions: ${place.teamName}, ${points(place.points)} points`}
+    <motion.div className="mg-pg-champ" role="status" aria-label={t('screen.pgo.championsLabel', { section: sectionName, team: place.teamName, points: points(place.points) })}
       initial={still ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={still ? undefined : { opacity: 0, transition: LEAVE }}>
       <motion.div ref={card} className="mg-pg-champ-card" initial={still ? false : { opacity: 0, y: 18, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ type: 'spring', stiffness: 300, damping: 22 }}>
@@ -94,9 +99,9 @@ function Champions({ place, sectionName, still }: { place: PrizeGivingPlace; sec
           animate={{ y: ['-70%', '4%', '0%'], rotate: [-12, 5, 0], opacity: [0, 1, 1] }} transition={{ duration: 1.1, delay: 0.25, ease: 'easeOut' }}>
           <Rosette width={64} />
         </motion.span>
-        <motion.span className="mg-pg-kicker" aria-hidden="true" {...rise(0.65)}>{sectionName} champions</motion.span>
+        <motion.span className="mg-pg-kicker" aria-hidden="true" {...rise(0.65)}>{t('screen.pgo.champions', { section: sectionName })}</motion.span>
         <motion.b className="mg-pg-champ-name" aria-hidden="true" {...rise(0.8)}>{place.teamName}</motion.b>
-        <motion.span className="mg-pg-champ-sub" aria-hidden="true" {...rise(0.95)}>{[place.clubName, `${points(place.points)} points`].filter(Boolean).join(' · ')}</motion.span>
+        <motion.span className="mg-pg-champ-sub" aria-hidden="true" {...rise(0.95)}>{[place.clubName, t('screen.pgo.pointsValue', { points: points(place.points) })].filter(Boolean).join(' · ')}</motion.span>
       </motion.div>
     </motion.div>
   );

@@ -209,6 +209,68 @@ public sealed class StatsService(AppDbContext db, StandingsService? standings = 
         return await BuildAsync(StatsSubjectKind.Team, StatsNames.Tidy(name), id.ToString(), memberships, viewer, ct);
     }
 
+    /// <summary>
+    /// How each team in an age group has finished in earlier, finished competitions, for the stream's Favourites card. A
+    /// team's past entries are the ones linked to its season profile plus teams with the same name (as the public team
+    /// stats page matches them). Each past entry counts as its final place divided by the teams placed in that age
+    /// group, so a win in a big field and a win in a small one both read as "near the top". Only team names and that
+    /// one figure leave here; hors concours teams are left out, and so is the competition itself.
+    /// </summary>
+    public async Task<List<FavouriteHistoryDto>> FavouriteHistoryAsync(int competitionId, int sectionId, CancellationToken ct = default)
+    {
+        var current = await db.Teams.AsNoTracking()
+            .Where(t => t.CompetitionId == competitionId && t.CompetitionSectionId == sectionId && !t.IsHorsConcours)
+            .Select(t => new { t.Id, t.DisplayName }).ToListAsync(ct);
+        if (current.Count == 0) return [];
+        var currentIds = current.Select(t => t.Id).ToList();
+        var lowerNames = current.Select(t => t.DisplayName.Trim().ToLower()).Distinct().ToList();
+
+        // team id in this event -> earlier team ids that count as the same team
+        var pastOf = current.ToDictionary(t => t.Id, _ => new HashSet<int>());
+        var byName = await db.Teams.AsNoTracking()
+            .Where(t => t.CompetitionId != competitionId && lowerNames.Contains(t.DisplayName.Trim().ToLower()))
+            .Select(t => new { t.Id, t.DisplayName }).ToListAsync(ct);
+        foreach (var team in current)
+        {
+            var key = StatsNames.Normalise(team.DisplayName);
+            foreach (var past in byName.Where(p => StatsNames.Normalise(p.DisplayName) == key)) pastOf[team.Id].Add(past.Id);
+        }
+        var links = await db.Set<EventTeamProfileLink>().AsNoTracking()
+            .Where(l => currentIds.Contains(l.TeamId) && l.CompetitionId == competitionId)
+            .Select(l => new { l.TeamId, l.TeamProfileId }).ToListAsync(ct);
+        if (links.Count > 0)
+        {
+            var profileIds = links.Select(l => l.TeamProfileId).Distinct().ToList();
+            var linked = await db.Set<EventTeamProfileLink>().AsNoTracking()
+                .Where(l => profileIds.Contains(l.TeamProfileId) && l.CompetitionId != competitionId)
+                .Select(l => new { l.TeamId, l.TeamProfileId }).ToListAsync(ct);
+            foreach (var link in links)
+                foreach (var past in linked.Where(l => l.TeamProfileId == link.TeamProfileId)) pastOf[link.TeamId].Add(past.TeamId);
+        }
+
+        var pastIds = pastOf.Values.SelectMany(v => v).Distinct().ToList();
+        var rows = pastIds.Count == 0 ? [] : await db.Teams.AsNoTracking()
+            .Where(t => pastIds.Contains(t.Id) && !t.IsHorsConcours)
+            .Select(t => new TeamRow(t.Id, t.DisplayName, t.Club != null ? t.Club.Name : string.Empty, t.IsHorsConcours,
+                t.CompetitionId, t.Competition!.Name, t.Competition.StartDate,
+                t.CompetitionSectionId, t.Section != null ? t.Section.DisplayName : string.Empty,
+                t.Section != null ? t.Section.Format : SectionFormat.Teams))
+            .ToListAsync(ct);
+        var counted = await CountedCompetitionsAsync(rows.Select(t => t.CompetitionId), ct);
+        rows = rows.Where(t => counted.Contains(t.CompetitionId)).ToList();
+        var places = await PlacesAsync(rows, ct);
+
+        return current.Select(team =>
+        {
+            var shares = pastOf[team.Id]
+                .Where(id => places.TryGetValue(id, out var p) && p.TeamsPlaced > 1)
+                .Select(id => (double)places[id].Place / places[id].TeamsPlaced)
+                .ToList();
+            return new FavouriteHistoryDto(team.Id, StatsNames.Tidy(team.DisplayName),
+                shares.Count == 0 ? null : Math.Round(shares.Average(), 4), shares.Count);
+        }).ToList();
+    }
+
     private async Task<StatsProfileDto?> TeamsProfileAsync(StatsSubjectKind kind, string key, List<NameRow> rows, StatsViewer viewer, CancellationToken ct)
     {
         var mine = rows.Where(r => StatsNames.Normalise(r.Name) == key).ToList();

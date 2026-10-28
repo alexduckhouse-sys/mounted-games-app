@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { useEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ConnectionStatusProvider, useConnectionStatus, type ConnectionStatus } from '../live/ConnectionStatusContext';
+import { ConnectionStatusProvider, useConnectionStatus, useOptionalConnectionStatus, type ConnectionStatus } from '../live/ConnectionStatusContext';
 import { BACK_ONLINE_MS, ConnectionPill } from './ConnectionPill';
 
 const START = new Date('2026-10-21T12:00:00Z').getTime();
@@ -149,5 +149,16 @@ describe('useConnectionStatus', () => {
     function Orphan() { useConnectionStatus(); return null; }
     vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(() => render(<Orphan />)).toThrow('useConnectionStatus must be used within ConnectionStatusProvider');
+  });
+});
+
+describe('useOptionalConnectionStatus', () => {
+  it('is null outside its provider and the shared state inside it', () => {
+    const seen: unknown[] = [];
+    function Probe() { seen.push(useOptionalConnectionStatus()); return null; }
+    render(<Probe />);
+    render(<ConnectionStatusProvider><Probe /></ConnectionStatusProvider>);
+    expect(seen[0]).toBeNull();
+    expect(seen.at(-1)).toMatchObject({ status: null });
   });
 });

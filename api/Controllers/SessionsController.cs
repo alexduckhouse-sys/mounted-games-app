@@ -103,6 +103,11 @@ public class SessionsController : ControllerBase
             .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
         if (s is null) return NotFound();
         var prevScheduled = s.ScheduledStart;
+        var prevMinutesPerHeat = s.MinutesPerHeat;
+        // A drawn session that hasn't started keeps its lanes but its time is free to change. Once it has started or
+        // has a scored race, its times are a record and can't be rewritten here ("Move everything later" still works).
+        if (req.ScheduledStart.HasValue && prevScheduled.HasValue && req.ScheduledStart.Value != prevScheduled.Value && IsRunOrScored(s))
+            return Conflict(new { message = "This session has started or has scores, so its start time can't be changed." });
         if (req.Name is not null)
         {
             if (string.IsNullOrWhiteSpace(req.Name)) return BadRequest(new { message = "A session needs a name." });
@@ -126,6 +131,8 @@ public class SessionsController : ControllerBase
             if (req.PlannedRaces is not null) s.PlannedRaces = PlannedRaceList.Write(req.PlannedRaces);
             if (req.PlannedFinalRaces is not null) s.PlannedFinalRaces = PlannedFinalRaceLists.Write(req.PlannedFinalRaces);
         }
+        if (!IsRunOrScored(s))
+            RetimeHeats(s, prevScheduled, prevMinutesPerHeat);
         await _db.SaveChangesAsync();
 
         var dto = s.ToDto();
@@ -263,6 +270,37 @@ public class SessionsController : ControllerBase
         _db.Sessions.Remove(s);
         await _db.SaveChangesAsync();
         return NoContent();
+    }
+
+    /// <summary>Started, finished, or with any scored race or running or finished heat: its times are a record.</summary>
+    private static bool IsRunOrScored(Session s) =>
+        HasScores(s) || s.StartedAt.HasValue || s.Heats.Any(h => h.StartedAt.HasValue || h.FinishedAt.HasValue);
+
+    /// <summary>
+    /// After a drawn, unstarted session's start or time per heat changes, its heats follow: they move by the same
+    /// amount as the session, and when the time per heat changed they are laid end to end again from the first one.
+    /// Heats keep their lanes; only their times change.
+    /// </summary>
+    private static void RetimeHeats(Session s, DateTime? prevStart, int? prevMinutesPerHeat)
+    {
+        if (s.Heats.Count == 0) return;
+        if (prevStart.HasValue && s.ScheduledStart.HasValue && s.ScheduledStart.Value != prevStart.Value)
+        {
+            var delta = s.ScheduledStart.Value - prevStart.Value;
+            foreach (var h in s.Heats.Where(h => h.ScheduledStart.HasValue))
+                h.ScheduledStart = h.ScheduledStart!.Value + delta;
+        }
+        if (s.MinutesPerHeat != prevMinutesPerHeat)
+        {
+            var ordered = s.Heats.OrderBy(h => h.OrderIndex).ToList();
+            var cursor = ordered[0].ScheduledStart ?? s.ScheduledStart;
+            if (cursor is null) return;
+            foreach (var h in ordered)
+            {
+                h.ScheduledStart = cursor;
+                cursor = cursor.Value.AddMinutes(h.DurationMinutes ?? s.MinutesPerHeat ?? 10);
+            }
+        }
     }
 
     /// <summary>Started, finished or with a race marked complete. Needs heats and races loaded.</summary>

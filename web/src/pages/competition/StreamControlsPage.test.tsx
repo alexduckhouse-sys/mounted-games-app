@@ -387,10 +387,10 @@ describe('Overlay tab', () => {
     mount();
     const group = screen.getByRole('radiogroup', { name: 'On screen' });
     const tiles = within(group).getAllByRole('radio');
-    expect(tiles.map((tile) => tile.textContent)).toEqual(['None', 'Automatic', 'Back soon', 'Toplist', 'Heat table', 'Podium', 'Race result', 'Up next', 'Race title', 'Sponsors']);
+    expect(tiles.map((tile) => tile.textContent)).toEqual(['None', 'Automatic', 'Back soon', 'Toplist', 'Heat table', 'Podium', 'Race result', 'Up next', 'Favourites', 'Race title', 'Sponsors']);
     expect(tiles[0]).toHaveAttribute('aria-checked', 'true');
     expect(screen.getAllByRole('button', { name: 'Show' })).toHaveLength(1); // the banner button; tiles have no Show buttons
-    expect(screen.getAllByRole('button', { name: /settings$/ })).toHaveLength(6);
+    expect(screen.getAllByRole('button', { name: /settings$/ })).toHaveLength(7);
   });
 
   it('puts a tile on screen with one tap and shows it as on', async () => {
@@ -425,6 +425,15 @@ describe('Overlay tab', () => {
     expect(readLiveOptions(stored).nextCount).toBe(3);
     await user.click(screen.getByRole('button', { name: 'Up next settings' }));
     expect(screen.queryByRole('group', { name: 'Up next settings' })).toBeNull();
+  });
+
+  it('chooses how many favourites to list', async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(screen.getByRole('button', { name: 'Favourites settings' }));
+    expect(readLiveOptions(stored).favouritesRows).toBe(5);
+    await user.click(within(screen.getByRole('group', { name: 'Favourites settings' })).getByRole('radio', { name: 'Top 3' }));
+    expect(readLiveOptions(stored).favouritesRows).toBe(3);
   });
 
   it('chooses the podium age group and steps the reveal one place at a time', async () => {
@@ -526,7 +535,7 @@ describe('Auto tab', () => {
   it('lists the rules, with choices only for rules that are on', async () => {
     const user = userEvent.setup();
     openAuto();
-    expect(screen.getAllByRole('switch').map((el) => el.getAttribute('aria-label'))).toEqual(['Run automations', 'After each race', 'From Session 2', 'After a session', 'Before each race', 'Between races']);
+    expect(screen.getAllByRole('switch').map((el) => el.getAttribute('aria-label'))).toEqual(['Run automations', 'After each race', 'From Session 2', 'After a session', 'Before each race', 'Between races', 'Before a final', 'Prize-giving after each final']);
     expect(screen.getByRole('radiogroup', { name: 'Show for' })).toBeInTheDocument();
     expect(screen.queryByText('Sponsors for 10s')).not.toBeNull();
     await user.click(within(screen.getByRole('radiogroup', { name: 'Show for' })).getByRole('radio', { name: '30s' }));
@@ -537,5 +546,22 @@ describe('Auto tab', () => {
     expect(screen.queryByRole('radiogroup', { name: 'Show for' })).toBeNull();
     await user.click(screen.getByRole('switch', { name: 'Between races' }));
     expect(screen.getAllByRole('radiogroup', { name: 'Show for' })).toHaveLength(1);
+  });
+
+  it('keeps the prize-giving after each final on by default and lets it be switched off for everyone', async () => {
+    const user = userEvent.setup();
+    openAuto();
+    const toggle = screen.getByRole('switch', { name: 'Prize-giving after each final' });
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
+    await user.click(toggle);
+    expect(readLiveOptions(stored).autoPrizeGiving).toBe(false);
+  });
+
+  it('turns the favourites rule on before a final', async () => {
+    const user = userEvent.setup();
+    openAuto();
+    expect(screen.getByText('Favourites for 15s')).toBeInTheDocument();
+    await user.click(screen.getByRole('switch', { name: 'Before a final' }));
+    expect(JSON.parse(localStorage.getItem('mg.streamAuto.1')!).rules.favourites.on).toBe(true);
   });
 });

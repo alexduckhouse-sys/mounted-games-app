@@ -48,13 +48,19 @@ describe('autoSteps', () => {
     expect(autoSteps(on, { sessionNumber: 2, racesInSection: 3, sessionFinished: false }).map((s) => s.card)).toEqual(['heat']);
   });
   it('adds podium when a session is done, then title and sponsors when they are on', () => {
-    const all = { on: true, rules: { race: { on: true, n: 10 }, toplist: { on: false, n: 1 }, podium: { on: true, n: 0 }, title: { on: true, n: 0 }, sponsor: { on: true, n: 10 } } };
+    const all = { on: true, rules: { race: { on: true, n: 10 }, toplist: { on: false, n: 1 }, podium: { on: true, n: 0 }, title: { on: true, n: 0 }, sponsor: { on: true, n: 10 }, favourites: { on: false, n: 0 } } };
     expect(autoSteps(all, { sessionNumber: 1, racesInSection: 2, sessionFinished: true })).toEqual([
       { card: 'heat', seconds: 10 }, { card: 'podium', seconds: 15 }, { card: 'title', seconds: 10 }, { card: 'sponsor', seconds: 10 },
     ]);
   });
+  it('adds the favourites just before a final when that rule is on', () => {
+    const rules = { ...on.rules, race: { on: false, n: 20 }, toplist: { on: false, n: 1 }, podium: { on: false, n: 0 }, favourites: { on: true, n: 0 } };
+    expect(autoSteps({ on: true, rules }, { sessionNumber: 3, racesInSection: 9, sessionFinished: true, beforeFinal: true })).toEqual([{ card: 'favourites', seconds: 15 }]);
+    expect(autoSteps({ on: true, rules }, { sessionNumber: 3, racesInSection: 9, sessionFinished: true, beforeFinal: false })).toEqual([]);
+    expect(autoSteps(on, { sessionNumber: 3, racesInSection: 9, sessionFinished: true, beforeFinal: true }).map((s) => s.card)).not.toContain('favourites');
+  });
   it('does nothing when every rule is off', () => {
-    const none = { on: true, rules: { race: { on: false, n: 10 }, toplist: { on: false, n: 1 }, podium: { on: false, n: 0 }, title: { on: false, n: 0 }, sponsor: { on: false, n: 10 } } };
+    const none = { on: true, rules: { race: { on: false, n: 10 }, toplist: { on: false, n: 1 }, podium: { on: false, n: 0 }, title: { on: false, n: 0 }, sponsor: { on: false, n: 10 }, favourites: { on: false, n: 0 } } };
     expect(autoSteps(none, { sessionNumber: 2, racesInSection: 2, sessionFinished: true })).toEqual([]);
   });
 });
@@ -64,10 +70,17 @@ describe('reading the timetable', () => {
     expect(finishedRaces(comp()).map((r) => r.raceId)).toEqual([1, 2, 3, 5]);
   });
   it('works out session number, races so far and whether the session is finished', () => {
-    expect(autoContext(comp(), 3)).toEqual({ sessionNumber: 2, racesInSection: 3, sessionFinished: false });
-    expect(autoContext(comp(), 2)).toEqual({ sessionNumber: 1, racesInSection: 3, sessionFinished: true });
-    expect(autoContext(comp(), 5)).toEqual({ sessionNumber: 1, racesInSection: 1, sessionFinished: true });
+    expect(autoContext(comp(), 3)).toEqual({ sessionNumber: 2, racesInSection: 3, sessionFinished: false, beforeFinal: false });
+    expect(autoContext(comp(), 2)).toEqual({ sessionNumber: 1, racesInSection: 3, sessionFinished: true, beforeFinal: false });
+    expect(autoContext(comp(), 5)).toEqual({ sessionNumber: 1, racesInSection: 1, sessionFinished: true, beforeFinal: false });
     expect(autoContext(comp(), 404)).toBeNull();
+  });
+  it('knows when the last qualifying race has just been scored and finals are still to come', () => {
+    const final = (complete: boolean) => session(2, { orderIndex: 2, competitionSectionId: 5, heats: [heat(2, { label: 'A Final', races: [race(3, { isComplete: complete })] })] });
+    const qualifying = session(1, { orderIndex: 1, competitionSectionId: 5, heats: [heat(1, { races: [race(1, { isComplete: true }), race(2, { isComplete: true })] })] });
+    expect(autoContext(competition({ sessions: [qualifying, final(false)] }), 2)?.beforeFinal).toBe(true);
+    expect(autoContext(competition({ sessions: [qualifying, final(true)] }), 3)?.beforeFinal).toBe(false);
+    expect(autoContext(competition({ sessions: [qualifying] }), 2)?.beforeFinal).toBe(false);
   });
   it('finds the next race and writes the status line', () => {
     expect(nextRaceName(comp())).toBe('Mug');
@@ -78,7 +91,7 @@ describe('reading the timetable', () => {
   });
   it('describes each rule', () => {
     expect(AUTO_RULES.map((r) => r.what(DEFAULT_AUTO.rules[r.key]))).toEqual([
-      'Heat table for 20s', 'Toplist after every 2 races, for 20s', 'Podium for 15s', 'Race title for 10s', 'Sponsors for 10s',
+      'Heat table for 20s', 'Toplist after every 2 races, for 20s', 'Podium for 15s', 'Race title for 10s', 'Sponsors for 10s', 'Favourites for 15s',
     ]);
     expect(AUTO_RULES[1].what({ on: true, n: 1 })).toBe('Toplist after every race, for 20s');
   });

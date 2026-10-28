@@ -54,7 +54,7 @@ describe('MessageThreadPage', () => {
     expect(screen.getByText('Field two')).toBeInTheDocument();
     expect(screen.queryByText('Not this thread')).toBeNull();
     expect(await screen.findByRole('button', { name: 'Block' })).toHaveClass('ann-red');
-    expect(screen.getByRole('link', { name: 'Back to announcements' })).toHaveAttribute('href', '/competitions/1/announcements');
+    expect(screen.getByRole('link', { name: 'Back to messages' })).toHaveAttribute('href', '/competitions/1/contact');
   });
 
   it('works out the role from the account when they have no team here', async () => {

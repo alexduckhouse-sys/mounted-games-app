@@ -106,7 +106,7 @@
   display: flex;
   align-items: stretch;
   min-height: 56px;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid rgb(var(--mg-line));
   background: rgb(var(--mg-surface));
   box-sizing: border-box;
@@ -293,7 +293,7 @@ html[data-lite="true"] .sc-hold { animation-duration: 350ms !important; }
   align-items: center;
   justify-content: center;
   border: 1px solid rgb(var(--mg-line));
-  border-radius: 10px;
+  border-radius: 12px;
   background: rgb(var(--mg-surface));
   color: rgb(var(--mg-heading));
   cursor: pointer;
@@ -481,7 +481,7 @@ button.sc-done-name { background: none; border: 0; padding: 0; text-align: left;
 .rt-more { position: relative; flex: none; }
 .rt-dots { width: 40px; height: 40px; border: 0; border-radius: 20px; background: transparent; color: rgb(var(--mg-heading)); display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .rt-dots[aria-expanded="true"] { background: rgb(var(--mg-tint) / 0.6); }
-.rt-menu { position: absolute; right: 0; top: calc(100% + 2px); z-index: 8; display: flex; flex-direction: column; min-width: 210px; padding: 4px 0; border: 1px solid rgb(var(--mg-control)); border-radius: 14px; background: rgb(var(--mg-surface)); box-shadow: 0 8px 24px rgb(var(--mg-overlay) / .18); }
+.rt-menu { overflow: hidden; position: absolute; right: 0; top: calc(100% + 2px); z-index: 8; display: flex; flex-direction: column; min-width: 210px; padding: 4px 0; border: 1px solid rgb(var(--mg-control)); border-radius: 14px; background: rgb(var(--mg-surface)); box-shadow: 0 8px 24px rgb(var(--mg-overlay) / .18); }
 .rt-menu button { display: flex; align-items: center; gap: 10px; min-height: 46px; padding: 0 16px; border: 0; border-top: 1px solid rgb(var(--mg-rule-soft)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); font: 500 16px/1.2 var(--mg-font); text-align: left; white-space: nowrap; cursor: pointer; }
 .rt-menu button:first-child { border-top: 0; }
 .rt-sw { flex: none; width: 11px; height: 15px; border-radius: 2px; }
@@ -501,7 +501,12 @@ button.sc-done-name { background: none; border: 0; padding: 0; text-align: left;
 .rt-link input[role="switch"] { margin-left: auto; }
 
 /* Heat picker bar, heat table and between-heats pages. */
-.hb-bar { position: relative; display: flex; background: rgb(var(--mg-surface)); border-bottom: 1px solid rgb(var(--mg-line)); }
+.hb-bar { position: relative; display: flex; align-items: center; background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); border-radius: 12px; }
+.hb-back { flex: none; width: 44px; min-height: 46px; display: inline-flex; align-items: center; justify-content: center; border-radius: 12px 0 0 12px; color: rgb(var(--mg-heading)) !important; text-decoration: none !important; }
+.hb-back + .hb-btn { padding-left: 4px; }
+.hb-conn { flex: none; display: inline-flex; padding-right: 8px; }
+.hb-conn:empty { display: none; }
+.hb-btn { border-radius: 12px; }
 .hb-btn { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 46px; padding: 0 14px; border: 0; background: transparent; color: rgb(var(--mg-heading)); font: 600 14px/1 var(--mg-font); text-align: left; cursor: pointer; }
 .hb-arena { font-weight: 800; }
 .hb-chev { margin-left: auto; width: 18px; height: 18px; flex: none; }
@@ -535,7 +540,6 @@ button.sc-done-name { background: none; border: 0; padding: 0; text-align: left;
 .rt-tie-bar { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border-radius: 12px; background: rgb(var(--mg-tint) / .6); }
 .rt-tie-count { font: 600 14px/1.3 var(--mg-font); color: rgb(var(--mg-body)); }
 
-.sc-hint.sc-hint-quiet { text-align: center; }
 
 /* The finishing order to check before saving: "Red · Test A · 1st". */
 .sc-review { margin: 8px 0 0; padding: 8px 12px; border-radius: 10px; background: rgb(var(--mg-subtle)); }
@@ -546,9 +550,21 @@ button.sc-done-name { background: none; border: 0; padding: 0; text-align: left;
 .sc-review li.is-out { color: rgb(var(--mg-muted)); }
 
 /* Scoring fills the screen: the lanes stretch, the tools and Save sit just above the bottom tabs. */
-.sc-fit .sc-rows { flex: 1 1 auto; }
+.sc-fit .sc-rows { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .sc-fit .sc-row { flex: 1 1 0; min-height: 44px; max-height: 84px; }
 .sc-fit .sc-bottom { margin-top: auto; padding-top: 10px; }
 body:has(.sc-fit) main.skin { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
 .sc-bottom-saved { display: flex; flex-direction: row; gap: 8px; align-items: center; }
 .sc-bottom-saved .sc-wide-btn { flex: 1; width: auto; }
+
+/* Full colour lanes: the whole box in the bib colour, with text picked for contrast (lib/laneFill.ts).
+   Placed keeps the colour and gains a ring and a reversed disc; out fades the colour to a wash with the struck-through name. */
+.sc-row.sc-row-fill { background: var(--lane-fill); border-color: rgb(0 0 0 / .2); }
+.sc-row-fill .sc-main-btn, .sc-row-fill .sc-name, .sc-row-fill .sc-lane { color: var(--lane-ink); }
+.sc-row-fill .sc-fact { color: var(--lane-ink-soft); }
+.sc-row-fill .sc-band { box-shadow: inset -1px 0 0 rgb(0 0 0 / 0.14), inset 0 0 0 1px rgb(0 0 0 / 0.08); }
+.sc-row.sc-row-fill.sc-row-placed { background: var(--lane-fill); border-color: var(--lane-ink); box-shadow: inset 0 0 0 3px var(--lane-ink); }
+.sc-row-fill .sc-place:not(.sc-place-out) { background: var(--lane-ink); color: var(--lane-fill); }
+.sc-row.sc-row-fill.sc-row-out { background: color-mix(in srgb, var(--lane-fill) 24%, rgb(var(--mg-surface))); border-color: #E8B4BA; }
+.sc-row-fill.sc-row-out .sc-main-btn, .sc-row-fill.sc-row-out .sc-lane { color: rgb(var(--mg-muted)); }
+.sc-row-fill.sc-row-out .sc-name { color: rgb(var(--mg-muted)); }

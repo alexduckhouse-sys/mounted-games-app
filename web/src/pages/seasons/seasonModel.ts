@@ -1,11 +1,12 @@
+import { activeLocale, tr } from '../../i18n/translate';
+import { localOrdinal } from '../../lib/ordinalText';
 import type { SectionFormat } from '../../types';
 import type { StatusTone } from '../refine/Refine';
 import type { SeasonRoundView, SeasonView, StandingView } from './seasonViewTypes';
 
+/** 1st, 2nd, 3rd in English; 1af, 2il, 3ydd in Welsh; 1er, 2e in French. */
 export function ordinal(value: number): string {
-  const mod100 = value % 100;
-  if (mod100 >= 11 && mod100 <= 13) return `${value}th`;
-  return `${value}${({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[value % 10] ?? 'th'}`;
+  return localOrdinal(value);
 }
 
 /** Tied teams share a rank; show those as "=3". */
@@ -94,13 +95,13 @@ function startOfDay(value: Date) {
 
 /** Derived from what the API returns: publication state and the event date. There is no separate "live" flag. */
 export function roundStatus(round: SeasonRoundView, now: Date = new Date()): { label: string; tone: StatusTone } {
-  if (!round.isIncluded) return { label: 'Excluded', tone: 'mut' };
-  if (round.publishedVersion) return round.publicationIsCurrent ? { label: 'Final', tone: 'mut' } : { label: 'Provisional', tone: 'warn' };
+  if (!round.isIncluded) return { label: tr('site.seasons.excluded'), tone: 'mut' };
+  if (round.publishedVersion) return round.publicationIsCurrent ? { label: tr('site.seasons.final'), tone: 'mut' } : { label: tr('site.seasons.provisional'), tone: 'warn' };
   const day = startOfDay(new Date(round.competitionDate));
   const today = startOfDay(now);
-  if (day === today) return { label: 'LIVE', tone: 'live' };
-  if (day > today) return { label: 'Upcoming', tone: 'mut' };
-  return { label: 'Awaiting results', tone: 'mut' };
+  if (day === today) return { label: tr('site.seasons.live'), tone: 'live' };
+  if (day > today) return { label: tr('site.seasons.upcoming'), tone: 'mut' };
+  return { label: tr('site.seasons.awaiting'), tone: 'mut' };
 }
 
 /** The latest included round that has published results. */
@@ -109,7 +110,7 @@ export function lastPublishedRound(rounds: SeasonRoundView[]): SeasonRoundView |
   return published.reduce<SeasonRoundView | null>((best, round) => (!best || round.orderIndex > best.orderIndex ? round : best), null);
 }
 
-/** "Sat 25 Oct". The season and admin pages are English; pages that follow the person's language pass `locale`. */
-export function shortDate(iso: string, withWeekday = true, locale = 'en-GB'): string {
+/** "Sat 25 Oct", in the chosen language unless a `locale` is given. */
+export function shortDate(iso: string, withWeekday = true, locale = activeLocale()): string {
   return new Date(iso).toLocaleDateString(locale, { ...(withWeekday ? { weekday: 'short' as const } : {}), day: 'numeric', month: 'short' });
 }
