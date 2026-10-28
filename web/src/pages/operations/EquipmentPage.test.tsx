@@ -75,4 +75,32 @@ describe('EquipmentPage', () => {
     show();
     expect(await screen.findByText(/No equipment items/)).toBeInTheDocument();
   });
+
+  it('keeps the other boxes open while one tick saves, and sends the second tick after the first', async () => {
+    let release: (value: unknown) => void = () => {};
+    vi.mocked(api.put).mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    const user = userEvent.setup();
+    show();
+    const pole = await screen.findByRole('checkbox', { name: '30 × Pole' });
+    const baton = screen.getByRole('checkbox', { name: '18 × Baton' });
+    await user.click(pole);
+    expect(pole).toBeChecked();
+    expect(baton).not.toBeDisabled();
+    await user.click(baton);
+    expect(baton).toBeChecked();
+    expect(api.put).toHaveBeenCalledTimes(1);
+    release({ data: { ...readiness, equipmentFingerprint: 'fp-2', equipmentChecklist: readiness.equipmentChecklist.map((item) => (item.key === 'Lane|Pole|30' ? { ...item, acknowledged: true } : item)) } });
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(api.put).mock.calls[1][1]).toEqual({ acknowledgedKeys: ['Lane|Pole|30', 'Top|Baton|6', 'Start|Baton|12'], expectedFingerprint: 'fp-2' });
+  });
+
+  it('takes a tick back and says which item when its save fails', async () => {
+    vi.mocked(api.put).mockRejectedValueOnce(new Error('offline'));
+    const user = userEvent.setup();
+    show();
+    const pole = await screen.findByRole('checkbox', { name: '30 × Pole' });
+    await user.click(pole);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t save 30 × Pole');
+    expect(pole).not.toBeChecked();
+  });
 });

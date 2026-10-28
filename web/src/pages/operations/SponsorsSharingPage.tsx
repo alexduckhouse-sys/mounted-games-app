@@ -272,7 +272,7 @@ function AddSponsor({ busy, onCreate, onProblem }: { busy: boolean; onCreate: (n
         <label className="rf-fld">{t('ops2.sponsors.name')}<input autoFocus value={name} placeholder={t('ops2.sponsors.namePlaceholder')} maxLength={80} onChange={(event) => setName(event.target.value)} /></label>
         <label className="rf-fld">{t('ops2.sponsors.website')}<input type="url" inputMode="url" value={link} placeholder="https://" maxLength={300} onChange={(event) => setLink(event.target.value)} /></label>
       </div>
-      <button type="submit" hidden aria-hidden="true" tabIndex={-1}>{t('ops2.sponsors.add')}</button>
+      <div className="kit-acts ops-gap"><button type="submit" className="kit-pill kit-pill-fill" disabled={busy || !name.trim()}>{t('ops3.plan.sponsors.addPill')}</button></div>
     </form>
   );
 }

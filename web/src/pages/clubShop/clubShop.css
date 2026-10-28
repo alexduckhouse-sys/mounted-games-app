@@ -9,7 +9,7 @@
 .cs-page .sp-card :is(.cs-row, .sp-row) > .cs-ava { border-radius: 20px; }
 .cs-page .sp-card :is(.cs-row, .sp-row) > .cs-thumb { border-radius: 10px; }
 .cs-page .sp-card :is(.cs-row, .sp-row) > :is(.kit-pill, .cs-chip) { border-radius: 999px; }
-.cs-page .sp-card :is(.cs-row, .sp-row) > .cs-more { border-radius: 20px; }
+.cs-page .sp-card :is(.cs-row, .sp-row) > .cs-more { border-radius: 22px; }
 
 /* Small status chips: On sale, Waiting, Declined, Paid, You... */
 .cs-chip { flex: none; display: inline-flex; align-items: center; min-height: 24px; padding: 0 9px; border-radius: 999px; background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); font: 700 12px/1 var(--mg-font); white-space: nowrap; }
@@ -41,9 +41,13 @@
 /* They look 36px tall; an invisible 44px area around each is what a thumb hits. */
 .cs-page .cs-pill-s, .cs-page .cs-redtext-s { position: relative; }
 .cs-page .cs-pill-s::after, .cs-page .cs-redtext-s::after { content: ''; position: absolute; inset: -4px 0; }
+/* Approve and Decline on a request are a full 44px tall, not just a 44px hit area. */
+.cs-page .cs-tap44 { min-height: 44px; }
+.cs-page .cs-tap44::after { inset: 0; }
+.cs-page .cs-tap44:disabled { opacity: .55; cursor: default; }
 
 /* The round ⋯ button on a row */
-.cs-more { flex: none; width: 40px; height: 40px; border: 0; border-radius: 20px; background: transparent; color: rgb(var(--mg-body)); font: 700 20px/1 var(--mg-font); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.cs-more { flex: none; width: 44px; height: 44px; border: 0; border-radius: 22px; background: transparent; color: rgb(var(--mg-body)); font: 700 20px/1 var(--mg-font); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .cs-more:hover { background: rgb(var(--mg-subtle)); }
 .cs-more:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
 

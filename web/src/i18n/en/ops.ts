@@ -6,7 +6,7 @@ export const ops = {
   'ops.view.draw': 'Draw',
   'ops.view.entries': 'Entries',
   'ops.view.protests': 'Protests',
-  'ops.view.scorers': 'Scorers & team',
+  'ops.view.scorers': 'People and QR codes',
   'ops.view.volunteers': 'Volunteers',
   'ops.view.safety': 'Emergency contacts',
   'ops.view.tack': 'Tack check',

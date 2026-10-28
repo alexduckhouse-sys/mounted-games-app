@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState, type ReactNode } from 'react';
 import { ChangePop } from '../../components/ChangePop';
 import { api } from '../../api';
 import { Notice } from '../../components/Notice';
@@ -7,6 +7,8 @@ import { priceLabel } from '../../lib/money';
 import { paidWord } from '../../lib/paidWord';
 import type { CompetitionDetail, SectionSignup } from '../../types';
 import { clubLabel } from '../../lib/clubName';
+import { Chevron } from '../refine/Refine';
+import '../../components/sitePages.css';
 
 export interface ExtendedSectionSignup extends SectionSignup {
   waitingForGuestSpot?: boolean;
@@ -50,13 +52,28 @@ export function EntryManagement({ competition, signups, entriesCloseAt, onChange
     <p className="rf-note !p-0">Leave blank to keep entries open until you close them. Times use your device’s time zone.</p>
     <button type="button" disabled={busy} onClick={() => void saveDate()} className="mg-btn mg-btn-secondary">Save closing date</button>
     {error && <Notice actionLabel="Try again" onAction={() => void saveDate()} actionDisabled={busy}>{error}</Notice>}{toast.node}
-    <details><summary className="min-h-11 cursor-pointer font-semibold">Stabling list · {bookings.reduce((sum, s) => sum + (s.stablesCount ?? 0), 0)} stables</summary>
-      {bookings.length === 0 ? <p>No stables booked yet.</p> : <ul>{bookings.map((s) => <li key={s.id}>{[s.fullName, clubLabel(s.stablingClubOrTeam) || clubLabel(s.ponyClubName) || clubLabel(s.teamName), `${s.stablesCount} ${s.stablesCount === 1 ? 'stable' : 'stables'}`].filter(Boolean).join(' · ')}</li>)}</ul>}
-    </details>
-    <details><summary className="min-h-11 cursor-pointer font-semibold">Entries · {signups.length}</summary>
-      <ul className="divide-y divide-[rgb(var(--mg-rule-soft))]">{signups.map((s) => <ManagedSignup key={s.id} signup={s} competition={competition} onChanged={onChanged} />)}</ul>
-    </details>
+    <div className="sp-card">
+      <Disclosure title={`Stabling list · ${bookings.reduce((sum, s) => sum + (s.stablesCount ?? 0), 0)} stables`}>
+        {bookings.length === 0 ? <p className="sp-note">No stables booked yet.</p> : <ul className="m-0 list-none px-4 pb-3">{bookings.map((s) => <li key={s.id}>{[s.fullName, clubLabel(s.stablingClubOrTeam) || clubLabel(s.ponyClubName) || clubLabel(s.teamName), `${s.stablesCount} ${s.stablesCount === 1 ? 'stable' : 'stables'}`].filter(Boolean).join(' · ')}</li>)}</ul>}
+      </Disclosure>
+      <Disclosure title={`Entries · ${signups.length}`}>
+        {signups.length === 0 ? <p className="sp-note">No entries yet.</p> : <ul className="m-0 list-none divide-y divide-[rgb(var(--mg-rule-soft))] px-4">{signups.map((s) => <ManagedSignup key={s.id} signup={s} competition={competition} onChanged={onChanged} />)}</ul>}
+      </Disclosure>
+    </div>
   </section>;
+}
+
+/** A house card row that opens and closes the content under it. The row is a button, so it works by keyboard and says whether it is open. */
+function Disclosure({ title, children }: { title: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const panel = useId();
+  return <div className="sp-disc">
+    <button type="button" className="rf-row sp-disc-row" aria-expanded={open} aria-controls={panel} onClick={() => setOpen((value) => !value)}>
+      <span className="rf-grow"><span className="rf-t1">{title}</span></span>
+      <span className="sp-disc-chev" data-open={open || undefined}><Chevron /></span>
+    </button>
+    {open && <div id={panel} className="mg-settle">{children}</div>}
+  </div>;
 }
 
 function ManagedSignup({ signup: s, competition, onChanged }: { signup: ExtendedSectionSignup; competition: CompetitionDetail; onChanged?: () => void }) {

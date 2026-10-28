@@ -247,7 +247,7 @@ export const ops2: AreaCatalogue<typeof en> = {
   'ops2.print.p.loadingLinks': 'Yn llwytho dolenni mynediad y staff…',
   'ops2.print.p.noLinks': 'Dim dolenni staff eto',
   'ops2.print.p.toCreate': 'Gwnewch ddolenni ar gyfer sgorwyr, camerâu a rheolwyr ffrwd.',
-  'ops2.print.p.steps': 'Ewch i Sgorwyr a thîm. Dewiswch yr arena a’r rôl, yna tapiwch Make scorer link. Dewch yn ôl yma i argraffu’r daflen.',
+  'ops2.print.p.steps': 'Ewch i Cyn y diwrnod › Pobl a chodau QR. Dewiswch yr arena a’r rôl, yna tapiwch Make scorer link. Dewch yn ôl yma i argraffu’r daflen.',
   'ops2.print.p.arenaScorer': 'Sgorwr',
   'ops2.print.p.tripod': 'Camera',
   'ops2.print.p.scorerStream': 'Sgorwr a ffrwd',

@@ -282,3 +282,22 @@ a.ops-tile:active { background: rgb(var(--mg-tint) / .65); }
 @media (min-width: 1024px) { .ops-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (min-width: 1280px) { .ops-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (prefers-reduced-motion: reduce) { .ops-tile { transition: none; } }
+
+/* Design plan #73: a quiet skeleton while the checks load, and a short fade when a view appears. */
+.ops-skel { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.ops-skel-row { height: 56px; border-radius: 12px; }
+.ops-fade { animation: mg-fade-in var(--mg-dur-base) var(--mg-ease-out) both; }
+@media (prefers-reduced-motion: reduce) { .ops-fade { animation: none; } }
+
+/* Design plan #75: an Emergency Search result opens a sheet; the emergency contact's number stays one tap away in the row. */
+.ops-who { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 44px; padding: 0; border: 0; background: transparent; text-align: left; color: inherit; font: inherit; cursor: pointer; }
+.ops-who-call { display: flex; flex-direction: column; align-items: flex-start; }
+
+/* Design plan #95: a lane that moved since the last draw number (or in a redraw) is tinted, and flashes once. */
+.ops-lane-changed { background: rgb(var(--mg-warn) / .14); border-radius: 6px; animation: mg-score-flash 1.6s var(--mg-ease-out); }
+@media (prefers-reduced-motion: reduce) { .ops-lane-changed { animation: none; } }
+
+/* Design plan #93: a quiet saving/saved badge in the header; it takes no room from the page, so nothing jumps. */
+.ops-saved { display: inline-flex; align-items: center; gap: 4px; min-width: 4.5rem; justify-content: flex-end; font: 600 13px/1 var(--mg-font); color: rgb(var(--mg-muted)); opacity: 0; transition: opacity var(--mg-dur-base) var(--mg-ease-out); }
+.ops-saved.is-on { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .ops-saved { transition: none; } }

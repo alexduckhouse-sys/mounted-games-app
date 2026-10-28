@@ -166,6 +166,19 @@ describe('SponsorsSharingPage', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Edit sponsor' })).toBeInTheDocument();
   });
 
+  it('has a visible Add sponsor pill that stays off until there is a name', async () => {
+    const user = userEvent.setup();
+    show();
+    await user.click(await screen.findByRole('button', { name: 'Add a sponsor' }));
+    const pill = screen.getByRole('button', { name: 'Add sponsor' });
+    expect(pill).toBeDisabled();
+    vi.mocked(api.post).mockResolvedValue({ data: wire(9, { name: 'New Co' }) });
+    await user.type(screen.getByLabelText('Name'), 'New Co');
+    expect(pill).toBeEnabled();
+    await user.click(pill);
+    expect(await screen.findByRole('heading', { level: 1, name: 'Edit sponsor' })).toBeInTheDocument();
+  });
+
   it('goes back to the list from the back links', async () => {
     const user = userEvent.setup();
     show();

@@ -12,7 +12,7 @@ function heatName(heat: DrawHeat): string {
   return heat.label || tr('ops2.protest.heatN', { n: heat.orderIndex });
 }
 
-function HeatColumn({ title, heats, removed }: { title: string; heats: DrawHeat[]; removed?: number[] }) {
+function HeatColumn({ title, heats, removed, moved }: { title: string; heats: DrawHeat[]; removed?: number[]; moved?: number[] }) {
   const t = useT();
   return (
     <div className="ops-col" aria-label={title} role="group">
@@ -24,7 +24,7 @@ function HeatColumn({ title, heats, removed }: { title: string; heats: DrawHeat[
           {heat.teams.length === 0 && <p className="rf-t2">{t('ops2.redraw.empty')}</p>}
           <ol>
             {[...heat.teams].sort((a, b) => a.laneIndex - b.laneIndex).map((team) => (
-              <li key={team.teamId}><span className="rf-num ops-lane-no">{team.laneIndex}</span> {team.teamName}</li>
+              <li key={team.teamId} className={moved?.includes(team.teamId) ? 'ops-lane-changed' : undefined}><span className="rf-num ops-lane-no">{team.laneIndex}</span> {team.teamName}</li>
             ))}
           </ol>
         </div>
@@ -44,7 +44,7 @@ function SessionChange({ session }: { session: RedrawSession }) {
       )}
       <div className="ops-cols">
         <HeatColumn title={t('ops2.redraw.before')} heats={session.before} removed={session.removedHeatIds} />
-        <HeatColumn title={t('ops2.redraw.after')} heats={session.after} />
+        <HeatColumn title={t('ops2.redraw.after')} heats={session.after} moved={session.moves.map((move) => move.teamId)} />
       </div>
       {session.moves.length > 0 && (
         <p className="rf-t2">

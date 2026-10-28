@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
@@ -24,13 +24,16 @@ import './profileStats.css';
 export default function TeamProfileStatsPage() {
   const t = useT();
   const params = useParams();
+  const [query] = useSearchParams();
+  // The season the team profile was showing, handed back so Back lands on the same one.
+  const season = query.get('season');
   const id = params.id ?? params.profileId ?? '';
   const { user } = useAuth();
   const load = useStatsProfile(id ? `/stats/team-profiles/${id}` : null, user?.id ?? 'public');
   const [open, setOpen] = useState<string | null>(null);
   const still = useStillMotion();
   const name = load.status === 'ready' ? load.data.name : undefined;
-  usePageHeader({ title: t('site.stats.statsWord'), subtitle: name, plain: true, backTo: `/team-profiles/${id}`, backLabel: name ? t('site.stats.backTo', { name }) : t('site.stats.backToTeam') });
+  usePageHeader({ title: t('site.stats.statsWord'), subtitle: name, plain: true, backTo: `/team-profiles/${id}${season ? `?season=${encodeURIComponent(season)}` : ''}`, backLabel: name ? t('site.stats.backTo', { name }) : t('site.stats.backToTeam') });
 
   if (load.status === 'idle' || load.status === 'loading') return <RefinePage><p role="status" className="sp-note">{t('site.stats.loadingRace')}</p></RefinePage>;
   if (load.status === 'error') return <RefinePage><Notice>{load.message}</Notice></RefinePage>;
