@@ -178,7 +178,7 @@ export const screen: AreaCatalogue<typeof en> = {
   'screen.colour.pink': 'Rose',
   'screen.colour.custom': 'Couleur personnalisée',
   'screen.qr.title': 'Partager avec des codes QR',
-  'screen.qr.description': 'Choisissez quoi partager : la page publique des résultats, l’affichage TV ou le poste du commentateur. Les liens des marqueurs sont sous Marqueurs et équipe.',
+  'screen.qr.description': 'Choisissez quoi partager : la page publique des résultats, l’affichage TV ou le poste du commentateur. Les liens des pointeurs sont dans Avant le jour J › Personnes et codes QR.',
   'screen.qr.tablist': 'Catégories de codes QR',
   'screen.qr.tabScorer': 'Liens QR bénévoles et pointeurs (sans connexion)',
   'screen.qr.tabScreens': 'Codes QR écrans, sonorisation et spectateurs',

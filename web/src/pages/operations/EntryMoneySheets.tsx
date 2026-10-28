@@ -123,7 +123,7 @@ export function ClubInvoicesSheet({ competition, signups, onChanged, onClose }: 
     const ok = await confirmDialog({
       title: t('ops2.entries.markPaidQ', { name: g.clubName }),
       message: t('ops2.money.clubMsg', { what: plural(pending.length, 'ops2.money.n.entry'), fee: feeText(g.totalDueMinor) }) + (receipt ? ` ${t('ops2.money.receiptTo', { what: plural(emails.size, 'ops2.money.n.email') })}` : ` ${t('ops2.money.noReceipt')}`),
-      confirmLabel: t('ops2.entries.markPaid'),
+      confirmLabel: competition.isDemo ? t('ops3.plan.demo.markPaid') : t('ops2.entries.markPaid'),
     });
     if (!ok) return;
     setBusy(true); setError(null); setNote(null);
@@ -148,12 +148,12 @@ export function ClubInvoicesSheet({ competition, signups, onChanged, onClose }: 
                 <h4 className="et-h">{g.clubName}</h4>
                 <p className="rf-t2">{plural(g.signupsCount, 'ops2.money.n.entry')} · {plural(g.teamsCount, 'ops2.money.n.team')} · {plural(g.stablesCount, 'ops2.money.n.stable')}</p>
                 <p className="rf-t1">{t('ops2.money.totals', { total: feeText(g.totalAmountMinor), due: feeText(g.totalDueMinor), paid: feeText(g.totalPaidMinor) })}</p>
-                <p className="rf-t2">{t('ops2.money.bankRef', { ref: g.clubBacsReference })}</p>
+                {!competition.isDemo && <p className="rf-t2">{t('ops2.money.bankRef', { ref: g.clubBacsReference })}</p>}
                 <div className="et-actions">
                   <button type="button" className="rf-btn" onClick={() => void copy(g)}>{t('ops2.money.copyInv')}</button>
                   <a className="rf-btn et-link" href={whatsAppUrl(textFor(g))} target="_blank" rel="noopener noreferrer">{t('ops2.money.whatsapp')}</a>
                   <button type="button" className="rf-btn rf-btn-primary" disabled={busy || g.totalDueMinor <= 0} onClick={() => void pay(g)}>
-                    {g.totalDueMinor > 0 ? t('ops2.entries.markPaidAria', { name: g.clubName }) : t('ops2.money.alreadyPaid')}
+                    {g.totalDueMinor > 0 ? t(competition.isDemo ? 'ops3.plan.demo.markClubPaid' : 'ops2.entries.markPaidAria', { name: g.clubName }) : t('ops2.money.alreadyPaid')}
                   </button>
                 </div>
               </section>

@@ -6,7 +6,7 @@ export const ops: AreaCatalogue<typeof en> = {
   'ops.view.draw': 'Tirage au sort',
   'ops.view.entries': 'Inscriptions',
   'ops.view.protests': 'Réclamations',
-  'ops.view.scorers': 'Marqueurs et équipe',
+  'ops.view.scorers': 'Personnes et codes QR',
   'ops.view.volunteers': 'Bénévoles',
   'ops.view.safety': 'Contacts d’urgence',
   'ops.view.tack': 'Contrôle du harnachement',

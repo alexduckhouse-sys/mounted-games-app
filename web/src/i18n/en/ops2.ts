@@ -247,7 +247,7 @@ export const ops2 = {
   'ops2.print.p.loadingLinks': 'Loading staff access links…',
   'ops2.print.p.noLinks': 'No staff links yet',
   'ops2.print.p.toCreate': 'Make links for scorers, cameras and stream controllers.',
-  'ops2.print.p.steps': 'Go to Scorers & team. Pick the arena and role, then tap Make scorer link. Come back here to print the sheet.',
+  'ops2.print.p.steps': 'Go to Before the day › People and QR codes. Pick the arena and role, then tap Make scorer link. Come back here to print the sheet.',
   'ops2.print.p.arenaScorer': 'Scorer',
   'ops2.print.p.tripod': 'Camera',
   'ops2.print.p.scorerStream': 'Scorer and stream',
