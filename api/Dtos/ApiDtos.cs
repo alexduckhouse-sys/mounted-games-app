@@ -504,13 +504,16 @@ public record FinishingPlaceDto(int TeamId, int Place, bool Eliminated, ResultSt
 /// </param>
 /// <param name="FinalPoints">Points scored in the team's final(s); null when the team is in no lettered final.</param>
 /// <param name="EarlierPoints">Points scored before the final; null when the team is in no lettered final.</param>
+/// <param name="Place">Shared place in this table (1, 2, 2, 4), as the age group's tie-break and any organiser order settle it.</param>
+/// <param name="Joint">True when nothing separates this team from a neighbour, so they share <paramref name="Place"/>.</param>
 public record StandingRow(
     int TeamId, string TeamName, string ClubName, string? BibColour,
     double TotalPoints, int RacesRun, int Wins, int Eliminations, int? FinalTier = null,
     bool Withdrawn = false, int BonusPoints = 0, string? RefereeCard = null,
     string? Flag = null, string? BibDescription = null,
     double? FinalPoints = null, double? EarlierPoints = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? TieBreakReason = null);
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? TieBreakReason = null,
+    int? Place = null, bool Joint = false);
 
 public record DeclarationFormDto(
     int Id, int TeamId, string TeamName, int CompetitionId, string CompetitionName,

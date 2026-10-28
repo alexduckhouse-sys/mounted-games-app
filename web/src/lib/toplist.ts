@@ -182,6 +182,17 @@ export function sectionScoreVersion(sessions: Session[], sectionId: number | nul
   return parts.join('|');
 }
 
+/**
+ * A session belongs to a section when it is that section's own, or when it combines teams from several sections
+ * (a combined heat sits under one section) and one of this section's teams is drawn or has a result in it.
+ */
+function inSection(session: Session, sectionId: number, teamIds: ReadonlySet<number>): boolean {
+  if (session.competitionSectionId === sectionId) return true;
+  if (teamIds.size === 0) return false;
+  return session.heats.some((heat) => heat.entries.some((entry) => teamIds.has(entry.teamId))
+    || heat.races.some((race) => race.results.some((result) => teamIds.has(result.teamId))));
+}
+
 /** "1st", "2nd", "3rd", "11th", "22nd". */
 export function ordinal(n: number): string {
   const teen = n % 100 >= 11 && n % 100 <= 13;
@@ -194,8 +205,9 @@ export function ordinal(n: number): string {
  * what each team still has to ride, hors concours teams and points per session.
  */
 export function buildToplist(standings: StandingRow[], sessions: Session[], teams: Team[], sectionId: number, finalistCount: number | null | undefined): Toplist {
+  const sectionTeamIds = new Set(teams.filter((team) => team.competitionSectionId === sectionId).map((team) => team.id));
   const heatSessions = sessions
-    .filter((session) => session.competitionSectionId === sectionId && isRace(session) && session.heats.some((heat) => !isFinal(session, heat)))
+    .filter((session) => inSection(session, sectionId, sectionTeamIds) && isRace(session) && session.heats.some((heat) => !isFinal(session, heat)))
     .sort((a, b) => a.orderIndex - b.orderIndex);
   const sessionsDone = heatSessions.filter((session) => session.status === 2 || (session.heats.length > 0 && session.heats.every(heatDone))).length;
 
@@ -203,7 +215,7 @@ export function buildToplist(standings: StandingRow[], sessions: Session[], team
   const sessionPoints = new Map<number, number[]>();
   const finalsPoints = new Map<number, number>();
   for (const session of sessions) {
-    if (session.competitionSectionId !== sectionId || !isRace(session)) continue;
+    if (!inSection(session, sectionId, sectionTeamIds) || !isRace(session)) continue;
     for (const heat of session.heats.filter((item) => isFinal(session, item))) {
       for (const result of heat.races.flatMap((race) => race.results)) finalsPoints.set(result.teamId, (finalsPoints.get(result.teamId) ?? 0) + result.points);
     }
@@ -226,16 +238,19 @@ export function buildToplist(standings: StandingRow[], sessions: Session[], team
     }
   });
 
-  const tieFacts = buildTieBreakFacts(sessions, sectionId);
+  const tieFacts = buildTieBreakFacts(sessions, sectionId, sectionTeamIds);
   // Once finals exist the final a team is in (A, then B, then C) decides its place before points do.
   const tier = (row: StandingRow) => row.finalTier ?? Number.MAX_SAFE_INTEGER;
   const compareRows = (a: StandingRow, b: StandingRow) =>
     tier(a) - tier(b) || b.totalPoints - a.totalPoints || compareTieBreak(a, b, tier(a) < Number.MAX_SAFE_INTEGER, finalsPoints, tieFacts);
-  const level = (a: StandingRow, b: StandingRow) => compareRows(a, b) === 0;
-  const ordered = [...standings].sort(compareRows);
+  // The server already ordered the table by its tie-break rule, the organiser's run-off order and the final tiers, and says
+  // which teams still share a place. Keep that; only standings without it (older data) are re-sorted here.
+  const fromServer = standings.length > 0 && standings.every((row) => typeof row.place === 'number');
+  const level = (a: StandingRow, b: StandingRow) => fromServer ? a.place === b.place : compareRows(a, b) === 0;
+  const ordered = fromServer ? [...standings].sort((a, b) => a.place! - b.place!) : [...standings].sort(compareRows);
   const standingRank = new Map(ordered.map((row, idx) => [row.teamId, (row as { place?: number }).place ?? idx + 1]));
-  const finalGroups = buildFinalGroups(sessions, sectionId, standingRank);
-  const hasRaceResults = sessions.some((session) => session.competitionSectionId === sectionId && isRace(session)
+  const finalGroups = buildFinalGroups(sessions, sectionId, standingRank, sectionTeamIds);
+  const hasRaceResults = sessions.some((session) => inSection(session, sectionId, sectionTeamIds) && isRace(session)
     && session.heats.some((heat) => heat.races.some((race) => race.results.length > 0)));
   const rows: ToplistRow[] = ordered.map((row, idx) => {
     const position = ordered.findIndex((other) => level(other, row)) + 1;
@@ -247,12 +262,12 @@ export function buildToplist(standings: StandingRow[], sessions: Session[], team
       if (next && tier(row) === tier(next) && (row.totalPoints === next.totalPoints || Math.abs(row.totalPoints - next.totalPoints) < 0.1)) {
         tieBreakReason = !hasRaceResults && row.tieBreakOrder == null && next.tieBreakOrder == null && (row.wins ?? 0) === (next.wins ?? 0) && row.totalPoints === next.totalPoints
           ? 'Level on points and countback — run-off if on cut-off'
-          : explainTieBreak(row, next, sessions, sectionId);
+          : explainTieBreak(row, next, sessions, sectionId, sectionTeamIds);
       } else if (prev && level(prev, row)) {
         const prevReason = prev.tieBreakReason
           ?? (!hasRaceResults && prev.tieBreakOrder == null && row.tieBreakOrder == null && (prev.wins ?? 0) === (row.wins ?? 0)
             ? 'Level on points and countback — run-off if on cut-off'
-            : explainTieBreak(prev, row, sessions, sectionId));
+            : explainTieBreak(prev, row, sessions, sectionId, sectionTeamIds));
         if (prevReason === 'Level on points and countback — run-off if on cut-off') {
           tieBreakReason = prevReason;
         }
@@ -307,7 +322,7 @@ export function buildToplist(standings: StandingRow[], sessions: Session[], team
   for (const group of finalGroups) for (const finalRow of group.rows) finalRow.qualifyingPosition = qualifying.get(finalRow.teamId)?.position ?? null;
   const detail = buildDetail(rows, finalGroups, heatSessions, qualifying);
   const byGame = buildByGame(heatSessions, hcTeamIds);
-  const started = scored || sessions.some((session) => session.competitionSectionId === sectionId && isRace(session)
+  const started = scored || sessions.some((session) => inSection(session, sectionId, sectionTeamIds) && isRace(session)
     && session.heats.some((heat) => heat.races.some((race) => race.results.length > 0)));
   return { rows, cutAfter, runoff, hc, sessionsDone, sessionsTotal: heatSessions.length, started, bySession: { sessions: columns, cells }, finals: finalGroups, byGame, detail };
 }
@@ -605,11 +620,11 @@ function buildByGame(heatSessions: Session[], hcTeamIds: Set<number>): GameStand
 const finalWording = /\bfinals?\b/i;
 
 /** One group per final heat that has results: teams by the points they scored in it, tied teams sharing a place. */
-function buildFinalGroups(sessions: Session[], sectionId: number, standingRank?: Map<number, number>): FinalGroup[] {
+function buildFinalGroups(sessions: Session[], sectionId: number, standingRank: Map<number, number> | undefined, sectionTeamIds: ReadonlySet<number>): FinalGroup[] {
   const groups: FinalGroup[] = [];
   const rankOf = (teamId: number) => standingRank?.get(teamId) ?? Number.MAX_SAFE_INTEGER;
   const ordered = sessions
-    .filter((session) => session.competitionSectionId === sectionId && isRace(session))
+    .filter((session) => inSection(session, sectionId, sectionTeamIds) && isRace(session))
     .sort((a, b) => a.orderIndex - b.orderIndex);
   for (const session of ordered) {
     for (const heat of [...session.heats].sort((a, b) => a.orderIndex - b.orderIndex)) {
@@ -662,7 +677,7 @@ interface TeamTieBreakFacts {
   finalRecentPoints: number[];
 }
 
-function buildTieBreakFacts(sessions: Session[], sectionId: number): Map<number, TeamTieBreakFacts> {
+function buildTieBreakFacts(sessions: Session[], sectionId: number, sectionTeamIds: ReadonlySet<number>): Map<number, TeamTieBreakFacts> {
   const facts = new Map<number, TeamTieBreakFacts>();
   const ensure = (teamId: number): TeamTieBreakFacts => {
     let f = facts.get(teamId);
@@ -673,7 +688,7 @@ function buildTieBreakFacts(sessions: Session[], sectionId: number): Map<number,
     return f;
   };
   const orderedSessions = sessions
-    .filter((s) => s.competitionSectionId === sectionId && isRace(s))
+    .filter((s) => inSection(s, sectionId, sectionTeamIds) && isRace(s))
     .slice()
     .sort((a, b) => a.orderIndex - b.orderIndex || a.id - b.id);
   for (const session of orderedSessions) {
@@ -814,6 +829,7 @@ export function explainTieBreak(
   below: StandingRow,
   sessions: Session[],
   sectionId: number,
+  sectionTeamIds: ReadonlySet<number> = new Set(),
 ): string | null {
   if (above.tieBreakReason) return above.tieBreakReason;
   if (Math.abs(above.totalPoints - below.totalPoints) >= 0.1) return null;
@@ -824,13 +840,13 @@ export function explainTieBreak(
     return 'Settled by run-off / referee order';
   }
   if (above.totalPoints <= 0 && (above.racesRun ?? 0) === 0 && (below.racesRun ?? 0) === 0) {
-    const anyScored = sessions.some((s) => s.competitionSectionId === sectionId && isRace(s)
+    const anyScored = sessions.some((s) => inSection(s, sectionId, sectionTeamIds) && isRace(s)
       && s.heats.some((h) => h.races.some((r) => r.results.length > 0)));
     if (!anyScored) return null;
   }
 
   const sectionSessions = sessions
-    .filter((s) => s.competitionSectionId === sectionId && isRace(s))
+    .filter((s) => inSection(s, sectionId, sectionTeamIds) && isRace(s))
     .slice()
     .sort((a, b) => a.orderIndex - b.orderIndex);
 

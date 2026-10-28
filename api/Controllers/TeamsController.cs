@@ -45,7 +45,8 @@ public record UpdateTeamInput(
 public class TeamsController : ControllerBase
 {
     private readonly AppDbContext _db;
-    public TeamsController(AppDbContext db) => _db = db;
+    private readonly MountedGames.Api.Hubs.ILiveBroadcaster _live;
+    public TeamsController(AppDbContext db, MountedGames.Api.Hubs.ILiveBroadcaster live) { _db = db; _live = live; }
 
     [HttpGet]
     public async Task<IEnumerable<TeamDto>> List(int competitionId) =>
@@ -161,6 +162,8 @@ public class TeamsController : ControllerBase
         {
             return Conflict(new { message = "The team changed while you were editing. Reload and try again." });
         }
+        // Hors concours changes who is in the standings, so live screens need to refetch them.
+        if (req.IsHorsConcours.HasValue) await _live.ResultsUpdated(competitionId, new { teamId = t.Id, isHorsConcours = t.IsHorsConcours });
         return t.ToDto();
     }
 
