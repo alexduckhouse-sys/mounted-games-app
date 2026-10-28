@@ -24,7 +24,7 @@ import {
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
-import type { CompetitionDetail, DeclarationForm, Heat, Session, StandingRow } from '../../types';
+import { TieBreakRule, type CompetitionDetail, type DeclarationForm, type Heat, type Session, type StandingRow } from '../../types';
 import type { QueuedScore } from '../../offline/scoreOutbox';
 import { SessionEndTransition } from './SessionEndTransition';
 import { HeatScores } from './HeatScores';
@@ -49,7 +49,7 @@ import { laneLabel, LANE_ROTATION_LABELS, LaneRotationMode, type LaneRotationMod
 import { lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './laneRules';
 import { useRaceNotes } from './useRaceNotes';
 import { formatPoints } from '../../lib/formatPoints';
-import { placeText } from '../../lib/raceSummary';
+import { heatTotals as rankHeat, placeText } from '../../lib/raceSummary';
 import { ScorerLinksCard } from './ScorerLinksCard';
 import { QrAccessModal } from '../../components/QrAccessModal';
 import { bibAccent } from '../../lib/bib';
@@ -1016,23 +1016,11 @@ function PostRaceCommentatorModal({
     started: standings.some((row) => row.racesRun > 0),
   }), [standings]);
 
+  // The same ranking as the announcer card: tie-breaks applied, "=1st" only while still level, hors concours unranked.
   const heatTotals = useMemo(() => {
-    const entries = recap.heat.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex);
-    return entries
-      .map((entry) => {
-        const pts = recap.heat.races.reduce(
-          (sum, r) => sum + (r.results.find((res) => res.teamId === entry.teamId)?.points ?? 0),
-          0,
-        );
-        return { teamId: entry.teamId, teamName: entry.teamName, laneIndex: entry.laneIndex, points: pts };
-      })
-      .sort((a, b) => b.points - a.points || a.laneIndex - b.laneIndex)
-      // Teams level on points share a place and read "=1st"; hors concours teams are marked HC.
-      .map((row, _i, all) => {
-        const place = 1 + all.filter((o) => o.points > row.points).length;
-        return { ...row, place, joint: all.filter((o) => o.points === row.points).length > 1, hc: hcTeamIds.has(row.teamId) };
-      });
-  }, [recap.heat, hcTeamIds]);
+    const races = recap.heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+    return rankHeat(recap.heat, races, races.length - 1, hcTeamIds, section?.tieBreakRule ?? TieBreakRule.Countback);
+  }, [recap.heat, hcTeamIds, section?.tieBreakRule]);
 
 
   return (
@@ -1050,7 +1038,7 @@ function PostRaceCommentatorModal({
                   key={row.teamId}
                   className="rounded-md border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] px-2.5 py-1 font-semibold"
                 >
-                  {placeText(row.place, row.joint)} {row.teamName}{row.hc ? ' (HC)' : ''}: {formatPoints(row.points)} pts
+                  {row.hc ? '' : `${placeText(row.position ?? 0, row.joint)} `}{row.teamName}{row.hc ? ' (HC)' : ''}: {formatPoints(row.points)} pts
                 </li>
               ))}
             </ul>
