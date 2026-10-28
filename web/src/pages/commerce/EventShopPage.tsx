@@ -1,3 +1,4 @@
+import { ShoppingBasket } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { Link } from 'react-router-dom';
 import { usePageHeader } from '../../components/CompactPageBarContext';
@@ -253,13 +254,11 @@ function EventShopContent() {
       {user && <div className="pt-1"><Link className="ev-text-btn" to="/me/orders">{t('site.shop.yourOrders')}</Link></div>}
       <p className="sp-note">{t('site.shop.sellerNote')}</p>
       {hasBasket && !orderVisible && (
-        <div className="shop-basket-bar" role="region" aria-label={t('site.shop.basket')}>
-          <span className="shop-basket-text">
-            <span className="shop-basket-count">{itemsText(basketCount)}</span>
-            <span className="shop-basket-total">{feeText(estimatedTotal)}</span>
-          </span>
-          <button type="button" className="kit-pill kit-pill-fill" onClick={showOrderButton}>{t('site.shop.checkout')}</button>
-        </div>
+        <button type="button" className="shop-basket-btn" onClick={showOrderButton}
+          aria-label={`${t('site.shop.checkout')}: ${itemsText(basketCount)}, ${feeText(estimatedTotal)}`}>
+          <ShoppingBasket aria-hidden="true" className="h-[22px] w-[22px]" />
+          <span className="shop-basket-n" aria-hidden="true">{basketCount}</span>
+        </button>
       )}
     </div>
   );
