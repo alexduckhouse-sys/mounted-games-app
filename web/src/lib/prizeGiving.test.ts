@@ -14,6 +14,13 @@ describe('parsePrizeGiving', () => {
     expect(parsePrizeGiving({ action: 'clear' })).toBe('clear');
   });
 
+  it('shows no club for the Unaffiliated placeholder', () => {
+    expect(parsePrizeGiving({ action: 'show', sectionId: 3, places: [{ ...place, clubName: 'Unaffiliated' }] }))
+      .toMatchObject({ places: [{ teamId: 7, clubName: null }] });
+    const frames = autoPrizeGivingFrames([{ teamId: 1, teamName: 'Team 1', place: 1, joint: false, points: 50 }], 9, 'Open', () => ' unaffiliated ');
+    expect(frames[0].places[0].clubName).toBeNull();
+  });
+
   it('ignores anything malformed', () => {
     for (const raw of [null, 'show', { action: 'dance' }, { action: 'show', places: [place] }, { action: 'show', sectionId: 3 },
       { action: 'show', sectionId: 3, places: [] }, { action: 'show', sectionId: 3, places: [null] },

@@ -9,6 +9,8 @@ import { allOptionsSoldOut, hasOptions, isSoldOut, listingTotal, maxQuantity, op
 import { usePageWidth } from '../../components/pageWidthState';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { useLanguage, useT } from '../../i18n/LanguageContext';
+import { tr } from '../../i18n/translate';
 import { useCompetition } from '../competition/context';
 import { RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineStatus } from '../refine/Refine';
 import { LoadError } from './commerceUi';
@@ -22,7 +24,6 @@ import '../../components/eventPages.css';
 /** Camping and stabling first, then kit, tickets and the rest. */
 const SHOP_ORDER: CommerceItemCategory[] = [2, 0, 1, 3];
 
-const COLLECT_NOTE = 'Collect at the event.';
 
 export function EventShopPage() {
   const { competition } = useCompetition();
@@ -32,10 +33,11 @@ export function EventShopPage() {
 
 type View = 'shop' | 'payment' | 'placed';
 
-const itemsText = (count: number) => `${count} ${count === 1 ? 'item' : 'items'}`;
-const clock = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+const itemsText = (count: number) => tr('site.shop.items', { count });
+const clock = (iso: string, locale: string) => new Date(iso).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
 function EventShopContent() {
+  const t = useT();
   usePageWidth('narrow');
   const { competition } = useCompetition();
   const { user } = useAuth();
@@ -69,8 +71,8 @@ function EventShopContent() {
         setSettings(settingsResponse.data);
       })
       .catch((requestError: unknown) => {
-        setError(errorMessage(requestError, 'Couldn’t load the event shop. Check your signal and try again.'));
-      }), [competition.id]);
+        setError(errorMessage(requestError, t('site.shop.loadFailed')));
+      }), [competition.id, t]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -141,7 +143,7 @@ function EventShopContent() {
         void load();
       }
     } catch (requestError) {
-      setOrderError(errorMessage(requestError, 'Couldn’t place your order. Check the basket and try again.'));
+      setOrderError(errorMessage(requestError, t('site.shop.orderFailed')));
     } finally {
       setBusy(false);
     }
@@ -157,12 +159,12 @@ function EventShopContent() {
   if (view === 'placed' && order) {
     return (
       <RefinePage>
-        <RefineHeader context={competition.name} title={`Order #${order.id}`} />
-        <div className="rf-state"><div><div className="rf-t1">Order placed</div><div className="rf-t2">Your confirmed total is {pounds(order.totalMinor)}.</div></div></div>
+        <RefineHeader context={competition.name} title={t('site.shop.orderN', { id: order.id })} />
+        <div className="rf-state"><div><div className="rf-t1">{t('site.shop.orderPlaced')}</div><div className="rf-t2">{t('site.shop.confirmedTotal', { total: pounds(order.totalMinor) })}</div></div></div>
         <OrderLines order={order} />
         <DemoPaymentNotice what="order" className="mt-3" />
-        <RefineNote>Pay the organiser using their usual payment details. They’ll mark the order paid when it arrives. {COLLECT_NOTE}</RefineNote>
-        <RefineFoot><button type="button" className="rf-btn rf-btn-primary rf-wide" onClick={backToShop}>Back to shop</button></RefineFoot>
+        <RefineNote>{t('site.shop.payOrganiser')} {t('site.shop.collect')}</RefineNote>
+        <RefineFoot><button type="button" className="rf-btn rf-btn-primary rf-wide" onClick={backToShop}>{t('site.shop.backToShop')}</button></RefineFoot>
       </RefinePage>
     );
   }
@@ -180,8 +182,8 @@ function EventShopContent() {
         variant="page"
         context={`${itemsText(order.lines.reduce((total, line) => total + line.quantity, 0) || basketCount)} · ${pounds(order.totalMinor)}`}
         onBack={() => setView('shop')}
-        backLabel="Back to shop"
-        approvedTitle="Order confirmed"
+        backLabel={t('site.shop.backToShop')}
+        approvedTitle={t('site.shop.orderConfirmed')}
         resultContext={competition.name}
         renderResult={({ payment, retry }) => <ShopOutcome order={order} payment={payment} retry={retry} onShop={backToShop} />}
       />
@@ -191,26 +193,26 @@ function EventShopContent() {
   const groups = SHOP_ORDER
     .map((category) => ({ category, items: (listings ?? []).filter((listing) => listing.category === category) }))
     .filter((group) => group.items.length > 0);
-  const orderLabel = `Order: ${feeText(estimatedTotal)}`;
+  const orderLabel = t('site.shop.orderTotal', { total: feeText(estimatedTotal) });
   return (
     <div className={`rf-page mx-auto flex w-full max-w-xl flex-col pt-3 ${hasBasket ? 'pb-24' : 'pb-2'}`}>
       <ShopHeader />
-      <div className="sp-seg" role="navigation" aria-label="Shop switcher">
-        <Link to={`/competitions/${competition.id}/shop`} aria-current="page">Event shop</Link>
-        <Link to="/shop">Tack &amp; kit classifieds</Link>
+      <div className="sp-seg" role="navigation" aria-label={t('site.shop.switcher')}>
+        <Link to={`/competitions/${competition.id}/shop`} aria-current="page">{t('site.shop.eventShopOne')}</Link>
+        <Link to="/shop">{t('site.shop.classifieds')}</Link>
       </div>
       {error && <div className="mt-3"><LoadError message={error} onRetry={() => void load()} /></div>}
-      {listings == null && !error && <p role="status" className="sp-note">Loading the shop…</p>}
-      {listings && listings.length === 0 && <p className="sp-note">There’s nothing in the event shop yet.</p>}
+      {listings == null && !error && <p role="status" className="sp-note">{t('site.shop.loadingShop')}</p>}
+      {listings && listings.length === 0 && <p className="sp-note">{t('site.shop.shopEmpty')}</p>}
       {groups.map(({ category, items }) => (
         <section key={category} aria-label={CATEGORY_LABEL[category]}>
           <h2 className="sp-sec">{CATEGORY_LABEL[category]}</h2>
-          <ul className="sp-card m-0 list-none p-0" aria-label={`${CATEGORY_LABEL[category]} for sale`}>
+          <ul className="sp-card m-0 list-none p-0" aria-label={t('site.shop.forSale', { category: CATEGORY_LABEL[category] })}>
             {items.map((listing) => {
               const withOptions = hasOptions(listing);
               const quantity = withOptions ? listingTotal(basket, listing.id) : quantityIn(basket, listing.id, null);
               const soldOut = listing.stockQuantity === 0 || allOptionsSoldOut(listing);
-              const note = [listing.description, listing.stockQuantity != null && !soldOut ? `${listing.stockQuantity} left` : null].filter(Boolean).join(' · ');
+              const note = [listing.description, listing.stockQuantity != null && !soldOut ? t('site.shop.left', { count: listing.stockQuantity }) : null].filter(Boolean).join(' · ');
               return (
                 <li key={listing.id}>
                   <div className="sp-row">
@@ -218,7 +220,7 @@ function EventShopContent() {
                       <span className="sp-t1">{listing.title}</span>
                       <span className="sp-t2">{feeText(listing.priceMinor)}{note ? ` · ${note}` : ''}</span>
                     </span>
-                    {soldOut ? <RefineStatus tone="warn">Sold out</RefineStatus>
+                    {soldOut ? <RefineStatus tone="warn">{t('site.shop.soldOut')}</RefineStatus>
                       : !withOptions && <RoundStepper name={listing.title} value={quantity} max={maxQuantity(listing, null, basket)} disabled={busy} onChange={(next) => changeQuantity(listing, null, next)} />}
                   </div>
                   {withOptions && !soldOut && (
@@ -242,21 +244,21 @@ function EventShopContent() {
       ))}
       {hasBasket && <DemoPaymentNotice what="order" className="mt-3" />}
       {hasBasket && (user ? (
-        <button type="button" ref={(node) => { orderButton.current = node; }} className="ev-bar" disabled={busy} onClick={() => void checkout()}>{busy ? 'Placing order…' : orderLabel}</button>
+        <button type="button" ref={(node) => { orderButton.current = node; }} className="ev-bar" disabled={busy} onClick={() => void checkout()}>{busy ? t('site.shop.placing') : orderLabel}</button>
       ) : (
-        <Link ref={(node) => { orderButton.current = node; }} className="ev-bar" to="/login" state={{ from: `/competitions/${competition.id}/shop` }}>Sign in to order</Link>
+        <Link ref={(node) => { orderButton.current = node; }} className="ev-bar" to="/login" state={{ from: `/competitions/${competition.id}/shop` }}>{t('site.shop.signInToOrder')}</Link>
       ))}
-      {orderError && <div className="mt-3"><Notice actionLabel="Try again" onAction={() => void checkout()} actionDisabled={busy}>{orderError}</Notice></div>}
-      {isDemo && hasBasket && <p className="sp-note">Next you will see a test payment page.</p>}
-      {user && <div className="pt-1"><Link className="ev-text-btn" to="/me/orders">Your orders</Link></div>}
-      <p className="sp-note">MG App connects buyers with independent sellers; your purchase contract is directly with the seller listed on each item.</p>
+      {orderError && <div className="mt-3"><Notice actionLabel={t('common.tryAgain')} onAction={() => void checkout()} actionDisabled={busy}>{orderError}</Notice></div>}
+      {isDemo && hasBasket && <p className="sp-note">{t('site.shop.nextTest')}</p>}
+      {user && <div className="pt-1"><Link className="ev-text-btn" to="/me/orders">{t('site.shop.yourOrders')}</Link></div>}
+      <p className="sp-note">{t('site.shop.sellerNote')}</p>
       {hasBasket && !orderVisible && (
-        <div className="shop-basket-bar" role="region" aria-label="Your basket">
+        <div className="shop-basket-bar" role="region" aria-label={t('site.shop.basket')}>
           <span className="shop-basket-text">
             <span className="shop-basket-count">{itemsText(basketCount)}</span>
             <span className="shop-basket-total">{feeText(estimatedTotal)}</span>
           </span>
-          <button type="button" className="kit-pill kit-pill-fill" onClick={showOrderButton}>Checkout</button>
+          <button type="button" className="kit-pill kit-pill-fill" onClick={showOrderButton}>{t('site.shop.checkout')}</button>
         </div>
       )}
     </div>
@@ -272,15 +274,16 @@ function OptionPicker({ listing, basket, picked, disabled, onPick, onChange }: {
   onPick: (optionId: number) => void;
   onChange: (optionId: number, next: number) => void;
 }) {
+  const t = useT();
   const options = optionsOf(listing);
   const chosen = options.find((option) => option.id === picked && !isSoldOut(option)) ?? null;
   return (
     <div className="shop-opts-wrap">
-      <div className="shop-opts" role="radiogroup" aria-label={`Options for ${listing.title}`}>
+      <div className="shop-opts" role="radiogroup" aria-label={t('site.shop.optionsFor', { title: listing.title })}>
         {options.map((option) => {
           const soldOut = isSoldOut(option);
           const inBasket = quantityIn(basket, listing.id, option.id);
-          const name = soldOut ? `${option.label}, sold out` : inBasket > 0 ? `${option.label}, ${inBasket} in basket` : option.label;
+          const name = soldOut ? t('site.shop.optionSoldOut', { label: option.label }) : inBasket > 0 ? t('site.shop.optionInBasket', { label: option.label, count: inBasket }) : option.label;
           return (
             <button key={option.id} type="button" role="radio" aria-checked={chosen?.id === option.id} aria-label={name} disabled={soldOut || disabled}
               className="shop-opt" data-sold-out={soldOut ? 'true' : undefined} onClick={() => onPick(option.id)}>
@@ -292,28 +295,31 @@ function OptionPicker({ listing, basket, picked, disabled, onPick, onChange }: {
       </div>
       {chosen ? (
         <div className="shop-opt-step">
-          <span className="sp-t2">{chosen.label}{chosen.stockQuantity != null ? ` · ${chosen.stockQuantity} left` : ''}</span>
+          <span className="sp-t2">{chosen.label}{chosen.stockQuantity != null ? ` · ${t('site.shop.left', { count: chosen.stockQuantity })}` : ''}</span>
           <RoundStepper name={`${listing.title} ${chosen.label}`} value={quantityIn(basket, listing.id, chosen.id)} max={maxQuantity(listing, chosen.id, basket)}
             disabled={disabled} onChange={(next) => onChange(chosen.id, next)} />
         </div>
-      ) : <p className="sp-t2 shop-opt-hint">Choose an option to add it.</p>}
+      ) : <p className="sp-t2 shop-opt-hint">{t('site.shop.chooseOption')}</p>}
     </div>
   );
 }
 
 /** The app header for the product list: back to the shop, with the event and its date underneath. */
 function ShopHeader() {
+  const t = useT();
+  const { locale } = useLanguage();
   const { competition } = useCompetition();
   const start = new Date(competition.startDate);
-  const when = Number.isNaN(start.getTime()) ? '' : start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  usePageHeader({ title: 'Event shop', subtitle: [competition.name, when].filter(Boolean).join(' · '), plain: true, backTo: '/shop', backLabel: 'Back to shop' });
+  const when = Number.isNaN(start.getTime()) ? '' : start.toLocaleDateString(locale, { day: 'numeric', month: 'short' });
+  usePageHeader({ title: t('site.shop.eventShopOne'), subtitle: [competition.name, when].filter(Boolean).join(' · '), plain: true, backTo: '/shop', backLabel: t('site.shop.backToShop') });
   return null;
 }
 
 function OrderLines({ order }: { order: EventOrder }) {
+  const t = useT();
   return (
     <>
-      <RefineList label="Order summary">
+      <RefineList label={t('site.shop.orderSummary')}>
         {order.lines.map((line) => (
           <li key={line.id} className="rf-row" style={{ minHeight: 48 }}>
             <span className="rf-grow">{orderLineText(line)}</span>
@@ -321,22 +327,24 @@ function OrderLines({ order }: { order: EventOrder }) {
           </li>
         ))}
       </RefineList>
-      <div className="rf-sum rf-sum-total -mx-4"><span>Total</span><span>{pounds(order.totalMinor)}</span></div>
+      <div className="rf-sum rf-sum-total -mx-4"><span>{t('site.shop.total')}</span><span>{pounds(order.totalMinor)}</span></div>
     </>
   );
 }
 
 /** What follows a demo payment: confirmed, declined or cancelled. The order may already exist, so the wording follows its real state. */
 function ShopOutcome({ order, payment, retry, onShop }: { order: EventOrder; payment: TestPayment; retry: () => void; onShop: () => void }) {
+  const t = useT();
+  const { locale } = useLanguage();
   if (payment.status === 0) {
     return (
       <>
-        <OutcomeState payment={payment} title={`Order #${order.id}`} detail={`Demo paid ${pounds(payment.amountMinor)} · ${clock(payment.createdAt)}`} />
+        <OutcomeState payment={payment} title={t('site.shop.orderN', { id: order.id })} detail={t('site.shop.demoPaid', { amount: pounds(payment.amountMinor), time: clock(payment.createdAt, locale) })} />
         <OrderLines order={order} />
-        <RefineNote>{COLLECT_NOTE} Show your order number when you collect.</RefineNote>
+        <RefineNote>{t('site.shop.collect')} {t('site.shop.showNumber')}</RefineNote>
         <RefineFoot>
-          <button type="button" className="rf-btn" onClick={onShop}>Shop</button>
-          <Link className="rf-btn rf-btn-primary rf-grow" to={`/me/orders?order=${order.id}`}>View receipt</Link>
+          <button type="button" className="rf-btn" onClick={onShop}>{t('site.shop.shop')}</button>
+          <Link className="rf-btn rf-btn-primary rf-grow" to={`/me/orders?order=${order.id}`}>{t('site.shop.viewReceipt')}</Link>
         </RefineFoot>
       </>
     );
@@ -344,19 +352,19 @@ function ShopOutcome({ order, payment, retry, onShop }: { order: EventOrder; pay
   if (payment.status === 1) {
     return (
       <>
-        <OutcomeState payment={payment} detail={`Nothing was charged. Order #${order.id} is waiting for payment.`} />
+        <OutcomeState payment={payment} detail={t('site.shop.nothingCharged', { id: order.id })} />
         <RefineFoot column>
-          <button type="button" className="rf-btn rf-btn-primary" onClick={retry}>Try again</button>
-          <button type="button" className="rf-btn rf-btn-text" onClick={onShop}>Back to shop</button>
+          <button type="button" className="rf-btn rf-btn-primary" onClick={retry}>{t('common.tryAgain')}</button>
+          <button type="button" className="rf-btn rf-btn-text" onClick={onShop}>{t('site.shop.backToShop')}</button>
         </RefineFoot>
       </>
     );
   }
   return (
     <>
-      <OutcomeState payment={payment} title="Payment cancelled" detail={`Order #${order.id} was cancelled and nothing was charged. Your basket is kept.`} />
+      <OutcomeState payment={payment} title={t('site.shop.paymentCancelled')} detail={t('site.shop.cancelledDetail', { id: order.id })} />
       <RefineFoot>
-        <button type="button" className="rf-btn rf-btn-primary rf-wide" onClick={onShop}>Back to shop</button>
+        <button type="button" className="rf-btn rf-btn-primary rf-wide" onClick={onShop}>{t('site.shop.backToShop')}</button>
       </RefineFoot>
     </>
   );
@@ -368,6 +376,7 @@ type OrderCheckoutProps = { order: EventOrder; onChanged: (order: EventOrder) =>
 >>;
 
 export function DemoOrderCheckout({ order, onChanged, ...flow }: OrderCheckoutProps) {
+  const t = useT();
   const [receipt, setReceipt] = useState<TestPayment | null>(() => order.testPayments.at(-1) ?? null);
 
   async function run(outcome: FakePaymentOutcome, idempotencyKey: string) {
@@ -383,7 +392,7 @@ export function DemoOrderCheckout({ order, onChanged, ...flow }: OrderCheckoutPr
   return (
     <DemoPaymentFlow
       targetKey={`order-${order.id}`}
-      title={`Order #${order.id}`}
+      title={t('site.shop.orderN', { id: order.id })}
       amountMinor={order.totalMinor}
       initialPayment={receipt}
       canPay={order.status === 1 || order.status === 3}

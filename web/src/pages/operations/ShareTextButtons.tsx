@@ -1,4 +1,5 @@
 import { useToast } from '../../components/Toast';
+import { useT } from '../../i18n/LanguageContext';
 import { copyText, shareWithSheet, whatsAppShareHref } from './shareText';
 
 /**
@@ -7,18 +8,19 @@ import { copyText, shareWithSheet, whatsAppShareHref } from './shareText';
  */
 export function ShareTextButtons({ title, text, name }: { title: string; text: string; name: string }) {
   const toast = useToast();
+  const t = useT();
   const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
   async function copy() {
-    toast.show((await copyText(text)) ? `${name} copied` : 'Couldn’t copy. Select the text and copy it by hand.');
+    toast.show((await copyText(text)) ? t('site.share.copied', { name }) : t('site.share.copyFailed'));
   }
 
   return (
     <span className="flex flex-wrap items-center gap-2" role="group" aria-label={title}>
       {toast.node}
       {canShare && <button type="button" className="rf-btn" onClick={() => void shareWithSheet(title, text)}>{title}</button>}
-      <button type="button" className="rf-btn" onClick={() => void copy()}>Copy {name.toLowerCase()}</button>
-      <a className="rf-btn" href={whatsAppShareHref(text)} target="_blank" rel="noopener noreferrer">Send on WhatsApp</a>
+      <button type="button" className="rf-btn" onClick={() => void copy()}>{t('site.share.copy', { name: name.toLowerCase() })}</button>
+      <a className="rf-btn" href={whatsAppShareHref(text)} target="_blank" rel="noopener noreferrer">{t('site.share.whatsapp')}</a>
     </span>
   );
 }

@@ -1,11 +1,12 @@
+import { tr } from '../../i18n/translate';
 import { lineTitle } from '../../lib/shopOptions';
 import type { CommerceItemCategory } from './types';
 
 export const CATEGORY_LABEL: Record<CommerceItemCategory, string> = {
-  0: 'Merchandise',
-  1: 'Tickets',
-  2: 'Camping',
-  3: 'Other',
+  get 0() { return tr('site.shop.catMerchandise'); },
+  get 1() { return tr('site.shop.catTickets'); },
+  get 2() { return tr('site.shop.catCamping'); },
+  get 3() { return tr('site.shop.catOther'); },
 };
 
 export function pounds(minor: number): string {
