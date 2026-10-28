@@ -184,9 +184,9 @@ describe('floating panels (menus and choice rows)', () => {
     expect(screen.getByRole('menuitem', { name: 'One' })).toHaveFocus();
   });
 
-  it('gives focus back to the button on Escape, after choosing something, and on Tab', async () => {
+  it('gives focus back to the button on Escape and after choosing something, and closes when focus leaves it', async () => {
     const user = userEvent.setup();
-    render(<RefineMenu label="More" items={items} />);
+    render(<><RefineMenu label="More" items={items} /><button type="button">Elsewhere</button></>);
     const button = screen.getByRole('button', { name: 'More' });
     await user.click(button);
     await user.keyboard('{Escape}');
@@ -197,6 +197,8 @@ describe('floating panels (menus and choice rows)', () => {
     expect(button).toHaveFocus();
     await user.click(button);
     await user.keyboard('{Tab}');
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    act(() => { screen.getByRole('button', { name: 'Elsewhere' }).focus(); });
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 

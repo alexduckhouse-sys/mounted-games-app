@@ -229,7 +229,7 @@ const PANEL_FIRST = '[aria-selected="true"], [role="menuitem"], input:not(:disab
 
 /**
  * A small panel fixed under a row (`id` is what the row's `aria-controls` points at). It closes on Escape, on a click
- * outside it and its row, on Tab, on resize and when the page scrolls. Focus moves into it when it opens, Up/Down/Home/End
+ * outside it and its row, when focus moves out of it, on resize and when the page scrolls. Focus moves into it when it opens, Up/Down/Home/End
  * move between its choices, and focus goes back to the row when it closes.
  */
 function FloatingPanel({ id, anchor, place, onClose, children }: { id: string; anchor: RefObject<HTMLElement | null>; place: Place; onClose: () => void; children: ReactNode }) {
@@ -239,14 +239,13 @@ function FloatingPanel({ id, anchor, place, onClose, children }: { id: string; a
   useEffect(() => {
     const panel = ref.current;
     const trigger = anchor.current;
-    if (panel && !panel.contains(document.activeElement)) panel.querySelector<HTMLElement>(PANEL_FIRST)?.focus();
+    if (panel && !panel.contains(document.activeElement)) panel.querySelector<HTMLElement>(PANEL_FIRST)?.focus({ preventScroll: true });
     const away = (event: MouseEvent) => {
       const target = event.target as Node;
       if (!ref.current?.contains(target) && !anchor.current?.contains(target)) closeRef.current();
     };
     const key = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { closeRef.current(); anchor.current?.focus(); return; }
-      if (event.key === 'Tab') { closeRef.current(); anchor.current?.focus(); return; }
       if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
       const items = [...(ref.current?.querySelectorAll<HTMLElement>(PANEL_ITEMS) ?? [])];
       if (items.length === 0 || !ref.current?.contains(document.activeElement)) return;
@@ -254,7 +253,7 @@ function FloatingPanel({ id, anchor, place, onClose, children }: { id: string; a
       const at = items.indexOf(document.activeElement as HTMLElement);
       const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
         : event.key === 'ArrowDown' ? (at + 1) % items.length : (at <= 0 ? items.length - 1 : at - 1);
-      items[next].focus();
+      items[next].focus({ preventScroll: true });
     };
     // A scroll anywhere else leaves the panel floating away from its row. The panel's own scrolling, and the scroll a
     // phone makes to bring a field into view while someone types in it, do not close it.
@@ -264,14 +263,21 @@ function FloatingPanel({ id, anchor, place, onClose, children }: { id: string; a
       if (active instanceof HTMLElement && ref.current?.contains(active) && active.matches('input, textarea')) return;
       closeRef.current();
     };
+    // Tabbing on through a calendar's fields stays open; focus going anywhere else on the page closes it.
+    const focusOut = (event: FocusEvent) => {
+      const target = event.target as Node;
+      if (!ref.current?.contains(target) && !anchor.current?.contains(target)) closeRef.current();
+    };
     const resize = () => closeRef.current();
     document.addEventListener('mousedown', away);
     document.addEventListener('keydown', key);
+    document.addEventListener('focusin', focusOut);
     window.addEventListener('resize', resize);
     window.addEventListener('scroll', scroll, { capture: true, passive: true });
     return () => {
       document.removeEventListener('mousedown', away);
       document.removeEventListener('keydown', key);
+      document.removeEventListener('focusin', focusOut);
       window.removeEventListener('resize', resize);
       window.removeEventListener('scroll', scroll, { capture: true });
       // Choosing something removes the focused item, which would drop focus on the page: put it back on the row.
