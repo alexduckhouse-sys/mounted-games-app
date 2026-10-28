@@ -2,6 +2,8 @@ import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Camera, Layers, Megaphone, QrCode, Radio, Sliders, Sparkles, Video } from 'lucide-react';
 import { Notice } from '../../components/Notice';
+import { Sheet } from '../../components/Sheet';
+import { useDockAction } from '../../components/TickerContext';
 import { PageProblem } from '../../components/PageProblem';
 import { QrCode as QrCodeImage } from '../../components/QrCode';
 import { useToast } from '../../components/Toast';
@@ -56,6 +58,10 @@ export function ProducePage() {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
     return `${origin}/competitions/${competition.id}/broadcast?arena=${encodeURIComponent(targetArena)}&angle=${encodeURIComponent(secondAngle)}`;
   }, [competition.id, targetArena, secondAngle]);
+
+  // The camera buttons live in a sheet opened from the dock; with no dock (page on its own) they stay in the header card.
+  const [camerasOpen, setCamerasOpen] = useState(false);
+  const docked = useDockAction(allowed ? { label: t('desk.stream.pr.camerasSheet'), icon: 'settings', onClick: () => setCamerasOpen(true) } : null);
 
   // Any signed-in account reaches this page (a competition team member may produce); the API makes the real check.
   if (!allowed) {
@@ -140,18 +146,7 @@ export function ProducePage() {
     await pushOverlay({ bannerText: null }, t('desk.stream.pr.bannerCleared'));
   };
 
-  return (
-    <fieldset disabled={busy} className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-4 p-3 sm:p-4">
-      <div className="mg-card flex flex-wrap items-center justify-between gap-3 p-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <Sliders className="h-5 w-5 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
-            <h1 className="text-xl font-bold">{t('desk.stream.pr.title')}</h1>
-          </div>
-          <p className="mt-0.5 text-xs text-[rgb(var(--mg-muted))]">
-            {t('desk.stream.pr.intro')}
-          </p>
-        </div>
+  const cameraButtons = (
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -166,20 +161,8 @@ export function ProducePage() {
             {t('desk.stream.pr.openHere')}
           </Link>
         </div>
-      </div>
-
-      {problem && (
-        <Notice
-          actionLabel={problem.show ? t('desk.stream.showMe') : problem.retry ? t('common.tryAgain') : undefined}
-          onAction={problem.show ? () => overlaysRef.current?.querySelector<HTMLElement>('[aria-pressed="true"]')?.focus() : problem.retry}
-        >
-          {problem.text}
-        </Notice>
-      )}
-      {toast.node}
-
-      {/* Dual-camera QR modal / card */}
-      {showDualCamQr && (
+  );
+  const dualCamQr = showDualCamQr && (
         <div role="region" aria-label={t('desk.stream.pr.addSecondRegion')} className="mg-card flex flex-col gap-3 p-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold">{t('desk.stream.pr.pair', { arena: targetArena })}</h2>
@@ -216,7 +199,34 @@ export function ProducePage() {
             </div>
           </div>
         </div>
+      );
+
+  return (
+    <fieldset disabled={busy} className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-4 p-3 sm:p-4">
+      <div className="mg-card flex flex-wrap items-center justify-between gap-3 p-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <Sliders className="h-5 w-5 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
+            <h1 className="text-xl font-bold">{t('desk.stream.pr.title')}</h1>
+          </div>
+          <p className="mt-0.5 text-xs text-[rgb(var(--mg-muted))]">
+            {t('desk.stream.pr.intro')}
+          </p>
+        </div>
+        {!docked && cameraButtons}
+      </div>
+
+      {problem && (
+        <Notice
+          actionLabel={problem.show ? t('desk.stream.showMe') : problem.retry ? t('common.tryAgain') : undefined}
+          onAction={problem.show ? () => overlaysRef.current?.querySelector<HTMLElement>('[aria-pressed="true"]')?.focus() : problem.retry}
+        >
+          {problem.text}
+        </Notice>
       )}
+      {toast.node}
+
+      {!docked && dualCamQr}
 
       {/* Active cameras & Dual-Camera Switcher */}
       <div className="mg-card flex flex-col gap-3 p-4">
@@ -423,6 +433,11 @@ export function ProducePage() {
           )}
         </div>
       </div>
+      {docked && camerasOpen && (
+        <Sheet title={t('desk.stream.pr.camerasSheet')} onClose={() => setCamerasOpen(false)}>
+          <div className="flex flex-col gap-3">{cameraButtons}{dualCamQr}</div>
+        </Sheet>
+      )}
     </fieldset>
   );
 }

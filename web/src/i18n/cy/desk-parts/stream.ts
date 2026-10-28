@@ -251,6 +251,7 @@ export const deskStream: AreaCatalogue<typeof en> = {
   'desk.stream.pr.title': 'Rheolydd ffrwd o bell',
   'desk.stream.pr.intro': 'Rheolwch droshaenau canolog y ffrwd, newidiwch rhwng sawl ffôn camera, a sbardunwch ailchwarae heb gyffwrdd â’r ffôn ar y trybedd.',
   'desk.stream.pr.add2nd': 'Ychwanegu ail ffôn camera',
+  'desk.stream.pr.camerasSheet': 'Ffonau camera',
   'desk.stream.pr.openHere': 'Agor y camera ar y ffôn hwn',
   'desk.stream.pr.addSecondRegion': 'Ychwanegu ail ffôn camera',
   'desk.stream.pr.pair': 'Paru ail ffôn camera ({arena})',

@@ -251,6 +251,7 @@ export const deskStream: AreaCatalogue<typeof en> = {
   'desk.stream.pr.title': 'Télécommande de diffusion',
   'desk.stream.pr.intro': 'Commandez les incrustations centrées, passez d’un téléphone caméra à l’autre et déclenchez des rediffusions sans toucher au téléphone sur trépied.',
   'desk.stream.pr.add2nd': 'Ajouter un 2e téléphone caméra',
+  'desk.stream.pr.camerasSheet': 'Téléphones caméra',
   'desk.stream.pr.openHere': 'Ouvrir la caméra sur ce téléphone',
   'desk.stream.pr.addSecondRegion': 'Ajouter un second téléphone caméra',
   'desk.stream.pr.pair': 'Associer un 2e téléphone caméra ({arena})',

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { api } from '../../api';
@@ -7,6 +7,9 @@ import type { StreamOverlay } from '../../types';
 import { competition } from '../../test/factories';
 import { deferred, liveStream } from '../../test/streamFakes';
 import { ProducePage } from './ProducePage';
+import { CurrentCompetitionProvider } from '../../competition/CurrentCompetitionContext';
+import { TickerProvider } from '../../components/TickerContext';
+import { TopBarTicker } from '../../components/TopBarTicker';
 
 const state = vi.hoisted(() => ({ allowed: true, admin: true, overlay: {} as StreamOverlay, save: vi.fn() }));
 vi.mock('../../api', () => ({ api: { post: vi.fn(), put: vi.fn() } }));
@@ -87,4 +90,21 @@ it('says a change worked with a toast, and offers Try again when a camera comman
   await act(async () => {});
   expect(api.post).toHaveBeenCalledTimes(2);
   expect(screen.queryByRole('alert')).toBeNull();
+});
+
+it('moves the camera buttons into a sheet opened from the dock', async () => {
+  render(<MemoryRouter><CurrentCompetitionProvider><TickerProvider><ProducePage /><TopBarTicker /></TickerProvider></CurrentCompetitionProvider></MemoryRouter>);
+  expect(screen.queryByRole('link', { name: /Open camera on this phone/ })).toBeNull();
+  expect(screen.queryByRole('button', { name: /Add 2nd camera/ })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Camera phones' }));
+  const sheet = within(screen.getByRole('dialog', { name: 'Camera phones' }));
+  expect(sheet.getByRole('link', { name: /Open camera on this phone/ })).toHaveAttribute('href', '/competitions/1/broadcast');
+  fireEvent.click(sheet.getByRole('button', { name: /Add 2nd camera/ }));
+  expect(sheet.getByRole('region', { name: /second camera/i })).toBeVisible();
+});
+
+it('puts nothing in the dock for viewers', () => {
+  state.allowed = false;
+  render(<MemoryRouter><CurrentCompetitionProvider><TickerProvider><ProducePage /><TopBarTicker /></TickerProvider></CurrentCompetitionProvider></MemoryRouter>);
+  expect(screen.queryByRole('button', { name: 'Camera phones' })).toBeNull();
 });

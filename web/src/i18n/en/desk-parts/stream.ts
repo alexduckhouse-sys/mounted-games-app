@@ -250,6 +250,7 @@ export const deskStream = {
   'desk.stream.pr.title': 'Remote stream controller',
   'desk.stream.pr.intro': 'Control centred stream overlays, switch between multiple camera phones, and trigger replays without touching the tripod phone.',
   'desk.stream.pr.add2nd': 'Add 2nd camera phone',
+  'desk.stream.pr.camerasSheet': 'Camera phones',
   'desk.stream.pr.openHere': 'Open camera on this phone',
   'desk.stream.pr.addSecondRegion': 'Add second camera phone',
   'desk.stream.pr.pair': 'Pair a 2nd camera phone ({arena})',
