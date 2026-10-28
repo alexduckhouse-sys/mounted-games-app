@@ -188,6 +188,26 @@ describe('MembersPage: waiting for you', () => {
     expect(api.post).toHaveBeenCalledWith('/admin/trainer-requests/r2/decline');
   });
 
+  it('asks before declining, and does nothing if you cancel', async () => {
+    const asked = autoConfirm(false);
+    const user = userEvent.setup();
+    mount();
+    await user.click(await (await waitingFor()).findByRole('button', { name: 'Decline Priya Shah' }));
+    await waitFor(() => expect(asked.titles).toEqual(['Decline this request?']));
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it('switches both buttons off while a request is being saved', async () => {
+    let finish: () => void = () => {};
+    vi.mocked(api.post).mockReturnValue(new Promise((resolve) => { finish = () => resolve({ data: {} }); }));
+    const user = userEvent.setup();
+    mount();
+    await user.click(await (await waitingFor()).findByRole('button', { name: 'Approve Priya Shah' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Decline Sam Lee' })).toBeDisabled());
+    expect(screen.getByRole('button', { name: 'Approve Sam Lee' })).toBeDisabled();
+    finish();
+  });
+
   it('says so when the server refuses', async () => {
     vi.mocked(api.post).mockRejectedValue(new Error('no'));
     const user = userEvent.setup();
@@ -363,6 +383,11 @@ describe('MembersPage: an admin', () => {
 });
 
 describe('MembersPage: no one signed in', () => {
+  it('explains when you are not in a club yet', () => {
+    mount({ clubId: null });
+    expect(screen.getByText(/not in a club yet/)).toBeInTheDocument();
+  });
+
   it('renders nothing', () => {
     const { container } = render(<MemoryRouter><AuthProvider><MembersPage /></AuthProvider></MemoryRouter>);
     expect(container).toBeEmptyDOMElement();
