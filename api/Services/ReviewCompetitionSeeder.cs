@@ -39,13 +39,33 @@ public static class ReviewCompetitionSeeder
     private const int MinutesPerHeat = 35;
     private const int ChangeoverMinutes = 5;
 
-    // The eight demo events: name, icon and day offset from the seed date. Offset 0 is the live one.
-    private static readonly (string Name, string Icon, int Offset)[] Events =
+    // The eight showcase events: name, icon, venue, region and day offset from the seed date. Offset 0 is the live one.
+    private static readonly (string Name, string Icon, string Location, string Region, int Offset)[] Events =
     {
-        ("Demo Meadow Cup", "gb", 0), ("Demo Clover Challenge", "ie", 3),
-        ("Demo River Games", "fr", 7), ("Demo Forest Trophy", "de", 14),
-        ("Demo Windmill Open", "nl", 21), ("Demo World Festival", "world", 28),
-        ("Demo Valley Finals", "trophy", -7), ("Demo Lakeside Games", "flag", -21),
+        ("EGUK Winter Pairs Series — Round 1", "gb", "Onley Grounds Equestrian Complex, Warwickshire", "Warwickshire", 0),
+        ("Midlands Series — Open & Pairs", "gb", "Dallas Burston Polo Club, Southam", "Warwickshire", 3),
+        ("Northern Challenge Pairs", "gb", "Arena UK, Grantham", "Lincolnshire", 7),
+        ("EGUK Winter Pairs Series — Round 2", "gb", "Onley Grounds Equestrian Complex, Warwickshire", "Warwickshire", 14),
+        ("Southern Series Autumn Friendly", "gb", "Moreton Equestrian Centre, Dorset", "Dorset", 21),
+        ("EGUK Winter Pairs Series — Round 3", "trophy", "Sykehouse Arena, South Yorkshire", "South Yorkshire", 28),
+        ("End of Season Championships", "trophy", "Kelsall Hill Equestrian Centre, Cheshire", "Cheshire", -7),
+        ("Welsh Open Championships", "flag", "David Broome Event Centre, Chepstow", "Monmouthshire", -21),
+    };
+
+    public static IReadOnlyList<string> EventNames { get; } = Events.Select(e => e.Name).ToArray();
+
+    private static readonly string[] LegacyDemoNames =
+    {
+        "Demo Meadow Cup", "Demo Clover Challenge", "Demo River Games", "Demo Forest Trophy",
+        "Demo Windmill Open", "Demo World Festival", "Demo Valley Finals", "Demo Lakeside Games",
+    };
+
+    private static readonly string[] TeamClubs =
+    {
+        "Central Warwickshire", "North Warwickshire", "Atherstone", "Rockwood Harriers",
+        "Oakley Hunt West", "Mid Glamorgan", "Berwyn & Dee", "Lancashire",
+        "Lothian & Borders", "Devon Daredevils", "Dorset", "Leicester Forest",
+        "Monmouthshire", "Cheshire", "Staffordshire", "Cotswold",
     };
 
     private static DateTime RoundDownTo5Minutes(DateTime t)
@@ -72,7 +92,7 @@ public static class ReviewCompetitionSeeder
             await using var transaction = await db.Database.BeginTransactionAsync();
             var created = 0;
             var eventIndex = -1;
-            foreach (var (name, icon, offset) in events)
+            foreach (var (name, icon, location, region, offset) in events)
             {
                 eventIndex++;
                 var existingId = await db.Competitions.Where(c => c.Name == name).Select(c => (int?)c.Id).FirstOrDefaultAsync();
@@ -100,9 +120,9 @@ public static class ReviewCompetitionSeeder
                     }
                 }
                 var day = DateTime.SpecifyKind(todayUtc.Date.AddDays(offset), DateTimeKind.Utc);
-                var clubName = $"{name} Club";
+                var clubName = $"{name} Host Club";
                 var club = await db.Clubs.SingleOrDefaultAsync(c => c.Name == clubName)
-                    ?? new Club { Name = clubName, Region = "Demo" };
+                    ?? new Club { Name = clubName, Region = region };
                 var competition = new Competition
                 {
                     Name = name,
@@ -111,8 +131,8 @@ public static class ReviewCompetitionSeeder
                     EndDate = day.AddHours(17),
                     IsActive = offset >= 0,
                     IsArchived = offset < 0,
-                    Location = "Demo showground",
-                    Description = "Sample competition for trying the app. All teams and results are fictional.",
+                    Location = location,
+                    Description = "Full schedule, declarations and live heat scoring.",
                 };
                 var sessionOrder = 0;
                 // Today's event, timed from the real clock: when each arena is next free, and the latest end.
@@ -146,14 +166,18 @@ public static class ReviewCompetitionSeeder
                         PriceMinor = DemoEntryPriceMinor,
                     };
                     competition.Sections.Add(section);
-                    var teams = Enumerable.Range(1, teamCount).Select(teamNumber => new Team
+                    var teams = Enumerable.Range(1, teamCount).Select(teamNumber =>
                     {
-                        Competition = competition,
-                        Section = section,
-                        Club = club,
-                        DisplayName = $"{name.Replace("Demo ", "")} {ageGroup} {teamNumber}",
-                        Suffix = teamNumber.ToString(),
-                        BibColour = BibColours[(teamNumber - 1) % BibColours.Length],
+                        var teamClub = TeamClubs[(teamNumber - 1) % TeamClubs.Length];
+                        return new Team
+                        {
+                            Competition = competition,
+                            Section = section,
+                            Club = club,
+                            DisplayName = ageGroup == "Seniors" ? teamClub : $"{teamClub} {ageGroup}",
+                            Suffix = teamNumber.ToString(),
+                            BibColour = BibColours[(teamNumber - 1) % BibColours.Length],
+                        };
                     }).ToArray();
                     foreach (var team in teams) competition.Teams.Add(team);
 
@@ -161,7 +185,7 @@ public static class ReviewCompetitionSeeder
                     {
                         var finished = offset < 0 || (offset == 0 && sessionOrder == 0);
                         var running = offset == 0 && sessionOrder == 1;
-                        var arenaName = round == 0 ? "Demo main arena" : "Demo final arena";
+                        var arenaName = round == 0 ? "Main Arena" : "Arena 2";
                         // Heats: balanced groups of at most 6. Finals: one heat of the top 6.
                         var groups = round == 0
                             ? SplitBalanced(teams, LanesPerHeat)
@@ -288,7 +312,7 @@ public static class ReviewCompetitionSeeder
     /// </summary>
     public static async Task<int> RemoveReviewCompetitionsAsync(AppDbContext db)
     {
-        var names = Events.Select(e => e.Name).ToArray();
+        var names = Events.Select(e => e.Name).Concat(LegacyDemoNames).ToArray();
         return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
             db.ChangeTracker.Clear();
@@ -367,6 +391,8 @@ public static class ReviewCompetitionSeeder
     var shiftIds = db.Set<VolunteerShift>().Where(x => ids.Contains(x.CompetitionId)).Select(x => x.Id);
     await db.Set<VolunteerClaim>().Where(x => shiftIds.Contains(x.ShiftId)).ExecuteDeleteAsync();
     await db.Set<VolunteerShift>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.Set<Protest>().Where(x => ids.Contains(x.CompetitionId) || heatIds.Contains(x.HeatId)
+        || (x.RaisedByTeamId != null && teamIds.Contains(x.RaisedByTeamId.Value))).ExecuteDeleteAsync();
     await db.Set<RaceScoreEvent>().Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();
     await db.Set<RaceScoreState>().Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();
     await db.Results.Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();

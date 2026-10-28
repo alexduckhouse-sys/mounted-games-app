@@ -14,6 +14,7 @@ import { NavigationDrawer } from './NavigationDrawer';
 import { TopBarTicker } from './TopBarTicker';
 import { TickerFeed } from './TickerFeed';
 import { useOptionalTicker } from './TickerContext';
+import { WeatherLine } from './WeatherLine';
 import { ConnectionPill } from './ConnectionPill';
 import { BottomTabs } from './BottomTabs';
 import { GlobalTabs } from './GlobalTabs';
@@ -22,6 +23,7 @@ import { PageSkeleton } from './Skeletons';
 import { useCompactPageBarState } from './CompactPageBarContext';
 import './compact-page-bar.css';
 import { TrainerAccountNotice } from './TrainerAccountNotice';
+import { InstallCard } from './InstallCard';
 import { LiteChip } from '../lite/LiteChip';
 import { initialsOf } from '../lib/profile';
 import { useNeedsYou } from '../pages/profile/needsYou';
@@ -141,6 +143,7 @@ function Shell({ width }: { width: PageWidth }) {
             </div>
           )}
         </header>
+        {competitionId != null && <WeatherLine />}
       </div>
       )}
       <main ref={mainRef} className={publicPage
@@ -148,6 +151,7 @@ function Shell({ width }: { width: PageWidth }) {
         : `skin mx-auto w-full ${cap} flex-1 px-4 pt-3 sm:pt-5 ${dockShown ? (hasTabs ? 'pb-44' : 'pb-24') : 'pb-3 sm:pb-5'}`}>
         {storageError && <Notice role="status" className={publicPage ? 'mt-4' : 'mb-3'}>{storageError}</Notice>}
         {onProfile && <TrainerAccountNotice />}
+        <InstallCard pathname={location.pathname} className={publicPage ? 'mt-4' : 'mb-3'} />
         <PageLoadBoundary page={location.pathname}>
           <Suspense fallback={<PageSkeleton />}><Outlet /></Suspense>
         </PageLoadBoundary>

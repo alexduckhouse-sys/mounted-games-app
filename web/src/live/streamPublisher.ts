@@ -21,6 +21,35 @@ export interface PublisherSnapshot {
   rttMs?: number;
   qualityPreset?: StreamQualityPreset;
   captureResolution?: string;
+  /** The camera settings this camera can hold still: a key is present only when the camera supports it; true means held. */
+  cameraLocks?: CameraLocks;
+}
+export type CameraLockKind = 'exposure' | 'focus' | 'whiteBalance';
+export type CameraLocks = Partial<Record<CameraLockKind, boolean>>;
+const LOCK_MODES: Record<CameraLockKind, 'exposureMode' | 'focusMode' | 'whiteBalanceMode'> = {
+  exposure: 'exposureMode', focus: 'focusMode', whiteBalance: 'whiteBalanceMode',
+};
+type ModeTrack = {
+  getCapabilities?: () => Record<string, unknown>;
+  getSettings?: () => Record<string, unknown>;
+  applyConstraints?: (constraints: MediaTrackConstraints) => Promise<void>;
+};
+/** The mode that holds a setting still: manual where offered, else a single adjustment that then stays. */
+function lockMode(track: MediaStreamTrack | undefined, kind: CameraLockKind): string | null {
+  const modes = (track as unknown as ModeTrack | undefined)?.getCapabilities?.()?.[LOCK_MODES[kind]];
+  if (!Array.isArray(modes) || !modes.includes('continuous')) return null;
+  return modes.includes('manual') ? 'manual' : modes.includes('single-shot') ? 'single-shot' : null;
+}
+/** Which settings the camera can lock (most iPhones report none), and whether each is locked now. */
+export function detectCameraLocks(track?: MediaStreamTrack): CameraLocks {
+  const locks: CameraLocks = {};
+  const settings = (track as unknown as ModeTrack | undefined)?.getSettings?.();
+  for (const kind of Object.keys(LOCK_MODES) as CameraLockKind[]) {
+    if (!lockMode(track, kind)) continue;
+    const mode = settings?.[LOCK_MODES[kind]];
+    locks[kind] = typeof mode === 'string' && mode !== 'continuous';
+  }
+  return locks;
 }
 export interface PublisherDependencies extends StreamClock {
   getUserMedia: (constraints: MediaStreamConstraints) => Promise<MediaStream>;
@@ -29,6 +58,8 @@ export interface PublisherDependencies extends StreamClock {
   request: typeof streamRequest;
   wakeLock: () => Promise<{ release: () => Promise<void> }>;
   visibility: { hidden: () => boolean; listen: (callback: () => void) => () => void };
+  /** Calls back when a camera or microphone is plugged in or removed. Optional: without it the lists only refresh on request. */
+  deviceChanges?: (callback: () => void) => () => void;
 }
 export function browserPublisherDependencies(customRequest: typeof streamRequest = streamRequest): PublisherDependencies {
   return {
@@ -42,6 +73,12 @@ export function browserPublisherDependencies(customRequest: typeof streamRequest
         document.addEventListener('visibilitychange', callback);
         return () => document.removeEventListener('visibilitychange', callback);
       },
+    },
+    deviceChanges: (callback) => {
+      const devices = navigator.mediaDevices;
+      if (typeof devices?.addEventListener !== 'function') return () => {};
+      devices.addEventListener('devicechange', callback);
+      return () => devices.removeEventListener('devicechange', callback);
     },
   };
 }
@@ -76,6 +113,7 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
     qualityPreset: '720p', captureResolution: '1080p',
   };
   const listeners = new Set<() => void>();
+  const deviceWatchers = new Set<() => void>();
   const update = (patch: Partial<PublisherSnapshot>) => { snapshot = { ...snapshot, ...patch }; listeners.forEach((fn) => fn()); };
   let pc: RTCPeerConnection | undefined;
   let videoSender: RTCRtpSender | undefined;
@@ -181,6 +219,7 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
       zoom: 1,
       maxZoom: detectMaxZoom(vTrack),
       captureResolution: detectResolutionLabel(vTrack),
+      cameraLocks: detectCameraLocks(vTrack),
     });
     applyAudio();
   }
@@ -405,6 +444,34 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
     capture,
     devices: async () => (await d.enumerateDevices()).filter((device) => device.kind === 'videoinput'),
     audioDevices: async () => (await d.enumerateDevices()).filter((device) => device.kind === 'audioinput'),
+    /**
+     * Calls `listener` with fresh camera and microphone lists whenever one is plugged in or removed, so pickers
+     * stay current. Returns the function that stops listening; disposing the publisher stops it too.
+     */
+    watchDevices(listener: (cameras: MediaDeviceInfo[], microphones: MediaDeviceInfo[]) => void): () => void {
+      if (!d.deviceChanges) return () => {};
+      let active = true;
+      let stopListening = () => {};
+      const unwatch = () => { if (!active) return; active = false; deviceWatchers.delete(unwatch); stopListening(); };
+      deviceWatchers.add(unwatch);
+      stopListening = d.deviceChanges(() => {
+        void d.enumerateDevices().then((all) => {
+          if (!active || !alive) return;
+          listener(all.filter((device) => device.kind === 'videoinput'), all.filter((device) => device.kind === 'audioinput'));
+        }).catch(() => { /* The lists stay as they were; the next change tries again. */ });
+      });
+      return unwatch;
+    },
+    /** Holds exposure, focus or white balance still (or lets the camera adjust again) where the camera supports it. */
+    async setCameraLock(kind: CameraLockKind, locked: boolean) {
+      const video = snapshot.media?.getVideoTracks()[0];
+      const track = video as unknown as ModeTrack | undefined;
+      const mode = lockMode(video, kind);
+      if (!track?.applyConstraints || !mode) return;
+      await track.applyConstraints({ advanced: [{ [LOCK_MODES[kind]]: locked ? mode : 'continuous' } as MediaTrackConstraintSet] });
+      if (snapshot.media?.getVideoTracks()[0] !== video) return;
+      update({ cameraLocks: { ...snapshot.cameraLocks, [kind]: locked } });
+    },
     /** takeOver replaces a stream already live on the same arena and camera position. */
     async start(arena: string, angle: string, takeOver = false) {
       if (running || busy || !alive) return;
@@ -427,7 +494,7 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
       const preview = snapshot.media!;
       preview.getVideoTracks().forEach((old) => { preview.removeTrack(old); old.stop(); });
       preview.addTrack(track);
-      update({ media: preview, zoom: 1, maxZoom: detectMaxZoom(track), captureResolution: detectResolutionLabel(track) });
+      update({ media: preview, zoom: 1, maxZoom: detectMaxZoom(track), captureResolution: detectResolutionLabel(track), cameraLocks: detectCameraLocks(track) });
     },
     async switchAudio(id?: string) {
       audioDeviceId = id;
@@ -494,6 +561,6 @@ export function createStreamPublisher(competitionId: number, d: PublisherDepende
     viewers(count: number) { update({ viewerCount: count }); },
     reconnect() { recover(); },
     stop,
-    dispose() { alive = false; unlisten(); void stop().catch(() => {}); listeners.clear(); },
+    dispose() { alive = false; unlisten(); [...deviceWatchers].forEach((stopWatching) => stopWatching()); void stop().catch(() => {}); listeners.clear(); },
   };
 }

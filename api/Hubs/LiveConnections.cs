@@ -23,6 +23,8 @@ public sealed class LiveConnections(RedisConnection redis, ILogger<LiveConnectio
     private readonly ConcurrentDictionary<string, Entry> _connections = new();
     private readonly object _gate = new();
     private IConnectionMultiplexer? _subscribedTo;
+    // 1 once this instance may have missed (or failed to send) an "ended" message since the last sweep.
+    private int _missed;
 
     private sealed record Entry(string UserId, HubCallerContext Context, int SessionVersion);
 
@@ -34,10 +36,33 @@ public sealed class LiveConnections(RedisConnection redis, ILogger<LiveConnectio
     {
         if (context.User?.Identity?.IsAuthenticated != true || context.UserIdentifier is not { } userId) return;
         _connections[context.ConnectionId] = new Entry(userId, context, LiveAccounts.SessionVersionOf(context.User));
-        EnsureSubscribed(redis.Available);
+        var connection = redis.Available;
+        if (connection is null && redis.Configured) MarkMissed();
+        EnsureSubscribed(connection);
     }
 
     public void Remove(HubCallerContext context) => _connections.TryRemove(context.ConnectionId, out _);
+
+    /// <summary>The accounts with a signed-in connection open on this instance.</summary>
+    public IReadOnlyCollection<string> TrackedUserIds() => _connections.Values.Select(entry => entry.UserId).Distinct().ToList();
+
+    /// <summary>
+    /// Closes the connections of <paramref name="userIds"/> whose account no longer accepts the token they opened with (or no
+    /// longer exists). Connections of other accounts, including ones added since the ids were read, are left alone.
+    /// </summary>
+    public int CloseRefused(IReadOnlyCollection<string> userIds, IReadOnlyDictionary<string, LiveAccounts.TokenState> states)
+    {
+        var checkedIds = userIds as ISet<string> ?? userIds.ToHashSet();
+        var closed = 0;
+        foreach (var entry in _connections.Values)
+        {
+            if (!checkedIds.Contains(entry.UserId)) continue;
+            if (states.TryGetValue(entry.UserId, out var state) && state.Accepts(entry.SessionVersion)) continue;
+            entry.Context.Abort();
+            closed++;
+        }
+        return closed;
+    }
 
     /// <summary>How many open connections on this instance are signed in as the account.</summary>
     public int CountFor(string userId) => _connections.Values.Count(entry => entry.UserId == userId);
@@ -51,7 +76,11 @@ public sealed class LiveConnections(RedisConnection redis, ILogger<LiveConnectio
     {
         CloseHere(userId, validFromVersion);
         var connection = redis.Available;
-        if (connection is null) return;
+        if (connection is null)
+        {
+            if (redis.Configured) MarkMissed();
+            return;
+        }
         EnsureSubscribed(connection);
         try
         {
@@ -59,9 +88,26 @@ public sealed class LiveConnections(RedisConnection redis, ILogger<LiveConnectio
         }
         catch (Exception ex)
         {
+            MarkMissed();
             log.LogWarning("Could not tell other instances that an account's sessions ended: {Reason}.", ex.GetType().Name);
         }
     }
+
+    /// <summary>
+    /// Whether the <see cref="LiveSessionSweeper"/> needs to read the database this time: always without Redis (nothing
+    /// arrives from other instances), and with it only when this instance isn't listening right now or has seen Redis fail
+    /// since the last sweep. Otherwise every ended session has reached this instance already, and the sweep leaves the
+    /// database alone so an idle one can go to sleep. Answering true clears the "seen a failure" mark.
+    /// </summary>
+    public bool SweepNeeded()
+    {
+        if (!redis.Configured) return true;
+        var missed = Interlocked.Exchange(ref _missed, 0) == 1;
+        return missed || Volatile.Read(ref _subscribedTo) is not { IsConnected: true };
+    }
+
+    /// <summary>Marks that an "ended" message may have been missed, so the next sweep reads the database.</summary>
+    internal void MarkMissed() => Volatile.Write(ref _missed, 1);
 
     /// <summary>A message from another instance: <c>instance|validFromVersion|userId</c>.</summary>
     internal void OnMessage(string? message)
@@ -88,10 +134,13 @@ public sealed class LiveConnections(RedisConnection redis, ILogger<LiveConnectio
             try
             {
                 connection.GetSubscriber().Subscribe(Channel, (_, message) => OnMessage(message));
+                // Messages published while the connection is down are lost, even once it reconnects.
+                connection.ConnectionFailed += (_, _) => MarkMissed();
                 Volatile.Write(ref _subscribedTo, connection);
             }
             catch (Exception ex)
             {
+                MarkMissed();
                 log.LogWarning("Could not listen for ended sessions from other instances: {Reason}.", ex.GetType().Name);
             }
         }

@@ -63,6 +63,21 @@ export const auth = {
   'auth.invite.title': 'Invitation',
   'auth.invite.join': 'Join Mounted Games',
 
+  // Google, Apple and Facebook sign-in, and finishing an account made with one
+  'auth.social.or': 'or',
+  'auth.social.googleUnavailable': 'Google sign-in didn’t load. Check your signal, or use your email and password.',
+  'auth.social.appleUnavailable': 'Apple sign-in didn’t load. Check your signal, or use your email and password.',
+  'auth.social.facebookUnavailable': 'Facebook sign-in didn’t load. Check your signal, or use your email and password.',
+  'auth.social.googleFailed': 'Google sign-in didn’t work. Try again, or use your email and password.',
+  'auth.social.appleFailed': 'Apple sign-in didn’t work. Try again, or use your email and password.',
+  'auth.social.notChecked': 'We couldn’t check that sign-in. Try again.',
+  'auth.social.appleSignIn': 'Sign in with Apple',
+  'auth.social.appleContinue': 'Continue with Apple',
+  'auth.social.facebookContinue': 'Continue with Facebook',
+  'auth.external.title': 'Finish creating your account',
+  'auth.external.signedInAs': 'Signed in as',
+  'auth.external.useDifferent': 'Use a different account',
+
   'auth.pw.length': 'At least {min} characters',
   'auth.pw.number': 'A number',
   'auth.pw.lowercase': 'A lowercase letter',
@@ -78,4 +93,7 @@ export const auth = {
   'auth.pw.err.upper': 'Your password needs a capital letter.',
   'auth.pw.err.special': 'Your password needs a special character (like ! ? # @ £).',
   'auth.pw.err.unique': 'Your password needs a wider mix of characters.',
+
+  'auth.reset.conflict': 'Your account changed while your new password was being saved, so nothing was changed. Try again.',
+  'auth.reset.failed': 'We couldn’t save your new password, so nothing was changed. Try again in a moment.',
 } satisfies Record<string, Message>;

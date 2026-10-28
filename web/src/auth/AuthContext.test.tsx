@@ -139,6 +139,18 @@ describe('signing in', () => {
     expect(result.current.token).toBe('tok-2');
   });
 
+  it('adopts a fresh sign-in handed to it, and ignores anything that isn’t one', async () => {
+    signIn();
+    const { result } = mount();
+    act(() => result.current.adoptSession({ ...stored(), token: 'tok-9' } as never));
+    expect(result.current.token).toBe('tok-9');
+    expect(JSON.parse(localStorage.getItem('mg.auth') ?? '{}').token).toBe('tok-9');
+    for (const odd of [null, { token: 'tok-10' }, { user: stored().user }]) {
+      act(() => result.current.adoptSession(odd as never));
+      expect(result.current.token).toBe('tok-9');
+    }
+  });
+
   it('clears loading when an invitation is refused', async () => {
     post.mockRejectedValue(new Error('gone'));
     const { result } = mount();
@@ -153,9 +165,9 @@ describe('signing in', () => {
     expect(result.current.loading).toBe(false);
   });
 
-  it('signs in with an external provider when the account already exists, or asks for signup details when new', async () => {
+  it('signs in with an external provider when the account exists, or hands back a sign-up ticket when it doesn’t', async () => {
     post.mockResolvedValueOnce({
-      data: { needsSignup: true, auth: null, email: 'new@example.com', suggestedName: 'New Rider', provider: 'google' },
+      data: { needsSignup: true, auth: null, email: 'new@example.com', suggestedName: 'New Rider', provider: 'google', signupTicket: 'ticket-1' },
     });
     const { result } = mount();
     let step1!: Awaited<ReturnType<typeof result.current.loginWithExternal>>;
@@ -163,52 +175,60 @@ describe('signing in', () => {
       step1 = await result.current.loginWithExternal('google', 'id-tok-1', { nonce: 'n-1' });
     });
     expect(post).toHaveBeenCalledWith('/auth/external', { provider: 'google', idToken: 'id-tok-1', nonce: 'n-1' });
-    expect(step1).toEqual({ needsSignup: true, email: 'new@example.com', suggestedName: 'New Rider', provider: 'google' });
+    expect(step1).toEqual({ needsSignup: true, email: 'new@example.com', suggestedName: 'New Rider', provider: 'google', ticket: 'ticket-1' });
     expect(result.current.user).toBeNull();
 
-    // Fallback defaults when server omits optional fields on needsSignup
-    post.mockResolvedValueOnce({ data: { needsSignup: true, auth: null } });
+    // Fallback defaults when the server leaves optional fields out, but never without a ticket.
+    post.mockResolvedValueOnce({ data: { needsSignup: true, auth: null, signupTicket: 'ticket-2' } });
     await act(async () => {
       step1 = await result.current.loginWithExternal('apple', 'id-tok-2');
     });
-    expect(step1).toEqual({ needsSignup: true, email: '', suggestedName: '', provider: 'apple' });
-
-    // Completing signup with clubName & role stores the session and sets trainerNotice for TrainerRequest
-    post.mockResolvedValueOnce({
-      data: { needsSignup: false, auth: stored(['Member', 'TrainerRequest']) },
-    });
-    get.mockResolvedValue({ data: stored(['Member', 'TrainerRequest']).user });
-    let step2!: Awaited<ReturnType<typeof result.current.loginWithExternal>>;
+    expect(step1).toEqual({ needsSignup: true, email: '', suggestedName: '', provider: 'apple', ticket: 'ticket-2' });
+    post.mockResolvedValueOnce({ data: { needsSignup: true, auth: null } });
     await act(async () => {
-      step2 = await result.current.loginWithExternal('google', 'id-tok-1', {
-        nonce: 'n-1',
-        fullName: 'Ann Smith',
-        clubName: 'Ashdown',
-        role: 'Trainer',
-      });
+      await expect(result.current.loginWithExternal('apple', 'id-tok-3')).rejects.toThrow('sign-up ticket');
     });
-    expect(post).toHaveBeenCalledWith('/auth/external', {
-      provider: 'google',
-      idToken: 'id-tok-1',
-      nonce: 'n-1',
-      fullName: 'Ann Smith',
-      clubName: 'Ashdown',
-      role: 'Trainer',
+
+    // Finishing with the ticket stores the session and raises the notice for a trainer request.
+    post.mockResolvedValueOnce({ data: stored(['Member', 'TrainerRequest']) });
+    get.mockResolvedValue({ data: stored(['Member', 'TrainerRequest']).user });
+    let profile!: Awaited<ReturnType<typeof result.current.completeExternalSignup>>;
+    await act(async () => {
+      profile = await result.current.completeExternalSignup('ticket-1', { fullName: 'Ann Smith', clubName: 'Ashdown', role: 'Trainer' });
     });
-    expect(step2).toEqual({ needsSignup: false });
+    expect(post).toHaveBeenLastCalledWith('/auth/external/signup', { ticket: 'ticket-1', fullName: 'Ann Smith', clubName: 'Ashdown', role: 'Trainer' });
+    expect(profile.email).toBe('ann@example.com');
     expect(result.current.user?.email).toBe('ann@example.com');
     expect(result.current.trainerNotice).toBe('requested');
 
-    // Member external login clears trainerNotice
-    post.mockResolvedValueOnce({ data: { needsSignup: false, auth: stored(['Member']) } });
+    // A member sign-in clears the notice.
+    post.mockResolvedValueOnce({ data: stored(['Member']) });
     await act(async () => {
-      await result.current.loginWithExternal('google', 'id-tok-1');
+      await result.current.completeExternalSignup('ticket-3', { fullName: 'Ann', clubName: 'Ashdown', role: 'Member' });
     });
+    expect(post).toHaveBeenLastCalledWith('/auth/external/signup', { ticket: 'ticket-3', fullName: 'Ann', clubName: 'Ashdown', role: 'Member' });
     expect(result.current.trainerNotice).toBeNull();
+
+    post.mockResolvedValueOnce({ data: { needsSignup: false, auth: stored(['Member']) } });
+    let step2!: Awaited<ReturnType<typeof result.current.loginWithExternal>>;
+    await act(async () => {
+      step2 = await result.current.loginWithExternal('google', 'id-tok-4');
+    });
+    expect(step2).toEqual({ needsSignup: false });
+  });
+
+  it('clears loading when finishing an external sign-up fails', async () => {
+    post.mockRejectedValue(new Error('ticket expired'));
+    const { result } = mount();
+    await act(async () => {
+      await expect(result.current.completeExternalSignup('old', { fullName: 'A', clubName: 'B', role: 'Member' })).rejects.toThrow('ticket expired');
+    });
+    expect(result.current.loading).toBe(false);
+    expect(result.current.user).toBeNull();
   });
 
   it('passes Apple’s first-sign-in name along and refuses a sign-in reply with no session', async () => {
-    post.mockResolvedValueOnce({ data: { needsSignup: true, auth: null, email: 'x@privaterelay.appleid.com', suggestedName: 'Sam Taylor', provider: 'apple' } });
+    post.mockResolvedValueOnce({ data: { needsSignup: true, auth: null, email: 'x@privaterelay.appleid.com', suggestedName: 'Sam Taylor', provider: 'apple', signupTicket: 'ticket-a' } });
     const { result } = mount();
     await act(async () => {
       await result.current.loginWithExternal('apple', 'apple-tok', { nonce: 'raw-nonce', providerName: 'Sam Taylor' });
@@ -272,6 +292,17 @@ describe('signing in', () => {
     act(() => result.current.logout());
     expect(result.current.user).toBeNull();
     expect(localStorage.getItem('mg.auth')).toBeNull();
+  });
+
+  it('clears unfinished entry drafts on sign-out but leaves other storage alone', () => {
+    signIn();
+    localStorage.setItem('mg.draft.entry.v1.["u",1,5,"standard"]', '{}');
+    localStorage.setItem('mg.draft.entry.v1.other', '{}');
+    localStorage.setItem('mg.other', 'keep');
+    const { result } = mount();
+    act(() => result.current.logout());
+    expect(Object.keys(localStorage).filter((k) => k.startsWith('mg.draft.entry.v1.'))).toEqual([]);
+    expect(localStorage.getItem('mg.other')).toBe('keep');
   });
 });
 

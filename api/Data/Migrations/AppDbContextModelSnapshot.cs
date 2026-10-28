@@ -1588,8 +1588,32 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<int>("CompetitionId")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("EndDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("EntriesCloseAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double?>("Latitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("Location")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<double?>("Longitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<int>("RunId")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime>("StartDate")
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("CompetitionId");
 
@@ -2044,6 +2068,80 @@ namespace MountedGames.Api.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("EquipmentAcknowledgement");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Operations.Protest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ConcernsTeamIdsJson")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DecidedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Decision")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("HeatId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RaceId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RaisedByName")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int?>("RaisedByTeamId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("RequestId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HeatId");
+
+                    b.HasIndex("RaceId");
+
+                    b.HasIndex("RaisedByTeamId");
+
+                    b.HasIndex("CompetitionId", "RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("CompetitionId", "Status");
+
+                    b.ToTable("Protest");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.Operations.RaceScoreEvent", b =>
@@ -2615,6 +2713,9 @@ namespace MountedGames.Api.Data.Migrations
 
                     b.Property<DateTime?>("FinishedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("HasOpenProtest")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("HeatId")
                         .HasColumnType("integer");
@@ -3354,6 +3455,8 @@ namespace MountedGames.Api.Data.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ContactEmail");
 
                     b.HasIndex("UserId");
 
@@ -4667,6 +4770,39 @@ namespace MountedGames.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Competition");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Operations.Protest", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Competition", "Competition")
+                        .WithMany()
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MountedGames.Api.Entities.Heat", "Heat")
+                        .WithMany()
+                        .HasForeignKey("HeatId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MountedGames.Api.Entities.Race", "Race")
+                        .WithMany()
+                        .HasForeignKey("RaceId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("MountedGames.Api.Entities.Team", "RaisedByTeam")
+                        .WithMany()
+                        .HasForeignKey("RaisedByTeamId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Competition");
+
+                    b.Navigation("Heat");
+
+                    b.Navigation("Race");
+
+                    b.Navigation("RaisedByTeam");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.Operations.RaceScoreEvent", b =>

@@ -212,7 +212,7 @@ describe('Event shop: orders', () => {
     mount();
     await userEvent.click(await tab('Orders'));
     expect(await screen.findByText('Demo · Payment due')).toBeInTheDocument();
-    expect(screen.getByText('Demo · Paid')).toBeInTheDocument();
+    expect(screen.getByText('Demo paid')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Mark order/ })).not.toBeInTheDocument();
   });
 

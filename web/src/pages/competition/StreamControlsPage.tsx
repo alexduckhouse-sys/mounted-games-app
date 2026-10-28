@@ -12,7 +12,7 @@ import { useStreamAuto } from '../../hooks/useStreamAuto';
 import { useStreamAutomation } from '../../hooks/useStreamAutomation';
 import { lengthLabel, loadInstantLength, saveInstantLength, type InstantLength } from '../../lib/instantReplay';
 import { DEFAULT_OVERLAY } from '../../lib/overlays';
-import { onAirStream } from '../../lib/streamControls';
+import { cameraArenas, onAirStream } from '../../lib/streamControls';
 import type { LiveStream } from '../../types';
 import { RotateCcw } from 'lucide-react';
 import { RefineHeader, RefinePage, type RefineTab } from '../refine/Refine';
@@ -38,6 +38,9 @@ export function StreamControlsPage() {
   const [pickedId, setPickedId] = useState<number | null>(null);
   const [ending, setEnding] = useState(false);
   const [media, setMedia] = useState<MediaStream | null>(null);
+  const [monitorId, setMonitorId] = useState<number | null>(null);
+  // The big player reports what it is playing, so the Camera tab's preview of that camera reuses the picture.
+  const onMedia = useCallback((next: MediaStream | null, streamId?: number) => { setMedia(next); setMonitorId(streamId ?? null); }, []);
   const [openClipId, setOpenClipId] = useState<string | null>(null);
   const [instantLength, setInstantLength] = useState<InstantLength>(loadInstantLength);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +77,7 @@ export function StreamControlsPage() {
   }
 
   const tabs: RefineTab[] = TABS.map(({ id, label }) => ({ label, active: tab === id, onSelect: () => choose(id) }));
-  const defaultArena = competition.sessions[0]?.arenaName || 'Arena 1';
+  const arenas = cameraArenas(competition.sessions);
   const pick = (stream: LiveStream) => setPickedId(stream.id);
 
   return (
@@ -94,7 +97,7 @@ export function StreamControlsPage() {
         {onAir ? (
           <div className="sx-video">
             <LiveVideo competitionId={competition.id} streams={liveStreams} sessions={competition.sessions} invoke={invoke} ready={ready}
-              messages={streamMessages} canBroadcast={false} competitionName={competition.name} publicLayout onMedia={setMedia} />
+              messages={streamMessages} canBroadcast={false} competitionName={competition.name} publicLayout onMedia={onMedia} />
           </div>
         ) : <div className="sx-notlive" role="status">Not live</div>}
 
@@ -117,7 +120,10 @@ export function StreamControlsPage() {
             <ReplayTab clips={clips} openId={openClipId} onOpen={setOpenClipId} controller={replay} instantLength={instantLength}
               onInstantLength={(length) => { saveInstantLength(length); setInstantLength(length); }} />
           )}
-          {tab === 'camera' && <CameraTab competitionId={competition.id} streams={liveStreams} onAir={onAir} telemetry={streamTelemetry} defaultArena={defaultArena} onPick={pick} />}
+          {tab === 'camera' && (
+            <CameraTab competitionId={competition.id} streams={liveStreams} onAir={onAir} telemetry={streamTelemetry} arenas={arenas} onPick={pick}
+              invoke={invoke} ready={ready} monitor={{ streamId: monitorId, media }} />
+          )}
         </div>
       </div>
     </RefinePage>

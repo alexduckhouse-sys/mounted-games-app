@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { MemoryRouter } from 'react-router-dom';
+import { MotionConfig } from 'framer-motion';
 import { describe, expect, it, vi } from 'vitest';
 import { RefineDisclosure, RefineFoot, RefineHeader, RefineList, RefineMenu, RefineQty, RefineSection, RefineSheet, RefineStatus } from './Refine';
 
@@ -92,7 +93,8 @@ describe('RefineSheet', () => {
 
   it('focuses the first field, traps Tab, closes on Esc and returns focus to the opener', async () => {
     const onClose = vi.fn();
-    render(<Host onClose={onClose} />);
+    // Still motion: the sheet closes at once instead of sliding away first.
+    render(<MotionConfig reducedMotion="always"><Host onClose={onClose} /></MotionConfig>);
     const opener = screen.getByRole('button', { name: 'Open' });
     await userEvent.click(opener);
     expect(screen.getByRole('dialog', { name: 'Refund £5.00?' })).toHaveAttribute('aria-modal', 'true');
@@ -112,7 +114,7 @@ describe('RefineSheet', () => {
 
   it('closes from the scrim and the close button', async () => {
     const onClose = vi.fn();
-    render(<Host onClose={onClose} />);
+    render(<MotionConfig reducedMotion="always"><Host onClose={onClose} /></MotionConfig>);
     await userEvent.click(screen.getByRole('button', { name: 'Open' }));
     await userEvent.click(screen.getByRole('button', { name: 'Close' }));
     await userEvent.click(screen.getByRole('button', { name: 'Open' }));

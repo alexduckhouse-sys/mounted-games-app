@@ -118,6 +118,7 @@ describe('Orders and sales: an order in a sheet', () => {
     expect(sheet).toHaveTextContent('Weekend camping × 1');
     expect(sheet).toHaveTextContent('£25.00');
     expect(sheet).toHaveTextContent('Pay the organiser directly. They mark it paid when the money arrives. Collect at the event.');
+    expect(within(sheet).getByText('This is a demo. No money will be taken or sent, and your order hasn’t been paid for.')).toBeInTheDocument();
     expect(dialog().getByRole('button', { name: 'Cancel order' })).toHaveClass('kit-redtext');
     expect(dialog().queryByRole('button', { name: /demo/i })).not.toBeInTheDocument();
     expect(dialog().queryByText(/TEST PAYMENT/)).not.toBeInTheDocument();
@@ -173,6 +174,20 @@ describe('Orders and sales: an order in a sheet', () => {
     mount('/me/orders?order=9');
     await screen.findByRole('dialog');
     expect(dialog().getByRole('button', { name: 'Pay demo order' })).toHaveClass('kit-pill-fill');
+  });
+
+  it('says Demo paid, not Paid, on a paid demo order in the list and the sheet, and Paid on a real one', async () => {
+    load([
+      orderOf({ id: 9, isTestOrder: true, status: 2, paidAt: '2026-10-18T10:31:00Z', testPayments: [payment(0)] }),
+      orderOf({ id: 10, status: 2, paidAt: '2026-10-18T10:31:00Z' }),
+    ]);
+    mount();
+    const demoRow = await screen.findByRole('button', { name: /Order 9/ });
+    expect(within(demoRow).getByText('Demo paid')).toBeInTheDocument();
+    expect(within(screen.getByRole('button', { name: /Order 10/ })).getByText('Paid')).toBeInTheDocument();
+    await userEvent.click(demoRow);
+    expect(dialog().getByText('Demo paid')).toBeInTheDocument();
+    expect(dialog().queryByText('Paid')).not.toBeInTheDocument();
   });
 
   it('opens a receipt from the link and refunds a paid demo order after confirming', async () => {

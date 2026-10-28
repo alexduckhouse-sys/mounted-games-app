@@ -124,9 +124,12 @@ describe('steps 2 and 3: details, then pay', () => {
     expect(next()).toBeDisabled();
     await fill();
     expect(next()).toHaveTextContent('Next: pay £10');
+    // The demo notice sits just above the button that leads to paying.
+    expect(screen.getByText('This is a demo. No money will be taken or sent, and your entry hasn’t been paid for.')).toBeInTheDocument();
     await userEvent.click(next());
 
     expect(screen.getByRole('heading', { name: 'Pay £10 by bank transfer' })).toBeInTheDocument();
+    expect(screen.getByText('This is a demo. No money will be taken or sent, and your entry hasn’t been paid for.')).toBeInTheDocument();
     expect(screen.getByText('Club 12-34-56')).toBeInTheDocument();
     expect(screen.getByRole('list', { name: 'Entry steps' })).toBeInTheDocument();
     expect(screen.getAllByText('Alice Rider').length).toBeGreaterThan(0);
@@ -135,6 +138,7 @@ describe('steps 2 and 3: details, then pay', () => {
     expect(await screen.findByRole('heading', { name: 'Entry submitted' })).toBeInTheDocument();
     expect(screen.getByText(/Under 12 team at Spring Games\./)).toBeInTheDocument();
     expect(screen.getByText(/The organiser marks it paid once your transfer arrives/)).toBeInTheDocument();
+    expect(screen.getByText('This is a demo. No money will be taken or sent, and your entry hasn’t been paid for.')).toBeInTheDocument();
     const bank = screen.getByRole('region', { name: 'Bank transfer details' });
     expect(bank).toHaveTextContent('Club 12-34-56');
     expect(bank).toHaveTextContent('Alice Rider');
@@ -290,7 +294,8 @@ describe('demo events', () => {
     vi.mocked(api.post).mockResolvedValue({ data: { id: 77, status: 0, amountMinor: 1500 } });
     await fill('Ann Rider');
     await userEvent.click(next());
-    expect(screen.getByText(/This is a demo event/)).toBeInTheDocument();
+    expect(screen.getByText('This is a demo. No money will be taken or sent, and your entry hasn’t been paid for.')).toBeInTheDocument();
+    expect(screen.getByText('After you submit, you will see a test payment page.')).toBeInTheDocument();
     expect(screen.queryByText('Copy bank details')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
     expect(await screen.findByText('Test payment page')).toBeInTheDocument();
@@ -304,6 +309,7 @@ describe('demo events', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
     expect(await screen.findByText(/Your entry is confirmed/)).toBeInTheDocument();
     expect(screen.queryByText('Test payment page')).not.toBeInTheDocument();
+    expect(screen.queryByText('This is a demo. No money will be taken or sent, and your entry hasn’t been paid for.')).not.toBeInTheDocument();
   });
 });
 
@@ -336,7 +342,7 @@ describe('the entry form', () => {
     vi.mocked(api.post).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ data: { id: 9, status: 1, amountMinor: 0 } });
     await fill();
     await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t submit your entry. Check your signal and try again. Nothing was sent.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t submit your entry. Check your signal and try again.');
     await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(2));
     const ids = vi.mocked(api.post).mock.calls.map((c) => (c[1] as { requestId: string }).requestId);

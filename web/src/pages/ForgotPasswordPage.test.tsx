@@ -28,10 +28,13 @@ beforeEach(() => {
 });
 
 describe('ForgotPasswordPage', () => {
-  it('is linked from the sign-in page', async () => {
+  it('is linked from the sign-in page once a password is turned down', async () => {
     const user = userEvent.setup();
+    vi.mocked(api.post).mockRejectedValueOnce({ response: { status: 401, data: { message: 'Invalid email or password.' } } });
     mount('/login');
-    await user.click(screen.getByRole('link', { name: 'Forgot your password?' }));
+    await user.type(screen.getByLabelText('Email'), 'sam@example.com');
+    await user.type(screen.getByLabelText('Password'), 'nope{Enter}');
+    await user.click(await screen.findByRole('link', { name: 'Forgot your password?' }));
     expect(screen.getByRole('heading', { name: 'Reset your password' })).toBeInTheDocument();
   });
 

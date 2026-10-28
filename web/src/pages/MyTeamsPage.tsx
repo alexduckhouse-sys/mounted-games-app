@@ -9,6 +9,7 @@ import { usePageWidth } from '../components/pageWidthState';
 import { usePageHeader } from '../components/CompactPageBarContext';
 import { useMyTeams } from '../hooks/useMyTeams';
 import { useTeamNotifications, type NotificationPermissionState } from '../hooks/useTeamNotifications';
+import { InstallAppSheet } from '../components/InstallAppSheet';
 import { heatRowsForTeam, heatSummary, heatTime, nextHeatRow, type TeamHeatRow } from '../lib/myTeams';
 import { joinKeyFromSearch } from '../lib/sharing';
 import { displaySectionName } from '../lib/section';
@@ -146,7 +147,7 @@ export function MyTeamsPage() {
             <div className="flex min-h-[52px] items-center gap-2.5 border-t border-[rgb(var(--mg-rule-soft))] px-3.5 py-1.5">
               <span className="flex flex-1 flex-col gap-0.5">
                 <span className="text-[15px] font-semibold">{t('account.teams.alerts')}</span>
-                <span className="text-xs text-[rgb(var(--mg-muted))]">{alertsNote(notify.enabled, notify.permission)}</span>
+                <span className="text-xs text-[rgb(var(--mg-muted))]">{alertsNote(notify.enabled, notify.permission, notify.needsInstall)}</span>
               </span>
               <Switch label={t('account.teams.alerts')} on={notify.enabled} disabled={notify.permission === 'denied'} onChange={notify.setEnabled} />
             </div>
@@ -179,11 +180,13 @@ export function MyTeamsPage() {
         <h2 className="mg-display text-lg font-bold text-[rgb(var(--mg-heading))]">{t('account.teams.following')}</h2>
         <FollowingTeamsSection />
       </div>
+      {notify.installGuide && <InstallAppSheet forNotifications onClose={notify.closeInstallGuide} />}
     </div>
   );
 }
 
-function alertsNote(enabled: boolean, permission: NotificationPermissionState): string {
+function alertsNote(enabled: boolean, permission: NotificationPermissionState, needsInstall: boolean): string {
+  if (needsInstall) return tr('account.teams.alertsInstall');
   if (permission === 'denied') return tr('account.teams.alertsDenied');
   if (permission === 'unsupported') return tr('account.teams.alertsUnsupported');
   return enabled ? tr('account.teams.alertsOn') : tr('account.teams.alertsOff');

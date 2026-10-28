@@ -20,7 +20,7 @@ import './clubShop/clubShop.css';
  */
 export function MembersPage() {
   const { user, hasRole } = useAuth();
-  const { review } = useNeedsYou();
+  const { review, reviewError } = useNeedsYou();
   const isAdmin = hasRole('Admin');
   const [clubs, setClubs] = useState<Club[]>([]);
   const [picked, setPicked] = useState<number | null>(null);
@@ -30,6 +30,9 @@ export function MembersPage() {
   const [loadFailed, setLoadFailed] = useState<number | null>(null);
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // An approve or decline that failed: the reason (the server's, such as an unconfirmed address) comes from `reviewError`.
+  const [reviewFailed, setReviewFailed] = useState(false);
+  const shown = notice ?? (reviewFailed ? reviewError || 'Couldn’t update this request. Check your signal and try again.' : null);
   const [busy, setBusy] = useState(false);
   const data = loaded && loaded.clubId === clubId ? loaded.data : null;
   usePageHeader({ title: 'Club members', subtitle: data?.clubName ?? user?.clubName ?? undefined, plain: true, backTo: '/me', backLabel: 'Back to my profile' });
@@ -63,8 +66,9 @@ export function MembersPage() {
 
   async function decide(request: TrainerRequest, action: 'approve' | 'decline') {
     setNotice(null);
+    setReviewFailed(false);
     if (!(await review(request, action))) {
-      setNotice('Couldn’t update this request. Check your signal and try again.');
+      setReviewFailed(true);
       return;
     }
     // An approved person joins a group, so fetch the list again rather than guess which one.
@@ -75,6 +79,7 @@ export function MembersPage() {
     if (clubId == null || busy) return;
     setBusy(true);
     setNotice(null);
+    setReviewFailed(false);
     try {
       const { data: change } = await api.put<ClubRoleChange>(`/clubs/${clubId}/members/${encodeURIComponent(userId)}/role`, { role });
       edit((cur) => ({ ...cur, members: applyRoleChange(cur.members, userId, change) }));
@@ -91,6 +96,7 @@ export function MembersPage() {
     if (!(await confirmDialog({ title: 'Remove from club?', message: `${member.fullName} stops being a member of ${data?.clubName ?? 'the club'}.`, confirmLabel: 'Remove from club', destructive: true }))) return false;
     setBusy(true);
     setNotice(null);
+    setReviewFailed(false);
     try {
       await api.delete(`/clubs/${clubId}/members/${encodeURIComponent(member.userId)}`);
       edit((cur) => ({ ...cur, members: withoutMember(cur.members, member.userId) }));
@@ -114,11 +120,11 @@ export function MembersPage() {
         <div className="sp-card">
           <CardDropdownRow label="Club" value={clubId == null ? '' : String(clubId)}
             options={[{ value: '', label: 'Choose a club' }, ...clubs.map((c) => ({ value: String(c.id), label: c.name }))]}
-            onChange={(value) => { setPicked(value ? Number(value) : null); setMenuFor(null); setNotice(null); }} />
+            onChange={(value) => { setPicked(value ? Number(value) : null); setMenuFor(null); setNotice(null); setReviewFailed(false); }} />
         </div>
       )}
 
-      {notice && <div className="cs-gap"><Notice>{notice}</Notice></div>}
+      {shown && <div className="cs-gap"><Notice>{shown}</Notice></div>}
       {clubId != null && !data && (
         <div className="cs-gap">
           {loadFailed === clubId

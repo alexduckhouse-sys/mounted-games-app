@@ -25,6 +25,9 @@ public sealed class RedisConnection : IDisposable
         _time = time ?? TimeProvider.System;
     }
 
+    /// <summary>Whether a Redis address is set at all (reachable or not).</summary>
+    public bool Configured => _options is not null;
+
     /// <summary>The connection when Redis is configured and reachable right now.</summary>
     public IConnectionMultiplexer? Available
     {

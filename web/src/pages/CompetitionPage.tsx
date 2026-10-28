@@ -9,10 +9,12 @@ import { appendStreamMessage } from '../lib/streams';
 import { tickerItems } from '../lib/ticker';
 import { BANNER_TAG, bannerAsNew, tickerAnnouncements } from '../lib/announcements';
 import { useTicker } from '../components/TickerContext';
+import { WeatherAlert } from '../components/WeatherAlert';
 import { useLiveHub } from '../live/useLiveHub';
 import { useConnectionStatus } from '../live/ConnectionStatusContext';
 import { isFocusPage, pollIntervalMs } from '../live/connectionStatus';
 import { useDownSince } from '../live/useDownSince';
+import { useIsOld } from '../live/useIsOld';
 import { HEAT_SAVED } from '../offline/useScoreOutbox';
 import { Clock } from 'lucide-react';
 import { Notice } from '../components/Notice';
@@ -28,10 +30,12 @@ import { useAgeGroups } from '../components/AgeGroupsContext';
 import { ageGroupStatuses } from '../lib/ageGroupStatus';
 import { useCompetitionMeta } from '../components/competitionMeta';
 import { displaySectionName } from '../lib/section';
-import { LIVE_SAVED_COPY_NOTICE_AFTER_MS, lastUpdatedText, readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, shouldNoticeSavedCopy, writeSavedCopy } from '../offline/savedCopies';
+import { lastUpdatedText, readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } from '../offline/savedCopies';
 import { PageSkeleton, TimetableSkeleton, ToplistSkeleton } from '../components/Skeletons';
 import { competitionPhase } from '../lib/competitionPhase';
 import { useLanguage, useT } from '../i18n/LanguageContext';
+import { announceProtestsChanged } from '../lib/protests';
+import { FollowBarPrompt } from './competition/FollowBarPrompt';
 
 function addAnnouncement(current: ChatMessage[], message: ChatMessage) {
   const withoutSame = current.filter((item) => item.id !== message.id);
@@ -222,7 +226,10 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
       }
       load();
       setReady((value) => value + 1);
+      // Staff screens re-read the protest log after a reconnect, in case a nudge was missed.
+      announceProtestsChanged();
     },
+    onProtestsChanged: announceProtestsChanged,
     onStreamUpdated: streamState.onStreamUpdated,
     onStreamViewers: streamState.onStreamViewers,
     onStreamTelemetry: (t) => setStreamTelemetry((cur) => ({ ...cur, [t.streamId]: t })),
@@ -315,10 +322,11 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   // Tell the header's connection pill what is happening.
   const retry = useCallback(() => { setRetrying(true); load(); reconnect(); }, [load, reconnect]);
   const { setStatus } = useConnectionStatus();
-  const { downSince, everConnected } = useDownSince(connected);
+  const { downSince } = useDownSince(connected);
+  const savedOld = useIsOld(savedAt);
   useEffect(() => {
-    setStatus({ connected, online, failures, downSince, everConnected, updatedAt, intervalMs, retrying, retry });
-  }, [connected, online, failures, downSince, everConnected, updatedAt, intervalMs, retrying, retry, setStatus]);
+    setStatus({ connected, online, failures, downSince, intervalMs, retrying, retry });
+  }, [connected, online, failures, downSince, intervalMs, retrying, retry, setStatus]);
   useEffect(() => () => setStatus(null), [setStatus]);
 
   if (error && !data) return (
@@ -332,7 +340,7 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
   }
   // A saved copy only needs a notice once it is noticeably old and the refresh is slow or has failed.
   const refreshing = settledAttempt !== attempt;
-  const showSavedNotice = savedAt !== null && (slowAttempt === attempt || !refreshing) && shouldNoticeSavedCopy(savedAt, !refreshing || savedAt === '', new Date(), LIVE_SAVED_COPY_NOTICE_AFTER_MS);
+  const showSavedNotice = savedAt !== null && (slowAttempt === attempt || !refreshing) && (!refreshing || savedAt === '') && savedOld;
 
   return (
     <CompetitionContext.Provider value={{ competition: data, reload: load, updatedAt, isStale: savedAt !== null || error || !connected, streams: streamState.streams, streamTelemetry, lastStreamCommand, streamingEnabled: streamState.streamingEnabled, streamingChecked: streamState.streamingChecked, invoke, ready, streamMessages, overlay: overlayState.overlay, saveOverlay: overlayState.save, scoreCards, sponsors: sponsorFeed.sponsors, reloadSponsors: sponsorFeed.reloadSponsors, sponsorSkip: sponsorFeed.sponsorSkip, prizeGiving }}>
@@ -348,6 +356,9 @@ function CompetitionContent({ competitionId }: { competitionId: number }) {
           </Notice>
         )}
       </div>
+      <WeatherAlert competition={data} reload={load} />
+      {/* A sheet, so it sits outside the page's flex column. */}
+      <FollowBarPrompt />
     </CompetitionContext.Provider>
   );
 }

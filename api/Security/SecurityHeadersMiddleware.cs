@@ -6,8 +6,11 @@ public sealed class SecurityHeadersMiddleware(RequestDelegate next, IWebHostEnvi
     // step with web/vercel.json; the parity test covers both deployment paths.
     // Sign in with Google (Google Identity Services) needs its script, stylesheet, button/One Tap frames and status
     // calls under https://accounts.google.com/gsi/; Sign in with Apple needs only its one script file (its pop-up is a
-    // window, not a frame, and answers by postMessage). Exactly the paths each provider documents, nothing wider.
-    public const string ContentSecurityPolicy = "default-src 'none'; script-src 'self' https://accounts.google.com/gsi/client https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_GB/appleid.auth.js; script-src-attr 'none'; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; style-src-elem 'self' https://accounts.google.com/gsi/style; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self' https://mounted-games-api.vercel.app wss://mounted-games-api.vercel.app https://accounts.google.com/gsi/; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://player.twitch.tv https://accounts.google.com/gsi/; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; upgrade-insecure-requests";
+    // window, not a frame, and answers by postMessage). Facebook Login needs its loader (sdk.js) and the bundle it loads
+    // (bundle/sdk.js/): with fedCM, status and localStorage off in FB.init, its pop-up answers by postMessage too, so it
+    // needs no frame or connect source. Its own logging calls and injected <style> are simply blocked. Exactly the paths
+    // each provider needs, nothing wider.
+    public const string ContentSecurityPolicy = "default-src 'none'; script-src 'self' https://accounts.google.com/gsi/client https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_GB/appleid.auth.js https://connect.facebook.net/en_GB/sdk.js https://connect.facebook.net/en_GB/bundle/sdk.js/; script-src-attr 'none'; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; style-src-elem 'self' https://accounts.google.com/gsi/style; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self' https://mounted-games-api.vercel.app wss://mounted-games-api.vercel.app https://accounts.google.com/gsi/; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://player.twitch.tv https://accounts.google.com/gsi/; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; upgrade-insecure-requests";
 
     /// <summary>
     /// The sign-in providers' sources in <see cref="ContentSecurityPolicy"/>, longest first. The embed policy leaves them
@@ -16,6 +19,8 @@ public sealed class SecurityHeadersMiddleware(RequestDelegate next, IWebHostEnvi
     public static readonly IReadOnlyList<string> SignInSources =
     [
         "https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_GB/appleid.auth.js",
+        "https://connect.facebook.net/en_GB/bundle/sdk.js/",
+        "https://connect.facebook.net/en_GB/sdk.js",
         "https://accounts.google.com/gsi/client",
         "https://accounts.google.com/gsi/style",
         "https://accounts.google.com/gsi/",

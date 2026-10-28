@@ -16,7 +16,7 @@ export function HorseboxEntranceCard({ competition }: { competition: Pick<Compet
   return (
     <>
       <h2 className="sp-sec">Horsebox entrance</h2>
-      <div className="ev-flat" role="group" aria-label="Horsebox entrance">
+      <div className="sp-card" role="group" aria-label="Horsebox entrance">
         {entrance.directionsNote && (
           <div className="sp-row"><span className="sp-grow"><span className="sp-t1 !font-medium whitespace-pre-wrap">{entrance.directionsNote}</span></span></div>
         )}

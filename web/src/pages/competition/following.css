@@ -1,0 +1,34 @@
+/* The competition's Following page: one card per followed team (name, then what it is doing and where it stands), and the
+   small preview of the bottom bar in the "add Following" sheet. Everything reads --mg-* tokens, so every theme works. */
+
+.fc-card { overflow: hidden; border: 1px solid rgb(var(--mg-line)); border-radius: var(--mg-radius-card); background: rgb(var(--mg-surface)); box-shadow: var(--mg-shadow-sm); }
+.fc-card.is-live { box-shadow: inset 3px 0 0 rgb(var(--mg-red)), var(--mg-shadow-sm); }
+.fc-top { display: flex; align-items: center; gap: 8px; padding: 10px 6px 8px 14px; }
+.fc-name { flex: 1; min-width: 0; display: block; color: rgb(var(--mg-heading)) !important; font: 700 18px/1.15 var(--mg-font); text-decoration: none !important; overflow-wrap: anywhere; }
+.fc-name:hover { text-decoration: underline !important; }
+.fc-name small { display: block; margin-top: 2px; color: rgb(var(--mg-muted)); font: 500 13px/1.2 var(--mg-font); }
+.fc-star { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; background: transparent; color: #C08308; cursor: pointer; }
+.fc-star:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -4px; border-radius: 10px; }
+
+.fc-line { display: grid; grid-template-columns: 62px minmax(0, 1fr) 14px; align-items: center; column-gap: 10px; min-height: 46px; padding: 6px 12px 6px 14px; border-top: 1px solid rgb(var(--mg-rule-soft)); color: rgb(var(--mg-ink)) !important; text-decoration: none !important; transition: background-color var(--mg-dur-fast) var(--mg-ease-out); }
+a.fc-line:hover { background: rgb(var(--mg-subtle)); }
+a.fc-line:active { background: rgb(var(--mg-tint) / .65); }
+.fc-line:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
+.fc-lead { color: rgb(var(--mg-heading)); font: 700 20px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; }
+.fc-lead.is-label { color: rgb(var(--mg-muted)); font: 600 13px/1.1 var(--mg-font); }
+.fc-lead.is-now { color: rgb(var(--mg-red)); font: 700 12px/1 var(--mg-font); letter-spacing: .06em; }
+.fc-lead.is-late { color: rgb(var(--mg-late-time)); }
+.fc-what { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.fc-what strong { font: 600 15px/1.2 var(--mg-font); overflow-wrap: anywhere; }
+.fc-what span { color: rgb(var(--mg-muted)); font: 500 13px/1.2 var(--mg-font); }
+.fc-what span.is-need { color: rgb(var(--mg-late-time)); }
+.fc-what span.is-safe { color: rgb(var(--mg-ok)); }
+.fc-chev { color: rgb(var(--mg-faint)); }
+
+/* "Add Following to your bottom bar": the bar as it will look, drawn small and still. */
+.fc-bar { display: flex; margin: 4px 0 16px; padding: 6px 2px; border: 1px solid rgb(var(--mg-line)); border-radius: 14px; background: rgb(var(--mg-surface)); }
+.fc-bar-tab { display: flex; flex: 1; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 52px; color: rgb(var(--mg-muted)); font: 500 11.5px/1 var(--mg-font); text-align: center; }
+.fc-bar-tab.is-on { color: rgb(var(--mg-heading)); font-weight: 700; }
+.fc-acts { display: flex; gap: 10px; }
+.fc-acts .kit-pill { flex: 1; min-height: 48px; }
+.fc-acts .kit-pill-fill { flex: 1.4; }

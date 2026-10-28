@@ -1,5 +1,5 @@
 /** What the connection pill shows. `connecting` and `live` show nothing. */
-export type LiveState = 'live' | 'connecting' | 'reconnecting' | 'polling' | 'offline';
+export type LiveState = 'live' | 'connecting' | 'polling' | 'unreachable' | 'offline';
 
 export interface ConnectionInputs {
   /** The live hub has joined the competition. */
@@ -10,8 +10,6 @@ export interface ConnectionInputs {
   failures: number;
   /** When the live link was last lost (ms since epoch), or null while connected. */
   downSince: number | null;
-  /** Whether the live link has worked at all since the page opened. */
-  everConnected: boolean;
 }
 
 /**
@@ -21,8 +19,8 @@ export interface ConnectionInputs {
 export const GRACE_MS = 15_000;
 /** A device that reports no network is believed after this short wait, so a Wi-Fi blip stays quiet. */
 export const OFFLINE_GRACE_MS = 5_000;
-/** After this long without the live link, say we're checking instead of reconnecting. */
-export const RECONNECT_MS = 45_000;
+/** Timetable checks that must fail in a row before the server counts as unreachable rather than just slow. */
+export const UNREACHABLE_FAILURES = 2;
 
 const FOCUS_PAGE = /\/competitions\/\d+\/(?:session\/\d+|scoring)\/?$/;
 
@@ -41,10 +39,8 @@ export function liveState(inputs: ConnectionInputs, now: number): LiveState {
   if (inputs.connected) return 'live';
   const downFor = inputs.downSince == null ? 0 : now - inputs.downSince;
   if (!inputs.online) return downFor < OFFLINE_GRACE_MS ? 'connecting' : 'offline';
-  // A failed timetable check only matters once the live link has stayed down too: one slow request
-  // during a routine reconnect isn't "offline".
+  // Failed timetable checks only matter once the live link has stayed down too: one slow request
+  // during a routine reconnect isn't news.
   if (downFor < GRACE_MS) return 'connecting';
-  if (inputs.failures > 0) return 'offline';
-  if (inputs.everConnected && downFor < RECONNECT_MS) return 'reconnecting';
-  return 'polling';
+  return inputs.failures >= UNREACHABLE_FAILURES ? 'unreachable' : 'polling';
 }

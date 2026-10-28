@@ -42,7 +42,7 @@ public class EmailAccountTests : IClassFixture<EmailApiFactory>
 
     private static (string UserId, string Token) LinkIn(EmailApiFactory.SentMessage m)
     {
-        var match = Regex.Match(m.Text, @"https://mg\.example\.org/confirm-email\?userId=([^&\s]+)&token=(\S+)");
+        var match = Regex.Match(m.Text, @"https://mg\.example\.org/confirm-email#u=([^&\s]+)&t=(\S+)");
         Assert.True(match.Success, m.Text);
         return (Uri.UnescapeDataString(match.Groups[1].Value), Uri.UnescapeDataString(match.Groups[2].Value));
     }
@@ -220,7 +220,9 @@ public class EmailAccountTests : IClassFixture<EmailApiFactory>
         Assert.DoesNotContain("Sam Lee", mail.Html);
         Assert.Contains(EmailHtml.HeaderStyle, mail.Html);
         Assert.Contains(EmailHtml.CardStyle, mail.Html);
-        Assert.Contains("/confirm-email?userId=", mail.Html);
+        Assert.Contains("/confirm-email#u=", mail.Html);
+        // The token travels in the fragment only, never a query string a server or proxy could log.
+        Assert.DoesNotContain("/confirm-email?", mail.Text);
         Assert.StartsWith("confirm-email-", mail.IdempotencyKey);
         var (userId, _) = LinkIn(mail);
         Assert.Equal(auth.User.Id, userId);
@@ -256,13 +258,13 @@ public class EmailAccountTests : IClassFixture<EmailApiFactory>
         var (email, auth, mail) = await SignedUpAsync();
         var (userId, token) = LinkIn(mail);
 
-        var r = await _f.CreateClient().PostAsJsonAsync("/api/auth/confirm-email", new ConfirmEmailRequest(userId, token));
+        var r = await _f.WithToken(auth.Token).PostAsJsonAsync("/api/auth/confirm-email", new ConfirmEmailRequest(userId, token));
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var me = await _f.WithToken(auth.Token).GetAsync("/api/auth/me");
         Assert.True((await me.ReadAsync<UserProfile>()).EmailConfirmed);
         // Using the link a second time does no harm.
-        var again = await _f.CreateClient().PostAsJsonAsync("/api/auth/confirm-email", new ConfirmEmailRequest(userId, token));
+        var again = await _f.WithToken(auth.Token).PostAsJsonAsync("/api/auth/confirm-email", new ConfirmEmailRequest(userId, token));
         Assert.Equal(HttpStatusCode.OK, again.StatusCode);
         Assert.True((await _f.LoginAsync(email, Password)).User.EmailConfirmed);
     }
@@ -277,7 +279,7 @@ public class EmailAccountTests : IClassFixture<EmailApiFactory>
     {
         var (_, auth, _) = await SignedUpAsync();
 
-        var r = await _f.CreateClient().PostAsJsonAsync("/api/auth/confirm-email", new ConfirmEmailRequest(auth.User.Id, token));
+        var r = await _f.WithToken(auth.Token).PostAsJsonAsync("/api/auth/confirm-email", new ConfirmEmailRequest(auth.User.Id, token));
 
         Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
         var me = await _f.WithToken(auth.Token).GetAsync("/api/auth/me");
@@ -285,19 +287,25 @@ public class EmailAccountTests : IClassFixture<EmailApiFactory>
     }
 
     [Fact]
-    public async Task ConfirmEmail_TokenForSomeoneElse_OrUnknownUser_GetsTheSameAnswer()
+    public async Task ConfirmEmail_NeedsTheAccountsOwnerSignedIn()
     {
-        var (_, _, mail) = await SignedUpAsync();
-        var (_, token) = LinkIn(mail);
-        var (_, other, _) = await SignedUpAsync();
+        var (_, owner, mail) = await SignedUpAsync();
+        var (userId, token) = LinkIn(mail);
+        var (_, other, otherMail) = await SignedUpAsync();
+        var (_, othersToken) = LinkIn(otherMail);
 
-        var wrongUser = await _f.CreateClient().PostAsJsonAsync("/api/auth/confirm-email", new ConfirmEmailRequest(other.User.Id, token));
-        var noUser = await _f.CreateClient().PostAsJsonAsync("/api/auth/confirm-email", new ConfirmEmailRequest("nobody", token));
-        var blankUser = await _f.CreateClient().PostAsJsonAsync("/api/auth/confirm-email", new ConfirmEmailRequest("", token));
+        var anonymous = await _f.CreateClient().PostAsJsonAsync("/api/auth/confirm-email", new ConfirmEmailRequest(userId, token));
+        var wrongAccount = await _f.WithToken(other.Token).PostAsJsonAsync("/api/auth/confirm-email", new ConfirmEmailRequest(userId, token));
+        var someoneElsesToken = await _f.WithToken(owner.Token).PostAsJsonAsync("/api/auth/confirm-email", new ConfirmEmailRequest(userId, othersToken));
+        var blankUser = await _f.WithToken(owner.Token).PostAsJsonAsync("/api/auth/confirm-email", new ConfirmEmailRequest("", othersToken));
 
-        Assert.Equal(HttpStatusCode.BadRequest, wrongUser.StatusCode);
-        Assert.Equal(await Message(wrongUser), await Message(noUser));
-        Assert.Equal(await Message(wrongUser), await Message(blankUser));
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, wrongAccount.StatusCode);
+        Assert.Contains("other_account", await Message(wrongAccount));
+        Assert.Equal(HttpStatusCode.BadRequest, someoneElsesToken.StatusCode);
+        Assert.Equal(await Message(someoneElsesToken), await Message(blankUser));
+        foreach (var account in new[] { owner, other })
+            Assert.False((await (await _f.WithToken(account.Token).GetAsync("/api/auth/me")).ReadAsync<UserProfile>()).EmailConfirmed);
     }
 
     // ---- resend ----
@@ -315,7 +323,7 @@ public class EmailAccountTests : IClassFixture<EmailApiFactory>
         var second = _f.Sent.Last(m => m.To == email);
         Assert.NotSame(first, second);
         var (userId, token) = LinkIn(second);
-        var confirm = await _f.CreateClient().PostAsJsonAsync("/api/auth/confirm-email", new ConfirmEmailRequest(userId, token));
+        var confirm = await _f.WithToken(auth.Token).PostAsJsonAsync("/api/auth/confirm-email", new ConfirmEmailRequest(userId, token));
         Assert.Equal(HttpStatusCode.OK, confirm.StatusCode);
     }
 
@@ -324,7 +332,7 @@ public class EmailAccountTests : IClassFixture<EmailApiFactory>
     {
         var (email, auth, mail) = await SignedUpAsync();
         var (userId, token) = LinkIn(mail);
-        await _f.CreateClient().PostAsJsonAsync("/api/auth/confirm-email", new ConfirmEmailRequest(userId, token));
+        await _f.WithToken(auth.Token).PostAsJsonAsync("/api/auth/confirm-email", new ConfirmEmailRequest(userId, token));
         var before = _f.Sent.Count(m => m.To == email);
 
         var r = await _f.WithToken(auth.Token).PostAsync("/api/auth/resend-confirmation", null);

@@ -54,6 +54,9 @@ export const entries: AreaCatalogue<typeof en> = {
   'entries.page.afterDraw': 'Bydd yr amserlen, y tablau arweinwyr a’r sgoriau byw yn agor unwaith y bydd y timau wedi’u tynnu.',
 
   'entries.form.full': 'Mae {section} yn llawn. Gallwch ymuno â’r rhestr aros.',
+  'entries.form.forSomeoneElse': 'Cofrestru rhywun arall? Newidiwch yr enw a’r clwb isod.',
+  'entries.form.draftUnsaved': 'Does dim modd cadw eich manylion ar y ddyfais hon. Cadwch y dudalen hon ar agor nes i chi gyflwyno.',
+  'entries.form.draftSaved': 'Cofrestriad anorffenedig wedi’i gadw ar y ddyfais hon am saith diwrnod.',
   'entries.form.emailInvalid': 'Nid yw’r cyfeiriad e-bost hwnnw’n edrych yn iawn.',
   'entries.form.sentTitle': '{entry} yn {competition}.',
   'entries.form.emailedCopy': 'Rydym wedi anfon copi atoch drwy e-bost.',
@@ -66,7 +69,7 @@ export const entries: AreaCatalogue<typeof en> = {
   'entries.form.bankCopied': 'Manylion y banc wedi’u copïo',
   'entries.form.payAmount': 'Talu {fee}',
   'entries.form.payByTransfer': 'Talu {fee} drwy drosglwyddiad banc',
-  'entries.form.demoNote': 'Digwyddiad arddangos yw hwn. Ar ôl i chi gyflwyno, fe welwch dudalen dalu brawf. Ni chymerir unrhyw arian.',
+  'entries.form.demoNote': 'Ar ôl i chi gyflwyno, fe welwch dudalen dalu brawf.',
   'entries.form.bankDetails': 'Manylion y banc',
   'entries.form.payTo': 'Talu i',
   'entries.form.reference': 'Cyfeirnod',

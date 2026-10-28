@@ -70,10 +70,16 @@ describe('Sheet', () => {
     fireEvent.touchEnd(dialog, { changedTouches: [{ clientY: 200 }] });
     expect(onClose).not.toHaveBeenCalled();
 
+    // A slow, short drag (400ms for 20px) slides back rather than closing.
+    const clock = vi.spyOn(performance, 'now');
+    clock.mockReturnValue(1000);
     fireEvent.pointerDown(dialog, { clientY: 100 });
     fireEvent.pointerMove(dialog, { clientY: 120 });
     expect(dialog).toHaveStyle({ transform: 'translateY(20px)' });
+    expect(dialog).toHaveClass('is-dragging');
+    clock.mockReturnValue(1400);
     fireEvent.pointerUp(dialog, { clientY: 120 });
+    expect(dialog).not.toHaveClass('is-dragging');
     expect(dialog.style.transform).toBe('');
     expect(onClose).not.toHaveBeenCalled();
 
@@ -81,6 +87,7 @@ describe('Sheet', () => {
     fireEvent.touchMove(dialog, { touches: [{ clientY: 160 }] });
     fireEvent.touchEnd(dialog, { changedTouches: [{ clientY: 160 }] });
     expect(onClose).toHaveBeenCalledTimes(1);
+    clock.mockRestore();
   });
 
   it('takes plain children, and focuses the control it was told to', () => {

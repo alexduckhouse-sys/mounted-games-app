@@ -216,6 +216,28 @@ public class TeamsCrudTests : IClassFixture<ApiFactory>
         Assert.Equal(coachId, dto.TrainerUserId);
     }
 
+    [Fact]
+    public async Task Create_RefusesATrainerWhoIsntAnApprovedTrainer_AsAnUpdateDoes()
+    {
+        var (comp, section, club) = await ArrangeAsync();
+        var (_, member) = await _f.SignupAsync("Member");
+        var trainer = await _f.TrainerAsync();
+
+        foreach (var notATrainer in new[] { member.User.Id, "no-such-user" })
+        {
+            var refused = await trainer.PostAsJsonAsync($"/api/competitions/{comp}/teams", NewTeam(section, club, trainer: notATrainer));
+            Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+            Assert.Contains("isn't an approved trainer", await refused.Content.ReadAsStringAsync());
+        }
+        Assert.Equal(0, await _f.WithDbAsync(db => db.Teams.CountAsync(t => t.CompetitionId == comp)));
+
+        // Blank means "none given", so a trainer creating it still becomes its trainer.
+        var auth = await _f.LoginAsync(TestClients.TrainerEmail, TestClients.TrainerPassword);
+        var dto = await (await trainer.PostAsJsonAsync($"/api/competitions/{comp}/teams", NewTeam(section, club, trainer: "  ")))
+            .ReadAsync<TeamDto>();
+        Assert.Equal(auth.User.Id, dto.TrainerUserId);
+    }
+
     // ---- update ----
 
     [Fact]

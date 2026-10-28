@@ -1,6 +1,7 @@
 import { motion, useReducedMotion } from 'framer-motion';
 import { CircleAlert, CreditCard, Lock, ShieldCheck } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { DemoPaymentNotice, type DemoPaymentKind } from '../../components/DemoPaymentNotice';
 import { Notice } from '../../components/Notice';
 import { RefineFoot, RefineHeader, RefinePage } from '../refine/Refine';
 import { newIdempotencyKey, pounds } from './commerceFormat';
@@ -30,6 +31,8 @@ export interface DemoPaymentFlowProps {
   resultContext?: string;
   /** Page variant: everything under the result header. Use OutcomeState for the icon and wording. */
   renderResult?: (result: { payment: TestPayment; retry: () => void }) => ReactNode;
+  /** What is being paid for, for the demo notice at the top of the page variant. */
+  what?: DemoPaymentKind;
   /** Page variant: how long the padlock screen shows at least, so a fast reply doesn't flash by. */
   minProcessingMs?: number;
 }
@@ -67,6 +70,7 @@ export function DemoPaymentFlow({
   resultContext,
   renderResult,
   minProcessingMs = 1200,
+  what = 'order',
 }: DemoPaymentFlowProps) {
   const page = variant === 'page';
   const reducedMotion = Boolean(useReducedMotion());
@@ -170,6 +174,7 @@ export function DemoPaymentFlow({
           title={headerTitle}
           demo
         />
+        {step !== 'processing' && <DemoPaymentNotice what={what} className="mt-3" />}
         {step === 'processing' && (
           <div className="rf-lockwrap" role="status" aria-live="polite">
             <DemoPaymentLock state="waiting" reducedMotion={reducedMotion} />
@@ -181,7 +186,7 @@ export function DemoPaymentFlow({
         {(step === 'details' || step === 'review') && (
           <>
             <form id="demo-pay-form" className="flex flex-col gap-3 py-3" onSubmit={submit} noValidate>
-              <p className="rf-note !py-0">Test card filled in for you. Nothing is sent or charged.</p>
+              <p className="rf-note !py-0">Test card filled in for you.</p>
               <label className="rf-fld">Card number
                 <input value={card} onChange={(event) => setCard(formatCard(event.target.value))} inputMode="numeric" autoComplete="off" placeholder="0000 0000 0000 0000" />
               </label>
@@ -326,7 +331,7 @@ export function OutcomeState({ payment, title, detail, role }: { payment: TestPa
   const tone = payment.status === 0 ? 'ok' : payment.status === 1 ? 'bad' : 'mut';
   const heading = title ?? (payment.status === 0 ? 'Payment approved' : payment.status === 1 ? 'The demo card was declined' : payment.status === 2 ? 'Payment cancelled' : 'Payment refunded');
   const line = detail ?? (payment.status === 0
-    ? <>Paid <PaidAmount amountMinor={payment.amountMinor} /></>
+    ? <>Demo paid <PaidAmount amountMinor={payment.amountMinor} /></>
     : payment.status === 1 ? 'Nothing was charged.' : payment.status === 2 ? 'Nothing was charged.' : 'No money moved.');
   // The disc pops in and its mark draws itself; a declined card gives a small shake (see demoPayment.css).
   return (

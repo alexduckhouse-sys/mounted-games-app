@@ -50,7 +50,7 @@ describe('EntriesPage filters and capacity', () => {
   it('opens the current booking from a pass QR without marking it paid or checked in', async () => {
     show('/competitions/7/entries?pass=1');
     expect(await screen.findByLabelText('Stable boxes')).toHaveValue('Barn B');
-    expect(screen.getByRole('button', { name: 'Paid · 1' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Show: Paid (1)' })).toBeInTheDocument();
     expect(api.post).not.toHaveBeenCalled();
     expect(api.put).not.toHaveBeenCalled();
   });
@@ -58,7 +58,7 @@ describe('EntriesPage filters and capacity', () => {
   it('shows the current withdrawn status when an old pass is scanned', async () => {
     show('/competitions/7/entries?pass=4');
     expect(await screen.findByLabelText('What happens to the fee')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Withdrawn · 1' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Show: Withdrawn (1)' })).toBeInTheDocument();
     expect(api.post).not.toHaveBeenCalled();
   });
 
@@ -78,11 +78,8 @@ describe('EntriesPage filters and capacity', () => {
 
   it('shows counts on each filter and the stable and hook-up totals', async () => {
     show();
-    expect(await screen.findByRole('button', { name: 'All · 6' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Paid · 1' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Pending payment · 3' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Waitlist · 1' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Withdrawn · 1' })).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Show: All teams' }));
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['All teams', 'Paid (1)', 'Pending payment (3)', 'Waitlist (1)', 'Withdrawn (1)']);
     expect(screen.getByText('Stables 8 of 20 booked · Hook-ups 2 of 5 booked')).toBeInTheDocument();
   });
 
@@ -90,7 +87,8 @@ describe('EntriesPage filters and capacity', () => {
     const user = userEvent.setup();
     const asked = autoConfirm(true);
     show();
-    await user.click(await screen.findByRole('button', { name: 'Pending payment · 3' }));
+    await user.click(await screen.findByRole('button', { name: /^Show:/ }));
+    await user.click(screen.getByRole('option', { name: 'Pending payment (3)' }));
     expect(screen.getAllByText('Pending payment').length).toBeGreaterThanOrEqual(3);
     expect(screen.getByText('£15.50 by bank transfer')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Mark Pending Pru paid' }));
@@ -102,7 +100,8 @@ describe('EntriesPage filters and capacity', () => {
     const user = userEvent.setup();
     autoConfirm(false);
     show();
-    await user.click(await screen.findByRole('button', { name: 'Pending payment · 3' }));
+    await user.click(await screen.findByRole('button', { name: /^Show:/ }));
+    await user.click(screen.getByRole('option', { name: 'Pending payment (3)' }));
     await user.click(screen.getByRole('button', { name: 'Mark Pending Pru paid' }));
     await new Promise((r) => setTimeout(r, 20));
     expect(api.post).not.toHaveBeenCalled();
@@ -111,7 +110,8 @@ describe('EntriesPage filters and capacity', () => {
   it('shows the guest rider, staff-only contacts, allocation and arrival on a paid entry', async () => {
     const user = userEvent.setup();
     show();
-    await user.click(await screen.findByRole('button', { name: 'Paid · 1' }));
+    await user.click(await screen.findByRole('button', { name: /^Show:/ }));
+    await user.click(screen.getByRole('option', { name: 'Paid (1)' }));
     await user.click(screen.getByRole('button', { name: /Paid Pat/ }));
     expect(screen.getByText(/Rider: Kit · born 05\/04\/2015 · Biscuit/)).toBeInTheDocument();
     expect(screen.getByText('Staff only')).toBeInTheDocument();
@@ -134,7 +134,8 @@ describe('EntriesPage filters and capacity', () => {
     const user = userEvent.setup();
     const asked = autoConfirm(true);
     show();
-    await user.click(await screen.findByRole('button', { name: 'Waitlist · 1' }));
+    await user.click(await screen.findByRole('button', { name: /^Show:/ }));
+    await user.click(screen.getByRole('option', { name: 'Waitlist (1)' }));
     await user.click(screen.getByRole('button', { name: /Waiting Wes/ }));
     expect(screen.getByText('No offer made yet.')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Offer a place' }));
@@ -146,7 +147,8 @@ describe('EntriesPage filters and capacity', () => {
     signups[2] = { ...signups[2], waitlistOfferExpiresAt: new Date(Date.now() + 5 * 3_600_000 + 30_000).toISOString() };
     const user = userEvent.setup();
     show();
-    await user.click(await screen.findByRole('button', { name: 'Waitlist · 1' }));
+    await user.click(await screen.findByRole('button', { name: /^Show:/ }));
+    await user.click(screen.getByRole('option', { name: 'Waitlist (1)' }));
     await user.click(screen.getByRole('button', { name: /Waiting Wes/ }));
     expect(screen.getByText(/^5h \d+m left$/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send a new offer' })).toBeInTheDocument();
@@ -156,7 +158,8 @@ describe('EntriesPage filters and capacity', () => {
     const user = userEvent.setup();
     const asked = autoConfirm(true);
     show();
-    await user.click(await screen.findByRole('button', { name: 'Withdrawn · 1' }));
+    await user.click(await screen.findByRole('button', { name: /^Show:/ }));
+    await user.click(screen.getByRole('option', { name: 'Withdrawn (1)' }));
     await user.click(screen.getByRole('button', { name: /Out Olly/ }));
     await user.selectOptions(screen.getByLabelText('What happens to the fee'), 'Refunded');
     await user.type(screen.getByLabelText(/Amount refunded/), '7.50');
@@ -168,7 +171,8 @@ describe('EntriesPage filters and capacity', () => {
   it('refuses a refund bigger than the fee', async () => {
     const user = userEvent.setup();
     show();
-    await user.click(await screen.findByRole('button', { name: 'Withdrawn · 1' }));
+    await user.click(await screen.findByRole('button', { name: /^Show:/ }));
+    await user.click(screen.getByRole('option', { name: 'Withdrawn (1)' }));
     await user.click(screen.getByRole('button', { name: /Out Olly/ }));
     await user.selectOptions(screen.getByLabelText('What happens to the fee'), 'Refunded');
     await user.type(screen.getByLabelText(/Amount refunded/), '20');

@@ -441,4 +441,94 @@ public class AccountDeletionTests : IClassFixture<ApiFactory>
         var again = await _f.CreateClient().PostAsJsonAsync("/api/auth/signup-trainer", new SignupTrainerRequest(auth.User.Email, Password, null, "Deletion Test Club"));
         Assert.Equal(HttpStatusCode.OK, again.StatusCode);
     }
+
+    // ---- blocks, volunteer duties and private replies ----
+
+    private async Task<AccountDeletionOutcome> DeleteThroughServiceAsync(string userId)
+    {
+        using var scope = _f.Services.CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+        return await scope.ServiceProvider.GetRequiredService<AccountDeletionService>().DeleteAsync((await users.FindByIdAsync(userId))!);
+    }
+
+    [Fact]
+    public async Task ABlockedAccount_KeepsItsBlockAndItsNetworks_WhenDeleted()
+    {
+        var (_, auth) = await _f.SignupAsync();
+        var id = auth.User.Id;
+        var hash = $"h1:{Guid.NewGuid():N}"[..30];
+        await _f.InDbAsync(async db =>
+        {
+            var user = await db.Users.SingleAsync(u => u.Id == id);
+            user.BlockedAt = DateTime.UtcNow;
+            user.BlockReason = "Abuse in chat";
+            db.AccountIps.Add(new AccountIp { UserId = id, IpHash = hash });
+            db.IpBlocks.Add(new IpBlock { IpAddress = hash, Reason = "Account blocked", BlockedAccountUserId = id });
+            await db.SaveChangesAsync();
+        });
+
+        Assert.Equal(AccountDeletionOutcome.Anonymised, await DeleteThroughServiceAsync(id));
+
+        await _f.WithDbAsync(async db =>
+        {
+            // Emptied, but still blocked, so it stays on the admins' blocked list and can be lifted from there.
+            var shell = await db.Users.SingleAsync(u => u.Id == id);
+            Assert.Equal((AccountDeletionService.DeletedName, $"deleted-{id}@deleted.invalid", "Abuse in chat"), (shell.FullName, shell.Email, shell.BlockReason));
+            Assert.NotNull(shell.BlockedAt);
+            Assert.True(await db.IpBlocks.AnyAsync(b => b.BlockedAccountUserId == id && b.IpAddress == hash));
+            Assert.True(await db.AccountIps.AnyAsync(a => a.UserId == id && a.IpHash == hash));
+        });
+
+        // An account that isn't blocked loses its networks as before.
+        var (client, other) = await _f.SignupAsync();
+        await _f.InDbAsync(async db =>
+        {
+            db.AccountIps.Add(new AccountIp { UserId = other.User.Id, IpHash = $"h1:{Guid.NewGuid():N}"[..30] });
+            await db.SaveChangesAsync();
+        });
+        Assert.Equal(HttpStatusCode.NoContent, (await Delete(client, Password)).StatusCode);
+        Assert.False(await _f.WithDbAsync(db => db.AccountIps.AnyAsync(a => a.UserId == other.User.Id)));
+    }
+
+    [Fact]
+    public async Task Deleting_RemovesVolunteerDutiesAndUnaddressesPrivateReplies()
+    {
+        var (client, auth) = await _f.SignupAsync();
+        var id = auth.User.Id;
+        var (_, bystander) = await _f.SignupAsync();
+        var arena = await _f.CreateArenaAsync(1);
+        var (shiftId, othersClaimId, replyId, othersReplyId) = await _f.WithDbAsync(async db =>
+        {
+            var shift = new MountedGames.Api.Entities.Operations.VolunteerShift
+            {
+                CompetitionId = arena.CompetitionId, Role = "Steward", CheckedInByUserId = id, CheckedInByName = "Real Name", CheckedInAt = DateTime.UtcNow,
+            };
+            db.VolunteerShifts.Add(shift);
+            await db.SaveChangesAsync();
+            db.VolunteerClaims.Add(new MountedGames.Api.Entities.Operations.VolunteerClaim { ShiftId = shift.Id, UserId = id, VolunteerName = "Real Name", ContactPhone = "07700 900123" });
+            var othersClaim = new MountedGames.Api.Entities.Operations.VolunteerClaim { ShiftId = shift.Id, UserId = bystander.User.Id, VolunteerName = "Bystander", ContactPhone = "07700 900456" };
+            var reply = new ChatMessage { CompetitionId = arena.CompetitionId, UserId = bystander.User.Id, AuthorName = "Organiser", Body = "Private reply", AdminOnly = true, RecipientUserId = id };
+            var othersReply = new ChatMessage { CompetitionId = arena.CompetitionId, UserId = id, AuthorName = "Organiser", Body = "Other reply", AdminOnly = true, RecipientUserId = bystander.User.Id };
+            db.AddRange(othersClaim, reply, othersReply);
+            await db.SaveChangesAsync();
+            return (shift.Id, othersClaim.Id, reply.Id, othersReply.Id);
+        });
+
+        Assert.Equal(HttpStatusCode.NoContent, (await Delete(client, Password)).StatusCode);
+
+        await _f.WithDbAsync(async db =>
+        {
+            Assert.False(await db.VolunteerClaims.AnyAsync(c => c.UserId == id));
+            Assert.False(await db.VolunteerClaims.AnyAsync(c => c.VolunteerName == "Real Name" || c.ContactPhone == "07700 900123"));
+            Assert.Equal("07700 900456", (await db.VolunteerClaims.SingleAsync(c => c.Id == othersClaimId)).ContactPhone);
+            var shift = await db.VolunteerShifts.SingleAsync(v => v.Id == shiftId);
+            Assert.Equal((null, AccountDeletionService.DeletedName), (shift.CheckedInByUserId, shift.CheckedInByName));
+            Assert.NotNull(shift.CheckedInAt);
+
+            // The organiser's reply stays staff-only, addressed to nobody; what the deleted person wrote is gone.
+            var reply = await db.ChatMessages.SingleAsync(m => m.Id == replyId);
+            Assert.Equal((null, true, "Private reply"), (reply.RecipientUserId, reply.AdminOnly, reply.Body));
+            Assert.False(await db.ChatMessages.AnyAsync(m => m.Id == othersReplyId));
+        });
+    }
 }

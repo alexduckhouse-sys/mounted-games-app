@@ -237,6 +237,7 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "Heats", "RaceRoundId", "INTEGER NULL");
         await EnsureColumnAsync(db, "Heats", "RaceRoundStage", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "HeatEntries", "BibColourOverride", "TEXT NULL");
+        await EnsureColumnAsync(db, "Races", "HasOpenProtest", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "CompetitionSections", "RunoffRaceName", "TEXT NULL");
         await EnsureColumnAsync(db, "CompetitionSections", "TieBreakRule", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "CompetitionSections", "FinalistCount", "INTEGER NULL");
@@ -467,6 +468,88 @@ public static class DbInitializer
 
     }
 
+    /// <summary>Canonical UK Pony Clubs list, added at every startup (reference data, not demo data).</summary>
+    internal static readonly string[] PresetClubNames =
+    {
+        "Albrighton Hunt", "Albrighton Woodland Hunt", "Amman Valley & District", "Anglesey",
+        "Angus", "Argyll South", "Ashford Valley", "Atherstone", "Avon Vale", "Axe Vale Hunt",
+        "Badsworth Hunt", "Banwell", "Banwen & District", "Barlow Hunt", "Beaufort Hunt",
+        "Bedale & West of Yore Hunt", "Bedfordshire South", "Belvoir Hunt", "Bennachie",
+        "Berkeley Hunt", "Berkeley South", "Berwickshire Hunt", "Berwyn & Dee",
+        "Bicester & Warden Hill Hunt", "Bisley and Sandown Chase", "Blackburn & District",
+        "Blackmore & Sparkford Vale", "Blankney Hunt", "Braes of Derwent South",
+        "Bramham Moor Hunt", "Brecon & Talybont", "Brocklesby Hunt", "Burghley", "Burton",
+        "Burton Cheshire Forest", "Caithness", "Cambridgeshire Hunt", "Carmarthen Bay",
+        "Cattistock Hunt", "Cheshire Hunt North", "Cheshire Hunt South", "Chiddingfold",
+        "Chiddingfold Farmers", "Chipping", "Cleveland Hunt", "Cobham and Wimbledon",
+        "Cotley Hunt", "Cotswold", "Cotswold Vale Farmers’ Hunt", "Cottesmore Hunt",
+        "Cowdray Hunt", "Craven Hunt", "Crawley & Horsham Hunt", "Crawley & Horsham Hunt South",
+        "Crickhowell & District", "Croome Hunt", "Cumberland Farmers Hunt North",
+        "Cumberland Farmers’ Hunt (South)", "Cumberland Foxhounds", "Curre Hunt", "Cury Hunt",
+        "Dalkeith & District", "Dare Valley", "Dartmoor", "Deeside", "Derwent Hunt", "Deveron",
+        "Devon & Somerset", "Dinas Powys", "Dolgellau & District", "Duke of Buccleuch’s Hunt",
+        "Dulverton West Foxhounds (North Molton) Hunt", "Dumfriesshire Hunt",
+        "Dwyfor and Gwynedd", "East Aberdeenshire (Buchan)", "East Antrim", "East Cheshire",
+        "East Cornwall", "East Devon Hunt", "East Down", "East Essex", "East Hertfordshire Hunt",
+        "East Kent Hunt", "East Lothian", "East Stirlingshire", "East Sussex",
+        "Easton Harriers Hunt", "Edinburgh", "Eggesford Hunt", "Eglinton Hunt",
+        "Enfield Chace Hunt", "Eridge", "Eskdale", "Essex & Suffolk Hunt", "Essex Farmers",
+        "Essex Hunt North", "Essex Union", "Essex Union South", "Fermanagh Harriers",
+        "Fernie Hunt", "Fife", "Fitzwilliam Hunt", "Flamstead", "Flint & Denbigh Hunt",
+        "Four Burrow", "Furness & District", "Fylde & District", "Galloway", "Garth Hunt",
+        "Garth South", "Glaisdale Hunt", "Glamorgan Hunt", "Glenrothes", "Glossop & District",
+        "Gogerddan", "Golden Valley", "Goodwood", "Grafton Hunt", "Grove", "Guernsey",
+        "Hambledon Hunt (North)", "Hampshire Hunt", "Haydock Park", "Heart of England",
+        "Hertfordshire Hunt", "Heythrop Hunt", "High Peak Hunt", "Holcombe Hunt",
+        "Holderness Hunt", "Hursley Hunt", "Hurworth Hunt", "Inverness-shire", "Isle of Man",
+        "Isle of Mull", "Isle of Wight", "Isles of Scilly", "Iveagh", "Ivel Valley",
+        "Jersey Drag Hunt", "Kenfig Hill", "Kent Border",
+        "Killultagh Old Rock & Chichester Harriers", "Kincardineshire", "Lamerton Hunt",
+        "Lanark & Upperward", "Lanarkshire & Renfrewshire Hunt", "Lancaster & District",
+        "Lauderdale Hunt", "Ledbury Hunt", "Linlithgow & Stirlingshire", "Llandeilo & District",
+        "Llangeinor Hunt", "Lord Leconfield Hunt", "Ludlow Hunt", "Malvern", "Mendip Farmers",
+        "Meynell", "Mid Antrim", "Mid Devon Hunt", "Mid Surrey", "Middleton Hunt",
+        "Middleton Hunt (East Side)", "Minchinhampton", "Monmouthshire", "Moray & Nairn",
+        "Morpeth Hunt", "Neath", "New Forest Hunts", "Newcastle & North Durham",
+        "Newmarket & Thurlow Hunt", "Nithsdale", "North Argyll", "North Cornwall",
+        "North Cotswold Hunt", "North Derry", "North Down", "North Herefordshire",
+        "North Norfolk", "North Northumberland Hunt", "North Shropshire Hunt",
+        "North Staffordshire Hunt", "North Warwickshire", "Oakley Hunt North",
+        "Oakley Hunt West", "Old Berkeley Hunt (Chilterns)", "Old Berkeley Hunt (Hughenden)",
+        "Old Berkeley Hunt (North)", "Old Berkeley Hunt (South)", "Old Berkshire Hunt",
+        "Old Surrey & Burstow Hunt", "Orkney", "Oxenholme", "Parc Howard", "Peak",
+        "Peebles Tweeddale", "Pembrokeshire Hunt", "Pendle Forest & Craven", "Pentyrch",
+        "Percy Hunt", "Perth Hunt", "Petersfield", "Polden Hills", "Poole & District",
+        "Portman", "Puckeridge Hunt", "Puckeridge Hunt Western", "Pytchley Hunt",
+        "Quantock Hunt", "Quorn Hunt", "Radnor & West Hereford Hunt", "Rockwood Harriers",
+        "Romney Marsh", "Ross-shire", "Route Hunt", "Royal Artillery", "Rufford Hunt",
+        "Ryburn Valley", "Saddleworth & District", "Scunthorpe & District", "Seavington",
+        "Sennybridge & District", "Seskinore Harriers", "Silverton Hunt", "Sinnington Hunt",
+        "Soham & District", "South & West Wilts Hunt", "South Berkshire",
+        "South Devon Hunt (Moorland)", "South Devon West", "South Dorset Hunt",
+        "South Durham Hunt", "South Hereford and Ross Harriers", "South Hertfordshire",
+        "South Norfolk", "South Northumberland", "South Nottinghamshire",
+        "South Oxfordshire Hunt (South)", "South Oxfordshire Hunt Central",
+        "South Pembrokeshire & Cresselly Hunt", "South Pool", "South Shropshire Hunt",
+        "South Staffordshire Hunt", "South Trent", "South Wold Hunt North",
+        "Southdown Hunt (East)", "Southdown West", "Spooners & West Dartmoor",
+        "Staff College & Sandhurst", "Staintondale Hunt",
+        "Stevenstone & Torrington Farmers Hunt", "Stewartry", "Strathblane & District",
+        "Strathearn", "Stroud", "Suffolk", "Surrey Union", "Swansea & District", "Syston",
+        "Tanatside Hunt", "Taunton Vale", "Taunton Vale Harriers", "Tedworth Hunt",
+        "Teme Valley Hunt", "Tetcott & South Tetcott Hunts", "The Wynnstay", "Thetford Chase",
+        "Tickham", "Tiverton Hunt", "Tivyside", "Tredegar Farmers Hunt", "Tullylagan",
+        "Tynedale Hunt", "United Pack", "Vale of Aylesbury Hunt", "Vale of Clettwr",
+        "Vale of Taf", "Vale of York", "Vine", "VWH Hunt", "Waen-y-Llyn", "Walpole & District",
+        "Warwickshire Hunt", "Waveney Harriers", "West Hants", "West Kent (Sevenoaks)",
+        "West Kent Meopham", "West Lancashire County", "West Lancashire Ince Blundell",
+        "West Midlands", "West Norfolk", "West Perthshire", "West Somerset",
+        "West Warwickshire", "Western", "Western Isles", "Weston Harriers Hunt",
+        "Whaddon Chase", "Wheatland Hunt", "Wheelton & District", "Wilton Hunt", "Wokingham",
+        "Woodland Hunt", "Woodland Pytchley Hunt", "Worcestershire Hunt", "Wylye Valley",
+        "Wyndham", "Wyre Forest", "Ynysybwl",
+    };
+
     private static async Task SeedReferenceDataAsync(AppDbContext db, RoleManager<IdentityRole> roles)
     {
         foreach (var r in Roles.All)
@@ -479,89 +562,9 @@ public static class DbInitializer
 
         // Canonical UK Pony Clubs list. Add only — never delete clubs that already exist
         // in the DB (they may be referenced by teams or saved riders).
-        var presetClubs = new[]
-        {
-            "Albrighton Hunt", "Albrighton Woodland Hunt", "Amman Valley & District", "Anglesey",
-            "Angus", "Argyll South", "Ashford Valley", "Atherstone", "Avon Vale", "Axe Vale Hunt",
-            "Badsworth Hunt", "Banwell", "Banwen & District", "Barlow Hunt", "Beaufort Hunt",
-            "Bedale & West of Yore Hunt", "Bedfordshire South", "Belvoir Hunt", "Bennachie",
-            "Berkeley Hunt", "Berkeley South", "Berwickshire Hunt", "Berwyn & Dee",
-            "Bicester & Warden Hill Hunt", "Bisley and Sandown Chase", "Blackburn & District",
-            "Blackmore & Sparkford Vale", "Blankney Hunt", "Braes of Derwent South",
-            "Bramham Moor Hunt", "Brecon & Talybont", "Brocklesby Hunt", "Burghley", "Burton",
-            "Burton Cheshire Forest", "Caithness", "Cambridgeshire Hunt", "Carmarthen Bay",
-            "Cattistock Hunt", "Cheshire Hunt North", "Cheshire Hunt South", "Chiddingfold",
-            "Chiddingfold Farmers", "Chipping", "Cleveland Hunt", "Cobham and Wimbledon",
-            "Cotley Hunt", "Cotswold", "Cotswold Vale Farmers’ Hunt", "Cottesmore Hunt",
-            "Cowdray Hunt", "Craven Hunt", "Crawley & Horsham Hunt", "Crawley & Horsham Hunt South",
-            "Crickhowell & District", "Croome Hunt", "Cumberland Farmers Hunt North",
-            "Cumberland Farmers’ Hunt (South)", "Cumberland Foxhounds", "Curre Hunt", "Cury Hunt",
-            "Dalkeith & District", "Dare Valley", "Dartmoor", "Deeside", "Derwent Hunt", "Deveron",
-            "Devon & Somerset", "Dinas Powys", "Dolgellau & District", "Duke of Buccleuch’s Hunt",
-            "Dulverton West Foxhounds (North Molton) Hunt", "Dumfriesshire Hunt",
-            "Dwyfor and Gwynedd", "East Aberdeenshire (Buchan)", "East Antrim", "East Cheshire",
-            "East Cornwall", "East Devon Hunt", "East Down", "East Essex", "East Hertfordshire Hunt",
-            "East Kent Hunt", "East Lothian", "East Stirlingshire", "East Sussex",
-            "Easton Harriers Hunt", "Edinburgh", "Eggesford Hunt", "Eglinton Hunt",
-            "Enfield Chace Hunt", "Eridge", "Eskdale", "Essex & Suffolk Hunt", "Essex Farmers",
-            "Essex Hunt North", "Essex Union", "Essex Union South", "Fermanagh Harriers",
-            "Fernie Hunt", "Fife", "Fitzwilliam Hunt", "Flamstead", "Flint & Denbigh Hunt",
-            "Four Burrow", "Furness & District", "Fylde & District", "Galloway", "Garth Hunt",
-            "Garth South", "Glaisdale Hunt", "Glamorgan Hunt", "Glenrothes", "Glossop & District",
-            "Gogerddan", "Golden Valley", "Goodwood", "Grafton Hunt", "Grove", "Guernsey",
-            "Hambledon Hunt (North)", "Hampshire Hunt", "Haydock Park", "Heart of England",
-            "Hertfordshire Hunt", "Heythrop Hunt", "High Peak Hunt", "Holcombe Hunt",
-            "Holderness Hunt", "Hursley Hunt", "Hurworth Hunt", "Inverness-shire", "Isle of Man",
-            "Isle of Mull", "Isle of Wight", "Isles of Scilly", "Iveagh", "Ivel Valley",
-            "Jersey Drag Hunt", "Kenfig Hill", "Kent Border",
-            "Killultagh Old Rock & Chichester Harriers", "Kincardineshire", "Lamerton Hunt",
-            "Lanark & Upperward", "Lanarkshire & Renfrewshire Hunt", "Lancaster & District",
-            "Lauderdale Hunt", "Ledbury Hunt", "Linlithgow & Stirlingshire", "Llandeilo & District",
-            "Llangeinor Hunt", "Lord Leconfield Hunt", "Ludlow Hunt", "Malvern", "Mendip Farmers",
-            "Meynell", "Mid Antrim", "Mid Devon Hunt", "Mid Surrey", "Middleton Hunt",
-            "Middleton Hunt (East Side)", "Minchinhampton", "Monmouthshire", "Moray & Nairn",
-            "Morpeth Hunt", "Neath", "New Forest Hunts", "Newcastle & North Durham",
-            "Newmarket & Thurlow Hunt", "Nithsdale", "North Argyll", "North Cornwall",
-            "North Cotswold Hunt", "North Derry", "North Down", "North Herefordshire",
-            "North Norfolk", "North Northumberland Hunt", "North Shropshire Hunt",
-            "North Staffordshire Hunt", "North Warwickshire", "Oakley Hunt North",
-            "Oakley Hunt West", "Old Berkeley Hunt (Chilterns)", "Old Berkeley Hunt (Hughenden)",
-            "Old Berkeley Hunt (North)", "Old Berkeley Hunt (South)", "Old Berkshire Hunt",
-            "Old Surrey & Burstow Hunt", "Orkney", "Oxenholme", "Parc Howard", "Peak",
-            "Peebles Tweeddale", "Pembrokeshire Hunt", "Pendle Forest & Craven", "Pentyrch",
-            "Percy Hunt", "Perth Hunt", "Petersfield", "Polden Hills", "Poole & District",
-            "Portman", "Puckeridge Hunt", "Puckeridge Hunt Western", "Pytchley Hunt",
-            "Quantock Hunt", "Quorn Hunt", "Radnor & West Hereford Hunt", "Rockwood Harriers",
-            "Romney Marsh", "Ross-shire", "Route Hunt", "Royal Artillery", "Rufford Hunt",
-            "Ryburn Valley", "Saddleworth & District", "Scunthorpe & District", "Seavington",
-            "Sennybridge & District", "Seskinore Harriers", "Silverton Hunt", "Sinnington Hunt",
-            "Soham & District", "South & West Wilts Hunt", "South Berkshire",
-            "South Devon Hunt (Moorland)", "South Devon West", "South Dorset Hunt",
-            "South Durham Hunt", "South Hereford and Ross Harriers", "South Hertfordshire",
-            "South Norfolk", "South Northumberland", "South Nottinghamshire",
-            "South Oxfordshire Hunt (South)", "South Oxfordshire Hunt Central",
-            "South Pembrokeshire & Cresselly Hunt", "South Pool", "South Shropshire Hunt",
-            "South Staffordshire Hunt", "South Trent", "South Wold Hunt North",
-            "Southdown Hunt (East)", "Southdown West", "Spooners & West Dartmoor",
-            "Staff College & Sandhurst", "Staintondale Hunt",
-            "Stevenstone & Torrington Farmers Hunt", "Stewartry", "Strathblane & District",
-            "Strathearn", "Stroud", "Suffolk", "Surrey Union", "Swansea & District", "Syston",
-            "Tanatside Hunt", "Taunton Vale", "Taunton Vale Harriers", "Tedworth Hunt",
-            "Teme Valley Hunt", "Tetcott & South Tetcott Hunts", "The Wynnstay", "Thetford Chase",
-            "Tickham", "Tiverton Hunt", "Tivyside", "Tredegar Farmers Hunt", "Tullylagan",
-            "Tynedale Hunt", "United Pack", "Vale of Aylesbury Hunt", "Vale of Clettwr",
-            "Vale of Taf", "Vale of York", "Vine", "VWH Hunt", "Waen-y-Llyn", "Walpole & District",
-            "Warwickshire Hunt", "Waveney Harriers", "West Hants", "West Kent (Sevenoaks)",
-            "West Kent Meopham", "West Lancashire County", "West Lancashire Ince Blundell",
-            "West Midlands", "West Norfolk", "West Perthshire", "West Somerset",
-            "West Warwickshire", "Western", "Western Isles", "Weston Harriers Hunt",
-            "Whaddon Chase", "Wheatland Hunt", "Wheelton & District", "Wilton Hunt", "Wokingham",
-            "Woodland Hunt", "Woodland Pytchley Hunt", "Worcestershire Hunt", "Wylye Valley",
-            "Wyndham", "Wyre Forest", "Ynysybwl",
-        };
         var existingClubNames = await db.Clubs.Select(c => c.Name).ToListAsync();
         var existingSet = existingClubNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var toAdd = presetClubs
+        var toAdd = PresetClubNames
             .Where(name => !existingSet.Contains(name))
             .Select(name => new Club { Name = name })
             .ToList();
@@ -572,6 +575,18 @@ public static class DbInitializer
         }
 
     }
+
+    /// <summary>The fictional riders the local demo data puts on two club rosters (no creator account).</summary>
+    internal static readonly (string Club, string Name, string Horse)[] DemoSavedRiders =
+    [
+        ("Warwickshire Hunt", "Olivia Hart", "Misty"), ("Warwickshire Hunt", "Noah Reed", "Sparrow"),
+        ("Warwickshire Hunt", "Ava Bell", "Captain"), ("Warwickshire Hunt", "Leo Frost", "Pepper"),
+        ("Warwickshire Hunt", "Isla Knight", "Biscuit"), ("Cotswold", "Theo Lane", "Rocket"),
+        ("Cotswold", "Maya Quinn", "Hazel"), ("Cotswold", "Sam Vale", "Trigger"),
+    ];
+
+    /// <summary>Fixed addresses of the demo trainer accounts <see cref="SeedDemoDataAsync"/> makes (not the shared admin).</summary>
+    internal static readonly string[] DemoTrainerEmails = ["trainer@mg.local", "coach@mg.local"];
 
     internal static async Task SeedDemoDataAsync(AppDbContext db, UserManager<AppUser> users)
     {
@@ -630,15 +645,10 @@ public static class DbInitializer
 
         if (!await db.SavedRiders.AnyAsync())
         {
-            db.SavedRiders.AddRange(
-                new SavedRider { ClubId = warwickshire.Id, FullName = "Olivia Hart", HorseName = "Misty" },
-                new SavedRider { ClubId = warwickshire.Id, FullName = "Noah Reed", HorseName = "Sparrow" },
-                new SavedRider { ClubId = warwickshire.Id, FullName = "Ava Bell", HorseName = "Captain" },
-                new SavedRider { ClubId = warwickshire.Id, FullName = "Leo Frost", HorseName = "Pepper" },
-                new SavedRider { ClubId = warwickshire.Id, FullName = "Isla Knight", HorseName = "Biscuit" },
-                new SavedRider { ClubId = cotswold.Id, FullName = "Theo Lane", HorseName = "Rocket" },
-                new SavedRider { ClubId = cotswold.Id, FullName = "Maya Quinn", HorseName = "Hazel" },
-                new SavedRider { ClubId = cotswold.Id, FullName = "Sam Vale", HorseName = "Trigger" });
+            db.SavedRiders.AddRange(DemoSavedRiders.Select(r => new SavedRider
+            {
+                ClubId = r.Club == warwickshire.Name ? warwickshire.Id : cotswold.Id, FullName = r.Name, HorseName = r.Horse,
+            }));
             await db.SaveChangesAsync();
         }
 

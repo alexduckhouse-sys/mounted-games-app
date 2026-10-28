@@ -37,6 +37,8 @@ describe('LoginPage', () => {
     expect(screen.queryByRole('button', { name: 'Sign up' })).not.toBeInTheDocument();
     expect(screen.queryByText(/demo credentials|PBKDF2|trainers, organisers and stewards/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/MGADMIN/)).not.toBeInTheDocument();
+    // Nothing has gone wrong yet, so there's no "Forgot your password?".
+    expect(screen.queryByRole('link', { name: 'Forgot your password?' })).not.toBeInTheDocument();
   });
 
   it('keeps Sign in disabled until both fields are filled', async () => {
@@ -73,14 +75,16 @@ describe('LoginPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
     const password = screen.getByLabelText('Password');
     expect(await screen.findByRole('alert')).toHaveTextContent('Email or password is wrong.');
+    expect(screen.getByRole('link', { name: 'Forgot your password?' })).toHaveAttribute('href', '/forgot-password');
     expect(screen.getAllByRole('alert')).toHaveLength(1);
     expect(password).toHaveAttribute('aria-invalid', 'true');
     expect(password).toHaveAccessibleDescription('Email or password is wrong.');
     expect(password.parentElement).toHaveAttribute('data-invalid', 'true');
     expect(screen.getByLabelText('Email').parentElement).not.toHaveAttribute('data-invalid', 'true');
-    // Typing again clears it.
+    // Typing again clears the message, but the way to reset stays.
     await userEvent.type(password, 'x');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Forgot your password?' })).toBeInTheDocument();
   });
 
   it('says so, without blaming the password, when the server cannot be reached', async () => {
@@ -89,6 +93,17 @@ describe('LoginPage', () => {
     await userEvent.type(screen.getByLabelText('Email'), 'sam@example.com');
     await userEvent.type(screen.getByLabelText('Password'), 'secret{Enter}');
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t sign in. Check your signal and try again.');
+    // No signal isn't a wrong password.
+    expect(screen.queryByRole('link', { name: 'Forgot your password?' })).not.toBeInTheDocument();
+  });
+
+  it('offers a reset once too many tries have locked the account', async () => {
+    vi.mocked(api.post).mockRejectedValue({ response: { status: 429, data: {} } });
+    mount();
+    await userEvent.type(screen.getByLabelText('Email'), 'sam@example.com');
+    await userEvent.type(screen.getByLabelText('Password'), 'secret{Enter}');
+    await screen.findByRole('alert');
+    expect(screen.getByRole('link', { name: 'Forgot your password?' })).toBeInTheDocument();
   });
 
   it('links to sign up and closes back to the public view', async () => {
@@ -196,6 +211,10 @@ describe('LoginPage', () => {
       vi.mocked(api.post).mockRejectedValue({ response: { status: 400, data: { message: 'Enter a valid email address.' } } });
       await userEvent.type(screen.getByLabelText('Organiser key'), 'x{Enter}');
       expect(await screen.findByRole('alert')).toHaveTextContent('Enter a valid email address.');
+      // An existing account whose address isn't confirmed is told to confirm it first.
+      vi.mocked(api.post).mockRejectedValue({ response: { status: 409, data: { code: 'email_unconfirmed', message: 'Confirm your email address before using the organiser key.' } } });
+      await userEvent.type(screen.getByLabelText('Organiser key'), 'x{Enter}');
+      expect(await screen.findByRole('alert')).toHaveTextContent('Confirm your email address before using the organiser key.');
       // A 429 rate-limit error shows the server message.
       vi.mocked(api.post).mockRejectedValue({ response: { status: 429, data: { message: 'Too many accounts have been created from this network address (maximum 5).' } } });
       await userEvent.type(screen.getByLabelText('Organiser key'), 'x{Enter}');

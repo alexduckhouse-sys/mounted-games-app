@@ -13,6 +13,9 @@ const state = vi.hoisted(() => ({ value: null as unknown, get: vi.fn(), manage: 
 vi.mock('./context', async (importOriginal) => ({ ...(await importOriginal<typeof import('./context')>()), useCompetition: () => state.value }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canManage: () => state.manage }) }));
 vi.mock('../../api', () => ({ api: { get: state.get, post: vi.fn() } }));
+// Stands in for 30 seconds passing (useHeldFor has its own timing test).
+const held = vi.hoisted(() => ({ value: true }));
+vi.mock('../../hooks/useHeldFor', () => ({ useHeldFor: (active: boolean) => active && held.value }));
 // The Tack & Turnout table fetches on its own; it has its own tests.
 vi.mock('./TackLeaderboard', () => ({ TackLeaderboard: () => null }));
 vi.mock('./TimetableBoard', () => ({
@@ -58,6 +61,7 @@ function renderTab(path = '/?section=9', props: { startOn?: 'draw' | 'scores' | 
 }
 
 beforeEach(() => {
+  held.value = true;
   state.manage = false;
   reload.mockClear();
   state.get.mockReset();
@@ -427,6 +431,41 @@ describe('the age group page', () => {
   });
 });
 
+describe('filling finals already on the timetable', () => {
+  it('fills empty lettered finals from the toplist instead of drawing new ones', async () => {
+    state.manage = true;
+    const user = userEvent.setup();
+    const finals = session(7, { competitionSectionId: 9, name: 'Finals · Under 12', status: 0, lanesPerHeat: 3, heats: [
+      heat(72, { sessionId: 7, label: 'B Final', orderIndex: 2, entries: [], races: [race(72, { name: 'Bending' })] }),
+      heat(71, { sessionId: 7, label: 'A Final', orderIndex: 1, entries: [], races: [race(71, { name: 'Bending' })] }),
+    ] });
+    setCompetition([qualifier, finals]);
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+    state.get.mockImplementation((url: string) => Promise.resolve({ data: url.includes('standings') ? standings : [], headers: {} }));
+    renderTab('/?section=9', {});
+    await user.click(screen.getByRole('button', { name: /Create finals/ }));
+    expect(await screen.findByText(/The A Final and B Final are already on the timetable/)).toHaveTextContent('up to 3 in each, best first into the A Final.');
+    expect(screen.queryByRole('spinbutton')).toBeNull();
+    await user.click(screen.getByRole('button', { name: /Fill the finals/ }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/sessions/7/populate-finals'));
+  });
+
+  it('shows the server’s reason when the finals can’t be filled', async () => {
+    state.manage = true;
+    const user = userEvent.setup();
+    setCompetition([qualifier, session(7, { competitionSectionId: 9, name: 'Finals · Under 12', status: 0, heats: [
+      heat(71, { sessionId: 7, label: 'A Final', entries: [], races: [race(71, { name: 'Bending' })] }),
+    ] })]);
+    vi.mocked(api.post).mockRejectedValue({ response: { data: { message: 'No teams with results to seed finals.' } } });
+    state.get.mockImplementation((url: string) => Promise.resolve({ data: url.includes('standings') ? standings : [], headers: {} }));
+    renderTab('/?section=9', {});
+    await user.click(screen.getByRole('button', { name: /Create finals/ }));
+    expect(await screen.findByText(/The A Final is already on the timetable/)).toHaveTextContent('up to 6 in each');
+    await user.click(screen.getByRole('button', { name: /Fill the finals/ }));
+    expect(await screen.findByText('No teams with results to seed finals.')).toBeVisible();
+  });
+});
+
 describe('personalisation, instant optimistic standings and section score fingerprint', () => {
   it('defaults to the followed team age group or mg.prefs.defaultAgeGroup when ?section is omitted', async () => {
     localStorage.setItem('mg.favourites.v1', JSON.stringify([{ competitionId: 1, teamId: 8 }]));
@@ -470,8 +509,13 @@ describe('personalisation, instant optimistic standings and section score finger
     state.get.mockReturnValueOnce(new Promise((resolve) => { resolveStandings = resolve; }));
     const combined = session(5, { competitionSectionId: null, heats: [heat(5, { entries: entries([1, 8]), races: [scored(5, [1, 1, 30])] })] });
     state.value = { ...original, competition: { ...original.competition, sessions: [qualifier, combined] } };
+    held.value = false;
     redraw();
     expect(state.get).toHaveBeenCalledTimes(2);
+    // A refresh shows the old standings without a notice; it only appears once they have lasted 30 seconds.
+    expect(screen.queryByText('Showing saved standings while results refresh.')).toBeNull();
+    held.value = true;
+    redraw();
     expect(screen.getByText('Showing saved standings while results refresh.')).toBeVisible();
     expect(rowNames(screen.getByRole('region', { name: 'Totals' }))[0]).toContain('Team 3');
     resolveStandings({ data: [standing(1, 40), standing(3, 7), standing(2, 4)], headers: {} });

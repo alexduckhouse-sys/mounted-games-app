@@ -23,6 +23,7 @@ import {
 import { RaceToolsSheet, type ToolLink, type ToolTeam } from './RaceToolsSheet';
 import { HeatPrintSheet } from './HeatPrintSheet';
 import { ScoreAuditPanel } from '../operations/ScoreAuditPanel';
+import { ProtestSheet } from '../operations/ProtestSheet';
 import './scoring.css';
 
 export type { PendingPlace } from '../../lib/raceScoring';
@@ -92,6 +93,8 @@ interface ScoringProps {
   onRerunRace?: () => Promise<void> | void;
   runoffTeams?: Array<{ id: number; name: string }>;
   onPickRunoffWinner?: (teamId: number) => Promise<void> | void;
+  /** The competition, for staff who can log a protest from race tools. Scorer links leave it out. */
+  protestCompetitionId?: number;
 }
 
 const NO_TEAMS: ReadonlySet<number> = new Set();
@@ -132,7 +135,7 @@ export function ScoringSection({
   onUndo, undoLabel = 'Undo', allowReasons = false, hcTeamIds = NO_TEAMS, onSetHc, cards, onSetCard, onOverridePoints, onDeadHeat, onClearDeadHeat,
   tieRule = TieBreakRule.Countback, notes = {}, nextLanes = null, laneHatbands = null, onRefresh,
   teamFacts, factsOn, onToggleFacts, toolLinks = NO_LINKS,
-  onAddRace, onRenameRace, onRerunRace, runoffTeams, onPickRunoffWinner, heatTools,
+  onAddRace, onRenameRace, onRerunRace, runoffTeams, onPickRunoffWinner, heatTools, protestCompetitionId,
 }: ScoringProps) {
   const [sheet, setSheet] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -140,6 +143,7 @@ export function ScoringSection({
   const [editing, setEditing] = useState(false);
   // The read-outs that used to sit under the race now open from race tools, so scoring fits one screen.
   const [infoSheet, setInfoSheet] = useState<'summary' | 'lanes' | 'history' | null>(null);
+  const [protesting, setProtesting] = useState(false);
   const [sortByLane, setSortByLane] = useState(() => getSortByLaneOrder());
 
   useEffect(() => {
@@ -291,6 +295,7 @@ export function ScoringSection({
     ...infoLinks.map((l) => ({ ...l, onSelect: () => { setToolsOpen(false); l.onSelect(); } })),
     ...toolLinks.map((l) => ({ ...l, onSelect: () => { setToolsOpen(false); l.onSelect(); } })),
     ...(hasControls ? [{ key: 'organiser', label: 'Organiser tools', sub: 'Races, heats, lanes and adjustments', onSelect: () => { setToolsOpen(false); setControlsOpen(true); } }] : []),
+    ...(protestCompetitionId != null ? [{ key: 'protest', label: 'Log a protest', sub: 'Marks the race under review until it’s decided', onSelect: () => { setToolsOpen(false); setProtesting(true); } }] : []),
   ];
 
   function stepTeam(teamId: number, by: 1 | -1) {
@@ -545,9 +550,12 @@ export function ScoringSection({
             </div>
             {infoSheet === 'summary' && summary && <SummaryCard summary={summary} raceNumber={summaryIdx + 1} />}
             {infoSheet === 'lanes' && nextLanes && <NextLanesCard lanes={nextLanes} />}
-            {infoSheet === 'history' && activeRace && <ScoreAuditPanel raceId={activeRace.id} onChanged={onRefresh} />}
+            {infoSheet === 'history' && activeRace && <ScoreAuditPanel raceId={activeRace.id} onChanged={onRefresh} heat={protestCompetitionId != null ? heat : undefined} race={activeRace} />}
           </div>
         </div>
+      )}
+      {protesting && protestCompetitionId != null && (
+        <ProtestSheet competitionId={protestCompetitionId} heat={heat} race={activeRace} onClose={() => setProtesting(false)} />
       )}
       {controlsOpen && activeRace && (
         <div className="rt-overlay">

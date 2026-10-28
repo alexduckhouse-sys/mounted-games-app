@@ -1,6 +1,7 @@
-import { useId, useRef, useState } from 'react';
+import { useId, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useDialogFocus } from './useDialogFocus';
+import { useSwipeToClose } from '../hooks/useSwipeToClose';
 import { tr } from '../i18n/translate';
 
 export interface ConfirmOptions {
@@ -24,7 +25,7 @@ export interface ConfirmOptions {
  * focus first. A go-ahead has the filled navy action first and the outlined choice beside it. Escape cancels.
  */
 export function ConfirmDialog({ title, message, confirmLabel = tr('shell.confirm.confirm'), cancelLabel, destructive = false, requireText, onAnswer }: ConfirmOptions & { onAnswer: (confirmed: boolean) => void }) {
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const { ref: dialogRef, handlers, style, dragging } = useSwipeToClose<HTMLDivElement>(() => onAnswer(false));
   const titleId = useId();
   const bodyId = useId();
   useDialogFocus(dialogRef, () => onAnswer(false), destructive ? '[data-confirm-cancel]' : '[data-confirm-yes]');
@@ -34,7 +35,7 @@ export function ConfirmDialog({ title, message, confirmLabel = tr('shell.confirm
   const yes = <button type="button" data-confirm-yes className={`kit-pill ${destructive ? 'kit-pill-del' : 'kit-pill-fill'}`} disabled={blocked} onClick={() => onAnswer(true)}>{confirmLabel}</button>;
   return (
     <div className="mg-confirm-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) onAnswer(false); }}>
-      <div ref={dialogRef} role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={bodyId} className={`mg-confirm ${destructive ? 'mg-confirm-danger' : ''}`}>
+      <div ref={dialogRef} role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={bodyId} {...handlers} style={style} className={`mg-confirm${destructive ? ' mg-confirm-danger' : ''}${dragging ? ' is-dragging' : ''}`}>
         <span aria-hidden="true" className="kit-sheet-grip" />
         <h2 id={titleId} className="mg-confirm-title">{title}</h2>
         <p id={bodyId} className="mg-confirm-body">{message}</p>

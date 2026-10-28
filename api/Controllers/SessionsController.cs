@@ -10,6 +10,7 @@ using MountedGames.Api.Entities.Operations;
 using MountedGames.Api.Hubs;
 using MountedGames.Api.Services;
 using MountedGames.Api.Services.Calendar;
+using MountedGames.Api.Services.EventTools;
 using MountedGames.Api.Services.Operations;
 
 namespace MountedGames.Api.Controllers;
@@ -219,6 +220,9 @@ public class SessionsController : ControllerBase
             var hasUnderReview = s.Heats.Any(h => h.Races.Any(r => r.Results.Any(res => ScoringService.IsUnderReview(res.RefereeNote))));
             if (hasUnderReview)
                 return Conflict(new { message = "Resolve or clear all results flagged under review before confirming official results." });
+            // An open protest (logged against a race or its whole heat) holds the results provisional the same way.
+            if (s.Heats.Any(h => h.Races.Any(r => r.HasOpenProtest)))
+                return Conflict(new { message = "Decide or withdraw the open protests before confirming official results." });
 
             s.OfficialConfirmedAt = now;
             s.ProvisionalUntil = now;
@@ -1145,11 +1149,14 @@ public class SessionsController : ControllerBase
         string? resumeDisplay = req.ResumeTime?.Trim();
         if (!string.IsNullOrWhiteSpace(resumeDisplay))
         {
-            var baseDate = unstarted.FirstOrDefault(s => s.ScheduledStart.HasValue)?.ScheduledStart?.Date ?? comp.StartDate.Date;
+            // Organisers type UK clock times, but the API runs in UTC, so the day and the time are read as UK time.
+            var firstScheduled = unstarted.FirstOrDefault(s => s.ScheduledStart.HasValue)?.ScheduledStart;
+            var baseDate = firstScheduled.HasValue
+                ? CompetitionSetup.ToLondonWallClock(firstScheduled.Value).Date
+                : CompetitionSetup.AnchorWallClock(comp.StartDate).Date;
             if (TimeSpan.TryParse(resumeDisplay, out var timeOfDay))
             {
-                var targetStart = DateTime.SpecifyKind(baseDate.Add(timeOfDay), DateTimeKind.Utc);
-                var firstScheduled = unstarted.FirstOrDefault(s => s.ScheduledStart.HasValue)?.ScheduledStart;
+                var targetStart = CompetitionSetup.FromLondonWallClock(baseDate.Add(timeOfDay));
                 if (firstScheduled.HasValue)
                     shift = targetStart - firstScheduled.Value;
                 else if (unstarted.Count > 0)
@@ -1157,10 +1164,13 @@ public class SessionsController : ControllerBase
             }
             else if (DateTime.TryParse(resumeDisplay, out var parsedDt))
             {
-                var firstScheduled = unstarted.FirstOrDefault(s => s.ScheduledStart.HasValue)?.ScheduledStart;
+                // A date and time with no zone is UK time; one with a zone is converted.
+                var parsedUtc = parsedDt.Kind == DateTimeKind.Unspecified
+                    ? CompetitionSetup.FromLondonWallClock(parsedDt)
+                    : parsedDt.ToUniversalTime();
                 if (firstScheduled.HasValue)
-                    shift = parsedDt.ToUniversalTime() - firstScheduled.Value;
-                resumeDisplay = parsedDt.ToString("HH:mm");
+                    shift = parsedUtc - firstScheduled.Value;
+                resumeDisplay = CompetitionSetup.ToLondonWallClock(parsedUtc).ToString("HH:mm");
             }
         }
         else if (req.DelayMinutes.HasValue)
@@ -1347,6 +1357,12 @@ public class SessionsController : ControllerBase
             .OrderBy(s => s.OrderIndex)
             .ToListAsync();
 
+        var reason = req?.Reason?.Trim().ToLowerInvariant();
+        if (!string.IsNullOrEmpty(reason) && !PauseReasons.Contains(reason))
+            return BadRequest(new { message = "Reason must be 'thunder' or 'rain'." });
+        if (!IsValidAnnouncement(req?.Announcement))
+            return BadRequest(new { message = "The announcement must be 2000 characters or fewer." });
+
         var arenaName = req?.ArenaName;
         var targetSessions = sessions.Where(s =>
             s.Status != SessionStatus.Finished
@@ -1358,11 +1374,15 @@ public class SessionsController : ControllerBase
         foreach (var s in targetSessions)
         {
             if (!ParsePauseNoteMs(s.Notes).HasValue) s.Notes = ApplyPauseNote(s.Notes, nowMs);
+            // A session already paused keeps its original pause time; it only learns why.
+            if (!string.IsNullOrEmpty(reason)) s.Notes = ApplyPauseReason(s.Notes, reason);
         }
 
+        var message = AddWeatherAnnouncement(competitionId, req?.Announcement);
         await _db.SaveChangesAsync();
         foreach (var s in targetSessions)
             await _live.SessionUpdated(competitionId, s.ToDto());
+        await BroadcastAsync(competitionId, message);
 
         return sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList();
     }
@@ -1378,6 +1398,9 @@ public class SessionsController : ControllerBase
             .Where(s => s.CompetitionId == competitionId)
             .OrderBy(s => s.OrderIndex)
             .ToListAsync();
+
+        if (!IsValidAnnouncement(req?.Announcement))
+            return BadRequest(new { message = "The announcement must be 2000 characters or fewer." });
 
         var arenaName = req?.ArenaName;
         var targetSessions = sessions.Where(s =>
@@ -1429,11 +1452,64 @@ public class SessionsController : ControllerBase
             updatedSessions.Add(s);
         }
 
+        var message = AddWeatherAnnouncement(competitionId, req?.Announcement);
         await _db.SaveChangesAsync();
         foreach (var s in updatedSessions)
             await _live.SessionUpdated(competitionId, s.ToDto());
+        await BroadcastAsync(competitionId, message);
 
         return sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList();
+    }
+
+    /// <summary>
+    /// Tells everyone about the weather without pausing or resuming anything (the organiser's "Tell everyone" for
+    /// heavy rain). It lives here, not on the chat endpoint, because that one is for site admins only while the
+    /// pause and resume it sits beside are open to every organiser.
+    /// </summary>
+    [HttpPost("weather-notice")]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
+    public async Task<ActionResult<ChatMessageDto>> PostWeatherNotice(int competitionId, WeatherNoticeRequest req)
+    {
+        if (string.IsNullOrWhiteSpace(req.Body) || !IsValidAnnouncement(req.Body))
+            return BadRequest(new { message = "Write an announcement of up to 2000 characters." });
+        if (!await _db.Competitions.AnyAsync(c => c.Id == competitionId)) return NotFound();
+
+        var message = AddWeatherAnnouncement(competitionId, req.Body)!;
+        await _db.SaveChangesAsync();
+        await BroadcastAsync(competitionId, message);
+        return message.ToDto();
+    }
+
+    private const int MaxAnnouncementLength = 2000;
+    private static readonly string[] PauseReasons = ["thunder", "rain"];
+
+    private static bool IsValidAnnouncement(string? body) => body is null || body.Length <= MaxAnnouncementLength;
+
+    /// <summary>Adds the weather announcement to the context (saved with the caller's other changes), or returns null when there is no text.</summary>
+    private ChatMessage? AddWeatherAnnouncement(int competitionId, string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return null;
+        var authorName = User.FindFirst("fullName")?.Value ?? "Organiser";
+        var message = new ChatMessage
+        {
+            CompetitionId = competitionId,
+            UserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value,
+            AuthorName = authorName.Length > 60 ? authorName[..60] : authorName,
+            Body = ProfanityFilter.Clean(body.Trim()),
+            Type = ChatMessageType.Announcement,
+            Tag = "weather",
+        };
+        _db.ChatMessages.Add(message);
+        return message;
+    }
+
+    private async Task BroadcastAsync(int competitionId, ChatMessage? message)
+    {
+        if (message is null) return;
+        var dto = message.ToDto();
+        await _live.Announcement(competitionId, dto);
+        await _live.ChatMessage(competitionId, dto);
     }
 
     /// <summary>Returns the learned minutes-per-race pace and duration multiplier for the competition.</summary>
@@ -1790,8 +1866,16 @@ public class SessionsController : ControllerBase
     private static string? RemovePauseNote(string? notes)
     {
         if (string.IsNullOrWhiteSpace(notes)) return null;
-        var cleaned = System.Text.RegularExpressions.Regex.Replace(notes, @"\s*\[paused:\d+\]\s*", " ").Trim();
+        var cleaned = System.Text.RegularExpressions.Regex.Replace(notes, @"\s*\[(?:paused:\d+|pausefor:[a-z]+)\]\s*", " ").Trim();
         return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;
+    }
+
+    /// <summary>Records why a session is paused (<c>[pausefor:thunder]</c> or <c>rain</c>), replacing any earlier reason.</summary>
+    private static string ApplyPauseReason(string? notes, string reason)
+    {
+        var cleaned = System.Text.RegularExpressions.Regex.Replace(notes ?? string.Empty, @"\s*\[pausefor:[a-z]+\]\s*", " ").Trim();
+        var tag = $"[pausefor:{reason}]";
+        return string.IsNullOrWhiteSpace(cleaned) ? tag : $"{cleaned} {tag}";
     }
 
     private static string? ApplyShiftNote(string? notes, int deltaMinutes)
@@ -1820,8 +1904,9 @@ public record SetCombinedScoringRequest(string ScoringMode);
 public record HoldCompetitionRequest(string? ResumeTime = null, int? DelayMinutes = null, string? ArenaName = null, bool PostAnnouncement = true);
 public record UpdateSessionRacesRequest(IReadOnlyList<string> RaceNames);
 public record ShiftSessionTimesRequest(int DeltaMinutes, string? ArenaName = null);
-public record PauseTimetableRequest(string? ArenaName = null);
-public record ResumeTimetableRequest(string? ArenaName = null);
+public record PauseTimetableRequest(string? ArenaName = null, string? Reason = null, string? Announcement = null);
+public record ResumeTimetableRequest(string? ArenaName = null, string? Announcement = null);
+public record WeatherNoticeRequest(string Body);
 public record PacePredictionDto(double? AvgMinutesPerRace, int? RecommendedMinutesPer5RaceHeat, double Multiplier, int SampleHeats);
 public record UpdateGateCheckRequest(int TeamId, string? Status);
 public record RequestArenaAssistanceRequest(string Service, string? ArenaName = null, string? Note = null, bool HoldArena = true);

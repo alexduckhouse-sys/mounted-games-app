@@ -12,11 +12,21 @@ if (!process.env.DATABASE_URL) {
 }
 
 const migrate = process.argv.includes('--migrate');
-// npm run db:import-competition -- <file.json> [--dry-run]: the file is passed through, never read here.
+// npm run db:import-competition -- <file.json> [--finals-only] [--dry-run]: the file is passed through, never read here.
 const importAt = process.argv.indexOf('--import-competition');
 const importArgs = importAt < 0 ? [] : [
   '--import-competition', path.resolve(process.argv[importAt + 1] ?? ''),
+  ...(process.argv.includes('--finals-only') ? ['--finals-only'] : []),
   ...(process.argv.includes('--dry-run') ? ['--dry-run'] : []),
+];
+// node scripts/api.mjs --clear-demo-data --keep-competition <id> --expect-name "<name>" [--apply] [--venue-postcode "<postcode>"]
+const valueAfter = flag => {
+  const at = process.argv.indexOf(flag);
+  return at < 0 || process.argv[at + 1] === undefined ? [] : [flag, process.argv[at + 1]];
+};
+const clearArgs = !process.argv.includes('--clear-demo-data') ? [] : [
+  '--clear-demo-data', ...valueAfter('--keep-competition'), ...valueAfter('--expect-name'), ...valueAfter('--venue-postcode'),
+  ...(process.argv.includes('--apply') ? ['--apply'] : []),
 ];
 const child = spawn('dotnet', [
   'run', '--no-launch-profile', '--project', 'api/MountedGames.Api.csproj', '--',
@@ -25,6 +35,7 @@ const child = spawn('dotnet', [
   ...(process.argv.includes('--seed-history') ? ['--seed-history'] : []),
   ...(process.argv.includes('--reseed-review') ? ['--reseed-review-competitions'] : []),
   ...importArgs,
+  ...clearArgs,
 ], {
   stdio: 'inherit',
   env: {

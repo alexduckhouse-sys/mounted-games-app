@@ -57,19 +57,23 @@ it('picks the live unfinished heat and shows the now and next cards', async () =
 it('filters the now card by zone', async () => {
   show();
   await screen.findByText('2 × Flag per lane');
-  await userEvent.click(screen.getByRole('button', { name: 'Changeover line' }));
-  expect(screen.queryByText('2 × Flag per lane')).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: /^Zone:/ }));
+  await userEvent.click(await screen.findByRole('radio', { name: 'Changeover line' }));
+  await waitFor(() => expect(screen.queryByText('2 × Flag per lane')).not.toBeInTheDocument());
   expect(screen.getByText('1 × Cone per lane')).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('button', { name: 'Centre poles' }));
-  expect(screen.getByText('Nothing to set')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: /^Zone:/ }));
+  await userEvent.click(await screen.findByRole('radio', { name: 'Centre poles' }));
+  expect(await screen.findByText('Nothing to set')).toBeInTheDocument();
 });
 
 it('uses the session and heat from the address, and changing them refetches', async () => {
   show(sessions(), '/?session=1&heat=11');
   await waitFor(() => expect(api.get).toHaveBeenCalledWith('/competitions/1/arena-crew-sheet', { params: { sessionId: 1, heatId: 11 } }));
-  await userEvent.selectOptions(screen.getByLabelText('Session'), '2');
+  await userEvent.click(screen.getByRole('button', { name: /^Session:/ }));
+  await userEvent.click(await screen.findByRole('radio', { name: /Afternoon/ }));
   await waitFor(() => expect(api.get).toHaveBeenLastCalledWith('/competitions/1/arena-crew-sheet', { params: { sessionId: 2, heatId: 22 } }));
-  await userEvent.selectOptions(screen.getByLabelText('Heat'), '21');
+  await userEvent.click(screen.getByRole('button', { name: /^Heat:/ }));
+  await userEvent.click((await screen.findAllByRole('radio'))[0]);
   await waitFor(() => expect(api.get).toHaveBeenLastCalledWith('/competitions/1/arena-crew-sheet', { params: { sessionId: 2, heatId: 21 } }));
 });
 

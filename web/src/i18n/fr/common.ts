@@ -30,4 +30,7 @@ export const common: AreaCatalogue<typeof en> = {
   'common.signOut': 'Se déconnecter',
   'common.mountedGames': 'Mounted Games',
   'common.somethingWrong': 'Un problème est survenu. Réessayez.',
+  'common.demoPayment.entry': 'Ceci est une démonstration. Aucun argent ne sera prélevé ni envoyé, et votre inscription n’a pas été payée.',
+  'common.demoPayment.order': 'Ceci est une démonstration. Aucun argent ne sera prélevé ni envoyé, et votre commande n’a pas été payée.',
+  'common.demoPayment.payout': 'Ceci est une démonstration. Aucun argent ne sera prélevé ni envoyé, et vos coordonnées bancaires ne serviront à payer personne.',
 };

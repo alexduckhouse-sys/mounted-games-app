@@ -7,12 +7,35 @@ using MountedGames.Api.Services.Streaming;
 
 namespace MountedGames.Api.Hubs;
 
-public class LiveHub(ViewerRegistry viewers, LiveConnections connections) : Hub
+public class LiveHub(ViewerRegistry viewers, LiveConnections connections, AppDbContext db) : Hub
 {
-    /// <summary>Signed-in connections are recorded so they can be closed when the account's sessions end.</summary>
+    /// <summary>
+    /// Signed-in connections are recorded so they can be closed when the account's sessions end. A session can end between
+    /// this connection's sign-in check and its being recorded, when closing would miss it, so the account is read again
+    /// once it is recorded.
+    /// </summary>
     public override async Task OnConnectedAsync()
     {
         connections.Add(Context);
+        if (Context.User?.Identity?.IsAuthenticated == true && Context.UserIdentifier is { } userId)
+        {
+            LiveAccounts.TokenState? state;
+            try
+            {
+                state = await LiveAccounts.StateAsync(db, userId, Context.ConnectionAborted);
+            }
+            catch
+            {
+                // The connection fails to open, so OnDisconnectedAsync may never run for it: don't leave it recorded.
+                connections.Remove(Context);
+                throw;
+            }
+            if (state is null || !state.Accepts(LiveAccounts.SessionVersionOf(Context.User)))
+            {
+                Context.Abort();
+                return;
+            }
+        }
         await base.OnConnectedAsync();
     }
 
@@ -74,6 +97,11 @@ public interface ILiveBroadcaster
     Task SponsorControl(int competitionId, SponsorControlDto control);
     Task StreamTelemetry(int competitionId, StreamTelemetryDto telemetry);
     Task StreamCommand(int competitionId, StreamCommandDto command);
+    /// <summary>
+    /// Tells the competition's staff (site admins, the owner and its competition admins) that its protests
+    /// changed, so their screens re-read the staff-only list. The payload is the competition id only.
+    /// </summary>
+    Task ProtestsChanged(int competitionId);
 }
 
 public class LiveBroadcaster : ILiveBroadcaster
@@ -129,6 +157,24 @@ public class LiveBroadcaster : ILiveBroadcaster
             await _hub.Clients.User(authorUserId).SendAsync("chatMessage", message);
         if (recipientUserId is not null && recipientUserId != authorUserId)
             await _hub.Clients.User(recipientUserId).SendAsync("chatMessage", message);
+    }
+
+    public async Task ProtestsChanged(int competitionId)
+    {
+        using var scope = _scopes.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var adminIds = await (from membership in db.UserRoles
+                              join role in db.Roles on membership.RoleId equals role.Id
+                              where role.Name == Roles.Admin
+                              select membership.UserId).Distinct().ToListAsync();
+        var owner = await db.Competitions.AsNoTracking().Where(c => c.Id == competitionId)
+            .Select(c => c.CreatedByUserId).FirstOrDefaultAsync();
+        var team = await db.CompetitionCollaborators.AsNoTracking().Where(k => k.CompetitionId == competitionId)
+            .Select(k => k.UserId).ToListAsync();
+        var groups = adminIds.Concat(team).Append(owner).OfType<string>().Distinct()
+            .Select(id => LiveHub.UserGroupName(competitionId, id)).ToArray();
+        if (groups.Length > 0)
+            await _hub.Clients.Groups(groups).SendAsync("protestsChanged", new { competitionId });
     }
 
     public Task ChatMessageDeleted(int competitionId, int messageId)

@@ -29,9 +29,10 @@ function parseUtcMs(iso: string | null | undefined): number | null {
 }
 
 export function sessionHasUnderReviewResult(session: Pick<Session, 'heats'>): boolean {
+  // A flagged result, or an open protest on the race (the API sets `underReview` on a race while a protest is open).
   return session.heats.some((heat) =>
     heat.races.some((race) =>
-      race.results.some((res) => Boolean(res.underReview)),
+      Boolean(race.underReview) || race.results.some((res) => Boolean(res.underReview)),
     ),
   );
 }

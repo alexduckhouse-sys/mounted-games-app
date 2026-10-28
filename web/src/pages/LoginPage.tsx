@@ -25,6 +25,8 @@ export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  // "Forgot your password?" only shows once a password has been turned down, so it doesn't crowd a first try.
+  const [passwordRefused, setPasswordRefused] = useState(false);
   const [organiserTitle, setOrganiserTitle] = useState('');
   const [organiserEmail, setOrganiserEmail] = useState('');
   const [organiserPassword, setOrganiserPassword] = useState('');
@@ -40,14 +42,14 @@ export function LoginPage() {
     try {
       const res = await loginWithExternal(provider, idToken, { nonce, providerName });
       if (res.needsSignup) {
-        setPendingExternal({ provider: res.provider, idToken, nonce, providerName, email: res.email, suggestedName: res.suggestedName });
+        setPendingExternal({ provider: res.provider, ticket: res.ticket, email: res.email, suggestedName: res.suggestedName });
       } else {
         nav((loc.state as NavState | null)?.from ?? '/', { replace: true });
       }
     } catch (err: unknown) {
-      setExternalError(externalErrorMessage(err, 'Couldn’t sign in. Check your signal and try again.'));
+      setExternalError(externalErrorMessage(err, t('auth.login.noSignal')));
     }
-  }, [loc.state, loginWithExternal, nav]);
+  }, [loc.state, loginWithExternal, nav, t]);
 
   const ready = useKey
     ? organiserTitle.trim().length > 0 && organiserEmail.trim().includes('@') && passwordMeetsRules(organiserPassword) && organiserKey.trim().length > 0
@@ -66,13 +68,16 @@ export function LoginPage() {
       const status = res?.status;
       if (status === 429) {
         setError(res?.data?.message || t('auth.login.tooMany'));
+        if (!useKey) setPasswordRefused(true);
       } else if (useKey) {
         const pwErrors = friendlyPasswordErrors(res?.data);
         if (status === 400) setError(pwErrors[0] || res?.data?.message || t('auth.login.checkDetails'));
         else if (status === 401) setError(res?.data?.message && res.data.message !== 'Invalid admin key.' ? res.data.message : t('auth.login.keyFailed'));
+        else if (status === 409) setError(res?.data?.message || t('auth.login.keyFailed'));
         else setError(t('auth.login.keyFailed'));
       } else {
         setError(status === 401 || status === 400 ? t('auth.login.wrong') : t('auth.login.noSignal'));
+        if (status === 401 || status === 400) setPasswordRefused(true);
       }
     }
   }
@@ -193,7 +198,7 @@ export function LoginPage() {
                 </div>
               )}
             </Field>
-            <Link to="/forgot-password" className="-mt-2 self-end text-sm font-semibold text-[rgb(var(--mg-heading))] !underline">Forgot your password?</Link>
+            {passwordRefused && <Link to="/forgot-password" className="-mt-2 self-end text-sm font-semibold text-[rgb(var(--mg-heading))] !underline">Forgot your password?</Link>}
           </>
         )}
 

@@ -57,6 +57,9 @@ export const entries = {
 
   // The entry form
   'entries.form.full': '{section} is full. You can join the waiting list.',
+  'entries.form.forSomeoneElse': 'Entering for someone else? Change the name and club below.',
+  'entries.form.draftUnsaved': 'Your details can’t be saved on this device. Keep this page open until you’ve submitted.',
+  'entries.form.draftSaved': 'Unfinished entry saved on this device for seven days.',
   'entries.form.emailInvalid': 'That email address doesn’t look right.',
   'entries.form.sentTitle': '{entry} at {competition}.',
   'entries.form.emailedCopy': 'We’ve emailed you a copy.',
@@ -69,7 +72,7 @@ export const entries = {
   'entries.form.bankCopied': 'Bank details copied',
   'entries.form.payAmount': 'Pay {fee}',
   'entries.form.payByTransfer': 'Pay {fee} by bank transfer',
-  'entries.form.demoNote': 'This is a demo event. After you submit, you will see a test payment page. No money is taken.',
+  'entries.form.demoNote': 'After you submit, you will see a test payment page.',
   'entries.form.bankDetails': 'Bank details',
   'entries.form.payTo': 'Pay to',
   'entries.form.reference': 'Reference',

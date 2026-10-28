@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { CardDropdownRow } from '../../components/CardDropdownRow';
 import { Notice } from '../../components/Notice';
 import { usePageWidth } from '../../components/pageWidthState';
 import { usePageHeader } from '../../components/CompactPageBarContext';
@@ -17,7 +16,9 @@ import {
 import { SectionFormatLabel, StatsSubjectKind, type StatsEntry, type StatsHit, type StatsProfile } from '../../types';
 import { Chevron, RefineDisclosure, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection } from '../refine/Refine';
 import { formatPoints } from '../../lib/formatPoints';
+import { groupRiders, type RiderLine } from './riderList';
 import '../../components/sitePages.css';
+import '../../components/filterKit.css';
 
 /** `/stats` browses and searches; `/stats/:kind?name=` shows one rider, pony, team or club. */
 export function StatsPage() {
@@ -43,26 +44,33 @@ function StatsBrowseView() {
     setParams(next, { replace: true });
   }
 
-  const kindOptions = STATS_TABS.map((entry) => ({ value: String(entry.kind), label: entry.label }));
+  // The tabs are links, so each keeps the words typed and the address says which one is showing.
+  const tabHref = (next: StatsSubjectKind) => {
+    const query = new URLSearchParams();
+    if (next !== StatsSubjectKind.Rider) query.set('kind', STATS_PATHS[next]);
+    if (text.trim()) query.set('q', text);
+    const search = query.toString();
+    return search ? `?${search}` : '?';
+  };
   return <RefinePage wide>
     <h1 className="sr-only">Rider and team stats</h1>
     <div className="mg-band mg-band-header sp-top pb-3 pt-0">
       <RoundSearch band label={`Search ${tab.plural}`} placeholder={`Name of a ${STATS_KIND_LABELS[kind].toLowerCase()}`} value={text} maxLength={STATS_MAX_QUERY}
         onChange={(next) => { setText(next); remember(kind, next); }} />
     </div>
-    <div className="sp-card sp-gap">
-      <CardDropdownRow label="Show" value={String(kind)} options={kindOptions} onChange={(value) => remember(Number(value) as StatsSubjectKind, text)} />
-    </div>
+    <nav className="sp-seg sp-gap" aria-label="Show">
+      {STATS_TABS.map((entry) => <Link key={entry.kind} to={tabHref(entry.kind)} replace aria-current={entry.kind === kind ? 'page' : undefined}>{entry.label}</Link>)}
+    </nav>
     <div>
       {text.trim().length === 1 && <RefineNote>Type at least two letters to narrow the list.</RefineNote>}
       {list.status === 'loading' && <p role="status" className="rf-note">Loading…</p>}
       {list.status === 'error' && <Notice className="mt-3">{list.message}</Notice>}
-      {list.status === 'ready' && <BrowseResults list={list} plural={tab.plural} label={tab.label} words={isSearchableQuery(text) ? tidyStatsQuery(text) : ''} />}
+      {list.status === 'ready' && <BrowseResults list={list} kind={kind} plural={tab.plural} label={tab.label} words={isSearchableQuery(text) ? tidyStatsQuery(text) : ''} />}
     </div>
   </RefinePage>;
 }
 
-function BrowseResults({ list, plural: noun, label, words }: { list: Extract<StatsBrowseLoad, { status: 'ready' }>; plural: string; label: string; words: string }) {
+function BrowseResults({ list, kind, plural: noun, label, words }: { list: Extract<StatsBrowseLoad, { status: 'ready' }>; kind: StatsSubjectKind; plural: string; label: string; words: string }) {
   if (list.items.length === 0) return <div className="py-6 text-[rgb(var(--mg-muted))]" role="status">
     <h2 className="m-0 mb-1 font-['Barlow_Condensed',sans-serif] text-xl font-bold text-[rgb(var(--mg-heading))]">{words ? 'No matches' : 'No finished events yet'}</h2>
     <p className="m-0">{words
@@ -71,13 +79,31 @@ function BrowseResults({ list, plural: noun, label, words }: { list: Extract<Sta
   </div>;
   const remaining = list.total - list.items.length;
   return <>
-    <ul className="sp-card sp-gap m-0 list-none p-0" aria-label={label}>{list.items.map((hit) => <HitRow key={hit.key} hit={hit} />)}</ul>
+    {kind === StatsSubjectKind.Rider
+      ? groupRiders(list.items).map((group) => <section key={group.letter} aria-label={`Riders ${group.letter}`} className="mt-8 first:mt-4">
+        <div className="fk-group-title">
+          <h2>{group.letter}</h2>
+          {/* Only a full list can be counted by letter; more pages would add to it. */}
+          {remaining <= 0 && <span>{plural(group.riders.length, 'rider')}</span>}
+        </div>
+        <ul className="sp-card mt-2 list-none p-0" aria-label={`Riders ${group.letter}`}>{group.riders.map((line) => <RiderRow key={line.hit.key} line={line} />)}</ul>
+      </section>)
+      : <ul className="sp-card sp-gap m-0 list-none p-0" aria-label={label}>{list.items.map((hit) => <HitRow key={hit.key} hit={hit} />)}</ul>}
     {list.moreError && <Notice className="mt-3">{list.moreError}</Notice>}
     {remaining > 0 && <button type="button" className="rf-btn rf-wide mt-3" disabled={list.loadingMore} onClick={list.loadMore}>
       {list.loadingMore ? 'Loading…' : `Show more (${remaining} left)`}
     </button>}
     <RefineNote>Only finished competitions count. Riders who asked to be shown by their surname initial appear that way here too.</RefineNote>
   </>;
+}
+
+/** "Barker, Arthur", surname first; nothing under it. */
+function RiderRow({ line }: { line: RiderLine }) {
+  const { hit } = line;
+  return <li><Link to={statsProfileHref(hit.kind, hit.key)} className="sp-row">
+    <span className="sp-grow"><span className="sp-t1 sp-big">{line.given ? <>{line.surname}, <span className="font-medium">{line.given}</span></> : line.surname}</span></span>
+    <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
+  </Link></li>;
 }
 
 function HitRow({ hit }: { hit: StatsHit }) {

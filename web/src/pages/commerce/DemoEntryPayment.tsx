@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api';
-import { Notice } from '../../components/Notice';
+import { DemoPaymentNotice } from '../../components/DemoPaymentNotice';
 import type { EventCommerceSettings } from './types';
 
 /**
- * On My signups: a demo event's entry gets a clearly marked link to the test payment page. Real events show
- * nothing, because they never use test payments. The payment itself happens on that page, not here.
+ * On My signups, under an entry that has a fee: the demo notice, so nobody thinks the entry has been paid for.
+ * A demo event's entry also gets a link to the test payment page (the payment itself happens there, not here); a
+ * real event's entry still waiting for money gets the notice alone, because the "How to pay" button above it
+ * already says where to go. Nothing shows until we know which kind of event it is, so the link doesn't pop in.
  */
 export function DemoEntryPayment({ signupId, signupStatus = 0 }: { signupId: number; signupStatus?: 0 | 1 | 2 | 3 }) {
-  const [isDemo, setIsDemo] = useState(false);
+  const [isDemo, setIsDemo] = useState<boolean | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -18,14 +20,13 @@ export function DemoEntryPayment({ signupId, signupStatus = 0 }: { signupId: num
     return () => { active = false; };
   }, [signupId]);
 
-  if (!isDemo) return null;
   const pending = signupStatus === 0;
+  if (isDemo === null || (!isDemo && !pending)) return null;
   return (
     <div className="mt-3">
-      <Notice tone="info" role={null} actionLabel={pending ? 'Open the test payment page' : 'View the test receipt'} actionTo={`/me/signups/${signupId}/test-payment`}>
-        <span className="block font-extrabold uppercase tracking-wide">Demo event: test payment only</span>
-        No money is taken for this entry.
-      </Notice>
+      {isDemo
+        ? <DemoPaymentNotice what="entry" actionLabel={pending ? 'Open the test payment page' : 'View the test receipt'} actionTo={`/me/signups/${signupId}/test-payment`} />
+        : <DemoPaymentNotice what="entry" />}
     </div>
   );
 }

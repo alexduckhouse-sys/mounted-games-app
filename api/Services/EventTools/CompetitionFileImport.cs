@@ -43,8 +43,13 @@ public sealed record CompetitionImportSection(
 /// </summary>
 public sealed record CompetitionImportHeat(string Start, IReadOnlyList<IReadOnlyList<string>?> Lanes, string? Label = null);
 
-/// <summary>A planned finals session. Its heats are drawn on the day from the standings (Create finals).</summary>
-public sealed record CompetitionImportFinals(string Start, int? MinutesPerFinal = null);
+/// <summary>
+/// A planned finals session. <see cref="Heats"/> lists the start times of the A, B, C... finals in that order; they are
+/// added with their races and no teams, and Create finals fills them from the standings on the day, up to
+/// <see cref="LanesPerFinal"/> teams each. Without heats the session stays empty and Create finals draws it.
+/// </summary>
+public sealed record CompetitionImportFinals(
+    string Start, int? MinutesPerFinal = null, int? LanesPerFinal = null, IReadOnlyList<string>? Heats = null);
 
 public sealed record CompetitionImportResult(
     int? CompetitionId, int Sections, int Sessions, int Heats, int Teams, int Riders, int Races, bool DryRun);
@@ -55,6 +60,7 @@ public sealed class CompetitionImportException(string message) : Exception(messa
 /// Adds one event from a <see cref="CompetitionImportFile"/>: sections, a heats session and a planned finals session
 /// per age group, heats with their lanes and races, a team per pair with a dec form naming its riders. Nothing is
 /// scored. Explicit command only (<c>--import-competition</c>); it refuses an event that already exists.
+/// <see cref="AddFinalsAsync"/> (<c>--finals-only</c>) adds just the empty finals heats to an event imported earlier.
 /// </summary>
 public static class CompetitionFileImport
 {
@@ -63,6 +69,7 @@ public static class CompetitionFileImport
     public const int DefaultMinutesPerHeat = 20;
     public const int DefaultMinutesPerFinal = 30;
     public const string MissingPartner = "partner TBC";
+    private const int MaxFinals = 26;
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
@@ -85,26 +92,12 @@ public static class CompetitionFileImport
 
     public static async Task<CompetitionImportResult> ImportAsync(AppDbContext db, CompetitionImportFile file, bool dryRun = false)
     {
-        var name = Required(file.Name, "name");
-        if (!DateOnly.TryParseExact(file.Date?.Trim(), "yyyy-MM-dd", out var date))
-            throw new CompetitionImportException("date must be written yyyy-MM-dd.");
-        TimeZoneInfo zone;
-        try { zone = TimeZoneInfo.FindSystemTimeZoneById(string.IsNullOrWhiteSpace(file.TimeZone) ? DefaultTimeZone : file.TimeZone.Trim()); }
-        catch (TimeZoneNotFoundException) { throw new CompetitionImportException($"Unknown time zone \"{file.TimeZone}\"."); }
-        DateTime At(string? time, string what)
-        {
-            if (!TimeOnly.TryParseExact(time?.Trim(), "HH:mm", out var t))
-                throw new CompetitionImportException($"{what}: time must be written HH:mm (24-hour).");
-            return TimeZoneInfo.ConvertTimeToUtc(date.ToDateTime(t, DateTimeKind.Unspecified), zone);
-        }
-
-        if (file.Sections is not { Count: > 0 }) throw new CompetitionImportException("The event has no sections.");
+        var (name, date, At) = Header(file);
         var hatbands = file.LaneHatbands?.Select(h => h?.Trim() ?? string.Empty).ToList();
         if (hatbands is not null && hatbands.Any(h => h.Length == 0)) throw new CompetitionImportException("A lane hatband is blank.");
 
         db.ChangeTracker.Clear();
-        var start = DateTime.SpecifyKind(date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
-        if (await db.Competitions.AnyAsync(c => c.Name == name && c.StartDate >= start.AddDays(-1) && c.StartDate < start.AddDays(2)))
+        if (await SameEvent(db, name, date).AnyAsync())
             throw new CompetitionImportException($"\"{name}\" on {date:yyyy-MM-dd} already exists. Nothing was changed.");
 
         string? ownerId = null;
@@ -236,16 +229,19 @@ public static class CompetitionFileImport
                 {
                     Competition = competition,
                     Section = section,
-                    Name = $"{section.DisplayName} finals",
+                    // The name Create finals looks for when it reuses a planned session.
+                    Name = FinalsName(section),
                     ArenaName = arena,
                     ScheduledStart = finalsStart,
                     LanesPerHeat = lanesPerHeat,
                     MinutesPerHeat = minutesPerFinal,
                     PlannedRaces = PlannedRaceList.Write(finalRaces),
                 };
+                var finalsEnd = AddFinalHeats(finalsSession, finals, finalsStart, minutesPerFinal, finalRaces, hatbands, ageGroup, At);
+                heatCount += finalsSession.Heats.Count;
+                raceCount += finalsSession.Heats.Count * finalRaces.Count;
                 competition.Sessions.Add(finalsSession);
-                // How many finals there will be isn't known until the draw; one slot is the least it takes.
-                sessions.Add((finalsSession, finalsStart.AddMinutes(minutesPerFinal)));
+                sessions.Add((finalsSession, finalsEnd));
             }
         }
 
@@ -267,6 +263,137 @@ public static class CompetitionFileImport
         db.Competitions.Add(competition);
         await db.SaveChangesAsync();
         return result with { CompetitionId = competition.Id };
+    }
+
+    /// <summary>
+    /// Adds the file's empty finals heats to the event it imported earlier, into each age group's planned finals
+    /// session. Refuses, changing nothing, if an age group already has finals heats.
+    /// </summary>
+    public static async Task<CompetitionImportResult> AddFinalsAsync(AppDbContext db, CompetitionImportFile file, bool dryRun = false)
+    {
+        var (name, date, At) = Header(file);
+        var hatbands = file.LaneHatbands?.Select(h => h?.Trim() ?? string.Empty).ToList();
+        db.ChangeTracker.Clear();
+        var matches = await SameEvent(db, name, date)
+            .Include(c => c.Sections)
+            .Include(c => c.Sessions).ThenInclude(s => s.Heats)
+            .ToListAsync();
+        var competition = matches.Count switch
+        {
+            0 => throw new CompetitionImportException($"There's no \"{name}\" on {date:yyyy-MM-dd}. Import the event first."),
+            1 => matches[0],
+            _ => throw new CompetitionImportException($"There's more than one \"{name}\" on {date:yyyy-MM-dd}. Nothing was changed."),
+        };
+        hatbands ??= PlannedRaceList.Read(competition.LaneHatbands)?.ToList();
+
+        int sectionCount = 0, heatCount = 0, raceCount = 0;
+        var lastEnd = DateTime.MinValue;
+        foreach (var import in file.Sections)
+        {
+            if (import.Finals is not { Heats.Count: > 0 } finals) continue;
+            var ageGroup = Required(import.AgeGroup, "A section's ageGroup");
+            var section = competition.Sections.SingleOrDefault(s => string.Equals(s.AgeGroup, ageGroup.Trim(), StringComparison.OrdinalIgnoreCase))
+                ?? throw new CompetitionImportException($"\"{name}\" has no {ageGroup} age group.");
+            var raceSessions = competition.Sessions.Where(s => s.CompetitionSectionId == section.Id && s.Kind == SessionKind.Race).ToList();
+            if (raceSessions.Any(s => s.Heats.Any(h => FinalsTiers.ParseLabel(h.Label) is not null)))
+                throw new CompetitionImportException($"{ageGroup} already has finals heats. Nothing was changed.");
+            var planned = raceSessions.Where(s => s.Heats.Count == 0 && s.Status == SessionStatus.Upcoming).ToList();
+            if (planned.Count != 1)
+                throw new CompetitionImportException($"{ageGroup} has {(planned.Count == 0 ? "no" : "more than one")} empty finals session. Nothing was changed.");
+            var session = planned[0];
+
+            var finalsStart = At(finals.Start, $"{ageGroup} finals");
+            var minutesPerFinal = finals.MinutesPerFinal ?? session.MinutesPerHeat ?? DefaultMinutesPerFinal;
+            if (minutesPerFinal < 1) throw new CompetitionImportException($"{ageGroup}: minutesPerFinal must be at least 1.");
+            var finalRaces = import.FinalRaces is not null ? Races(import.FinalRaces, $"{ageGroup} finals")
+                : PlannedRaceList.Read(session.PlannedRaces) is { Count: > 0 } plannedRaces ? plannedRaces.ToList()
+                : Races(import.HeatRaces, $"{ageGroup} finals");
+            session.Name = FinalsName(section);
+            session.ScheduledStart = finalsStart;
+            session.MinutesPerHeat = minutesPerFinal;
+            session.PlannedRaces = PlannedRaceList.Write(finalRaces);
+            var end = AddFinalHeats(session, finals, finalsStart, minutesPerFinal, finalRaces, hatbands is { Count: > 0 } ? hatbands : null, ageGroup, At);
+            if (end > lastEnd) lastEnd = end;
+            sectionCount++;
+            heatCount += session.Heats.Count;
+            raceCount += session.Heats.Count * finalRaces.Count;
+        }
+        if (sectionCount == 0) throw new CompetitionImportException("The file lists no finals heats to add.");
+        if (competition.EndDate < lastEnd) throw new CompetitionImportException("The last final ends after the event does. Nothing was changed.");
+
+        var result = new CompetitionImportResult(competition.Id, sectionCount, sectionCount, heatCount, 0, 0, raceCount, dryRun);
+        if (dryRun)
+        {
+            db.ChangeTracker.Clear();
+            return result;
+        }
+        await db.SaveChangesAsync();
+        return result;
+    }
+
+    /// <summary>
+    /// The lettered finals, A first as on the scoresheet, each with the final races and no teams. A final runs for
+    /// minutesPerFinal, or up to the next final's start if that comes sooner. Returns when the last one ends.
+    /// </summary>
+    private static DateTime AddFinalHeats(Session session, CompetitionImportFinals finals, DateTime finalsStart, int minutesPerFinal,
+        List<string> races, List<string>? hatbands, string ageGroup, Func<string?, string, DateTime> at)
+    {
+        var end = finalsStart.AddMinutes(minutesPerFinal);
+        if (finals.LanesPerFinal is { } lanes)
+        {
+            if (lanes < 1) throw new CompetitionImportException($"{ageGroup}: lanesPerFinal must be at least 1.");
+            if (hatbands is not null && lanes > hatbands.Count)
+                throw new CompetitionImportException($"{ageGroup}: lanesPerFinal is more than there are hatbands.");
+            session.LanesPerHeat = lanes;
+        }
+        var starts = finals.Heats ?? [];
+        if (starts.Count > MaxFinals) throw new CompetitionImportException($"{ageGroup} has more than {MaxFinals} finals.");
+        var times = starts.Select((t, i) => at(t, $"{ageGroup} {(char)('A' + i)} Final")).ToList();
+        for (var i = 0; i < times.Count; i++)
+        {
+            var label = $"{(char)('A' + i)} Final";
+            if (times[i] < (i == 0 ? finalsStart : times[i - 1]))
+                throw new CompetitionImportException($"{ageGroup} {label} starts before {(i == 0 ? "the finals session" : "the final before it")}.");
+            var minutes = i + 1 < times.Count ? Math.Min(minutesPerFinal, (int)(times[i + 1] - times[i]).TotalMinutes) : minutesPerFinal;
+            var heat = new Heat
+            {
+                Session = session,
+                Label = label,
+                OrderIndex = i + 1,
+                DurationMinutes = Math.Max(1, minutes),
+                ScheduledStart = times[i],
+            };
+            for (var r = 0; r < races.Count; r++)
+                heat.Races.Add(new Race { Heat = heat, Name = races[r], OrderIndex = r + 1 });
+            session.Heats.Add(heat);
+            end = times[i].AddMinutes(heat.DurationMinutes.Value);
+        }
+        return end;
+    }
+
+    private static string FinalsName(CompetitionSection section) => $"Finals · {section.DisplayName}";
+
+    private static (string Name, DateOnly Date, Func<string?, string, DateTime> At) Header(CompetitionImportFile file)
+    {
+        var name = Required(file.Name, "name");
+        if (!DateOnly.TryParseExact(file.Date?.Trim(), "yyyy-MM-dd", out var date))
+            throw new CompetitionImportException("date must be written yyyy-MM-dd.");
+        TimeZoneInfo zone;
+        try { zone = TimeZoneInfo.FindSystemTimeZoneById(string.IsNullOrWhiteSpace(file.TimeZone) ? DefaultTimeZone : file.TimeZone.Trim()); }
+        catch (TimeZoneNotFoundException) { throw new CompetitionImportException($"Unknown time zone \"{file.TimeZone}\"."); }
+        if (file.Sections is not { Count: > 0 }) throw new CompetitionImportException("The event has no sections.");
+        return (name, date, (time, what) =>
+        {
+            if (!TimeOnly.TryParseExact(time?.Trim(), "HH:mm", out var t))
+                throw new CompetitionImportException($"{what}: time must be written HH:mm (24-hour).");
+            return TimeZoneInfo.ConvertTimeToUtc(date.ToDateTime(t, DateTimeKind.Unspecified), zone);
+        });
+    }
+
+    private static IQueryable<Competition> SameEvent(AppDbContext db, string name, DateOnly date)
+    {
+        var start = DateTime.SpecifyKind(date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
+        return db.Competitions.Where(c => c.Name == name && c.StartDate >= start.AddDays(-1) && c.StartDate < start.AddDays(2));
     }
 
     private static Team NewTeam(Competition competition, CompetitionSection section, Club club, List<string> riders, int ridersPerTeam)

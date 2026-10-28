@@ -57,7 +57,7 @@ export interface PasswordResetCheck {
 
 /** The body of a refused `POST /api/auth/password-reset/confirm` (400, 404 or 410). */
 export interface PasswordResetProblem {
-  code: 'expired' | 'used' | 'invalid' | 'conflict' | 'password_rules' | 'password_required';
+  code: 'expired' | 'used' | 'invalid' | 'conflict' | 'failed' | 'password_rules' | 'password_required';
   message: string;
   /** Friendly wording per broken password rule, with Identity's codes in `errorCodes`. Only for `password_rules`. */
   errors?: string[] | null;
@@ -66,7 +66,7 @@ export interface PasswordResetProblem {
 
 /** A sign-in provider switched on in the API (`GET /auth/providers`). `clientId` is the public web client ID. */
 export interface ExternalProvider {
-  id: 'google' | 'apple';
+  id: 'google' | 'apple' | 'facebook';
   name: string;
   clientId: string;
 }
@@ -77,6 +77,16 @@ export interface ExternalAuthResponse {
   email?: string | null;
   suggestedName?: string | null;
   provider?: string | null;
+  /** Finishes a new account through `POST /auth/external/signup` within ten minutes. */
+  signupTicket?: string | null;
+}
+
+/** `GET /auth/logins`: whether the account has a password, and which providers it can sign in with. */
+export interface LinkedSignIns {
+  hasPassword: boolean;
+  logins: { provider: string; name: string }[];
+  /** After adding or removing one: this device's new sign-in, because every other session has ended. */
+  auth?: AuthResponse | null;
 }
 
 export interface TrainerRequest {
@@ -193,18 +203,6 @@ export interface CompetitionPickerPage {
   hasMore: boolean;
 }
 
-/** `GET /api/competitions/picker/near-you`: the upcoming list ordered for this viewer. Never cached or shared. */
-export interface CompetitionNearYouPage {
-  items: CompetitionPickerItem[];
-  hasMore: boolean;
-  /** We could tell roughly where the viewer is (without asking). When false there are no distances and no toggle. */
-  locationKnown: boolean;
-  /** The order used: nearest first, or soonest first. */
-  sort: 'nearest' | 'soonest';
-  /** Whole miles from the viewer, for the items on this page that have a known venue. */
-  distances: { id: number; miles: number }[];
-}
-
 export interface CompetitionSection {
   id: number;
   competitionId: number;
@@ -310,6 +308,8 @@ export interface Race {
   startedAt?: string | null;
   finishedAt?: string | null;
   results: ResultRow[];
+  /** An open protest covers this race. Only the flag reaches the public, never the protest. */
+  underReview?: boolean;
 }
 
 export type ReplayRaceMarker = Pick<Race, 'id' | 'name' | 'orderIndex' | 'startedAt' | 'finishedAt' | 'isComplete'>;
@@ -327,6 +327,8 @@ export interface Heat {
   raceRoundStage?: RaceRoundStage;
   entries: HeatEntry[];
   races: Race[];
+  /** An open protest covers at least one of its races. */
+  underReview?: boolean;
 }
 
 export interface Session {
@@ -1507,6 +1509,18 @@ export interface StatsGame {
   pointQuotaPercent: number | null;
   averagePoints?: number | null;
   averagePlace?: number | null;
+  /** A team profile's most recent runs of this game, oldest first; missing for every other kind of profile. */
+  runs?: StatsRun[] | null;
+}
+
+/** One time a team rode a game: where, when, how it went. `place` is null when put out or unplaced. */
+export interface StatsRun {
+  competitionName: string;
+  startDate: string;
+  place: number | null;
+  eliminated: boolean;
+  points: number;
+  maxPoints: number;
 }
 
 export interface StatsSession {
@@ -1776,4 +1790,36 @@ export interface PublicResultsSummaryDto {
   isProvisional: boolean;
   generatedAt?: string;
   summaryText: string;
+}
+
+/** Where a protest stands (API `ProtestStatus`). Only Open blocks signing off. */
+export const ProtestStatus = { Open: 0, Upheld: 1, Dismissed: 2, Withdrawn: 3 } as const;
+export type ProtestStatus = typeof ProtestStatus[keyof typeof ProtestStatus];
+
+export interface ProtestTeam { teamId: number; teamName: string }
+
+/** A protest as staff see it (`GET /competitions/{id}/protests`). Staff-only: never show it to the public. */
+export interface Protest {
+  id: number;
+  competitionId: number;
+  sessionId: number;
+  sessionName: string;
+  heatId: number;
+  heatLabel?: string | null;
+  heatOrder: number;
+  /** Null means the whole heat. */
+  raceId?: number | null;
+  raceName?: string | null;
+  raisedByTeam?: ProtestTeam | null;
+  concerns: ProtestTeam[];
+  raisedByName?: string | null;
+  reason: string;
+  status: ProtestStatus;
+  decision?: string | null;
+  createdByUserId?: string | null;
+  createdAt: string;
+  decidedByUserId?: string | null;
+  decidedAt?: string | null;
+  /** The race (or a race in the heat) was already signed off when this was read. */
+  raceSignedOff: boolean;
 }

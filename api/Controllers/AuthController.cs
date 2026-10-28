@@ -7,6 +7,7 @@ using System.Text;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
@@ -79,22 +80,33 @@ public class AuthController : ControllerBase
         => Ok(externalValidator.GetEnabledProviders());
 
     private const string ExternalTokenRefused = "We couldn't check that sign-in. Try again.";
-    private const string AdminsUsePassword = "Admins need to sign in with their email and password, not Google or Apple.";
-    private const string AccountExistsUsePassword = "There's already an account with this email address. Sign in with your email and password.";
-    private const string LockedOutMessage = "Too many wrong passwords. Try again in a few minutes.";
+    private const string AdminsUsePassword = "Admins need to sign in with their email and password, not Google, Apple or Facebook.";
+    private const string TicketExpired = "Your sign-in has expired. Sign in again to finish creating your account.";
+
+    /// <summary>Someone signed in with a provider whose address belongs to an account it can't simply open.</summary>
+    private ConflictObjectResult AccountExistsUsePassword(string providerName) => Conflict(new
+    {
+        message = $"There's already an account with this email address. Sign in with your email and password, then add {providerName} from My account. If you don't have a password or can't remember it, reset your password first.",
+        code = "external_link_refused",
+    });
 
     /// <summary>
-    /// Signs in with a Google or Apple ID token, linking it to an existing account or, with a club and role, creating one.
+    /// Signs in with a Google or Apple ID token, or a Facebook access token.
     /// <list type="bullet">
-    /// <item>The token must pass <see cref="IExternalTokenValidator"/> (signature, issuer, audience, expiry, nonce).</item>
+    /// <item>The token must pass <see cref="IExternalTokenValidator"/> (signature, issuer, audience, expiry, nonce, and
+    /// for Google and Apple not used before; Facebook's SDK reuses its token, so a Facebook one may sign in again).</item>
     /// <item>A provider sign-in already linked to an account signs in to that account.</item>
-    /// <item>Otherwise an account with the same email is linked only when the provider vouches for the address
-    /// (<see cref="ExternalIdentity.MayLinkByEmail"/>) and the account's own email is confirmed, so nobody can register
-    /// someone else's address with a password and wait for its owner to sign in with Google.</item>
-    /// <item>Admin accounts, locked or blocked accounts and accounts locked out after wrong passwords are never signed in
-    /// or linked this way.</item>
-    /// <item>A new account goes through the same path as <see cref="SignupTrainer"/>: the per-network account limit,
-    /// Member at once, a Trainer or Manager request awaiting approval.</item>
+    /// <item>Otherwise an account with the same email is linked only when the provider runs that mailbox
+    /// (<see cref="ExternalIdentity.MayLinkByEmail"/>), the account's own email is confirmed, and nobody else can already
+    /// hold a way in (<see cref="LinkByEmail"/>: no provider sign-in, and no password unless one set through a mailed link),
+    /// so nobody can register someone else's address, by password or with an unchecked Facebook address, and wait for its
+    /// owner to sign in. The account's address is told.</item>
+    /// <item>Admin accounts and locked, blocked or deleted accounts are never signed in or linked this way. A lockout
+    /// after wrong passwords doesn't stop it: that only guards the password.</item>
+    /// <item>Nobody found: a ten-minute sign-up ticket (<see cref="ExternalSignupTickets"/>) for
+    /// <see cref="ExternalSignup"/>, which makes the account once they've picked a club and role. A provider that didn't
+    /// share an address (Facebook can withhold it) gets no ticket: an account's address must come from somewhere checked,
+    /// so the person signs up with email and password and adds Facebook from My account.</item>
     /// </list>
     /// </summary>
     [EnableRateLimiting("auth")]
@@ -103,28 +115,25 @@ public class AuthController : ControllerBase
     public async Task<ActionResult<ExternalAuthResultDto>> ExternalLogin(
         ExternalAuthRequest req,
         [FromServices] IExternalTokenValidator externalValidator,
-        [FromServices] IConfiguration config,
+        [FromServices] ExternalSignupTickets tickets,
+        [FromServices] AccountEmailService accountEmail,
         [FromServices] AccountIpRecorder ipRecorder)
     {
         if (await _db.IsIpBlockedAsync(HttpContext, HttpContext.RequestAborted))
             return StatusCode(StatusCodes.Status403Forbidden, new { message = "Sign-in from this network is blocked." });
 
-        var providerId = (req.Provider ?? string.Empty).Trim().ToLowerInvariant();
-        var provider = externalValidator.GetEnabledProviders().FirstOrDefault(p => p.Id == providerId);
-        if (provider is null)
+        var checkedSignIn = await CheckExternalTokenAsync(externalValidator, req.Provider, req.IdToken, req.Nonce, ExternalTokenUse.SignIn);
+        if (checkedSignIn is not ({ } provider, { } identity))
             return Unauthorized(new { message = ExternalTokenRefused, code = "external_token" });
 
-        var checkedToken = await externalValidator.ValidateAsync(provider.Id, req.IdToken ?? string.Empty, req.Nonce, HttpContext.RequestAborted);
-        if (checkedToken.Identity is not { } identity)
-            return Unauthorized(new { message = ExternalTokenRefused, code = "external_token" });
-        if (!EmailValidation.TryNormalise(identity.Email, out var email))
-            return EmailRejected(EmailProblem.Format);
-
+        // An existing link decides first, so an odd address from the provider never stops someone who is already linked.
         var linkedUser = await _users.FindByLoginAsync(provider.Id, identity.Subject);
         if (linkedUser is not null)
         {
             if (await RefuseExternalSignInAsync(linkedUser) is { } refused) return refused;
-            if (!linkedUser.EmailConfirmed && identity.MayLinkByEmail && string.Equals(linkedUser.Email, email, StringComparison.OrdinalIgnoreCase))
+            if (!linkedUser.EmailConfirmed && identity.MayLinkByEmail && identity.Email is not null
+                && EmailValidation.TryNormalise(identity.Email, out var linkedEmail)
+                && string.Equals(linkedUser.Email, linkedEmail, StringComparison.OrdinalIgnoreCase))
             {
                 linkedUser.EmailConfirmed = true;
                 await _users.UpdateAsync(linkedUser);
@@ -132,8 +141,17 @@ public class AuthController : ControllerBase
             return await ExternalSignInAsync(linkedUser, ipRecorder);
         }
 
+        if (identity.Email is null)
+            return BadRequest(new
+            {
+                message = $"{provider.Name} didn't share your email address with us, so we can't make an account from it. Sign up with your email and a password, then add {provider.Name} from My account.",
+                code = "external_email_missing",
+            });
+        if (!EmailValidation.TryNormalise(identity.Email, out var email))
+            return EmailRejected(EmailProblem.Format);
+
         // The same answer whether or not an account uses this address, so an unconfirmed address reveals nothing.
-        if (!identity.EmailVerified)
+        if (ExternalProviders.VerifiesEmail(provider.Id) && !identity.EmailVerified)
             return Unauthorized(new
             {
                 message = $"{provider.Name} hasn't confirmed this email address yet. Confirm it in your {provider.Name} account, or sign in with your email and password.",
@@ -144,18 +162,17 @@ public class AuthController : ControllerBase
         if (existing is not null)
         {
             if (!identity.MayLinkByEmail || !existing.EmailConfirmed)
-                return Conflict(new { message = AccountExistsUsePassword, code = "external_link_refused" });
+                return AccountExistsUsePassword(provider.Name);
             if (await RefuseExternalSignInAsync(existing) is { } refused) return refused;
-            // One Google (or Apple) identity per account: a second one with the same address is someone else's.
-            if ((await _users.GetLoginsAsync(existing)).Any(l => l.LoginProvider == provider.Id))
-                return Conflict(new
-                {
-                    message = $"Your account here is already linked to a different {provider.Name} account. Sign in with that one, or with your email and password.",
-                    code = "external_other_login",
-                });
+            if (await LinkProblemAsync(existing, provider) is { } problem) return problem;
+            // An account someone else may already hold a way into (a password chosen at sign-up, another provider) isn't
+            // linked: see LinkByEmail.
+            if (!await LinkByEmail.MayLinkAsync(_users, existing))
+                return AccountExistsUsePassword(provider.Name);
             var linked = await _users.AddLoginAsync(existing, new UserLoginInfo(provider.Id, identity.Subject, provider.Name));
             if (!linked.Succeeded)
-                return Conflict(new { message = AccountExistsUsePassword, code = "external_link_refused" });
+                return AccountExistsUsePassword(provider.Name);
+            await accountEmail.SendSignInAddedAsync(existing, provider.Name);
             return await ExternalSignInAsync(existing, ipRecorder);
         }
 
@@ -164,30 +181,329 @@ public class AuthController : ControllerBase
 
         // Apple's name arrives beside the token, not in it, so it only ever suggests a name for a new account.
         var suggestedName = SuggestedExternalName(identity, req.ProviderName, email);
-        if (string.IsNullOrWhiteSpace(req.ClubName))
-            return new ExternalAuthResultDto(NeedsSignup: true, Auth: null, Email: email, SuggestedName: suggestedName, Provider: provider.Id);
+        // A verified Apple relay address starts confirmed: Apple runs the relay and made it for this person and this app.
+        // It still never links to an existing account by email (MayLinkByEmail stays false).
+        var vouched = identity.MayLinkByEmail || (identity.IsPrivateRelay && identity.EmailVerified);
+        var ticket = tickets.Create(new ExternalSignupTicket(provider.Id, identity.Subject, email, vouched, suggestedName));
+        return new ExternalAuthResultDto(NeedsSignup: true, Auth: null, Email: email, SuggestedName: suggestedName, Provider: provider.Id, SignupTicket: ticket);
+    }
 
-        var clubName = req.ClubName.Trim();
+    /// <summary>
+    /// Makes the account for a provider sign-in that found none, from its sign-up ticket and the person's club and role,
+    /// through the same path as <see cref="SignupTrainer"/> (the per-network account limit, Member at once, a Trainer or
+    /// Manager request awaiting approval). The email is the provider's own; it starts confirmed only when the provider runs
+    /// the mailbox (or it's an Apple relay address); otherwise the usual confirmation email goes out.
+    /// </summary>
+    [EnableRateLimiting("auth")]
+    [HttpPost("external/signup")]
+    [AllowAnonymous]
+    public async Task<ActionResult<AuthResponse>> ExternalSignup(
+        ExternalSignupRequest req,
+        [FromServices] ExternalSignupTickets tickets,
+        [FromServices] IExternalTokenValidator externalValidator,
+        [FromServices] AccountEmailService accountEmail,
+        [FromServices] IConfiguration config,
+        [FromServices] AccountIpRecorder ipRecorder)
+    {
+        if (await _db.IsIpBlockedAsync(HttpContext, HttpContext.RequestAborted))
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Sign-up from this network is blocked." });
+
+        var ticket = tickets.Read(req.Ticket);
+        var provider = ticket is null ? null : externalValidator.GetEnabledProviders().FirstOrDefault(p => p.Id == ticket.Provider);
+        if (ticket is null || provider is null)
+            return Unauthorized(new { message = TicketExpired, code = "external_ticket" });
+        if (await _users.FindByLoginAsync(provider.Id, ticket.Subject) is not null)
+            return Conflict(new { message = $"You already have an account. Sign in with {provider.Name}.", code = "external_account_exists" });
+
+        var email = ticket.Email;
+        if (EmailValidation.IsDisposable(EmailValidation.DomainOf(email)))
+            return EmailRejected(EmailProblem.Disposable);
+        if (await _users.FindByEmailAsync(email) is not null)
+            return AccountExistsUsePassword(provider.Name);
+
+        var clubName = (req.ClubName ?? string.Empty).Trim();
         if (ClubNameProblem(clubName) is { } clubProblem)
             return BadRequest(new { message = clubProblem });
         var givenName = (req.FullName ?? string.Empty).Trim();
         if (givenName.Length > 100)
             return BadRequest(new { message = "Your name must be 100 characters or fewer." });
-        var fullName = givenName.Length > 0 ? givenName : suggestedName;
+        var fullName = givenName.Length > 0 ? givenName : ticket.SuggestedName;
         if (fullName.Length == 0)
             return BadRequest(new { message = "Enter your name." });
 
         var created = await CreateSelfServiceAccountAsync(config, email, fullName, clubName, SelfServiceRole(req.Role),
-            emailConfirmed: true, password: null, login: new UserLoginInfo(provider.Id, identity.Subject, provider.Name));
+            emailConfirmed: ticket.EmailVouched, password: null, login: new UserLoginInfo(provider.Id, ticket.Subject, provider.Name));
         if (created.Value is not { } signedUp)
-            return created.Result!;
+            return created;
         await ipRecorder.RecordAsync(signedUp.User.Id, HttpContext.Connection.RemoteIpAddress?.ToString(), HttpContext.RequestAborted);
-        return new ExternalAuthResultDto(NeedsSignup: false, Auth: signedUp);
+        // Sent once, after the account's transaction has committed.
+        if (!ticket.EmailVouched)
+            await accountEmail.SendConfirmationAsync((await _users.FindByIdAsync(signedUp.User.Id))!);
+        return signedUp;
     }
 
     /// <summary>
+    /// Facebook's data deletion callback, set as the app's Data Deletion Request URL. Facebook posts a <c>signed_request</c>
+    /// when someone removes the app. Only one signed with our app secret, issued within the last 24 hours and not handled
+    /// before is accepted (<see cref="FacebookSignedRequest"/>, <see cref="ExternalTokenReplayGuard"/>, keyed on the
+    /// signature bytes). A request is marked handled only once the action has worked, so Facebook can retry after a
+    /// failure. Then:
+    /// <list type="bullet">
+    /// <item>An account that can only sign in with Facebook (no password, no other provider) is deleted, as if its owner
+    /// had deleted it (<see cref="AccountDeletionService"/>), and its sessions end. Otherwise it would be left with no way
+    /// in. The last administrator is never deleted this way, and nor is a locked or blocked account: deleting would wipe
+    /// the evidence behind the block and free its owner to sign up again. For those only the link goes.</item>
+    /// <item>Any other account just loses its Facebook link, so the Facebook user id is gone; it keeps its name and email,
+    /// as the privacy page explains, and can be deleted from My account.</item>
+    /// </list>
+    /// No record of the request is kept beyond a log line with its code (keeping one would need a new table), so the
+    /// status page says what happens to every request rather than what happened to this one. The reply is what Facebook
+    /// asks for: a status page and a confirmation code. Answers 404 unless Facebook is configured.
+    /// </summary>
+    [HttpPost("facebook/data-deletion")]
+    [AllowAnonymous]
+    [Consumes("application/x-www-form-urlencoded")]
+    public async Task<IActionResult> FacebookDataDeletion(
+        [FromForm(Name = "signed_request")] string? signedRequest,
+        [FromServices] FacebookApp facebook,
+        [FromServices] ExternalTokenReplayGuard replay,
+        [FromServices] AccountDeletionService deletion,
+        [FromServices] LiveAccounts accounts,
+        [FromServices] TimeProvider time,
+        [FromServices] IOptions<EmailOptions> emailOptions,
+        [FromServices] IConfiguration config,
+        [FromServices] ILogger<AuthController> log)
+    {
+        if (!facebook.IsConfigured) return NotFound();
+        var request = FacebookSignedRequest.Read(signedRequest, facebook.AppSecret!, time.GetUtcNow());
+        if (request is null) return BadRequest(new { message = "That request isn't signed by Facebook for this app, or it's out of date." });
+        if (await replay.IsUsedAsync(FacebookDeletionStore, request.UserId, request.Signature))
+            return BadRequest(new { message = "That request has already been handled." });
+
+        var outcome = "no linked account";
+        var user = await _users.FindByLoginAsync(ExternalProviders.Facebook, request.UserId);
+        if (user is not null)
+        {
+            var onlyWayIn = !await _users.HasPasswordAsync(user)
+                && (await _users.GetLoginsAsync(user)).All(l => l.LoginProvider == ExternalProviders.Facebook);
+            if (onlyWayIn && user.IsAccessStopped)
+            {
+                await RemoveFacebookLinkAsync(user, request.UserId);
+                outcome = "account stopped, link removed";
+            }
+            else if (onlyWayIn && !await deletion.IsLastAdminAsync(user, Roles.Admin))
+            {
+                await deletion.DeleteAsync(user, HttpContext.RequestAborted);
+                await accounts.SessionsEndedAsync(user.Id);
+                outcome = "account deleted";
+            }
+            else
+            {
+                await RemoveFacebookLinkAsync(user, request.UserId);
+                outcome = "link removed";
+            }
+        }
+        // Only now: a request that failed part-way can be sent again.
+        await replay.TryUseAsync(FacebookDeletionStore, request.UserId, request.Signature, request.IssuedAt + FacebookSignedRequest.MaxAge);
+        var code = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(8));
+        log.LogInformation("Facebook data deletion request {Code}: {Outcome}.", code, outcome);
+        var site = EmailSite.Origin(emailOptions.Value, config) ?? $"{Request.Scheme}://{Request.Host}";
+        return Ok(new { url = $"{site}/data-deletion?code={code}", confirmation_code = code });
+    }
+
+    private const string FacebookDeletionStore = "facebook-deletion";
+
+    private async Task RemoveFacebookLinkAsync(AppUser user, string facebookUserId)
+    {
+        var removed = await _users.RemoveLoginAsync(user, ExternalProviders.Facebook, facebookUserId);
+        if (!removed.Succeeded) throw new InvalidOperationException("The Facebook link could not be removed.");
+    }
+
+    /// <summary>How the signed-in person can sign in: whether they have a password, and which providers are linked.</summary>
+    [HttpGet("logins")]
+    [Authorize]
+    public async Task<ActionResult<LinkedSignInsDto>> MyLogins()
+    {
+        var user = await _users.GetUserAsync(User);
+        if (user is null) return Unauthorized();
+        return await LinkedSignInsAsync(user);
+    }
+
+    /// <summary>
+    /// Adds a Google, Apple or Facebook sign-in to the signed-in account, from a fresh token for it. Being signed in isn't
+    /// enough: <c>Confirm</c> must prove the owner is here (<see cref="ConfirmItsYouAsync"/>), so a stolen session can't
+    /// add the thief's own way in. The provider's address doesn't have to match. The account's address is told, and every
+    /// other session ends (as when the password changes): this device gets a fresh sign-in back in <c>Auth</c>.
+    /// </summary>
+    [EnableRateLimiting("auth")]
+    [HttpPost("logins")]
+    [Authorize]
+    public async Task<ActionResult<LinkedSignInsDto>> ConnectLogin(
+        ExternalConnectRequest req,
+        [FromServices] IExternalTokenValidator externalValidator,
+        [FromServices] AccountEmailService accountEmail,
+        [FromServices] LiveAccounts accounts)
+    {
+        var user = await _users.GetUserAsync(User);
+        if (user is null) return Unauthorized();
+        if (await RefuseExternalSignInAsync(user) is { } refused) return refused;
+        // Checked before the new token, so a session without the owner never uses it up.
+        var confirm = req.Confirm ?? new ReauthRequest();
+        if (await ConfirmItsYouAsync(user, confirm.Password, confirm.Provider, confirm.IdToken, confirm.Nonce, externalValidator,
+                "Enter your current password to add a way to sign in.", NoWayToConfirm) is { } unconfirmed)
+            return unconfirmed;
+
+        var checkedSignIn = await CheckExternalTokenAsync(externalValidator, req.Provider, req.IdToken, req.Nonce, ExternalTokenUse.Connect);
+        if (checkedSignIn is not ({ } provider, { } identity))
+            return Unauthorized(new { message = ExternalTokenRefused, code = "external_token" });
+
+        var owner = await _users.FindByLoginAsync(provider.Id, identity.Subject);
+        if (owner is not null)
+            return owner.Id == user.Id
+                ? await LinkedSignInsAsync(user)
+                : Conflict(new { message = $"That {provider.Name} account is already linked to a different Mounted Games account.", code = "external_login_taken" });
+        if (await LinkProblemAsync(user, provider) is { } problem) return problem;
+
+        // Saved with the new link (AddLoginAsync saves the whole account), so every older token stops working.
+        user.SessionVersion++;
+        var linked = await _users.AddLoginAsync(user, new UserLoginInfo(provider.Id, identity.Subject, provider.Name));
+        if (!linked.Succeeded)
+        {
+            user.SessionVersion--;
+            return Conflict(new { message = $"That {provider.Name} account is already linked to a different Mounted Games account.", code = "external_login_taken" });
+        }
+        await accounts.SessionsEndedAsync(user.Id, user.SessionVersion);
+        await accountEmail.SendSignInAddedAsync(user, provider.Name);
+        return await LinkedSignInsAsync(user, await FreshAuthAsync(user));
+    }
+
+    /// <summary>
+    /// Removes a provider sign-in from the signed-in account, once the owner has proved they're here (the body is a
+    /// <see cref="ReauthRequest"/>). The last way in is never removed: an account with no password keeps its only provider.
+    /// The account's address is told, and every other session ends; this device gets a fresh sign-in back in <c>Auth</c>.
+    /// </summary>
+    [EnableRateLimiting("auth")]
+    [HttpDelete("logins/{provider}")]
+    [Authorize]
+    public async Task<ActionResult<LinkedSignInsDto>> RemoveLogin(
+        string provider,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ReauthRequest? req,
+        [FromServices] IExternalTokenValidator externalValidator,
+        [FromServices] AccountEmailService accountEmail,
+        [FromServices] LiveAccounts accounts)
+    {
+        var user = await _users.GetUserAsync(User);
+        if (user is null) return Unauthorized();
+        var logins = await _users.GetLoginsAsync(user);
+        var login = logins.FirstOrDefault(l => l.LoginProvider == provider);
+        if (login is null) return NotFound();
+        if (logins.Count == 1 && !await _users.HasPasswordAsync(user))
+            return Conflict(new
+            {
+                message = $"{login.ProviderDisplayName} is the only way you can sign in, because your account has no password. Keep it, or set a password first.",
+                code = "last_sign_in",
+            });
+        var confirm = req ?? new ReauthRequest();
+        if (await ConfirmItsYouAsync(user, confirm.Password, confirm.Provider, confirm.IdToken, confirm.Nonce, externalValidator,
+                "Enter your current password to remove a way to sign in.", NoWayToConfirm) is { } unconfirmed)
+            return unconfirmed;
+
+        // Saved with the removal (RemoveLoginAsync saves the whole account), so every older token stops working.
+        user.SessionVersion++;
+        var removed = await _users.RemoveLoginAsync(user, login.LoginProvider, login.ProviderKey);
+        if (!removed.Succeeded)
+        {
+            user.SessionVersion--;
+            return StatusCode(500, new { message = "Couldn't remove it. Try again." });
+        }
+        await accounts.SessionsEndedAsync(user.Id, user.SessionVersion);
+        var name = login.ProviderDisplayName ?? login.LoginProvider;
+        await accountEmail.SendSignInRemovedAsync(user, name);
+        return await LinkedSignInsAsync(user, await FreshAuthAsync(user));
+    }
+
+    private const string NoWayToConfirm = "This account has no password or sign-in to confirm it's you. Ask an administrator.";
+
+    /// <summary>
+    /// Null when the owner has proved they're here; otherwise the answer to send. An account with a password needs it
+    /// (a wrong one counts towards the sign-in lockout, so this can't be used to guess it). One without (made with Google,
+    /// Apple or Facebook) needs a fresh sign-in with one of its own linked providers, used once. The shared admin account
+    /// has neither, so it can't confirm.
+    /// </summary>
+    private async Task<ActionResult?> ConfirmItsYouAsync(AppUser user, string? password, string? providerId, string? idToken, string? nonce,
+        IExternalTokenValidator externalValidator, string enterPassword, string noWayIn)
+    {
+        // Signing in with the admin key gives a token for the shared organiser account, which has no password of its own to confirm.
+        var shared = string.Equals(user.Email, "admin@mg.local", StringComparison.OrdinalIgnoreCase);
+        if (!shared && await _users.HasPasswordAsync(user))
+        {
+            if (string.IsNullOrEmpty(password))
+                return BadRequest(new { message = enterPassword, code = "confirm_with_password" });
+
+            var check = await _signIn.CheckPasswordSignInAsync(user, password, lockoutOnFailure: true);
+            if (check.IsLockedOut)
+                return BadRequest(new { message = "Too many wrong passwords. Try again in a few minutes." });
+            if (!check.Succeeded)
+                return BadRequest(new { message = "That password isn't right.", code = "wrong_password" });
+            return null;
+        }
+
+        IList<UserLoginInfo> logins = shared ? [] : await _users.GetLoginsAsync(user);
+        if (logins.Count == 0)
+            return Conflict(new { message = noWayIn });
+        if (string.IsNullOrEmpty(idToken))
+            return BadRequest(new { message = "Sign in again to confirm it's you.", code = "confirm_with_provider" });
+        var checkedSignIn = await CheckExternalTokenAsync(externalValidator, providerId, idToken, nonce, ExternalTokenUse.Confirm);
+        if (checkedSignIn is not ({ } provider, { } identity))
+            return BadRequest(new { message = ExternalTokenRefused, code = "external_token" });
+        if (!logins.Any(l => l.LoginProvider == provider.Id && l.ProviderKey == identity.Subject))
+            return BadRequest(new { message = $"That isn't the {provider.Name} account linked to this one. Sign in with that one to confirm.", code = "external_wrong_account" });
+        return null;
+    }
+
+    /// <summary>A new sign-in for this device, under the account's current session version.</summary>
+    private async Task<AuthResponse> FreshAuthAsync(AppUser user)
+    {
+        var (token, expiresAt, roles) = await _tokens.CreateTokenAsync(user);
+        var club = user.ClubId.HasValue ? await _db.Clubs.FindAsync(user.ClubId.Value) : null;
+        return new AuthResponse(token, expiresAt,
+            new UserProfile(user.Id, user.Email!, user.FullName, user.ClubId, club?.Name, roles.ToList(), user.EmailConfirmed));
+    }
+
+    private async Task<LinkedSignInsDto> LinkedSignInsAsync(AppUser user, AuthResponse? auth = null)
+        => new(await _users.HasPasswordAsync(user),
+            (await _users.GetLoginsAsync(user))
+                .OrderBy(l => l.LoginProvider, StringComparer.Ordinal)
+                .Select(l => new LinkedSignInDto(l.LoginProvider, l.ProviderDisplayName ?? l.LoginProvider))
+                .ToList(),
+            auth);
+
+    /// <summary>The provider (if it's switched on) and who signed in, or null when the token doesn't pass every check.</summary>
+    private async Task<(ExternalProviderDto Provider, ExternalIdentity Identity)?> CheckExternalTokenAsync(
+        IExternalTokenValidator externalValidator, string? providerId, string? token, string? nonce, ExternalTokenUse use)
+    {
+        var id = (providerId ?? string.Empty).Trim().ToLowerInvariant();
+        var provider = externalValidator.GetEnabledProviders().FirstOrDefault(p => p.Id == id);
+        if (provider is null) return null;
+        var checkedToken = await externalValidator.ValidateAsync(provider.Id, token ?? string.Empty, nonce, use, HttpContext.RequestAborted);
+        return checkedToken.Identity is { } identity ? (provider, identity) : null;
+    }
+
+    /// <summary>One identity per provider per account: a second one is someone else's, or needs the first removed.</summary>
+    private async Task<ActionResult?> LinkProblemAsync(AppUser user, ExternalProviderDto provider)
+        => (await _users.GetLoginsAsync(user)).Any(l => l.LoginProvider == provider.Id)
+            ? Conflict(new
+            {
+                message = $"Your account here is already linked to a different {provider.Name} account. Use that one, or remove it from My account first.",
+                code = "external_other_login",
+            })
+            : null;
+
+    /// <summary>
     /// Why an account can't be signed in to or linked through a provider, or null if it can. Admins must use their
-    /// password; a lock, block, deletion or wrong-password lockout stops this route as it stops the password one.
+    /// password; a lock, block or deletion stops this route as it stops the password one. A lockout after wrong
+    /// passwords does not: it guards the password, and letting it stop provider sign-in would let anyone who knows the
+    /// address lock its owner out.
     /// </summary>
     private async Task<ActionResult?> RefuseExternalSignInAsync(AppUser user)
     {
@@ -196,8 +512,6 @@ public class AuthController : ControllerBase
             return StatusCode(StatusCodes.Status403Forbidden, new { message = AdminsUsePassword, code = "admin_password_only" });
         if (user.IsAccessStopped || user.LockoutEnd == DateTimeOffset.MaxValue)
             return StatusCode(StatusCodes.Status403Forbidden, new { message = AccessStoppedMessage, code = "account_stopped" });
-        if (await _users.IsLockedOutAsync(user))
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = LockedOutMessage, code = "account_locked_out" });
         return null;
     }
 
@@ -211,18 +525,19 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// The name offered for a new account: the token's (Google), else the one Apple handed the page, else the start of a
-    /// real email address. An Apple relay address's start is random letters, so it suggests nothing.
+    /// The name offered for a new account: the token's (Google), else the one the provider handed the page (Apple), else
+    /// the start of a real email address. An Apple relay address's start is random letters, so it suggests nothing.
     /// </summary>
-    private static string SuggestedExternalName(ExternalIdentity identity, string? providerName, string email)
+    private static string SuggestedExternalName(ExternalIdentity identity, string? providerName, string? email)
     {
         var name = identity.Name;
         if (string.IsNullOrWhiteSpace(name)) name = providerName;
-        if (string.IsNullOrWhiteSpace(name)) name = identity.IsPrivateRelay ? string.Empty : email.Split('@')[0];
+        if (string.IsNullOrWhiteSpace(name)) name = identity.IsPrivateRelay || email is null ? string.Empty : email.Split('@')[0];
         name = string.Join(' ', new string(name.Select(c => char.IsControl(c) ? ' ' : c).ToArray())
             .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
         return name.Length > 100 ? name[..100].TrimEnd() : name;
     }
+
 
     [EnableRateLimiting("auth")]
     [HttpPost("admin-key")]
@@ -286,6 +601,9 @@ public class AuthController : ControllerBase
                     {
                         if (!await _users.IsInRoleAsync(existing, Roles.Admin))
                         {
+                            // The key makes an existing account staff, so its address must be confirmed (ConfirmedAddress).
+                            // An organiser who already has Admin this way signs in as before.
+                            if (ConfirmedAddress.Refuses(existing, Roles.Admin)) return ConfirmedAddress.OwnRefusal();
                             var granted = await _users.AddToRoleAsync(existing, Roles.Admin);
                             if (!granted.Succeeded) return PasswordProblems(granted);
                         }
@@ -481,7 +799,7 @@ public class AuthController : ControllerBase
             if (login is not null)
             {
                 var linked = await _users.AddLoginAsync(user, login);
-                if (!linked.Succeeded) return Conflict(new { message = AccountExistsUsePassword, code = "external_link_refused" });
+                if (!linked.Succeeded) return AccountExistsUsePassword(login.ProviderDisplayName ?? login.LoginProvider);
             }
 
             var assignedRoles = role == Roles.Trainer ? new[] { Roles.Member, Roles.TrainerRequest }
@@ -555,10 +873,16 @@ public class AuthController : ControllerBase
         return cleaned.Length == 0 ? "user" : cleaned;
     }
 
+    /// <summary>
+    /// An admin makes an account for someone. The address is whatever the admin typed, so it starts unconfirmed and gets
+    /// the usual confirmation email: until its owner confirms it (signed in), it can't be used to reset the password. The
+    /// role is granted at once, unlike the other staff grants (<see cref="ConfirmedAddress"/>), because a new account has
+    /// nobody yet who could confirm it.
+    /// </summary>
     [EnableRateLimiting("auth")]
     [HttpPost("register")]
     [Authorize(Roles = Roles.Admin)]
-    public async Task<ActionResult<AuthResponse>> Register(RegisterRequest req)
+    public async Task<ActionResult<AuthResponse>> Register(RegisterRequest req, [FromServices] AccountEmailService accountEmail)
     {
         if (await _db.IsIpBlockedAsync(HttpContext, HttpContext.RequestAborted))
             return StatusCode(StatusCodes.Status403Forbidden, new { message = "Registration from this network is blocked." });
@@ -572,7 +896,7 @@ public class AuthController : ControllerBase
             Email = req.Email,
             FullName = req.FullName,
             ClubId = req.ClubId,
-            EmailConfirmed = true
+            EmailConfirmed = false
         };
         var result = await _users.CreateAsync(user, req.Password);
         if (!result.Succeeded)
@@ -585,6 +909,7 @@ public class AuthController : ControllerBase
         if (!Roles.Assignable.Contains(role))
             role = Roles.Trainer;
         await _users.AddToRoleAsync(user, role);
+        await accountEmail.SendConfirmationAsync(user);
 
         var (token, expiresAt, roles) = await _tokens.CreateTokenAsync(user);
         var club = user.ClubId.HasValue ? await _db.Clubs.FindAsync(user.ClubId.Value) : null;
@@ -594,28 +919,22 @@ public class AuthController : ControllerBase
 
     /// <summary>
     /// Deletes the signed-in person's own account (see <see cref="AccountDeletionService"/> for what happens to
-    /// their data). Needs the current password. The shared admin account and the last Admin are refused.
+    /// their data). Needs the current password, or for an account without one a fresh sign-in with its own provider
+    /// (<see cref="ConfirmItsYouAsync"/>). The shared admin account and the last Admin are refused.
     /// </summary>
     [EnableRateLimiting("auth")]
     [HttpDelete("me")]
     [Authorize]
-    public async Task<IActionResult> DeleteMe(DeleteAccountRequest req, [FromServices] AccountDeletionService deletion, [FromServices] LiveAccounts accounts)
+    public async Task<IActionResult> DeleteMe(DeleteAccountRequest req, [FromServices] AccountDeletionService deletion, [FromServices] LiveAccounts accounts,
+        [FromServices] IExternalTokenValidator externalValidator)
     {
         var user = await _users.GetUserAsync(User);
         if (user is null) return Unauthorized();
 
-        // Signing in with the admin key gives a token for the shared organiser account, which has no password of its own to confirm.
-        if (string.Equals(user.Email, "admin@mg.local", StringComparison.OrdinalIgnoreCase) || !await _users.HasPasswordAsync(user))
-            return Conflict(new { message = "This account signs in without a password, so it can't be deleted here. Ask an administrator." });
-        if (string.IsNullOrEmpty(req.Password))
-            return BadRequest(new { message = "Enter your current password to delete your account." });
-
-        // Counts towards the same lockout as signing in, so this can't be used to guess the password.
-        var check = await _signIn.CheckPasswordSignInAsync(user, req.Password, lockoutOnFailure: true);
-        if (check.IsLockedOut)
-            return BadRequest(new { message = "Too many wrong passwords. Try again in a few minutes." });
-        if (!check.Succeeded)
-            return BadRequest(new { message = "That password isn't right." });
+        if (await ConfirmItsYouAsync(user, req.Password, req.Provider, req.IdToken, req.Nonce, externalValidator,
+                "Enter your current password to delete your account.",
+                "This account signs in without a password, so it can't be deleted here. Ask an administrator.") is { } unconfirmed)
+            return unconfirmed;
 
         if (await deletion.IsLastAdminAsync(user, Roles.Admin))
             return Conflict(new { message = "This is the only administrator account. Make someone else an administrator first." });
@@ -657,7 +976,7 @@ public class AuthController : ControllerBase
     /// Changes the signed-in person's own password. Needs the current one; a wrong guess counts towards the same
     /// lockout as signing in, so this can't be used to guess it. It also signs the account out everywhere else: the
     /// account's <c>SessionVersion</c> goes up with the new password, so <see cref="LiveAccounts"/> refuses every older
-    /// token at once and their live-hub connections close, and this device gets a fresh token back. Any Google or Apple
+    /// token at once and their live-hub connections close, and this device gets a fresh token back. Any Google, Apple or Facebook
     /// sign-in is disconnected in the same transaction, so one an intruder linked doesn't survive the change.
     /// </summary>
     [EnableRateLimiting("auth")]
@@ -712,17 +1031,26 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Opens the link from the confirmation email. No sign-in needed. A wrong user, a wrong or old token and an
-    /// expired one all get the same answer, so it can't be used to find out who has an account.
+    /// Opens the link from the confirmation email, for the person signed in to the account it was sent for. Whoever can read
+    /// a mailbox isn't necessarily its account's owner (an address can be mistyped, or belong to someone else), and a
+    /// confirmed address is what lets a staff account reset its password by email, so the link alone is not enough. Signed
+    /// in to a different account: 403 <c>other_account</c>. A wrong, old or expired token: the same 400 whatever the reason.
     /// </summary>
     [EnableRateLimiting("auth")]
     [HttpPost("confirm-email")]
-    [AllowAnonymous]
+    [Authorize]
     public async Task<IActionResult> ConfirmEmail(ConfirmEmailRequest req, [FromServices] EmailConfirmationTokens tokens)
     {
-        var user = string.IsNullOrWhiteSpace(req.UserId) ? null : await _users.FindByIdAsync(req.UserId);
-        if (user is null || !tokens.IsValid(user, req.Token))
-            return BadRequest(new { message = "This confirmation link has expired or isn't valid. Sign in and ask for a new one." });
+        var user = await _users.GetUserAsync(User);
+        if (user is null) return Unauthorized();
+        if (!string.IsNullOrWhiteSpace(req.UserId) && req.UserId != user.Id)
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                code = "other_account",
+                message = "This link is for a different account. Sign out, then sign in to the account the email was sent to.",
+            });
+        if (!tokens.IsValid(user, req.Token))
+            return BadRequest(new { message = "This confirmation link has expired or isn't valid. Ask for a new one from your profile." });
         if (!user.EmailConfirmed)
         {
             user.EmailConfirmed = true;

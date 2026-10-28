@@ -101,6 +101,26 @@ describe('TimetablePage', () => {
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/3', { scheduledStart: at(70) }));
   });
 
+  it('always offers a start time for finals, and saves it even when the suggested time is kept', async () => {
+    competition.sessions.push(session(4, 'Under 12 finals', { scheduledStart: null, durationMinutes: null }));
+    try {
+      const user = userEvent.setup();
+      show();
+      const row = await screen.findByRole('button', { name: /Under 12 finals/ });
+      expect(row).toHaveTextContent('Set a start time so it shows on the public timetable');
+      await user.click(row);
+      const start = screen.getByLabelText('Start');
+      fireEvent.blur(start);
+      await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/4', { scheduledStart: expect.any(String) }));
+      fireEvent.change(start, { target: { value: '15:30' } });
+      fireEvent.blur(start);
+      await waitFor(() => expect(vi.mocked(api.put).mock.calls.some(([url, body]) => url === '/competitions/7/sessions/4'
+        && new Date((body as { scheduledStart: string }).scheduledStart).getHours() === 15)).toBe(true));
+    } finally {
+      competition.sessions.pop();
+    }
+  });
+
   it('edits a break: its name, length and removal', async () => {
     const user = userEvent.setup();
     const asked = autoConfirm(true);
@@ -118,13 +138,96 @@ describe('TimetablePage', () => {
     expect(asked.titles).toEqual(['Remove Lunch?']);
   });
 
-  it('moves an item above its neighbour', async () => {
+  it('has no grips until the order is open to change, then drags and keys move a block', async () => {
+    const user = userEvent.setup();
+    show();
+    expect(screen.queryByRole('button', { name: /^Move .*drag/ })).not.toBeInTheDocument();
+    await user.click(await screen.findByRole('switch', { name: 'Drag to change the order' }));
+    // Pressing the arrow key on a focused grip moves the block one place.
+    const grip = screen.getByRole('button', { name: /^Move Lunch: drag/ });
+    grip.focus();
+    await user.keyboard('{ArrowUp}');
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/2', { scheduledStart: startOf(1) }));
+    expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/1', { scheduledStart: at(50) });
+    // Nothing before the first, so up on the first one does nothing; other keys are ignored.
+    vi.mocked(api.put).mockClear();
+    const first = screen.getByRole('button', { name: /^Move Under 12 · Session 1: drag/ });
+    first.focus();
+    await user.keyboard('{ArrowUp}{a}');
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it('drags a block down the order with a pointer and saves the new times', async () => {
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ height: 50 } as DOMRect);
+    try {
+      const user = userEvent.setup();
+      show();
+      await user.click(await screen.findByRole('switch', { name: 'Drag to change the order' }));
+      const grip = screen.getByRole('button', { name: /^Move Under 12 · Session 1: drag/ });
+      fireEvent.pointerDown(grip, { clientY: 100, button: 0 });
+      fireEvent(window, new MouseEvent('pointermove', { clientY: 160 }));
+      fireEvent(window, new MouseEvent('pointerup'));
+      await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/2', { scheduledStart: at(0) }));
+      expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/1', { scheduledStart: at(50) });
+      // Letting go where it started saves nothing.
+      vi.mocked(api.put).mockClear();
+      fireEvent.pointerDown(grip, { clientY: 100, button: 0 });
+      fireEvent(window, new MouseEvent('pointercancel'));
+      fireEvent.pointerDown(grip, { clientY: 100, button: 2 });
+      expect(api.put).not.toHaveBeenCalled();
+    } finally {
+      rect.mockRestore();
+    }
+  });
+
+  it('keeps a final where it is: no grip, and others are not moved onto its time', async () => {
+    competition.sessions.push(session(4, 'Under 12 finals', { scheduledStart: at(200), durationMinutes: 30 }));
+    try {
+      const user = userEvent.setup();
+      show();
+      await user.click(await screen.findByRole('switch', { name: 'Drag to change the order' }));
+      expect(screen.queryByRole('button', { name: /^Move Under 12 finals/ })).not.toBeInTheDocument();
+      screen.getByRole('button', { name: /^Move Under 12 · Session 2: drag/ }).focus();
+      await user.keyboard('{ArrowDown}');
+      expect(api.put).not.toHaveBeenCalled();
+    } finally {
+      competition.sessions.pop();
+    }
+  });
+
+  it('moves a block and everything after it by the chosen minutes, even when each follows on', async () => {
     const user = userEvent.setup();
     show();
     await user.click(await screen.findByRole('button', { name: /Lunch/ }));
-    await user.click(screen.getByRole('button', { name: 'Move Lunch up' }));
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/2', { scheduledStart: startOf(1) }));
-    expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/1', { scheduledStart: at(50) });
+    await user.click(screen.getByRole('button', { name: 'More minutes from here' }));
+    await user.click(screen.getByRole('button', { name: 'Move Lunch and later ones later' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/2', { scheduledStart: at(60) }));
+    expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/3', { scheduledStart: at(100) });
+    expect(api.put).not.toHaveBeenCalledWith('/competitions/7/sessions/1', expect.anything());
+    await user.click(screen.getByRole('button', { name: 'Fewer minutes from here' }));
+    await user.click(screen.getByRole('button', { name: 'Move Lunch and later ones earlier' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/3', { scheduledStart: at(65) }));
+  });
+
+  it('adds a break straight after the row being edited', async () => {
+    const user = userEvent.setup();
+    show();
+    await user.click(await screen.findByRole('button', { name: /Under 12 · Session 1/ }));
+    await user.click(screen.getByRole('button', { name: 'Add a break after this' }));
+    expect(screen.getByRole('button', { name: 'After: Under 12 · Session 1' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Add break' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/7/sessions', expect.objectContaining({ name: 'Lunch', durationMinutes: 30, scheduledStart: at(20) })));
+  });
+
+  it('adds a break at the start and moves everything later', async () => {
+    const user = userEvent.setup();
+    show();
+    await user.click(await screen.findByRole('button', { name: 'Add a break' }));
+    await user.click(screen.getByRole('button', { name: 'After: Under 12 · Session 2' }));
+    await user.click(screen.getByRole('option', { name: 'At the start' }));
+    await user.click(screen.getByRole('button', { name: 'Add break' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/7/sessions', expect.objectContaining({ durationMinutes: 30, scheduledStart: at(0) })));
+    for (const [id, minutes] of [[1, 30], [2, 70], [3, 110]]) expect(api.put).toHaveBeenCalledWith(`/competitions/7/sessions/${id}`, { scheduledStart: at(minutes) });
   });
 
   it('adds a break after an item', async () => {

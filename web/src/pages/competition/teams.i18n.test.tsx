@@ -34,28 +34,31 @@ function mountFollowing(lang: Lang) {
 }
 
 describe('Following tab in Welsh and French', () => {
+  beforeEach(() => { vi.mocked(api.get).mockRejectedValue(new Error('offline')); });
+
   it('speaks Welsh but leaves team names as they were typed', () => {
     localStorage.setItem(FAVOURITES_KEY, '[{"competitionId":1,"teamId":1},{"competitionId":1,"teamId":2}]');
     mountFollowing('cy');
-    const followed = screen.getByRole('heading', { name: 'Timau rydych chi’n eu dilyn' });
-    const rows = within(followed.closest('section')!).getAllByRole('listitem');
-    expect(rows[0]).toHaveTextContent('Example Blue');
-    expect(rows[0]).toHaveTextContent('Nesaf: Rhagras 1 · Lôn 2 · ar y gweill');
-    expect(rows[1]).toHaveTextContent('Heb ei dynnu eto');
-    expect(screen.getByRole('heading', { name: 'Rhagrasys nesaf' })).toBeInTheDocument();
-    expect(screen.getByText('AR Y GWEILL · Ras 2 o 2')).toBeInTheDocument();
+    const now = screen.getByRole('heading', { name: 'Ar y gweill' }).closest('section')!;
+    expect(within(now).getByText('Example Blue')).toBeInTheDocument();
+    expect(within(now).getByText('AR Y GWEILL')).toBeInTheDocument();
+    expect(within(now).getByText('Seniors Rhagras 1 · ras 2 o 2')).toBeInTheDocument();
+    expect(within(now).getByText('lôn 2 · 1af hyd yma, 4 pwynt')).toBeInTheDocument();
+    expect(within(now).getByText('1 tîm')).toBeInTheDocument();
+    const next = screen.getByRole('heading', { name: 'Nesaf' }).closest('section')!;
+    expect(within(next).getByText('Heb ei dynnu eto')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Dad-ddilyn Example Blue' })).toBeInTheDocument();
-    expect(screen.getByText('4 pwynt')).toBeInTheDocument();
-    expect(screen.getByText('1 ras')).toBeInTheDocument();
-    expect(screen.queryByText('Next heats')).not.toBeInTheDocument();
+    expect(screen.queryByText('On now')).not.toBeInTheDocument();
   });
 
   it('speaks French, with plural forms from the French rules', () => {
     localStorage.setItem(FAVOURITES_KEY, '[{"competitionId":1,"teamId":1}]');
     mountFollowing('fr');
-    expect(screen.getByRole('heading', { name: 'Équipes suivies' })).toBeInTheDocument();
-    expect(screen.getByText('EN COURS · Course 2 sur 2')).toBeInTheDocument();
-    expect(screen.getByText('1 course')).toBeInTheDocument();
+    const now = screen.getByRole('heading', { name: 'En cours' }).closest('section')!;
+    expect(within(now).getByText('1 équipe')).toBeInTheDocument();
+    expect(within(now).getByText('EN COURS')).toBeInTheDocument();
+    expect(within(now).getByText('Seniors Manche 1 · course 2 sur 2')).toBeInTheDocument();
+    expect(within(now).getByText('couloir 2 · 1er pour l’instant, 4 pts')).toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: 'Trouver une équipe, un club ou une tranche d’âge' })).toBeInTheDocument();
     expect(document.documentElement.lang).toBe('fr');
   });

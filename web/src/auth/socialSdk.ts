@@ -1,12 +1,19 @@
 /**
- * The two sign-in providers' own scripts (Google Identity Services, Sign in with Apple JS), loaded only when the sign-in
- * page shows their buttons, and the nonce we hand them.
+ * The sign-in providers' own scripts (Google Identity Services, Sign in with Apple JS, Facebook's JavaScript SDK), and the
+ * nonce we hand Google and Apple. Each loads only when a page shows its button: sign-in and sign-up, and on My account to
+ * add a way to sign in or to confirm it's you (adding or removing one, or deleting the account).
  *
- * Both script addresses are allowed by exact path in the Content-Security-Policy, in `web/vercel.json` and
+ * Every script address is allowed by exact path in the Content-Security-Policy, in `web/vercel.json` and
  * `api/Security/SecurityHeadersMiddleware.cs`. Change all three together.
  */
 export const GOOGLE_SCRIPT = 'https://accounts.google.com/gsi/client';
 export const APPLE_SCRIPT = 'https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_GB/appleid.auth.js';
+/** Facebook's loader. It fetches the SDK itself from `https://connect.facebook.net/en_GB/bundle/sdk.js/`, also in the CSP. */
+export const FACEBOOK_SCRIPT = 'https://connect.facebook.net/en_GB/sdk.js';
+/** Keep in step with `FacebookApp.DefaultGraphVersion` in `api/Auth/FacebookSignIn.cs`. */
+export const FACEBOOK_GRAPH_VERSION = 'v23.0';
+/** How long to wait for Facebook's SDK to say it's ready before showing that it didn't load. */
+export const FACEBOOK_READY_TIMEOUT_MS = 15_000;
 
 export interface GoogleCredentialResponse {
   credential?: string;
@@ -50,10 +57,34 @@ export interface AppleAuthApi {
   signIn(): Promise<AppleSignInResponse>;
 }
 
+export interface FacebookLoginResponse {
+  status?: string;
+  /** Missing when the person closed the window or said no. */
+  authResponse?: { accessToken?: string; userID?: string } | null;
+}
+
+/** The part of Facebook's `FB` we use. */
+export interface FacebookApi {
+  init(options: {
+    appId: string;
+    version: string;
+    cookie: boolean;
+    xfbml: boolean;
+    status: boolean;
+    localStorage: boolean;
+    fedCM: boolean;
+  }): void;
+  /** `auth_type: 'reauthenticate'` makes Facebook ask for the password again, for confirming it's the owner. */
+  login(callback: (response: FacebookLoginResponse) => void, options: { scope: string; auth_type?: 'reauthenticate' }): void;
+}
+
 declare global {
   interface Window {
     google?: { accounts?: { id?: GoogleIdApi } };
     AppleID?: { auth?: AppleAuthApi };
+    FB?: FacebookApi;
+    /** Facebook's SDK calls this once it has fully loaded. */
+    fbAsyncInit?: () => void;
   }
 }
 
@@ -93,9 +124,38 @@ export async function loadApple(): Promise<AppleAuthApi> {
   return api;
 }
 
+let facebookReady: Promise<FacebookApi> | null = null;
+
+/**
+ * Facebook's SDK. Its loader script defines `FB` at once but only queues calls until the real SDK arrives, and a queued
+ * `FB.login` would open its pop-up outside the tap (so the browser blocks it). So this waits for `fbAsyncInit`, which
+ * the SDK calls when it is ready, and gives up after {@link FACEBOOK_READY_TIMEOUT_MS}.
+ */
+export function loadFacebook(): Promise<FacebookApi> {
+  facebookReady ??= new Promise<FacebookApi>((resolve, reject) => {
+    const fail = (error: Error) => {
+      facebookReady = null;
+      reject(error);
+    };
+    const timer = setTimeout(() => fail(new Error('Facebook SDK did not start')), FACEBOOK_READY_TIMEOUT_MS);
+    window.fbAsyncInit = () => {
+      clearTimeout(timer);
+      if (window.FB) resolve(window.FB);
+      else fail(new Error('Facebook SDK did not start'));
+    };
+    loadScript(FACEBOOK_SCRIPT).catch((error: Error) => {
+      clearTimeout(timer);
+      fail(error);
+    });
+  });
+  return facebookReady;
+}
+
 /** Forgets loaded scripts. For tests. */
 export function resetSocialSdk() {
   loading.clear();
+  facebookReady = null;
+  delete window.fbAsyncInit;
 }
 
 export interface SignInNonce {

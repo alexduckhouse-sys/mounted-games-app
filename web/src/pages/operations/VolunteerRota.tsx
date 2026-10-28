@@ -156,7 +156,7 @@ export function VolunteerRota({ competition, manage }: { competition: Competitio
               </div>
             </div>
           ) : (
-            <button type="button" className="ops-addbar ops-addrow" onClick={() => setDraft(blank())}><Plus className="h-4 w-4" aria-hidden="true" />Add a shift</button>
+            <button type="button" className="ops-addbar ops-addbar-gap" onClick={() => setDraft(blank())}><Plus className="h-4 w-4" aria-hidden="true" />Add a shift</button>
           )}
 
           {needed.length > 0 && (

@@ -2,13 +2,15 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useCurrentCompetition } from './CurrentCompetitionContext';
 import { useStillMotion } from '../lite/useStillMotion';
 import { useT } from '../i18n/LanguageContext';
+import { useSwipeToClose } from '../hooks/useSwipeToClose';
 
 /** How long the banner takes to leave once answered (skin.css `.mg-remember.is-closing`). */
-const LEAVE_MS = 160;
+const LEAVE_MS = 200;
 
 /**
  * A small banner above the bottom tabs offering to keep this competition for next time (a cookie) or just for this
- * visit. It doesn't block the page: people can carry on and answer whenever they like.
+ * visit. It doesn't block the page: people can carry on and answer whenever they like. Swiping it down counts as
+ * "just this visit".
  */
 export function RememberCompetitionDialog() {
   const t = useT();
@@ -25,9 +27,10 @@ export function RememberCompetitionDialog() {
     setClosing(true);
     timer.current = setTimeout(() => setRememberChoice(choice), LEAVE_MS);
   }
+  const { ref, handlers, style, dragging } = useSwipeToClose<HTMLElement>(() => answer('visit'), !closing);
 
   return (
-    <section role="region" aria-labelledby={titleId} className={`mg-remember${closing ? ' is-closing' : ''}`}>
+    <section ref={ref} role="region" aria-labelledby={titleId} {...handlers} style={style} className={`mg-remember${dragging ? ' is-dragging' : ''}${closing ? ' is-closing' : ''}`}>
       <div className="mg-remember-copy">
         <h2 id={titleId} className="mg-remember-title">{t('shell.remember.title')}</h2>
         <p className="mg-remember-text">{t('shell.remember.text', { name: current?.name ?? t('shell.remember.thisCompetition') })}</p>

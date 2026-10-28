@@ -2,14 +2,19 @@ import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   APPLE_SCRIPT,
+  FACEBOOK_GRAPH_VERSION,
+  FACEBOOK_READY_TIMEOUT_MS,
+  FACEBOOK_SCRIPT,
   GOOGLE_SCRIPT,
   loadApple,
+  loadFacebook,
   loadGoogle,
   loadScript,
   makeNonce,
   randomState,
   resetSocialSdk,
   type AppleAuthApi,
+  type FacebookApi,
   type GoogleIdApi,
 } from './socialSdk';
 
@@ -21,6 +26,7 @@ afterEach(() => {
   document.head.querySelectorAll('script').forEach((s) => s.remove());
   delete window.google;
   delete window.AppleID;
+  delete window.FB;
 });
 
 describe('loadScript', () => {
@@ -71,6 +77,41 @@ describe('provider scripts', () => {
     window.AppleID = { auth };
     await expect(loadApple()).resolves.toBe(auth);
     expect(APPLE_SCRIPT).toContain('/en_GB/');
+  });
+});
+
+describe('Facebook’s SDK', () => {
+  const fb = { init: vi.fn(), login: vi.fn() } satisfies FacebookApi;
+
+  it('waits for Facebook to say it’s ready, and loads its loader only once', async () => {
+    const loaded = loadFacebook();
+    expect(loadFacebook()).toBe(loaded);
+    expect(scripts(FACEBOOK_SCRIPT)).toHaveLength(1);
+    finish(FACEBOOK_SCRIPT, 'load');
+    window.FB = fb;
+    window.fbAsyncInit!();
+    await expect(loaded).resolves.toBe(fb);
+    expect(FACEBOOK_GRAPH_VERSION).toMatch(/^v\d+\.\d$/);
+  });
+
+  it('fails, and tries again next time, when the loader can’t load or the SDK never starts', async () => {
+    const blocked = loadFacebook();
+    finish(FACEBOOK_SCRIPT, 'error');
+    await expect(blocked).rejects.toThrow("Couldn't load");
+
+    const empty = loadFacebook();
+    expect(empty).not.toBe(blocked);
+    window.fbAsyncInit!();
+    await expect(empty).rejects.toThrow('did not start');
+
+    vi.useFakeTimers();
+    try {
+      const silent = loadFacebook();
+      vi.advanceTimersByTime(FACEBOOK_READY_TIMEOUT_MS);
+      await expect(silent).rejects.toThrow('did not start');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

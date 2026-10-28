@@ -79,6 +79,13 @@ public static class EmailSqliteSchema
             CREATE TABLE IF NOT EXISTS "EntriesDigestCompetitions" (
                 "CompetitionId" INTEGER NOT NULL CONSTRAINT "PK_EntriesDigestCompetitions" PRIMARY KEY,
                 "RunId" INTEGER NOT NULL,
+                "Name" TEXT NOT NULL DEFAULT '',
+                "Location" TEXT NULL,
+                "StartDate" TEXT NOT NULL DEFAULT '0001-01-01 00:00:00',
+                "EndDate" TEXT NULL,
+                "Latitude" REAL NULL,
+                "Longitude" REAL NULL,
+                "EntriesCloseAt" TEXT NULL,
                 CONSTRAINT "FK_EntriesDigestCompetitions_EntriesDigestRuns_RunId" FOREIGN KEY ("RunId")
                     REFERENCES "EntriesDigestRuns" ("Id") ON DELETE CASCADE
             );
@@ -96,6 +103,15 @@ public static class EmailSqliteSchema
             );
             CREATE UNIQUE INDEX IF NOT EXISTS "IX_EntriesDigestRecipients_RunId_OptInId" ON "EntriesDigestRecipients" ("RunId", "OptInId");
             CREATE INDEX IF NOT EXISTS "IX_EntriesDigestRecipients_RunId_Status" ON "EntriesDigestRecipients" ("RunId", "Status");
+            CREATE INDEX IF NOT EXISTS "IX_SectionSignups_ContactEmail" ON "SectionSignups" ("ContactEmail");
             """);
+        // A development file from before the digest froze its text.
+        await DbInitializer.EnsureColumnAsync(db, "EntriesDigestCompetitions", "Name", "TEXT NOT NULL DEFAULT ''");
+        await DbInitializer.EnsureColumnAsync(db, "EntriesDigestCompetitions", "Location", "TEXT NULL");
+        await DbInitializer.EnsureColumnAsync(db, "EntriesDigestCompetitions", "StartDate", "TEXT NOT NULL DEFAULT '0001-01-01 00:00:00'");
+        await DbInitializer.EnsureColumnAsync(db, "EntriesDigestCompetitions", "EndDate", "TEXT NULL");
+        await DbInitializer.EnsureColumnAsync(db, "EntriesDigestCompetitions", "Latitude", "REAL NULL");
+        await DbInitializer.EnsureColumnAsync(db, "EntriesDigestCompetitions", "Longitude", "REAL NULL");
+        await DbInitializer.EnsureColumnAsync(db, "EntriesDigestCompetitions", "EntriesCloseAt", "TEXT NULL");
     }
 }

@@ -851,6 +851,7 @@ function SessionScoring() {
               allowReasons
               hcTeamIds={hcTeamIds}
               onSetHc={canOrganise(competition) ? setHcRecorded : undefined}
+              protestCompetitionId={canOrganise(competition) ? competition.id : undefined}
               cards={cardOverridesNow}
               onSetCard={(teamId, card) => setCard(teamId, card, true)}
               tieRule={competition.sections.find((s) => s.id === session.competitionSectionId)?.tieBreakRule}

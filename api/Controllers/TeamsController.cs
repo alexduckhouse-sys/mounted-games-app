@@ -100,8 +100,11 @@ public class TeamsController : ControllerBase
             : (string.IsNullOrWhiteSpace(suffix) ? club.Name : $"{club.Name} {suffix}");
 
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        var trainerUserId = req.TrainerUserId;
-        if (string.IsNullOrEmpty(trainerUserId) && User.IsInRole(Roles.Trainer))
+        var trainerUserId = string.IsNullOrWhiteSpace(req.TrainerUserId) ? null : req.TrainerUserId.Trim();
+        // Same rule as an update: only an approved trainer can be a team's trainer.
+        if (trainerUserId is not null && !await IsApprovedTrainerAsync(trainerUserId))
+            return BadRequest(new { message = NotATrainer });
+        if (trainerUserId is null && User.IsInRole(Roles.Trainer))
             trainerUserId = userId;
 
         var team = new Team
@@ -190,6 +193,14 @@ public class TeamsController : ControllerBase
         return t.ToDto();
     }
 
+    private const string NotATrainer = "That person isn't an approved trainer.";
+
+    private Task<bool> IsApprovedTrainerAsync(string userId)
+        => (from userRole in _db.UserRoles
+            join role in _db.Roles on userRole.RoleId equals role.Id
+            where userRole.UserId == userId && role.Name == Roles.Trainer
+            select userRole.UserId).AnyAsync();
+
     /// <summary>Applies the trainer and bib description of an update. Returns an error result, or null when fine.</summary>
     private async Task<ActionResult?> ApplyTrainerAndBibAsync(
         Team t, string? trainerUserId, string? bibDescription, bool clubOnly = false, string? flagOverride = null)
@@ -204,11 +215,7 @@ public class TeamsController : ControllerBase
             return null;
         }
         var trainerId = trainerUserId.Trim();
-        var isTrainer = await (from userRole in _db.UserRoles
-                               join role in _db.Roles on userRole.RoleId equals role.Id
-                               where userRole.UserId == trainerId && role.Name == Roles.Trainer
-                               select userRole.UserId).AnyAsync();
-        if (!isTrainer) return BadRequest(new { message = "That person isn't an approved trainer." });
+        if (!await IsApprovedTrainerAsync(trainerId)) return BadRequest(new { message = NotATrainer });
         if (clubOnly && !await _db.Users.AnyAsync(u => u.Id == trainerId && u.ClubId == t.ClubId))
             return BadRequest(new { message = "Choose a trainer from this club." });
         t.TrainerUserId = trainerId;

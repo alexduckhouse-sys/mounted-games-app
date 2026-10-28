@@ -54,6 +54,9 @@ export const entries: AreaCatalogue<typeof en> = {
   'entries.page.afterDraw': 'Le programme, les classements et les scores en direct s’ouvrent une fois les équipes tirées au sort.',
 
   'entries.form.full': '{section} est complet. Vous pouvez rejoindre la liste d’attente.',
+  'entries.form.forSomeoneElse': 'Vous inscrivez quelqu’un d’autre ? Changez le nom et le club ci-dessous.',
+  'entries.form.draftUnsaved': 'Vos informations ne peuvent pas être enregistrées sur cet appareil. Gardez cette page ouverte jusqu’à l’envoi.',
+  'entries.form.draftSaved': 'Inscription non terminée enregistrée sur cet appareil pendant sept jours.',
   'entries.form.emailInvalid': 'Cette adresse e-mail ne semble pas correcte.',
   'entries.form.sentTitle': '{entry} à {competition}.',
   'entries.form.emailedCopy': 'Nous vous en avons envoyé une copie par e-mail.',
@@ -66,7 +69,7 @@ export const entries: AreaCatalogue<typeof en> = {
   'entries.form.bankCopied': 'Coordonnées bancaires copiées',
   'entries.form.payAmount': 'Payer {fee}',
   'entries.form.payByTransfer': 'Payer {fee} par virement bancaire',
-  'entries.form.demoNote': 'Ceci est un événement de démonstration. Après l’envoi, vous verrez une page de paiement test. Aucun argent n’est prélevé.',
+  'entries.form.demoNote': 'Après l’envoi, vous verrez une page de paiement test.',
   'entries.form.bankDetails': 'Coordonnées bancaires',
   'entries.form.payTo': 'À payer à',
   'entries.form.reference': 'Référence',

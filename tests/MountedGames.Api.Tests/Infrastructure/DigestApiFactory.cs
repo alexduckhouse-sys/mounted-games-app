@@ -43,15 +43,18 @@ public sealed class DigestApiFactory : EmailApiFactory
     }
 
     public async Task<int> OpenEventAsync(string name, int daysAhead = 10, double? lat = null, double? lon = null, string? venue = null,
-        bool locked = false, bool demo = false, bool sections = true, DateTime? closeAt = null, bool archived = false)
+        bool locked = false, bool demo = false, bool sections = true, DateTime? closeAt = null, bool archived = false,
+        TimeSpan? age = null)
     {
         var start = Clock.GetUtcNow().UtcDateTime.Date.AddDays(daysAhead);
+        // Created long enough ago to be announced, unless the test is about the settling time.
+        var created = Clock.GetUtcNow().UtcDateTime - (age ?? TimeSpan.FromDays(1));
         return await this.InDbAsync(async db =>
         {
             var c = new Competition
             {
                 Name = name, StartDate = start, Location = venue, Latitude = lat, Longitude = lon,
-                SignupsLocked = locked, IsArchived = archived,
+                SignupsLocked = locked, IsArchived = archived, CreatedAt = created,
             };
             db.Competitions.Add(c);
             await db.SaveChangesAsync();

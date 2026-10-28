@@ -50,6 +50,7 @@ public class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("RateLimits:TeamJoinPerMinute", "100000");
         builder.UseSetting("RateLimits:ShopReportsPerMinute", "100000");
         builder.UseSetting("RateLimits:UnsubscribePerMinute", "100000");
+        builder.UseSetting("RateLimits:NearYouPerMinute", "100000");
         builder.UseSetting("RateLimits:ScorerReadsPerMinute", "100000");
         builder.UseSetting("RateLimits:PasswordResetRequestsPerMinute", "100000");
         builder.UseSetting("RateLimits:PasswordResetLinksPerMinute", "100000");
@@ -60,6 +61,7 @@ public class ApiFactory : WebApplicationFactory<Program>
             services.Remove(services.Single(d => d.ImplementationType == typeof(MountedGames.Api.Services.Streaming.StreamSweeper)));
 
             services.Remove(services.Single(d => d.ImplementationType == typeof(IpRetentionSweeper)));
+            services.Remove(services.Single(d => d.ImplementationType == typeof(MountedGames.Api.Hubs.LiveSessionSweeper)));
 
             services.AddTransient<IStartupFilter, TestIpStartupFilter>();
 

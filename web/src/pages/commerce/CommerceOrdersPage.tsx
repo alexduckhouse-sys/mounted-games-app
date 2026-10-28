@@ -4,6 +4,7 @@ import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { confirmDialog } from '../../components/ConfirmDialog';
+import { DemoPaymentNotice } from '../../components/DemoPaymentNotice';
 import { Sheet } from '../../components/Sheet';
 import { downloadCsv, toCsv } from '../../lib/csv';
 import { RefineFoot } from '../refine/Refine';
@@ -11,6 +12,7 @@ import { Chip, type ChipTone } from '../clubShop/ui';
 import { LoadError, TestReceipt } from './commerceUi';
 import { lineTitle } from '../../lib/shopOptions';
 import { errorMessage, newIdempotencyKey, orderLineText, pounds } from './commerceFormat';
+import { paidWord } from '../../lib/paidWord';
 import { OutcomeState } from './DemoPaymentFlow';
 import { DemoOrderCheckout } from './EventShopPage';
 import type { CommerceOrderStatus, DemoOrderPaymentResult, EventOrder, EventOrderLine, SellerSale, TestPayment } from './types';
@@ -28,6 +30,9 @@ const STATUS: Record<CommerceOrderStatus, { text: string; tone: ChipTone }> = {
   4: { text: 'Cancelled', tone: 'grey' },
   5: { text: 'Refunded', tone: 'grey' },
 };
+
+/** The chip for an order. A paid demo order reads "Demo paid". */
+const statusFor = (status: CommerceOrderStatus, isTest: boolean) => (status === 2 ? { ...STATUS[2], text: paidWord(isTest) } : STATUS[status]);
 
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 const whenText = (iso: string) => new Date(iso).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -159,6 +164,7 @@ function CommerceOrdersContent() {
           : orders.length === 0 ? <p className="sp-note">You haven’t bought anything yet.</p>
             : (
               <>
+                {orders.some((order) => order.status === 0 || order.status === 1) && <DemoPaymentNotice what="order" />}
                 {realOrders.length > 0 && <OrderGroup title="Your orders" orders={realOrders} onOpen={open} />}
                 {demoOrders.length > 0 && <OrderGroup title="Demo orders" meta="Test payments only" orders={demoOrders} onOpen={open} />}
                 {realOrders.length > 0 && <p className="sp-note">Pay the organiser directly. They mark the order paid when the money arrives. Collect at the event.</p>}
@@ -188,7 +194,7 @@ function OrderGroup({ title, meta, orders, onOpen }: { title: string; meta?: str
       <h2 className="sp-sec">{title}{meta && <small>{meta}</small>}</h2>
       <div className="sp-card">
         {orders.map((order) => {
-          const status = STATUS[order.status];
+          const status = statusFor(order.status, order.isTestOrder);
           return (
             <button key={order.id} type="button" className="sp-row" onClick={() => onOpen(order.id)}>
               <span className="sp-grow">
@@ -245,7 +251,7 @@ function SalesList({ sales }: { sales: SellerSale[] | null }) {
           <h2 className="sp-sec">Sales <small>Collect at the event</small></h2>
           <div className="sp-card">
             {sales.map((sale) => {
-              const status = STATUS[sale.status];
+              const status = statusFor(sale.status, sale.isTestOrder);
               return (
                 <div key={sale.orderId} className="cs-row">
                   <span className="sp-grow">
@@ -275,7 +281,7 @@ function OrderSheet({ order, busy, onClose, onPay, onCancel, onRefund }: {
   onCancel: () => Promise<boolean>;
   onRefund: () => Promise<boolean>;
 }) {
-  const status = STATUS[order.status];
+  const status = statusFor(order.status, order.isTestOrder);
   const payment: TestPayment | undefined = [...order.testPayments].reverse().find((candidate) => candidate.isTest);
   const canPay = order.isTestOrder && (order.status === 1 || order.status === 3);
   const canCancel = [0, 1, 3].includes(order.status);
@@ -293,8 +299,9 @@ function OrderSheet({ order, busy, onClose, onPay, onCancel, onRefund }: {
             <div><dt>Total</dt><dd><strong>{pounds(order.totalMinor)}</strong></dd></div>
           </dl>
           {order.isTestOrder && payment && <TestReceipt payment={payment} />}
+          <DemoPaymentNotice what="order" />
           <p className="kit-sheet-text">
-            {order.isTestOrder ? 'A demo order: no money moved. ' : order.status === 0 ? 'Pay the organiser directly. They mark it paid when the money arrives. ' : ''}
+            {order.isTestOrder ? '' : order.status === 0 ? 'Pay the organiser directly. They mark it paid when the money arrives. ' : ''}
             Collect at the event.
           </p>
           <div className="kit-acts">

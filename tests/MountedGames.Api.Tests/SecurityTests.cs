@@ -346,7 +346,7 @@ public class SecurityTests
             .ToDictionary(d => d.Split(' ', 2)[0], d => d);
         Assert.Equal("default-src 'none'", directives["default-src"]);
         // Besides our own bundle, only the two sign-in scripts, each by its exact file.
-        Assert.Equal("script-src 'self' https://accounts.google.com/gsi/client https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_GB/appleid.auth.js",
+        Assert.Equal("script-src 'self' https://accounts.google.com/gsi/client https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_GB/appleid.auth.js https://connect.facebook.net/en_GB/sdk.js https://connect.facebook.net/en_GB/bundle/sdk.js/",
             directives["script-src"]);
         Assert.Equal("script-src-attr 'none'", directives["script-src-attr"]);
         Assert.Equal("style-src-elem 'self' https://accounts.google.com/gsi/style", directives["style-src-elem"]);
@@ -374,6 +374,12 @@ public class SecurityTests
             await File.WriteAllTextAsync(path, JsonSerializer.Serialize(new { Jwt = new { Key = new string('x', 40) } }));
             var config = new ConfigurationBuilder().AddJsonFile(path).Build();
             Assert.Throws<InvalidOperationException>(() => SecurityConfiguration.Validate(config, new TestEnvironment()));
+
+            // The same goes for Facebook's app secret.
+            await File.WriteAllTextAsync(path, JsonSerializer.Serialize(new { Auth = new { Facebook = new { AppSecret = new string('f', 32) } } }));
+            var facebook = new ConfigurationBuilder().AddJsonFile(path)
+                .AddInMemoryCollection([new("Jwt:Key", new string('x', 40))]).Build();
+            Assert.Throws<InvalidOperationException>(() => SecurityConfiguration.Validate(facebook, new TestEnvironment()));
         }
         finally { File.Delete(path); }
     }
@@ -389,6 +395,12 @@ public class SecurityTests
         }).Build();
         Assert.Throws<InvalidOperationException>(() => SecurityConfiguration.Validate(config, environment));
         config["Database:SeedDemoData"] = "false";
+        SecurityConfiguration.Validate(config, environment);
+
+        // Facebook's app secret is optional, but when it's set it must be a real one.
+        config["Auth:Facebook:AppSecret"] = "too-short";
+        Assert.Throws<InvalidOperationException>(() => SecurityConfiguration.Validate(config, environment));
+        config["Auth:Facebook:AppSecret"] = new string('f', 32);
         SecurityConfiguration.Validate(config, environment);
     }
 

@@ -4,6 +4,7 @@ import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { CardDropdownRow } from '../components/CardDropdownRow';
 import { usePageHeader } from '../components/CompactPageBarContext';
+import { DemoPaymentNotice } from '../components/DemoPaymentNotice';
 import { Notice } from '../components/Notice';
 import { PageSkeleton } from '../components/Skeletons';
 import { apiErrorMessage } from '../lib/apiError';
@@ -154,6 +155,8 @@ export function PayoutsPage() {
       {current && status && (
         <>
           <p role="status" className="cs-status" data-tone={status.ready ? 'good' : 'warn'}>{status.text}</p>
+
+          <DemoPaymentNotice what="payout" />
 
           <h2 className="sp-sec">Who gets paid</h2>
           <div className="sp-card">

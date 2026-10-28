@@ -104,15 +104,24 @@ builder.Services
 builder.Services.AddAuthorizationWithCompetitionStaff();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<LiveAccounts>();
-// Sign in with Google / Apple: fetches only the providers' fixed signing-key addresses (see ExternalProviders).
+// Sign in with Google / Apple / Facebook: fetches only the providers' fixed signing-key addresses (see ExternalProviders)
+// and Facebook's Graph API. Facebook's debug_token call carries the token being checked in the query string
+// (input_token, as Facebook requires; the app's own token goes in the Authorization header), so the factory's request
+// logging is off for this client.
 builder.Services.AddHttpClient(ExternalTokenValidator.HttpClientName, c =>
     {
         c.Timeout = TimeSpan.FromSeconds(10);
         c.MaxResponseContentBufferSize = 256 * 1024;
     })
-    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
+    .RemoveAllLoggers();
+builder.Services.AddSingleton<ExternalTokenReplayGuard>();
+builder.Services.AddSingleton<ExternalSignupTickets>();
+builder.Services.AddSingleton<FacebookApp>();
+builder.Services.AddSingleton<FacebookTokenVerifier>();
 builder.Services.AddSingleton<IExternalTokenValidator, ExternalTokenValidator>();
 builder.Services.AddSingleton<LiveConnections>();
+builder.Services.AddHostedService<LiveSessionSweeper>();
 
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<ScoringService>();
@@ -263,7 +272,8 @@ if (args.Contains("--seed-history"))
 
 if (args.Contains("--import-competition"))
 {
-    // A real event from a JSON file kept outside the repo (riders' names never go in source control). Refuses an event that exists.
+    // A real event from a JSON file kept outside the repo (riders' names never go in source control). Refuses an event that exists;
+    // --finals-only adds the file's empty finals heats to it instead.
     var path = args.SkipWhile(a => a != "--import-competition").Skip(1).FirstOrDefault();
     if (string.IsNullOrWhiteSpace(path) || path.StartsWith("--") || !File.Exists(path))
     {
@@ -278,8 +288,17 @@ if (args.Contains("--import-competition"))
     try
     {
         var file = CompetitionFileImport.Parse(await File.ReadAllTextAsync(path));
-        var imported = await CompetitionFileImport.ImportAsync(
-            scope.ServiceProvider.GetRequiredService<AppDbContext>(), file, dryRun: args.Contains("--dry-run"));
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var dryRun = args.Contains("--dry-run");
+        if (args.Contains("--finals-only"))
+        {
+            // Adds the file's empty finals heats to the event imported earlier.
+            var added = await CompetitionFileImport.AddFinalsAsync(db, file, dryRun);
+            Console.WriteLine($"{(added.DryRun ? "Checked (nothing saved)" : "Added")} finals to competition {added.CompetitionId}: "
+                + $"{added.Sessions} finals sessions, {added.Heats} finals, {added.Races} races, no teams.");
+            return;
+        }
+        var imported = await CompetitionFileImport.ImportAsync(db, file, dryRun);
         Console.WriteLine($"{(imported.DryRun ? "Checked (nothing saved)" : $"Imported competition {imported.CompetitionId}")}: "
             + $"{imported.Sections} sections, {imported.Sessions} sessions, {imported.Heats} heats, {imported.Teams} teams, "
             + $"{imported.Riders} riders, {imported.Races} races.");
@@ -289,6 +308,14 @@ if (args.Contains("--import-competition"))
         Console.Error.WriteLine(ex.Message);
         Environment.ExitCode = 1;
     }
+    return;
+}
+
+if (args.Contains(DemoDataCleaner.Flag))
+{
+    // One-off: deletes every competition but --keep-competition, with seasons, seeder accounts and unused clubs.
+    // A dry run unless --apply. Doesn't run DbInitializer, so a dry run writes nothing. See docs/neon-setup.md.
+    Environment.ExitCode = await DemoDataCleaner.RunCommandAsync(app.Services, args, Console.Out, Console.Error);
     return;
 }
 

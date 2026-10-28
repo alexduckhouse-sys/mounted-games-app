@@ -828,6 +828,11 @@ public class ScoringService
         if (kind == RaceScoreEventKind.SignedOff)
         {
             if (state.IsSignedOff) throw new ScoreConflictException("These results are already signed off.");
+            // An open protest on this race, or on its whole heat, has to be decided or withdrawn first.
+            if (await _db.Set<Protest>().AnyAsync(p => p.Status == ProtestStatus.Open && p.HeatId == race.HeatId
+                    && (p.RaceId == null || p.RaceId == raceId), cancellationToken))
+                throw new ScoreConflictException(
+                    "This race has an open protest. Decide it or mark it withdrawn before signing off.");
             var entryTeamIds = race.Heat?.Entries.Select(entry => entry.TeamId).ToHashSet() ?? [];
             var resultTeamIds = race.Results.Select(result => result.TeamId).ToHashSet();
             if (!race.IsComplete || entryTeamIds.Count == 0
