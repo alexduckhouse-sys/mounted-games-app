@@ -4,6 +4,7 @@ import { ChevronRight, ExternalLink, Pencil, Plus, Trash2, X } from 'lucide-reac
 import { api } from '../../api';
 import { Notice } from '../../components/Notice';
 import { useToast } from '../../components/Toast';
+import { useDockAction } from '../../components/TickerContext';
 import { useAuth } from '../../auth/AuthContext';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { useCompetition } from '../competition/context';
@@ -73,12 +74,12 @@ function GlobalRulebooks() {
     </div>
   );
 
-  const headerFor = (draft: RulebookDraft | null, busy: boolean, onAdd: () => void, onClose: () => void) => {
+  const headerFor = (draft: RulebookDraft | null, busy: boolean, docked: boolean, onAdd: () => void, onClose: () => void) => {
     const editing = draft !== null;
     const actions = tab === 'rulebooks'
       ? (editing
         ? <button type="button" className="rf-ib" aria-label="Close editor" onClick={onClose} disabled={busy}><X className="h-5 w-5" aria-hidden="true" /></button>
-        : canWrite ? <button type="button" className="rf-btn" onClick={onAdd} disabled={busy}><Plus aria-hidden="true" className="h-4 w-4" />Add rulebook</button> : null)
+        : canWrite && !docked ? <button type="button" className="rf-btn" onClick={onAdd} disabled={busy}><Plus aria-hidden="true" className="h-4 w-4" />{t('teams.rulebooks.add')}</button> : null)
       : null;
 
     return (
@@ -96,10 +97,10 @@ function GlobalRulebooks() {
   return (
     <RefinePage wide>
       {tab === 'rulebooks' ? (
-        <RulebooksPanel renderHeader={({ draft, busy, onAdd, onClose }) => headerFor(draft, busy, onAdd, onClose)} onShowGameRules={() => setTab('races')} />
+        <RulebooksPanel renderHeader={({ draft, busy, docked, onAdd, onClose }) => headerFor(draft, busy, docked, onAdd, onClose)} onShowGameRules={() => setTab('races')} />
       ) : (
         <>
-          {headerFor(null, false, () => {}, () => {})}
+          {headerFor(null, false, false, () => {}, () => {})}
           <GameRulesList />
         </>
       )}
@@ -157,7 +158,7 @@ export function RulebooksPanel({
   renderHeader,
   onShowGameRules,
 }: {
-  renderHeader?: (controls: { draft: RulebookDraft | null; busy: boolean; onAdd: () => void; onClose: () => void }) => ReactNode;
+  renderHeader?: (controls: { draft: RulebookDraft | null; busy: boolean; docked: boolean; onAdd: () => void; onClose: () => void }) => ReactNode;
   /** Lets the empty-list line take you to the Game rules tab. */
   onShowGameRules?: () => void;
 } = {}) {
@@ -171,6 +172,8 @@ export function RulebooksPanel({
   const [draft, setDraft] = useState<RulebookDraft | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  // "Add a rulebook" is the + beside the ticker dock while the list shows.
+  const docked = useDockAction(canWrite && !draft && !busy ? { label: t('teams.rulebooks.add'), icon: 'plus', onClick: () => edit() } : null);
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
 
@@ -275,10 +278,10 @@ export function RulebooksPanel({
   return (
     <div>
       {renderHeader
-        ? renderHeader({ draft, busy, onAdd: () => edit(), onClose: () => setDraft(null) })
-        : canWrite && !draft && (
+        ? renderHeader({ draft, busy, docked, onAdd: () => edit(), onClose: () => setDraft(null) })
+        : canWrite && !draft && !docked && (
           <div className="mb-3 flex justify-end">
-            <button type="button" className="rf-btn" onClick={() => edit()} disabled={busy}><Plus aria-hidden="true" className="h-4 w-4" />Add rulebook</button>
+            <button type="button" className="rf-btn" onClick={() => edit()} disabled={busy}><Plus aria-hidden="true" className="h-4 w-4" />{t('teams.rulebooks.add')}</button>
           </div>
         )}
 
@@ -289,7 +292,7 @@ export function RulebooksPanel({
         <RefineNote>
           {t('teams.rulebooks.noRulebook')}{' '}
           {onShowGameRules ? <>{t('teams.rulebooks.see')}{' '}<button type="button" className="ev-link underline" onClick={onShowGameRules}>{t('teams.rulebooks.gameRules')}</button>{' '}{t('teams.rulebooks.seeAfter')}</> : t('teams.rulebooks.gameRulesHas')}
-          {canWrite && ' Use Add rulebook to publish one.'}
+          {canWrite && ` ${t(docked ? 'teams.rulebooks.addHintDock' : 'teams.rulebooks.addHint')}`}
         </RefineNote>
       )}
 
