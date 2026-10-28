@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { api } from '../../api';
 import { Notice } from '../../components/Notice';
 import { Sheet } from '../../components/Sheet';
@@ -36,11 +35,21 @@ function wasCancelled(err: unknown): boolean {
   return typeof err === 'object' && err !== null && (err as { name?: string }).name === 'AbortError';
 }
 
+export interface StoryImage {
+  /** False until an age group has results, so the Share event sheet leaves the choice out. */
+  available: boolean;
+  busy: boolean;
+  start: () => void;
+  /** The age-group picker, the picture sheet and any error; render it once, beside the Share event row. */
+  node: ReactNode;
+}
+
 /**
- * "Share a results picture" in Details → Share and print: pick an age group, see the 9:16 picture, then Share or Save.
- * The picture is made first and shared from a second tap, because iOS refuses a share that follows a download.
+ * The "Share a results picture" choice in the Share event sheet: pick an age group, see the 9:16 picture, then
+ * Share or Save. The picture is made first and shared from a second tap, because iOS refuses a share that follows
+ * a download.
  */
-export function StoryImageRow({ competition }: { competition: CompetitionDetail }) {
+export function useStoryImage(competition: CompetitionDetail): StoryImage {
   const t = useT();
   const sections = sectionsWithResults(competition);
   const [picking, setPicking] = useState(false);
@@ -50,8 +59,6 @@ export function StoryImageRow({ competition }: { competition: CompetitionDetail 
   const [sheetError, setSheetError] = useState<string | null>(null);
 
   useEffect(() => () => { if (card) URL.revokeObjectURL(card.url); }, [card]);
-
-  if (sections.length === 0) return null;
 
   async function make(section: CompetitionSection) {
     setBusy(true);
@@ -106,15 +113,8 @@ export function StoryImageRow({ competition }: { competition: CompetitionDetail 
 
   const canShare = card ? canShareStoryResultCard(card.blob, card.data) : false;
 
-  return (
-    <div>
-      <button type="button" className="sp-row" onClick={start} disabled={busy} aria-busy={busy}>
-        <span className="sp-grow">
-          <span className="sp-t1 !font-medium">{busy ? t('competition.details.storyMaking') : t('competition.details.storyImage')}</span>
-          <span className="sp-t2">{t('competition.details.storyHint')}</span>
-        </span>
-        <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
-      </button>
+  const node = (
+    <>
       {error && <Notice className="mx-4 my-2">{error}</Notice>}
       {picking && (
         <PickSheet
@@ -150,6 +150,8 @@ export function StoryImageRow({ competition }: { competition: CompetitionDetail 
           )}
         </Sheet>
       )}
-    </div>
+    </>
   );
+
+  return { available: sections.length > 0, busy, start, node };
 }

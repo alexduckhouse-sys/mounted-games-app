@@ -57,6 +57,8 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.details.enter': 'S’inscrire',
   'competition.details.linkCopied': 'Lien copié',
   'competition.details.shareLink': 'Partager le lien de l’événement',
+  'competition.details.share': 'Partager l’événement',
+  'competition.details.shareSendLink': 'Envoyer le lien',
   'competition.details.copyFailed': 'Impossible de copier le lien. Maintenez appuyé sur {link} pour le copier, ou affichez le code QR.',
   'competition.details.copyFailedLink': 'le lien de l’événement',
   'competition.details.showQr': 'Afficher le code QR de l’événement',

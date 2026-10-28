@@ -57,6 +57,8 @@ export const competition = {
   'competition.details.enter': 'Enter',
   'competition.details.linkCopied': 'Link copied',
   'competition.details.shareLink': 'Share event link',
+  'competition.details.share': 'Share event',
+  'competition.details.shareSendLink': 'Send the link',
   'competition.details.copyFailed': 'Couldn’t copy the link. Press and hold {link} to copy it, or show the QR code.',
   'competition.details.copyFailedLink': 'the event link',
   'competition.details.showQr': 'Show event QR code',

@@ -57,6 +57,8 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.details.enter': 'Cofrestru',
   'competition.details.linkCopied': 'Dolen wedi’i chopïo',
   'competition.details.shareLink': 'Rhannu dolen y digwyddiad',
+  'competition.details.share': 'Rhannu’r digwyddiad',
+  'competition.details.shareSendLink': 'Anfon y ddolen',
   'competition.details.copyFailed': 'Methu copïo’r ddolen. Pwyswch a daliwch {link} i’w chopïo, neu dangoswch y cod QR.',
   'competition.details.copyFailedLink': 'ddolen y digwyddiad',
   'competition.details.showQr': 'Dangos cod QR y digwyddiad',
