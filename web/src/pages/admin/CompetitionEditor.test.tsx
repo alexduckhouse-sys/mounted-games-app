@@ -441,7 +441,8 @@ describe('CompetitionEditor: arenas', () => {
     fireEvent.change(within(lanes).getByRole('spinbutton'), { target: { value: '99' } });
     expect(stored().arenas[1].lanes).toBe('12');
     await userEvent.click(screen.getByRole('button', { name: 'Less: Number of arenas' }));
-    expect(screen.queryByLabelText('Arena 2')).not.toBeInTheDocument();
+    // The removed row folds away rather than vanishing.
+    await waitFor(() => expect(screen.queryByLabelText('Arena 2')).not.toBeInTheDocument());
   });
 
   it('takes the age groups along when an arena is renamed or its lanes change', async () => {
@@ -469,7 +470,7 @@ describe('CompetitionEditor: sections', () => {
     expect(within(second).getByRole('spinbutton', { name: 'Max entries, Under 8' })).toHaveValue(10);
     expect(stored().sections[1]).toMatchObject({ ageGroup: 'Under 8', arena: 'Main arena', maxTeamsPerHeat: '6' });
     await userEvent.click(within(group).getByRole('button', { name: 'Remove Seniors' }));
-    expect(screen.queryByRole('group', { name: 'Seniors' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('group', { name: 'Seniors' })).not.toBeInTheDocument());
     expect(screen.getByRole('group', { name: 'Under 8' })).toBeInTheDocument();
   });
 
@@ -729,6 +730,8 @@ describe('CompetitionEditor: races', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Session 1' }));
     await userEvent.click(screen.getByRole('button', { name: 'Remove Flag Race' }));
     expect(stored().sections[0].sessions.map((s: { races: string[] }) => s.races)).toEqual([['Bending'], ['Bending']]);
+    // The removed row folds away, then is gone.
+    await waitFor(() => expect(screen.queryByText('Flag Race')).not.toBeInTheDocument());
     // Turn following off and it can change on its own.
     await userEvent.click(screen.getByRole('tab', { name: 'Session 2' }));
     await userEvent.click(sw('Same races as Session 1'));
@@ -1347,6 +1350,21 @@ describe('CompetitionEditor: editing', () => {
     await userEvent.click(step('Payment and rules'));
     expect(await screen.findByText(/Cheshire PC hasn't finished setting up payouts yet/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Set up payouts' })).toHaveAttribute('href', '/me/payouts');
+  });
+
+  it('shows a skeleton, not a bare word, while an existing competition loads', async () => {
+    let release!: (value: unknown) => void;
+    vi.mocked(api.get).mockImplementation((async (url: string) => {
+      if (url === '/competitions/7') return new Promise((resolve) => { release = resolve; });
+      return { data: [] };
+    }) as never);
+    mount('/admin/competitions/7');
+    const loading = screen.getByRole('status');
+    expect(loading).toHaveTextContent('Loading');
+    expect(loading.querySelector('.mg-skel')).not.toBeNull();
+    release({ data: competition({ ...saved, sessions: [] }) });
+    await screen.findByDisplayValue('Autumn Area');
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
   it('keeps a local draft instead of reloading from the server', async () => {

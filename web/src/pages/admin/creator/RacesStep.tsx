@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { AnimatePresence } from 'framer-motion';
+import { LeavingRow } from '../../../components/LeavingRow';
 import { Plus, X } from 'lucide-react';
 import { useT } from '../../../i18n/LanguageContext';
 import { defaultRaceList, SCOPE_LABEL, type RaceScope } from '../../../lib/defaultRaces';
@@ -76,11 +78,14 @@ export function RacesStep({ draft, change, templates }: StepProps<CreatorDraft> 
               )}
               {locked && <div className="cw-row" role="listitem"><span className="cw-t2">{t('admin.creator.races.locked')}</span></div>}
               {list.length === 0 && !locked && <div className="cw-row" role="listitem"><span className="cw-t2">{t('admin.creator.races.none')}</span></div>}
+              {/* Keyed by tab, so switching tabs swaps the whole list at once and only adding or removing a race animates. */}
+              <AnimatePresence initial={false} key={`${si}:${String(active)}`}>
               {list.map((race, i) => {
                 const group = `${si}:${String(active)}`;
                 const onMove = (from: number, to: number) => edit(si, (cur) => withRaces(cur, active, moveItem(list, from, to)));
                 return (
-                  <div key={race} role="listitem" data-race-row="" data-same={same} data-lifted={lifted(i, group)} className="cw-race" style={rowStyle(i, group)}>
+                  <LeavingRow as="div" key={race}>
+                  <div role="listitem" data-race-row="" data-same={same} data-lifted={lifted(i, group)} className="cw-race" style={rowStyle(i, group)}>
                     {editable
                       ? (
                         <GripButton label={t('admin.creator.races.move', { race })}
@@ -95,8 +100,10 @@ export function RacesStep({ draft, change, templates }: StepProps<CreatorDraft> 
                       </button>
                     )}
                   </div>
+                  </LeavingRow>
                 );
               })}
+              </AnimatePresence>
             </div>
 
             {editable && (
