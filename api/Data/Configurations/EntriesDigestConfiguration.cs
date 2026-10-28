@@ -20,6 +20,8 @@ public class EntriesDigestCompetitionConfiguration : IEntityTypeConfiguration<En
     {
         b.HasKey(x => x.CompetitionId);
         b.Property(x => x.CompetitionId).ValueGeneratedNever();
+        b.Property(x => x.Name).HasMaxLength(200).IsRequired();
+        b.Property(x => x.Location).HasMaxLength(500);
         b.HasIndex(x => x.RunId);
         b.HasOne(x => x.Run).WithMany(x => x.CompetitionRows).HasForeignKey(x => x.RunId).OnDelete(DeleteBehavior.Cascade);
     }

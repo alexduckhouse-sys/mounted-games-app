@@ -2,8 +2,11 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Services.Email;
 using MountedGames.Api.Tests.Infrastructure;
 
 namespace MountedGames.Api.Tests.Auth;
@@ -319,7 +322,52 @@ public class AuthEndpointsTests : IClassFixture<ApiFactory>
             builder.UseSetting("RateLimits:TeamJoinPerMinute", "2");
             builder.UseSetting("RateLimits:ShopReportsPerMinute", "2");
             builder.UseSetting("RateLimits:UnsubscribePerMinute", "2");
+            builder.UseSetting("RateLimits:NearYouPerMinute", "2");
         }
+    }
+
+    [Fact]
+    public async Task OneClickUnsubscribes_AreLimitedPerSignedTokenNotPerAddress_ButForgedOnesStillPerAddress()
+    {
+        using var factory = new ActionLimitedFactory();
+        var mailApp = factory.CreateClient();
+        mailApp.DefaultRequestHeaders.Add(TestIpStartupFilter.Header, "198.51.100.45"); // a big mail provider's shared server
+        var configuration = factory.Services.GetRequiredService<IConfiguration>();
+
+        // Many different people unsubscribe from the same address in one minute: none is lost.
+        for (var id = 1; id <= 6; id++)
+        {
+            var token = Uri.EscapeDataString(EmailUnsubscribeTokens.Create(configuration, id));
+            Assert.Equal(HttpStatusCode.OK, (await mailApp.PostAsync($"/api/email/unsubscribe-one-click?token={token}", null)).StatusCode);
+        }
+        // One token can't be hammered.
+        var same = Uri.EscapeDataString(EmailUnsubscribeTokens.Create(configuration, 99));
+        for (var i = 0; i < 2; i++)
+            Assert.Equal(HttpStatusCode.OK, (await mailApp.PostAsync($"/api/email/unsubscribe-one-click?token={same}", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await mailApp.PostAsync($"/api/email/unsubscribe-one-click?token={same}", null)).StatusCode);
+
+        // Made-up tokens stay limited per address, however they vary.
+        var guesser = factory.CreateClient();
+        guesser.DefaultRequestHeaders.Add(TestIpStartupFilter.Header, "198.51.100.46");
+        for (var i = 0; i < 2; i++)
+            Assert.Equal(HttpStatusCode.OK, (await guesser.PostAsync($"/api/email/unsubscribe-one-click?token=n1.{i + 1}.forged{i}", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await guesser.PostAsync("/api/email/unsubscribe-one-click?token=n1.9.forged9", null)).StatusCode);
+    }
+
+    [Fact]
+    public async Task NearYou_IsLimitedPerAddress()
+    {
+        using var factory = new ActionLimitedFactory();
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add(TestIpStartupFilter.Header, "198.51.100.47");
+        for (var i = 0; i < 2; i++)
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/competitions/picker/near-you")).StatusCode);
+        var limited = await client.GetAsync("/api/competitions/picker/near-you");
+        Assert.Equal(HttpStatusCode.TooManyRequests, limited.StatusCode);
+        Assert.Equal("60", limited.Headers.GetValues("Retry-After").Single());
+        var elsewhere = factory.CreateClient();
+        elsewhere.DefaultRequestHeaders.Add(TestIpStartupFilter.Header, "198.51.100.48");
+        Assert.Equal(HttpStatusCode.OK, (await elsewhere.GetAsync("/api/competitions/picker/near-you")).StatusCode);
     }
 
     [Theory]

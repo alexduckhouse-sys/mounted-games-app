@@ -8,6 +8,7 @@ using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Commerce;
 using MountedGames.Api.Hubs;
+using MountedGames.Api.Security;
 using MountedGames.Api.Services;
 using MountedGames.Api.Services.Email;
 using MountedGames.Api.Services.Geo;
@@ -112,6 +113,7 @@ public class CompetitionsController : ControllerBase
     /// </summary>
     [HttpGet("picker/near-you")]
     [AllowAnonymous]
+    [EnableRateLimiting(RequestLimits.NearYouPolicy)]
     public async Task<ActionResult<CompetitionNearYouPage>> NearYou(
         [FromServices] LocationInference locations, [FromQuery] int page = 1, [FromQuery] int pageSize = 24,
         [FromQuery] string? sort = null, CancellationToken ct = default)
@@ -121,7 +123,7 @@ public class CompetitionsController : ControllerBase
         Response.Headers.CacheControl = "private, no-store";
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         var origin = userId is null ? null
-            : await locations.FromHistoryAsync(userId, User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value, ct);
+            : await locations.FromHistoryAsync(userId, ct);
         origin ??= VisitorGeo.Get(HttpContext);
         return await CompetitionPickerQuery.LoadNearYouAsync(_db, page, pageSize, DateTime.UtcNow.Date, origin,
             nearest: !string.Equals(sort, CompetitionPickerQuery.SortSoonest, StringComparison.OrdinalIgnoreCase), ct);

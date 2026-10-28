@@ -168,6 +168,27 @@ public class NearYouTests : IClassFixture<NearYouTests.ProxyApiFactory>
     }
 
     [Fact]
+    public async Task AnAccountWhoseEmailMatchesSomeoneElsesEntryContactLearnsNothingAboutThem()
+    {
+        await FreshAsync();
+        var venue = await EventAsync("Where the child rides", 3, 50.7, -3.5);
+        await EventAsync("Somewhere else", 4, 55.9, -3.2);
+        var (client, auth) = await _f.SignupAsync("Member");
+        var email = auth.User.Email.ToLowerInvariant();
+        await _f.InDbAsync(async db =>
+        {
+            var section = await db.CompetitionSections.FirstAsync(s => s.CompetitionId == venue);
+            // A trainer typed this parent's address on an entry; the account above was made for it without being confirmed.
+            db.SectionSignups.Add(new SectionSignup { CompetitionSectionId = section.Id, FullName = "A child", ContactEmail = email, Status = SignupPaymentStatus.Paid });
+            await db.SaveChangesAsync();
+        });
+        var (page, _) = await GetAsync(key: null, client: client);
+        Assert.False(page.LocationKnown);
+        Assert.Equal("soonest", page.Sort);
+        Assert.Empty(page.Distances);
+    }
+
+    [Fact]
     public async Task BadPagingIsRefused_AndThePublicPickerIsUntouched()
     {
         var client = _f.CreateClient();

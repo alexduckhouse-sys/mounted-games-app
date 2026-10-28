@@ -188,6 +188,72 @@ public class EntriesDigestTests : IClassFixture<DigestApiFactory>
     }
 
     [Fact]
+    public async Task TheEmailSaysWhatWasTrueWhenTheRunWasClaimed_NotWhatTheOrganiserTypedSince()
+    {
+        await StartAsync();
+        var people = Enumerable.Range(0, 7).Select(_ => Addr()).ToArray(); // more than two batches of three
+        await _f.OptInsAsync(people);
+        var id = await _f.OpenEventAsync("Spring Cup", 12, 52.0, -2.0, venue: "Hartpury");
+        using (var scope = _f.Services.CreateScope())
+            Assert.NotNull(await Service(scope).ClaimRunAsync("2026-10-24", EntriesDigestRunStatus.Sending, false, CancellationToken.None));
+        var frozen = await _f.InDbAsync(db => db.EntriesDigestCompetitions.AsNoTracking().SingleAsync(c => c.CompetitionId == id));
+        Assert.Equal(("Spring Cup", "Hartpury"), (frozen.Name, frozen.Location));
+
+        // Someone with the organiser's login puts something else in front of the whole list between the claim and the sends.
+        await _f.InDbAsync(db => db.Competitions.Where(c => c.Id == id).ExecuteUpdateAsync(s => s
+            .SetProperty(c => c.Name, "Click here to win a prize").SetProperty(c => c.Location, "Somewhere else entirely")
+            .SetProperty(c => c.StartDate, new DateTime(2027, 5, 1, 0, 0, 0, DateTimeKind.Utc))));
+        await _f.TickAsync();
+
+        Assert.Equal(people.Length, _f.Sent.Count);
+        foreach (var message in _f.Sent)
+        {
+            Assert.Equal("Entries are open for Spring Cup", message.Subject);
+            Assert.Contains("Where: Hartpury", message.Text);
+            Assert.DoesNotContain("prize", message.Text + message.Html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Somewhere else", message.Text);
+            Assert.DoesNotContain("2027", message.Text);
+        }
+    }
+
+    [Fact]
+    public async Task ANewCompetitionWaitsSixHoursBeforeItIsAnnounced_SoAdminsCanSpotABadName()
+    {
+        await StartAsync();
+        var to = Addr();
+        await _f.OptInsAsync(to);
+        var id = await _f.OpenEventAsync("Just created", age: TimeSpan.FromHours(5));
+        using (var scope = _f.Services.CreateScope())
+        {
+            var status = await Service(scope).StatusAsync(CancellationToken.None);
+            Assert.Equal(0, status.PendingCount);
+        }
+        await _f.TickAsync();
+        Assert.Empty(_f.Sent);
+        Assert.Empty(await RunsAsync());
+
+        // Once it has been there six hours (still inside the evening window) it goes in; before that nothing is lost or marked announced.
+        _f.At(2026, 10, 24, 18, 31);
+        await _f.TickAsync();
+        Assert.Contains("Just created", Assert.Single(_f.SentTo(to)).Text);
+        Assert.True(await _f.InDbAsync(db => db.EntriesDigestCompetitions.AnyAsync(c => c.CompetitionId == id)));
+    }
+
+    [Fact]
+    public async Task AnAdminCanArchiveABadlyNamedNewCompetitionInTheWaitingTime()
+    {
+        await StartAsync();
+        await _f.OptInsAsync(Addr());
+        var id = await _f.OpenEventAsync("Oops typo", age: TimeSpan.FromHours(1));
+        await _f.TickAsync();
+        await _f.InDbAsync(db => db.Competitions.Where(c => c.Id == id).ExecuteUpdateAsync(s => s.SetProperty(c => c.IsArchived, true)));
+        _f.At(2026, 10, 24, 21, 0);
+        await _f.TickAsync();
+        Assert.Empty(_f.Sent);
+        Assert.Empty(await RunsAsync());
+    }
+
+    [Fact]
     public async Task ACompetitionIsAnnouncedOnce_EvenIfTheOrganiserUnlocksItAgain()
     {
         await StartAsync();
@@ -252,7 +318,7 @@ public class EntriesDigestTests : IClassFixture<DigestApiFactory>
         var section = await _f.InDbAsync(db => db.CompetitionSections.Where(s => s.CompetitionId == past).Select(s => s.Id).FirstAsync());
         await _f.InDbAsync(async db =>
         {
-            db.SectionSignups.Add(new SectionSignup { CompetitionSectionId = section, FullName = "Parent", ContactEmail = local.ToUpperInvariant(), Status = SignupPaymentStatus.Paid });
+            db.SectionSignups.Add(new SectionSignup { CompetitionSectionId = section, FullName = "Parent", ContactEmail = local, Status = SignupPaymentStatus.Paid });
             await db.SaveChangesAsync();
         });
         await _f.OpenEventAsync("A north", 3, 55.9, -3.2);       // Edinburgh, soonest
@@ -354,6 +420,34 @@ public class EntriesDigestTests : IClassFixture<DigestApiFactory>
         await _f.TickAsync();
         Assert.Single(_f.SentTo(to));
         Assert.NotEmpty(ids);
+    }
+
+    [Fact]
+    public async Task AClaimAbandonedAgainAndAgainIsGivenUpOn_NotRetriedForEver()
+    {
+        await StartAsync();
+        var stuck = Addr();
+        var fine = Addr();
+        await _f.OptInsAsync(stuck, fine);
+        await _f.OpenEventAsync("Dies mid-send");
+        using (var scope = _f.Services.CreateScope())
+            await Service(scope).ClaimRunAsync("2026-10-24", EntriesDigestRunStatus.Sending, false, CancellationToken.None);
+        var now = _f.Clock.GetUtcNow().UtcDateTime;
+        var firstId = await _f.InDbAsync(db => db.EntriesDigestRecipients.OrderBy(r => r.Id).Select(r => r.Id).FirstAsync());
+        // The first person's claim has been taken and abandoned three times already (every attempt killed the instance).
+        await _f.InDbAsync(db => db.EntriesDigestRecipients.Where(r => r.Id == firstId).ExecuteUpdateAsync(s => s
+            .SetProperty(r => r.Status, EntriesDigestRecipientStatus.Claimed).SetProperty(r => r.ClaimedAt, now.AddMinutes(-10))
+            .SetProperty(r => r.ClaimToken, Guid.NewGuid()).SetProperty(r => r.Attempts, EntriesDigestService.MaxAttempts)));
+
+        await _f.TickAsync();
+
+        Assert.Single(_f.Sent); // only the other person
+        var run = Assert.Single(await RunsAsync());
+        Assert.Equal(EntriesDigestRunStatus.Done, run.Status);
+        var counts = await CountsAsync(run.Id);
+        Assert.Equal(1, counts[EntriesDigestRecipientStatus.Failed]);
+        Assert.Equal(1, counts[EntriesDigestRecipientStatus.Sent]);
+        Assert.Equal(EntriesDigestService.MaxAttempts, await _f.InDbAsync(db => db.EntriesDigestRecipients.Where(r => r.Id == firstId).Select(r => r.Attempts).SingleAsync()));
     }
 
     [Fact]

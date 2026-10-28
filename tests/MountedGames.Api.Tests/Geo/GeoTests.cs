@@ -125,24 +125,28 @@ public class LocationInferenceTests : IClassFixture<ApiFactory>
         return (section.CompetitionId, section.Id);
     }
 
-    private async Task<GeoPoint?> ForAsync(string? userId, string? email)
+    private async Task<GeoPoint?> ForAsync(string? userId)
     {
         using var scope = _f.Services.CreateScope();
-        return await scope.ServiceProvider.GetRequiredService<LocationInference>().FromHistoryAsync(userId, email, CancellationToken.None);
+        return await scope.ServiceProvider.GetRequiredService<LocationInference>().FromHistoryAsync(userId, CancellationToken.None);
+    }
+
+    private async Task<GeoPoint?> ForAddressAsync(string address)
+    {
+        using var scope = _f.Services.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<LocationInference>().ForAddressAsync(address, CancellationToken.None);
     }
 
     [Fact]
     public async Task NoHistoryMeansNoPlace()
     {
-        Assert.Null(await ForAsync(null, null));
-        Assert.Null(await ForAsync(Guid.NewGuid().ToString(), $"nobody-{Guid.NewGuid():N}@example.org"));
-        Assert.Null(await ForAsync(null, "not an address"));
-        using var scope = _f.Services.CreateScope();
-        Assert.Null(await scope.ServiceProvider.GetRequiredService<LocationInference>().ForAddressAsync("not an address", CancellationToken.None));
+        Assert.Null(await ForAsync(null));
+        Assert.Null(await ForAsync(Guid.NewGuid().ToString()));
+        Assert.Null(await ForAddressAsync("not an address"));
     }
 
     [Fact]
-    public async Task EntriesByAccountOrByAddressAreAveraged_ButDemoCancelledAndUnplacedVenuesAreNot()
+    public async Task EntriesByAccountAreAveraged_ButDemoCancelledUnplacedVenuesAndOtherPeoplesAddressesAreNot()
     {
         var userId = (await _f.SignupAsync("Member")).Auth.User.Id;
         var email = $"parent-{Guid.NewGuid():N}@example.org";
@@ -155,16 +159,20 @@ public class LocationInferenceTests : IClassFixture<ApiFactory>
         {
             db.SectionSignups.AddRange(
                 new SectionSignup { CompetitionSectionId = a.SectionId, FullName = "P", UserId = userId, Status = SignupPaymentStatus.Paid },
-                new SectionSignup { CompetitionSectionId = b.SectionId, FullName = "P", ContactEmail = email.ToUpperInvariant(), Status = SignupPaymentStatus.Pending },
+                new SectionSignup { CompetitionSectionId = b.SectionId, FullName = "P", ContactEmail = email, Status = SignupPaymentStatus.Pending },
                 new SectionSignup { CompetitionSectionId = demo.SectionId, FullName = "P", UserId = userId, Status = SignupPaymentStatus.Paid },
                 new SectionSignup { CompetitionSectionId = unplaced.SectionId, FullName = "P", UserId = userId, Status = SignupPaymentStatus.Paid },
                 new SectionSignup { CompetitionSectionId = cancelled.SectionId, FullName = "P", UserId = userId, Status = SignupPaymentStatus.Cancelled });
             await db.SaveChangesAsync();
         });
-        var point = await ForAsync(userId, email);
+        // Signed in: only the account's own entries count. The entry that merely names this address as its contact doesn't.
+        var point = await ForAsync(userId);
         Assert.NotNull(point);
-        Assert.Equal(51.0, point!.Value.Latitude, 6);
-        Assert.Equal(-3.0, point.Value.Longitude, 6);
+        Assert.Equal(50.0, point!.Value.Latitude, 6);
+        Assert.Equal(-2.0, point.Value.Longitude, 6);
+        // The opt-in path (an email to that same mailbox) does use the address.
+        var byAddress = await ForAddressAsync(email);
+        Assert.Equal(52.0, byAddress!.Value.Latitude, 6);
     }
 
     [Fact]
@@ -192,9 +200,9 @@ public class LocationInferenceTests : IClassFixture<ApiFactory>
             await db.SaveChangesAsync();
         });
 
-        var trainerPoint = await ForAsync(auth.User.Id, null);
+        var trainerPoint = await ForAsync(auth.User.Id);
         Assert.Equal(54.0, trainerPoint!.Value.Latitude, 6);
-        var supporterPoint = await ForAsync(supporter.Item2.User.Id, null);
+        var supporterPoint = await ForAsync(supporter.Item2.User.Id);
         Assert.Equal(56.0, supporterPoint!.Value.Latitude, 6);   // the pending follow doesn't count
         using var scope = _f.Services.CreateScope();
         var byAddress = await scope.ServiceProvider.GetRequiredService<LocationInference>().ForAddressAsync(address, CancellationToken.None);
@@ -213,6 +221,6 @@ public class LocationInferenceTests : IClassFixture<ApiFactory>
             db.SectionSignups.AddRange(venues.Select(v => new SectionSignup { CompetitionSectionId = v.SectionId, FullName = "P", UserId = userId, Status = SignupPaymentStatus.Paid }));
             await db.SaveChangesAsync();
         });
-        Assert.Equal(10.0, (await ForAsync(userId, null))!.Value.Latitude, 6);
+        Assert.Equal(10.0, (await ForAsync(userId))!.Value.Latitude, 6);
     }
 }

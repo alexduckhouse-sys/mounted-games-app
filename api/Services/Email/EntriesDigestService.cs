@@ -92,7 +92,7 @@ public sealed class EntriesDigestService(
         if (existing is null)
         {
             var pending = await EntriesOpenRule.OpenAsync(db, now, null, excludeAnnounced: true, ct);
-            if (pending.Count == 0) throw new EntriesDigestException("There's nothing new to send. Every open competition has already been announced.", 409);
+            if (pending.Count == 0) throw new EntriesDigestException("There's nothing new to send. Every open competition has either been announced already or was created less than six hours ago.", 409);
             var people = (await CustomEmailAudiences.ResolveAsync(db, CustomEmailAudience.News, ct)).Count;
             if (people == 0) throw new EntriesDigestException("No one is on the list yet.", 409);
             if (people != expectedRecipients)
@@ -158,7 +158,7 @@ public sealed class EntriesDigestService(
         if (open.Count == 0 && status != EntriesDigestRunStatus.Baseline) return null;
 
         var run = new EntriesDigestRun { RunDate = runDate, ClaimedAt = now, Status = status, Manual = manual, Competitions = open.Count };
-        foreach (var c in open) run.CompetitionRows.Add(new EntriesDigestCompetition { CompetitionId = c.Id });
+        foreach (var c in open) run.CompetitionRows.Add(EntriesOpenRule.Freeze(c));
         if (status == EntriesDigestRunStatus.Baseline)
         {
             run.CompletedAt = now;
@@ -227,9 +227,13 @@ public sealed class EntriesDigestService(
         var now = time.GetUtcNow().UtcDateTime;
         var stale = now - ClaimIsStale;
         var retryBefore = now - RetryAfter;
+        // A claim abandoned too often (the instance died each time) is given up on, not retried for ever.
+        await db.EntriesDigestRecipients
+            .Where(r => r.RunId == runId && r.Status == EntriesDigestRecipientStatus.Claimed && r.ClaimedAt < stale && r.Attempts >= MaxAttempts)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, EntriesDigestRecipientStatus.Failed), ct);
         var claimable = db.EntriesDigestRecipients.Where(r => r.RunId == runId
             && (r.Status == EntriesDigestRecipientStatus.Pending
-                || (r.Status == EntriesDigestRecipientStatus.Claimed && r.ClaimedAt < stale)
+                || (r.Status == EntriesDigestRecipientStatus.Claimed && r.ClaimedAt < stale && r.Attempts < MaxAttempts)
                 || (r.Status == EntriesDigestRecipientStatus.Failed && r.Attempts < MaxAttempts && r.ClaimedAt < retryBefore)));
         var ids = await claimable.OrderBy(r => r.Id).Select(r => r.Id).Take(BatchSize).ToListAsync(ct);
         if (ids.Count == 0) return 0;
@@ -249,9 +253,12 @@ public sealed class EntriesDigestService(
         var stillOptedIn = (await db.EmailOptIns.AsNoTracking().Where(o => o.UnsubscribedAt == null && wanted.Contains(o.Email))
             .Select(o => o.Email).ToListAsync(ct)).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        // What each person can still be told about: competitions of this run that are open right now.
-        var runCompetitionIds = await db.EntriesDigestCompetitions.AsNoTracking().Where(c => c.RunId == runId).Select(c => c.CompetitionId).ToListAsync(ct);
-        var open = await EntriesOpenRule.OpenAsync(db, now, runCompetitionIds, excludeAnnounced: false, ct);
+        // What each person can still be told about: competitions of this run that are still open right now, described by the text
+        // and dates frozen when the run was claimed (never the organiser's current edits).
+        var frozen = await db.EntriesDigestCompetitions.AsNoTracking().Where(c => c.RunId == runId).ToListAsync(ct);
+        var stillOpen = (await EntriesOpenRule.OpenAsync(db, now, frozen.Select(c => c.CompetitionId).ToList(), excludeAnnounced: false, ct))
+            .Select(c => c.Id).ToHashSet();
+        var open = frozen.Where(c => stillOpen.Contains(c.CompetitionId)).Select(EntriesOpenRule.Thaw).ToList();
         var site = EmailSite.Origin(options.Value, configuration);
 
         var handled = 0;

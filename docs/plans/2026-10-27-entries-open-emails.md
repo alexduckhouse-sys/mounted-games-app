@@ -1,6 +1,6 @@
 # Entries-open emails and nearest-first events (27 October 2026)
 
-Status: built on `feat/entries-open-emails`. Settled by the user: everyone on the opt-in list gets every newly opened event; we never ask anyone where they are; when we can infer roughly where someone is, show nearest first.
+Status: built on `feat/entries-open-emails` (merged as part of #211); review fixes on `fix/entries-digest-security`. Settled by the user: everyone on the opt-in list gets every newly opened event; we never ask anyone where they are; when we can infer roughly where someone is, show nearest first.
 
 ## What "opened" means
 
@@ -13,7 +13,7 @@ There is no "opened at" column, so "newly opened" is the first time the rule is 
 | Table | Key columns |
 | --- | --- |
 | `EntriesDigestRuns` | `Id`, `RunDate` (unique, string: the UK date `yyyy-MM-dd`, or `baseline`), `ClaimedAt`, `Status` (Sending, Done, Baseline), `Manual`, `Competitions`, `Total`, `CompletedAt` |
-| `EntriesDigestCompetitions` | `CompetitionId` (PK, plain int, no FK), `RunId` (FK, cascade) |
+| `EntriesDigestCompetitions` | `CompetitionId` (PK, plain int, no FK), `RunId` (FK, cascade), and the frozen text and dates the email is made from: `Name`, `Location`, `StartDate`, `EndDate`, `Latitude`, `Longitude`, `EntriesCloseAt` (see "Security review fixes") |
 | `EntriesDigestRecipients` | `Id`, `RunId` (FK, cascade), `OptInId`, `Status` (Pending, Claimed, Sent, Failed, Skipped), `ClaimedAt`, `ClaimToken`, `Attempts`; unique `(RunId, OptInId)` |
 
 No address is stored: a recipient row holds the opt-in id, and the address is read from `EmailOptIns` at send time (so an unsubscribe is honoured to the last moment). No location column anywhere.
@@ -65,3 +65,14 @@ Vercel documents cron jobs for Vercel Functions: an HTTP GET to the production U
 | SQLite vs Postgres | no provider SQL in claim code; schema guard test for SQLite; migration script checked by eye against the EF output | `EntriesDigestSchemaTests`; whole suite on SQLite |
 | Backlog on first deploy | baseline run | first tick sends nothing and records open events |
 | Admin endpoints | `Roles.Admin` | anonymous 401, non-admin 403 |
+
+## Security review fixes (27 October 2026)
+
+A read-only review of PR #205 found these; each was checked in the code first.
+
+- **Venue history through `near-you` (medium).** Accounts can be created for addresses nobody has confirmed, so matching the token's email against `SectionSignups.ContactEmail` let someone read where a family competes from the distances returned. `LocationInference.FromHistoryAsync(userId)` now matches on the account only (entries, trained teams, accepted follows). The address match stays in `ForAddressAsync`, used only to order the digest sent to that same mailbox. Test: an account whose email equals another entry's contact address, with no entries of its own, gets `LocationKnown=false` and no distances.
+- **Organiser text sent to the whole list (medium).** The claim now copies each competition's name, venue, dates, coordinates and close time into `EntriesDigestCompetitions`, and every batch sends from those frozen values (the live check only decides whether the event is still open). PR #205 had already been merged (through the integration PR #211) when this review was fixed, so `AddEntriesDigest` (`20261027161822`) is left exactly as merged and a second, additive migration does the work: `20261027204636_FreezeEntriesDigestCompetitionText` adds the seven columns to `EntriesDigestCompetitions` (a backfill copies the current competition text into any row from a run claimed before it, so such a run still sends) and the `IX_SectionSignups_ContactEmail` index. The idempotent script, snapshot and SQLite guard (`CREATE TABLE` plus `EnsureColumn` for a file with the earlier table) were done together.
+- **Age gate.** `Competition.CreatedAt` exists, so the rule is: a competition is announced only when `CreatedAt` is at least 6 hours old (`EntriesOpenRule.SettleTime`). That is "new" in the claim, the pending list and Send now; the per-recipient re-check of a frozen run does not apply it. It is simpler than recording a first-seen-open time (no extra table, and it works while no instance is up). Limit: it measures from when the event was created, not from when entries opened, so an old event that is unlocked later is announced at once. A name an admin dislikes can be fixed, or the event archived or locked, in the window; an archived, locked or closed event is dropped before it is sent.
+- **`near-you` rate limit (low).** New `near-you` policy, per signed-in user or IP, `RateLimits:NearYouPerMinute` (60). The web already falls back to `/picker` on a 429. `ContactEmail` is written normalised (`EmailAddresses.TryNormalise` lower-cases it), so the `ToLower()` in `ForAddressAsync` is gone, and `IX_SectionSignups_ContactEmail` is added in the same new migration (and as a SQLite guard).
+- **One-click unsubscribes lost to the per-IP limit (low).** `unsubscribe-one-click` has its own policy: a validly signed token is limited per token, so Gmail or Yahoo's shared servers don't hit a per-IP cap; anything that doesn't verify (how abuse looks) stays at 10 a minute per IP. The page endpoint `unsubscribe` is unchanged.
+- **Abandoned claims retried without limit (low).** A stale `Claimed` row is retaken only while `Attempts < MaxAttempts`; one past it is marked `Failed` and counts as failed for good, so the run can finish.
