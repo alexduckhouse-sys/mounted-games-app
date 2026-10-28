@@ -85,6 +85,16 @@ describe('SectionsPage', () => {
     expect(within(pairs).getByRole('button', { name: 'Remove Flag' })).toBeInTheDocument();
   });
 
+  it('shows a quiet Saved badge in the header after a change, not a paragraph in the page', async () => {
+    const user = userEvent.setup();
+    show();
+    const pairs = await screen.findByRole('region', { name: 'Under 15 Pairs' });
+    await user.click(within(pairs).getByRole('button', { name: 'Edit' }));
+    await user.click(await within(pairs).findByRole('button', { name: 'Sack' }));
+    expect(await screen.findByText('Saved')).toBeInTheDocument();
+    expect(screen.getByText('Saved').closest('p')).toBeNull();
+  });
+
   it('edits a race list: add from the library, move, remove, preset and leave for later, saving each time', async () => {
     const user = userEvent.setup();
     show();

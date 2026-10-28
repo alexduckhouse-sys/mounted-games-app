@@ -41,6 +41,19 @@ describe('RulebooksPage', () => {
     expect(screen.queryByText('Keep the changeover clear.')).not.toBeInTheDocument();
   });
 
+  it('narrows the rulebook list from a round search bar', async () => {
+    serve([handbook, junior]);
+    const user = userEvent.setup();
+    mount();
+    await screen.findByRole('button', { name: /^Event handbook/ });
+    await user.type(screen.getByRole('searchbox', { name: 'Find a rulebook' }), 'junior');
+    expect(screen.queryByRole('button', { name: /^Event handbook/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Junior rules/ })).toBeInTheDocument();
+    await user.clear(screen.getByRole('searchbox', { name: 'Find a rulebook' }));
+    await user.type(screen.getByRole('searchbox', { name: 'Find a rulebook' }), 'zzz');
+    expect(screen.getByText(/No rulebook matches/)).toBeInTheDocument();
+  });
+
   it('loads a rulebook only when it is chosen, and reuses it afterwards', async () => {
     serve([handbook, junior]);
     const user = userEvent.setup();

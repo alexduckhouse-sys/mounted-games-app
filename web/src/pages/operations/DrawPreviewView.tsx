@@ -85,8 +85,10 @@ function laneSpread(preview: DrawPreview): Array<{ teamId: number; name: string;
   return [...teams.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function DrawResult({ preview, round, onRound, onNewSeed, busy }: {
+export function DrawResult({ preview, previous = null, round, onRound, onNewSeed, busy }: {
   preview: DrawPreview;
+  /** The preview this one replaced (same section, new draw number): lanes that moved are marked. */
+  previous?: DrawPreview | null;
   round: number;
   onRound: (index: number) => void;
   onNewSeed: () => void;
@@ -96,6 +98,13 @@ export function DrawResult({ preview, round, onRound, onNewSeed, busy }: {
   const active = Math.min(round, preview.sessions.length - 1);
   const session = preview.sessions[active];
   const spread = laneSpread(preview);
+  const before = previous && previous.sectionId === preview.sectionId && previous.fingerprint !== preview.fingerprint
+    ? new Map(previous.sessions.map((item) => [item.sessionId, new Map(item.heats.flatMap((heat) => heat.teams.map((team) => [team.teamId, team.laneIndex] as const)))]))
+    : null;
+  const wasLane = (teamId: number, lane: number): number | null => {
+    const was = session ? before?.get(session.sessionId)?.get(teamId) : undefined;
+    return was != null && was !== lane ? was : null;
+  };
   return (
     <>
       <RefineList as="div">
@@ -115,19 +124,25 @@ export function DrawResult({ preview, round, onRound, onNewSeed, busy }: {
       )}
 
       {session && (
-        <>
+        <div key={`${preview.fingerprint}-${active}`} className="ops-fade">
           <p className="ops-session">{session.name}</p>
           {session.heats.map((heat) => (
             <Fragment key={heat.heatId}>
               <RefineSection title={heat.label || t('ops.draw.heat', { n: heat.orderIndex })} />
               <RefineList as="ol" label={heat.label || t('ops.draw.heat', { n: heat.orderIndex })}>
-                {[...heat.teams].sort((a, b) => a.laneIndex - b.laneIndex).map((team) => (
-                  <li key={team.teamId} className="rf-row ops-lane"><span className="rf-num ops-lane-no">{team.laneIndex}</span><span className="rf-grow">{team.teamName}</span></li>
-                ))}
+                {[...heat.teams].sort((a, b) => a.laneIndex - b.laneIndex).map((team) => {
+                  const was = wasLane(team.teamId, team.laneIndex);
+                  return (
+                    <li key={team.teamId} className={`rf-row ops-lane${was != null ? ' ops-lane-changed' : ''}`}>
+                      <span className="rf-num ops-lane-no">{team.laneIndex}</span><span className="rf-grow">{team.teamName}</span>
+                      {was != null && <span className="rf-t2">{t('ops3.plan.draw.wasLane', { lane: was })}</span>}
+                    </li>
+                  );
+                })}
               </RefineList>
             </Fragment>
           ))}
-        </>
+        </div>
       )}
 
       <div className="ops-gap">
