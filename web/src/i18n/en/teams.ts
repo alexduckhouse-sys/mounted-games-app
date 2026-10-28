@@ -72,7 +72,7 @@ export const teams = {
   'teams.team.avgPlace': 'Average place',
   'teams.team.racesWon': 'Races won',
   'teams.team.wonOf': '{won} of {total}',
-  'teams.team.pointQuota': 'Point quota',
+  'teams.team.pointQuota': 'Avg points',
   'teams.team.statsLater': 'Stats show once {name} has raced.',
   'teams.team.declaredAria': 'Declared riders and ponies',
   'teams.team.decForm': 'Dec form',

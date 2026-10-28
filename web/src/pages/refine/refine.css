@@ -44,7 +44,7 @@ a.rf-row:active, button.rf-row:active, summary.rf-row:active { background: rgb(v
 summary.rf-row { list-style: none; cursor: pointer; }
 summary.rf-row::-webkit-details-marker { display: none; }
 .rf-chev-down { transition: transform 180ms var(--mg-ease-out); }
-details[open] > summary .rf-chev-down { transform: rotate(180deg); }
+details[open] > summary .rf-chev-down, [aria-expanded="true"] > .rf-chev-down { transform: rotate(180deg); }
 /* A disclosure's contents come in under their row. Where the browser can animate to auto height it slides open too. */
 details[open] > summary ~ * { animation: rf-reveal 220ms var(--mg-ease-out); }
 @keyframes rf-reveal { from { opacity: 0; transform: translateY(-4px); } }
@@ -136,6 +136,14 @@ details[open] > summary ~ * { animation: rf-reveal 220ms var(--mg-ease-out); }
 .rf-table th:last-child, .rf-table td:last-child { padding-right: 14px; text-align: right; }
 .rf-table a { color: inherit !important; font-weight: 600; display: flex; align-items: center; min-height: 44px; text-decoration: none !important; }
 .rf-table-wrap { border: 1px solid rgb(var(--mg-line)); border-radius: var(--mg-radius-card); background: rgb(var(--mg-surface)); box-shadow: var(--mg-shadow-sm); overflow-x: auto; }
+
+/* A table that always fits its card: fixed columns, short text wrapping instead of pushing the card sideways. */
+.rf-table-fit { overflow-x: hidden; }
+.rf-table-fit .rf-table { table-layout: fixed; font-size: 14px; }
+.rf-table-fit .rf-table th { padding-inline: 3px; overflow-wrap: anywhere; hyphens: auto; }
+.rf-table-fit .rf-table td { padding-inline: 3px; height: auto; min-height: 44px; padding-block: 6px; overflow-wrap: anywhere; line-height: 1.2; }
+.rf-table-fit .rf-table th:first-child, .rf-table-fit .rf-table td:first-child { padding-left: 10px; }
+.rf-table-fit .rf-table th:last-child, .rf-table-fit .rf-table td:last-child { padding-right: 10px; }
 
 /* Demo checkout outcome icons and the padlock screen */
 .rf-state-ok { fill: rgb(var(--mg-ok) / .14); }

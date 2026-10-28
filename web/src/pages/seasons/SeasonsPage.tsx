@@ -10,6 +10,7 @@ import { useT } from '../../i18n/LanguageContext';
 import { sectionFormatText } from '../../lib/sectionFormatText';
 import { RefineHeader, RefinePage } from '../refine/Refine';
 import { AddBar } from '../admin/creator/controls';
+import { useDockAction } from '../../components/TickerContext';
 import '../../components/sitePages.css';
 import { SeasonSettingsForm } from './SeasonSettingsForm';
 import { seasonError, type SeasonView } from './seasonViewTypes';
@@ -26,6 +27,9 @@ export function SeasonsPage() {
   const creating = canCreate && params.get('new') !== null;
   const navigate = useNavigate();
   usePageHeader({ title: t('site.seasons.title'), plain: true });
+  const createLabel = seasons?.length ? t('site.seasons.create') : t('site.seasons.createFirst');
+  // The organiser's one action sits by the ticker dock; a page rendered without a dock keeps its own bar.
+  const docked = useDockAction(canCreate && seasons && !creating ? { label: createLabel, icon: 'plus', onClick: () => setParams({ new: '1' }) } : null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -74,6 +78,6 @@ export function SeasonsPage() {
         </ul>
       </section>;
     })}
-    {canCreate && seasons && <div className="sp-gap"><AddBar onClick={() => setParams({ new: '1' })}>{seasons.length ? t('site.seasons.create') : t('site.seasons.createFirst')}</AddBar></div>}
+    {canCreate && seasons && !docked && <div className="sp-gap"><AddBar onClick={() => setParams({ new: '1' })}>{createLabel}</AddBar></div>}
   </RefinePage>;
 }
