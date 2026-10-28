@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
+import { useT } from '../../i18n/LanguageContext';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
 import { VOLUNTEER_ROLE_PRESETS } from '../../lib/lorryAndVolunteers';
@@ -25,6 +26,7 @@ const blank = (): Draft => ({ id: null, role: VOLUNTEER_ROLE_PRESETS[0], session
  * organisers (`manage`) also add, change and remove shifts and send the unfilled ones on. Steward duties live on the duty board instead.
  */
 export function VolunteerRota({ competition, manage }: { competition: CompetitionDetail; manage: boolean }) {
+  const t = useT();
   const { user } = useAuth();
   const [shifts, setShifts] = useState<VolunteerShift[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,10 +38,10 @@ export function VolunteerRota({ competition, manage }: { competition: Competitio
     let active = true;
     fetchVolunteerShifts(id).then(
       (data) => { if (active) { setShifts(data.filter(isRotaShift)); setError(null); } },
-      (caught) => { if (active) { setError(apiErrorMessage(caught, 'Couldn’t load the volunteer shifts. Check your signal and try again.')); setShifts((current) => current ?? []); } },
+      (caught) => { if (active) { setError(apiErrorMessage(caught, t('site.volunteers.loadFailed'))); setShifts((current) => current ?? []); } },
     );
     return () => { active = false; };
-  }, [id]);
+  }, [id, t]);
 
   const sessions = useMemo(() => competition.sessions.filter((s) => !s.isBreak).slice().sort((a, b) => a.orderIndex - b.orderIndex), [competition.sessions]);
   const list = useMemo(() => shifts ?? [], [shifts]);
@@ -53,18 +55,18 @@ export function VolunteerRota({ competition, manage }: { competition: Competitio
     try { await work(); } catch (caught) { setError(apiErrorMessage(caught, failure)); } finally { setBusy(null); }
   }
 
-  const take = (shift: VolunteerShift) => act(shift.id, 'Couldn’t take that shift. Check your signal and try again.', async () => replace(await claimVolunteerShift(id, shift.id)));
-  const giveBack = (shift: VolunteerShift, claimId: number) => act(shift.id, 'Couldn’t give that shift back. Check your signal and try again.', async () => replace(await unclaimVolunteerShift(id, shift.id, claimId)));
+  const take = (shift: VolunteerShift) => act(shift.id, t('site.volunteers.takeFailed'), async () => replace(await claimVolunteerShift(id, shift.id)));
+  const giveBack = (shift: VolunteerShift, claimId: number) => act(shift.id, t('site.volunteers.giveFailed'), async () => replace(await unclaimVolunteerShift(id, shift.id, claimId)));
 
   async function removeClaim(shift: VolunteerShift, claimId: number, name: string) {
-    if (!(await confirmDialog({ title: `Take ${name} off ${shift.role}?`, message: 'They lose their place on this shift. They are not told.', confirmLabel: 'Take them off', destructive: true }))) return;
+    if (!(await confirmDialog({ title: t('site.volunteers.removeTitle', { name, role: shift.role }), message: t('site.volunteers.removeMessage'), confirmLabel: t('site.volunteers.removeLabel'), destructive: true }))) return;
     await giveBack(shift, claimId);
   }
 
   async function removeShift(shift: VolunteerShift) {
-    const people = shift.claimedCount > 0 ? ` The ${shift.claimedCount === 1 ? 'person' : `${shift.claimedCount} people`} who signed up lose their place. They are not told.` : '';
-    if (!(await confirmDialog({ title: `Delete the ${shift.role} shift?`, message: `It is removed from the rota.${people}`, confirmLabel: 'Delete shift', destructive: true }))) return;
-    await act(shift.id, 'Couldn’t delete that shift. Check your signal and try again.', async () => {
+    const people = shift.claimedCount > 0 ? ` ${t('site.volunteers.deletePeople', { count: shift.claimedCount })}` : '';
+    if (!(await confirmDialog({ title: t('site.volunteers.deleteTitle', { role: shift.role }), message: `${t('site.volunteers.deleteMessage')}${people}`, confirmLabel: t('site.volunteers.deleteLabel'), destructive: true }))) return;
+    await act(shift.id, t('site.volunteers.deleteFailed'), async () => {
       await deleteVolunteerShift(id, shift.id);
       setShifts((current) => (current ?? []).filter((s) => s.id !== shift.id));
     });
@@ -76,7 +78,7 @@ export function VolunteerRota({ competition, manage }: { competition: Competitio
 
   async function save() {
     if (!draft) return;
-    if (!draft.role.trim()) { setError('Give the shift a role.'); return; }
+    if (!draft.role.trim()) { setError(t('site.volunteers.needRole')); return; }
     const body: CreateVolunteerShiftInput = {
       role: draft.role.trim(),
       sessionId: draft.session === WHOLE_EVENT ? null : Number(draft.session),
@@ -90,19 +92,19 @@ export function VolunteerRota({ competition, manage }: { competition: Competitio
       const saved = draft.id === null ? await createVolunteerShift(id, body) : await updateVolunteerShift(id, draft.id, body);
       setShifts((current) => (draft.id === null ? [...(current ?? []), saved] : (current ?? []).map((s) => (s.id === saved.id ? saved : s))));
       setDraft(null);
-    } catch (caught) { setError(apiErrorMessage(caught, 'Couldn’t save that shift. Check your signal and try again.')); }
+    } catch (caught) { setError(apiErrorMessage(caught, t('site.volunteers.saveFailed'))); }
     finally { setBusy(null); }
   }
 
   const link = `${window.location.origin}/competitions/${id}/volunteers`;
-  const sessionOptions = [{ value: WHOLE_EVENT, label: 'Whole event' }, ...sessions.map((s) => ({ value: String(s.id), label: s.name }))];
+  const sessionOptions = [{ value: WHOLE_EVENT, label: t('site.volunteers.wholeEvent') }, ...sessions.map((s) => ({ value: String(s.id), label: s.name }))];
 
   return (
     <div className="ops-cards" aria-busy={busy !== null}>
       {error && <Notice>{error}</Notice>}
-      {shifts === null && <p role="status" className="rf-note">Loading the volunteer shifts…</p>}
+      {shifts === null && <p role="status" className="rf-note">{t('site.volunteers.loading')}</p>}
       {list.length > 0 && <RefineNote>{rotaSummaryText(list)}</RefineNote>}
-      {!user && list.length > 0 && <Notice tone="info" actionLabel="Sign in" actionTo="/login">Sign in to take a shift.</Notice>}
+      {!user && list.length > 0 && <Notice tone="info" actionLabel={t('common.signIn')} actionTo="/login">{t('site.volunteers.signInToTake')}</Notice>}
 
       {groups.map((group) => (
         <section key={group.key} aria-label={group.title}>
@@ -115,7 +117,7 @@ export function VolunteerRota({ competition, manage }: { competition: Competitio
                 <div key={shift.id} className="rf-row ops-wrap">
                   <span className="rf-grow">
                     <span className="rf-t1">{shift.role}{shift.startTimeLabel ? `, ${shift.startTimeLabel}` : ''}</span>
-                    <span className="rf-t2">{shift.isFilled ? 'Full' : `${shift.remainingCount} ${shift.remainingCount === 1 ? 'place' : 'places'} left`} · {shift.claimedCount} of {shift.requiredCount} taken</span>
+                    <span className="rf-t2">{shift.isFilled ? t('site.volunteers.full') : t('site.volunteers.placesLeft', { count: shift.remainingCount })} · {t('site.volunteers.taken', { taken: shift.claimedCount, total: shift.requiredCount })}</span>
                     {shift.notes && <span className="rf-t2">{shift.notes}</span>}
                     {shift.claims.length > 0 && (
                       <span className="rf-t2">
@@ -123,61 +125,61 @@ export function VolunteerRota({ competition, manage }: { competition: Competitio
                           <span key={claim.id}>
                             {index > 0 && ', '}
                             {claim.volunteerName}{claim.clubName ? ` (${claim.clubName})` : ''}
-                            {manage && !claim.isMine && <> <button type="button" className="ops-danger-link" disabled={busyHere} aria-label={`Take ${claim.volunteerName} off ${shift.role}`} onClick={() => void removeClaim(shift, claim.id, claim.volunteerName)}>Remove</button></>}
+                            {manage && !claim.isMine && <> <button type="button" className="ops-danger-link" disabled={busyHere} aria-label={t('site.volunteers.removeAria', { name: claim.volunteerName, role: shift.role })} onClick={() => void removeClaim(shift, claim.id, claim.volunteerName)}>{t('site.volunteers.remove')}</button></>}
                           </span>
                         ))}
                       </span>
                     )}
                   </span>
-                  {user && mine && <button type="button" className="rf-btn" disabled={busyHere} onClick={() => void giveBack(shift, mine.id)}>Give my place back</button>}
-                  {user && !mine && !shift.isFilled && <button type="button" className="rf-btn rf-btn-primary" disabled={busyHere} onClick={() => void take(shift)}>Take this shift</button>}
-                  {manage && <button type="button" className="rf-btn" disabled={busyHere} aria-label={`Edit ${shift.role}`} onClick={() => edit(shift)}>Edit</button>}
-                  {manage && <button type="button" className="ops-danger-link" disabled={busyHere} aria-label={`Delete ${shift.role}`} onClick={() => void removeShift(shift)}>Delete</button>}
+                  {user && mine && <button type="button" className="rf-btn" disabled={busyHere} onClick={() => void giveBack(shift, mine.id)}>{t('site.volunteers.giveBack')}</button>}
+                  {user && !mine && !shift.isFilled && <button type="button" className="rf-btn rf-btn-primary" disabled={busyHere} onClick={() => void take(shift)}>{t('site.volunteers.take')}</button>}
+                  {manage && <button type="button" className="rf-btn" disabled={busyHere} aria-label={t('site.volunteers.editRole', { role: shift.role })} onClick={() => edit(shift)}>{t('common.edit')}</button>}
+                  {manage && <button type="button" className="ops-danger-link" disabled={busyHere} aria-label={t('site.volunteers.deleteRole', { role: shift.role })} onClick={() => void removeShift(shift)}>{t('common.delete')}</button>}
                 </div>
               );
             })}
           </RefineList>
         </section>
       ))}
-      {shifts !== null && list.length === 0 && !draft && <p className="rf-note">{manage ? 'No shifts yet. Add the jobs you need covered.' : 'The organisers haven’t added any volunteer shifts yet.'}</p>}
+      {shifts !== null && list.length === 0 && !draft && <p className="rf-note">{manage ? t('site.volunteers.emptyManage') : t('site.volunteers.empty')}</p>}
 
       {manage && (
         <>
           {draft ? (
-            <div className="ops-dup" role="group" aria-label={draft.id === null ? 'New shift' : 'Change shift'}>
-              <RefineChoiceRow label="Role" value={draft.role} options={VOLUNTEER_ROLE_PRESETS.map((role) => ({ value: role, label: role }))} allowOther onChange={(role) => setDraft({ ...draft, role })} />
-              <RefineChoiceRow label="Session" value={draft.session} options={sessionOptions} onChange={(session) => setDraft({ ...draft, session })} />
-              <label className="rf-fld">Time (optional)<input value={draft.time} maxLength={80} placeholder="For example 9:30 to 12:00" onChange={(event) => setDraft({ ...draft, time: event.target.value })} /></label>
-              <label className="rf-fld">Notes (optional)<input value={draft.notes} maxLength={500} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} /></label>
-              <div className="rf-row"><span className="rf-grow rf-t1">People needed</span><RefineQty name="people needed" value={draft.places} max={50} onChange={(places) => setDraft({ ...draft, places: Math.max(1, places) })} /></div>
+            <div className="ops-dup" role="group" aria-label={draft.id === null ? t('site.volunteers.newShift') : t('site.volunteers.changeShift')}>
+              <RefineChoiceRow label={t('site.volunteers.role')} value={draft.role} options={VOLUNTEER_ROLE_PRESETS.map((role) => ({ value: role, label: role }))} allowOther onChange={(role) => setDraft({ ...draft, role })} />
+              <RefineChoiceRow label={t('site.volunteers.session')} value={draft.session} options={sessionOptions} onChange={(session) => setDraft({ ...draft, session })} />
+              <label className="rf-fld">{t('site.volunteers.time')}<input value={draft.time} maxLength={80} placeholder={t('site.volunteers.timePlaceholder')} onChange={(event) => setDraft({ ...draft, time: event.target.value })} /></label>
+              <label className="rf-fld">{t('site.volunteers.notes')}<input value={draft.notes} maxLength={500} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} /></label>
+              <div className="rf-row"><span className="rf-grow rf-t1">{t('site.volunteers.peopleNeeded')}</span><RefineQty name={t('site.volunteers.peopleNeededName')} value={draft.places} max={50} onChange={(places) => setDraft({ ...draft, places: Math.max(1, places) })} /></div>
               <div className="rf-actions">
-                <button type="button" className="rf-btn rf-btn-primary" disabled={busy === 'form'} onClick={() => void save()}>{draft.id === null ? 'Add shift' : 'Save shift'}</button>
-                <button type="button" className="rf-btn" onClick={() => setDraft(null)}>Cancel</button>
+                <button type="button" className="rf-btn rf-btn-primary" disabled={busy === 'form'} onClick={() => void save()}>{draft.id === null ? t('site.volunteers.addShift') : t('site.volunteers.saveShift')}</button>
+                <button type="button" className="rf-btn" onClick={() => setDraft(null)}>{t('common.cancel')}</button>
               </div>
             </div>
           ) : (
-            <button type="button" className="ops-addbar ops-addbar-gap" onClick={() => setDraft(blank())}><Plus className="h-4 w-4" aria-hidden="true" />Add a shift</button>
+            <button type="button" className="ops-addbar ops-addbar-gap" onClick={() => setDraft(blank())}><Plus className="h-4 w-4" aria-hidden="true" />{t('site.volunteers.addAShift')}</button>
           )}
 
           {needed.length > 0 && (
-            <section aria-label="Shifts that still need people">
-              <RefineSection title="Still need people" meta={needed.length} />
+            <section aria-label={t('site.volunteers.stillNeedAria')}>
+              <RefineSection title={t('site.volunteers.stillNeed')} meta={needed.length} />
               <RefineList as="div">
                 {needed.map((shift) => (
                   <div key={shift.id} className="rf-row">
-                    <span className="rf-grow"><span className="rf-t1">{shift.role}{shift.startTimeLabel ? `, ${shift.startTimeLabel}` : ''}</span><span className="rf-t2">{shift.sessionId == null ? 'Whole event' : shift.sessionName ?? 'Session'} · {shift.remainingCount} {shift.remainingCount === 1 ? 'place' : 'places'} left</span></span>
+                    <span className="rf-grow"><span className="rf-t1">{shift.role}{shift.startTimeLabel ? `, ${shift.startTimeLabel}` : ''}</span><span className="rf-t2">{shift.sessionId == null ? t('site.volunteers.wholeEvent') : shift.sessionName ?? t('site.volunteers.session')} · {t('site.volunteers.placesLeft', { count: shift.remainingCount })}</span></span>
                   </div>
                 ))}
                 <div className="rf-row ops-wrap">
-                  <span className="rf-grow rf-t1">Ask for help</span>
-                  <ShareTextButtons title="Share unfilled shifts" name="Message" text={unfilledShareText(competition.name, list, sessions, link)} />
+                  <span className="rf-grow rf-t1">{t('site.volunteers.askForHelp')}</span>
+                  <ShareTextButtons title={t('site.volunteers.shareTitle')} name={t('site.volunteers.shareName')} text={unfilledShareText(competition.name, list, sessions, link)} />
                 </div>
               </RefineList>
             </section>
           )}
         </>
       )}
-      {!manage && <p className="rf-note"><Link to={`/competitions/${id}/details`}>Back to the event</Link></p>}
+      {!manage && <p className="rf-note"><Link to={`/competitions/${id}/details`}>{t('site.volunteers.backToEvent')}</Link></p>}
     </div>
   );
 }

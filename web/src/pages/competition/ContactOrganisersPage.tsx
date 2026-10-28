@@ -14,6 +14,8 @@ import { Notice } from '../../components/Notice';
 import { Sheet } from '../../components/Sheet';
 import { BUBBLE_IN, BUBBLE_SHOWN, BUBBLE_SPRING } from '../../lib/motion';
 import { useStillMotion } from '../../lite/useStillMotion';
+import { useT } from '../../i18n/LanguageContext';
+import { activeLocale, tr } from '../../i18n/translate';
 import { clockTime, initials, markSeen, messageThreads, readSeen, threadMessages } from '../../lib/announcements';
 import type { ChatMessage } from '../../types';
 import './chat.css';
@@ -22,20 +24,20 @@ import '../../components/eventPages.css';
 import '../clubShop/clubShop.css';
 
 const messageTime = (message: ChatMessage) =>
-  new Date(message.createdAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  new Date(message.createdAt).toLocaleTimeString(activeLocale(), { hour: '2-digit', minute: '2-digit' });
 
 /** "Today", "Yesterday" or "Mon 26 Oct": the heading above a day's messages in the thread. */
 function dayHeading(iso: string, now = new Date()): string {
   const day = new Date(iso);
   const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const diff = Math.round((startOf(now) - startOf(day)) / 86_400_000);
-  if (diff === 0) return 'Today';
-  if (diff === 1) return 'Yesterday';
-  return day.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  if (diff === 0) return tr('common.today');
+  if (diff === 1) return tr('site.contact.yesterday');
+  return day.toLocaleDateString(activeLocale(), { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
 /** The time on a chat list row: the clock for today, else the day. */
-const listTime = (iso: string) => (dayHeading(iso) === 'Today' ? clockTime(iso) : dayHeading(iso));
+const listTime = (iso: string) => (dayHeading(iso) === tr('common.today') ? clockTime(iso) : dayHeading(iso));
 
 export function ContactOrganisersPage() {
   const { user } = useAuth();
@@ -44,6 +46,7 @@ export function ContactOrganisersPage() {
 }
 
 function ContactOrganisersSession() {
+  const t = useT();
   const { competition, reload } = useCompetition();
   const { user, canEdit, hasRole } = useAuth();
   const isAdmin = hasRole('Admin');
@@ -73,21 +76,21 @@ function ContactOrganisersSession() {
   const threads = messageThreads(messages, readSeen(competition.id));
   const teamOf = (userId: string) => competition.teams.find((team) => team.trainerUserId === userId)?.displayName;
   const person = withId ? threads.find((thread) => thread.userId === withId) : undefined;
-  const personName = person?.name ?? 'Message';
+  const personName = person?.name ?? t('site.contact.message');
   usePageHeader(isAdmin
     ? withId
-      ? { title: personName, subtitle: teamOf(withId) ?? competition.name, plain: true, backTo: location.pathname, backLabel: 'Back to messages' }
-      : { title: 'Messages', subtitle: competition.name, plain: true, backTo: `/competitions/${competition.id}/details`, backLabel: 'Back to details' }
-    : { title: 'Message the organisers', subtitle: competition.name, plain: true, backTo: `/competitions/${competition.id}/details`, backLabel: 'Back to details' });
+      ? { title: personName, subtitle: teamOf(withId) ?? competition.name, plain: true, backTo: location.pathname, backLabel: t('site.contact.backToMessages') }
+      : { title: t('site.contact.messages'), subtitle: competition.name, plain: true, backTo: `/competitions/${competition.id}/details`, backLabel: t('site.contact.backToDetails') }
+    : { title: t('site.contact.title'), subtitle: competition.name, plain: true, backTo: `/competitions/${competition.id}/details`, backLabel: t('site.contact.backToDetails') });
   // Go back to where you came from, or to the details when this page was opened directly.
   const goBack = () => (location.key === 'default' ? navigate(`/competitions/${competition.id}/details`) : navigate(-1));
 
   const requestMessages = useCallback((controller: AbortController) => {
     void api.get<ChatMessage[]>(`/competitions/${competition.id}/chat`, { signal: controller.signal })
       .then((response) => { if (!controller.signal.aborted) setMessages(response.data); })
-      .catch(() => { if (!controller.signal.aborted) setMessagesError('Couldn’t load messages. Check your signal and try again.'); })
+      .catch(() => { if (!controller.signal.aborted) setMessagesError(t('site.contact.loadFailed')); })
       .finally(() => { if (!controller.signal.aborted) setMessagesLoading(false); });
-  }, [competition.id]);
+  }, [competition.id, t]);
 
   const loadMessages = useCallback(() => {
     loadController.current?.abort();
@@ -136,14 +139,14 @@ function ContactOrganisersSession() {
 
   async function removeMessage(id: number): Promise<boolean> {
     if (!canModerate) return false;
-    if (!(await confirmDialog({ title: 'Delete this message?', message: 'It disappears for everyone.', confirmLabel: 'Delete message', destructive: true }))) return false;
+    if (!(await confirmDialog({ title: t('site.contact.deleteTitle'), message: t('site.contact.deleteMessage'), confirmLabel: t('site.contact.deleteLabel'), destructive: true }))) return false;
     setActionError(null);
     try {
       await api.delete(`/competitions/${competition.id}/chat/${id}`);
       setMessages((current) => current.filter((message) => message.id !== id));
       return true;
     } catch {
-      setActionError({ text: 'Couldn’t delete that message. Check your signal and try again.' });
+      setActionError({ text: t('site.contact.deleteFailed') });
       return false;
     } finally {
       reload();
@@ -152,16 +155,16 @@ function ContactOrganisersSession() {
 
   async function blockMessageAuthor(id: number): Promise<boolean> {
     if (!canModerate) return false;
-    if (!(await confirmDialog({ title: 'Block this sender?', message: 'They can’t post in chat from this phone or network.', confirmLabel: 'Block sender', destructive: true }))) return false;
+    if (!(await confirmDialog({ title: t('site.contact.blockTitle'), message: t('site.contact.blockMessage'), confirmLabel: t('site.contact.blockSender'), destructive: true }))) return false;
     setActionError(null);
     setActionNotice(null);
     try {
       const { data } = await api.post<{ alreadyBlocked: boolean; ipAddress: string }>(`/competitions/${competition.id}/chat/${id}/block-author`, {});
-      setActionNotice(data.alreadyBlocked ? `IP ${data.ipAddress} was already blocked.` : `Blocked IP ${data.ipAddress}.`);
+      setActionNotice(data.alreadyBlocked ? t('site.contact.alreadyBlocked', { ip: data.ipAddress }) : t('site.contact.blocked', { ip: data.ipAddress }));
       return true;
     } catch (error) {
       const message = (error as { response?: { data?: { message?: string } } }).response?.data?.message
-        ?? 'Could not block this sender. The post may be too old to have an IP recorded.';
+        ?? t('site.contact.blockFailed');
       setActionError({ text: message });
       return false;
     }
@@ -183,8 +186,8 @@ function ContactOrganisersSession() {
       setBody((current) => current.trim() === text ? '' : current);
     } catch (error) {
       setActionError((error as { response?: { status?: number } }).response?.status === 403
-        ? { text: 'Posting is blocked from this network. Contact an organiser.' }
-        : { text: 'Couldn’t send that message. Check your signal and try again.', retrySend: true });
+        ? { text: t('site.contact.postBlocked') }
+        : { text: t('site.contact.sendFailed'), retrySend: true });
     } finally {
       sendingRef.current = false;
       setSending(false);
@@ -195,7 +198,7 @@ function ContactOrganisersSession() {
     <div id="chat-composer" className="ev-composer">
       <div className="flex items-end gap-2">
         <label className="ev-compose-field">
-          <span className="sr-only">{withId ? `Reply to ${personName}` : 'Message the organisers'}</span>
+          <span className="sr-only">{withId ? t('site.contact.replyTo', { name: personName }) : t('site.contact.title')}</span>
           <textarea
             rows={desktop ? 2 : 1}
             value={body}
@@ -206,10 +209,10 @@ function ContactOrganisersSession() {
                 if (body.trim()) void send();
               }
             }}
-            placeholder={withId ? 'Reply' : 'Message the organisers'}
+            placeholder={withId ? t('site.contact.reply') : t('site.contact.title')}
           />
         </label>
-        <button type="button" className="ev-send" aria-label="Send" disabled={!body.trim() || sending} onClick={() => void send()}>
+        <button type="button" className="ev-send" aria-label={t('site.contact.send')} disabled={!body.trim() || sending} onClick={() => void send()}>
           <ArrowUp aria-hidden="true" className="h-5 w-5" strokeWidth={2.4} />
         </button>
       </div>
@@ -221,12 +224,12 @@ function ContactOrganisersSession() {
       {actionError && (
         <Notice
           onDismiss={() => setActionError(null)}
-          dismissLabel="Dismiss error"
-          actionLabel={actionError.retrySend ? 'Try again' : undefined}
+          dismissLabel={t('site.contact.dismissError')}
+          actionLabel={actionError.retrySend ? t('common.tryAgain') : undefined}
           onAction={actionError.retrySend ? () => void send() : undefined}
         >{actionError.text}</Notice>
       )}
-      {actionNotice && <Notice tone="info" onDismiss={() => setActionNotice(null)} dismissLabel="Dismiss notice">{actionNotice}</Notice>}
+      {actionNotice && <Notice tone="info" onDismiss={() => setActionNotice(null)} dismissLabel={t('site.contact.dismissNotice')}>{actionNotice}</Notice>}
     </>
   );
 
@@ -234,11 +237,11 @@ function ContactOrganisersSession() {
   if (!user) {
     return (
       <div className="rf-page mx-auto flex w-full max-w-xl flex-col gap-3 pb-6 pt-4">
-        <h1 className="sr-only">Message the organisers</h1>
-        <p className="ev-body !text-[16px] !text-[rgb(var(--mg-ink))]">Sign in to message the organisers. Only they can read what you send.</p>
+        <h1 className="sr-only">{t('site.contact.title')}</h1>
+        <p className="ev-body !text-[16px] !text-[rgb(var(--mg-ink))]">{t('site.contact.signInPrompt')}</p>
         <div className="sp-acts">
-          <Link to="/login" state={{ from: location.pathname }} className="sp-pill sp-pill-fill">Sign in</Link>
-          <button type="button" className="sp-pill" onClick={goBack}>Go back</button>
+          <Link to="/login" state={{ from: location.pathname }} className="sp-pill sp-pill-fill">{t('common.signIn')}</Link>
+          <button type="button" className="sp-pill" onClick={goBack}>{t('common.goBack')}</button>
         </div>
       </div>
     );
@@ -248,13 +251,13 @@ function ContactOrganisersSession() {
   if (isAdmin && !withId) {
     return (
       <div className="skin cs-page">
-        <h1 className="sr-only">Messages</h1>
+        <h1 className="sr-only">{t('site.contact.messages')}</h1>
         {notices}
-        {messagesError && <Notice actionLabel="Try again" onAction={loadMessages}>{messagesError}</Notice>}
+        {messagesError && <Notice actionLabel={t('common.tryAgain')} onAction={loadMessages}>{messagesError}</Notice>}
         {messagesLoading && messages.length === 0 ? (
-          <p role="status" className="sp-note">Loading messages…</p>
+          <p role="status" className="sp-note">{t('site.contact.loading')}</p>
         ) : (
-          <ul className="sp-card cs-gap m-0 list-none p-0" aria-label="Messages">
+          <ul className="sp-card cs-gap m-0 list-none p-0" aria-label={t('site.contact.messages')}>
             {threads.map((item) => {
               const team = teamOf(item.userId);
               return (
@@ -267,13 +270,13 @@ function ContactOrganisersSession() {
                     </span>
                     <span className="cs-right">
                       <time className="cs-time" dateTime={item.lastAt}>{listTime(item.lastAt)}</time>
-                      {item.unread > 0 && <span className="cs-unread" aria-label={`${item.unread} unread`}>{item.unread}</span>}
+                      {item.unread > 0 && <span className="cs-unread" aria-label={t('site.contact.unread', { count: item.unread })}>{item.unread}</span>}
                     </span>
                   </button>
                 </li>
               );
             })}
-            {threads.length === 0 && <li className="cs-row sp-t2">No messages yet.</li>}
+            {threads.length === 0 && <li className="cs-row sp-t2">{t('site.contact.none')}</li>}
           </ul>
         )}
       </div>
@@ -284,14 +287,14 @@ function ContactOrganisersSession() {
   const shown = isAdmin ? thread : privateMessages;
   return (
     <div className="ev-thread rf-page mx-auto flex w-full max-w-xl flex-col gap-2 pb-3 pt-4">
-      <h1 className="sr-only">{isAdmin ? personName : 'Message the organisers'}</h1>
+      <h1 className="sr-only">{isAdmin ? personName : t('site.contact.title')}</h1>
       {notices}
-      {!isAdmin && !privateMessagingAvailable && <Notice tone="info">Messaging the organisers isn’t available for this event yet.</Notice>}
-      {messagesError && <Notice actionLabel="Try again" onAction={loadMessages}>{messagesError}</Notice>}
-      {(isAdmin || privateMessagingAvailable) && <span className="cs-privacy">{isAdmin ? `Only you and ${personName} see this` : 'Only you and the organisers see this'}</span>}
-      {messagesLoading && messages.length === 0 && <p role="status" className="sp-note text-center">Loading messages…</p>}
+      {!isAdmin && !privateMessagingAvailable && <Notice tone="info">{t('site.contact.unavailable')}</Notice>}
+      {messagesError && <Notice actionLabel={t('common.tryAgain')} onAction={loadMessages}>{messagesError}</Notice>}
+      {(isAdmin || privateMessagingAvailable) && <span className="cs-privacy">{isAdmin ? t('site.contact.privacyAdmin', { name: personName }) : t('site.contact.privacy')}</span>}
+      {messagesLoading && messages.length === 0 && <p role="status" className="sp-note text-center">{t('site.contact.loading')}</p>}
       {!messagesLoading && shown.length === 0 && (isAdmin || privateMessagingAvailable) && !messagesError && (
-        <p className="sp-note text-center">{isAdmin ? 'No messages from them yet.' : 'No messages yet. Write to the organisers below.'}</p>
+        <p className="sp-note text-center">{isAdmin ? t('site.contact.noneFromThem') : t('site.contact.noneWrite')}</p>
       )}
       {shown.map((message, index) => {
         const day = dayHeading(message.createdAt);
@@ -305,11 +308,11 @@ function ContactOrganisersSession() {
               <motion.div className={`ev-bub ${mine ? 'ev-bub-me' : 'ev-bub-them'}`}
                 initial={still || messagesLoading ? false : BUBBLE_IN} animate={BUBBLE_SHOWN} transition={BUBBLE_SPRING}
                 style={{ transformOrigin: mine ? 'bottom right' : 'bottom left' }}>
-                {!mine && !isAdmin && <b className="ev-bub-from">{message.authorName || 'Organiser'}</b>}
+                {!mine && !isAdmin && <b className="ev-bub-from">{message.authorName || t('site.contact.organiser')}</b>}
                 {message.body}
                 <time dateTime={message.createdAt}>{messageTime(message)}</time>
               </motion.div>
-              {canModerate && <button type="button" className="cs-bub-more" aria-label={`More for message: ${message.body}`} onClick={() => setMenuFor(message)}>⋯</button>}
+              {canModerate && <button type="button" className="cs-bub-more" aria-label={t('site.contact.moreFor', { body: message.body })} onClick={() => setMenuFor(message)}>⋯</button>}
             </div>
           </div>
         );
@@ -317,13 +320,13 @@ function ContactOrganisersSession() {
       {composer}
 
       {menuFor && (
-        <Sheet title="This message" description={menuFor.body.length > 90 ? `${menuFor.body.slice(0, 90)}…` : menuFor.body} onClose={() => setMenuFor(null)}>
+        <Sheet title={t('site.contact.thisMessage')} description={menuFor.body.length > 90 ? `${menuFor.body.slice(0, 90)}…` : menuFor.body} onClose={() => setMenuFor(null)}>
           {({ close }) => (
             <div className="kit-acts">
               {!menuFor.recipientUserId && (
-                <button type="button" className="kit-redtext" onClick={() => { void blockMessageAuthor(menuFor.id).then((done) => { if (done) close(); }); }}>Block sender</button>
+                <button type="button" className="kit-redtext" onClick={() => { void blockMessageAuthor(menuFor.id).then((done) => { if (done) close(); }); }}>{t('site.contact.blockSender')}</button>
               )}
-              <button type="button" className="kit-redtext" onClick={() => { void removeMessage(menuFor.id).then((done) => { if (done) close(); }); }}>Delete message</button>
+              <button type="button" className="kit-redtext" onClick={() => { void removeMessage(menuFor.id).then((done) => { if (done) close(); }); }}>{t('site.contact.deleteLabel')}</button>
             </div>
           )}
         </Sheet>

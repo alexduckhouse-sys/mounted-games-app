@@ -1,4 +1,5 @@
 import { api } from '../../api';
+import { tr } from '../../i18n/translate';
 import { volunteerShiftSummary } from '../../lib/lorryAndVolunteers';
 import type { ClaimVolunteerShiftInput, CreateVolunteerShiftInput, Session, VolunteerShift } from '../../types';
 
@@ -16,7 +17,7 @@ export function groupShiftsBySession(shifts: readonly VolunteerShift[], sessions
   const groups = new Map<string, RotaGroup>();
   for (const shift of shifts) {
     const key = shift.sessionId == null ? 'event' : `s${shift.sessionId}`;
-    const title = shift.sessionId == null ? 'Whole event' : order.get(shift.sessionId)?.name ?? shift.sessionName?.trim() ?? 'Session';
+    const title = shift.sessionId == null ? tr('site.volunteers.wholeEvent') : order.get(shift.sessionId)?.name ?? shift.sessionName?.trim() ?? tr('site.volunteers.session');
     const group = groups.get(key) ?? { key, title, shifts: [] };
     group.shifts.push(shift);
     groups.set(key, group);
@@ -49,9 +50,9 @@ export function unfilledShareText(eventName: string, shifts: readonly VolunteerS
 /** "14 of 20 places taken" and how many shifts still need someone. */
 export function rotaSummaryText(shifts: readonly VolunteerShift[]): string {
   const summary = volunteerShiftSummary(shifts);
-  if (summary.totalShifts === 0) return 'No shifts yet';
-  const need = summary.unfilledShifts === 0 ? 'every shift is covered' : `${summary.unfilledShifts} ${summary.unfilledShifts === 1 ? 'shift needs' : 'shifts need'} people`;
-  return `${summary.claimedSlots} of ${summary.totalSlots} places taken, ${need}`;
+  if (summary.totalShifts === 0) return tr('site.volunteers.noShiftsYet');
+  const need = summary.unfilledShifts === 0 ? tr('site.volunteers.allCovered') : tr('site.volunteers.shiftsNeed', { count: summary.unfilledShifts });
+  return tr('site.volunteers.summary', { taken: summary.claimedSlots, total: summary.totalSlots, need });
 }
 
 // ---- the API, one call each ----

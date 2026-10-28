@@ -9,10 +9,11 @@ import { useAuth } from '../../auth/AuthContext';
 import { FAVOURITES_CHANGED, readFavourites, setFavourites as setManyFavourites } from '../../lib/favourites';
 import { useFollowedProfiles } from '../../hooks/useFollowedProfiles';
 import { setFollowedProfile } from '../../lib/followedProfiles';
-import { SectionFormatLabel } from '../../types';
+import { useLanguage, useT } from '../../i18n/LanguageContext';
+import { sectionFormatText } from '../../lib/sectionFormatText';
 import { Chevron, RefineDisclosure, RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection } from '../refine/Refine';
 import { ordinal, positionLabels, shortDate } from './seasonModel';
-import { plural } from '../../lib/stats';
+import { countText } from '../../lib/stats';
 import type { SeasonView, StandingView } from './seasonViewTypes';
 import { buildRows, latestPerRound, seasonChoices, type SeasonDetail } from './teamHistoryModel';
 import { TeamGameStats } from './TeamGameStats';
@@ -59,6 +60,8 @@ export default function TeamProfilePage() {
 }
 
 function TeamProfilePageContent({ id }: { id: string | undefined }) {
+  const t = useT();
+  const { locale } = useLanguage();
   const { user, canOrganise } = useAuth();
   const mayManage = canOrganise();
   const navigate = useNavigate();
@@ -91,14 +94,14 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
   const selected = choices.find((choice) => choice.seasonId === query.get('season')) ?? choices[0] ?? null;
   const selectedId = selected?.seasonId ?? null;
   const headerContext = !selected ? undefined
-    : seasonData && seasonData.seasonId === selectedId ? `${seasonData.season.ageGroup} ${SectionFormatLabel[seasonData.season.format]} · ${seasonData.season.year}`
+    : seasonData && seasonData.seasonId === selectedId ? `${seasonData.season.ageGroup} ${sectionFormatText(seasonData.season.format, t)} · ${seasonData.season.year}`
       : `${selected.title} · ${selected.year}`;
   usePageHeader({
-    title: !id ? 'Team profiles' : history?.profile.displayName ?? 'Team history',
+    title: !id ? t('site.profiles.title') : history?.profile.displayName ?? t('site.profiles.history'),
     subtitle: id ? headerContext : undefined,
     plain: true,
     backTo: id ? (selected ? `/seasons/${selected.seasonId}` : '/team-profiles') : undefined,
-    backLabel: id ? (selected ? 'Back to standings' : 'Back to team profiles') : undefined,
+    backLabel: id ? (selected ? t('site.profiles.backToStandings') : t('site.profiles.backToProfiles')) : undefined,
   });
 
   useEffect(() => {
@@ -116,10 +119,10 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
       }
       setError(null);
     }).catch((caught) => {
-      if (!cancelled) setError(message(caught, id ? 'Couldn’t load this team profile. Check your signal and try again.' : 'Couldn’t load team profiles. Check your signal and try again.'));
+      if (!cancelled) setError(message(caught, id ? t('site.profiles.loadOne') : t('site.profiles.loadMany')));
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [id, mayManage, user?.id, refresh]);
+  }, [id, mayManage, user?.id, refresh, t]);
 
   useEffect(() => {
     if (!competitionId) return;
@@ -188,7 +191,7 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
     finally { setBusy(false); }
   }
 
-  if (loading) return <RefinePage><p role="status" className="sp-note">Loading team history…</p></RefinePage>;
+  if (loading) return <RefinePage><p role="status" className="sp-note">{t('site.profiles.loading')}</p></RefinePage>;
 
   if (!id) {
     if (creating && mayManage) return <RefinePage>
@@ -212,22 +215,22 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
     const needle = search.trim().toLowerCase();
     const shown = (profiles ?? []).filter((profile) => `${profile.displayName} ${profile.clubName}`.toLowerCase().includes(needle));
     return <RefinePage>
-      <h1 className="sr-only">Team profiles</h1>
-      {error && <Notice className="sv-msg" actionLabel="Try again" onAction={() => { setLoading(true); setError(null); setRefresh((value) => value + 1); }}>{error}</Notice>}
+      <h1 className="sr-only">{t('site.profiles.title')}</h1>
+      {error && <Notice className="sv-msg" actionLabel={t('common.tryAgain')} onAction={() => { setLoading(true); setError(null); setRefresh((value) => value + 1); }}>{error}</Notice>}
       {!error && (profiles?.length ? <>
-        <RoundSearch label="Find a team or club" placeholder="Team or club" value={search} onChange={setSearch} />
-        {shown.length > 0 && <ul className="sp-card sp-gap m-0 list-none p-0" aria-label="Team profiles">{[...shown].sort((a, b) => a.displayName.localeCompare(b.displayName)).map((profile) => <li key={profile.id}><Link to={`/team-profiles/${profile.id}`} className="sp-row"><span className="sp-grow"><span className="sp-t1">{profile.displayName}</span><span className="sp-t2">{profile.clubName}{profile.suffix ? ` · suffix ${profile.suffix}` : ''}</span></span><ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} /></Link></li>)}</ul>}
-        {shown.length === 0 && <p className="sp-note">No team or club matches “{search.trim()}”.</p>}
-      </> : <div className="sv-empty"><h2>No team profiles yet</h2><p>Profiles will appear here once an organiser creates them.</p></div>)}
+        <RoundSearch label={t('teams.list.find')} placeholder={t('teams.list.findPlaceholder')} value={search} onChange={setSearch} />
+        {shown.length > 0 && <ul className="sp-card sp-gap m-0 list-none p-0" aria-label={t('site.profiles.title')}>{[...shown].sort((a, b) => a.displayName.localeCompare(b.displayName)).map((profile) => <li key={profile.id}><Link to={`/team-profiles/${profile.id}`} className="sp-row"><span className="sp-grow"><span className="sp-t1">{profile.displayName}</span><span className="sp-t2">{profile.clubName}{profile.suffix ? ` · ${t('site.profiles.suffix', { suffix: profile.suffix })}` : ''}</span></span><ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} /></Link></li>)}</ul>}
+        {shown.length === 0 && <p className="sp-note">{t('teams.list.noMatch', { query: search.trim() })}</p>}
+      </> : <div className="sv-empty"><h2>{t('site.profiles.none')}</h2><p>{t('site.profiles.noneBody')}</p></div>)}
       {mayManage && <div className="sp-gap"><AddBar onClick={() => setCreating(true)}>New profile</AddBar></div>}
     </RefinePage>;
   }
 
   if (!history) return <RefinePage>
-    <RefineHeader back="/team-profiles" backLabel="Back to team profiles" context="Team profiles" title="Team history" />
+    <RefineHeader back="/team-profiles" backLabel={t('site.profiles.backToProfiles')} context={t('site.profiles.title')} title={t('site.profiles.history')} />
     {error
-      ? <PageProblem title="Couldn’t load this team" primaryLabel="Try again" onPrimary={() => { setLoading(true); setError(null); setRefresh((value) => value + 1); }}>{error}</PageProblem>
-      : <PageProblem title="Team profile not found" secondaryLabel="Team profiles" secondaryTo="/team-profiles">Check the link, or pick the team from the list.</PageProblem>}
+      ? <PageProblem title={t('site.profiles.loadTitle')} primaryLabel={t('common.tryAgain')} onPrimary={() => { setLoading(true); setError(null); setRefresh((value) => value + 1); }}>{error}</PageProblem>
+      : <PageProblem title={t('site.stats.profileNotFound')} secondaryLabel={t('site.stats.teamProfiles')} secondaryTo="/team-profiles">{t('site.stats.checkLink')}</PageProblem>}
   </RefinePage>;
 
   const profile = history.profile;
@@ -255,21 +258,21 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
   const standing = detail?.standing ?? null;
   const total = standing?.totalPoints ?? latestPerRound(seasonResults).reduce((sum, result) => sum + result.seasonPoints, 0);
   const bestCount = detail?.season.bestResultsToCount ?? null;
-  const roundsText = bestCount && bestCount < entered ? `best ${bestCount} of ${entered} rounds` : `${entered} ${entered === 1 ? 'round' : 'rounds'}`;
+  const roundsText = bestCount && bestCount < entered ? t('site.profiles.bestOf', { best: bestCount, entered }) : t('site.seasons.rounds', { count: entered });
   const placeLabel = standing && detail ? (() => {
     const label = positionLabels(seasonData!.standings).get(standing.teamProfileId) ?? String(standing.rank);
     return label.startsWith('=') ? `=${ordinal(standing.rank)}` : ordinal(standing.rank);
   })() : null;
   const previous = choices.filter((choice) => choice.seasonId !== selectedId);
   const seasonLine = !selected ? null : placeLabel
-    ? `${placeLabel} in the ${selected.title} with ${plural(total, 'point')}, ${roundsText}`
-    : `${plural(total, 'point')} in the ${selected.title}, ${roundsText}`;
-  const club = profile.suffix ? `${profile.clubName} · suffix ${profile.suffix}` : profile.clubName;
+    ? t('site.profiles.placeIn', { place: placeLabel, season: selected.title, points: countText('point', total), rounds: roundsText })
+    : t('site.profiles.pointsIn', { season: selected.title, points: countText('point', total), rounds: roundsText });
+  const club = profile.suffix ? `${profile.clubName} · ${t('site.profiles.suffix', { suffix: profile.suffix })}` : profile.clubName;
 
   return <RefinePage>
     <h1 className="sr-only">{profile.displayName}</h1>
     {tabs.length > 0 && (
-      <div className="sp-seg" role="tablist" aria-label="Team profile sections">
+      <div className="sp-seg" role="tablist" aria-label={t('site.profiles.sections')}>
         {tabs.map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => { setTab(key); setError(null); }}>{label}</button>)}
       </div>
     )}
@@ -281,25 +284,25 @@ function TeamProfilePageContent({ id }: { id: string | undefined }) {
       <div className="sp-card sp-gap">
         <div className="sp-row">
           <span className="sp-grow"><span className="sp-t2">{club}</span>{seasonLine && <span className="sp-t1">{seasonLine}</span>}</span>
-          <button type="button" className="rf-ib sv-star" aria-pressed={following} aria-label={`${following ? 'Unstar' : 'Star'} ${profile.displayName}`} title="Follow on this device" onClick={toggleStar}><Star className="h-5 w-5" aria-hidden="true" /></button>
+          <button type="button" className="rf-ib sv-star" aria-pressed={following} aria-label={t(following ? 'site.profiles.unstar' : 'site.profiles.star', { name: profile.displayName })} title={t('site.profiles.followDevice')} onClick={toggleStar}><Star className="h-5 w-5" aria-hidden="true" /></button>
         </div>
       </div>
-      {history.publishedResults.length === 0 ? <div className="sv-empty"><h2>No published results</h2><p>This team hasn’t appeared in a published season round yet.</p></div> : <>
+      {history.publishedResults.length === 0 ? <div className="sv-empty"><h2>{t('site.profiles.noResults')}</h2><p>{t('site.profiles.noResultsBody')}</p></div> : <>
         <h2 className="sp-sec">{selected?.title}</h2>
-        <ul className="sp-card m-0 list-none p-0" aria-label={`Rounds in ${selected?.title}. Struck-through points fall outside the best results that count.`}>
+        <ul className="sp-card m-0 list-none p-0" aria-label={t('site.profiles.roundsIn', { season: selected?.title ?? '' })}>
           {rows.map((row) => <li key={row.key} className="sp-row">
-            <span className="sp-grow"><span className="sp-t1">R{row.order} · {row.name}</span><span className="sp-t2">{shortDate(row.date, false)}{row.dropped ? ' · dropped' : row.place === null ? ' · did not enter' : ''}</span></span>
+            <span className="sp-grow"><span className="sp-t1">R{row.order} · {row.name}</span><span className="sp-t2">{shortDate(row.date, false, locale)}{row.dropped ? ` · ${t('site.profiles.dropped')}` : row.place === null ? ` · ${t('site.profiles.didNotEnter')}` : ''}</span></span>
             <span className="sp-place">{row.place === null ? '—' : ordinal(row.place)}</span>
             <span className="sp-rpts" data-drop={row.dropped || undefined}>{row.points === null ? '—' : row.dropped ? <s className="sv-struck">{row.points}</s> : row.points}</span>
           </li>)}
         </ul>
-        {previous.length > 0 && <div className="sv-gap"><RefineList as="div"><RefineDisclosure title="Previous seasons" sub={`${previous.length} more`}>
+        {previous.length > 0 && <div className="sv-gap"><RefineList as="div"><RefineDisclosure title={t('site.profiles.previous')} sub={t('site.profiles.more', { count: previous.length })}>
           <div className="sv-prev">{previous.map((choice) => <Link key={choice.seasonId} className="rf-row" to={`?season=${choice.seasonId}`}><span className="rf-grow"><span className="rf-t1">{choice.title}</span><span className="rf-t2">{choice.year}</span></span><Chevron /></Link>)}</div>
         </RefineDisclosure></RefineList></div>}
       </>}
       <TeamGameStats profileId={profile.id} linked={history.eventTeams.length} />
-      <h2 className="sp-sec">Competitions</h2>
-      {history.eventTeams.length === 0 ? <p className="sp-note">No event teams are linked yet.</p> : <ul className="sp-card m-0 list-none p-0" aria-label="Competitions">{history.eventTeams.map((item) => <li key={item.id}><Link to={`/competitions/${item.competitionId}`} className="sp-row"><span className="sp-grow"><span className="sp-t1">{item.competitionName}</span><span className="sp-t2">{item.teamName}</span></span><ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} /></Link></li>)}</ul>}
+      <h2 className="sp-sec">{t('site.stats.competitions')}</h2>
+      {history.eventTeams.length === 0 ? <p className="sp-note">{t('site.profiles.noEventTeams')}</p> : <ul className="sp-card m-0 list-none p-0" aria-label={t('site.stats.competitions')}>{history.eventTeams.map((item) => <li key={item.id}><Link to={`/competitions/${item.competitionId}`} className="sp-row"><span className="sp-grow"><span className="sp-t1">{item.competitionName}</span><span className="sp-t2">{item.teamName}</span></span><ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} /></Link></li>)}</ul>}
     </>}
 
     {tab === 'edit' && canManageProfile && <>
