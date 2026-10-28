@@ -23,7 +23,7 @@ import { ScorerLinksCard } from './ScorerLinksCard';
 import { useStoryImage } from './StoryImage';
 import { EventSponsorsSection } from './SponsorsCard';
 import { usePageWidth } from '../../components/pageWidthState';
-import type { CompetitionSection, EquipmentLine, SectionSignup } from '../../types';
+import type { CompetitionDetail, CompetitionSection, EquipmentLine, SectionSignup } from '../../types';
 import { feesLine, sectionFull } from '../../lib/entryOptions';
 import { placesLeftText } from '../../lib/placesLeft';
 import '../../components/sitePages.css';
