@@ -41,6 +41,11 @@
 .kit-sheet-text { margin: 0; font: 500 15px/1.45 var(--mg-font); color: rgb(var(--mg-ink)); }
 .kit-sheet-text + .kit-sheet-text { margin-top: -4px; }
 dialog.kit-sheet { margin: auto auto 0; width: 100%; max-width: 36rem; max-height: 92dvh; overflow-y: auto; box-sizing: border-box; border: 0; padding: 0; border-radius: 26px 26px 0 0; corner-shape: squircle; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); box-shadow: 0 -8px 32px rgb(0 0 0 / .18); font-family: var(--mg-font); }
+/* A finger on the grip or the heading drags the sheet instead of scrolling the page behind it (hooks/useSwipeToClose). */
+dialog.kit-sheet { overscroll-behavior: contain; }
+.kit-sheet-grip, .kit-sheet-title { touch-action: none; }
+.kit-sheet-grip { position: relative; }
+.kit-sheet-grip::after { content: ''; position: absolute; inset: -14px -48px; }
 dialog.kit-sheet::backdrop { background: rgb(var(--mg-overlay) / .45); }
 .kit-sheet-inner { display: flex; flex-direction: column; gap: 12px; }
 /* The padding sits inside, so a tap near the sheet's edge lands on the sheet, not on the dialog (which reads as a tap outside). */

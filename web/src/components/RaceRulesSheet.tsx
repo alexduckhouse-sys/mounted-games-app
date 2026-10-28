@@ -8,6 +8,7 @@ import { findRaceTemplate } from '../lib/raceTemplates';
 import type { RaceTemplate, SectionFormat } from '../types';
 import { Notice } from './Notice';
 import { RaceDiagram } from './RaceDiagram';
+import { SwipeSheet } from './SwipeSheet';
 
 import { useT } from '../i18n/LanguageContext';
 
@@ -264,7 +265,8 @@ export function RaceRulesSheet({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div
+      <SwipeSheet
+        onClose={onClose}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -297,7 +299,7 @@ export function RaceRulesSheet({
         <div className="kit-acts">
           <button type="button" className="kit-pill kit-pill-fill" aria-label={t('competition.rules.close')} onClick={onClose}>{t('common.close')}</button>
         </div>
-      </div>
+      </SwipeSheet>
     </div>
   );
 }

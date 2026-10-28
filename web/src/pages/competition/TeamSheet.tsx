@@ -29,7 +29,7 @@ export interface TeamSheetRider {
 
 /**
  * A team's points by session and its final, as a kit sheet: the team name, one line about it, Team page and Close,
- * then the breakdown. Esc, a swipe down or a tap on the dim behind it closes it and focus goes back to the row.
+ * then the breakdown. It has no Close button: Esc, a swipe down or a tap on the dim behind it closes it and focus goes back to the row.
  */
 export function TeamSheet({
   detail,
@@ -116,9 +116,8 @@ export function TeamSheet({
                 : <a href={teamPage} className="mg-text-link !min-h-11 inline-flex items-center gap-1 text-sm font-semibold">{t('teams.sheet.fullPage')}<ChevronRight aria-hidden="true" className="h-4 w-4" /></a>}
             </div>
           )}
-          <div className="kit-acts">
-            <button type="button" className="kit-pill kit-pill-fill" onClick={() => close()}>{t('common.close')}</button>
-          </div>
+          {/* No Close button: swipe down, tap the dim behind it or press Esc. Screen readers still get one. */}
+          <button type="button" className="sr-only" onClick={() => close()}>{t('common.close')}</button>
         </>
       )}
     </Sheet>
