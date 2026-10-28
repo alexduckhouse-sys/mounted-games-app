@@ -1,3 +1,4 @@
+import { tr } from '../../i18n/translate';
 import type { TimetableClash } from '../../lib/timetableClashes';
 
 /** The clashes that touch one session, whichever side of the clash it is on. */
@@ -7,7 +8,7 @@ export function clashesForSession(clashes: readonly TimetableClash[], sessionId:
 
 /** Why the two teams are tied together, in a few words. */
 export function clashReason(clash: TimetableClash): string {
-  if (clash.reason === 'pony') return `Same pony: ${clash.sharedDetail ?? 'a shared pony'}`;
-  if (clash.reason === 'trainer') return `Same trainer: ${clash.sharedDetail ?? 'a shared trainer'}`;
-  return 'Followed together';
+  if (clash.reason === 'pony') return tr('ops.clash.pony', { detail: clash.sharedDetail ?? tr('ops.clash.ponyFallback') });
+  if (clash.reason === 'trainer') return tr('ops.clash.trainer', { detail: clash.sharedDetail ?? tr('ops.clash.trainerFallback') });
+  return tr('ops.clash.together');
 }
