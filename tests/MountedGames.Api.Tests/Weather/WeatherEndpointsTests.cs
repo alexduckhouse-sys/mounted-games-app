@@ -95,6 +95,18 @@ public class WeatherEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task At_AsksForUtcHours_AndMatchesTheUtcHourOfAZonedTime()
+    {
+        Reset();
+        _f.Http.RespondJson("open-meteo", Hourly);
+
+        var (_, body) = await GetJsonAsync("/api/weather/at?lat=52&lon=-1&when=2030-06-01T14:30:00Z");
+
+        Assert.Equal("2030-06-01T14:00", body.GetProperty("hour").GetString());
+        Assert.Contains("timezone=UTC", Assert.Single(_f.Http.Requests));
+    }
+
+    [Fact]
     public async Task At_FallsBackToFirstHour_WhenNoHourMatches()
     {
         Reset();

@@ -771,7 +771,8 @@ public class CompetitionsController : ControllerBase
             .Include(c => c.Sessions).ThenInclude(s => s.Heats)
             .FirstOrDefaultAsync(c => c.Id == id);
         if (c is null) return NotFound();
-        var shift = TimeSpan.FromDays(days);
+        // Shift by UK calendar days, so a wall-clock time stays put across a clock change.
+        DateTime Shift(DateTime value) => MountedGames.Api.Services.UkTime.FromUk(MountedGames.Api.Services.UkTime.ToUk(value).AddDays(days));
 
         // Only push sessions that haven't started yet — preserves history.
         var shiftedSessionIds = new List<int>();
@@ -780,17 +781,17 @@ public class CompetitionsController : ControllerBase
             var changed = false;
             if (s.ScheduledStart.HasValue)
             {
-                s.ScheduledStart = s.ScheduledStart.Value.Add(shift);
+                s.ScheduledStart = Shift(s.ScheduledStart.Value);
                 changed = true;
             }
             foreach (var h in s.Heats.Where(h => !h.StartedAt.HasValue && !h.FinishedAt.HasValue && h.ScheduledStart.HasValue))
             {
-                h.ScheduledStart = h.ScheduledStart!.Value.Add(shift);
+                h.ScheduledStart = Shift(h.ScheduledStart!.Value);
                 changed = true;
             }
             if (changed) shiftedSessionIds.Add(s.Id);
         }
-        if (c.EndDate.HasValue) c.EndDate = c.EndDate.Value.Add(shift);
+        if (c.EndDate.HasValue) c.EndDate = c.EndDate.Value.AddDays(days);
         await _db.SaveChangesAsync();
         var detailResult = await Get(id);
         if (shiftedSessionIds.Count > 0 && detailResult.Value is { } detail)

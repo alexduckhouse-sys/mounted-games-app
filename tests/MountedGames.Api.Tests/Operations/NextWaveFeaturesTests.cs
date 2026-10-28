@@ -170,6 +170,7 @@ public class NextWaveFeaturesTests(ApiFactory factory) : IClassFixture<ApiFactor
                 LanesPerHeat = 2,
                 OrderIndex = 1,
                 Kind = SessionKind.Race,
+                ScheduledStart = new DateTime(2032, 6, 1, 8, 0, 0, DateTimeKind.Utc),
             };
             db.Sessions.Add(s);
             await db.SaveChangesAsync();
@@ -192,6 +193,7 @@ public class NextWaveFeaturesTests(ApiFactory factory) : IClassFixture<ApiFactor
         Assert.Equal(3, duties.Count); // 1 Arena Crew + 2 Start/Finish Line Stewards (LanesPerHeat = 2)
         Assert.All(duties, d => Assert.Equal(stewardTeam, d.AssignedTeamId));
         Assert.All(duties, d => Assert.Equal("Assigned", d.AttendanceStatus));
+        Assert.All(duties, d => Assert.Equal("09:00", d.StartTimeLabel)); // 08:00 UTC is 09:00 BST
 
         var targetDuty = duties[0];
 

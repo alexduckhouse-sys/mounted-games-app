@@ -2,12 +2,14 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, type StoredAuth } from '../api';
+import { unsubscribeFromPush } from '../lib/push';
 import { AuthProvider, useAuth } from './AuthContext';
 
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
   api: { get: vi.fn(), post: vi.fn() },
 }));
+vi.mock('../lib/push', () => ({ unsubscribeFromPush: vi.fn().mockResolvedValue(undefined) }));
 const get = vi.mocked(api.get);
 const post = vi.mocked(api.post);
 
@@ -292,6 +294,15 @@ describe('signing in', () => {
     act(() => result.current.logout());
     expect(result.current.user).toBeNull();
     expect(localStorage.getItem('mg.auth')).toBeNull();
+  });
+
+  it('drops the push subscription and the alerts flag on sign-out', () => {
+    signIn();
+    localStorage.setItem('mg.notify.enabled', '1');
+    const { result } = mount();
+    act(() => result.current.logout());
+    expect(unsubscribeFromPush).toHaveBeenCalledWith('tok-1');
+    expect(localStorage.getItem('mg.notify.enabled')).toBeNull();
   });
 
   it('clears unfinished entry drafts on sign-out but leaves other storage alone', () => {

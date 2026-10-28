@@ -8,6 +8,7 @@ import { Notice } from '../../components/Notice';
 import { apiErrorMessage } from '../../lib/apiError';
 import { competitionUpdateBody } from '../../lib/competitionPayload';
 import { HATBAND_COLOURS, MAX_LANES, lanesFor } from '../../lib/creatorDraft';
+import { dayKey } from '../../lib/timetableDay';
 import { HATBAND_PALETTE, formatHatband, hatbandColour, hatbandHex, hatbandName, isHatbandHex, parseHatband } from '../../lib/hatbands';
 import { defaultEventStart, heatSizes, planTimetable } from '../../lib/formatPlan';
 import { dropIndex, makeRoom } from '../../lib/creatorRaces';
@@ -134,10 +135,10 @@ export function TimetablePage() {
   const pushItems = (list: Item[], minutes: number) =>
     Promise.all(list.filter(shifts).map((item) => put(item.session.id, { scheduledStart: addMinutes(item.start!, minutes).toISOString() })));
 
-  /** With follow-on, everything after an item in its arena moves with it when its length changes. */
+  /** With follow-on, everything after an item in its arena on the same day moves with it when its length changes. */
   async function shiftLater(list: Item[], after: Item, minutes: number) {
     if (!follow || minutes === 0 || !after.start) return;
-    await pushItems(list.filter((item) => item !== after && !!item.start && item.start.getTime() >= after.start!.getTime()), minutes);
+    await pushItems(list.filter((item) => item !== after && !!item.start && item.start.getTime() >= after.start!.getTime() && dayKey(item.start) === dayKey(after.start!)), minutes);
   }
 
   /** This block and every later one in its arena, whether or not each follows on. */

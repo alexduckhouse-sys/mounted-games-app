@@ -285,4 +285,34 @@ public class DurableNotificationTests(ApiFactory factory) : IClassFixture<ApiFac
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(response.Headers.CacheControl?.NoStore);
     }
+
+    [Fact]
+    public async Task ReminderPlan_UsesDelayedStartAndOneBasedHeatLabel()
+    {
+        var now = DateTime.UtcNow;
+        var section = await factory.NewSectionAsync();
+        var plans = await factory.InDbAsync(async db =>
+        {
+            var team = new Team { CompetitionId = section.CompetitionId, CompetitionSectionId = section.Id,
+                Club = new Club { Name = $"Example club {Guid.NewGuid():N}" }, DisplayName = "Example team" };
+            var late = new Session { CompetitionId = section.CompetitionId, CompetitionSectionId = section.Id, Name = "Late start",
+                Kind = SessionKind.Race, OrderIndex = 0, ScheduledStart = now.AddMinutes(-40), StartedAt = now.AddMinutes(-10), Status = SessionStatus.InArena };
+            var briefing = new Session { CompetitionId = section.CompetitionId, CompetitionSectionId = section.Id, Name = "Delayed briefing",
+                Kind = SessionKind.Briefing, OrderIndex = 1, ScheduledStart = now.AddMinutes(50) };
+            var racing = new Session { CompetitionId = section.CompetitionId, CompetitionSectionId = section.Id, Name = "Heat race",
+                Kind = SessionKind.Race, OrderIndex = 2, ScheduledStart = now.AddMinutes(-90), Status = SessionStatus.Upcoming };
+            db.AddRange(team, late, briefing, racing);
+            await db.SaveChangesAsync();
+            racing.ScheduledStart = null;
+            var heat = new Heat { SessionId = racing.Id, OrderIndex = 0, ScheduledStart = now.AddMinutes(65) };
+            heat.Entries.Add(new HeatEntry { TeamId = team.Id, LaneIndex = 1 });
+            db.Add(heat);
+            await db.SaveChangesAsync();
+            var plan = await ReminderPlan.LoadAsync(db, now, default, section.CompetitionId);
+            return (plan, briefing.Id);
+        });
+        var brief = Assert.Single(plans.plan, p => p.Key == $"brief:{plans.Item2}");
+        Assert.InRange((brief.DueAt - now).TotalMinutes, 49, 51);
+        Assert.Contains(plans.plan, p => p.Payload.Body.Contains("(Heat 1,"));
+    }
 }

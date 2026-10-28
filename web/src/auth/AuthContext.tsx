@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { api, readStoredAuth, writeStoredAuth, type StoredAuth } from '../api';
+import { api, readStoredAuth, readToken, writeStoredAuth, type StoredAuth } from '../api';
+import { unsubscribeFromPush } from '../lib/push';
 import type { AuthResponse, CompetitionAccess, ExternalAuthResponse, Role, UserProfile } from '../types';
 
 export type ExternalAuthResult =
@@ -283,6 +284,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       for (const key of Object.keys(localStorage).filter((item) => item.startsWith('mg.draft.entry.v1.'))) localStorage.removeItem(key);
     } catch { /* Storage may be unavailable. */ }
+    // The next person on this browser mustn't inherit these alerts (and the server refuses to hand one browser
+    // endpoint to a second account), so drop the push subscription, using the token that is about to go.
+    const token = readToken();
+    if (token) void unsubscribeFromPush(token);
+    try { localStorage.removeItem('mg.notify.enabled'); } catch { /* Storage may be unavailable. */ }
     writeStoredAuth(null);
     setAuth(null);
     setSignedOut(true);

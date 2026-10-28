@@ -577,4 +577,14 @@ describe('pause cascade regressions', () => {
     expect(timeOf(timings.get(3)!.effective)).toBe(ms(day2Offset));
     expect(timings.get(3)!.shifted).toBe(false);
   });
+
+  it('puts a session just after UK midnight in the next UK day, not the next UTC day', () => {
+    const lateNight = 14 * 60 + 30; // 23:30 UTC is 00:30 BST on 2 June
+    const timings = computeTimings([
+      session(1, { orderIndex: 1, arenaName: 'Arena 1', scheduledStart: at(0), startedAt: at(45), heats: [heat(1)] }),
+      session(2, { orderIndex: 2, arenaName: 'Arena 1', scheduledStart: at(lateNight), heats: [heat(2)] }),
+    ], { nowMs: ms(25) });
+    expect(timeOf(timings.get(2)!.effective)).toBe(ms(lateNight));
+    expect(timings.get(2)!.shifted).toBe(false);
+  });
 });

@@ -273,6 +273,16 @@ describe('useTeamNotifications: what it announces', () => {
     }]);
   });
 
+  it('does not remind about a session in another section', async () => {
+    enable();
+    withSessions(
+      session(1, { name: 'Open heats', competitionSectionId: 8, scheduledStart: at(58) }),
+      session(2, { name: 'Seniors heats', competitionSectionId: 7, scheduledStart: at(58) }),
+    );
+    await mount([myTeam({ competitionSectionId: 7 })]);
+    expect(shown.map((n) => n.options?.tag)).toEqual(['1h:2:1']);
+  });
+
   it('names a custom hatband colour without its colour code', async () => {
     enable();
     competitions = {

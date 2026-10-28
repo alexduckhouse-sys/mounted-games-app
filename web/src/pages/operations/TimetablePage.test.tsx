@@ -90,6 +90,20 @@ describe('TimetablePage', () => {
     expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/3', { scheduledStart: at(90) });
   });
 
+  it('leaves the next day’s blocks alone when it moves what follows', async () => {
+    const user = userEvent.setup();
+    competition.sessions.push(session(4, 'Sunday session', { scheduledStart: at(24 * 60), orderIndex: 4 }));
+    try {
+      show();
+      await user.click(await screen.findByRole('button', { name: /Under 12 · Session 1/ }));
+      await user.click(screen.getByRole('button', { name: 'Longer time per heat' }));
+      await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/3', { scheduledStart: at(90) }));
+      expect(api.put).not.toHaveBeenCalledWith('/competitions/7/sessions/4', expect.anything());
+    } finally {
+      competition.sessions.pop();
+    }
+  });
+
   it('shows a start time to type when follow-on is off, and nothing moves with it', async () => {
     const user = userEvent.setup();
     show();
