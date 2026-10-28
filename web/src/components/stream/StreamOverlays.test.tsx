@@ -176,6 +176,35 @@ describe('LiveDataCardOverlay and StreamOverlays data cards', () => {
     expect(screen.queryByRole('region')).toBeNull();
   });
 
+  it('renders the favourites card: this event\'s average places blended with earlier finishes, never odds', async () => {
+    vi.mocked(api.get).mockImplementation(async (path) => ({ data: String(path).includes('favourites-history')
+      ? [{ teamId: 2, teamName: 'Ash Seniors', historyPlaceShare: 0.25, historyEntries: 3 }, { teamId: 3, teamName: 'Elm HC', historyPlaceShare: 0.1, historyEntries: 1 }]
+      : [] }));
+    const first = renderWithComp({ look: { liveCard: 'favourites', liveOptions: { favouritesRows: 3 } } });
+    const card = screen.getByRole('region', { name: 'Favourites: Seniors' });
+    expect(card).toHaveTextContent('Seniors · Favourites');
+    await waitFor(() => expect(card).toHaveTextContent('Best average place'));
+    expect(api.get).toHaveBeenCalledWith('/stats/competitions/1/favourites-history', expect.objectContaining({ params: { sectionId: 5 } }));
+    const rows = within(card).getAllByRole('listitem').map((el) => el.textContent);
+    expect(rows[0]).toMatch(/^1Oak Seniorsavg place 1\.0$/);
+    expect(rows.some((text) => text?.includes('Elm HC'))).toBe(false);
+    expect(card).not.toHaveTextContent('%');
+    first.unmount();
+
+    // History that can't be reached still leaves a card ranked on this event alone; no results at all says so.
+    vi.mocked(api.get).mockRejectedValue(new Error('offline'));
+    const offline = renderWithComp({ look: { liveCard: 'favourites' } });
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Favourites: Seniors' })).toHaveTextContent('Oak Seniors'));
+    offline.unmount();
+    renderWithComp({ look: { liveCard: 'favourites', liveSectionId: 6 } });
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Favourites: Under 17 Pairs' })).toHaveTextContent('No results to go on yet.'));
+  });
+
+  it('renders nothing for the favourites card when the competition has no age groups', () => {
+    renderWithComp({ look: { liveCard: 'favourites' } }, competition({ sections: [], sessions: [], teams: [] }));
+    expect(screen.queryByRole('region')).toBeNull();
+  });
+
   it('renders the heat table card both during a scored heat and before any race is scored', () => {
     const { unmount } = renderWithComp({ look: { liveCard: 'heat' } });
     const card = screen.getByRole('region', { name: 'Heat table: Seniors · Heat 1' });

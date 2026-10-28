@@ -59,3 +59,14 @@ it('keeps the champions still, without confetti, when motion is stilled', () => 
   act(() => { vi.advanceTimersByTime(2000); });
   expect(burst).not.toHaveBeenCalled();
 });
+
+it('shows the prize-giving that plays itself, but gives way to one the organiser is stepping through', () => {
+  const auto: PrizeGiving = { sectionId: 3, sectionName: 'Open', champions: false, places: [place(6, 6, 172)] };
+  const own = render(<CompetitionContext.Provider value={{ prizeGiving: null } as unknown as CompetitionCtx}><PrizeGivingOverlay auto={auto} /></CompetitionContext.Provider>);
+  expect(screen.getByRole('status', { name: '6th: Team 6, 172 points' })).toBeInTheDocument();
+  own.unmount();
+  const manual: PrizeGiving = { sectionId: 3, sectionName: 'Open', champions: false, places: [place(5, 5, 181)] };
+  render(<CompetitionContext.Provider value={{ prizeGiving: manual } as unknown as CompetitionCtx}><PrizeGivingOverlay auto={auto} /></CompetitionContext.Provider>);
+  expect(screen.getByRole('status', { name: '5th: Team 5, 181 points' })).toBeInTheDocument();
+  expect(screen.queryByRole('status', { name: '6th: Team 6, 172 points' })).toBeNull();
+});

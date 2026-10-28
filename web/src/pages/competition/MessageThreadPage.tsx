@@ -112,7 +112,7 @@ function ThreadSession({ userId }: { userId: string }) {
     <RefinePage className="ann-page ann-thread-page">
       <header className="rf-hd">
         <div className="rf-hd-top">
-          <Link className="rf-ib" to={`/competitions/${competition.id}/announcements`} aria-label="Back to announcements"><ChevronLeft className="h-5 w-5" aria-hidden="true" /></Link>
+          <Link className="rf-ib" to={`/competitions/${competition.id}/contact`} aria-label="Back to messages"><ChevronLeft className="h-5 w-5" aria-hidden="true" /></Link>
           <span className="rf-ctx">{competition.name}</span>
         </div>
         <div className="ann-title-row">

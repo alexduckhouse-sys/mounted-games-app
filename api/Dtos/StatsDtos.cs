@@ -88,3 +88,10 @@ public record StatsSessionDto(int SessionId, string Name, double Points, double 
 
 /// <summary>A rider and pony who were declared together, and how often.</summary>
 public record StatsPartnershipDto(string RiderName, string PonyName, int Entries, int Competitions);
+
+/// <summary>
+/// A team's earlier results for the Favourites card: the average of its final place divided by the teams placed in
+/// that age group (0 to 1, lower is better), over <paramref name="HistoryEntries"/> earlier finished entries. Null when
+/// it has none. Names are the event's own team names; nothing about riders.
+/// </summary>
+public record FavouriteHistoryDto(int TeamId, string TeamName, double? HistoryPlaceShare, int HistoryEntries);

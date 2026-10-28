@@ -77,7 +77,7 @@ function ContactOrganisersSession() {
   usePageHeader(isAdmin
     ? withId
       ? { title: personName, subtitle: teamOf(withId) ?? competition.name, plain: true, backTo: location.pathname, backLabel: 'Back to messages' }
-      : { title: 'Messages', subtitle: competition.name, plain: true, backTo: `/competitions/${competition.id}/details`, backLabel: 'Back to details' }
+      : { title: 'Messages', subtitle: competition.name, plain: true, backTo: `/competitions/${competition.id}/chat`, backLabel: 'Back to live stream' }
     : { title: 'Message the organisers', subtitle: competition.name, plain: true, backTo: `/competitions/${competition.id}/details`, backLabel: 'Back to details' });
   // Go back to where you came from, or to the details when this page was opened directly.
   const goBack = () => (location.key === 'default' ? navigate(`/competitions/${competition.id}/details`) : navigate(-1));
