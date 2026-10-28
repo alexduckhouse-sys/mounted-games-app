@@ -63,6 +63,7 @@ Running the wizard again only creates, changes or removes the shifts that change
 
 ## Settled with the owner (28 October 2026)
 
+- Hub look: **tiles** (option B on the Claude Design canvas "MG App organiser pages", artboard `Before-the-day-hub.dc.html`). One orange "N things to sort" line at the top, then two-up tiles with an icon, name and one-line status, grouped Set up / People / On the day.
 - Build Part 1 (the hub) first, then Part 2.
 - Duties go to teams, per heat. Roles include referee, starter and scorer. A team can't do a duty in a heat it rides, but can in its own session.
 - Arena party is normally the teams riding in the heat; one per arena.
