@@ -12,7 +12,7 @@
 [aria-checked="true"] > .sx-radio { border: 6px solid rgb(var(--mg-heading)); }
 .sx-onair { flex: none; padding: 4px 8px; border-radius: 4px; background: rgb(var(--mg-danger)); color: #fff; font: 800 11px/1 var(--mg-font); letter-spacing: .06em; }
 
-.sx-addbar { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 52px; margin-top: 12px; border: 0; border-radius: 12px; background: #E9EDF2; color: #17385F; font: 700 16px/1 var(--mg-font); cursor: pointer; }
+.sx-addbar { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 52px; margin-top: 12px; border: 0; border-radius: 12px; background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); font: 700 16px/1 var(--mg-font); cursor: pointer; }
 .sx-addbar:hover { filter: brightness(.97); }
 .sx-addbar:focus-visible, .sx-pill:focus-visible, .sx-end:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
 

@@ -80,7 +80,7 @@ details[open] > summary ~ * { animation: rf-reveal 220ms var(--mg-ease-out); }
 .rf-btn-primary { background: rgb(var(--mg-button)); border-color: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); }
 .rf-btn-primary:hover:not(:disabled) { border-color: rgb(var(--mg-button)); filter: brightness(1.12); }
 .rf-btn-danger { background: rgb(var(--mg-danger)); border-color: rgb(var(--mg-danger)); color: #fff; }
-.rf-btn-danger:hover:not(:disabled) { border-color: rgb(var(--mg-elim)); filter: brightness(1.1); }
+.rf-btn-danger:hover:not(:disabled) { border-color: rgb(var(--mg-danger)); filter: brightness(1.1); }
 .rf-btn-text { border-color: transparent; background: transparent; padding: 0 8px; }
 .rf-btn-text:hover:not(:disabled) { border-color: transparent; text-decoration: underline !important; }
 .rf-wide { width: 100%; }
