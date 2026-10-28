@@ -236,6 +236,72 @@ public class EmailServicesTests : IClassFixture<ApiFactory>
         Assert.DoesNotContain("\"reply_to\"", body);
     }
 
+    private static ResendEmailSender FastResend(StubHttp stub, List<TimeSpan> delays) => new(new StubFactory(stub),
+        Options.Create(new EmailOptions { Enabled = true, ApiKey = "k", From = "f@example.org" }),
+        NullLogger<ResendEmailSender>.Instance, (d, _) => { lock (delays) delays.Add(d); return Task.CompletedTask; });
+
+    [Fact]
+    public async Task Resend_RetriesRateLimits_HonouringRetryAfterWithinABound()
+    {
+        var stub = new StubHttp();
+        var calls = 0;
+        stub.Respond("api.resend.com", _ =>
+        {
+            calls++;
+            if (calls == 1)
+            {
+                var limited = new HttpResponseMessage(System.Net.HttpStatusCode.TooManyRequests);
+                limited.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(120));
+                return limited;
+            }
+            return new HttpResponseMessage(calls == 2 ? System.Net.HttpStatusCode.TooManyRequests : System.Net.HttpStatusCode.OK);
+        });
+        var delays = new List<TimeSpan>();
+
+        var status = await FastResend(stub, delays).SendAsync(new EmailMessage("a@example.org", "Hi", "plain"));
+
+        Assert.Equal(EmailDeliveryStatus.Sent, status);
+        Assert.Equal(3, calls);
+        Assert.Contains(ResendEmailSender.MaxRetryWait, delays);
+        Assert.All(delays, d => Assert.True(d <= ResendEmailSender.MaxRetryWait));
+    }
+
+    [Fact]
+    public async Task Resend_GivesUpAfterTheRetries_AndNeverRetriesOtherFailures()
+    {
+        var stub = new StubHttp();
+        var calls = 0;
+        stub.Respond("api.resend.com", _ => { calls++; return new HttpResponseMessage(System.Net.HttpStatusCode.TooManyRequests); });
+        var resend = FastResend(stub, new List<TimeSpan>());
+        Assert.Equal(EmailDeliveryStatus.Failed, await resend.SendAsync(new EmailMessage("a@example.org", "Hi", "plain")));
+        Assert.Equal(1 + ResendEmailSender.MaxRetries, calls);
+
+        foreach (var code in new[] { System.Net.HttpStatusCode.UnprocessableEntity, System.Net.HttpStatusCode.InternalServerError })
+        {
+            stub.Reset();
+            var bad = 0;
+            stub.Respond("api.resend.com", _ => { bad++; return new HttpResponseMessage(code); });
+            Assert.Equal(EmailDeliveryStatus.Failed, await resend.SendAsync(new EmailMessage("a@example.org", "Hi", "plain")));
+            Assert.Equal(1, bad);
+        }
+    }
+
+    [Fact]
+    public async Task Resend_SpacesConsecutiveSends()
+    {
+        var stub = new StubHttp();
+        stub.Respond("api.resend.com", _ => new HttpResponseMessage(System.Net.HttpStatusCode.OK));
+        var delays = new List<TimeSpan>();
+        var resend = FastResend(stub, delays);
+
+        await resend.SendAsync(new EmailMessage("a@example.org", "Hi", "plain"));
+        Assert.Empty(delays);
+        await resend.SendAsync(new EmailMessage("b@example.org", "Hi", "plain"));
+
+        var gap = Assert.Single(delays);
+        Assert.InRange(gap, TimeSpan.FromMilliseconds(1), ResendEmailSender.MinimumGap);
+    }
+
     [Fact]
     public async Task Resend_IncludesReplyTo_WhenConfigured()
     {
