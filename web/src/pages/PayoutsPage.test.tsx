@@ -87,6 +87,7 @@ describe('PayoutsPage: one page', () => {
     expect(screen.getByText('Add')).toHaveTextContent('Add');
     expect(screen.getByRole('button', { name: /^Bank account/ })).toContainElement(screen.getByText('Add'));
     expect(screen.getByText('Online payments aren’t switched on yet. Entries are paid to you directly until they are.')).toBeInTheDocument();
+    expect(screen.getByText('This is a demo. No money will be taken or sent, and your bank details won’t be used to pay anyone.')).toBeInTheDocument();
     expect(screen.queryByText(/Test mode/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Step \d of 6/)).not.toBeInTheDocument();
   });

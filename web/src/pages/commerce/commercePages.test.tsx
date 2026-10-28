@@ -108,6 +108,17 @@ describe('EventShopPage', () => {
       items: [{ listingId: 10, quantity: 1 }],
     }));
     expect(screen.getByText(/Pay the organiser using their usual payment details/)).toBeInTheDocument();
+    expect(screen.getByText('This is a demo. No money will be taken or sent, and your order hasn’t been paid for.')).toBeInTheDocument();
+  });
+
+  it('says the order is a demo next to the order button, and not before anything is in the basket', async () => {
+    shopGet(manualSettings);
+    render(<MemoryRouter><EventShopPage /></MemoryRouter>);
+    await screen.findByText('Weekend camping');
+    expect(screen.queryByText('This is a demo. No money will be taken or sent, and your order hasn’t been paid for.')).not.toBeInTheDocument();
+    await addCamping();
+    expect(screen.getByText('This is a demo. No money will be taken or sent, and your order hasn’t been paid for.')).toBeInTheDocument();
+    expect(screen.queryByText('Next you will see a test payment page.')).not.toBeInTheDocument();
   });
 
   it('shows a sticky basket bar once there is something in the basket, and Checkout takes you to the order button', async () => {
@@ -192,9 +203,11 @@ describe('EventShopPage', () => {
       post.mockResolvedValueOnce({ data: demoOrder } as never);
       render(<MemoryRouter><EventShopPage /></MemoryRouter>);
       await addCamping();
-      expect(screen.getByText(/This is a demo event/)).toBeInTheDocument();
+      expect(screen.getByText('This is a demo. No money will be taken or sent, and your order hasn’t been paid for.')).toBeInTheDocument();
+      expect(screen.getByText('Next you will see a test payment page.')).toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Order: £25' }));
       expect(await screen.findByRole('heading', { name: /Payment/ })).toHaveTextContent('DEMO');
+      expect(screen.getByText('This is a demo. No money will be taken or sent, and your order hasn’t been paid for.')).toBeInTheDocument();
       expect(screen.getByLabelText('Card number')).toHaveValue('4242 4242 4242 4242');
     }
 
@@ -205,6 +218,7 @@ describe('EventShopPage', () => {
       expect(await screen.findByRole('heading', { name: /Order confirmed/ }, { timeout: 4000 })).toBeInTheDocument();
       expect(post).toHaveBeenLastCalledWith('/commerce/orders/34/demo-checkout', { idempotencyKey: expect.any(String), outcome: 0 });
       expect(screen.getByRole('link', { name: 'View receipt' })).toHaveAttribute('href', '/me/orders?order=34');
+      expect(screen.getByText('This is a demo. No money will be taken or sent, and your order hasn’t been paid for.')).toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Shop' }));
       expect(screen.getByText('Weekend camping')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /^Order:/ })).not.toBeInTheDocument();

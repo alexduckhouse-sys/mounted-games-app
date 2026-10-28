@@ -118,6 +118,7 @@ describe('Orders and sales: an order in a sheet', () => {
     expect(sheet).toHaveTextContent('Weekend camping × 1');
     expect(sheet).toHaveTextContent('£25.00');
     expect(sheet).toHaveTextContent('Pay the organiser directly. They mark it paid when the money arrives. Collect at the event.');
+    expect(within(sheet).getByText('This is a demo. No money will be taken or sent, and your order hasn’t been paid for.')).toBeInTheDocument();
     expect(dialog().getByRole('button', { name: 'Cancel order' })).toHaveClass('kit-redtext');
     expect(dialog().queryByRole('button', { name: /demo/i })).not.toBeInTheDocument();
     expect(dialog().queryByText(/TEST PAYMENT/)).not.toBeInTheDocument();

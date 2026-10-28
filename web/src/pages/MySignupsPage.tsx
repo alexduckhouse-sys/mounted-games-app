@@ -105,7 +105,7 @@ function SignupList() {
     const entry = signups?.find((item) => item.id === signupId);
     if (!entry) return;
     const fee = entry.amountMinor > 0
-      ? `The entry fee is ${priceLabel(entry.amountMinor)}, paid by bank transfer or the organiser’s payment link once you accept.`
+      ? `The entry fee is ${priceLabel(entry.amountMinor)}, paid by bank transfer or the organiser’s payment link once you accept. ${t('common.demoPayment.entry')}`
       : 'It’s free, so nothing to pay.';
     if (!(await confirmDialog({ title: 'Take this place?', message: `${entry.competitionName}, ${displaySectionName(entry.sectionName)}. ${fee}`, confirmLabel: 'Accept the place' }))) return;
     setError(null);

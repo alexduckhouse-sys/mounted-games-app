@@ -30,4 +30,7 @@ export const common: AreaCatalogue<typeof en> = {
   'common.signOut': 'Allgofnodi',
   'common.mountedGames': 'Mounted Games',
   'common.somethingWrong': 'Aeth rhywbeth o’i le. Rhowch gynnig arall arni.',
+  'common.demoPayment.entry': 'Arddangosiad yw hwn. Ni fydd unrhyw arian yn cael ei gymryd na’i anfon, ac nid yw eich cofrestriad wedi’i dalu.',
+  'common.demoPayment.order': 'Arddangosiad yw hwn. Ni fydd unrhyw arian yn cael ei gymryd na’i anfon, ac nid yw eich archeb wedi’i thalu.',
+  'common.demoPayment.payout': 'Arddangosiad yw hwn. Ni fydd unrhyw arian yn cael ei gymryd na’i anfon, ac ni chaiff eich manylion banc eu defnyddio i dalu neb.',
 };

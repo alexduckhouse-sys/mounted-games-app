@@ -4,6 +4,7 @@ import { Minus, Plus } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { useT } from '../../i18n/LanguageContext';
+import { DemoPaymentNotice } from '../../components/DemoPaymentNotice';
 import { Notice } from '../../components/Notice';
 import { useToast } from '../../components/Toast';
 import { EntryEmailFields, type EntryEmail } from '../../components/EntryEmailFields';
@@ -32,6 +33,8 @@ export interface EntrySent {
   bank?: BankDetails;
   /** The organiser's optional online payment link (https only), shown beside the bank details. */
   paymentLinkUrl?: string;
+  /** Set when the entry carries a fee, so the confirmation can repeat that this is a demo. */
+  hasFee?: boolean;
 }
 
 /** Steps 2 and 3 of an entry: your details, then pay. Everything typed stays while you move between them. */
@@ -184,6 +187,7 @@ function EntryFormDetails({ competition, section, kind, step, onSent, onConflict
       onSent({
         enteredAs: isWaitlist ? null : teamName.trim() || club.trim() || fullName.trim() || null,
         text: lines.filter(Boolean).join(' '),
+        ...(priceMinor > 0 ? { hasFee: true } : {}),
         ...(owesByBank ? { bank: { payTo: competition.paymentDestination?.trim() || null, reference, amount: feeText(priceMinor) } } : {}),
         ...(owesByBank && normalisePaymentLinkUrl(competition.paymentLinkUrl) ? { paymentLinkUrl: normalisePaymentLinkUrl(competition.paymentLinkUrl)! } : {}),
       });
@@ -212,6 +216,7 @@ function EntryFormDetails({ competition, section, kind, step, onSent, onConflict
     return (
       <>
         <h2 className="ev-step-title">{isDemo ? t('entries.form.payAmount', { fee: feeText(priceMinor) }) : t('entries.form.payByTransfer', { fee: feeText(priceMinor) })}</h2>
+        <DemoPaymentNotice what="entry" className="mb-3" />
         {isDemo ? (
           <p className="ev-body">{t('entries.form.demoNote')}</p>
         ) : (
@@ -322,6 +327,7 @@ function EntryFormDetails({ competition, section, kind, step, onSent, onConflict
         <RiderPrivacyFields termsText={competition.termsText} value={privacy} onChange={(patch) => setPrivacy((cur) => ({ ...cur, ...patch }))} />
       </form>
       {draftSaved && <p className="sp-note">{t('entries.form.draftSaved')}</p>}
+      {priceMinor > 0 && <DemoPaymentNotice what="entry" className="mt-3" />}
       <button type="button" className="ev-bar" disabled={busy || !ready} onClick={next}>{busy ? t('entries.form.submitting') : nextLabel}</button>
       {error}
     </>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { Link } from 'react-router-dom';
 import { usePageHeader } from '../../components/CompactPageBarContext';
+import { DemoPaymentNotice } from '../../components/DemoPaymentNotice';
 import { Notice } from '../../components/Notice';
 import { RoundStepper } from '../../components/RoundStepper';
 import { feeText } from '../../lib/entryOptions';
@@ -159,6 +160,7 @@ function EventShopContent() {
         <RefineHeader context={competition.name} title={`Order #${order.id}`} />
         <div className="rf-state"><div><div className="rf-t1">Order placed</div><div className="rf-t2">Your confirmed total is {pounds(order.totalMinor)}.</div></div></div>
         <OrderLines order={order} />
+        <DemoPaymentNotice what="order" className="mt-3" />
         <RefineNote>Pay the organiser using their usual payment details. They’ll mark the order paid when it arrives. {COLLECT_NOTE}</RefineNote>
         <RefineFoot><button type="button" className="rf-btn rf-btn-primary rf-wide" onClick={backToShop}>Back to shop</button></RefineFoot>
       </RefinePage>
@@ -238,13 +240,14 @@ function EventShopContent() {
           </ul>
         </section>
       ))}
+      {hasBasket && <DemoPaymentNotice what="order" className="mt-3" />}
       {hasBasket && (user ? (
         <button type="button" ref={(node) => { orderButton.current = node; }} className="ev-bar" disabled={busy} onClick={() => void checkout()}>{busy ? 'Placing order…' : orderLabel}</button>
       ) : (
         <Link ref={(node) => { orderButton.current = node; }} className="ev-bar" to="/login" state={{ from: `/competitions/${competition.id}/shop` }}>Sign in to order</Link>
       ))}
       {orderError && <div className="mt-3"><Notice actionLabel="Try again" onAction={() => void checkout()} actionDisabled={busy}>{orderError}</Notice></div>}
-      {isDemo && hasBasket && <p className="sp-note">This is a demo event. Next you will see a test payment page, and no money is taken.</p>}
+      {isDemo && hasBasket && <p className="sp-note">Next you will see a test payment page.</p>}
       {user && <div className="pt-1"><Link className="ev-text-btn" to="/me/orders">Your orders</Link></div>}
       <p className="sp-note">MG App connects buyers with independent sellers; your purchase contract is directly with the seller listed on each item.</p>
       {hasBasket && !orderVisible && (

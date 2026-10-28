@@ -30,4 +30,8 @@ export const common = {
   'common.signOut': 'Sign out',
   'common.mountedGames': 'Mounted Games',
   'common.somethingWrong': 'Something went wrong. Try again.',
+  // The demo notice on every screen where someone pays or is asked to pay (components/DemoPaymentNotice.tsx)
+  'common.demoPayment.entry': 'This is a demo. No money will be taken or sent, and your entry hasn’t been paid for.',
+  'common.demoPayment.order': 'This is a demo. No money will be taken or sent, and your order hasn’t been paid for.',
+  'common.demoPayment.payout': 'This is a demo. No money will be taken or sent, and your bank details won’t be used to pay anyone.',
 } satisfies Record<string, Message>;
