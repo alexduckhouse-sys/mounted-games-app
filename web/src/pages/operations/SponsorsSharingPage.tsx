@@ -7,6 +7,7 @@ import { api } from '../../api';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
 import { useToast } from '../../components/Toast';
+import { useDockAction } from '../../components/TickerContext';
 import { competitionCalendarUrl, competitionLink } from '../../lib/sharing';
 import {
   SPONSOR_PLACEMENTS, dateToEnd, dateToStart, endToDate, hasPlacement, isHttpsLink, parseSponsorAdmin, parseSponsorAdmins, sponsorStatus, startToDate, withPlacement,
@@ -85,6 +86,8 @@ export function SponsorsSharingPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const base = `/competitions/${competition.id}/sponsors`;
+  const canAdd = view.kind === 'list' && items != null && !busy && items.length < MAX_SPONSORS;
+  const docked = useDockAction(canAdd ? { label: t('ops2.sponsors.titleAdd'), icon: 'plus', onClick: () => { setError(null); setView({ kind: 'add' }); } } : null);
 
   useEffect(() => {
     let cancelled = false;
@@ -180,9 +183,9 @@ export function SponsorsSharingPage() {
                   ))}
                   {items.length === 0 && <div className="rf-row"><span className="rf-t2">{t('ops2.sponsors.none')}</span></div>}
                 </RefineList>
-                <button type="button" className="ops-addbar ops-addbar-gap" disabled={busy || items.length >= MAX_SPONSORS} onClick={() => { setError(null); setView({ kind: 'add' }); }}>
+                {!docked && <button type="button" className="ops-addbar ops-addbar-gap" disabled={busy || items.length >= MAX_SPONSORS} onClick={() => { setError(null); setView({ kind: 'add' }); }}>
                   <Plus className="h-4 w-4" aria-hidden="true" />{t('ops2.sponsors.titleAdd')}
-                </button>
+                </button>}
               </>
             )}
 

@@ -177,23 +177,25 @@ function TeamMarks({ competitionId, section, team, onSaved }: { competitionId: s
       <span className="tools-muted">{summary}</span>
     </div>
     {scored ? (
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className="overflow-hidden">
+        {/* Sectors share what the rider names leave, so the grid never scrolls sideways on a phone. */}
+        <table className="w-full table-fixed text-sm">
           <thead>
             <tr>
-              <th scope="col" className="text-left py-1 pr-2">{t('ops3.rider')}</th>
-              {section.sectors.map((sector) => <th key={sector.id} scope="col" className="text-left py-1 px-1">{sector.name}</th>)}
-              <th scope="col" className="text-right py-1 pl-2">{t('ops3.tc.riderTotal')}</th>
+              <th scope="col" className="w-[30%] text-left py-1 pr-2">{t('ops3.rider')}</th>
+              {section.sectors.map((sector) => <th key={sector.id} scope="col" className="break-words text-left py-1 px-1 text-xs leading-tight">{sector.name}</th>)}
+              <th scope="col" className="w-12 text-right py-1 pl-2">{t('ops3.tc.riderTotal')}</th>
             </tr>
           </thead>
           <tbody>
             {riders.map((riderName, riderIndex) => (
               <tr key={`${riderIndex}-${riderName}`} className="border-t border-[rgb(var(--mg-rule-soft))]">
-                <th scope="row" className="py-1.5 pr-2 text-left font-medium">{riderName}</th>
+                <th scope="row" className="break-words py-1.5 pr-2 text-left font-medium">{riderName}</th>
                 {section.sectors.map((sector) => (
                   <td key={sector.id} className="py-1 px-1">
                     <NumberField
                       aria-label={`${riderName} ${sector.name}`}
+                      className="input w-full min-w-0 !px-1 text-center"
                       min={0}
                       max={section.maxPoints}
                       value={grid[sector.id]?.[riderIndex] ?? ''}

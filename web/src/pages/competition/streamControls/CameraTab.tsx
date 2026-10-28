@@ -3,6 +3,8 @@ import { Plus } from 'lucide-react';
 import { api } from '../../../api';
 import { Notice } from '../../../components/Notice';
 import { QrCode } from '../../../components/QrCode';
+import { Sheet } from '../../../components/Sheet';
+import { useDockAction } from '../../../components/TickerContext';
 import { useToast } from '../../../components/Toast';
 import { useT } from '../../../i18n/LanguageContext';
 import { usePageVisible } from '../../../hooks/usePageVisible';
@@ -75,6 +77,9 @@ export function CameraTab({ competitionId, streams, onAir, telemetry, arenas, on
     if (!showQr) { setKnown(streams.map((stream) => stream.id)); setLinkError(null); }
     setShowQr((open) => !open);
   }
+  // "Add a camera phone" is the + beside the ticker dock; its QR panel opens in a sheet.
+  const docked = useDockAction({ label: t('desk.stream.cam.addPhone'), icon: 'plus', onClick: () => { if (!showQr) togglePanel(); } });
+
 
   async function makeLink() {
     if (making || !arena || links[key]) return;
@@ -125,6 +130,43 @@ export function CameraTab({ competitionId, streams, onAir, telemetry, arenas, on
   const previewArena = onAir?.arenaName ?? streams[0]?.arenaName ?? '';
   const previewIds = previewsOn ? previewStreams(streams, previewArena).map((stream) => stream.id) : [];
 
+  const panel = (
+    <div className="sx-panel sx-camera-panel" role="region" aria-label={t('desk.stream.cam.addPhone')}>
+      <RefineList as="div" label={t('desk.stream.cam.cameraPhone')}>
+        {arenas.length > 1 && (
+          <RefineChoiceRow label={t('desk.stream.cam.arena')} value={arena} options={arenas.map((name) => ({ value: name, label: name }))}
+            onChange={(next) => { setArenaChoice(next); setLinkError(null); }} />
+        )}
+        <RefineChoiceRow label={t('desk.stream.cam.position')} value={angle} options={ANGLE_OPTIONS} allowOther
+          onChange={(next) => { setAngle(next); setLinkError(null); }} />
+      </RefineList>
+      {link ? (
+        <div className="sx-camera-link">
+          <QrCode value={link} label={t('desk.stream.cam.qrFor', { angle })} className="sx-qr" />
+          <div className="sx-panel-copy">
+            <strong>{t('desk.stream.cam.scan')}</strong>
+            <span className="rf-t2">{t('desk.stream.cam.noAccount', { arena, angle })}</span>
+            <p className="sx-link">{link}</p>
+            <p className="rf-t2" role="status">{t('desk.stream.cam.waiting')}</p>
+            <div className="sx-pills">
+              <button type="button" className="rf-btn" onClick={() => void copy(link)}>{t('desk.stream.cam.copyLink')}</button>
+              <button type="button" className="rf-btn" onClick={() => setShowQr(false)}>{t('common.close')}</button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="sx-pills">
+          <button type="button" className="rf-btn rf-btn-primary" disabled={making || !arena} onClick={() => void makeLink()}>
+            {making ? t('desk.stream.cam.making') : t('desk.stream.cam.makeQr')}
+          </button>
+          <button type="button" className="rf-btn" onClick={() => setShowQr(false)}>{t('common.close')}</button>
+        </div>
+      )}
+      {linkError && (
+        <Notice className="sx-status" actionLabel={link ? undefined : t('common.tryAgain')} onAction={() => void makeLink()} actionDisabled={making}>{linkError}</Notice>
+      )}
+    </div>
+  );
   return (
     <>
       <RefineSection title={t('desk.stream.cam.onAir')} />
@@ -149,46 +191,13 @@ export function CameraTab({ competitionId, streams, onAir, telemetry, arenas, on
         </RefineList></div>
       )}
 
-      <button type="button" className="sx-addbar" aria-expanded={showQr} onClick={togglePanel}>
-        <Plus className="h-4 w-4" aria-hidden="true" />{t('desk.stream.cam.addPhone')}
-      </button>
-      {showQr && (
-        <div className="sx-panel sx-camera-panel" role="region" aria-label={t('desk.stream.cam.addPhone')}>
-          <RefineList as="div" label={t('desk.stream.cam.cameraPhone')}>
-            {arenas.length > 1 && (
-              <RefineChoiceRow label={t('desk.stream.cam.arena')} value={arena} options={arenas.map((name) => ({ value: name, label: name }))}
-                onChange={(next) => { setArenaChoice(next); setLinkError(null); }} />
-            )}
-            <RefineChoiceRow label={t('desk.stream.cam.position')} value={angle} options={ANGLE_OPTIONS} allowOther
-              onChange={(next) => { setAngle(next); setLinkError(null); }} />
-          </RefineList>
-          {link ? (
-            <div className="sx-camera-link">
-              <QrCode value={link} label={t('desk.stream.cam.qrFor', { angle })} className="sx-qr" />
-              <div className="sx-panel-copy">
-                <strong>{t('desk.stream.cam.scan')}</strong>
-                <span className="rf-t2">{t('desk.stream.cam.noAccount', { arena, angle })}</span>
-                <p className="sx-link">{link}</p>
-                <p className="rf-t2" role="status">{t('desk.stream.cam.waiting')}</p>
-                <div className="sx-pills">
-                  <button type="button" className="rf-btn" onClick={() => void copy(link)}>{t('desk.stream.cam.copyLink')}</button>
-                  <button type="button" className="rf-btn" onClick={() => setShowQr(false)}>{t('common.close')}</button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="sx-pills">
-              <button type="button" className="rf-btn rf-btn-primary" disabled={making || !arena} onClick={() => void makeLink()}>
-                {making ? t('desk.stream.cam.making') : t('desk.stream.cam.makeQr')}
-              </button>
-              <button type="button" className="rf-btn" onClick={() => setShowQr(false)}>{t('common.close')}</button>
-            </div>
-          )}
-          {linkError && (
-            <Notice className="sx-status" actionLabel={link ? undefined : t('common.tryAgain')} onAction={() => void makeLink()} actionDisabled={making}>{linkError}</Notice>
-          )}
-        </div>
+      {!docked && (
+        <button type="button" className="sx-addbar" aria-expanded={showQr} onClick={togglePanel}>
+          <Plus className="h-4 w-4" aria-hidden="true" />{t('desk.stream.cam.addPhone')}
+        </button>
       )}
+      {showQr && docked && <Sheet title={t('desk.stream.cam.addPhone')} onClose={() => setShowQr(false)}>{panel}</Sheet>}
+      {showQr && !docked && panel}
 
       {error && <Notice className="sx-status">{error}</Notice>}
 

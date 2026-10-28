@@ -153,6 +153,9 @@ export function ToplistView({
     <DropdownRow label={t('competition.toplist.show')} value={view} options={tabs.map(([value, label]) => ({ value, label }))} onChange={(next) => setChosen(next as View)} />
   );
 
+  const sessionCount = list.bySession.sessions.length;
+  const manySessions = sessionCount > 5;
+  const sessionWidth = manySessions ? `calc((100% - 36px - 44px - 110px) / ${sessionCount})` : '36px';
   return (
     <>
       <div className="flex flex-col gap-3 pt-3">
@@ -238,13 +241,14 @@ export function ToplistView({
         </>}
 
         {view === 'sessions' && (
-          <section aria-label={t('competition.toplist.sessionPoints')} className="mg-card overflow-x-auto">
-            <table className="w-full border-collapse">
+          <section aria-label={t('competition.toplist.sessionPoints')} className="mg-card overflow-hidden">
+            <table className="w-full table-fixed border-collapse">
               <thead>
                 <tr className="mg-display border-b border-[rgb(var(--mg-rule))] text-xs font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-muted))]">
                   <th scope="col" className="w-9 py-1.5 pl-3 text-left font-bold">#</th>
                   <th scope="col" className="py-1.5 text-left font-bold">{t('competition.toplist.team')}</th>
-                  {list.bySession.sessions.map((s) => <th key={s.id} scope="col" className="w-9 py-1.5 text-center font-bold"><abbr title={sessionColumnTitle(s.title, t)} className="no-underline">{s.label}</abbr></th>)}
+                  {/* Session columns share what the team names leave (at least 110px), so the card never scrolls sideways. */}
+                  {list.bySession.sessions.map((s) => <th key={s.id} scope="col" style={{ width: sessionWidth }} className="py-1.5 text-center font-bold"><abbr title={sessionColumnTitle(s.title, t)} className="no-underline">{s.label}</abbr></th>)}
                   <th scope="col" className="w-11 py-1.5 pr-3 text-right font-bold text-[rgb(var(--mg-heading))]">{t('competition.toplist.pts')}</th>
                 </tr>
               </thead>
@@ -256,7 +260,7 @@ export function ToplistView({
                   return (
                     <motion.tr key={row.teamId} layout="position" transition={RESORT} data-rank-id={row.teamId} data-followed={fav ? 'true' : undefined} className={`relative border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0 ${fav ? 'bg-[rgb(var(--mg-tint))] shadow-[inset_3px_0_0_#C08308]' : ''}`}>
                       <td className="mg-display h-11 py-0 pl-3 text-base font-bold">{list.started ? row.position : '—'}</td>
-                      <th scope="row" className="min-w-0 py-0 pr-2 text-left text-[15px] font-semibold leading-tight">
+                      <th scope="row" className="min-w-0 break-words py-0 pr-2 text-left text-[15px] font-semibold leading-tight">
                         {openRow
                           ? <button type="button" onClick={openRow} aria-haspopup="dialog" className="block min-h-11 w-full text-left font-semibold after:absolute after:inset-0">{renderTeamName(row.teamId, row.teamName, fav, false)}</button>
                           : teamHref(row.teamId)
@@ -264,7 +268,7 @@ export function ToplistView({
                             : renderTeamName(row.teamId, row.teamName, fav, false)}
                       </th>
                       {list.bySession.sessions.map((s, i) => (
-                        <td key={s.id} className="mg-display text-center text-base font-semibold tabular-nums">
+                        <td key={s.id} className={`mg-display text-center font-semibold tabular-nums ${manySessions ? 'text-sm' : 'text-base'}`}>
                           {cells ? formatPoints(cells[i]) : <><span aria-hidden="true" className="text-[rgb(var(--mg-dash))]">–</span><span className="sr-only">{t('competition.toplist.noPoints')}</span></>}
                         </td>
                       ))}

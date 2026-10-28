@@ -30,13 +30,14 @@ export function TackLeaderboard({ competitionId, sectionId, refresh = 0 }: { com
         {table.mode === 2 ? t('competition.tack.added') : t('competition.tack.separate')}
         {' '}{t('competition.tack.upTo', { n: table.maxPoints })}
       </p>
-      <div className="mg-card overflow-x-auto">
-        <table className="w-full border-collapse">
+      <div className="mg-card overflow-hidden">
+        <table className="w-full table-fixed border-collapse">
           <thead>
             <tr className="mg-display border-b border-[rgb(var(--mg-rule))] text-xs font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-muted))]">
               <th scope="col" className="w-9 py-1.5 pl-3 text-left font-bold">#</th>
               <th scope="col" className="py-1.5 text-left font-bold">{t('competition.toplist.team')}</th>
-              {table.sectors.map((name) => <th key={name} scope="col" className="px-1 py-1.5 text-center font-bold">{name}</th>)}
+              {/* Sectors share what the team names leave (at least 110px), so the card never scrolls sideways. */}
+              {table.sectors.map((name) => <th key={name} scope="col" style={{ width: `min(48px, calc((100% - 36px - 44px - 110px) / ${table.sectors.length}))` }} className="break-words px-0.5 py-1.5 text-center text-[11px] font-bold leading-tight">{name}</th>)}
               <th scope="col" className="w-11 py-1.5 pr-3 text-right font-bold text-[rgb(var(--mg-heading))]">{t('competition.toplist.pts')}</th>
             </tr>
           </thead>
@@ -44,7 +45,7 @@ export function TackLeaderboard({ competitionId, sectionId, refresh = 0 }: { com
             {table.rows.map((row) => (
               <tr key={row.teamId} className="border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0">
                 <td className="mg-display h-11 py-0 pl-3 text-base font-bold">{row.rank ?? 'HC'}</td>
-                <th scope="row" className="py-0 pr-2 text-left text-[15px] font-semibold leading-tight">
+                <th scope="row" className="break-words py-0 pr-2 text-left text-[15px] font-semibold leading-tight">
                   {row.teamName}
                   {clubLabel(row.clubName) && <span className="block text-xs font-medium text-[rgb(var(--mg-muted))]">{row.clubName}</span>}
                 </th>
