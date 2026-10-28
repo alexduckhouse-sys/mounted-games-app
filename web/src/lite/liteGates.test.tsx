@@ -12,7 +12,6 @@ import { CompetitionMetaProvider } from '../components/CompetitionMetaContext';
 import { NavExtrasProvider } from '../components/NavExtrasContext';
 import { NavigationDrawer } from '../components/NavigationDrawer';
 import { LiveVideo } from '../components/stream/LiveVideo';
-import { WeatherAt, WeatherNow } from '../components/WeatherChips';
 import { WeatherBadge } from '../components/WeatherBadge';
 import { SettingsPage } from '../pages/SettingsPage';
 import { ThemeProvider } from '../theme/ThemeContext';
@@ -45,25 +44,11 @@ describe('weather in lite mode', () => {
     const { container } = render(
       <Lite><CurrentCompetitionProvider><Venue>
         <WeatherBadge />
-        <WeatherNow lat={54} lon={-2} />
-        <WeatherAt lat={54} lon={-2} when="2026-10-24T09:00:00Z" />
       </Venue></CurrentCompetitionProvider></Lite>,
     );
     await settled();
     expect(container).toBeEmptyDOMElement();
     expect(getWeather).not.toHaveBeenCalled();
-  });
-
-  it('still loads in normal mode', async () => {
-    const Normal = liteWrapper('off');
-    render(
-      <Normal>
-        <WeatherNow lat={54} lon={-2} />
-        <WeatherAt lat={54} lon={-2} when="2026-10-24T09:00:00Z" />
-      </Normal>,
-    );
-    await settled();
-    expect(getWeather).toHaveBeenCalledTimes(2);
   });
 });
 

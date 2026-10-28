@@ -1,4 +1,3 @@
-// Unused in web UI yet — reserved for iOS / upcoming wiring
 /**
  * Headers the API trusts to identify a visitor behind Vercel's /api proxy
  * (see api/Security/ProxyClientIpMiddleware.cs). Only Vercel's routing middleware sets them.
