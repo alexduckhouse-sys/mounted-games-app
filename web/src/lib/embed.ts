@@ -2,6 +2,7 @@ import type { CompetitionDetail, Heat, Session, StandingRow } from '../types';
 import type { StandingView } from '../pages/seasons/seasonViewTypes';
 import { displaySectionName } from './section';
 import { dayKey } from './timetableDay';
+import { activeLocale, tr } from '../i18n/translate';
 import { sessionOrdinals, type TimetableGroup, type TimetableRow } from './timetableRows';
 
 /**
@@ -158,7 +159,7 @@ export function embedPollMs(live: boolean, failures: number): number {
 
 /** Hours and minutes in the viewer's own zone. */
 export function clockText(date: Date): string {
-  return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleTimeString(activeLocale(), { hour: '2-digit', minute: '2-digit' });
 }
 
 const finalWording = /\bfinals?\b/i;
@@ -251,5 +252,5 @@ export function isSeasonStandings(value: unknown): value is { standings: Standin
 export function timetableGroupTitle(group: TimetableGroup, ordinals: Map<number, number>): string | null {
   if (!group.race) return null;
   const section = displaySectionName(group.session.sectionName || group.session.name);
-  return finalWording.test(group.session.name) || group.rows.some((row) => row.group === 'Finals') ? `${section} · Finals` : `${section} · Session ${ordinals.get(group.session.id) ?? 1}`;
+  return finalWording.test(group.session.name) || group.rows.some((row) => row.group === 'Finals') ? tr('screen.embed.sectionFinals', { section }) : tr('screen.embed.sectionSession', { section, n: ordinals.get(group.session.id) ?? 1 });
 }

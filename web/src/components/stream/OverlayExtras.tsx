@@ -18,10 +18,12 @@ import { timetableRows } from '../../lib/timetableRows';
 import { EASE_OUT, ENTER, LEAVE, previousSlots, ROW_STAGGER_S, SHUFFLE_DELAY_S, SHUFFLE_S, SPRING, WIPE_HIDDEN_BOTTOM, WIPE_HIDDEN_LEFT, WIPE_HIDDEN_RIGHT, WIPE_SHOWN } from '../../lib/motion';
 import { useStillMotion } from '../../lite/useStillMotion';
 import { currentLanes, type RaceLane } from '../../lib/raceLanes';
-import { hatbandName } from '../../lib/hatbands';
+import { localHatbandName } from '../../lib/hatbands';
 import { CountUp } from './CountUp';
 import { TickerNumber } from '../TickerNumber';
 import { playRankMoves, useRankMotion } from '../../hooks/useRankMotion';
+import { useLanguage, useT } from '../../i18n/LanguageContext';
+import type { Translate } from '../../i18n/translate';
 
 interface BibColourHolder {
   bibColour?: string | null;
@@ -69,12 +71,13 @@ const CORNERS: Partial<Record<OverlayPlace, string>> = {
 };
 
 function useMinuteClock() {
+  const { locale } = useLanguage();
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(timer);
   }, []);
-  return now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  return now.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 }
 
 function ClockChip() {
@@ -84,6 +87,7 @@ function ClockChip() {
 
 /** The small corner pieces a producer can switch on: viewer count, arena, clock and logo. */
 export function OverlayChips({ stream, look, live }: { stream: LiveStream; look: OverlayLook; live: ReactNode }) {
+  const t = useT();
   // The LIVE badge always leads the top-left corner; the producer's chips join whichever corner they chose.
   const corners = new Map<string, ReactElement[]>([[CORNERS['top-left']!, [<span key="live">{live}</span>]]]);
   const add = (place: OverlayPlace, element: ReactElement) => {
@@ -92,7 +96,7 @@ export function OverlayChips({ stream, look, live }: { stream: LiveStream; look:
   };
   const { logo, viewers, arena, clock } = look.elements;
   if (logo.show && look.logoUrl) add(logo.place, <img key="logo" className="mg-ov-logo" src={look.logoUrl} alt="" />);
-  if (viewers.show) add(viewers.place, <span key="viewers" className="mg-ov-chip"><Eye aria-hidden="true" />{stream.viewerCount} watching</span>);
+  if (viewers.show) add(viewers.place, <span key="viewers" className="mg-ov-chip"><Eye aria-hidden="true" />{t('screen.ov.watching', { count: stream.viewerCount })}</span>);
   if (arena.show) add(arena.place, <span key="arena" className="mg-ov-chip"><MapPin aria-hidden="true" />{stream.arenaName}</span>);
   if (clock.show) add(clock.place, <ClockChip key="clock" />);
   return <>{[...corners].map(([corner, items]) => (
@@ -220,6 +224,7 @@ export function ScoreCardOverlay({
  */
 function ScoreCardPanel({ due, teams, where }: { due: QueuedScoreCard; teams?: Team[]; where: string }) {
   const still = useStillMotion();
+  const t = useT();
   const { card } = due;
   const rows = card.rows.filter((row) => !due.hiddenTeamIds?.includes(row.teamId));
   const before = previousSlots(rows);
@@ -236,9 +241,9 @@ function ScoreCardPanel({ due, teams, where }: { due: QueuedScoreCard; teams?: T
   return (
     <CentreCard
       className={`${where} mg-ov-card-center`}
-      label={`Results: ${due.heading}`}
+      label={t('screen.ov.results', { heading: due.heading })}
       heading={due.heading}
-      subtitle={`after ${card.raceName} (race ${card.raceNumber} of ${card.raceCount})`}
+      subtitle={t('screen.ov.afterRace', { race: card.raceName, n: card.raceNumber, total: card.raceCount })}
     >
       <ol ref={listRef}>
         {rows.map((row, idx) => {
@@ -264,8 +269,8 @@ function ScoreCardPanel({ due, teams, where }: { due: QueuedScoreCard; teams?: T
                 {due.names?.[row.teamId] ?? row.teamName}
                 {bibColor && <BibSwatch color={bibColor} size={10} />}
               </span>
-              {row.change === 'up' && <motion.span initial={still ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ ...ENTER, delay: settled }}><ArrowUp className="mg-ov-card-up" aria-label="moved up" /></motion.span>}
-              {row.change === 'down' && <motion.span initial={still ? false : { opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ ...ENTER, delay: settled }}><ArrowDown className="mg-ov-card-down" aria-label="moved down" /></motion.span>}
+              {row.change === 'up' && <motion.span initial={still ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ ...ENTER, delay: settled }}><ArrowUp className="mg-ov-card-up" aria-label={t('screen.ov.movedUp')} /></motion.span>}
+              {row.change === 'down' && <motion.span initial={still ? false : { opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ ...ENTER, delay: settled }}><ArrowDown className="mg-ov-card-down" aria-label={t('screen.ov.movedDown')} /></motion.span>}
               <motion.span
                 className={`mg-ov-card-added ${row.eliminated ? 'is-out' : ''}`}
                 initial={still ? false : { opacity: 0, scale: 0.4 }}
@@ -375,6 +380,7 @@ export function ToplistBody({
 }
 
 function LiveToplistCard({ competition, sectionId }: { competition: CompetitionDetail; sectionId: number }) {
+  const t = useT();
   const { ready } = useCompetition();
   const [result, setResult] = useState<{ rows: StandingRow[]; failed: boolean } | null>(null);
   useEffect(() => {
@@ -395,11 +401,11 @@ function LiveToplistCard({ competition, sectionId }: { competition: CompetitionD
   const section = competition.sections.find((item) => item.id === sectionId)!;
   const hc = new Set(competition.teams.filter((team) => team.isHorsConcours).map((team) => team.id));
   const list = buildToplist((result?.rows ?? []).filter((row) => !hc.has(row.teamId)), competition.sessions, competition.teams, sectionId, null);
-  const subtitle = result === null ? 'Loading standings…'
-    : result.failed ? (list.rows.length > 0 ? 'Last received standings' : 'Standings unavailable')
-      : list.started ? 'Current standings' : 'Before Race 1';
+  const subtitle = result === null ? t('screen.ov.loadingStandings')
+    : result.failed ? (list.rows.length > 0 ? t('screen.ov.lastStandings') : t('screen.ov.standingsUnavailable'))
+      : list.started ? t('screen.ov.currentStandings') : t('screen.ov.beforeRace1');
   return (
-    <CentreCard label={`Live toplist: ${displaySectionName(section.displayName)}`} heading={`${displaySectionName(section.displayName)} · Toplist`} subtitle={subtitle}>
+    <CentreCard label={t('screen.ov.liveToplist', { section: displaySectionName(section.displayName) })} heading={t('screen.ov.toplistHeading', { section: displaySectionName(section.displayName) })} subtitle={subtitle}>
       <ToplistBody competition={competition} rows={list.rows} started={list.started} />
     </CentreCard>
   );
@@ -454,6 +460,7 @@ export function LanesBody({
   competition: CompetitionDetail;
 }) {
   const still = useStillMotion();
+  const t = useT();
   return (
     <ol>
       {lanes.map(({ entry, lane, sitting, hatband }, idx) => {
@@ -472,7 +479,7 @@ export function LanesBody({
               {bibColor && <BibSwatch color={bibColor} size={10} />}
             </span>
             <span />
-            <span className="mg-ov-card-added">{sitting ? 'Sits out' : hatband ? `${hatbandName(hatband)} hatband` : `Lane ${lane}`}</span>
+            <span className="mg-ov-card-added">{sitting ? t('screen.ov.sitsOut') : hatband ? t('screen.ov.hatband', { name: localHatbandName(hatband, t) }) : t('screen.ov.lane', { n: lane })}</span>
             <span />
           </motion.li>
         );
@@ -489,6 +496,7 @@ export function NextBody({
   competition: CompetitionDetail;
 }) {
   const still = useStillMotion();
+  const t = useT();
   return (
     <ol>
       {entries.map((entry, idx) => {
@@ -507,7 +515,7 @@ export function NextBody({
               {bibColor && <BibSwatch color={bibColor} size={10} />}
             </span>
             <span />
-            <span className="mg-ov-card-added">Lane {entry.laneIndex}</span>
+            <span className="mg-ov-card-added">{t('screen.ov.lane', { n: entry.laneIndex })}</span>
             <span />
           </motion.li>
         );
@@ -570,10 +578,11 @@ export function HeatBody({
  */
 export function LiveDataCardOverlay({ arenaName, overlay }: { arenaName: string; overlay: StreamOverlay }) {
   const competition = useOptionalCompetition();
-  return <AnimatePresence mode="wait">{competition ? liveDataCard(competition, arenaName, overlay) : null}</AnimatePresence>;
+  const t = useT();
+  return <AnimatePresence mode="wait">{competition ? liveDataCard(competition, arenaName, overlay, t) : null}</AnimatePresence>;
 }
 
-function liveDataCard(competition: CompetitionDetail, arenaName: string, overlay: StreamOverlay): ReactElement | null {
+function liveDataCard(competition: CompetitionDetail, arenaName: string, overlay: StreamOverlay, t: Translate): ReactElement | null {
   const { mode, sectionId } = readLiveOverlayCard(overlay);
   if (mode === 'none') return null;
 
@@ -605,9 +614,9 @@ function liveDataCard(competition: CompetitionDetail, arenaName: string, overlay
     return (
       <CentreCard
         key={`${mode}-${heat.id}`}
-        label={`${mode === 'next' ? 'Up next' : 'Starting lanes'}: ${heading}`}
+        label={`${mode === 'next' ? t('screen.ov.upNext') : t('screen.ov.startingLanes')}: ${heading}`}
         heading={heading}
-        subtitle={mode === 'next' ? 'Up next in collecting ring' : lanes?.raceName ? `Lanes for ${lanes.raceName}` : 'Starting lanes'}
+        subtitle={mode === 'next' ? t('screen.ov.upNextRing') : lanes?.raceName ? t('screen.ov.lanesFor', { race: lanes.raceName }) : t('screen.ov.startingLanes')}
       >
         {mode === 'next' ? (
           <NextBody entries={entries} competition={competition} />
@@ -635,9 +644,9 @@ function liveDataCard(competition: CompetitionDetail, arenaName: string, overlay
   return (
     <CentreCard
       key={`heat-${heat.id}`}
-      label={`Heat table: ${heading}`}
+      label={t('screen.ov.heatTable', { heading })}
       heading={heading}
-      subtitle={scoredRaces.length > 0 ? `After race ${scoredRaces.length} of ${heat.races.length}` : `${heat.races.length} races`}
+      subtitle={scoredRaces.length > 0 ? t('screen.ov.afterRaceOf', { done: scoredRaces.length, total: heat.races.length }) : t('screen.ov.raceCount', { count: heat.races.length })}
     >
       <HeatBody rows={rows} scored={scoredRaces.length > 0} competition={competition} />
     </CentreCard>
