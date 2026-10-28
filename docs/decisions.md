@@ -256,3 +256,7 @@
 - **The events list:** `GET /api/competitions/picker/near-you` is separate from the public `/picker` because its answer differs per viewer and so must stay out of the shared and service-worker caches; the web falls back to `/picker` if it fails. It sorts the whole upcoming set before paging.
 - **No Vercel cron** (not documented for container services under `services`, so not added blind): the evening send needs an awake instance, and Send now on Admin → Email covers a gap. Follow-up if wanted: verify a cron on a preview, then add a `CRON_SECRET`-protected GET that calls the same tick.
 - Files: `api/Services/Email/EntriesDigest*.cs`, `api/Services/Geo/`, `api/Services/UkTime.cs`, `api/Controllers/EntriesDigestController.cs`, migration `AddEntriesDigest`, `web/src/pages/admin/EntriesDigestCard.tsx`, `web/src/competition/CompetitionPicker.tsx`.
+
+## 2026-10-28: The events page goes back to soonest first
+- The owner asked for the Nearest first / Soonest first pills to go and the list to be in date order. The web events page now uses only the public `/competitions/picker` (soonest first, no distances).
+- Kept: the entries-open email still orders events by where someone is, and `GET /api/competitions/picker/near-you` stays in the API, unused by the web.
