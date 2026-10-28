@@ -341,7 +341,7 @@ function RulebookEditor({ draft, setDraft, busy, onSave, onCancel }: {
         <Field label="Source link (optional)"><input type="url" maxLength={2000} placeholder="https://…" value={draft.sourceUrl} onChange={(event) => setDraft({ ...draft, sourceUrl: event.target.value })} /></Field>
         <Field label="Rulebook text"><textarea className="ops-textarea" required maxLength={250000} value={draft.text} onChange={(event) => setDraft({ ...draft, text: event.target.value })} /></Field>
       </form>
-      <RefineFoot aboveTabs label="Save rulebook">
+      <RefineFoot inline aboveTabs label="Save rulebook">
         <button type="button" className="rf-btn" onClick={onCancel} disabled={busy}>Cancel</button>
         <button type="submit" form="rulebook-form" className="rf-btn rf-btn-primary rf-grow" disabled={busy}>{busy ? 'Saving…' : 'Save rulebook'}</button>
       </RefineFoot>

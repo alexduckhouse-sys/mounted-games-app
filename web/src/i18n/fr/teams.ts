@@ -73,7 +73,7 @@ export const teams: AreaCatalogue<typeof en> = {
   'teams.team.avgPlace': 'Place moyenne',
   'teams.team.racesWon': 'Courses gagnées',
   'teams.team.wonOf': '{won} sur {total}',
-  'teams.team.pointQuota': 'Quota de points',
+  'teams.team.pointQuota': 'Points moyens',
   'teams.team.statsLater': 'Les statistiques s’affichent dès que {name} a couru.',
   'teams.team.declaredAria': 'Cavaliers et poneys déclarés',
   'teams.team.decForm': 'Formulaire de déclaration',

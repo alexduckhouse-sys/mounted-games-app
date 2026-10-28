@@ -43,10 +43,11 @@ describe('Stats in Welsh and French', () => {
   it('shows a profile summary in Welsh', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: profile });
     mount('/stats/riders?name=oliver%20s.', 'cy');
-    expect(await screen.findByText('Cystadlaethau')).toBeInTheDocument();
+    expect((await screen.findAllByText('Cystadlaethau')).length).toBeGreaterThan(0);
     expect(screen.getByText('1af 1 · 2il 0 · 3ydd 0')).toBeInTheDocument();
     expect(screen.getByText('3 o 6 pwynt')).toBeInTheDocument();
     expect(screen.getByText('1 o 2 ras')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Mewngofnodi' })).toBeInTheDocument();
+    // Nothing asks a visitor to sign in any more.
+    expect(screen.queryByRole('link', { name: 'Mewngofnodi' })).not.toBeInTheDocument();
   });
 });

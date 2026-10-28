@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -28,7 +28,49 @@ beforeEach(() => {
   vi.mocked(api.post).mockResolvedValue(signedIn);
 });
 
+describe('LoginPage close button', () => {
+  it('goes back to the page the person came from, when the link carried one', async () => {
+    mount({ pathname: '/login', state: { from: '/teams' } });
+    await userEvent.click(screen.getByRole('link', { name: 'Close' }));
+    expect(await screen.findByText('Teams page')).toBeInTheDocument();
+  });
+
+  it('goes home when there is nowhere to go back to', async () => {
+    mount();
+    await userEvent.click(screen.getByRole('link', { name: 'Close' }));
+    expect(await screen.findByText('Home page')).toBeInTheDocument();
+  });
+
+  it('goes back one step in the app when there is earlier history', async () => {
+    render(<AuthProvider><MemoryRouter initialEntries={['/teams', '/login']} initialIndex={1}><Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/teams" element={<p>Teams page</p>} />
+      <Route path="/" element={<p>Home page</p>} />
+    </Routes></MemoryRouter></AuthProvider>);
+    window.history.replaceState({ idx: 1 }, '');
+    await userEvent.click(screen.getByRole('link', { name: 'Close' }));
+    expect(await screen.findByText('Teams page')).toBeInTheDocument();
+    window.history.replaceState(null, '', '/');
+  });
+});
+
 describe('LoginPage', () => {
+  it('has no blank spacer pushing the shared-key link to the bottom of the screen', () => {
+    const { container } = mount();
+    expect(container.querySelector('form > .flex-1')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Organiser with a shared key' })).toBeInTheDocument();
+  });
+
+  it('notes caps lock under the password box, and swaps to the shared-key form', async () => {
+    mount();
+    const password = screen.getByLabelText('Password');
+    fireEvent.keyDown(password, { key: 'A', modifierCapsLock: true });
+    expect(screen.getByText('Caps lock is on')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Organiser with a shared key' }));
+    expect(screen.getByRole('heading', { name: 'Organiser sign in' })).toBeInTheDocument();
+    expect(screen.queryByText('Caps lock is on')).not.toBeInTheDocument();
+  });
+
   it('asks only for an email and password, with no tabs, demo credentials or intro', () => {
     mount();
     expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument();

@@ -407,7 +407,7 @@ describe('MyTeamsPage design plan A8', () => {
     expect(document.querySelector('.border-dashed')).toBeNull();
     expect(screen.getByTestId('dock')).toHaveTextContent('Join a team with a code');
     await userEvent.click(screen.getByTestId('dock'));
-    expect(screen.getByLabelText('Join key')).toBeInTheDocument();
+    expect(screen.getByLabelText('Team join code')).toBeInTheDocument();
     expect(screen.queryByTestId('dock')).toBeNull();
     expect(screen.getByRole('link', { name: 'Choose a competition' })).not.toHaveClass('border-dashed');
   });

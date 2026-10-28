@@ -19,14 +19,42 @@
 .sv-standings th:last-child, .sv-standings td.sv-end { padding-right: 18px; }
 .sv-table .rf-num { font: 700 20px/1 var(--mg-font-display); }
 .sv-table .sv-team { font: 600 17px/1.2 var(--mg-font); color: rgb(var(--mg-ink)); }
-.sv-struck { text-decoration: line-through; color: rgb(var(--mg-muted)); font-weight: 600; font-variant-numeric: tabular-nums; }
+.sv-struck { position: relative; display: inline-block; color: rgb(var(--mg-faint)); font-weight: 600; font-variant-numeric: tabular-nums; }
+.sv-struck::after { content: ''; position: absolute; left: -3px; right: -3px; top: 50%; height: 1.5px; border-radius: 1px; background: currentColor; transform: rotate(-24deg); }
 .sv-dim { color: rgb(var(--mg-muted)); }
 .rf-table.sv-hist td { padding-block: 6px; height: auto; min-height: 48px; }
 .sv-hist .rf-t1 { font-weight: 600; }
 
+/* Season standings: one narrow column a round, its width worked out from how many there are (see `roundWidth`), so it never scrolls. */
+.sv-standings col.sv-c-pos { width: 9%; }
+.sv-standings col.sv-c-pts { width: 13%; }
+.rf-table-fit .sv-standings td, .rf-table-fit .sv-standings th { padding-inline: 2px; }
+/* A round's score is one short number: never break it across lines. */
+.rf-table-fit .sv-standings :is(td, th).sv-mid { padding-inline: 0; white-space: nowrap; overflow-wrap: normal; }
+.rf-table-fit .sv-standings th:first-child, .rf-table-fit .sv-standings td:first-child { padding-left: 8px; padding-right: 0; }
+.rf-table-fit .sv-standings th:last-child, .rf-table-fit .sv-standings td:last-child { padding-right: 10px; }
+.sv-standings .sv-pos { width: auto; }
+.sv-standings .sv-team { font-size: 15px; overflow-wrap: anywhere; min-height: 44px; }
+.sv-standings .sv-end { font-size: 18px; }
+.sv-rounds-some { font-size: 13px; }
+.sv-rounds-some th { font-size: 11px; }
+.sv-rounds-some .sv-team { font-size: 14px; }
+.sv-rounds-many td.sv-mid { font-size: 11px; }
+.sv-rounds-many th { font-size: 9.5px; letter-spacing: 0; }
+.sv-rounds-many .sv-team { font-size: 13px; }
+.sv-rounds-many .sv-end { font-size: 16px; }
+
 /* Round rows */
 .sv-rn { min-width: 34px; font: 700 20px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
 .sv-rn-dim { color: rgb(var(--mg-muted)); }
+/* The round's detail unfolds (and folds away) rather than appearing at once. */
+.sv-reveal { display: grid; grid-template-rows: 1fr; animation: sv-unfold var(--mg-dur-base, 200ms) var(--mg-ease-out, ease-out); }
+.sv-reveal-out { grid-template-rows: 0fr; opacity: 0; animation: sv-fold var(--mg-dur-base, 200ms) var(--mg-ease-out, ease-out); }
+.sv-reveal-clip { min-height: 0; overflow: hidden; }
+@keyframes sv-unfold { from { grid-template-rows: 0fr; opacity: 0; } to { grid-template-rows: 1fr; opacity: 1; } }
+@keyframes sv-fold { from { grid-template-rows: 1fr; opacity: 1; } to { grid-template-rows: 0fr; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .sv-reveal, .sv-reveal-out { animation: none; } }
+html[data-lite="true"] :is(.sv-reveal, .sv-reveal-out) { animation: none; }
 .sv-round-detail { display: flex; flex-direction: column; gap: 12px; padding: 4px 16px 16px; background: rgb(var(--mg-surface)); }
 .sv-round-detail .rf-table-wrap { margin-inline: -16px; border-inline: 0; border-radius: 0; box-shadow: none; }
 .sv-round-detail a.sv-link { color: rgb(var(--mg-heading)); font-weight: 600; min-height: 44px; display: inline-flex; align-items: center; }
@@ -48,3 +76,12 @@
 .sv-prev > .rf-row { border-top: 1px solid rgb(var(--mg-rule-soft)); }
 .sv-hist td.rf-num { font: 700 20px/1 var(--mg-font-display); }
 .sv-hist .sv-dim { font-variant-numeric: tabular-nums; }
+
+/* Competitions to include when creating a season: one switch row each, edge to edge inside the card. */
+.sv-picks { display: flex; flex-direction: column; margin-inline: -16px; }
+.sv-picks .rf-row { border-bottom: 1px solid rgb(var(--mg-rule-soft)); }
+.sv-picks .rf-row:last-child { border-bottom: 0; }
+/* The quiet "Saving… / Saved" line under an autosaving form. */
+.sv-save { min-height: 20px; margin: 4px 0 0; padding: 0 16px; text-align: right; }
+/* The age group and format, as a quiet heading when there is only one of each. */
+.sv-where-plain { justify-content: flex-start; gap: 6px; }

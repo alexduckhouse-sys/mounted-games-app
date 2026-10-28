@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
+import { usePageHeader } from '../components/CompactPageBarContext';
 import { PageProblem } from '../components/PageProblem';
 import { useT } from '../i18n/LanguageContext';
 import '../components/sitePages.css';
@@ -13,6 +14,7 @@ type Phase = 'working' | 'done' | 'failed' | 'incomplete';
  */
 export function UnsubscribePage() {
   const t = useT();
+  usePageHeader({ title: t('shell.unsubscribe.title'), plain: true });
   const [params] = useSearchParams();
   const token = params.get('token')?.trim() ?? '';
   const [phase, setPhase] = useState<Phase>(token ? 'working' : 'incomplete');

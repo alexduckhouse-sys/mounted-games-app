@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -6,6 +6,7 @@ import { api, type StoredAuth } from '../api';
 import { AuthProvider } from '../auth/AuthContext';
 import { CurrentCompetitionProvider } from '../competition/CurrentCompetitionContext';
 import { competition, heat, race, session, team } from '../test/factories';
+import { CompactPageBarProvider, useCompactPageBarState } from '../components/CompactPageBarContext';
 import { ProfilePage } from './ProfilePage';
 import { NeedsYouProvider } from './profile/NeedsYouProvider';
 
@@ -49,6 +50,11 @@ function mount(options: Options = {}) {
   );
 }
 
+function HeaderProbe() {
+  const { header } = useCompactPageBarState();
+  return <span data-testid="header-title">{header?.title ?? 'none'}</span>;
+}
+
 const today = new Date();
 const at = (h: number, m: number) => new Date(today.getFullYear(), today.getMonth(), today.getDate(), h, m).toISOString();
 const pickerItem = (id: number, extra: Record<string, unknown> = {}) => ({ id, name: `Event ${id}`, startDate: at(9, 0), endDate: null, icon: 'flag', ...extra });
@@ -79,6 +85,29 @@ beforeEach(() => {
 
 const section = (name: string) => within(screen.getByRole('region', { name }));
 const needsSection = async () => within(await screen.findByRole('region', { name: 'Needs you' }));
+
+describe('ProfilePage: title and loading', () => {
+  it('puts the page’s title in the top bar', () => {
+    const view = render(
+      <MemoryRouter initialEntries={['/me']}>
+        <AuthProvider><CurrentCompetitionProvider><NeedsYouProvider><CompactPageBarProvider>
+          <Routes><Route path="/me" element={<ProfilePage />} /></Routes>
+          <HeaderProbe />
+        </CompactPageBarProvider></NeedsYouProvider></CurrentCompetitionProvider></AuthProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('header-title')).toHaveTextContent('Me');
+    expect(view.container).toBeTruthy();
+  });
+
+  it('holds "Needs you" back until the requests behind it have answered, then shows it with full-size buttons', async () => {
+    mount({ roles: ['Admin'] });
+    expect(screen.queryByRole('region', { name: 'Needs you' })).not.toBeInTheDocument();
+    const needs = await needsSection();
+    expect(needs.getByRole('button', { name: 'Approve Sam Lee' })).toHaveClass('sp-pill-tall');
+    expect(needs.getByRole('button', { name: 'Decline Sam Lee' })).toHaveClass('sp-red-tall');
+  });
+});
 
 describe('ProfilePage: header', () => {
   it('shows who the person is: initials, name, role and club', () => {
@@ -188,8 +217,11 @@ describe('ProfilePage: my club', () => {
     expect(within(list).getByText('Starlight')).toBeInTheDocument();
     expect(within(list).getByText('Zoe Evans')).toBeInTheDocument();
     expect(club.getByRole('link', { name: /Manage on dec forms/ })).toHaveAttribute('href', '/declarations');
+    expect(club.getByRole('link', { name: /Manage on dec forms/ })).toHaveClass('min-h-11');
     await userEvent.click(toggle);
-    expect(club.queryByRole('list', { name: 'Saved riders list' })).not.toBeInTheDocument();
+    // It stays for the length of the close, then goes.
+    expect(club.getByRole('list', { name: 'Saved riders list' }).closest('.sp-reveal')).toHaveAttribute('data-open', 'false');
+    await waitFor(() => expect(club.queryByRole('list', { name: 'Saved riders list' })).not.toBeInTheDocument());
   });
 
   it('says so when there are no saved riders', async () => {

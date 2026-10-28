@@ -1,10 +1,11 @@
 import { useCallback, useId, useState, type FormEvent } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { ArrowLeft, Eye, EyeOff, KeyRound } from 'lucide-react';
+import { ArrowLeft, KeyRound } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { useT } from '../i18n/LanguageContext';
 import { Notice } from '../components/Notice';
 import { PasswordChecklist } from '../components/PasswordChecklist';
+import { PasswordInput } from '../components/PasswordInput';
 import { SocialLoginButtons, type SocialCredential } from '../components/SocialLoginButtons';
 import { externalErrorMessage } from '../lib/externalAuthError';
 import { friendlyPasswordErrors, passwordMeetsRules } from '../lib/passwordRules';
@@ -24,15 +25,12 @@ export function LoginPage() {
   const [useKey, setUseKey] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   // "Forgot your password?" only shows once a password has been turned down, so it doesn't crowd a first try.
   const [passwordRefused, setPasswordRefused] = useState(false);
   const [organiserTitle, setOrganiserTitle] = useState('');
   const [organiserEmail, setOrganiserEmail] = useState('');
   const [organiserPassword, setOrganiserPassword] = useState('');
-  const [showOrganiserPassword, setShowOrganiserPassword] = useState(false);
   const [organiserKey, setOrganiserKey] = useState('');
-  const [showOrganiserKey, setShowOrganiserKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingExternal, setPendingExternal] = useState<PendingExternalSignup | null>(null);
   const [externalError, setExternalError] = useState<string | null>(null);
@@ -84,8 +82,6 @@ export function LoginPage() {
 
   function swap() {
     setUseKey((v) => !v);
-    setShowOrganiserKey(false);
-    setShowOrganiserPassword(false);
     setError(null);
   }
 
@@ -103,7 +99,9 @@ export function LoginPage() {
 
   return (
     <AuthFrame>
-      <form onSubmit={submit} className="flex flex-1 flex-col gap-[18px]" noValidate>
+      <form onSubmit={submit} className="flex flex-1 flex-col" noValidate>
+       {/* Keyed so the form fades when it swaps to the shared-key version and back. */}
+       <div key={useKey ? 'key' : 'password'} className="mg-swap flex flex-col gap-[18px]">
         <h1 className="mg-h1 !text-[34px] !leading-none">{useKey ? t('auth.login.organiserTitle') : t('common.signIn')}</h1>
 
         {!useKey && (
@@ -134,20 +132,8 @@ export function LoginPage() {
             <div className="flex flex-col gap-1.5">
               <Field label={t('auth.field.password')}>
                 {({ id }) => (
-                  <div className="mg-field">
-                    <input id={id} type={showOrganiserPassword ? 'text' : 'password'} value={organiserPassword}
-                      autoComplete="new-password" aria-describedby={rulesId}
-                      onChange={(e) => { setOrganiserPassword(e.target.value); setError(null); }} />
-                    <button
-                      type="button"
-                      onClick={() => setShowOrganiserPassword((v) => !v)}
-                      aria-label={showOrganiserPassword ? t('auth.password.hide') : t('auth.password.show')}
-                      aria-pressed={showOrganiserPassword}
-                      className="-mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[rgb(var(--mg-muted))] hover:text-[rgb(var(--mg-ink))]"
-                    >
-                      {showOrganiserPassword ? <EyeOff aria-hidden="true" className="h-[18px] w-[18px]" /> : <Eye aria-hidden="true" className="h-[18px] w-[18px]" />}
-                    </button>
-                  </div>
+                  <PasswordInput id={id} value={organiserPassword} autoComplete="new-password" describedBy={rulesId}
+                    onChange={(e) => { setOrganiserPassword(e.target.value); setError(null); }} />
                 )}
               </Field>
               <PasswordChecklist password={organiserPassword} id={rulesId} />
@@ -157,17 +143,9 @@ export function LoginPage() {
             </div>
             <Field label={t('auth.login.organiserKey')} error={error}>
               {({ id, invalid, describedBy }) => (
-                <div className="mg-field" data-invalid={invalid}>
-                  <input id={id} type={showOrganiserKey ? 'text' : 'password'} value={organiserKey}
-                    autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false}
-                    aria-invalid={invalid} aria-describedby={describedBy}
-                    onChange={(e) => { setOrganiserKey(e.target.value); setError(null); }} />
-                  <button type="button" className="flex min-h-11 min-w-11 items-center justify-center text-[rgb(var(--mg-muted))]"
-                    onClick={() => setShowOrganiserKey((shown) => !shown)} aria-pressed={showOrganiserKey}
-                    aria-label={showOrganiserKey ? t('auth.login.keyHide') : t('auth.login.keyShow')}>
-                    {showOrganiserKey ? <EyeOff className="h-5 w-5" aria-hidden="true" /> : <Eye className="h-5 w-5" aria-hidden="true" />}
-                  </button>
-                </div>
+                <PasswordInput id={id} value={organiserKey} autoComplete="off" secret invalid={invalid} describedBy={describedBy}
+                  showLabel={t('auth.login.keyShow')} hideLabel={t('auth.login.keyHide')}
+                  onChange={(e) => { setOrganiserKey(e.target.value); setError(null); }} />
               )}
             </Field>
           </>
@@ -183,19 +161,8 @@ export function LoginPage() {
             </Field>
             <Field label={t('auth.field.password')} error={error}>
               {({ id, invalid, describedBy }) => (
-                <div className="mg-field" data-invalid={invalid}>
-                  <input id={id} type={showPassword ? 'text' : 'password'} value={password} autoComplete="current-password" aria-invalid={invalid} aria-describedby={describedBy}
-                    onChange={(e) => { setPassword(e.target.value); setError(null); }} />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    aria-label={showPassword ? t('auth.password.hide') : t('auth.password.show')}
-                    aria-pressed={showPassword}
-                    className="-mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[rgb(var(--mg-muted))] hover:text-[rgb(var(--mg-ink))]"
-                  >
-                    {showPassword ? <EyeOff aria-hidden="true" className="h-[18px] w-[18px]" /> : <Eye aria-hidden="true" className="h-[18px] w-[18px]" />}
-                  </button>
-                </div>
+                <PasswordInput id={id} value={password} autoComplete="current-password" invalid={invalid} describedBy={describedBy}
+                  onChange={(e) => { setPassword(e.target.value); setError(null); }} />
               )}
             </Field>
             {passwordRefused && <Link to="/forgot-password" className="-mt-2 self-end text-sm font-semibold text-[rgb(var(--mg-heading))] !underline">{t('auth.forgot.link')}</Link>}
@@ -210,11 +177,11 @@ export function LoginPage() {
           </p>
         )}
 
-        <div className="flex-1" />
         <button type="button" onClick={swap} className="mx-auto flex min-h-11 items-center gap-2 text-[15px] font-semibold text-[rgb(var(--mg-muted))]">
           {useKey ? <ArrowLeft aria-hidden="true" className="h-4 w-4" /> : <KeyRound aria-hidden="true" className="h-4 w-4" />}
           {useKey ? t('auth.login.backToSignIn') : t('auth.login.sharedKey')}
         </button>
+       </div>
       </form>
     </AuthFrame>
   );
