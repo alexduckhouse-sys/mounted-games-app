@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { ChevronRight, MoreHorizontal } from 'lucide-react';
 import { formatPoints } from '../../lib/formatPoints';
 import { redLabel, yellowLabel, type CardMark } from '../../lib/refereeCards';
-import { CardChip, LaneBand, PullDownDialog } from './ScoringParts';
+import { Sheet } from '../../components/Sheet';
+import { CardChip, LaneBand } from './ScoringParts';
+import '../refine/refine.css';
 
 /** One team in the race tools list. */
 export interface ToolTeam {
@@ -81,13 +83,8 @@ export function RaceToolsSheet({
   }
 
   return (
-    <div className="rt-overlay">
-      <button type="button" className="rt-scrim" aria-label="Close race tools" onClick={onClose} />
-      <PullDownDialog label="Race tools" className="rt-sheet" focus=".sc-link" onClose={onClose}>
-        <div className="rt-head">
-          <span className="rt-title">Race tools</span>
-          <button type="button" className="sc-link" onClick={onClose}>Close</button>
-        </div>
+    <Sheet title="Race tools" onClose={onClose} initialFocus=".kit-pill">
+      {({ close }) => (<>
         <div className="rt-teams" role="group" aria-label="Teams in this race">
           {teams.map((t) => {
             const open = menuFor === t.teamId;
@@ -165,22 +162,22 @@ export function RaceToolsSheet({
         )}
         <div className="rt-links">
           {onDeadHeat && (
-            <label className="rt-link">
+            <div className="rt-link">
               <span className="rt-link-text"><span className="rt-link-name">Dead heat</span><span className="rt-link-sub">Teams that finish together share the points</span></span>
-              <input type="checkbox" role="switch" checked={tieMode} onChange={() => { setTieMode((on) => !on); setTicked([]); }} />
-            </label>
+              <button type="button" role="switch" aria-checked={tieMode} aria-label="Dead heat" className="rf-sw" onClick={() => { setTieMode((on) => !on); setTicked([]); }}><span aria-hidden="true" /></button>
+            </div>
           )}
           {onToggleFacts && (
-            <label className="rt-link">
+            <div className="rt-link">
               <span className="rt-link-text"><span className="rt-link-name">Commentator facts</span></span>
-              <input type="checkbox" role="switch" checked={Boolean(factsOn)} onChange={onToggleFacts} />
-            </label>
+              <button type="button" role="switch" aria-checked={Boolean(factsOn)} aria-label="Commentator facts" className="rf-sw" onClick={onToggleFacts}><span aria-hidden="true" /></button>
+            </div>
           )}
           {onToggleFullColour && (
-            <label className="rt-link">
+            <div className="rt-link">
               <span className="rt-link-text"><span className="rt-link-name">Full colour lanes</span><span className="rt-link-sub">Fill each lane with its bib colour, on this device</span></span>
-              <input type="checkbox" role="switch" checked={Boolean(fullColour)} onChange={onToggleFullColour} />
-            </label>
+              <button type="button" role="switch" aria-checked={Boolean(fullColour)} aria-label="Full colour lanes" className="rf-sw" onClick={onToggleFullColour}><span aria-hidden="true" /></button>
+            </div>
           )}
           {links.map((l) => (
             <button type="button" className="rt-link" key={l.key} onClick={l.onSelect}>
@@ -198,8 +195,9 @@ export function RaceToolsSheet({
             ))}
           </dl>
         </section>
-      </PullDownDialog>
-    </div>
+        <div className="kit-acts"><button type="button" className="kit-pill" onClick={() => close()}>Close</button></div>
+      </>)}
+    </Sheet>
   );
 }
 

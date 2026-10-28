@@ -86,7 +86,7 @@
 .sc-done-result { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgb(var(--mg-body)); }
 .sc-tag { display: inline-flex; align-items: center; border-radius: 6px; padding: 2px 7px; font: 700 11px/1.2 var(--mg-font); letter-spacing: .04em; text-transform: uppercase; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); flex-shrink: 0; }
 .sc-tag-hc, .sc-tag-last { background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); }
-.sc-tag-manual { background: #FFF1D6; color: #7A4B00; }
+.sc-tag-manual { background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); }
 /* Shown once a Bluetooth keypad, page-turner or pedal has scored something. */
 .sc-keypad-chip { align-self: center; display: inline-flex; align-items: center; gap: 5px; margin: 8px 0 0; padding: 3px 10px; border-radius: 999px; background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); font: 600 12px/1.3 var(--mg-font); }
 
@@ -118,7 +118,7 @@
 }
 .sc-row-out {
   background: rgb(var(--mg-live-row));
-  border-color: #E8B4BA;
+  border-color: rgb(var(--mg-elim) / .3);
 }
 .sc-row-sit { opacity: .55; }
 /* The only lane still to score: a steady ring, no pulse. The scorer still places it. */
@@ -334,13 +334,6 @@ html[data-lite="true"] .sc-hold { animation-duration: 350ms !important; }
 .sc-lane-item .sc-lane { width: 28px; height: 28px; border-radius: 8px; background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); font-size: 17px; }
 
 /* Sheets. */
-.sc-overlay { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; background: rgb(var(--mg-overlay) / .55); animation: sc-fade 160ms cubic-bezier(0.22, 1, 0.36, 1); }
-@media (min-width: 640px) { .sc-overlay { align-items: center; } }
-.sc-sheet { width: 100%; max-width: 32rem; max-height: 90dvh; overflow-y: auto; padding: 16px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); border-radius: 20px 20px 0 0; animation: sc-sheet-in 200ms cubic-bezier(0.22, 1, 0.36, 1); box-shadow: 0 -8px 30px rgb(var(--mg-overlay) / 0.18); }
-@media (min-width: 640px) { .sc-sheet { border-radius: 16px; } }
-@keyframes sc-fade { from { opacity: 0; } to { opacity: 1; } }
-@keyframes sc-sheet-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-@media (prefers-reduced-motion: reduce) { .sc-overlay, .sc-sheet { animation: none; } }
 .sc-field { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
 .sc-choices { display: flex; flex-wrap: wrap; gap: 6px; }
 .sc-choice { min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1.5px solid rgb(var(--mg-control)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); font: 600 14px/1.1 var(--mg-font); cursor: pointer; }
@@ -455,6 +448,7 @@ button.sc-done-name { background: none; border: 0; padding: 0; text-align: left;
 }
 .sc-fact { font: 600 12.5px/1.25 var(--mg-font); color: rgb(var(--mg-heading)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sc-chip { flex: none; display: inline-block; width: 12px; height: 16px; border-radius: 2px; }
+/* The yellow and red of a referee card are the card colours, so they stay literal in every theme. */
 .sc-chip-yellow { background: #F2C230; box-shadow: 0 0 0 1px #C49A12; }
 .sc-chip-red { background: #E12A39; }
 .sc-chip-hc { flex: none; padding: 2px 5px; border-radius: 4px; background: rgb(var(--mg-done-bg)); color: rgb(var(--mg-body)); font: 800 11px/1 var(--mg-font); }
@@ -462,12 +456,6 @@ button.sc-done-name { background: none; border: 0; padding: 0; text-align: left;
 .sc-link-red { border: 0; background: none; padding: 8px 0; min-height: 44px; color: rgb(var(--mg-elim)); font: 700 15px/1.2 var(--mg-font); text-align: left; text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 4px; cursor: pointer; }
 
 /* Race tools sheet. */
-.rt-overlay { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; background: rgb(var(--mg-overlay) / .45); }
-.rt-scrim { position: absolute; inset: 0; border: 0; background: transparent; cursor: default; }
-.rt-sheet { position: relative; width: 100%; max-width: 32rem; max-height: 82dvh; overflow-y: auto; padding: 18px 16px 24px; display: flex; flex-direction: column; gap: 10px; border-radius: 20px 20px 0 0; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); }
-@media (min-width: 640px) { .rt-overlay { align-items: center; } .rt-sheet { border-radius: 16px; } }
-.rt-head { position: sticky; top: -18px; z-index: 3; display: flex; justify-content: space-between; align-items: center; margin: -18px -16px 0; padding: 18px 16px 10px; background: rgb(var(--mg-surface)); border-radius: 20px 20px 0 0; }
-.rt-title { font: 800 22px/1.1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
 .rt-teams { flex: none; border: 1px solid rgb(var(--mg-line)); border-radius: 12px; background: rgb(var(--mg-surface)); }
 .rt-row { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-height: 52px; padding: 6px 6px 6px 0; border-top: 1px solid rgb(var(--mg-rule-soft)); }
 .rt-row:first-child { border-top: 0; }
@@ -498,7 +486,8 @@ button.sc-done-name { background: none; border: 0; padding: 0; text-align: left;
 .rt-link-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .rt-link-name { font: 600 15px/1.25 var(--mg-font); }
 .rt-link-sub { font: 500 13px/1.3 var(--mg-font); color: rgb(var(--mg-muted)); }
-.rt-link input[role="switch"] { margin-left: auto; }
+.rt-link .rf-sw { margin-left: auto; }
+.rt-link .rf-sw::after { content: ''; position: absolute; inset: -11px -4px; }
 
 /* Heat picker bar, heat table and between-heats pages. */
 .hb-bar { position: relative; display: flex; align-items: center; background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); border-radius: 12px; }
@@ -511,9 +500,10 @@ button.sc-done-name { background: none; border: 0; padding: 0; text-align: left;
 .hb-arena { font-weight: 800; }
 .hb-chev { margin-left: auto; width: 18px; height: 18px; flex: none; }
 .hb-btn[aria-expanded="true"] .hb-chev { transform: rotate(90deg); }
-.hb-menu { position: absolute; left: 8px; right: 8px; top: calc(100% + 4px); z-index: 9; display: flex; flex-direction: column; padding: 4px 0; border: 1px solid rgb(var(--mg-control)); border-radius: 14px; background: rgb(var(--mg-surface)); box-shadow: 0 8px 24px rgb(var(--mg-overlay) / .18); }
+.hb-menu { overflow: hidden auto; max-height: 60dvh; position: absolute; left: 8px; right: 8px; top: calc(100% + 4px); z-index: 9; display: flex; flex-direction: column; padding: 4px 0; border: 1px solid rgb(var(--mg-control)); border-radius: 14px; background: rgb(var(--mg-surface)); box-shadow: 0 8px 24px rgb(var(--mg-overlay) / .18); }
 .hb-menu button { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-height: 52px; padding: 8px 16px; border: 0; border-top: 1px solid rgb(var(--mg-rule-soft)); background: rgb(var(--mg-surface)); text-align: left; cursor: pointer; }
 .hb-menu button:first-child { border-top: 0; }
+.hb-menu button:last-child { border-radius: 0 0 10px 10px; }
 .hb-menu button[aria-selected="true"] { background: rgb(var(--mg-tint) / 0.6); }
 .hb-item-label { font: 600 15px/1.25 var(--mg-font); color: rgb(var(--mg-ink)); }
 .hb-item-status { font: 500 13px/1.3 var(--mg-font); color: rgb(var(--mg-muted)); }
@@ -565,6 +555,6 @@ body:has(.sc-fit) main.skin { padding-bottom: calc(76px + env(safe-area-inset-bo
 .sc-row-fill .sc-band { box-shadow: inset -1px 0 0 rgb(0 0 0 / 0.14), inset 0 0 0 1px rgb(0 0 0 / 0.08); }
 .sc-row.sc-row-fill.sc-row-placed { background: var(--lane-fill); border-color: var(--lane-ink); box-shadow: inset 0 0 0 3px var(--lane-ink); }
 .sc-row-fill .sc-place:not(.sc-place-out) { background: var(--lane-ink); color: var(--lane-fill); }
-.sc-row.sc-row-fill.sc-row-out { background: color-mix(in srgb, var(--lane-fill) 24%, rgb(var(--mg-surface))); border-color: #E8B4BA; }
+.sc-row.sc-row-fill.sc-row-out { background: color-mix(in srgb, var(--lane-fill) 24%, rgb(var(--mg-surface))); border-color: rgb(var(--mg-elim) / .3); }
 .sc-row-fill.sc-row-out .sc-main-btn, .sc-row-fill.sc-row-out .sc-lane { color: rgb(var(--mg-muted)); }
 .sc-row-fill.sc-row-out .sc-name { color: rgb(var(--mg-muted)); }

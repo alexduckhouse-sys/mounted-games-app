@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MotionConfig } from 'framer-motion';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -35,13 +36,13 @@ function mount(data: CompetitionDetail, forms: DeclarationForm[] = [], reload = 
     return Promise.resolve({ data: [] });
   });
   return render(
-    <MemoryRouter initialEntries={['/competitions/1/session/1']}>
+    <MotionConfig reducedMotion="always"><MemoryRouter initialEntries={['/competitions/1/session/1']}>
       <CompetitionContext.Provider value={{
         competition: data, reload, saveOverlay, streams: [], streamingEnabled: false, invoke: vi.fn(), ready: 0, streamMessages: [],
       }}>
         <Routes><Route path="/competitions/:id/session/:sessionId" element={<SessionPage />} /></Routes>
       </CompetitionContext.Provider>
-    </MemoryRouter>,
+    </MemoryRouter></MotionConfig>,
   );
 }
 
@@ -75,6 +76,10 @@ const openOrganiserTools = async () => {
   const sheet = await openTools();
   await userEvent.click(within(sheet).getByRole('button', { name: /Organiser tools/ }));
   return screen.getByRole('dialog', { name: 'Organiser tools' });
+};
+const openAdjustments = async () => {
+  await userEvent.click(within(await screen.findByRole('dialog', { name: 'Organiser tools' })).getByRole('button', { name: 'Score adjustments' }));
+  return screen.getByRole('dialog', { name: 'Score adjustments' });
 };
 const openInfo = async (link: RegExp, dialog: string) => {
   const sheet = await openTools();
@@ -386,7 +391,7 @@ describe('SessionPage', () => {
       fireEvent.keyDown(screen.getByRole('button', { name: /^Rider 3, lane/ }), { key: 'Delete' });
       await tapRider('Rider 2', 2);
       await completeRace();
-      const sheet = screen.getByRole('dialog', { name: 'Why were teams eliminated?' });
+      const sheet = screen.getByRole('dialog', { name: 'Why are they out?' });
       expect(within(sheet).getByText('Rider 3')).toBeInTheDocument();
       await userEvent.click(within(sheet).getByRole('button', { name: 'Did not start' }));
       await userEvent.click(within(sheet).getByRole('button', { name: 'Save race' }));
@@ -437,7 +442,7 @@ describe('SessionPage', () => {
       await userEvent.type(screen.getByLabelText('Reason for correction'), 'Judge changed it');
       await completeRace();
       // Rider 2 is out for not finishing, so the sheet starts on that reason.
-      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Why were teams eliminated?' })).getByRole('button', { name: 'Save race' }));
+      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Why are they out?' })).getByRole('button', { name: 'Save race' }));
       expect(outbox()[0].places).toEqual([
         { teamId: 1, place: 1, eliminated: false, refereeNote: 'Quick start' },
         { teamId: 2, place: 0, eliminated: true, status: 3, refereeNote: 'Did not finish' },
@@ -517,7 +522,7 @@ describe('SessionPage', () => {
       await userEvent.click(within(await teamMenu(sheet, 'Rider 2')).getByRole('menuitem', { name: 'Make HC' }));
       await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/1/teams/2', { isHorsConcours: true }));
       await waitFor(() => expect(reload).toHaveBeenCalled());
-      await userEvent.click(screen.getByRole('button', { name: 'Close race tools' }));
+      await userEvent.click(within(screen.getByRole('dialog', { name: 'Race tools' })).getByRole('button', { name: 'Close' }));
       await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
       await waitFor(() => expect(api.put).toHaveBeenLastCalledWith('/competitions/1/teams/2', { isHorsConcours: false }));
     });
@@ -559,7 +564,7 @@ describe('SessionPage', () => {
       await waitFor(() => expect(api.put).toHaveBeenLastCalledWith('/competitions/1/teams/2/card', { card: 'red' }));
       expect(within(row('Rider 2')).getByRole('img', { name: 'Red card' })).toBeInTheDocument();
 
-      await userEvent.click(screen.getByRole('button', { name: 'Close race tools' }));
+      await userEvent.click(within(screen.getByRole('dialog', { name: 'Race tools' })).getByRole('button', { name: 'Close' }));
       await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
       await waitFor(() => expect(api.put).toHaveBeenLastCalledWith('/competitions/1/teams/2/card', { card: 'yellow' }));
       await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
@@ -590,7 +595,7 @@ describe('SessionPage', () => {
       await userEvent.click(within(await teamMenu(sheet, 'Rider 1')).getByRole('menuitem', { name: 'Change points' }));
       await userEvent.click(within(sheet).getByRole('button', { name: 'One point fewer for Rider 1' }));
       expect(within(sheet).getByText('2')).toBeInTheDocument();
-      await userEvent.click(screen.getByRole('button', { name: 'Close race tools' }));
+      await userEvent.click(within(screen.getByRole('dialog', { name: 'Race tools' })).getByRole('button', { name: 'Close' }));
       expect(row('Rider 1')).toHaveTextContent('2 pts by hand');
       await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
       await waitFor(() => expect(row('Rider 1')).not.toHaveTextContent('by hand'));
@@ -796,7 +801,7 @@ describe('SessionPage', () => {
         expect(within(screen.getByRole('dialog', { name: 'Race tools' })).getByRole('button', { name: /Lanes for Final/ })).toBeInTheDocument();
       }, { timeout: 5000 });
       await userEvent.click(within(screen.getByRole('dialog', { name: 'Race tools' })).getByRole('button', { name: /Lanes for Final/ }));
-      const lanes = screen.getByRole('dialog', { name: 'Next round lanes' });
+      const lanes = screen.getByRole('dialog', { name: 'Lanes for Final' });
       expect(lanes).toHaveTextContent('Provisional');
       expect(lanes).toHaveTextContent('A1');
       view.unmount();
@@ -913,6 +918,7 @@ describe('SessionPage', () => {
       });
       mount(tiedComp);
       await openOrganiserTools();
+      await openAdjustments();
 
       await userEvent.selectOptions(screen.getByLabelText('Run-off winner'), '2');
       await userEvent.click(screen.getByRole('button', { name: 'Record run-off winner' }));
@@ -959,22 +965,23 @@ describe('SessionPage', () => {
       vi.mocked(api.put).mockRejectedValueOnce(new Error('offline'));
       mount(tiedComp);
       await openOrganiserTools();
+      const adjustments = await openAdjustments();
 
       await userEvent.click(screen.getByRole('button', { name: 'Record run-off winner' }));
-      expect(await screen.findByText('Couldn’t save the run-off result. Check your signal and try again.')).toBeInTheDocument();
+      expect(await within(adjustments).findByText('Couldn’t save the run-off result. Check your signal and try again.')).toBeInTheDocument();
 
       const customPts = screen.getByLabelText('Custom points');
       await userEvent.clear(customPts);
       await userEvent.type(customPts, '2.25');
       await userEvent.click(screen.getByRole('button', { name: 'Save override' }));
-      expect(await screen.findByText('Enter whole or half points, such as 3 or 2.5.')).toBeInTheDocument();
+      expect(await within(adjustments).findByText('Enter whole or half points, such as 3 or 2.5.')).toBeInTheDocument();
 
       const delta = screen.getByLabelText('Point adjustment');
       await userEvent.clear(delta);
       await userEvent.type(delta, '0.3');
       await userEvent.type(screen.getByLabelText('Adjustment reason'), 'Typo');
       await userEvent.click(screen.getByRole('button', { name: 'Apply adjustment' }));
-      expect(await screen.findByText('Adjust by whole or half points, such as 1 or -0.5.')).toBeInTheDocument();
+      expect(await within(adjustments).findByText('Adjust by whole or half points, such as 1 or -0.5.')).toBeInTheDocument();
       expect(api.post).not.toHaveBeenCalled();
     });
 
@@ -986,6 +993,7 @@ describe('SessionPage', () => {
       mount(scoringData(2));
       await opened('Bending');
       await openOrganiserTools();
+      await openAdjustments();
 
       await userEvent.selectOptions(screen.getByLabelText('Short-handed team'), '2');
       await userEvent.click(screen.getByRole('button', { name: 'Mark team HC (Hors Concours)' }));
@@ -1026,12 +1034,54 @@ describe('SessionPage', () => {
     mount(data);
     await opened('Flag');
     await openOrganiserTools();
+      await openAdjustments();
     expect(screen.getByRole('list', { name: 'Remaining uncompleted races' })).toHaveTextContent('Flag');
     await userEvent.click(screen.getByRole('button', { name: 'Save race line-up' }));
     expect(api.put).toHaveBeenCalledWith('/competitions/1/sessions/1/races', { raceNames: ['Bending', 'Flag'] });
     vi.mocked(api.put).mockRejectedValueOnce({ response: { data: { message: 'Protected game cannot move.' } } });
     await userEvent.click(screen.getByRole('button', { name: 'Save race line-up' }));
     expect(await screen.findByText('Protected game cannot move.')).toBeVisible();
+  });
+
+  describe('Score adjustments and Set up heats sheets', () => {
+    it('opens Score adjustments as the shared sheet with 44px controls, and closes it on Escape or a tap on the dim', async () => {
+      mount(scoringData(2));
+      await opened('Bending');
+      await openOrganiserTools();
+      const sheet = await openAdjustments();
+      expect(sheet).toHaveClass('kit-sheet');
+      expect(within(sheet).getByRole('button', { name: 'Apply adjustment' })).toHaveClass('min-h-11');
+      expect(within(sheet).getByLabelText('Short-handed team')).toHaveClass('min-h-11');
+      fireEvent(sheet, new Event('cancel', { cancelable: true }));
+      expect(screen.queryByRole('dialog', { name: 'Score adjustments' })).toBeNull();
+      const again = await openAdjustments();
+      fireEvent.click(again);
+      expect(screen.queryByRole('dialog', { name: 'Score adjustments' })).toBeNull();
+    });
+
+    it('shows a failed adjustment inside the sheet, not on the page behind it', async () => {
+      vi.mocked(api.post).mockRejectedValueOnce(new Error('offline'));
+      mount(scoringData(2));
+      await opened('Bending');
+      await openOrganiserTools();
+      const sheet = await openAdjustments();
+      await userEvent.type(within(sheet).getByLabelText('Adjustment reason'), 'Late');
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Apply adjustment' }));
+      const message = 'Couldn’t save score adjustment. Check your signal and try again.';
+      expect(await within(sheet).findByText(message)).toBeInTheDocument();
+      expect(screen.getAllByText(message)).toHaveLength(1);
+    });
+
+    it('opens Set up heats as the shared sheet with no blurred backdrop, and closes it on Escape', async () => {
+      mount(competition({ teams, sessions: [session(1, { status: 0, heats: [], plannedRaces: ['Sword'] })] }), []);
+      await userEvent.click(screen.getByRole('button', { name: /Set up heats/ }));
+      const sheet = await screen.findByRole('dialog', { name: 'Set up heats' });
+      expect(sheet).toHaveClass('kit-sheet');
+      expect(document.querySelector('.backdrop-blur-sm')).toBeNull();
+      expect(within(sheet).getByRole('button', { name: 'Generate' })).toHaveClass('kit-pill');
+      fireEvent(sheet, new Event('cancel', { cancelable: true }));
+      expect(screen.queryByRole('dialog', { name: 'Set up heats' })).toBeNull();
+    });
   });
 
   describe('Commentator facts, post-race summary modal, and QR Access', () => {
@@ -1050,7 +1100,7 @@ describe('SessionPage', () => {
       const sheet = await openTools();
       await userEvent.click(within(sheet).getByRole('switch', { name: /Commentator facts/ }));
       expect(localStorage.getItem('mg.commentatorScoring.1')).toBe('yes');
-      await userEvent.click(screen.getByRole('button', { name: 'Close race tools' }));
+      await userEvent.click(within(screen.getByRole('dialog', { name: 'Race tools' })).getByRole('button', { name: 'Close' }));
 
       // Official standings (with the tack bonus) decide the line under each team.
       await waitFor(() => expect(row('Rider 1')).toHaveTextContent('Leading'));
@@ -1197,9 +1247,9 @@ it('clears the in-memory draft and undo action when a race is rerun', async () =
   mount(scoringData(2));
   await opened('Bending');
   await tapRider('Rider 1', 1);
-  const sheet = await openOrganiserTools();
-  // Race controls and the score adjustments panel both offer a re-run in this sheet; the first is the race controls'.
-  await userEvent.click(within(sheet).getAllByRole('button', { name: /Re-run stopped race/ })[0]);
+  await openOrganiserTools();
+  const sheet = await openAdjustments();
+  await userEvent.click(within(sheet).getByRole('button', { name: /Re-run stopped race/ }));
   await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/sessions/races/1/results'));
   expect(screen.queryByLabelText('Place 1')).toBeNull();
   expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
