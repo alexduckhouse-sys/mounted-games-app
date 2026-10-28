@@ -1,6 +1,6 @@
 import { screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { registerPwa, reloadOnceForChunkFailure, setBroadcasting } from './pwa';
+import { applyPendingUpdate, registerPwa, reloadOnceForChunkFailure, setBroadcasting } from './pwa';
 
 type Options = { onNeedRefresh: () => void; onOfflineReady: () => void; onRegisteredSW: (url: string, registration?: unknown) => void };
 const registerSW = vi.hoisted(() => vi.fn());
@@ -20,10 +20,39 @@ describe('registerPwa', () => {
     expect(registerSW).toHaveBeenCalledTimes(1);
   });
 
-  it('applies a waiting update straight away, without asking', () => {
+  it('does not reload under the user when an update is waiting', () => {
     options.onNeedRefresh();
-    expect(updateSW).toHaveBeenCalledWith(true);
+    expect(updateSW).not.toHaveBeenCalled();
     expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(applyPendingUpdate()).toBe(true);
+    expect(updateSW).toHaveBeenCalledWith(true);
+    expect(applyPendingUpdate()).toBe(false);
+  });
+
+  it('applies the update at the next in-app route change', () => {
+    options.onNeedRefresh();
+    history.pushState({}, '', '/somewhere');
+    expect(updateSW).toHaveBeenCalledTimes(1);
+    updateSW.mockClear();
+    options.onNeedRefresh();
+    history.replaceState({}, '', '/elsewhere');
+    expect(updateSW).toHaveBeenCalledTimes(1);
+    updateSW.mockClear();
+    options.onNeedRefresh();
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    expect(updateSW).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies the update when the tab is hidden, not when it is shown', () => {
+    options.onNeedRefresh();
+    const state = vi.spyOn(document, 'visibilityState', 'get');
+    state.mockReturnValue('visible');
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(updateSW).not.toHaveBeenCalled();
+    state.mockReturnValue('hidden');
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(updateSW).toHaveBeenCalledTimes(1);
+    state.mockRestore();
   });
 
   it('remembers that the app is ready to work offline', () => {
@@ -41,11 +70,13 @@ describe('registerPwa', () => {
   });
 });
 
-it('holds the update back while broadcasting, then applies it', () => {
+it('holds the update back while broadcasting, then applies it at the next safe moment', () => {
   setBroadcasting(true);
   options.onNeedRefresh();
+  history.pushState({}, '', '/live');
   expect(updateSW).not.toHaveBeenCalled();
   setBroadcasting(false);
+  history.pushState({}, '', '/after');
   expect(updateSW).toHaveBeenCalledWith(true);
 });
 

@@ -1,8 +1,9 @@
 /**
- * Service-worker registration. A new version applies by itself: as soon as one is waiting, the page asks it to
- * skip waiting and reloads onto it (the worker already claims clients on activation). Asking the user to reload
- * could be answered with the old index.html from the waiting worker, so the tab kept loading deleted chunks.
- * While a broadcast is running the swap is held back until it ends.
+ * Service-worker registration. A new version applies by itself, but never under someone's hands: once one is waiting,
+ * the page asks it to skip waiting and reloads onto it (the worker already claims clients on activation) at the next
+ * in-app navigation or when the tab is hidden, whichever comes first. Asking the user to reload could be answered
+ * with the old index.html from the waiting worker, so the tab kept loading deleted chunks. While a broadcast is
+ * running the swap is held back.
  */
 import { registerSW } from 'virtual:pwa-register';
 import { isNativeApp } from './native/platform';
@@ -13,10 +14,14 @@ let updatePending = false;
 
 export function setBroadcasting(value: boolean): void {
   broadcasting = value;
-  if (!value && updatePending) {
-    updatePending = false;
-    applyUpdate?.();
-  }
+}
+
+/** Applies a waiting update if one is queued and it is safe to reload (called on navigation and when the tab hides). */
+export function applyPendingUpdate(): boolean {
+  if (!updatePending || broadcasting || !applyUpdate) return false;
+  updatePending = false;
+  applyUpdate();
+  return true;
 }
 
 const RELOAD_KEY = 'mg.pwa.chunkReload';
@@ -33,6 +38,7 @@ export function reloadOnceForChunkFailure(reload: () => void = () => window.loca
   }
   // If the tab is still running after a while, the reload worked: allow one more for a later deploy.
   setTimeout(() => { try { sessionStorage.removeItem(RELOAD_KEY); } catch { /* ignore */ } }, RELOAD_GUARD_MS);
+  updatePending = false;
   if (applyUpdate) applyUpdate(); else reload();
   return true;
 }
@@ -52,17 +58,27 @@ function watchChunkFailures(): void {
   });
 }
 
+function watchSafeMoments(): void {
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') applyPendingUpdate(); });
+  window.addEventListener('popstate', () => { applyPendingUpdate(); });
+  // The router changes pages with history.pushState/replaceState; the page has just changed when they return.
+  for (const method of ['pushState', 'replaceState'] as const) {
+    const original = history[method].bind(history);
+    history[method] = (...args: Parameters<History['pushState']>) => { original(...args); applyPendingUpdate(); };
+  }
+}
+
 export function registerPwa(): void {
   // The iPhone app ships the build inside itself and updates with each app release, so it runs no
   // service worker (and WKWebView doesn't offer one for the app's own origin anyway).
   if (isNativeApp()) return;
   watchChunkFailures();
+  watchSafeMoments();
   const updateSW = registerSW({
     onNeedRefresh() {
-      // A new build is waiting in the worker: activate it and reload, unless a broadcast is running.
+      // A new build is waiting in the worker: activate it and reload at the next safe moment.
       applyUpdate = () => { void updateSW(true); };
-      if (broadcasting) { updatePending = true; return; }
-      applyUpdate();
+      updatePending = true;
     },
     onOfflineReady() {
       // Stash a flag so the UI can show a "you're good offline" toast if we
