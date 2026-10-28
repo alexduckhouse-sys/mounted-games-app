@@ -147,6 +147,7 @@
 .ops-mv-btns { flex: 1 1 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 @media (min-width: 640px) { .ops-mv-btns { flex: none; display: flex; } }
 .ops-time { flex: none; width: 52px; font: 700 18px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); font-variant-numeric: tabular-nums; }
+.ops-lock-note { margin: 0; padding: 6px 16px 8px; }
 .ops-gap-line { padding: 2px 16px; font: 500 12px/1.6 var(--mg-font); color: rgb(var(--mg-muted)); background: rgb(var(--mg-subtle)); }
 .ops-tt-edit { background: rgb(var(--mg-subtle)); }
 .ops-tt-edit .ops-pair { grid-template-columns: 1fr; }
