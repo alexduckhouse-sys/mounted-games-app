@@ -101,6 +101,8 @@ export const savedCopyKeys = {
  * a normal load, a quick refresh or a short wobble in the signal should show nothing at all.
  */
 export const SAVED_COPY_NOTICE_AFTER_MS = 30 * 60_000;
+/** Old standings show for a moment on every refresh; the "Showing saved standings" line waits until they have lasted this long. */
+export const SAVED_STANDINGS_NOTICE_MS = 30_000;
 /** Competition pages and scoring during an event change every few minutes, so a copy goes stale sooner. */
 export const LIVE_SAVED_COPY_NOTICE_AFTER_MS = 10 * 60_000;
 /** Freshness window (2 minutes) in Lite Mode where a recently saved copy avoids redundant background fetches. */
