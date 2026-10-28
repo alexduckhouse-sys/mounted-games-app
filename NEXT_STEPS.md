@@ -4,36 +4,58 @@ The cross-chat to-do list, confirmed product specifications, code-verified bugs,
 
 **This file, `BUGS.md` and `COMPLETED_NEXT_STEPS.md` live in git on main.** Edit them on your feature branch (or a small docs PR), not in an uncommitted copy in another worktree. Move finished items to `COMPLETED_NEXT_STEPS.md` once their PR is merged.
 
-## Start here: end of 27 October — what's merged, what isn't, and where it's kept
+## Start here: end of 27 October — what's merged, what's waiting
 
-**Merged on 27 October:** #198–#203, #205–#208, #210, #211 (integration of #203–#209), #212 (West Mids Pairs importer), #214 (password-reset security fixes). Neon `production` has the three #211 migrations (backup branch `backup-pre-integration-211-20261027`).
+**Merged on 27 October:**
+- #198–#203, #205–#208, #210, #211 (the integration of #203–#209)
+- #212 West Mids Pairs importer
+- #214 password-reset security fixes
+- #216 club receipt privacy
+- #217 docs
+- #220 add-to-home-screen guide
+- #221 EGUK demo names
+- #222 camera phones join by QR code
+- #224 flaky scorer test fix
+- #225 entry form remembers you; no phone or email kept, drafts cleared on sign-out
+- #226 connection pill wording
+- #227 phone-alert readiness; alerts only switch off when blocked or unsupported
+- #230 weather alerts for organisers
 
-**Tomorrow (28 October):** the owner is fixing organiser and site admin pages that didn't follow the house style. Every UI PR now ticks the checklist at the top of `docs/designs/design-decisions.md` ("Before you open a UI pull request"). Today's public-page decisions are in the same file under "Public pages, round 2".
+Neon `production` has the three #211 migrations. Its only other branch is `backup-pre-integration-211-20261027`.
 
-**Open PRs:**
-- #216 club receipts: each contact sees only their own entries. This is a live privacy fix from #202. Merge first.
-- #215 ticker dock on every page.
+**Tomorrow (28 October):** the owner is fixing organiser and site admin pages that didn't follow the house style. Every UI PR ticks the checklist at the top of `docs/designs/design-decisions.md` ("Before you open a UI pull request").
 
-**Not on main yet. Nothing is lost:** on 27 October every worktree's uncommitted work was snapshotted into a local ref, `refs/backup/wip-20261027/<worktree>`, in the main checkout. The snapshot's parent is the worktree's HEAD, so `git diff refs/backup/wip-20261027/<name>^ refs/backup/wip-20261027/<name>` shows the work. The tip of every deleted local branch is kept at `refs/backup/branches-20261027/<branch>`; `git for-each-ref refs/backup/` lists them all. The repo is public, so these refs are **local only. Don't push them.** Some contain unreleased security fixes and audit reports.
+**Open, needs the owner:**
 
-**Tidy-up done:** 44 stale worktrees and 44 local branches were removed, all backed up as above (71 worktrees down to 30). The worktrees that are left hold live or unmerged work (the table below). Neon now has only `production` and `backup-pre-integration-211-20261027`. The owner deleted the three older 27 October branches, so 8 of the 10 allowed branches are free.
-
-| Work | Where | State / next step |
+| PR | What | Waiting on |
 | --- | --- | --- |
-| Public pages round 2 build | `demo/event-pages` + `demo/site-pages` → `demo/public-pages` | The "Public pages design improvements" session is building it now and raising the PRs |
-| Next-wave UI pass | `feat/next-wave-ui-pass` (worktree `next-wave-ui`, 4 local commits) | Handoff in `.claude/worktrees/next-wave-ui/HANDOFF-next-wave-ui-pass.md`. Next: coverage run, then PR |
-| Weather alerts | `feat/weather-alerts` (pushed, no PR) | Deliberately left out of #211. Needs a PR and a check against main |
-| Protest log v2 | worktree and backup `agent-a5f1aee4ea01d6c92` (40 new files, AddProtestLog migration) | Needs a branch, PR and a Neon migration |
-| Entries-digest security rework | worktree and backup `agent-a712dfa98b3866af7` | **Migration clash:** it regenerates AddEntriesDigest, which is already on prod. Redo it as a new incremental migration |
-| Install guide v2 | backup `agent-ad6f499cd69e9a0fa` (older copy: `w-install-guide`) | Uncommitted. Needs a PR |
-| Camera connect and locks | backup `w-camera-connect` | Uncommitted. Needs a PR |
-| EGUK showcase names | backup `eguk-showcase` | Uncommitted. Needs a PR |
-| Codex entrant conveniences, everyday features, notification readiness | backups `mg-entrant-conveniences`, `mg-everyday-features`, `mg-notification-readiness` | Uncommitted. Everyday features notes a waiting-list bug: accepting a place can drop stabling charges |
-| iOS app | backups `agent-abe1af4b229d24eb3` (Capacitor shell), `ios-web`, `mg-ios-wave2` (largest Codex set), `mg-ios-*` | Uncommitted. See `.ios-app-handoff.local/PLAN.md` |
-| Social sign-in / password reset leftovers | backups `agent-a136b7a700736f06c`, `agent-ad970ad59bf8297cb` | Probably older copies of what landed in #211/#214. Compare before discarding |
-| Multi-model audit reports | backup `main-checkout` (`docs/audits/**`) | Includes a security audit. Review before committing anything to this public repo; `MASTER-SYNTHESIS.md` is summarised in `docs/plans/2026-10-27-codex-debate-handoff.md` |
-| Older fix worktrees (`late-*`, `remaining-*`, `scoring-*`, `backend-*`, `weather-delta-fixes`, `w10-review-fixes`, `w2-*`, `toplist-exact`, `stream-residual-integration`, `main-followup-*`) | backups of the same names | Mostly landed through later integrations. Main has moved on in the same files, so check a specific fix before redoing it |
-| Unowned | — | Audit-7 CSS residual (`fix/audit-7-css-theme-cleanup-deadcode`). The toplist "−1" (points gap to the leader) needs clearer wording |
+| #219 | Entries-open email security fixes | Neon migration `20261027204636_FreezeEntriesDigestCompetitionText`, then merge. **First** of the migration PRs |
+| #229 | Protest log for stewards | After #219: rebase and regenerate `AppDbContextModelSnapshot`. Then Neon migration `20261027210359_AddProtestLog`, then merge |
+| #231 | iPhone backend: lasting reminders, team progress, chat report and block, deletion | After #229: rebase. Then Neon migration `20261027222640_AddIosNotificationsAndChatModeration`, then merge |
+| #232 | iPhone app shell (Capacitor, Live Activity) | Stacked on #231; merge after it. Xcode signing not set up (`DEVELOPMENT_TEAM` blank) |
+| #223 | Results picture, one entries filter dropdown, crew dropdowns. The toplist points gap stays as it is | Owner to choose: results picture as its own row (as built) or one choice inside the Share event sheet |
+| #218 | Public pages round 2 | The public pages design session |
+| #215 | Ticker dock on every page | Another agent |
+
+Run prod migrations with `NEON_ENV_FILE=<prod env> Jwt__Key=<32+ chars> Admin__Key=<20+ chars> npm run db:migrate`, from a checkout of the PR branch. Take a Neon backup branch first.
+
+**Checks still owed:**
+- #226: French and Welsh pill wording needs a native speaker.
+- #230: the weather line sits under the header; check that matches the weather design.
+
+**Nothing is lost:** uncommitted work from every removed worktree is in local refs.
+- `refs/backup/wip-20261027/<worktree>` and `refs/backup/wip-20261027b/<worktree>`: the work is `git diff <ref>^ <ref>`.
+- `refs/backup/branches-20261027/<branch>`: tips of deleted branches.
+- List them all with `git for-each-ref refs/backup/`.
+- The repo is public, so these refs stay local. Never push them; some hold audit reports.
+
+**Dropped by the owner (27 Oct):**
+- the multi-model audit reports (`docs/audits/**`, kept only in the backup refs);
+- the admin design scratch copy;
+- a control-centre folder of build output;
+- the unwired helpers and specs in Codex's everyday-features.
+
+**Checked and not a bug:** "accepting a waiting-list place drops stabling". Stabling is sold through the event shop, and the web never sends a stable fee with an entry.
 
 ## 26 October — Whole-Site Agent Army Audit & PRs #141–#185 Shipped
 
