@@ -282,6 +282,7 @@ export const teams: AreaCatalogue<typeof en> = {
   'teams.stream.dataNote': 'Mae fideo’n defnyddio llawer o ddata, felly dim ond pan fyddwch chi’n tapio y bydd yn dechrau.',
   'teams.stream.connecting': 'Yn cysylltu…',
   'teams.stream.stream': 'Ffrwd',
+  'teams.stream.controls': 'Rheolyddion y ffrwd',
   'teams.stream.openStream': 'Agor y ffrwd',
   'teams.stream.tapToLoad': 'Tapiwch i lwytho’r ffrwd',
   'teams.stream.reconnecting': 'Yn ailgysylltu…',

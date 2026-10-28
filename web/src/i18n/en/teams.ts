@@ -281,6 +281,7 @@ export const teams = {
   'teams.stream.dataNote': 'Video uses a lot of data, so it only starts when you tap.',
   'teams.stream.connecting': 'Connecting…',
   'teams.stream.stream': 'Stream',
+  'teams.stream.controls': 'Stream controls',
   'teams.stream.openStream': 'Open stream',
   'teams.stream.tapToLoad': 'Tap to load the stream',
   'teams.stream.reconnecting': 'Reconnecting…',
