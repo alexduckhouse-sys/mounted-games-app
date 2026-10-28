@@ -332,7 +332,7 @@ export const deskStream = {
   'desk.stream.bc.dimmedLabel': 'Screen dimmed for tripod battery saving',
   'desk.stream.bc.locked': 'Screen locked',
   'desk.stream.bc.lockedLine': 'LIVE {time} · {arena} · {angle}',
-  'desk.stream.bc.unlock': 'Double-tap to unlock.',
+  'desk.stream.bc.unlock': 'Tap to unlock.',
   'desk.stream.bc.sponsorsOffAria': 'Turn sponsors off',
   'desk.stream.bc.sponsorsOnAria': 'Turn sponsors on',
   'desk.stream.bc.sponsorsOn': 'Sponsors on',

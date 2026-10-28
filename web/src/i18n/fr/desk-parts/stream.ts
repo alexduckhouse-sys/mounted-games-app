@@ -333,7 +333,7 @@ export const deskStream: AreaCatalogue<typeof en> = {
   'desk.stream.bc.dimmedLabel': 'Écran assombri pour économiser la batterie du trépied',
   'desk.stream.bc.locked': 'Écran verrouillé',
   'desk.stream.bc.lockedLine': 'EN DIRECT {time} · {arena} · {angle}',
-  'desk.stream.bc.unlock': 'Touchez deux fois pour déverrouiller.',
+  'desk.stream.bc.unlock': 'Touchez pour déverrouiller.',
   'desk.stream.bc.sponsorsOffAria': 'Désactiver les partenaires',
   'desk.stream.bc.sponsorsOnAria': 'Activer les partenaires',
   'desk.stream.bc.sponsorsOn': 'Partenaires activés',

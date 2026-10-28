@@ -346,7 +346,7 @@ it('supports microphone selection, wind filter, quality presets, camera zoom, tr
   fireEvent.click(screen.getByRole('button', { name: 'Lock and dim screen' }));
   expect(screen.getByRole('dialog', { name: 'Screen dimmed for tripod battery saving' })).toBeVisible();
   expect(screen.getByRole('heading', { name: 'Screen locked' })).toBeVisible();
-  fireEvent.click(screen.getByRole('button', { name: 'Double-tap to unlock.' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Tap to unlock.' }));
   expect(screen.queryByRole('dialog', { name: 'Screen dimmed for tripod battery saving' })).toBeNull();
 
   state.lastStreamCommand = { streamId: 99, arenaName: 'Main Arena', command: 'flipCamera', issuedAt: '2026-10-24T12:04:00Z' };

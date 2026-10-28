@@ -333,7 +333,7 @@ export const deskStream: AreaCatalogue<typeof en> = {
   'desk.stream.bc.dimmedLabel': 'Sgrin wedi’i thywyllu i arbed batri’r trybedd',
   'desk.stream.bc.locked': 'Sgrin wedi’i chloi',
   'desk.stream.bc.lockedLine': 'YN FYW {time} · {arena} · {angle}',
-  'desk.stream.bc.unlock': 'Tapiwch ddwywaith i ddatgloi.',
+  'desk.stream.bc.unlock': 'Tapiwch i ddatgloi.',
   'desk.stream.bc.sponsorsOffAria': 'Diffodd y noddwyr',
   'desk.stream.bc.sponsorsOnAria': 'Troi’r noddwyr ymlaen',
   'desk.stream.bc.sponsorsOn': 'Noddwyr ymlaen',
