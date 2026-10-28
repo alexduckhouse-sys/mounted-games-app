@@ -1,5 +1,7 @@
 import type { StatsBrowse, StatsGame, StatsHit, StatsProfile, StatsSubjectKind, StatsSummary } from '../types';
 import { formatPoints } from './formatPoints';
+import { tr } from '../i18n/translate';
+import { localOrdinal } from './ordinalText';
 
 /** The API's limits on a search or profile name (`StatsNames` in the API). */
 export const STATS_MIN_QUERY = 2;
@@ -8,7 +10,13 @@ export const STATS_MAX_QUERY = 80;
 /** The URL segment for each kind, shared by the web route (`/stats/:kind`) and the API (`/api/stats/:kind`). */
 export const STATS_PATHS: Record<StatsSubjectKind, string> = { 0: 'riders', 1: 'ponies', 2: 'teams', 3: 'clubs' };
 
-export const STATS_KIND_LABELS: Record<StatsSubjectKind, string> = { 0: 'Rider', 1: 'Pony', 2: 'Team', 3: 'Club' };
+/** The kind's name in the chosen language ("Rider", "Pony", "Team", "Club" in English). */
+export const STATS_KIND_LABELS: Record<StatsSubjectKind, string> = {
+  get 0() { return tr('site.stats.kind.rider'); },
+  get 1() { return tr('site.stats.kind.pony'); },
+  get 2() { return tr('site.stats.kind.team'); },
+  get 3() { return tr('site.stats.kind.club'); },
+};
 
 /** The kind for a URL segment, or null for anything else. */
 export function statsKindFromPath(segment: string | undefined): StatsSubjectKind | null {
@@ -40,20 +48,18 @@ export function formatPercent(value: number | null | undefined): string {
 
 /** 1st, 2nd, 3rd, 4th, 11th, 12th, 13th, 21st. */
 export function ordinalPlace(place: number): string {
-  const tens = place % 100;
-  if (tens >= 11 && tens <= 13) return `${place}th`;
-  return `${place}${({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[place % 10] ?? 'th'}`;
+  return localOrdinal(place);
 }
 
 /** "A Final" for tier 0, "B Final" for 1, and so on; null when not in a lettered final. */
 export function finalLabel(tier: number | null | undefined): string | null {
   if (tier == null || tier < 0 || tier > 25) return null;
-  return `${String.fromCharCode(65 + tier)} Final`;
+  return tr('site.stats.finalLetter', { letter: String.fromCharCode(65 + tier) });
 }
 
 /** "3 of 6 points" for a quota line. */
 export function pointsOf(points: number, maxPoints: number): string {
-  return `${formatPoints(points)} of ${formatPoints(maxPoints)} ${maxPoints === 1 ? 'point' : 'points'}`;
+  return tr('site.stats.pointsOf', { count: maxPoints, points: formatPoints(points), max: formatPoints(maxPoints) });
 }
 
 export function plural(count: number, one: string, many = `${one}s`): string {
@@ -62,10 +68,10 @@ export function plural(count: number, one: string, many = `${one}s`): string {
 
 /** The filter tabs on the stats page, in order. `plural` is the lower-case word used in prompts and messages. */
 export const STATS_TABS: { kind: StatsSubjectKind; label: string; plural: string }[] = [
-  { kind: 0, label: 'Riders', plural: 'riders' },
-  { kind: 1, label: 'Ponies', plural: 'ponies' },
-  { kind: 2, label: 'Teams', plural: 'teams' },
-  { kind: 3, label: 'Clubs', plural: 'clubs' },
+  { kind: 0, get label() { return tr('site.stats.tab.riders'); }, get plural() { return tr('site.stats.tabPlural.riders'); } },
+  { kind: 1, get label() { return tr('site.stats.tab.ponies'); }, get plural() { return tr('site.stats.tabPlural.ponies'); } },
+  { kind: 2, get label() { return tr('site.stats.tab.teams'); }, get plural() { return tr('site.stats.tabPlural.teams'); } },
+  { kind: 3, get label() { return tr('site.stats.tab.clubs'); }, get plural() { return tr('site.stats.tabPlural.clubs'); } },
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -92,32 +98,47 @@ export function isStatsProfile(value: unknown): value is StatsProfile {
 
 export interface StatsTile { label: string; value: string; detail: string }
 
+/** "3 races", "1 win", "2 entries" in the chosen language. */
+export const countText = (key: 'race' | 'win' | 'entry' | 'competition' | 'rider' | 'point' | 'run' | 'ageGroupEntry' | 'placedEntry', n: number) => {
+  switch (key) {
+    case 'race': return tr('site.count.race', { count: n });
+    case 'win': return tr('site.count.win', { count: n });
+    case 'entry': return tr('site.count.entry', { count: n });
+    case 'competition': return tr('site.count.competition', { count: n });
+    case 'rider': return tr('site.count.rider', { count: n });
+    case 'point': return tr('site.count.point', { count: n });
+    case 'run': return tr('site.count.run', { count: n });
+    case 'ageGroupEntry': return tr('site.count.ageGroupEntry', { count: n });
+    default: return tr('site.count.placedEntry', { count: n });
+  }
+};
+
 /** The headline tiles of a profile, in reading order. */
 export function summaryTiles(summary: StatsSummary): StatsTile[] {
   const podiums = summary.firsts + summary.seconds + summary.thirds;
   const bFinals = summary.bFinals ?? 0;
   const cFinals = summary.cFinals ?? 0;
   const finalsDetail = summary.entriesWithFinals === 0
-    ? 'No finals run'
+    ? tr('site.stats.noFinals')
     : bFinals > 0 || cFinals > 0
-      ? `A ${summary.aFinals} · B ${bFinals} · C ${cFinals} (of ${summary.entriesWithFinals})`
-      : `${summary.aFinals} of ${summary.entriesWithFinals} with finals`;
+      ? tr('site.stats.finalsAbcOfParen', { a: summary.aFinals, b: bFinals, c: cFinals, of: summary.entriesWithFinals })
+      : tr('site.stats.finalsWith', { a: summary.aFinals, of: summary.entriesWithFinals });
   return [
     {
-      label: 'Competitions', value: String(summary.competitions),
-      detail: plural(summary.entries, 'age-group entry', 'age-group entries'),
+      label: tr('site.stats.competitions'), value: String(summary.competitions),
+      detail: countText('ageGroupEntry', summary.entries),
     },
-    { label: 'Podiums', value: String(podiums), detail: `1st ${summary.firsts} · 2nd ${summary.seconds} · 3rd ${summary.thirds}` },
+    { label: tr('site.stats.podiums'), value: String(podiums), detail: tr('site.stats.podiumDetail', { first: summary.firsts, second: summary.seconds, third: summary.thirds }) },
     {
-      label: 'Average place', value: summary.averagePlace == null ? '—' : String(summary.averagePlace),
-      detail: summary.placedEntries === 0 ? 'No placed entries' : `Over ${plural(summary.placedEntries, 'placed entry', 'placed entries')}`,
+      label: tr('site.stats.averagePlace'), value: summary.averagePlace == null ? '—' : String(summary.averagePlace),
+      detail: summary.placedEntries === 0 ? tr('site.stats.noPlaced') : tr('site.stats.overPlaced', { entries: countText('placedEntry', summary.placedEntries) }),
     },
     {
-      label: 'A Final', value: formatPercent(summary.aFinalPercent),
+      label: tr('site.stats.aFinal'), value: formatPercent(summary.aFinalPercent),
       detail: finalsDetail,
     },
-    { label: 'Point quota', value: formatPercent(summary.pointQuotaPercent), detail: pointsOf(summary.points, summary.maxPoints) },
-    { label: 'Races won', value: formatPercent(summary.winPercent), detail: `${summary.wins} of ${plural(summary.races, 'race')}` },
+    { label: tr('site.stats.pointQuota'), value: formatPercent(summary.pointQuotaPercent), detail: pointsOf(summary.points, summary.maxPoints) },
+    { label: tr('site.stats.racesWon'), value: formatPercent(summary.winPercent), detail: tr('site.of', { a: summary.wins, b: countText('race', summary.races) }) },
   ];
 }
 
@@ -127,18 +148,18 @@ export function statsFacts(summary: StatsSummary): { label: string; value: strin
   const bFinals = summary.bFinals ?? 0;
   const cFinals = summary.cFinals ?? 0;
   const finals = summary.entriesWithFinals === 0
-    ? 'No finals run'
+    ? tr('site.stats.noFinals')
     : bFinals > 0 || cFinals > 0
-      ? `A ${summary.aFinals} · B ${bFinals} · C ${cFinals} of ${summary.entriesWithFinals}`
-      : `${summary.aFinals} of ${summary.entriesWithFinals}`;
+      ? tr('site.stats.finalsAbcOf', { a: summary.aFinals, b: bFinals, c: cFinals, of: summary.entriesWithFinals })
+      : tr('site.of', { a: summary.aFinals, b: summary.entriesWithFinals });
   const quota = summary.pointQuotaPercent == null ? '' : ` (${formatPercent(summary.pointQuotaPercent)})`;
   return [
-    { label: 'Competitions', value: String(summary.competitions) },
-    { label: 'Podiums', value: podiums === 0 ? 'None yet' : `${podiums} (1st ${summary.firsts}, 2nd ${summary.seconds}, 3rd ${summary.thirds})` },
-    { label: 'Average place', value: summary.averagePlace == null ? '—' : String(summary.averagePlace) },
-    { label: 'A Finals', value: finals },
-    { label: 'Points', value: `${formatPoints(summary.points)} of ${formatPoints(summary.maxPoints)}${quota}` },
-    { label: 'Races won', value: `${summary.wins} of ${summary.races}` },
+    { label: tr('site.stats.competitions'), value: String(summary.competitions) },
+    { label: tr('site.stats.podiums'), value: podiums === 0 ? tr('site.stats.noneYet') : tr('site.stats.podiumFact', { total: podiums, first: summary.firsts, second: summary.seconds, third: summary.thirds }) },
+    { label: tr('site.stats.averagePlace'), value: summary.averagePlace == null ? '—' : String(summary.averagePlace) },
+    { label: tr('site.stats.aFinals'), value: finals },
+    { label: tr('site.stats.points'), value: `${tr('site.of', { a: formatPoints(summary.points), b: formatPoints(summary.maxPoints) })}${quota}` },
+    { label: tr('site.stats.racesWon'), value: tr('site.of', { a: summary.wins, b: summary.races }) },
   ];
 }
 
@@ -146,9 +167,9 @@ export function statsFacts(summary: StatsSummary): { label: string; value: strin
 export function gameLine(game: StatsGame): string {
   const average = game.averagePoints ?? (game.races > 0 ? Math.round((game.points / game.races) * 10) / 10 : null);
   return [
-    plural(game.races, 'race'),
-    plural(game.wins, 'win'),
-    average == null ? null : `average ${average} pts`,
-    game.averagePlace == null ? null : `average place ${game.averagePlace}`,
+    countText('race', game.races),
+    countText('win', game.wins),
+    average == null ? null : tr('site.stats.averagePts', { n: average }),
+    game.averagePlace == null ? null : tr('site.stats.averagePlaceN', { n: game.averagePlace }),
   ].filter(Boolean).join(' · ');
 }

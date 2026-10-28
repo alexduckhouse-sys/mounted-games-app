@@ -1,4 +1,5 @@
 import type { CompetitionDetail, MySignup, SectionSignup, SignupPaymentStatus } from '../types';
+import { clubLabel } from './clubName';
 
 export type PassPaymentBadge = 'PAID' | 'PENDING' | 'REFUNDED' | 'CANCELLED';
 
@@ -64,12 +65,11 @@ function resolveClubOrTeamLabel(input: {
   teamName?: string | null;
   ponyClubName?: string | null;
 }): string {
-  const label =
-    input.stablingClubOrTeam?.trim() ||
-    input.teamName?.trim() ||
-    input.ponyClubName?.trim() ||
-    'Unaffiliated';
-  return label;
+  return (
+    clubLabel(input.stablingClubOrTeam) ||
+    clubLabel(input.teamName) ||
+    clubLabel(input.ponyClubName)
+  );
 }
 
 export function buildLorryStablingPassFromMySignup(

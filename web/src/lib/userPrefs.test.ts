@@ -11,6 +11,7 @@ import {
   getDefaultAgeGroup,
   getDefaultToplistView,
   getNotifyMinutesBefore,
+  getFullColourLanes,
   getScorerHaptics,
   getTextSize,
   isValidBottomTabId,
@@ -23,6 +24,7 @@ import {
   setDefaultAgeGroup,
   setDefaultToplistView,
   setNotifyMinutesBefore,
+  setFullColourLanes,
   setScorerHaptics,
   setTextSize,
   STORAGE_KEYS,
@@ -257,5 +259,31 @@ describe('userPrefs', () => {
       tag: '15m:10:20',
       title: 'Supporting Kent A — 15 minutes to go',
     });
+  });
+});
+
+describe('full colour lanes preference', () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(() => vi.restoreAllMocks());
+
+  it('is off by default, saved under mg.scoring.fullColour and announced', () => {
+    const heard = vi.fn();
+    window.addEventListener(PREFS_CHANGED_EVENT, heard);
+    expect(getFullColourLanes()).toBe(false);
+    setFullColourLanes(true);
+    expect(localStorage.getItem('mg.scoring.fullColour')).toBe('true');
+    expect(getFullColourLanes()).toBe(true);
+    setFullColourLanes(false);
+    expect(localStorage.getItem('mg.scoring.fullColour')).toBeNull();
+    expect(getFullColourLanes()).toBe(false);
+    expect(heard).toHaveBeenCalledTimes(2);
+    window.removeEventListener(PREFS_CHANGED_EVENT, heard);
+  });
+
+  it('stays off when storage is blocked', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
+    expect(getFullColourLanes()).toBe(false);
+    expect(() => setFullColourLanes(true)).not.toThrow();
   });
 });

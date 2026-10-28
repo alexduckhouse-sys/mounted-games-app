@@ -439,4 +439,8 @@ export const deskStream = {
   'desk.stream.in.downloadClip': 'Download replay {label}',
   'desk.stream.in.savedButton': 'Saved replays ({count})',
   'desk.stream.in.replaysButton': 'Replays ({count})',
+  'desk.stream.autoCard.favourites': 'favourites',
+  'desk.stream.tile.favourites': 'Favourites',
+  'desk.stream.auto.favourites.when': 'Before a final',
+  'desk.stream.auto.favourites.what': 'Favourites for {seconds}s',
 } satisfies Record<string, Message>;

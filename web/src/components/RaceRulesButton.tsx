@@ -7,6 +7,7 @@ import type { RaceTemplate, SectionFormat } from '../types';
 import { Notice } from './Notice';
 import { useT } from '../i18n/LanguageContext';
 import { RaceDiagram } from './RaceDiagram';
+import { SwipeSheet } from './SwipeSheet';
 import './race-rules.css';
 
 type Result = { key: string; template: RaceTemplate | null } | { key: string; failed: true };
@@ -78,7 +79,7 @@ export function RaceRulesButton({ raceName, format, className = '', label }: { r
     </button>
     {open && createPortal(
       <div className="race-rules-overlay" onPointerDown={(event) => { if (event.target === event.currentTarget) close(); }}>
-        <div ref={sheetRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="race-rules-sheet">
+        <SwipeSheet ref={sheetRef} onClose={close} role="dialog" aria-modal="true" aria-labelledby={titleId} className="race-rules-sheet">
           <span className="race-rules-handle" aria-hidden="true" />
           <div className="race-rules-head">
             <h2 id={titleId}>{raceName}</h2>
@@ -106,7 +107,7 @@ export function RaceRulesButton({ raceName, format, className = '', label }: { r
             {!template.summary && !template.rules && equipment.length === 0 && <Notice tone="info" role={null}>{t('competition.rules.none')}</Notice>}
           </div>}
           <div className="kit-acts race-rules-acts"><button type="button" className="kit-pill kit-pill-fill" aria-label={t('competition.rules.close')} onClick={close}>{t('common.close')}</button></div>
-        </div>
+        </SwipeSheet>
       </div>,
       document.body,
     )}

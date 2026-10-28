@@ -440,4 +440,8 @@ export const deskStream: AreaCatalogue<typeof en> = {
   'desk.stream.in.downloadClip': 'Lawrlwytho’r ailchwarae {label}',
   'desk.stream.in.savedButton': 'Ailchwaraeon wedi’u cadw ({count})',
   'desk.stream.in.replaysButton': 'Ailchwaraeon ({count})',
+  'desk.stream.autoCard.favourites': 'ffefrynnau',
+  'desk.stream.tile.favourites': 'Ffefrynnau',
+  'desk.stream.auto.favourites.when': 'Cyn rownd derfynol',
+  'desk.stream.auto.favourites.what': 'Ffefrynnau am {seconds} eil',
 };

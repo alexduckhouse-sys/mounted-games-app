@@ -9,10 +9,13 @@ import { auth } from './auth.ts';
 import { common } from './common.ts';
 import { competition } from './competition.ts';
 import { entries } from './entries.ts';
+import { screen } from './screen.ts';
+import { ops } from './ops.ts';
 import { shell } from './shell.ts';
+import { site } from './site.ts';
 import { desk } from './desk.ts';
 import { teams } from './teams.ts';
 
-export const AREAS = { common, shell, auth, account, entries, competition, teams, desk } as const;
+export const AREAS = { common, shell, auth, account, entries, competition, teams, site, ops, screen, desk } as const;
 
-export const cy: Catalogue = { ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...desk };
+export const cy: Catalogue = { ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...site, ...ops, ...screen, ...desk };

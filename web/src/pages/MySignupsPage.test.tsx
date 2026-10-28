@@ -155,6 +155,7 @@ describe('MySignupsPage', () => {
     expect(card.getByText('Alice Partner · Cheshire PC')).toBeInTheDocument();
     expect(card.getByText('Event 5 · Open Pairs')).toBeInTheDocument();
     expect(card.getByRole('button', { name: /^Decline/ })).toHaveClass('sp-red');
+    expect(card.getByRole('button', { name: 'Accept pair request from Alice Partner' })).toHaveTextContent(/^Accept$/);
     await userEvent.click(card.getByRole('button', { name: 'Accept pair request from Alice Partner' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/my/signups/5/pair-respond', { accept: true }));
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Pair request' })).not.toBeInTheDocument());

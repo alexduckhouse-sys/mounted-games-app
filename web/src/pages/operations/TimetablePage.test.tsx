@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { autoConfirm } from '../../test/confirm';
 import { TimetablePage } from './TimetablePage';
@@ -361,5 +361,80 @@ describe('TimetablePage', () => {
     await user.click(await screen.findByRole('button', { name: 'Later' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Nope.');
     expect(within(screen.getByRole('alert')).queryByRole('button')).not.toBeInTheDocument();
+  });
+});
+
+describe('TimetablePage after the draw', () => {
+  const originals = competition.sessions.slice();
+  const heat = (id: number, extra: Record<string, unknown> = {}) => ({ id, label: `Heat ${id}`, orderIndex: id, startedAt: null, finishedAt: null, entries: [], races: [{ id: id * 10, isComplete: false }], ...extra });
+  const drawn = (id: number, name: string, start: number, extra: Record<string, unknown> = {}) =>
+    session(id, name, { scheduledStart: at(start), durationMinutes: 20, heats: [heat(id * 2), heat(id * 2 + 1)], ...extra });
+  const use = (...sessions: unknown[]) => { competition.sessions = sessions as typeof competition.sessions; };
+
+  beforeEach(() => {
+    vi.mocked(api.put).mockResolvedValue({ data: {} });
+    vi.mocked(api.post).mockResolvedValue({ data: preview });
+  });
+  afterEach(() => { competition.sessions = originals; });
+
+  it('lets a drawn session that has not started change its time per heat and moves what follows', async () => {
+    use(drawn(1, 'Under 12 · Session 1', 0), session(2, 'Lunch', { kind: 1, isBreak: true, competitionSectionId: null, scheduledStart: at(40), durationMinutes: 30, minutesPerHeat: null }), drawn(3, 'Under 12 · Session 2', 80));
+    const user = userEvent.setup();
+    show();
+    await user.click(await screen.findByRole('button', { name: /Under 12 · Session 1/ }));
+    expect(screen.queryByText(/has started or has scores/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Longer time per heat' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/1', { minutesPerHeat: 15, durationMinutes: 30 }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/3', { scheduledStart: at(90) }));
+  });
+
+  it('offers a start time and a move-from on a drawn session', async () => {
+    use(drawn(1, 'Under 12 · Session 1', 0), drawn(3, 'Under 12 · Session 2', 80));
+    const user = userEvent.setup();
+    show();
+    await user.click(await screen.findByRole('switch', { name: 'Each one follows on from the one before' }));
+    await user.click(screen.getByRole('button', { name: /Under 12 · Session 2/ }));
+    expect(screen.getByLabelText('Start')).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Follow on from the one before' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/3', { scheduledStart: at(20) }));
+  });
+
+  it('swaps two drawn sessions: each takes the other’s slot, with no block', async () => {
+    use(drawn(1, 'Under 12 · Session 1', 0), drawn(3, 'Under 12 · Session 2', 80));
+    const user = userEvent.setup();
+    show();
+    await user.click(await screen.findByRole('switch', { name: 'Drag to change the order' }));
+    const grip = screen.getByRole('button', { name: /^Move Under 12 · Session 1: drag/ });
+    grip.focus();
+    await user.keyboard('{ArrowDown}');
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/3', { scheduledStart: at(0) }));
+    expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/1', { scheduledStart: at(80) });
+  });
+
+  it('warns, and does not block, when a moved session overlaps the one before', async () => {
+    use(drawn(1, 'Under 12 · Session 1', 0, { heats: [heat(2), heat(3), heat(4), heat(5)] }), drawn(3, 'Under 12 · Session 2', 10));
+    show();
+    expect(await screen.findByText('Overlaps the one before')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Under 12 · Session 2/ })).toBeEnabled();
+  });
+
+  it('keeps a session that has started locked: no grip, no start time, and says why', async () => {
+    use(drawn(1, 'Under 12 · Session 1', 0, { status: 1, startedAt: at(0) }), drawn(3, 'Under 12 · Session 2', 80));
+    const user = userEvent.setup();
+    show();
+    await user.click(await screen.findByRole('switch', { name: 'Drag to change the order' }));
+    expect(screen.queryByRole('button', { name: /^Move Under 12 · Session 1: drag/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('switch', { name: 'Drag to change the order' }));
+    await user.click(screen.getByRole('button', { name: /Under 12 · Session 1/ }));
+    expect(screen.getByText(/has started or has scores/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Shift/ })).not.toBeInTheDocument();
+  });
+
+  it('keeps a session with a scored race locked', async () => {
+    use(drawn(1, 'Under 12 · Session 1', 0, { heats: [heat(2, { races: [{ id: 20, isComplete: true }] }), heat(3)] }));
+    const user = userEvent.setup();
+    show();
+    await user.click(await screen.findByRole('button', { name: /Under 12 · Session 1/ }));
+    expect(screen.getByText(/has started or has scores/)).toBeInTheDocument();
   });
 });

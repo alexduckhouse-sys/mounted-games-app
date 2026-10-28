@@ -59,7 +59,7 @@ describe('Following tab in Welsh and French', () => {
     expect(within(now).getByText('EN COURS')).toBeInTheDocument();
     expect(within(now).getByText('Seniors Manche 1 · course 2 sur 2')).toBeInTheDocument();
     expect(within(now).getByText('couloir 2 · 1er pour l’instant, 4 pts')).toBeInTheDocument();
-    expect(screen.getByRole('searchbox', { name: 'Trouver une équipe, un club ou une tranche d’âge' })).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Trouver une équipe, un club ou une catégorie d’âge' })).toBeInTheDocument();
     expect(document.documentElement.lang).toBe('fr');
   });
 });
@@ -93,7 +93,7 @@ describe('Team sheet in French and Welsh', () => {
     expect(screen.getByText('1er · 64 pts')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Session 1' })).toHaveTextContent('Bending');
     // The status letters stay, the spoken label is French.
-    expect(screen.getByText('Non partante')).toHaveClass('sr-only');
+    expect(screen.getByText('Non-partant(e)')).toHaveClass('sr-only');
     expect(screen.getByText('DNS')).toBeInTheDocument();
   });
 

@@ -20,6 +20,6 @@ describe('resultStatusLabel', () => {
 
   it('treats an old result with no status as an elimination, in any language', () => {
     expect(resultStatusLabel(en, true, null)).toBe('Eliminated');
-    expect(resultStatusLabel(fr, true)).toBe('Éliminée');
+    expect(resultStatusLabel(fr, true)).toBe('Éliminé(e)');
   });
 });

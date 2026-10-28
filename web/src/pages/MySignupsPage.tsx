@@ -185,7 +185,7 @@ function SignupList() {
                 </span>
                 <span className="flex shrink-0 items-center gap-2">
                   <button type="button" className="sp-red" aria-label={t('account.signups.declinePair', { name: s.pairRequestFromName ?? t('account.signups.anotherRider') })} onClick={() => void respondPair(s.id, false)}>{t('account.signups.decline')}</button>
-                  <button type="button" className="sp-pill sp-pill-fill sp-pill-sm" aria-label={t('account.signups.acceptPair', { name: s.pairRequestFromName ?? t('account.signups.anotherRider') })} onClick={() => void respondPair(s.id, true)}>{t('account.signups.acceptPlace')}</button>
+                  <button type="button" className="sp-pill sp-pill-fill sp-pill-sm" aria-label={t('account.signups.acceptPair', { name: s.pairRequestFromName ?? t('account.signups.anotherRider') })} onClick={() => void respondPair(s.id, true)}>{t('account.signups.accept')}</button>
                 </span>
               </div>
             ))}
@@ -260,7 +260,7 @@ function EntrySheet({ signup: s, demoPaid, onClose, onWithdraw, onAccept }: { si
         <>
           {notes.map((note) => <p key={note} className="kit-sheet-text m-0">{note}</p>)}
           {offer.state !== 'none' && (
-            <section aria-label="Place offered" className="flex flex-col gap-2 rounded-[14px] border-[1.5px] border-[rgb(var(--mg-button))] bg-[rgb(var(--mg-tint)/.55)] p-3.5">
+            <section aria-label={t('account.signups.placeOffered')} className="flex flex-col gap-2 rounded-[14px] border-[1.5px] border-[rgb(var(--mg-button))] bg-[rgb(var(--mg-tint)/.55)] p-3.5">
               <p className="kit-sheet-text m-0 font-semibold">{offer.state === 'open' ? t('account.signups.offerOpenTitle') : t('account.signups.offerExpiredTitle')}</p>
               <p className="kit-sheet-text m-0" role="status">{offer.state === 'open' ? t('account.signups.offerOpenBody', { left: offerLeft(s.waitlistOfferExpiresAt, now, t) }) : t('account.signups.offerExpiredBody')}</p>
               {offer.state === 'open' && <button type="button" className="kit-pill kit-pill-fill" onClick={() => close(() => { onClose(); void onAccept(s.id); })}>{t('account.signups.acceptPlace')}</button>}

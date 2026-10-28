@@ -440,4 +440,8 @@ export const deskStream: AreaCatalogue<typeof en> = {
   'desk.stream.in.downloadClip': 'Télécharger la rediffusion {label}',
   'desk.stream.in.savedButton': 'Rediffusions enregistrées ({count})',
   'desk.stream.in.replaysButton': 'Rediffusions ({count})',
+  'desk.stream.autoCard.favourites': 'favoris',
+  'desk.stream.tile.favourites': 'Favoris',
+  'desk.stream.auto.favourites.when': 'Avant une finale',
+  'desk.stream.auto.favourites.what': 'Favoris pendant {seconds} s',
 };

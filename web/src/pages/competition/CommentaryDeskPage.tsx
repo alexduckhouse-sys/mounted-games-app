@@ -1,3 +1,4 @@
+import { clubLabel } from '../../lib/clubName';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ClipboardCheck, Mic, Monitor, QrCode as QrCodeIcon, Radio, Sparkles, Trophy, Users } from 'lucide-react';
@@ -267,7 +268,7 @@ export function CommentaryDeskPage() {
           rankLabel: toplist.started ? `${localOrdinal(row.position, lang)}${row.joint ? '=' : ''}` : localOrdinal(idx + 1, lang),
           bibColour: team?.bibColour ?? st?.bibColour ?? null,
           teamName: row.teamName,
-          clubName: team?.clubName ?? st?.clubName ?? '',
+          clubName: clubLabel(team?.clubName ?? st?.clubName),
           trainerName: dec?.trainerName?.trim() || team?.trainerName?.trim() || null,
           riders,
           totalPoints: row.points,
@@ -291,7 +292,7 @@ export function CommentaryDeskPage() {
         rankLabel: localOrdinal(idx + 1, lang),
         bibColour: tm.bibColour ?? null,
         teamName: tm.displayName,
-        clubName: tm.clubName,
+        clubName: clubLabel(tm.clubName),
         trainerName: dec?.trainerName?.trim() || tm.trainerName?.trim() || null,
         riders,
         totalPoints: 0,
@@ -532,9 +533,9 @@ export function CommentaryDeskPage() {
                             <span className="text-base font-bold text-[rgb(var(--mg-ink))]">
                               {entry.teamName}
                             </span>
-                            {team?.clubName && (
+                            {clubLabel(team?.clubName) && (
                               <span className="truncate text-xs font-medium text-[rgb(var(--mg-muted))]">
-                                · {team.clubName}
+                                · {team?.clubName}
                               </span>
                             )}
                           </div>

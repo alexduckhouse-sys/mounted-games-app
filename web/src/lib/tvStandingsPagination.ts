@@ -1,4 +1,6 @@
 // Unused in web UI yet — reserved for iOS / upcoming wiring
+import { tr } from '../i18n/translate';
+
 export const TV_STANDINGS_PAGE_SIZE = 10;
 export const TV_STANDINGS_PAGE_INTERVAL_MS = 10_000;
 
@@ -19,7 +21,7 @@ export function formatTvStandingsPageLabel(
   startRank: number,
   endRank: number,
 ): string {
-  return `Page ${pageIndex + 1} of ${totalPages}: Ranks ${startRank}–${endRank}`;
+  return tr('screen.tv.pageLabel', { page: pageIndex + 1, total: totalPages, from: startRank, to: endRank });
 }
 
 /**
@@ -44,7 +46,7 @@ export function paginateTvStandings<T>(
       startRank: 0,
       endRank: 0,
       hasMultiplePages: false,
-      pageLabel: 'Page 1 of 1: Ranks 0–0',
+      pageLabel: formatTvStandingsPageLabel(0, 1, 0, 0),
       rows: [],
     };
   }

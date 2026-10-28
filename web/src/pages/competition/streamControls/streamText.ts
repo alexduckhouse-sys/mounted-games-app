@@ -1,6 +1,6 @@
 import type { MessageKey } from '../../../i18n/en';
 import type { Translate } from '../../../i18n/translate';
-import { PODIUM_SECONDS, TITLE_SECONDS, TOPLIST_SECONDS, type AutoRule, type AutoRuleKey, type AutoState } from '../../../lib/streamAuto';
+import { PODIUM_SECONDS, FAVOURITES_SECONDS, TITLE_SECONDS, TOPLIST_SECONDS, type AutoRule, type AutoRuleKey, type AutoState } from '../../../lib/streamAuto';
 import type { OverlayTileId } from '../../../lib/streamOverlayTiles';
 import type { LiveStream } from '../../../types';
 
@@ -42,6 +42,7 @@ export function autoRuleText(t: Translate, key: AutoRuleKey, rule: AutoRule) {
   else if (key === 'toplist') what = rule.n === 1 ? t('desk.stream.auto.toplist.whatOne', { seconds: TOPLIST_SECONDS }) : t('desk.stream.auto.toplist.whatMany', { n: rule.n, seconds: TOPLIST_SECONDS });
   else if (key === 'podium') what = t('desk.stream.auto.podium.what', { seconds: PODIUM_SECONDS });
   else if (key === 'title') what = t('desk.stream.auto.title.what', { seconds: TITLE_SECONDS });
+  else if (key === 'favourites') what = t('desk.stream.auto.favourites.what', { seconds: FAVOURITES_SECONDS });
   else what = t('desk.stream.auto.sponsor.what', { n: rule.n });
   return { when, what, choiceLabel };
 }

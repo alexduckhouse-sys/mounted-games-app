@@ -4,11 +4,13 @@ import { useT } from '../../../i18n/LanguageContext';
 import { RefineList, RefineNote, RefineSection } from '../../refine/Refine';
 import { autoChoiceText, autoRuleText, autoStatusText } from './streamText';
 
-export function AutoTab({ competition, auto, setOn, setRule }: {
+export function AutoTab({ competition, auto, setOn, setRule, prizeGiving }: {
   competition: Pick<CompetitionDetail, 'sessions'>;
   auto: AutoState;
   setOn: (on: boolean) => void;
   setRule: (key: AutoRuleKey, patch: { on?: boolean; n?: number }) => void;
+  /** The shared prize-giving switch: it is saved with the overlay, so it holds for everyone watching, not just this device. */
+  prizeGiving: { on: boolean; disabled: boolean; set: (on: boolean) => void };
 }) {
   const t = useT();
   return (
@@ -41,6 +43,15 @@ export function AutoTab({ competition, auto, setOn, setRule }: {
           );
         })}
       </RefineList>
+
+      <RefineSection title="Prize-giving" />
+      <RefineList as="div" label="Prize-giving">
+        <div className="rf-row sx-rule">
+          <span className="rf-grow sx-rule-text"><span className="rf-t1">After each final</span><span className="rf-t2">Places go up on the stream by themselves, last to first</span></span>
+          <button type="button" role="switch" aria-checked={prizeGiving.on} aria-label="Prize-giving after each final" disabled={prizeGiving.disabled} className="rf-sw" onClick={() => prizeGiving.set(!prizeGiving.on)}><span aria-hidden="true" /></button>
+        </div>
+      </RefineList>
+      <RefineNote>This one plays for everyone watching, even with no controls page open. The Prize-giving page on a session’s menu runs it by hand.</RefineNote>
     </>
   );
 }

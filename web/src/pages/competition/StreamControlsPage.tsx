@@ -113,7 +113,8 @@ export function StreamControlsPage() {
 
         <div key={tab} role="tabpanel" className="mg-settle" aria-label={t(`desk.stream.tab.${tab}`)}>
           {tab === 'overlay' && <OverlayTab competition={competition} overlay={overlay} tiles={tiles} canChange={Boolean(saveOverlay)} />}
-          {tab === 'auto' && <AutoTab competition={competition} auto={auto} setOn={setOn} setRule={setRule} />}
+          {tab === 'auto' && <AutoTab competition={competition} auto={auto} setOn={setOn} setRule={setRule}
+            prizeGiving={{ on: tiles.options.autoPrizeGiving, disabled: tiles.busy || !saveOverlay, set: (on) => void tiles.setOptions({ autoPrizeGiving: on }) }} />}
           {tab === 'replay' && (
             <ReplayTab clips={clips} openId={openClipId} onOpen={setOpenClipId} controller={replay} instantLength={instantLength}
               onInstantLength={(length) => { saveInstantLength(length); setInstantLength(length); }} />
