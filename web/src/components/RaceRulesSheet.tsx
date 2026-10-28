@@ -4,7 +4,8 @@ import { Link } from 'react-router-dom';
 import { BookOpen } from 'lucide-react';
 import { api } from '../api';
 import { equipmentFromDiagram } from '../lib/raceEquipment';
-import type { RaceTemplate } from '../types';
+import { findRaceTemplate } from '../lib/raceTemplates';
+import type { RaceTemplate, SectionFormat } from '../types';
 import { Notice } from './Notice';
 import { RaceDiagram } from './RaceDiagram';
 
@@ -75,18 +76,25 @@ export function buildRaceRulebooks(template: RaceTemplateDetail | RaceTemplate):
   });
 }
 
+/** A race's rules for a section of this format: its Pairs or Individual version when the library has one. */
 export async function fetchRaceTemplateByName(
   raceName: string,
   fallback?: RaceTemplate | null,
+  format?: SectionFormat | null,
 ): Promise<RaceTemplateDetail | null> {
-  const key = raceName.trim().toLowerCase();
-  if (!key) return null;
+  const name = raceName.trim().toLowerCase();
+  if (!name) return null;
+  const variant = format === 1 || format === 3 ? format : null;
+  const key = variant ? `${name}|${variant}` : name;
   const cached = raceDetailCache.get(key);
   if (cached) return cached;
 
   const promise = (async (): Promise<RaceTemplateDetail | null> => {
     try {
-      const res = await api.get<RaceTemplateDetail>(`/race-templates/by-name/${encodeURIComponent(raceName.trim())}`);
+      const url = `/race-templates/by-name/${encodeURIComponent(raceName.trim())}`;
+      const res = variant
+        ? await api.get<RaceTemplateDetail>(url, { params: { format: variant } })
+        : await api.get<RaceTemplateDetail>(url);
       if (res?.data && typeof res.data.name === 'string') {
         return {
           ...res.data,
@@ -102,7 +110,7 @@ export async function fetchRaceTemplateByName(
     try {
       const listRes = await api.get<RaceTemplate[]>('/race-templates');
       const found = Array.isArray(listRes?.data)
-        ? listRes.data.find((t) => t.name.trim().toLowerCase() === key) ?? null
+        ? findRaceTemplate(listRes.data, raceName, variant)
         : null;
       return found ? { ...found, rulebooks: buildRaceRulebooks(found) } : null;
     } catch {
@@ -202,11 +210,14 @@ export function RaceRulebookSection({
 
 export function RaceRulesSheet({
   raceName,
+  format,
   open,
   onClose,
   competitionId,
 }: {
   raceName: string | null;
+  /** The section's format: Pairs and Individual sections read their own version of the race. */
+  format?: SectionFormat | null;
   open: boolean;
   onClose: () => void;
   /** The competition in context. Without one there is no rulebooks page to link to, so the link is left out. */
@@ -215,20 +226,20 @@ export function RaceRulesSheet({
   const t = useT();
   const titleId = useId();
   const [loaded, setLoaded] = useState<{ key: string; detail: RaceTemplateDetail | null } | null>(null);
-  const activeKey = raceName?.trim().toLowerCase() ?? '';
+  const activeKey = raceName ? `${raceName.trim().toLowerCase()}|${format ?? ''}` : '';
   const template = loaded && loaded.key === activeKey ? loaded.detail : null;
   const loading = Boolean(open && activeKey && (!loaded || loaded.key !== activeKey));
 
   useEffect(() => {
     if (!open || !raceName || !activeKey) return;
     let cancelled = false;
-    fetchRaceTemplateByName(raceName).then((res) => {
+    fetchRaceTemplateByName(raceName, null, format).then((res) => {
       if (!cancelled) setLoaded({ key: activeKey, detail: res });
     });
     return () => {
       cancelled = true;
     };
-  }, [open, raceName, activeKey]);
+  }, [open, raceName, format, activeKey]);
 
   useEffect(() => {
     if (!open || !raceName) return;

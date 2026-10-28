@@ -221,5 +221,8 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.rules.howRidden': 'Comment la course se déroule',
   'competition.rules.penalties': 'Règles et pénalités',
   'competition.rules.loadingRace': 'Chargement des règles de la course…',
+  'competition.posters.qrOnPrint': 'Les codes QR sont créés à l’impression',
   'competition.rules.openPage': 'Ouvrir la page du règlement de la course',
+  'competition.rules.pairsVersion': 'Version en paires',
+  'competition.rules.individualVersion': 'Version individuelle',
 };

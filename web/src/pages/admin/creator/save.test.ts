@@ -33,7 +33,7 @@ describe('saveCreator existing breaks', () => {
   });
 
   it('saves edits to a break that already exists instead of skipping it', async () => {
-    const draft = { ...defaultDraft(new Date('2026-06-01T08:00:00Z')), sections: [], breaks: [{ existingId: 7, kind: 1, name: ' Lunch ', date: '2026-06-01', time: '12:30', minutes: '45', arena: ' Ring 2 ' }] };
+    const draft = { ...defaultDraft(new Date('2026-06-01T08:00:00Z')), sections: [], breaks: [{ existingId: 7, kind: 1 as const, name: ' Lunch ', date: '2026-06-01', time: '12:30', minutes: '45', arena: ' Ring 2 ' }] };
     const competition = { id: 3, isActive: true, isArchived: false, sections: [], teams: [], sessions: [{ id: 7, name: 'Lunch', isBreak: true, kind: 1 }] } as unknown as CompetitionDetail;
     await saveCreator(draft, { editingId: 3, competition, teamCounts: {}, progress: () => {} });
     const call = vi.mocked(api.put).mock.calls.find(([url]) => url === '/competitions/3/sessions/7');

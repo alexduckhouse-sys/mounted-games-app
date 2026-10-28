@@ -29,7 +29,7 @@ export function CardDropdownRow({ label, value, options, onChange, disabled, swa
       options={options}
       onChange={onChange}
       disabled={disabled}
-      className="block w-full"
+      className="sp-dropdown block w-full"
       buttonClassName="sp-row w-full"
       menuClassName="sp-menu"
     >

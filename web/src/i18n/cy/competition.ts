@@ -221,5 +221,8 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.rules.howRidden': 'Sut mae’r ras yn cael ei marchogaeth',
   'competition.rules.penalties': 'Rheolau a chosbau',
   'competition.rules.loadingRace': 'Yn llwytho rheolau’r ras…',
+  'competition.posters.qrOnPrint': 'Crëir codau QR pan fyddwch yn argraffu',
   'competition.rules.openPage': 'Agor tudalen llyfr rheolau’r ras',
+  'competition.rules.pairsVersion': 'Fersiwn parau',
+  'competition.rules.individualVersion': 'Fersiwn unigol',
 };

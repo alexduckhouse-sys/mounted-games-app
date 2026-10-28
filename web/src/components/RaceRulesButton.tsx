@@ -2,8 +2,8 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Info } from 'lucide-react';
 import { equipmentFromDiagram } from '../lib/raceEquipment';
-import { loadRaceTemplates, raceNameKey } from '../lib/raceTemplates';
-import type { RaceTemplate } from '../types';
+import { findRaceTemplate, loadRaceTemplates, raceNameKey } from '../lib/raceTemplates';
+import type { RaceTemplate, SectionFormat } from '../types';
 import { Notice } from './Notice';
 import { useT } from '../i18n/LanguageContext';
 import { RaceDiagram } from './RaceDiagram';
@@ -20,13 +20,13 @@ function ruleHighlights(template: RaceTemplate): string[] {
   return [...new Set(candidates.filter((text): text is string => !!text))].slice(0, 3);
 }
 
-/** An info button that opens a sheet with a race's rules and equipment. */
-export function RaceRulesButton({ raceName, className = '', label }: { raceName: string; className?: string; label?: ReactNode }) {
+/** An info button that opens a sheet with a race's rules and equipment, in the Pairs or Individual version when `format` says the section rides one. */
+export function RaceRulesButton({ raceName, format, className = '', label }: { raceName: string; format?: SectionFormat | null; className?: string; label?: ReactNode }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const key = `${raceNameKey(raceName)}|${attempt}`;
+  const key = `${raceNameKey(raceName)}|${format ?? ''}|${attempt}`;
   const buttonRef = useRef<HTMLButtonElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -40,10 +40,10 @@ export function RaceRulesButton({ raceName, className = '', label }: { raceName:
     if (!open) return;
     let cancelled = false;
     loadRaceTemplates().then((list) => {
-      if (!cancelled) setResult({ key, template: list.find((t) => raceNameKey(t.name) === raceNameKey(raceName)) ?? null });
+      if (!cancelled) setResult({ key, template: findRaceTemplate(list, raceName, format) });
     }).catch(() => { if (!cancelled) setResult({ key, failed: true }); });
     return () => { cancelled = true; };
-  }, [open, raceName, key]);
+  }, [open, raceName, format, key]);
 
   useEffect(() => {
     if (!open) return;
@@ -82,6 +82,8 @@ export function RaceRulesButton({ raceName, className = '', label }: { raceName:
           <span className="race-rules-handle" aria-hidden="true" />
           <div className="race-rules-head">
             <h2 id={titleId}>{raceName}</h2>
+            {template?.format === 1 && <p className="race-rules-version">{t('competition.rules.pairsVersion')}</p>}
+            {template?.format === 3 && <p className="race-rules-version">{t('competition.rules.individualVersion')}</p>}
           </div>
           {!current && <Notice tone="info">{t('competition.rules.loading')}</Notice>}
           {current && 'failed' in current && <Notice actionLabel={t('common.tryAgain')} onAction={() => setAttempt(attempt + 1)}>{t('competition.rules.failed')}</Notice>}

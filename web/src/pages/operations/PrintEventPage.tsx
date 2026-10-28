@@ -13,7 +13,8 @@ import '../eventTools/printEvent.css';
 import { formatPoints } from '../../lib/formatPoints';
 import { downloadCsv, safeFilename, toCsv } from '../../lib/csv';
 import { formatDurationHms, logoSrc } from '../../lib/sponsors';
-import { mintPosterLinks, type PosterLink } from './posterLinks';
+import { activeScorerLinks, mintPosterLinks, type PosterLink } from './posterLinks';
+import { tr } from '../../i18n/translate';
 import { drawForSession, parseSessionId, scoreSheetsForSession } from './sessionPrint';
 import { SPONSOR_CSV_HEADER, buildSponsorReportRows, placeFiguresText, sponsorCsvRows, type SponsorReportRow } from './sponsorReport';
 import type { CompetitionDetail, ScorerLink } from '../../types';
@@ -70,7 +71,9 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
   const [compDetail, setCompDetail] = useState<CompetitionDetail | null>(null);
   const [sponsorLoadedId, setSponsorLoadedId] = useState<string | null>(null);
   const loadingSponsors = sponsorMode && sponsorLoadedId !== String(competitionId ?? '');
-  const [scorerLinks, setScorerLinks] = useState<PosterLink[]>([]);
+  const [scorerLinks, setScorerLinks] = useState<ScorerLink[]>([]);
+  const [posterLinks, setPosterLinks] = useState<PosterLink[] | null>(null);
+  const [printing, setPrinting] = useState(false);
   const [linksLoadedId, setLinksLoadedId] = useState<string | null>(null);
   const loadingLinks = view === 'posters' && linksLoadedId !== String(competitionId ?? '');
   const [exportingResults, setExportingResults] = useState(false);
@@ -112,12 +115,11 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
     if (view !== 'posters' || !competitionId) return;
     let cancelled = false;
     api.get<{ links?: ScorerLink[] } | ScorerLink[]>(`/competitions/${competitionId}/scorer-links`)
-      .then(async (res) => {
+      .then((res) => {
+        if (cancelled) return;
         const body = res.data;
         const list = Array.isArray(body) ? body : Array.isArray(body?.links) ? body.links : [];
-        // Tokens aren't stored, so make fresh links for the sheet (the old ones keep working).
-        const minted = await mintPosterLinks(competitionId, list, window.location.origin);
-        if (!cancelled) setScorerLinks(minted);
+        setScorerLinks(list);
       })
       .catch(() => {
         if (!cancelled) setScorerLinks([]);
@@ -166,6 +168,24 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
 
   function exportSponsorCsv() {
     downloadCsv(`${safeFilename(competition.name || 'competition')}-sponsor-report.csv`, toCsv(SPONSOR_CSV_HEADER, sponsorCsvRows(sponsorRows)));
+  }
+
+  /** Tokens aren't stored, so the staff sheet gets fresh links, made only when someone prints it (old links keep working). */
+  async function printPage() {
+    if (view === 'posters' && posterLinks === null && activeScorerLinks(scorerLinks, Date.now()).length > 0) {
+      setPrinting(true);
+      try {
+        setPosterLinks(await mintPosterLinks(competitionId, scorerLinks, window.location.origin));
+        // Let the QR codes render before the print dialog opens.
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      } catch (caught) {
+        toast.show(message(caught));
+        return;
+      } finally {
+        setPrinting(false);
+      }
+    }
+    window.print();
   }
 
   async function exportOfficialResultsCsv() {
@@ -307,7 +327,7 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
         >
           <BarChart3 className="h-4 w-4" />Sponsor report
         </button>
-        <button className="mg-btn mg-btn-primary" onClick={() => window.print()}><Printer className="h-4 w-4" />Print</button>
+        <button className="mg-btn mg-btn-primary" disabled={printing} onClick={() => void printPage()}><Printer className="h-4 w-4" />Print</button>
         {sessionId && !sponsorMode && (
           <span className="flex items-center gap-2 text-sm text-[rgb(var(--mg-muted))]">
             One session only.
@@ -354,6 +374,7 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
             <QrPostersSection
               competition={compDetail ?? (data.competition as CompetitionDetail)}
               scorerLinks={scorerLinks}
+              posterLinks={posterLinks}
               loadingLinks={loadingLinks}
             />
           )}
@@ -544,15 +565,19 @@ function Results({ data }: { data: PrintableResults }) {
 function QrPostersSection({
   competition,
   scorerLinks,
+  posterLinks,
   loadingLinks,
 }: {
   competition: CompetitionDetail | { id: number; name: string; location?: string | null; startDate: string; endDate?: string | null; what3Words?: string | null; latitude?: number | null; longitude?: number | null };
-  scorerLinks: PosterLink[];
+  scorerLinks: ScorerLink[];
+  /** Fresh links with their QR addresses; null until the sheet has been printed. */
+  posterLinks: PosterLink[] | null;
   loadingLinks: boolean;
 }) {
   const origin = window.location.origin;
   const gateUrl = `${origin}/competitions/${competition.id}`;
-  const activeLinks = scorerLinks;
+  const [now] = useState(() => Date.now());
+  const activeLinks: Array<{ link: ScorerLink; url: string | null }> = posterLinks ?? activeScorerLinks(scorerLinks, now).map((link) => ({ link, url: null }));
 
   return (
     <>
@@ -649,11 +674,13 @@ function QrPostersSection({
                     <p className="text-xs font-semibold text-gray-600">Arena: {link.arenaName}</p>
                   </div>
                   <div className="my-2 flex justify-center">
-                    <QrCode value={targetUrl} label={`QR code for ${link.label} (${scopeLabel})`} className="h-36 w-36" />
+                    {targetUrl
+                      ? <QrCode value={targetUrl} label={`QR code for ${link.label} (${scopeLabel})`} className="h-36 w-36" />
+                      : <p className="flex h-36 w-36 items-center justify-center text-xs text-gray-500">{tr('competition.posters.qrOnPrint')}</p>}
                   </div>
                   <div className="mt-2 w-full text-xs text-gray-500">
                     <p className="font-medium text-gray-700">Scan to open arena interface</p>
-                    <p className="mt-0.5 truncate font-mono text-[10px]">{targetUrl.replace(/^https?:\/\//, '')}</p>
+                    {targetUrl && <p className="mt-0.5 truncate font-mono text-[10px]">{targetUrl.replace(/^https?:\/\//, '')}</p>}
                     <p className="mt-1 text-[10px]">Expires: {new Date(link.expiresAt).toLocaleDateString('en-GB')}</p>
                   </div>
                 </div>

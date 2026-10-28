@@ -6,7 +6,7 @@ import { api } from '../../api';
 import { downloadCsv } from '../../lib/csv';
 import PrintEventPage from './PrintEventPage';
 
-vi.mock('../../api', () => ({ api: { get: vi.fn() } }));
+vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
 vi.mock('../../lib/csv', async (importOriginal) => ({ ...(await importOriginal<typeof import('../../lib/csv')>()), downloadCsv: vi.fn() }));
 
 const competition = { id: 12, name: 'Spring event', location: 'Field Lane', startDate: '2031-05-04T09:00:00Z', endDate: null };
@@ -163,5 +163,32 @@ describe('PrintEventPage official results pack', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: /Official results pack/ }));
     expect(await screen.findByText('No luck')).toBeInTheDocument();
     expect(downloadCsv).not.toHaveBeenCalled();
+  });
+});
+
+describe('PrintEventPage staff QR posters', () => {
+  const old = { id: 4, label: 'Ring 1', arenaName: 'Main', createdAt: '2031-01-01T00:00:00Z', expiresAt: '2099-01-01T00:00:00Z', lastUsedAt: null, revokedAt: null };
+  beforeEach(() => {
+    vi.mocked(api.get).mockReset();
+    vi.mocked(api.post).mockReset();
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (url.endsWith('/scorer-links')) return { data: { arenas: [], defaultExpiresAt: '', links: [old] } };
+      return { data: { id: 12, name: 'Spring event', startDate: '2031-05-04T09:00:00Z', endDate: null, location: null } };
+    });
+    vi.mocked(api.post).mockResolvedValue({ data: { link: { ...old, id: 9 }, token: 'mgs_tok', path: '' } });
+    window.print = vi.fn();
+  });
+
+  it('makes no links on load, then mints them and prints when Print is pressed', async () => {
+    show('/event-tools/12/print/posters');
+    expect(await screen.findByText('Ring 1')).toBeInTheDocument();
+    expect(screen.getByText('QR codes are created when you print')).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+    await userEvent.setup().click(screen.getByRole('button', { name: /^Print$/ }));
+    await waitFor(() => expect(window.print).toHaveBeenCalledTimes(1));
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.post).toHaveBeenCalledWith('/competitions/12/scorer-links', expect.objectContaining({ label: 'Ring 1', arenaName: 'Main' }));
+    expect(screen.queryByText('QR codes are created when you print')).not.toBeInTheDocument();
+    expect(screen.getByText(/\/score#t=mgs_tok/)).toBeInTheDocument();
   });
 });

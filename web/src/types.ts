@@ -1153,6 +1153,10 @@ export interface RaceTemplate {
   category?: string | null;
   diagramJson?: string | null;
   isBuiltIn: boolean;
+  /** The team race a Pairs or Individual version replaces, or the race a sponsored name is ridden as. */
+  baseName?: string | null;
+  /** Set on a Pairs (1) or Individual (3) version: the section format it is for. */
+  format?: SectionFormat | null;
 }
 
 /**
