@@ -164,7 +164,7 @@ function EventShopContent() {
         <OrderLines order={order} />
         <DemoPaymentNotice what="order" className="mt-3" />
         <RefineNote>{t('site.shop.payOrganiser')} {t('site.shop.collect')}</RefineNote>
-        <RefineFoot><button type="button" className="rf-btn rf-btn-primary rf-wide" onClick={backToShop}>{t('site.shop.backToShop')}</button></RefineFoot>
+        <RefineFoot inline><button type="button" className="rf-btn rf-btn-primary rf-wide" onClick={backToShop}>{t('site.shop.backToShop')}</button></RefineFoot>
       </RefinePage>
     );
   }
@@ -342,7 +342,7 @@ function ShopOutcome({ order, payment, retry, onShop }: { order: EventOrder; pay
         <OutcomeState payment={payment} title={t('site.shop.orderN', { id: order.id })} detail={t('site.shop.demoPaid', { amount: pounds(payment.amountMinor), time: clock(payment.createdAt, locale) })} />
         <OrderLines order={order} />
         <RefineNote>{t('site.shop.collect')} {t('site.shop.showNumber')}</RefineNote>
-        <RefineFoot>
+        <RefineFoot inline>
           <button type="button" className="rf-btn" onClick={onShop}>{t('site.shop.shop')}</button>
           <Link className="rf-btn rf-btn-primary rf-grow" to={`/me/orders?order=${order.id}`}>{t('site.shop.viewReceipt')}</Link>
         </RefineFoot>
@@ -353,7 +353,7 @@ function ShopOutcome({ order, payment, retry, onShop }: { order: EventOrder; pay
     return (
       <>
         <OutcomeState payment={payment} detail={t('site.shop.nothingCharged', { id: order.id })} />
-        <RefineFoot column>
+        <RefineFoot inline column>
           <button type="button" className="rf-btn rf-btn-primary" onClick={retry}>{t('common.tryAgain')}</button>
           <button type="button" className="rf-btn rf-btn-text" onClick={onShop}>{t('site.shop.backToShop')}</button>
         </RefineFoot>
@@ -363,7 +363,7 @@ function ShopOutcome({ order, payment, retry, onShop }: { order: EventOrder; pay
   return (
     <>
       <OutcomeState payment={payment} title={t('site.shop.paymentCancelled')} detail={t('site.shop.cancelledDetail', { id: order.id })} />
-      <RefineFoot>
+      <RefineFoot inline>
         <button type="button" className="rf-btn rf-btn-primary rf-wide" onClick={onShop}>{t('site.shop.backToShop')}</button>
       </RefineFoot>
     </>
