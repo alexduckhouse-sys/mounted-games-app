@@ -379,6 +379,12 @@ function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
   // The finals session planned for this age group (made in the creator), if heats haven't been made in it yet: reusing it keeps its B and C race lists.
   const planned = competition.sessions.find((x) => x.competitionSectionId === sectionId && (x.kind ?? 0) === 0 && x.status === 0
     && x.heats.length === 0 && /^finals\s*·/i.test(x.name.trim()));
+  // Lettered finals already on the timetable with nobody in them (an imported event): fill those from the toplist instead.
+  const toFill = competition.sessions.find((x) => x.competitionSectionId === sectionId && (x.kind ?? 0) === 0 && x.status === 0
+    && x.heats.length > 0 && x.heats.every((h) => /^[A-Z] Final$/i.test((h.label ?? '').trim()) && h.entries.length === 0));
+  const fillLanes = toFill?.lanesPerHeat ?? 6;
+  // Filled best first by letter (A, B, C), whatever order they run in.
+  const fillNames = toFill ? toFill.heats.map((h) => (h.label ?? '').trim().replace(/^./, (c) => c.toUpperCase())).sort() : [];
   const [races, setRaces] = useState(planned?.plannedRaces?.length ? planned.plannedRaces.join('\n') : 'Litter Lifter\nFlag\nBottle\nMug\nBall and Cone');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -390,15 +396,32 @@ function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
       .catch(() => setStandings([]));
   }, [competition.id, sectionId]);
 
+  const seats = toFill ? toFill.heats.length * fillLanes : topN;
   const runoff = useMemo(() => {
-    if (standings.length <= topN) return null;
-    const cutoff = standings[topN - 1];
-    const next = standings[topN];
+    if (standings.length <= seats) return null;
+    const cutoff = standings[seats - 1];
+    const next = standings[seats];
     if (cutoff.totalPoints !== next.totalPoints) return null;
     const tied = standings.filter((s) => s.totalPoints === cutoff.totalPoints);
-    const seatsLeft = topN - standings.slice(0, topN).filter((s) => s.totalPoints > cutoff.totalPoints).length;
+    const seatsLeft = seats - standings.slice(0, seats).filter((s) => s.totalPoints > cutoff.totalPoints).length;
     return { tied, points: cutoff.totalPoints, seatsLeft };
-  }, [standings, topN]);
+  }, [standings, seats]);
+
+  async function fill() {
+    if (!toFill) return;
+    setErr(null);
+    setBusy(true);
+    try {
+      await api.post(`/competitions/${competition.id}/sessions/${toFill.id}/populate-finals`);
+      onCreated();
+    } catch (e) {
+      const m = (e as { response?: { data?: string | { message?: string } } }).response?.data;
+      const text = typeof m === 'string' ? m : m?.message;
+      setErr(text || 'Couldn’t fill the finals. Check your signal and try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function submit() {
     setErr(null);
@@ -437,6 +460,12 @@ function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
           <button onClick={onClose} className="btn-ghost !py-1 !px-1.5"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-3 space-y-3">
+          {toFill ? (
+            <p className="text-sm">
+              The {listNames(fillNames)} {fillNames.length === 1 ? 'is' : 'are'} already on the timetable. Teams go in from the toplist,
+              up to {fillLanes} in each, best first into the {fillNames[0]}.
+            </p>
+          ) : (<>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="text-xs font-semibold">Top N teams</span>
@@ -461,6 +490,7 @@ function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
               onChange={(next) => setRaces(next.join('\n'))}
             />
           </div>
+          </>)}
 
           {runoff && (
             <Notice>
@@ -473,11 +503,16 @@ function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
         </div>
         <div className="flex items-center gap-2 p-3 border-t border-slate-200 dark:border-slate-800">
           <button onClick={onClose} className="btn-ghost !py-1.5 !px-3 text-xs">Cancel</button>
-          <button onClick={submit} disabled={busy} className="btn-primary !py-1.5 !px-3 text-xs ml-auto">
-            <Sparkles className="w-3.5 h-3.5" /> {busy ? 'Creating…' : 'Create finals'}
+          <button onClick={toFill ? fill : submit} disabled={busy} className="btn-primary !py-1.5 !px-3 text-xs ml-auto">
+            <Sparkles className="w-3.5 h-3.5" /> {toFill ? (busy ? 'Filling…' : 'Fill the finals') : (busy ? 'Creating…' : 'Create finals')}
           </button>
         </div>
       </motion.div>
     </motion.div>
   );
+}
+
+/** "A Final", "A Final and B Final", "A Final, B Final and C Final". */
+function listNames(names: string[]): string {
+  return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 }
