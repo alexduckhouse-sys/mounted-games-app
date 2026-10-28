@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { isShiftCheckedInHere, isShiftMarkedMissing, myTeamAssignedDuties } from '../../lib/lorryAndVolunteers';
 import type { VolunteerShift } from '../../types';
+import { useT } from '../../i18n/LanguageContext';
+import { ArenaCrewLink } from './ArenaCrewLink';
 import { useCompetition } from './context';
 
 function timeLabel(iso: string | null | undefined): string {
@@ -15,6 +18,7 @@ function timeLabel(iso: string | null | undefined): string {
 export function MyStewardDutyBanner() {
   const { competition } = useCompetition();
   const { user } = useAuth();
+  const t = useT();
   const [shifts, setShifts] = useState<VolunteerShift[]>([]);
   const [busy, setBusy] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +78,10 @@ export function MyStewardDutyBanner() {
           </div>
         );
       })}
+      <div className="flex flex-wrap gap-2">
+        <ArenaCrewLink competitionId={competition.id} sessionId={mine[0].sessionId} />
+        <Link to={`${base}/volunteers`} className="sp-pill">{t('competition.steward.allShifts')}</Link>
+      </div>
       {error && <p role="alert" className="rounded-[10px] bg-[rgb(var(--mg-problem-bg))] px-3 py-2 text-sm text-[rgb(var(--mg-problem-ink))]">{error}</p>}
     </section>
   );

@@ -185,6 +185,8 @@ export function DetailsTab() {
         <LinkRow to="../shop" label={t('competition.details.stabling')} />
         <LinkRow to="../rulebooks" label={t('competition.details.rules')} />
         <LinkRow to="../arena" label={t('competition.details.arena')} />
+        {user && <LinkRow to="../volunteers" label={t('competition.details.volunteers')} />}
+        {showDecForms && <LinkRow to="../arena-crew" label={t('competition.details.arenaCrew')} />}
         <LinkRow to="../weather" label={t('competition.details.weather')} />
         <LinkRow to="../contact" label={t('competition.details.contact')} />
         {user && <EquipmentBlock competitionId={competition.id} />}

@@ -182,6 +182,7 @@ export function CompetitionTeamPage() {
 
   useCompactPageBar({
     backTo: fallbackBackPath,
+    backLabel: t('common.back'),
     title: team?.displayName ?? t('teams.team.title'),
     subtitle: [sectionLabel, competition.name].filter(Boolean).join(' · '),
     badge: nextState?.kind === 'heat' && nextState.row.status === 'live' ? 'live' : nextState?.kind === 'done' ? 'finished' : 'next',

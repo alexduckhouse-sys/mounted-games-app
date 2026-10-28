@@ -131,6 +131,11 @@ export function EntriesPage() {
   const capacityText = capacityLines(capacity);
   const reloadAll = useCallback(async () => { await load(); }, [load]);
   const shown = useMemo(() => (filter === 'all' ? [] : signups.filter((s) => signupBucket(s) === filter)), [signups, filter]);
+  // Unpaid bank-transfer sign-ups have no team yet, so the team list below would hide them.
+  const awaitingPayment = useMemo(() => {
+    const teamIds = new Set((entries ?? []).map((team) => team.teamId));
+    return signups.filter((s) => signupBucket(s) === 'pending' && !(s.teamId != null && teamIds.has(s.teamId)));
+  }, [signups, entries]);
   const closed = Boolean(competition.signupsLocked);
 
   const groups = useMemo(() => {
@@ -227,7 +232,16 @@ export function EntriesPage() {
           />
         )}
 
-        {filter === 'all' && entries !== null && entries.length === 0 && <p className="rf-note">No entries yet.</p>}
+        {filter === 'all' && entries !== null && entries.length === 0 && awaitingPayment.length === 0 && <p className="rf-note">No entries yet.</p>}
+        {filter === 'all' && awaitingPayment.length > 0 && (
+          <>
+            <RefineSection title="Awaiting payment" />
+            <SignupList
+              signups={awaitingPayment} filter="pending" busy={busy} openId={openSignup} competition={competition}
+              onOpen={(id) => setOpenSignup(openSignup === id ? null : id)} onMarkPaid={(x) => void markSignupPaid(x)} onChanged={reloadAll}
+            />
+          </>
+        )}
         {filter === 'all' && groups.map(([sectionId, group]) => (
           <Fragment key={sectionId}>
             <RefineSection title={group.name} />

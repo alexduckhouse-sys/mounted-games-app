@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronRight } from 'lucide-react';
 import { RunGraph, type GraphRun } from '../../components/RunGraph';
-import { useCompactPageBar, usePageHeader } from '../../components/CompactPageBarContext';
+import { useCompactPageBar } from '../../components/CompactPageBarContext';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useStillMotion } from '../../lite/useStillMotion';
 import { useT } from '../../i18n/LanguageContext';
@@ -53,11 +53,11 @@ export function TeamStatsPage() {
   const subtitle = [team?.displayName, sectionLabel].filter(Boolean).join(' · ');
   useCompactPageBar({
     backTo: teamPath,
+    backLabel: team?.displayName ?? t('teams.team.title'),
     title: t('teams.team.stats'),
     subtitle,
     badge: nextState?.kind === 'heat' && nextState.row.status === 'live' ? 'live' : nextState?.kind === 'done' ? 'finished' : 'next',
   });
-  usePageHeader({ title: t('teams.team.stats'), subtitle, backTo: teamPath, backLabel: team?.displayName ?? t('teams.team.title') });
 
   if (!team) {
     return <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 pt-3"><div className="mg-card p-4 text-sm text-[rgb(var(--mg-muted))]">{t('teams.team.notFound')}</div></div>;
