@@ -5,7 +5,8 @@
 main:has(.rf-hd) { padding-top: 0; }
 .rf-page { width: 100%; font-family: var(--mg-font); color: rgb(var(--mg-ink)); animation: rf-page-in 180ms var(--mg-ease-out); }
 @keyframes rf-page-in {
-  from { opacity: 0; transform: translateY(6px); }
+  /* From part-faded, not blank: a page that starts invisible reads as a flash of empty screen. */
+  from { opacity: .4; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 

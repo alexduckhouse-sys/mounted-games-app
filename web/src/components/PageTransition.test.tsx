@@ -112,7 +112,7 @@ describe('PageTransition', () => {
     expect(frames()).toHaveLength(0);
     expect(animations).toHaveLength(1);
     expect(animations[0].target.id).toBe('main');
-    expect(animations[0].keyframes).toEqual([{ opacity: 0 }, { opacity: 1 }]);
+    expect(animations[0].keyframes).toEqual([{ opacity: 0.4 }, { opacity: 1 }]);
     expect(animations[0].options.duration).toBe(160);
     expect(document.getElementById('main')!.style.visibility).toBe('');
   });
