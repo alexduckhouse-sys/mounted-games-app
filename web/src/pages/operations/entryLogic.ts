@@ -68,10 +68,14 @@ export function waitlistOfferState(expiresAt: string | null | undefined, now: Da
   if (!Number.isFinite(end)) return { state: 'none' };
   const ms = end - now.getTime();
   if (ms <= 0) return { state: 'expired', text: 'Offer ran out' };
-  const minutes = Math.max(1, Math.ceil(ms / 60_000));
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
+  const { h, m } = offerTimeLeft(ms);
   return { state: 'open', text: h > 0 ? `${h}h ${m}m left` : `${m}m left` };
+}
+
+/** Whole hours and minutes left of an offer, rounding up to the minute (at least one), for text in any language. */
+export function offerTimeLeft(ms: number): { h: number; m: number } {
+  const minutes = Math.max(1, Math.ceil(ms / 60_000));
+  return { h: Math.floor(minutes / 60), m: minutes % 60 };
 }
 
 /** Pounds typed by hand ("12", "12.5", "£12.50") to pence, or null when it isn't an amount. Avoids float rounding. */

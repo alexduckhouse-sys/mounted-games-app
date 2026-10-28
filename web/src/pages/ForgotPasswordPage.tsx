@@ -6,12 +6,14 @@ import { apiErrorMessage, apiErrorStatus } from '../lib/apiError';
 import { Notice } from '../components/Notice';
 import { AuthFrame } from './auth/AuthFrame';
 import { Field } from './auth/Field';
+import { useT } from '../i18n/LanguageContext';
 
 /**
  * Asks for the sign-in email and sends a reset link. The API gives the same answer whether or not there is an account,
  * so this page does too: it never says whether the address is known.
  */
 export function ForgotPasswordPage() {
+  const t = useT();
   const [email, setEmail] = useState('');
   const [sending, setSending] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -30,9 +32,9 @@ export function ForgotPasswordPage() {
       setSentTo(address);
     } catch (caught) {
       const status = apiErrorStatus(caught);
-      setError(status === 429 ? 'Too many tries. Wait a minute and try again.'
-        : status === 400 || status === 403 ? apiErrorMessage(caught, 'Check the address and try again.')
-          : 'Couldn’t send the link. Check your signal and try again.');
+      setError(status === 429 ? t('auth.forgot.tooMany')
+        : status === 400 || status === 403 ? apiErrorMessage(caught, t('auth.forgot.checkAddress'))
+          : t('auth.forgot.sendFailed'));
     } finally {
       setSending(false);
     }
@@ -42,15 +44,15 @@ export function ForgotPasswordPage() {
     return (
       <AuthFrame>
         <div className="flex flex-1 flex-col gap-[18px]">
-          <h1 className="mg-h1 !text-[34px] !leading-none">Check your email</h1>
+          <h1 className="mg-h1 !text-[34px] !leading-none">{t('auth.forgot.checkTitle')}</h1>
           <Notice tone="info" icon={MailCheck}>
-            If there’s an account for {sentTo}, we’ve sent it a link to choose a new password. The link works for 30 minutes.
+            {t('auth.forgot.sentNotice', { email: sentTo })}
           </Notice>
           <p className="m-0 text-[15px] text-[rgb(var(--mg-body))]">
-            Nothing after a few minutes? Check your spam folder, or{' '}
-            <button type="button" className="font-semibold text-[rgb(var(--mg-heading))] underline" onClick={() => setSentTo(null)}>try again</button>.
+            {t('auth.forgot.nothingYet')}{' '}
+            <button type="button" className="font-semibold text-[rgb(var(--mg-heading))] underline" onClick={() => setSentTo(null)}>{t('auth.forgot.tryAgain')}</button>.
           </p>
-          <Link to="/login" className="mg-btn mg-btn-primary w-full">Back to sign in</Link>
+          <Link to="/login" className="mg-btn mg-btn-primary w-full">{t('auth.login.backToSignIn')}</Link>
         </div>
       </AuthFrame>
     );
@@ -59,9 +61,9 @@ export function ForgotPasswordPage() {
   return (
     <AuthFrame>
       <form onSubmit={submit} className="flex flex-1 flex-col gap-[18px]" noValidate>
-        <h1 className="mg-h1 !text-[34px] !leading-none">Reset your password</h1>
-        <p className="m-0 text-[15px] text-[rgb(var(--mg-body))]">Enter the email address you sign in with and we’ll send you a link to choose a new password.</p>
-        <Field label="Email" error={error}>
+        <h1 className="mg-h1 !text-[34px] !leading-none">{t('auth.forgot.title')}</h1>
+        <p className="m-0 text-[15px] text-[rgb(var(--mg-body))]">{t('auth.forgot.intro')}</p>
+        <Field label={t('auth.field.email')} error={error}>
           {({ id, invalid, describedBy }) => (
             <div className="mg-field" data-invalid={invalid}>
               <input id={id} type="email" value={email} autoComplete="email" autoFocus aria-invalid={invalid} aria-describedby={describedBy}
@@ -69,9 +71,9 @@ export function ForgotPasswordPage() {
             </div>
           )}
         </Field>
-        <button type="submit" disabled={!ready} className="mg-btn mg-btn-primary w-full">{sending ? 'Sending…' : 'Send reset link'}</button>
+        <button type="submit" disabled={!ready} className="mg-btn mg-btn-primary w-full">{sending ? t('auth.forgot.sending') : t('auth.forgot.send')}</button>
         <p className="text-center text-[15px] font-medium text-[rgb(var(--mg-body))]">
-          Remembered it? <Link to="/login" className="font-semibold text-[rgb(var(--mg-heading))] !underline">Sign in</Link>
+          {t('auth.forgot.remembered')} <Link to="/login" className="font-semibold text-[rgb(var(--mg-heading))] !underline">{t('common.signIn')}</Link>
         </p>
       </form>
     </AuthFrame>

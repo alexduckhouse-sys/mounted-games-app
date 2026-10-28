@@ -96,4 +96,17 @@ export const auth = {
 
   'auth.reset.conflict': 'Your account changed while your new password was being saved, so nothing was changed. Try again.',
   'auth.reset.failed': 'We couldn’t save your new password, so nothing was changed. Try again in a moment.',
+  'auth.forgot.link': 'Forgot your password?',
+  'auth.forgot.tooMany': 'Too many tries. Wait a minute and try again.',
+  'auth.forgot.checkAddress': 'Check the address and try again.',
+  'auth.forgot.sendFailed': 'Couldn’t send the link. Check your signal and try again.',
+  'auth.forgot.checkTitle': 'Check your email',
+  'auth.forgot.sentNotice': 'If there’s an account for {email}, we’ve sent it a link to choose a new password. The link works for 30 minutes.',
+  'auth.forgot.nothingYet': 'Nothing after a few minutes? Check your spam folder, or',
+  'auth.forgot.tryAgain': 'try again',
+  'auth.forgot.title': 'Reset your password',
+  'auth.forgot.intro': 'Enter the email address you sign in with and we’ll send you a link to choose a new password.',
+  'auth.forgot.sending': 'Sending…',
+  'auth.forgot.send': 'Send reset link',
+  'auth.forgot.remembered': 'Remembered it?',
 } satisfies Record<string, Message>;

@@ -6,7 +6,7 @@ import { Sheet } from '../../../components/Sheet';
 import { useToast } from '../../../components/Toast';
 import { api } from '../../../api';
 import { useAuth } from '../../../auth/AuthContext';
-import { useT } from '../../../i18n/LanguageContext';
+import { useLanguage, useT } from '../../../i18n/LanguageContext';
 import { FLAG_COMPETITION_ICONS } from '../../../competition/icons';
 import { apiErrorMessage } from '../../../lib/apiError';
 import { parseBibAndFlag } from '../../../lib/bib';
@@ -51,6 +51,7 @@ const wide = () => typeof window !== 'undefined' && typeof window.matchMedia ===
  */
 export function DecFormEditor({ competition, team, existing, draft, priorPhone, onSaved, onDelete, lockInfo, config = STANDARD_CONFIG }: Props) {
   const t = useT();
+  const { locale } = useLanguage();
   const { user } = useAuth();
   const flagOptions = [{ value: '', label: t('entries.dec.noFlag') }, ...FLAG_COMPETITION_ICONS.map((f) => ({ value: f.id as string, label: f.label }))];
   const section = competition.sections.find((s) => s.id === team.competitionSectionId);
@@ -220,9 +221,9 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
 
   async function copyTeam(saved: SavedTeamDeclaration) {
     if (slots.some(Boolean) && !(await confirmDialog({
-      title: 'Replace the riders?',
-      message: 'The riders already on this form will be swapped for the ones from that team.',
-      confirmLabel: 'Replace',
+      title: t('entries.dec.replaceTitle'),
+      message: t('entries.dec.replaceMessage'),
+      confirmLabel: t('entries.dec.replace'),
     }))) return;
     const year = competition.startDate ? new Date(competition.startDate).getFullYear() : null;
     const applied = applySavedTeamToForm(saved, section?.format, config, {
@@ -280,8 +281,8 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
               <button type="button" className="sp-row" onClick={() => setCopyOpen(true)}>
                 <Copy aria-hidden="true" className="h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-heading))]" strokeWidth={2.25} />
                 <span className="sp-grow">
-                  <span className="sp-t1">Copy a previous team</span>
-                  <span className="sp-t2">Fills in riders, ponies, bibs and trainer from a form you sent before</span>
+                  <span className="sp-t1">{t('entries.dec.copyTeam')}</span>
+                  <span className="sp-t2">{t('entries.dec.copyTeamHelp')}</span>
                 </span>
                 <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
               </button>
@@ -393,15 +394,15 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
       {toast.node}
       {termsOpen && <TermsDialog termsText={competition.termsText} onClose={() => setTermsOpen(false)} />}
       {copyOpen && (
-        <Sheet title="Copy a previous team" description="Pick a team you have declared before. You can change anything afterwards." onClose={() => setCopyOpen(false)}>
+        <Sheet title={t('entries.dec.copyTeam')} description={t('entries.dec.copySheetHelp')} onClose={() => setCopyOpen(false)}>
           {({ close: closeSheet }) => (
-            <div className="sp-card" role="list" aria-label="Previous teams">
+            <div className="sp-card" role="list" aria-label={t('entries.dec.previousTeams')}>
               {savedTeams.map((saved) => (
                 <div key={`${saved.competitionId}-${saved.teamId}`} role="listitem">
                   <button type="button" className="sp-row" onClick={() => closeSheet(() => { setCopyOpen(false); void copyTeam(saved); })}>
                     <span className="sp-grow">
                       <span className="sp-t1">{savedTeamSummaryLabel(saved)}</span>
-                      {saved.submittedAt && <span className="sp-t2">Sent {new Date(saved.submittedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+                      {saved.submittedAt && <span className="sp-t2">{t('entries.dec.sentOn', { date: new Date(saved.submittedAt).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' }) })}</span>}
                     </span>
                     <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
                   </button>
