@@ -1,5 +1,6 @@
 import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { Plus, X } from 'lucide-react';
+import { useT } from '../../../i18n/LanguageContext';
 import { defaultRaceList, SCOPE_LABEL, type RaceScope } from '../../../lib/defaultRaces';
 import { finalCountOf, sectionHasFinal, sectionName, type CreatorDraft, type SectionDraft } from '../../../lib/creatorDraft';
 import {
@@ -25,6 +26,7 @@ interface Drag { name: string; from: number; to: number; dy: number; height: num
  * or with the up and down arrow keys while the grip has focus. Nothing here is required: a list can be left for later.
  */
 export function RacesStep({ draft, change, templates }: StepProps<CreatorDraft> & { templates: string[] }) {
+  const t = useT();
   const [tab, setTab] = useState<Record<number, RaceKey>>({});
   const [picker, setPicker] = useState<number | null>(null);
   const [presets, setPresets] = useState<number | null>(null);
@@ -71,8 +73,8 @@ export function RacesStep({ draft, change, templates }: StepProps<CreatorDraft> 
   }
 
   return (
-    <section aria-label="Races" className="flex flex-col">
-      <StepHeading>Races</StepHeading>
+    <section aria-label={t('admin.creator.step.races')} className="flex flex-col">
+      <StepHeading>{t('admin.creator.step.races')}</StepHeading>
       {draft.sections.map((s, si) => {
         const name = sectionName(s);
         const finals = finalCountOf(s);
@@ -83,16 +85,16 @@ export function RacesStep({ draft, change, templates }: StepProps<CreatorDraft> 
         const list = racesOf(s, active) ?? [];
         const editable = !same && !locked;
         const final = isFinalKey(active);
-        const matches = templates.filter((t) => !list.includes(t) && t.toLowerCase().includes(query.trim().toLowerCase()));
+        const matches = templates.filter((tpl) => !list.includes(tpl) && tpl.toLowerCase().includes(query.trim().toLowerCase()));
         const typed = query.trim();
-        const canAddTyped = typed.length > 0 && !list.some((x) => x.toLowerCase() === typed.toLowerCase()) && !templates.some((t) => t.toLowerCase() === typed.toLowerCase());
+        const canAddTyped = typed.length > 0 && !list.some((x) => x.toLowerCase() === typed.toLowerCase()) && !templates.some((tpl) => tpl.toLowerCase() === typed.toLowerCase());
         const setList = (races: string[] | null) => edit(si, (cur) => withRaces(cur, active, races));
         return (
           <section key={s.existingId ?? `new-${si}`} aria-label={name}>
-            <SecHead name={name} first={si === 0} sub={finals > 1 ? `${s.maxParticipants} entries in heats of ${s.maxTeamsPerHeat}, so ${finals} finals` : undefined} />
+            <SecHead name={name} first={si === 0} sub={finals > 1 ? t('admin.creator.races.sub', { entries: s.maxParticipants, size: s.maxTeamsPerHeat, finals }) : undefined} />
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
               {all.length > 1 && (
-                <div className="cw-seg" role="tablist" aria-label="Race list for">
+                <div className="cw-seg" role="tablist" aria-label={t('admin.creator.races.listFor')}>
                   {all.map((k) => (
                     <button key={String(k)} type="button" role="tab" aria-selected={k === active} onClick={() => { setTab({ ...tab, [si]: k }); setPicker(null); setPresets(null); }}>
                       {raceKeyLabel(k, finals)}
@@ -102,24 +104,24 @@ export function RacesStep({ draft, change, templates }: StepProps<CreatorDraft> 
               )}
               {!s.usesRaceFinals && !sectionHasFinal(s) && (
                 <button type="button" className="cw-btn cw-btn-s" onClick={() => { edit(si, (cur) => ({ ...cur, hasFinal: true })); setTab({ ...tab, [si]: 'f' }); }}>
-                  <Plus className="h-4 w-4" aria-hidden="true" />Add a final
+                  <Plus className="h-4 w-4" aria-hidden="true" />{t('admin.creator.races.addFinal')}
                 </button>
               )}
               {final && !s.finalHasHeats && !s.finalScored && (
                 <button type="button" className="cw-btn cw-btn-s cw-btn-d" onClick={() => { edit(si, (cur) => ({ ...cur, hasFinal: false })); setTab({ ...tab, [si]: 1 }); }}>
-                  {finals > 1 ? 'Remove the finals' : 'Remove the final'}
+                  {finals > 1 ? t('admin.creator.races.removeFinals') : t('admin.creator.races.removeFinal')}
                 </button>
               )}
             </div>
 
-            <div className="cw-card" role="list" aria-label={`Races, ${raceKeyLabel(active, finals)}`}>
+            <div className="cw-card" role="list" aria-label={t('admin.creator.races.listAria', { label: raceKeyLabel(active, finals) })}>
               {!final && active !== 1 && !locked && (
                 <div className="cw-sw-row" role="listitem">
-                  <RefineSwitchRow label="Same races as Session 1" on={same} onChange={(on) => edit(si, (cur) => withFollowsFirst(cur, active as number, on))} />
+                  <RefineSwitchRow label={t('admin.creator.races.same')} on={same} onChange={(on) => edit(si, (cur) => withFollowsFirst(cur, active as number, on))} />
                 </div>
               )}
-              {locked && <div className="cw-row" role="listitem"><span className="cw-t2">Heats are made. Change the races on the On the day page.</span></div>}
-              {list.length === 0 && !locked && <div className="cw-row" role="listitem"><span className="cw-t2">No races yet</span></div>}
+              {locked && <div className="cw-row" role="listitem"><span className="cw-t2">{t('admin.creator.races.locked')}</span></div>}
+              {list.length === 0 && !locked && <div className="cw-row" role="listitem"><span className="cw-t2">{t('admin.creator.races.none')}</span></div>}
               {list.map((race, i) => {
                 const lifted = drag?.name === race;
                 const shift = drag && !lifted ? makeRoom(i, drag.from, drag.to, drag.height) : 0;
@@ -128,14 +130,14 @@ export function RacesStep({ draft, change, templates }: StepProps<CreatorDraft> 
                     style={lifted && drag ? { transform: `translateY(${drag.dy}px)` } : shift ? { transform: `translateY(${shift}px)` } : undefined}>
                     {editable
                       ? (
-                        <button type="button" className="cw-grip" aria-label={`Move ${race}: drag, or use the up and down arrow keys`}
+                        <button type="button" className="cw-grip" aria-label={t('admin.creator.races.move', { race })}
                           onPointerDown={(e) => grab(e, si, active, list, i)} onKeyDown={(e) => keys(e, si, active, list, i)}><GripIcon /></button>
                       )
                       : <span style={{ width: 8 }} />}
                     <span className="cw-num">{i + 1}</span>
                     <span className="cw-grow cw-t1">{race}</span>
                     {editable && (
-                      <button type="button" className="cw-ib cw-ib-red" aria-label={`Remove ${race}`} onClick={() => setList(list.filter((_, j) => j !== i))}>
+                      <button type="button" className="cw-ib cw-ib-red" aria-label={t('admin.creator.races.removeRace', { race })} onClick={() => setList(list.filter((_, j) => j !== i))}>
                         <X className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />
                       </button>
                     )}
@@ -146,10 +148,10 @@ export function RacesStep({ draft, change, templates }: StepProps<CreatorDraft> 
 
             {editable && (
               <>
-                {picker !== si && <div style={{ marginTop: 10 }}><AddBar onClick={() => { setPicker(si); setQuery(''); setPresets(null); }}>Add a race</AddBar></div>}
+                {picker !== si && <div style={{ marginTop: 10 }}><AddBar onClick={() => { setPicker(si); setQuery(''); setPresets(null); }}>{t('admin.creator.races.add')}</AddBar></div>}
                 <div className="cw-acts" style={{ marginTop: 10 }}>
-                  <button type="button" className="cw-btn cw-btn-s" aria-expanded={presets === si} onClick={() => { setPresets(presets === si ? null : si); setPicker(null); }}>Use a preset list</button>
-                  <button type="button" className="cw-btn cw-btn-s" onClick={() => setList(null)}>Leave for later</button>
+                  <button type="button" className="cw-btn cw-btn-s" aria-expanded={presets === si} onClick={() => { setPresets(presets === si ? null : si); setPicker(null); }}>{t('admin.creator.races.preset')}</button>
+                  <button type="button" className="cw-btn cw-btn-s" onClick={() => setList(null)}>{t('admin.creator.races.later')}</button>
                 </div>
                 {presets === si && (
                   <div className="cw-card" style={{ marginTop: 10 }}>
@@ -157,30 +159,30 @@ export function RacesStep({ draft, change, templates }: StepProps<CreatorDraft> 
                       const races = defaultRaceList(scope, s.format, s.ageGroup);
                       return (
                         <div key={scope} className="cw-row">
-                          <span className="cw-grow"><span className="cw-t1">{SCOPE_LABEL[scope]} list, {races.length} races</span><span className="cw-t2">{races.join(', ')}</span></span>
-                          <button type="button" className="cw-btn cw-btn-s" aria-label={`Use the ${SCOPE_LABEL[scope]} list`} onClick={() => { setList(races); setPresets(null); }}>Use this</button>
+                          <span className="cw-grow"><span className="cw-t1">{t('admin.creator.races.scopeList', { scope: SCOPE_LABEL[scope], count: races.length })}</span><span className="cw-t2">{races.join(', ')}</span></span>
+                          <button type="button" className="cw-btn cw-btn-s" aria-label={t('admin.creator.races.useScope', { scope: SCOPE_LABEL[scope] })} onClick={() => { setList(races); setPresets(null); }}>{t('admin.creator.races.useThis')}</button>
                         </div>
                       );
                     })}
-                    <div className="cw-row" style={{ minHeight: 48 }}><button type="button" className="cw-btn cw-btn-s" onClick={() => setPresets(null)}>Close</button></div>
+                    <div className="cw-row" style={{ minHeight: 48 }}><button type="button" className="cw-btn cw-btn-s" onClick={() => setPresets(null)}>{t('common.close')}</button></div>
                   </div>
                 )}
                 {picker === si && (
                   <div className="cw-card" style={{ marginTop: 10 }}>
                     <div className="cw-panel">
-                      <label className="cw-fld">Find a race
-                        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Type to filter" autoComplete="off" />
+                      <label className="cw-fld">{t('admin.creator.races.find')}
+                        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('admin.creator.races.filter')} autoComplete="off" />
                       </label>
                       <div className="cw-libgrid">
-                        {matches.map((t) => (
-                          <button key={t} type="button" className="cw-pick" onClick={() => setList([...list, t])}><span>{t}</span><Plus className="h-4 w-4" aria-hidden="true" /></button>
+                        {matches.map((tpl) => (
+                          <button key={tpl} type="button" className="cw-pick" onClick={() => setList([...list, tpl])}><span>{tpl}</span><Plus className="h-4 w-4" aria-hidden="true" /></button>
                         ))}
                         {canAddTyped && (
-                          <button type="button" className="cw-pick" onClick={() => { setList([...list, typed]); setQuery(''); }}><span>Add “{typed}”</span><Plus className="h-4 w-4" aria-hidden="true" /></button>
+                          <button type="button" className="cw-pick" onClick={() => { setList([...list, typed]); setQuery(''); }}><span>{t('admin.creator.races.addTyped', { typed })}</span><Plus className="h-4 w-4" aria-hidden="true" /></button>
                         )}
                       </div>
-                      {matches.length === 0 && !canAddTyped && <span className="cw-t2">No match.</span>}
-                      <div><button type="button" className="cw-btn cw-btn-s" onClick={() => { setPicker(null); setQuery(''); }}>Done</button></div>
+                      {matches.length === 0 && !canAddTyped && <span className="cw-t2">{t('admin.creator.noMatch')}</span>}
+                      <div><button type="button" className="cw-btn cw-btn-s" onClick={() => { setPicker(null); setQuery(''); }}>{t('common.done')}</button></div>
                     </div>
                   </div>
                 )}

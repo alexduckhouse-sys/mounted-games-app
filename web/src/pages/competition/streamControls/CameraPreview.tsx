@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useT } from '../../../i18n/LanguageContext';
 import { browserViewerDependencies, createStreamViewer } from '../../../live/streamViewer';
 import type { StreamInvoke } from '../../../live/streamRuntime';
 import type { LiveStream } from '../../../types';
@@ -48,7 +49,8 @@ export function CameraPreview({ stream, invoke, ready, monitorMedia }: {
   /** The big player's picture when it shows this camera; leave undefined to open a small viewer of its own. */
   monitorMedia?: MediaStream | null;
 }) {
-  const label = `${stream.angleName} preview`;
+  const t = useT();
+  const label = t('desk.stream.cam.preview', { angle: stream.angleName });
   return monitorMedia !== undefined
     ? <PreviewVideo media={monitorMedia} label={label} />
     : <ViewerPreview stream={stream} invoke={invoke} ready={ready} label={label} />;

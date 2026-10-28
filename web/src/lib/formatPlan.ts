@@ -1,3 +1,4 @@
+import { tr } from '../i18n/translate.ts';
 /** How the teams of an age group split into heats: as even as possible, no heat bigger than `maxPerHeat`. Matches the server. */
 export function heatSizes(teamCount: number, maxPerHeat: number): number[] {
   if (teamCount <= 0) return [];
@@ -10,10 +11,10 @@ export function heatSizes(teamCount: number, maxPerHeat: number): number[] {
 
 /** "2 heats of 3", "1 heat of 4", or "3 heats (4, 3, 3)" when they differ. */
 export function describeHeats(sizes: readonly number[]): string {
-  if (sizes.length === 0) return 'no teams yet';
+  if (sizes.length === 0) return tr('admin.creator.heats.none');
   const same = sizes.every((size) => size === sizes[0]);
-  if (sizes.length === 1) return `1 heat of ${sizes[0]}`;
-  return same ? `${sizes.length} heats of ${sizes[0]}` : `${sizes.length} heats (${sizes.join(', ')})`;
+  if (sizes.length === 1) return tr('admin.creator.heats.one', { size: sizes[0] });
+  return same ? tr('admin.creator.heats.same', { count: sizes.length, size: sizes[0] }) : tr('admin.creator.heats.mixed', { count: sizes.length, sizes: sizes.join(', ') });
 }
 
 /** An event that starts at midnight has no time set yet, so the day starts at nine. */

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../api';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
+import { useT } from '../../i18n/LanguageContext';
+import { tr } from '../../i18n/translate';
 import { problemMessage } from '../../lib/apiError';
 import { RefineList, RefineSection } from '../refine/Refine';
 import { isEntriesDigestStatus, type EntriesDigestStatus } from './entriesDigestTypes';
@@ -9,6 +11,7 @@ import { events, lastRunText, nextSendText, people } from './entriesDigestText';
 
 /** Site admins: what the daily "entries are open" email is waiting to announce, how the last one went, and a Send now button. */
 export function EntriesDigestCard() {
+  const t = useT();
   const [status, setStatus] = useState<EntriesDigestStatus | null>(null);
   const [unavailable, setUnavailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +45,7 @@ export function EntriesDigestCard() {
       }
       return latest;
     } catch (caught) {
-      if (alive.current) setError(problemMessage(caught, 'Couldn’t send. Check your signal and try again.'));
+      if (alive.current) setError(problemMessage(caught, tr('admin.email.digest.errSend')));
       return null;
     } finally {
       if (alive.current) setBusy(false);
@@ -52,9 +55,9 @@ export function EntriesDigestCard() {
   async function sendNow() {
     if (!status) return;
     const ok = await confirmDialog({
-      title: 'Send it now?',
-      message: `${people(status.recipients)} will get one email about ${events(status.pendingCount)}. That covers today’s evening email, so anything that opens later waits until tomorrow. You can’t unsend it.`,
-      confirmLabel: 'Send now',
+      title: tr('admin.email.digest.confirmTitle'),
+      message: tr('admin.email.digest.confirmMessage', { people: people(status.recipients), events: events(status.pendingCount) }),
+      confirmLabel: tr('admin.email.digest.sendNow'),
     });
     if (ok) await send(status);
   }
@@ -64,43 +67,43 @@ export function EntriesDigestCard() {
 
   return (
     <>
-      <RefineSection title="New-event emails" />
-      <RefineList as="div" label="New-event emails">
+      <RefineSection title={t('admin.email.digest.title')} />
+      <RefineList as="div" label={t('admin.email.digest.title')}>
         <div className="rf-row">
           <span className="rf-grow">
             <span className="rf-t2">
-              Each evening, around 6pm UK time, everyone on the list gets one email with the competitions that have opened for entries since the last one. If nothing is new, nothing goes out.
+              {t('admin.email.digest.intro')}
             </span>
           </span>
         </div>
-        {unavailable && <div className="rf-row"><span className="rf-t2" role="status">Couldn’t load this. Reload the page to try again.</span></div>}
-        {!status && !unavailable && <div className="rf-row"><span className="rf-t2" role="status">Loading…</span></div>}
+        {unavailable && <div className="rf-row"><span className="rf-t2" role="status">{t('admin.email.digest.unavailable')}</span></div>}
+        {!status && !unavailable && <div className="rf-row"><span className="rf-t2" role="status">{t('common.loading')}</span></div>}
         {status && (
           <>
             <div className="rf-row">
               <span className="rf-grow">
-                <span className="rf-t1">Waiting to go</span>
+                <span className="rf-t1">{t('admin.email.digest.waiting')}</span>
                 <span className="rf-t2">
                   {status.pendingCount === 0
-                    ? 'Nothing new'
-                    : `${events(status.pendingCount)}: ${status.pending.map((c) => c.name).join(', ')}${status.pendingCount > status.pending.length ? ' and more' : ''}`}
+                    ? t('admin.email.digest.nothingNew')
+                    : t(status.pendingCount > status.pending.length ? 'admin.email.digest.pendingMore' : 'admin.email.digest.pendingList', { events: events(status.pendingCount), names: status.pending.map((c) => c.name).join(', ') })}
                 </span>
               </span>
             </div>
-            <div className="rf-row"><span className="rf-grow"><span className="rf-t1">On the list</span><span className="rf-t2">{people(status.recipients)}</span></span></div>
+            <div className="rf-row"><span className="rf-grow"><span className="rf-t1">{t('admin.email.digest.onList')}</span><span className="rf-t2">{people(status.recipients)}</span></span></div>
             <div className="rf-row">
               <span className="rf-grow">
-                <span className="rf-t1">Last email</span>
-                <span className="rf-t2">{status.last ? lastRunText(status.last) : 'None yet'}</span>
+                <span className="rf-t1">{t('admin.email.digest.lastEmail')}</span>
+                <span className="rf-t2">{status.last ? lastRunText(status.last) : t('admin.email.digest.noneYet')}</span>
               </span>
             </div>
             <div className="rf-row">
               <span className="rf-grow">
-                <span className="rf-t1">Next</span>
-                <span className="rf-t2">{status.canSend ? (status.todayClaimed && !unfinished ? 'Today’s has gone. ' : '') + nextSendText(status.nextSendUtc) : status.cannotSendBecause}</span>
+                <span className="rf-t1">{t('admin.email.digest.next')}</span>
+                <span className="rf-t2">{status.canSend ? (status.todayClaimed && !unfinished ? t('admin.email.digest.todayGone', { next: nextSendText(status.nextSendUtc) }) : nextSendText(status.nextSendUtc)) : status.cannotSendBecause}</span>
               </span>
               <button type="button" className="rf-btn" disabled={!canPress} onClick={() => void sendNow()}>
-                {busy ? 'Sending…' : unfinished ? 'Carry on' : 'Send now'}
+                {busy ? t('admin.email.digest.busy') : unfinished ? t('admin.email.digest.carryOn') : t('admin.email.digest.sendNow')}
               </button>
             </div>
           </>

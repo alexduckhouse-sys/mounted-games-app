@@ -4,15 +4,17 @@ import { api } from '../../../api';
 import { Notice } from '../../../components/Notice';
 import { QrCode } from '../../../components/QrCode';
 import { useToast } from '../../../components/Toast';
+import { useT } from '../../../i18n/LanguageContext';
 import { usePageVisible } from '../../../hooks/usePageVisible';
 import { useLiteMode } from '../../../lite/LiteModeContext';
 import type { StreamInvoke } from '../../../live/streamRuntime';
-import { CAMERA_ANGLES, QUALITY_CHOICES, cameraLinkLabel, cameraSettings, cameraStatus, newCamera, previewStreams } from '../../../lib/streamControls';
+import { CAMERA_ANGLES, QUALITY_CHOICES, cameraLinkLabel, cameraSettings, newCamera, previewStreams } from '../../../lib/streamControls';
 import { scorerLinkUrl } from '../../../offline/scorerLink';
 import type { CreatedScorerLink, LiveStream, StreamCommand, StreamTelemetry } from '../../../types';
 import { apiMessage } from '../../operations/types';
 import { RefineChoiceRow, RefineList, RefineSection, RefineSwitchRow } from '../../refine/Refine';
 import { CameraPreview } from './CameraPreview';
+import { cameraStatusText, qualityText } from './streamText';
 
 interface Props {
   competitionId: number;
@@ -36,6 +38,7 @@ const linkKey = (arena: string, angle: string) => `${arena}\n${angle}`;
 const ANGLE_OPTIONS = CAMERA_ANGLES.map((name) => ({ value: name as string, label: name }));
 
 export function CameraTab({ competitionId, streams, onAir, telemetry, arenas, onPick, invoke, ready = 0, monitor }: Props) {
+  const t = useT();
   const [showQr, setShowQr] = useState(false);
   const [arenaChoice, setArenaChoice] = useState<string | null>(null);
   const [angle, setAngle] = useState<string>(CAMERA_ANGLES[0]);
@@ -63,7 +66,7 @@ export function CameraTab({ competitionId, streams, onAir, telemetry, arenas, on
   const joined = showQr && link ? newCamera(streams, arena, angle, known) : null;
   if (joined) {
     setShowQr(false);
-    setConnected({ id: joined.id, text: `${joined.angleName} camera connected` });
+    setConnected({ id: joined.id, text: t('desk.stream.cam.connected', { angle: joined.angleName }) });
   }
   const { show } = toast;
   useEffect(() => { if (connected) show(connected.text); }, [connected, show]);
@@ -85,7 +88,7 @@ export function CameraTab({ competitionId, streams, onAir, telemetry, arenas, on
       if (!data || typeof data.token !== 'string' || !data.token) throw new Error('No token in the reply');
       if (mounted.current) setLinks((current) => ({ ...current, [wanted.key]: scorerLinkUrl(window.location.origin, data.token, wanted.angle) }));
     } catch (problem) {
-      if (mounted.current) setLinkError(apiMessage(problem, 'Couldn’t make the camera link. Check your signal and try again.'));
+      if (mounted.current) setLinkError(apiMessage(problem, t('desk.stream.cam.linkFailed')));
     } finally {
       if (mounted.current) setMaking(false);
     }
@@ -94,9 +97,9 @@ export function CameraTab({ competitionId, streams, onAir, telemetry, arenas, on
   async function copy(url: string) {
     try {
       await navigator.clipboard.writeText(url);
-      show('Link copied');
+      show(t('desk.stream.cam.linkCopied'));
     } catch {
-      setLinkError('Couldn’t copy the link. Press and hold it to copy, or scan the QR code.');
+      setLinkError(t('desk.stream.cam.copyFailed'));
     }
   }
 
@@ -106,7 +109,7 @@ export function CameraTab({ competitionId, streams, onAir, telemetry, arenas, on
       await api.post(`/competitions/${competitionId}/streams/${stream.id}/command`, { command, value });
       return true;
     } catch {
-      setError('Couldn’t reach the camera phone. Check your signal and try again.');
+      setError(t('desk.stream.cameraUnreachable'));
       return false;
     }
   }
@@ -124,11 +127,11 @@ export function CameraTab({ competitionId, streams, onAir, telemetry, arenas, on
 
   return (
     <>
-      <RefineSection title="On air" />
+      <RefineSection title={t('desk.stream.cam.onAir')} />
       {streams.length === 0 ? (
-        <p className="rf-note">No camera is live. Open the stream on a phone to start one.</p>
+        <p className="rf-note">{t('desk.stream.cam.noneLive')}</p>
       ) : (
-        <div role="radiogroup" aria-label="Camera"><RefineList as="div">
+        <div role="radiogroup" aria-label={t('desk.stream.cam.camera')}><RefineList as="div">
           {streams.map((stream) => {
             const on = onAir?.id === stream.id;
             return (
@@ -138,8 +141,8 @@ export function CameraTab({ competitionId, streams, onAir, telemetry, arenas, on
                   <CameraPreview stream={stream} invoke={invoke} ready={ready}
                     monitorMedia={monitor && monitor.streamId === stream.id ? monitor.media : undefined} />
                 )}
-                <span className="rf-grow"><span className="rf-t1">{stream.arenaName} · {stream.angleName}</span><span className="rf-t2">{cameraStatus(stream)}</span></span>
-                {on && <span className="sx-onair">ON AIR</span>}
+                <span className="rf-grow"><span className="rf-t1">{stream.arenaName} · {stream.angleName}</span><span className="rf-t2">{cameraStatusText(t, stream)}</span></span>
+                {on && <span className="sx-onair">{t('desk.stream.cam.onAirBadge')}</span>}
               </button>
             );
           })}
@@ -147,42 +150,42 @@ export function CameraTab({ competitionId, streams, onAir, telemetry, arenas, on
       )}
 
       <button type="button" className="sx-addbar" aria-expanded={showQr} onClick={togglePanel}>
-        <Plus className="h-4 w-4" aria-hidden="true" />Add a camera phone
+        <Plus className="h-4 w-4" aria-hidden="true" />{t('desk.stream.cam.addPhone')}
       </button>
       {showQr && (
-        <div className="sx-panel sx-camera-panel" role="region" aria-label="Add a camera phone">
-          <RefineList as="div" label="Camera phone">
+        <div className="sx-panel sx-camera-panel" role="region" aria-label={t('desk.stream.cam.addPhone')}>
+          <RefineList as="div" label={t('desk.stream.cam.cameraPhone')}>
             {arenas.length > 1 && (
-              <RefineChoiceRow label="Arena" value={arena} options={arenas.map((name) => ({ value: name, label: name }))}
+              <RefineChoiceRow label={t('desk.stream.cam.arena')} value={arena} options={arenas.map((name) => ({ value: name, label: name }))}
                 onChange={(next) => { setArenaChoice(next); setLinkError(null); }} />
             )}
-            <RefineChoiceRow label="Position" value={angle} options={ANGLE_OPTIONS} allowOther
+            <RefineChoiceRow label={t('desk.stream.cam.position')} value={angle} options={ANGLE_OPTIONS} allowOther
               onChange={(next) => { setAngle(next); setLinkError(null); }} />
           </RefineList>
           {link ? (
             <div className="sx-camera-link">
-              <QrCode value={link} label={`QR code for the ${angle} camera`} className="sx-qr" />
+              <QrCode value={link} label={t('desk.stream.cam.qrFor', { angle })} className="sx-qr" />
               <div className="sx-panel-copy">
-                <strong>Scan with the camera phone</strong>
-                <span className="rf-t2">No account needed. It goes live as {arena} · {angle}.</span>
+                <strong>{t('desk.stream.cam.scan')}</strong>
+                <span className="rf-t2">{t('desk.stream.cam.noAccount', { arena, angle })}</span>
                 <p className="sx-link">{link}</p>
-                <p className="rf-t2" role="status">Waiting for the camera to go live…</p>
+                <p className="rf-t2" role="status">{t('desk.stream.cam.waiting')}</p>
                 <div className="sx-pills">
-                  <button type="button" className="rf-btn" onClick={() => void copy(link)}>Copy link</button>
-                  <button type="button" className="rf-btn" onClick={() => setShowQr(false)}>Close</button>
+                  <button type="button" className="rf-btn" onClick={() => void copy(link)}>{t('desk.stream.cam.copyLink')}</button>
+                  <button type="button" className="rf-btn" onClick={() => setShowQr(false)}>{t('common.close')}</button>
                 </div>
               </div>
             </div>
           ) : (
             <div className="sx-pills">
               <button type="button" className="rf-btn rf-btn-primary" disabled={making || !arena} onClick={() => void makeLink()}>
-                {making ? 'Making QR code…' : 'Make QR code'}
+                {making ? t('desk.stream.cam.making') : t('desk.stream.cam.makeQr')}
               </button>
-              <button type="button" className="rf-btn" onClick={() => setShowQr(false)}>Close</button>
+              <button type="button" className="rf-btn" onClick={() => setShowQr(false)}>{t('common.close')}</button>
             </div>
           )}
           {linkError && (
-            <Notice className="sx-status" actionLabel={link ? undefined : 'Try again'} onAction={() => void makeLink()} actionDisabled={making}>{linkError}</Notice>
+            <Notice className="sx-status" actionLabel={link ? undefined : t('common.tryAgain')} onAction={() => void makeLink()} actionDisabled={making}>{linkError}</Notice>
           )}
         </div>
       )}
@@ -191,24 +194,24 @@ export function CameraTab({ competitionId, streams, onAir, telemetry, arenas, on
 
       {onAir && settings && (
         <>
-          <RefineSection title="Settings" meta={`${onAir.arenaName} · ${onAir.angleName}`} />
-          <RefineList as="div" label="Camera settings">
+          <RefineSection title={t('desk.stream.cam.settings')} meta={`${onAir.arenaName} · ${onAir.angleName}`} />
+          <RefineList as="div" label={t('desk.stream.cam.cameraSettings')}>
             <div className="rf-row sx-row-pills">
-              <span className="rf-grow rf-t1">Quality</span>
-              <div className="sx-pills" role="radiogroup" aria-label="Quality">
+              <span className="rf-grow rf-t1">{t('desk.stream.cam.quality')}</span>
+              <div className="sx-pills" role="radiogroup" aria-label={t('desk.stream.cam.quality')}>
                 {QUALITY_CHOICES.map((choice) => (
                   <button key={choice.preset} type="button" role="radio" aria-checked={settings.quality === choice.preset} className="sx-pill"
-                    onClick={() => void send(onAir, 'setQualityPreset', choice.preset).then((ok) => { if (ok) remember(onAir, { quality: choice.preset }); })}>{choice.label}</button>
+                    onClick={() => void send(onAir, 'setQualityPreset', choice.preset).then((ok) => { if (ok) remember(onAir, { quality: choice.preset }); })}>{qualityText(t, choice.preset)}</button>
                 ))}
               </div>
             </div>
-            <RefineSwitchRow label="Wind filter" on={settings.windFilter}
+            <RefineSwitchRow label={t('desk.stream.cam.windFilter')} on={settings.windFilter}
               onChange={(next) => void send(onAir, 'windFilter', String(next)).then((ok) => { if (ok) remember(onAir, { windFilter: next }); })} />
-            <RefineSwitchRow label="Sound" on={settings.sound}
+            <RefineSwitchRow label={t('desk.stream.cam.sound')} on={settings.sound}
               onChange={(next) => void send(onAir, 'mute', String(!next)).then((ok) => { if (ok) remember(onAir, { sound: next }); })} />
             <div className="rf-row">
-              <span className="rf-grow rf-t1">Flip camera</span>
-              <button type="button" className="rf-btn" onClick={() => void send(onAir, 'flipCamera', null)}>Flip</button>
+              <span className="rf-grow rf-t1">{t('desk.stream.cam.flipCamera')}</span>
+              <button type="button" className="rf-btn" onClick={() => void send(onAir, 'flipCamera', null)}>{t('desk.stream.cam.flip')}</button>
             </div>
           </RefineList>
         </>
