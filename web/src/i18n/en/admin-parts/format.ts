@@ -208,6 +208,7 @@ export const adminFormat = {
   'admin.format.rules.manage': 'Manage',
   'admin.format.rules.about': 'About',
   'admin.format.rules.name': 'Name',
+  'admin.format.rules.createRace': 'Create race',
   'admin.format.rules.category': 'Category',
   'admin.format.rules.categoryPlaceholder': 'e.g. Bending, Equipment',
   'admin.format.rules.summary': 'One-line summary',

@@ -209,6 +209,7 @@ export const adminFormat: AreaCatalogue<typeof en> = {
   'admin.format.rules.manage': 'Rheoli',
   'admin.format.rules.about': 'Ynglŷn â’r ras',
   'admin.format.rules.name': 'Enw',
+  'admin.format.rules.createRace': 'Creu ras',
   'admin.format.rules.category': 'Categori',
   'admin.format.rules.categoryPlaceholder': 'e.e. Plygu, Offer',
   'admin.format.rules.summary': 'Crynodeb un llinell',

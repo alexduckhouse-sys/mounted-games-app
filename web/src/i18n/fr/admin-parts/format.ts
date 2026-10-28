@@ -209,6 +209,7 @@ export const adminFormat: AreaCatalogue<typeof en> = {
   'admin.format.rules.manage': 'Gérer',
   'admin.format.rules.about': 'À propos',
   'admin.format.rules.name': 'Nom',
+  'admin.format.rules.createRace': 'Créer la course',
   'admin.format.rules.category': 'Catégorie',
   'admin.format.rules.categoryPlaceholder': 'p. ex. Slalom, Matériel',
   'admin.format.rules.summary': 'Résumé en une ligne',
