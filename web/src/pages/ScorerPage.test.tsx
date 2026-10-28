@@ -314,6 +314,8 @@ describe('ScorerPage', () => {
   });
 
   it('shows an old saved copy when offline, and says so', async () => {
+    // At midday, so the saved time is never yesterday's (the notice then adds the date).
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 5, 15, 12, 0) });
     const user = userEvent.setup();
     link.get.mockResolvedValueOnce({ data: timetable() }).mockRejectedValue(axiosError());
     const first = open();
