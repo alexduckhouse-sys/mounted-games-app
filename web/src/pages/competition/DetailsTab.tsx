@@ -227,9 +227,8 @@ export function DetailsTab() {
         <div className="mt-6 flex flex-col gap-3">
           <h2 className="sp-sec !mt-0">Organiser</h2>
           <div className="sp-card" role="list" aria-label="Organiser pages">
-            <LinkRow to={`/competitions/${competition.id}/operations`} label="Manage entries and equipment" />
+            <LinkRow to={`/competitions/${competition.id}/operations`} label="Before the day" />
             <LinkRow to="../shop/manage" label="Manage event shop" />
-            <LinkRow to="../operations" label="Operations, draw and tools" />
           </div>
           {competition.sections.length > 0 && (
             <div className="flex flex-wrap gap-2">

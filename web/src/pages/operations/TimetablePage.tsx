@@ -274,7 +274,7 @@ export function TimetablePage() {
   return (
     <RefinePage>
       {savedToast.node}
-      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.equip.backToPrep')} context={competition.name} title={t('ops.tt.title')} />
+      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.hub.back')} context={competition.name} title={t('ops.tt.title')} />
       <div className="ops-cards ops-tt" aria-busy={busy}>
         <DrawUndoBanner competitionId={competition.id} version={undoVersion} onRestored={reload} />
         <TimetableClashes competition={competition} />

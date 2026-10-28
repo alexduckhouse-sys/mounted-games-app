@@ -51,17 +51,19 @@ beforeEach(() => {
 });
 
 describe.each([
-  { lang: 'cy' as const, prep: 'Paratoadau', toSort: 'I’w datrys', missing: 'Ffurflenni datgan ar goll', details: 'Manylion y digwyddiad', recheck: 'Gwirio eto', big: 'Offer mawr', extras: 'Ychwanegion sgorio', moveAll: 'Symud popeth', hatbands: 'Bandiau het', about: 'Amdano', horsebox: 'Mynedfa’r bocs ceffylau', back: 'Yn ôl i’r paratoadau' },
-  { lang: 'fr' as const, prep: 'Préparatifs', toSort: 'À régler', missing: 'Formulaires de déclaration manquants', details: 'Détails de l’événement', recheck: 'Revérifier', big: 'Gros équipement', extras: 'Options de notation', moveAll: 'Tout décaler', hatbands: 'Bandeaux', about: 'À propos', horsebox: 'Entrée des vans', back: 'Retour aux préparatifs' },
-])('organiser event pages in $lang', ({ lang, prep, toSort, missing, details, recheck, big, extras, moveAll, hatbands, about, horsebox, back }) => {
-  it('translates the preparations list', async () => {
+  { lang: 'cy' as const, hub: 'Cyn y diwrnod', toSort: 'peth i’w ddatrys', sortLine: '1 ffurflen ddatgan ar goll · 1 eitem o offer i’w gwirio', blocking: 'I’w datrys', tile: 'Dyblygu’r digwyddiad', recheck: 'Gwirio eto', big: 'Offer mawr', extras: 'Ychwanegion sgorio', moveAll: 'Symud popeth', hatbands: 'Bandiau het', about: 'Amdano', horsebox: 'Mynedfa’r bocs ceffylau', back: 'Yn ôl i Cyn y diwrnod' },
+  { lang: 'fr' as const, hub: 'Avant le jour J', toSort: 'points à régler', sortLine: '1 formulaire de déclaration manquant · 1 élément d’équipement à vérifier', blocking: 'À régler', tile: 'Dupliquer l’événement', recheck: 'Revérifier', big: 'Gros équipement', extras: 'Options de notation', moveAll: 'Tout décaler', hatbands: 'Bandeaux', about: 'À propos', horsebox: 'Entrée des vans', back: 'Retour à Avant le jour J' },
+])('organiser event pages in $lang', ({ lang, hub, toSort, sortLine, blocking, tile, recheck, big, extras, moveAll, hatbands, about, horsebox, back }) => {
+  it('translates the Before the day hub', async () => {
     mount(lang, <OperationsPage />);
     expect(await screen.findByText(toSort)).toBeInTheDocument();
-    expect(screen.getAllByText(prep).length).toBeGreaterThan(0);
-    expect(screen.getByText(missing)).toBeInTheDocument();
-    expect(screen.getByText(details)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: hub })).toBeInTheDocument();
+    expect(screen.getByText(sortLine)).toBeInTheDocument();
+    expect(screen.getByText(blocking)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: new RegExp(`^${tile}`) })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: recheck })).toBeInTheDocument();
-    expect(screen.queryByText('Dec forms missing')).not.toBeInTheDocument();
+    expect(screen.queryByText('things to sort')).not.toBeInTheDocument();
+    expect(screen.queryByText('Event details')).not.toBeInTheDocument();
   });
 
   it('translates the equipment list', async () => {

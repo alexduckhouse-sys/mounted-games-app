@@ -186,6 +186,7 @@ export default function App() {
                 <Route path="shop/manage" element={<ProtectedRoute roles={['Admin', 'Trainer']}><CommerceManagementPage /></ProtectedRoute>} />
                 <Route path="rulebooks" element={<RulebooksPage />} />
                 <Route path="operations" element={<ProtectedRoute roles={['Admin', 'Trainer']}><OperationsPage /></ProtectedRoute>} />
+                <Route path="operations/:tool" element={<ProtectedRoute roles={['Admin', 'Trainer']}><OperationsPage /></ProtectedRoute>} />
                 <Route path="sections" element={<ProtectedRoute roles={['Admin', 'Trainer']}><SectionsPage /></ProtectedRoute>} />
                 <Route path="timetable-and-draw" element={<ProtectedRoute roles={['Admin', 'Trainer']}><TimetablePage /></ProtectedRoute>} />
                 <Route path="equipment" element={<ProtectedRoute roles={['Admin', 'Trainer']}><EquipmentPage /></ProtectedRoute>} />

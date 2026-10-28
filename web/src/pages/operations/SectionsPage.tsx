@@ -183,7 +183,7 @@ export function SectionsPage() {
   const busy = saving;
   return (
     <RefinePage>
-      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.equip.backToPrep')} context={competition.name} title={t('ops.sections.title')} />
+      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.hub.back')} context={competition.name} title={t('ops.sections.title')} />
       <div className="ops-sections" aria-busy={busy}>
         {error && <Notice actionLabel={retryable ? t('common.tryAgain') : undefined} onAction={() => void flush()}>{error}</Notice>}
         {busy && <p role="status" className="rf-note">{t('common.saving')}</p>}

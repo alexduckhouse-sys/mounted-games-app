@@ -160,7 +160,7 @@ export function EventDetailsPage() {
 
   return (
     <RefinePage>
-      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.equip.backToPrep')} context={competition.name} title={t('ops.detail.title')} />
+      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.hub.back')} context={competition.name} title={t('ops.detail.title')} />
       <div className="ops-cards">
         {error && <Notice>{error}</Notice>}
         {saving > 0 && <p role="status" className="rf-note">{t('common.saving')}</p>}

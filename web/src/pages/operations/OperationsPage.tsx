@@ -1,25 +1,25 @@
 import { useT } from '../../i18n/LanguageContext';
-import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { usePageWidth } from '../../components/pageWidthState';
 import { MoreHorizontal, RefreshCw } from 'lucide-react';
-import { TickerNumber } from '../../components/TickerNumber';
 import { Notice } from '../../components/Notice';
 import { useToast } from '../../components/Toast';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompetition } from '../competition/context';
 import { ProtestsPanel } from './ProtestsPanel';
 import { CompetitionTeamCard } from '../competition/CompetitionTeamCard';
 import { ScorerLinksCard } from '../competition/ScorerLinksCard';
-import { Chevron, RefineFoot, RefineHeader, RefineList, RefineNote, RefinePage, RefineSection, RefineSheet } from '../refine/Refine';
+import { RefineFoot, RefineHeader, RefineNote, RefinePage, RefineSheet } from '../refine/Refine';
 import { DrawResult, DrawSettingsForm } from './DrawPreviewView';
 import { DrawUndoBanner } from './DrawUndoBanner';
 import { EmergencySearch } from './EmergencySearch';
 import { VolunteerRota } from './VolunteerRota';
 import { EntriesPanel } from './EntriesPanel';
-import { equipmentLines } from './equipment';
-import { buildIssueGroups, clock, drawSubtitle, type IssueGroup } from './readiness';
+import { BeforeTheDayHub } from './BeforeTheDayHub';
+import { isTool, type Tool } from './hubData';
+import { buildIssueGroups, drawSubtitle } from './readiness';
 import type { CompetitionReadiness, DrawPreview } from './types';
 import { apiMessage } from './types';
 import { DuplicateEventPanel, PrintSheetsPanel, TeamImportPanel } from '../eventTools/EventToolsPage';
@@ -54,10 +54,7 @@ export function OperationsPage() {
   return <OperationsPageContent key={`${competition.id}:${user.id}`} />;
 }
 
-type View = 'checks' | 'draw' | 'entries' | 'protests' | 'scorers' | 'volunteers' | 'safety' | 'tack' | 'passport' | 'import' | 'print' | 'results' | 'duplicate';
 type Sheet = 'draw' | null;
-
-const VALID_VIEWS = new Set<View>(['checks', 'draw', 'entries', 'protests', 'scorers', 'volunteers', 'safety', 'tack', 'passport', 'import', 'print', 'results', 'duplicate']);
 
 function OperationsPageContent() {
   const t = useT();
@@ -67,11 +64,9 @@ function OperationsPageContent() {
   const mayDuplicate = Boolean(hasRole?.('Admin') || hasRole?.('Trainer'));
   const wide = useWideScreen();
   usePageWidth(wide ? 'wide' : 'default');
+  const { tool: toolParam } = useParams();
   const [searchParams] = useSearchParams();
-  const [view, setView] = useState<View>(() => {
-    const param = searchParams.get('tab') as View | null;
-    return param && VALID_VIEWS.has(param) ? param : 'checks';
-  });
+  const tool: Tool | null = isTool(toolParam) ? toolParam : null;
   const [sheet, setSheet] = useState<Sheet>(null);
   const [readiness, setReadiness] = useState<CompetitionReadiness | null>(null);
   const [checkedAt, setCheckedAt] = useState<Date | null>(null);
@@ -166,8 +161,7 @@ function OperationsPageContent() {
   function changeSeed(value: string) { setSeed(value); setPreview(null); }
 
   const groups = useMemo(() => (readiness ? buildIssueGroups(readiness, competition.id) : []), [readiness, competition.id]);
-  const shownView: View = view;
-  const back = `/competitions/${competition.id}`;
+  const hubPath = `/competitions/${competition.id}/operations`;
   const sectionName = (id: number) => competition.sections.find((section) => section.id === id)?.displayName ?? t('ops.page.sectionDraw');
 
   const overflow = (
@@ -181,114 +175,71 @@ function OperationsPageContent() {
     </button>
   );
 
-  let title = t('ops.view.checks');
-  const orgContext = t('ops.page.context', { name: competition.name });
-  let context = orgContext;
-  let subtitle: string | undefined;
-  let actions: ReactNode = recheck;
-  if (shownView === 'checks') {
-    // The page has no subtitle: the rows say what is left.
-  } else if (shownView === 'entries') {
-    title = t('ops.view.entries');
-    context = orgContext;
-    actions = null;
-  } else if (shownView === 'protests') {
-    title = t('ops.view.protests');
-    actions = null;
-  } else if (shownView === 'scorers') {
-    title = t('ops.view.scorers');
-    actions = null;
-  } else if (shownView === 'volunteers') {
-    title = t('ops.view.volunteers');
-    actions = null;
-  } else if (shownView === 'safety') {
-    title = t('ops.view.safety');
-    actions = null;
-  } else if (shownView === 'tack') {
-    title = t('ops.view.tack');
-    actions = null;
-  } else if (shownView === 'passport') {
-    title = t('ops.view.passport');
-    actions = null;
-  } else if (shownView === 'import') {
-    title = t('ops.view.import');
-    actions = null;
-  } else if (shownView === 'print') {
-    title = t('ops.view.print');
-    actions = null;
-  } else if (shownView === 'results') {
-    title = t('ops.view.results');
-    actions = null;
-  } else if (shownView === 'duplicate') {
-    title = t('ops.view.duplicate');
-    actions = null;
-  } else if (preview) {
-    title = sectionName(preview.sectionId);
-    actions = overflow;
-    context = t('ops.page.contextDraw');
-    subtitle = drawSubtitle(preview);
-  } else {
-    title = t('ops.view.draw');
-    actions = null;
+  const legacyTab = searchParams.get('tab');
+  if (!tool && toolParam) return <Navigate to={hubPath} replace />;
+  if (tool === 'duplicate' && !mayDuplicate) return <Navigate to={hubPath} replace />;
+  if (!tool && legacyTab) {
+    // Old links: ?tab=<view> is now its own page. Unknown values and "checks" land on the hub.
+    return <Navigate to={isTool(legacyTab) ? `${hubPath}/${legacyTab}` : hubPath} replace />;
   }
 
-  const tabs = [
-    { label: t('ops.view.checks'), active: shownView === 'checks', onSelect: () => setView('checks') },
-    { label: t('ops.view.draw'), active: shownView === 'draw', onSelect: () => setView('draw') },
-    { label: t('ops.view.entries'), active: shownView === 'entries', onSelect: () => setView('entries') },
-    { label: t('ops.view.protests'), active: shownView === 'protests', onSelect: () => setView('protests') },
-    { label: t('ops.view.scorers'), active: shownView === 'scorers', onSelect: () => setView('scorers') },
-    { label: t('ops.view.volunteers'), active: shownView === 'volunteers', onSelect: () => setView('volunteers') },
-    { label: t('ops.view.safety'), active: shownView === 'safety', onSelect: () => setView('safety') },
-    { label: t('ops.view.tack'), active: shownView === 'tack', onSelect: () => setView('tack') },
-    { label: t('ops.view.passport'), active: shownView === 'passport', onSelect: () => setView('passport') },
-    { label: t('ops.view.import'), active: shownView === 'import', onSelect: () => setView('import') },
-    { label: t('ops.view.print'), active: shownView === 'print', onSelect: () => setView('print') },
-    { label: t('ops.view.results'), active: shownView === 'results', onSelect: () => setView('results') },
-    ...(mayDuplicate ? [{ label: t('ops.view.duplicate'), active: shownView === 'duplicate', onSelect: () => setView('duplicate') }] : []),
-  ];
+  let title = t('ops.hub.title');
+  let context = competition.name;
+  let subtitle: string | undefined;
+  let actions: ReactNode = tool ? null : recheck;
+  if (tool === 'draw') {
+    title = t('ops.view.draw');
+    if (preview) {
+      title = sectionName(preview.sectionId);
+      actions = overflow;
+      context = t('ops.page.contextDraw');
+      subtitle = drawSubtitle(preview);
+    }
+  } else if (tool) {
+    title = t(`ops.view.${tool}`);
+  }
 
-  const showDrawFoot = shownView === 'draw' && !!preview;
+  const showDrawFoot = tool === 'draw' && !!preview;
 
   return (
     <RefinePage className={wide ? 'ops-wide' : ''}>
       {toast.node}
-      <RefineHeader back={back} backLabel={t('ops.page.backToEvent')} context={context} actions={actions} title={title} subtitle={subtitle} tabs={tabs} tabsLabel={t('ops.page.eventTools')} tabsKind="tablist" />
+      <RefineHeader back={tool ? hubPath : `/competitions/${competition.id}`} backLabel={tool ? t('ops.hub.back') : t('ops.page.backToEvent')} context={context} actions={actions} title={title} subtitle={subtitle} />
 
       <DrawUndoBanner competitionId={competition.id} version={undoVersion} onRestored={() => { reloadCompetition(); void loadReadiness(); }} />
 
-      {loadError && (!readiness || shownView !== 'checks') && <Notice actionLabel={t('common.tryAgain')} onAction={() => void loadReadiness()}>{loadError}</Notice>}
-      {loadingReadiness && !readiness && <p role="status" className="rf-note">{t('ops.page.checkingDetails')}</p>}
+      {loadError && (!readiness || tool !== null) && <Notice actionLabel={t('common.tryAgain')} onAction={() => void loadReadiness()}>{loadError}</Notice>}
+      {!tool && loadingReadiness && !readiness && <p role="status" className="rf-note">{t('ops.page.checkingDetails')}</p>}
 
-      {shownView === 'checks' && readiness && (
-        <Preparations readiness={readiness} groups={groups} competitionId={competition.id} refreshFailed={loadError !== null} checkedAt={checkedAt} retrying={loadingReadiness} onRetry={() => void loadReadiness()} onOpen={setView} />
+      {!tool && (
+        <BeforeTheDayHub competition={competition} readiness={readiness} groups={groups} mayDuplicate={mayDuplicate} refreshFailed={loadError !== null && readiness !== null} checkedAt={checkedAt} retrying={loadingReadiness} onRetry={() => void loadReadiness()} />
       )}
 
-      {shownView === 'entries' && <EntriesPanel canWrite={canWrite} onTimetableChanged={reloadCompetition} />}
+      {tool === 'entries' && <EntriesPanel canWrite={canWrite} onTimetableChanged={reloadCompetition} />}
 
-      {shownView === 'protests' && (
+      {tool === 'protests' && (
         <ProtestsPanel competitionId={competition.id} title={t('ops.page.protestsTitle')}
           empty={t('ops.page.protestsEmpty')} />
       )}
 
-      {shownView === 'scorers' && (
+      {tool === 'scorers' && (
         <div className="space-y-3 ops-tools">
           <ScorerLinksCard competitionId={competition.id} canWrite={canWrite} />
           <CompetitionTeamCard competitionId={competition.id} canWrite={canWrite} />
         </div>
       )}
 
-      {shownView === 'volunteers' && <VolunteerRota competition={competition} manage={canWrite} />}
-      {shownView === 'safety' && <EmergencySearch competitionId={competition.id} />}
+      {tool === 'volunteers' && <VolunteerRota competition={competition} manage={canWrite} />}
+      {tool === 'safety' && <EmergencySearch competitionId={competition.id} />}
 
-      {shownView === 'tack' && <div className="ops-tools ops-flat"><TackCheckTab competitionId={String(competition.id)} /></div>}
-      {shownView === 'passport' && <div className="ops-tools ops-flat"><PassportCheckTab competitionId={String(competition.id)} /></div>}
-      {shownView === 'import' && <TeamImportPanel competitionId={String(competition.id)} onImported={reloadCompetition} />}
-      {shownView === 'print' && <div className="ops-tools ops-flat"><PrintSheetsPanel competitionId={String(competition.id)} /></div>}
-      {shownView === 'results' && <div className="ops-tools ops-flat"><ResultsBookTab competitionId={String(competition.id)} /></div>}
-      {shownView === 'duplicate' && mayDuplicate && <DuplicateEventPanel competition={competition} />}
+      {tool === 'tack' && <div className="ops-tools ops-flat"><TackCheckTab competitionId={String(competition.id)} /></div>}
+      {tool === 'passport' && <div className="ops-tools ops-flat"><PassportCheckTab competitionId={String(competition.id)} /></div>}
+      {tool === 'import' && <TeamImportPanel competitionId={String(competition.id)} onImported={reloadCompetition} />}
+      {tool === 'print' && <div className="ops-tools ops-flat"><PrintSheetsPanel competitionId={String(competition.id)} /></div>}
+      {tool === 'results' && <div className="ops-tools ops-flat"><ResultsBookTab competitionId={String(competition.id)} /></div>}
+      {tool === 'duplicate' && mayDuplicate && <DuplicateEventPanel competition={competition} />}
 
-      {shownView === 'draw' && (
+      {tool === 'draw' && (
         <section aria-label={t('ops.page.sectionDraw')}>
           {competition.sections.length === 0 && <RefineNote>{t('ops.page.addSectionFirst')}</RefineNote>}
           {!preview && sheet !== 'draw' && (
@@ -317,89 +268,5 @@ function OperationsPageContent() {
         </RefineSheet>
       )}
     </RefinePage>
-  );
-}
-
-interface PrepRow { key: string; count: number; title: string; to?: string; view?: View }
-
-function Chev() { return <Chevron />; }
-
-/** The Preparations list: what is left to sort (rows with a zero count are hidden), then the places each set-up area is managed. */
-function Preparations({ readiness, groups, competitionId, refreshFailed, checkedAt, retrying, onRetry, onOpen }: {
-  readiness: CompetitionReadiness;
-  groups: IssueGroup[];
-  competitionId: number;
-  refreshFailed: boolean;
-  checkedAt: Date | null;
-  retrying: boolean;
-  onRetry: () => void;
-  onOpen: (view: View) => void;
-}) {
-  const t = useT();
-  const base = `/competitions/${competitionId}`;
-  const clashes = groups.find((group) => group.id === 'clashes')?.items ?? [];
-  const unpaid = readiness.unpaidSignups.length;
-  const missing = readiness.missingDeclarations.length;
-  const short = readiness.incompleteTeams.length;
-  const equipmentDetails = readiness.equipmentIssues.length;
-  const acknowledged = new Set(readiness.equipmentChecklist.filter((item) => item.acknowledged).map((item) => item.key));
-  const equipmentToCheck = equipmentLines(readiness.equipmentChecklist).filter((line) => !line.keys.every((key) => acknowledged.has(key))).length;
-  const toSort = ([
-    { key: 'unpaid', count: unpaid, title: t('ops.prep.unpaid'), to: `${base}/entries` },
-    { key: 'missing', count: missing, title: t('ops.prep.missing'), to: `${base}/entries` },
-    { key: 'short', count: short, title: t('ops.prep.short'), to: `${base}/teams` },
-    { key: 'details', count: equipmentDetails, title: t('ops.prep.details'), to: base },
-    { key: 'equipment', count: equipmentToCheck, title: t('ops.prep.equipment'), to: `${base}/equipment` },
-  ] as PrepRow[]).filter((row) => row.count > 0);
-  const manage: Array<{ key: string; title: string; todo: boolean; to?: string; view?: View }> = [
-    { key: 'details', title: t('ops.area.details'), todo: false, to: `${base}/event-details` },
-    { key: 'sections', title: t('ops.area.sections'), todo: false, to: `${base}/sections` },
-    { key: 'entries', title: t('ops.area.entries'), todo: unpaid + missing + short > 0, to: `${base}/entries` },
-    { key: 'timetable', title: t('ops.area.timetable'), todo: clashes.length + equipmentDetails > 0, to: `${base}/timetable-and-draw` },
-    { key: 'equipment', title: t('ops.area.equipment'), todo: equipmentToCheck > 0, to: `${base}/equipment` },
-    { key: 'sponsors', title: t('ops.area.sponsors'), todo: false, to: `${base}/sponsors-and-sharing` },
-  ];
-  const open = (target: { to?: string; view?: View }, children: ReactNode) => target.to
-    ? <Link to={target.to} className="rf-row">{children}</Link>
-    : <button type="button" className="rf-row" onClick={() => onOpen(target.view as View)}>{children}</button>;
-  return (
-    <div className="ops-prep">
-      {refreshFailed && (
-        <Notice actionLabel={t('common.tryAgain')} onAction={onRetry} actionDisabled={retrying} role="status">
-          {t('ops.prep.refreshFailed', { known: checkedAt ? t('ops.prep.lastKnown', { time: clock(checkedAt) }) : '' })}
-        </Notice>
-      )}
-      {clashes.length > 0 && <>
-        <RefineSection title={t('ops.prep.blocking')} />
-        <RefineList as="div">
-          {clashes.map((item) => (
-            <Link key={item.key} to={item.to} className="rf-row">
-              <span className="rf-grow"><span className="rf-t1">{item.title}</span><span className="rf-t2">{item.detail}</span></span>
-              <Chev />
-            </Link>
-          ))}
-        </RefineList>
-      </>}
-      <RefineSection title={t('ops.prep.toSort')} />
-      {toSort.length === 0
-        ? <RefineNote>{t('ops.prep.nothing')}</RefineNote>
-        : (
-          <RefineList as="div">
-            {toSort.map((row) => <Fragment key={row.key}>{open(row, <>
-              <span className="rf-num ops-count"><TickerNumber value={row.count} format={String} /></span>
-              <span className="rf-grow rf-t1">{row.title}</span>
-              <Chev />
-            </>)}</Fragment>)}
-          </RefineList>
-        )}
-      <RefineSection title={t('ops.prep.manage')} />
-      <RefineList as="div">
-        {manage.map((area) => <Fragment key={area.key}>{open(area, <>
-          <span className="rf-grow rf-t1">{area.title}</span>
-          {area.todo && <span className="ops-dot" role="img" aria-label={t('ops.prep.dot')} />}
-          <Chev />
-        </>)}</Fragment>)}
-      </RefineList>
-    </div>
   );
 }

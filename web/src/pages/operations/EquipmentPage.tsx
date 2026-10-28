@@ -71,7 +71,7 @@ export function EquipmentPage() {
 
   return (
     <RefinePage>
-      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.equip.backToPrep')} context={competition.name} title={t('ops.area.equipment')} />
+      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.hub.back')} context={competition.name} title={t('ops.area.equipment')} />
       <div className="ops-cards ops-tt ops-equip" aria-busy={busy}>
         {error && <Notice actionLabel={loadFailed ? t('common.tryAgain') : undefined} onAction={() => void load()}>{error}</Notice>}
         {refreshed && <Notice tone="info">{refreshed}</Notice>}

@@ -155,7 +155,7 @@ export function SponsorsSharingPage() {
   return (
     <RefinePage>
       {view.kind === 'list'
-        ? <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops2.sponsors.backPrep')} context={competition.name} title={title} />
+        ? <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.hub.back')} context={competition.name} title={title} />
         : <RefineHeader onBack={toList} backLabel={t('ops2.sponsors.backTo')} context={competition.name} title={title} />}
       <div className="ops-cards ops-tt ops-spons" aria-busy={busy}>
         {error && <Notice>{error}</Notice>}
