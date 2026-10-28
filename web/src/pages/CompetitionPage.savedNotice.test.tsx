@@ -30,7 +30,7 @@ const answer = (headers: object) => vi.mocked(api.get).mockImplementation(async 
 const offline = () => vi.mocked(api.get).mockImplementation(async (url: string) => { if (url.endsWith('/chat')) return { data: [] }; throw new Error('offline'); });
 
 beforeEach(() => { localStorage.clear(); });
-afterEach(() => { vi.mocked(api.get).mockReset(); });
+afterEach(() => { vi.mocked(api.get).mockReset(); vi.useRealTimers(); });
 
 describe('CompetitionPage: saved copy notice', () => {
   it('says nothing on a normal load', async () => {
@@ -58,6 +58,8 @@ describe('CompetitionPage: saved copy notice', () => {
   });
 
   it('says when the copy is old and the refresh failed, and the button tries again', async () => {
+    // At midday, so the saved time is never yesterday's (the notice then adds the date).
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 5, 15, 12, 0) });
     writeSavedCopy(savedCopyKeys.competition(1), competition(), minutesAgo(60));
     offline();
     renderPage();
