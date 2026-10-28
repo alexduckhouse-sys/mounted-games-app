@@ -84,7 +84,7 @@ export const adminCreator = {
   'admin.creator.dec.later': 'Once it’s created, go to Dec form setup on the competition page to add things like weight, a passport number, medical notes or your own questions, and flags for forms that need a look. What trainers fill in can change at any time; changes apply to forms sent after that.',
   // Payment
   'admin.creator.pay.entryFees': 'Entry fees',
-  'admin.creator.pay.testMode': 'Test mode: no real money moves yet.',
+  'admin.creator.pay.testMode': 'This is a demo competition, so no real money is taken or sent.',
   'admin.creator.pay.setUp': 'Set up payouts',
   'admin.creator.pay.askManager': 'Ask your club’s manager.',
   'admin.creator.pay.howPay': 'How riders pay for now (optional)',

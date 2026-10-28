@@ -1363,7 +1363,26 @@ describe('CompetitionEditor: editing', () => {
     await userEvent.click(step('Payment and rules'));
     expect(await screen.findByText('Entry fees are paid out to Cheshire PC \u2014 \u2022\u2022\u2022\u20221234 \u00b7 Ready')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Set up payouts' })).not.toBeInTheDocument();
-    expect(screen.getByText('Test mode: no real money moves yet.')).toBeInTheDocument();
+    // A real competition says nothing about test mode.
+    expect(screen.queryByText(/demo competition/)).not.toBeInTheDocument();
+  });
+
+  it('says a demo competition takes no real money, and only a demo one does', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/competitions/7') return { data: { ...saved, isDemo: true } };
+      return { data: [] };
+    });
+    mount('/admin/competitions/7');
+    await screen.findByDisplayValue('Autumn Area');
+    await userEvent.click(step('Payment and rules'));
+    expect(await screen.findByText('This is a demo competition, so no real money is taken or sent.')).toBeInTheDocument();
+  });
+
+  it('does not mention demo mode when making a new competition', async () => {
+    seed('payment');
+    mount();
+    expect(await screen.findByTestId('payouts-to')).toBeInTheDocument();
+    expect(screen.queryByText(/demo competition/)).not.toBeInTheDocument();
   });
 
   it('links an admin to Set up payouts when the club is not ready', async () => {

@@ -269,7 +269,7 @@ export function CompetitionEditor() {
                 {stepId === 'structure' && <StructureStep {...props} templates={templates} teamCounts={teamCounts} />}
                 {stepId === 'races' && <RacesStep {...props} templates={templates} />}
                 {stepId === 'dec' && <DecFormStep competitionId={isEdit ? editingId : null} canChange={mayOrganise} />}
-                {stepId === 'payment' && <PaymentNotesStep {...props} payoutsTo={payoutsToShow} canSetUpPayouts={hasRole('Manager') || hasRole('Admin')} canSetPassportCheck={!isEdit} />}
+                {stepId === 'payment' && <PaymentNotesStep {...props} payoutsTo={payoutsToShow} canSetUpPayouts={hasRole('Manager') || hasRole('Admin')} canSetPassportCheck={!isEdit} isDemo={!!competition?.isDemo} />}
                 {stepId === 'review' && (
                   <ReviewStep {...props} teamCounts={teamCounts} real={real} onEdit={go} isEdit={isEdit}
                     payoutsText={payoutsText(payoutsToShow)} />

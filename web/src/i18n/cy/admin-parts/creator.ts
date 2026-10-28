@@ -75,7 +75,7 @@ export const adminCreator: AreaCatalogue<typeof en> = {
   'admin.creator.dec.basics': 'Mae cystadleuaeth newydd yn dechrau gyda’r pethau sylfaenol: enw’r marchog ac enw’r ferlen ar gyfer pob marchog, ac enw a rhif ffôn yr hyfforddwr ar gyfer y tîm.',
   'admin.creator.dec.later': 'Unwaith y bydd wedi’i chreu, ewch i osodiadau’r ffurflen ddatgan ar dudalen y gystadleuaeth i ychwanegu pethau fel pwysau, rhif pasbort, nodiadau meddygol neu eich cwestiynau eich hun, a baneri ar gyfer ffurflenni sydd angen golwg. Gall yr hyn y bydd hyfforddwyr yn ei lenwi newid ar unrhyw adeg; mae’r newidiadau’n berthnasol i ffurflenni a anfonir wedi hynny.',
   'admin.creator.pay.entryFees': 'Ffioedd cofrestru',
-  'admin.creator.pay.testMode': 'Modd prawf: does dim arian go iawn yn symud eto.',
+  'admin.creator.pay.testMode': 'Cystadleuaeth arddangos yw hon, felly ni chaiff arian go iawn ei gymryd na’i anfon.',
   'admin.creator.pay.setUp': 'Gosod taliadau',
   'admin.creator.pay.askManager': 'Gofynnwch i reolwr eich clwb.',
   'admin.creator.pay.howPay': 'Sut mae marchogion yn talu am nawr (dewisol)',

@@ -75,7 +75,7 @@ export const adminCreator: AreaCatalogue<typeof en> = {
   'admin.creator.dec.basics': 'Une nouvelle compétition démarre avec l’essentiel : le nom du cavalier et celui du poney pour chaque cavalier, et le nom et le numéro de téléphone de l’entraîneur pour l’équipe.',
   'admin.creator.dec.later': 'Une fois la compétition créée, allez dans la configuration du formulaire de déclaration sur la page de la compétition pour ajouter des éléments comme le poids, un numéro de passeport, des notes médicales ou vos propres questions, ainsi que des signalements pour les formulaires à vérifier. Ce que remplissent les entraîneurs peut changer à tout moment ; les changements s’appliquent aux formulaires envoyés ensuite.',
   'admin.creator.pay.entryFees': 'Frais d’inscription',
-  'admin.creator.pay.testMode': 'Mode test : aucun argent réel n’est encore échangé.',
+  'admin.creator.pay.testMode': 'Ceci est une compétition de démonstration : aucun argent réel n’est prélevé ni envoyé.',
   'admin.creator.pay.setUp': 'Configurer les versements',
   'admin.creator.pay.askManager': 'Demandez au responsable de votre club.',
   'admin.creator.pay.howPay': 'Comment les cavaliers paient pour l’instant (facultatif)',
