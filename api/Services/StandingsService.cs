@@ -129,22 +129,22 @@ public sealed class StandingsService(AppDbContext db, IMemoryCache? cache = null
 
         // Within a final (or among non-finalists), teams level on points go in tie-break order: the age group's
         // rule, or the organiser's order after a run-off.
-        return rows
+        var ordered = new List<StandingRow>(rows.Count);
+        foreach (var g in rows
             .GroupBy(r => (Tier: r.FinalTier ?? FinalsTiers.NotInFinals, r.TotalPoints))
             .OrderBy(g => g.Key.Tier)
-            .ThenByDescending(g => g.Key.TotalPoints)
-            .SelectMany(g =>
+            .ThenByDescending(g => g.Key.TotalPoints))
+        {
+            var byTeam = g.ToDictionary(r => r.TeamId);
+            var orderedFacts = ties.OrderLevel(g.Select(r => facts[r.TeamId]).ToList());
+            var groupStart = ordered.Count;
+            var chainStart = groupStart;
+            for (var i = 0; i < orderedFacts.Count; i++)
             {
-                var byTeam = g.ToDictionary(r => r.TeamId);
-                var orderedFacts = ties.OrderLevel(g.Select(r => facts[r.TeamId]).ToList());
-                if (orderedFacts.Count < 2)
-                    return orderedFacts.Select(f => byTeam[f.TeamId]);
-
-                var groupRows = new List<StandingRow>(orderedFacts.Count);
-                for (var i = 0; i < orderedFacts.Count; i++)
+                var row = byTeam[orderedFacts[i].TeamId];
+                string? reason = null;
+                if (orderedFacts.Count > 1)
                 {
-                    var row = byTeam[orderedFacts[i].TeamId];
-                    string? reason = null;
                     if (i + 1 < orderedFacts.Count)
                     {
                         var belowRow = byTeam[orderedFacts[i + 1].TeamId];
@@ -156,10 +156,20 @@ public sealed class StandingsService(AppDbContext db, IMemoryCache? cache = null
                         if (prevReason == "Level on points and countback — run-off if on cut-off")
                             reason = prevReason;
                     }
-                    groupRows.Add(reason is null ? row : row with { TieBreakReason = reason });
                 }
-                return groupRows;
-            })
-            .ToList();
+                // Shared place (1, 2, 2, 4): a team shares the one above it only while nothing separates them.
+                if (i > 0 && ties.Settle(orderedFacts, orderedFacts[i - 1], orderedFacts[i]) != TieSettlement.Open)
+                    chainStart = groupStart + i;
+                ordered.Add((reason is null ? row : row with { TieBreakReason = reason }) with { Place = chainStart + 1 });
+            }
+        }
+        // A team is joint when its neighbour in the table holds the same place.
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            var joint = (i > 0 && ordered[i - 1].Place == ordered[i].Place)
+                || (i + 1 < ordered.Count && ordered[i + 1].Place == ordered[i].Place);
+            if (joint) ordered[i] = ordered[i] with { Joint = true };
+        }
+        return ordered;
     }
 }

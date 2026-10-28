@@ -10,6 +10,7 @@ import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import type { CompetitionDetail, StandingRow } from '../../types';
+import type { FinalsBoundary } from '../../lib/tieBreak';
 import { buildToplist, sectionScoreVersion } from '../../lib/toplist';
 import { FAVOURITES_KEY } from '../../lib/favourites';
 import { ToplistView, type ToplistViewTab } from './ToplistView';
@@ -398,15 +399,33 @@ function FinalsModal({ sectionId, onClose, onCreated }: FinalsModalProps) {
   }, [competition.id, sectionId]);
 
   const seats = toFill ? toFill.heats.length * fillLanes : topN;
+  const boundaryLanes = toFill ? fillLanes : lanes;
+  // The server says whether the cut at the last seat is settled (countback, last race or the organiser's order), not just level on points.
+  // Loading until the answer for the current seats arrives; null if it couldn't be checked (then points alone decide, as before).
+  const boundaryKey = `${competition.id}:${sectionId}:${seats}:${boundaryLanes}`;
+  const [fetched, setFetched] = useState<{ key: string; data: FinalsBoundary | null } | null>(null);
+  useEffect(() => {
+    if (seats < 1) return;
+    let cancelled = false;
+    api.get<FinalsBoundary>(`/competitions/${competition.id}/finals/boundary`, { params: { topN: seats, sectionId, lanesPerHeat: boundaryLanes } })
+      .then((r) => { if (!cancelled) setFetched({ key: boundaryKey, data: r.data ?? null }); })
+      .catch(() => { if (!cancelled) setFetched({ key: boundaryKey, data: null }); });
+    return () => { cancelled = true; };
+  }, [competition.id, sectionId, seats, boundaryLanes, boundaryKey]);
+  const boundary: FinalsBoundary | null | undefined = seats < 1 ? null : fetched?.key === boundaryKey ? fetched.data : undefined;
   const runoff = useMemo(() => {
-    if (standings.length <= seats) return null;
+    if (standings.length <= seats || boundary === undefined) return null;
     const cutoff = standings[seats - 1];
     const next = standings[seats];
     if (cutoff.totalPoints !== next.totalPoints) return null;
+    if (boundary) {
+      const cut = boundary.boundaries?.find((b) => b.cutoff === seats);
+      if (!boundary.tied || (cut && cut.settled)) return null;
+    }
     const tied = standings.filter((s) => s.totalPoints === cutoff.totalPoints);
     const seatsLeft = seats - standings.slice(0, seats).filter((s) => s.totalPoints > cutoff.totalPoints).length;
     return { tied, points: cutoff.totalPoints, seatsLeft };
-  }, [standings, seats]);
+  }, [standings, seats, boundary]);
 
   async function fill() {
     if (!toFill) return;

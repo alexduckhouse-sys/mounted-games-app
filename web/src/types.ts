@@ -892,6 +892,10 @@ export interface StandingRow {
   refereeCard?: 'yellow' | 'red' | null;
   flag?: string | null;
   bibDescription?: string | null;
+  /** Shared place from the server (1, 2, 2, 4), after the tie-break rule and any organiser order. */
+  place?: number | null;
+  /** Nothing separates this team from a neighbour: they share `place`. */
+  joint?: boolean;
 }
 
 /** Matches `TackCheckMode`: 0 pass or fail only, 1 a separate Tack & Turnout table, 2 bonus points in the standings. */
