@@ -25,6 +25,8 @@ export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  // "Forgot your password?" only shows once a password has been turned down, so it doesn't crowd a first try.
+  const [passwordRefused, setPasswordRefused] = useState(false);
   const [organiserTitle, setOrganiserTitle] = useState('');
   const [organiserEmail, setOrganiserEmail] = useState('');
   const [organiserPassword, setOrganiserPassword] = useState('');
@@ -66,6 +68,7 @@ export function LoginPage() {
       const status = res?.status;
       if (status === 429) {
         setError(res?.data?.message || t('auth.login.tooMany'));
+        if (!useKey) setPasswordRefused(true);
       } else if (useKey) {
         const pwErrors = friendlyPasswordErrors(res?.data);
         if (status === 400) setError(pwErrors[0] || res?.data?.message || t('auth.login.checkDetails'));
@@ -73,6 +76,7 @@ export function LoginPage() {
         else setError(t('auth.login.keyFailed'));
       } else {
         setError(status === 401 || status === 400 ? t('auth.login.wrong') : t('auth.login.noSignal'));
+        if (status === 401 || status === 400) setPasswordRefused(true);
       }
     }
   }
@@ -193,7 +197,7 @@ export function LoginPage() {
                 </div>
               )}
             </Field>
-            <Link to="/forgot-password" className="-mt-2 self-end text-sm font-semibold text-[rgb(var(--mg-heading))] !underline">Forgot your password?</Link>
+            {passwordRefused && <Link to="/forgot-password" className="-mt-2 self-end text-sm font-semibold text-[rgb(var(--mg-heading))] !underline">Forgot your password?</Link>}
           </>
         )}
 
