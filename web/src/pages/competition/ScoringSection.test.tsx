@@ -394,11 +394,11 @@ describe('race tools', () => {
     const toggle = vi.fn();
     const { unmount } = render(<Harness />);
     let sheet = await openTools(user);
-    expect(within(sheet).queryByRole('switch')).toBeNull();
+    expect(within(sheet).queryByRole('switch', { name: /Commentator facts/ })).toBeNull();
     unmount();
     render(<Harness factsOn onToggleFacts={toggle} />);
     sheet = await openTools(user);
-    const sw = within(sheet).getByRole('switch');
+    const sw = within(sheet).getByRole('switch', { name: /Commentator facts/ });
     expect(sw).toBeChecked();
     await user.click(sw);
     expect(toggle).toHaveBeenCalled();
@@ -787,9 +787,9 @@ it('keeps a manual score, and raises nothing, when an HC change fails', async ()
 });
 
 describe('eliminating and dead heats from race tools', () => {
-  it('says how to eliminate from a lane card', () => {
+  it('no longer prints the hold-to-eliminate hint on the screen', () => {
     render(<Harness />);
-    expect(screen.getByText('Hold a lane for 0.6 s to eliminate')).toBeInTheDocument();
+    expect(screen.queryByText(/Hold a lane for/)).toBeNull();
   });
 
   it('eliminates a team from its menu, the same as holding its lane card', async () => {
@@ -835,5 +835,51 @@ describe('eliminating and dead heats from race tools', () => {
     const menu = await openTeamMenu(user, sheet, 'Bravo');
     await user.click(within(menu).getByRole('menuitem', { name: 'Split dead heat' }));
     expect(onClearDeadHeat).toHaveBeenCalledWith(2);
+  });
+});
+
+describe('full colour lanes', () => {
+  const lane = (name: RegExp) => screen.getByRole('button', { name }).closest('li') as HTMLElement;
+
+  it('leaves the boxes plain until the scorer turns it on in race tools, then fills each with its bib colour', async () => {
+    localStorage.clear();
+    const user = userEvent.setup();
+    render(<Harness />);
+    expect(lane(/^Alpha, lane/)).not.toHaveClass('sc-row-fill');
+    const sheet = await openTools(user);
+    await user.click(within(sheet).getByRole('switch', { name: /Full colour lanes/ }));
+    expect(localStorage.getItem('mg.scoring.fullColour')).toBe('true');
+    await user.click(within(sheet).getByRole('button', { name: 'Close' }));
+    expect(lane(/^Alpha, lane/)).toHaveClass('sc-row-fill');
+    expect(lane(/^Alpha, lane/).style.getPropertyValue('--lane-fill')).toBe('#dc2626');
+    expect(lane(/^Alpha, lane/).style.getPropertyValue('--lane-ink')).toBe('#FFFFFF');
+    expect(lane(/^Bravo, lane/)).toHaveClass('sc-row-fill');
+    // No colour word means no guessed fill.
+    expect(lane(/^Charlie, lane/)).not.toHaveClass('sc-row-fill');
+    localStorage.clear();
+  });
+
+  it('remembers the choice for the next visit', () => {
+    localStorage.setItem('mg.scoring.fullColour', 'true');
+    render(<Harness />);
+    expect(lane(/^Alpha, lane/)).toHaveClass('sc-row-fill');
+    localStorage.clear();
+  });
+});
+
+describe('swiping scoring sheets down', () => {
+  it('closes race tools when its heading is pulled down, and keeps it when the pull is short', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    const sheet = await openTools(user);
+    const title = within(sheet).getByText('Race tools');
+    fireEvent.touchStart(title, { touches: [{ clientY: 100 }] });
+    fireEvent.touchMove(title, { touches: [{ clientY: 110 }] });
+    fireEvent.touchEnd(title, { changedTouches: [{ clientY: 110 }] });
+    expect(screen.getByRole('dialog', { name: 'Race tools' })).toBeInTheDocument();
+    fireEvent.touchStart(title, { touches: [{ clientY: 100 }] });
+    fireEvent.touchMove(title, { touches: [{ clientY: 220 }] });
+    fireEvent.touchEnd(title, { changedTouches: [{ clientY: 220 }] });
+    expect(screen.queryByRole('dialog', { name: 'Race tools' })).toBeNull();
   });
 });

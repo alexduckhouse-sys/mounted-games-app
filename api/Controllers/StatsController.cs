@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.RateLimiting;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
@@ -61,6 +62,13 @@ public sealed class StatsController(AppDbContext db, StandingsService standings)
     [HttpGet("team-profiles/{id:guid}")]
     public async Task<ActionResult<StatsProfileDto>> TeamProfile(Guid id, CancellationToken ct)
         => await _stats.TeamProfileAsync(id, Viewer, ct) is { } result ? result : NotFound();
+
+    /// <summary>Earlier finishes of the teams in one age group, for the stream's Favourites card.</summary>
+    [HttpGet("competitions/{competitionId:int}/favourites-history")]
+    public async Task<ActionResult<List<FavouriteHistoryDto>>> FavouriteHistory(int competitionId, [FromQuery] int sectionId, CancellationToken ct)
+        => await db.CompetitionSections.AsNoTracking().AnyAsync(s => s.Id == sectionId && s.CompetitionId == competitionId, ct)
+            ? await _stats.FavouriteHistoryAsync(competitionId, sectionId, ct)
+            : NotFound();
 
     private async Task<ActionResult<StatsProfileDto>> Profile(string? name, Func<Task<StatsProfileDto?>> load)
     {

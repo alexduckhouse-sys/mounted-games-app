@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DeclarationForm } from '../types';
-import { parsePrizeGiving, revealOrder, riderLines } from './prizeGiving';
+import { autoPrizeGivingFrames, newlyFinished, parsePrizeGiving, revealOrder, riderLines } from './prizeGiving';
 import type { Toplist, ToplistRow } from './toplist';
 
 describe('parsePrizeGiving', () => {
@@ -55,5 +55,36 @@ describe('riderLines', () => {
   it('shows a rider who asked for initial-only by their surname initial', () => {
     const forms = [form(1, 7, '2026-10-02T09:00:00Z', [{ ...rider('Amy Lee', 0, 'Biscuit'), useInitialOnly: true } as unknown as ReturnType<typeof rider>])];
     expect(riderLines(forms, 7)).toEqual([{ rider: 'Amy L.', pony: 'Biscuit', reserve: false }]);
+  });
+});
+
+describe('autoPrizeGivingFrames', () => {
+  const order = [
+    { teamId: 3, teamName: 'Team 3', place: 3, joint: false, points: 30 },
+    { teamId: 2, teamName: 'Team 2', place: 2, joint: false, points: 40 },
+    { teamId: 1, teamName: 'Team 1', place: 1, joint: false, points: 50 },
+  ];
+  const club = (teamId: number) => (teamId === 2 ? null : `Club ${teamId}`);
+
+  it('builds one frame per place, each carrying every place so far, with the winners last', () => {
+    const frames = autoPrizeGivingFrames(order, 9, 'Open', club);
+    expect(frames.map((f) => f.places.map((p) => p.teamId))).toEqual([[3], [3, 2], [3, 2, 1]]);
+    expect(frames.map((f) => f.champions)).toEqual([false, false, true]);
+    expect(frames[1].places[1]).toEqual({ teamId: 2, place: 2, teamName: 'Team 2', clubName: null, points: 40 });
+    expect(frames[0]).toMatchObject({ sectionId: 9, sectionName: 'Open' });
+  });
+
+  it('does not crown a last frame that is not first place, and has no frames for no places', () => {
+    expect(autoPrizeGivingFrames(order.slice(0, 2), 9, 'Open', club).at(-1)?.champions).toBe(false);
+    expect(autoPrizeGivingFrames([], 9, 'Open', club)).toEqual([]);
+  });
+});
+
+describe('newlyFinished', () => {
+  it('reports only age groups that have finished since the last look, and nothing on the first look', () => {
+    expect(newlyFinished(null, new Set([1, 2]))).toEqual([]);
+    expect(newlyFinished(new Set([1]), new Set([1, 2, 3]))).toEqual([2, 3]);
+    expect(newlyFinished(new Set([1, 2]), new Set([1]))).toEqual([]);
+    expect(newlyFinished(new Set(), new Set())).toEqual([]);
   });
 });

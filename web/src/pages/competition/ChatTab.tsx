@@ -7,6 +7,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
 import { useLiveHub } from '../../live/useLiveHub';
 import { useDialogFocus } from '../../components/useDialogFocus';
+import { useSwipeToClose } from '../../hooks/useSwipeToClose';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { LiveVideo } from '../../components/stream/LiveVideo';
@@ -251,13 +252,8 @@ function ChatTabSession() {
         <div className="mg-section-head">
           <h2 id="announcements-title">{t('teams.chat.announcements')}</h2>
           {isAdmin && (
-            <Link to={`/competitions/${competition.id}/announcements`} className="text-xs font-semibold text-[rgb(var(--mg-heading))] underline">
-              Manage announcements
-            </Link>
-          )}
-          {isAdmin && (
             <Link to={`/competitions/${competition.id}/contact`} className="text-xs font-semibold text-[rgb(var(--mg-heading))] underline">
-              Organiser messages{privateCount > 0 ? ` (${privateCount})` : ''}
+              Messages{privateCount > 0 ? ` (${privateCount})` : ''}
             </Link>
           )}
           {!desktop && listed.length > 0 && <button ref={announcementsTriggerRef} type="button" onClick={() => setAllOpen(true)}>{t('teams.chat.all', { count: listed.length })}</button>}
@@ -470,11 +466,11 @@ function AnnouncementsOverlay({ messages, staff, canModerate, pinnedId, error, o
   onClose: () => void;
   returnFocusRef: RefObject<HTMLElement | null>;
 }) {
-  const dialogRef = useRef<HTMLDivElement>(null);
   const { t } = useLanguage();
+  const { ref: dialogRef, handlers, style, dragging } = useSwipeToClose<HTMLDivElement>(onClose);
   useDialogFocus(dialogRef, onClose, '[data-close-announcements]', returnFocusRef);
   return <div className="live-overlay" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div ref={dialogRef} className="live-all-dialog" role="dialog" aria-modal="true" aria-label={t('teams.chat.allAria')}>
+    <div ref={dialogRef} {...handlers} style={style} className={`live-all-dialog${dragging ? ' is-dragging' : ''}`} role="dialog" aria-modal="true" aria-label={t('teams.chat.allAria')}>
       <span aria-hidden="true" className="kit-sheet-grip" />
       <div className="live-all-head"><h2>{t('teams.chat.allAria')}</h2><button type="button" className="mg-icon-btn" data-close-announcements aria-label={t('teams.chat.close')} onClick={onClose}><X aria-hidden="true" /></button></div>
       {error && <Notice onDismiss={onDismissError} dismissLabel="Dismiss error">{error}</Notice>}
@@ -506,9 +502,10 @@ function StaffStreamCard({ active, fallback, competitionId, canBroadcast, canEdi
     {canBroadcast && (
       <div className="staff-stream-actions">
         {!active && <Link className="mg-btn mg-btn-primary" to={`/competitions/${competitionId}/broadcast`}>Go live</Link>}
-        <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/stream-controls`}>Control the stream</Link>
+        {active
+          ? <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/stream-controls`}>Control the stream</Link>
+          : <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/stream-controls?tab=replay`}>Replays</Link>}
         <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/commentary`}>Commentary desk</Link>
-        <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/prize-giving`}>Prize-giving</Link>
       </div>
     )}
     {streamingNotSetUp && <Notice tone="info">Streaming isn’t set up yet. Add the Cloudflare keys to switch it on.</Notice>}
@@ -525,10 +522,10 @@ function StreamSettingsOverlay({ competitionId, fallback, canBroadcast, canEditS
   onClose: () => void;
   returnFocusRef: RefObject<HTMLElement | null>;
 }) {
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const { ref: dialogRef, handlers, style, dragging } = useSwipeToClose<HTMLDivElement>(onClose);
   useDialogFocus(dialogRef, onClose, '[aria-label="Close stream settings"]', returnFocusRef);
   return <div className="live-overlay" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div ref={dialogRef} className="staff-stream-dialog" role="dialog" aria-modal="true" aria-label="Stream settings">
+    <div ref={dialogRef} {...handlers} style={style} className={`staff-stream-dialog${dragging ? ' is-dragging' : ''}`} role="dialog" aria-modal="true" aria-label="Stream settings">
       <span aria-hidden="true" className="kit-sheet-grip" />
       <div className="live-all-head"><h2>Stream settings</h2><button type="button" className="mg-icon-btn" aria-label="Close stream settings" onClick={onClose}><X aria-hidden="true" /></button></div>
       {canBroadcast && <Link to={`/competitions/${competitionId}/broadcast`} className="mg-btn mg-btn-primary"><Video aria-hidden="true" />Change camera</Link>}

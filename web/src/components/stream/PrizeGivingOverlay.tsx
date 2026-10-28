@@ -17,8 +17,9 @@ const points = (value: number) => (Number.isInteger(value) ? String(value) : val
  * (in on the gold diagonal wipe, its points counting up), the places already given in a card down the right like the
  * score card, and for the winners a centred card with the rosette and confetti.
  */
-export function PrizeGivingOverlay() {
-  const prizeGiving = useContext(CompetitionContext)?.prizeGiving ?? null;
+export function PrizeGivingOverlay({ auto = null }: { auto?: PrizeGiving | null }) {
+  // The organiser's own stepping wins over the one that plays itself after a final.
+  const prizeGiving = useContext(CompetitionContext)?.prizeGiving ?? auto;
   return <AnimatePresence>{prizeGiving && <PrizeGivingShown key={prizeGiving.sectionId} prizeGiving={prizeGiving} />}</AnimatePresence>;
 }
 

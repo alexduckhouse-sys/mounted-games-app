@@ -13,6 +13,7 @@ import {
 import type { TackCheckBoard, TackCheckMode, TackCheckSection, TackCheckTeam } from '../../types';
 import { SelectField } from '../../components/SelectField';
 import { NumberField } from '../../components/NumberField';
+import { clubLabel } from '../../lib/clubName';
 
 function message(error: unknown, fallback: string) {
   const candidate = error as { response?: { data?: { message?: string; detail?: string; title?: string } } };
@@ -167,7 +168,7 @@ function TeamMarks({ competitionId, section, team, onSaved }: { competitionId: s
   const summary = scored ? `${teamTotal} pts` : `${team.passed} passed, ${team.failed} failed`;
   return <form className="tools-team" onSubmit={save} aria-label={team.teamName} noValidate><fieldset className="tools-fields" disabled={busy}><legend className="sr-only">{team.teamName}</legend>
     <div className="tools-team-head">
-      <span><span className="tools-team-name">{team.teamName}</span> <span className="tools-muted">{team.clubName}{tags ? ` (${tags})` : ''}</span></span>
+      <span><span className="tools-team-name">{team.teamName}</span> <span className="tools-muted">{clubLabel(team.clubName)}{tags ? ` (${tags})` : ''}</span></span>
       <span className="tools-muted">{summary}</span>
     </div>
     {scored ? (

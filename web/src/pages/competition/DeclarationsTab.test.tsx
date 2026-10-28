@@ -662,6 +662,21 @@ describe('DeclarationsTab: around the form', () => {
     expect(await screen.findByRole('button', { name: /Export CSV \(1\)/ })).toBeInTheDocument();
   });
 
+  it('shows how many dec forms are in, a QR code for the page, and Export CSV at the bottom', async () => {
+    forms = [{ id: 9, teamId: 70, teamName: 'Other Club A', competitionId: 4, competitionName: 'x', submittedAt: '2026-10-20T09:00:00Z', isLocked: true, riders: [] }];
+    state.organise = true;
+    mount();
+    const exportButton = await screen.findByRole('button', { name: /Export CSV \(1\)/ });
+    expect(await screen.findByText(/^\d+ of \d+ dec forms? in$/)).toBeInTheDocument();
+    const qrRow = screen.getByRole('button', { name: 'Show dec form QR code' });
+    expect(screen.queryByRole('img', { name: /QR code for the/ })).not.toBeInTheDocument();
+    await userEvent.setup().click(qrRow);
+    expect(screen.getByRole('img', { name: /QR code for the/ })).toBeInTheDocument();
+    // Export comes after the list of forms and the QR row, not before them.
+    expect(qrRow.compareDocumentPosition(exportButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Other Club A/ }).compareDocumentPosition(exportButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('says so when the person has no team here', async () => {
     mount({ teams: [] });
     expect(await screen.findByText('You have no teams in this competition.')).toBeInTheDocument();

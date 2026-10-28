@@ -33,6 +33,10 @@ Goal: more function with fewer and smaller buttons, so there is less chrome abov
 - Arena slider: the white thumb glides to the tapped arena (300 ms, ease-out).
 - With `prefers-reduced-motion` all of this is off.
 
+## Editing after the draw (28 October 2026)
+
+On Timetable and draw a drawn session that has not started keeps its lanes but its start, time per heat and place in the order can change; its heats' times follow (`SessionsController.Update` re-times them) and later sessions move to follow (`shiftLater`). A session that has started, or has a running or finished heat or any scored race, is locked (`lib/sessionLock.ts`, and the API answers 409 to a start change); "Move everything" still moves what is left. Overlaps show the "Overlaps the one before" warning and never block.
+
 ## Still open
 
 - Full organiser edit mode (board E) is still paused; only the timing sheet behind the pencil is built.

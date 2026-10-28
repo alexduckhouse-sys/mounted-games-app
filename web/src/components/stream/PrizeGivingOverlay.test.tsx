@@ -61,6 +61,7 @@ it('keeps the champions still, without confetti, when motion is stilled', () => 
   expect(burst).not.toHaveBeenCalled();
 });
 
+
 it('reads out the place and the champions in French and Welsh', () => {
   const value = { prizeGiving: { sectionId: 3, sectionName: 'Open', champions: false, places: [place(6, 6, 172), place(5, 5, 181)] } } as unknown as CompetitionCtx;
   const fr = render(<LanguageProvider initial="fr"><MotionConfig reducedMotion="always"><CompetitionContext.Provider value={value}><PrizeGivingOverlay /></CompetitionContext.Provider></MotionConfig></LanguageProvider>);
@@ -70,4 +71,15 @@ it('reads out the place and the champions in French and Welsh', () => {
   const champions = { prizeGiving: { sectionId: 3, sectionName: 'Open', champions: true, places: [place(1, 1, 214)] } } as unknown as CompetitionCtx;
   render(<LanguageProvider initial="cy"><MotionConfig reducedMotion="always"><CompetitionContext.Provider value={champions}><PrizeGivingOverlay /></CompetitionContext.Provider></MotionConfig></LanguageProvider>);
   expect(screen.getByRole('status', { name: 'Pencampwyr Open: Team 1, 214 pwynt' })).toHaveTextContent('Pencampwyr Open');
+});
+
+it('shows the prize-giving that plays itself, but gives way to one the organiser is stepping through', () => {
+  const auto: PrizeGiving = { sectionId: 3, sectionName: 'Open', champions: false, places: [place(6, 6, 172)] };
+  const own = render(<CompetitionContext.Provider value={{ prizeGiving: null } as unknown as CompetitionCtx}><PrizeGivingOverlay auto={auto} /></CompetitionContext.Provider>);
+  expect(screen.getByRole('status', { name: '6th: Team 6, 172 points' })).toBeInTheDocument();
+  own.unmount();
+  const manual: PrizeGiving = { sectionId: 3, sectionName: 'Open', champions: false, places: [place(5, 5, 181)] };
+  render(<CompetitionContext.Provider value={{ prizeGiving: manual } as unknown as CompetitionCtx}><PrizeGivingOverlay auto={auto} /></CompetitionContext.Provider>);
+  expect(screen.getByRole('status', { name: '5th: Team 5, 181 points' })).toBeInTheDocument();
+  expect(screen.queryByRole('status', { name: '6th: Team 6, 172 points' })).toBeNull();
 });
