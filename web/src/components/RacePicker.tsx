@@ -290,7 +290,7 @@ export function RaceListPicker({
             <button
               key={scope}
               type="button"
-              className="mg-btn mg-btn-secondary !min-h-10 !px-3 !text-xs"
+              className="mg-btn mg-btn-secondary !min-h-11 !px-3 !text-xs"
               onClick={() => onChange(defaultRaceList(scope, format, ageGroup))}
             >
               Use {SCOPE_LABEL[scope]} list
@@ -309,7 +309,7 @@ export function RaceListPicker({
             <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[rgb(var(--mg-heading))]">{race}</span>
             <button
               type="button"
-              className="mg-icon-btn !h-9 !w-9 !border-0"
+              className="mg-icon-btn !h-11 !w-11 !border-0"
               aria-label={`Move ${race} up`}
               disabled={i === 0}
               onClick={() => move(i, i - 1)}
@@ -318,7 +318,7 @@ export function RaceListPicker({
             </button>
             <button
               type="button"
-              className="mg-icon-btn !h-9 !w-9 !border-0"
+              className="mg-icon-btn !h-11 !w-11 !border-0"
               aria-label={`Move ${race} down`}
               disabled={i === races.length - 1}
               onClick={() => move(i, i + 1)}
@@ -327,7 +327,7 @@ export function RaceListPicker({
             </button>
             <button
               type="button"
-              className="mg-icon-btn !h-9 !w-9 !border-0"
+              className="mg-icon-btn !h-11 !w-11 !border-0"
               aria-label={`Remove ${race}`}
               onClick={() => remove(i)}
             >

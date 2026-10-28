@@ -591,7 +591,7 @@ export function ScoringSection({
 /** Bottom sheet over the scoring screen: the shared Sheet, so it swipes, closes on Escape and gives focus back. */
 function RtDialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
-    <Sheet title={title} onClose={onClose} initialFocus=".kit-pill">
+    <Sheet title={title} onClose={onClose}>
       {({ close }) => (<>
         {children}
         <div className="kit-acts"><button type="button" className="kit-pill" onClick={() => close()}>Close</button></div>

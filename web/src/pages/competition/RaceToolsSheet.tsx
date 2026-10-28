@@ -83,7 +83,7 @@ export function RaceToolsSheet({
   }
 
   return (
-    <Sheet title="Race tools" onClose={onClose} initialFocus=".kit-pill">
+    <Sheet title="Race tools" onClose={onClose}>
       {({ close }) => (<>
         <div className="rt-teams" role="group" aria-label="Teams in this race">
           {teams.map((t) => {
