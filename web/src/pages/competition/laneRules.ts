@@ -1,5 +1,5 @@
 import type { Heat, HeatEntry, Session } from '../../types';
-import { LaneRotationMode, laneLabel, positionFor, sitsOut, type LaneRotationModeValue } from '../../lib/lanes';
+import { LaneRotationMode, laneLabel, sitsOut, type LaneRotationModeValue } from '../../lib/lanes';
 import type { PendingPlace } from '../../lib/raceScoring';
 
 /** How many teams go through from each qualifier to the final. */
@@ -23,12 +23,6 @@ export function displayLaneFor(heat: Heat, entry: HeatEntry, raceIndex: number, 
 export function sitsOutOf(heat: Heat, entry: HeatEntry, raceIndex: number, rules: LaneRules): boolean {
   const drawn = byDrawnLane(heat).findIndex((e) => e.id === entry.id) + 1;
   return sitsOut(drawn, raceIndex, heat.entries.length, rules.lanesPerHeat, rules.mode);
-}
-
-export function teamForDisplayLane(heat: Heat, raceIndex: number, displayLane: number, rules: LaneRules): HeatEntry | null {
-  const size = heat.entries.length;
-  if (size <= 0) return null;
-  return byDrawnLane(heat).find((_, i) => positionFor(i + 1, raceIndex, size, rules.mode) === displayLane) ?? null;
 }
 
 /** Qualifier teams nobody placed finish after those who were, in lane order, on the qualifier's 1 point. */

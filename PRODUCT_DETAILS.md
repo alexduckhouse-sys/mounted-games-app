@@ -80,7 +80,7 @@ scoring to post-event standings — on phones in a field.
 - Tap teams in finishing order — 1st = size of the largest heat in the
   session, last place = 1, eliminated = 0.
 - Long-press / right-click to mark eliminated.
-- Per-race start/stop clock; results auto-broadcast via SignalR.
+- Race start and finish times are recorded automatically (no visible clock); results auto-broadcast via SignalR.
 - Mid-race scoring drafts auto-save per-race to localStorage so a refresh
   doesn't lose pending placings.
 - Heat-end overlay surfaces next-up dec forms before the next heat starts.
@@ -94,7 +94,7 @@ scoring to post-event standings — on phones in a field.
 ### Dec forms
 - Trainer fills riders for their team per-competition; saves to a roster
   for re-use. Auto-saved drafts per comp.
-- Bib colour, captain / reserve flags, DOB, horse name, optional notes.
+- Bib colour, reserve flag, DOB, horse name, pony height, optional notes (captain and order are kept but no longer asked for).
 - CSV export.
 - "Submit dec form" CTA on the global `/declarations` page.
 

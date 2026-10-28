@@ -307,13 +307,14 @@ public class DeclarationFormsEndpointsTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task OrganiserFormedEntry_GrantsAccessToDraftsAndSubmission()
     {
-        var section = await _f.NewSectionAsync(SectionFormat.Individual, priceMinor: 0);
+        var section = await _f.NewSectionAsync(SectionFormat.Individual, priceMinor: 1000);
         var (entrant, _) = await _f.SignupAsync("Member");
         (await entrant.PostAsJsonAsync($"/api/competitions/{section.CompetitionId}/sections/{section.Id}/signups", new
         {
             fullName = "Synthetic Entrant", acceptTerms = true, consentVersion = SignupTerms.WordingVersion,
         })).EnsureSuccessStatusCode();
         var admin = await _f.AdminAsync();
+        await _f.PayPendingAsync(section.Id);
         var formed = await (await admin.PostAsJsonAsync($"/api/competitions/{section.CompetitionId}/sections/{section.Id}/form-teams", new FormTeamsFromSignupsRequest(null, false, false))).ReadAsync<FormTeamsResult>();
         var team = Assert.Single(formed.Created);
         var formId = await SeedFormAsync(team.Id, false);

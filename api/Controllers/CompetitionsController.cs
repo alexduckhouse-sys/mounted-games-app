@@ -518,7 +518,7 @@ public class CompetitionsController : ControllerBase
             if (hasRounds) blockers.Add("a season round");
             return Conflict(new
             {
-                message = $"This competition can't be deleted because it still has {string.Join(" and ", blockers)}. Remove or move those first."
+                message = $"This competition can't be deleted because it still has {string.Join(" and ", blockers)}.{(hasRounds ? " Remove its rounds from the season first." : "")}"
             });
         }
 
