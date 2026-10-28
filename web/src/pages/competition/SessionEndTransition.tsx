@@ -1,3 +1,4 @@
+import { clubLabel } from '../../lib/clubName';
 import { useEffect, useRef, useState } from 'react';
 import { useDialogFocus } from '../../components/useDialogFocus';
 import { useNavigate } from 'react-router-dom';
@@ -232,7 +233,7 @@ export function SessionEndTransition({ competition, finishedSession, onClose, on
                         const team = competition.teams.find((t) => t.id === row.teamId);
                         const form = allForms.find((f) => f.teamId === row.teamId);
                         const teamName = team?.displayName || row.teamName;
-                        const clubName = team?.clubName?.trim() || null;
+                        const clubName = clubLabel(team?.clubName) || null;
                         const trainerName =
                           form?.trainerName?.trim() ||
                           team?.trainerName?.trim() ||
