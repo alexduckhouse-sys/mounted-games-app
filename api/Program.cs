@@ -262,7 +262,8 @@ if (args.Contains("--seed-history"))
 
 if (args.Contains("--import-competition"))
 {
-    // A real event from a JSON file kept outside the repo (riders' names never go in source control). Refuses an event that exists.
+    // A real event from a JSON file kept outside the repo (riders' names never go in source control). Refuses an event that exists;
+    // --finals-only adds the file's empty finals heats to it instead.
     var path = args.SkipWhile(a => a != "--import-competition").Skip(1).FirstOrDefault();
     if (string.IsNullOrWhiteSpace(path) || path.StartsWith("--") || !File.Exists(path))
     {
@@ -277,8 +278,17 @@ if (args.Contains("--import-competition"))
     try
     {
         var file = CompetitionFileImport.Parse(await File.ReadAllTextAsync(path));
-        var imported = await CompetitionFileImport.ImportAsync(
-            scope.ServiceProvider.GetRequiredService<AppDbContext>(), file, dryRun: args.Contains("--dry-run"));
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var dryRun = args.Contains("--dry-run");
+        if (args.Contains("--finals-only"))
+        {
+            // Adds the file's empty finals heats to the event imported earlier.
+            var added = await CompetitionFileImport.AddFinalsAsync(db, file, dryRun);
+            Console.WriteLine($"{(added.DryRun ? "Checked (nothing saved)" : "Added")} finals to competition {added.CompetitionId}: "
+                + $"{added.Sessions} finals sessions, {added.Heats} finals, {added.Races} races, no teams.");
+            return;
+        }
+        var imported = await CompetitionFileImport.ImportAsync(db, file, dryRun);
         Console.WriteLine($"{(imported.DryRun ? "Checked (nothing saved)" : $"Imported competition {imported.CompetitionId}")}: "
             + $"{imported.Sections} sections, {imported.Sessions} sessions, {imported.Heats} heats, {imported.Teams} teams, "
             + $"{imported.Riders} riders, {imported.Races} races.");

@@ -12,10 +12,11 @@ if (!process.env.DATABASE_URL) {
 }
 
 const migrate = process.argv.includes('--migrate');
-// npm run db:import-competition -- <file.json> [--dry-run]: the file is passed through, never read here.
+// npm run db:import-competition -- <file.json> [--finals-only] [--dry-run]: the file is passed through, never read here.
 const importAt = process.argv.indexOf('--import-competition');
 const importArgs = importAt < 0 ? [] : [
   '--import-competition', path.resolve(process.argv[importAt + 1] ?? ''),
+  ...(process.argv.includes('--finals-only') ? ['--finals-only'] : []),
   ...(process.argv.includes('--dry-run') ? ['--dry-run'] : []),
 ];
 const child = spawn('dotnet', [
