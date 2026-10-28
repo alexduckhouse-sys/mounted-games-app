@@ -93,7 +93,7 @@ describe('SessionEndTransition', () => {
         trainerName: 'Sarah Coach',
         riders: [
           { id: 1, fullName: 'Alice Rider', horseName: 'Starlight', isCaptain: true, isReserve: false, orderIndex: 1 },
-          { id: 2, fullName: 'Ben Rider', horseName: 'Thunder', isCaptain: false, isReserve: false, orderIndex: 2 },
+          { id: 2, fullName: 'Ben Rider', horseName: 'Thunder', isCaptain: false, isReserve: false, orderIndex: 2, useInitialOnly: true },
         ],
       },
       {
@@ -168,7 +168,8 @@ describe('SessionEndTransition', () => {
     expect(items[2]).toHaveTextContent('25 pts');
     expect(items[2]).toHaveTextContent('Trained by Sarah Coach');
     expect(items[2]).toHaveTextContent('Alice Rider — Starlight');
-    expect(items[2]).toHaveTextContent('Ben Rider — Thunder');
+    expect(items[2]).toHaveTextContent('Ben R. — Thunder');
+    expect(items[2]).not.toHaveTextContent('Ben Rider');
   });
 
   describe('special awards and reserves', () => {

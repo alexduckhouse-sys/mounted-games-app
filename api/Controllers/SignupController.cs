@@ -869,6 +869,9 @@ public class SignupController : ControllerBase
         if (amount > int.MaxValue) return BadRequest(new { message = "The total entry fee is too large." });
         var amountMinor = (int)amount;
         var isFree = amountMinor == 0 && !req.IsWaitlist;
+        // Same safeguarding rule as declaration forms: a single-letter surname ("Oliver S.") means initial-only and no filming.
+        var singleLetterSurname = DecFormRules.HasSingleLetterSurnameInitial(name)
+            || DecFormRules.HasSingleLetterSurnameInitial(guestDetails?.RiderName);
         var signup = new SectionSignup
         {
             CompetitionSectionId = sectionId,
@@ -880,8 +883,8 @@ public class SignupController : ControllerBase
             ContactInfo = req.ContactInfo?.Trim(),
             ContactEmail = contactEmail,
             ClientRequestId = requestId,
-            UseInitialOnly = req.UseInitialOnly,
-            NoFilming = req.NoFilming,
+            UseInitialOnly = req.UseInitialOnly || singleLetterSurname,
+            NoFilming = req.NoFilming || singleLetterSurname,
             TermsAccepted = true,
             TermsAcceptedAt = DateTime.UtcNow,
             TermsAcceptedByUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
@@ -1587,6 +1590,8 @@ public class SignupController : ControllerBase
         // Individual or Pairs team, shown with the entry's initial-only choice as before).
         var paidGuests = await LoadGuestMapAsync(paidIds);
         string RiderOf(SectionSignup s) => paidGuests.GetValueOrDefault(s.Id)?.RiderName ?? s.FullName;
+        // Member names in the preview honour the entry's initial-only choice, as the team names do.
+        string RiderShown(SectionSignup s) => RiderNames.Display(RiderOf(s), s.UseInitialOnly, false);
         var paidSignups = allPaidSignups
             .Where(s => !(paidMeta.TryGetValue(s.Id, out var mm) && mm.WaitingForGuestSpot == true)
                      && !(paidExtras.TryGetValue(s.Id, out var ex) && (ex.IsWaitlist || ex.IsWithdrawn)))
@@ -1639,7 +1644,7 @@ public class SignupController : ControllerBase
                 if (tCount <= 1)
                 {
                     previews.Add(new FormedTeamPreview(clubName, clubId, string.Empty,
-                        new[] { whole.Id }, new[] { RiderOf(whole) }, whole.TeamName));
+                        new[] { whole.Id }, new[] { RiderShown(whole) }, whole.TeamName));
                 }
                 else
                 {
@@ -1656,7 +1661,7 @@ public class SignupController : ControllerBase
                             ? customNames[k]
                             : $"{baseName} {suffix}".Trim();
                         previews.Add(new FormedTeamPreview(clubName, clubId, suffix,
-                            new[] { whole.Id }, new[] { RiderOf(whole) }, tName));
+                            new[] { whole.Id }, new[] { RiderShown(whole) }, tName));
                     }
                 }
             }
@@ -1664,7 +1669,7 @@ public class SignupController : ControllerBase
             foreach (var named in singles.Where(s => !string.IsNullOrWhiteSpace(s.TeamName))
                          .GroupBy(s => s.TeamName!.Trim(), StringComparer.OrdinalIgnoreCase))
                 previews.Add(new FormedTeamPreview(clubName, clubId, string.Empty,
-                    named.Select(x => x.Id).ToList(), named.Select(RiderOf).ToList(), named.Key));
+                    named.Select(x => x.Id).ToList(), named.Select(RiderShown).ToList(), named.Key));
             var ordered = singles.Where(s => string.IsNullOrWhiteSpace(s.TeamName)).ToList();
             for (var i = 0; i < ordered.Count; i += ridersPerTeam)
             {
@@ -1674,7 +1679,7 @@ public class SignupController : ControllerBase
                     previews.Add(new FormedTeamPreview(
                         clubName, clubId, string.Empty,
                         slice.Select(x => x.Id).ToList(),
-                        slice.Select(RiderOf).ToList(),
+                        slice.Select(RiderShown).ToList(),
                         RiderNames.Display(RiderOf(slice[0]), slice[0].UseInitialOnly, false)));
                 }
                 else if (section.Format == SectionFormat.Pairs && ridersPerTeam == 2)
@@ -1683,7 +1688,7 @@ public class SignupController : ControllerBase
                     previews.Add(new FormedTeamPreview(
                         clubName, clubId, string.Empty,
                         slice.Select(x => x.Id).ToList(),
-                        slice.Select(RiderOf).ToList(),
+                        slice.Select(RiderShown).ToList(),
                         pairName));
                 }
                 else
@@ -1692,7 +1697,7 @@ public class SignupController : ControllerBase
                     previews.Add(new FormedTeamPreview(
                         clubName, clubId, suffix,
                         slice.Select(x => x.Id).ToList(),
-                        slice.Select(RiderOf).ToList()));
+                        slice.Select(RiderShown).ToList()));
                 }
             }
         }
@@ -1712,7 +1717,7 @@ public class SignupController : ControllerBase
                 previews.Add(new FormedTeamPreview(
                     pairClubName, pairClubId, string.Empty,
                     new[] { first.Id, second.Id },
-                    new[] { RiderOf(first), RiderOf(second) },
+                    new[] { RiderShown(first), RiderShown(second) },
                     pairName));
             }
         }

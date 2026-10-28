@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using MountedGames.Api.Controllers;
 using MountedGames.Api.Data;
+using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Services;
 using MountedGames.Api.Tests.Infrastructure;
@@ -218,5 +219,44 @@ public class GuestRiderDetailsTests : IClassFixture<ApiFactory>
         // The details go with their entry.
         await db.SectionSignups.Where(s => s.Id == signup.Id).ExecuteDeleteAsync();
         Assert.False(await db.Set<SignupGuestDetails>().AnyAsync(x => x.SignupId == signup.Id));
+    }
+
+    [Fact]
+    public async Task ASingleLetterSurname_ForcesInitialOnlyAndNoFilming_ForTheEntrantAndTheGuestRider()
+    {
+        var section = await _f.NewSectionAsync(SectionFormat.Individual, priceMinor: 1000);
+        var (entrant, _) = await _f.SignupAsync();
+        // The entrant's own name is fine, the child's is not.
+        var input = Entry() with { RiderName = "Fakerider T." };
+        var created = await (await EnterAsync(entrant, section, input)).ReadAsync<SectionSignupExtendedDto>();
+        var (selfEntrant, _) = await _f.SignupAsync();
+        var self = await (await EnterAsync(selfEntrant, section, new CreateSectionSignupInput("Oliver S.", "Synthetic Guest Club", null,
+            AcceptTerms: true, ConsentVersion: SignupTerms.WordingVersion, RequestId: Guid.NewGuid().ToString("N")))).ReadAsync<SectionSignupExtendedDto>();
+        await _f.InDbAsync(async db =>
+        {
+            foreach (var id in new[] { created.Id, self.Id })
+            {
+                var row = await db.SectionSignups.SingleAsync(x => x.Id == id);
+                Assert.True(row.UseInitialOnly);
+                Assert.True(row.NoFilming);
+            }
+        });
+    }
+
+    [Fact]
+    public async Task TeamPreview_ShowsGuestRidersByInitialWhenTheyAskedForIt()
+    {
+        var section = await _f.NewSectionAsync(SectionFormat.Individual, priceMinor: 1000);
+        var (entrant, _) = await _f.SignupAsync();
+        var created = await (await EnterAsync(entrant, section, Entry() with { UseInitialOnly = true })).ReadAsync<SectionSignupExtendedDto>();
+        var admin = await _f.AdminAsync();
+        (await admin.PostAsJsonAsync($"/api/competitions/{section.CompetitionId}/signups/{created.Id}/mark-paid", new { })).EnsureSuccessStatusCode();
+
+        var response = await admin.PostAsJsonAsync($"/api/competitions/{section.CompetitionId}/sections/{section.Id}/form-teams",
+            new FormTeamsFromSignupsRequest(null, true, true));
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, body);
+        Assert.Contains("Fakerider T.", body);
+        Assert.DoesNotContain("Testchild", body);
     }
 }

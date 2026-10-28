@@ -30,7 +30,7 @@ public sealed partial class EventArchiveService(
         var competition = await db.Competitions.AsNoTracking().AsSplitQuery()
             .Include(x => x.Sections)
             .Include(x => x.Teams).ThenInclude(t => t.Club)
-            .Include(x => x.Teams).ThenInclude(t => t.DeclarationForms).ThenInclude(f => f.Riders)
+            .Include(x => x.Teams).ThenInclude(t => t.DeclarationForms).ThenInclude(f => f.Riders).ThenInclude(r => r.SavedRider)
             .Include(x => x.Sessions).ThenInclude(s => s.Section)
             .Include(x => x.Sessions).ThenInclude(s => s.Heats).ThenInclude(h => h.Entries).ThenInclude(e => e.Team).ThenInclude(t => t!.Club)
             .Include(x => x.Sessions).ThenInclude(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results)
@@ -57,7 +57,7 @@ public sealed partial class EventArchiveService(
         var files = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["results-book.csv"] = BuildResultsBookCsv(book),
-            ["standings.csv"] = BuildStandingsCsv(orderedSections, standingsBySection),
+            ["standings.csv"] = BuildStandingsCsv(orderedSections, standingsBySection, book),
             ["timetable.csv"] = BuildTimetableCsv(competition.Sessions),
             ["declarations.csv"] = BuildDeclarationsCsv(competition.Teams, sectionById),
             ["entries-summary.csv"] = BuildEntriesSummaryCsv(competition.Teams, sectionById),
@@ -150,7 +150,8 @@ public sealed partial class EventArchiveService(
 
     private static string BuildStandingsCsv(
         IReadOnlyList<CompetitionSection> sections,
-        IReadOnlyDictionary<int, List<StandingRow>> standingsBySection)
+        IReadOnlyDictionary<int, List<StandingRow>> standingsBySection,
+        ResultsBookDto book)
     {
         var header = new[]
         {
@@ -162,14 +163,13 @@ public sealed partial class EventArchiveService(
         foreach (var section in sections)
         {
             var sectionRows = standingsBySection.GetValueOrDefault(section.Id) ?? [];
-            (int Tier, double Total)? previous = null;
-            var rank = 0;
+            // Same tie-aware ranks as results-book.csv (teams level on points share a rank unless a tie-break separates them).
+            var ranks = (book.Sections.FirstOrDefault(x => x.SectionId == section.Id)?.Standings ?? [])
+                .ToDictionary(x => x.TeamId, x => x.Rank);
             for (var i = 0; i < sectionRows.Count; i++)
             {
                 var r = sectionRows[i];
-                var key = (r.FinalTier ?? FinalsTiers.NotInFinals, r.TotalPoints);
-                if (previous != key) rank = i + 1;
-                previous = key;
+                var rank = ranks.TryGetValue(r.TeamId, out var ranked) ? ranked : i + 1;
                 var finalLabel = r.FinalTier is >= 0 and < 26 ? $"{(char)('A' + r.FinalTier.Value)} Final" : string.Empty;
                 rows.Add([
                     section.DisplayName,
@@ -324,7 +324,7 @@ public sealed partial class EventArchiveService(
                     ResultStatuses.PublicBibDescription(team.BibDescription) ?? team.BibColour ?? string.Empty,
                     form?.TrainerName ?? string.Empty,
                     form?.IsLocked == true ? "Yes" : "No",
-                    RiderNames.Display(rider.FullName, rider.UseInitialOnly, viewerSeesFullNames: false),
+                    RiderNames.Display(rider.FullName, rider.UseInitialOnly || (rider.SavedRider?.UseInitialOnly ?? false), viewerSeesFullNames: false),
                     rider.HorseName?.Trim() ?? string.Empty,
                     rider.PonyHeightHands?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
                     rider.IsCaptain ? "Yes" : "No",
@@ -415,7 +415,7 @@ public sealed partial class EventArchiveService(
                     Withdrawn = t.EntryStatus != TeamEntryStatus.Active,
                     Riders = (form?.Riders ?? []).OrderBy(r => r.IsReserve).ThenBy(r => r.OrderIndex).ThenBy(r => r.Id).Select(r => new
                     {
-                        Name = RiderNames.Display(r.FullName, r.UseInitialOnly, viewerSeesFullNames: false),
+                        Name = RiderNames.Display(r.FullName, r.UseInitialOnly || (r.SavedRider?.UseInitialOnly ?? false), viewerSeesFullNames: false),
                         Pony = r.HorseName?.Trim(),
                         r.IsCaptain,
                         r.IsReserve,

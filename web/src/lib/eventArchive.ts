@@ -56,11 +56,13 @@ export function buildEventArchiveFiles(input: BuildEventArchiveInput): Record<st
   for (const section of resultsBook.sections) {
     const customStandings = getMapOrRecord(section.sectionId, standingsBySection);
     if (customStandings && customStandings.length > 0) {
+      // Use the results book's tie-aware ranks (teams level on points can share a rank) rather than numbering rows.
+      const rankByTeam = new Map(section.standings.map((r) => [r.teamId, r.rank] as const));
       customStandings.forEach((s, index) => {
         standingsRows.push(
           row([
             section.sectionName,
-            index + 1,
+            rankByTeam.get(s.teamId) ?? index + 1,
             s.teamName,
             s.clubName,
             s.totalPoints,

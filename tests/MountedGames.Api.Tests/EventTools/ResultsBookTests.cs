@@ -310,4 +310,38 @@ public class ResultsBookTests : IClassFixture<ApiFactory>
         Assert.Equal((byte)'P', zipBytes[0]);
         Assert.Equal((byte)'K', zipBytes[1]);
     }
+
+    [Fact]
+    public async Task PublicSummaryAndArchive_IgnoreUnlockedDrafts_AndHonourTheSavedRidersInitialOnlyFlag()
+    {
+        var w = await WorldAsync();
+        var id = w.Arena.CompetitionId;
+        await _f.WithDbAsync(async db =>
+        {
+            var club = await db.Clubs.FirstAsync();
+            var saved = new SavedRider { ClubId = club.Id, FullName = "Mabel Quigley", UseInitialOnly = true };
+            db.SavedRiders.Add(saved);
+            await db.SaveChangesAsync();
+            // Team 1: a locked form whose rider has no flag of its own but whose roster entry asks for an initial.
+            var locked = new DeclarationForm { TeamId = w.Arena.TeamIds[0], SubmittedAt = DateTime.UtcNow.AddHours(-1), IsLocked = true, TermsAcceptedAt = DateTime.UtcNow };
+            // Another team has only an unsubmitted draft, which must never reach the public summary.
+            var draft = new DeclarationForm { TeamId = w.Arena.TeamIds[1], SubmittedAt = DateTime.UtcNow, IsLocked = false };
+            db.DeclarationForms.AddRange(locked, draft);
+            await db.SaveChangesAsync();
+            db.RiderEntries.AddRange(
+                new RiderEntry { DeclarationFormId = locked.Id, SavedRiderId = saved.Id, FullName = "Mabel Quigley", HorseName = "Lockedpony", OrderIndex = 0 },
+                new RiderEntry { DeclarationFormId = draft.Id, FullName = "Draftie Person", HorseName = "Draftpony", OrderIndex = 0 });
+            await db.SaveChangesAsync();
+        });
+
+        var summary = (await (await _f.CreateClient().GetAsync($"{Base(id)}/results-summary")).ReadAsync<PublicResultsSummaryDto>()).SummaryText;
+        Assert.Contains("Mabel Q. (Lockedpony)", summary);
+        Assert.DoesNotContain("Mabel Quigley", summary);
+        Assert.DoesNotContain("Draftie", summary);
+
+        var archive = await (await w.Owner.GetAsync($"/api/competitions/{id}/archive")).ReadAsync<EventArchiveDto>();
+        Assert.DoesNotContain("Mabel Quigley", archive.Files["declarations.csv"]);
+        Assert.DoesNotContain("Mabel Quigley", archive.Files["competition-snapshot.json"]);
+        Assert.Contains("Mabel Q.", archive.Files["declarations.csv"]);
+    }
 }

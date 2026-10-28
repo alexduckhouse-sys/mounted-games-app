@@ -51,4 +51,9 @@ describe('riderLines', () => {
     ]);
     expect(riderLines(forms, 9)).toEqual([]);
   });
+
+  it('shows a rider who asked for initial-only by their surname initial', () => {
+    const forms = [form(1, 7, '2026-10-02T09:00:00Z', [{ ...rider('Amy Lee', 0, 'Biscuit'), useInitialOnly: true } as unknown as ReturnType<typeof rider>])];
+    expect(riderLines(forms, 7)).toEqual([{ rider: 'Amy L.', pony: 'Biscuit', reserve: false }]);
+  });
 });

@@ -158,7 +158,7 @@ public class RiderSwapService(AppDbContext db)
                             ? ((replacementSaved?.UseInitialOnly ?? false) || MountedGames.Api.Services.DecForms.DecFormRules.HasSingleLetterSurnameInitial(repRider))
                             : outRider.UseInitialOnly,
                         NoFilming = !string.IsNullOrWhiteSpace(repRider)
-                            ? (replacementSaved?.NoFilming ?? false)
+                            ? ((replacementSaved?.NoFilming ?? false) || MountedGames.Api.Services.DecForms.DecFormRules.HasSingleLetterSurnameInitial(repRider))
                             : outRider.NoFilming,
                     };
                     form.Riders.Add(inRider);

@@ -222,6 +222,25 @@ describe('eventArchive (#100)', () => {
     expect(files['standings.csv']).toContain('Ahead of Beech B on Countback (4× 1st places vs 2× 1st places)');
   });
 
+  it('uses the results book ranks in standings.csv, so teams level on a place share it', () => {
+    const book = sampleBook();
+    book.sections[0].standings = [
+      { rank: 1, teamId: 1, teamName: 'Oak A', clubName: 'Oak Pony Club', finalLabel: null, totalPoints: 28, bonusPoints: 0, racesRun: 6, wins: 4, eliminations: 0, withdrawn: false },
+      { rank: 1, teamId: 2, teamName: 'Beech B', clubName: 'Beech PC', finalLabel: null, totalPoints: 28, bonusPoints: 0, racesRun: 6, wins: 4, eliminations: 0, withdrawn: false },
+      { rank: 3, teamId: 3, teamName: 'Elm C', clubName: 'Elm PC', finalLabel: null, totalPoints: 20, bonusPoints: 0, racesRun: 6, wins: 1, eliminations: 0, withdrawn: false },
+    ];
+    const std = (teamId: number, teamName: string, totalPoints: number) =>
+      ({ teamId, teamName, clubName: 'x', totalPoints, bonusPoints: 0, racesRun: 6, wins: 1, eliminations: 0, withdrawn: false }) as StandingRow;
+    const files = buildEventArchiveFiles({
+      competition: sampleCompetition(),
+      resultsBook: book,
+      standingsBySection: new Map([[5, [std(1, 'Oak A', 28), std(2, 'Beech B', 28), std(3, 'Elm C', 20)]]]),
+    });
+    const lines = files['standings.csv'].split(/\r?\n/);
+    expect(lines.find((l) => l.includes('Beech B'))).toMatch(/^Under 12 Teams,1,Beech B/);
+    expect(lines.find((l) => l.includes('Elm C'))).toMatch(/^Under 12 Teams,3,Elm C/);
+  });
+
   it('packs files into a valid ZIP archive with PK signatures and matching CRC-32', () => {
     const files = {
       'hello.txt': 'Hello Mounted Games!',
