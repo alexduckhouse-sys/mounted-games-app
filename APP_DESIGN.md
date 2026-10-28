@@ -13,7 +13,7 @@ A live scoring, timetable and team-management tool for Mounted Games competition
 - **Site Admin & Master Admin** (`Roles.Admin` & `Roles.MasterAdmin`): Invited via one-time email link (`/invite#t=...`) or created with a password-protected email via `POST /api/auth/admin-key`. Site admins manage all competitions, trainer/manager requests, users (`/admin/users`), blocked accounts (`/admin/blocked`), custom audience emails (`/admin/email`), and the global rules library (`/admin/rules`), and can lock/unlock organisers (`LockedAt`). Only a `MasterAdmin` (`POST /api/auth/master-admin` with `MasterAdmin__KeyHash`) can lock/unlock or block/unblock an `Admin` or grant/revoke the `Admin` role.
 
 ## Organiser access (15 October 2026)
-Admins can manage every competition. Trainers can create competitions and use organiser tools only for competitions they created. Manager and member roles do not grant organiser access. The API checks stored ownership on every organiser request; frontend controls reflect the same rule. Existing admin-only scoring, timetable and moderation operations stay admin-only.
+Admins can manage every competition. Trainers can create competitions and use organiser tools only for competitions they created. Manager and member roles do not grant organiser access. The API checks stored ownership on every organiser request; frontend controls reflect the same rule. Day-of scoring, timetable and moderation endpoints are open to the competition's staff (owner, competition team, admins), not only admins.
 
 Signing up needs one tick: parental consent for the riders on the entry (filming limits are the separate "No close-up filming or photos" box) and acceptance of the event terms, which the organiser can write in the competition editor (a labelled placeholder shows if they have not). The tick, who ticked it, when and the wording version are stored on the signup. A short note near the public stream says spectator filming on their own phones is outside our control. Signup contact/payment records are private to the organiser. Public declarations show the competition line-up without dates of birth, phone numbers or private notes. Saved rider records belong to the account that saved them; legacy records with no recorded owner remain admin-only. See `docs/security-review.md` for deployment requirements and verification limits.
 
@@ -157,13 +157,13 @@ Full spec: `docs/specs/live-stream.md`. Design: `docs/designs/live-stream-propos
 - **QR codes:** organisers (owner, helpers and admins) can print a **venue poster** (name, date, venue, big QR to the event page) from the Details tab or Operations → Print sheets. Scorer QR links (`ScorerLinksCard`) let volunteers score from their phone without an account (`/score#t=...`), covering the whole competition with an arena label for the organiser’s reference, and are reachable from Operations (`Scorers & team`), On the day (`FormatPage`), the session scoring page (`SessionPage`), Details (`#scorer-links`), and Site admin. Trainers see a QR for each team's supporter join key under Supporters; scanning opens My Teams with the key filled in, after sign-in.
 
 ## Trainer / supporter notifications
-- **Foreground-only** browser notifications via the Web Notification API. Hook: `useTeamNotifications` (`web/src/hooks/`). Toggle lives in the My Teams header.
+- **Foreground** browser notifications via the Web Notification API while the tab is open (background push is described under Background push notifications below). Hook: `useTeamNotifications` (`web/src/hooks/`). Toggle lives in the My Teams header.
 - Fires when:
   - A race session for one of your teams is **1 hour away** (5-min window).
   - A **briefing is 30 minutes away**.
   - The schedule has **slipped ≥ 15 minutes** ahead or behind. Re-fires at every 10-min slip bucket (15, 25, 35, …).
 - Dedupe keys in `localStorage` under `mg.notify.fired:*` prevent re-firing the same alert. A 30-second polling tick checks conditions while the tab is open.
-- Honest limitation: with no service worker / VAPID push, notifications stop the moment the tab closes. Background push is a future hardening pass.
+- Without push set up, foreground notifications stop the moment the tab closes; push (below) covers that.
 
 ## Live timing
 - Heat-level `ScheduledStart` (per-heat pinning) overrides the cascade for that heat onwards. See *Timetable UX* and *Heat scheduling* in memory.
@@ -300,9 +300,9 @@ Lifecycle the app supports today:
   for and never stored), the email lists the nearest first; otherwise by date.
 - **Events list near you:** `GET /api/competitions/picker/near-you` orders the upcoming list nearest first from the same
   kind of rough place (a signed-in person's history, else the connection's position from Vercel's geolocation, one
-  decimal place, passed by `web/middleware.ts` under the proxy key and used for that request only). The web shows
-  "about 30 miles" and a Nearest first / Soonest first switch (remembered in `mg.eventsSort`); with no place there is
-  no switch and the order is by date. The public `/picker` is unchanged and still the cached, offline copy.
+  decimal place, passed by `web/middleware.ts` under the proxy key and used for that request only). Since 28 October
+  the web events page no longer uses it (soonest first from the public `/picker`, no distances); the endpoint stays for
+  the entries-open email ordering.
 
 ### Trainer-as-organiser
 Trainers can create + edit competitions (controllers'

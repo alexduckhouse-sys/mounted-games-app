@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useDialogFocus } from './useDialogFocus';
 import { Link } from 'react-router-dom';
 import { BookOpen } from 'lucide-react';
 import { api } from '../api';
@@ -242,36 +243,10 @@ export function RaceRulesSheet({
     };
   }, [open, raceName, format, activeKey]);
 
-  useEffect(() => {
-    if (!open || !raceName) return;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [open, raceName, onClose]);
-
   if (!open || !raceName) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-[rgb(var(--mg-overlay)/0.45)] p-0 sm:items-center sm:p-4"
-      onPointerDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <SwipeSheet
-        onClose={onClose}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="flex max-h-[90vh] w-full max-w-2xl flex-col gap-3 overflow-y-auto rounded-t-[26px] bg-[rgb(var(--mg-surface))] px-5 pb-6 pt-2 shadow-xl [corner-shape:squircle] sm:rounded-[20px]"
-      >
+    <RulesFrame titleId={titleId} onClose={onClose}>
         <span aria-hidden="true" className="kit-sheet-grip" />
         <h2 id={titleId} className="kit-sheet-title">
           {template?.name ?? raceName}
@@ -299,6 +274,30 @@ export function RaceRulesSheet({
         <div className="kit-acts">
           <button type="button" className="kit-pill kit-pill-fill" aria-label={t('competition.rules.close')} onClick={onClose}>{t('common.close')}</button>
         </div>
+    </RulesFrame>
+  );
+}
+
+/** The dim and the sheet: focus moves in, Tab stays inside, Escape closes and focus goes back. */
+function RulesFrame({ titleId, onClose, children }: { titleId: string; onClose: () => void; children: ReactNode }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onClose, '.kit-acts button');
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-[rgb(var(--mg-overlay)/0.45)] p-0 sm:items-center sm:p-4"
+      onPointerDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <SwipeSheet
+        ref={dialogRef}
+        onClose={onClose}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="flex max-h-[90vh] w-full max-w-2xl flex-col gap-3 overflow-y-auto rounded-t-[26px] bg-[rgb(var(--mg-surface))] px-5 pb-6 pt-2 shadow-xl [corner-shape:squircle] sm:rounded-[20px]"
+      >
+        {children}
       </SwipeSheet>
     </div>
   );

@@ -222,7 +222,7 @@ public class GuestRiderDetailsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task ASingleLetterSurname_ForcesInitialOnlyAndNoFilming_ForTheEntrantAndTheGuestRider()
+    public async Task ASingleLetterSurname_ForcesInitialOnly_ForTheEntrantAndTheGuestRider()
     {
         var section = await _f.NewSectionAsync(SectionFormat.Individual, priceMinor: 1000);
         var (entrant, _) = await _f.SignupAsync();
@@ -238,7 +238,6 @@ public class GuestRiderDetailsTests : IClassFixture<ApiFactory>
             {
                 var row = await db.SectionSignups.SingleAsync(x => x.Id == id);
                 Assert.True(row.UseInitialOnly);
-                Assert.True(row.NoFilming);
             }
         });
     }

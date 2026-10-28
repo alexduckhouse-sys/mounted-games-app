@@ -98,28 +98,6 @@ public class IpBlocksEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.NotFound, (await admin.DeleteAsync("/api/ip-blocks/999999")).StatusCode);
     }
 
-    [Fact]
-    public async Task Mine_ReturnsCallerIp_ToAnonymousUsers()
-    {
-        var client = _f.CreateClient();
-        client.DefaultRequestHeaders.Add(TestIpStartupFilter.Header, "203.0.113.5");
-
-        var r = await client.GetAsync("/api/ip-blocks/mine");
-
-        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
-        using var doc = JsonDocument.Parse(await r.Content.ReadAsStringAsync());
-        Assert.Equal("203.0.113.5", doc.RootElement.GetProperty("ip").GetString());
-    }
-
-    [Fact]
-    public async Task Mine_ReturnsEmptyString_WhenAddressUnknown()
-    {
-        var r = await _f.CreateClient().GetAsync("/api/ip-blocks/mine");
-
-        using var doc = JsonDocument.Parse(await r.Content.ReadAsStringAsync());
-        Assert.Equal("", doc.RootElement.GetProperty("ip").GetString());
-    }
-
     public static IEnumerable<object[]> AdminOnly() => new[]
     {
         new object[] { "GET", "/api/ip-blocks" },

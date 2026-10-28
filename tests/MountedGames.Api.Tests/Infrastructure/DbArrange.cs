@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using MountedGames.Api.Data;
 using MountedGames.Api.Entities;
@@ -35,5 +36,17 @@ public static class DbArrange
             db.CompetitionSections.Add(section);
             await db.SaveChangesAsync();
             return section;
+        });
+
+    /// <summary>Marks a section's pending entries paid straight in the database, without forming teams, so form-teams tests start from paid but unformed entries.</summary>
+    public static Task PayPendingAsync(this ApiFactory f, int sectionId)
+        => f.InDbAsync(async db =>
+        {
+            foreach (var s in db.SectionSignups.Where(x => x.CompetitionSectionId == sectionId && x.Status == SignupPaymentStatus.Pending))
+            {
+                s.Status = SignupPaymentStatus.Paid;
+                s.PaidAt = DateTime.UtcNow;
+            }
+            await db.SaveChangesAsync();
         });
 }

@@ -766,6 +766,11 @@ public class CommerceController(AppDbContext db) : ControllerBase
             {
                 signup.Status = SignupPaymentStatus.Paid;
                 signup.PaidAt = DateTime.UtcNow;
+                await db.SaveChangesAsync(cancellationToken);
+                // Same as an organiser marking the entry paid: pair seekers and guest-spot waiters keep their own flows.
+                var meta = await db.Set<SignupMatchmaking>().FindAsync(new object[] { signup.Id }, cancellationToken);
+                if (meta?.LookingForPair != true && meta?.WaitingForGuestSpot != true)
+                    await SignupController.FormTeamForPaidSignupAsync(db, competitionId, signup.CompetitionSectionId, signup.Id);
             }
             var payment = NewTestPayment(
                 competitionId,

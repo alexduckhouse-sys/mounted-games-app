@@ -16,7 +16,7 @@ namespace MountedGames.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/event-tools/competitions/{competitionId:int}")]
-public sealed class TackCheckController(AppDbContext db) : ControllerBase
+public sealed class TackCheckController(AppDbContext db, MountedGames.Api.Hubs.ILiveBroadcaster live) : ControllerBase
 {
     [HttpGet("tack-check")]
     [Authorize(Policy = CompetitionStaff.Policy)]
@@ -29,15 +29,25 @@ public sealed class TackCheckController(AppDbContext db) : ControllerBase
     [CompetitionAccess("competitionId")]
     public Task<ActionResult<TackCheckSectionDto>> SaveSettings(
         int competitionId, int sectionId, SaveTackCheckSettingsRequest request, CancellationToken ct)
-        => Run("Tack check not saved", () => new TackCheckService(db).SaveSettingsAsync(competitionId, sectionId, request, ct));
+        => Run("Tack check not saved", async () =>
+        {
+            var result = await new TackCheckService(db).SaveSettingsAsync(competitionId, sectionId, request, ct);
+            await BroadcastStandingsAsync(competitionId, sectionId);
+            return result;
+        });
 
     [HttpPut("tack-check/sections/{sectionId:int}/teams/{teamId:int}")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
     public Task<ActionResult<TackCheckSectionDto>> SaveMarks(
         int competitionId, int sectionId, int teamId, SaveTackCheckMarksRequest request, CancellationToken ct)
-        => Run("Marks not saved", () => new TackCheckService(db)
-            .SaveMarksAsync(competitionId, sectionId, teamId, request, User.FindFirstValue(ClaimTypes.NameIdentifier), ct));
+        => Run("Marks not saved", async () =>
+        {
+            var result = await new TackCheckService(db)
+                .SaveMarksAsync(competitionId, sectionId, teamId, request, User.FindFirstValue(ClaimTypes.NameIdentifier), ct);
+            await BroadcastStandingsAsync(competitionId, sectionId, teamId);
+            return result;
+        });
 
     /// <summary>The Tack &amp; Turnout table: team points per sector in sections that score their tack check.</summary>
     [HttpGet("tack-check/leaderboard")]
@@ -99,6 +109,10 @@ public sealed class TackCheckController(AppDbContext db) : ControllerBase
         [FromQuery] int? competitionId = null,
         CancellationToken ct = default)
         => new PassportCheckService(db).LookupCertifiedHorseAsync(passportCode, ponyName, ownerFullName, competitionId, User, ct);
+
+    /// <summary>Tack check bonus points are part of the standings, so live screens refetch them.</summary>
+    private Task BroadcastStandingsAsync(int competitionId, int sectionId, int? teamId = null)
+        => live.ResultsUpdated(competitionId, new { sectionId, teamId, tackCheck = true });
 
     private async Task<ActionResult<T>> Run<T>(string title, Func<Task<T>> work)
     {

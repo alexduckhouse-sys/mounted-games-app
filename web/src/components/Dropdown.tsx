@@ -138,7 +138,7 @@ export function Dropdown({
         aria-labelledby={labelledBy}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-controls={id}
+        aria-controls={open ? id : undefined}
         aria-invalid={invalid || undefined}
         data-value={value}
         aria-activedescendant={open ? `${id}-${active}` : undefined}

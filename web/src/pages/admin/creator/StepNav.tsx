@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { useDialogFocus } from '../../../components/useDialogFocus';
 import { useExitDelay } from '../../../hooks/useExitDelay';
 import { Check, Menu, X } from 'lucide-react';
 import { STEP_LABEL, type StepId } from '../../../lib/creatorDraft';
@@ -16,18 +17,13 @@ function StepButton({ id, index, current, done, open, onGo }: { id: StepId; inde
 /** The step list on a phone: it slides in from the left over a dim, and slides back out before it goes. */
 function StepsDrawer({ title, onClose, children }: { title: string; onClose: () => void; children: (close: () => void) => ReactNode }) {
   const { closing, close } = useExitDelay(onClose);
-  const closeRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { closeRef.current?.focus(); }, []);
-  useEffect(() => {
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
-    document.addEventListener('keydown', esc);
-    return () => document.removeEventListener('keydown', esc);
-  }, [close]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, close, '.cw-drawer-head button');
   return (
-    <div className={`cw-drawer${closing ? ' is-closing' : ''}`} role="dialog" aria-label="Steps">
+    <div ref={dialogRef} className={`cw-drawer${closing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-label="Steps">
       <nav aria-label="Steps, menu">
         <div className="cw-drawer-head"><span>{title}</span>
-          <button ref={closeRef} type="button" aria-label="Close" onClick={() => close()}><X className="h-[18px] w-[18px]" aria-hidden="true" /></button>
+          <button type="button" aria-label="Close" onClick={() => close()}><X className="h-[18px] w-[18px]" aria-hidden="true" /></button>
         </div>
         {children(() => close())}
       </nav>

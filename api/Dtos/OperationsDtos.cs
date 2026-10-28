@@ -70,14 +70,6 @@ public record CompetitionReadinessDto(int CompetitionId, bool IsReady, string Eq
     IReadOnlyList<RaceListToChooseDto> RaceListsToChoose,
     DrawUndoStatusDto? DrawUndo = null);
 
-public record TeamRaceLineupPlanDto(
-    int CompetitionId,
-    int TeamId,
-    Dictionary<string, Dictionary<string, string>> Assignments,
-    DateTime? UpdatedAt = null);
-
-public record SaveTeamRaceLineupRequest(
-    Dictionary<string, Dictionary<string, string>>? Assignments);
 /// <summary>A team whose latest dec form has riders with flags (an answer outside the organiser's limits). Counts only: no rider details.</summary>
 public record FlaggedDecFormDto(int TeamId, string TeamName, int SectionId, string SectionName, int FlaggedRiders);
 /// <summary>

@@ -61,10 +61,11 @@ public class EntryLifecycleTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task ReplaceExisting_PreservesWholeMultiTeamGroupIfOneTeamHasHistory()
     {
-        var section = await _f.NewSectionAsync();
+        var section = await _f.NewSectionAsync(priceMinor: 1000);
         var entrant = await _f.TrainerAsync();
         var admin = await _f.AdminAsync();
         var signup = await (await entrant.PostAsJsonAsync(EntryUrl(section), Entry(true, 2))).ReadAsync<SectionSignupExtendedDto>();
+        await _f.PayPendingAsync(section.Id);
         var formed = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, false, false))).ReadAsync<FormTeamsResult>();
         var retainedIds = formed.Created.Select(t => t.Id).Order().ToArray();
         await _f.InDbAsync(async db =>
@@ -81,10 +82,11 @@ public class EntryLifecycleTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task ReplaceExisting_RebuildsEveryUnusedTeamAndItsLinks()
     {
-        var section = await _f.NewSectionAsync();
+        var section = await _f.NewSectionAsync(priceMinor: 1000);
         var entrant = await _f.TrainerAsync();
         var admin = await _f.AdminAsync();
         var signup = await (await entrant.PostAsJsonAsync(EntryUrl(section), Entry(true, 2))).ReadAsync<SectionSignupExtendedDto>();
+        await _f.PayPendingAsync(section.Id);
         (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, false, false))).EnsureSuccessStatusCode();
         var rebuilt = await (await admin.PostAsJsonAsync(FormUrl(section), new FormTeamsFromSignupsRequest(null, false, true))).ReadAsync<FormTeamsResult>();
         Assert.Equal(2, rebuilt.Created.Count);

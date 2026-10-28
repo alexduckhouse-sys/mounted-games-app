@@ -799,3 +799,30 @@ describe('explainTieBreak and tieBreakReason (#71)', () => {
     expect(list.rows[0].tieBreakReason).toBe('Ahead of Belvoir A on Countback (3× 1st places vs 1× 1st place)');
   });
 });
+
+describe('buildToplist keeps the server order and places', () => {
+  it('does not re-sort level teams the server has already ordered', () => {
+    // Team 2 has more wins, but the organiser's run-off put team 1 first; the server says they no longer share a place.
+    const input = [{ ...standing(1, 8), wins: 0, place: 1 }, { ...standing(2, 8), wins: 3, place: 2 }, { ...standing(3, 4), place: 3 }];
+    const list = buildToplist(input, [], [], SECTION, null);
+    expect(list.rows.map((r) => r.teamId)).toEqual([1, 2, 3]);
+    expect(list.rows.map((r) => r.position)).toEqual([1, 2, 3]);
+    expect(list.rows.map((r) => r.joint)).toEqual([false, false, false]);
+  });
+
+  it('shares a place only where the server says nothing separates the teams', () => {
+    const input = [{ ...standing(1, 8), place: 1 }, { ...standing(2, 8), place: 1 }, { ...standing(3, 4), place: 3 }];
+    const list = buildToplist(input, [], [], SECTION, null);
+    expect(list.rows.map((r) => [r.position, r.joint])).toEqual([[1, true], [1, true], [3, false]]);
+  });
+});
+
+describe('buildToplist combined sessions', () => {
+  it('counts a team from another section drawn in a combined session', () => {
+    const combined = session(1, [heat(1, [1, 2], [scored(1, [1, 3], [2, 2])])], { competitionSectionId: SECTION + 1 });
+    const list = buildToplist([standing(2, 2)], [combined], [team(2)], SECTION, null);
+    expect(list.bySession.sessions).toHaveLength(1);
+    expect(list.bySession.cells.get(2)).toEqual([2]);
+    expect(list.sessionsTotal).toBe(1);
+  });
+});

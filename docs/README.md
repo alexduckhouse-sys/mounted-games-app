@@ -7,11 +7,11 @@ What each document is for and how far to trust it. When a doc and the code disag
 | File | Use it for | State |
 | --- | --- | --- |
 | `designs/design-decisions.md` | The house style for all pages (public, organiser, on the day, site admin): looks, controls, buttons, copy, navigation and per-page decisions picked by the owner (25–26 October 2026). **Start here for any UI/UX work or audit** | Current (2026-10-26) |
-| `../CLAUDE.md` (`../AGENTS.md`) | Repo-wide agent guide, commands, architecture, deployment and security invariants (`api/CLAUDE.md`, `web/CLAUDE.md`, `tests/CLAUDE.md` cover each area) | Current (2026-10-26) |
-| `../APP_DESIGN.md` | Goals, scope and agreed domain behaviour. Read before changing behaviour, and update it when a decision lands | Current (2026-10-26) |
-| `decisions.md` | Settled architecture, domain and security decisions (with rejected alternatives and file paths). Check before reopening a question | Current (2026-10-26) |
-| `../PRODUCT_DETAILS.md` | End-to-end competition lifecycle from entries through live scoring, streaming, seasons and payouts, by role | Current (2026-10-26) |
-| `../NEXT_STEPS.md` & `../BUGS.md` | Cross-chat to-do list, confirmed Q&A decisions and code-verified bug catalogue | Current (2026-10-27) |
+| `../CLAUDE.md` (`../AGENTS.md`) | Repo-wide agent guide, commands, architecture, deployment and security invariants (`api/CLAUDE.md`, `web/CLAUDE.md`, `tests/CLAUDE.md` cover each area) | Current (2026-10-28) |
+| `../APP_DESIGN.md` | Goals, scope and agreed domain behaviour. Read before changing behaviour, and update it when a decision lands | Current (2026-10-28) |
+| `decisions.md` | Settled architecture, domain and security decisions (with rejected alternatives and file paths). Check before reopening a question | Current (2026-10-28) |
+| `../PRODUCT_DETAILS.md` | End-to-end competition lifecycle from entries through live scoring, streaming, seasons and payouts, by role | Current (2026-10-28) |
+| `../NEXT_STEPS.md` & `../BUGS.md` | Cross-chat to-do list, confirmed Q&A decisions and code-verified bug catalogue | Current (2026-10-28) |
 
 ## Audited Workspace Skills (`../.agents/skills/`)
 
@@ -42,7 +42,7 @@ Multi-model audit reports live in `audits/antigravity/`, `audits/claude/`, and `
 | File | Use it for | State |
 | --- | --- | --- |
 | `pc-mounted-games-race-rules-2026.md` | Pony Club race rules (text extracted from the official PDF, one very long line). Search it with `grep -o`; don't read it whole | Source material |
-| `neon-setup.md` | Neon Postgres: local runs against a branch, `npm run db:migrate`, verification | Current (2026-10-26) |
+| `neon-setup.md` | Neon Postgres: local runs against a branch, `npm run db:migrate`, verification | Current (2026-10-28) |
 | `security-review.md` | Security review (15–26 October): headers, rate limits, proxy IPs, dependency updates, remaining limits | Current for what it covers |
 | `connection-performance.md` | Work done for slow or patchy venue connections (Lite mode, public cache, score outbox) | Current |
 | `test-coverage-handoff.md` | API and web test suite status and coverage gates (95% API line coverage, 97% web coverage) | Current |
@@ -64,4 +64,4 @@ Multi-model audit reports live in `audits/antigravity/`, `audits/claude/`, and `
 ## Elsewhere
 
 - `../README.md` & `../web/README.md`: quick-start, commands, architecture and links to `CLAUDE.md`.
-- `../DEPLOY.md`: older Render and Fly walkthroughs from May 2026 (historical background only; live hosting is Vercel + Neon Postgres as documented in `../CLAUDE.md`).
+- `../DEPLOY.md`: older Render and Fly walkthroughs from May 2026 (marked historical in its banner; live hosting is Vercel + Neon Postgres as documented in `../CLAUDE.md`).

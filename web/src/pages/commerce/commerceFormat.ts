@@ -1,27 +1,11 @@
 import { lineTitle } from '../../lib/shopOptions';
-import type { CommerceItemCategory, CommerceListingStatus, CommerceOrderStatus } from './types';
+import type { CommerceItemCategory } from './types';
 
 export const CATEGORY_LABEL: Record<CommerceItemCategory, string> = {
   0: 'Merchandise',
   1: 'Tickets',
   2: 'Camping',
   3: 'Other',
-};
-
-export const LISTING_LABEL: Record<CommerceListingStatus, string> = {
-  0: 'Waiting for approval',
-  1: 'Approved',
-  2: 'Not approved',
-  3: 'Withdrawn',
-};
-
-export const ORDER_LABEL: Record<CommerceOrderStatus, string> = {
-  0: 'Pay the organiser',
-  1: 'Demo payment due',
-  2: 'Paid',
-  3: 'Test payment declined',
-  4: 'Cancelled',
-  5: 'Refunded',
 };
 
 export function pounds(minor: number): string {

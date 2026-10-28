@@ -172,6 +172,7 @@ export function ToplistView({
 
         {view === 'totals' && <>
           {places != null && places > 0 && <p className="text-sm font-medium leading-snug text-[rgb(var(--mg-body))]">{t('competition.toplist.topMake', { places })}</p>}
+          <span aria-live="polite" className="sr-only">{list.started && list.rows[0] ? `${t('competition.toplist.totals')}: ${list.rows[0].teamName}` : ''}</span>
           <section aria-label={t('competition.toplist.totals')} className="mg-card overflow-hidden">
             <ol ref={totalsRef}>
               {list.rows.map((row, index) => {

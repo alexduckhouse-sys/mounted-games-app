@@ -144,7 +144,6 @@ describe('eventArchive (#100)', () => {
             isReserve: false,
             isGuestRider: false,
             useInitialOnly: true,
-            noFilming: false,
             orderIndex: 0,
           },
           {
@@ -156,7 +155,6 @@ describe('eventArchive (#100)', () => {
             isReserve: true,
             isGuestRider: true,
             useInitialOnly: false,
-            noFilming: false,
             orderIndex: 1,
           },
         ],

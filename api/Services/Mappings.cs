@@ -62,7 +62,7 @@ public static class Mappings
         s.Section?.DisplayName ?? string.Empty,
         s.FullName, s.PonyClubName, s.ContactInfo,
         s.AmountMinor, s.Status, s.PaidAt, s.TeamId, s.CreatedAt,
-        s.UseInitialOnly, s.NoFilming,
+        s.UseInitialOnly,
         s.TermsAccepted,
         s.TermsAcceptedAt is { } at ? DateTime.SpecifyKind(at, DateTimeKind.Utc) : null,
         s.TermsWordingVersion,
@@ -181,7 +181,7 @@ public static class Mappings
 
     public static RiderEntryDto ToDto(this RiderEntry r) => new(
         r.Id, r.SavedRiderId, r.FullName, r.DateOfBirth, r.HorseName, r.BibColour,
-        r.IsCaptain, r.IsReserve, r.OrderIndex, r.UseInitialOnly, r.NoFilming, r.IsGuestRider, r.PonyHeightHands,
+        r.IsCaptain, r.IsReserve, r.OrderIndex, r.UseInitialOnly, r.IsGuestRider, r.PonyHeightHands,
         r.BirthYear, r.AgeGroup, r.WeightKg, r.PonyPassportNumber, r.PonyAge, r.MembershipNumber,
         r.EmergencyContactName, r.EmergencyContactPhone, r.MedicalNotes,
         DecFormRules.ReadCustomValues(r.CustomValuesJson), DecFormRules.ReadFlags(r.FlagsJson),
@@ -189,12 +189,12 @@ public static class Mappings
 
     /// <summary>
     /// The rider as a public viewer sees them: the surname shortened when the rider asked for that, and the
-    /// date of birth, saved-rider link and filming opt-out left out. Staff and the owning trainer get <see cref="ToDto(RiderEntry)"/>.
+    /// date of birth and saved-rider link left out. Staff and the owning trainer get <see cref="ToDto(RiderEntry)"/>.
     /// </summary>
     public static RiderEntryDto ToPublicDto(this RiderEntry r) => r.ToDto() with
     {
         FullName = RiderNames.Display(r.FullName, r.UseInitialOnly, viewerSeesFullNames: false),
-        DateOfBirth = null, SavedRiderId = null, NoFilming = false,
+        DateOfBirth = null, SavedRiderId = null,
         // Every adaptive dec form field is personal data about a child: none of it goes on a public page.
         BirthYear = null, AgeGroup = null, WeightKg = null, PonyPassportNumber = null, PonyOwnerFullName = null, PonyAge = null,
         MembershipNumber = null, EmergencyContactName = null, EmergencyContactPhone = null, MedicalNotes = null,
@@ -219,7 +219,7 @@ public static class Mappings
         includePrivate ? d.TrainerPhone : null);
 
     public static SavedRiderDto ToDto(this SavedRider r) =>
-        new(r.Id, r.ClubId, r.FullName, r.DateOfBirth, r.HorseName, r.Notes, r.UseInitialOnly, r.NoFilming, r.PonyHeightHands, r.PonyPassportNumber, r.PonyOwnerFullName);
+        new(r.Id, r.ClubId, r.FullName, r.DateOfBirth, r.HorseName, r.Notes, r.UseInitialOnly, r.PonyHeightHands, r.PonyPassportNumber, r.PonyOwnerFullName);
 
     public static ChatMessageDto ToDto(this ChatMessage m) => new(
         m.Id, m.CompetitionId, m.UserId, m.AuthorName, m.Body, m.Type, m.Tag, m.CreatedAt, m.AdminOnly, m.RecipientUserId);
