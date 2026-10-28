@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { useT } from '../../i18n/LanguageContext';
 import { Notice } from '../../components/Notice';
 import { TickerNumber } from '../../components/TickerNumber';
 import { api } from '../../api';
@@ -12,6 +13,7 @@ import './operations.css';
 /** Equipment: what to put out, big kit then little kit. Ticking a row saves straight away. */
 export function EquipmentPage() {
   const { competition } = useCompetition();
+  const t = useT();
   const [readiness, setReadiness] = useState<CompetitionReadiness | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -25,10 +27,10 @@ export function EquipmentPage() {
       const { data } = await api.get<CompetitionReadiness>(`/competitions/${competition.id}/operations/readiness`);
       setReadiness(data);
     } catch (caught) {
-      setError(apiMessage(caught, 'Couldn’t load the equipment list. Check your signal and try again.'));
+      setError(apiMessage(caught, t('ops.equip.loadError')));
       setLoadFailed(true);
     }
-  }, [competition.id]);
+  }, [competition.id, t]);
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
@@ -52,9 +54,9 @@ export function EquipmentPage() {
       const status = (caught as { response?: { status?: number } })?.response?.status;
       if (status === 409) {
         await load();
-        setRefreshed(apiMessage(caught, 'The list changed on another phone, so it has been refreshed.'));
+        setRefreshed(apiMessage(caught, t('ops.equip.changed')));
       } else {
-        setError(apiMessage(caught, 'Couldn’t save that tick. Check your signal and try again.'));
+        setError(apiMessage(caught, t('ops.equip.saveError')));
       }
     } finally {
       setBusy(false);
@@ -62,22 +64,22 @@ export function EquipmentPage() {
   }
 
   const groups = [
-    { name: 'Big equipment', rows: lines.filter((line) => line.big) },
-    { name: 'Little equipment', rows: lines.filter((line) => !line.big) },
+    { name: t('ops.equip.big'), rows: lines.filter((line) => line.big) },
+    { name: t('ops.equip.little'), rows: lines.filter((line) => !line.big) },
   ].filter((group) => group.rows.length > 0);
   const isOn = (keys: string[]) => keys.every((key) => acknowledged.has(key));
 
   return (
     <RefinePage>
-      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel="Back to preparations" context={competition.name} title="Equipment" />
+      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.equip.backToPrep')} context={competition.name} title={t('ops.area.equipment')} />
       <div className="ops-cards ops-tt ops-equip" aria-busy={busy}>
-        {error && <Notice actionLabel={loadFailed ? 'Try again' : undefined} onAction={() => void load()}>{error}</Notice>}
+        {error && <Notice actionLabel={loadFailed ? t('common.tryAgain') : undefined} onAction={() => void load()}>{error}</Notice>}
         {refreshed && <Notice tone="info">{refreshed}</Notice>}
-        {!readiness && !error && <p role="status" className="rf-note">Loading…</p>}
-        {readiness && lines.length === 0 && <RefineNote>No equipment items were found for the current race list.</RefineNote>}
+        {!readiness && !error && <p role="status" className="rf-note">{t('common.loading')}</p>}
+        {readiness && lines.length === 0 && <RefineNote>{t('ops.equip.empty')}</RefineNote>}
         {groups.map((group) => (
           <Fragment key={group.name}>
-            <h2 className="rf-sec ops-tt-head"><span>{group.name}</span><span><TickerNumber value={group.rows.filter((row) => isOn(row.keys)).length} format={String} /> of {group.rows.length}</span></h2>
+            <h2 className="rf-sec ops-tt-head"><span>{group.name}</span><span><TickerNumber value={group.rows.filter((row) => isOn(row.keys)).length} format={String} />{t('ops.equip.ofTotal', { total: group.rows.length })}</span></h2>
             <RefineList as="div" label={group.name}>
               {group.rows.map((row) => {
                 const on = isOn(row.keys);
