@@ -267,6 +267,20 @@ public class CommerceController(AppDbContext db) : ControllerBase
         return NoContent();
     }
 
+    /// <summary>The events whose shop has at least one item on sale, so the shop page lists only those.</summary>
+    [HttpGet("competitions/with-items")]
+    [AllowAnonymous]
+    public async Task<ActionResult<IReadOnlyList<int>>> CompetitionsWithItems(CancellationToken cancellationToken)
+    {
+        var ids = await db.Set<CompetitionListing>()
+            .AsNoTracking()
+            .Where(x => x.Status == CommerceListingStatus.Approved && x.CatalogueItem!.IsActive)
+            .Select(x => x.CompetitionId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        return ids;
+    }
+
     [HttpGet("competitions/{competitionId:int}/listings")]
     [AllowAnonymous]
     public async Task<ActionResult<IReadOnlyList<PublicCompetitionListingDto>>> PublicListings(

@@ -64,9 +64,9 @@ describe('Event shop: options', () => {
     expect(add()).toBeDisabled();
     await userEvent.click(screen.getByRole('radio', { name: 'L' }));
     await userEvent.click(screen.getByRole('button', { name: 'Add one Club hoodie L' }));
-    const bar = screen.getByRole('region', { name: 'Your basket' });
-    expect(bar).toHaveTextContent('4 items');
-    expect(bar).toHaveTextContent('£112');
+    const basket = screen.getByRole('button', { name: /^Checkout:/ });
+    expect(basket).toHaveAccessibleName('Checkout: 4 items, £112');
+    expect(basket).toHaveTextContent('4');
   });
 
   it('orders one line per option', async () => {

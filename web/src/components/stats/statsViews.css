@@ -1,0 +1,15 @@
+/* The per-game table: six short columns that fit a phone, wrapping rather than scrolling. */
+.rf-table.sg-table { font-size: 13px; }
+.rf-table.sg-table th { font-size: 11px; }
+.sg-table col.sg-game { width: 22%; }
+.sg-table col.sg-n { width: 13%; }
+.sg-table col.sg-nf { width: 17%; }
+.sg-table col.sg-won { width: 15%; }
+.sg-table col.sg-avg { width: 17%; }
+.sg-table col.sg-quota { width: 16%; }
+.rf-table.sg-table th:not(:first-child), .rf-table.sg-table td:not(:first-child) { text-align: center; }
+.rf-table.sg-table th:last-child, .rf-table.sg-table td:last-child { text-align: right; }
+@media (min-width: 640px) {
+  .rf-table.sg-table { font-size: 15px; }
+  .rf-table.sg-table th { font-size: 12px; }
+}

@@ -73,7 +73,7 @@ export const teams: AreaCatalogue<typeof en> = {
   'teams.team.avgPlace': 'Safle cyfartalog',
   'teams.team.racesWon': 'Rasys a enillwyd',
   'teams.team.wonOf': '{won} o {total}',
-  'teams.team.pointQuota': 'Cwota pwyntiau',
+  'teams.team.pointQuota': 'Pwyntiau cyfartalog',
   'teams.team.statsLater': 'Bydd yr ystadegau’n ymddangos unwaith y bydd {name} wedi rasio.',
   'teams.team.declaredAria': 'Marchogion a merlod a ddatganwyd',
   'teams.team.decForm': 'Ffurflen ddatgan',
@@ -333,4 +333,5 @@ export const teams: AreaCatalogue<typeof en> = {
   'teams.following.followPromptPreview': 'Eich bar gwaelod gyda Dilyn wedi’i ychwanegu',
   'teams.following.followPromptNotNow': 'Nid nawr',
   'teams.following.followPromptAdd': 'Ychwanegu at y bar gwaelod',
+  'teams.following.unfollowed': 'Dim yn dilyn mwyach',
 };
