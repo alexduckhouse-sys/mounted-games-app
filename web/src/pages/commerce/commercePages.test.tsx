@@ -218,6 +218,7 @@ describe('EventShopPage', () => {
       expect(await screen.findByRole('heading', { name: /Order confirmed/ }, { timeout: 4000 })).toBeInTheDocument();
       expect(post).toHaveBeenLastCalledWith('/commerce/orders/34/demo-checkout', { idempotencyKey: expect.any(String), outcome: 0 });
       expect(screen.getByRole('link', { name: 'View receipt' })).toHaveAttribute('href', '/me/orders?order=34');
+      expect(screen.getByText(/^Demo paid £25\.00/)).toBeInTheDocument();
       expect(screen.getByText('This is a demo. No money will be taken or sent, and your order hasn’t been paid for.')).toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Shop' }));
       expect(screen.getByText('Weekend camping')).toBeInTheDocument();

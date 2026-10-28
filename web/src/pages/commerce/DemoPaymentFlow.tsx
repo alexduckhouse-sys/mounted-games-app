@@ -331,7 +331,7 @@ export function OutcomeState({ payment, title, detail, role }: { payment: TestPa
   const tone = payment.status === 0 ? 'ok' : payment.status === 1 ? 'bad' : 'mut';
   const heading = title ?? (payment.status === 0 ? 'Payment approved' : payment.status === 1 ? 'The demo card was declined' : payment.status === 2 ? 'Payment cancelled' : 'Payment refunded');
   const line = detail ?? (payment.status === 0
-    ? <>Paid <PaidAmount amountMinor={payment.amountMinor} /></>
+    ? <>Demo paid <PaidAmount amountMinor={payment.amountMinor} /></>
     : payment.status === 1 ? 'Nothing was charged.' : payment.status === 2 ? 'Nothing was charged.' : 'No money moved.');
   // The disc pops in and its mark draws itself; a declined card gives a small shake (see demoPayment.css).
   return (

@@ -176,6 +176,20 @@ describe('Orders and sales: an order in a sheet', () => {
     expect(dialog().getByRole('button', { name: 'Pay demo order' })).toHaveClass('kit-pill-fill');
   });
 
+  it('says Demo paid, not Paid, on a paid demo order in the list and the sheet, and Paid on a real one', async () => {
+    load([
+      orderOf({ id: 9, isTestOrder: true, status: 2, paidAt: '2026-10-18T10:31:00Z', testPayments: [payment(0)] }),
+      orderOf({ id: 10, status: 2, paidAt: '2026-10-18T10:31:00Z' }),
+    ]);
+    mount();
+    const demoRow = await screen.findByRole('button', { name: /Order 9/ });
+    expect(within(demoRow).getByText('Demo paid')).toBeInTheDocument();
+    expect(within(screen.getByRole('button', { name: /Order 10/ })).getByText('Paid')).toBeInTheDocument();
+    await userEvent.click(demoRow);
+    expect(dialog().getByText('Demo paid')).toBeInTheDocument();
+    expect(dialog().queryByText('Paid')).not.toBeInTheDocument();
+  });
+
   it('opens a receipt from the link and refunds a paid demo order after confirming', async () => {
     const paid = orderOf({ id: 9, isTestOrder: true, status: 2, totalMinor: 500, paidAt: '2026-10-18T10:31:00Z', lines: [{ ...line, title: 'Event mug', unitPriceMinor: 500, lineTotalMinor: 500 }], testPayments: [payment(0)] });
     load([paid]);

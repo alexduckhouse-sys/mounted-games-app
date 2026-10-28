@@ -12,6 +12,7 @@ import { Chip, type ChipTone } from '../clubShop/ui';
 import { LoadError, TestReceipt } from './commerceUi';
 import { lineTitle } from '../../lib/shopOptions';
 import { errorMessage, newIdempotencyKey, orderLineText, pounds } from './commerceFormat';
+import { paidWord } from '../../lib/paidWord';
 import { OutcomeState } from './DemoPaymentFlow';
 import { DemoOrderCheckout } from './EventShopPage';
 import type { CommerceOrderStatus, DemoOrderPaymentResult, EventOrder, EventOrderLine, SellerSale, TestPayment } from './types';
@@ -29,6 +30,9 @@ const STATUS: Record<CommerceOrderStatus, { text: string; tone: ChipTone }> = {
   4: { text: 'Cancelled', tone: 'grey' },
   5: { text: 'Refunded', tone: 'grey' },
 };
+
+/** The chip for an order. A paid demo order reads "Demo paid". */
+const statusFor = (status: CommerceOrderStatus, isTest: boolean) => (status === 2 ? { ...STATUS[2], text: paidWord(isTest) } : STATUS[status]);
 
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 const whenText = (iso: string) => new Date(iso).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -190,7 +194,7 @@ function OrderGroup({ title, meta, orders, onOpen }: { title: string; meta?: str
       <h2 className="sp-sec">{title}{meta && <small>{meta}</small>}</h2>
       <div className="sp-card">
         {orders.map((order) => {
-          const status = STATUS[order.status];
+          const status = statusFor(order.status, order.isTestOrder);
           return (
             <button key={order.id} type="button" className="sp-row" onClick={() => onOpen(order.id)}>
               <span className="sp-grow">
@@ -247,7 +251,7 @@ function SalesList({ sales }: { sales: SellerSale[] | null }) {
           <h2 className="sp-sec">Sales <small>Collect at the event</small></h2>
           <div className="sp-card">
             {sales.map((sale) => {
-              const status = STATUS[sale.status];
+              const status = statusFor(sale.status, sale.isTestOrder);
               return (
                 <div key={sale.orderId} className="cs-row">
                   <span className="sp-grow">
@@ -277,7 +281,7 @@ function OrderSheet({ order, busy, onClose, onPay, onCancel, onRefund }: {
   onCancel: () => Promise<boolean>;
   onRefund: () => Promise<boolean>;
 }) {
-  const status = STATUS[order.status];
+  const status = statusFor(order.status, order.isTestOrder);
   const payment: TestPayment | undefined = [...order.testPayments].reverse().find((candidate) => candidate.isTest);
   const canPay = order.isTestOrder && (order.status === 1 || order.status === 3);
   const canCancel = [0, 1, 3].includes(order.status);

@@ -331,7 +331,7 @@ function ShopOutcome({ order, payment, retry, onShop }: { order: EventOrder; pay
   if (payment.status === 0) {
     return (
       <>
-        <OutcomeState payment={payment} title={`Order #${order.id}`} detail={`Paid ${pounds(payment.amountMinor)} · ${clock(payment.createdAt)}`} />
+        <OutcomeState payment={payment} title={`Order #${order.id}`} detail={`Demo paid ${pounds(payment.amountMinor)} · ${clock(payment.createdAt)}`} />
         <OrderLines order={order} />
         <RefineNote>{COLLECT_NOTE} Show your order number when you collect.</RefineNote>
         <RefineFoot>
