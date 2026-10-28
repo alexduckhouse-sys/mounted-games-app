@@ -1,6 +1,7 @@
 import { HeatBibClash } from './HeatBibClash';
 import { useState } from 'react';
-import { ChevronRight, MoreHorizontal } from 'lucide-react';
+import { ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react';
+import { BackLink } from '../../components/BackLink';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { hatbandFor } from '../../lib/laneOrder';
 import { publicRiderName } from '../../lib/riderNames';
@@ -11,11 +12,15 @@ import { HeatGrid, LaneBand, type RefereeCard } from './ScoringParts';
 /** One heat in the picker's list. */
 export interface HeatPickItem { key: string; label: string; status: string; selected: boolean; onSelect: () => void }
 
-/** The full-width bar under the header: the arena in bold, then the age group and heat. It opens the list of heats. */
-export function HeatPickerBar({ arena, label, items }: { arena: string; label: string; items: HeatPickItem[] }) {
+/**
+ * The bar at the top of the scoring screen: the arena in bold, then the age group and heat. It opens the list of heats.
+ * `back` puts a back arrow at its left: it returns to the page the scorer came from, or to `back.to` on a fresh load.
+ */
+export function HeatPickerBar({ arena, label, items, back }: { arena: string; label: string; items: HeatPickItem[]; back?: { to: string; label: string } }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="hb-bar">
+      {back && <BackLink to={back.to} className="hb-back" aria-label={back.label}><ChevronLeft className="h-5 w-5" aria-hidden="true" /></BackLink>}
       <button
         type="button"
         className="hb-btn"

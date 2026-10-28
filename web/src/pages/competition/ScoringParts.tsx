@@ -1,8 +1,9 @@
 /* eslint-disable react-refresh/only-export-components */
 import { motion, type PanInfo } from 'framer-motion';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { BibSwatch, HatbandSwatch } from '../../components/BibSwatch';
 import { dotColour } from '../../lib/teamColours';
+import type { LaneFill } from '../../lib/laneFill';
 import { hatbandColour } from '../../lib/hatbands';
 import { RaceRulesButton } from '../../components/RaceRulesButton';
 import { RaceSelect } from '../../components/RacePicker';
@@ -22,6 +23,7 @@ import './heat.css';
 import './scoring.css';
 import { formatPoints } from '../../lib/formatPoints';
 import { triggerScorerHaptic } from '../../lib/userPrefs';
+import { useSwipeToClose } from '../../hooks/useSwipeToClose';
 
 export interface ScoreOverrideValue {
   points: number;
@@ -195,7 +197,7 @@ export function tapHaptic(): void {
 /** One team in the race being scored. A tap places it (or takes it off again); pressing and holding eliminates it. */
 export function ScoreRow({
   entry, lane, hatband, state, sitting, hc, canScore, points = 0, overridePoints,
-  card, fact, last = false,
+  card, fact, last = false, fill = null,
   onTap, onSwipeEliminate, onToggleElim,
 }: {
   entry: HeatEntry;
@@ -212,6 +214,8 @@ export function ScoreRow({
   fact?: string;
   /** The only racing lane still to be scored: picked out quietly, never placed for the scorer. */
   last?: boolean;
+  /** Paints the whole box in the team's bib colour (the scorer's "Full colour lanes" choice). Null keeps the normal box. */
+  fill?: LaneFill | null;
   onTap: () => void;
   onSwipeEliminate: () => void;
   onToggleElim: () => void;
@@ -285,7 +289,10 @@ export function ScoreRow({
   ) : null;
 
   return (
-    <li className={`sc-row ${placed ? 'sc-row-placed' : ''} ${eliminated ? 'sc-row-out' : ''} ${sitting ? 'sc-row-sit' : ''} ${last ? 'sc-row-last' : ''}`}>
+    <li
+      className={`sc-row ${placed ? 'sc-row-placed' : ''} ${eliminated ? 'sc-row-out' : ''} ${sitting ? 'sc-row-sit' : ''} ${last ? 'sc-row-last' : ''} ${fill ? 'sc-row-fill' : ''}`}
+      style={fill ? ({ '--lane-fill': fill.colour, '--lane-ink': fill.ink, '--lane-ink-soft': fill.inkSoft } as CSSProperties) : undefined}
+    >
       {holding && <span className="sc-hold" aria-hidden="true" />}
       <motion.button
         type="button"
@@ -333,10 +340,20 @@ export function ScoreRow({
   );
 }
 
+/** A bottom dialog on the scoring screen that closes when it is swiped down (the same hook as `components/Sheet`). */
+export function PullDownDialog({ label, className, onClose, children }: { label: string; className: string; onClose: () => void; children: ReactNode }) {
+  const { ref, handlers, style, dragging } = useSwipeToClose<HTMLDivElement>(onClose);
+  return (
+    <div ref={ref} role="dialog" aria-modal="true" aria-label={label} className={dragging ? `${className} is-dragging` : className} style={style} {...handlers} onClick={(e) => e.stopPropagation()}>
+      {children}
+    </div>
+  );
+}
+
 function Overlay({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
   return (
     <div className="sc-overlay" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-label={label} className="sc-sheet" onClick={(e) => e.stopPropagation()}>{children}</div>
+      <PullDownDialog label={label} className="sc-sheet" onClose={onClose}>{children}</PullDownDialog>
     </div>
   );
 }
