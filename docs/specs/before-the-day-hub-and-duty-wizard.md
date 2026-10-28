@@ -31,32 +31,51 @@ One page, no tab bar. It replaces the tab bar on `/competitions/:id/operations` 
 
 ## Part 2: Staff and volunteers wizard
 
-A step-by-step set-up reached from "Staff and volunteers" on the hub. It creates ordinary `VolunteerShift` rows through the existing API, so the rota, duty board, arena crew sheet and check-ins keep working as they do. No schema change is expected.
+A step-by-step set-up reached from "Staff and volunteers" on the hub. **Duties go to teams, not named people, and they're set per heat.** Each team in a heat's duty list gets a role for that heat. It builds on `VolunteerShift` (`AssignedTeamId`, `DutyCategory`, `LaneNumber`, attendance and check-in), so the rota, duty board, arena crew sheet and check-ins keep working.
 
-Steps (Back and Next, a progress line at the top, and each step saves as you go, like the creator wizard):
+**Schema change needed:** `VolunteerShift` has a `SessionId` but no heat. Add a nullable `HeatId` (entity, EF migration, idempotent SQL script, SQLite guard), keeping session-level and whole-event shifts as they are.
 
-1. **Roles you need.** Tick the jobs this event uses, each with a stepper for how many per session: Referee, Arena party (a team or club), Start/finish line stewards (one per lane), Changeover stewards, Collecting ring, Tack steward, Gate, Scorer, First aid liaison, plus "+ Add a role". Defaults come from the current presets (`VOLUNTEER_ROLE_PRESETS`, `STEWARD_DUTY_ROLE_PRESETS`); lane counts come from each session's lanes.
-2. **Session by session.** One card per race session in running order (breaks skipped), with the roles from step 1 as rows. For each row, choose:
-   - **A team or club** ("Session 2 arena party: Stockport A"). Teams riding in that session are greyed out with "Riding this session".
-   - **A named person** (an organiser, a competition-team member, or typed).
-   - **Open to volunteers:** the slot appears on the public rota for people to take.
-   - "**Fill the rest automatically**" uses the existing `POST sessions/{id}/duty-assignments` (non-riding teams) for the steward and arena crew rows.
-   - "**Same as previous session**" copies the card above.
-3. **Whole-event jobs.** Jobs that don't belong to a session (e.g. Gate, First aid liaison), set the same way.
-4. **Check and share.** A summary table of sessions × roles showing who's on what, with any gaps highlighted. Then the "Ask for help" share text for open slots (the existing `unfilledShareText`) and "Done", which goes to the Staff and volunteers page.
+### Rules (owner, 28 October 2026)
 
-After set-up, "Staff and volunteers" opens the current rota view (with each session's duties folded in) and an "Edit set-up" button that reopens the wizard with everything filled in. Running the wizard again changes existing shifts; it never duplicates them. A shift someone has already taken is never removed without a confirm that names them.
+- A team **can't do a duty in a heat it rides in**. It **can** do one in another heat of the same session.
+- A team has at most one duty per heat; the wizard flags any overlap.
+- **Arena party is normally the teams riding in that heat**, so it's not assigned by default. An organiser can switch a heat to "assigned arena party" and pick a team. With two arenas, each arena's heat has its own arena party.
+- Named people (e.g. a named referee) are left out.
 
-## Open questions for the owner
+### Steps
 
-1. Is "Referee" a staff job you want listed here (a named person per session), or is it out of scope?
-2. Should arena party be one team per session, or one per arena when a session uses two arenas?
-3. Should named people get an email or notification when they're put on a duty, or is the rota enough?
-4. Part 1 first, then Part 2? (Recommended: Part 1 is small and makes Part 2 easy to place.)
+Back and Next, a progress line at the top, and each step saves as you go, like the creator wizard.
+
+1. **Roles per heat.** Tick the roles a heat needs, with a stepper where more than one is needed: Referee, Starter, Scorer, Start/finish line stewards (default one per lane), Changeover stewards, Collecting ring, plus "+ Add a role". Arena party shows as "Teams in the heat" unless switched. This sets the default for every heat; a heat can override it.
+2. **Heat by heat.** Sessions in running order, heats inside them (breaks skipped). Each heat lists its roles, and each role gets a team. Teams riding in that heat can't be chosen ("Riding this heat"). A team already on a duty in that heat shows "Already on duty".
+   - "**Fill automatically**" picks teams not riding that heat, spreading duties fairly (fewest duties so far first, and not back-to-back with their own heat where possible). This extends the existing `POST sessions/{id}/duty-assignments` to work per heat.
+   - "**Same as previous heat**" copies roles, not teams (copying teams would usually break the rule).
+3. **Check.** A grid of heats × roles with team names, where clashes and empty roles are highlighted, plus each team's duty count. "Done" saves and goes to the Staff and volunteers page.
+
+Running the wizard again only creates, changes or removes the shifts that changed; it never duplicates. Removing a team that has already checked in asks for a confirm.
+
+### Teams see their duties
+
+- **Following tab:** a followed team's next duty shows next to its next heat ("Heat 4: Changeover steward, lane 2"), in the same card.
+- **"We're here":** from that card, the team's people can confirm they're at their duty. This uses the existing attendance/check-in, so staff see it on the duty board as now.
+- **Push notifications:** a push to followers of the team when its duty heat is next (the existing push scheduling), on the web PWA and the iPhone app once the iOS app ships its push support.
+- The volunteer rota (open slots that anyone can take) stays as it is, for non-team jobs such as gate or car parking.
+
+## Settled with the owner (28 October 2026)
+
+- Build Part 1 (the hub) first, then Part 2.
+- Duties go to teams, per heat. Roles include referee, starter and scorer. A team can't do a duty in a heat it rides, but can in its own session.
+- Arena party is normally the teams riding in the heat; one per arena.
+- Teams are told through the Following tab and push notifications; there are no emails.
+
+## Still open
+
+1. Who may press "We're here"? Following is anonymous (stored on the device). Suggested: anyone following can press it, but it shows as "Team says here" (not "Checked in by staff") and is rate limited, so staff can still check. The alternative is signed-in team members and trainers only.
 
 ## Done when
 
 - `/operations` shows the grouped hub with no tab bar, and every tool opens as its own page with Back to the hub. Old `?tab=` links redirect.
 - "Before the day" is in the organiser's drawer and on the event home before the event starts.
-- The wizard can set up a two-arena, three-session event's referee, arena party and line stewards in one pass. The result shows correctly on the rota, the session duty board and the arena crew sheet, and running the wizard again doesn't duplicate anything.
-- The UI checklist in `docs/designs/design-decisions.md` is ticked, and tests cover the shift diffing (create, change or remove only what changed).
+- The wizard can set up a two-arena, three-session event's per-heat referee, starter, scorer and steward duties in one pass. No team is given a duty in a heat it rides. The result shows correctly on the duty board, the arena crew sheet and each followed team's card, and running the wizard again doesn't duplicate anything.
+- Tests cover the own-heat rule, the overlap check, fair auto-fill and the shift diffing (API and web).
+- The UI checklist in `docs/designs/design-decisions.md` is ticked.
