@@ -8,18 +8,28 @@ export function ordinalText(n: number, lang: Lang): string {
   return localOrdinal(n, lang);
 }
 
-/** The small line under a team's name in the chosen language (the same rules as `toplistNote`), or null. */
-export function toplistNoteText(row: ToplistRow, t: Translate, lang: Lang): string | null {
+/**
+ * The small line under a team's name on the toplist page, in the chosen language, or null. Ties and run-offs are
+ * shown by a tint rather than words, and races left are not counted; otherwise the same rules as `toplistNote`.
+ */
+export function toplistNoteText(row: ToplistRow, t: Translate): string | null {
   const tack = row.bonus > 0 ? t('competition.toplist.tackBonus', { count: row.bonus }) : null;
-  return [standingNote(row, t, lang), tack].filter(Boolean).join(' · ') || null;
+  return [standingNote(row, t), tack].filter(Boolean).join(' · ') || null;
 }
 
-function standingNote(row: ToplistRow, t: Translate, lang: Lang): string | null {
+/** How the note reads: 'safe' (green) for a guaranteed place, 'need' (amber) for points still to get, otherwise plain. */
+export function toplistNoteTone(row: ToplistRow): 'safe' | 'need' | null {
+  if (row.withdrawn || row.neededUnavailable) return null;
+  if (row.guaranteed) return 'safe';
+  return row.toStay != null || row.needed != null ? 'need' : null;
+}
+
+function standingNote(row: ToplistRow, t: Translate): string | null {
   if (row.withdrawn) return t('competition.toplist.withdrawn');
-  if (row.runoff) return t('competition.toplist.jointRunoff', { place: ordinalText(row.position, lang) });
   if (row.neededUnavailable) return t('competition.toplist.unavailable');
-  if (row.needed != null) return t(row.neededForRunoff ? 'competition.toplist.neededRunoff' : 'competition.toplist.neededFinal', { n: row.needed });
-  if (row.racesLeft > 0) return t('competition.toplist.racesLeft', { count: row.racesLeft });
+  if (row.guaranteed) return t('competition.toplist.guaranteed');
+  if (row.toStay != null) return t('competition.toplist.toStay', { count: row.toStay });
+  if (row.needed != null) return t(row.neededForRunoff ? 'competition.toplist.neededRunoff' : 'competition.toplist.neededFinal', { count: row.needed });
   return null;
 }
 

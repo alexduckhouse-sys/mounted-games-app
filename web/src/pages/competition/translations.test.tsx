@@ -31,20 +31,40 @@ afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); });
 
 describe('the toplist in Welsh and French', () => {
   const list = buildToplist([standing(1, 6), standing(2, 6), standing(3, 2)], [], [], 9, null);
+  // Top 2 through, with notes as the qualification sums would give them.
+  const withLine = buildToplist([standing(1, 6), standing(2, 5), standing(3, 2)], [], [], 9, 2);
+  Object.assign(withLine.rows[0], { guaranteed: true, racesLeft: 1 });
+  Object.assign(withLine.rows[1], { toStay: 1, racesLeft: 1 });
+  Object.assign(withLine.rows[2], { needed: 4, racesLeft: 1 });
 
   it('translates the chrome and leaves team names as typed', () => {
     inLang('cy', <ToplistView list={list} section={null} />);
     const totals = screen.getByRole('region', { name: 'Cyfansymiau' });
     expect(within(totals).getAllByRole('listitem')[0]).toHaveTextContent('Team 1');
     expect(screen.getAllByText('(cyfartal)', { exact: false })).toHaveLength(2);
-    expect(screen.getByText('−4')).toHaveAttribute('title', '4 y tu ôl i’r arweinydd');
+  });
+
+  it('translates the cut-off line and the qualification notes into Welsh', () => {
+    inLang('cy', <ToplistView list={withLine} section={null} />);
+    expect(screen.getByRole('separator', { name: 'Terfyn Rownd Derfynol A' })).toBeInTheDocument();
+    expect(screen.getByText('Lle yn Rownd Derfynol A yn sicr')).toBeInTheDocument();
+    expect(screen.getByText('1 pwynt i aros yn Rownd Derfynol A')).toBeInTheDocument();
+    expect(screen.getByText('Angen 4 pwynt i gyrraedd Rownd Derfynol A (canlyniadau arferol)')).toBeInTheDocument();
   });
 
   it('uses French wording and a French sr-only points label', () => {
     inLang('fr', <ToplistView list={list} section={null} />);
     expect(screen.getByRole('region', { name: 'Totaux' })).toBeInTheDocument();
-    expect(screen.getByText('−4')).toHaveAttribute('title', '4 derrière le leader');
+    expect(screen.queryByText('−4')).toBeNull();
     expect(screen.getAllByText('points', { exact: false }).length).toBeGreaterThan(0);
+  });
+
+  it('translates the cut-off line and the qualification notes into French', () => {
+    inLang('fr', <ToplistView list={withLine} section={null} />);
+    expect(screen.getByRole('separator', { name: 'Seuil de la finale A' })).toBeInTheDocument();
+    expect(screen.getByText('Place assurée en finale A')).toBeInTheDocument();
+    expect(screen.getByText('1 pt pour rester en finale A')).toBeInTheDocument();
+    expect(screen.getByText('Il faut 4 pts pour la finale A (arrivées normales)')).toBeInTheDocument();
   });
 
   it('shows the Show menu options in the chosen language', async () => {

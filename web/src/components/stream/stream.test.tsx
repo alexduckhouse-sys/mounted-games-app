@@ -203,7 +203,8 @@ it('hands the live video to the page and takes it back when the player goes', as
   vi.stubGlobal('RTCPeerConnection', fakePeerConstructor); vi.stubGlobal('MediaStream', fakeStreamConstructor);
   const onMedia = vi.fn(); const { unmount } = render(<MemoryRouter><LiveVideo {...props()} canBroadcast={false} onMedia={onMedia} /></MemoryRouter>); await settle();
   act(() => FakePeer.instances.at(-1)!.track()); await tick(2000);
-  expect(onMedia.mock.calls.some(([media]) => media !== null)).toBe(true);
+  expect(onMedia).toHaveBeenCalledWith(null, 1);
+  expect(onMedia.mock.calls.some(([media, id]) => media !== null && id === 1)).toBe(true);
   unmount(); expect(onMedia).toHaveBeenLastCalledWith(null);
 });
 

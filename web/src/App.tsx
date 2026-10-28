@@ -11,6 +11,7 @@ import { CurrentCompetitionProvider } from './competition/CurrentCompetitionCont
 import { NavExtrasProvider } from './components/NavExtrasContext';
 import { AgeGroupsProvider } from './components/AgeGroupsContext';
 import { TickerProvider } from './components/TickerContext';
+import { WeatherLineProvider } from './components/WeatherLineContext';
 import { ConnectionStatusProvider } from './live/ConnectionStatusContext';
 import { CompetitionMetaProvider } from './components/CompetitionMetaContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -112,6 +113,7 @@ export default function App() {
         <NavExtrasProvider>
         <AgeGroupsProvider>
         <TickerProvider>
+        <WeatherLineProvider>
         <ConnectionStatusProvider>
         <CompetitionMetaProvider>
         <CompactPageBarProvider>
@@ -247,6 +249,7 @@ export default function App() {
         </CompactPageBarProvider>
         </CompetitionMetaProvider>
         </ConnectionStatusProvider>
+        </WeatherLineProvider>
         </TickerProvider>
         </AgeGroupsProvider>
         </NavExtrasProvider>

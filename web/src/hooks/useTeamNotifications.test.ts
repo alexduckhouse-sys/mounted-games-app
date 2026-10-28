@@ -1,13 +1,14 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
-import { subscribeForPush, unsubscribeFromPush } from '../lib/push';
+import { subscribeForPushResult as subscribeForPush, unsubscribeFromPush } from '../lib/push';
+import { fakeDevice, resetDevice, UA } from '../test/device';
 import { competition, heat, session, team } from '../test/factories';
 import type { CompetitionDetail, Session, Team } from '../types';
 import { useTeamNotifications } from './useTeamNotifications';
 
 vi.mock('../api', () => ({ api: { get: vi.fn() } }));
-vi.mock('../lib/push', () => ({ subscribeForPush: vi.fn(), unsubscribeFromPush: vi.fn() }));
+vi.mock('../lib/push', () => ({ subscribeForPushResult: vi.fn(), unsubscribeFromPush: vi.fn() }));
 const get = vi.mocked(api.get);
 
 const now = new Date('2026-06-01T10:00:00Z');
@@ -44,12 +45,15 @@ beforeEach(() => {
   FakeNotification.failToShow = false;
   FakeNotification.requestPermission = vi.fn().mockResolvedValue('granted');
   vi.stubGlobal('Notification', FakeNotification);
-  vi.mocked(subscribeForPush).mockResolvedValue(true);
+  vi.mocked(subscribeForPush).mockResolvedValue('ok');
   vi.mocked(unsubscribeFromPush).mockResolvedValue(undefined);
   competitions = { 1: competition() };
   get.mockImplementation(async (url) => ({ data: competitions[Number(String(url).split('/').pop())] }));
 });
-afterEach(() => { vi.useRealTimers(); });
+afterEach(() => {
+  vi.useRealTimers();
+  resetDevice();
+});
 
 describe('useTeamNotifications: switching on and off', () => {
   it('starts off, and reports the browser’s permission', () => {
@@ -107,8 +111,38 @@ describe('useTeamNotifications: switching on and off', () => {
     expect(result.current.problem).toBeNull();
     await act(async () => { await result.current.setEnabled(true); });
     expect(alertSpy).not.toHaveBeenCalled();
-    expect(result.current.problem).toBe('This browser can’t show notifications. Try Chrome or Safari.');
+    expect(result.current.problem).toBe('This browser can’t show notifications. On iPhone, add Mounted Games to your Home Screen and open it from there.');
     expect(result.current.enabled).toBe(false);
+  });
+
+  it('on an iPhone that hasn’t added the app to its Home Screen, shows how instead of asking', async () => {
+    fakeDevice({ userAgent: UA.iphoneSafari });
+    Reflect.deleteProperty(globalThis, 'Notification');
+    const { result } = renderHook(() => useTeamNotifications([]));
+    expect(result.current).toMatchObject({ needsInstall: true, installGuide: false, permission: 'unsupported' });
+    await act(async () => { await result.current.setEnabled(true); });
+    expect(result.current).toMatchObject({ installGuide: true, problem: null, enabled: false });
+    expect(subscribeForPush).not.toHaveBeenCalled();
+    act(() => { result.current.closeInstallGuide(); });
+    expect(result.current.installGuide).toBe(false);
+  });
+
+  it('asks as usual on an iPhone running from the Home Screen', async () => {
+    fakeDevice({ userAgent: UA.iphoneSafari, iosStandalone: true });
+    FakeNotification.permission = 'default';
+    const { result } = renderHook(() => useTeamNotifications([]));
+    expect(result.current.needsInstall).toBe(false);
+    await act(async () => { await result.current.setEnabled(true); });
+    expect(FakeNotification.requestPermission).toHaveBeenCalledTimes(1);
+    expect(result.current).toMatchObject({ enabled: true, installGuide: false });
+  });
+
+  it('points an older iPhone at an iOS update when it has no notifications even from the Home Screen', async () => {
+    fakeDevice({ userAgent: UA.iphoneSafari, iosStandalone: true });
+    Reflect.deleteProperty(globalThis, 'Notification');
+    const { result } = renderHook(() => useTeamNotifications([]));
+    await act(async () => { await result.current.setEnabled(true); });
+    expect(result.current.problem).toBe('Notifications need iOS 16.4 or later. Update your device, then try again.');
   });
 
   it('switches off, forgets the setting and unregisters push', async () => {
@@ -118,7 +152,7 @@ describe('useTeamNotifications: switching on and off', () => {
     expect(result.current.enabled).toBe(false);
     expect(localStorage.getItem('mg.notify.enabled')).toBeNull();
     expect(unsubscribeFromPush).toHaveBeenCalledTimes(1);
-    expect(subscribeForPush).not.toHaveBeenCalled();
+    expect(subscribeForPush).toHaveBeenCalledTimes(1); // only the check on load, never a new subscription
   });
 
   it('keeps working when the setting cannot be stored', async () => {
@@ -443,5 +477,88 @@ describe('useTeamNotifications: what it announces', () => {
     await act(async () => { await view.result.current.setEnabled(false); });
     await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
     expect(shown).toEqual([]);
+  });
+});
+
+describe('useTeamNotifications: only on when the phone is registered', () => {
+  it.each([
+    ['server', 'We couldn’t register this phone for notifications. Check your signal and try again.'],
+    ['browser', 'Your browser wouldn’t set up notifications. Try again in a moment.'],
+    ['denied', 'Notifications are blocked for this site. Allow them in your browser settings, then switch them on again.'],
+  ] as const)('stays off and says so when registering fails (%s)', async (reason, message) => {
+    vi.mocked(subscribeForPush).mockResolvedValue(reason);
+    const { result } = renderHook(() => useTeamNotifications([]));
+    await act(async () => { await result.current.setEnabled(true); });
+    expect(result.current.enabled).toBe(false);
+    expect(result.current.problem).toBe(message);
+    expect(localStorage.getItem('mg.notify.enabled')).toBeNull();
+  });
+
+  it('says so when the permission prompt is refused', async () => {
+    FakeNotification.permission = 'default';
+    FakeNotification.requestPermission = vi.fn().mockResolvedValue('denied');
+    const { result } = renderHook(() => useTeamNotifications([]));
+    await act(async () => { await result.current.setEnabled(true); });
+    expect(result.current.enabled).toBe(false);
+    expect(result.current.problem).toMatch(/blocked for this site/);
+  });
+
+  it('clears an earlier problem once it works', async () => {
+    vi.mocked(subscribeForPush).mockResolvedValueOnce('server').mockResolvedValue('ok');
+    const { result } = renderHook(() => useTeamNotifications([]));
+    await act(async () => { await result.current.setEnabled(true); });
+    await act(async () => { await result.current.setEnabled(true); });
+    expect(result.current).toMatchObject({ enabled: true, problem: null });
+  });
+
+  it('shows a saved "on" as off when the browser has since blocked notifications', () => {
+    enable();
+    FakeNotification.permission = 'denied';
+    const { result } = renderHook(() => useTeamNotifications([]));
+    expect(result.current.enabled).toBe(false);
+    expect(subscribeForPush).not.toHaveBeenCalled();
+  });
+
+  it('keeps a saved "on", shows the reason, and tries again next time when the server check fails', async () => {
+    enable();
+    vi.mocked(subscribeForPush).mockResolvedValue('server');
+    const view = renderHook(() => useTeamNotifications([]));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(subscribeForPush).toHaveBeenCalledTimes(1);
+    expect(view.result.current.enabled).toBe(true);
+    expect(view.result.current.problem).toMatch(/couldn’t register this phone/);
+    expect(localStorage.getItem('mg.notify.enabled')).toBe('1');
+    view.unmount();
+    vi.mocked(subscribeForPush).mockResolvedValue('ok');
+    const again = renderHook(() => useTeamNotifications([]));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(subscribeForPush).toHaveBeenCalledTimes(2);
+    expect(again.result.current).toMatchObject({ enabled: true, problem: null });
+  });
+
+  it('keeps a saved "on" and says why when the browser is too slow to answer', async () => {
+    enable();
+    vi.mocked(subscribeForPush).mockResolvedValue('browser');
+    const view = renderHook(() => useTeamNotifications([]));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(view.result.current.enabled).toBe(true);
+    expect(view.result.current.problem).toMatch(/wouldn’t set up notifications/);
+    expect(localStorage.getItem('mg.notify.enabled')).toBe('1');
+  });
+
+  it.each(['denied', 'unsupported'] as const)('switches a saved "on" off and saves that when the check says %s', async (reason) => {
+    enable();
+    vi.mocked(subscribeForPush).mockResolvedValue(reason);
+    const view = renderHook(() => useTeamNotifications([]));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(view.result.current.enabled).toBe(false);
+    expect(localStorage.getItem('mg.notify.enabled')).not.toBe('1');
+  });
+
+  it('keeps a saved "on" when the check passes', async () => {
+    enable();
+    const view = renderHook(() => useTeamNotifications([]));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(view.result.current).toMatchObject({ enabled: true, problem: null });
   });
 });

@@ -2,7 +2,7 @@
 
 MG App manages Mounted Games competitions on phones at events: organisers handle entries, teams and timetables; trainers submit rider declaration forms; supporters, stewards and spectators follow live scoring, standings and chat. It combines an ASP.NET Core 10 API with a React 19, TypeScript and Vite PWA, including offline caching, push notifications, weather and a marketplace. Payments are recorded for manual confirmation; online payment processing is not implemented.
 
-Read `APP_DESIGN.md` before changing behaviour, `docs/designs/design-decisions.md` for the house style and per-page UI/UX rules (25–26 October 2026), and `PRODUCT_DETAILS.md` for the lifecycle. `docs/README.md` says which docs are current. Check implementation where older documentation disagrees.
+Read `APP_DESIGN.md` before changing behaviour, `docs/designs/design-decisions.md` for the house style and per-page UI/UX rules (25–27 October 2026; every UI PR ticks its "Before you open a UI pull request" checklist), and `PRODUCT_DETAILS.md` for the lifecycle. `docs/README.md` says which docs are current. Check implementation where older documentation disagrees.
 
 Each area has its own guide, loaded when you work there: `api/CLAUDE.md` (glossary, change recipes, scoring rules), `web/CLAUDE.md` (pages, hub events, offline, tests) and `tests/CLAUDE.md` (API test helpers). Each has an `AGENTS.md` symlink for Codex.
 

@@ -1,10 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Clock, RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import { Clock, RefreshCw, ServerOff, Wifi, WifiOff } from 'lucide-react';
 import { useConnectionStatus } from '../live/ConnectionStatusContext';
 import { liveState } from '../live/connectionStatus';
 import { useLanguage } from '../i18n/LanguageContext';
-
-const time = (date: Date, locale: string) => date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
 /** How long "Back online" shows once the live link returns after the pill had appeared. */
 export const BACK_ONLINE_MS = 2600;
@@ -20,10 +18,10 @@ export function ConnectionPill({ fallback = null }: { fallback?: ReactNode }) {
 }
 
 function useConnectionPill(): ReactNode {
-  const { t, locale } = useLanguage();
+  const { t } = useLanguage();
   const { status } = useConnectionStatus();
   const down = status != null && !status.connected;
-  // Ticks while the live link is down, so the pill moves from hidden to reconnecting to checking.
+  // Ticks while the live link is down, so the pill appears only once the drop has lasted past the grace period.
   const [now, setNow] = useState(0);
   useEffect(() => {
     if (!down) return;
@@ -62,26 +60,24 @@ function useConnectionPill(): ReactNode {
       </button>
     );
   }
-  if (state === 'reconnecting') {
-    return (
-      <button type="button" className="mg-conn-pill mg-conn-reconnecting" onClick={status.retry} aria-label={t('shell.conn.reconnectingLabel')}>
-        <RefreshCw className="mg-conn-spin" aria-hidden="true" />{t('shell.conn.reconnecting')}
-      </button>
-    );
-  }
   if (state === 'polling') {
     const seconds = Math.round(status.intervalMs / 1000);
     return (
       <button type="button" className="mg-conn-pill mg-conn-polling" onClick={status.retry} aria-label={t('shell.conn.pollingLabel', { seconds })}>
-        <Clock aria-hidden="true" />{t('shell.conn.polling', { seconds })}
+        <Clock aria-hidden="true" />{t('shell.conn.polling')}
       </button>
     );
   }
-  const updated = status.updatedAt ? time(status.updatedAt, locale) : null;
+  if (state === 'unreachable') {
+    return (
+      <button type="button" className="mg-conn-pill mg-conn-offline" onClick={status.retry} aria-label={t('shell.conn.unreachableLabel')}>
+        <ServerOff aria-hidden="true" />{t('shell.conn.unreachable')}
+      </button>
+    );
+  }
   return (
-    <button type="button" className="mg-conn-pill mg-conn-offline" onClick={status.retry}
-      aria-label={updated ? t('shell.conn.offlineUpdatedLabel', { time: updated }) : t('shell.conn.offlineLabel')}>
-      <WifiOff aria-hidden="true" />{updated ? t('shell.conn.offlineUpdated', { time: updated }) : t('shell.conn.offline')}
+    <button type="button" className="mg-conn-pill mg-conn-offline" onClick={status.retry} aria-label={t('shell.conn.offlineLabel')}>
+      <WifiOff aria-hidden="true" />{t('shell.conn.offline')}
     </button>
   );
 }

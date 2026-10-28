@@ -1,6 +1,6 @@
 # Design decisions
 
-This is the house style for MG App's redesigned pages: every look, control and copy rule the owner picked while reviewing the organiser, site admin and "On the day" pages (25–26 October 2026). Use it for any new page, including the public side, so the whole app matches.
+This is the house style for MG App's redesigned pages: every look, control and copy rule the owner picked while reviewing the organiser, site admin and "On the day" pages (25–26 October 2026) and the public pages (27 October 2026). Use it for any new or changed page so the whole app matches.
 
 The source of truth for the organiser pages is the Claude Design canvas "MG App organiser pages" (https://claude.ai/artifact/6qhbrgghBuGs3kTVdVb6ci, private to the owner). It has three working prototypes: Create competition (desktop), Set up and site admin, and On the day (phone). When this file and the canvas disagree, the canvas wins; when the canvas and the code disagree, ask.
 
@@ -9,12 +9,33 @@ The source of truth for the organiser pages is the Claude Design canvas "MG App 
 - Start from the live page. Screenshot it at phone width first and change the page body only. The owner likes the current app; whole new visual directions were rejected three times.
 - Phone first. The exception is Create competition, which is desktop first but must still work on a phone.
 - Offer small before/after changes, not A/B/C restyles.
-- Leave animations alone. Another agent owns all motion (Framer Motion and CSS). Don't add, change or remove any unless the owner asks.
+- Leave animations alone. Another agent owns all motion (Framer Motion and CSS). Don't add, change or remove any unless the owner asks. The page transitions picked on 27 October are listed under Public pages, round 2.
 - "Less AI":
   - no icon grid for every fact, no progress bars for their own sake;
   - no shouting labels;
   - no filler sentences;
   - no developer words.
+
+## Before you open a UI pull request
+
+Some organiser and site admin pages shipped without following this file (found 27 October 2026; being fixed on 28 October). Every PR that changes what a page looks like goes through this list. Copy it into the PR body and tick it.
+
+1. **Read first:** this file, plus the canvas or handoff for the page (`docs/designs/*-handoff.md`). If they disagree with each other or with the code, ask the owner. Don't pick one yourself.
+2. **Screenshot before and after** at phone width (390×844), and at 1440×900 for desktop-first pages (the creator). Put both in the PR.
+3. **Chrome untouched:** top bar, notice line, "running late" line and bottom tabs are as built.
+4. **Controls match this file:**
+   - dropdown rows, not pill rows;
+   - steppers for numbers, switches for on/off;
+   - the T2 date row;
+   - drag grips with no arrows;
+   - destructive actions as red underlined text;
+   - "+ Add …" as a grey bar;
+   - one filled navy pill for the main action.
+5. **Saving:** autosave, no Save button (scoring's "Save scores" is the only exception). Limits warn and never block.
+6. **Copy:** UK English, put through `humanise`, no developer words, no filler sentences, nothing from the Rejected list below.
+7. **Motion:** none added, changed or removed unless the owner asked for it on this page (see Page transitions below).
+8. **Tokens:** colours come from the `--mg-*` tokens and the #194 button tokens in `web/src/theme/skin.css`. No hex values in components, and all five themes still read correctly.
+9. **Scope:** change only the page body you were asked about. Note anything else you spotted in the PR instead of fixing it there.
 
 ## Look
 
@@ -126,13 +147,67 @@ The source of truth for the organiser pages is the Claude Design canvas "MG App 
   - Blocked accounts are blocked by account, with IPs blocked behind the scenes.
 - **Email:** an ordinary text email with links on words, or a picture as the whole email, plus an editable footer. The preview looks like a real email (no banner). Sending asks "Are you sure?" with the full preview, then shows progress with Stop.
 
+### Public pages, round 2 (27 October 2026)
+
+The owner reviewed each public page as "live capture beside a tidier version" on the canvas "MG App public pages, round 2" (https://claude.ai/artifact/4BVqrMaCsSVRQonDWiw8su, private). The depth is a timetable-style tidy, not a new layout. Sign-in and account pages were out of scope.
+
+- **Approved to build:**
+  - timetable;
+  - heat page;
+  - live stream;
+  - teams;
+  - team page;
+  - arena setup;
+  - rules;
+  - weather;
+  - event shop;
+  - competitions;
+  - past competitions;
+  - seasons;
+  - team profiles;
+  - menu;
+  - settings.
+
+  The build is on `demo/public-pages`, from `demo/event-pages` and `demo/site-pages`.
+- **Ticker dock:** the ticker sits in a dock at the bottom of every event page (PR #215 brings it to the rest).
+- **Back button:** a boxed 44px arrow matching the menu button (`.mg-nav-btn`) on every page that has a back button.
+- **Page transitions** (picked by the owner, so they're an exception to "leave animations alone"):
+  - opening a page and going back use a push;
+  - switching tabs uses a quick 160ms crossfade.
+- **Heat page:**
+  - built as it is now, with bigger team names;
+  - no "Lane N" line, no ‹ › arrows, no Official mark, nothing underlined;
+  - the diagonal race names run full length, and "#" and "TEAM" sit on the baseline at the foot of them;
+  - PTS is right-aligned;
+  - to change heat, a heat-list button beside the ticker dock opens a bottom sheet of the day's heats grouped by age group, with the current heat ticked.
+- **Teams, competitions, past competitions:** the tidier versions were liked as they stand. Competitions loses its search bar.
+- **Arena setup:** the ring crew splits into Top, Middle and Start line.
+- **Menu:** the age group picker is a white settings-style row ("Age group · Juniors ⌄"), not the navy band, which read as part of the top bar.
+- **Toplist:** age groups appear as a row of tabs (like the day tabs), scrolling sideways when there are more than three. It has Toplist and Scores only, with no Heats tab. Ties show as "3=" with a thick 6px left bar like the live run-off. The A Final cut-off is a red dashed line labelled "A Final cut-off". Teams below it show "N pts needed for the A Final". There's no "N behind" figure and no chevrons.
+
+  The toplist is **not yet approved**: ask before building it.
+- **Still to check with the owner:**
+  - the details cards (Dec forms hidden);
+  - team stats and profile stats;
+  - the season table (no warning, one selector row, names without " U14");
+  - rider stats;
+  - tack and kit (full-width slider at the top, search filter);
+  - Following / My teams (follow teams outside a competition);
+  - the teams filter open;
+  - the menu age dropdown open;
+  - the site menu (bigger text, no language row);
+  - showing finals times.
+
 ## Rejected (don't bring back)
 
 - **Visual directions:**
   - wholesale restyles of the live pages;
   - gradient or tapering hatband shapes;
   - block buttons and rows of pill choices where a dropdown would do;
-  - Back/Next at the top of the wizard.
+  - Back/Next at the top of the wizard;
+  - hand-drawn redraws of live pages on the canvas: edit a capture of the live page instead;
+  - story cards inline on the toplist or team page: a story image is one choice in the Share event sheet;
+  - a heat page with Toplist/Timetable pills removed and ‹ › between heats.
 - **Features:**
   - a race clock;
   - a timetable/finals tools page;

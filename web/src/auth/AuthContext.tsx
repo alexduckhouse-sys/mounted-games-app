@@ -279,6 +279,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    // Unfinished entry forms hold names and clubs; don't leave them on a shared phone.
+    try {
+      for (const key of Object.keys(localStorage).filter((item) => item.startsWith('mg.draft.entry.v1.'))) localStorage.removeItem(key);
+    } catch { /* Storage may be unavailable. */ }
     writeStoredAuth(null);
     setAuth(null);
     setSignedOut(true);

@@ -115,12 +115,28 @@ describe('SeasonSettingsForm', () => {
 });
 
 describe('SeasonPage', () => {
+  it('shows the republish warning only to people who can republish, and drops a matching age suffix from team names', async () => {
+    const stale = { ...season, ageGroup: 'Under 14', rounds: [{ ...season.rounds[0], ageGroup: 'Under 14', publicationIsCurrent: false }] };
+    const table = { standings: [{ ...standings.standings[0], teamName: 'Atherstone U14' }, { ...standings.standings[1], teamName: 'Dorset U12' }] };
+    const load = (canManage: boolean) => vi.mocked(api.get).mockImplementation(async (url) => ({ data: url.endsWith('/standings') ? table : { ...stale, canManage } }));
+    load(false);
+    const view = render(<MemoryRouter initialEntries={['/seasons/example-season']}><Routes><Route path="/seasons/:seasonId" element={<SeasonPage />} /></Routes></MemoryRouter>);
+    expect(await screen.findByRole('link', { name: 'Atherstone' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Dorset U12' })).toBeInTheDocument();
+    expect(screen.queryByText(/Republish to update the table/)).not.toBeInTheDocument();
+    view.unmount();
+    load(true);
+    render(<MemoryRouter initialEntries={['/seasons/example-season']}><Routes><Route path="/seasons/:seasonId" element={<SeasonPage />} /></Routes></MemoryRouter>);
+    expect(await screen.findByText(/Republish to update the table/)).toBeInTheDocument();
+  });
   it('shows standings first with shared places, per-round columns, dropped scores crossed out and profile links, and no management controls', async () => {
     mount();
     expect(await screen.findByRole('heading', { name: 'Example Summer League' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Standings' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getAllByText('=1')).toHaveLength(2);
-    expect(screen.getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['Pos', 'Team', 'R1', 'Pts']);
+    expect(screen.getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['Position', 'Team', 'R1', 'Pts']);
+    // The position column has no visible heading; screen readers still get one.
+    expect(screen.getByText('Position')).toHaveClass('sr-only');
     const droppedScore = screen.getByText('8');
     expect(droppedScore).toHaveClass('line-through', 'opacity-55');
     expect(screen.getByRole('link', { name: 'Example Blue' })).toHaveAttribute('href', '/team-profiles/team-a');
@@ -129,9 +145,11 @@ describe('SeasonPage', () => {
     expect(screen.queryByText(/not an official ranking/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Best 1 of 1 round/)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Example Blue' })).toHaveClass('sv-team');
-    // Age group and what to show are dropdown rows. With one choice each, they have nothing to open.
-    expect(screen.getByRole('combobox', { name: /Age group Seniors/ })).toBeDisabled();
-    expect(screen.getByRole('combobox', { name: /Show Teams/ })).toBeDisabled();
+    // Age group and what to show are one row, "Seniors · Teams". With one choice each, it has nothing to open.
+    const where = screen.getByRole('button', { name: 'Seniors, Teams' });
+    expect(where).toHaveTextContent('Seniors· Teams');
+    expect(where).toBeDisabled();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument();
   });
   it('shows age-group division tabs when a season has rounds across multiple age groups and lets an admin manage without edit mode', async () => {
@@ -158,7 +176,12 @@ describe('SeasonPage', () => {
     render(<MemoryRouter initialEntries={['/seasons/example-season']}><Routes><Route path="/seasons/:seasonId" element={<SeasonPage />} /></Routes></MemoryRouter>);
     expect(await screen.findByRole('link', { name: 'Settings' })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Under 12' })).not.toBeInTheDocument();
-    chooseOption(screen.getByRole('combobox', { name: /Age group/ }), 'Under 12');
+    expect(screen.getByRole('button', { name: /^All age groups, Teams/ })).toHaveTextContent('All age groups· Teams');
+    await userEvent.click(screen.getByRole('button', { name: /^All age groups, Teams/ }));
+    expect(screen.queryByRole('group', { name: 'Show' })).not.toBeInTheDocument();
+    await userEvent.click(within(screen.getByRole('group', { name: 'Age group' })).getByRole('button', { name: 'Under 12' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(screen.getByRole('button', { name: /^Under 12, Teams/ })).toHaveTextContent('Under 12· Teams');
     expect(screen.getByRole('link', { name: 'Example Juniors' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Example Blue' })).not.toBeInTheDocument();
   });
@@ -174,7 +197,11 @@ describe('SeasonPage', () => {
     render(<MemoryRouter initialEntries={['/seasons/example-season']}><Routes><Route path="/seasons/:seasonId" element={<SeasonPage />} /></Routes></MemoryRouter>);
     expect(await screen.findByRole('link', { name: 'Example Blue' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Fake Rider' })).not.toBeInTheDocument();
-    chooseOption(screen.getByRole('combobox', { name: /^Show/ }), 'Pairs');
+    await userEvent.click(screen.getByRole('button', { name: /^Seniors, Teams/ }));
+    expect(screen.queryByRole('group', { name: 'Age group' })).not.toBeInTheDocument();
+    await userEvent.click(within(screen.getByRole('group', { name: 'Show' })).getByRole('button', { name: 'Pairs' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(screen.getByRole('button', { name: /^Seniors, Pairs/ })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Fake Rider' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Example Blue' })).not.toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Rider' })).toBeInTheDocument();
