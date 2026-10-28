@@ -1,22 +1,26 @@
+import { useT } from '../../i18n/LanguageContext';
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { api } from '../../api';
+import { activeLocale, tr } from '../../i18n/translate';
 import { Notice } from '../../components/Notice';
 import { useCompetition } from '../competition/context';
 import { Chevron, RefineList, RefineNote, RefineSection, RefineSheet, RefineStatus } from '../refine/Refine';
 import { RedrawPreviewView } from './RedrawPreviewView';
 import { RiderSwapSheet } from './RiderSwapSheet';
 import type { SetTeamEntryStatusResult, TeamEntry, TeamEntryStatus } from './types';
-import { OFFLINE_MESSAGE, apiMessage, isOffline, statusOf } from './types';
+import { apiMessage, isOffline, statusOf } from './types';
 import './operations.css';
 
 interface StatusSheet { team: TeamEntry; next: TeamEntryStatus }
 
-const STATUS_LABEL: Record<TeamEntryStatus, string> = { 0: 'In the draw', 1: 'Withdrawn', 2: 'No-show' };
+const STATUS_LABEL: Record<TeamEntryStatus, string> = {
+  get 0() { return tr('ops2.panel.inDraw'); }, get 1() { return tr('ops2.protest.withdrawn'); }, get 2() { return tr('ops2.redraw.noShow'); },
+};
 
 function whenText(iso: string | null): string {
   if (!iso) return '';
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleString(activeLocale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
 /**
@@ -25,6 +29,7 @@ function whenText(iso: string | null): string {
  */
 export function EntriesPanel({ canWrite, onTimetableChanged }: { canWrite: boolean; onTimetableChanged: () => void }) {
   const { competition } = useCompetition();
+  const t = useT();
   const [entries, setEntries] = useState<TeamEntry[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -41,12 +46,12 @@ export function EntriesPanel({ canWrite, onTimetableChanged }: { canWrite: boole
       setEntries(Array.isArray(data) ? data : []);
     } catch (error) {
       setLoadError(isOffline(error)
-        ? OFFLINE_MESSAGE
-        : apiMessage(error, 'Couldn’t load the entries. Check your signal and try again.'));
+        ? t('ops2.offline')
+        : apiMessage(error, t('ops2.panel.loadError')));
     } finally {
       setLoading(false);
     }
-  }, [competition.id]);
+  }, [competition.id, t]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -65,7 +70,7 @@ export function EntriesPanel({ canWrite, onTimetableChanged }: { canWrite: boole
   const redrawSections = bySection.filter(([, group]) => group.teams.some((team) => team.redrawAvailable));
 
   if (redrawSection != null) {
-    const name = bySection.find(([id]) => id === redrawSection)?.[1].name ?? 'Section';
+    const name = bySection.find(([id]) => id === redrawSection)?.[1].name ?? t('ops2.panel.section');
     return (
       <RedrawPreviewView
         competitionId={competition.id}
@@ -73,27 +78,27 @@ export function EntriesPanel({ canWrite, onTimetableChanged }: { canWrite: boole
         sectionName={name}
         canWrite={canWrite}
         onClose={() => { setRedrawSection(null); void load(); }}
-        onApplied={() => { setMessage('Re-draw applied. Phones following this event will update.'); onTimetableChanged(); }}
+        onApplied={() => { setMessage(t('ops2.redraw.applied')); onTimetableChanged(); }}
       />
     );
   }
 
   return (
-    <section aria-label="Entries">
+    <section aria-label={t('ops2.panel.entries')}>
       {message && <Notice tone="info" onDismiss={() => setMessage(null)}>{message}</Notice>}
-      {loading && !entries && <p role="status" className="rf-note">Loading teams…</p>}
-      {loadError && <Notice actionLabel="Try again" onAction={() => void load()}>{loadError}</Notice>}
-      {entries && entries.length === 0 && <RefineNote>No teams have entered yet.</RefineNote>}
+      {loading && !entries && <p role="status" className="rf-note">{t('ops2.panel.loadingTeams')}</p>}
+      {loadError && <Notice actionLabel={t('common.tryAgain')} onAction={() => void load()}>{loadError}</Notice>}
+      {entries && entries.length === 0 && <RefineNote>{t('ops2.panel.noTeams')}</RefineNote>}
 
       {redrawSections.length > 0 && (
         <>
-          <RefineSection title="Re-draw" />
-          <RefineList as="div" label="Re-draw previews">
+          <RefineSection title={t('ops2.panel.redraw')} />
+          <RefineList as="div" label={t('ops2.panel.redrawPreviews')}>
             {redrawSections.map(([id, group]) => {
               const out = group.teams.filter((team) => team.status !== 0).length;
               return (
                 <button key={id} type="button" className="rf-row" onClick={() => setRedrawSection(id)}>
-                  <span className="rf-grow"><span className="rf-t1">{group.name}</span><span className="rf-t2">{out === 1 ? '1 team is out' : `${out} teams are out`}. Preview how the unscored heats would change.</span></span>
+                  <span className="rf-grow"><span className="rf-t1">{group.name}</span><span className="rf-t2">{t(out === 1 ? 'ops2.panel.outOne' : 'ops2.panel.outMany', { count: out })}</span></span>
                   <Chevron />
                 </button>
               );
@@ -105,7 +110,7 @@ export function EntriesPanel({ canWrite, onTimetableChanged }: { canWrite: boole
       {bySection.map(([id, group]) => (
         <div key={id}>
           <RefineSection title={group.name} />
-          <RefineList as="ul" label={`${group.name} teams`}>
+          <RefineList as="ul" label={t('ops2.panel.teamsLabel', { name: group.name })}>
             {group.teams.map((team) => (
               <li key={team.teamId} className="ops-entry">
                 <div className="rf-row ops-entry-head">
@@ -122,14 +127,14 @@ export function EntriesPanel({ canWrite, onTimetableChanged }: { canWrite: boole
                 <div className="ops-entry-actions">
                   {team.status === 0 ? (
                     <>
-                      <button type="button" className="rf-btn" disabled={!canWrite} onClick={() => setSheet({ team, next: 1 })} aria-label={`Withdraw ${team.teamName}`}>Withdraw</button>
-                      <button type="button" className="rf-btn" disabled={!canWrite} onClick={() => setSheet({ team, next: 2 })} aria-label={`Mark ${team.teamName} as a no-show`}>No-show</button>
-                      <button type="button" className="rf-btn" disabled={!canWrite} onClick={() => setSwapTeam(team)} aria-label={`Swap a rider for ${team.teamName}`}>Swap rider</button>
+                      <button type="button" className="rf-btn" disabled={!canWrite} onClick={() => setSheet({ team, next: 1 })} aria-label={t('ops2.panel.withdrawAria', { name: team.teamName })}>{t('ops2.panel.withdraw')}</button>
+                      <button type="button" className="rf-btn" disabled={!canWrite} onClick={() => setSheet({ team, next: 2 })} aria-label={t('ops2.panel.noShowAria', { name: team.teamName })}>{t('ops2.redraw.noShow')}</button>
+                      <button type="button" className="rf-btn" disabled={!canWrite} onClick={() => setSwapTeam(team)} aria-label={t('ops2.panel.swapAria', { name: team.teamName })}>{t('ops2.panel.swap')}</button>
                     </>
                   ) : team.canReinstate ? (
-                    <button type="button" className="rf-btn" disabled={!canWrite} onClick={() => setSheet({ team, next: 0 })} aria-label={`Reinstate ${team.teamName}`}>Reinstate</button>
+                    <button type="button" className="rf-btn" disabled={!canWrite} onClick={() => setSheet({ team, next: 0 })} aria-label={t('ops2.panel.reinstateAria', { name: team.teamName })}>{t('ops2.panel.reinstate')}</button>
                   ) : (
-                    <span className="rf-t2">A draw has been applied since, so this can’t be undone here. Add the team back from the timetable editor.</span>
+                    <span className="rf-t2">{t('ops2.panel.noUndo')}</span>
                   )}
                 </div>
               </li>
@@ -148,8 +153,8 @@ export function EntriesPanel({ canWrite, onTimetableChanged }: { canWrite: boole
             setSheet(null);
             const places = result.heatPlacesChanged;
             setMessage(sheet.next === 0
-              ? `${sheet.team.teamName} is back in the draw${places > 0 ? ` and was put back in ${places === 1 ? '1 heat' : `${places} heats`}` : ''}.`
-              : `${sheet.team.teamName} is out${places > 0 ? ` of ${places === 1 ? '1 unscored heat' : `${places} unscored heats`}. Preview a re-draw to tidy the rest` : ''}.`);
+              ? (places > 0 ? t('ops2.panel.backIn', { name: sheet.team.teamName, places: t('ops2.panel.heats', { count: places }) }) : t('ops2.panel.backInDraw', { name: sheet.team.teamName }))
+              : (places > 0 ? t('ops2.panel.outOf', { name: sheet.team.teamName, places: t('ops2.panel.unscoredHeats', { count: places }) }) : t('ops2.panel.isOut', { name: sheet.team.teamName })));
             onTimetableChanged();
             void load();
           }}
@@ -174,17 +179,18 @@ function StatusSheetView({ competitionId, sheet, onClose, onDone }: {
   onClose: () => void;
   onDone: (result: SetTeamEntryStatusResult) => void;
 }) {
+  const t = useT();
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { team, next } = sheet;
-  const title = next === 1 ? `Withdraw ${team.teamName}` : next === 2 ? `${team.teamName}: no-show` : `Reinstate ${team.teamName}`;
+  const title = next === 1 ? t('ops2.panel.withdrawAria', { name: team.teamName }) : next === 2 ? t('ops2.panel.noShowTitle', { name: team.teamName }) : t('ops2.panel.reinstateAria', { name: team.teamName });
   const needsReason = next === 1;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (busy) return;
-    if (needsReason && !reason.trim()) { setError('Say why the team is withdrawing.'); return; }
+    if (needsReason && !reason.trim()) { setError(t('ops2.panel.sayWhy')); return; }
     setBusy(true);
     setError(null);
     try {
@@ -196,8 +202,8 @@ function StatusSheetView({ competitionId, sheet, onClose, onDone }: {
     } catch (failure) {
       const status = statusOf(failure);
       setError(isOffline(failure)
-        ? OFFLINE_MESSAGE
-        : apiMessage(failure, status === 409 ? 'This can’t be undone any more.' : 'Couldn’t save the change. Check your signal and try again.'));
+        ? t('ops2.offline')
+        : apiMessage(failure, status === 409 ? t('ops2.panel.cantUndo') : t('ops2.panel.saveError')));
     } finally {
       setBusy(false);
     }
@@ -207,16 +213,16 @@ function StatusSheetView({ competitionId, sheet, onClose, onDone }: {
     <RefineSheet title={title} onClose={onClose}>
       <form className="ops-form" onSubmit={(event) => void submit(event)}>
         {next === 0
-          ? <RefineNote>The team goes back into the heats it left, if they haven’t been scored or re-drawn since.</RefineNote>
-          : <RefineNote>Removes the team from unscored heats. Scored or started heats keep the team and its points.</RefineNote>}
-        <label className="rf-fld">{next === 0 ? 'Note (optional)' : next === 2 ? 'Reason (optional)' : 'Reason'}
+          ? <RefineNote>{t('ops2.panel.reinstateNote')}</RefineNote>
+          : <RefineNote>{t('ops2.panel.removesNote')}</RefineNote>}
+        <label className="rf-fld">{next === 0 ? t('ops2.pd.noteOptional') : next === 2 ? t('ops2.panel.reasonOptional') : t('ops2.panel.reasonLabel')}
           <textarea className="ops-note-input" value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} />
         </label>
-        <span className="rf-t2">Visible to organisers only.</span>
+        <span className="rf-t2">{t('ops2.panel.orgOnly')}</span>
         {error && <Notice>{error}</Notice>}
         <div className="rf-actions">
-          <button type="button" className="rf-btn" onClick={onClose}>Cancel</button>
-          <button type="submit" className="rf-btn rf-btn-primary rf-grow" disabled={busy}>{busy ? 'Saving…' : next === 0 ? 'Reinstate team' : next === 1 ? 'Withdraw team' : 'Mark as no-show'}</button>
+          <button type="button" className="rf-btn" onClick={onClose}>{t('common.cancel')}</button>
+          <button type="submit" className="rf-btn rf-btn-primary rf-grow" disabled={busy}>{busy ? t('common.saving') : next === 0 ? t('ops2.panel.reinstateTeam') : next === 1 ? t('ops2.panel.withdrawTeam') : t('ops2.panel.markNoShow')}</button>
         </div>
       </form>
     </RefineSheet>

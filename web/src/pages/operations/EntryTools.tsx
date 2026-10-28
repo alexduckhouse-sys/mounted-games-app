@@ -1,5 +1,7 @@
+import { useT } from '../../i18n/LanguageContext';
 import { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
+import { tr } from '../../i18n/translate';
 import { Notice } from '../../components/Notice';
 import { apiErrorMessage } from '../../lib/apiError';
 import { downloadCsv, safeFilename } from '../../lib/csv';
@@ -19,13 +21,13 @@ import { clubLabel } from '../../lib/clubName';
 type Tool = 'bacs' | 'remind' | 'clubs' | 'arrivals' | 'refunds' | 'treasurer' | 'share';
 
 const TOOLS: Array<{ tool: Tool; title: string; hint: string }> = [
-  { tool: 'bacs', title: 'Match a bank statement', hint: 'Upload a CSV and tick the payments that match' },
-  { tool: 'remind', title: 'Remind unpaid', hint: 'Email people who still owe an entry fee' },
-  { tool: 'clubs', title: 'Club invoices', hint: 'One total per club, and mark a whole club paid' },
-  { tool: 'arrivals', title: 'Arrival list', hint: 'Who arrives when, with vehicles' },
-  { tool: 'refunds', title: 'Refunds and credits', hint: 'What has been kept, refunded or carried over' },
-  { tool: 'treasurer', title: 'Treasurer export', hint: 'Entries and shop orders in one CSV' },
-  { tool: 'share', title: 'Share entries summary', hint: 'Counts for a group chat, no names' },
+  { tool: 'bacs', get title() { return tr('ops2.tools.bacs'); }, get hint() { return tr('ops2.hint.bacs'); } },
+  { tool: 'remind', get title() { return tr('ops2.tools.remind'); }, get hint() { return tr('ops2.hint.remind'); } },
+  { tool: 'clubs', get title() { return tr('ops2.tools.clubs'); }, get hint() { return tr('ops2.hint.clubs'); } },
+  { tool: 'arrivals', get title() { return tr('ops2.tools.arrivals'); }, get hint() { return tr('ops2.hint.arrivals'); } },
+  { tool: 'refunds', get title() { return tr('ops2.tools.refunds'); }, get hint() { return tr('ops2.hint.refunds'); } },
+  { tool: 'treasurer', get title() { return tr('ops2.tools.treasurer'); }, get hint() { return tr('ops2.hint.treasurer'); } },
+  { tool: 'share', get title() { return tr('ops2.tools.share'); }, get hint() { return tr('ops2.hint.share'); } },
 ];
 
 interface Props {
@@ -37,20 +39,21 @@ interface Props {
 
 /** The organiser's entry tools: one row that opens a menu, then a focused sheet for each job. */
 export function EntryTools({ competition, signups, capacity, onChanged }: Props) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [tool, setTool] = useState<Tool | null>(null);
   const close = () => setTool(null);
   const shared = { competition, signups, onChanged, onClose: close };
   return (
     <>
-      <button type="button" className="rf-btn" aria-haspopup="dialog" onClick={() => setOpen(true)}>Entry tools</button>
+      <button type="button" className="rf-btn" aria-haspopup="dialog" onClick={() => setOpen(true)}>{t('ops2.tools.entryTools')}</button>
       {open && tool === null && (
-        <RefineSheet title="Entry tools" onClose={() => setOpen(false)}>
+        <RefineSheet title={t('ops2.tools.entryTools')} onClose={() => setOpen(false)}>
           <div className="et-sheet">
-            <RefineList as="div" label="Entry tools">
-              {TOOLS.map((t) => (
-                <button key={t.tool} type="button" className="rf-row et-tool" onClick={() => setTool(t.tool)}>
-                  <span className="rf-grow"><span className="rf-t1">{t.title}</span><span className="rf-t2">{t.hint}</span></span>
+            <RefineList as="div" label={t('ops2.tools.entryTools')}>
+              {TOOLS.map((item) => (
+                <button key={item.tool} type="button" className="rf-row et-tool" onClick={() => setTool(item.tool)}>
+                  <span className="rf-grow"><span className="rf-t1">{item.title}</span><span className="rf-t2">{item.hint}</span></span>
                   <ChevronRight className="h-4 w-4" aria-hidden="true" />
                 </button>
               ))}
@@ -72,83 +75,86 @@ export function EntryTools({ competition, signups, capacity, onChanged }: Props)
 type WindowFilter = 'all' | 'fridayEvening' | 'saturdayMorning' | 'other';
 
 function ArrivalListSheet({ competition, signups, onClose }: { competition: CompetitionDetail; signups: SectionSignup[]; onClose: () => void }) {
+  const t = useT();
   const groups = groupArrivalManifest(signups);
   const [filter, setFilter] = useState<WindowFilter>('all');
   const shown = filter === 'all' ? [...groups.fridayEvening, ...groups.saturdayMorning, ...groups.other] : groups[filter];
   const chips: Array<{ value: WindowFilter; label: string; n: number }> = [
-    { value: 'all', label: 'All', n: groups.fridayEvening.length + groups.saturdayMorning.length + groups.other.length },
-    { value: 'fridayEvening', label: 'Friday evening', n: groups.fridayEvening.length },
-    { value: 'saturdayMorning', label: 'Saturday morning', n: groups.saturdayMorning.length },
-    { value: 'other', label: 'Other', n: groups.other.length },
+    { value: 'all', label: t('ops2.entries.f.all'), n: groups.fridayEvening.length + groups.saturdayMorning.length + groups.other.length },
+    { value: 'fridayEvening', label: t('ops2.entries.arr.fri'), n: groups.fridayEvening.length },
+    { value: 'saturdayMorning', label: t('ops2.entries.arr.sat'), n: groups.saturdayMorning.length },
+    { value: 'other', label: t('ops2.entries.arr.other'), n: groups.other.length },
   ];
   return (
-    <RefineSheet title="Arrival list" onClose={onClose}>
+    <RefineSheet title={t('ops2.tools.arrivals')} onClose={onClose}>
       <div className="et-sheet">
-        <div className="ops-chips" role="group" aria-label="Arrival time">
+        <div className="ops-chips" role="group" aria-label={t('ops2.tools.arrivalTime')}>
           {chips.map((c) => (
             <button key={c.value} type="button" className="rf-btn et-chip" aria-pressed={filter === c.value} onClick={() => setFilter(c.value)}>{c.label} · {c.n}</button>
           ))}
         </div>
-        {shown.length === 0 ? <p className="rf-note">Nobody has booked stables or given an arrival time or vehicle yet.</p> : (
-          <RefineList as="div" label="Arrivals">
+        {shown.length === 0 ? <p className="rf-note">{t('ops2.tools.nobodyBooked')}</p> : (
+          <RefineList as="div" label={t('ops2.tools.arrivals2')}>
             {shown.map((s) => (
               <div key={s.id} className="rf-row">
                 <span className="rf-grow">
                   <span className="rf-t1">{s.fullName}</span>
                   <span className="rf-t2">{[clubLabel(s.stablingClubOrTeam) || clubLabel(s.ponyClubName) || clubLabel(s.teamName), displaySectionName(s.sectionName)].filter(Boolean).join(' · ')}</span>
-                  <span className="rf-t2">{arrivalWindowLabel(s.arrivalWindow)} · {s.vehicleRegistration?.trim() || 'No vehicle given'} · {s.stablesCount ?? 0} {(s.stablesCount ?? 0) === 1 ? 'stable' : 'stables'}</span>
+                  <span className="rf-t2">{arrivalWindowLabel(s.arrivalWindow)} · {s.vehicleRegistration?.trim() || t('ops2.tools.noVehicle')} · {tr('ops2.money.n.stable', { count: s.stablesCount ?? 0 })}</span>
                 </span>
-                <span className={`rf-st ${s.status === 1 ? 'rf-ok' : 'rf-warn'}`}>{s.status === 1 ? paidWord(competition.isDemo) : 'Pending payment'}</span>
+                <span className={`rf-st ${s.status === 1 ? 'rf-ok' : 'rf-warn'}`}>{s.status === 1 ? paidWord(competition.isDemo) : t('ops2.entries.pendingPayment')}</span>
               </div>
             ))}
           </RefineList>
         )}
         <div className="et-actions">
           <button type="button" className="rf-btn" disabled={shown.length === 0}
-            onClick={() => downloadCsv(`${safeFilename(competition.name)}-arrivals.csv`, arrivalManifestCsv(shown))}>Download CSV</button>
+            onClick={() => downloadCsv(`${safeFilename(competition.name)}-arrivals.csv`, arrivalManifestCsv(shown))}>{t('ops2.tools.downloadCsv')}</button>
         </div>
-        <p className="rf-note">The CSV has vehicle registrations. Keep it with the gate team.</p>
+        <p className="rf-note">{t('ops2.tools.csvNote')}</p>
       </div>
     </RefineSheet>
   );
 }
 
 function RefundsSheet({ signups, onClose }: { signups: SectionSignup[]; onClose: () => void }) {
+  const t = useT();
   const ledger = computeFeeDispositionLedger(signups);
   const totals: Array<[string, number]> = [
-    ['Refunded', ledger.totalRefundedMinor],
-    ['Refunds still to pay', ledger.refundsPendingMinor],
-    ['Fees kept', ledger.totalRetainedMinor],
-    ['Credit for next event', ledger.creditsRolledOverMinor],
+    [t('ops2.entries.fee.refunded'), ledger.totalRefundedMinor],
+    [t('ops2.tools.stillToPay'), ledger.refundsPendingMinor],
+    [t('ops2.tools.feesKept'), ledger.totalRetainedMinor],
+    [t('ops2.entries.fee.credit'), ledger.creditsRolledOverMinor],
   ];
   return (
-    <RefineSheet title="Refunds and credits" onClose={onClose}>
+    <RefineSheet title={t('ops2.tools.refunds')} onClose={onClose}>
       <div className="et-sheet">
-        <RefineList as="div" label="Totals">
+        <RefineList as="div" label={t('ops2.tools.totals')}>
           {totals.map(([label, minor]) => (
             <div key={label} className="rf-row"><span className="rf-grow rf-t1">{label}</span><span className="rf-t1">{feeText(minor)}</span></div>
           ))}
         </RefineList>
-        {ledger.rows.length === 0 ? <p className="rf-note">No withdrawn or refunded entries yet.</p> : (
-          <RefineList as="div" label="Withdrawn and refunded entries">
+        {ledger.rows.length === 0 ? <p className="rf-note">{t('ops2.tools.noRefunds')}</p> : (
+          <RefineList as="div" label={t('ops2.tools.withdrawnRefunded')}>
             {ledger.rows.map((s) => (
               <div key={s.id} className="rf-row">
                 <span className="rf-grow">
                   <span className="rf-t1">{s.fullName}</span>
-                  <span className="rf-t2">{displaySectionName(s.sectionName)} · fee {feeText(s.amountMinor)}{s.dispositionNote ? ` · ${s.dispositionNote}` : ''}</span>
+                  <span className="rf-t2">{displaySectionName(s.sectionName)} · {t('ops2.tools.fee', { fee: feeText(s.amountMinor) })}{s.dispositionNote ? ` · ${s.dispositionNote}` : ''}</span>
                 </span>
                 <span className="rf-st rf-mut">{dispositionLabel(s.feeDisposition)}</span>
               </div>
             ))}
           </RefineList>
         )}
-        <p className="rf-note">Record what happens to a fee from the withdrawn entry itself, under Withdrawn.</p>
+        <p className="rf-note">{t('ops2.tools.recordNote')}</p>
       </div>
     </RefineSheet>
   );
 }
 
 function TreasurerSheet({ competition, signups, onClose }: { competition: CompetitionDetail; signups: SectionSignup[]; onClose: () => void }) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function download() {
@@ -157,16 +163,16 @@ function TreasurerSheet({ competition, signups, onClose }: { competition: Compet
       const orders = await fetchShopOrders(competition.id);
       const csv = treasurerCsv({ competitionId: competition.id, competitionName: competition.name, signups, orders, teams: competition.teams });
       downloadCsv(`${safeFilename(competition.name)}-treasurer.csv`, csv);
-    } catch (caught) { setError(apiErrorMessage(caught, 'Couldn’t load the shop orders, so the export would be incomplete. Check your signal and try again.')); }
+    } catch (caught) { setError(apiErrorMessage(caught, t('ops2.tools.treasurerError'))); }
     finally { setBusy(false); }
   }
   return (
-    <RefineSheet title="Treasurer export" onClose={onClose}>
+    <RefineSheet title={t('ops2.tools.treasurer')} onClose={onClose}>
       <div className="et-sheet">
         {error && <Notice>{error}</Notice>}
-        <p className="rf-note">One CSV with every entry and shop order: reference, amount, stables, hook-ups, payment status and refunds. It has names, so share it only with whoever keeps the accounts.</p>
+        <p className="rf-note">{t('ops2.tools.treasurerNote')}</p>
         <div className="et-actions">
-          <button type="button" className="rf-btn rf-btn-primary" disabled={busy} onClick={() => void download()}>Download CSV</button>
+          <button type="button" className="rf-btn rf-btn-primary" disabled={busy} onClick={() => void download()}>{t('ops2.tools.downloadCsv')}</button>
         </div>
       </div>
     </RefineSheet>
@@ -174,24 +180,25 @@ function TreasurerSheet({ competition, signups, onClose }: { competition: Compet
 }
 
 function ShareSheet({ competition, signups, capacity, onClose }: { competition: CompetitionDetail; signups: SectionSignup[]; capacity: CompetitionEntrySettings | null; onClose: () => void }) {
+  const t = useT();
   const text = entriesSummaryText(competition.name, signups, capacity);
   const [note, setNote] = useState<string | null>(null);
   const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
   async function copy() {
-    try { await navigator.clipboard.writeText(text); setNote('Copied.'); } catch { setNote('Couldn’t copy. Select the text and copy it.'); }
+    try { await navigator.clipboard.writeText(text); setNote(t('ops2.tools.copied')); } catch { setNote(t('ops2.tools.copyFailed')); }
   }
   async function share() {
     try { await navigator.share({ text }); } catch { /* the sheet was dismissed */ }
   }
   return (
-    <RefineSheet title="Share entries summary" onClose={onClose}>
+    <RefineSheet title={t('ops2.tools.share')} onClose={onClose}>
       <div className="et-sheet">
-        <pre className="et-preview" aria-label="Summary text">{text}</pre>
+        <pre className="et-preview" aria-label={t('ops2.tools.summaryText')}>{text}</pre>
         {note && <p className="rf-note" role="status">{note}</p>}
         <div className="et-actions">
-          {canShare && <button type="button" className="rf-btn" onClick={() => void share()}>Share</button>}
-          <button type="button" className="rf-btn" onClick={() => void copy()}>Copy text</button>
-          <a className="rf-btn et-link" href={whatsAppUrl(text)} target="_blank" rel="noopener noreferrer">Share on WhatsApp</a>
+          {canShare && <button type="button" className="rf-btn" onClick={() => void share()}>{t('ops2.sponsors.share')}</button>}
+          <button type="button" className="rf-btn" onClick={() => void copy()}>{t('ops2.tools.copyText')}</button>
+          <a className="rf-btn et-link" href={whatsAppUrl(text)} target="_blank" rel="noopener noreferrer">{t('ops2.money.whatsapp')}</a>
         </div>
       </div>
     </RefineSheet>

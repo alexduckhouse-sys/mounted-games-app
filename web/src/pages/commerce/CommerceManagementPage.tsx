@@ -1,5 +1,7 @@
+import { useT } from '../../i18n/LanguageContext';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api';
+import { tr } from '../../i18n/translate';
 import { useAuth } from '../../auth/AuthContext';
 import { CardDropdownRow } from '../../components/CardDropdownRow';
 import { usePageHeader } from '../../components/CompactPageBarContext';
@@ -18,21 +20,21 @@ type ManagementView = 'items' | 'orders' | 'payments';
 
 /** What the organiser sees for an order: whether the money has arrived. */
 const ORDER_STATUS: Record<CommerceOrderStatus, { text: string; tone: ChipTone }> = {
-  0: { text: 'Not paid', tone: 'warn' },
-  1: { text: 'Payment due', tone: 'warn' },
-  2: { text: 'Paid', tone: 'good' },
-  3: { text: 'Declined', tone: 'bad' },
-  4: { text: 'Cancelled', tone: 'grey' },
-  5: { text: 'Refunded', tone: 'grey' },
+  0: { get text() { return tr('ops3.shop.status0'); }, tone: 'warn' },
+  1: { get text() { return tr('ops3.shop.status1'); }, tone: 'warn' },
+  2: { get text() { return tr('ops3.shop.status2'); }, tone: 'good' },
+  3: { get text() { return tr('ops3.shop.status3'); }, tone: 'bad' },
+  4: { get text() { return tr('ops3.shop.status4'); }, tone: 'grey' },
+  5: { get text() { return tr('ops3.shop.status5'); }, tone: 'grey' },
 };
 
 const PAY_OPTIONS = [
-  { value: 'manual', label: 'Pay the organiser' },
-  { value: 'demo', label: 'Demo (no money taken)' },
+  { value: 'manual', get label() { return tr('ops3.shop.payOrganiser'); } },
+  { value: 'demo', get label() { return tr('ops3.shop.demoNoMoney'); } },
 ];
 
-const stockText = (listing: CompetitionListing) => (listing.item.stockQuantity == null ? 'Unlimited' : `${listing.item.stockQuantity} available`);
-const sellerText = (listing: CompetitionListing) => listing.sellerName || 'A seller';
+const stockText = (listing: CompetitionListing) => (listing.item.stockQuantity == null ? tr('ops3.shop.unlimited') : tr('ops3.shop.available', { count: listing.item.stockQuantity }));
+const sellerText = (listing: CompetitionListing) => listing.sellerName || tr('ops3.shop.aSeller');
 
 export function CommerceManagementPage() {
   usePageWidth('narrow');
@@ -42,6 +44,7 @@ export function CommerceManagementPage() {
 }
 
 function CommerceManagementContent() {
+  const t = useT();
   const { competition } = useCompetition();
   const { canOrganise } = useAuth();
   const [listings, setListings] = useState<CompetitionListing[] | null>(null);
@@ -51,7 +54,7 @@ function CommerceManagementContent() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [declining, setDeclining] = useState<CompetitionListing | null>(null);
-  usePageHeader({ title: 'Event shop', subtitle: competition.name, plain: true, backTo: `/competitions/${competition.id}/details`, backLabel: 'Back to details' });
+  usePageHeader({ title: t('ops2.sponsors.eventShop'), subtitle: competition.name, plain: true, backTo: `/competitions/${competition.id}/details`, backLabel: t('ops3.shop.backDetails') });
 
   const load = useCallback(() => {
     if (!canOrganise(competition)) return Promise.resolve();
@@ -67,9 +70,9 @@ function CommerceManagementContent() {
         setSettings(settingsResponse.data);
       })
       .catch((requestError: unknown) => {
-        setError(errorMessage(requestError, 'Couldn’t load the shop. Check your signal and try again.'));
+        setError(errorMessage(requestError, t('ops3.shop.loadError')));
       });
-  }, [canOrganise, competition]);
+  }, [canOrganise, competition, t]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -91,10 +94,10 @@ function CommerceManagementContent() {
   }
 
   const approve = (listing: CompetitionListing) =>
-    run(() => api.put(`/commerce/listings/${listing.id}/approval`, { status: 1, reviewNote: null }), 'Couldn’t approve the item. Check your signal and try again.');
+    run(() => api.put(`/commerce/listings/${listing.id}/approval`, { status: 1, reviewNote: null }), t('ops3.shop.approveError'));
 
   const decline = (listing: CompetitionListing, reason: string) =>
-    run(() => api.put(`/commerce/listings/${listing.id}/approval`, { status: 2, reviewNote: reason.trim() || null }), 'Couldn’t decline the item. Check your signal and try again.');
+    run(() => api.put(`/commerce/listings/${listing.id}/approval`, { status: 2, reviewNote: reason.trim() || null }), t('ops3.shop.declineError'));
 
   async function setDemo(isDemo: boolean) {
     setBusy(true);
@@ -103,7 +106,7 @@ function CommerceManagementContent() {
       const { data } = await api.put<EventCommerceSettings>(`/commerce/competitions/${competition.id}/settings`, { isDemo });
       setSettings(data);
     } catch (requestError) {
-      setError(errorMessage(requestError, 'Couldn’t change how people pay. Check your signal and try again.'));
+      setError(errorMessage(requestError, t('ops3.shop.payError')));
     } finally {
       setBusy(false);
     }
@@ -111,33 +114,33 @@ function CommerceManagementContent() {
 
   async function manualAction(order: EventOrder, action: 'manual-payment' | 'manual-refund') {
     if (action === 'manual-refund' && !(await confirmDialog({
-      title: `Mark order ${order.id} refunded?`,
-      message: 'Only do this once the money has gone back to the buyer.',
-      confirmLabel: 'Mark refunded',
-      cancelLabel: 'Not yet',
+      title: t('ops3.shop.markRefundedQ', { id: order.id }),
+      message: t('ops3.shop.markRefundedMsg'),
+      confirmLabel: t('ops3.shop.markRefunded'),
+      cancelLabel: t('ops3.shop.notYet'),
       destructive: true,
     }))) return;
     await run(
       () => api.post(`/commerce/orders/${order.id}/${action}`, { confirmedExternally: true }),
-      action === 'manual-payment' ? 'Couldn’t mark the order paid. Check your signal and try again.' : 'Couldn’t mark the order refunded. Check your signal and try again.',
+      action === 'manual-payment' ? t('ops3.shop.markPaidError') : t('ops3.shop.markRefundedError'),
     );
   }
 
-  if (!canOrganise(competition)) return <div className="skin cs-page"><p className="sp-note">Only this competition’s organiser can manage its shop.</p></div>;
+  if (!canOrganise(competition)) return <div className="skin cs-page"><p className="sp-note">{t('ops3.shop.organiserOnly')}</p></div>;
 
   const waiting = listings?.filter((listing) => listing.status === 0) ?? [];
   const onSale = listings?.filter((listing) => listing.status === 1) ?? [];
   const notOnSale = listings?.filter((listing) => listing.status === 2 || listing.status === 3) ?? [];
   const tabs: { id: ManagementView; label: string }[] = [
-    { id: 'items', label: `Items${waiting.length > 0 ? ` (${waiting.length})` : ''}` },
-    { id: 'orders', label: 'Orders' },
-    { id: 'payments', label: 'Payments' },
+    { id: 'items', label: `${t('ops3.shop.items')}${waiting.length > 0 ? ` (${waiting.length})` : ''}` },
+    { id: 'orders', label: t('ops3.shop.orders') },
+    { id: 'payments', label: t('ops3.shop.payments') },
   ];
 
   return (
     <div className="skin cs-page">
-      <h1 className="sr-only">Event shop</h1>
-      <div className="sp-seg" role="tablist" aria-label="Event shop">
+      <h1 className="sr-only">{t('ops2.sponsors.eventShop')}</h1>
+      <div className="sp-seg" role="tablist" aria-label={t('ops2.sponsors.eventShop')}>
         {tabs.map((tab) => (
           <button key={tab.id} type="button" role="tab" aria-selected={view === tab.id} onClick={() => setView(tab.id)}>{tab.label}</button>
         ))}
@@ -145,9 +148,9 @@ function CommerceManagementContent() {
       {error && <div className="cs-gap"><LoadError message={error} onRetry={() => void load()} /></div>}
 
       {view === 'items' && (
-        listings == null ? <p role="status" className="sp-note">Loading items…</p> : (
+        listings == null ? <p role="status" className="sp-note">{t('ops3.shop.loadingItems')}</p> : (
           <>
-            <h2 className="sp-sec">To approve <small>{waiting.length}</small></h2>
+            <h2 className="sp-sec">{t('ops3.shop.toApprove')} <small>{waiting.length}</small></h2>
             <div className="sp-card">
               {waiting.map((listing) => (
                 <div key={listing.id} className="cs-row cs-stack">
@@ -156,33 +159,33 @@ function CommerceManagementContent() {
                     <span className="sp-price !text-[18px]">{pounds(listing.item.priceMinor)}</span>
                   </span>
                   <span className="cs-end">
-                    <button type="button" className="kit-redtext cs-redtext-s" disabled={busy} aria-label={`Decline ${listing.item.title}`} onClick={() => setDeclining(listing)}>Decline</button>
-                    <button type="button" className="kit-pill kit-pill-fill cs-pill-s" disabled={busy} aria-label={`Approve ${listing.item.title}`} onClick={() => { void approve(listing); }}>Approve</button>
+                    <button type="button" className="kit-redtext cs-redtext-s" disabled={busy} aria-label={t('ops3.shop.declineAria', { title: listing.item.title })} onClick={() => setDeclining(listing)}>{t('ops3.shop.decline')}</button>
+                    <button type="button" className="kit-pill kit-pill-fill cs-pill-s" disabled={busy} aria-label={t('ops3.shop.approveAria', { title: listing.item.title })} onClick={() => { void approve(listing); }}>{t('ops3.shop.approve')}</button>
                   </span>
                 </div>
               ))}
-              {waiting.length === 0 && <p className="cs-row sp-t2 m-0">Nothing waiting.</p>}
+              {waiting.length === 0 && <p className="cs-row sp-t2 m-0">{t('ops3.shop.nothingWaiting')}</p>}
             </div>
 
-            <h2 className="sp-sec">On sale <small>{onSale.length}</small></h2>
+            <h2 className="sp-sec">{t('ops3.shop.onSale')} <small>{onSale.length}</small></h2>
             <div className="sp-card">
               {onSale.map((listing) => (
                 <div key={listing.id} className="cs-row">
                   <span className="sp-grow"><span className="sp-t1">{listing.item.title}</span><span className="sp-t2">{sellerText(listing)} · {pounds(listing.item.priceMinor)}</span></span>
-                  <Chip tone="good">On sale</Chip>
+                  <Chip tone="good">{t('ops3.shop.onSale')}</Chip>
                 </div>
               ))}
-              {onSale.length === 0 && <p className="cs-row sp-t2 m-0">Nothing on sale yet.</p>}
+              {onSale.length === 0 && <p className="cs-row sp-t2 m-0">{t('ops3.shop.nothingOnSale')}</p>}
             </div>
 
             {notOnSale.length > 0 && (
               <>
-                <h2 className="sp-sec">Not on sale <small>{notOnSale.length}</small></h2>
+                <h2 className="sp-sec">{t('ops3.shop.notOnSale')} <small>{notOnSale.length}</small></h2>
                 <div className="sp-card">
                   {notOnSale.map((listing) => (
                     <div key={listing.id} className="cs-row">
                       <span className="sp-grow"><span className="sp-t1">{listing.item.title}</span><span className="sp-t2">{sellerText(listing)} · {pounds(listing.item.priceMinor)}</span></span>
-                      <Chip tone={listing.status === 2 ? 'bad' : 'grey'}>{listing.status === 2 ? 'Declined' : 'Withdrawn'}</Chip>
+                      <Chip tone={listing.status === 2 ? 'bad' : 'grey'}>{listing.status === 2 ? t('ops3.shop.status3') : t('ops2.protest.withdrawn')}</Chip>
                     </div>
                   ))}
                 </div>
@@ -193,9 +196,9 @@ function CommerceManagementContent() {
       )}
 
       {view === 'orders' && (
-        orders == null ? <p role="status" className="sp-note">Loading orders…</p> : (
+        orders == null ? <p role="status" className="sp-note">{t('ops3.shop.loadingOrders')}</p> : (
           <>
-            <h2 className="sp-sec">Orders <small>{orders.length}</small></h2>
+            <h2 className="sp-sec">{t('ops3.shop.orders')} <small>{orders.length}</small></h2>
             <div className="sp-card">
               {orders.map((order) => {
                 const status = ORDER_STATUS[order.status];
@@ -205,38 +208,38 @@ function CommerceManagementContent() {
                   <div key={order.id} className="cs-row cs-stack">
                     <span className="cs-line">
                       <span className="sp-grow">
-                        <span className="sp-t1">Order {order.id} · {order.buyerName || 'Buyer'}</span>
+                        <span className="sp-t1">{t('ops3.shop.orderBuyer', { id: order.id, buyer: order.buyerName || t('ops3.shop.buyer') })}</span>
                         <span className="sp-t2">{order.lines.map(orderLineText).join(', ')}</span>
                       </span>
                       <span className="cs-right">
                         <span className="sp-price !text-[18px]">{pounds(order.totalMinor)}</span>
-                        <Chip tone={status.tone}>{order.isTestOrder ? (order.status === 2 ? paidWord(true) : `Demo · ${status.text}`) : status.text}</Chip>
+                        <Chip tone={status.tone}>{order.isTestOrder ? (order.status === 2 ? paidWord(true) : t('ops3.shop.demoStatus', { status: status.text })) : status.text}</Chip>
                       </span>
                     </span>
                     {(canMarkPaid || canMarkRefunded) && (
                       <span className="cs-end">
-                        {canMarkPaid && <button type="button" className="kit-pill kit-pill-fill cs-pill-s" disabled={busy} aria-label={`Mark order ${order.id} paid`} onClick={() => { void manualAction(order, 'manual-payment'); }}>Mark paid</button>}
-                        {canMarkRefunded && <button type="button" className="kit-pill cs-pill-s" disabled={busy} aria-label={`Mark order ${order.id} refunded`} onClick={() => { void manualAction(order, 'manual-refund'); }}>Mark refunded</button>}
+                        {canMarkPaid && <button type="button" className="kit-pill kit-pill-fill cs-pill-s" disabled={busy} aria-label={t('ops3.shop.markPaidAria', { id: order.id })} onClick={() => { void manualAction(order, 'manual-payment'); }}>{t('ops2.entries.markPaid')}</button>}
+                        {canMarkRefunded && <button type="button" className="kit-pill cs-pill-s" disabled={busy} aria-label={t('ops3.shop.markRefundedAria', { id: order.id })} onClick={() => { void manualAction(order, 'manual-refund'); }}>{t('ops3.shop.markRefunded')}</button>}
                       </span>
                     )}
                   </div>
                 );
               })}
-              {orders.length === 0 && <p className="cs-row sp-t2 m-0">No orders yet.</p>}
+              {orders.length === 0 && <p className="cs-row sp-t2 m-0">{t('ops3.shop.noOrders')}</p>}
             </div>
           </>
         )
       )}
 
       {view === 'payments' && (
-        settings == null ? <p role="status" className="sp-note">Loading…</p> : (
+        settings == null ? <p role="status" className="sp-note">{t('common.loading')}</p> : (
           <>
-            <h2 className="sp-sec">Payments</h2>
+            <h2 className="sp-sec">{t('ops3.shop.payments')}</h2>
             <div className="sp-card">
-              <CardDropdownRow label="How people pay" value={settings.isDemo ? 'demo' : 'manual'} options={PAY_OPTIONS} disabled={busy || settings.isLocked}
+              <CardDropdownRow label={t('ops3.shop.howPay')} value={settings.isDemo ? 'demo' : 'manual'} options={PAY_OPTIONS} disabled={busy || settings.isLocked}
                 onChange={(value) => { if ((value === 'demo') !== settings.isDemo) void setDemo(value === 'demo'); }} />
             </div>
-            <p className="sp-note">{settings.isLocked ? 'Fixed once anyone has ordered.' : 'Demo takes no money. Use it to try the shop.'}</p>
+            <p className="sp-note">{settings.isLocked ? t('ops3.shop.fixed') : t('ops3.shop.demoNote')}</p>
           </>
         )
       )}
@@ -250,13 +253,14 @@ function CommerceManagementContent() {
 
 /** Asks why, so the seller sees a reason next to "Declined". */
 function DeclineSheet({ listing, onClose, onDecline }: { listing: CompetitionListing; onClose: () => void; onDecline: (reason: string) => Promise<string | null> }) {
+  const t = useT();
   const [reason, setReason] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
   return (
-    <FormSheet title="Decline this item?" description={`${listing.item.title} from ${sellerText(listing)}. They see your reason.`} saveLabel="Decline" onClose={onClose} error={problem}
+    <FormSheet title={t('ops3.shop.declineTitle')} description={t('ops3.shop.declineDesc', { title: listing.item.title, seller: sellerText(listing) })} saveLabel={t('ops3.shop.decline')} onClose={onClose} error={problem}
       onSave={async () => { const message = await onDecline(reason); setProblem(message); return message == null; }}>
-      <SheetField label="Reason">
-        <textarea rows={3} maxLength={500} placeholder="e.g. Only stabling and hook-ups at this event." value={reason} onChange={(event) => setReason(event.target.value)} />
+      <SheetField label={t('ops2.panel.reasonLabel')}>
+        <textarea rows={3} maxLength={500} placeholder={t('ops3.shop.declinePh')} value={reason} onChange={(event) => setReason(event.target.value)} />
       </SheetField>
     </FormSheet>
   );
