@@ -13,6 +13,7 @@
 .race-rules-handle { display: block; width: 36px; height: 5px; margin: 0 auto 5px; border-radius: 99px; background: rgb(var(--mg-control)); }
 .race-rules-head { display: flex; min-height: 44px; align-items: center; gap: 12px; }
 .race-rules-head h2 { flex: 1; color: rgb(var(--mg-heading)); font: 800 22px/1.05 var(--mg-font-display); }
+.race-rules-version { flex-shrink: 0; border-radius: 999px; background: rgb(var(--mg-subtle)); padding: 4px 10px; color: rgb(var(--mg-muted)); font: 700 13px/1.2 var(--mg-font); }
 .race-rules-acts { margin-top: 16px; }
 .race-rules-body { display: flex; flex-direction: column; gap: 14px; }
 .race-rules-body h3 { margin-bottom: 4px; color: rgb(var(--mg-heading)); font: 700 15px/1 var(--mg-font); text-transform: uppercase; letter-spacing: .04em; }

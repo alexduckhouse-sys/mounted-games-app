@@ -215,9 +215,11 @@ public record GeocodeResult(double? Latitude, double? Longitude, string? Source)
 
 public record BlockAuthorRequest(string? Reason = null);
 
+/// <param name="BaseName">The team race a Pairs or Individual version replaces, or the race a sponsored name is ridden as (<see cref="Services.RaceVariants"/>).</param>
+/// <param name="Format">Set on a Pairs or Individual version: the section format it is for.</param>
 public record RaceTemplateDto(
     int Id, string Name, string? Summary, string? Rules, string? Category,
-    string? DiagramJson, bool IsBuiltIn);
+    string? DiagramJson, bool IsBuiltIn, string? BaseName = null, SectionFormat? Format = null);
 public record UpsertRaceTemplateRequest(
     string Name, string? Summary, string? Rules, string? Category, string? DiagramJson);
 

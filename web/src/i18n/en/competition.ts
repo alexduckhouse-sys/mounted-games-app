@@ -222,4 +222,6 @@ export const competition = {
   'competition.rules.penalties': 'Rules & penalties',
   'competition.rules.loadingRace': 'Loading race rules…',
   'competition.rules.openPage': 'Open race rulebook page',
+  'competition.rules.pairsVersion': 'Pairs version',
+  'competition.rules.individualVersion': 'Individual version',
 } satisfies Record<string, Message>;

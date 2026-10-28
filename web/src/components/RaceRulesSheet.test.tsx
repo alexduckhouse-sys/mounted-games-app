@@ -100,6 +100,31 @@ describe('race guide provenance', () => {
   });
 });
 
+describe('pairs and individual versions', () => {
+  it('asks the API for the section’s version and caches it apart from the team race', async () => {
+    vi.mocked(api.get).mockImplementation((_url, config) =>
+      Promise.resolve({ data: template((config?.params as { format?: number } | undefined)?.format === 1 ? 'Fake Race (Pairs)' : 'Fake Race') }));
+    expect(await fetchRaceTemplateByName('Fake Race', null, 1)).toMatchObject({ name: 'Fake Race (Pairs)' });
+    expect(await fetchRaceTemplateByName('Fake Race', null, 2)).toMatchObject({ name: 'Fake Race' });
+    expect(api.get).toHaveBeenNthCalledWith(1, '/race-templates/by-name/Fake%20Race', { params: { format: 1 } });
+    expect(api.get).toHaveBeenNthCalledWith(2, '/race-templates/by-name/Fake%20Race');
+  });
+
+  it('falls back to the version in the race list when the detail endpoint fails', async () => {
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('offline detail')).mockResolvedValueOnce({
+      data: [template('Fake Race'), { ...template('Fake Race (Individual)'), baseName: 'Fake Race', format: 3 }],
+    });
+    expect(await fetchRaceTemplateByName('Fake Race', null, 3)).toMatchObject({ name: 'Fake Race (Individual)' });
+  });
+
+  it('shows the pairs version in the sheet for a pairs section', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: template('Fake Race (Pairs)') });
+    render(<MemoryRouter><RaceRulesSheet raceName="Fake Race" format={1} open onClose={vi.fn()} /></MemoryRouter>);
+    expect(await screen.findByRole('dialog', { name: 'Fake Race (Pairs)' })).toBeInTheDocument();
+    expect(api.get).toHaveBeenCalledWith('/race-templates/by-name/Fake%20Race', { params: { format: 1 } });
+  });
+});
+
 describe('race rules sheet loading and closing', () => {
   it('waits until opened with a name before fetching', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: template() });

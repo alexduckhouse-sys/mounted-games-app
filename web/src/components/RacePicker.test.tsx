@@ -5,8 +5,9 @@ import { useState } from 'react';
 import { loadRaceTemplates } from '../lib/raceTemplates';
 import { RaceListPicker, RaceSelect } from './RacePicker';
 
-vi.mock('../lib/raceTemplates', () => ({
-  loadRaceTemplates: vi.fn(() => Promise.resolve([{ name: 'Special Relay' }])),
+vi.mock('../lib/raceTemplates', async (original) => ({
+  ...(await original<typeof import('../lib/raceTemplates')>()),
+  loadRaceTemplates: vi.fn(() => Promise.resolve([{ name: 'Special Relay' }, { name: 'Special Relay (Pairs)', baseName: 'Special Relay', format: 1 }])),
 }));
 
 describe('RacePicker', () => {
@@ -25,6 +26,12 @@ describe('RacePicker', () => {
     render(<RaceSelect onSelect={onSelect} />);
     await userEvent.selectOptions(screen.getByLabelText('Select race'), 'Bending');
     expect(onSelect).toHaveBeenCalledWith('Bending');
+  });
+
+  it('offers library races but not the pairs and individual versions a section picks by itself', async () => {
+    render(<RaceSelect onSelect={vi.fn()} />);
+    expect(await screen.findByRole('option', { name: 'Special Relay' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Special Relay (Pairs)' })).not.toBeInTheDocument();
   });
 
   it('keeps a controlled draft aligned with search, custom clearing and external race changes', async () => {

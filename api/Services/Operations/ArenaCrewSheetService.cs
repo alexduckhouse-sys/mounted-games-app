@@ -20,6 +20,7 @@ public class ArenaCrewSheetService(AppDbContext db)
 
         var sessions = await db.Sessions
             .AsNoTracking()
+            .Include(s => s.Section)
             .Include(s => s.Heats).ThenInclude(h => h.Entries)
             .Include(s => s.Heats).ThenInclude(h => h.Races)
             .Where(s => s.CompetitionId == competitionId && !s.IsBreak && s.Kind == SessionKind.Race)
@@ -74,7 +75,12 @@ public class ArenaCrewSheetService(AppDbContext db)
                 .Select((name, idx) => (RaceId: (int?)null, Name: name, OrderIndex: idx + 1, IsComplete: false))
                 .ToList();
 
-        var distinctNames = raceList.Select(r => r.Name).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        // A Pairs or Individual session sets out its section's version of each race.
+        var format = session.Section?.Format;
+        var distinctNames = raceList
+            .SelectMany(r => new[] { r.Name, RaceVariants.Resolve(r.Name, format) })
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
         var lowered = distinctNames.Select(n => n.ToLowerInvariant()).ToList();
         var dbTemplates = lowered.Count == 0
             ? []
@@ -89,9 +95,11 @@ public class ArenaCrewSheetService(AppDbContext db)
         foreach (var item in raceList)
         {
             var canonical = BuiltInRaceMetadata.ResolveCanonicalName(item.Name);
-            var dbTemplate = dbTemplates.FirstOrDefault(t => string.Equals(t.Name, item.Name, StringComparison.OrdinalIgnoreCase))
+            var variant = RaceVariants.Resolve(item.Name, format);
+            var dbTemplate = dbTemplates.FirstOrDefault(t => string.Equals(t.Name, variant, StringComparison.OrdinalIgnoreCase))
+                ?? dbTemplates.FirstOrDefault(t => string.Equals(t.Name, item.Name, StringComparison.OrdinalIgnoreCase))
                 ?? dbTemplates.FirstOrDefault(t => string.Equals(t.Name, canonical, StringComparison.OrdinalIgnoreCase));
-            var seedDetail = BuiltInRaceMetadata.FromBuiltInSeed(item.Name);
+            var seedDetail = BuiltInRaceMetadata.FromBuiltInSeed(variant) ?? BuiltInRaceMetadata.FromBuiltInSeed(item.Name);
 
             var diagramJson = BuiltInRaceMetadata.NormaliseDiagramJson(dbTemplate?.DiagramJson ?? seedDetail?.DiagramJson)
                 ?? dbTemplate?.DiagramJson

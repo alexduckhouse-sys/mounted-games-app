@@ -25,7 +25,10 @@ const competition = {
 vi.mock('../competition/context', () => ({ useCompetition: () => ({ competition, reload }) }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ hasRole: (role: string) => role === 'Admin' }) }));
 vi.mock('../../api', () => ({ api: { get: vi.fn(), put: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
-vi.mock('../../lib/raceTemplates', () => ({ loadRaceTemplates: () => Promise.resolve([{ name: 'Flag' }, { name: 'Bending' }, { name: 'Sack' }]) }));
+vi.mock('../../lib/raceTemplates', async (original) => ({
+  ...(await original<typeof import('../../lib/raceTemplates')>()),
+  loadRaceTemplates: () => Promise.resolve([{ name: 'Flag' }, { name: 'Bending' }, { name: 'Sack' }, { name: 'Sack (Pairs)', baseName: 'Sack', format: 1 }]),
+}));
 vi.mock('../admin/creator/save', async (original) => ({ ...(await original<typeof import('../admin/creator/save')>()), saveCreator: vi.fn() }));
 
 function show() {

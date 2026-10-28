@@ -86,4 +86,15 @@ describe('arenaCrewSheet (#4)', () => {
     expect(sheet.nextRace?.raceName).toBe('Two Mug');
     expect(sheet.transition?.bringIn).toEqual(['2 × Mug per lane']);
   });
+
+  it('sets out the pairs version of each race for a pairs session', () => {
+    const heat: Heat = { id: 60, sessionId: 11, label: 'Heat 1', orderIndex: 1, entries: [], races: [{ id: 601, heatId: 60, name: 'Five Flag', orderIndex: 1, isComplete: false, results: [] }] };
+    const session: Session = { id: 11, competitionId: 1, competitionSectionId: 3, sectionName: 'Open Pairs', name: 'Pairs 1', arenaName: 'Arena 1', status: 1, orderIndex: 1, isBreak: false, kind: 0, lanesPerHeat: 5, heats: [heat] };
+    const templates: RaceTemplate[] = [
+      { id: 1, name: 'Five Flag', isBuiltIn: true, summary: 'Team', diagramJson: '[{"t":"item","kind":"flag","anchor":"start"},{"t":"item","kind":"flag","anchor":"beyond"},{"t":"item","kind":"flag","anchor":"beyond"}]' },
+      { id: 2, name: 'Five Flag (Pairs)', isBuiltIn: true, summary: 'Pairs', baseName: 'Five Flag', format: 1, diagramJson: '[{"t":"item","kind":"flag","anchor":"start"}]' },
+    ];
+    expect(buildOfflineArenaCrewPropSheet(1, session, heat, templates, 1).currentRace?.summary).toBe('Pairs');
+    expect(buildOfflineArenaCrewPropSheet(1, session, heat, templates).currentRace?.summary).toBe('Team');
+  });
 });

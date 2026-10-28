@@ -40,26 +40,30 @@ public class RaceTemplatesController : ControllerBase
     [HttpGet("by-name/{name}")]
     [AllowAnonymous]
     [ExcludeFromCodeCoverage]
-    public async Task<ActionResult<BuiltInRaceMetadata.RaceTemplateDetailDto>> GetByName(string name)
+    public async Task<ActionResult<BuiltInRaceMetadata.RaceTemplateDetailDto>> GetByName(string name, [FromQuery] SectionFormat? format = null)
     {
         var trimmed = (name ?? string.Empty).Trim();
         if (trimmed.Length == 0) return NotFound();
         var canonical = BuiltInRaceMetadata.ResolveCanonicalName(trimmed);
+        // A Pairs or Individual section reads its own version of the race when there is one.
+        var variant = RaceVariants.Resolve(trimmed, format);
         var lowered = trimmed.ToLower();
         var canonicalLowered = canonical.ToLower();
+        var variantLowered = variant.ToLower();
         var candidates = await _db.RaceTemplates
             .AsNoTracking()
-            .Where(r => r.Name.ToLower() == lowered || r.Name.ToLower() == canonicalLowered)
+            .Where(r => r.Name.ToLower() == lowered || r.Name.ToLower() == canonicalLowered || r.Name.ToLower() == variantLowered)
             .OrderBy(r => r.Id)
             .ToListAsync();
-        var row = candidates.FirstOrDefault(r => r.Name == trimmed)
+        var row = candidates.FirstOrDefault(r => string.Equals(r.Name, variant, StringComparison.OrdinalIgnoreCase) && variantLowered != lowered)
+            ?? candidates.FirstOrDefault(r => r.Name == trimmed)
             ?? candidates.FirstOrDefault(r => string.Equals(r.Name, trimmed, StringComparison.OrdinalIgnoreCase))
             ?? candidates.FirstOrDefault(r => string.Equals(r.Name, canonical, StringComparison.OrdinalIgnoreCase))
             ?? candidates.FirstOrDefault();
         if (row is not null)
             return BuiltInRaceMetadata.ToDetailDto(row);
 
-        var builtIn = BuiltInRaceMetadata.FromBuiltInSeed(trimmed);
+        var builtIn = BuiltInRaceMetadata.FromBuiltInSeed(variant) ?? BuiltInRaceMetadata.FromBuiltInSeed(trimmed);
         return builtIn is not null ? builtIn : NotFound();
     }
 
@@ -125,6 +129,9 @@ public class RaceTemplatesController : ControllerBase
         return NoContent();
     }
 
-    private static RaceTemplateDto ToDto(RaceTemplate r) =>
-        new(r.Id, r.Name, r.Summary, r.Rules, r.Category, r.DiagramJson, r.IsBuiltIn);
+    private static RaceTemplateDto ToDto(RaceTemplate r)
+    {
+        var (baseName, format) = RaceVariants.Describe(r.Name);
+        return new(r.Id, r.Name, r.Summary, r.Rules, r.Category, r.DiagramJson, r.IsBuiltIn, baseName, format);
+    }
 }

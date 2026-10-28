@@ -4,7 +4,7 @@ import {
   AREA_JUNIORS, AREA_PAIRS, AREA_SENIORS, defaultRaceList, SCOPE_LABEL,
   ZONE_JUNIORS, ZONE_PAIRS, ZONE_SENIORS, type RaceScope,
 } from '../lib/defaultRaces';
-import { loadRaceTemplates } from '../lib/raceTemplates';
+import { loadRaceTemplates, raceListNames } from '../lib/raceTemplates';
 
 const FALLBACK_RACES = Array.from(
   new Set([
@@ -69,7 +69,7 @@ function useOfficialRaceNames(providedTemplates?: string[]): string[] {
     loadRaceTemplates()
       .then((list) => {
         if (!cancelled && Array.isArray(list)) {
-          setLoaded(list.map((t) => t.name).filter(Boolean));
+          setLoaded(raceListNames(list).filter(Boolean));
         }
       })
       .catch(() => {});

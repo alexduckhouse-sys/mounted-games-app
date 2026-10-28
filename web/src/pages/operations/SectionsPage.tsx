@@ -11,7 +11,7 @@ import {
 } from '../../lib/creatorDraft';
 import { draftFromCompetition, teamCountsOf } from '../../lib/creatorLoad';
 import { LANE_ROTATION_LABELS, type LaneRotationModeValue } from '../../lib/lanes';
-import { loadRaceTemplates } from '../../lib/raceTemplates';
+import { loadRaceTemplates, raceListNames } from '../../lib/raceTemplates';
 import { SessionKind, TieBreakRule, type CompetitionDetail, type Session } from '../../types';
 import { useCompetition } from '../competition/context';
 import { SaveError, saveCreator } from '../admin/creator/save';
@@ -75,7 +75,7 @@ export function SectionsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    loadRaceTemplates().then((list) => { if (!cancelled) setTemplates(list.map((t) => t.name)); }).catch(() => {});
+    loadRaceTemplates().then((list) => { if (!cancelled) setTemplates(raceListNames(list)); }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
 

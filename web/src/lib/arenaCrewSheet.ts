@@ -8,8 +8,10 @@ import {
   type DiagramElement,
   type Heat,
   type RaceTemplate,
+  type SectionFormat,
   type Session,
 } from '../types';
+import { findRaceTemplate } from './raceTemplates';
 
 export type ArenaCrewZoneFilter = 'all' | 'start' | 'centre' | 'top';
 
@@ -190,6 +192,8 @@ export function buildOfflineArenaCrewPropSheet(
   session: Session | null | undefined,
   heat: Heat | null | undefined,
   templates: readonly RaceTemplate[],
+  /** The session's section format: a Pairs or Individual session sets out its own version of each race. */
+  format?: SectionFormat | null,
 ): ArenaCrewPropSheet {
   if (!session) {
     return {
@@ -205,11 +209,6 @@ export function buildOfflineArenaCrewPropSheet(
       transition: null,
       allHeatRaces: [],
     };
-  }
-
-  const templateMap = new Map<string, RaceTemplate>();
-  for (const t of templates) {
-    templateMap.set(t.name.trim().toLowerCase(), t);
   }
 
   const rawRaces =
@@ -229,7 +228,7 @@ export function buildOfflineArenaCrewPropSheet(
   const countsList: Map<string, number>[] = [];
 
   for (const r of rawRaces) {
-    const tpl = templateMap.get(r.name.trim().toLowerCase());
+    const tpl = findRaceTemplate(templates, r.name, format);
     const { card, propCounts } = buildArenaCrewRaceCardFromDiagram(r.name, r.orderIndex, tpl?.diagramJson, {
       raceId: r.raceId,
       summary: tpl?.summary ?? null,

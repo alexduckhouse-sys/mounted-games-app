@@ -222,4 +222,6 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.rules.penalties': 'Rheolau a chosbau',
   'competition.rules.loadingRace': 'Yn llwytho rheolau’r ras…',
   'competition.rules.openPage': 'Agor tudalen llyfr rheolau’r ras',
+  'competition.rules.pairsVersion': 'Fersiwn parau',
+  'competition.rules.individualVersion': 'Fersiwn unigol',
 };
