@@ -201,7 +201,7 @@ export function EntriesPage() {
 
   return (
     <RefinePage>
-      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel="Back to preparations" context={competition.name} title="Entries and dec forms" />
+      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel="Back to Before the day" context={competition.name} title="Entries and dec forms" />
       <div className="ops-cards ops-entries" aria-busy={busy}>
         {error && <Notice>{error}</Notice>}
         {passNotice && <Notice>{passNotice}</Notice>}

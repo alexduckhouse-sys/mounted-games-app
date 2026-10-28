@@ -138,7 +138,7 @@ export function EventDetailsPage() {
 
   return (
     <RefinePage>
-      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel="Back to preparations" context={competition.name} title="Event details" />
+      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel="Back to Before the day" context={competition.name} title="Event details" />
       <div className="ops-cards">
         {error && <Notice>{error}</Notice>}
         {saving > 0 && <p role="status" className="rf-note">Saving…</p>}
