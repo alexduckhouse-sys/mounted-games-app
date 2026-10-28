@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { PageLoadBoundary } from './components/PageLoadBoundary';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { LanguageProvider } from './i18n/LanguageContext';
@@ -22,6 +22,7 @@ import { CompetitionPage } from './pages/CompetitionPage';
 import { AfterDrawOnly, CompetitionHome } from './pages/competition/CompetitionHome';
 import { ScrollToTop } from './components/ScrollToTop';
 import { useT } from './i18n/LanguageContext';
+import { isLiteModeActive } from './lite/liteMode';
 
 const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })));
 const SignUpPage = lazy(() => import('./pages/SignUpPage').then((module) => ({ default: module.SignUpPage })));
@@ -103,7 +104,33 @@ function OpeningPage() {
   return <p role="status" className="p-4 text-sm">{t('shell.header.openingPage')}</p>;
 }
 
+/**
+ * The pages people tap between at an event. Their code is fetched once the app is idle, so a tab opens straight away
+ * instead of holding the old page while it downloads. Lite mode and Data Saver skip it to save data.
+ */
+function warmPublicPages() {
+  if (isLiteModeActive()) return;
+  void Promise.allSettled([
+    import('./pages/CompetitionsPage'),
+    import('./pages/FollowingPage'),
+    import('./pages/ProfilePage'),
+    import('./pages/competition/ScoringTab'),
+    import('./pages/competition/SessionPage'),
+    import('./pages/competition/TeamsTab'),
+    import('./pages/competition/CompetitionTeamPage'),
+    import('./pages/competition/DetailsTab'),
+    import('./pages/competition/FollowingTab'),
+    import('./pages/competition/ChatTab'),
+  ]);
+}
+
 export default function App() {
+  useEffect(() => {
+    const idle = window.requestIdleCallback ?? ((run: () => void) => window.setTimeout(run, 1500));
+    const cancel = window.cancelIdleCallback ?? window.clearTimeout;
+    const handle = idle(warmPublicPages);
+    return () => cancel(handle);
+  }, []);
   return (
     <LanguageProvider>
     <LiteModeProvider>
