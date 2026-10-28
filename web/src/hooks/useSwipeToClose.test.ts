@@ -30,7 +30,7 @@ describe('useSwipeToClose', () => {
     act(() => hook.result.current.handlers.onTouchStart(touch(100)));
     act(() => hook.result.current.handlers.onTouchMove(touch(150)));
     expect(hook.result.current.dragging).toBe(true);
-    expect(hook.result.current.style).toMatchObject({ transform: 'translateY(50px)', '--drag': '50px' });
+    expect(hook.result.current.style).toMatchObject({ transform: 'translateY(50px)', '--drag': '50px', '--fade': '0.875' });
     clock.mockReturnValue(1000);
     act(() => hook.result.current.handlers.onTouchEnd(touch(150)));
     expect(onClose).not.toHaveBeenCalled();

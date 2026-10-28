@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { MessageKey } from './en';
 import type { MessageValues } from './messages';
-import { DEFAULT_LANG, initialLang, localeFor, setActiveLang, storeLang, translate, type Lang, type Translate } from './translate';
+import { DEFAULT_LANG, initialLang, isLoaded, loadCatalogue, localeFor, setActiveLang, storeLang, translate, type Lang, type Translate } from './translate';
 
 interface LanguageContextValue {
   lang: Lang;
@@ -22,29 +22,39 @@ const LanguageContext = createContext<LanguageContextValue>({
 });
 
 export function LanguageProvider({ children, initial }: { children: ReactNode; initial?: Lang }) {
-  const [lang, setLangState] = useState<Lang>(() => {
-    const start = initial ?? initialLang();
-    setActiveLang(start);
-    return start;
-  });
+  const [lang, setLangState] = useState<Lang>(() => initial ?? initialLang());
+  // Bumped when a catalogue arrives, so the text re-renders in the chosen language.
+  const [arrived, setArrived] = useState(0);
+
+  // Until the chosen catalogue has loaded the app reads in English, never blank and never raw keys.
+  const shown: Lang = isLoaded(lang) ? lang : DEFAULT_LANG;
+  setActiveLang(shown);
 
   useEffect(() => {
-    setActiveLang(lang);
-    document.documentElement.lang = lang;
+    if (isLoaded(lang)) return;
+    let current = true;
+    void loadCatalogue(lang).then((ok) => {
+      if (ok && current) setArrived((count) => count + 1);
+    });
+    return () => { current = false; };
   }, [lang]);
+
+  useEffect(() => {
+    document.documentElement.lang = shown;
+  }, [shown]);
 
   const setLang = useCallback((next: Lang) => {
     storeLang(next);
-    setActiveLang(next);
     setLangState(next);
   }, []);
 
   const value = useMemo<LanguageContextValue>(() => ({
     lang,
-    locale: localeFor(lang),
+    locale: localeFor(shown),
     setLang,
-    t: (key, values) => translate(lang, key, values),
-  }), [lang, setLang]);
+    t: (key, values) => translate(shown, key, values),
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `arrived` marks a catalogue landing; `shown` already reflects it
+  }), [lang, shown, setLang, arrived]);
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }

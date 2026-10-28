@@ -14,7 +14,6 @@ export interface EntryDraft {
   stablesCount: number;
   stablingClubOrTeam: string;
   useInitialOnly: boolean;
-  noFilming: boolean;
   requestId: string;
 }
 
@@ -26,7 +25,7 @@ function isDraft(value: unknown): value is EntryDraft {
   if (!value || typeof value !== 'object') return false;
   const d = value as Record<string, unknown>;
   return ['fullName', 'club', 'teamName', 'stablingClubOrTeam'].every((key) => typeof d[key] === 'string' && d[key].length <= 2000)
-    && ['wholeTeam', 'lookingForGuestRiders', 'useInitialOnly', 'noFilming'].every((key) => typeof d[key] === 'boolean')
+    && ['wholeTeam', 'lookingForGuestRiders', 'useInitialOnly'].every((key) => typeof d[key] === 'boolean')
     && typeof d.requestId === 'string' && d.requestId.length > 0 && d.requestId.length <= 100
     && (d.teamsCount === '' || (Number.isInteger(d.teamsCount) && Number(d.teamsCount) >= 1 && Number(d.teamsCount) <= 20))
     && Number.isInteger(d.stablesCount) && Number(d.stablesCount) >= 0 && Number(d.stablesCount) <= 100;
@@ -56,10 +55,10 @@ export function saveEntryDraft(key: string, details: EntryDraft, now = Date.now(
   try {
     // Whitelist fields rather than serialising state, which can also contain consent.
     const { fullName, club, teamName, wholeTeam, lookingForGuestRiders,
-      teamsCount, stablesCount, stablingClubOrTeam, useInitialOnly, noFilming, requestId } = details;
+      teamsCount, stablesCount, stablingClubOrTeam, useInitialOnly, requestId } = details;
     localStorage.setItem(key, JSON.stringify({ savedAt: now, details: {
       fullName, club, teamName, wholeTeam, lookingForGuestRiders,
-      teamsCount, stablesCount, stablingClubOrTeam, useInitialOnly, noFilming, requestId,
+      teamsCount, stablesCount, stablingClubOrTeam, useInitialOnly, requestId,
     } }));
     return true;
   } catch { return false; }

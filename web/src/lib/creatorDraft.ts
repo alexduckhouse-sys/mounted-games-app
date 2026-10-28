@@ -1,4 +1,5 @@
 import { isRealisticEmail } from './emailCheck';
+import { tr } from '../i18n/translate.ts';
 import { sectionDisplayName } from './section';
 
 /** The competition creator's draft: what the person has typed, step by step, before anything is saved. */
@@ -285,43 +286,43 @@ export function validateStep(draft: CreatorDraft, step: StepId): Problems {
     const seen = new Set<string>();
     draft.arenas.forEach((a, i) => {
       const name = a.name.trim();
-      if (!name) found[`arena.${i}.name`] = 'Give the arena a name.';
-      else if (seen.has(name.toLowerCase())) found[`arena.${i}.name`] = 'Two arenas have the same name.';
+      if (!name) found[`arena.${i}.name`] = tr('admin.creator.problem.arenaName');
+      else if (seen.has(name.toLowerCase())) found[`arena.${i}.name`] = tr('admin.creator.problem.arenaSame');
       seen.add(name.toLowerCase());
     });
   } else if (step === 'about') {
-    if (!draft.name.trim()) found.name = 'Enter a name.';
+    if (!draft.name.trim()) found.name = tr('admin.creator.problem.name');
   } else if (step === 'when') {
-    if (!draft.startDate) found.startDate = 'Choose a start date.';
-    if (!draft.startTime) found.startTime = 'Choose a start time.';
-    if (draft.endDate && draft.startDate && draft.endDate < draft.startDate) found.endDate = 'The end can’t be before the start.';
-    if (draft.contactEmail.trim() && !isRealisticEmail(draft.contactEmail)) found.contactEmail = 'That email address doesn’t look right.';
+    if (!draft.startDate) found.startDate = tr('admin.creator.problem.startDate');
+    if (!draft.startTime) found.startTime = tr('admin.creator.problem.startTime');
+    if (draft.endDate && draft.startDate && draft.endDate < draft.startDate) found.endDate = tr('admin.creator.problem.endBefore');
+    if (draft.contactEmail.trim() && !isRealisticEmail(draft.contactEmail)) found.contactEmail = tr('admin.creator.problem.email');
   } else if (step === 'sections') {
     const seen = new Set<string>();
     draft.sections.forEach((s, i) => {
       const age = s.ageGroup.trim();
-      if (!age) { found[`section.${i}.ageGroup`] = 'Enter an age group.'; return; }
+      if (!age) { found[`section.${i}.ageGroup`] = tr('admin.creator.problem.ageGroup'); return; }
       const key = `${s.format}|${age.toLowerCase()}`;
-      if (seen.has(key)) found[`section.${i}.ageGroup`] = 'You already have this age group in this format.';
+      if (seen.has(key)) found[`section.${i}.ageGroup`] = tr('admin.creator.problem.ageGroupTaken');
       seen.add(key);
-      if (s.priceGbp.trim() && !(Number.isFinite(parseFloat(s.priceGbp)) && parseFloat(s.priceGbp) >= 0)) found[`section.${i}.price`] = 'Enter a price, or leave it empty for free.';
-      if (s.maxParticipants.trim() && !(wholeNumber(s.maxParticipants) !== null)) found[`section.${i}.max`] = 'Enter a whole number, or leave it empty for no limit.';
+      if (s.priceGbp.trim() && !(Number.isFinite(parseFloat(s.priceGbp)) && parseFloat(s.priceGbp) >= 0)) found[`section.${i}.price`] = tr('admin.creator.problem.price');
+      if (s.maxParticipants.trim() && !(wholeNumber(s.maxParticipants) !== null)) found[`section.${i}.max`] = tr('admin.creator.problem.max');
     });
   } else if (step === 'structure') {
     draft.sections.forEach((s, i) => {
       const minutes = wholeNumber(s.minutesPerRace);
-      if (minutes === null || minutes < 1 || minutes > 180) found[`section.${i}.minutes`] = 'Minutes per heat must be from 1 to 180.';
+      if (minutes === null || minutes < 1 || minutes > 180) found[`section.${i}.minutes`] = tr('admin.creator.problem.minutes');
       const heat = wholeNumber(s.maxTeamsPerHeat);
-      if (heat === null || heat < 1 || heat > 20) found[`section.${i}.heat`] = 'Teams per heat must be from 1 to 20.';
-      if (s.finalistCount.trim() && parseFinalistCount(s.finalistCount) === null) found[`section.${i}.finalists`] = 'Teams in the final must be from 1 to 50.';
-      if (!s.arena.trim()) found[`section.${i}.arena`] = 'Give the arena a name.';
+      if (heat === null || heat < 1 || heat > 20) found[`section.${i}.heat`] = tr('admin.creator.problem.heat');
+      if (s.finalistCount.trim() && parseFinalistCount(s.finalistCount) === null) found[`section.${i}.finalists`] = tr('admin.creator.problem.finalists');
+      if (!s.arena.trim()) found[`section.${i}.arena`] = tr('admin.creator.problem.arenaName');
     });
   } else if (step === 'review') {
     draft.breaks.forEach((b, i) => {
       const minutes = wholeNumber(b.minutes);
-      if (!b.name.trim()) found[`break.${i}.name`] = 'Name this break.';
-      if (minutes === null || minutes < 1 || minutes > 1440) found[`break.${i}.minutes`] = 'Enter how many minutes it lasts.';
-      if (!b.date || !b.time) found[`break.${i}.time`] = 'Choose when it starts.';
+      if (!b.name.trim()) found[`break.${i}.name`] = tr('admin.creator.problem.breakName');
+      if (minutes === null || minutes < 1 || minutes > 1440) found[`break.${i}.minutes`] = tr('admin.creator.break.problemMinutes');
+      if (!b.date || !b.time) found[`break.${i}.time`] = tr('admin.creator.break.problemStart');
     });
   }
   return found;

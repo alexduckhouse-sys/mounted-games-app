@@ -5,7 +5,7 @@ import { RiderPrivacyFields } from './RiderPrivacyFields';
 describe('RiderPrivacyFields', () => {
   it('renders a single I agree consent tick box and reports changes', () => {
     const onChange = vi.fn();
-    render(<RiderPrivacyFields value={{ useInitialOnly: true, noFilming: true }} onChange={onChange} />);
+    render(<RiderPrivacyFields value={{ useInitialOnly: true }} onChange={onChange} />);
     const consent = screen.getByLabelText('I agree') as HTMLInputElement;
     expect(consent.checked).toBe(false);
     expect(screen.getAllByRole('checkbox')).toHaveLength(1);
@@ -15,7 +15,7 @@ describe('RiderPrivacyFields', () => {
   });
 
   it('reflects the agreed value it is given', () => {
-    render(<RiderPrivacyFields value={{ useInitialOnly: false, noFilming: false, agreed: true }} onChange={vi.fn()} />);
+    render(<RiderPrivacyFields value={{ useInitialOnly: false, agreed: true }} onChange={vi.fn()} />);
     expect((screen.getByLabelText('I agree') as HTMLInputElement).checked).toBe(true);
   });
 });

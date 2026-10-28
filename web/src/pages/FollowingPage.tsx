@@ -15,10 +15,11 @@ import { clubTeamCount, lastOut, nextEntry } from '../lib/followingProfiles';
 import { competitionDateText, isOnToday } from '../lib/competitionDates';
 import { arenaNames, nextHeats, summariseNext } from '../lib/following';
 import { readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } from '../offline/savedCopies';
-import { ordinal, shortDate } from './seasons/seasonModel';
+import { shortDate } from './seasons/seasonModel';
+import { localOrdinal } from '../lib/ordinalText';
 import type { TeamProfile, TeamProfileHistory } from './seasons/teamProfileTypes';
 import type { CompetitionDetail, CompetitionSummary } from '../types';
-import { useT } from '../i18n/LanguageContext';
+import { useLanguage, useT } from '../i18n/LanguageContext';
 import '../components/sitePages.css';
 import '../components/filterKit.css';
 
@@ -71,6 +72,7 @@ type SearchProps = {
 export function FollowingPage() {
   usePageWidth('wide');
   const t = useT();
+  const { locale } = useLanguage();
   const { favourites, setMany } = useFavourites();
   const followed = useFollowedProfiles();
   const details = useProfileDetails(followed.profiles);
@@ -111,9 +113,9 @@ export function FollowingPage() {
       const when = isOnToday(row.entry.startDate, row.entry.endDate, now) ? t('common.today') : competitionDateText(row.entry.startDate, row.entry.endDate);
       return <><b className={strong}>{when}</b> · {row.entry.competitionName}</>;
     }
-    if (row.last) return <>{t('teams.following.lastOut')} <b className={strong}>{ordinal(row.last.place)}</b> · {row.last.competitionName}, {shortDate(row.last.date, false)}</>;
+    if (row.last) return <>{t('teams.following.lastOut')} <b className={strong}>{localOrdinal(row.last.place)}</b> · {row.last.competitionName}, {shortDate(row.last.date, false, locale)}</>;
     const count = details.profiles ? clubTeamCount(row.profile.id, details.profiles) : null;
-    return count ? t('teams.following.clubTeams', { count }) : row.history?.profile.clubName ?? row.profile.clubName;
+    return count ? t('teams.following.clubTeams', { count }) : null;
   };
   const group = (list: Row[], label: string) => list.length > 0 && (
     <section aria-label={label}>
@@ -123,7 +125,7 @@ export function FollowingPage() {
           <li key={row.profile.id} className="sp-row !gap-1 !pr-1">
             <Link to={row.entry ? `/competitions/${row.entry.competitionId}/teams/${row.entry.teamId}` : `/team-profiles/${row.profile.id}`} className="sp-grow !text-[rgb(var(--mg-heading))] !no-underline">
               <span className="text-[21px] font-semibold leading-tight">{row.name}</span>
-              <span className="sp-t2">{subOf(row)}</span>
+              {subOf(row) && <span className="sp-t2">{subOf(row)}</span>}
             </Link>
             <button type="button" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[rgb(var(--mg-late-time))]" aria-pressed="true" aria-label={t('teams.unfollow', { name: row.name })} onClick={() => unfollow(row)}>
               <FollowStar on className="h-[22px] w-[22px]" />

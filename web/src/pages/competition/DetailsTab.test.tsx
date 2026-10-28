@@ -226,7 +226,7 @@ describe('DetailsTab', () => {
     viewer({ canOrganise: () => true, canManage: () => true });
     vi.mocked(api.get).mockImplementation(async (url) => (String(url).endsWith('/signups') ? { data: [] } : { data: [] }) as never);
     renderTab();
-    expect(await screen.findByRole('link', { name: 'Manage entries and equipment' })).toHaveAttribute('href', '/competitions/5/operations');
+    expect(await screen.findByRole('link', { name: 'Before the day' })).toHaveAttribute('href', '/competitions/5/operations');
     expect(screen.getByRole('link', { name: /Scorer QR codes/ })).toHaveAttribute('href', '#scorer-links');
     expect(screen.getByRole('link', { name: /Go live & stream/ })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Print venue poster' })).toBeInTheDocument();

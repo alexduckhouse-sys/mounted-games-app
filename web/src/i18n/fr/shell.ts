@@ -63,10 +63,10 @@ export const shell: AreaCatalogue<typeof en> = {
   'shell.ticker.watchLabel': 'Regarder la vidéo en direct',
   'shell.ticker.allUpdates': 'Toutes les actualités ({count})',
   'shell.ticker.now': 'En cours : {race}',
-  'shell.ticker.next': 'Prochain {time} : {race}',
+  'shell.ticker.next': 'À suivre ({time}) : {race}',
   'shell.ticker.heat': 'Manche {n}',
   'shell.ticker.race': 'Course {n}/{total}',
-  'shell.ticker.groupFinals': '{group} Finales',
+  'shell.ticker.groupFinals': 'Finales {group}',
   'shell.ticker.onTime': 'À l’heure',
   'shell.ticker.behind': 'Retard de {duration}',
   'shell.ticker.finished': 'Courses terminées',
@@ -105,7 +105,7 @@ export const shell: AreaCatalogue<typeof en> = {
   'shell.menu.ageGroup': 'Catégorie d’âge',
   'shell.menu.ageGroups': 'Catégories d’âge',
   'shell.menu.live': 'Direct',
-  'shell.menu.nextAt': 'Prochain {time}',
+  'shell.menu.nextAt': 'À suivre ({time})',
   'shell.menu.language': 'Langue',
 
   // Language picker
@@ -199,7 +199,7 @@ export const shell: AreaCatalogue<typeof en> = {
   'shell.confirmEmail.done': 'Merci, votre adresse e-mail est confirmée.',
   'shell.confirmEmail.toProfile': 'Aller à mon profil',
   'shell.confirmEmail.signInBody': 'Connectez-vous au compte auquel cet e-mail a été envoyé, et nous confirmerons l’adresse aussitôt.',
-  'shell.confirmEmail.signIn': 'Se connecter',
+  'shell.confirmEmail.signIn': 'Se connecter pour confirmer',
   'shell.confirmEmail.otherTitle': 'Un autre compte est connecté',
   'shell.confirmEmail.otherBody': 'Ce lien concerne un autre compte. Déconnectez-vous, puis connectez-vous au compte auquel l’e-mail a été envoyé.',
 
@@ -328,4 +328,5 @@ export const shell: AreaCatalogue<typeof en> = {
   'shell.weather.draft.rainPause': 'Nous faisons une pause à cause de la forte pluie. Merci d’attendre des nouvelles ici.',
   'shell.weather.draft.rainNoPause': 'De la forte pluie arrive vers {time}. Les courses continuent sauf avis contraire.',
   'shell.weather.draft.clear': 'Les courses reprennent. Le programme a été mis à jour, consultez-le pour votre prochaine manche.',
+  'shell.events.yearCount': { one: '{count} compétition', other: '{count} compétitions' },
 };

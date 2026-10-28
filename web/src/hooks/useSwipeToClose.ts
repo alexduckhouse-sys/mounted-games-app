@@ -22,12 +22,14 @@ export function useSwipeToClose<T extends HTMLElement>(onClose: () => void, enab
   const [dragY, setDragY] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [released, setReleased] = useState(false);
+  const [height, setHeight] = useState(400);
 
   function begin(y: number, target: EventTarget | null) {
     if (!enabled || released || (ref.current?.scrollTop ?? 0) > 0) return;
     // From 640px wide these are centred cards, not sheets, so there is nothing to pull down.
     if (typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 640px)').matches) return;
     if (target instanceof Element && target.closest('input, textarea, select, button, a, [data-no-swipe]')) return;
+    setHeight(ref.current?.getBoundingClientRect().height || 400);
     const now = performance.now();
     drag.current = { startY: y, startAt: now, lastY: y, lastAt: now };
   }
@@ -74,6 +76,7 @@ export function useSwipeToClose<T extends HTMLElement>(onClose: () => void, enab
     onPointerUp: (event: PointerEvent) => end(event.clientY),
     onPointerCancel: cancel,
   };
-  const style = dragY > 0 ? ({ transform: `translateY(${dragY}px)`, '--drag': `${dragY}px` } as CSSProperties) : undefined;
+  // `--fade` (1 down to 0) lets the dim behind the pop-up lighten as it is pulled away.
+  const style = dragY > 0 ? ({ transform: `translateY(${dragY}px)`, '--drag': `${dragY}px`, '--fade': Math.max(0, 1 - dragY / height).toFixed(3) } as CSSProperties) : undefined;
   return { ref, handlers, style, dragging };
 }

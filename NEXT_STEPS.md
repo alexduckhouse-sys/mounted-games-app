@@ -1,10 +1,40 @@
-# Next steps (27 October 2026)
+# Next steps (28 October 2026)
 
 The cross-chat to-do list, confirmed product specifications, code-verified bugs, and roadmap. Update or delete items as they land.
 
 **This file, `BUGS.md` and `COMPLETED_NEXT_STEPS.md` live in git on main.** Edit them on your feature branch (or a small docs PR), not in an uncommitted copy in another worktree. Move finished items to `COMPLETED_NEXT_STEPS.md` once their PR is merged.
 
-## Start here: end of 27 October — what's merged, what's waiting
+## 28 October: what's merged, what's in progress, what's waiting
+
+**Merged on 28 October (after the #244–#263 owner requests):**
+- #261 rounded corners kept on organiser lists and a few cards
+- #264–#273 audit fixes, one PR per area:
+  - #264 free and demo-paid entries form their team; stabling is shop-only (check it has merged before relying on it)
+  - #265 auth and admin hardening (lock/block bump `SessionVersion`, delete 409s, image data URLs)
+  - #266 scoring page and outbox (`CancelRace` guard, in-flight saves, `mg:score-sent`)
+  - #267 stream viewer cap, PWA auto-update, Resend pacing
+  - #268 money, email and seed data
+  - #269 UK-time and notification fixes
+  - #270 history-aware Back, rota and crew links, timetable after finish, unpaid entries listed
+  - #271 print pages, native `<dialog>` confirms, staff QR links minted on Print
+  - #272 safeguarding (roster access, initial-only rules, public results use locked forms)
+  - #273 standings `Place`/`Joint`, toplist keeps server order, live-update fixes
+- Decisions are in `docs/decisions.md` (2026-10-28: owner decisions from the audit fixes). The agent guides now describe the new behaviour.
+
+**In progress (batches):**
+- Translation gaps (cy/fr).
+- Copy and jargon pass: waiting on the owner to approve the wording table before anything changes on screen.
+- Non-visual accessibility.
+- Dead code and tests (dead exports and CSS, duplicate `web/tests/*.test.mjs` suites, flaky-clock tests).
+- Season-round unlink, so a section that is a season round can be deleted; and push re-assign (`PushController.Subscribe` returns 409 when another user holds the endpoint, deliberately; logout now unsubscribes).
+
+**Waiting on the owner:**
+- About 300 design and UI items to send to Claude Design. The ranking is kept locally in `docs/audits/claude/2026-10-28-ui-ux-ranking.md` and is not in git (public repo).
+- The legal contact email (placeholder until supplied).
+
+## Earlier: end of 27 October — what's merged, what's waiting
+
+*Status as of 27 October; several of these have since merged. Check `gh pr list` for the current state.*
 
 **Merged on 27 October:**
 - #198–#203, #205–#208, #210, #211 (the integration of #203–#209)
@@ -117,7 +147,7 @@ Run prod migrations with `NEON_ENV_FILE=<prod env> Jwt__Key=<32+ chars> Admin__K
 
 **Decisions taken in the walkthrough** (don't relitigate):
 - Admin **edit mode is removed** entirely; destructive actions use the red full-screen `ConfirmDialog`, never `window.confirm`.
-- No "Demo event" labels anywhere (only the user uses the site); demo events count in stats.
+- Demo events show a "Demo event" badge and notice (see `APP_DESIGN.md`); demo events count in stats.
 - `/events` is the one competition picker; Forget clears the saved competition; `/` jumps into a competition only when the user chose Remember.
 - A new competition is **entry-first**: until teams are drawn the public sees only the entry page and Details.
 - Competitions are created in a **stepped wizard** (structure, timing, HHF, hatbands and races up front, races skippable); the Format page is now **On the day**.

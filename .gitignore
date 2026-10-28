@@ -58,3 +58,7 @@ coverage/
 
 # Local UI handoff for the small-refinement batch
 SMALL_REFINEMENTS_HANDOFF.md
+
+# Audit reports stay local: the repo is public and they describe security findings in detail (owner, 28 Oct 2026).
+audit-reports/
+docs/audits/

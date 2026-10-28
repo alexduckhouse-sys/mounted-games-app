@@ -7,6 +7,7 @@ import { CompactPageBarProvider } from '../../components/CompactPageBarContext';
 import { competition, heat, race, result, session, standing, team } from '../../test/factories';
 import type { CompetitionDetail, DeclarationForm, LiveStream } from '../../types';
 import { CommentaryDeskPage } from './CommentaryDeskPage';
+import { LanguageProvider } from '../../i18n/LanguageContext';
 import { CompetitionContext } from './context';
 import { TvKioskPage } from './TvKioskPage';
 import { StreamControlStrip } from '../../components/stream/StreamControlStrip';
@@ -141,9 +142,10 @@ function makeComp(): CompetitionDetail {
   });
 }
 
-function renderWithCompetition(initialEntry: string, comp = makeComp()) {
+function renderWithCompetition(initialEntry: string, comp = makeComp(), lang: 'en' | 'cy' | 'fr' = 'en') {
   const reload = vi.fn();
   return render(
+    <LanguageProvider initial={lang}>
     <MemoryRouter initialEntries={[initialEntry]}>
       <CompactPageBarProvider>
         <CompetitionContext.Provider
@@ -165,7 +167,8 @@ function renderWithCompetition(initialEntry: string, comp = makeComp()) {
           </Routes>
         </CompetitionContext.Provider>
       </CompactPageBarProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
+    </LanguageProvider>,
   );
 }
 
@@ -220,7 +223,7 @@ describe('CommentaryDeskPage', () => {
     const overlays = await screen.findByRole('region', { name: 'Stream overlays' });
     expect(screen.queryByRole('region', { name: 'Live stream control strip' })).toBeNull();
     const tiles = within(within(overlays).getByRole('radiogroup', { name: 'On screen' })).getAllByRole('radio');
-    expect(tiles.map((tile) => tile.textContent)).toEqual(['Off', 'Toplist', 'Heat table', 'Podium', 'Race result', 'Up next', 'Race title', 'Sponsors']);
+    expect(tiles.map((tile) => tile.textContent)).toEqual(['Off', 'Toplist', 'Heat table', 'Podium', 'Race result', 'Up next', 'Favourites', 'Race title', 'Sponsors']);
     expect(tiles[0]).toHaveAttribute('aria-checked', 'true');
     await user.click(within(overlays).getByRole('radio', { name: 'Toplist' }));
     expect(saveOverlay.mock.calls.at(-1)![0]({ look: {}, sponsorMode: 0 })).toMatchObject({ look: { liveCard: 'toplist' } });
@@ -296,6 +299,17 @@ describe('CommentaryDeskPage lanes', () => {
 });
 
 describe('TvKioskPage', () => {
+  it('shows its controls and slide names in French and Welsh', async () => {
+    const fr = renderWithCompetition('/competitions/1/tv', makeComp(), 'fr');
+    expect(await screen.findByRole('button', { name: 'Suivre automatiquement la catégorie en direct' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Diapositive du tableau d’affichage TV' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Diapositive suivante' })).toBeInTheDocument();
+    fr.unmount();
+    renderWithCompetition('/competitions/1/tv', makeComp(), 'cy');
+    expect(await screen.findByRole('button', { name: 'Dilyn yr adran fyw yn awtomatig' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sleid nesaf' })).toBeInTheDocument();
+  });
+
   it('supports Current Heat Table slide, removes redundant Club columns, and offers Auto-follow live section, Full screen, Stream Controls & QR Access', async () => {
     const user = userEvent.setup();
     renderWithCompetition('/competitions/1/tv');
@@ -330,6 +344,17 @@ describe('TvKioskPage', () => {
     // Open QR Access Modal from TV Kiosk
     await user.click(screen.getByRole('button', { name: /QR Access/ }));
     expect(await screen.findByRole('dialog', { name: 'Share with QR codes' })).toBeInTheDocument();
+  });
+
+  it('lists the lane draw for the next race, rotated as the commentary desk shows it', async () => {
+    renderWithCompetition('/competitions/1/tv');
+    const draw = await screen.findByRole('region', { name: 'In the Ring and Next Heat Lane Draw' });
+    const first = within(draw).getAllByRole('list')[0];
+    const rows = within(first).getAllByRole('listitem');
+    // Same order as the commentary desk test above: race 2 moves everyone up one lane.
+    expect(rows.map((li) => within(li).getByText(/^Lane \d$/).textContent)).toEqual(['Lane 1', 'Lane 2', 'Lane 3']);
+    expect(within(rows[0]).getByText('East C')).toBeInTheDocument();
+    expect(within(rows[1]).getByText('North A')).toBeInTheDocument();
   });
 
   it('handles offline stream list and scorer client mode in StreamControlStrip', async () => {

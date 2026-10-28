@@ -1,3 +1,5 @@
+import { useT } from '../../i18n/LanguageContext';
+import { activeLocale } from '../../i18n/translate';
 import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { ArrowDown, ArrowUp, Minus, Pencil, Plus } from 'lucide-react';
 import { useSavedToast } from '../../components/SavedTick';
@@ -21,6 +23,7 @@ import { TimetableClashes } from './TimetableClashes';
 import { ShareTextButtons } from './ShareTextButtons';
 import { timetableShareText } from './shareText';
 import type { DrawPreview } from './types';
+import { isSessionLocked } from '../../lib/sessionLock';
 import './operations.css';
 
 const DEFAULT_MINUTES = 10;
@@ -29,9 +32,9 @@ const NO_COLOUR = '#8A93A0';
 const AT_START = 'start';
 
 const isRace = (s: Session) => !s.isBreak && (s.kind ?? SessionKind.Race) === SessionKind.Race;
-const hhmm = (d: Date) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-const lengthText = (minutes: number) => (minutes >= 60 ? `${Math.floor(minutes / 60)} h${minutes % 60 ? ` ${minutes % 60} min` : ''}` : `${minutes} min`);
-const dayText = (d: Date) => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+const ALL_ARENAS = 'All arenas';
+const hhmm = (d: Date) => d.toLocaleTimeString(activeLocale(), { hour: '2-digit', minute: '2-digit' });
+const dayText = (d: Date) => d.toLocaleDateString(activeLocale(), { weekday: 'short', day: 'numeric', month: 'short' });
 const addMinutes = (d: Date, minutes: number) => new Date(d.getTime() + minutes * 60_000);
 
 interface Item {
@@ -59,14 +62,18 @@ function GripIcon() {
 
 interface Drag { id: number; from: number; to: number; dy: number; height: number }
 
-/** Keeps its own time when the order changes: drawn or started, a final (its start is set by the organiser), or no start yet. */
+/** Keeps its own time when the order changes: started or scored, a final (its start is set by the organiser), or no start yet. */
 const stays = (item: Item) => item.locked || item.final || !item.start;
-/** Moves with the others when times are pushed: not drawn or started, and not a final that has no start of its own yet. */
+/** Moves with the others when times are pushed: not started or scored, and not a final that has no start of its own yet. */
 const shifts = (item: Item) => !!item.start && !item.locked && !(item.final && !item.session.scheduledStart);
 
 /** Timetable and draw: the day's running order for each arena, the hatbands, and the lane draw. Every change saves as it is made. */
 export function TimetablePage() {
   const { competition, reload } = useCompetition();
+  const t = useT();
+  const lengthText = (minutes: number) => (minutes >= 60
+    ? (minutes % 60 ? t('ops.tt.hm', { h: Math.floor(minutes / 60), m: minutes % 60 }) : t('ops.tt.h', { h: Math.floor(minutes / 60) }))
+    : t('ops.tt.min', { n: minutes }));
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -102,14 +109,14 @@ export function TimetablePage() {
       const heats = brk ? 0 : s.heats.length > 0 ? s.heats.length : heatSizes(teamsIn(s.competitionSectionId), s.lanesPerHeat ?? lanesFor(section?.format ?? 2)).length;
       const minutes = brk ? s.durationMinutes ?? 0 : section?.usesRaceFinals ? 3 * perHeat : s.heats.length > 0 || !s.durationMinutes ? heats * perHeat || row?.minutes || 0 : s.durationMinutes;
       const start = s.scheduledStart ? new Date(s.scheduledStart) : row && row.minutes > 0 ? row.start : null;
-      return { session: s, isBreak: brk, arena: s.arenaName?.trim() ?? '', start, minutes, heats, perHeat, locked: !brk && (s.heats.length > 0 || s.status !== 0), final: !brk && /\bfinals?\b/i.test(s.name) };
+      return { session: s, isBreak: brk, arena: s.arenaName?.trim() ?? '', start, minutes, heats, perHeat, locked: !brk && isSessionLocked(s), final: !brk && /\bfinals?\b/i.test(s.name) };
     });
   }, [competition]);
 
   const groups = useMemo(() => {
     const map = new Map<string, Item[]>();
     for (const item of items) {
-      const key = item.arena || 'All arenas';
+      const key = item.arena || ALL_ARENAS;
       map.set(key, [...(map.get(key) ?? []), item]);
     }
     return [...map.entries()].map(([name, list]) => ({
@@ -124,8 +131,8 @@ export function TimetablePage() {
     setBusy(true);
     setError(null);
     setNotice(null);
-    try { await work(); reload(); savedToast.show('Changes'); return true; }
-    catch (caught) { setError(apiErrorMessage(caught, `${failure} Check your signal and try again.`)); return false; }
+    try { await work(); reload(); savedToast.show(t('ops.tt.changes')); return true; }
+    catch (caught) { setError(apiErrorMessage(caught, t('ops.tt.failWith', { failure }))); return false; }
     finally { setBusy(false); }
   }
   const put = (id: number, body: Record<string, unknown>) => api.put(`/competitions/${competition.id}/sessions/${id}`, body);
@@ -142,11 +149,11 @@ export function TimetablePage() {
   }
 
   /** This block and every later one in its arena, whether or not each follows on. */
-  const shiftFrom = (list: Item[], item: Item, minutes: number) => run('Couldn’t move those.', () => pushItems(list.slice(list.indexOf(item)), minutes));
+  const shiftFrom = (list: Item[], item: Item, minutes: number) => run(t('ops.tt.fail.move'), () => pushItems(list.slice(list.indexOf(item)), minutes));
 
-  const shiftAll = (by: number) => run('Couldn’t move the timetable.', () => api.post(`/competitions/${competition.id}/sessions/shift-times`, { deltaMinutes: by }));
+  const shiftAll = (by: number) => run(t('ops.tt.fail.moveAll'), () => api.post(`/competitions/${competition.id}/sessions/shift-times`, { deltaMinutes: by }));
 
-  const setHeatMinutes = (list: Item[], item: Item, value: number) => run('Couldn’t save the time per heat.', async () => {
+  const setHeatMinutes = (list: Item[], item: Item, value: number) => run(t('ops.tt.fail.perHeat'), async () => {
     const length = item.heats * value;
     const body: Record<string, unknown> = { minutesPerHeat: value };
     if (!item.locked && item.heats > 0) body.durationMinutes = length;
@@ -154,27 +161,27 @@ export function TimetablePage() {
     if (!item.locked) await shiftLater(list, item, length - item.minutes);
   });
 
-  const setBreakLength = (list: Item[], item: Item, value: number) => run('Couldn’t save the length.', async () => {
+  const setBreakLength = (list: Item[], item: Item, value: number) => run(t('ops.tt.fail.length'), async () => {
     await put(item.session.id, { durationMinutes: value });
     await shiftLater(list, item, value - item.minutes);
   });
 
-  const setBreakName = (item: Item, name: string) => run('Couldn’t save the name.', () => put(item.session.id, { name }));
+  const setBreakName = (item: Item, name: string) => run(t('ops.tt.fail.name'), () => put(item.session.id, { name }));
 
-  const setStart = (item: Item, time: string) => run('Couldn’t save the start time.', async () => {
+  const setStart = (item: Item, time: string) => run(t('ops.tt.fail.start'), async () => {
     if (!item.start || !/^\d{2}:\d{2}$/.test(time)) return;
     const [h, m] = time.split(':').map(Number);
     await put(item.session.id, { scheduledStart: new Date(item.start.getFullYear(), item.start.getMonth(), item.start.getDate(), h, m).toISOString() });
   });
 
-  const followOn = (list: Item[], item: Item) => run('Couldn’t save the start time.', async () => {
+  const followOn = (list: Item[], item: Item) => run(t('ops.tt.fail.start'), async () => {
     const before = list[list.indexOf(item) - 1];
     const end = before && endOf(before);
     if (end) await put(item.session.id, { scheduledStart: end.toISOString() });
   });
 
   /** Moves a block to another place in its arena; the ones that can move share out the times, and the rest keep theirs. */
-  const reorder = (list: Item[], from: number, to: number) => run('Couldn’t move that.', async () => {
+  const reorder = (list: Item[], from: number, to: number) => run(t('ops.tt.fail.that'), async () => {
     const changes = reorderStarts(list.map((item) => ({ id: item.session.id, start: item.start, minutes: item.minutes, fixed: stays(item) })), from, to);
     await Promise.all(changes.map((change) => put(change.id, { scheduledStart: change.start.toISOString() })));
   });
@@ -219,20 +226,20 @@ export function TimetablePage() {
   }
 
   async function removeBreak(list: Item[], item: Item) {
-    if (!(await confirmDialog({ title: `Remove ${item.session.name}?`, message: 'Later sessions move up to fill the gap.', confirmLabel: 'Remove break', destructive: true }))) return;
-    await run('Couldn’t remove the break.', async () => {
+    if (!(await confirmDialog({ title: t('ops.tt.removeBreakTitle', { name: item.session.name }), message: t('ops.tt.removeBreakMsg'), confirmLabel: t('ops.tt.removeBreakConfirm'), destructive: true }))) return;
+    await run(t('ops.tt.fail.removeBreak'), async () => {
       await api.delete(`/competitions/${competition.id}/sessions/${item.session.id}`);
       await shiftLater(list, item, -item.minutes);
     });
     setEditing(null);
   }
 
-  const addBreak = (list: Item[], arena: string, after: Item | null, name: string, minutes: number) => run('Couldn’t add the break.', async () => {
+  const addBreak = (list: Item[], arena: string, after: Item | null, name: string, minutes: number) => run(t('ops.tt.fail.addBreak'), async () => {
     const start = (after && endOf(after)) ?? list.find((i) => i.start)?.start ?? defaultEventStart(new Date(competition.startDate));
     if (after) await shiftLater(list.filter((i) => i !== after), { ...after, start }, minutes);
     else if (follow) await pushItems(list, minutes);
     await api.post(`/competitions/${competition.id}/sessions`, {
-      competitionSectionId: null, name, arenaName: arena === 'All arenas' ? null : arena, scheduledStart: start.toISOString(),
+      competitionSectionId: null, name, arenaName: arena === ALL_ARENAS ? null : arena, scheduledStart: start.toISOString(),
       orderIndex: competition.sessions.reduce((m, s) => Math.max(m, s.orderIndex), 0) + 1, notes: null, isBreak: true, durationMinutes: minutes, kind: SessionKind.Break, location: null,
     });
     setAdding(null);
@@ -240,7 +247,7 @@ export function TimetablePage() {
 
   // ----- hatbands -----
   const bands = competition.laneHatbands ?? [];
-  const saveBands = (next: string[]) => run('Couldn’t save the hatbands.', () => api.put(`/competitions/${competition.id}`, competitionUpdateBody(competition, { laneHatbands: next })));
+  const saveBands = (next: string[]) => run(t('ops.tt.fail.hatbands'), () => api.put(`/competitions/${competition.id}`, competitionUpdateBody(competition, { laneHatbands: next })));
   const [addingBand, setAddingBand] = useState(false);
   const [changing, setChanging] = useState<number | null>(null);
   const moveBand = (i: number, by: -1 | 1) => { const next = [...bands]; [next[i], next[i + by]] = [next[i + by], next[i]]; setChanging(null); void saveBands(next); };
@@ -252,13 +259,13 @@ export function TimetablePage() {
   // ----- draw -----
   const [sectionId, setSectionId] = useState<string>(String(competition.sections[0]?.id ?? ''));
   const [preview, setPreview] = useState<DrawPreview | null>(null);
-  const draw = () => run('Couldn’t draw this section.', async () => {
+  const draw = () => run(t('ops.tt.fail.draw'), async () => {
     const { data } = await api.post<DrawPreview>(`/competitions/${competition.id}/sections/${sectionId}/draw/preview`, { seed: Math.floor(Math.random() * 90_000) + 10_000 });
     setPreview(data);
   });
-  const applyDraw = () => preview && run('Couldn’t apply the draw.', async () => {
+  const applyDraw = () => preview && run(t('ops.tt.fail.apply'), async () => {
     await api.post(`/competitions/${competition.id}/sections/${preview.sectionId}/draw/apply`, { seed: preview.seed, fingerprint: preview.fingerprint });
-    setNotice('Draw applied. The timetable has these lanes.');
+    setNotice(t('ops.tt.drawApplied'));
     setUndoVersion((n) => n + 1);
     setPreview(null);
   });
@@ -267,7 +274,7 @@ export function TimetablePage() {
   return (
     <RefinePage>
       {savedToast.node}
-      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel="Back to preparations" context={competition.name} title="Timetable and draw" />
+      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.hub.back')} context={competition.name} title={t('ops.tt.title')} />
       <div className="ops-cards ops-tt" aria-busy={busy}>
         <DrawUndoBanner competitionId={competition.id} version={undoVersion} onRestored={reload} />
         <TimetableClashes competition={competition} />
@@ -276,23 +283,23 @@ export function TimetablePage() {
 
         <RefineList as="div">
           <div className="rf-row ops-mv">
-            <span className="rf-grow rf-t1">Move everything</span>
-            <span className="ops-step-ctl" role="group" aria-label="Minutes to move everything">
-              <button type="button" className="ops-ibtn" aria-label="Fewer minutes" disabled={move <= 5} onClick={() => setMove(Math.max(5, move - 5))}><Minus className="h-4 w-4" aria-hidden="true" /></button>
+            <span className="rf-grow rf-t1">{t('ops.tt.moveAll')}</span>
+            <span className="ops-step-ctl" role="group" aria-label={t('ops.tt.moveAllAria')}>
+              <button type="button" className="ops-ibtn" aria-label={t('ops.tt.fewerMin')} disabled={move <= 5} onClick={() => setMove(Math.max(5, move - 5))}><Minus className="h-4 w-4" aria-hidden="true" /></button>
               <output><TickerNumber value={move} format={String} /></output>
-              <button type="button" className="ops-ibtn" aria-label="More minutes" disabled={move >= 120} onClick={() => setMove(Math.min(120, move + 5))}><Plus className="h-4 w-4" aria-hidden="true" /></button>
+              <button type="button" className="ops-ibtn" aria-label={t('ops.tt.moreMin')} disabled={move >= 120} onClick={() => setMove(Math.min(120, move + 5))}><Plus className="h-4 w-4" aria-hidden="true" /></button>
             </span>
-            <span className="rf-t2">min</span>
+            <span className="rf-t2">{t('ops.tt.minUnit')}</span>
             <span className="ops-mv-btns">
-              <button type="button" className="rf-btn" disabled={busy} onClick={() => void shiftAll(-move)}>Earlier</button>
-              <button type="button" className="rf-btn" disabled={busy} onClick={() => void shiftAll(move)}>Later</button>
+              <button type="button" className="rf-btn" disabled={busy} onClick={() => void shiftAll(-move)}>{t('ops.tt.earlier')}</button>
+              <button type="button" className="rf-btn" disabled={busy} onClick={() => void shiftAll(move)}>{t('ops.tt.later')}</button>
             </span>
           </div>
-          <RefineSwitchRow label="Each one follows on from the one before" on={follow} onChange={setFollow} />
-          <RefineSwitchRow label="Drag to change the order" on={arrange} onChange={(on) => { setArrange(on); setEditing(null); }} />
+          <RefineSwitchRow label={t('ops.tt.followsOn')} on={follow} onChange={setFollow} />
+          <RefineSwitchRow label={t('ops.tt.dragOrder')} on={arrange} onChange={(on) => { setArrange(on); setEditing(null); }} />
           <div className="rf-row ops-wrap">
-            <span className="rf-grow rf-t1">Send the timetable</span>
-            <ShareTextButtons title="Share timetable" name="Timetable" text={timetableShareText(competition, `${window.location.origin}/competitions/${competition.id}`)} />
+            <span className="rf-grow rf-t1">{t('ops.tt.send')}</span>
+            <ShareTextButtons title={t('ops.tt.shareTitle')} name={t('ops.tt.shareName')} text={timetableShareText(competition, `${window.location.origin}/competitions/${competition.id}`)} />
           </div>
         </RefineList>
 
@@ -301,8 +308,8 @@ export function TimetablePage() {
           const last = [...group.list].reverse().find((i) => i.start);
           return (
             <Fragment key={group.name}>
-              <h2 className="rf-sec ops-tt-head"><span>{group.name} {first?.start ? `· ${dayText(first.start)}` : ''}</span>{first?.start && last && <span>{hhmm(first.start)} – {hhmm(endOf(last) ?? last.start!)}</span>}</h2>
-              <RefineList as="div" label={group.name}>
+              <h2 className="rf-sec ops-tt-head"><span>{group.name === ALL_ARENAS ? t('ops.tt.allArenas') : group.name} {first?.start ? `· ${dayText(first.start)}` : ''}</span>{first?.start && last && <span>{hhmm(first.start)} – {hhmm(endOf(last) ?? last.start!)}</span>}</h2>
+              <RefineList as="div" label={group.name === ALL_ARENAS ? t('ops.tt.allArenas') : group.name}>
                 {group.list.map((item, i) => {
                   const prev = group.list[i - 1];
                   const prevEnd = prev && endOf(prev);
@@ -310,61 +317,62 @@ export function TimetablePage() {
                   const open = editing === item.session.id;
                   const end = endOf(item);
                   const unsetFinal = item.final && !item.locked && !item.session.scheduledStart;
-                  const meta = item.isBreak ? `Break · ${lengthText(item.minutes)}` : unsetFinal ? 'Set a start time so it shows on the public timetable' : `${item.heats} ${item.heats === 1 ? 'heat' : 'heats'} · ${item.perHeat} min a heat · ${lengthText(item.minutes)}`;
+                  const meta = item.isBreak ? t('ops.tt.breakMeta', { length: lengthText(item.minutes) }) : unsetFinal ? t('ops.tt.setStart') : t('ops.tt.heatMeta', { heats: t('ops.tt.heats', { count: item.heats }), per: item.perHeat, length: lengthText(item.minutes) });
                   const lifted = drag?.id === item.session.id;
                   const room = drag && !lifted ? makeRoom(i, drag.from, drag.to, drag.height) : 0;
                   return (
                     <Fragment key={item.session.id}>
-                      {gap > 0 && <div className="ops-gap-line">{gap} min gap</div>}
+                      {gap > 0 && <div className="ops-gap-line">{t('ops.tt.gap', { n: gap })}</div>}
                       {arrange ? (
                         <div className="rf-row ops-tt-row" data-tt-row="" data-lifted={lifted}
                           style={lifted && drag ? { transform: `translateY(${drag.dy}px)` } : room ? { transform: `translateY(${room}px)` } : undefined}>
                           {stays(item)
                             ? <span className="ops-grip-gap" />
                             : (
-                              <button type="button" className="ops-grip" disabled={busy} aria-label={`Move ${item.session.name}: drag, or use the up and down arrow keys`}
+                              <button type="button" className="ops-grip" disabled={busy} aria-label={t('ops.tt.grip', { name: item.session.name })}
                                 onPointerDown={(event) => grab(event, group.list, i)} onKeyDown={(event) => keys(event, group.list, i)}><GripIcon /></button>
                             )}
                           <span className="ops-time">{item.start ? hhmm(item.start) : '–'}</span>
                           <span className="rf-grow"><span className="rf-t1">{item.session.name}</span><span className="rf-t2">{meta}</span></span>
-                          {gap < 0 && <span className="ops-warn">Overlaps the one before</span>}
-                          {end && <span className="rf-t2">to {hhmm(end)}</span>}
+                          {gap < 0 && <span className="ops-warn">{t('ops.tt.overlap')}</span>}
+                          {end && <span className="rf-t2">{t('ops.tt.to', { time: hhmm(end) })}</span>}
                         </div>
                       ) : !open ? (
                         <button type="button" className="rf-row ops-tt-row" aria-expanded={false} onClick={() => setEditing(item.session.id)}>
                           <span className="ops-time">{item.start ? hhmm(item.start) : '–'}</span>
                           <span className="rf-grow"><span className="rf-t1">{item.session.name}</span><span className="rf-t2">{meta}</span></span>
-                          {gap < 0 && <span className="ops-warn">Overlaps the one before</span>}
-                          {end && <span className="rf-t2">to {hhmm(end)}</span>}
+                          {gap < 0 && <span className="ops-warn">{t('ops.tt.overlap')}</span>}
+                          {end && <span className="rf-t2">{t('ops.tt.to', { time: hhmm(end) })}</span>}
                           <Pencil className="rf-chev h-4 w-4" aria-hidden="true" />
                         </button>
                       ) : (
                         <div className="ops-tt-edit">
                           <div className="rf-row">
                             <span className="ops-time">{item.start ? hhmm(item.start) : '–'}</span>
-                            <span className="rf-grow"><span className="rf-t1">{item.session.name}</span><span className="rf-t2">{meta}{end ? ` · to ${hhmm(end)}` : ''}</span></span>
-                            <button type="button" className="rf-btn" aria-expanded onClick={() => setEditing(null)}>Done</button>
+                            <span className="rf-grow"><span className="rf-t1">{item.session.name}</span><span className="rf-t2">{meta}{end ? t('ops.tt.toLong', { time: hhmm(end) }) : ''}</span></span>
+                            <button type="button" className="rf-btn" aria-expanded onClick={() => setEditing(null)}>{t('common.done')}</button>
                           </div>
                           {item.isBreak && (
-                            <RefineChoiceRow label="Name" value={item.session.name} options={BREAK_NAMES} allowOther disabled={busy} onChange={(name) => void setBreakName(item, name)} />
+                            <RefineChoiceRow label={t('ops.tt.name')} value={item.session.name} options={BREAK_NAMES} allowOther disabled={busy} onChange={(name) => void setBreakName(item, name)} />
                           )}
                           {(!follow || item.final) && item.start && (
                             <div className="rf-row">
-                              <label className="rf-grow rf-t1" htmlFor={`start-${item.session.id}`}>Start</label>
+                              <label className="rf-grow rf-t1" htmlFor={`start-${item.session.id}`}>{t('ops.tt.start')}</label>
                               <input id={`start-${item.session.id}`} type="time" className="ops-time-input" defaultValue={hhmm(item.start)} disabled={busy || item.locked}
                                 onBlur={(event) => { if (event.target.value && (event.target.value !== hhmm(item.start!) || unsetFinal)) void setStart(item, event.target.value); }} />
-                              <button type="button" className="rf-btn" disabled={busy || item.locked || !prev} onClick={() => void followOn(group.list, item)}>Follow on from the one before</button>
+                              <button type="button" className="rf-btn" disabled={busy || item.locked || !prev} onClick={() => void followOn(group.list, item)}>{t('ops.tt.followOn')}</button>
                             </div>
                           )}
+                          {item.locked && !item.isBreak && <p className="rf-t2 ops-lock-note">This one has started or has scores, so its time can’t be changed here. “Move everything” still moves what is left.</p>}
                           {shifts(item) && <ShiftFrom name={item.session.name} busy={busy} onShift={(minutes) => void shiftFrom(group.list, item, minutes)} />}
                           <div className="ops-pair">
                             {item.isBreak
-                              ? <MinuteStepper label="Length" value={item.minutes} min={5} max={240} disabled={busy} onChange={(n) => void setBreakLength(group.list, item, n)} />
-                              : <MinuteStepper label="Time per heat" value={item.perHeat} min={5} max={120} disabled={busy} onChange={(n) => void setHeatMinutes(group.list, item, n)} />}
+                              ? <MinuteStepper label={t('ops.tt.length')} value={item.minutes} min={5} max={240} disabled={busy} onChange={(n) => void setBreakLength(group.list, item, n)} />
+                              : <MinuteStepper label={t('ops.tt.timePerHeat')} value={item.perHeat} min={5} max={120} disabled={busy} onChange={(n) => void setHeatMinutes(group.list, item, n)} />}
                           </div>
                           <div className="rf-row ops-end">
-                            <button type="button" className="rf-btn" disabled={busy} onClick={() => { setEditing(null); setAdding({ group: group.name, after: String(item.session.id) }); }}>Add a break after this</button>
-                            {item.isBreak && <button type="button" className="ops-danger-link" disabled={busy} onClick={() => void removeBreak(group.list, item)}>Remove</button>}
+                            <button type="button" className="rf-btn" disabled={busy} onClick={() => { setEditing(null); setAdding({ group: group.name, after: String(item.session.id) }); }}>{t('ops.tt.addAfter')}</button>
+                            {item.isBreak && <button type="button" className="ops-danger-link" disabled={busy} onClick={() => void removeBreak(group.list, item)}>{t('ops.tt.remove')}</button>}
                           </div>
                         </div>
                       )}
@@ -373,63 +381,63 @@ export function TimetablePage() {
                 })}
                 {adding?.group === group.name
                   ? <BreakForm key={`${group.name}-${adding.after ?? ''}`} list={group.list} initialAfter={adding.after} busy={busy} onCancel={() => setAdding(null)} onAdd={(after, name, minutes) => void addBreak(group.list, group.name, after, name, minutes)} />
-                  : <button type="button" className="ops-addbar ops-addrow" disabled={busy} onClick={() => setAdding({ group: group.name })}><Plus className="h-4 w-4" aria-hidden="true" />Add a break</button>}
+                  : <button type="button" className="ops-addbar ops-addrow" disabled={busy} onClick={() => setAdding({ group: group.name })}><Plus className="h-4 w-4" aria-hidden="true" />{t('ops.tt.addBreak')}</button>}
               </RefineList>
             </Fragment>
           );
         })}
 
-        <h2 className="rf-sec ops-tt-head"><span>Hatbands</span><span>{bands.length}</span></h2>
-        <RefineList as="div" label="Hatbands">
+        <h2 className="rf-sec ops-tt-head"><span>{t('ops.tt.hatbands')}</span><span>{bands.length}</span></h2>
+        <RefineList as="div" label={t('ops.tt.hatbands')}>
           {bands.map((band, i) => (
             <Fragment key={i}>
               <div className="rf-row">
                 <span className="ops-lane-badge">{i + 1}</span>
                 <span className="ops-dot-colour" aria-hidden="true" style={{ background: hatbandColour(band) }} />
                 <span className="rf-grow rf-t1">{hatbandName(band)}</span>
-                <button type="button" className="ops-ibtn" aria-label={`Move ${hatbandName(band)} up`} disabled={busy || i === 0} onClick={() => moveBand(i, -1)}><ArrowUp className="h-4 w-4" aria-hidden="true" /></button>
-                <button type="button" className="ops-ibtn" aria-label={`Move ${hatbandName(band)} down`} disabled={busy || i === bands.length - 1} onClick={() => moveBand(i, 1)}><ArrowDown className="h-4 w-4" aria-hidden="true" /></button>
-                <RefineMenu label={`More for ${hatbandName(band)}`} disabled={busy} items={[
-                  { label: 'Change colour', onSelect: () => { setAddingBand(false); setChanging(i); } },
-                  { label: 'Remove', danger: true, onSelect: () => { setChanging(null); void saveBands(bands.filter((_, j) => j !== i)); } },
+                <button type="button" className="ops-ibtn" aria-label={t('ops.tt.moveBandUp', { name: hatbandName(band) })} disabled={busy || i === 0} onClick={() => moveBand(i, -1)}><ArrowUp className="h-4 w-4" aria-hidden="true" /></button>
+                <button type="button" className="ops-ibtn" aria-label={t('ops.tt.moveBandDown', { name: hatbandName(band) })} disabled={busy || i === bands.length - 1} onClick={() => moveBand(i, 1)}><ArrowDown className="h-4 w-4" aria-hidden="true" /></button>
+                <RefineMenu label={t('ops.tt.moreFor', { name: hatbandName(band) })} disabled={busy} items={[
+                  { label: t('ops.tt.changeColour'), onSelect: () => { setAddingBand(false); setChanging(i); } },
+                  { label: t('ops.tt.remove'), danger: true, onSelect: () => { setChanging(null); void saveBands(bands.filter((_, j) => j !== i)); } },
                 ]} />
               </div>
               {changing === i && <BandEditor band={band} onSave={(value) => void saveBand(i, value)} onDone={() => setChanging(null)} />}
             </Fragment>
           ))}
           {bands.length === 0 && (
-            <div className="rf-row"><span className="rf-grow rf-t2">No hatbands</span>
-              <button type="button" className="rf-btn" disabled={busy} onClick={() => void saveBands(HATBAND_COLOURS.slice(0, 6))}>Use the usual colours</button></div>
+            <div className="rf-row"><span className="rf-grow rf-t2">{t('ops.tt.noBands')}</span>
+              <button type="button" className="rf-btn" disabled={busy} onClick={() => void saveBands(HATBAND_COLOURS.slice(0, 6))}>{t('ops.tt.usual')}</button></div>
           )}
-          {bands.length < MAX_LANES && !addingBand && <button type="button" className="ops-addbar ops-addrow" disabled={busy} onClick={() => { setChanging(null); setAddingBand(true); }}><Plus className="h-4 w-4" aria-hidden="true" />Add a hatband</button>}
+          {bands.length < MAX_LANES && !addingBand && <button type="button" className="ops-addbar ops-addrow" disabled={busy} onClick={() => { setChanging(null); setAddingBand(true); }}><Plus className="h-4 w-4" aria-hidden="true" />{t('ops.tt.addBand')}</button>}
           {addingBand && <AddBand busy={busy} onAdd={(value) => { void saveBands([...bands, value]); setAddingBand(false); }} onCancel={() => setAddingBand(false)} />}
         </RefineList>
-        {bands.length > 0 && <div className="ops-end-left"><button type="button" className="ops-danger-link" disabled={busy} onClick={() => { setChanging(null); void saveBands([]); }}>Remove all hatbands</button></div>}
+        {bands.length > 0 && <div className="ops-end-left"><button type="button" className="ops-danger-link" disabled={busy} onClick={() => { setChanging(null); void saveBands([]); }}>{t('ops.tt.removeAllBands')}</button></div>}
 
-        <h2 className="rf-sec ops-tt-head"><span>Draw</span></h2>
+        <h2 className="rf-sec ops-tt-head"><span>{t('ops.tt.draw')}</span></h2>
         <RefineList as="div">
-          <RefineChoiceRow label="Section" value={sectionId} options={competition.sections.map((s) => ({ value: String(s.id), label: s.displayName }))} disabled={busy || competition.sections.length === 0}
+          <RefineChoiceRow label={t('ops.tt.section')} value={sectionId} options={competition.sections.map((s) => ({ value: String(s.id), label: s.displayName }))} disabled={busy || competition.sections.length === 0}
             onChange={(value) => { setSectionId(value); setPreview(null); }} />
           <div className="rf-row">
-            <span className="rf-grow rf-t1">Lanes for heat 1</span>
-            <button type="button" className="rf-btn rf-btn-primary" disabled={busy || !sectionId} onClick={() => void draw()}>Draw</button>
+            <span className="rf-grow rf-t1">{t('ops.tt.lanesHeat1')}</span>
+            <button type="button" className="rf-btn rf-btn-primary" disabled={busy || !sectionId} onClick={() => void draw()}>{t('ops.tt.draw')}</button>
           </div>
         </RefineList>
         {heatOne && (
           <>
-            <h2 className="rf-sec ops-tt-head"><span>Heat 1</span></h2>
-            <RefineList as="div" label="Heat 1">
+            <h2 className="rf-sec ops-tt-head"><span>{t('ops.tt.heat1')}</span></h2>
+            <RefineList as="div" label={t('ops.tt.heat1')}>
               {heatOne.teams.slice().sort((a, b) => a.laneIndex - b.laneIndex).map((team) => (
                 <div key={team.teamId} className="rf-row">
                   <span className="ops-dot-colour" aria-hidden="true" style={{ background: bands[team.laneIndex - 1] ? hatbandColour(bands[team.laneIndex - 1]) : NO_COLOUR }} />
-                  <span className="rf-t1 ops-lane-label">Lane {team.laneIndex}</span>
+                  <span className="rf-t1 ops-lane-label">{t('ops.tt.lane', { n: team.laneIndex })}</span>
                   <span className="rf-grow rf-t1">{team.teamName}</span>
                 </div>
               ))}
             </RefineList>
             <div className="rf-actions ops-draw-actions">
-              <button type="button" className="rf-btn rf-btn-primary" disabled={busy || !preview.fairness.everyTeamAppearsOncePerSession} onClick={() => void applyDraw()}>Apply draw</button>
-              <button type="button" className="rf-btn" disabled={busy} onClick={() => void draw()}>Shuffle again</button>
+              <button type="button" className="rf-btn rf-btn-primary" disabled={busy || !preview.fairness.everyTeamAppearsOncePerSession} onClick={() => void applyDraw()}>{t('ops.page.applyDraw')}</button>
+              <button type="button" className="rf-btn" disabled={busy} onClick={() => void draw()}>{t('ops.tt.shuffle')}</button>
             </div>
           </>
         )}
@@ -440,13 +448,14 @@ export function TimetablePage() {
 
 /** A small round − and + with the number on its own between them. */
 function MinuteStepper({ label, value, min, max, disabled, onChange }: { label: string; value: number; min: number; max: number; disabled?: boolean; onChange: (n: number) => void }) {
+  const t = useT();
   return (
     <div className="ops-step">
-      <span className="ops-step-label">{label} (min)</span>
+      <span className="ops-step-label">{t('ops.tt.minLabel', { label })}</span>
       <span className="ops-step-ctl" role="group" aria-label={label}>
-        <button type="button" className="ops-ibtn" aria-label={`Shorter ${label.toLowerCase()}`} disabled={disabled || value <= min} onClick={() => onChange(Math.max(min, value - 5))}><Minus className="h-4 w-4" aria-hidden="true" /></button>
+        <button type="button" className="ops-ibtn" aria-label={t('ops.tt.shorter', { label: label.toLowerCase() })} disabled={disabled || value <= min} onClick={() => onChange(Math.max(min, value - 5))}><Minus className="h-4 w-4" aria-hidden="true" /></button>
         <output><TickerNumber value={value} format={String} /></output>
-        <button type="button" className="ops-ibtn" aria-label={`Longer ${label.toLowerCase()}`} disabled={disabled || value >= max} onClick={() => onChange(Math.min(max, value + 5))}><Plus className="h-4 w-4" aria-hidden="true" /></button>
+        <button type="button" className="ops-ibtn" aria-label={t('ops.tt.longer', { label: label.toLowerCase() })} disabled={disabled || value >= max} onClick={() => onChange(Math.min(max, value + 5))}><Plus className="h-4 w-4" aria-hidden="true" /></button>
       </span>
     </div>
   );
@@ -454,36 +463,38 @@ function MinuteStepper({ label, value, min, max, disabled, onChange }: { label: 
 
 /** Moves this block and everything after it in the arena later or earlier by the minutes chosen. */
 function ShiftFrom({ name, busy, onShift }: { name: string; busy: boolean; onShift: (minutes: number) => void }) {
+  const t = useT();
   const [minutes, setMinutes] = useState(15);
   return (
     <div className="rf-row ops-mv">
-      <span className="rf-grow rf-t1">From here on</span>
-      <span className="ops-step-ctl" role="group" aria-label={`Minutes to move ${name} and later ones`}>
-        <button type="button" className="ops-ibtn" aria-label="Fewer minutes from here" disabled={minutes <= 5} onClick={() => setMinutes(Math.max(5, minutes - 5))}><Minus className="h-4 w-4" aria-hidden="true" /></button>
+      <span className="rf-grow rf-t1">{t('ops.tt.fromHere')}</span>
+      <span className="ops-step-ctl" role="group" aria-label={t('ops.tt.shiftGroup', { name })}>
+        <button type="button" className="ops-ibtn" aria-label={t('ops.tt.fewerHere')} disabled={minutes <= 5} onClick={() => setMinutes(Math.max(5, minutes - 5))}><Minus className="h-4 w-4" aria-hidden="true" /></button>
         <output><TickerNumber value={minutes} format={String} /></output>
-        <button type="button" className="ops-ibtn" aria-label="More minutes from here" disabled={minutes >= 120} onClick={() => setMinutes(Math.min(120, minutes + 5))}><Plus className="h-4 w-4" aria-hidden="true" /></button>
+        <button type="button" className="ops-ibtn" aria-label={t('ops.tt.moreHere')} disabled={minutes >= 120} onClick={() => setMinutes(Math.min(120, minutes + 5))}><Plus className="h-4 w-4" aria-hidden="true" /></button>
       </span>
-      <span className="rf-t2">min</span>
+      <span className="rf-t2">{t('ops.tt.minUnit')}</span>
       <span className="ops-mv-btns">
-        <button type="button" className="rf-btn" disabled={busy} aria-label={`Move ${name} and later ones earlier`} onClick={() => onShift(-minutes)}>Earlier</button>
-        <button type="button" className="rf-btn" disabled={busy} aria-label={`Move ${name} and later ones later`} onClick={() => onShift(minutes)}>Later</button>
+        <button type="button" className="rf-btn" disabled={busy} aria-label={t('ops.tt.moveEarlier', { name })} onClick={() => onShift(-minutes)}>{t('ops.tt.earlier')}</button>
+        <button type="button" className="rf-btn" disabled={busy} aria-label={t('ops.tt.moveLater', { name })} onClick={() => onShift(minutes)}>{t('ops.tt.later')}</button>
       </span>
     </div>
   );
 }
 
 function BreakForm({ list, initialAfter, busy, onAdd, onCancel }: { list: Item[]; initialAfter?: string; busy: boolean; onAdd: (after: Item | null, name: string, minutes: number) => void; onCancel: () => void }) {
+  const t = useT();
   const [after, setAfter] = useState(initialAfter ?? (list.length ? String(list[list.length - 1].session.id) : AT_START));
   const [name, setName] = useState('Lunch');
   const [minutes, setMinutes] = useState(30);
   return (
     <div className="ops-dup">
-      <RefineChoiceRow label="After" value={after} options={[{ value: AT_START, label: 'At the start' }, ...list.map((item) => ({ value: String(item.session.id), label: item.session.name }))]} onChange={setAfter} />
-      <RefineChoiceRow label="Name" value={name} options={BREAK_NAMES} allowOther onChange={setName} />
-      <MinuteStepper label="How long" value={minutes} min={5} max={240} onChange={setMinutes} />
+      <RefineChoiceRow label={t('ops.tt.after')} value={after} options={[{ value: AT_START, label: t('ops.tt.atStart') }, ...list.map((item) => ({ value: String(item.session.id), label: item.session.name }))]} onChange={setAfter} />
+      <RefineChoiceRow label={t('ops.tt.name')} value={name} options={BREAK_NAMES} allowOther onChange={setName} />
+      <MinuteStepper label={t('ops.tt.howLong')} value={minutes} min={5} max={240} onChange={setMinutes} />
       <div className="rf-actions">
-        <button type="button" className="rf-btn rf-btn-primary" disabled={busy} onClick={() => onAdd(list.find((i) => String(i.session.id) === after) ?? null, name, minutes)}>Add break</button>
-        <button type="button" className="rf-btn" onClick={onCancel}>Cancel</button>
+        <button type="button" className="rf-btn rf-btn-primary" disabled={busy} onClick={() => onAdd(list.find((i) => String(i.session.id) === after) ?? null, name, minutes)}>{t('ops.tt.addBreakBtn')}</button>
+        <button type="button" className="rf-btn" onClick={onCancel}>{t('common.cancel')}</button>
       </div>
     </div>
   );
@@ -491,6 +502,7 @@ function BreakForm({ list, initialAfter, busy, onAdd, onCancel }: { list: Item[]
 
 /** A colour picker with a box beside it for the #RRGGBB. Choosing from either updates the other; only a complete colour is passed on. */
 function ColourField({ hex, onChange }: { hex: string; onChange: (hex: string) => void }) {
+  const t = useT();
   const [text, setText] = useState(hex);
   function typed(value: string) {
     setText(value);
@@ -499,8 +511,8 @@ function ColourField({ hex, onChange }: { hex: string; onChange: (hex: string) =
   }
   return (
     <div className="ops-colour-field">
-      <input type="color" aria-label="Colour" value={hex.toLowerCase()} onChange={(event) => { setText(event.target.value.toUpperCase()); onChange(event.target.value.toUpperCase()); }} />
-      <input aria-label="Colour code" value={text} maxLength={7} spellCheck={false} autoCapitalize="characters" onChange={(event) => typed(event.target.value)}
+      <input type="color" aria-label={t('ops.tt.colour')} value={hex.toLowerCase()} onChange={(event) => { setText(event.target.value.toUpperCase()); onChange(event.target.value.toUpperCase()); }} />
+      <input aria-label={t('ops.tt.colourCode')} value={text} maxLength={7} spellCheck={false} autoCapitalize="characters" onChange={(event) => typed(event.target.value)}
         onBlur={() => setText(hex)} />
     </div>
   );
@@ -508,6 +520,7 @@ function ColourField({ hex, onChange }: { hex: string; onChange: (hex: string) =
 
 /** The panel under a hatband row: its name and colour. Edits are sent a moment after the last change, and the last one on Done. */
 function BandEditor({ band, onSave, onDone }: { band: string; onSave: (value: string) => void; onDone: () => void }) {
+  const t = useT();
   const [name, setName] = useState(hatbandName(band));
   const [hex, setHex] = useState(hatbandHex(band));
   const timer = useRef<number | null>(null);
@@ -523,30 +536,31 @@ function BandEditor({ band, onSave, onDone }: { band: string; onSave: (value: st
   const soon = () => { if (timer.current !== null) window.clearTimeout(timer.current); timer.current = window.setTimeout(send, 400); };
   useEffect(() => () => { if (timer.current !== null) { window.clearTimeout(timer.current); send(); } }, []);
   return (
-    <div className="ops-dup" role="group" aria-label={`Change colour of ${hatbandName(band)}`}>
-      <label className="rf-fld">Name<input value={name} maxLength={30} onChange={(event) => { setName(event.target.value); latest.current.name = event.target.value; soon(); }} /></label>
+    <div className="ops-dup" role="group" aria-label={t('ops.tt.changeColourOf', { name: hatbandName(band) })}>
+      <label className="rf-fld">{t('ops.tt.name')}<input value={name} maxLength={30} onChange={(event) => { setName(event.target.value); latest.current.name = event.target.value; soon(); }} /></label>
       <ColourField hex={hex} onChange={(value) => { setHex(value); latest.current.hex = value; soon(); }} />
-      <div className="rf-actions"><button type="button" className="rf-btn rf-btn-primary" onClick={onDone}>Done</button></div>
+      <div className="rf-actions"><button type="button" className="rf-btn rf-btn-primary" onClick={onDone}>{t('common.done')}</button></div>
     </div>
   );
 }
 
 /** Adding a hatband: pick a usual colour or choose your own, name it, and add it. */
 function AddBand({ busy, onAdd, onCancel }: { busy: boolean; onAdd: (value: string) => void; onCancel: () => void }) {
+  const t = useT();
   const [name, setName] = useState('');
   const [hex, setHex] = useState('#C8202F');
   const [pick, setPick] = useState(0);
   const choose = (colour: string) => { setName(colour); setHex(HATBAND_PALETTE[colour]); setPick((n) => n + 1); };
   return (
     <form className="ops-dup" onSubmit={(event) => { event.preventDefault(); if (name.trim()) onAdd(formatHatband(name, hex)); }}>
-      <div className="ops-chips" role="group" aria-label="Quick colours">
+      <div className="ops-chips" role="group" aria-label={t('ops.tt.quick')}>
         {HATBAND_COLOURS.map((colour) => (
           <button key={colour} type="button" className="rf-btn" onClick={() => choose(colour)}><span className="ops-dot-colour" aria-hidden="true" style={{ background: HATBAND_PALETTE[colour] ?? NO_COLOUR }} />{colour}</button>
         ))}
       </div>
-      <label className="rf-fld">Name<input value={name} placeholder="Any name" maxLength={30} onChange={(event) => setName(event.target.value)} /></label>
+      <label className="rf-fld">{t('ops.tt.name')}<input value={name} placeholder={t('ops.tt.anyName')} maxLength={30} onChange={(event) => setName(event.target.value)} /></label>
       <ColourField key={pick} hex={hex} onChange={setHex} />
-      <div className="rf-actions"><button type="submit" className="rf-btn rf-btn-primary" disabled={busy || !name.trim()}>Add hatband</button><button type="button" className="rf-btn" onClick={onCancel}>Cancel</button></div>
+      <div className="rf-actions"><button type="submit" className="rf-btn rf-btn-primary" disabled={busy || !name.trim()}>{t('ops.tt.addBandBtn')}</button><button type="button" className="rf-btn" onClick={onCancel}>{t('common.cancel')}</button></div>
     </form>
   );
 }

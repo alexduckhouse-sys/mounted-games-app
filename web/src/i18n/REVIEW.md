@@ -27,7 +27,7 @@ The sport has no settled Welsh or French terms for several words. Where several 
 | section / age group | grŵp oedran / adran | catégorie d'âge / catégorie | |
 | hatband / bib | bib | dossard | |
 | sit out | eistedd allan | au repos | |
-| elimination | wedi'i ddileu | éliminée | Status words also: did not start `heb ddechrau` / `non partante`, did not finish `heb orffen` / `abandon`, retired `wedi ymddeol`. Check `non classée` for DNF in French. |
+| elimination | wedi’i eithrio | éliminé(e) | Status words also: did not start `heb ddechrau` / `non-partant(e)`, did not finish `heb orffen` / `n’a pas terminé`, retired `wedi rhoi’r gorau iddi` / `abandon`. The `(e)` forms avoid choosing a gender for a rider or a team. |
 | carried forward | cario ymlaen | reporté | |
 | run-off | ras ddatrys | barrage | |
 | draw | tynnu enwau / balot | tirage au sort / tirage | |
@@ -49,7 +49,7 @@ The sport has no settled Welsh or French terms for several words. Where several 
 
 Other specifics:
 
-- French "né(e) en" is used even when the value is a full date.
+- French uses "né(e) : {value}" so it reads right for a year or a full date.
 - The ring inside the heat ring (28px) holds `Byw` / `Nawr` (Welsh) and `Live` / `Maint.` (French); these are guesses and may not fit.
 - Welsh and French weekday and month names come from the browser (`Intl`). A browser without Welsh data shows English day names; nothing breaks.
 - Google, Apple and Facebook sign-in buttons use the provider's own wording. Google draws its button itself and is asked for `cy` or `fr`; if it has no Welsh it shows English. Apple's and Facebook's buttons are ours, so their text is in the catalogue: French uses `Se connecter avec Apple`, `Continuer avec Apple` and `Continuer avec Facebook`, which we believe are their official French titles (please check against Apple's Human Interface Guidelines and Facebook's brand guide). Welsh keeps the English (a deliberate fallback in `catalogues.test.ts`) because we couldn't find an official Welsh version from either. Apple's and Facebook's own pop-ups stay in English for now: their scripts are loaded from fixed `en_GB` addresses that the Content Security Policy names exactly, so changing the language there means changing the CSP too.
@@ -58,4 +58,17 @@ Other specifics:
 
 ## How to review
 
-Each area has one file per language in `cy/` and `fr/` (`common`, `shell`, `auth`, `account`, `entries`, `competition`, `teams`). Keys are `area.thing`, and the English next to each is in `en/`. `catalogues.test.ts` checks that every English key has a Welsh and French entry and that `{placeholders}` match, so edits are safe to make directly.
+Each area has one file per language in `cy/` and `fr/`: `common`, `shell`, `auth`, `account`, `entries`, `competition`, `teams`, plus (28 October 2026) `site` (public pages: stats, shop, volunteers, sponsors, contact, seasons, team profiles), `screen` (TV kiosk, prize-giving, stream overlays, embeds), `ops`, `ops2` and `ops3` (organiser pages, event tools, shop management), `admin` (site admin and the competition wizard) and `desk` (commentary desk, arena help and crew sheets, stream controls, broadcast). Keys are `area.thing`, and the English next to each is in `en/`. `catalogues.test.ts` checks that every English key has a Welsh and French entry and that `{placeholders}` match, so edits are safe to make directly.
+
+## Review status (28 October 2026)
+
+Every screen now goes through the catalogues, staff and admin ones included. Welsh and French load only when someone picks them (`translate.ts` `loadCatalogue`); English is always bundled and shows until the chosen language arrives.
+
+An AI second pass (Gemini) checked placeholders (all match) and fixed clear mistranslations: Welsh `porthiant` (horse fodder) for a video feed, `baner` (national flag) for a warning flag, `dyrnau` (fists) for hands, `balot` (election ballot) for the draw, `wedi ymddeol` / `wedi'i ddileu` for retired and eliminated; French `Notation`, `aire de rassemblement`, "la 1er place", "Nom du équipe", "en tant que entraîneur". It is still not a native-speaker review.
+
+Left for a native speaker, because the fix depends on judgement rather than a clear error:
+
+- Welsh gender agreement around `rhagras` (`hon`, `fwyaf`, `bresennol`).
+- Welsh wording in `match.title`, `plannedNow`, `events.mine`, `laneOrder`, the install-the-app text, the stabling words, `theirPhone`, `deadline.sent*`, `lookingPair`, `onNow` and `equineId`.
+- French `volunteers.summary` / `taken` and `screen.ov.watching`.
+- Strings built in shared helpers that are still English: tie-break reasons in `lib/toplist.ts`, the "+10 min" delay text, `hatbandName()` outside the stream overlay, `lib/commentatorFacts`, `lib/arenaCrewSheet`, and CSV file contents (deliberately English).

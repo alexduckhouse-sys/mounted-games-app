@@ -1,5 +1,7 @@
 # Deploying the Mounted Games Scoreboard
 
+> **Historical.** Production runs on Vercel (website and API as two projects) with Neon Postgres. See `CLAUDE.md` (Configuration and deployment) and `docs/neon-setup.md`. The Render and Fly walkthroughs below are not in use.
+
 Pick the path that matches what you need:
 
 | Use case | Platform | Cost | Setup time |

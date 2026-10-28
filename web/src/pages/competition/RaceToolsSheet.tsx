@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ChevronRight, MoreHorizontal } from 'lucide-react';
 import { formatPoints } from '../../lib/formatPoints';
 import { redLabel, yellowLabel, type CardMark } from '../../lib/refereeCards';
-import { CardChip, LaneBand } from './ScoringParts';
+import { CardChip, LaneBand, PullDownDialog } from './ScoringParts';
 
 /** One team in the race tools list. */
 export interface ToolTeam {
@@ -48,13 +48,16 @@ interface RaceToolsSheetProps {
   /** When given, the commentator facts switch shows. */
   factsOn?: boolean;
   onToggleFacts?: () => void;
+  /** Lane boxes filled with each team's bib colour on this device. The switch shows when a handler is given. */
+  fullColour?: boolean;
+  onToggleFullColour?: () => void;
   links: ToolLink[];
   onClose: () => void;
 }
 
 /** The ⋯ sheet on the scoring screen: every team with its own menu (HC, cards, points), then the other tools. */
 export function RaceToolsSheet({
-  teams, canHc, canCards, canChangePoints, onHc, onYellow, onRed, onStepPoints, onEliminate, onDeadHeat, onClearDeadHeat, factsOn, onToggleFacts, links, onClose,
+  teams, canHc, canCards, canChangePoints, onHc, onYellow, onRed, onStepPoints, onEliminate, onDeadHeat, onClearDeadHeat, factsOn, onToggleFacts, fullColour, onToggleFullColour, links, onClose,
 }: RaceToolsSheetProps) {
   const [menuFor, setMenuFor] = useState<number | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
@@ -80,7 +83,7 @@ export function RaceToolsSheet({
   return (
     <div className="rt-overlay">
       <button type="button" className="rt-scrim" aria-label="Close race tools" onClick={onClose} />
-      <div role="dialog" aria-modal="true" aria-label="Race tools" className="rt-sheet">
+      <PullDownDialog label="Race tools" className="rt-sheet" focus=".sc-link" onClose={onClose}>
         <div className="rt-head">
           <span className="rt-title">Race tools</span>
           <button type="button" className="sc-link" onClick={onClose}>Close</button>
@@ -173,6 +176,12 @@ export function RaceToolsSheet({
               <input type="checkbox" role="switch" checked={Boolean(factsOn)} onChange={onToggleFacts} />
             </label>
           )}
+          {onToggleFullColour && (
+            <label className="rt-link">
+              <span className="rt-link-text"><span className="rt-link-name">Full colour lanes</span><span className="rt-link-sub">Fill each lane with its bib colour, on this device</span></span>
+              <input type="checkbox" role="switch" checked={Boolean(fullColour)} onChange={onToggleFullColour} />
+            </label>
+          )}
           {links.map((l) => (
             <button type="button" className="rt-link" key={l.key} onClick={l.onSelect}>
               <span className="rt-link-text"><span className="rt-link-name">{l.label}</span><span className="rt-link-sub">{l.sub}</span></span>
@@ -189,7 +198,7 @@ export function RaceToolsSheet({
             ))}
           </dl>
         </section>
-      </div>
+      </PullDownDialog>
     </div>
   );
 }

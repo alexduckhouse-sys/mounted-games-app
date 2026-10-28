@@ -12,6 +12,7 @@ import { useT } from '../../i18n/LanguageContext';
 import { formatPoints } from '../../lib/formatPoints';
 import { statsProfileHref } from '../../lib/stats';
 import { StatsSubjectKind } from '../../types';
+import { blockLabelText, blockNoteText } from '../../lib/toplistText';
 
 /** A router Link (no full reload) where there is a router, a plain anchor where there is not (some tests render the sheet bare). */
 function SpaLink({ href, inRouter, ...rest }: { href: string; inRouter: boolean; className?: string; children: ReactNode }) {
@@ -29,7 +30,7 @@ export interface TeamSheetRider {
 
 /**
  * A team's points by session and its final, as a kit sheet: the team name, one line about it, Team page and Close,
- * then the breakdown. Esc, a swipe down or a tap on the dim behind it closes it and focus goes back to the row.
+ * then the breakdown. It has no Close button: Esc, a swipe down or a tap on the dim behind it closes it and focus goes back to the row.
  */
 export function TeamSheet({
   detail,
@@ -116,9 +117,8 @@ export function TeamSheet({
                 : <a href={teamPage} className="mg-text-link !min-h-11 inline-flex items-center gap-1 text-sm font-semibold">{t('teams.sheet.fullPage')}<ChevronRight aria-hidden="true" className="h-4 w-4" /></a>}
             </div>
           )}
-          <div className="kit-acts">
-            <button type="button" className="kit-pill kit-pill-fill" onClick={() => close()}>{t('common.close')}</button>
-          </div>
+          {/* No Close button: swipe down, tap the dim behind it or press Esc. Screen readers still get one. */}
+          <button type="button" className="sr-only" onClick={() => close()}>{t('common.close')}</button>
         </>
       )}
     </Sheet>
@@ -129,10 +129,10 @@ function Block({ block }: { block: TeamBlock }) {
   const t = useT();
   const accent = block.kind === 'final' ? 'var(--mg-red)' : 'var(--mg-heading)';
   return (
-    <section aria-label={block.label} className="flex flex-col gap-1.5">
+    <section aria-label={blockLabelText(block.label, t)} className="flex flex-col gap-1.5">
       <div className="flex items-baseline gap-2 border-b-[1.5px] pb-1" style={{ borderColor: `rgb(${accent})` }}>
-        <h3 className="mg-display flex-1 text-[13px] font-bold uppercase leading-none tracking-[0.05em]" style={{ color: `rgb(${accent})` }}>{block.label}</h3>
-        {block.note && <span className="text-[11px] font-medium text-[rgb(var(--mg-muted))]">{block.note}</span>}
+        <h3 className="mg-display flex-1 text-[13px] font-bold uppercase leading-none tracking-[0.05em]" style={{ color: `rgb(${accent})` }}>{blockLabelText(block.label, t)}</h3>
+        {block.note && <span className="text-[11px] font-medium text-[rgb(var(--mg-muted))]">{blockNoteText(block.note, t)}</span>}
         <span className="mg-display text-lg font-bold leading-none text-[rgb(var(--mg-heading))]">{block.points == null ? '–' : formatPoints(block.points)}<span className="sr-only">{block.points == null ? ` ${t('teams.sheet.noPointsSr')}` : ` ${t('teams.sheet.pointsSr')}`}</span></span>
       </div>
       {block.points == null

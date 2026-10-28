@@ -24,7 +24,6 @@ export interface DecRider {
   ponyOwnerFullName?: string;
   isCaptain: boolean;
   useInitialOnly: boolean;
-  noFilming: boolean;
   isGuestRider: boolean;
   /** Answers to the parts the organiser added (weight, passport number, their own questions and so on). */
   extra: ExtraAnswers;
@@ -58,7 +57,7 @@ export const minRidersForSlots = (slots: readonly Slot[]): number => {
 };
 
 export function blankRider(): DecRider {
-  return { savedRiderId: null, fullName: '', dob: '', pony: '', height: '', ponyOwnerFullName: '', isCaptain: false, useInitialOnly: false, noFilming: false, isGuestRider: false, extra: blankExtras() };
+  return { savedRiderId: null, fullName: '', dob: '', pony: '', height: '', ponyOwnerFullName: '', isCaptain: false, useInitialOnly: false, isGuestRider: false, extra: blankExtras() };
 }
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})/;
@@ -134,7 +133,6 @@ export function riderFromSaved(saved: SavedRider, reserve: boolean): DecRider {
     height: reserve ? '' : heightText(saved.ponyHeightHands),
     ponyOwnerFullName: reserve ? '' : saved.ponyOwnerFullName ?? '',
     useInitialOnly: saved.useInitialOnly ?? false,
-    noFilming: saved.noFilming ?? false,
     extra: {
       ...blankExtras(),
       ponyPassport: reserve ? '' : saved.ponyPassportNumber ?? '',
@@ -152,7 +150,6 @@ function riderFromEntry(entry: RiderEntry, config: DecFormConfig): DecRider {
     ponyOwnerFullName: entry.ponyOwnerFullName ?? '',
     isCaptain: entry.isCaptain,
     useInitialOnly: entry.useInitialOnly ?? false,
-    noFilming: entry.noFilming ?? false,
     isGuestRider: entry.isGuestRider ?? false,
     extra: extrasFromEntry(entry, config.weightUnit),
   };
@@ -293,7 +290,6 @@ export function buildSubmitBody(fields: DecFormFields, slots: readonly Slot[], c
       isReserve: reserve,
       isGuestRider: rider.isGuestRider,
       useInitialOnly: rider.useInitialOnly,
-      noFilming: rider.noFilming,
       orderIndex: index,
       ponyOwnerFullName: reserve ? null : (rider.ponyOwnerFullName?.trim() || null),
       ...extrasBody(rider.extra, reserve, config),
@@ -394,7 +390,7 @@ function birthYearFromRider(rider: DecRider): number | null {
 export function savedTeamSummaryLabel(savedTeam: SavedTeamDeclaration): string {
   const ridingCount = savedTeam.riders.filter((r) => !r.isReserve).length;
   const reserveCount = savedTeam.riders.filter((r) => r.isReserve).length;
-  const countText = reserveCount > 0 ? `${ridingCount} riders + reserve` : `${ridingCount} ${ridingCount === 1 ? 'rider' : 'riders'}`;
+  const countText = reserveCount > 0 ? tr('entries.dec.ridersReserve', { count: ridingCount }) : tr('entries.riders', { count: ridingCount });
   const head = subtitleOf([savedTeam.entryTeamName || savedTeam.teamName, savedTeam.ageGroup || savedTeam.sectionName, savedTeam.competitionName]);
   return `${head} (${countText})`;
 }
@@ -444,7 +440,7 @@ export function applySavedTeamToForm(
           birthYear,
           ageInCompetitionYear: ageInCompYear,
           maxAge,
-          message: `${slot.fullName} turns ${ageInCompYear} in ${compYear} (check U${maxAge} eligibility).`,
+          message: tr('entries.dec.ageWarning', { name: slot.fullName, age: ageInCompYear, year: compYear, max: maxAge }),
         });
       }
     });
@@ -459,4 +455,9 @@ export function applySavedTeamToForm(
     phone: (savedTeam.trainerPhone ?? '').trim(),
     ageWarnings,
   };
+}
+
+/** "12 of 18 dec forms in": how many of the teams still in the event have sent theirs. */
+export function decFormStat(formsIn: number, teams: number): string {
+  return `${formsIn} of ${teams} dec ${teams === 1 ? 'form' : 'forms'} in`;
 }

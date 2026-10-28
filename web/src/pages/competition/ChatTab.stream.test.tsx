@@ -269,8 +269,11 @@ it('gives organisers a clear Go live button, whether or not streaming is switche
   const goLive = screen.getByRole('link', { name: 'Go live' });
   expect(goLive).toHaveAttribute('href', '/competitions/1/broadcast');
   expect(screen.queryByText(/Streaming isn’t set up yet/)).toBeNull();
-  expect(screen.getByRole('link', { name: 'Control the stream' })).toHaveAttribute('href', '/competitions/1/stream-controls');
+  // Nothing is live: the controls are hidden and organisers still reach their saved replays.
+  expect(screen.queryByRole('link', { name: 'Control the stream' })).toBeNull();
+  expect(screen.getByRole('link', { name: 'Replays' })).toHaveAttribute('href', '/competitions/1/stream-controls?tab=replay');
   expect(screen.getByRole('link', { name: 'Commentary desk' })).toHaveAttribute('href', '/competitions/1/commentary');
+  expect(screen.queryByRole('link', { name: 'Prize-giving' })).toBeNull();
   expect(screen.queryByText('End stream')).toBeNull();
 
   context.enabled = false; rerender(<MemoryRouter><ChatTab /></MemoryRouter>);
@@ -283,7 +286,8 @@ it('hides Go live once a stream is on but keeps the control and desk links', asy
   context.streams = [{ id: 4, competitionId: 1, arenaName: 'Arena 1', angleName: 'Main', status: 0, caption: null, audioMuted: false, hasAudio: true, startedAt: '2026-06-01T10:00:00Z', viewerCount: 2, generation: 1 }];
   render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
   expect(screen.queryByRole('link', { name: 'Go live' })).toBeNull();
-  expect(screen.getByRole('link', { name: 'Control the stream' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Control the stream' })).toHaveAttribute('href', '/competitions/1/stream-controls');
+  expect(screen.queryByRole('link', { name: 'Replays' })).toBeNull();
   expect(screen.getByRole('link', { name: 'Commentary desk' })).toBeInTheDocument();
 });
 
@@ -348,4 +352,30 @@ it('warns when the last post was for another competition, with a Switch back lin
   fireEvent.click(screen.getByRole('button', { name: 'Dismiss competition warning' }));
   expect(screen.queryByText(/Your last post was for/)).toBeNull();
   localStorage.removeItem('mg.lastChatComp');
+});
+
+it('swipes the all-announcements sheet and the stream settings sheet down to close them', async () => {
+  const swipe = (dialog: HTMLElement) => {
+    fireEvent.touchStart(dialog, { touches: [{ clientY: 100 }] });
+    fireEvent.touchMove(dialog, { touches: [{ clientY: 260 }] });
+    fireEvent.touchEnd(dialog, { changedTouches: [{ clientY: 260 }] });
+  };
+  context.roles = ['Admin'];
+  render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
+  fireEvent.click(screen.getByRole('button', { name: 'Change' }));
+  swipe(screen.getByRole('dialog', { name: 'Stream settings' }));
+  expect(screen.queryByRole('dialog', { name: 'Stream settings' })).toBeNull();
+});
+
+it('swipes the all-announcements sheet down to close it', async () => {
+  context.roles = [];
+  context.detail = competition({ sessions: [session(1, { status: 1 })] });
+  vi.mocked(api.get).mockResolvedValue({ data: [1, 2, 3, 4].map((id) => chat(id, { body: `Update ${id}`, createdAt: `2026-06-01T10:0${id}:00Z` })) });
+  render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
+  fireEvent.click(screen.getByRole('button', { name: /^All/ }));
+  const dialog = screen.getByRole('dialog', { name: 'All announcements' });
+  fireEvent.touchStart(dialog, { touches: [{ clientY: 100 }] });
+  fireEvent.touchMove(dialog, { touches: [{ clientY: 260 }] });
+  fireEvent.touchEnd(dialog, { changedTouches: [{ clientY: 260 }] });
+  expect(screen.queryByRole('dialog', { name: 'All announcements' })).toBeNull();
 });

@@ -1,7 +1,7 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { NextLanesCard, ScoreClashBanner, type ScoreClashItem } from './ScoringParts';
+import { EliminationSheet, NextLanesCard, ScoreClashBanner, type ScoreClashItem } from './ScoringParts';
 
 const clash = (raceId: number, raceOrder: number): ScoreClashItem => ({
   raceId, raceName: `Game ${raceOrder}`, raceOrder,
@@ -50,5 +50,24 @@ describe('NextLanesCard', () => {
     render(<NextLanesCard lanes={lanes(false)} />);
     expect(screen.queryByRole('status')).toBeNull();
     expect(screen.getByText('Not final yet.')).toBeInTheDocument();
+  });
+});
+
+describe('EliminationSheet focus', () => {
+  it('takes focus, closes on Escape and gives focus back', () => {
+    const opener = document.createElement('button');
+    document.body.appendChild(opener);
+    opener.focus();
+    const onCancel = vi.fn();
+    const { unmount } = render(
+      <EliminationSheet places={[{ teamId: 1, place: 1, eliminated: true } as never]} names={{ 1: 'Oak A' }} onSave={vi.fn()} onSkip={vi.fn()} onCancel={onCancel} />,
+    );
+    const sheet = screen.getByRole('dialog', { name: 'Why were teams eliminated?' });
+    expect(sheet.contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    unmount();
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
   });
 });

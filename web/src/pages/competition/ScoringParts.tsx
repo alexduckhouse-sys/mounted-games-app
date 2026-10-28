@@ -1,16 +1,17 @@
 /* eslint-disable react-refresh/only-export-components */
 import { motion, type PanInfo } from 'framer-motion';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { BibSwatch, HatbandSwatch } from '../../components/BibSwatch';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useDialogFocus } from '../../components/useDialogFocus';
+import { BibSwatch } from '../../components/BibSwatch';
 import { dotColour } from '../../lib/teamColours';
+import type { LaneFill } from '../../lib/laneFill';
 import { hatbandColour } from '../../lib/hatbands';
-import { RaceRulesButton } from '../../components/RaceRulesButton';
 import { RaceSelect } from '../../components/RacePicker';
 import { Notice } from '../../components/Notice';
 import { Sheet } from '../../components/Sheet';
 import { ELIM_REASONS, OTHER_REASON, noteFor, reasonKeyOf, statusFor } from '../../lib/elimReasons';
 import { RESULT_STATUS } from '../../lib/resultStatus';
-import { hatbandFor, inLaneOrder } from '../../lib/laneOrder';
+import { inLaneOrder } from '../../lib/laneOrder';
 import type { NextLanes } from '../../lib/nextRoundLanes';
 import type { PendingPlace } from '../../lib/raceScoring';
 import type { RaceSummary } from '../../lib/raceSummary';
@@ -22,6 +23,7 @@ import './heat.css';
 import './scoring.css';
 import { formatPoints } from '../../lib/formatPoints';
 import { triggerScorerHaptic } from '../../lib/userPrefs';
+import { useSwipeToClose } from '../../hooks/useSwipeToClose';
 
 export interface ScoreOverrideValue {
   points: number;
@@ -90,14 +92,6 @@ export function parseRefereeCard(note: string | null | undefined): { card: Refer
     return { card, cleanNote: match[2].trim() };
   }
   return { card: null, cleanNote: note.trim() };
-}
-
-/** Formats a referee note with the [YC] or [RC] prefix when a card is selected. */
-export function formatRefereeCardNote(card: RefereeCard, cleanNote: string): string {
-  const clean = cleanNote.replace(/^\s*\[(YC|RC)\]\s*/i, '').trim();
-  if (card === 'yellow') return clean ? `[YC] ${clean}` : '[YC]';
-  if (card === 'red') return clean ? `[RC] ${clean}` : '[RC]';
-  return clean;
 }
 
 /** Reads stored cards from localStorage for immediate client-side badging. */
@@ -195,7 +189,7 @@ export function tapHaptic(): void {
 /** One team in the race being scored. A tap places it (or takes it off again); pressing and holding eliminates it. */
 export function ScoreRow({
   entry, lane, hatband, state, sitting, hc, canScore, points = 0, overridePoints,
-  card, fact, last = false,
+  card, fact, last = false, fill = null,
   onTap, onSwipeEliminate, onToggleElim,
 }: {
   entry: HeatEntry;
@@ -212,6 +206,8 @@ export function ScoreRow({
   fact?: string;
   /** The only racing lane still to be scored: picked out quietly, never placed for the scorer. */
   last?: boolean;
+  /** Paints the whole box in the team's bib colour (the scorer's "Full colour lanes" choice). Null keeps the normal box. */
+  fill?: LaneFill | null;
   onTap: () => void;
   onSwipeEliminate: () => void;
   onToggleElim: () => void;
@@ -285,7 +281,10 @@ export function ScoreRow({
   ) : null;
 
   return (
-    <li className={`sc-row ${placed ? 'sc-row-placed' : ''} ${eliminated ? 'sc-row-out' : ''} ${sitting ? 'sc-row-sit' : ''} ${last ? 'sc-row-last' : ''}`}>
+    <li
+      className={`sc-row ${placed ? 'sc-row-placed' : ''} ${eliminated ? 'sc-row-out' : ''} ${sitting ? 'sc-row-sit' : ''} ${last ? 'sc-row-last' : ''} ${fill ? 'sc-row-fill' : ''}`}
+      style={fill ? ({ '--lane-fill': fill.colour, '--lane-ink': fill.ink, '--lane-ink-soft': fill.inkSoft } as CSSProperties) : undefined}
+    >
       {holding && <span className="sc-hold" aria-hidden="true" />}
       <motion.button
         type="button"
@@ -333,10 +332,24 @@ export function ScoreRow({
   );
 }
 
+/**
+ * A bottom dialog on the scoring screen that closes when it is swiped down (the same hook as `components/Sheet`). Focus
+ * moves in to `focus` and stays inside; Escape closes it.
+ */
+export function PullDownDialog({ label, className, onClose, focus = 'button', children }: { label: string; className: string; onClose: () => void; focus?: string; children: ReactNode }) {
+  const { ref, handlers, style, dragging } = useSwipeToClose<HTMLDivElement>(onClose);
+  useDialogFocus(ref, onClose, focus);
+  return (
+    <div ref={ref} role="dialog" aria-modal="true" aria-label={label} className={dragging ? `${className} is-dragging` : className} style={style} {...handlers} onClick={(e) => e.stopPropagation()}>
+      {children}
+    </div>
+  );
+}
+
 function Overlay({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
   return (
     <div className="sc-overlay" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-label={label} className="sc-sheet" onClick={(e) => e.stopPropagation()}>{children}</div>
+      <PullDownDialog label={label} className="sc-sheet" onClose={onClose}>{children}</PullDownDialog>
     </div>
   );
 }
@@ -467,26 +480,6 @@ export function EliminationSheet({ places, names, onSave, onSkip, onCancel }: {
         <button type="button" className="mg-btn mg-btn-secondary" onClick={onCancel}>Back</button>
       </div>
     </Overlay>
-  );
-}
-
-/** The current race's lanes, in order. Sits beside the races on a wide screen and after them on a phone. */
-export function LaneView({ heat, raceIndex, raceName, rules, hatbands }: { heat: Heat; raceIndex: number; raceName: string; rules: LaneRules; hatbands?: string[] | null }) {
-  if (heat.entries.length === 0) return null;
-  const rotated = raceIndex > 0 && rules.mode !== 1;
-  return (
-    <section className="sc-card sc-pad" aria-label="Lane view">
-      <h3 className="sc-label">Lanes for {raceName}</h3>
-      {rotated && <p className="sc-sub">Rotated {rules.mode === 2 ? '-' : '+'}{raceIndex} from the draw</p>}
-      <ol className="sc-rows mt-1">
-        {inLaneOrder(heat, raceIndex, rules).map((e) => (
-          <li key={e.id} className="sc-lane-item">
-            <span className="sc-lane">{displayLaneFor(heat, e, raceIndex, rules)}</span>
-            <span className="sc-who"><span className="sc-name">{e.teamName}</span><BibSwatch colour={e.bibColour} /><HatbandSwatch colour={hatbandFor(hatbands, displayLaneFor(heat, e, raceIndex, rules))} /></span>
-          </li>
-        ))}
-      </ol>
-    </section>
   );
 }
 
@@ -641,39 +634,6 @@ export function HeatGrid({ heat, races, activeRaceId, activeIndex, rules, pendin
         </table>
       </div>
     </section>
-  );
-}
-
-/** The race rules, one button per race, below the table when opened. */
-export function RaceRules({ races }: { races: Race[] }) {
-  const [open, setOpen] = useState(false);
-  if (races.length === 0) return null;
-  return (
-    <>
-      <div className="flex justify-center">
-        <button
-          type="button"
-          className="mg-text-link"
-          aria-expanded={open}
-          onClick={() => setOpen((show) => !show)}
-        >
-          {open ? 'Close race rules and setup' : 'Race rules and arena setup'}
-        </button>
-      </div>
-      {open && (
-        <section aria-label="Race rules" className="sc-card px-3">
-          <h3 className="sc-label pt-3">Race rules</h3>
-          <ol className="divide-y divide-[rgb(var(--mg-rule-soft))]">
-            {races.map((r) => (
-              <li key={r.id} className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate py-2">{r.name}</span>
-                <RaceRulesButton raceName={r.name} className="!h-11 !w-11" />
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
-    </>
   );
 }
 

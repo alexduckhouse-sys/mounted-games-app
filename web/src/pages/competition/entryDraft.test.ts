@@ -5,10 +5,17 @@ const key = entryDraftKey('fictional-account', 1, 5, 'standard');
 const details: EntryDraft = {
   fullName: 'Example Entrant', club: 'Fictional Pony Club',
   teamName: 'Example Team', wholeTeam: false, lookingForGuestRiders: false, teamsCount: 1,
-  stablesCount: 0, stablingClubOrTeam: '', useInitialOnly: false, noFilming: true, requestId: 'example-request',
+  stablesCount: 0, stablingClubOrTeam: '', useInitialOnly: false, requestId: 'example-request',
 };
 
 describe('entry drafts', () => {
+  it('still reads a draft saved before the filming option was removed', () => {
+    localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), details: { ...details, noFilming: true } }));
+    expect(readEntryDraft(key)).toMatchObject(details);
+    saveEntryDraft(key, details);
+    expect(localStorage.getItem(key)).not.toContain('noFilming');
+  });
+
   it('keeps account, event, section and entry type separate, including punctuation in account ids', () => {
     saveEntryDraft(key, details);
     expect(readEntryDraft(key)).toEqual(details);

@@ -3,6 +3,7 @@ import { ChevronDown, Mic } from 'lucide-react';
 import { api } from '../../api';
 import { buildCommentatorBriefing } from '../../lib/commentatorFacts';
 import { formatPoints } from '../../lib/formatPoints';
+import { useT } from '../../i18n/LanguageContext';
 import type { CommentatorBriefing, DeclarationForm, Heat, Session, StandingRow, Team } from '../../types';
 
 export interface BriefingLaneOrder {
@@ -43,6 +44,7 @@ function startsOpen(): boolean {
 export function CommentatorBriefingCard({
   competitionId, session, heat, allSessions, standings, teams, declarations, finalistCount, laneOrder, refreshTick,
 }: Props) {
+  const t = useT();
   const [open, setOpen] = useState(startsOpen);
   const [fetched, setFetched] = useState<{ key: string; briefing: CommentatorBriefing } | null>(null);
   const completedRaces = heat.races.filter((r) => r.isComplete).length;
@@ -76,7 +78,7 @@ export function CommentatorBriefingCard({
   // so the briefing agrees with the lanes card and the scorer.
   const laneLabel = (teamId: number, fallback: string) => {
     const order = laneByTeam.get(teamId);
-    return order ? (order.sitting ? 'Sitting out' : `Lane ${order.lane}`) : fallback;
+    return order ? (order.sitting ? t('desk.commentary.sittingOut') : t('desk.commentary.lane', { n: order.lane })) : fallback;
   };
   const points = briefing.talkingPoints.slice(0, 6).map((point) => point.replace(/Lane (\d+) \(([^)]+)\)/g, (whole, _lane: string, name: string) => {
     const squad = briefing.lanes.find((l) => l.teamName === name);
@@ -84,7 +86,7 @@ export function CommentatorBriefingCard({
   }));
 
   return (
-    <section aria-label="Briefing" className="mg-card overflow-hidden">
+    <section aria-label={t('desk.commentary.briefing')} className="mg-card overflow-hidden">
       <button
         type="button"
         aria-expanded={open}
@@ -94,7 +96,7 @@ export function CommentatorBriefingCard({
       >
         <span className="flex min-w-0 items-center gap-2">
           <Mic className="h-5 w-5 shrink-0 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
-          <span className="mg-display text-lg font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">Briefing</span>
+          <span className="mg-display text-lg font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">{t('desk.commentary.briefing')}</span>
           <span className="truncate text-xs font-bold text-[rgb(var(--mg-body))]">
             {briefing.heatLabel}{briefing.currentRaceName ? ` · ${briefing.currentRaceName}` : ''}
           </span>
@@ -120,12 +122,12 @@ export function CommentatorBriefingCard({
           )}
 
           {lanes.length === 0 ? (
-            <p className="m-0 text-sm text-[rgb(var(--mg-muted))]">No lane draw for this heat yet.</p>
+            <p className="m-0 text-sm text-[rgb(var(--mg-muted))]">{t('desk.commentary.noLaneDrawBriefing')}</p>
           ) : (
             <ol className="m-0 flex list-none flex-col divide-y divide-[rgb(var(--mg-rule-soft))] p-0">
               {lanes.map((l) => {
                 const order = laneByTeam.get(l.teamId);
-                const label = order ? (order.sitting ? 'Sits out' : `Lane ${order.lane}`) : `Lane ${l.laneIndex}`;
+                const label = order ? (order.sitting ? t('desk.commentary.sitsOut') : t('desk.commentary.lane', { n: order.lane })) : t('desk.commentary.lane', { n: l.laneIndex });
                 return (
                   <li key={l.teamId} className="flex flex-col gap-1 py-2.5 first:pt-0 last:pb-0">
                     <div className="flex flex-wrap items-baseline justify-between gap-x-3">
@@ -134,7 +136,9 @@ export function CommentatorBriefingCard({
                         {l.teamName}
                       </span>
                       <span className="text-xs font-bold text-[rgb(var(--mg-heading))]">
-                        {l.currentRank != null ? `Rank ${l.currentRank} · ` : ''}{formatPoints(l.totalPoints)} pts
+                        {l.currentRank != null
+                          ? t('desk.commentary.rankPts', { rank: l.currentRank, points: formatPoints(l.totalPoints) })
+                          : t('desk.commentary.ptsOnly', { points: formatPoints(l.totalPoints) })}
                       </span>
                     </div>
                     {l.stakesHeadline && <p className="m-0 text-xs text-[rgb(var(--mg-body))]">{l.stakesHeadline}</p>}

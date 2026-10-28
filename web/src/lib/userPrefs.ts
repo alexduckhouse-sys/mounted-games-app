@@ -102,6 +102,7 @@ export const STORAGE_KEYS = {
   textSize: 'mg.prefs.textSize',
   scorerHaptics: 'mg.prefs.scorerHaptics',
   sortByLaneOrder: 'mg.prefs.sortByLaneOrder',
+  fullColourLanes: 'mg.scoring.fullColour',
 } as const;
 
 export const PREFS_CHANGED_EVENT = 'mg:prefs-changed';
@@ -290,6 +291,16 @@ export function getSortByLaneOrder(): boolean {
 
 export function setSortByLaneOrder(enabled: boolean): void {
   writeStorage(STORAGE_KEYS.sortByLaneOrder, enabled ? 'true' : 'false');
+  notifyPrefsChanged();
+}
+
+/** Whether lane boxes on the scoring screen are filled with the team's bib colour. A per-device choice, off by default. */
+export function getFullColourLanes(): boolean {
+  return readStorage(STORAGE_KEYS.fullColourLanes) === 'true';
+}
+
+export function setFullColourLanes(enabled: boolean): void {
+  writeStorage(STORAGE_KEYS.fullColourLanes, enabled ? 'true' : null);
   notifyPrefsChanged();
 }
 

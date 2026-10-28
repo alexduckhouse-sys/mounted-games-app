@@ -79,7 +79,7 @@ describe('stablingPass', () => {
       createdAt: '2026-06-01T12:00:00Z',
       stablesCount: 2,
     });
-    expect(unallocatedWithStables.clubOrTeamName).toBe('Unaffiliated');
+    expect(unallocatedWithStables.clubOrTeamName).toBe('');
     expect(unallocatedWithStables.stableAssignment).toBe('To be allocated on arrival');
 
     const fromSection = buildLorryStablingPassFromSectionSignup(
@@ -155,6 +155,11 @@ describe('stablingPass', () => {
       createdAt: '2026-07-01T12:00:00Z',
     });
     expect(buildOfflineWalletPassHtml(fallbackVenuePass)).toContain('Showground gate');
+    const odd = { ...fallbackVenuePass, signupId: '<img src=x>' as unknown as number, stablesCount: '<b>2</b>' as unknown as number };
+    const oddHtml = buildOfflineWalletPassHtml(odd);
+    expect(oddHtml).not.toContain('<img src=x>');
+    expect(oddHtml).not.toContain('<b>2</b>');
+    expect(oddHtml).toContain('&lt;img src=x&gt;');
 
     const createObjectUrlSpy = vi
       .spyOn(URL, 'createObjectURL')

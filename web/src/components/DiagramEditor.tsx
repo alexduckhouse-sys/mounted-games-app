@@ -2,13 +2,76 @@ import { useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Copy, Minus, Plus, Trash2 } from 'lucide-react';
 import type { ConeKind, DiagramElement, DiagramPos, DiagramTool, ItemKind } from '../types';
 import { DIAGRAM_TOOLS } from '../types';
+import { useLanguage } from '../i18n/LanguageContext';
+import type { MessageKey } from '../i18n/en';
+import type { Translate } from '../i18n/translate';
 import { ElementShape, LaneCanvas } from './RaceDiagram';
 import { LANE, pxToPct } from './diagramGeometry';
 import {
   MAX_POLES, MIN_POLES, addContent, allowedSlotKinds, buildSlots, contentsOf, duplicateItem, fillPoles,
   fromLaneModel, isContainer, moveToSlot, nearestSlot, parseDiagram, patchItem, placeTool, removeContent,
-  removeItem, setPoleCount, slotById, stepSlot, toLaneModel, toolLabel, type LaneModel,
+  removeItem, setPoleCount, slotById, stepSlot, toLaneModel, toolLabel, type LaneModel, type Slot,
 } from './diagramSlots';
+
+const TOOL_KEYS: Record<string, MessageKey> = {
+  'pole:': 'admin.format.diagram.tool.pole',
+  'cone:flag': 'admin.format.diagram.tool.cone:flag',
+  'cone:ball': 'admin.format.diagram.tool.cone:ball',
+  'in:': 'admin.format.diagram.tool.in',
+  'item:bucket': 'admin.format.diagram.tool.item:bucket',
+  'item:bin': 'admin.format.diagram.tool.item:bin',
+  'item:mug': 'admin.format.diagram.tool.item:mug',
+  'item:ball': 'admin.format.diagram.tool.item:ball',
+  'item:flag': 'admin.format.diagram.tool.item:flag',
+  'item:sock': 'admin.format.diagram.tool.item:sock',
+  'item:sack': 'admin.format.diagram.tool.item:sack',
+  'item:bottle': 'admin.format.diagram.tool.item:bottle',
+  'item:baton': 'admin.format.diagram.tool.item:baton',
+  'item:sword': 'admin.format.diagram.tool.item:sword',
+  'item:quoit': 'admin.format.diagram.tool.item:quoit',
+  'item:card': 'admin.format.diagram.tool.item:card',
+  'item:penny': 'admin.format.diagram.tool.item:penny',
+  'item:box': 'admin.format.diagram.tool.item:box',
+  'lane:': 'admin.format.diagram.tool.lane',
+  'midline:': 'admin.format.diagram.midline',
+};
+
+/** The name of a kind of equipment in the chosen language; `fallback` is the English name from diagramSlots. */
+function toolName(t: Translate, kind: { t: string; kind?: string }, fallback: string): string {
+  const key = TOOL_KEYS[`${kind.t === 'table' ? 'in' : kind.t}:${kind.kind ?? ''}`]
+    ?? (kind.t === 'item' || kind.t === 'cone' ? 'admin.format.diagram.tool.item' : undefined);
+  return key ? t(key) : fallback;
+}
+
+const elementName = (t: Translate, el: DiagramElement) => toolName(t, { t: el.t, kind: (el as DiagramPos).kind }, toolLabel(el));
+
+/** The chip label for a place on the lane ("Pole 2", "1–2"), in the chosen language. */
+function slotLabel(t: Translate, slot: Slot, poleCount: number): string {
+  switch (slot.kind) {
+    case 'start': return t('admin.format.diagram.slot.start');
+    case 'top': return t('admin.format.diagram.slot.top');
+    case 'beyond': return t('admin.format.diagram.slot.beyond');
+    case 'pole': return t('admin.format.diagram.slot.pole', { n: slot.index });
+    default: return `${slot.index === 0 ? t('admin.format.diagram.slot.start') : slot.index}–${slot.index === poleCount ? t('admin.format.diagram.slot.top') : slot.index + 1}`;
+  }
+}
+
+/** The long label for a place on the lane ("Between pole 2 and pole 3"), in the chosen language. */
+function slotDescription(t: Translate, slot: Slot, poleCount: number): string {
+  switch (slot.kind) {
+    case 'start': return t('admin.format.diagram.slot.onStart');
+    case 'top': return t('admin.format.diagram.slot.onTop');
+    case 'beyond': return t('admin.format.diagram.slot.beyondTop');
+    case 'pole': return t('admin.format.diagram.slot.onPole', { n: slot.index });
+    default: {
+      const k = slot.index;
+      return t('admin.format.diagram.slot.between', {
+        from: k === 0 ? t('admin.format.diagram.slot.theStart') : t('admin.format.diagram.slot.thePole', { n: k }),
+        to: k === poleCount ? t('admin.format.diagram.slot.theTop') : t('admin.format.diagram.slot.thePole', { n: k + 1 }),
+      });
+    }
+  }
+}
 
 interface Props {
   value: string;
@@ -25,6 +88,7 @@ interface Props {
  *    drag it on the lane), duplicate it, delete it, or say what's on it.
  */
 export function DiagramEditor({ value, onChange }: Props) {
+  const { t } = useLanguage();
   const model = useMemo(() => toLaneModel(parseDiagram(value)), [value]);
   const slots = useMemo(() => buildSlots(model.poleCount), [model.poleCount]);
   const [activeSlotId, setActiveSlotId] = useState<string | null>(null);
@@ -101,18 +165,18 @@ export function DiagramEditor({ value, onChange }: Props) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 flex-wrap text-xs">
-        <span className="font-semibold text-slate-600 dark:text-slate-300">Bending poles</span>
-        <button type="button" className="btn-ghost min-h-[44px] min-w-[44px] justify-center" aria-label="Fewer poles"
+        <span className="font-semibold text-slate-600 dark:text-slate-300">{t('admin.format.diagram.bendingPoles')}</span>
+        <button type="button" className="btn-ghost min-h-[44px] min-w-[44px] justify-center" aria-label={t('admin.format.diagram.fewerPoles')}
                 disabled={model.poleCount <= MIN_POLES} onClick={() => commit(setPoleCount(model, model.poleCount - 1))}>
           <Minus className="w-4 h-4" />
         </button>
         <span className="w-6 text-center text-sm font-semibold" data-testid="pole-count">{model.poleCount}</span>
-        <button type="button" className="btn-ghost min-h-[44px] min-w-[44px] justify-center" aria-label="More poles"
+        <button type="button" className="btn-ghost min-h-[44px] min-w-[44px] justify-center" aria-label={t('admin.format.diagram.morePoles')}
                 disabled={model.poleCount >= MAX_POLES} onClick={() => commit(setPoleCount(model, model.poleCount + 1))}>
           <Plus className="w-4 h-4" />
         </button>
         <button type="button" className="btn-ghost min-h-[44px]" onClick={() => commit(fillPoles(model))}>
-          Put a pole in every position
+          {t('admin.format.diagram.fillPoles')}
         </button>
         <button
           type="button"
@@ -120,18 +184,18 @@ export function DiagramEditor({ value, onChange }: Props) {
           className={`btn-ghost min-h-[44px] ${model.midline ? 'bg-brand-100 dark:bg-brand-900/40 ring-1 ring-brand-300' : ''}`}
           onClick={() => commit({ ...model, midline: !model.midline })}
         >
-          Midline
+          {t('admin.format.diagram.midline')}
         </button>
         <button type="button" className="btn-ghost min-h-[44px] text-rose-500 ml-auto" onClick={() => { commit({ ...model, items: [], midline: false }); setSelectedIndex(null); }}>
-          <Trash2 className="w-4 h-4" /> Clear
+          <Trash2 className="w-4 h-4" /> {t('admin.format.diagram.clear')}
         </button>
       </div>
 
       <div className="rounded-md border border-slate-200 dark:border-slate-700 overflow-hidden select-none">
-        <LaneCanvas model={model} height={220} ariaLabel="Race diagram editor" editing={canvasEditing} />
+        <LaneCanvas model={model} height={220} ariaLabel={t('admin.format.diagram.editorLabel')} editing={canvasEditing} />
       </div>
 
-      <div className="overflow-x-auto -mx-1 px-1 pb-1" role="group" aria-label="Places on the lane">
+      <div className="overflow-x-auto -mx-1 px-1 pb-1" role="group" aria-label={t('admin.format.diagram.places')}>
         <div className="flex gap-1.5 min-w-max">
           {slots.map((s) => {
             const count = model.items.filter((it) => it.slot === s.id).length;
@@ -141,13 +205,13 @@ export function DiagramEditor({ value, onChange }: Props) {
                 key={s.id}
                 type="button"
                 aria-pressed={on}
-                aria-label={s.description}
+                aria-label={slotDescription(t, s, model.poleCount)}
                 onClick={() => selectSlot(s.id)}
                 className={`relative min-h-[44px] min-w-[52px] px-2 rounded-lg border text-xs font-semibold whitespace-nowrap
                   ${on ? 'bg-sky-100 border-sky-500 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100' : 'bg-white/70 border-slate-300 text-slate-700 dark:bg-slate-800/60 dark:border-slate-600 dark:text-slate-200'}
                   ${s.kind === 'pole' ? '' : 'italic font-medium'}`}
               >
-                {s.label}
+                {slotLabel(t, s, model.poleCount)}
                 {count > 0 && (
                   <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full bg-amber-500 text-white text-[10px] leading-[18px] text-center">{count}</span>
                 )}
@@ -159,23 +223,23 @@ export function DiagramEditor({ value, onChange }: Props) {
 
       {!activeSlot && !selected && (
         <p className="text-sm text-slate-500">
-          {model.items.length === 0 ? 'Tap a pole or a gap to place equipment.' : 'Tap an element to edit it, or a slot to add equipment.'}
+          {model.items.length === 0 ? t('admin.format.diagram.tapToPlace') : t('admin.format.diagram.tapToEdit')}
         </p>
       )}
 
       {activeSlot && !selected && (
         <div className="card p-3 space-y-2" data-testid="slot-panel">
-          <div className="text-sm font-semibold">{activeSlot.description}</div>
+          <div className="text-sm font-semibold">{slotDescription(t, activeSlot, model.poleCount)}</div>
           {itemsHere.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {itemsHere.map(({ it, i }) => (
                 <button key={i} type="button" className="btn-ghost min-h-[44px]" onClick={() => selectItem(i)}>
-                  {toolLabel(it.el)}{(it.el as DiagramPos).label ? ` · ${(it.el as DiagramPos).label}` : ''}
+                  {elementName(t, it.el)}{(it.el as DiagramPos).label ? ` · ${(it.el as DiagramPos).label}` : ''}
                 </button>
               ))}
             </div>
           )}
-          <span className="text-xs text-slate-500 block">Add here:</span>
+          <span className="text-xs text-slate-500 block">{t('admin.format.diagram.addHere')}</span>
           <ToolGrid onPick={place} disablePoles={activeSlot.kind !== 'pole'} />
         </div>
       )}
@@ -184,7 +248,7 @@ export function DiagramEditor({ value, onChange }: Props) {
         <SelectedPanel
           model={model}
           index={selectedIndex}
-          slotLabel={slotById(slots, selected.slot)?.description ?? ''}
+          slotLabel={(() => { const slot = slotById(slots, selected.slot); return slot ? slotDescription(t, slot, model.poleCount) : ''; })()}
           canBack={stepSlot(model, selectedIndex, -1) !== null}
           canForward={stepSlot(model, selectedIndex, 1) !== null}
           onMove={moveSelected}
@@ -198,32 +262,33 @@ export function DiagramEditor({ value, onChange }: Props) {
   );
 }
 
-const GROUPS: { label: string; match: (t: DiagramTool) => boolean }[] = [
-  { label: 'Lane', match: (t) => t.t !== 'cone' && t.t !== 'item' },
-  { label: 'Cones', match: (t) => t.t === 'cone' },
-  { label: 'Equipment', match: (t) => t.t === 'item' },
+const GROUPS: { label: MessageKey; match: (t: DiagramTool) => boolean }[] = [
+  { label: 'admin.format.diagram.group.lane', match: (t) => t.t !== 'cone' && t.t !== 'item' },
+  { label: 'admin.format.diagram.group.cones', match: (t) => t.t === 'cone' },
+  { label: 'admin.format.diagram.group.equipment', match: (t) => t.t === 'item' },
 ];
 
 function ToolGrid({ onPick, disablePoles, hidePoles }: { onPick: (t: DiagramTool) => void; disablePoles?: boolean; hidePoles?: boolean }) {
+  const { t: tr } = useLanguage();
   return (
     <div className="space-y-2">
       {GROUPS.map((g) => {
-        const tools = DIAGRAM_TOOLS.filter((t) => g.match(t) && !(hidePoles && t.t === 'pole'));
+        const tools = DIAGRAM_TOOLS.filter((d) => g.match(d) && !(hidePoles && d.t === 'pole'));
         if (tools.length === 0) return null;
         return (
           <div key={g.label}>
-            <span className="text-[11px] uppercase tracking-wide text-slate-500 block mb-1">{g.label}</span>
+            <span className="text-[11px] uppercase tracking-wide text-slate-500 block mb-1">{tr(g.label)}</span>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-              {tools.map((t) => (
+              {tools.map((d) => (
                 <button
-                  key={t.t + (t.kind ?? '')}
+                  key={d.t + (d.kind ?? '')}
                   type="button"
                   className="btn-ghost min-h-[44px] justify-start gap-2 text-sm disabled:opacity-40"
-                  disabled={disablePoles && t.t === 'pole'}
-                  title={t.t === 'pole' && disablePoles ? 'Poles only go on pole positions' : `Add a ${t.label.toLowerCase()}`}
-                  onClick={() => onPick(t)}
+                  disabled={disablePoles && d.t === 'pole'}
+                  title={d.t === 'pole' && disablePoles ? tr('admin.format.diagram.polesOnly') : tr('admin.format.diagram.addA', { tool: toolName(tr, d, d.label).toLowerCase() })}
+                  onClick={() => onPick(d)}
                 >
-                  <ToolPreview t={t.t} kind={t.kind} /> {t.label}
+                  <ToolPreview t={d.t} kind={d.kind} /> {toolName(tr, d, d.label)}
                 </button>
               ))}
             </div>
@@ -257,6 +322,7 @@ function SelectedPanel({
   onDelete: () => void;
   onDone: () => void;
 }) {
+  const { t } = useLanguage();
   const item = model.items[index];
   const el = item.el as DiagramPos & { t: DiagramElement['t'] };
   const contents = contentsOf(item.el);
@@ -265,57 +331,57 @@ function SelectedPanel({
     <div className="card p-3 space-y-3" data-testid="selected-panel">
       <div className="flex items-center gap-2 flex-wrap">
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold">{toolLabel(item.el)}</div>
+          <div className="text-sm font-semibold">{elementName(t, item.el)}</div>
           <div className="text-xs text-slate-500">{slotLabel}</div>
         </div>
-        <button type="button" className="btn-ghost min-h-[44px]" onClick={onDone}>Done</button>
+        <button type="button" className="btn-ghost min-h-[44px]" onClick={onDone}>{t('common.done')}</button>
       </div>
 
       <label className="block">
-        <span className="text-xs text-slate-500">Name / label</span>
+        <span className="text-xs text-slate-500">{t('admin.format.diagram.nameLabel')}</span>
         <input
           className="input mt-0.5 text-sm"
           value={el.label ?? ''}
           onChange={(e) => onChange(patchItem(model, index, { label: e.target.value }))}
-          placeholder={el.t === 'pole' ? 'e.g. 1, 2, 3' : 'e.g. EGUK flag, blue mug'}
+          placeholder={el.t === 'pole' ? t('admin.format.diagram.poleExample') : t('admin.format.diagram.itemExample')}
         />
       </label>
 
       <div className="grid grid-cols-4 gap-1.5">
-        <button type="button" className="btn-ghost min-h-[44px] justify-center" aria-label="Move towards the start" disabled={!canBack} onClick={() => onMove(-1)}>
+        <button type="button" className="btn-ghost min-h-[44px] justify-center" aria-label={t('admin.format.diagram.towardsStart')} disabled={!canBack} onClick={() => onMove(-1)}>
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <button type="button" className="btn-ghost min-h-[44px] justify-center" aria-label="Move towards the top" disabled={!canForward} onClick={() => onMove(1)}>
+        <button type="button" className="btn-ghost min-h-[44px] justify-center" aria-label={t('admin.format.diagram.towardsTop')} disabled={!canForward} onClick={() => onMove(1)}>
           <ArrowRight className="w-5 h-5" />
         </button>
-        <button type="button" className="btn-ghost min-h-[44px] justify-center" aria-label="Duplicate" onClick={onDuplicate}>
+        <button type="button" className="btn-ghost min-h-[44px] justify-center" aria-label={t('admin.format.diagram.duplicate')} onClick={onDuplicate}>
           <Copy className="w-5 h-5" />
         </button>
-        <button type="button" className="btn-ghost min-h-[44px] justify-center text-rose-500" aria-label="Delete" onClick={onDelete}>
+        <button type="button" className="btn-ghost min-h-[44px] justify-center text-rose-500" aria-label={t('common.delete')} onClick={onDelete}>
           <Trash2 className="w-5 h-5" />
         </button>
       </div>
 
       {container && (
         <div className="pt-2 border-t border-slate-100 dark:border-slate-700/60 space-y-2" data-testid="contents-panel">
-          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 block">What&apos;s on it</span>
-          {contents.length === 0 && <p className="text-xs text-slate-500">Nothing yet. Pick something below to put it on.</p>}
+          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 block">{t('admin.format.diagram.whatsOnIt')}</span>
+          {contents.length === 0 && <p className="text-xs text-slate-500">{t('admin.format.diagram.nothingYet')}</p>}
           {contents.map((c) => (
             <div key={c.key} className="flex items-center gap-2">
               <ToolPreview t={c.tool.t} kind={c.tool.kind} />
-              <span className="flex-1 text-sm">{c.label}</span>
-              <button type="button" className="btn-ghost min-h-[44px] min-w-[44px] justify-center" aria-label={`Remove a ${c.label.toLowerCase()}`}
+              <span className="flex-1 text-sm">{toolName(t, c.tool, c.label)}</span>
+              <button type="button" className="btn-ghost min-h-[44px] min-w-[44px] justify-center" aria-label={t('admin.format.diagram.removeA', { tool: toolName(t, c.tool, c.label).toLowerCase() })}
                       onClick={() => onChange(removeContent(model, index, c.key))}>
                 <Minus className="w-4 h-4" />
               </button>
               <span className="w-5 text-center text-sm font-semibold">{c.count}</span>
-              <button type="button" className="btn-ghost min-h-[44px] min-w-[44px] justify-center" aria-label={`Add a ${c.label.toLowerCase()}`}
+              <button type="button" className="btn-ghost min-h-[44px] min-w-[44px] justify-center" aria-label={t('admin.format.diagram.addA', { tool: toolName(t, c.tool, c.label).toLowerCase() })}
                       onClick={() => onChange(addContent(model, index, c.tool))}>
                 <Plus className="w-4 h-4" />
               </button>
             </div>
           ))}
-          <span className="text-xs text-slate-500 block">Put on it:</span>
+          <span className="text-xs text-slate-500 block">{t('admin.format.diagram.putOnIt')}</span>
           <ToolGrid hidePoles onPick={(t) => onChange(addContent(model, index, t))} />
         </div>
       )}

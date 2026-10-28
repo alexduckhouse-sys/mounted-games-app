@@ -328,4 +328,5 @@ export const shell = {
   'shell.weather.draft.rainPause': 'We’re pausing for heavy rain. Please wait for news here.',
   'shell.weather.draft.rainNoPause': 'Heavy rain is on the way from about {time}. Racing carries on unless we say otherwise.',
   'shell.weather.draft.clear': 'Racing is starting again. The timetable has been updated, so check it for your next heat.',
+  'shell.events.yearCount': { one: '{count} competition', other: '{count} competitions' },
 } satisfies Record<string, Message>;

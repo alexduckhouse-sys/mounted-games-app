@@ -1,5 +1,5 @@
-// Unused in web UI yet — reserved for iOS / upcoming wiring
 import type { CompetitionDetail, MySignup, SectionSignup, SignupPaymentStatus } from '../types';
+import { clubLabel } from './clubName';
 
 export type PassPaymentBadge = 'PAID' | 'PENDING' | 'REFUNDED' | 'CANCELLED';
 
@@ -65,12 +65,11 @@ function resolveClubOrTeamLabel(input: {
   teamName?: string | null;
   ponyClubName?: string | null;
 }): string {
-  const label =
-    input.stablingClubOrTeam?.trim() ||
-    input.teamName?.trim() ||
-    input.ponyClubName?.trim() ||
-    'Unaffiliated';
-  return label;
+  return (
+    clubLabel(input.stablingClubOrTeam) ||
+    clubLabel(input.teamName) ||
+    clubLabel(input.ponyClubName)
+  );
 }
 
 export function buildLorryStablingPassFromMySignup(
@@ -184,14 +183,14 @@ export function buildOfflineWalletPassHtml(
 </head>
 <body>
   <article class="card">
-    <p class="kicker">Lorry Windscreen &amp; Stabling Pass · #${pass.signupId}</p>
+    <p class="kicker">Lorry Windscreen &amp; Stabling Pass · #${escapeHtml(String(pass.signupId))}</p>
     <h1 class="title">${escapeHtml(pass.clubOrTeamName)}</h1>
     <p class="sub">${escapeHtml(pass.competitionName)} · ${escapeHtml(venueLine)}</p>
     <span class="badge">${escapeHtml(pass.paymentStatus)}</span>
     <div class="grid">
       <div><div class="label">Barn / Stable Boxes</div><div class="value">${escapeHtml(pass.stableAssignment)}</div></div>
       <div><div class="label">Hook-up</div><div class="value">${escapeHtml(pass.hookupAssignment ?? 'None allocated')}</div></div>
-      <div><div class="label">Stables Booked</div><div class="value">${pass.stablesCount}</div></div>
+      <div><div class="label">Stables Booked</div><div class="value">${escapeHtml(String(pass.stablesCount))}</div></div>
       <div><div class="label">Vehicle Reg</div><div class="value">${escapeHtml(pass.vehicleRegistration ?? 'Not recorded')}</div></div>
       <div><div class="label">Entrant</div><div class="value">${escapeHtml(pass.entrantName)}</div></div>
       <div><div class="label">Section</div><div class="value">${escapeHtml(pass.sectionName)}</div></div>

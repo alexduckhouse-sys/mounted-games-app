@@ -1,4 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
+import { useDialogFocus } from '../useDialogFocus';
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ChangeEvent, type MouseEvent } from 'react';
 import {
   Camera,
@@ -14,6 +15,8 @@ import {
   X,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useT } from '../../i18n/LanguageContext';
+import { tr } from '../../i18n/translate';
 import { LEAVE, SPRING } from '../../lib/motion';
 import { useStillMotion } from '../../lite/useStillMotion';
 import { useReplayPreparation } from '../../live/useReplayPreparation';
@@ -62,9 +65,9 @@ export interface SavedReplaysButtonProps {
 const ZOOM_LEVELS = [1, 1.5, 2, 3, 4] as const;
 
 const PLAYBACK_SPEEDS = [
-  { rate: 0.25, label: 'Photo-Finish' },
-  { rate: 0.5, label: 'Slow-Mo' },
-  { rate: 1, label: 'Normal' },
+  { rate: 0.25, label: 'desk.stream.in.speedPhoto' },
+  { rate: 0.5, label: 'desk.stream.in.speedSlow' },
+  { rate: 1, label: 'desk.stream.in.speedNormal' },
 ] as const;
 
 function formatTimestamp(isoString: string): string {
@@ -119,20 +122,20 @@ export function capturePhotoFinishSnapshot(
   currentTimeSec: number,
   transform: { zoom: number; panX: number; panY: number }
 ): string {
-  if (!video || !video.videoWidth || !video.videoHeight) throw new Error('Wait for the replay video to load before taking a photo.');
+  if (!video || !video.videoWidth || !video.videoHeight) throw new Error(tr('desk.stream.in.waitVideo'));
   const canvas = document.createElement('canvas');
   const w = video.videoWidth, h = video.videoHeight;
   canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('This browser could not create a photo.');
+  if (!ctx) throw new Error(tr('desk.stream.in.noPhoto'));
   ctx.save(); ctx.translate(w / 2, h / 2); ctx.scale(transform.zoom, transform.zoom);
   ctx.translate(-w / 2 + transform.panX, -h / 2 + transform.panY);
   ctx.drawImage(video, 0, 0, w, h); ctx.restore();
   ctx.fillStyle = 'rgba(0, 0, 0, 0.82)'; ctx.fillRect(0, h - 64, w, 64);
   ctx.fillStyle = '#fbbf24'; ctx.font = 'bold 24px sans-serif';
-  ctx.fillText(`Photo Finish · ${clip.label} · ${clip.arenaName} · ${formatVideoTime(currentTimeSec)}`, 24, h - 24);
+  ctx.fillText(tr('desk.stream.in.photoBanner', { label: clip.label, arena: clip.arenaName, time: formatVideoTime(currentTimeSec) }), 24, h - 24);
   const dataUrl = canvas.toDataURL('image/png');
-  if (!dataUrl.startsWith('data:image/png')) throw new Error('The photo could not be saved. Try again.');
+  if (!dataUrl.startsWith('data:image/png')) throw new Error(tr('desk.stream.in.photoNotSaved'));
   const link = document.createElement('a'); link.href = dataUrl;
   link.download = `photo-finish-${clip.label.replace(/\s+/g, '_')}-${currentTimeSec.toFixed(1)}s.png`;
   document.body.appendChild(link); link.click(); link.remove();
@@ -178,6 +181,9 @@ export function ReplayInspector({
   onClose,
   videoRef: externalVideoRef,
 }: ReplayInspectorProps) {
+  const t = useT();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onClose, 'button[data-autofocus]');
   const internalVideoRef = useRef<HTMLVideoElement>(null);
   const videoRef = externalVideoRef || internalVideoRef;
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -521,10 +527,10 @@ export function ReplayInspector({
       const widthScale = (videoRef.current?.videoWidth || 1) / (videoRef.current?.clientWidth || videoRef.current?.videoWidth || 1);
       const heightScale = (videoRef.current?.videoHeight || 1) / (videoRef.current?.clientHeight || videoRef.current?.videoHeight || 1);
       capturePhotoFinishSnapshot(videoRef.current, clip, currentTime, { zoom, panX: panX * widthScale, panY: panY * heightScale });
-      photoToast.show(`Photo finish saved (${formatVideoTime(currentTime)})`);
+      photoToast.show(t('desk.stream.in.photoSaved', { time: formatVideoTime(currentTime) }));
     } catch (error) {
       // "Wait for the replay video to load" says what to do; every other failure gets the one standard sentence.
-      setPhotoProblem(error instanceof Error && error.message.startsWith('Wait for') ? error.message : 'Couldn’t save the photo. Try again.');
+      setPhotoProblem(error instanceof Error && error.message === t('desk.stream.in.waitVideo') ? error.message : t('desk.stream.in.photoFailed'));
     }
   };
 
@@ -547,10 +553,6 @@ export function ReplayInspector({
   // Keyboard accessibility
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-        return;
-      }
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'BUTTON')) {
         return;
@@ -568,7 +570,7 @@ export function ReplayInspector({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose, togglePlay, stepFrame]);
+  }, [togglePlay, stepFrame]);
 
   const downloadFilename = `${clip.label.replace(/\s+/g, '_')}_${clip.arenaName.replace(/\s+/g, '_')}.${clip.mimeType.includes('mp4') ? 'mp4' : 'webm'}`;
 
@@ -597,9 +599,10 @@ export function ReplayInspector({
 
   return (
     <motion.div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
-      aria-label="Replay inspector"
+      aria-label={t('desk.stream.in.dialog')}
       className="fixed inset-0 z-[100] flex flex-col bg-black/95 text-white mg-font select-none"
       initial={still ? false : { opacity: 0, y: 28 }}
       animate={{ opacity: 1, y: 0 }}
@@ -621,12 +624,12 @@ export function ReplayInspector({
             {clip.savedHighlight && (
               <span className="flex items-center gap-1 rounded bg-amber-400/20 px-2 py-0.5 text-[10px] font-bold text-amber-300 border border-amber-400/40">
                 <Star className="h-3 w-3 fill-amber-300" aria-hidden="true" />
-                Highlight
+                {t('desk.stream.in.highlight')}
               </span>
             )}
           </div>
           <p className="text-xs text-[rgb(var(--mg-header-sub))] truncate">
-            {clip.arenaName} · {formatTimestamp(clip.createdAt)} · {clip.durationSeconds}s
+            {t('desk.stream.in.headerMeta', { arena: clip.arenaName, time: formatTimestamp(clip.createdAt), seconds: clip.durationSeconds })}
           </p>
         </div>
 
@@ -635,15 +638,16 @@ export function ReplayInspector({
             href={clip.url}
             download={downloadFilename}
             className="mg-stream-control !min-h-9 !min-w-9 px-3 text-xs font-semibold"
-            aria-label="Download replay"
+            aria-label={t('desk.stream.in.downloadAria')}
           >
             <Download className="h-4 w-4" aria-hidden="true" />
-            <span className="hidden sm:inline">Download</span>
+            <span className="hidden sm:inline">{t('desk.stream.in.download')}</span>
           </a>
           <button
             type="button"
             className="mg-stream-control !min-h-9 !min-w-9 p-2"
-            aria-label="Close replay"
+            aria-label={t('desk.stream.in.closeAria')}
+            data-autofocus=""
             onClick={onClose}
           >
             <X className="h-5 w-5" aria-hidden="true" />
@@ -679,7 +683,7 @@ export function ReplayInspector({
               setDuration(videoRef.current.duration);
             }
           }}
-          aria-label={`${clip.label} video`}
+          aria-label={t('desk.stream.ed.video', { label: clip.label })}
         />
 
         {/* Floating Zoom & Region Focus Controls Overlay */}
@@ -693,7 +697,7 @@ export function ReplayInspector({
                   ? 'bg-amber-400 text-black shadow-sm'
                   : 'text-white hover:bg-white/10'
               }`}
-              aria-label={`Zoom ${level}x`}
+              aria-label={t('desk.stream.in.zoomAria', { level })}
               aria-pressed={Math.abs(zoom - level) < 0.05}
               onClick={() => handleZoomChange(level)}
             >
@@ -704,11 +708,11 @@ export function ReplayInspector({
             <button
               type="button"
               className="flex items-center gap-1 min-h-8 rounded-full px-2.5 text-xs font-semibold text-amber-300 hover:bg-white/10"
-              aria-label="Reset view"
+              aria-label={t('desk.stream.in.resetView')}
               onClick={handleResetView}
             >
               <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>Reset view</span>
+              <span>{t('desk.stream.in.resetView')}</span>
             </button>
           )}
 
@@ -717,26 +721,26 @@ export function ReplayInspector({
           <button
             type="button"
             className="min-h-8 rounded-full px-2 text-[11px] font-semibold text-white/90 hover:bg-white/10"
-            aria-label="Focus left start/finish"
+            aria-label={t('desk.stream.in.focusLeftAria')}
             onClick={() => handleFocusRegion('left')}
           >
-            Start / Finish (Left)
+            {t('desk.stream.in.focusLeft')}
           </button>
           <button
             type="button"
             className="min-h-8 rounded-full px-2 text-[11px] font-semibold text-white/90 hover:bg-white/10"
-            aria-label="Focus centre"
+            aria-label={t('desk.stream.in.focusCentreAria')}
             onClick={() => handleFocusRegion('centre')}
           >
-            Centre
+            {t('desk.stream.in.centre')}
           </button>
           <button
             type="button"
             className="min-h-8 rounded-full px-2 text-[11px] font-semibold text-white/90 hover:bg-white/10"
-            aria-label="Focus right changeover"
+            aria-label={t('desk.stream.in.focusRightAria')}
             onClick={() => handleFocusRegion('right')}
           >
-            Changeover (Right)
+            {t('desk.stream.in.focusRight')}
           </button>
         </div>
       </div>
@@ -749,7 +753,7 @@ export function ReplayInspector({
           <div className="relative flex-1 flex items-center">
             <input
               type="range"
-              aria-label="Timeline scrubber"
+              aria-label={t('desk.stream.in.scrubber')}
               min={0}
               max={duration}
               step={0.05}
@@ -766,7 +770,7 @@ export function ReplayInspector({
                   style={{
                     left: `${Math.max(0, Math.min(100, (k.timeSec / duration) * 100))}%`,
                   }}
-                  title={`Keyframe at ${k.timeSec}s`}
+                  title={t('desk.stream.in.keyframeAt', { time: k.timeSec })}
                 >
                   ◆
                 </span>
@@ -784,7 +788,7 @@ export function ReplayInspector({
             <button
               type="button"
               className="mg-stream-control !min-h-10 !min-w-10 !rounded-xl"
-              aria-label={isPlaying ? 'Pause replay' : 'Play replay'}
+              aria-label={isPlaying ? t('desk.stream.in.pauseAria') : t('desk.stream.in.playAria')}
               onClick={togglePlay}
             >
               {isPlaying ? (
@@ -797,7 +801,7 @@ export function ReplayInspector({
             <button
               type="button"
               className="mg-stream-control !min-h-10 px-3 text-xs font-bold !rounded-xl"
-              aria-label="Step back 0.1 seconds"
+              aria-label={t('desk.stream.in.stepBack')}
               onClick={() => stepFrame(-0.1)}
             >
               -0.1s
@@ -805,7 +809,7 @@ export function ReplayInspector({
             <button
               type="button"
               className="mg-stream-control !min-h-10 px-3 text-xs font-bold !rounded-xl"
-              aria-label="Step forward 0.1 seconds"
+              aria-label={t('desk.stream.in.stepForward')}
               onClick={() => stepFrame(0.1)}
             >
               +0.1s
@@ -823,12 +827,12 @@ export function ReplayInspector({
                     ? 'bg-amber-400 text-black shadow-sm'
                     : 'text-white hover:bg-white/10'
                 }`}
-                aria-label={`Playback speed ${rate}x`}
+                aria-label={t('desk.stream.in.speedAria', { rate })}
                 aria-pressed={playbackRate === rate}
                 onClick={() => handleSpeedChange(rate)}
               >
                 <span>{rate}x</span>{' '}
-                <span className="hidden sm:inline text-[10px] opacity-80">{label}</span>
+                <span className="hidden sm:inline text-[10px] opacity-80">{t(label)}</span>
               </button>
             ))}
           </div>
@@ -840,8 +844,7 @@ export function ReplayInspector({
             <div className="flex items-center gap-1.5 font-semibold text-white/90">
               <Scissors className="h-3.5 w-3.5 text-amber-400" aria-hidden="true" />
               <span>
-                Trimmed: {formatVideoTime(trimStart)} – {formatVideoTime(trimEnd)} (
-                {(trimEnd - trimStart).toFixed(1)}s)
+                {t('desk.stream.in.trimmed', { start: formatVideoTime(trimStart), end: formatVideoTime(trimEnd), length: (trimEnd - trimStart).toFixed(1) })}
               </span>
             </div>
 
@@ -849,26 +852,26 @@ export function ReplayInspector({
               <button
                 type="button"
                 className="mg-stream-control !min-h-7 px-2 text-[11px] font-semibold"
-                aria-label="Set trim start at playhead"
+                aria-label={t('desk.stream.in.setStartAria')}
                 onClick={handleSetTrimStart}
               >
-                [ Set Start
+                {t('desk.stream.in.setStart')}
               </button>
               <button
                 type="button"
                 className="mg-stream-control !min-h-7 px-2 text-[11px] font-semibold"
-                aria-label="Set trim end at playhead"
+                aria-label={t('desk.stream.in.setEndAria')}
                 onClick={handleSetTrimEnd}
               >
-                Set End ]
+                {t('desk.stream.in.setEnd')}
               </button>
               <button
                 type="button"
                 className="mg-stream-control !min-h-7 px-2 text-[11px] font-semibold text-white/70 hover:text-white"
-                aria-label="Reset trim"
+                aria-label={t('desk.stream.in.resetTrimAria')}
                 onClick={handleResetTrim}
               >
-                Reset Trim
+                {t('desk.stream.in.resetTrim')}
               </button>
             </div>
           </div>
@@ -876,11 +879,11 @@ export function ReplayInspector({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <label className="flex items-center gap-2">
               <span className="w-16 shrink-0 text-[10px] text-[rgb(var(--mg-header-sub))]">
-                Trim start
+                {t('desk.stream.in.trimStart')}
               </span>
               <input
                 type="range"
-                aria-label="Trim start"
+                aria-label={t('desk.stream.in.trimStart')}
                 min={0}
                 max={Math.max(0, trimEnd - 0.1)}
                 step={0.1}
@@ -889,17 +892,17 @@ export function ReplayInspector({
                 className="flex-1 accent-amber-400 cursor-pointer h-1.5 rounded-lg bg-white/20"
               />
               <span className="w-10 text-right font-mono text-[10px] text-white/80">
-                {trimStart.toFixed(1)}s
+                {t('desk.stream.in.seconds', { value: trimStart.toFixed(1) })}
               </span>
             </label>
 
             <label className="flex items-center gap-2">
               <span className="w-16 shrink-0 text-[10px] text-[rgb(var(--mg-header-sub))]">
-                Trim end
+                {t('desk.stream.in.trimEnd')}
               </span>
               <input
                 type="range"
-                aria-label="Trim end"
+                aria-label={t('desk.stream.in.trimEnd')}
                 min={Math.min(duration, trimStart + 0.1)}
                 max={duration}
                 step={0.1}
@@ -908,7 +911,7 @@ export function ReplayInspector({
                 className="flex-1 accent-amber-400 cursor-pointer h-1.5 rounded-lg bg-white/20"
               />
               <span className="w-10 text-right font-mono text-[10px] text-white/80">
-                {trimEnd.toFixed(1)}s
+                {t('desk.stream.in.seconds', { value: trimEnd.toFixed(1) })}
               </span>
             </label>
           </div>
@@ -919,7 +922,7 @@ export function ReplayInspector({
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="flex items-center gap-1 font-semibold text-amber-300 mr-1 text-[11px]">
               <Camera className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>Follow Zoom:</span>
+              <span>{t('desk.stream.in.followZoom')}</span>
             </span>
 
             <button
@@ -929,7 +932,7 @@ export function ReplayInspector({
                   ? '!bg-red-500 !text-white border-red-400 animate-pulse'
                   : ''
               }`}
-              aria-label="Record follow zoom"
+              aria-label={t('desk.stream.in.recordAria')}
               aria-pressed={isRecordingFollow}
               onClick={() => {
                 const next = !isRecordingFollow;
@@ -937,42 +940,42 @@ export function ReplayInspector({
                 if (next) setFollowEnabled(true);
               }}
             >
-              ● Record Follow
+              {t('desk.stream.in.record')}
             </button>
 
             <button
               type="button"
               className="mg-stream-control !min-h-7 px-2 text-[11px] font-semibold"
-              aria-label="Add follow keyframe"
+              aria-label={t('desk.stream.in.addKeyframeAria')}
               onClick={handleAddKeyframe}
             >
               <Plus className="h-3 w-3 mr-0.5 inline" aria-hidden="true" />
-              Keyframe
+              {t('desk.stream.in.keyframe')}
             </button>
 
             {followKeyframes.length > 0 && (
               <button
                 type="button"
                 className="mg-stream-control !min-h-7 px-2 text-[11px] font-semibold text-red-300 hover:text-red-200"
-                aria-label="Clear follow keyframes"
+                aria-label={t('desk.stream.in.clearFollowAria')}
                 onClick={handleClearFollow}
               >
-                Clear Follow ({followKeyframes.length})
+                {t('desk.stream.in.clearFollow', { count: followKeyframes.length })}
               </button>
             )}
 
             <button
               type="button"
               className="mg-stream-control !min-h-7 px-2.5 text-[11px] font-semibold !text-amber-300 hover:!bg-amber-400/20"
-              aria-label="Photo finish snapshot"
+              aria-label={t('desk.stream.in.photoAria')}
               onClick={handlePhotoFinishSnapshot}
             >
-              📸 Photo Finish
+              {t('desk.stream.in.photoButton')}
             </button>
           </div>
 
           <div className="flex items-center gap-1 text-[10px] text-[rgb(var(--mg-header-sub))]">
-            <span>Double-tap video to focal zoom</span>
+            <span>{t('desk.stream.in.doubleTap')}</span>
           </div>
         </div>
       </div>
@@ -980,7 +983,7 @@ export function ReplayInspector({
       {/* Photo Finish Snapshot: a toast when it worked, a problem strip when it didn't */}
       {photoProblem && (
         <div className="pointer-events-auto fixed bottom-20 left-3 right-3 z-[120] mx-auto max-w-md">
-          <Notice actionLabel="Try again" onAction={handlePhotoFinishSnapshot}>{photoProblem}</Notice>
+          <Notice actionLabel={t('common.tryAgain')} onAction={handlePhotoFinishSnapshot}>{photoProblem}</Notice>
         </div>
       )}
       {photoToast.node}
@@ -992,32 +995,32 @@ export function ReplayInspector({
           <button
             type="button"
             className="mg-stream-control !min-h-10 px-4 text-xs font-bold !rounded-xl !bg-amber-400 !text-black hover:!bg-amber-300 transition-colors"
-            aria-label="Save highlight"
+            aria-label={t('desk.stream.in.saveHighlightAria')}
             disabled={preparation.progress !== null}
             onClick={handleSaveHighlight}
           >
             <Star className="h-4 w-4 mr-1.5 fill-black" aria-hidden="true" />
-            <span>Save Highlight</span>
+            <span>{t('desk.stream.in.saveHighlight')}</span>
           </button>
           <button
             type="button"
             className="mg-stream-control !min-h-10 px-4 text-xs font-semibold !rounded-xl text-red-300 hover:!bg-red-500/20 hover:text-red-200 transition-colors"
-            aria-label="Remove line review"
+            aria-label={t('desk.stream.in.removeAria')}
             onClick={handleRemoveLineReview}
           >
             <Trash2 className="h-4 w-4 mr-1.5" aria-hidden="true" />
-            <span>Remove (Line Review Done)</span>
+            <span>{t('desk.stream.in.remove')}</span>
           </button>
         </div>
 
         <button
           type="button"
           className="mg-stream-control !min-h-10 px-4 text-xs font-semibold !rounded-xl"
-          aria-label="Replay clip"
+          aria-label={t('desk.stream.in.replayClipAria')}
           onClick={handleReplayClip}
         >
           <RotateCcw className="h-4 w-4 mr-1.5" aria-hidden="true" />
-          <span>Replay Clip</span>
+          <span>{t('desk.stream.in.replayClip')}</span>
         </button>
       </div>
 
@@ -1025,11 +1028,11 @@ export function ReplayInspector({
       {clips && clips.length > 1 && (
         <div
           role="region"
-          aria-label="Saved clips"
+          aria-label={t('desk.stream.in.savedClips')}
           className="border-t border-[rgb(var(--mg-header-line))] bg-[rgb(var(--mg-header-deep)/0.9)] px-4 py-2"
         >
           <div className="text-[11px] font-semibold text-[rgb(var(--mg-header-sub))] mb-1.5">
-            Race Clips ({clips.length})
+            {t('desk.stream.in.raceClips', { count: clips.length })}
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
             {clips.map((c) => {
@@ -1037,34 +1040,30 @@ export function ReplayInspector({
               return (
                 <div
                   key={c.id}
-                  role="button"
-                  tabIndex={0}
-                  aria-current={isSelected ? 'true' : undefined}
                   className={`group flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-colors cursor-pointer shrink-0 ${
                     isSelected
                       ? 'border-amber-400 bg-amber-400/15 text-white'
                       : 'border-white/15 bg-white/5 text-white/80 hover:border-white/40 hover:text-white'
                   }`}
                   onClick={() => onSelectClip?.(c)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      onSelectClip?.(c);
-                    }
-                  }}
                 >
-                  <div className="flex flex-col text-left">
+                  <button
+                    type="button"
+                    aria-current={isSelected ? 'true' : undefined}
+                    className="flex flex-col text-left"
+                    onClick={(e) => { e.stopPropagation(); onSelectClip?.(c); }}
+                  >
                     <span className="font-semibold truncate max-w-[140px]">{c.label}</span>
                     <span className="text-[10px] text-[rgb(var(--mg-header-sub))]">
-                      {c.arenaName} · {c.durationSeconds}s
+                      {t('desk.stream.in.clipMetaShort', { arena: c.arenaName, seconds: c.durationSeconds })}
                     </span>
-                  </div>
+                  </button>
 
                   {onDeleteClip && (
                     <button
                       type="button"
                       className="rounded p-1 text-white/50 hover:bg-red-500/20 hover:text-red-400 transition-colors"
-                      aria-label={`Delete replay ${c.label}`}
+                      aria-label={t('desk.stream.in.deleteClip', { label: c.label })}
                       onClick={(e) => {
                         e.stopPropagation();
                         onDeleteClip(c.id);
@@ -1083,7 +1082,11 @@ export function ReplayInspector({
   );
 }
 
-export function SavedReplaysDrawer({
+export function SavedReplaysDrawer(props: SavedReplaysDrawerProps) {
+  return props.open ? <SavedReplaysDialog {...props} /> : null;
+}
+
+function SavedReplaysDialog({
   competitionId,
   open,
   onClose,
@@ -1092,6 +1095,9 @@ export function SavedReplaysDrawer({
   onCaptureBufferClip,
   bufferedSeconds,
 }: SavedReplaysDrawerProps) {
+  const t = useT();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onClose, 'button[data-autofocus]');
   const [clips, setClips] = useState<SavedReplayClip[]>(() => getSavedReplays(competitionId));
 
   useEffect(() => {
@@ -1101,13 +1107,12 @@ export function SavedReplaysDrawer({
     return subscribeSavedReplays(update);
   }, [open, competitionId]);
 
-  if (!open) return null;
-
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
-      aria-label="Saved replays"
+      aria-label={t('desk.stream.in.drawerTitle')}
       className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm mg-font"
       onClick={onClose}
     >
@@ -1118,12 +1123,13 @@ export function SavedReplaysDrawer({
         <div className="flex items-center justify-between border-b border-[rgb(var(--mg-header-line))] pb-3">
           <div className="flex items-center gap-2">
             <Film className="h-5 w-5 text-amber-400" aria-hidden="true" />
-            <h2 className="text-lg font-bold">Saved Replays</h2>
+            <h2 className="text-lg font-bold">{t('desk.stream.in.drawerHeading')}</h2>
           </div>
           <button
             type="button"
             className="mg-stream-control !min-h-9 !min-w-9 p-1.5"
-            aria-label="Close saved replays"
+            aria-label={t('desk.stream.in.closeDrawer')}
+            data-autofocus=""
             onClick={onClose}
           >
             <X className="h-5 w-5" aria-hidden="true" />
@@ -1133,16 +1139,16 @@ export function SavedReplaysDrawer({
         {onCaptureBufferClip && (
           <div className="rounded-xl border border-white/15 bg-black/40 p-3 flex flex-col gap-2">
             <div className="flex items-center justify-between text-xs text-[rgb(var(--mg-header-sub))]">
-              <span className="font-semibold text-white">30-minute rolling buffer</span>
-              <span>{bufferedSeconds !== undefined ? `${bufferedSeconds}s buffered` : 'Ready'}</span>
+              <span className="font-semibold text-white">{t('desk.stream.in.buffer')}</span>
+              <span>{bufferedSeconds !== undefined ? t('desk.stream.in.buffered', { seconds: bufferedSeconds }) : t('desk.stream.in.ready')}</span>
             </div>
             <div className="flex flex-wrap gap-2">
               {[
-                { secs: 15, label: 'Save last 15s' },
-                { secs: 30, label: 'Save last 30s' },
-                { secs: 60, label: 'Save last 1m' },
-                { secs: 300, label: 'Save last 5m' },
-                { secs: 1800, label: 'Save full buffer (30m)' },
+                { secs: 15, label: t('desk.stream.in.saveLast15') },
+                { secs: 30, label: t('desk.stream.in.saveLast30') },
+                { secs: 60, label: t('desk.stream.in.saveLast1m') },
+                { secs: 300, label: t('desk.stream.in.saveLast5m') },
+                { secs: 1800, label: t('desk.stream.in.saveFull') },
               ].map(({ secs, label }) => (
                 <button
                   key={secs}
@@ -1159,7 +1165,7 @@ export function SavedReplaysDrawer({
 
         {clips.length === 0 ? (
           <p className="text-sm text-[rgb(var(--mg-header-sub))] py-8 text-center">
-            No saved replays yet
+            {t('desk.stream.in.noSaved')}
           </p>
         ) : (
           <div className="flex flex-col gap-2">
@@ -1173,10 +1179,10 @@ export function SavedReplaysDrawer({
                 }}
               >
                 <div className="min-w-0 flex-1">
-                  <div className="font-semibold truncate">{clip.label}</div>
+                  <button type="button" className="block max-w-full truncate text-left font-semibold">{clip.label}</button>
                   {clip.storageWarning && <Notice role={null} className="my-1">{clip.storageWarning}</Notice>}
                   <div className="text-xs text-[rgb(var(--mg-header-sub))]">
-                    {clip.arenaName} · {clip.durationSeconds}s · {formatTimestamp(clip.createdAt)}
+                    {t('desk.stream.in.clipMeta', { arena: clip.arenaName, seconds: clip.durationSeconds, time: formatTimestamp(clip.createdAt) })}
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
@@ -1184,7 +1190,7 @@ export function SavedReplaysDrawer({
                     href={clip.url}
                     download={`${clip.label.replace(/\s+/g, '_')}.${clip.mimeType.includes('mp4') ? 'mp4' : 'webm'}`}
                     className="mg-stream-control !min-w-8 !min-h-8 p-1.5 text-xs"
-                    aria-label={`Download replay ${clip.label}`}
+                    aria-label={t('desk.stream.in.downloadClip', { label: clip.label })}
                     onClick={(e) => e.stopPropagation()}
                   >
                     <Download className="h-4 w-4" aria-hidden="true" />
@@ -1193,7 +1199,7 @@ export function SavedReplaysDrawer({
                     <button
                       type="button"
                       className="mg-stream-control !min-h-8 !min-w-8 p-1.5 text-xs hover:!bg-red-600/80"
-                      aria-label={`Delete replay ${clip.label}`}
+                      aria-label={t('desk.stream.in.deleteClip', { label: clip.label })}
                       onClick={(e) => {
                         e.stopPropagation();
                         onDeleteClip(clip.id);
@@ -1218,6 +1224,7 @@ export function SavedReplaysButton({
   onSelectClip,
   className = '',
 }: SavedReplaysButtonProps) {
+  const t = useT();
   useEffect(() => { void loadPersistedReplays(competitionId); }, [competitionId]);
   const [clips, setClips] = useState<SavedReplayClip[]>(() => {
     const all = getSavedReplays(competitionId);
@@ -1248,10 +1255,10 @@ export function SavedReplaysButton({
       type="button"
       className={`mg-stream-control text-xs font-semibold px-3 py-1.5 gap-1.5 ${className}`}
       onClick={handleClick}
-      aria-label={`Saved replays (${clips.length})`}
+      aria-label={t('desk.stream.in.savedButton', { count: clips.length })}
     >
       <Film className="h-4 w-4" aria-hidden="true" />
-      <span>Replays ({clips.length})</span>
+      <span>{t('desk.stream.in.replaysButton', { count: clips.length })}</span>
     </button>
   );
 }

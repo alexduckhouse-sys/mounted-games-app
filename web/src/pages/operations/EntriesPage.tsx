@@ -1,3 +1,4 @@
+import { useT } from '../../i18n/LanguageContext';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ChangePop } from '../../components/ChangePop';
@@ -7,6 +8,7 @@ import { LeavingRow } from '../../components/LeavingRow';
 import { feeText } from '../../lib/entryOptions';
 import { paidWord } from '../../lib/paidWord';
 import { api } from '../../api';
+import { activeLocale, tr } from '../../i18n/translate';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
 import { useToast } from '../../components/Toast';
@@ -32,19 +34,19 @@ import './entryTools.css';
 
 type PartKey = 'trainerPhone' | 'bib' | 'dob' | 'weight' | 'ponyHeight' | 'ponyPassport' | 'ponyAge' | 'membershipNumber' | 'emergencyContact' | 'medicalNotes';
 const PARTS: Array<{ key: PartKey; label: string }> = [
-  { key: 'trainerPhone', label: 'Trainer’s phone number' },
-  { key: 'bib', label: 'Bibs or numbers' },
-  { key: 'dob', label: 'Rider’s age' },
-  { key: 'weight', label: 'Rider’s weight' },
-  { key: 'ponyHeight', label: 'Pony’s height' },
-  { key: 'ponyPassport', label: 'Pony’s passport or ID number' },
-  { key: 'ponyAge', label: 'Pony’s age' },
-  { key: 'membershipNumber', label: 'Membership number' },
-  { key: 'emergencyContact', label: 'Emergency contact' },
-  { key: 'medicalNotes', label: 'Medical notes' },
+  { key: 'trainerPhone', get label() { return tr('ops2.entries.part.trainerPhone'); } },
+  { key: 'bib', get label() { return tr('ops2.entries.part.bib'); } },
+  { key: 'dob', get label() { return tr('ops2.entries.part.dob'); } },
+  { key: 'weight', get label() { return tr('ops2.entries.part.weight'); } },
+  { key: 'ponyHeight', get label() { return tr('ops2.entries.part.ponyHeight'); } },
+  { key: 'ponyPassport', get label() { return tr('ops2.entries.part.ponyPassport'); } },
+  { key: 'ponyAge', get label() { return tr('ops2.entries.part.ponyAge'); } },
+  { key: 'membershipNumber', get label() { return tr('ops2.entries.part.membershipNumber'); } },
+  { key: 'emergencyContact', get label() { return tr('ops2.entries.part.emergencyContact'); } },
+  { key: 'medicalNotes', get label() { return tr('ops2.entries.part.medicalNotes'); } },
 ];
 
-const whenText = (iso: string) => new Date(iso).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+const whenText = (iso: string) => new Date(iso).toLocaleString(activeLocale(), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const eventDays = (start: string, end: string | null | undefined): Date[] => {
   const from = new Date(start);
   if (Number.isNaN(from.getTime())) return [];
@@ -55,13 +57,14 @@ const eventDays = (start: string, end: string | null | undefined): Date[] => {
 };
 const ageOf = (rider: RiderEntry): string => {
   const born = rider.birthYear ?? (rider.dateOfBirth ? Number(rider.dateOfBirth.slice(0, 4)) : null);
-  return born && Number.isFinite(born) ? `age ${new Date().getFullYear() - born}` : (rider.ageGroup ?? '');
+  return born && Number.isFinite(born) ? tr('ops2.entries.age', { n: new Date().getFullYear() - born }) : (rider.ageGroup ?? '');
 };
 
 interface LockTime { declarationsCloseAt: string | null }
 
 /** Entries and dec forms: who has entered and paid, which forms are in, and what the form asks. Every change saves as it is made. */
 export function EntriesPage() {
+  const t = useT();
   const { competition, reload } = useCompetition();
   const { search } = useLocation();
   const passSignupId = parsePassSignupIdFromSearch(search);
@@ -95,20 +98,20 @@ export function EntriesPage() {
     if (s.status === 'fulfilled' && Array.isArray(s.value.data)) {
       setSignups(s.value.data);
       const pass = s.value.data.find((signup) => signup.id === passSignupId);
-      setPassNotice(passSignupId !== null && !pass ? 'This pass does not match an entry for this event. Check the event and ask the organiser for help.' : null);
+      setPassNotice(passSignupId !== null && !pass ? t('ops2.entries.passMismatch') : null);
       const passKey = `${competition.id}:${passSignupId}`;
       if (pass) setSelection((previous) => previous.openedPass === passKey ? previous : {
         filter: signupBucket(pass), openSignup: pass.id, openedPass: passKey,
       });
     } else if (passSignupId !== null) {
-      setPassNotice('Couldn’t check this pass. Check your signal and try again.');
+      setPassNotice(t('ops2.entries.passCheck'));
     }
     if (f.status === 'fulfilled' && Array.isArray(f.value.data)) setForms(f.value.data);
     if (l.status === 'fulfilled') setLock(l.value.data?.declarationsCloseAt ?? null);
     if (c.status === 'fulfilled') setConfig(parseConfigResponse(c.value.data)?.config ?? STANDARD_CONFIG);
     if (cap.status === 'fulfilled') setCapacity(cap.value);
-    setError(e.status === 'rejected' ? 'Couldn’t load the entries. Check your signal and try again.' : null);
-  }, [competition.id, passSignupId]);
+    setError(e.status === 'rejected' ? t('ops2.entries.loadError') : null);
+  }, [competition.id, passSignupId, t]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -120,7 +123,7 @@ export function EntriesPage() {
     setBusy(true);
     setError(null);
     try { await work(); await load(); return true; }
-    catch (caught) { setError(apiErrorMessage(caught, `${failure} Check your signal and try again.`)); return false; }
+    catch (caught) { setError(apiErrorMessage(caught, `${failure} ${t('ops2.print.checkSignal')}`)); return false; }
     finally { setBusy(false); }
   }
 
@@ -148,7 +151,7 @@ export function EntriesPage() {
     return [...map.entries()];
   }, [entries]);
 
-  const toggleEntries = () => run('Couldn’t change entries.', async () => {
+  const toggleEntries = () => run(t('ops2.entries.changeEntries'), async () => {
     await api.post(`/competitions/${competition.id}/signups-locked`, { locked: !closed });
     reload();
   });
@@ -157,12 +160,12 @@ export function EntriesPage() {
     const targets = live.filter((s) => s.teamId === team.teamId && s.status === (paid ? 0 : 1));
     if (targets.length === 0) return;
     const total = targets.reduce((sum, s) => sum + s.amountMinor, 0);
-    const what = targets.length === 1 ? '1 entry' : `${targets.length} entries`;
+    const what = t('ops2.entries.what', { count: targets.length });
     const ok = await confirmDialog(paid
-      ? { title: `Mark ${team.teamName} paid?`, message: `${what} (${feeText(total)}) will be recorded as received. Paid entries can form teams and send confirmations.`, confirmLabel: 'Mark paid' }
-      : { title: `Mark ${team.teamName} not paid?`, message: `${what} (${feeText(total)}) will go back to pending payment.`, confirmLabel: 'Mark not paid' });
+      ? { title: t('ops2.entries.markPaidQ', { name: team.teamName }), message: t('ops2.entries.receivedMsg', { what, fee: feeText(total) }), confirmLabel: t('ops2.entries.markPaid') }
+      : { title: t('ops2.entries.markNotPaidQ', { name: team.teamName }), message: t('ops2.entries.backPendingMsg', { what, fee: feeText(total) }), confirmLabel: t('ops2.entries.markNotPaid') });
     if (!ok) return;
-    await run('Couldn’t change the payment.', async () => {
+    await run(t('ops2.entries.payError'), async () => {
       for (const signup of targets) {
         if (paid) await api.post(`/competitions/${competition.id}/signups/${signup.id}/mark-paid`);
         else await api.put(`/signups/${signup.id}/status`, { status: 0 });
@@ -170,38 +173,38 @@ export function EntriesPage() {
     });
   };
   const markSignupPaid = async (signup: SectionSignup) => {
-    const ok = await confirmDialog({ title: `Mark ${signup.fullName} paid?`, message: `1 entry (${feeText(signup.amountMinor)}) will be recorded as received. Paid entries can form teams and send confirmations.`, confirmLabel: 'Mark paid' });
+    const ok = await confirmDialog({ title: t('ops2.entries.markPaidQ', { name: signup.fullName }), message: t('ops2.entries.receivedMsg', { what: t('ops2.entries.what', { count: 1 }), fee: feeText(signup.amountMinor) }), confirmLabel: t('ops2.entries.markPaid') });
     if (!ok) return;
-    await run('Couldn’t change the payment.', () => api.post(`/competitions/${competition.id}/signups/${signup.id}/mark-paid`));
+    await run(t('ops2.entries.payError'), () => api.post(`/competitions/${competition.id}/signups/${signup.id}/mark-paid`));
   };
 
   async function withdraw(team: TeamEntry) {
-    if (!(await confirmDialog({ title: `Withdraw ${team.teamName}?`, message: 'They come out of the draw. You can bring them back until a draw depends on it.', confirmLabel: 'Withdraw', destructive: true }))) return;
-    await run('Couldn’t withdraw the entry.', () => api.put(`/competitions/${competition.id}/teams/${team.teamId}/entry-status`, { status: 1, reason: null }));
+    if (!(await confirmDialog({ title: t('ops2.entries.withdrawQ', { name: team.teamName }), message: t('ops2.entries.withdrawMsg'), confirmLabel: t('ops2.panel.withdraw'), destructive: true }))) return;
+    await run(t('ops2.entries.withdrawError'), () => api.put(`/competitions/${competition.id}/teams/${team.teamId}/entry-status`, { status: 1, reason: null }));
     reload();
   }
   async function reinstate(team: TeamEntry) {
-    await run('Couldn’t reinstate the entry.', () => api.put(`/competitions/${competition.id}/teams/${team.teamId}/entry-status`, { status: 0, reason: null }));
+    await run(t('ops2.entries.reinstateError'), () => api.put(`/competitions/${competition.id}/teams/${team.teamId}/entry-status`, { status: 0, reason: null }));
     reload();
   }
   async function copyLink() {
-    try { await navigator.clipboard.writeText(`${window.location.origin}/competitions/${competition.id}/declarations`); toast.show('Link copied'); }
-    catch { setError('Couldn’t copy the link.'); }
+    try { await navigator.clipboard.writeText(`${window.location.origin}/competitions/${competition.id}/declarations`); toast.show(t('ops2.sponsors.linkCopied')); }
+    catch { setError(t('ops2.entries.copyError')); }
   }
 
-  const saveLock = (iso: string | null) => run('Couldn’t save the deadline.', () => api.put(`/declaration-forms/competition/${competition.id}/lock-time`, { declarationsCloseAt: iso }));
+  const saveLock = (iso: string | null) => run(t('ops2.entries.deadlineError'), () => api.put(`/declaration-forms/competition/${competition.id}/lock-time`, { declarationsCloseAt: iso }));
   const saveConfig = (next: DecFormConfig) => {
     const problem = configProblem(next);
     if (problem) { setError(problem); return Promise.resolve(false); }
     setConfig(next);
-    return run('Couldn’t save the dec form.', async () => { await api.put(`/competitions/${competition.id}/dec-form-config`, next); });
+    return run(t('ops2.entries.decError'), async () => { await api.put(`/competitions/${competition.id}/dec-form-config`, next); });
   };
 
   const days = eventDays(competition.startDate, competition.endDate);
 
   return (
     <RefinePage>
-      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel="Back to preparations" context={competition.name} title="Entries and dec forms" />
+      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.hub.back')} context={competition.name} title={t('ops2.entries.title')} />
       <div className="ops-cards ops-entries" aria-busy={busy}>
         {error && <Notice>{error}</Notice>}
         {passNotice && <Notice>{passNotice}</Notice>}
@@ -210,19 +213,19 @@ export function EntriesPage() {
         <RefineList as="div">
           <div className="rf-row">
             <span className="rf-grow">
-              <span className="rf-t1">{closed ? 'Entries closed' : 'Entries open'}</span>
-              <span className="rf-t2">{paidCount} paid · {unpaidCount} not paid</span>
+              <span className="rf-t1">{closed ? t('ops2.entries.closed') : t('ops2.entries.open')}</span>
+              <span className="rf-t2">{t('ops2.entries.paidNot', { paid: paidCount, unpaid: unpaidCount })}</span>
               {capacityText.length > 0 && <span className="rf-t2 et-cap">{capacityText.join(' · ')}</span>}
             </span>
-            <button type="button" className="rf-btn" disabled={busy} onClick={() => void toggleEntries()}>{closed ? 'Reopen entries' : 'Close entries'}</button>
+            <button type="button" className="rf-btn" disabled={busy} onClick={() => void toggleEntries()}>{closed ? t('ops2.entries.reopen') : t('ops2.entries.close')}</button>
           </div>
           <div className="rf-row">
-            <span className="rf-grow"><span className="rf-t1">Tools</span><span className="rf-t2">Bank statement, reminders, clubs, arrivals, refunds, exports</span></span>
+            <span className="rf-grow"><span className="rf-t1">{t('ops2.entries.tools')}</span><span className="rf-t2">{t('ops2.entries.toolsSub')}</span></span>
             <EntryTools competition={competition} signups={signups} capacity={capacity} onChanged={reloadAll} />
           </div>
           {/* One dropdown, not a row of pills. "All" lists teams by section, so it carries no sign-up count. */}
-          <RefineChoiceRow label="Show" value={filter} onChange={setFilter}
-            options={FILTERS.map((f) => ({ value: f.value, label: f.value === 'all' ? 'All teams' : `${f.label} (${counts[f.value]})` }))} />
+          <RefineChoiceRow label={t('ops2.entries.show')} value={filter} onChange={setFilter}
+            options={FILTERS.map((f) => ({ value: f.value, label: f.value === 'all' ? t('ops2.entries.allTeams') : `${f.label} (${counts[f.value]})` }))} />
         </RefineList>
 
         {filter !== 'all' && (
@@ -232,10 +235,10 @@ export function EntriesPage() {
           />
         )}
 
-        {filter === 'all' && entries !== null && entries.length === 0 && awaitingPayment.length === 0 && <p className="rf-note">No entries yet.</p>}
+        {filter === 'all' && entries !== null && entries.length === 0 && awaitingPayment.length === 0 && <p className="rf-note">{t('ops2.entries.noEntries')}</p>}
         {filter === 'all' && awaitingPayment.length > 0 && (
           <>
-            <RefineSection title="Awaiting payment" />
+            <RefineSection title={t('ops2.entries.awaiting')} />
             <SignupList
               signups={awaitingPayment} filter="pending" busy={busy} openId={openSignup} competition={competition}
               onOpen={(id) => setOpenSignup(openSignup === id ? null : id)} onMarkPaid={(x) => void markSignupPaid(x)} onChanged={reloadAll}
@@ -253,7 +256,7 @@ export function EntriesPage() {
                 const form = forms.find((f) => f.teamId === team.teamId);
                 const flags = (form?.riders ?? []).flatMap((r) => r.flags ?? []);
                 const out = team.status !== 0;
-                const tag = out ? { text: 'Withdrawn', tone: 'mut' } : !form ? { text: 'Missing', tone: 'mut' } : flags.length > 0 ? { text: 'Flagged', tone: 'warn' } : { text: 'Received', tone: 'ok' };
+                const tag = out ? { text: t('ops2.protest.withdrawn'), tone: 'mut' } : !form ? { text: t('ops2.entries.missing'), tone: 'mut' } : flags.length > 0 ? { text: t('ops2.entries.flagged'), tone: 'warn' } : { text: t('ops2.entries.received'), tone: 'ok' };
                 const isOpen = open === team.teamId;
                 const pending = !out && mine.length > 0 && !paid;
                 const owed = mine.filter((s) => s.status === 0).reduce((sum, s) => sum + s.amountMinor, 0);
@@ -263,8 +266,8 @@ export function EntriesPage() {
                       <span className="rf-grow">
                         <span className="rf-t1">{team.teamName}</span>
                         <span className="rf-t2">
-                          {mine.length > 0 && !pending && <span className={paid ? 'ops-paid' : 'ops-unpaid'}><ChangePop value={paid ? paidWord(competition.isDemo) : 'Not paid'} tick={paid}>{paid ? paidWord(competition.isDemo) : 'Not paid'}</ChangePop></span>}
-                          {mine.length > 0 && !pending && form ? ' · ' : ''}{form ? `Form in ${whenText(form.submittedAt)}` : ''}
+                          {mine.length > 0 && !pending && <span className={paid ? 'ops-paid' : 'ops-unpaid'}><ChangePop value={paid ? paidWord(competition.isDemo) : t('ops2.entries.notPaid')} tick={paid}>{paid ? paidWord(competition.isDemo) : t('ops2.entries.notPaid')}</ChangePop></span>}
+                          {mine.length > 0 && !pending && form ? ' · ' : ''}{form ? t('ops2.entries.formIn', { when: whenText(form.submittedAt) }) : ''}
                         </span>
                       </span>
                       <span className={`rf-st rf-${tag.tone}`}>{tag.text}</span>
@@ -272,23 +275,23 @@ export function EntriesPage() {
                     </button>
                     {pending && (
                       <div className="ops-pending">
-                        <span className="ops-badge-pending">Pending payment</span>
-                        {owed > 0 && <span className="rf-t2">{feeText(owed)} by bank transfer</span>}
-                        <button type="button" className="rf-btn rf-btn-primary ops-markpaid" disabled={busy} aria-label={`Mark ${team.teamName} paid`} onClick={() => void setPaid(team, true)}>Mark paid</button>
+                        <span className="ops-badge-pending">{t('ops2.entries.pendingPayment')}</span>
+                        {owed > 0 && <span className="rf-t2">{t('ops2.entries.byBank', { fee: feeText(owed) })}</span>}
+                        <button type="button" className="rf-btn rf-btn-primary ops-markpaid" disabled={busy} aria-label={t('ops2.entries.markPaidAria', { name: team.teamName })} onClick={() => void setPaid(team, true)}>{t('ops2.entries.markPaid')}</button>
                       </div>
                     )}
                     {isOpen && (
                       <div className="ops-entry-body">
                         {mine.length > 0 && (
                           <div className="ops-line">
-                            <span className="rf-grow"><span className="rf-t1"><ChangePop value={paid ? paidWord(competition.isDemo) : 'Not paid yet'} tick={paid}>{paid ? paidWord(competition.isDemo) : 'Not paid yet'}</ChangePop></span></span>
-                            <button type="button" className="rf-btn" disabled={busy} onClick={() => void setPaid(team, !paid)}>{paid ? 'Mark not paid' : 'Mark paid'}</button>
+                            <span className="rf-grow"><span className="rf-t1"><ChangePop value={paid ? paidWord(competition.isDemo) : t('ops2.entries.notPaidYet')} tick={paid}>{paid ? paidWord(competition.isDemo) : t('ops2.entries.notPaidYet')}</ChangePop></span></span>
+                            <button type="button" className="rf-btn" disabled={busy} onClick={() => void setPaid(team, !paid)}>{paid ? t('ops2.entries.markNotPaid') : t('ops2.entries.markPaid')}</button>
                           </div>
                         )}
                         {form ? <FormView form={form} flags={flags} /> : (
                           <div className="ops-line">
-                            <span className="rf-grow"><span className="rf-t1">Not received yet</span></span>
-                            <button type="button" className="rf-btn" onClick={() => void copyLink()}>Copy form link</button>
+                            <span className="rf-grow"><span className="rf-t1">{t('ops2.entries.notReceived')}</span></span>
+                            <button type="button" className="rf-btn" onClick={() => void copyLink()}>{t('ops2.entries.copyForm')}</button>
                           </div>
                         )}
                         {signups.filter((s) => s.teamId === team.teamId).map((s, _i, all) => (
@@ -299,8 +302,8 @@ export function EntriesPage() {
                         ))}
                         <div className="ops-line ops-line-end">
                           {out
-                            ? (team.canReinstate ? <button type="button" className="rf-btn" disabled={busy} onClick={() => void reinstate(team)}>Reinstate</button> : <span className="rf-t2">This entry is out of the draw.</span>)
-                            : <button type="button" className="ops-danger-link" disabled={busy} onClick={() => void withdraw(team)}>Withdraw this entry</button>}
+                            ? (team.canReinstate ? <button type="button" className="rf-btn" disabled={busy} onClick={() => void reinstate(team)}>{t('ops2.panel.reinstate')}</button> : <span className="rf-t2">{t('ops2.entries.outOfDraw')}</span>)
+                            : <button type="button" className="ops-danger-link" disabled={busy} onClick={() => void withdraw(team)}>{t('ops2.entries.withdrawThis')}</button>}
                         </div>
                       </div>
                     )}
@@ -312,17 +315,17 @@ export function EntriesPage() {
           </Fragment>
         ))}
 
-        <RefineSection title="Dec form" />
+        <RefineSection title={t('ops2.entries.decForm')} />
         <RefineList as="div">
           <div className="rf-row">
-            <span className="rf-grow"><span className="rf-t1">Questions and flags</span>{config && <span className="rf-t2">{questionCount(config)} questions · {rulesOf(config).length} flag rules</span>}</span>
-            <button type="button" className="rf-btn" aria-expanded={setup} onClick={() => setSetup((v) => !v)}>{setup ? 'Done' : 'Edit'}</button>
+            <span className="rf-grow"><span className="rf-t1">{t('ops2.entries.qAndFlags')}</span>{config && <span className="rf-t2">{t('ops2.entries.qCount', { questions: questionCount(config), rules: rulesOf(config).length })}</span>}</span>
+            <button type="button" className="rf-btn" aria-expanded={setup} onClick={() => setSetup((v) => !v)}>{setup ? t('common.done') : t('common.edit')}</button>
           </div>
           {setup && config && (
             <>
-              <RefineDateTimeRow label="Deadline" value={lock} eventDays={days} disabled={busy} onChange={(iso) => void saveLock(iso)} />
+              <RefineDateTimeRow label={t('ops2.entries.deadline')} value={lock} eventDays={days} disabled={busy} onChange={(iso) => void saveLock(iso)} />
               <div className="rf-row">
-                <span className="rf-grow"><span className="rf-t1">Download</span><span className="rf-t2">Received forms, CSV</span></span>
+                <span className="rf-grow"><span className="rf-t1">{t('ops2.entries.download')}</span><span className="rf-t2">{t('ops2.entries.downloadSub')}</span></span>
                 <button type="button" className="rf-btn" disabled={forms.length === 0}
                   onClick={() => downloadCsv(`${safeFilename(competition.name)}-dec-forms.csv`, decFormsCsv(forms, config.customFields))}>CSV</button>
               </div>
@@ -340,14 +343,15 @@ function SignupList({ signups, filter, busy, openId, competition, onOpen, onMark
   signups: SectionSignup[]; filter: EntryFilter; busy: boolean; openId: number | null; competition: ReturnType<typeof useCompetition>['competition'];
   onOpen: (id: number) => void; onMarkPaid: (s: SectionSignup) => void; onChanged: () => Promise<void>;
 }) {
-  const empty: Record<EntryFilter, string> = { all: '', paid: 'No paid entries yet.', pending: 'Nobody is waiting to pay.', waitlist: 'The waiting list is empty.', withdrawn: 'No withdrawn entries.' };
+  const t = useT();
+  const empty: Record<EntryFilter, string> = { all: '', paid: t('ops2.entries.e.paid'), pending: t('ops2.entries.e.pending'), waitlist: t('ops2.entries.e.waitlist'), withdrawn: t('ops2.entries.e.withdrawn') };
   if (signups.length === 0) return <p className="rf-note">{empty[filter]}</p>;
   return (
-    <RefineList as="div" label="Entries">
+    <RefineList as="div" label={t('ops2.panel.entries')}>
       {signups.map((s) => {
         const bucket = signupBucket(s);
         const isOpen = openId === s.id;
-        const tag = bucket === 'paid' ? { text: paidWord(competition.isDemo), tone: 'ok' } : bucket === 'pending' ? { text: 'Pending payment', tone: 'warn' } : bucket === 'waitlist' ? { text: 'Waitlist', tone: 'mut' } : { text: 'Withdrawn', tone: 'mut' };
+        const tag = bucket === 'paid' ? { text: paidWord(competition.isDemo), tone: 'ok' } : bucket === 'pending' ? { text: t('ops2.entries.pendingPayment'), tone: 'warn' } : bucket === 'waitlist' ? { text: t('ops2.entries.f.waitlist'), tone: 'mut' } : { text: t('ops2.protest.withdrawn'), tone: 'mut' };
         return (
           <div key={s.id}>
             <button type="button" className="rf-row ops-entry-row" aria-expanded={isOpen} onClick={() => onOpen(s.id)}>
@@ -360,9 +364,9 @@ function SignupList({ signups, filter, busy, openId, competition, onOpen, onMark
             </button>
             {bucket === 'pending' && (
               <div className="ops-pending">
-                <span className="ops-badge-pending">Pending payment</span>
-                <span className="rf-t2">{feeText(s.amountMinor)} by bank transfer</span>
-                <button type="button" className="rf-btn rf-btn-primary ops-markpaid" disabled={busy} aria-label={`Mark ${s.fullName} paid`} onClick={() => onMarkPaid(s)}>Mark paid</button>
+                <span className="ops-badge-pending">{t('ops2.entries.pendingPayment')}</span>
+                <span className="rf-t2">{t('ops2.entries.byBank', { fee: feeText(s.amountMinor) })}</span>
+                <button type="button" className="rf-btn rf-btn-primary ops-markpaid" disabled={busy} aria-label={t('ops2.entries.markPaidAria', { name: s.fullName })} onClick={() => onMarkPaid(s)}>{t('ops2.entries.markPaid')}</button>
               </div>
             )}
             {isOpen && (
@@ -378,11 +382,12 @@ function SignupList({ signups, filter, busy, openId, competition, onOpen, onMark
 }
 
 function FormView({ form, flags }: { form: DeclarationForm; flags: string[] }) {
+  const t = useT();
   const riders = form.riders.slice().sort((a, b) => a.orderIndex - b.orderIndex);
   return (
     <div className="ops-form">
       {flags.map((text) => <Notice key={text} role="status">{text}</Notice>)}
-      <p className="rf-t1">Trainer: {form.trainerName ?? form.submittedByName ?? 'not given'}</p>
+      <p className="rf-t1">{t('ops2.entries.trainer', { name: form.trainerName ?? form.submittedByName ?? t('ops2.entries.notGiven') })}</p>
       <ol className="ops-riders">
         <AnimatePresence initial={false}>
           {riders.map((rider, i) => (
@@ -418,6 +423,7 @@ function withRule(config: DecFormConfig, rule: Rule): DecFormConfig {
 
 /** The questions the form asks (Remove each, add from the usual ones or write your own) and the flag rules. */
 function SetupEditor({ config, busy, onSave }: { config: DecFormConfig; busy: boolean; onSave: (next: DecFormConfig) => Promise<boolean> }) {
+  const t = useT();
   const [adding, setAdding] = useState(false);
   const [own, setOwn] = useState(false);
   const [name, setName] = useState('');
@@ -428,7 +434,7 @@ function SetupEditor({ config, busy, onSave }: { config: DecFormConfig; busy: bo
   const unused = PARTS.filter((p) => !asked(config[p.key]));
   const numbers = config.customFields.filter((f) => f.type === NUMBER_FIELD);
   const rules = rulesOf(config);
-  const label = (id: string) => config.customFields.find((f) => f.id === id)?.label.trim() || 'Question';
+  const label = (id: string) => config.customFields.find((f) => f.id === id)?.label.trim() || t('ops2.entries.question');
   const unitOf = (id: string) => config.customFields.find((f) => f.id === id)?.unit?.trim() ?? '';
 
   function addOwn() {
@@ -441,40 +447,40 @@ function SetupEditor({ config, busy, onSave }: { config: DecFormConfig; busy: bo
 
   return (
     <>
-      <RefineSection title="Questions" />
-      <RefineList as="div" label="Questions">
+      <RefineSection title={t('ops2.entries.questions')} />
+      <RefineList as="div" label={t('ops2.entries.questions')}>
         {used.map((part) => (
           <div key={part.key} className="rf-row"><span className="rf-grow rf-t1">{part.label}</span>
-            <button type="button" className="ops-danger-link" disabled={busy} aria-label={`Remove ${part.label}`} onClick={() => void onSave({ ...config, [part.key]: OFF })}>Remove</button></div>
+            <button type="button" className="ops-danger-link" disabled={busy} aria-label={t('ops2.entries.removeAria', { name: part.label })} onClick={() => void onSave({ ...config, [part.key]: OFF })}>{t('ops2.entries.remove')}</button></div>
         ))}
         {config.customFields.map((field) => (
-          <div key={field.id} className="rf-row"><span className="rf-grow"><span className="rf-t1">{field.label}</span>{field.type === NUMBER_FIELD && <span className="rf-t2">A number{field.unit ? ` in ${field.unit}` : ''}</span>}</span>
-            <button type="button" className="ops-danger-link" disabled={busy} aria-label={`Remove ${field.label}`}
-              onClick={() => void onSave({ ...config, customFields: config.customFields.filter((f) => f.id !== field.id) })}>Remove</button></div>
+          <div key={field.id} className="rf-row"><span className="rf-grow"><span className="rf-t1">{field.label}</span>{field.type === NUMBER_FIELD && <span className="rf-t2">{field.unit ? t('ops2.entries.numberIn', { unit: field.unit }) : t('ops2.entries.aNumber')}</span>}</span>
+            <button type="button" className="ops-danger-link" disabled={busy} aria-label={t('ops2.entries.removeAria', { name: field.label })}
+              onClick={() => void onSave({ ...config, customFields: config.customFields.filter((f) => f.id !== field.id) })}>{t('ops2.entries.remove')}</button></div>
         ))}
         <div className="rf-row ops-end">
-          <button type="button" className="rf-btn" aria-expanded={adding} disabled={busy} onClick={() => { setAdding((v) => !v); setOwn(false); }}>+ Add a question</button>
+          <button type="button" className="rf-btn" aria-expanded={adding} disabled={busy} onClick={() => { setAdding((v) => !v); setOwn(false); }}>{t('ops2.entries.addQ')}</button>
         </div>
         {adding && !own && (
-          <div className="rf-choices ops-add-list" role="listbox" aria-label="Add a question">
+          <div className="rf-choices ops-add-list" role="listbox" aria-label={t('ops2.entries.addQLabel')}>
             {unused.map((part) => (
               <button key={part.key} type="button" role="option" aria-selected={false} className="rf-choice" onClick={() => { void onSave({ ...config, [part.key]: OPTIONAL }); setAdding(false); }}>{part.label}</button>
             ))}
-            <button type="button" role="option" aria-selected={false} className="rf-choice" onClick={() => setOwn(true)}>Write your own…</button>
+            <button type="button" role="option" aria-selected={false} className="rf-choice" onClick={() => setOwn(true)}>{t('ops2.entries.writeOwn')}</button>
           </div>
         )}
         {adding && own && (
           <form className="ops-dup" onSubmit={(event) => { event.preventDefault(); addOwn(); }}>
-            <label className="rf-fld">Question<input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} /></label>
-            <RefineChoiceRow label="Answer" value={kind} options={[{ value: 'text', label: 'Text' }, { value: 'number', label: 'A number' }]} onChange={setKind} />
-            {kind === 'number' && <label className="rf-fld">Unit (optional)<input value={unit} maxLength={20} onChange={(event) => setUnit(event.target.value)} /></label>}
-            <div className="rf-actions"><button type="submit" className="rf-btn rf-btn-primary" disabled={!name.trim()}>Add question</button><button type="button" className="rf-btn" onClick={() => setOwn(false)}>Cancel</button></div>
+            <label className="rf-fld">{t('ops2.entries.question')}<input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} /></label>
+            <RefineChoiceRow label={t('ops2.entries.answer')} value={kind} options={[{ value: 'text', label: t('ops2.entries.text') }, { value: 'number', label: t('ops2.entries.aNumber') }]} onChange={setKind} />
+            {kind === 'number' && <label className="rf-fld">{t('ops2.entries.unit')}<input value={unit} maxLength={20} onChange={(event) => setUnit(event.target.value)} /></label>}
+            <div className="rf-actions"><button type="submit" className="rf-btn rf-btn-primary" disabled={!name.trim()}>{t('ops2.entries.addQuestion')}</button><button type="button" className="rf-btn" onClick={() => setOwn(false)}>{t('common.cancel')}</button></div>
           </form>
         )}
       </RefineList>
 
-      <RefineSection title="Flag rules" />
-      {numbers.length === 0 && <p className="rf-note">Add a number question to flag answers that go over or under a limit.</p>}
+      <RefineSection title={t('ops2.entries.flagRules')} />
+      {numbers.length === 0 && <p className="rf-note">{t('ops2.entries.addNumberQ')}</p>}
       {numbers.length > 0 && (
         <>
           {rules.map((rule) => (
@@ -491,7 +497,7 @@ function SetupEditor({ config, busy, onSave }: { config: DecFormConfig; busy: bo
               }}
               onRemove={() => setPending((list) => list.filter((p) => p.key !== rule.key))} />
           ))}
-          <button type="button" className="ops-addbar" disabled={busy} onClick={() => setPending((list) => [...list, { key: list.length ? list[list.length - 1].key + 1 : 1, field: numbers[0].id, op: 'over' }])}>+ Add a flag rule</button>
+          <button type="button" className="ops-addbar" disabled={busy} onClick={() => setPending((list) => [...list, { key: list.length ? list[list.length - 1].key + 1 : 1, field: numbers[0].id, op: 'over' }])}>{t('ops2.entries.addRule')}</button>
         </>
       )}
     </>
@@ -503,21 +509,22 @@ function RuleBlock({ uid, numbers, field, op, value, unit, label, busy, onChange
   uid: string; numbers: CustomField[]; field: string; op: 'over' | 'under'; value: string; unit: string; label: string; busy: boolean;
   onChange: (next: { field: string; op: 'over' | 'under'; value: number | null }) => void; onRemove: () => void;
 }) {
+  const t = useT();
   const [text, setText] = useState(value);
   const commit = () => { const n = Number(text); if (text.trim() !== '' && Number.isFinite(n) && String(n) !== value) onChange({ field, op, value: n }); };
   return (
-    <RefineList as="div" label={`Flag rule for ${label}`}>
-      <div className="rf-row ops-rule-head"><span className="rf-grow rf-t1">Flag if</span></div>
-      <RefineChoiceRow label="Answer" value={field} options={numbers.map((f) => ({ value: f.id, label: f.label.trim() || 'Question' }))} disabled={busy}
+    <RefineList as="div" label={t('ops2.entries.ruleFor', { name: label })}>
+      <div className="rf-row ops-rule-head"><span className="rf-grow rf-t1">{t('ops2.entries.flagIf')}</span></div>
+      <RefineChoiceRow label={t('ops2.entries.answer')} value={field} options={numbers.map((f) => ({ value: f.id, label: f.label.trim() || t('ops2.entries.question') }))} disabled={busy}
         onChange={(next) => onChange({ field: next, op, value: text.trim() !== '' && Number.isFinite(Number(text)) ? Number(text) : null })} />
-      <RefineChoiceRow label="Is" value={op} options={[{ value: 'over', label: 'is over' }, { value: 'under', label: 'is under' }]} disabled={busy}
+      <RefineChoiceRow label={t('ops2.entries.is')} value={op} options={[{ value: 'over', label: t('ops2.entries.isOver') }, { value: 'under', label: t('ops2.entries.isUnder') }]} disabled={busy}
         onChange={(next) => onChange({ field, op: next, value: text.trim() !== '' && Number.isFinite(Number(text)) ? Number(text) : null })} />
       <div className="rf-row">
-        <label className="rf-grow rf-t1" htmlFor={`rule-${uid}`}>Value</label>
+        <label className="rf-grow rf-t1" htmlFor={`rule-${uid}`}>{t('ops2.entries.value')}</label>
         <input id={`rule-${uid}`} className="ops-value" inputMode="decimal" value={text} disabled={busy} onChange={(event) => setText(event.target.value)} onBlur={commit} />
         {unit && <span className="rf-t2">{unit}</span>}
       </div>
-      <div className="rf-row ops-end"><button type="button" className="ops-danger-link" disabled={busy} onClick={onRemove}>Remove rule</button></div>
+      <div className="rf-row ops-end"><button type="button" className="ops-danger-link" disabled={busy} onClick={onRemove}>{t('ops2.entries.removeRule')}</button></div>
     </RefineList>
   );
 }

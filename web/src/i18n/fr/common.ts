@@ -33,4 +33,7 @@ export const common: AreaCatalogue<typeof en> = {
   'common.demoPayment.entry': 'Ceci est une démonstration. Aucun argent ne sera prélevé ni envoyé, et votre inscription n’a pas été payée.',
   'common.demoPayment.order': 'Ceci est une démonstration. Aucun argent ne sera prélevé ni envoyé, et votre commande n’a pas été payée.',
   'common.demoPayment.payout': 'Ceci est une démonstration. Aucun argent ne sera prélevé ni envoyé, et vos coordonnées bancaires ne serviront à payer personne.',
+  'common.qty.group': 'Quantité : {name}',
+  'common.qty.remove': 'Retirer 1 {name}',
+  'common.qty.add': 'Ajouter 1 {name}',
 };

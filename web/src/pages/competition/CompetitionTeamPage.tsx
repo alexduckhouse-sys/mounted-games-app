@@ -28,6 +28,8 @@ import { heatName, nextHeats } from '../../lib/following';
 import { computeTeamStats } from '../../lib/teamStats';
 import type { TeamProfile, TeamProfileHistory } from '../seasons/teamProfileTypes';
 import { byDrawnLane } from './laneRules';
+import { clubLabel } from '../../lib/clubName';
+import { blockLabelText, blockNoteText } from '../../lib/toplistText';
 
 
 
@@ -235,7 +237,7 @@ export function CompetitionTeamPage() {
                 <span>{team.displayName}</span>
               </h1>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-[rgb(var(--mg-muted))]">
-                <span>{[sectionLabel, team.clubName].filter(Boolean).join(' · ')}</span>
+                <span>{[sectionLabel, clubLabel(team.clubName)].filter(Boolean).join(' · ')}</span>
                 {team.isHorsConcours && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
                     <Ban aria-hidden="true" className="h-3 w-3" /> {t('teams.team.horsConcours')}
@@ -432,9 +434,9 @@ function BreakdownBlock({ block }: { block: TeamBlock }) {
     <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline gap-2 border-b-[1.5px] pb-1" style={{ borderColor: `rgb(${accent})` }}>
         <h3 className="mg-display flex-1 text-[13px] font-bold uppercase leading-none tracking-[0.05em]" style={{ color: `rgb(${accent})` }}>
-          {block.label}
+          {blockLabelText(block.label, t)}
         </h3>
-        {block.note && <span className="text-[11px] font-medium text-[rgb(var(--mg-muted))]">{block.note}</span>}
+        {block.note && <span className="text-[11px] font-medium text-[rgb(var(--mg-muted))]">{blockNoteText(block.note, t)}</span>}
         <span className="mg-display text-lg font-bold leading-none text-[rgb(var(--mg-heading))]">
           {block.points == null ? '–' : formatPoints(block.points)}
         </span>

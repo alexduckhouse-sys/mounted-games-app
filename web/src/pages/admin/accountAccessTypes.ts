@@ -1,3 +1,5 @@
+import { tr } from '../../i18n/translate';
+
 // Wire types for locking, blocking and inviting accounts (api/Dtos/AccountAccessDtos.cs). Enums travel as numbers.
 
 /** What an invited person becomes: 0 an organiser (approved Trainer), 1 a site admin (Admin). */
@@ -64,12 +66,12 @@ export interface AdminUser {
 
 /** What an account is called on the Users page. */
 export function accountKind(roles: readonly string[]): string {
-  if (roles.includes('MasterAdmin')) return 'Master admin';
-  if (roles.includes('Admin')) return 'Site admin';
-  if (roles.includes('Trainer')) return 'Organiser';
-  if (roles.includes('TrainerRequest')) return 'Wants to organise';
-  if (roles.includes('Manager')) return 'Team manager';
-  if (roles.includes('ManagerRequest')) return 'Wants to manage a team';
-  if (roles.includes('Rider')) return 'Rider';
-  return 'Supporter';
+  if (roles.includes('MasterAdmin')) return tr('admin.accounts.kind.master');
+  if (roles.includes('Admin')) return tr('admin.accounts.kind.admin');
+  if (roles.includes('Trainer')) return tr('admin.accounts.kind.organiser');
+  if (roles.includes('TrainerRequest')) return tr('admin.accounts.kind.wantsOrganise');
+  if (roles.includes('Manager')) return tr('admin.accounts.kind.manager');
+  if (roles.includes('ManagerRequest')) return tr('admin.accounts.kind.wantsManage');
+  if (roles.includes('Rider')) return tr('admin.accounts.kind.rider');
+  return tr('admin.accounts.kind.supporter');
 }

@@ -9,8 +9,9 @@ const section = (id: number, displayName: string, extra: Partial<CompetitionSect
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
 const entries = [1, 2].map((id) => ({ id, teamId: id, teamName: `Team ${id}`, laneIndex: id }));
-// Keep the shared timetable on one day even when tests run near midnight.
-const todayNoon = new Date(new Date().setHours(12, 0, 0, 0)).toISOString();
+// A fixed local noon, with the clock pinned to it in beforeEach, so no run depends on the time of day or on BST.
+const fixedNow = new Date(2026, 9, 24, 12, 0, 0, 0);
+const todayNoon = fixedNow.toISOString();
 const detail = competition({
   name: 'Spring Games',
   sections: [section(5, 'Teams Seniors', { finalistCount: 1 }), section(6, 'Teams Juniors')],
@@ -32,6 +33,8 @@ function open(path: string) {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(fixedNow);
   routes = {
     '/api/competitions/1': () => json(detail),
     '/api/competitions/1/standings?sectionId=5': () => json([standing(1, 2), standing(2, 1)]),
@@ -41,7 +44,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock);
   localStorage.setItem('mg.auth', JSON.stringify({ token: 'secret', expiresAt: '2999-01-01', user: { id: 'u', roles: ['Admin'] } }));
 });
-afterEach(() => { vi.unstubAllGlobals(); document.head.querySelectorAll('meta[name=robots]').forEach((m) => m.remove()); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); document.head.querySelectorAll('meta[name=robots]').forEach((m) => m.remove()); });
 
 describe('embedded standings', () => {
   it('shows the toplist with age-group chips, a back link that opens a new tab, and no sign-in data in requests', async () => {
@@ -135,8 +138,7 @@ describe('embedded timetable', () => {
   });
 
   it('offers the whole day when earlier sessions are hidden and filters by age group', async () => {
-    // Keep all three half-hour sessions on one day even when the suite runs near midnight.
-    const finishedAt = new Date(new Date().setHours(12, 0, 0, 0)).toISOString();
+    const finishedAt = todayNoon;
     const day = competition({ ...detail, sessions: [
       session(1, { orderIndex: 1, status: 2, scheduledStart: finishedAt, heats: [heat(1, { finishedAt, scheduledStart: finishedAt })] }),
       session(2, { orderIndex: 2, status: 2, scheduledStart: finishedAt, heats: [heat(2, { finishedAt, scheduledStart: finishedAt })] }),
@@ -249,5 +251,23 @@ describe('embedded season standings', () => {
     routes[`/api/seasons/${id}/standings`] = () => json(standings);
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() => expect(screen.getByText('Hunt A')).toBeInTheDocument());
+  });
+});
+
+describe('embeds in French and Welsh', () => {
+  it('follow the browser language, with no stored choice read', async () => {
+    const language = vi.spyOn(window.navigator, 'language', 'get').mockReturnValue('fr-FR');
+    try {
+      const view = open('/embed/competitions/1/standings');
+      expect(await screen.findByText('Team 1')).toBeInTheDocument();
+      expect(screen.getByText('Les 1 premiers vont en finale')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Propulsé par Mounted Games' })).toBeInTheDocument();
+      expect(screen.getByRole('list', { name: 'Classement' })).toBeInTheDocument();
+      view.unmount();
+      language.mockReturnValue('cy-GB');
+      open('/embed/competitions/1/timetable');
+      expect(await screen.findByText('Egwyl')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Wedi’i bweru gan Mounted Games' })).toBeInTheDocument();
+    } finally { language.mockRestore(); }
   });
 });

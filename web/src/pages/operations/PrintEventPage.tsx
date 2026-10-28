@@ -14,9 +14,10 @@ import { formatPoints } from '../../lib/formatPoints';
 import { downloadCsv, safeFilename, toCsv } from '../../lib/csv';
 import { formatDurationHms, logoSrc } from '../../lib/sponsors';
 import { activeScorerLinks, mintPosterLinks, type PosterLink } from './posterLinks';
-import { tr } from '../../i18n/translate';
+import { activeLocale, tr } from '../../i18n/translate';
+import type { MessageKey } from '../../i18n/en/index';
 import { drawForSession, parseSessionId, scoreSheetsForSession } from './sessionPrint';
-import { SPONSOR_CSV_HEADER, buildSponsorReportRows, placeFiguresText, sponsorCsvRows, type SponsorReportRow } from './sponsorReport';
+import { SPONSOR_CSV_HEADER, buildSponsorReportRows, placeFiguresText, placementText, sponsorCsvRows, tierText, type SponsorReportRow } from './sponsorReport';
 import type { CompetitionDetail, ScorerLink } from '../../types';
 import { PageProblem } from '../../components/PageProblem';
 import { QrCode } from '../../components/QrCode';
@@ -26,32 +27,32 @@ import { competitionDateText } from '../../lib/competitionDates';
 
 /** What each print view loads and is called. The book and entry list are not under /print because they have their own access rules. */
 const VIEWS = {
-  draw: { path: 'print/draw', title: 'Draw and lanes' },
-  'score-sheets': { path: 'print/score-sheets', title: 'Score sheets' },
-  results: { path: 'print/results', title: 'Results' },
-  'results-book': { path: 'results-book', title: 'Results book' },
-  'results-book-organiser': { path: 'results-book/organiser', title: 'Results book: organiser copy' },
-  entries: { path: 'print/entries', title: 'Entry list' },
-  'tack-check': { path: 'print/tack-check', title: 'Tack check' },
-  posters: { path: 'print/posters', title: 'QR posters' },
-  'volunteer-card': { path: 'print/draw', title: 'Volunteer card' },
-} as const;
+  draw: { path: 'print/draw', title: 'ops2.print.view.draw' },
+  'score-sheets': { path: 'print/score-sheets', title: 'ops2.print.view.scoreSheets' },
+  results: { path: 'print/results', title: 'ops2.print.view.results' },
+  'results-book': { path: 'results-book', title: 'ops2.print.view.book' },
+  'results-book-organiser': { path: 'results-book/organiser', title: 'ops2.print.view.bookOrganiser' },
+  entries: { path: 'print/entries', title: 'ops2.print.view.entries' },
+  'tack-check': { path: 'print/tack-check', title: 'ops2.print.view.tack' },
+  posters: { path: 'print/posters', title: 'ops2.print.view.posters' },
+  'volunteer-card': { path: 'print/draw', title: 'ops2.print.view.volunteer' },
+} as const satisfies Record<string, { path: string; title: MessageKey }>;
 type View = keyof typeof VIEWS;
 
 /** Sheets that carry a small QR code to the public live scores. */
 const QR_VIEWS: readonly View[] = ['draw', 'score-sheets'];
 
 function date(value: string) {
-  return new Date(value).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' });
+  return new Date(value).toLocaleDateString(activeLocale(), { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 function time(value: string | null) {
-  return value ? new Date(value).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : 'Time TBC';
+  return value ? new Date(value).toLocaleTimeString(activeLocale(), { hour: '2-digit', minute: '2-digit' }) : tr('ops2.print.timeTbc');
 }
 
 function message(error: unknown) {
   const candidate = error as { response?: { data?: { detail?: string; title?: string } } };
-  return candidate.response?.data?.detail ?? candidate.response?.data?.title ?? 'Check your signal and try again.';
+  return candidate.response?.data?.detail ?? candidate.response?.data?.title ?? tr('ops2.print.checkSignal');
 }
 
 export default function PrintEventPage() {
@@ -153,8 +154,8 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
     return () => { cancelled = true; };
   }, [competitionId, sponsorMode]);
 
-  if (error) return <PageProblem title="Couldn’t load the print view" primaryLabel="Try again" onPrimary={() => { setError(null); setAttempt(attempt + 1); }}>{error}</PageProblem>;
-  if (!data) return <p className="mg-card p-4" role="status">Preparing the print view…</p>;
+  if (error) return <PageProblem title={tr('ops2.print.loadProblem')} primaryLabel={tr('common.tryAgain')} onPrimary={() => { setError(null); setAttempt(attempt + 1); }}>{error}</PageProblem>;
+  if (!data) return <p className="mg-card p-4" role="status">{tr('ops2.print.preparing')}</p>;
   const competition = data.competition;
   const reference = competition.competitionNumber?.trim() || null;
   const showQr = !sponsorMode && QR_VIEWS.includes(view);
@@ -305,11 +306,11 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
     <article className="event-print-page">
       {toast.node}
       <div className="event-print-controls mb-5 flex flex-wrap items-center gap-2">
-        <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/details`}><ChevronLeft className="h-4 w-4" />Event details</Link>
-        <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/tv`}><Monitor className="h-4 w-4" />TV Kiosk</Link>
-        <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/commentary`}><Mic className="h-4 w-4" />PA Desk</Link>
+        <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/details`}><ChevronLeft className="h-4 w-4" />{tr('ops2.print.eventDetails')}</Link>
+        <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/tv`}><Monitor className="h-4 w-4" />{tr('ops2.print.tvKiosk')}</Link>
+        <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/commentary`}><Mic className="h-4 w-4" />{tr('ops2.print.paDesk')}</Link>
         <Link className={`mg-btn ${view === 'posters' && !sponsorMode ? 'mg-btn-primary' : 'mg-btn-secondary'}`} to={`/event-tools/${competitionId}/print/posters`}>
-          <QrCodeIcon className="h-4 w-4" />QR posters
+          <QrCodeIcon className="h-4 w-4" />{tr('ops2.print.view.posters')}
         </Link>
         <button
           type="button"
@@ -317,7 +318,7 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
           disabled={exportingResults}
           className="mg-btn mg-btn-secondary"
         >
-          <Download className="h-4 w-4" />{exportingResults ? 'Exporting results…' : 'Official results pack (CSV)'}
+          <Download className="h-4 w-4" />{exportingResults ? tr('ops2.print.exporting') : tr('ops2.print.officialPack')}
         </button>
         <button
           type="button"
@@ -325,27 +326,27 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
           onClick={() => setSponsorMode((v) => !v)}
           className="mg-btn mg-btn-secondary"
         >
-          <BarChart3 className="h-4 w-4" />Sponsor report
+          <BarChart3 className="h-4 w-4" />{tr('ops2.print.sponsorReport')}
         </button>
-        <button className="mg-btn mg-btn-primary" disabled={printing} onClick={() => void printPage()}><Printer className="h-4 w-4" />Print</button>
+        <button className="mg-btn mg-btn-primary" disabled={printing} onClick={() => void printPage()}><Printer className="h-4 w-4" />{tr('ops2.print.print')}</button>
         {sessionId && !sponsorMode && (
           <span className="flex items-center gap-2 text-sm text-[rgb(var(--mg-muted))]">
-            One session only.
-            <Link className="mg-btn mg-btn-secondary" to={`/event-tools/${competitionId}/print/${view}`} replace>Show every session</Link>
+            {tr('ops2.print.oneSession')}
+            <Link className="mg-btn mg-btn-secondary" to={`/event-tools/${competitionId}/print/${view}`} replace>{tr('ops2.print.showEvery')}</Link>
           </span>
         )}
       </div>
       <header className="event-print-header">
         <div className="event-print-header-text">
-          <p className="event-print-kicker">Mounted Games</p>
+          <p className="event-print-kicker">{tr('common.mountedGames')}</p>
           <h1>{competition.name}</h1>
           <p>{date(competition.startDate)}{competition.location ? ` · ${competition.location}` : ''}</p>
-          {reference && <p className="event-print-ref">Reference: {reference}</p>}
-          <p className="event-print-kind">{sponsorMode ? 'Sponsor report' : VIEWS[view].title}</p>
+          {reference && <p className="event-print-ref">{tr('ops2.print.reference', { ref: reference })}</p>}
+          <p className="event-print-kind">{sponsorMode ? tr('ops2.print.sponsorReport') : tr(VIEWS[view].title)}</p>
         </div>
         {showQr && <div className="event-print-qr-box">
-          <QrCode value={`${window.location.origin}/competitions/${competition.id}/toplists`} label="QR code for the live scores" className="event-print-qr-small" />
-          <span>Live scores</span>
+          <QrCode value={`${window.location.origin}/competitions/${competition.id}/toplists`} label={tr('ops2.print.qrLabel')} className="event-print-qr-small" />
+          <span>{tr('ops2.print.liveScores')}</span>
         </div>}
       </header>
 
@@ -353,7 +354,7 @@ function PrintView({ competitionId, view, initialSponsorMode = false }: { compet
         <SponsorProofOfValueSection
           competitionName={competition.name}
           startDate={date(competition.startDate)}
-          venue={competition.location ?? 'Venue TBC'}
+          venue={competition.location ?? tr('ops2.print.venueTbc')}
           totalTeams={totalTeams}
           totalSections={totalSections}
           rows={sponsorRows}
@@ -409,66 +410,66 @@ function SponsorProofOfValueSection({
   const totalSeconds = useMemo(() => rows.reduce((sum, r) => sum + r.totalSeconds, 0), [rows]);
 
   return (
-    <section aria-label="Sponsor report" className="event-print-section">
+    <section aria-label={tr('ops2.print.sponsorReport')} className="event-print-section">
       <div className="event-print-controls mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] p-3">
         <div>
           <strong className="block text-sm font-bold text-[rgb(var(--mg-heading))]">
-            Sponsor report
+            {tr('ops2.print.sponsorReport')}
           </strong>
           <span className="text-xs text-[rgb(var(--mg-muted))]">
-            How often each sponsor was shown, and for how long on the live video.
+            {tr('ops2.print.sr.sub')}
           </span>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" className="mg-btn mg-btn-secondary" onClick={onExportCsv}>
-            <Download className="h-4 w-4" aria-hidden="true" /> Download as CSV
+            <Download className="h-4 w-4" aria-hidden="true" /> {tr('ops2.print.sr.csv')}
           </button>
           <button type="button" className="mg-btn mg-btn-primary" onClick={onPrint}>
-            <Printer className="h-4 w-4" aria-hidden="true" /> Print or save as PDF
+            <Printer className="h-4 w-4" aria-hidden="true" /> {tr('ops2.print.sr.pdf')}
           </button>
         </div>
       </div>
 
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-lg border border-[rgb(var(--mg-rule-soft))] p-3">
-          <span className="block text-xs font-bold text-[rgb(var(--mg-muted))]">Event and date</span>
+          <span className="block text-xs font-bold text-[rgb(var(--mg-muted))]">{tr('ops2.print.sr.eventDate')}</span>
           <strong className="mt-0.5 block text-sm font-bold text-[rgb(var(--mg-ink))]">{competitionName}</strong>
           <span className="block text-xs text-[rgb(var(--mg-body))]">{startDate}</span>
         </div>
         <div className="rounded-lg border border-[rgb(var(--mg-rule-soft))] p-3">
-          <span className="block text-xs font-bold text-[rgb(var(--mg-muted))]">Venue</span>
+          <span className="block text-xs font-bold text-[rgb(var(--mg-muted))]">{tr('ops2.print.sr.venue')}</span>
           <strong className="mt-0.5 block text-sm font-bold text-[rgb(var(--mg-ink))]">{venue}</strong>
         </div>
         <div className="rounded-lg border border-[rgb(var(--mg-rule-soft))] p-3">
-          <span className="block text-xs font-bold text-[rgb(var(--mg-muted))]">Teams and sections</span>
+          <span className="block text-xs font-bold text-[rgb(var(--mg-muted))]">{tr('ops2.print.sr.teamsSections')}</span>
           <strong className="mt-0.5 block text-sm font-bold text-[rgb(var(--mg-ink))]">
-            {totalTeams} teams · {totalSections} sections
+            {tr('ops2.print.sr.teamsCount', { teams: totalTeams, sections: totalSections })}
           </strong>
         </div>
         <div className="rounded-lg border border-[rgb(var(--mg-rule-soft))] p-3">
-          <span className="block text-xs font-bold text-[rgb(var(--mg-muted))]">Total views</span>
+          <span className="block text-xs font-bold text-[rgb(var(--mg-muted))]">{tr('ops2.print.sr.totalViews')}</span>
           <strong className="mt-0.5 block text-lg font-bold tabular-nums text-[rgb(var(--mg-heading))]">
-            {totalViews.toLocaleString('en-GB')}
+            {totalViews.toLocaleString(activeLocale())}
           </strong>
-          <span className="block text-xs text-[rgb(var(--mg-muted))]">{formatDurationHms(totalSeconds)} on video</span>
+          <span className="block text-xs text-[rgb(var(--mg-muted))]">{tr('ops2.print.sr.onVideo', { time: formatDurationHms(totalSeconds) })}</span>
         </div>
       </div>
 
       {loading ? (
-        <p role="status" className="event-print-note">Loading the sponsor figures…</p>
+        <p role="status" className="event-print-note">{tr('ops2.print.sr.loading')}</p>
       ) : rows.length === 0 ? (
-        <p className="event-print-empty">No sponsors have been added to this event yet.</p>
+        <p className="event-print-empty">{tr('ops2.print.sr.empty')}</p>
       ) : (
         <div className="event-print-table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Sponsor</th>
-                <th>Level</th>
-                <th className="event-print-cell">Views</th>
-                <th className="event-print-cell">On video</th>
-                <th>Switched on for</th>
-                <th>Views by place</th>
+                <th>{tr('ops2.print.sr.colSponsor')}</th>
+                <th>{tr('ops2.print.sr.colLevel')}</th>
+                <th className="event-print-cell">{tr('ops2.print.sr.colViews')}</th>
+                <th className="event-print-cell">{tr('ops2.print.sr.colOnVideo')}</th>
+                <th>{tr('ops2.print.sr.colSwitched')}</th>
+                <th>{tr('ops2.print.sr.colByPlace')}</th>
               </tr>
             </thead>
             <tbody>
@@ -479,7 +480,7 @@ function SponsorProofOfValueSection({
                       {row.logoUrl && (
                         <img
                           src={logoSrc(row.logoUrl, import.meta.env.VITE_API_BASE)}
-                          alt={`${row.name} logo`}
+                          alt={tr('ops2.print.sr.logoAlt', { name: row.name })}
                           className="h-7 w-7 shrink-0 rounded object-contain"
                         />
                       )}
@@ -489,10 +490,10 @@ function SponsorProofOfValueSection({
                       </div>
                     </div>
                   </td>
-                  <td>{row.tierLabel}</td>
-                  <td className="event-print-cell"><strong>{row.totalViews.toLocaleString('en-GB')}</strong></td>
-                  <td className="event-print-cell">{row.totalSeconds > 0 ? formatDurationHms(row.totalSeconds) : 'None'}</td>
-                  <td>{row.switchedOn.join(', ') || 'Not recorded'}</td>
+                  <td>{tierText(row.tierLabel)}</td>
+                  <td className="event-print-cell"><strong>{row.totalViews.toLocaleString(activeLocale())}</strong></td>
+                  <td className="event-print-cell">{row.totalSeconds > 0 ? formatDurationHms(row.totalSeconds) : tr('ops2.print.sr.none')}</td>
+                  <td>{row.switchedOn.map(placementText).join(', ') || tr('ops2.print.sr.notRecorded')}</td>
                   <td>{placeFiguresText(row)}</td>
                 </tr>
               ))}
@@ -505,16 +506,16 @@ function SponsorProofOfValueSection({
 }
 
 function Draw({ data }: { data: PrintableDraw }) {
-  if (data.sessions.length === 0) return <p className="event-print-empty">No draw has been set up yet.</p>;
+  if (data.sessions.length === 0) return <p className="event-print-empty">{tr('ops2.print.noDraw')}</p>;
   return <>{data.sessions.map((session) => <section key={session.sessionId} className="event-print-section">
-    <h2>{session.sectionName || 'Open section'} · {session.sessionName}</h2>
-    {session.arenaName && <p className="event-print-note">Arena: {session.arenaName}</p>}
+    <h2>{session.sectionName || tr('ops2.print.openSection')} · {session.sessionName}</h2>
+    {session.arenaName && <p className="event-print-note">{tr('ops2.print.arena', { name: session.arenaName })}</p>}
     {session.heats.map((heat) => {
       const teams = heat.teams.slice().sort((a, b) => (a.lane ?? 0) - (b.lane ?? 0));
       return <div key={heat.heatId} className="event-print-block">
         <h3>{heat.label} <span>{time(heat.scheduledStart)}</span></h3>
         <div className="event-print-table-wrap"><table>
-          <thead><tr><th>Lane</th><th>Team</th>{heat.races.map((race, index) => <th key={race.raceId} className="event-print-cell">{index + 1}. {race.name}</th>)}<th className="event-print-cell">Total</th></tr></thead>
+          <thead><tr><th>{tr('ops2.print.lane')}</th><th>{tr('ops2.print.team')}</th>{heat.races.map((race, index) => <th key={race.raceId} className="event-print-cell">{index + 1}. {race.name}</th>)}<th className="event-print-cell">{tr('ops2.print.total')}</th></tr></thead>
           <tbody>{teams.map((team) => <tr key={team.teamId}><td>{team.lane}</td><td>{team.teamName}</td>{heat.races.map((race) => <td key={race.raceId} className="event-print-cell" />)}<td className="event-print-cell" /></tr>)}</tbody>
         </table></div>
       </div>;
@@ -531,15 +532,15 @@ function scoreText(cell: { points: number | null; eliminated: boolean; isSitOut?
 }
 
 function ScoreSheets({ data }: { data: PrintableScoreSheets }) {
-  if (data.heats.length === 0) return <p className="event-print-empty">No score sheets are available yet.</p>;
+  if (data.heats.length === 0) return <p className="event-print-empty">{tr('ops2.print.noSheets')}</p>;
   return <>{data.heats.map((heat) => {
     // One row per team in lane order, one column per race; anything already scored is filled in.
     const teams = (heat.races[0]?.teams ?? []).slice().sort((a, b) => (a.lane ?? 0) - (b.lane ?? 0));
     return <section key={heat.heatId} className="event-print-section event-print-break">
-      <h2>{heat.sectionName || 'Open section'} · {heat.sessionName} · {heat.label}</h2>
+      <h2>{heat.sectionName || tr('ops2.print.openSection')} · {heat.sessionName} · {heat.label}</h2>
       <p className="event-print-note">{time(heat.scheduledStart)}</p>
-      {heat.races.length === 0 ? <p className="event-print-empty">No races have been added to this heat.</p> : <div className="event-print-table-wrap"><table>
-        <thead><tr><th>Lane</th><th>Team</th><th>Bib</th>{heat.races.map((race, index) => <th key={race.raceId} className="event-print-cell">{index + 1}. {race.name}</th>)}<th className="event-print-cell">Total</th></tr></thead>
+      {heat.races.length === 0 ? <p className="event-print-empty">{tr('ops2.print.noRaces')}</p> : <div className="event-print-table-wrap"><table>
+        <thead><tr><th>{tr('ops2.print.lane')}</th><th>{tr('ops2.print.team')}</th><th>{tr('ops2.print.bib')}</th>{heat.races.map((race, index) => <th key={race.raceId} className="event-print-cell">{index + 1}. {race.name}</th>)}<th className="event-print-cell">{tr('ops2.print.total')}</th></tr></thead>
         <tbody>{teams.map((team) => {
           const cells = heat.races.map((race) => race.teams.find((x) => x.teamId === team.teamId));
           const scored = cells.filter((cell) => cell && cell.points !== null && cell.points !== undefined);
@@ -555,10 +556,10 @@ function ScoreSheets({ data }: { data: PrintableScoreSheets }) {
 }
 
 function Results({ data }: { data: PrintableResults }) {
-  return <>{data.isProvisional && <p className="event-print-provisional">Provisional results: some races are not complete.</p>}{data.sections.length === 0 ? <p className="event-print-empty">No sections are available yet.</p> : data.sections.map((section) => {
+  return <>{data.isProvisional && <p className="event-print-provisional">{tr('ops2.print.provisional')}</p>}{data.sections.length === 0 ? <p className="event-print-empty">{tr('ops2.print.noSections')}</p> : data.sections.map((section) => {
     // Tack check bonus points are part of the total; the column shows them only when a section has any.
     const hasBonus = section.results.some((row) => (row.bonusPoints ?? 0) > 0);
-    return <section key={section.competitionSectionId} className="event-print-section"><h2>{section.sectionName}</h2>{section.results.length === 0 ? <p className="event-print-empty">No results yet.</p> : <div className="event-print-table-wrap"><table><thead><tr><th>Pos.</th><th>Team</th><th>Points</th>{hasBonus && <th>Tack bonus</th>}<th>Races</th><th>Wins</th><th>Elim.</th></tr></thead><tbody>{section.results.map((row) => <tr key={row.teamId}><td>{row.rank}</td><td>{row.teamName}</td><td><strong>{row.totalPoints}</strong></td>{hasBonus && <td>{row.bonusPoints ?? 0}</td>}<td>{row.racesRun}</td><td>{row.wins}</td><td>{row.eliminations}</td></tr>)}</tbody></table></div>}</section>;
+    return <section key={section.competitionSectionId} className="event-print-section"><h2>{section.sectionName}</h2>{section.results.length === 0 ? <p className="event-print-empty">{tr('ops2.print.noResults')}</p> : <div className="event-print-table-wrap"><table><thead><tr><th>{tr('ops2.print.colPos')}</th><th>{tr('ops2.print.team')}</th><th>{tr('ops2.print.colPoints')}</th>{hasBonus && <th>{tr('ops2.print.colTack')}</th>}<th>{tr('ops2.print.colRaces')}</th><th>{tr('ops2.print.colWins')}</th><th>{tr('ops2.print.colElim')}</th></tr></thead><tbody>{section.results.map((row) => <tr key={row.teamId}><td>{row.rank}</td><td>{row.teamName}</td><td><strong>{row.totalPoints}</strong></td>{hasBonus && <td>{row.bonusPoints ?? 0}</td>}<td>{row.racesRun}</td><td>{row.wins}</td><td>{row.eliminations}</td></tr>)}</tbody></table></div>}</section>;
   })}</>;
 }
 
@@ -582,32 +583,32 @@ function QrPostersSection({
   return (
     <>
       {/* PAGE 1: Spectator Gate & Ring Fence Poster */}
-      <section className="event-print-section event-poster event-print-break" aria-label="Spectator Gate Poster">
-        <p className="event-print-kicker">Mounted Games</p>
+      <section className="event-print-section event-poster event-print-break" aria-label={tr('ops2.print.p.gateAria')}>
+        <p className="event-print-kicker">{tr('common.mountedGames')}</p>
         <h2 className="event-poster-title !bg-transparent !p-0 !text-[#17385f]">{competition.name}</h2>
         <p className="event-poster-when">{competitionDateText(competition.startDate, competition.endDate, true)}</p>
         {competition.location && <p className="event-poster-where">{competition.location}</p>}
 
         <div className="my-6 flex justify-center">
-          <QrCode value={gateUrl} label={`QR code for ${competition.name} timetable, scores and live stream`} className="event-poster-qr" />
+          <QrCode value={gateUrl} label={tr('ops2.print.p.qrLabel', { name: competition.name })} className="event-poster-qr" />
         </div>
 
-        <p className="event-poster-scan">Scan for Live Timetable, Scores &amp; Stream</p>
+        <p className="event-poster-scan">{tr('ops2.print.p.scan')}</p>
         <p className="event-poster-link">{gateUrl.replace(/^https?:\/\//, '')}</p>
 
         {/* Emergency Venue Details Box */}
         <div className="mt-8 rounded-lg border-2 border-red-800 bg-red-50 p-4 text-left text-red-950">
           <h3 className="mb-2 text-base font-bold uppercase tracking-wide text-red-900">
-            Emergency Venue Information (Dial 999 / 112)
+            {tr('ops2.print.p.emergency')}
           </h3>
           <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
             <div>
-              <span className="font-semibold">Event Venue / Location:</span>
-              <p className="text-sm font-medium">{competition.location || 'Location details on event schedule'}</p>
+              <span className="font-semibold">{tr('ops2.print.p.venueLoc')}</span>
+              <p className="text-sm font-medium">{competition.location || tr('ops2.print.p.locDetails')}</p>
             </div>
             {competition.what3Words && (
               <div>
-                <span className="font-semibold">what3words Location:</span>
+                <span className="font-semibold">{tr('ops2.print.p.w3w')}</span>
                 <p className="font-mono text-sm font-bold">
                   {competition.what3Words.startsWith('///') ? competition.what3Words : `///${competition.what3Words}`}
                 </p>
@@ -615,54 +616,54 @@ function QrPostersSection({
             )}
             {competition.latitude != null && competition.longitude != null && (
               <div>
-                <span className="font-semibold">GPS Coordinates:</span>
+                <span className="font-semibold">{tr('ops2.print.p.gps')}</span>
                 <p className="font-mono text-sm">
                   {competition.latitude.toFixed(5)}, {competition.longitude.toFixed(5)}
                 </p>
               </div>
             )}
             <div>
-              <span className="font-semibold">Emergency Access Note:</span>
-              <p className="text-xs">Quote the venue name and what3words address to emergency services.</p>
+              <span className="font-semibold">{tr('ops2.print.p.accessNote')}</span>
+              <p className="text-xs">{tr('ops2.print.p.quote')}</p>
             </div>
           </div>
         </div>
       </section>
 
       {/* PAGE 2: Staff & Ring Crew QR Sheet */}
-      <section className="event-print-section event-print-break" style={{ breakBefore: 'page' }} aria-label="Staff & Ring Crew Link Sheet">
+      <section className="event-print-section event-print-break" style={{ breakBefore: 'page' }} aria-label={tr('ops2.print.p.staffAria')}>
         <div className="mb-4 border-b-2 border-[#17385f] pb-3">
-          <p className="event-print-kicker">Staff &amp; Ring Crew Only</p>
+          <p className="event-print-kicker">{tr('ops2.print.p.staffOnly')}</p>
           <h2 className="!bg-transparent !p-0 !text-2xl !font-bold !text-[#17385f]">
-            Ring Crew, Camera Rig &amp; Scorer Access Sheet
+            {tr('ops2.print.p.accessSheet')}
           </h2>
           <p className="text-sm text-[rgb(var(--mg-muted))]">
-            Authorised volunteer links for {competition.name}. Scan each QR code below to open the corresponding ring control interface.
+            {tr('ops2.print.p.authorised', { name: competition.name })}
           </p>
         </div>
 
         {loadingLinks ? (
-          <p className="event-print-note" role="status">Loading staff access links…</p>
+          <p className="event-print-note" role="status">{tr('ops2.print.p.loadingLinks')}</p>
         ) : activeLinks.length === 0 ? (
           <div className="rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-ground))] p-6 text-center">
-            <h3 className="mb-2 text-lg font-bold text-[rgb(var(--mg-heading))]">No Active Staff Links Generated</h3>
+            <h3 className="mb-2 text-lg font-bold text-[rgb(var(--mg-heading))]">{tr('ops2.print.p.noLinks')}</h3>
             <p className="mx-auto max-w-lg text-sm text-[rgb(var(--mg-body))]">
-              To create volunteer links for scorers, tripod cameras, and stream controllers:
+              {tr('ops2.print.p.toCreate')}
             </p>
             <ol className="mx-auto mt-3 max-w-md list-decimal pl-5 text-left text-sm text-[rgb(var(--mg-body))]">
-              <li>Navigate to <strong>Event Details</strong> &gt; <strong>Scorer Links</strong>.</li>
-              <li>Select the target arena and choose the role: <strong>Arena Scorer</strong>, <strong>Tripod Camera</strong>, or <strong>Scorer + Stream Controller</strong>.</li>
-              <li>Click <strong>Create Link</strong> to generate links. Return here to print the full QR sheet.</li>
+              <li>{tr('ops2.print.p.step1a')}<strong>{tr('ops2.print.p.step1b')}</strong> &gt; <strong>{tr('ops2.print.p.step1c')}</strong>{tr('ops2.print.p.end')}</li>
+              <li>{tr('ops2.print.p.step2a')}<strong>{tr('ops2.print.p.arenaScorer')}</strong>, <strong>{tr('ops2.print.p.tripod')}</strong>{tr('ops2.print.p.step2b')}<strong>{tr('ops2.print.p.scorerStream')}</strong>{tr('ops2.print.p.end')}</li>
+              <li>{tr('ops2.print.p.step3a')}<strong>{tr('ops2.print.p.createLink')}</strong>{tr('ops2.print.p.step3b')}</li>
             </ol>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
             {activeLinks.map(({ link, url: targetUrl }) => {
               const scopeLabel = link.scope === 1
-                ? 'Tripod Camera'
+                ? tr('ops2.print.p.tripod')
                 : link.scope === 2
-                  ? 'Scorer + Stream Controller'
-                  : 'Arena Scorer';
+                  ? tr('ops2.print.p.scorerStream')
+                  : tr('ops2.print.p.arenaScorer');
 
               return (
                 <div key={link.id} className="flex flex-col items-center justify-between rounded-lg border-2 border-gray-300 bg-white p-4 text-center break-inside-avoid">
@@ -671,17 +672,17 @@ function QrPostersSection({
                       {scopeLabel}
                     </span>
                     <h4 className="mt-2 text-base font-bold text-[#17385f]">{link.label}</h4>
-                    <p className="text-xs font-semibold text-gray-600">Arena: {link.arenaName}</p>
+                    <p className="text-xs font-semibold text-gray-600">{tr('ops2.print.arena', { name: link.arenaName })}</p>
                   </div>
                   <div className="my-2 flex justify-center">
                     {targetUrl
-                      ? <QrCode value={targetUrl} label={`QR code for ${link.label} (${scopeLabel})`} className="h-36 w-36" />
+                      ? <QrCode value={targetUrl} label={tr('ops2.print.p.linkQr', { label: link.label, scope: scopeLabel })} className="h-36 w-36" />
                       : <p className="flex h-36 w-36 items-center justify-center text-xs text-gray-500">{tr('competition.posters.qrOnPrint')}</p>}
                   </div>
                   <div className="mt-2 w-full text-xs text-gray-500">
-                    <p className="font-medium text-gray-700">Scan to open arena interface</p>
+                    <p className="font-medium text-gray-700">{tr('ops2.print.p.scanOpen')}</p>
                     {targetUrl && <p className="mt-0.5 truncate font-mono text-[10px]">{targetUrl.replace(/^https?:\/\//, '')}</p>}
-                    <p className="mt-1 text-[10px]">Expires: {new Date(link.expiresAt).toLocaleDateString('en-GB')}</p>
+                    <p className="mt-1 text-[10px]">{tr('ops2.print.p.expires', { date: new Date(link.expiresAt).toLocaleDateString(activeLocale()) })}</p>
                   </div>
                 </div>
               );

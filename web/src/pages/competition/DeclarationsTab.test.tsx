@@ -426,7 +426,7 @@ describe('DeclarationsTab: the dec form', () => {
       id: 9, teamId: 7, teamName: 'Stockport C', competitionId: 4, competitionName: 'Cheshire Area MG', submittedAt: '2026-10-20T09:00:00Z', isLocked: true,
       riders: [0, 1, 2, 3, 4].map((i) => ({
         id: i + 1, fullName: `Rider ${i + 1}`, dateOfBirth: '2015-04-05T00:00:00', horseName: 'Pony', ponyHeightHands: 13, isCaptain: i === 0, isReserve: false, orderIndex: i,
-        noFilming: i === 1, useInitialOnly: i === 2,
+        useInitialOnly: i === 2,
       })),
     }];
     const user = userEvent.setup();
@@ -439,7 +439,6 @@ describe('DeclarationsTab: the dec form', () => {
     await waitFor(() => expect(state.post).toHaveBeenCalled());
     const riders = state.post.mock.calls[0][1].riders;
     expect(riders[0].isCaptain).toBe(true);
-    expect(riders[1].noFilming).toBe(true);
     expect(riders[2].useInitialOnly).toBe(true);
   });
 
@@ -661,6 +660,21 @@ describe('DeclarationsTab: around the form', () => {
     state.organise = true;
     mount();
     expect(await screen.findByRole('button', { name: /Export CSV \(1\)/ })).toBeInTheDocument();
+  });
+
+  it('shows how many dec forms are in, a QR code for the page, and Export CSV at the bottom', async () => {
+    forms = [{ id: 9, teamId: 70, teamName: 'Other Club A', competitionId: 4, competitionName: 'x', submittedAt: '2026-10-20T09:00:00Z', isLocked: true, riders: [] }];
+    state.organise = true;
+    mount();
+    const exportButton = await screen.findByRole('button', { name: /Export CSV \(1\)/ });
+    expect(await screen.findByText(/^\d+ of \d+ dec forms? in$/)).toBeInTheDocument();
+    const qrRow = screen.getByRole('button', { name: 'Show dec form QR code' });
+    expect(screen.queryByRole('img', { name: /QR code for the/ })).not.toBeInTheDocument();
+    await userEvent.setup().click(qrRow);
+    expect(screen.getByRole('img', { name: /QR code for the/ })).toBeInTheDocument();
+    // Export comes after the list of forms and the QR row, not before them.
+    expect(qrRow.compareDocumentPosition(exportButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Other Club A/ }).compareDocumentPosition(exportButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('says so when the person has no team here', async () => {

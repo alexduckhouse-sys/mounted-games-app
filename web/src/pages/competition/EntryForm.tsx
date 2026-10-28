@@ -81,7 +81,7 @@ function EntryFormDetails({ competition, section, kind, step, onSent, onConflict
   const [stablingClubOrTeam, setStablingClubOrTeam] = useState(draft?.stablingClubOrTeam ?? '');
   const [guestFields, setGuestFields] = useState<GuestRiderFields>(blankGuestRider);
   const [showGuestProblem, setShowGuestProblem] = useState(false);
-  const [privacy, setPrivacy] = useState<RiderPrivacy>({ useInitialOnly: draft?.useInitialOnly ?? false, noFilming: draft?.noFilming ?? false });
+  const [privacy, setPrivacy] = useState<RiderPrivacy>({ useInitialOnly: draft?.useInitialOnly ?? false });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<{ text: string; retry: boolean } | null>(null);
   const toast = useToast();
@@ -95,11 +95,10 @@ function EntryFormDetails({ competition, section, kind, step, onSent, onConflict
     if (completed.current) return;
     setDraftSaved(saveEntryDraft(draftKey, {
       fullName, club, teamName, wholeTeam, lookingForGuestRiders,
-      teamsCount, stablesCount, stablingClubOrTeam, useInitialOnly: privacy.useInitialOnly,
-      noFilming: privacy.noFilming, requestId,
+      teamsCount, stablesCount, stablingClubOrTeam, useInitialOnly: privacy.useInitialOnly, requestId,
     }));
   }, [draftKey, fullName, club, teamName, wholeTeam, lookingForGuestRiders,
-    teamsCount, stablesCount, stablingClubOrTeam, privacy.useInitialOnly, privacy.noFilming, requestId]);
+    teamsCount, stablesCount, stablingClubOrTeam, privacy.useInitialOnly, requestId]);
 
   const isWaitlist = kind === 'waitlist';
   const guestWaiting = kind === 'guest' && section.format === 2;
@@ -167,7 +166,6 @@ function EntryFormDetails({ competition, section, kind, step, onSent, onConflict
         stablingClubOrTeam: guestWaiting || isWaitlist || !hasStables ? null : stablingClubOrTeam.trim() || club.trim() || teamName.trim() || null,
         paymentMethod: priceMinor > 0 ? (isDemo ? 'card' : 'bacs') : null,
         useInitialOnly: privacy.useInitialOnly,
-        noFilming: privacy.noFilming,
         acceptTerms: privacy.agreed,
         consentVersion: CONSENT_VERSION,
       });
@@ -292,8 +290,8 @@ function EntryFormDetails({ competition, section, kind, step, onSent, onConflict
           <div className="flex flex-col gap-3">
             <div className="flex min-h-11 items-center gap-3">
               <span className="sp-grow"><span className="sp-t1 !text-[15px]">{t('entries.form.stables')}</span><span className="sp-t2">{t('entries.form.stablesHelp')} <Link className="ev-link" to={`/competitions/${competition.id}/shop`}>{t('entries.form.bookShop')}</Link></span>
-                {stablesLeft != null && <span className="sp-t2" role="status">{stablesLeft <= 0 ? 'None left' : `${stablesLeft} ${stablesLeft === 1 ? 'stable' : 'stables'} left`}</span>}
-                {hookupsLeft != null && <span className="sp-t2" role="status">{hookupsLeft <= 0 ? 'No hook-ups left' : `${hookupsLeft} ${hookupsLeft === 1 ? 'hook-up' : 'hook-ups'} left`}</span>}</span>
+                {stablesLeft != null && <span className="sp-t2" role="status">{stablesLeft <= 0 ? t('entries.form.stablesNone') : t('entries.form.stablesLeft', { count: stablesLeft })}</span>}
+                {hookupsLeft != null && <span className="sp-t2" role="status">{hookupsLeft <= 0 ? t('entries.form.hookupsNone') : t('entries.form.hookupsLeft', { count: hookupsLeft })}</span>}</span>
               <span className="sp-stepper">
                 <button type="button" aria-label={t('entries.form.fewerStable')} disabled={stablesCount === 0} onClick={() => setStablesCount((n) => Math.max(0, n - 1))}><Minus className="h-4 w-4" aria-hidden="true" /></button>
                 <output aria-live="polite" className="!min-w-[30px]">{stablesCount}</output>
@@ -306,20 +304,20 @@ function EntryFormDetails({ competition, section, kind, step, onSent, onConflict
         {hasGuestRider && (
           <div className="flex flex-col gap-4" onBlur={() => setShowGuestProblem(true)}>
             <fieldset className="m-0 flex min-w-0 flex-col gap-3 rounded-[14px] border border-[rgb(var(--mg-line))] bg-[rgb(var(--mg-tint)/.4)] p-3.5">
-              <legend className="px-1.5 text-[13px] font-bold uppercase tracking-[0.06em] text-[rgb(var(--mg-heading))]">Rider</legend>
-              <p className="sp-note !m-0">Who will be riding. If that is a child, put their name here, not yours. Leave this section blank if you are the rider.</p>
-              <label className="rf-fld">Rider’s name<input autoComplete="off" maxLength={MAX_GUEST_NAME} value={guestFields.riderName} onChange={(e) => setGuest({ riderName: e.target.value })} /></label>
-              <label className="rf-fld">Rider’s date of birth<input type="date" autoComplete="off" max={new Date().toISOString().slice(0, 10)} value={guestFields.riderDob} onChange={(e) => setGuest({ riderDob: e.target.value })} /></label>
-              {ageWarning && <Notice tone="info">{ageWarning} You can still enter, and the organiser will check it.</Notice>}
-              <label className="rf-fld">Pony’s name<input autoComplete="off" maxLength={MAX_GUEST_NAME} value={guestFields.ponyName} onChange={(e) => setGuest({ ponyName: e.target.value })} /></label>
+              <legend className="px-1.5 text-[13px] font-bold uppercase tracking-[0.06em] text-[rgb(var(--mg-heading))]">{t('entries.guest.legendRider')}</legend>
+              <p className="sp-note !m-0">{t('entries.guest.riderNote')}</p>
+              <label className="rf-fld">{t('entries.guest.riderName')}<input autoComplete="off" maxLength={MAX_GUEST_NAME} value={guestFields.riderName} onChange={(e) => setGuest({ riderName: e.target.value })} /></label>
+              <label className="rf-fld">{t('entries.guest.riderDob')}<input type="date" autoComplete="off" max={new Date().toISOString().slice(0, 10)} value={guestFields.riderDob} onChange={(e) => setGuest({ riderDob: e.target.value })} /></label>
+              {ageWarning && <Notice tone="info">{ageWarning} {t('entries.guest.ageStill')}</Notice>}
+              <label className="rf-fld">{t('entries.guest.ponyName')}<input autoComplete="off" maxLength={MAX_GUEST_NAME} value={guestFields.ponyName} onChange={(e) => setGuest({ ponyName: e.target.value })} /></label>
             </fieldset>
             <fieldset className="m-0 flex min-w-0 flex-col gap-3 rounded-[14px] border border-[rgb(var(--mg-line))] p-3.5">
-              <legend className="px-1.5 text-[13px] font-bold uppercase tracking-[0.06em] text-[rgb(var(--mg-heading))]">Parent or guardian and emergency contact</legend>
-              <p className="sp-note !m-0">For the organiser to reach on the day. Only the organiser and the people running the event can see these details.</p>
-              <label className="rf-fld">Parent or guardian’s name<input autoComplete="off" maxLength={MAX_GUEST_NAME} value={guestFields.guardianName} onChange={(e) => setGuest({ guardianName: e.target.value })} /></label>
-              <label className="rf-fld">Parent or guardian’s mobile<input type="tel" autoComplete="off" value={guestFields.guardianPhone} onChange={(e) => setGuest({ guardianPhone: e.target.value })} /></label>
-              <label className="rf-fld">Emergency contact’s name<input autoComplete="off" maxLength={MAX_GUEST_NAME} value={guestFields.emergencyName} onChange={(e) => setGuest({ emergencyName: e.target.value })} /></label>
-              <label className="rf-fld">Emergency contact’s mobile<input type="tel" autoComplete="off" value={guestFields.emergencyPhone} onChange={(e) => setGuest({ emergencyPhone: e.target.value })} /></label>
+              <legend className="px-1.5 text-[13px] font-bold uppercase tracking-[0.06em] text-[rgb(var(--mg-heading))]">{t('entries.guest.legendGuardian')}</legend>
+              <p className="sp-note !m-0">{t('entries.guest.guardianNote')}</p>
+              <label className="rf-fld">{t('entries.guest.guardianName')}<input autoComplete="off" maxLength={MAX_GUEST_NAME} value={guestFields.guardianName} onChange={(e) => setGuest({ guardianName: e.target.value })} /></label>
+              <label className="rf-fld">{t('entries.guest.guardianMobile')}<input type="tel" autoComplete="off" value={guestFields.guardianPhone} onChange={(e) => setGuest({ guardianPhone: e.target.value })} /></label>
+              <label className="rf-fld">{t('entries.guest.emergencyName')}<input autoComplete="off" maxLength={MAX_GUEST_NAME} value={guestFields.emergencyName} onChange={(e) => setGuest({ emergencyName: e.target.value })} /></label>
+              <label className="rf-fld">{t('entries.guest.emergencyMobile')}<input type="tel" autoComplete="off" value={guestFields.emergencyPhone} onChange={(e) => setGuest({ emergencyPhone: e.target.value })} /></label>
             </fieldset>
             {showGuestProblem && guestProblem && <Notice role="alert">{guestProblem}</Notice>}
           </div>

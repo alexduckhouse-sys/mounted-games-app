@@ -1,37 +1,43 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { useDialogFocus } from '../../../components/useDialogFocus';
 import { useExitDelay } from '../../../hooks/useExitDelay';
 import { Check, Menu, X } from 'lucide-react';
-import { STEP_LABEL, type StepId } from '../../../lib/creatorDraft';
+import { useT } from '../../../i18n/LanguageContext';
+import type { StepId } from '../../../lib/creatorDraft';
+import type { MessageKey } from '../../../i18n/en/index';
+/** The catalogue key of each step's name. */
+const STEP_KEY = {
+  start: 'admin.creator.step.start', about: 'admin.creator.step.about', when: 'admin.creator.step.when', arenas: 'admin.creator.step.arenas',
+  sections: 'admin.creator.step.sections', structure: 'admin.creator.step.structure', races: 'admin.creator.step.races', dec: 'admin.creator.step.dec',
+  payment: 'admin.creator.step.payment', review: 'admin.creator.step.review',
+} as const satisfies Record<StepId, MessageKey>;
 
 /** One entry in the step list: a number or a green tick, and its name. */
 function StepButton({ id, index, current, done, open, onGo }: { id: StepId; index: number; current: boolean; done: boolean; open: boolean; onGo: () => void }) {
+  const t = useT();
   return (
     <button type="button" className="cw-step" disabled={!open} aria-current={current ? 'step' : undefined} data-done={done} onClick={onGo}>
       <span className="cw-badge" aria-hidden="true">{done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : index + 1}</span>
-      <span>{STEP_LABEL[id]}<span className="sr-only">{done ? ', done' : ''}</span></span>
+      <span>{t(STEP_KEY[id])}<span className="sr-only">{done ? t('admin.creator.doneSr') : ''}</span></span>
     </button>
   );
 }
 
 /** The step list on a phone: it slides in from the left over a dim, and slides back out before it goes. */
 function StepsDrawer({ title, onClose, children }: { title: string; onClose: () => void; children: (close: () => void) => ReactNode }) {
+  const t = useT();
   const { closing, close } = useExitDelay(onClose);
-  const closeRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { closeRef.current?.focus(); }, []);
-  useEffect(() => {
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
-    document.addEventListener('keydown', esc);
-    return () => document.removeEventListener('keydown', esc);
-  }, [close]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, close, '.cw-drawer-head button');
   return (
-    <div className={`cw-drawer${closing ? ' is-closing' : ''}`} role="dialog" aria-label="Steps">
-      <nav aria-label="Steps, menu">
+    <div ref={dialogRef} className={`cw-drawer${closing ? ' is-closing' : ''}`} role="dialog" aria-modal="true" aria-label={t('admin.creator.steps')}>
+      <nav aria-label={t('admin.creator.stepsMenu')}>
         <div className="cw-drawer-head"><span>{title}</span>
-          <button ref={closeRef} type="button" aria-label="Close" onClick={() => close()}><X className="h-[18px] w-[18px]" aria-hidden="true" /></button>
+          <button type="button" aria-label={t('common.close')} onClick={() => close()}><X className="h-[18px] w-[18px]" aria-hidden="true" /></button>
         </div>
         {children(() => close())}
       </nav>
-      <button type="button" className="cw-scrim" aria-label="Close" onClick={() => close()} />
+      <button type="button" className="cw-scrim" aria-label={t('common.close')} onClick={() => close()} />
     </div>
   );
 }
@@ -53,6 +59,7 @@ export function StepNav({ steps, current, reached, locked = false, onGo, timetab
   onTimetable: () => void;
   title: string;
 }) {
+  const t = useT();
   const [drawer, setDrawer] = useState(false);
   const hideDrawer = useCallback(() => setDrawer(false), []);
 
@@ -65,7 +72,7 @@ export function StepNav({ steps, current, reached, locked = false, onGo, timetab
       {timetable && (
         <button type="button" className="cw-step" disabled={!timetable.available} aria-current={timetable.current ? 'step' : undefined} data-done={false}
           onClick={() => { onTimetable(); afterGo?.(); }}>
-          <span className="cw-badge" aria-hidden="true">{steps.length + 1}</span><span>Timetable</span>
+          <span className="cw-badge" aria-hidden="true">{steps.length + 1}</span><span>{t('admin.creator.step.timetable')}</span>
         </button>
       )}
     </>
@@ -74,9 +81,9 @@ export function StepNav({ steps, current, reached, locked = false, onGo, timetab
   return (
     <div className="cw-navcell">
       <button type="button" className="cw-steps-btn" aria-haspopup="dialog" aria-expanded={drawer} onClick={() => setDrawer(true)}>
-        <Menu className="h-[18px] w-[18px]" aria-hidden="true" />Steps
+        <Menu className="h-[18px] w-[18px]" aria-hidden="true" />{t('admin.creator.steps')}
       </button>
-      <nav aria-label="Steps" className="cw-nav">{list()}</nav>
+      <nav aria-label={t('admin.creator.steps')} className="cw-nav">{list()}</nav>
       {drawer && <StepsDrawer title={title} onClose={hideDrawer}>{(close) => list(close)}</StepsDrawer>}
     </div>
   );

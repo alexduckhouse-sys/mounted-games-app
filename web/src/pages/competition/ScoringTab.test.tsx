@@ -431,6 +431,30 @@ describe('the age group page', () => {
   });
 });
 
+describe('the finals dialog run-off notice', () => {
+  const level = [standing(1, 20), standing(2, 18), standing(3, 16), standing(4, 14), standing(5, 12), standing(6, 10), standing(7, 10)];
+  const open = async (boundary: unknown) => {
+    state.manage = true;
+    const user = userEvent.setup();
+    setCompetition([qualifier]);
+    state.get.mockImplementation((url: string) => Promise.resolve({ data: url.includes('boundary') ? boundary : level, headers: {} }));
+    renderTab('/?section=9', {});
+    await user.click(screen.getByRole('button', { name: /Create finals/ }));
+    await screen.findAllByRole('button', { name: /Create finals/ });
+  };
+
+  it('asks for a run-off only when the server says the tie at the cut is still open', async () => {
+    await open({ tied: true, unsettled: true, boundaries: [{ cutoff: 6, settled: false }] });
+    expect(await screen.findByText(/Runoff needed/, {}, { timeout: 3000 })).toBeInTheDocument();
+  });
+
+  it('stays quiet when countback or the organiser order has settled a points tie', async () => {
+    await open({ tied: true, unsettled: false, boundaries: [{ cutoff: 6, settled: true }] });
+    await waitFor(() => expect(state.get).toHaveBeenCalledWith(expect.stringContaining('finals/boundary'), expect.anything()));
+    expect(screen.queryByText(/Runoff needed/)).toBeNull();
+  });
+});
+
 describe('filling finals already on the timetable', () => {
   it('fills empty lettered finals from the toplist instead of drawing new ones', async () => {
     state.manage = true;

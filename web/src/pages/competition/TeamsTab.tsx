@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { FollowStar } from '../../components/FollowStar';
-import { Plus, Save, ClipboardList, Ban, Flag, Search, SlidersHorizontal, X } from 'lucide-react';
+import { Plus, Save, ClipboardList, Ban, Flag, Search, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useFavourites } from '../../hooks/useFavourites';
 import { useCompetition } from './context';
@@ -11,12 +11,13 @@ import { parseBibAndFlag } from '../../lib/bib';
 import { displaySectionName } from '../../lib/section';
 import { Notice } from '../../components/Notice';
 import { SelectField } from '../../components/SelectField';
-import { Sheet } from '../../components/Sheet';
 import { PageGrid } from '../../components/PageGrid';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { useT } from '../../i18n/LanguageContext';
 import '../../components/filterKit.css';
+import { clubLabel } from '../../lib/clubName';
+import { AgeGroupFilterButton, AgeGroupFilterSheet } from '../../components/AgeGroupFilter';
 
 export function TeamsTab() {
   usePageWidth('wide');
@@ -262,7 +263,7 @@ export function TeamsTab() {
                         </span>
                       )}
                     </div>
-                    {team.clubName && <span className="truncate text-[13.5px] leading-tight text-[rgb(var(--mg-muted))]">{team.clubName}</span>}
+                    {clubLabel(team.clubName) && <span className="truncate text-[13.5px] leading-tight text-[rgb(var(--mg-muted))]">{team.clubName}</span>}
                     {mayAssignTrainers && <TrainerPicker competitionId={competition.id} team={team} onSaved={reload} />}
                   </div>
                   {canEdit() && (
@@ -319,10 +320,7 @@ export function TeamsTab() {
   const searchBar = desktop ? searchField : (
     <div className="fk-find">
       {searchField}
-      <button type="button" className="fk-fbtn" aria-label={sectionLabel ? `${filterLabel}, 1 set` : filterLabel} onClick={() => setSheetOpen(true)}>
-        <SlidersHorizontal aria-hidden="true" className="h-5 w-5" />
-        {sectionLabel && <span className="fk-count" aria-hidden="true">1</span>}
-      </button>
+      <AgeGroupFilterButton label={filterLabel} active={!!sectionLabel} onClick={() => setSheetOpen(true)} />
     </div>
   );
   const shownCount = (id: number | 'all') => (id === 'all' ? competition.teams : competition.teams.filter((team) => team.competitionSectionId === id)).length;
@@ -354,23 +352,14 @@ export function TeamsTab() {
       )}
     </div>
       {sheetOpen && !desktop && (
-        <Sheet title={filterLabel} className="fk-sheet" onClose={() => setSheetOpen(false)}>
-          {({ close }) => (
-            <>
-              <div className="fk-tiles" role="group" aria-label={filterLabel}>
-                {[{ id: 'all' as const, label: t('teams.list.allAgeGroups') }, ...competition.sections.map((sec) => ({ id: sec.id, label: displaySectionName(sec.displayName) }))].map((option) => (
-                  <button key={option.id} type="button" className="fk-tile" aria-pressed={sectionId === option.id} onClick={() => setSectionId(option.id)}>
-                    <strong>{option.label}</strong>
-                    <span>{shownCount(option.id) === 1 ? '1 team' : `${shownCount(option.id)} teams`}</span>
-                  </button>
-                ))}
-              </div>
-              <button type="button" className="kit-pill kit-pill-fill fk-show" onClick={() => close()}>
-                Show {grouped.reduce((sum, [, list]) => sum + list.length, 0)} {grouped.reduce((sum, [, list]) => sum + list.length, 0) === 1 ? 'team' : 'teams'}
-              </button>
-            </>
-          )}
-        </Sheet>
+        <AgeGroupFilterSheet
+          title={filterLabel}
+          value={sectionId}
+          shown={grouped.reduce((sum, [, list]) => sum + list.length, 0)}
+          options={[{ id: 'all' as const, label: t('teams.list.allAgeGroups'), teams: shownCount('all') }, ...competition.sections.map((sec) => ({ id: sec.id, label: displaySectionName(sec.displayName), teams: shownCount(sec.id) }))]}
+          onChange={setSectionId}
+          onClose={() => setSheetOpen(false)}
+        />
       )}
     </>
   );

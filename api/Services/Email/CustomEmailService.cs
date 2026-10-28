@@ -290,7 +290,7 @@ public sealed class CustomEmailService(
         var (blocks, site) = await ResolveAsync(request, ct);
         var rendered = CustomEmailRenderer.Render(blocks, site, request.Audience);
         var sample = $"{site}/unsubscribe?token=test";
-        return await sender.SendAsync(new EmailMessage(to, $"[Test] {request.Subject.Trim()}",
+        return await sender.SendAsync(new EmailMessage(to, SignupConfirmationEmail.OneLine($"[Test] {request.Subject.Trim()}"),
             CustomEmailRenderer.ForRecipient(rendered.Text, sample), CustomEmailRenderer.ForRecipient(rendered.Html, sample),
             $"custom-email-test-{Guid.NewGuid():N}"), ct);
     }
@@ -505,7 +505,7 @@ public sealed class CustomEmailService(
                 ["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click",
             };
         }
-        return new EmailMessage(recipient.Address, email.Subject,
+        return new EmailMessage(recipient.Address, SignupConfirmationEmail.OneLine(email.Subject),
             CustomEmailRenderer.ForRecipient(email.TextBody, unsubscribe), CustomEmailRenderer.ForRecipient(email.HtmlBody, unsubscribe),
             $"custom-email-{email.Id}-{recipient.Id}", headers);
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterStandingsByDivision, lastPublishedRound, ordinal, positionLabels, roundStatus, seasonDivisions, teamNameForAge } from './seasonModel';
+import { filterStandingsByDivision, lastPublishedRound, ordinal, positionLabels, roundStatus, seasonDivisions, shortDate, teamNameForAge } from './seasonModel';
 import { buildRows, seasonChoices } from './teamHistoryModel';
 import type { SeasonRoundView, SeasonView, StandingView } from './seasonViewTypes';
 import type { TeamProfileHistoryResult } from './teamProfileTypes';
@@ -100,5 +100,13 @@ describe('teamNameForAge', () => {
     expect(teamNameForAge('Atherstone U14', '  ')).toBe('Atherstone U14');
     expect(teamNameForAge('U14', 'Under 14')).toBe('U14');
     expect(teamNameForAge('Atherstone U14 Reds', 'Under 14')).toBe('Atherstone U14 Reds');
+  });
+});
+
+describe('shortDate', () => {
+  it('is English by default and follows a locale when given one', () => {
+    expect(shortDate('2026-10-25T12:00:00Z')).toBe('Sun 25 Oct');
+    expect(shortDate('2026-10-25T12:00:00Z', false)).toBe('25 Oct');
+    expect(shortDate('2026-10-25T12:00:00Z', false, 'fr-FR')).toBe('25 oct.');
   });
 });

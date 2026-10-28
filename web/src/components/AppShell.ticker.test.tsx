@@ -15,6 +15,7 @@ import { CompactPageBarProvider } from './CompactPageBarContext';
 import { CompetitionMetaProvider } from './CompetitionMetaContext';
 import { NavExtrasProvider } from './NavExtrasContext';
 import { TickerProvider, useTicker } from './TickerContext';
+import { useHideChrome } from './ScreenChrome';
 
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
@@ -34,6 +35,7 @@ function Publish({ items, watch = null }: { items: TickerItem[]; watch?: number 
   useEffect(() => { setWatchCompetitionId(watch); }, [watch, setWatchCompetitionId]);
   return null;
 }
+function Hide() { useHideChrome(true); return null; }
 function mount(path: string, items: TickerItem[] = [line], watch: number | null = null) {
   return render(
     <MotionConfig reducedMotion="always"><MemoryRouter initialEntries={[path]}>
@@ -112,5 +114,24 @@ describe('AppShell: the ticker on every page', () => {
     mount('/settings');
     expect(screen.queryByTestId('feed')).toBeNull();
     expect(main()).toHaveClass('pb-10');
+  });
+});
+
+describe('AppShell: a page that hides the chrome (the scoring screen)', () => {
+  it('drops the app header and the ticker dock, and the room kept for the dock', () => {
+    render(
+      <MotionConfig reducedMotion="always"><MemoryRouter initialEntries={['/competitions/4/session/9']}>
+        <LiteModeProvider><AuthProvider><ThemeProvider><CurrentCompetitionProvider><NavExtrasProvider><AgeGroupsProvider><CompetitionMetaProvider><CompactPageBarProvider><TickerProvider>
+          <Routes>
+            <Route element={<AppShell />}>
+              <Route path="*" element={<><Publish items={[line]} /><Hide /></>} />
+            </Route>
+          </Routes>
+        </TickerProvider></CompactPageBarProvider></CompetitionMetaProvider></AgeGroupsProvider></NavExtrasProvider></CurrentCompetitionProvider></ThemeProvider></AuthProvider></LiteModeProvider>
+      </MemoryRouter></MotionConfig>,
+    );
+    expect(dock()).toBeNull();
+    expect(screen.queryByRole('banner')).toBeNull();
+    expect(main()).not.toHaveClass('pb-44');
   });
 });

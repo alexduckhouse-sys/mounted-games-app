@@ -137,7 +137,7 @@ describe('small shared pieces', () => {
   it('labels the quantity stepper and the sponsor logo in the chosen language', () => {
     inLang('fr', <><RoundStepper name="Camping" value={1} onChange={() => {}} /><SponsorBadge sponsor={{ id: 1, name: 'Oak Feeds', logoUrl: '/logo.png', linkUrl: null, tier: 1 } as never} /></>);
     expect(screen.getByRole('group', { name: 'Quantité pour Camping' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Retirer un Camping' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retirer 1 Camping' })).toBeInTheDocument();
     expect(screen.getByText('Oak Feeds')).toBeInTheDocument();
   });
 });

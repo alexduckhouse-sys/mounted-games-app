@@ -1,6 +1,8 @@
+import { useT } from '../../i18n/LanguageContext';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
+import { activeLocale, tr } from '../../i18n/translate';
 import { useAuth } from '../../auth/AuthContext';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { confirmDialog } from '../../components/ConfirmDialog';
@@ -23,21 +25,21 @@ type View = 'bought' | 'sold';
 
 /** The word shown for an order: what the buyer needs to do or what happened. Colour only reinforces it. */
 const STATUS: Record<CommerceOrderStatus, { text: string; tone: ChipTone }> = {
-  0: { text: 'Pay the organiser', tone: 'warn' },
-  1: { text: 'Payment due', tone: 'warn' },
-  2: { text: 'Paid', tone: 'good' },
-  3: { text: 'Declined', tone: 'bad' },
-  4: { text: 'Cancelled', tone: 'grey' },
-  5: { text: 'Refunded', tone: 'grey' },
+  0: { get text() { return tr('ops3.shop.payOrganiser'); }, tone: 'warn' },
+  1: { get text() { return tr('ops3.shop.status1'); }, tone: 'warn' },
+  2: { get text() { return tr('ops3.shop.status2'); }, tone: 'good' },
+  3: { get text() { return tr('ops3.shop.status3'); }, tone: 'bad' },
+  4: { get text() { return tr('ops3.shop.status4'); }, tone: 'grey' },
+  5: { get text() { return tr('ops3.shop.status5'); }, tone: 'grey' },
 };
 
 /** The chip for an order. A paid demo order reads "Demo paid". */
 const statusFor = (status: CommerceOrderStatus, isTest: boolean) => (status === 2 ? { ...STATUS[2], text: paidWord(isTest) } : STATUS[status]);
 
-const shortDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-const whenText = (iso: string) => new Date(iso).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+const shortDate = (iso: string) => new Date(iso).toLocaleDateString(activeLocale(), { weekday: 'short', day: 'numeric', month: 'short' });
+const whenText = (iso: string) => new Date(iso).toLocaleString(activeLocale(), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const linesText = (lines: EventOrderLine[]) => lines.map(orderLineText).join(', ');
-const eventName = (name: string | null | undefined) => name || 'Event order';
+const eventName = (name: string | null | undefined) => name || tr('ops3.orders.eventOrder');
 
 export function CommerceOrdersPage() {
   const { user } = useAuth();
@@ -45,6 +47,7 @@ export function CommerceOrdersPage() {
 }
 
 function CommerceOrdersContent() {
+  const t = useT();
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
   const [view, setView] = useState<View>('bought');
@@ -55,7 +58,7 @@ function CommerceOrdersContent() {
   const [paying, setPaying] = useState(false);
   const refundAttempts = useRef(new Map<number, string>());
   const openId = Number(params.get('order')) || null;
-  usePageHeader({ title: 'Orders and sales', plain: true, backTo: '/me', backLabel: 'Back to my profile' });
+  usePageHeader({ title: t('ops3.orders.title'), plain: true, backTo: '/me', backLabel: t('ops3.orders.backProfile') });
 
   const load = useCallback(() => {
     if (!user) return Promise.resolve();
@@ -69,9 +72,9 @@ function CommerceOrdersContent() {
         setSales(salesResponse.data);
       })
       .catch((requestError: unknown) => {
-        setError(errorMessage(requestError, 'Couldn’t load your orders. Check your signal and try again.'));
+        setError(errorMessage(requestError, t('ops3.orders.loadError')));
       });
-  }, [user]);
+  }, [user, t]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -86,7 +89,7 @@ function CommerceOrdersContent() {
     : existing) ?? null);
 
   async function cancel(order: EventOrder): Promise<boolean> {
-    if (!(await confirmDialog({ title: 'Cancel this order?', message: `Order ${order.id} is cancelled and the items go back on sale.`, confirmLabel: 'Cancel order', cancelLabel: 'Keep order', destructive: true }))) return false;
+    if (!(await confirmDialog({ title: t('ops3.orders.cancelQ'), message: t('ops3.orders.cancelMsg', { id: order.id }), confirmLabel: t('ops3.orders.cancelOrder'), cancelLabel: t('ops3.orders.keep'), destructive: true }))) return false;
     setBusyId(order.id);
     setError(null);
     try {
@@ -94,7 +97,7 @@ function CommerceOrdersContent() {
       await load();
       return true;
     } catch (requestError) {
-      setError(errorMessage(requestError, 'Couldn’t cancel the order. Check your signal and try again.'));
+      setError(errorMessage(requestError, t('ops3.orders.cancelError')));
       return false;
     } finally {
       setBusyId(null);
@@ -102,7 +105,7 @@ function CommerceOrdersContent() {
   }
 
   async function refund(order: EventOrder): Promise<boolean> {
-    if (!(await confirmDialog({ title: `Refund ${pounds(order.totalMinor)}?`, message: `Refunds the whole of order ${order.id}. It’s a demo, so no money moves. The order shows as Refunded.`, confirmLabel: `Refund ${pounds(order.totalMinor)}`, cancelLabel: 'Keep order', destructive: true }))) return false;
+    if (!(await confirmDialog({ title: t('ops3.orders.refundQ', { amount: pounds(order.totalMinor) }), message: t('ops3.orders.refundMsg', { id: order.id }), confirmLabel: t('ops3.orders.refundQ', { amount: pounds(order.totalMinor) }).replace(/\?$/, ''), cancelLabel: t('ops3.orders.keep'), destructive: true }))) return false;
     const idempotencyKey = refundAttempts.current.get(order.id) ?? newIdempotencyKey(`demo-refund-${order.id}`);
     refundAttempts.current.set(order.id, idempotencyKey);
     setBusyId(order.id);
@@ -113,14 +116,14 @@ function CommerceOrdersContent() {
       replaceOrder(data.order);
       return true;
     } catch (requestError) {
-      setError(errorMessage(requestError, 'Couldn’t run the test refund. Check your signal and try again.'));
+      setError(errorMessage(requestError, t('ops3.orders.refundError')));
       return false;
     } finally {
       setBusyId(null);
     }
   }
 
-  if (!user) return <div className="skin cs-page"><p className="sp-note">Sign in to see your orders and sales. <Link to="/login">Sign in</Link></p></div>;
+  if (!user) return <div className="skin cs-page"><p className="sp-note">{t('ops3.orders.signIn')} <Link to="/login">{t('common.signIn')}</Link></p></div>;
 
   const current = openId != null ? orders?.find((order) => order.id === openId) ?? null : null;
 
@@ -130,17 +133,17 @@ function CommerceOrdersContent() {
         order={current}
         onChanged={replaceOrder}
         variant="page"
-        context={`Order ${current.id} · ${pounds(current.totalMinor)}`}
+        context={t('ops3.orders.ctx', { id: current.id, total: pounds(current.totalMinor) })}
         onBack={() => setPaying(false)}
-        backLabel="Back to order"
-        approvedTitle="Payment approved"
-        resultContext={`Order ${current.id}`}
+        backLabel={t('ops3.orders.backOrder')}
+        approvedTitle={t('ops3.orders.approved')}
+        resultContext={t('ops3.orders.resultCtx', { id: current.id })}
         renderResult={({ payment, retry }) => (
           <>
             <OutcomeState payment={payment} />
             <RefineFoot column>
-              {payment.status === 1 && <button type="button" className="rf-btn rf-btn-primary" onClick={retry}>Try again</button>}
-              <button type="button" className={`rf-btn ${payment.status === 1 ? 'rf-btn-text' : 'rf-btn-primary'}`} onClick={() => setPaying(false)}>Back to order</button>
+              {payment.status === 1 && <button type="button" className="rf-btn rf-btn-primary" onClick={retry}>{t('common.tryAgain')}</button>}
+              <button type="button" className={`rf-btn ${payment.status === 1 ? 'rf-btn-text' : 'rf-btn-primary'}`} onClick={() => setPaying(false)}>{t('ops3.orders.backOrder')}</button>
             </RefineFoot>
           </>
         )}
@@ -152,22 +155,22 @@ function CommerceOrdersContent() {
   const realOrders = orders?.filter((order) => !order.isTestOrder) ?? [];
   return (
     <div className="skin cs-page">
-      <h1 className="sr-only">Orders and sales</h1>
-      <div className="sp-seg" role="tablist" aria-label="Orders">
-        <button type="button" role="tab" aria-selected={view === 'bought'} onClick={() => setView('bought')}>Bought</button>
-        <button type="button" role="tab" aria-selected={view === 'sold'} onClick={() => setView('sold')}>Sold</button>
+      <h1 className="sr-only">{t('ops3.orders.title')}</h1>
+      <div className="sp-seg" role="tablist" aria-label={t('ops3.shop.orders')}>
+        <button type="button" role="tab" aria-selected={view === 'bought'} onClick={() => setView('bought')}>{t('ops3.orders.bought')}</button>
+        <button type="button" role="tab" aria-selected={view === 'sold'} onClick={() => setView('sold')}>{t('ops3.orders.sold')}</button>
       </div>
       {error && <div className="cs-gap"><LoadError message={error} onRetry={() => void load()} /></div>}
 
       {view === 'bought' ? (
-        orders == null ? <p role="status" className="sp-note">Loading your orders…</p>
-          : orders.length === 0 ? <p className="sp-note">You haven’t bought anything yet.</p>
+        orders == null ? <p role="status" className="sp-note">{t('ops3.orders.loading')}</p>
+          : orders.length === 0 ? <p className="sp-note">{t('ops3.orders.none')}</p>
             : (
               <>
                 {orders.some((order) => order.status === 0 || order.status === 1) && <DemoPaymentNotice what="order" />}
-                {realOrders.length > 0 && <OrderGroup title="Your orders" orders={realOrders} onOpen={open} />}
-                {demoOrders.length > 0 && <OrderGroup title="Demo orders" meta="Test payments only" orders={demoOrders} onOpen={open} />}
-                {realOrders.length > 0 && <p className="sp-note">Pay the organiser directly. They mark the order paid when the money arrives. Collect at the event.</p>}
+                {realOrders.length > 0 && <OrderGroup title={t('ops3.orders.yours')} orders={realOrders} onOpen={open} />}
+                {demoOrders.length > 0 && <OrderGroup title={t('ops3.orders.demo')} meta={t('ops3.orders.testOnly')} orders={demoOrders} onOpen={open} />}
+                {realOrders.length > 0 && <p className="sp-note">{t('ops3.orders.payDirect')}</p>}
               </>
             )
       ) : (
@@ -189,6 +192,7 @@ function CommerceOrdersContent() {
 }
 
 function OrderGroup({ title, meta, orders, onOpen }: { title: string; meta?: string; orders: EventOrder[]; onOpen: (id: number) => void }) {
+  const t = useT();
   return (
     <section aria-label={title}>
       <h2 className="sp-sec">{title}{meta && <small>{meta}</small>}</h2>
@@ -199,7 +203,7 @@ function OrderGroup({ title, meta, orders, onOpen }: { title: string; meta?: str
             <button key={order.id} type="button" className="sp-row" onClick={() => onOpen(order.id)}>
               <span className="sp-grow">
                 <span className="sp-t1">{eventName(order.competitionName)}</span>
-                <span className="sp-t2">Order {order.id} · {shortDate(order.createdAt)} · {linesText(order.lines)}</span>
+                <span className="sp-t2">{t('ops3.orders.line', { id: order.id, date: shortDate(order.createdAt), lines: linesText(order.lines) })}</span>
               </span>
               <span className="cs-right"><span className="sp-price !text-[18px]">{pounds(order.totalMinor)}</span><Chip tone={status.tone}>{status.text}</Chip></span>
             </button>
@@ -213,7 +217,8 @@ function OrderGroup({ title, meta, orders, onOpen }: { title: string; meta?: str
 const STABLING_LINE_PATTERN = /stabl|hook[\s-]*up|shaving|haylage|bedding|bale|camping|pitch|corral|lorry/i;
 
 function SalesList({ sales }: { sales: SellerSale[] | null }) {
-  if (sales == null) return <p role="status" className="sp-note">Loading your sales…</p>;
+  const t = useT();
+  if (sales == null) return <p role="status" className="sp-note">{t('ops3.orders.loadingSales')}</p>;
 
   // Demo orders move no money, so they stay out of the totals.
   const real = sales.filter((sale) => !sale.isTestOrder);
@@ -239,16 +244,16 @@ function SalesList({ sales }: { sales: SellerSale[] | null }) {
   return (
     <>
       <div className="cs-tiles">
-        <div className="cs-tile"><strong>{pounds(sum([2]))}</strong><span>Paid</span></div>
-        <div className="cs-tile"><strong>{pounds(sum([0, 1]))}</strong><span>Not paid yet</span></div>
-        <div className="cs-tile"><strong>{pounds(sum([5]))}</strong><span>Refunded</span></div>
+        <div className="cs-tile"><strong>{pounds(sum([2]))}</strong><span>{t('ops3.shop.paid')}</span></div>
+        <div className="cs-tile"><strong>{pounds(sum([0, 1]))}</strong><span>{t('ops2.entries.notPaidYet')}</span></div>
+        <div className="cs-tile"><strong>{pounds(sum([5]))}</strong><span>{t('ops3.shop.status5')}</span></div>
       </div>
 
       {sales.length === 0 ? (
-        <p className="sp-note">You haven’t sold anything yet.</p>
+        <p className="sp-note">{t('ops3.orders.noSales')}</p>
       ) : (
         <>
-          <h2 className="sp-sec">Sales <small>Collect at the event</small></h2>
+          <h2 className="sp-sec">{t('ops3.orders.sales')} <small>{t('ops3.orders.collect')}</small></h2>
           <div className="sp-card">
             {sales.map((sale) => {
               const status = statusFor(sale.status, sale.isTestOrder);
@@ -256,7 +261,7 @@ function SalesList({ sales }: { sales: SellerSale[] | null }) {
                 <div key={sale.orderId} className="cs-row">
                   <span className="sp-grow">
                     <span className="sp-t1">{eventName(sale.competitionName)}</span>
-                    <span className="sp-t2">Order {sale.orderId}{sale.isTestOrder && ' · demo'} · {linesText(sale.lines)}</span>
+                    <span className="sp-t2">{t('ops3.orders.saleLine', { id: sale.orderId, demo: sale.isTestOrder ? ` · ${t('ops3.orders.demoWord')}` : '', lines: linesText(sale.lines) })}</span>
                   </span>
                   <span className="cs-right"><span className="sp-price !text-[18px]">{pounds(sale.sellerTotalMinor)}</span><Chip tone={status.tone}>{status.text}</Chip></span>
                 </div>
@@ -264,7 +269,7 @@ function SalesList({ sales }: { sales: SellerSale[] | null }) {
             })}
           </div>
           <div className="kit-acts cs-gap">
-            <button type="button" className="kit-pill cs-pill-s" onClick={exportTreasurerCsv}>Download for the treasurer (CSV)</button>
+            <button type="button" className="kit-pill cs-pill-s" onClick={exportTreasurerCsv}>{t('ops3.orders.treasurer')}</button>
           </div>
         </>
       )}
@@ -281,6 +286,7 @@ function OrderSheet({ order, busy, onClose, onPay, onCancel, onRefund }: {
   onCancel: () => Promise<boolean>;
   onRefund: () => Promise<boolean>;
 }) {
+  const t = useT();
   const status = statusFor(order.status, order.isTestOrder);
   const payment: TestPayment | undefined = [...order.testPayments].reverse().find((candidate) => candidate.isTest);
   const canPay = order.isTestOrder && (order.status === 1 || order.status === 3);
@@ -288,35 +294,30 @@ function OrderSheet({ order, busy, onClose, onPay, onCancel, onRefund }: {
   const canRefund = order.isTestOrder && order.status === 2;
   const when = order.paidAt ?? order.refundedAt ?? order.cancelledAt ?? order.createdAt;
   return (
-    <Sheet title={`Order ${order.id}${order.isTestOrder ? ' (demo)' : ''}`} onClose={onClose}>
+    <Sheet title={t('ops3.orders.sheetTitle', { id: order.id, demo: order.isTestOrder ? ` (${t('ops3.orders.demoWord')})` : '' })} onClose={onClose}>
       {({ close }) => (
         <>
           <dl className="cs-sheet-facts">
-            <div><dt>Event</dt><dd>{eventName(order.competitionName)}</dd></div>
-            <div><dt>Status</dt><dd>{status.text}</dd></div>
-            <div><dt>When</dt><dd>{whenText(when)}</dd></div>
+            <div><dt>{t('ops3.orders.event')}</dt><dd>{eventName(order.competitionName)}</dd></div>
+            <div><dt>{t('ops2.sponsors.status')}</dt><dd>{status.text}</dd></div>
+            <div><dt>{t('ops3.orders.when')}</dt><dd>{whenText(when)}</dd></div>
             {order.lines.map((line) => <div key={line.id}><dt>{orderLineText(line)}</dt><dd>{pounds(line.lineTotalMinor)}</dd></div>)}
-            <div><dt>Total</dt><dd><strong>{pounds(order.totalMinor)}</strong></dd></div>
+            <div><dt>{t('ops2.print.total')}</dt><dd><strong>{pounds(order.totalMinor)}</strong></dd></div>
           </dl>
           {order.isTestOrder && payment && <TestReceipt payment={payment} />}
           <DemoPaymentNotice what="order" />
           <p className="kit-sheet-text">
-            {order.isTestOrder ? '' : order.status === 0 ? 'Pay the organiser directly. They mark it paid when the money arrives. ' : ''}
-            Collect at the event.
+            {order.isTestOrder ? '' : order.status === 0 ? `${t('ops3.orders.payDirectShort')} ` : ''}
+            {t('ops3.orders.collect')}.
           </p>
           <div className="kit-acts">
-            {canPay && <button type="button" className="kit-pill kit-pill-fill" onClick={() => close(onPay)}>{order.status === 3 ? 'Retry demo payment' : 'Pay demo order'}</button>}
-            <button type="button" className={`kit-pill${canPay ? '' : ' kit-pill-fill'}`} onClick={() => close()}>Done</button>
-            {canCancel && <button type="button" className="kit-redtext" disabled={busy} onClick={() => { void onCancel().then((done) => { if (done) close(); }); }}>Cancel order</button>}
-            {canRefund && <button type="button" className="kit-redtext" disabled={busy} onClick={() => { void onRefund(); }}>Refund order…</button>}
+            {canPay && <button type="button" className="kit-pill kit-pill-fill" onClick={() => close(onPay)}>{order.status === 3 ? t('ops3.orders.retry') : t('ops3.orders.payDemo')}</button>}
+            <button type="button" className={`kit-pill${canPay ? '' : ' kit-pill-fill'}`} onClick={() => close()}>{t('common.done')}</button>
+            {canCancel && <button type="button" className="kit-redtext" disabled={busy} onClick={() => { void onCancel().then((done) => { if (done) close(); }); }}>{t('ops3.orders.cancelOrder')}</button>}
+            {canRefund && <button type="button" className="kit-redtext" disabled={busy} onClick={() => { void onRefund(); }}>{t('ops3.orders.refundOrder')}</button>}
           </div>
         </>
       )}
     </Sheet>
   );
-}
-
-export function LatestTestReceipt({ payments }: { payments: TestPayment[] }) {
-  const payment = payments.at(-1);
-  return payment ? <TestReceipt payment={payment} /> : null;
 }

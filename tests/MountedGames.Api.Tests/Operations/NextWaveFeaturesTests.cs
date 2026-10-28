@@ -228,6 +228,28 @@ public class NextWaveFeaturesTests(ApiFactory factory) : IClassFixture<ApiFactor
         var overriddenDto = await overrideResp.ReadAsync<VolunteerShiftDto>();
         Assert.Equal("Here", overriddenDto.AttendanceStatus);
         Assert.True(overriddenDto.CheckedInByStaffOverride);
+
+        // 5. A signed-out follower can mark the third duty as here without a name; nobody is recorded.
+        var anon = factory.CreateClient();
+        var anonResp = await anon.PostAsJsonAsync(
+            $"/api/competitions/{compId}/volunteer-shifts/{duties[2].Id}/check-in",
+            new CheckInVolunteerShiftRequest("Should Be Ignored"));
+        Assert.Equal(HttpStatusCode.OK, anonResp.StatusCode);
+        var anonDto = await anonResp.ReadAsync<VolunteerShiftDto>();
+        Assert.Equal("Here", anonDto.AttendanceStatus);
+        Assert.Null(anonDto.CheckedInByName);
+        var anonRecorded = await factory.WithDbAsync(db => db.VolunteerShifts.AsNoTracking().FirstAsync(v => v.Id == duties[2].Id));
+        Assert.Null(anonRecorded.CheckedInByUserId);
+        Assert.Null(anonRecorded.CheckedInByName);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await anon.PostAsJsonAsync($"/api/competitions/{compId}/volunteer-shifts/999999/check-in", new { })).StatusCode);
+
+        // 6. The public list hides who checked in; staff and the person who did it still see it.
+        var publicList = await (await anon.GetAsync($"/api/competitions/{compId}/volunteer-shifts")).ReadAsync<List<VolunteerShiftDto>>();
+        Assert.Equal("Here", publicList.Single(d => d.Id == targetDuty.Id).AttendanceStatus);
+        Assert.All(publicList, d => Assert.Null(d.CheckedInByName));
+        var staffList = await (await staff.GetAsync($"/api/competitions/{compId}/volunteer-shifts")).ReadAsync<List<VolunteerShiftDto>>();
+        Assert.Equal("Pat Steward", staffList.Single(d => d.Id == targetDuty.Id).CheckedInByName);
     }
 
     [Fact]

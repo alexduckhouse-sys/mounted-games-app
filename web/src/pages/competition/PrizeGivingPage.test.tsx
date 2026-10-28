@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { competition } from '../../test/factories';
 import type { DeclarationForm, StandingRow } from '../../types';
+import { LanguageProvider } from '../../i18n/LanguageContext';
+import type { Lang } from '../../i18n/translate';
 import { CompetitionContext } from './context';
 import { PrizeGivingPage } from './PrizeGivingPage';
 
@@ -23,19 +25,21 @@ const FORMS = [{
   ],
 }] as unknown as DeclarationForm[];
 
-function mount(url = '/competitions/1/prize-giving') {
+function mount(url = '/competitions/1/prize-giving', lang: Lang = 'en') {
   const value = {
     competition: competition({ sections: [{ id: 5, competitionId: 1, format: 2, ageGroup: 'Open', displayName: 'Open', finalistCount: null }, { id: 6, competitionId: 1, format: 2, ageGroup: 'U12', displayName: 'Under 12', finalistCount: null }], sessions: [], teams: [] }),
     reload: vi.fn(), streams: [], streamingEnabled: true, invoke: vi.fn(), ready: 1, streamMessages: [],
   };
   return render(
+    <LanguageProvider initial={lang}>
     <MotionConfig reducedMotion="always">
       <MemoryRouter initialEntries={[url]}>
         <CompetitionContext.Provider value={value as never}>
           <Routes><Route path="/competitions/:id/prize-giving" element={<PrizeGivingPage />} /></Routes>
         </CompetitionContext.Provider>
       </MemoryRouter>
-    </MotionConfig>,
+    </MotionConfig>
+    </LanguageProvider>,
   );
 }
 
@@ -119,5 +123,20 @@ describe('PrizeGivingPage', () => {
     vi.mocked(api.get).mockImplementation(async (url: string) => ({ data: url.includes('standings') ? [] : [] }));
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() => expect(screen.getByText('No places to give in Open yet.')).toBeInTheDocument());
+  });
+});
+
+describe('PrizeGivingPage in French and Welsh', () => {
+  it('reads in French, with a French ordinal on the button', async () => {
+    mount('/competitions/1/prize-giving?section=5', 'fr');
+    expect(await screen.findByText('À suivre : 3e')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Révéler : 3e' })).toBeInTheDocument();
+    expect(screen.getByText('Pas de fiche de déclaration pour cette équipe, donc pas de cavaliers à annoncer.')).toBeInTheDocument();
+  });
+
+  it('reads in Welsh', async () => {
+    mount('/competitions/1/prize-giving?section=5', 'cy');
+    expect(await screen.findByText('Nesaf: 3ydd')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Datgelu’r 3ydd' })).toBeInTheDocument();
   });
 });

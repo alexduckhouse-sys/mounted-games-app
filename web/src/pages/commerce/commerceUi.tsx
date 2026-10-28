@@ -1,19 +1,12 @@
 import type { ReactNode } from 'react';
 import { Notice } from '../../components/Notice';
+import { useT } from '../../i18n/LanguageContext';
 import type { TestPayment } from './types';
 
-export function PageHeader({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <header className="flex flex-col gap-1.5">
-      <h1 className="mg-h1">{title}</h1>
-      <p className="mg-lede">{children}</p>
-    </header>
-  );
-}
-
 export function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const t = useT();
   return (
-    <Notice actionLabel="Try again" onAction={onRetry}>{message}</Notice>
+    <Notice actionLabel={t('common.tryAgain')} onAction={onRetry}>{message}</Notice>
   );
 }
 
@@ -28,10 +21,11 @@ export function StatusPill({ children, tone = 'neutral' }: { children: ReactNode
 }
 
 export function TestReceipt({ payment }: { payment: TestPayment }) {
+  const t = useT();
   return (
     <Notice tone="info" className="mg-rise w-full text-left">
       <span className="block font-extrabold">{payment.receiptLabel}</span>
-      <span className="mt-1 block break-all text-xs">Test receipt: {payment.receiptReference}</span>
+      <span className="mt-1 block break-all text-xs">{t('site.commerce.testReceipt', { reference: payment.receiptReference })}</span>
     </Notice>
   );
 }

@@ -213,7 +213,7 @@ public class RefereeCardsTests(ApiFactory factory) : IClassFixture<ApiFactory>
         var staleDb = staleScope.ServiceProvider.GetRequiredService<AppDbContext>();
         var staleTeam = (await staleDb.Teams.FindAsync(arena.TeamIds[0]))!;
         (await (await _f.AdminAsync()).PutAsJsonAsync(CardUrl(arena), new SetTeamCardRequest("red"))).EnsureSuccessStatusCode();
-        var controller = new TeamsController(staleDb);
+        var controller = new TeamsController(staleDb, staleScope.ServiceProvider.GetRequiredService<ILiveBroadcaster>());
         var response = await controller.Update(arena.CompetitionId, staleTeam.Id, new UpdateTeamInput(BibDescription: "Green"));
         Assert.IsType<ConflictObjectResult>(response.Result);
         var stored = await _f.WithDbAsync(db => db.Teams.AsNoTracking().SingleAsync(t => t.Id == staleTeam.Id));

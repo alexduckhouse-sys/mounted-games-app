@@ -1,3 +1,4 @@
+import { tr } from '../i18n/translate';
 import type { TackCheckMark, TackCheckMode, TackCheckSector, TackCheckTeam } from '../types';
 
 /** The sectors a section starts with, as the API's `TackCheckService.DefaultSectors`. */
@@ -6,9 +7,9 @@ export const MAX_TACK_SECTORS = 12;
 export const MAX_SECTOR_NAME = 60;
 
 export const TACK_MODES: { mode: TackCheckMode; label: string; detail: string }[] = [
-  { mode: 0, label: 'Pass or fail only', detail: 'A checklist for the stewards. Nothing is scored.' },
-  { mode: 1, label: 'Tack & Turnout table', detail: 'Points for each sector, shown in their own table. The main standings stay as they are.' },
-  { mode: 2, label: 'Bonus points', detail: 'Points for each sector are added to the team’s total in the main standings, shown as tack check bonus points.' },
+  { mode: 0, get label() { return tr('ops3.tack.mode0'); }, get detail() { return tr('ops3.tack.mode0d'); } },
+  { mode: 1, get label() { return tr('ops3.tack.mode1'); }, get detail() { return tr('ops3.tack.mode1d'); } },
+  { mode: 2, get label() { return tr('ops3.tack.mode2'); }, get detail() { return tr('ops3.tack.mode2d'); } },
 ];
 
 /** True for the modes where stewards give points rather than a pass or fail. */
@@ -17,9 +18,9 @@ export const isScored = (mode: TackCheckMode) => mode !== 0;
 /** What is wrong with this list of sector names, as the API checks it, or null when it can be saved. */
 export function sectorProblem(names: string[]): string | null {
   const trimmed = names.map((name) => name.trim());
-  if (trimmed.length === 0 || trimmed.length > MAX_TACK_SECTORS) return `Add between 1 and ${MAX_TACK_SECTORS} sectors.`;
-  if (trimmed.some((name) => name.length === 0 || name.length > MAX_SECTOR_NAME)) return `Give every sector a name of up to ${MAX_SECTOR_NAME} characters.`;
-  if (new Set(trimmed.map((name) => name.toLowerCase())).size !== trimmed.length) return 'Two sectors have the same name.';
+  if (trimmed.length === 0 || trimmed.length > MAX_TACK_SECTORS) return tr('ops3.tack.sectorsRange', { max: MAX_TACK_SECTORS });
+  if (trimmed.some((name) => name.length === 0 || name.length > MAX_SECTOR_NAME)) return tr('ops3.tack.sectorName', { max: MAX_SECTOR_NAME });
+  if (new Set(trimmed.map((name) => name.toLowerCase())).size !== trimmed.length) return tr('ops3.tack.sameName');
   return null;
 }
 
@@ -52,7 +53,7 @@ export function marksFromDraft(draft: Record<number, MarkDraft>, max: number): {
   const marks: TackCheckMark[] = [];
   for (const [id, cell] of Object.entries(draft)) {
     const points = parsePoints(cell.points, max);
-    if (points === 'invalid') return { problem: `Points go from 0 to ${max}.` };
+    if (points === 'invalid') return { problem: tr('ops3.tack.pointsRange', { max }) };
     const passed = cell.passed === 'pass' ? true : cell.passed === 'fail' ? false : null;
     if (passed !== null || points !== null) marks.push({ sectorId: Number(id), passed, points });
   }
@@ -110,7 +111,7 @@ export function marksFromRiderGrid(grid: RiderGridDraft, max: number): { marks: 
     let hasAny = false;
     for (const text of cells) {
       const parsed = parsePoints(text, max);
-      if (parsed === 'invalid') return { problem: `Points go from 0 to ${max}.` };
+      if (parsed === 'invalid') return { problem: tr('ops3.tack.pointsRange', { max }) };
       if (parsed !== null) hasAny = true;
       riderPoints.push(parsed);
     }

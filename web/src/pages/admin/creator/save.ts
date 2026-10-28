@@ -1,4 +1,5 @@
 import { api } from '../../../api';
+import { tr } from '../../../i18n/translate.ts';
 import { setCardsEnabled } from '../../competition/ScoringParts';
 import {
   finalCountOf, finalSessionName, hatbandsFor, heatSizeOf, minutesOf, parseFinalistCount, parseMaxParticipants, priceGbpToMinor, sectionLocked, sectionName, type CreatorDraft, type SectionDraft,
@@ -73,15 +74,15 @@ export async function saveCreator(draft: CreatorDraft, opts: {
   const { editingId, competition, teamCounts, progress } = opts;
   let competitionId = editingId;
   const step = async <T>(label: string, work: () => Promise<T>): Promise<T> => {
-    progress(label);
-    try { return await work(); } catch (e) { throw new SaveError(`${label.replace(/…$/, '')} failed: ${messageOf(e, 'please try again')}`, competitionId, (e as { response?: { status?: number } }).response?.status ?? null); }
+    progress(`${label}…`);
+    try { return await work(); } catch (e) { throw new SaveError(tr('admin.creator.save.failed', { step: label, reason: messageOf(e, tr('admin.creator.save.tryAgainReason')) }), competitionId, (e as { response?: { status?: number } }).response?.status ?? null); }
   };
 
   if (editingId === null) {
-    const created = await step('Creating competition…', () => api.post<{ id: number }>('/competitions', basicsPayload(draft)));
+    const created = await step(tr('admin.creator.save.creating'), () => api.post<{ id: number }>('/competitions', basicsPayload(draft)));
     competitionId = created.data.id;
   } else {
-    await step('Saving details…', () => api.put(`/competitions/${editingId}`, { ...basicsPayload(draft), isActive: competition?.isActive ?? true, isArchived: competition?.isArchived ?? false }));
+    await step(tr('admin.creator.save.details'), () => api.put(`/competitions/${editingId}`, { ...basicsPayload(draft), isActive: competition?.isActive ?? true, isArchived: competition?.isArchived ?? false }));
   }
   const id = competitionId as number;
   if (draft.cardsEnabled !== undefined) {
@@ -89,13 +90,13 @@ export async function saveCreator(draft: CreatorDraft, opts: {
   }
   const base = `/competitions/${id}`;
   if (editingId === null && draft.passportCheck) {
-    await step('Turning on the passport check…', () => api.put(`/event-tools/competitions/${id}/passport-check/settings`, { enabled: true }));
+    await step(tr('admin.creator.save.passport'), () => api.put(`/event-tools/competitions/${id}/passport-check/settings`, { enabled: true }));
   }
 
   // Age groups taken out of the draft.
   const keptSections = new Set(draft.sections.flatMap((s) => (s.existingId ? [s.existingId] : [])));
   for (const old of competition?.sections ?? []) {
-    if (!keptSections.has(old.id)) await step(`Removing ${old.displayName}…`, () => api.delete(`${base}/sections/${old.id}`));
+    if (!keptSections.has(old.id)) await step(tr('admin.creator.save.removing', { name: old.displayName }), () => api.delete(`${base}/sections/${old.id}`));
   }
 
   const sectionIds: number[] = [];
@@ -113,16 +114,16 @@ export async function saveCreator(draft: CreatorDraft, opts: {
       ...(s.usesRaceFinals ? {} : { hasFinal: s.hasFinal !== false, carryPointsIntoFinal: s.carryPointsIntoFinal ?? true, doublePointsInFinal: s.doublePointsInFinal ?? false }),
     };
     if (s.existingId) {
-      await step(`Saving ${name}…`, () => api.put(`${base}/sections/${s.existingId}`, { ...common, maxParticipants: common.maxParticipants ?? 0 }));
+      await step(tr('admin.creator.save.saving', { name }), () => api.put(`${base}/sections/${s.existingId}`, { ...common, maxParticipants: common.maxParticipants ?? 0 }));
       sectionIds.push(s.existingId);
     } else {
-      const made = await step(`Adding ${name}…`, () => api.post<{ id: number }>(`${base}/sections`, { format: s.format, ageGroup: s.ageGroup.trim(), displayName: name, ...common }));
+      const made = await step(tr('admin.creator.save.adding', { name }), () => api.post<{ id: number }>(`${base}/sections`, { format: s.format, ageGroup: s.ageGroup.trim(), displayName: name, ...common }));
       sectionIds.push(made.data.id);
     }
   }
 
   const setLaneRotation = (sessionId: number, laneRotationMode: number, name: string) =>
-    step(`Saving lane order for ${name}…`, () => api.put(`${base}/sessions/${sessionId}/settings`, { laneRotationMode }));
+    step(tr('admin.creator.save.laneOrder', { name }), () => api.put(`${base}/sessions/${sessionId}/settings`, { laneRotationMode }));
 
   // Sessions and breaks, with the estimated times.
   const real = realFixedItems(competition);
@@ -143,7 +144,7 @@ export async function saveCreator(draft: CreatorDraft, opts: {
   for (const old of (competition?.sessions ?? []).filter(isRace)) {
     // A session of a removed age group went with it.
     if (keptSections.has(old.competitionSectionId ?? -1) && !keptSessions.has(old.id)) {
-      await step(`Removing ${old.name}…`, () => api.delete(`${base}/sessions/${old.id}`));
+      await step(tr('admin.creator.save.removing', { name: old.name }), () => api.delete(`${base}/sessions/${old.id}`));
     }
   }
 
@@ -158,10 +159,10 @@ export async function saveCreator(draft: CreatorDraft, opts: {
       const body = session.hasHeats
         ? { minutesPerHeat: minutes, arenaName: arena }
         : { arenaName: arena, minutesPerHeat: minutes, lanesPerHeat: heatSizeOf(section), plannedRaces: session.races ?? [], scheduledStart: row?.start.toISOString(), durationMinutes: row && row.minutes > 0 ? row.minutes : undefined, orderIndex: orderOf(`s${p.key}`) };
-      await step(`Saving ${p.name}…`, () => api.put(`${base}/sessions/${session.existingId}`, body));
+      await step(tr('admin.creator.save.saving', { name: p.name }), () => api.put(`${base}/sessions/${session.existingId}`, body));
       if (section.laneRotation !== undefined && !session.hasHeats) await setLaneRotation(session.existingId, section.laneRotation, p.name);
     } else {
-      const made = await step(`Adding ${p.name}…`, () => api.post<{ id?: number }>(`${base}/sessions`, {
+      const made = await step(tr('admin.creator.save.adding', { name: p.name }), () => api.post<{ id?: number }>(`${base}/sessions`, {
         competitionSectionId: sectionIds[p.sectionIndex], name: p.name, arenaName: arena, scheduledStart: row?.start.toISOString() ?? null,
         orderIndex: orderOf(`s${p.key}`), notes: null, isBreak: false, durationMinutes: row && row.minutes > 0 ? row.minutes : null,
         kind: SessionKind.Race, location: null, lanesPerHeat: heatSizeOf(section), minutesPerHeat: minutes, plannedRaces: session.races ?? [],
@@ -185,9 +186,9 @@ export async function saveCreator(draft: CreatorDraft, opts: {
       const body = section.finalHasHeats
         ? { minutesPerHeat: minutes, arenaName: arena }
         : { arenaName: arena, minutesPerHeat: minutes, lanesPerHeat: heatSizeOf(section), plannedRaces: section.finalRaces ?? [], plannedFinalRaces };
-      await step(`Saving ${fName}…`, () => api.put(`${base}/sessions/${section.finalSessionId}`, body));
+      await step(tr('admin.creator.save.saving', { name: fName }), () => api.put(`${base}/sessions/${section.finalSessionId}`, body));
     } else if (hasFinalRaces || (!sectionLocked(section) && hasFinalists)) {
-      await step(`Adding ${fName}…`, () => api.post(`${base}/sessions`, {
+      await step(tr('admin.creator.save.adding', { name: fName }), () => api.post(`${base}/sessions`, {
         competitionSectionId: sectionIds[sectionIndex], name: fName, arenaName: arena, scheduledStart: null,
         orderIndex: nextFinalOrder++, notes: null, isBreak: false, durationMinutes: null,
         kind: SessionKind.Race, location: null, lanesPerHeat: heatSizeOf(section), minutesPerHeat: minutes, plannedRaces: section.finalRaces ?? [], plannedFinalRaces,
@@ -197,20 +198,20 @@ export async function saveCreator(draft: CreatorDraft, opts: {
 
   const keptBreaks = new Set(draft.breaks.flatMap((b) => (b.existingId ? [b.existingId] : [])));
   for (const old of (competition?.sessions ?? []).filter((s) => !isRace(s))) {
-    if (!keptBreaks.has(old.id)) await step(`Removing ${old.name}…`, () => api.delete(`${base}/sessions/${old.id}`));
+    if (!keptBreaks.has(old.id)) await step(tr('admin.creator.save.removing', { name: old.name }), () => api.delete(`${base}/sessions/${old.id}`));
   }
   for (const [i, b] of draft.breaks.entries()) {
     const window = breakWindow(b);
     if (b.existingId) {
       // The session's kind and place in the order stay; its name, time, length and arena follow the edit.
       const minutes = parseInt(b.minutes, 10);
-      await step(`Saving ${b.name.trim() || 'break'}…`, () => api.put(`${base}/sessions/${b.existingId}`, {
+      await step(tr('admin.creator.save.saving', { name: b.name.trim() || tr('admin.creator.save.breakLower') }), () => api.put(`${base}/sessions/${b.existingId}`, {
         name: b.name.trim() || undefined, arenaName: b.arena.trim(), scheduledStart: window?.start.toISOString(),
         durationMinutes: minutes > 0 ? minutes : undefined,
       }));
       continue;
     }
-    await step(`Adding ${b.name.trim() || 'break'}…`, () => api.post(`${base}/sessions`, {
+    await step(tr('admin.creator.save.adding', { name: b.name.trim() || tr('admin.creator.save.breakLower') }), () => api.post(`${base}/sessions`, {
       competitionSectionId: null, name: b.name.trim(), arenaName: b.arena.trim() || null, scheduledStart: window?.start.toISOString() ?? null,
       orderIndex: orderOf(`b${i}`), notes: null, isBreak: b.kind === 1, durationMinutes: parseInt(b.minutes, 10) || null,
       kind: b.kind, location: null,

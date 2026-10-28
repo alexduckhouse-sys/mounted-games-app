@@ -140,6 +140,10 @@ public class AuditAuthAdminFixesTests(ApiFactory f) : IClassFixture<ApiFactory>
         var checkIn = await me.PostAsJsonAsync("/api/competitions/1/volunteer-shifts/1/check-in", new { });
         Assert.Equal(HttpStatusCode.Forbidden, claim.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, checkIn.StatusCode);
+
+        var anon = WithIp(f.CreateClient(), "10.77.0.4");
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await anon.PostAsJsonAsync("/api/competitions/1/volunteer-shifts/1/check-in", new { })).StatusCode);
     }
 
     [Fact]

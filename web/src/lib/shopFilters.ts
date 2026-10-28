@@ -1,3 +1,4 @@
+import { tr } from '../i18n/translate';
 import type { ShopPost } from '../types';
 
 /** The ways to narrow the tack and kit list, using only what a listing already holds: price, photo and when it was posted. */
@@ -13,17 +14,17 @@ export interface ShopFilters {
 export const NO_SHOP_FILTERS: ShopFilters = { price: 'any', photoOnly: false, posted: 'any' };
 
 export const PRICE_BANDS: { value: PriceBand; label: string }[] = [
-  { value: 'any', label: 'Any price' },
-  { value: 'under25', label: 'Under £25' },
-  { value: 'from25to100', label: '£25 to £100' },
-  { value: 'over100', label: 'Over £100' },
-  { value: 'unpriced', label: 'No price listed' },
+  { value: 'any', get label() { return tr('site.shop.priceAny'); } },
+  { value: 'under25', get label() { return tr('site.shop.priceUnder25'); } },
+  { value: 'from25to100', get label() { return tr('site.shop.price25to100'); } },
+  { value: 'over100', get label() { return tr('site.shop.priceOver100'); } },
+  { value: 'unpriced', get label() { return tr('site.shop.priceNone'); } },
 ];
 
 export const POSTED_OPTIONS: { value: PostedWithin; label: string }[] = [
-  { value: 'any', label: 'Any time' },
-  { value: 'week', label: 'Past week' },
-  { value: 'month', label: 'Past month' },
+  { value: 'any', get label() { return tr('site.shop.postedAny'); } },
+  { value: 'week', get label() { return tr('site.shop.postedWeek'); } },
+  { value: 'month', get label() { return tr('site.shop.postedMonth'); } },
 ];
 
 const DAY_MS = 86_400_000;
@@ -55,7 +56,7 @@ export function countShopFilters(filters: ShopFilters): number {
 export function shopFilterChips(filters: ShopFilters): { key: keyof ShopFilters; label: string }[] {
   const chips: { key: keyof ShopFilters; label: string }[] = [];
   if (filters.price !== 'any') chips.push({ key: 'price', label: PRICE_BANDS.find((band) => band.value === filters.price)?.label ?? '' });
-  if (filters.photoOnly) chips.push({ key: 'photoOnly', label: 'With a photo' });
+  if (filters.photoOnly) chips.push({ key: 'photoOnly', label: tr('site.shop.withPhoto') });
   if (filters.posted !== 'any') chips.push({ key: 'posted', label: POSTED_OPTIONS.find((option) => option.value === filters.posted)?.label ?? '' });
   return chips;
 }
