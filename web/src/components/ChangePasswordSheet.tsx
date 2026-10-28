@@ -4,6 +4,7 @@ import { useT } from '../i18n/LanguageContext';
 import { apiErrorMessage } from '../lib/apiError';
 import { passwordMeetsRules } from '../lib/passwordRules';
 import { Notice } from './Notice';
+import { PasswordInput } from './PasswordInput';
 import { PasswordChecklist } from './PasswordChecklist';
 import { Sheet } from './Sheet';
 
@@ -38,14 +39,14 @@ export function ChangePasswordSheet({ onClose, onChanged }: { onClose: () => voi
     <Sheet title={t('account.password.title')} onClose={onClose} dismissible={!busy} initialFocus="#change-password-current">
       {({ close }) => (
         <form onSubmit={submit} className="kit-sheet-inner">
-          <label className="kit-sheet-field" htmlFor="change-password-current">
-            {t('account.password.current')}
-            <input id="change-password-current" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
-          </label>
-          <label className="kit-sheet-field" htmlFor="change-password-new">
-            {t('account.password.new')}
-            <input id="change-password-new" type="password" autoComplete="new-password" aria-describedby="change-password-rules" value={next} onChange={(e) => setNext(e.target.value)} />
-          </label>
+          <div className="kit-sheet-field">
+            <label htmlFor="change-password-current">{t('account.password.current')}</label>
+            <PasswordInput id="change-password-current" value={current} autoComplete="current-password" onChange={(e) => setCurrent(e.target.value)} />
+          </div>
+          <div className="kit-sheet-field">
+            <label htmlFor="change-password-new">{t('account.password.new')}</label>
+            <PasswordInput id="change-password-new" value={next} autoComplete="new-password" describedBy="change-password-rules" onChange={(e) => setNext(e.target.value)} />
+          </div>
           <PasswordChecklist password={next} id="change-password-rules" />
           {error && <Notice>{error}</Notice>}
           <div className="kit-acts">
