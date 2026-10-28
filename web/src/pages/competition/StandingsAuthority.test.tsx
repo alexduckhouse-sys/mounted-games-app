@@ -9,6 +9,9 @@ import { CommentaryDeskPage } from './CommentaryDeskPage';
 const state = vi.hoisted(() => ({ value: null as unknown, get: vi.fn() }));
 vi.mock('./context', () => ({ useCompetition: () => state.value }));
 vi.mock('../../api', () => ({ api: { get: state.get } }));
+// Stands in for 30 seconds passing (useHeldFor has its own timing test).
+const held = vi.hoisted(() => ({ value: true }));
+vi.mock('../../hooks/useHeldFor', () => ({ useHeldFor: (active: boolean) => active && held.value }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canOrganise: () => false }) }));
 vi.mock('../../components/stream/StreamControlStrip', () => ({ StreamControlStrip: () => <div>Staff stream controls</div> }));
 vi.mock('../../components/QrAccessModal', () => ({ QrAccessModal: () => null }));
@@ -19,6 +22,7 @@ vi.mock('../../components/SponsorStrip', () => ({ SponsorStrip: () => null }));
 vi.mock('../../components/SponsorBadge', () => ({ SponsorBadge: () => null }));
 
 beforeEach(() => {
+  held.value = true;
   state.get.mockImplementation((url: string) => Promise.resolve({ data: url.includes('/standings') ? [standing(1, 8.5)] : [] }));
   state.value = { reload: vi.fn(), competition: competition({
     sections: [{ id: 5, displayName: 'Seniors', finalistCount: 0 }] as never,
@@ -42,6 +46,14 @@ describe.each([
     const previous = state.value as { competition: ReturnType<typeof competition>; reload: () => void };
     state.get.mockRejectedValue(new Error('Synthetic offline failure'));
     state.value = { ...previous, competition: { ...previous.competition, teams: [...previous.competition.teams] } };
+    held.value = false;
+    const calls = state.get.mock.calls.length;
+    view.rerender(<MemoryRouter><Page /></MemoryRouter>);
+    await waitFor(() => expect(state.get.mock.calls.length).toBeGreaterThan(calls));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // A refresh that fails shows nothing at first: old standings only get a notice once they have lasted 30 seconds.
+    expect(screen.queryByText('Showing saved standings while results refresh.')).toBeNull();
+    held.value = true;
     view.rerender(<MemoryRouter><Page /></MemoryRouter>);
     await screen.findByText('Showing saved standings while results refresh.');
     expect(screen.getByRole('region', { name: region })).toHaveTextContent('8.5');

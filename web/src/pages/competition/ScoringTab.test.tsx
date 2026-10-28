@@ -13,6 +13,9 @@ const state = vi.hoisted(() => ({ value: null as unknown, get: vi.fn(), manage: 
 vi.mock('./context', async (importOriginal) => ({ ...(await importOriginal<typeof import('./context')>()), useCompetition: () => state.value }));
 vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canManage: () => state.manage }) }));
 vi.mock('../../api', () => ({ api: { get: state.get, post: vi.fn() } }));
+// Stands in for 30 seconds passing (useHeldFor has its own timing test).
+const held = vi.hoisted(() => ({ value: true }));
+vi.mock('../../hooks/useHeldFor', () => ({ useHeldFor: (active: boolean) => active && held.value }));
 // The Tack & Turnout table fetches on its own; it has its own tests.
 vi.mock('./TackLeaderboard', () => ({ TackLeaderboard: () => null }));
 vi.mock('./TimetableBoard', () => ({
@@ -58,6 +61,7 @@ function renderTab(path = '/?section=9', props: { startOn?: 'draw' | 'scores' | 
 }
 
 beforeEach(() => {
+  held.value = true;
   state.manage = false;
   reload.mockClear();
   state.get.mockReset();
@@ -470,8 +474,13 @@ describe('personalisation, instant optimistic standings and section score finger
     state.get.mockReturnValueOnce(new Promise((resolve) => { resolveStandings = resolve; }));
     const combined = session(5, { competitionSectionId: null, heats: [heat(5, { entries: entries([1, 8]), races: [scored(5, [1, 1, 30])] })] });
     state.value = { ...original, competition: { ...original.competition, sessions: [qualifier, combined] } };
+    held.value = false;
     redraw();
     expect(state.get).toHaveBeenCalledTimes(2);
+    // A refresh shows the old standings without a notice; it only appears once they have lasted 30 seconds.
+    expect(screen.queryByText('Showing saved standings while results refresh.')).toBeNull();
+    held.value = true;
+    redraw();
     expect(screen.getByText('Showing saved standings while results refresh.')).toBeVisible();
     expect(rowNames(screen.getByRole('region', { name: 'Totals' }))[0]).toContain('Team 3');
     resolveStandings({ data: [standing(1, 40), standing(3, 7), standing(2, 4)], headers: {} });

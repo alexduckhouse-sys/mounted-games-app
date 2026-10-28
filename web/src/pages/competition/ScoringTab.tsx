@@ -18,7 +18,7 @@ import { HeatScores } from './HeatScores';
 import { ToplistRowsSkeleton } from '../../components/Skeletons';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { SponsorStrip } from '../../components/SponsorStrip';
-import { readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } from '../../offline/savedCopies';
+import { readSavedCopy, SAVED_STANDINGS_NOTICE_MS, savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } from '../../offline/savedCopies';
 import { NumberField } from '../../components/NumberField';
 import { Notice } from '../../components/Notice';
 import { PageGrid } from '../../components/PageGrid';
@@ -27,6 +27,7 @@ import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { formatPoints } from '../../lib/formatPoints';
 import { ProvisionalBadge } from '../../components/ProvisionalStatus';
 import { useProvisionalState } from '../../hooks/useProvisionalState';
+import { useHeldFor } from '../../hooks/useHeldFor';
 import { getSectionProvisionalState } from '../../lib/provisionalResults';
 import { useT } from '../../i18n/LanguageContext';
 
@@ -186,6 +187,8 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   const standings = !standingsError && currentResult ? currentResult.rows : savedStandings?.data ?? NO_ROWS;
   const standingsStale = currentResult ? currentResult.savedCopy || currentResult.source !== refreshSource : savedStandings != null;
   const standingsLoading = sectionId != null && !currentResult && !savedStandings && standings.length === 0;
+  // Old standings are on screen for a moment on every refresh; only say so if it lasts half a minute.
+  const showSavedNotice = useHeldFor(standingsStale, SAVED_STANDINGS_NOTICE_MS);
   // Whether this age group's finished results are still open to queries, held for a review, or official.
   const provisional = useProvisionalState((now) => getSectionProvisionalState(competition.sessions, sectionId, now));
   useEffect(() => {
@@ -237,7 +240,7 @@ export function ScoringTab({ startOn = 'draw' }: { startOn?: SectionSubTab }) {
   const notices = (
     <>
       {standingsLoading && !savedStandings && <ToplistRowsSkeleton />}
-      {standingsStale && <Notice tone="info">{t('competition.scoring.savedStandings')}</Notice>}
+      {showSavedNotice && <Notice tone="info">{t('competition.scoring.savedStandings')}</Notice>}
       {standingsError && <Notice actionLabel={t('common.tryAgain')} onAction={() => { if (sectionId != null) setStandingsBySection((prev) => { const next = { ...prev }; delete next[sectionId]; return next; }); setRetry((n) => n + 1); }}>{t('competition.scoring.loadFailed')}</Notice>}
       {sectionId != null && !standingsLoading && !standingsError && standings.length === 0 && <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">{t('competition.scoring.noResults')}</p>}
     </>

@@ -21,6 +21,8 @@ import { useCompetition } from './context';
 import { Notice } from '../../components/Notice';
 import { DeskOverlays } from './streamControls/DeskOverlays';
 import { CommentatorBriefingCard } from './CommentatorBriefingCard';
+import { useHeldFor } from '../../hooks/useHeldFor';
+import { SAVED_STANDINGS_NOTICE_MS } from '../../offline/savedCopies';
 
 type DeskMode = 'split' | 'lanes' | 'standings';
 
@@ -143,6 +145,8 @@ export function CommentaryDeskPage() {
   const currentStandings = sectionId == null ? null : standingsBySection[sectionId];
   const standings = useMemo(() => currentStandings?.rows ?? [], [currentStandings]);
   const standingsStale = currentStandings?.failed || currentStandings?.source !== refreshSource;
+  // Old standings are on screen for a moment on every refresh; only say so if it lasts half a minute.
+  const savedNotice = useHeldFor(standingsStale && standings.length > 0, SAVED_STANDINGS_NOTICE_MS);
 
   const standingByTeamId = useMemo(() => {
     const map = new Map<number, StandingRow>();
@@ -349,7 +353,7 @@ export function CommentaryDeskPage() {
 
   return (
     <div className="mx-auto flex w-full flex-col gap-4 py-3">
-      {standingsStale && <Notice tone="info">{standings.length ? 'Showing saved standings while results refresh.' : 'Waiting for official standings.'}</Notice>}
+      {standingsStale && (standings.length ? savedNotice && <Notice tone="info">Showing saved standings while results refresh.</Notice> : <Notice tone="info">Waiting for official standings.</Notice>)}
       {/* Top Bar */}
       <header className="mg-card flex flex-col gap-3 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
