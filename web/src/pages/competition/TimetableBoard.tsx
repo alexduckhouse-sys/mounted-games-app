@@ -297,6 +297,7 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
           paused={isPaused}
           busy={shifting}
           pace={pace.avgMinutesPerRace != null && (pace.sampleHeats >= 2 || pace.sampleRaces >= 5) ? pace.avgMinutesPerRace : null}
+          rearrangeTo={`/competitions/${competition.id}/timetable-and-draw`}
           onShift={shiftTimes}
           onContinue={() => void resume()}
           onClose={() => setDelayOpen(false)}
