@@ -11,7 +11,9 @@ describe('routeDepth', () => {
     expect(routeDepth('/competitions/4/')).toBe(1);
     expect(routeDepth('/competitions/4/teams')).toBe(1);
     expect(routeDepth('/competitions/4/enter/details')).toBe(1);
-    expect(routeDepth('/competitions/4/arena')).toBe(2);
+    expect(routeDepth('/competitions/4/arena')).toBe(1);
+    expect(routeDepth('/competitions/4/timetable')).toBe(1);
+    expect(routeDepth('/competitions/4/rules')).toBe(2);
     expect(routeDepth('/competitions/4/teams/9')).toBe(3);
     expect(routeDepth('/competitions/4/session/12')).toBe(3);
   });
@@ -36,12 +38,13 @@ describe('transitionFor', () => {
   });
 
   it('treats a browser back onto a deeper page as back', () => {
-    expect(transitionFor('/events', '/competitions/4/arena', true)).toBe('back');
+    expect(transitionFor('/events', '/competitions/4/teams/9', true)).toBe('back');
   });
 
   it('crossfades between pages at the same level, popped or not', () => {
     expect(transitionFor('/competitions/4', '/competitions/4/chat', false)).toBe('fade');
     expect(transitionFor('/competitions/4/chat', '/competitions/4', true)).toBe('fade');
+    expect(transitionFor('/competitions/4/teams', '/competitions/4/arena', false)).toBe('fade');
     expect(transitionFor('/competitions/4/session/1', '/competitions/4/session/2', false)).toBe('fade');
   });
 });

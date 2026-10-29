@@ -5,14 +5,16 @@ export const PUSH_MS = 420;
 export const FADE_MS = 160;
 export const PUSH_EASING = 'cubic-bezier(.32,.72,0,1)';
 export const FADE_EASING = 'ease-out';
+/** How long a move waits for a page that is still opening (its code or first data loading), so the real page is what moves. */
+export const READY_WAIT_MS = 350;
 
 /** The pages the bottom tab bar opens inside a competition. They sit side by side, one level down from the events list. */
-const COMPETITION_TABS = new Set(['', 'toplists', 'following', 'chat', 'teams', 'declarations', 'shop', 'details', 'operations', 'scoring', 'enter']);
+const COMPETITION_TABS = new Set(['', 'timetable', 'toplists', 'following', 'chat', 'teams', 'arena', 'declarations', 'shop', 'details', 'operations', 'scoring', 'enter']);
 const GLOBAL_PATHS = new Set(['/', '/events', '/competitions', '/competitions/past', '/following', '/me', '/me/account', '/me/members', '/me/payouts', '/me/catalogue', '/me/orders', '/dashboard', '/teams', '/me/signups', '/shop']);
 
 /**
  * How deep a page sits. The global tab pages are 0, a competition's tabs 1, and anything opened from those (a team, a heat,
- * the arena, rules) 2 or more. Other pages count their path segments.
+ * rules) 2 or more. Other pages count their path segments.
  */
 export function routeDepth(pathname: string): number {
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
