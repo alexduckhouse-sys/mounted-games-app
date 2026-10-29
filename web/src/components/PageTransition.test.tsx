@@ -1,25 +1,32 @@
 import { act, render } from '@testing-library/react';
 import { MotionConfig } from 'framer-motion';
-import { useEffect, useRef } from 'react';
+import { useEffect, useReducer, useRef } from 'react';
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PageTransition } from './PageTransition';
 
 let go: (to: string, replace?: boolean, state?: unknown) => void = () => {};
 let goBack: () => void = () => {};
+// A page still opening shows a loading placeholder, as a lazy page's skeleton does, until the test lets it finish.
+let opening = '';
+let refresh: () => void = () => {};
 const animations: Array<{ target: HTMLElement; keyframes: Keyframe[]; options: KeyframeAnimationOptions; finish: () => void; cancel: ReturnType<typeof vi.fn> }> = [];
 
 function Harness({ disabled = false }: { disabled?: boolean }) {
   const ref = useRef<HTMLElement>(null);
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const [, rerender] = useReducer((n: number) => n + 1, 0);
   useEffect(() => {
+    refresh = rerender;
     go = (to, replace, state) => navigate(to, { replace, state });
     goBack = () => navigate(-1);
   }, [navigate]);
   return (
     <>
-      <main ref={ref} id="main"><span id="inner">{pathname}</span><video /></main>
+      <main ref={ref} id="main">
+        {pathname === opening ? <div role="status" aria-busy="true">Loading</div> : <><span id="inner">{pathname}</span><video /></>}
+      </main>
       <PageTransition mainRef={ref} disabled={disabled} />
     </>
   );
@@ -35,6 +42,7 @@ function mount(path: string, props: { disabled?: boolean; still?: boolean } = {}
 
 beforeEach(() => {
   animations.length = 0;
+  opening = '';
   Object.defineProperty(HTMLElement.prototype, 'animate', {
     configurable: true,
     writable: true,
@@ -202,6 +210,69 @@ describe('PageTransition', () => {
     // @ts-expect-error simulate a browser without the Web Animations API
     delete HTMLElement.prototype.animate;
     act(() => go('/competitions/4/teams/9'));
+    expect(frames()).toHaveLength(0);
+  });
+
+  it('holds the old page while the new one is still opening, then slides the real page in', async () => {
+    mount('/competitions/4/teams');
+    opening = '/competitions/4/teams/9';
+    act(() => go('/competitions/4/teams/9'));
+    // Only the held copy of the old page shows; the skeleton waits unseen and nothing moves yet.
+    expect(frames()).toHaveLength(1);
+    expect(frames()[0].textContent).toContain('/competitions/4/teams');
+    expect(animations).toHaveLength(0);
+    const main = document.getElementById('main')!;
+    expect(main.style.visibility).toBe('hidden');
+    // A change inside the skeleton is not the page arriving.
+    main.querySelector('[aria-busy]')!.append('…');
+    await flush();
+    expect(animations).toHaveLength(0);
+
+    opening = '';
+    act(() => refresh());
+    await flush();
+    expect(animations).toHaveLength(2);
+    const copies = [...frames()] as HTMLElement[];
+    expect(copies).toHaveLength(2);
+    expect(copies[1].textContent).toContain('/competitions/4/teams/9');
+    expect(copies[1].textContent).not.toContain('Loading');
+
+    animations.forEach((a) => a.finish());
+    await flush();
+    expect(frames()).toHaveLength(0);
+    expect(main.style.visibility).toBe('');
+  });
+
+  it('stops waiting after a moment and fades in whatever is there', () => {
+    vi.useFakeTimers();
+    mount('/competitions/4/chat');
+    opening = '/competitions/4/arena';
+    act(() => go('/competitions/4/arena'));
+    expect(frames()).toHaveLength(1);
+    expect(animations).toHaveLength(0);
+    act(() => { vi.advanceTimersByTime(350); });
+    expect(frames()).toHaveLength(0);
+    expect(animations).toHaveLength(1);
+    expect(animations[0].target.id).toBe('main');
+    expect(document.getElementById('main')!.style.visibility).toBe('');
+  });
+
+  it('drops the held page if another move starts or the shell goes away while waiting', () => {
+    const view = mount('/competitions/4/chat');
+    opening = '/competitions/4/arena';
+    act(() => go('/competitions/4/arena'));
+    expect(frames()).toHaveLength(1);
+    opening = '';
+    act(() => go('/competitions/4/teams'));
+    // The held page went with the first move; the second one is a plain fade of the real page.
+    expect(frames()).toHaveLength(0);
+    expect(animations).toHaveLength(1);
+    expect(document.getElementById('main')!.style.visibility).toBe('');
+
+    opening = '/competitions/4/teams/9';
+    act(() => go('/competitions/4/teams/9'));
+    expect(frames()).toHaveLength(1);
+    view.unmount();
     expect(frames()).toHaveLength(0);
   });
 
