@@ -272,7 +272,7 @@ export function CommentaryDeskPage() {
         return {
           teamId: row.teamId,
           rank: row.position,
-          rankLabel: toplist.started ? `${localOrdinal(row.position, lang)}${row.joint ? '=' : ''}` : localOrdinal(idx + 1, lang),
+          rankLabel: toplist.started ? `${row.joint ? '=' : ''}${localOrdinal(row.position, lang)}` : '—',
           bibColour: team?.bibColour ?? st?.bibColour ?? null,
           teamName: row.teamName,
           clubName: clubLabel(team?.clubName ?? st?.clubName),
@@ -296,7 +296,7 @@ export function CommentaryDeskPage() {
       return {
         teamId: tm.id,
         rank: idx + 1,
-        rankLabel: localOrdinal(idx + 1, lang),
+        rankLabel: '—',
         bibColour: tm.bibColour ?? null,
         teamName: tm.displayName,
         clubName: clubLabel(tm.clubName),
@@ -626,7 +626,7 @@ export function CommentaryDeskPage() {
                           {t('desk.commentary.firsts', { count: row.wins })}
                         </span>
                         <span className="mg-display text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]">
-                          {t('desk.commentary.ptsOnly', { points: formatPoints(row.totalPoints) })}
+                          {t('desk.commentary.pointsN', { count: row.totalPoints })}
                         </span>
                       </div>
                     </div>
