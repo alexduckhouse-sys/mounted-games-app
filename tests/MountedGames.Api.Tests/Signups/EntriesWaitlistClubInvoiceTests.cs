@@ -174,7 +174,8 @@ public class EntriesWaitlistClubInvoiceTests : IClassFixture<ApiFactory>
         var s2 = await (await e2.PostAsJsonAsync(EntryUrl(section), MakeEntry("Withdrawn Retained"))).ReadAsync<SectionSignupExtendedDto>();
         var s3 = await (await e3.PostAsJsonAsync(EntryUrl(section), MakeEntry("Withdrawn Rollover"))).ReadAsync<SectionSignupExtendedDto>();
 
-        (await admin.PostAsJsonAsync($"/api/competitions/{section.CompetitionId}/signups/{s1.Id}/mark-paid", new { })).EnsureSuccessStatusCode();
+        var paid = await (await admin.PostAsJsonAsync($"/api/competitions/{section.CompetitionId}/signups/{s1.Id}/mark-paid", new { })).ReadAsync<SectionSignupExtendedDto>();
+        Assert.NotNull(paid.PaidAt);
         (await admin.PostAsJsonAsync($"/api/competitions/{section.CompetitionId}/signups/{s2.Id}/mark-paid", new { })).EnsureSuccessStatusCode();
         (await admin.PostAsJsonAsync($"/api/competitions/{section.CompetitionId}/signups/{s3.Id}/mark-paid", new { })).EnsureSuccessStatusCode();
 
@@ -194,6 +195,26 @@ public class EntriesWaitlistClubInvoiceTests : IClassFixture<ApiFactory>
         Assert.Equal(2500, d1.RefundedAmountMinor);
         Assert.Equal("50% refunded less £15 admin fee", d1.DispositionNote);
         Assert.Equal(SignupPaymentStatus.Refunded, d1.Status);
+        Assert.Equal(paid.PaidAt, d1.PaidAt);
+
+        // A note/amount correction and a repeated status save must retain the actual refund date.
+        var refundDate = new DateTime(2026, 9, 1, 12, 0, 0, DateTimeKind.Utc);
+        await _f.InDbAsync(async db =>
+        {
+            var extras = await db.Set<SignupExtras>().FindAsync(s1.Id);
+            Assert.NotNull(extras);
+            extras.DispositionUpdatedAt = refundDate;
+            await db.SaveChangesAsync();
+        });
+        var corrected = await (await admin.PutAsJsonAsync($"/api/competitions/{section.CompetitionId}/signups/{s1.Id}/disposition",
+            new UpdateSignupDispositionInput("Refunded", 2400, "Corrected refund note"))).ReadAsync<SectionSignupExtendedDto>();
+        Assert.Equal(refundDate, corrected.DispositionUpdatedAt);
+        Assert.Equal(paid.PaidAt, corrected.PaidAt);
+        Assert.Equal(2400, corrected.RefundedAmountMinor);
+        (await admin.PutAsJsonAsync($"/api/signups/{s1.Id}/status", new MountedGames.Api.Dtos.UpdateSignupStatusRequest(SignupPaymentStatus.Refunded))).EnsureSuccessStatusCode();
+        var restoredAmount = await (await admin.PutAsJsonAsync($"/api/competitions/{section.CompetitionId}/signups/{s1.Id}/disposition",
+            new UpdateSignupDispositionInput("Refunded", 2500, "Corrected refund note"))).ReadAsync<SectionSignupExtendedDto>();
+        Assert.Equal(refundDate, restoredAmount.DispositionUpdatedAt);
 
         // Full fee retained.
         var d2 = await (await admin.PutAsJsonAsync($"/api/competitions/{section.CompetitionId}/signups/{s2.Id}/disposition",

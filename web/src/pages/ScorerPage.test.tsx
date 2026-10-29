@@ -37,6 +37,8 @@ const opened = (name: string) => screen.findByRole('region', { name: `Scoring ${
  * can miss, so each tap is checked by the number of placed teams and repeated if it didn't register.
  */
 async function tapTeams(user: ReturnType<typeof userEvent.setup>, names: string[]) {
+  const skip = screen.queryByRole('button', { name: 'Score without start time' });
+  if (skip) await user.click(skip);
   for (const [index, name] of names.entries()) {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await user.click(screen.getByRole('button', { name: new RegExp(`^${name}, lane`) }));
@@ -117,11 +119,26 @@ describe('ScorerPage', () => {
 
     expect(outbox()).toEqual([expect.objectContaining({
       viaLink: true, raceId: 11, competitionId: 1, sessionId: 1, state: 'waiting', label: 'Heat 1 · Bending',
+      previewPoints: { 1: 2, 2: 3, 3: 1 },
       places: [{ teamId: 2, place: 1, eliminated: false }, { teamId: 1, place: 2, eliminated: false }, { teamId: 3, place: 3, eliminated: false }],
     })]);
     expect(await opened('Flag')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('saved on this phone');
   });
+
+  it.each([{ label: 'A Final', raceRoundStage: 0 as const, expected: { 1: 3, 2: 2, 3: 1 } },
+    { label: 'Qualifier', raceRoundStage: 1 as const, expected: { 1: 1, 2: 1, 3: 1 } }])(
+    'backs up provisional $label points without adding scoring overrides', async ({ label, raceRoundStage, expected }) => {
+      const user = userEvent.setup();
+      link.get.mockResolvedValue({ data: timetable({ sessions: [session(1, { heats: [heatWith({ label, raceRoundStage })] })] }) });
+      open();
+      await opened('Bending');
+      await tapTeams(user, ['Team 1', 'Team 2', 'Team 3']);
+      await user.click(screen.getByRole('button', { name: 'SAVE SCORES' }));
+      expect(outbox()[0].previewPoints).toEqual(expected);
+      expect(outbox()[0].places).toEqual([1, 2, 3].map((teamId) => ({ teamId, place: teamId, eliminated: false })));
+    },
+  );
 
   it('asks for a reason before correcting a race that already has results', async () => {
     const user = userEvent.setup();
@@ -202,6 +219,7 @@ describe('ScorerPage', () => {
       .toEqual(['Did not start', 'Did not finish', 'Retired', 'Other']);
     await user.click(within(sheet).getByRole('button', { name: 'Did not start' }));
     await user.click(within(sheet).getByRole('button', { name: 'Save race' }));
+    expect(outbox()[0].previewPoints).toEqual({ 1: 3, 2: 0, 3: 2 });
     expect(outbox()[0].places).toEqual([
       { teamId: 1, place: 1, eliminated: false },
       { teamId: 2, place: 0, eliminated: true, status: 2, refereeNote: 'Did not start' },

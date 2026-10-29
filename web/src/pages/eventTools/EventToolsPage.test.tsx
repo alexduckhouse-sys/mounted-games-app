@@ -115,7 +115,7 @@ describe('EventToolsPage merged into OperationsPage', () => {
     await user.clear(input);
     await user.type(input, 'club,suffix,section\nNorth Club,A,Under 12');
     await user.click(screen.getByRole('button', { name: 'Preview teams' }));
-    expect(await screen.findByText('North Club')).toBeInTheDocument();
+    expect(await screen.findByText('North Club A')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Add 1 team' }));
 
     await waitFor(() => expect(post).toHaveBeenLastCalledWith('/event-tools/competitions/12/team-import/apply', {
@@ -123,6 +123,17 @@ describe('EventToolsPage merged into OperationsPage', () => {
     }));
     expect(await screen.findByText('1 team added')).toBeInTheDocument();
     expect(compState.reload).toHaveBeenCalled();
+  });
+
+  it('shows why rider exports cannot be imported without sending them to the API', async () => {
+    const user = userEvent.setup();
+    renderPage('/competitions/12/operations/import');
+    const input = await screen.findByLabelText('CSV text');
+    await user.clear(input);
+    await user.type(input, 'Club,Class,Rider Name\nDemo Club,Open,Example Rider');
+    await user.click(screen.getByRole('button', { name: 'Preview teams' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('rider entry sheet');
+    expect(post).not.toHaveBeenCalled();
   });
 
   it('keeps duplicate-event form values when the API rejects them', async () => {

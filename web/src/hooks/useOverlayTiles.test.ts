@@ -131,3 +131,16 @@ describe('useOverlayTiles', () => {
     await act(async () => { release('saved'); await first; });
   });
 });
+
+describe('saved looks', () => {
+  it('applies only visual fields while preserving current race, banner and revision', async () => {
+    const t = setup({ overlay: { ...DEFAULT_OVERLAY, revision: 9, bannerText: 'Demo announcement', look: { liveCard: 'heat', liveSectionId: 4 } } });
+    await act(() => t.hook.result.current.applyLook({ accent: '#123456', liveSectionId: 999, liveCard: 'podium', logoUrl: 'javascript:alert(1)' }));
+    expect(t.changes[0]).toMatchObject({ revision: 9, bannerText: 'Demo announcement', look: { accent: '#123456', liveCard: 'heat', liveSectionId: 4, logoUrl: null } });
+  });
+  it('reports a revision conflict without claiming the look was applied', async () => {
+    const t = setup({ save: vi.fn().mockResolvedValue('conflict') });
+    await act(() => t.hook.result.current.applyLook({}));
+    expect(t.hook.result.current.conflict).toBe(true);
+  });
+});

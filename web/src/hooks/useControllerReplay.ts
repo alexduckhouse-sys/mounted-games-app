@@ -1,33 +1,27 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { createReplayBuffer, removeSavedReplay, tagSavedReplay, type ReplayBufferHandle, type ReplayBufferStatus, type SavedReplayClip } from '../live/replayBuffer';
-import { ReplaySegmentStore } from '../live/replaySegments';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createReplayBuffer, removeSavedReplay, updateReplayRaceTimes, tagSavedReplay, type ReplayBufferHandle, type ReplayBufferStatus, type SavedReplayClip } from '../live/replayBuffer';
 import { useReplayPreparation } from '../live/useReplayPreparation';
+import type { Session } from '../types';
 import type { QueuedScoreCard } from '../lib/scoreCard';
 
 export const RACE_RECORDING_SECONDS = 45;
-
-function startPreservingSegments(handle: ReplayBufferHandle, stream: MediaStream) {
-  const originalClear = ReplaySegmentStore.prototype.clear;
-  ReplaySegmentStore.prototype.clear = () => {};
-  try {
-    handle.start(stream);
-  } finally {
-    ReplaySegmentStore.prototype.clear = originalClear;
-  }
-}
 
 /**
  * Records the live video this device is watching into the 30-minute replay buffer, so a producer can save an instant
  * replay and every scored race is kept as a recording. Clips stay on this device. Preparing a clip plays it back in
  * real time, so a 30-second clip takes about 30 seconds and the page must stay open.
  */
-export function useControllerReplay({ competitionId, arena, streamId, media, scoreCards }: {
+export function useControllerReplay({ competitionId, arena, streamId, media, scoreCards, sessions }: {
   competitionId: number;
   arena: string;
   streamId: number | null;
   media: MediaStream | null;
   scoreCards?: QueuedScoreCard[];
+  sessions?: Session[];
 }) {
+  const races = useMemo(() => sessions?.filter((s) => (s.arenaName ?? '') === arena).flatMap((s) => s.heats.flatMap((h) => h.races)) ?? [], [sessions, arena]);
+  const raceRef = useRef(races);
+  useEffect(() => { raceRef.current = races; updateReplayRaceTimes(competitionId, arena, races); }, [races, competitionId, arena]);
   const buffer = useRef<ReplayBufferHandle | null>(null);
   const streamIdRef = useRef<number | null>(streamId);
   useEffect(() => {
@@ -54,6 +48,7 @@ export function useControllerReplay({ competitionId, arena, streamId, media, sco
       streamId: streamIdRef.current ?? undefined,
       arenaName: arena || 'Arena',
       windowSeconds: 1800,
+      retainOnSwitch: true,
       onStatus: setStatus,
     });
     buffer.current = handle;
@@ -65,7 +60,7 @@ export function useControllerReplay({ competitionId, arena, streamId, media, sco
 
   useEffect(() => {
     if (!buffer.current) return;
-    if (media) startPreservingSegments(buffer.current, media);
+    if (media) buffer.current.start(media);
     else buffer.current.stop();
   }, [media, armed, competitionId, arena]);
 
@@ -80,7 +75,7 @@ export function useControllerReplay({ competitionId, arena, streamId, media, sco
     const current = buffer.current;
     // No video right now (between cameras): there is nothing of this race to keep.
     if (!current || !sameArena || !live) return;
-    void prepare((options) => current.saveClip(`${latest.heading} · ${latest.card.raceName}`, { ...options, durationSeconds: RACE_RECORDING_SECONDS }), (clip) => { tagSavedReplay(clip.id, 'race'); });
+    void prepare((options) => current.saveClip(`${latest.heading} · ${latest.card.raceName}`, { ...options, durationSeconds: RACE_RECORDING_SECONDS }), (clip) => { if (raceRef.current.length) tagSavedReplay(clip.id, 'race', raceRef.current); else tagSavedReplay(clip.id, 'race'); });
   }, [scoreCards, arena, prepare, live]);
 
   const instant = useCallback((seconds: number, label: string, onSaved?: (clip: SavedReplayClip) => void) => {
@@ -88,7 +83,7 @@ export function useControllerReplay({ competitionId, arena, streamId, media, sco
     if (!current) { setNoVideo(true); return; }
     setNoVideo(false);
     void prepare((options) => current.saveClip(label, { ...options, durationSeconds: seconds }), (clip) => {
-      tagSavedReplay(clip.id, 'instant');
+      if (raceRef.current.length) tagSavedReplay(clip.id, 'instant', raceRef.current); else tagSavedReplay(clip.id, 'instant');
       setJustMadeId(clip.id);
       onSaved?.(clip);
     });

@@ -1,3 +1,5 @@
+import { CallUpStrip } from './reliability/CallUpStrip';
+import { SubstitutionRequests } from './reliability/SubstitutionRequests';
 import { arenaCrewPath } from './crewDutyHelpers';
 import { SessionSharePrint } from '../operations/SessionSharePrint';
 import { SessionDutyBoard } from './SessionDutyBoard';
@@ -46,7 +48,7 @@ import {
 } from '../../lib/raceScoring';
 import { isSaveInFlight, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../../offline/useScoreOutbox';
 import { laneLabel, LANE_ROTATION_LABELS, LaneRotationMode, type LaneRotationModeValue } from '../../lib/lanes';
-import { lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './laneRules';
+import { displayLaneFor, lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './laneRules';
 import { useRaceNotes } from './useRaceNotes';
 import { formatPoints } from '../../lib/formatPoints';
 import { heatTotals as rankHeat, placeText } from '../../lib/raceSummary';
@@ -492,6 +494,9 @@ function SessionScoring() {
       raceId: activeRace.id,
       competitionId: session.competitionId,
       sessionId: session.id,
+      arenaName: session.arenaName ?? undefined,
+      sessionName: session.name,
+      lanes: Object.fromEntries(activeHeat.entries.map(e => [e.teamId, Number(displayLaneFor(activeHeat, e, orderedRaces.findIndex(r => r.id === activeRace.id), lanesOf(session)))])),
       label: `${activeHeat.label ?? `Heat ${heatIndex + 1}`} · ${activeRace.name}`,
       places: [...places, ...restOfQualifier(activeHeat, places), ...sitOutPlaces(activeHeat, orderedRaces.findIndex((r) => r.id === activeRace.id), lanesOf(session))],
       expected: placingsOf(activeRace.results),
@@ -499,6 +504,7 @@ function SessionScoring() {
       queuedAt: new Date().toISOString(),
       state: 'waiting',
     };
+    item.previewPoints = Object.fromEntries((withQueuedResults(activeHeat, [item], sessionBase).races.find(r => r.id === item.raceId)?.results ?? []).map(r => [r.teamId, r.points]));
     const queuedBefore = outbox.find((q) => q.raceId === activeRace.id) ?? null;
     const nextOutbox = enqueue(outbox, item);
     const stored = updateOutbox((list) => enqueue(list, item));
@@ -680,6 +686,7 @@ function SessionScoring() {
 
   return (
     <div className="space-y-3 pt-3">
+      {canOrganise(competition) && <div className="flex flex-wrap gap-2"><CallUpStrip compact competitionId={competition.id} sessions={competition.sessions} arenaName={session.arenaName ?? ''} /><SubstitutionRequests compact competitionId={competition.id} canDecide onChanged={reload} /></div>}
       {saveError && <Notice>{saveError}</Notice>}
       <ScoreClashBanner clashes={clashes} teamNamesById={teamNamesById} onResolve={resolveClash} />
       {/* The Official / Provisional mark is not shown on the heat page; organisers keep the Confirm official button. */}

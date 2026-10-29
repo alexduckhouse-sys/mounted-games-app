@@ -427,6 +427,7 @@ public static class ReviewCompetitionSeeder
     await db.Set<RaceScoreEvent>().Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();
     await db.Set<RaceScoreState>().Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();
     await db.Results.Where(x => raceIds.Contains(x.RaceId)).ExecuteDeleteAsync();
+    await db.Set<HeatCall>().Where(x => heatIds.Contains(x.HeatId)).ExecuteDeleteAsync();
     await db.Races.Where(x => heatIds.Contains(x.HeatId)).ExecuteDeleteAsync();
     await db.Set<CalendarHeatVersion>().Where(x => heatIds.Contains(x.HeatId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
     await db.HeatEntries.Where(x => heatIds.Contains(x.HeatId)).ExecuteDeleteAsync();
@@ -442,6 +443,7 @@ public static class ReviewCompetitionSeeder
     await db.Set<PassportCheck>().Where(x => ids.Contains(x.CompetitionId) || teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
 
     // Entries, teams and declarations.
+    await db.Set<SubstitutionRequest>().Where(x => ids.Contains(x.CompetitionId) || formIds.Contains(x.DeclarationFormId)).ExecuteDeleteAsync();
     await db.Set<RiderSwapEvent>().Where(x => ids.Contains(x.CompetitionId) || formIds.Contains(x.DeclarationFormId)).ExecuteDeleteAsync();
     await db.RiderEntries.Where(x => formIds.Contains(x.DeclarationFormId)).ExecuteDeleteAsync();
     await db.DeclarationForms.Where(x => teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();

@@ -1,5 +1,14 @@
 # Project decisions
 
+## 2026-10-29: Efficiency caches use committed database revisions
+- Why: standings and anonymous competition snapshots need reusable work across bursts of readers without retaining stale scores after a write, rollback or missed cross-instance message.
+- Approach: per-competition database revisions change in the same transaction through versioned triggers; bounded local snapshots check the committed revision, coalesce fills in their own scope and return independent DTOs. Signed-in detail reads bypass the shared cache.
+- Rejected: global invalidation on every database write; local-only or pub/sub-only invalidation; a short account-state cache that delays lock, block or session revocation. Immediate account checks remain uncached.
+- Scope: implement the agreed efficiency work with safe middleware savings; item 2.3 (stateful SignalR reconnect) remains excluded. Replay buffers use explicit ownership and retain saved clips.
+- Revisit if: hosting or event delivery changes enough to justify reconnect infrastructure, or profiling shows revision reads dominate request cost.
+- Files: `api/Data/CompetitionReadRevisionSchemaV1.cs`, `api/Services/{CompetitionSnapshotCache,CompetitionDetailReader,StandingsService}.cs`, `api/Auth/LiveAccounts.cs`, `web/src/live/replaySegments.ts`.
+- Source: efficiency handoff review and implementation chat, 29 October 2026. The migration must be applied before deploying the API; production was not changed by this implementation.
+
 ## 2026-10-27: Heat-result pushes wait for the iOS app decision; family accounts are a maybe
 - Why: the owner wants push notifications for a followed team's heat results ("Came 2nd in Heat 3, now 4th overall") considered together with the native iOS app and Live Activities, not built for web push first. Family accounts (one parent account holding several children's rider and pony details) were called "meh": possible later, not now.
 - Rejected for now: heat-result web pushes on their own; family accounts.

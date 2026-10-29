@@ -50,7 +50,7 @@ public class RiderSwapService(AppDbContext db)
 
     public async Task<RiderSwapDto> SwapAsync(
         int competitionId, int formId, SwapRiderRequest request, string? actorUserId,
-        CancellationToken ct = default, EmergencyReplacementInput? emergency = null)
+        CancellationToken ct = default, EmergencyReplacementInput? emergency = null, int? substitutionRequestId = null)
     {
         var requestId = (request.RequestId ?? string.Empty).Trim();
         if (requestId.Length is 0 or > 100) throw new EntryValidationException("A request id of up to 100 characters is required.");
@@ -73,6 +73,20 @@ public class RiderSwapService(AppDbContext db)
             var earlier = await db.Set<RiderSwapEvent>().AsNoTracking()
                 .FirstOrDefaultAsync(e => e.DeclarationFormId == formId && e.RequestId == requestId, ct);
             if (earlier is not null) return ToDto(earlier) with { Replayed = true };
+
+            SubstitutionRequest? substitution = null;
+            if (substitutionRequestId.HasValue)
+            {
+                substitution = await db.Set<SubstitutionRequest>().SingleOrDefaultAsync(x => x.Id == substitutionRequestId
+                    && x.DeclarationFormId == formId && x.CompetitionId == competitionId, ct)
+                    ?? throw new KeyNotFoundException("Request not found.");
+                if (substitution.Status != "pending") throw new DrawValidationException("This request has already been decided.");
+                if (substitution.DeclarationFingerprint != DeclarationFingerprint.Of(form))
+                    throw new DrawValidationException("The declaration changed after this request. Ask the trainer to send a new request.");
+                substitution.Status = "approved";
+                substitution.DecidedAt = DateTime.UtcNow;
+                substitution.DecidedByUserId = actorUserId;
+            }
 
             var latestId = await db.DeclarationForms.Where(f => f.TeamId == form.TeamId)
                 .OrderByDescending(f => f.SubmittedAt).ThenByDescending(f => f.Id).Select(f => f.Id).FirstAsync(ct);
@@ -212,7 +226,7 @@ public class RiderSwapService(AppDbContext db)
 
     private static List<RiderSwapSnapshotDto> Snapshot(DeclarationForm form) => form.Riders
         .OrderBy(r => r.OrderIndex).ThenBy(r => r.Id)
-        .Select(r => new RiderSwapSnapshotDto(r.Id, r.FullName, r.IsReserve, r.IsCaptain, r.OrderIndex))
+        .Select(r => new RiderSwapSnapshotDto(r.Id, r.FullName, r.IsReserve, r.IsCaptain, r.OrderIndex, r.HorseName))
         .ToList();
 
     private static RiderSwapDto ToDto(RiderSwapEvent e) => new(

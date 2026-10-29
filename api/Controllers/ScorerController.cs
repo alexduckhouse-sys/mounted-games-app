@@ -102,7 +102,7 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
             return BadRequest(new { message = "Note must be 1000 characters or fewer." });
         try
         {
-            await scoring.ApplyLegacyAsync(raceId, req.Places, req.Expected, null, req.Reason, ct, ActorLabel);
+            await scoring.ApplyLegacyAsync(raceId, req.Places, req.Expected, null, req.Reason, ct, ActorLabel, req.FinishedAt);
         }
         catch (ScoreConflictException ex) { return await ConflictAsync(race, ex.Message); }
         catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
@@ -115,6 +115,27 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
         await live.ResultsUpdated(competitionId, new { sessionId = race.Heat.SessionId, heat = dto });
         await BroadcastSessionAsync(race.Heat.SessionId, competitionId);
         return dto;
+    }
+
+    /// <summary>Record the flag-down time within the scorer link's competition.</summary>
+    [HttpPost("api/scorer/races/{raceId:int}/start")]
+    [EnableRateLimiting(RequestLimits.ScorePolicy)]
+    public async Task<ActionResult<RaceDto>> StartRace(int raceId, RaceClockRequest request, CancellationToken ct)
+    {
+        if (Link.Scope == ScorerLink.ScopeCamera) return StatusCode(403);
+        if (!await InScopeAsync(raceId, ct)) return NotFound();
+        try
+        {
+            var race = await scoring.UpdateRaceClockAsync(raceId, true,
+                request.At ?? DateTime.UtcNow, request.At is not null, ct);
+            await BroadcastAsync(raceId);
+            return race.ToDto();
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+        catch (ScoreValidationException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
+        catch (Exception ex) when (ScoringController.IsScoringConcurrency(ex))
+        { return Conflict(new { message = "The race changed on another device. Try again." }); }
     }
 
     /// <summary>Allows a collecting-ring steward or scorer link to update a lane's gate check-in status.</summary>

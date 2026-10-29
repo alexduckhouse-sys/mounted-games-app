@@ -93,3 +93,7 @@ describe.each([
     expect(screen.getByRole('link', { name: new RegExp(back) })).toBeInTheDocument();
   });
 });
+
+vi.mock('../competition/reliability/SubstitutionRequests', () => ({ SubstitutionRequests: () => null }));
+
+vi.mock('../../components/PaceReview', () => ({ PaceReview: () => null }));

@@ -37,7 +37,7 @@ function Harness({ activeIdx = 1, initial = [], onSubmit = vi.fn(), onSelectRace
     <MotionConfig reducedMotion="always">
       <input aria-label="Somewhere else" />
       <ScoringSection
-        heat={h} races={h.races} activeRace={h.races[activeIdx]} onSelectRace={onSelectRace} sessionBase={3}
+        heat={h} races={h.races} activeRace={{ ...h.races[activeIdx], startIsExplicit: true, startedAt: '2026-10-29T09:00:00Z' }} onSelectRace={onSelectRace} sessionBase={3}
         laneRules={{ lanesPerHeat: null, mode: LaneRotationMode.MoveUp }} qualifiers={3} pending={pending} canScore={canScore} queued={[]}
         onClickTeam={(teamId) => setPending((p) => tapTeam(p, teamId))}
         onToggleElim={(teamId) => setPending((p) => toggleEliminated(p, teamId))}

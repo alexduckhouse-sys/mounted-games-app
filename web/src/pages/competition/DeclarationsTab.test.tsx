@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -106,6 +106,7 @@ beforeEach(() => {
   savedRiders = saved;
   savedTeams = null;
   state.get.mockImplementation(async (url: string) => {
+    if (url.endsWith('/substitution-requests')) return { data: [] };
     if (url === '/declaration-forms') return { data: forms };
     if (url.startsWith('/declaration-forms/my-saved-teams') && savedTeams) return { data: savedTeams };
     if (url === '/clubs/1/saved-riders') return { data: savedRiders };
@@ -412,7 +413,8 @@ describe('DeclarationsTab: the dec form', () => {
 
   it('says when a sent form can still be changed, and by when to send an unsent one', async () => {
     state.get.mockImplementation(async (url: string) => {
-      if (url === '/declaration-forms') return { data: forms };
+      if (url.endsWith('/substitution-requests')) return { data: [] };
+    if (url === '/declaration-forms') return { data: forms };
       if (url === '/clubs/1/saved-riders') return { data: savedRiders };
       if (url === '/declaration-forms/competition/4/lock-time') return { data: { competitionId: 4, declarationsCloseAt: '2040-10-26T17:00:00Z', isClosed: false } };
       throw new Error(`unexpected ${url}`);
@@ -530,7 +532,8 @@ describe('DeclarationsTab: the dec form', () => {
 
   it('shows the declaration deadline banner and blocks non-organiser edits after the lock time passes', async () => {
     state.get.mockImplementation(async (url: string) => {
-      if (url === '/declaration-forms') return { data: forms };
+      if (url.endsWith('/substitution-requests')) return { data: [] };
+    if (url === '/declaration-forms') return { data: forms };
       if (url === '/clubs/1/saved-riders') return { data: savedRiders };
       if (url === '/declaration-forms/competition/4/lock-time') {
         return { data: { competitionId: 4, declarationsCloseAt: '2020-01-01T10:00:00Z', isClosed: true } };
@@ -546,7 +549,8 @@ describe('DeclarationsTab: the dec form', () => {
   it('lets a self-entered Rider open and submit a dec form for their linked team', async () => {
     state.user = { id: 'u-rider', fullName: 'Sam Rider', email: 'sam@example.com', clubId: null, clubName: '', roles: ['Rider'] };
     state.get.mockImplementation(async (url: string) => {
-      if (url === '/declaration-forms') return { data: forms };
+      if (url.endsWith('/substitution-requests')) return { data: [] };
+    if (url === '/declaration-forms') return { data: forms };
       if (url === '/me/signups') return { data: [{ id: 101, competitionId: 4, competitionSectionId: 6, teamId: 8, fullName: 'Sam Rider', status: 1, declarationAccessGranted: true }] };
       if (url === '/clubs/1/saved-riders') return { data: [] };
       throw new Error(`unexpected ${url}`);
@@ -825,7 +829,8 @@ describe('DeclarationsTab: around the form', () => {
 
   it('copes with the forms not loading', async () => {
     state.get.mockImplementation(async (url: string) => {
-      if (url === '/declaration-forms') throw new Error('offline');
+      if (url.endsWith('/substitution-requests')) return { data: [] };
+    if (url === '/declaration-forms') throw new Error('offline');
       return { data: savedRiders };
     });
     mount();
@@ -835,7 +840,8 @@ describe('DeclarationsTab: around the form', () => {
 
   it('carries on without the saved riders', async () => {
     state.get.mockImplementation(async (url: string) => {
-      if (url === '/declaration-forms') return { data: forms };
+      if (url.endsWith('/substitution-requests')) return { data: [] };
+    if (url === '/declaration-forms') return { data: forms };
       throw new Error('offline');
     });
     const user = userEvent.setup();
@@ -925,6 +931,35 @@ describe('DeclarationsTab: copy a previous team', () => {
     await opened();
     expect(screen.queryByRole('button', { name: /Copy a previous team/ })).not.toBeInTheDocument();
   });
+});
+
+
+it('runs the deadline clock only while a future deadline is visible and stops at closing', async () => {
+  vi.useFakeTimers();
+  const start = Date.parse('2040-01-01T10:00:00Z');
+  vi.setSystemTime(start);
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  state.get.mockImplementation(async (url: string) => ({ data: url.endsWith('/lock-time')
+    ? { competitionId: 4, declarationsCloseAt: new Date(start + 2_000).toISOString(), isClosed: false } : [] }));
+  const interval = vi.spyOn(globalThis, 'setInterval');
+  let view!: ReturnType<typeof mount>;
+  try {
+    await act(async () => { view = mount(); });
+    expect(interval).toHaveBeenCalledWith(expect.any(Function), 1000);
+    act(() => { vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden'); document.dispatchEvent(new Event('visibilitychange')); });
+    expect(vi.getTimerCount()).toBe(0);
+    act(() => { vi.setSystemTime(start + 3_000); vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible'); document.dispatchEvent(new Event('visibilitychange')); });
+    expect(screen.getByText(/Declaration forms closed on/)).toBeVisible();
+    expect(vi.getTimerCount()).toBe(0);
+  } finally { view?.unmount(); vi.useRealTimers(); }
+});
+
+it.each([null, '2020-01-01T10:00:00Z'])('does not start a clock for an absent or elapsed deadline: %s', async (declarationsCloseAt) => {
+  const interval = vi.spyOn(globalThis, 'setInterval');
+  state.get.mockImplementation(async (url: string) => ({ data: url.endsWith('/lock-time')
+    ? { competitionId: 4, declarationsCloseAt, isClosed: false } : [] }));
+  await act(async () => { mount(); });
+  expect(interval).not.toHaveBeenCalled();
 });
 
 describe('DeclarationsTab: organiser tools in the dock', () => {

@@ -7,6 +7,7 @@ import { OVERLAY_TILES, bannerMessage, type LiveOptions, type OverlayTileId } fr
 import type { CompetitionDetail, StreamOverlay } from '../../../types';
 import { Notice } from '../../../components/Notice';
 import { RefineSection } from '../../refine/Refine';
+import { SavedOverlayLooks } from './SavedOverlayLooks';
 import { tileText } from './streamText';
 
 type Tiles = ReturnType<typeof useOverlayTiles>;
@@ -114,6 +115,7 @@ export function OverlayTab({ competition, overlay, tiles, canChange }: {
 
   return (
     <fieldset className="sx-fieldset" disabled={tiles.busy || !canChange}>
+      {canChange && <SavedOverlayLooks look={overlay.look} apply={tiles.applyLook} />}
       <div className="sx-tiles" role="radiogroup" aria-label={t('desk.stream.ov.onScreen')}>
         {OVERLAY_TILES.map((tile) => {
           const on = tiles.active === tile.id;
