@@ -178,12 +178,34 @@ describe('TimetablePage', () => {
     await user.keyboard('{ArrowUp}');
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/2', { scheduledStart: startOf(1) }));
     expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/1', { scheduledStart: at(50) });
-    // Nothing before the first, so up on the first one does nothing; other keys are ignored.
+    // Lunch is first now and nothing is before it, so up does nothing; other keys are ignored.
+    await waitFor(() => expect(grip).toHaveAttribute('aria-disabled', 'false'));
     vi.mocked(api.put).mockClear();
-    const first = screen.getByRole('button', { name: /^Move Under 12 · Session 1: drag/ });
-    first.focus();
     await user.keyboard('{ArrowUp}{a}');
     expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it('shows a moved block at its new time while it saves, and keeps the grip focused', async () => {
+    let finish = () => {};
+    vi.mocked(api.put).mockImplementation(() => new Promise((resolve) => { finish = () => resolve({ data: {} }); }));
+    const user = userEvent.setup();
+    const { container } = show();
+    await user.click(await screen.findByRole('switch', { name: 'Drag to change the order' }));
+    const timeOf = (id: number) => container.querySelector(`[data-tt-row="${id}"] .ops-time`)?.textContent;
+    const firstTime = timeOf(1);
+    const grip = screen.getByRole('button', { name: /^Move Lunch: drag/ });
+    grip.focus();
+    await user.keyboard('{ArrowUp}');
+    // Before the save answers, Lunch already sits first with Session 1's old start.
+    await waitFor(() => expect(timeOf(2)).toBe(firstTime));
+    expect([...container.querySelectorAll('[data-tt-row]')].map((row) => row.getAttribute('data-tt-row'))).toEqual(['2', '1', '3']);
+    expect(grip).toHaveFocus();
+    expect(grip).toHaveAttribute('aria-disabled', 'true');
+    // A second press while it saves does nothing.
+    const calls = vi.mocked(api.put).mock.calls.length;
+    await user.keyboard('{ArrowDown}');
+    expect(api.put).toHaveBeenCalledTimes(calls);
+    finish();
   });
 
   it('drags a block down the order with a pointer and saves the new times', async () => {

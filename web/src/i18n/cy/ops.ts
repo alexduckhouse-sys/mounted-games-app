@@ -368,6 +368,7 @@ export const ops: AreaCatalogue<typeof en> = {
   'ops.tt.name': 'Enw',
   'ops.tt.start': 'Dechrau',
   'ops.tt.followOn': 'Dilyn yr un blaenorol',
+  'ops.tt.lockedNote': 'Mae hon wedi dechrau neu mae ganddi sgoriau, felly does dim modd newid ei hamser yma. Mae “Symud popeth” yn dal i symud yr hyn sydd ar ôl.',
   'ops.tt.length': 'Hyd',
   'ops.tt.timePerHeat': 'Amser fesul rhagras',
   'ops.tt.minLabel': '{label} (mun)',
