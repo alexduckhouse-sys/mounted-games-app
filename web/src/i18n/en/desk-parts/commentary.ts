@@ -30,7 +30,7 @@ export const deskCommentary = {
   'desk.commentary.cutoffDefault': 'Top {places} qualify for the A Final',
   'desk.commentary.cutoffBubble': '{team} ({points}) holds {place}, {ahead} ahead of {chasing}',
   'desk.commentary.waitingFirst': 'Waiting for first completed race',
-  'desk.commentary.savedStandings': 'Showing saved standings while results refresh.',
+  'desk.commentary.savedStandings': 'Showing the saved toplist while results refresh.',
   'desk.commentary.waitingOfficial': 'Waiting for official standings.',
   'desk.commentary.livePa': 'Live PA feed',
   'desk.commentary.standby': 'Standby',

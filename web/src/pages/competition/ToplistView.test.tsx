@@ -27,7 +27,7 @@ describe('ToplistView positions', () => {
 
   it('shows real positions once there are points, tints tied rows, and has no gap behind the leader', () => {
     const { container } = render(<ToplistView list={list([6, 6, 2])} section={null} />);
-    expect(positions()).toEqual(['1', '1', '3']);
+    expect(positions()).toEqual(['1=', '1=', '3']);
     expect(screen.getAllByText('(joint)', { exact: false })).toHaveLength(2);
     expect([...container.querySelectorAll('li[data-tied="true"]')].map((li) => li.getAttribute('data-rank-id'))).toEqual(['1', '2']);
     expect(screen.queryByText('−4')).not.toBeInTheDocument();

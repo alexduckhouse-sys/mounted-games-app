@@ -21,8 +21,10 @@
 .fk-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .fk-chip {
   display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 0 8px 0 12px; border: 0; border-radius: 16px;
-  background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); font: 600 13px/1 var(--mg-font); cursor: pointer;
+  position: relative; background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); font: 600 13px/1 var(--mg-font); cursor: pointer;
 }
+/* The chip stays 32px tall; the tap area is 44px. */
+.fk-chip::after { content: ""; position: absolute; inset: -6px 0; }
 
 /* The heading over a group of rows: its name, then a count (and where). */
 .fk-group-title { display: flex; width: 100%; align-items: baseline; gap: 8px; padding: 0 2px 3px; }

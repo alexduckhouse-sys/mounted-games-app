@@ -16,7 +16,7 @@ vi.mock('../commerce/DemoEntryPayment', () => ({ DemoEntryPayment: () => null })
 const reload = vi.fn();
 const longText = 'Two days of mounted games for every age group, with heats on Saturday and finals on Sunday afternoon. Stabling is available on site, so book through the branch secretary and bring your own lane equipment for the warm-up ring.';
 const competition = {
-  id: 5, name: 'Hartpury Area Festival', organiserName: 'Severn Vale Branch', description: longText, location: 'Hartpury', startDate: '2026-10-24', endDate: '2026-10-25',
+  id: 5, name: 'Hartpury Area Festival', organiserName: 'Severn Vale Branch', description: longText, location: 'Hartpury', startDate: '2099-10-24', endDate: '2099-10-25',
   sections: [
     { id: 1, competitionId: 5, format: 3, ageGroup: 'Under 10', displayName: 'Under 10', priceMinor: 4500, maxParticipants: 16 },
     { id: 2, competitionId: 5, format: 3, ageGroup: 'Under 12', displayName: 'Under 12', priceMinor: 0, maxParticipants: null },
@@ -213,6 +213,18 @@ describe('DetailsTab', () => {
     renderTab();
     expect(screen.getByRole('list', { name: 'Age groups and fees' })).toHaveTextContent('Full · Waiting list · Guest rider Free');
     expect(screen.getByText('Entries are closed for this competition.')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Enter a team' })).not.toBeInTheDocument();
+  });
+
+  it('says the competition has ended instead of offering an entry form once its last day has passed', () => {
+    vi.mocked(useCompetition).mockReturnValue({
+      competition: {
+        ...competition, startDate: '2020-01-04', endDate: '2020-01-05',
+        sections: [{ id: 3, competitionId: 5, format: 2, ageGroup: 'U12', displayName: 'Under 12', priceMinor: 1000, maxParticipants: 20, activeSignupsCount: 2 }],
+      }, reload,
+    } as unknown as ReturnType<typeof useCompetition>);
+    renderTab();
+    expect(screen.getByText('This competition has ended.')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Enter a team' })).not.toBeInTheDocument();
   });
 
