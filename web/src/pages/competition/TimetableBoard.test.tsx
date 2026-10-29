@@ -272,18 +272,12 @@ it('keeps the competition name and update time in the header line, with no day o
   expect(header().subtitle).not.toMatch(/All ages|▾/);
 });
 
-it('renders the bandExtra and lead slots, places Status colours above Show full timetable, and reveals footer inside Show full timetable', () => {
+it('renders the bandExtra and lead slots, shows the page footer without a Show full timetable button when nothing is folded away', () => {
   renderBoard(<TimetableBoard bandExtra={<p>age chips</p>} lead={<p>toplist lead</p>} footer={<p>page footer</p>} />);
   expect(screen.getByText('age chips')).toBeVisible();
   expect(screen.getByText('toplist lead')).toBeVisible();
-  expect(screen.queryByText('page footer')).toBeNull();
-
-  const legend = screen.getByRole('list', { name: 'Status colours' });
-  const toggle = screen.getByRole('button', { name: 'Show full timetable' });
-  expect(toggle.compareDocumentPosition(legend) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
-
-  fireEvent.click(toggle);
   expect(screen.getByText('page footer')).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Show full timetable' })).toBeNull();
 });
 
 it('gives a break its own heading line with how long it lasts, and lists briefings with their label and no chevron link', () => {

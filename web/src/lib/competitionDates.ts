@@ -56,3 +56,12 @@ export function isOnToday(start: string, end: string | null | undefined, now: Da
   const key = (d: Date) => d.getFullYear() * 10_000 + d.getMonth() * 100 + d.getDate();
   return key(from) <= key(now) && key(now) <= key(to);
 }
+
+/** True once the last day has gone by (the day itself still counts as running). */
+export function hasEnded(start: string, end: string | null | undefined, now: Date): boolean {
+  const from = dayOf(start);
+  if (!from) return false;
+  const to = (end ? dayOf(end) : null) ?? from;
+  const key = (d: Date) => d.getFullYear() * 10_000 + d.getMonth() * 100 + d.getDate();
+  return key(to) < key(now);
+}

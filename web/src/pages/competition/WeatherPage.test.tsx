@@ -17,6 +17,8 @@ vi.mock('../../api', async (importOriginal) => ({
   api: { get: vi.fn() },
 }));
 
+vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canOrganise: () => false, hasRole: () => false }) }));
+
 const reload = vi.fn();
 
 const day1 = '2030-06-01'; // Saturday
@@ -344,12 +346,15 @@ describe('WeatherPage', () => {
 
     expect(day2Btn).toHaveAttribute('aria-selected', 'true');
     await waitFor(() => {
-      expect(within(summary).getByText('22°')).toBeInTheDocument();
+      expect(within(screen.getByRole('region', { name: 'Day weather summary' })).getByText('22°')).toBeInTheDocument();
     });
-    expect(within(summary).getByText('Sunny')).toBeInTheDocument();
-    expect(within(summary).getByText('5% chance of rain · Wind up to 11 km/h')).toBeInTheDocument();
-    expect(within(timetable).getByText('Seniors · Sunday A Final')).toBeInTheDocument();
-    expect(within(timetable).queryByText('Seniors · Saturday Heat 1')).not.toBeInTheDocument();
+    // The day's content remounts for the fade, so look the regions up again.
+    const nextSummary = screen.getByRole('region', { name: 'Day weather summary' });
+    const nextTimetable = screen.getByRole('region', { name: 'Timetable with weather' });
+    expect(within(nextSummary).getByText('Sunny')).toBeInTheDocument();
+    expect(within(nextSummary).getByText('5% chance of rain · Wind up to 11 km/h')).toBeInTheDocument();
+    expect(within(nextTimetable).getByText('Seniors · Sunday A Final')).toBeInTheDocument();
+    expect(within(nextTimetable).queryByText('Seniors · Saturday Heat 1')).not.toBeInTheDocument();
   });
 
   it('shows missing location instead of invented weather when the competition has no coordinates', () => {
@@ -371,7 +376,7 @@ describe('WeatherPage', () => {
 
     expect(api.get).not.toHaveBeenCalled();
     const summary = screen.getByRole('region', { name: 'Day weather summary' });
-    expect(within(summary).getByText('There’s no weather here because the venue has no map location.')).toBeInTheDocument();
+    expect(within(summary).getByText('Weather isn’t available yet because the venue has no map location.')).toBeInTheDocument();
     expect(within(summary).queryByText(/°|chance of rain/)).toBeNull();
     expect(screen.getByText('Nothing scheduled for this day.')).toBeInTheDocument();
   });
@@ -500,7 +505,8 @@ describe('WeatherPage', () => {
     renderWeatherPage();
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t load the weather for this day'));
     expect(screen.queryByText('22°')).toBeNull();
-    expect(screen.getByRole('region', { name: 'Timetable with weather' })).toHaveTextContent('Weather unavailable');
+    // One clear message above, not "Weather unavailable" repeated on every row.
+    expect(screen.getByRole('region', { name: 'Timetable with weather' })).not.toHaveTextContent('Weather unavailable');
   });
 
   it('accepts explicitly zoned hourly timestamps without a separate upstream UTC offset', async () => {

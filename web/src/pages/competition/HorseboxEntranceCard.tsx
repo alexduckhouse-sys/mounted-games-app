@@ -1,9 +1,11 @@
 import { ExternalLink } from 'lucide-react';
+import { useT } from '../../i18n/LanguageContext';
 import { horseboxEntrance } from '../operations/lorryEntrance';
 import type { CompetitionDetail } from '../../types';
 
 /** For lorries and horseboxes when they come in by a different gate from everyone else. Shows nothing if the organiser hasn't said. */
 export function HorseboxEntranceCard({ competition }: { competition: Pick<CompetitionDetail, 'lorryWhat3Words' | 'lorryLatitude' | 'lorryLongitude' | 'lorryDirectionsNote'> }) {
+  const t = useT();
   const entrance = horseboxEntrance(competition);
   if (!entrance) return null;
   const links = [
@@ -15,8 +17,8 @@ export function HorseboxEntranceCard({ competition }: { competition: Pick<Compet
 
   return (
     <>
-      <h2 className="sp-sec">Horsebox entrance</h2>
-      <div className="sp-card" role="group" aria-label="Horsebox entrance">
+      <h2 className="sp-sec">{t('competition.horsebox.heading')}</h2>
+      <div className="sp-card" role="group" aria-label={t('competition.horsebox.heading')}>
         {entrance.directionsNote && (
           <div className="sp-row"><span className="sp-grow"><span className="sp-t1 !font-medium whitespace-pre-wrap">{entrance.directionsNote}</span></span></div>
         )}

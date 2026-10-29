@@ -52,10 +52,10 @@ describe.each([
     await waitFor(() => expect(state.get.mock.calls.length).toBeGreaterThan(calls));
     await new Promise((resolve) => setTimeout(resolve, 20));
     // A refresh that fails shows nothing at first: old standings only get a notice once they have lasted 30 seconds.
-    expect(screen.queryByText('Showing saved standings while results refresh.')).toBeNull();
+    expect(screen.queryByText('Showing the saved toplist while results refresh.')).toBeNull();
     held.value = true;
     view.rerender(<MemoryRouter><Page /></MemoryRouter>);
-    await screen.findByText('Showing saved standings while results refresh.');
+    await screen.findByText('Showing the saved toplist while results refresh.');
     expect(screen.getByRole('region', { name: region })).toHaveTextContent('8.5');
   });
 });
