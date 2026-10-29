@@ -57,29 +57,32 @@ export function MyStewardDutyBanner() {
       const next = data && typeof data === 'object' && 'id' in data ? data : { ...shift, attendanceStatus: 'Here', checkedInAt: new Date().toISOString() };
       setShifts((cur) => cur.map((s) => (s.id === shift.id ? { ...s, ...next } : s)));
     } catch {
-      setError('Couldn’t check in. Try again, or tell the ring steward you’re here.');
+      setError(t('competition.steward.checkInFailed'));
     } finally {
       setBusy(null);
     }
   }
 
   return (
-    <section aria-label="Your steward duties" className="mb-4 space-y-3">
+    <section aria-label={t('competition.steward.heading')} className="mb-4 space-y-3">
       {mine.map((shift) => {
         const here = isShiftCheckedInHere(shift);
         const missing = isShiftMarkedMissing(shift);
-        const label = `Steward duty: ${shift.sessionName ?? 'Session'} · ${shift.role}${shift.laneNumber != null && !shift.role.includes(`Lane ${shift.laneNumber}`) ? `, lane ${shift.laneNumber}` : ''}`;
+        const session = shift.sessionName ?? t('competition.steward.session');
+        const label = shift.laneNumber != null && !shift.role.includes(`Lane ${shift.laneNumber}`)
+          ? t('competition.steward.dutyLane', { session, role: shift.role, lane: shift.laneNumber })
+          : t('competition.steward.duty', { session, role: shift.role });
         const frame = missing
           ? 'border-[rgb(var(--mg-elim))] bg-[rgb(var(--mg-elim)/0.08)]'
           : 'border-[rgb(var(--mg-control))] bg-[rgb(var(--mg-surface))]';
         return (
           <div key={shift.id} className={`rounded-[12px] border-2 p-4 ${frame}`}>
-            {missing && !here && <p className="text-lg font-bold text-[rgb(var(--mg-elim))]">You’re needed now</p>}
+            {missing && !here && <p className="text-lg font-bold text-[rgb(var(--mg-elim))]">{t('competition.steward.needed')}</p>}
             <p className="break-words text-base font-semibold text-[rgb(var(--mg-ink))]">{label}</p>
             {shift.assignedTeamName && <p className="mg-meta">{shift.assignedTeamName}{shift.startTimeLabel ? ` · ${shift.startTimeLabel}` : ''}</p>}
             {here
-              ? <p className="mt-2 text-base font-semibold text-[rgb(var(--mg-ok))]" role="status">Checked in{timeLabel(shift.checkedInAt) ? ` at ${timeLabel(shift.checkedInAt)}` : ''}</p>
-              : <button type="button" disabled={busy !== null} onClick={() => checkIn(shift)} className="mt-3 min-h-11 w-full rounded-[10px] bg-[rgb(var(--mg-button))] px-4 text-base font-semibold text-[rgb(var(--mg-button-ink))] disabled:opacity-60 sm:w-auto">We’re here</button>}
+              ? <p className="mt-2 text-base font-semibold text-[rgb(var(--mg-ok))]" role="status">{timeLabel(shift.checkedInAt) ? t('competition.steward.checkedInAt', { time: timeLabel(shift.checkedInAt) }) : t('competition.steward.checkedIn')}</p>
+              : <button type="button" disabled={busy !== null} onClick={() => checkIn(shift)} className="mt-3 min-h-11 w-full rounded-[10px] bg-[rgb(var(--mg-button))] px-4 text-base font-semibold text-[rgb(var(--mg-button-ink))] disabled:opacity-60 sm:w-auto">{t('competition.steward.here')}</button>}
           </div>
         );
       })}

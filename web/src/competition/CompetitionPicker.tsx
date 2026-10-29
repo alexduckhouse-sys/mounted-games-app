@@ -152,7 +152,7 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
       {!mineOnly && state.savedCopy && !loading && shouldNoticeSavedCopy(state.savedAt, true, now) && <Notice tone="info" icon={Clock}>{t('shell.events.refreshWhenOnline', { updated: lastUpdatedText(state.savedAt, now) })}</Notice>}
       <div className="flex flex-col gap-3.5" aria-busy={loading}>
         {onToday.length > 0 && (
-          <section aria-label={t('shell.events.onToday')}>
+          <section className="mg-settle" aria-label={t('shell.events.onToday')}>
             <h2 className="sp-sec sp-first">{t('shell.events.onToday')}</h2>
             <div className="mg-cards-grid flex flex-col gap-1.5">
               {onToday.map((competition) => <TodayCard key={competition.id} competition={competition} selected={current?.id === competition.id} onChoose={() => choose(competition)} warm={handlersFor(competition.id)} />)}
@@ -160,7 +160,7 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
           </section>
         )}
         {later.length > 0 && groups.map((group) => (
-          <section key={group.heading} aria-label={group.heading}>
+          <section key={group.heading} className="mg-settle" aria-label={group.heading}>
             <h2 className="sp-sec sp-first">{group.heading}{past && !(state.hasMore && group === groups[groups.length - 1]) && <small>{t('shell.events.yearCount', { count: group.items.length })}</small>}</h2>
             <div className="mg-lines mg-lines-grid">
               {group.items.map((competition) => <CompetitionRow key={competition.id} competition={competition} past={past} selected={current?.id === competition.id} onChoose={() => choose(competition)} warm={handlersFor(competition.id)} />)}

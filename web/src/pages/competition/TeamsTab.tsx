@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { FollowStar } from '../../components/FollowStar';
-import { Plus, Save, ClipboardList, Ban, Flag, Search, X } from 'lucide-react';
+import { Plus, Save, ClipboardList, Ban, Flag, Search, X, ChevronDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useFavourites } from '../../hooks/useFavourites';
 import { useCompetition } from './context';
@@ -245,11 +245,11 @@ export function TeamsTab() {
               const parsedBib = parseBibAndFlag(team.bibDescription);
               const on = followed.has(team.id);
               return (
-                <li key={team.id} className={`flex min-h-14 items-center gap-1 py-1.5 pl-4 pr-1.5 text-[rgb(var(--mg-ink))] ${team.isHorsConcours || team.isWithdrawn ? 'opacity-70' : ''}`}>
+                <li key={team.id} className={`relative flex min-h-14 items-center gap-1 py-1.5 pl-4 pr-1.5 text-[rgb(var(--mg-ink))] ${team.isHorsConcours || team.isWithdrawn ? 'opacity-70' : ''}`}>
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-base font-semibold leading-tight">
                       {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="h-3.5 w-5 shrink-0 rounded-[2px] object-cover" />}
-                      <Link to={`/competitions/${competition.id}/teams/${team.id}`} className="min-w-0 text-[rgb(var(--mg-ink))] hover:underline">
+                      <Link to={`/competitions/${competition.id}/teams/${team.id}`} className="min-w-0 text-[rgb(var(--mg-ink))] after:absolute after:inset-0 after:content-[''] hover:underline">
                         {team.displayName}
                       </Link>
                       {hasDec && (
@@ -274,7 +274,7 @@ export function TeamsTab() {
                       )}
                     </div>
                     {clubLabel(team.clubName) && <span className="truncate text-[13.5px] leading-tight text-[rgb(var(--mg-muted))]">{team.clubName}</span>}
-                    {mayAssignTrainers && <TrainerPicker competitionId={competition.id} team={team} onSaved={reload} />}
+                    {mayAssignTrainers && <div className="relative z-10"><TrainerPicker competitionId={competition.id} team={team} onSaved={reload} /></div>}
                   </div>
                   {canEdit() && (
                     <button
@@ -285,7 +285,7 @@ export function TeamsTab() {
                         reload();
                       }}
                       title={team.isHorsConcours ? t('teams.list.markScoring') : t('teams.list.markHc')}
-                      className={`mg-small-btn !min-h-9 !px-2 !text-[10px] ${
+                      className={`mg-small-btn relative z-10 !min-h-9 !px-2 !text-[10px] ${
                         team.isHorsConcours ? '!text-[rgb(var(--mg-ok))]' : '!text-[rgb(var(--mg-muted))]'
                       }`}
                     >
@@ -294,7 +294,7 @@ export function TeamsTab() {
                   )}
                   <button
                     type="button"
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[rgb(var(--mg-heading))] hover:bg-[rgb(var(--mg-subtle))]"
+                    className="relative z-10 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[rgb(var(--mg-heading))] hover:bg-[rgb(var(--mg-subtle))]"
                     aria-pressed={on}
                     aria-label={t(on ? 'teams.unfollow' : 'teams.follow', { name: team.displayName })}
                     onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}
@@ -392,12 +392,15 @@ function arenaOf(sessions: Session[], sectionId: number | null | undefined): str
 function TrainerPicker({ competitionId, team, onSaved }: { competitionId: number; team: Team; onSaved: () => void }) {
   const t = useT();
   const [trainers, setTrainers] = useState<{ userId: string; fullName: string }[]>([]);
+  const [open, setOpen] = useState(false);
   const [error, setError] = useState(false);
+  // The club's trainers are fetched only when the organiser opens this picker, not for every team on the page.
   useEffect(() => {
+    if (!open) return;
     api.get<{ userId: string; fullName: string }[]>(`/clubs/${team.clubId}/trainers`)
       .then((r) => setTrainers(r.data))
       .catch(() => setTrainers([]));
-  }, [team.clubId]);
+  }, [open, team.clubId]);
   // The current trainer stays selectable even if they belong to another club.
   const options = team.trainerUserId && !trainers.some((trainer) => trainer.userId === team.trainerUserId)
     ? [{ userId: team.trainerUserId, fullName: team.trainerName ?? t('teams.list.currentTrainer') }, ...trainers]
@@ -408,6 +411,15 @@ function TrainerPicker({ competitionId, team, onSaved }: { competitionId: number
       await api.put(`/competitions/${competitionId}/teams/${team.id}`, { trainerUserId });
       onSaved();
     } catch { setError(true); }
+  }
+  if (!open) {
+    return (
+      <button type="button" className="relative inline-flex min-h-11 items-center gap-1 text-left text-[13px] text-[rgb(var(--mg-muted))] after:absolute after:-inset-x-1 after:inset-y-0 after:content-['']"
+        aria-label={t('teams.list.changeTrainer', { name: team.displayName })} onClick={() => setOpen(true)}>
+        <span className="truncate">{team.trainerName ?? t('teams.list.noTrainer')}</span>
+        <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+      </button>
+    );
   }
   return (
     <label className="block text-[10px] text-[rgb(var(--mg-muted))]">

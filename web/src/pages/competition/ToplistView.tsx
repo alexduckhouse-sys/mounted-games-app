@@ -35,8 +35,8 @@ type View = ToplistViewTab;
 
 const separatorLabel = 'flex items-center gap-2 border-b border-[rgb(var(--mg-rule-soft))] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-[rgb(var(--mg-red))]';
 const dashes = <span aria-hidden="true" className="flex-1 border-t-2 border-dashed border-current" />;
-// Tied teams share a number and a soft tint, nothing more.
-const TIED = { background: 'rgb(var(--mg-heading) / .07)' };
+// Tied teams share a number with an equals sign and a thick bar down the left edge (design-decisions.md).
+const TIED = { boxShadow: 'inset 6px 0 0 rgb(var(--mg-heading))' };
 const NOTE_TONE = { safe: 'text-[rgb(var(--mg-ok))]', need: 'text-[rgb(var(--mg-late-time))]' } as const;
 
 /**
@@ -98,6 +98,8 @@ export function ToplistView({
     return inner;
   };
   const hasFinals = list.finals.length > 0;
+  // Every final has been run: the table is the final result, so there is no cut-off left to show.
+  const finished = hasFinals && list.finals.every((group) => group.complete === true);
   const hasSessions = list.bySession.sessions.length > 0;
   // null until the viewer picks one, so finals become the default the moment they have results.
   const [internalChosen, setInternalChosen] = useState<View | null>(null);
@@ -174,6 +176,7 @@ export function ToplistView({
         )}
 
         {view === 'totals' && <>
+          {finished && <h2 className="mg-h2">{t('competition.toplist.finalResults')}</h2>}
           {places != null && places > 0 && <p className="text-sm font-medium leading-snug text-[rgb(var(--mg-body))]">{t('competition.toplist.topMake', { places })}</p>}
           <span aria-live="polite" className="sr-only">{list.started && list.rows[0] ? `${t('competition.toplist.totals')}: ${list.rows[0].teamName}` : ''}</span>
           <section aria-label={t('competition.toplist.totals')} className="mg-card overflow-hidden">
@@ -186,7 +189,7 @@ export function ToplistView({
                 const fav = isFav(row.teamId);
                 const tied = list.started && row.joint;
                 const content = <>
-                  <span className="mg-display w-7 shrink-0 text-xl font-bold leading-none">{list.started ? row.position : '—'}<span className="sr-only">{list.started && row.joint ? <>{' '}{t('competition.toplist.joint')}</> : ''}</span></span>
+                  <span className="mg-display w-9 shrink-0 text-xl font-bold leading-none">{list.started ? row.position : '—'}{list.started && row.joint && <span aria-hidden="true">=</span>}<span className="sr-only">{list.started && row.joint ? <>{' '}{t('competition.toplist.joint')}</> : ''}</span></span>
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-1">
                     <span data-grow="start" className="truncate text-base font-semibold leading-tight">{renderTeamName(row.teamId, row.teamName, fav, false)}</span>
                     {note && <span className={`text-[13.5px] font-medium leading-none ${tone ? NOTE_TONE[tone] : 'text-[rgb(var(--mg-body))]'}`}>{note}</span>}
@@ -209,7 +212,7 @@ export function ToplistView({
                       <RowBox open={openRow} href={teamHref(row.teamId)}>{content}</RowBox>
                       <FollowGlimmer on={fav} />
                     </motion.li>
-                    {list.cutAfter === index && index < list.rows.length - 1 && (
+                    {!finished && list.cutAfter === index && index < list.rows.length - 1 && (
                       <motion.li layout="position" transition={RESORT} role="separator" aria-label={t('competition.toplist.cutoff')} className={`${separatorLabel} !py-1.5`}>
                         {dashes}{t('competition.toplist.cutoff')}{dashes}
                       </motion.li>
