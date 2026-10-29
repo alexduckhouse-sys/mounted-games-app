@@ -456,7 +456,7 @@ public record RaceDto(
     int OrderIndex, bool IsComplete,
     DateTime? StartedAt, DateTime? FinishedAt,
     IReadOnlyList<ResultDto> Results,
-    bool UnderReview = false);
+    bool UnderReview = false, bool StartIsExplicit = false);
 
 public record UpdateHeatDurationRequest(int? DurationMinutes);
 
@@ -489,7 +489,7 @@ public record CreateHeatRequest(
 public record SubmitRaceResultsRequest(
     IReadOnlyList<FinishingPlaceDto> Places,
     IReadOnlyList<FinishingPlaceDto>? Expected = null,
-    string? Reason = null);
+    string? Reason = null, DateTime? FinishedAt = null);
 /// <summary>Status null means Eliminated when Eliminated is set. RefereeNote is private to staff (500 characters at most).</summary>
 /// <param name="Points">Optional points for a finisher, in whole or half points (a dead heat, say); left out, the place decides.</param>
 public record FinishingPlaceDto(int TeamId, int Place, bool Eliminated, ResultStatus? Status = null, string? RefereeNote = null, double? Points = null);

@@ -45,7 +45,7 @@ public class ScoringController : ControllerBase
         {
             await _scoring.ApplyLegacyAsync(raceId, req.Places, req.Expected,
                 User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
-                correctionReason, cancellationToken);
+                correctionReason, cancellationToken, finishedAt: req.FinishedAt);
         }
         catch (ScoreConflictException ex) { return await ScoreConflict(race, ex.Message, ex.ExistingPlaces, ex.IncomingPlaces); }
         catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
@@ -295,13 +295,14 @@ public class ScoringController : ControllerBase
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RaceClockRequest? req = null,
         CancellationToken cancellationToken = default)
     {
-        var tappedAt = ClockTime(req?.At, DateTime.UtcNow);
+        var tappedAt = req?.At ?? DateTime.UtcNow;
         Race race;
         try
         {
             race = await _scoring.UpdateRaceClockAsync(
                 raceId, true, tappedAt, req?.At is not null, cancellationToken);
         }
+        catch (ScoreValidationException ex) { return BadRequest(new { message = ex.Message }); }
         catch (KeyNotFoundException) { return NotFound(); }
         catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
         catch (Exception ex) when (IsScoringConcurrency(ex))

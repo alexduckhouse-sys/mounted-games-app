@@ -438,3 +438,5 @@ describe('TimetablePage after the draw', () => {
     expect(screen.getByText(/has started or has scores/)).toBeInTheDocument();
   });
 });
+
+vi.mock('../../components/PaceReview', () => ({ PaceReview: () => null }));

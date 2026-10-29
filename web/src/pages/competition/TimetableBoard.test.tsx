@@ -549,7 +549,7 @@ it('links heat rows directly to the heat without a lanes dropdown and shows a si
 it('formats delays of an hour or more as hours and minutes, and lets organisers move the times by typed minutes from the timing sheet behind the pencil', async () => {
   const postSpy = vi.spyOn(api, 'post').mockResolvedValue({ data: [] } as never);
   auth.organise = true;
-  const completedRaces = [1, 2, 3, 4, 5].map((id) => race(id, { isComplete: true }));
+  const completedRaces = [1, 2, 3, 4, 5].map((id) => race(id, { isComplete: true, startIsExplicit: true, startedAt: `${day}T09:${String((id - 1) * 4).padStart(2, '0')}:00`, finishedAt: `${day}T09:${String(id * 4).padStart(2, '0')}:00` }));
   setCompetition({
     sessions: [
       session(1, {
@@ -706,3 +706,6 @@ it('warms a row once when a delay moves its start time while you watch, but not 
   expect(moved.querySelector('.tt-shifted')).not.toBeNull();
   expect(container.querySelectorAll('.tt-shifted')).toHaveLength(1);
 });
+
+// Live call-up delivery is exercised by reliability tests; keep these page checks deterministic.
+vi.mock('./reliability/heatCalls', async (original) => ({ ...(await original<typeof import('./reliability/heatCalls')>()), useHeatCalls: () => ({ calls: [], error: '', reload: vi.fn() }) }));

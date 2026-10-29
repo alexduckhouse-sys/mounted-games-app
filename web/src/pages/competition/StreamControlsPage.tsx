@@ -51,7 +51,7 @@ export function StreamControlsPage() {
   const tiles = useOverlayTiles({ competitionId: competition.id, overlay, saveOverlay, onAir, setAutoOn: setOn });
   const clips = useSavedReplays(competition.id);
   const arenaName = onAir?.arenaName || competition.sessions[0]?.arenaName || 'Arena 1';
-  const replay = useControllerReplay({ competitionId: competition.id, arena: arenaName, streamId: onAir?.id ?? null, media, scoreCards });
+  const replay = useControllerReplay({ competitionId: competition.id, arena: arenaName, streamId: onAir?.id ?? null, media, scoreCards, sessions: competition.sessions });
   const requested = params.get('tab');
   const tab: StreamControlsTab = TABS.some((item) => item.id === requested) ? (requested as StreamControlsTab) : 'overlay';
   const choose = useCallback((next: StreamControlsTab) => setParams({ tab: next }, { replace: true }), [setParams]);

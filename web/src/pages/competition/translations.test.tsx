@@ -141,3 +141,6 @@ describe('small shared pieces', () => {
     expect(screen.getByText('Oak Feeds')).toBeInTheDocument();
   });
 });
+
+// Live call-up delivery is exercised by reliability tests; keep these page checks deterministic.
+vi.mock('./reliability/heatCalls', async (original) => ({ ...(await original<typeof import('./reliability/heatCalls')>()), useHeatCalls: () => ({ calls: [], error: '', reload: vi.fn() }) }));

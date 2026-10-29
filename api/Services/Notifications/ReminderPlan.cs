@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Entities.Operations;
 using MountedGames.Api.Services.Calendar;
 
 namespace MountedGames.Api.Services.Notifications;
@@ -67,6 +68,21 @@ internal static class ReminderPlan
                         Add($"brief:{s.Id}", s.CompetitionId, scheduled, 30, "Briefing in 30 minutes", s.Name, users);
                 }
             }
+        }
+        var heatCalls = await db.Set<HeatCall>().AsNoTracking().Where(c => c.CalledAt > now.AddMinutes(-15)
+            && (!competitionId.HasValue || c.Heat!.Session!.CompetitionId == competitionId)).ToListAsync(ct);
+        foreach (var call in heatCalls)
+        {
+            var session = sessions.FirstOrDefault(s => s.Heats.Any(h => h.Id == call.HeatId));
+            var heat = session?.Heats.First(h => h.Id == call.HeatId);
+            if (session is null || heat is null || heat.StartedAt.HasValue || heat.FinishedAt.HasValue
+                || heat.Races.Any(r => r.StartedAt.HasValue || r.IsComplete)) continue;
+            var users = heat.Entries.SelectMany(e => usersByTeam.GetValueOrDefault(e.TeamId) ?? []).ToHashSet();
+            var key = $"collecting-ring:{heat.Id}";
+            var label = heat.Label ?? $"Heat {heat.OrderIndex}";
+            var payload = new PushPayload("Collecting ring call", $"{label} · {session.Name} · {session.ArenaName ?? "Main Arena"}: please go to the collecting ring now.", key, $"/competitions/{session.CompetitionId}/timetable");
+            plans.Add(new(key, session.CompetitionId, call.CalledAt, call.CalledAt.AddMinutes(15),
+                call.CalledAt.Ticks.ToString(), payload, users));
         }
         return plans;
 

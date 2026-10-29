@@ -21,7 +21,8 @@ export interface SavedReplayClip {
   streamId?: number;
   arenaName: string;
   label: string;
-  createdAt: string; // ISO string
+  createdAt: string; // Recording end, not export completion.
+  recordingSegments?: { startAt: string; endAt: string; offsetSeconds: number }[];
   durationSeconds: number;
   mimeType: string;
   blob: Blob;
@@ -41,6 +42,7 @@ export interface SavedReplayClip {
     name: string;
     orderIndex: number;
     startedAt?: string | null;
+    startIsExplicit?: boolean;
     finishedAt?: string | null;
     isComplete?: boolean;
   }>;
@@ -168,7 +170,7 @@ async function persistClip(clip: SavedReplayClip): Promise<void> {
         savedHighlight: clip.savedHighlight, trimStartSeconds: clip.trimStartSeconds,
         trimEndSeconds: clip.trimEndSeconds, followKeyframes: clip.followKeyframes,
         resolutionLabel: clip.resolutionLabel,
-        source: clip.source, races: clip.races,
+        source: clip.source, races: clip.races, recordingSegments: clip.recordingSegments,
       });
     });
     clip.storageWarning = undefined;
@@ -293,13 +295,33 @@ export function subscribeSavedReplays(listener: () => void): () => void {
 }
 
 /** Remembers where a clip came from, so the Replay tab can list race recordings apart from the rest. */
-export function tagSavedReplay(clipId: string, source: NonNullable<SavedReplayClip['source']>): SavedReplayClip | null {
+export function tagSavedReplay(clipId: string, source: NonNullable<SavedReplayClip['source']>, races?: SavedReplayClip['races']): SavedReplayClip | null {
   const clip = savedReplays.find((c) => c.id === clipId);
   if (!clip) return null;
   clip.source = source;
+  if (races) clip.races = races;
   void persistClip(clip);
   notifyListeners();
   return clip;
+}
+
+/** Refresh chapter evidence when timing reaches this device after the recording was saved. */
+export function updateReplayRaceTimes(competitionId: number, arenaName: string, races: NonNullable<SavedReplayClip['races']>) {
+  for (const clip of savedReplays) {
+    if (clip.competitionId !== competitionId || clip.arenaName !== (arenaName || 'Arena')) continue;
+    const end = Date.parse(clip.createdAt), start = end - clip.durationSeconds * 1000;
+    const relevant = races.filter((race) => {
+      const at = Date.parse(race.startedAt ?? race.finishedAt ?? '');
+      return clip.recordingSegments?.length
+        ? clip.recordingSegments.some((segment) => at >= Date.parse(segment.startAt) && at <= Date.parse(segment.endAt))
+        : at >= start - 3000 && at <= end;
+    });
+    if (relevant.length && JSON.stringify(clip.races) !== JSON.stringify(relevant)) {
+      clip.races = relevant;
+      void persistClip(clip);
+      notifyListeners();
+    }
+  }
 }
 
 export function markReplayAsHighlight(
@@ -361,7 +383,13 @@ export async function exportTrimmedClip(
   if (options.signal?.aborted) throw new DOMException('Replay preparation cancelled.', 'AbortError');
   const exported: SavedReplayClip = {
     ...clip, id: crypto.randomUUID(), blob, url: URL.createObjectURL(blob), mimeType: blob.type,
-    createdAt: new Date().toISOString(), durationSeconds: end - start, savedHighlight: true,
+    createdAt: new Date(Date.parse(clip.createdAt) - (clip.durationSeconds - end) * 1000).toISOString(), durationSeconds: end - start, savedHighlight: true,
+    recordingSegments: clip.recordingSegments?.flatMap((segment) => {
+      const length = (Date.parse(segment.endAt) - Date.parse(segment.startAt)) / 1000;
+      const from = Math.max(start, segment.offsetSeconds), to = Math.min(end, segment.offsetSeconds + length);
+      return to <= from ? [] : [{ startAt: new Date(Date.parse(segment.startAt) + (from - segment.offsetSeconds) * 1000).toISOString(),
+        endAt: new Date(Date.parse(segment.startAt) + (to - segment.offsetSeconds) * 1000).toISOString(), offsetSeconds: from - start }];
+    }),
     trimStartSec: 0, trimEndSec: end - start, trimStartSeconds: 0, trimEndSeconds: end - start,
     // The original keeps editable keyframes; the new clip already contains their rendered movement.
     followKeyframes: undefined,
@@ -540,7 +568,12 @@ export function createReplayBuffer(options: ReplayBufferOptions): ReplayBufferHa
       const seconds = sources.reduce((sum, source) => sum + source.to - source.from, 0);
       const clip: SavedReplayClip = {
         id: crypto.randomUUID(), competitionId: options.competitionId, streamId: options.streamId,
-        arenaName: options.arenaName, label: label?.trim() || `${options.arenaName} Replay`, createdAt: new Date(now()).toISOString(),
+        arenaName: options.arenaName, label: label?.trim() || `${options.arenaName} Replay`, createdAt: new Date(Math.min(end, selected[selected.length - 1].end)).toISOString(),
+        recordingSegments: selected.map((segment, index) => ({
+          startAt: new Date(Math.max(start, segment.start)).toISOString(),
+          endAt: new Date(Math.min(end, segment.end)).toISOString(),
+          offsetSeconds: sources.slice(0, index).reduce((sum, source) => sum + source.to - source.from, 0),
+        })),
         durationSeconds: seconds, mimeType: blob.type, blob, url, savedHighlight: false,
         trimStartSeconds: 0, trimEndSeconds: seconds, trimStartSec: 0, trimEndSec: seconds,
         resolutionLabel: settings.resolutionLabel ?? options.resolutionLabel,

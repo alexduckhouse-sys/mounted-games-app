@@ -1,3 +1,4 @@
+import { OfficialResultsDownload } from './OfficialResultsDownload';
 import { tr } from '../../i18n/translate';
 import { useT } from '../../i18n/LanguageContext';
 import { useEffect, useRef, useState } from 'react';
@@ -185,6 +186,11 @@ export function SponsorsSharingPage() {
                 </button>
               </>
             )}
+
+            <RefineList as="div">
+              <Link className="rf-row" to={`/event-tools/${competition.id}/print/sponsors`}><span className="rf-grow rf-t1">{t('ops2.print.sponsorReport')}</span></Link>
+              <OfficialResultsDownload competitionId={competition.id} />
+            </RefineList>
 
             <h2 className="rf-sec ops-tt-head"><span>{t('ops2.sponsors.share')}</span></h2>
             <RefineList as="div" label={t('ops2.sponsors.share')}>

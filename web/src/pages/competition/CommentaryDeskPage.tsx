@@ -1,3 +1,4 @@
+import { CallUpStrip } from './reliability/CallUpStrip';
 import { clubLabel } from '../../lib/clubName';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -359,6 +360,7 @@ export function CommentaryDeskPage() {
   return (
     <div className="mx-auto flex w-full flex-col gap-4 py-3">
       {standingsStale && (standings.length ? savedNotice && <Notice tone="info">{t('desk.commentary.savedStandings')}</Notice> : <Notice tone="info">{t('desk.commentary.waitingOfficial')}</Notice>)}
+      {canControlStreams && <CallUpStrip competitionId={competition.id} sessions={competition.sessions} />}
       {/* Top Bar */}
       <header className="mg-card flex flex-col gap-3 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">

@@ -9,10 +9,10 @@ import { feeText } from '../../lib/entryOptions';
 import { paidWord } from '../../lib/paidWord';
 import { arrivalManifestCsv, arrivalWindowLabel, computeFeeDispositionLedger, groupArrivalManifest } from '../../lib/entryWorkflows';
 import { displaySectionName } from '../../lib/section';
-import { treasurerCsv } from '../../lib/treasurerCsv';
+import { AccountingExportError, accountingCsv, treasurerCsv, type AccountingPreset } from '../../lib/treasurerCsv';
 import { whatsAppUrl } from '../../lib/whatsapp';
 import type { CompetitionDetail, CompetitionEntrySettings, SectionSignup } from '../../types';
-import { RefineList, RefineSheet } from '../refine/Refine';
+import { RefineChoiceRow, RefineList, RefineSheet } from '../refine/Refine';
 import { BacsMatchSheet, ClubInvoicesSheet, RemindUnpaidSheet } from './EntryMoneySheets';
 import { dispositionLabel, entriesSummaryText, fetchShopOrders } from './entryLogic';
 import './entryTools.css';
@@ -157,13 +157,15 @@ function TreasurerSheet({ competition, signups, onClose }: { competition: Compet
   const t = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [preset, setPreset] = useState<'detail' | AccountingPreset>('detail');
   async function download() {
     setBusy(true); setError(null);
     try {
       const orders = await fetchShopOrders(competition.id);
-      const csv = treasurerCsv({ competitionId: competition.id, competitionName: competition.name, signups, orders, teams: competition.teams });
-      downloadCsv(`${safeFilename(competition.name)}-treasurer.csv`, csv);
-    } catch (caught) { setError(apiErrorMessage(caught, t('ops2.tools.treasurerError'))); }
+      const input = { competitionId: competition.id, competitionName: competition.name, signups, orders, teams: competition.teams };
+      const csv = preset === 'detail' ? treasurerCsv(input) : accountingCsv(input, preset);
+      downloadCsv(`${safeFilename(competition.name)}-${preset === 'detail' ? 'treasurer' : preset}.csv`, csv);
+    } catch (caught) { setError(caught instanceof AccountingExportError ? caught.message : apiErrorMessage(caught, t('ops2.tools.treasurerError'))); }
     finally { setBusy(false); }
   }
   return (
@@ -171,6 +173,8 @@ function TreasurerSheet({ competition, signups, onClose }: { competition: Compet
       <div className="et-sheet">
         {error && <Notice>{error}</Notice>}
         <p className="rf-note">{t('ops2.tools.treasurerNote')}</p>
+        <RefineChoiceRow label={tr('completion.format')} value={preset} disabled={busy} onChange={setPreset} options={[{ value: 'detail', label: tr('completion.detailed') }, ...(!competition.isDemo ? [{ value: 'xero', label: 'Xero' }, { value: 'quickbooks', label: 'QuickBooks' }, { value: 'freeagent', label: 'FreeAgent' }] as const : [])]} />
+        {preset !== 'detail' && <p className="rf-note">{tr('completion.accountingHint')}</p>}
         <div className="et-actions">
           <button type="button" className="rf-btn rf-btn-primary" disabled={busy} onClick={() => void download()}>{t('ops2.tools.downloadCsv')}</button>
         </div>

@@ -16,7 +16,7 @@ public class StandingsCacheAndRaceStampTests : IClassFixture<ApiFactory>
     public StandingsCacheAndRaceStampTests(ApiFactory f) => _f = f;
 
     [Fact]
-    public async Task ScoringRace_AutoStampsFinishedAt_AndNextRaceStartedAt()
+    public async Task ScoringRace_StampsItsFinish_WithoutInventingNextFlagDown()
     {
         var a = await _f.CreateArenaAsync(3);
         var (heatId, races) = await _f.AddHeatAsync(a.SessionId, a.TeamIds, "Heat 1", 1, 3);
@@ -40,7 +40,7 @@ public class StandingsCacheAndRaceStampTests : IClassFixture<ApiFactory>
         Assert.NotNull(dtoR1.StartedAt);
         Assert.NotNull(dtoR1.FinishedAt);
         Assert.False(dtoR2.IsComplete);
-        Assert.NotNull(dtoR2.StartedAt);
+        Assert.Null(dtoR2.StartedAt);
         Assert.Null(dtoR2.FinishedAt);
         Assert.Null(dtoR3.StartedAt);
         Assert.Equal(heatId, heatAfterR1.Id);

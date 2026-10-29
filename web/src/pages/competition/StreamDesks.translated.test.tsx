@@ -140,3 +140,5 @@ describe('stream desks in French and Welsh', () => {
     expect(screen.queryByText('Save Highlight')).toBeNull();
   });
 });
+
+vi.mock('./streamControls/SavedOverlayLooks', () => ({ SavedOverlayLooks: () => null }));

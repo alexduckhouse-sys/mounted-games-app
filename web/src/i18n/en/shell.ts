@@ -2,6 +2,10 @@ import type { Message } from '../messages';
 
 /** The shell and the pages everyone meets: header, menu, tabs, banners, pop-ups, events list, settings, small pages. */
 export const shell = {
+  'shell.menu.producerOverlay': 'Producer overlay',
+  'shell.menu.decQuestions': 'Dec form questions',
+  'shell.menu.timetableHint': 'Set the timetable and draw',
+  'shell.menu.laneDraw': 'Lane draw',
   // Header
   'shell.header.backToTimetable': 'Back to timetable',
   'shell.header.back': 'Back',

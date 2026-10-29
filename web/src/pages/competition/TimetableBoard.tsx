@@ -1,3 +1,5 @@
+import { HeatCalledBadge } from './reliability/CallUpStrip';
+import { useHeatCalls, type HeatCall } from './reliability/heatCalls';
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -59,6 +61,7 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
   const { locale } = useLanguage();
   const title = titleProp ?? t('competition.timetable.title');
   const { competition, reload, updatedAt } = useCompetition();
+  const { calls } = useHeatCalls(competition.id);
   const { canOrganise } = useAuth();
   const favHook = useFavourites() as {
     favourites?: { competitionId: number; teamId: number }[];
@@ -272,6 +275,7 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
           <TimetableEvent
             key={row.key}
             row={row}
+            calls={calls}
             competitionId={competition.id}
             showArena={arenas.length > 1 && !selectedArena && (!sharedArena || !group.title)}
             hasFollowedTeam={Boolean(row.heat?.entries.some((e) => isTeamFav(e.teamId)))}
@@ -422,8 +426,9 @@ function finalsByAgeGroup(rows: TimetableRow[]) {
 }
 
 /** One timetable line: time, name with a small sub-line, "+N" or "−N" when moved, status colour dot. */
-function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false }: {
+function TimetableEvent({ row, calls, competitionId, showArena, hasFollowedTeam = false }: {
   row: TimetableRow;
+  calls: HeatCall[];
   competitionId: number;
   showArena: boolean;
   hasFollowedTeam?: boolean;
@@ -468,6 +473,7 @@ function TimetableEvent({ row, competitionId, showArena, hasFollowedTeam = false
         {name}
         {hasFollowedTeam && <Star aria-hidden="true" className="tt-fav-star" size={12} />}
       </strong>
+      {heat && <HeatCalledBadge heatId={heat.id} calls={calls} />}
       {sub && <span className="tt-sub">{sub}</span>}
       {showShift && (
         <span className={`tt-planned${shiftMinutes < 0 ? ' tt-planned-early' : ''}`} aria-hidden="true">{shiftText}</span>

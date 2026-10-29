@@ -1,3 +1,4 @@
+import { SubstitutionRequests } from '../competition/reliability/SubstitutionRequests';
 import { useT } from '../../i18n/LanguageContext';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
@@ -66,7 +67,7 @@ interface LockTime { declarationsCloseAt: string | null }
 export function EntriesPage() {
   const t = useT();
   const { competition, reload } = useCompetition();
-  const { search } = useLocation();
+  const { search, hash } = useLocation();
   const passSignupId = parsePassSignupIdFromSearch(search);
   const [passNotice, setPassNotice] = useState<string | null>(null);
   const [entries, setEntries] = useState<TeamEntry[] | null>(null);
@@ -75,7 +76,7 @@ export function EntriesPage() {
   const [lock, setLock] = useState<string | null>(null);
   const [config, setConfig] = useState<DecFormConfig | null>(null);
   const [open, setOpen] = useState<number | null>(null);
-  const [setup, setSetup] = useState(false);
+  const [setup, setSetup] = useState(hash === '#dec-form' || hash === '#fm-dec');
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -206,6 +207,7 @@ export function EntriesPage() {
     <RefinePage>
       <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.hub.back')} context={competition.name} title={t('ops2.entries.title')} />
       <div className="ops-cards ops-entries" aria-busy={busy}>
+        <SubstitutionRequests competitionId={competition.id} canDecide onChanged={reloadAll} />
         {error && <Notice>{error}</Notice>}
         {passNotice && <Notice>{passNotice}</Notice>}
         {toast.node}
@@ -227,6 +229,27 @@ export function EntriesPage() {
           <RefineChoiceRow label={t('ops2.entries.show')} value={filter} onChange={setFilter}
             options={FILTERS.map((f) => ({ value: f.value, label: f.value === 'all' ? t('ops2.entries.allTeams') : `${f.label} (${counts[f.value]})` }))} />
         </RefineList>
+
+        <section id="dec-form" aria-label={t('ops2.entries.decForm')}>
+        <RefineSection title={t('ops2.entries.decForm')} />
+        <RefineList as="div">
+          <div className="rf-row">
+            <span className="rf-grow"><span className="rf-t1">{t('ops2.entries.qAndFlags')}</span>{config && <span className="rf-t2">{t('ops2.entries.qCount', { questions: questionCount(config), rules: rulesOf(config).length })}</span>}</span>
+            <button type="button" className="rf-btn" aria-expanded={setup} onClick={() => setSetup((v) => !v)}>{setup ? t('common.done') : t('common.edit')}</button>
+          </div>
+          {setup && config && (
+            <>
+              <RefineDateTimeRow label={t('ops2.entries.deadline')} value={lock} eventDays={days} disabled={busy} onChange={(iso) => void saveLock(iso)} />
+              <div className="rf-row">
+                <span className="rf-grow"><span className="rf-t1">{t('ops2.entries.download')}</span><span className="rf-t2">{t('ops2.entries.downloadSub')}</span></span>
+                <button type="button" className="rf-btn" disabled={forms.length === 0}
+                  onClick={() => downloadCsv(`${safeFilename(competition.name)}-dec-forms.csv`, decFormsCsv(forms, config.customFields))}>CSV</button>
+              </div>
+            </>
+          )}
+        </RefineList>
+        {setup && config && <SetupEditor config={config} busy={busy} onSave={saveConfig} />}
+        </section>
 
         {filter !== 'all' && (
           <SignupList
@@ -315,24 +338,7 @@ export function EntriesPage() {
           </Fragment>
         ))}
 
-        <RefineSection title={t('ops2.entries.decForm')} />
-        <RefineList as="div">
-          <div className="rf-row">
-            <span className="rf-grow"><span className="rf-t1">{t('ops2.entries.qAndFlags')}</span>{config && <span className="rf-t2">{t('ops2.entries.qCount', { questions: questionCount(config), rules: rulesOf(config).length })}</span>}</span>
-            <button type="button" className="rf-btn" aria-expanded={setup} onClick={() => setSetup((v) => !v)}>{setup ? t('common.done') : t('common.edit')}</button>
-          </div>
-          {setup && config && (
-            <>
-              <RefineDateTimeRow label={t('ops2.entries.deadline')} value={lock} eventDays={days} disabled={busy} onChange={(iso) => void saveLock(iso)} />
-              <div className="rf-row">
-                <span className="rf-grow"><span className="rf-t1">{t('ops2.entries.download')}</span><span className="rf-t2">{t('ops2.entries.downloadSub')}</span></span>
-                <button type="button" className="rf-btn" disabled={forms.length === 0}
-                  onClick={() => downloadCsv(`${safeFilename(competition.name)}-dec-forms.csv`, decFormsCsv(forms, config.customFields))}>CSV</button>
-              </div>
-            </>
-          )}
-        </RefineList>
-        {setup && config && <SetupEditor config={config} busy={busy} onSave={saveConfig} />}
+
       </div>
     </RefinePage>
   );

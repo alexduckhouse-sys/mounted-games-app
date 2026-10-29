@@ -1,7 +1,8 @@
+import { PaceReview } from '../../components/PaceReview';
 import { useT } from '../../i18n/LanguageContext';
 import { activeLocale } from '../../i18n/translate';
 import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
-import { ArrowDown, ArrowUp, Minus, Pencil, Plus } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, Minus, Pencil, Plus } from 'lucide-react';
 import { useSavedToast } from '../../components/SavedTick';
 import { TickerNumber } from '../../components/TickerNumber';
 import { api } from '../../api';
@@ -276,6 +277,7 @@ export function TimetablePage() {
       {savedToast.node}
       <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.hub.back')} context={competition.name} title={t('ops.tt.title')} />
       <div className="ops-cards ops-tt" aria-busy={busy}>
+        <PaceReview competitionId={competition.id} />
         <DrawUndoBanner competitionId={competition.id} version={undoVersion} onRestored={reload} />
         <TimetableClashes competition={competition} />
         {error && <Notice>{error}</Notice>}
@@ -302,6 +304,64 @@ export function TimetablePage() {
             <ShareTextButtons title={t('ops.tt.shareTitle')} name={t('ops.tt.shareName')} text={timetableShareText(competition, `${window.location.origin}/competitions/${competition.id}`)} />
           </div>
         </RefineList>
+
+        <details className="rf-list"><summary className="rf-row"><span className="rf-grow rf-t1">{t('ops.tt.hatbands')}</span><span className="rf-t2">{bands.length}</span><ChevronDown className="rf-chev h-4 w-4" aria-hidden="true" /></summary>
+        <RefineList as="div" label={t('ops.tt.hatbands')}>
+          {bands.map((band, i) => (
+            <Fragment key={i}>
+              <div className="rf-row">
+                <span className="ops-lane-badge">{i + 1}</span>
+                <span className="ops-dot-colour" aria-hidden="true" style={{ background: hatbandColour(band) }} />
+                <span className="rf-grow rf-t1">{hatbandName(band)}</span>
+                <button type="button" className="ops-ibtn" aria-label={t('ops.tt.moveBandUp', { name: hatbandName(band) })} disabled={busy || i === 0} onClick={() => moveBand(i, -1)}><ArrowUp className="h-4 w-4" aria-hidden="true" /></button>
+                <button type="button" className="ops-ibtn" aria-label={t('ops.tt.moveBandDown', { name: hatbandName(band) })} disabled={busy || i === bands.length - 1} onClick={() => moveBand(i, 1)}><ArrowDown className="h-4 w-4" aria-hidden="true" /></button>
+                <RefineMenu label={t('ops.tt.moreFor', { name: hatbandName(band) })} disabled={busy} items={[
+                  { label: t('ops.tt.changeColour'), onSelect: () => { setAddingBand(false); setChanging(i); } },
+                  { label: t('ops.tt.remove'), danger: true, onSelect: () => { setChanging(null); void saveBands(bands.filter((_, j) => j !== i)); } },
+                ]} />
+              </div>
+              {changing === i && <BandEditor band={band} onSave={(value) => void saveBand(i, value)} onDone={() => setChanging(null)} />}
+            </Fragment>
+          ))}
+          {bands.length === 0 && (
+            <div className="rf-row"><span className="rf-grow rf-t2">{t('ops.tt.noBands')}</span>
+              <button type="button" className="rf-btn" disabled={busy} onClick={() => void saveBands(HATBAND_COLOURS.slice(0, 6))}>{t('ops.tt.usual')}</button></div>
+          )}
+          {bands.length < MAX_LANES && !addingBand && <button type="button" className="ops-addbar ops-addrow" disabled={busy} onClick={() => { setChanging(null); setAddingBand(true); }}><Plus className="h-4 w-4" aria-hidden="true" />{t('ops.tt.addBand')}</button>}
+          {addingBand && <AddBand busy={busy} onAdd={(value) => { void saveBands([...bands, value]); setAddingBand(false); }} onCancel={() => setAddingBand(false)} />}
+        </RefineList>
+        {bands.length > 0 && <div className="ops-end-left"><button type="button" className="ops-danger-link" disabled={busy} onClick={() => { setChanging(null); void saveBands([]); }}>{t('ops.tt.removeAllBands')}</button></div>}
+
+
+        </details>
+        <details className="rf-list"><summary className="rf-row"><span className="rf-grow rf-t1">{t('shell.menu.laneDraw')}</span><ChevronDown className="rf-chev h-4 w-4" aria-hidden="true" /></summary>
+        <RefineList as="div">
+          <RefineChoiceRow label={t('ops.tt.section')} value={sectionId} options={competition.sections.map((s) => ({ value: String(s.id), label: s.displayName }))} disabled={busy || competition.sections.length === 0}
+            onChange={(value) => { setSectionId(value); setPreview(null); }} />
+          <div className="rf-row">
+            <span className="rf-grow rf-t1">{t('ops.tt.lanesHeat1')}</span>
+            <button type="button" className="rf-btn rf-btn-primary" disabled={busy || !sectionId} onClick={() => void draw()}>{t('ops.tt.draw')}</button>
+          </div>
+        </RefineList>
+        {heatOne && (
+          <>
+            <h2 className="rf-sec ops-tt-head"><span>{t('ops.tt.heat1')}</span></h2>
+            <RefineList as="div" label={t('ops.tt.heat1')}>
+              {heatOne.teams.slice().sort((a, b) => a.laneIndex - b.laneIndex).map((team) => (
+                <div key={team.teamId} className="rf-row">
+                  <span className="ops-dot-colour" aria-hidden="true" style={{ background: bands[team.laneIndex - 1] ? hatbandColour(bands[team.laneIndex - 1]) : NO_COLOUR }} />
+                  <span className="rf-t1 ops-lane-label">{t('ops.tt.lane', { n: team.laneIndex })}</span>
+                  <span className="rf-grow rf-t1">{team.teamName}</span>
+                </div>
+              ))}
+            </RefineList>
+            <div className="rf-actions ops-draw-actions">
+              <button type="button" className="rf-btn rf-btn-primary" disabled={busy || !preview.fairness.everyTeamAppearsOncePerSession} onClick={() => void applyDraw()}>{t('ops.page.applyDraw')}</button>
+              <button type="button" className="rf-btn" disabled={busy} onClick={() => void draw()}>{t('ops.tt.shuffle')}</button>
+            </div>
+          </>
+        )}
+        </details>
 
         {groups.map((group) => {
           const first = group.list.find((i) => i.start);
@@ -387,60 +447,7 @@ export function TimetablePage() {
           );
         })}
 
-        <h2 className="rf-sec ops-tt-head"><span>{t('ops.tt.hatbands')}</span><span>{bands.length}</span></h2>
-        <RefineList as="div" label={t('ops.tt.hatbands')}>
-          {bands.map((band, i) => (
-            <Fragment key={i}>
-              <div className="rf-row">
-                <span className="ops-lane-badge">{i + 1}</span>
-                <span className="ops-dot-colour" aria-hidden="true" style={{ background: hatbandColour(band) }} />
-                <span className="rf-grow rf-t1">{hatbandName(band)}</span>
-                <button type="button" className="ops-ibtn" aria-label={t('ops.tt.moveBandUp', { name: hatbandName(band) })} disabled={busy || i === 0} onClick={() => moveBand(i, -1)}><ArrowUp className="h-4 w-4" aria-hidden="true" /></button>
-                <button type="button" className="ops-ibtn" aria-label={t('ops.tt.moveBandDown', { name: hatbandName(band) })} disabled={busy || i === bands.length - 1} onClick={() => moveBand(i, 1)}><ArrowDown className="h-4 w-4" aria-hidden="true" /></button>
-                <RefineMenu label={t('ops.tt.moreFor', { name: hatbandName(band) })} disabled={busy} items={[
-                  { label: t('ops.tt.changeColour'), onSelect: () => { setAddingBand(false); setChanging(i); } },
-                  { label: t('ops.tt.remove'), danger: true, onSelect: () => { setChanging(null); void saveBands(bands.filter((_, j) => j !== i)); } },
-                ]} />
-              </div>
-              {changing === i && <BandEditor band={band} onSave={(value) => void saveBand(i, value)} onDone={() => setChanging(null)} />}
-            </Fragment>
-          ))}
-          {bands.length === 0 && (
-            <div className="rf-row"><span className="rf-grow rf-t2">{t('ops.tt.noBands')}</span>
-              <button type="button" className="rf-btn" disabled={busy} onClick={() => void saveBands(HATBAND_COLOURS.slice(0, 6))}>{t('ops.tt.usual')}</button></div>
-          )}
-          {bands.length < MAX_LANES && !addingBand && <button type="button" className="ops-addbar ops-addrow" disabled={busy} onClick={() => { setChanging(null); setAddingBand(true); }}><Plus className="h-4 w-4" aria-hidden="true" />{t('ops.tt.addBand')}</button>}
-          {addingBand && <AddBand busy={busy} onAdd={(value) => { void saveBands([...bands, value]); setAddingBand(false); }} onCancel={() => setAddingBand(false)} />}
-        </RefineList>
-        {bands.length > 0 && <div className="ops-end-left"><button type="button" className="ops-danger-link" disabled={busy} onClick={() => { setChanging(null); void saveBands([]); }}>{t('ops.tt.removeAllBands')}</button></div>}
 
-        <h2 className="rf-sec ops-tt-head"><span>{t('ops.tt.draw')}</span></h2>
-        <RefineList as="div">
-          <RefineChoiceRow label={t('ops.tt.section')} value={sectionId} options={competition.sections.map((s) => ({ value: String(s.id), label: s.displayName }))} disabled={busy || competition.sections.length === 0}
-            onChange={(value) => { setSectionId(value); setPreview(null); }} />
-          <div className="rf-row">
-            <span className="rf-grow rf-t1">{t('ops.tt.lanesHeat1')}</span>
-            <button type="button" className="rf-btn rf-btn-primary" disabled={busy || !sectionId} onClick={() => void draw()}>{t('ops.tt.draw')}</button>
-          </div>
-        </RefineList>
-        {heatOne && (
-          <>
-            <h2 className="rf-sec ops-tt-head"><span>{t('ops.tt.heat1')}</span></h2>
-            <RefineList as="div" label={t('ops.tt.heat1')}>
-              {heatOne.teams.slice().sort((a, b) => a.laneIndex - b.laneIndex).map((team) => (
-                <div key={team.teamId} className="rf-row">
-                  <span className="ops-dot-colour" aria-hidden="true" style={{ background: bands[team.laneIndex - 1] ? hatbandColour(bands[team.laneIndex - 1]) : NO_COLOUR }} />
-                  <span className="rf-t1 ops-lane-label">{t('ops.tt.lane', { n: team.laneIndex })}</span>
-                  <span className="rf-grow rf-t1">{team.teamName}</span>
-                </div>
-              ))}
-            </RefineList>
-            <div className="rf-actions ops-draw-actions">
-              <button type="button" className="rf-btn rf-btn-primary" disabled={busy || !preview.fairness.everyTeamAppearsOncePerSession} onClick={() => void applyDraw()}>{t('ops.page.applyDraw')}</button>
-              <button type="button" className="rf-btn" disabled={busy} onClick={() => void draw()}>{t('ops.tt.shuffle')}</button>
-            </div>
-          </>
-        )}
       </div>
     </RefinePage>
   );

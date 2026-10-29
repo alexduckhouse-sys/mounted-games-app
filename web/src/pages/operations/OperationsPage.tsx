@@ -1,10 +1,12 @@
+import { SaveStartingPoint } from './SaveStartingPoint';
+import { OfficialResultsDownload } from './OfficialResultsDownload';
 import { useT } from '../../i18n/LanguageContext';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { usePageWidth } from '../../components/pageWidthState';
 import { MoreHorizontal, RefreshCw } from 'lucide-react';
 import { Notice } from '../../components/Notice';
 import { useToast } from '../../components/Toast';
-import { Navigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { useCompetition } from '../competition/context';
@@ -236,8 +238,12 @@ function OperationsPageContent() {
       {tool === 'passport' && <div className="ops-tools ops-flat"><PassportCheckTab competitionId={String(competition.id)} /></div>}
       {tool === 'import' && <TeamImportPanel competitionId={String(competition.id)} onImported={reloadCompetition} />}
       {tool === 'print' && <div className="ops-tools ops-flat"><PrintSheetsPanel competitionId={String(competition.id)} /></div>}
-      {tool === 'results' && <div className="ops-tools ops-flat"><ResultsBookTab competitionId={String(competition.id)} /></div>}
-      {tool === 'duplicate' && mayDuplicate && <DuplicateEventPanel competition={competition} />}
+      {tool === 'results' && <div className="ops-tools ops-flat">
+        <div className="rf-list"><Link className="rf-row" to={`/competitions/${competition.id}/prize-giving`}>{t('screen.pg.title')}</Link><OfficialResultsDownload competitionId={competition.id} /></div>
+        <ResultsBookTab competitionId={String(competition.id)} />
+      </div>}
+      {!tool && mayDuplicate && <div className="rf-list"><SaveStartingPoint competitionId={competition.id} competitionName={competition.name} /></div>}
+      {tool === 'duplicate' && mayDuplicate && <><DuplicateEventPanel competition={competition} /><div className="rf-list"><SaveStartingPoint competitionId={competition.id} competitionName={competition.name} /></div></>}
 
       {tool === 'draw' && (
         <section aria-label={t('ops.page.sectionDraw')}>

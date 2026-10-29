@@ -291,3 +291,5 @@ describe('Entry tools', () => {
     expect(screen.getByRole('link', { name: 'Share on WhatsApp' })).toHaveAttribute('href', expect.stringContaining('https://wa.me/?text='));
   });
 });
+
+vi.mock('../competition/reliability/SubstitutionRequests', () => ({ SubstitutionRequests: () => null }));

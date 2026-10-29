@@ -220,3 +220,6 @@ describe('EntriesPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Nope.');
   });
 });
+
+// Requests have their own access, race and decision tests.
+vi.mock('../competition/reliability/SubstitutionRequests', () => ({ SubstitutionRequests: () => null }));

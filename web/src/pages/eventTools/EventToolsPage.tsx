@@ -1,3 +1,5 @@
+import { OfficialResultsDownload } from '../operations/OfficialResultsDownload';
+import { normaliseTeamCsvHeaders, TeamImportFormatError } from './teamImportHeaders';
 import { useT } from '../../i18n/LanguageContext';
 import { ArchiveDownload } from './ArchiveDownload';
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
@@ -43,16 +45,19 @@ export function TeamImportPanel({ competitionId, onImported }: { competitionId: 
   const [preview, setPreview] = useState<CsvTeamImportPreview | null>(null);
   const [busy, setBusy] = useState<'preview' | 'apply' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [preparedCsv, setPreparedCsv] = useState('');
+  const [mappedColumns, setMappedColumns] = useState<string[]>([]);
   const [retryPreview, setRetryPreview] = useState(false);
   const toast = useToast();
 
   function changeCsv(value: string) {
-    setCsv(value); setPreview(null);
+    setCsv(value); setPreview(null); setMappedColumns([]);
   }
 
   async function loadFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (file.size > 256 * 1024) { setError(tr('completion.csvSize')); return; }
     try { changeCsv(await file.text()); }
     catch { setError(t('ops3.import.readError')); }
   }
@@ -60,9 +65,12 @@ export function TeamImportPanel({ competitionId, onImported }: { competitionId: 
   async function previewImport() {
     setBusy('preview'); setError(null); setRetryPreview(false);
     try {
-      const { data } = await api.post<CsvTeamImportPreview>(`/event-tools/competitions/${competitionId}/team-import/preview`, { csv });
+      const normalised = normaliseTeamCsvHeaders(csv);
+      setMappedColumns(normalised.mapped);
+      setPreparedCsv(normalised.csv);
+      const { data } = await api.post<CsvTeamImportPreview>(`/event-tools/competitions/${competitionId}/team-import/preview`, { csv: normalised.csv });
       setPreview(data);
-    } catch (caught) { setError(message(caught, t('ops3.import.previewError'))); setRetryPreview(true); }
+    } catch (caught) { setError(caught instanceof TeamImportFormatError ? caught.message : message(caught, t('ops3.import.previewError'))); setRetryPreview(true); }
     finally { setBusy(null); }
   }
 
@@ -71,7 +79,7 @@ export function TeamImportPanel({ competitionId, onImported }: { competitionId: 
     setBusy('apply'); setError(null); setRetryPreview(false);
     try {
       const { data } = await api.post<{ createdCount: number }>(`/event-tools/competitions/${competitionId}/team-import/apply`, {
-        csv, fingerprint: preview.fingerprint, previewVersion: preview.previewVersion,
+        csv: preparedCsv, fingerprint: preview.fingerprint, previewVersion: preview.previewVersion,
       });
       toast.show(t('ops3.import.teamsAdded', { count: data.createdCount }));
       setPreview(null);
@@ -92,21 +100,23 @@ export function TeamImportPanel({ competitionId, onImported }: { competitionId: 
       <h2 id="import-title" className="sr-only">{t('ops3.import.title')}</h2>
       <RefineNote>{t('ops3.import.columns')}<strong>club</strong>, <strong>suffix</strong>, <strong>section</strong>.</RefineNote>
       <RefineList as="div">
-        <button type="button" className="rf-row" onClick={() => fileRef.current?.click()}>
+        <button type="button" className="rf-row" disabled={busy !== null} onClick={() => fileRef.current?.click()}>
           <Upload className="h-5 w-5 rf-chev" aria-hidden="true" /><span className="rf-grow rf-t1">{t('ops3.import.choose')}</span><Chevron />
         </button>
       </RefineList>
-      <input ref={fileRef} className="sr-only" type="file" accept=".csv,text/csv" onChange={loadFile} tabIndex={-1} aria-label={t('ops3.import.fileLabel')} />
+      <input ref={fileRef} className="sr-only" type="file" accept=".csv,text/csv" disabled={busy !== null} onChange={loadFile} tabIndex={-1} aria-label={t('ops3.import.fileLabel')} />
       <div className="tools-form">
-        <label className="rf-fld">{t('ops3.import.csvText')}<textarea className="tools-csv" value={csv} onChange={(event) => changeCsv(event.target.value)} spellCheck={false} /></label>
+        <label className="rf-fld">{t('ops3.import.csvText')}<textarea className="tools-csv" disabled={busy !== null} value={csv} onChange={(event) => changeCsv(event.target.value)} spellCheck={false} /></label>
         <button type="button" className="rf-btn rf-btn-primary rf-wide" disabled={busy !== null || !csv.trim()} onClick={previewImport}>{busy === 'preview' ? t('ops3.import.checking') : t('ops3.import.preview')}</button>
       </div>
+      {mappedColumns.length > 0 && <RefineNote>{mappedColumns.join(" · ")}</RefineNote>}
+      <RefineNote>{tr('completion.csvHint')}</RefineNote>
       {preview && <>
         <RefineSection title={t('ops3.import.previewTitle')} meta={hasErrors ? t('ops3.import.fixRows') : t('ops3.import.allReady')} />
         <RefineList as="ul" label={t('ops3.import.rowsReady', { valid: preview.validRows, total: preview.totalRows })}>
           {preview.rows.map((row) => <li key={row.rowNumber} className="rf-row">
             <span className="rf-grow">
-              <span className="rf-t1"><span>{row.club}</span> <span>{row.suffix}</span></span>
+              <span className="rf-t1"><span>{row.teamName || `${row.club} ${row.suffix}`.trim()}</span></span>
               <span className="rf-t2">{t('ops3.import.row', { n: row.rowNumber, section: row.section })}</span>
               {row.errors.length > 0 && <span className="rf-t2 tools-error">{row.errors.join(' ')}</span>}
             </span>
@@ -171,6 +181,7 @@ export function DuplicateEventPanel({ competition }: { competition: CompetitionF
 }
 
 const PRINT_SHEETS = [
+  { to: 'sponsors', get title() { return tr('ops2.print.sponsorReport'); }, get detail() { return tr('ops2.print.sponsorReport'); } },
   { to: 'entries', get title() { return tr('ops3.sheet.entries'); }, get detail() { return tr('ops3.sheet.entriesDetail'); } },
   { to: 'draw', get title() { return tr('ops3.sheet.draw'); }, get detail() { return tr('ops3.sheet.drawDetail'); } },
   { to: 'score-sheets', get title() { return tr('ops3.sheet.scoresheets'); }, get detail() { return tr('ops3.sheet.scoresheetsDetail'); } },
@@ -190,6 +201,7 @@ export function PrintSheetsPanel({ competitionId }: { competitionId: string }) {
         {PRINT_SHEETS.map((sheet) => <Link key={sheet.to} className="rf-row" to={`/event-tools/${competitionId}/print/${sheet.to}`}>
           <span className="rf-grow"><span className="rf-t1">{sheet.title}</span><span className="rf-t2">{sheet.detail}</span></span><Chevron />
         </Link>)}
+        <OfficialResultsDownload competitionId={Number(competitionId)} />
       </RefineList></nav>
       <RefineSection title={t('ops3.sheet.keep')} />
       <RefineList as="div"><ArchiveDownload competitionId={Number(competitionId)} /></RefineList>

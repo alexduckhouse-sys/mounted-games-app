@@ -51,6 +51,7 @@ beforeEach(() => {
   state.organise = false;
   config = setup;
   state.get.mockImplementation(async (url: string) => {
+    if (url.endsWith('/substitution-requests')) return { data: [] };
     if (url === '/declaration-forms') return { data: forms };
     if (url === '/clubs/1/saved-riders') return { data: [] };
     if (url === '/competitions/4/dec-form-config') {

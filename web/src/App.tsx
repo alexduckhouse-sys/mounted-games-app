@@ -1,3 +1,4 @@
+import { LegacyEventRedirect } from './components/LegacyEventRedirect';
 import { lazy, Suspense, useEffect } from 'react';
 import { PageLoadBoundary } from './components/PageLoadBoundary';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
@@ -43,8 +44,8 @@ const PrizeGivingPage = lazy(() => import('./pages/competition/PrizeGivingPage')
 const StreamControlsPage = lazy(() => import('./pages/competition/StreamControlsPage').then((module) => ({ default: module.StreamControlsPage })));
 const ProducePage = lazy(() => import('./pages/competition/ProducePage').then((module) => ({ default: module.ProducePage })));
 const ChatTab = lazy(() => import('./pages/competition/ChatTab').then((module) => ({ default: module.ChatTab })));
-const AnnouncementsPage = lazy(() => import('./pages/competition/AnnouncementsPage').then((module) => ({ default: module.AnnouncementsPage })));
 const MessageThreadPage = lazy(() => import('./pages/competition/MessageThreadPage').then((module) => ({ default: module.MessageThreadPage })));
+const AnnouncementsPage = lazy(() => import('./pages/competition/AnnouncementsPage').then((module) => ({ default: module.AnnouncementsPage })));
 const ContactOrganisersPage = lazy(() => import('./pages/competition/ContactOrganisersPage').then((module) => ({ default: module.ContactOrganisersPage })));
 const EntryPage = lazy(() => import('./pages/competition/EntryPage').then((module) => ({ default: module.EntryPage })));
 const DetailsTab = lazy(() => import('./pages/competition/DetailsTab').then((module) => ({ default: module.DetailsTab })));
@@ -63,7 +64,6 @@ const InvitePage = lazy(() => import('./pages/InvitePage').then((module) => ({ d
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage').then((module) => ({ default: module.ForgotPasswordPage })));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage').then((module) => ({ default: module.ResetPasswordPage })));
 const CompetitionEditor = lazy(() => import('./pages/admin/CompetitionEditor').then((module) => ({ default: module.CompetitionEditor })));
-const FormatPage = lazy(() => import('./pages/admin/FormatPage').then((module) => ({ default: module.FormatPage })));
 const RulesLibraryPage = lazy(() => import('./pages/admin/RulesLibraryPage').then((module) => ({ default: module.RulesLibraryPage })));
 const ArenaCrewPage = lazy(() => import('./pages/competition/ArenaCrewPage').then((module) => ({ default: module.ArenaCrewPage })));
 const VolunteerRotaPage = lazy(() => import('./pages/competition/VolunteerRotaPage').then((module) => ({ default: module.VolunteerRotaPage })));
@@ -196,8 +196,8 @@ export default function App() {
                 <Route path="declarations" element={<DeclarationsTab />} />
                 <Route path="broadcast" element={<ProtectedRoute roles={['Admin', 'Trainer']}><BroadcastPage /></ProtectedRoute>} />
                 <Route path="stream-controls" element={<ProtectedRoute roles={['Admin', 'Trainer']}><StreamControlsPage /></ProtectedRoute>} />
-                <Route path="prize-giving" element={<ProtectedRoute roles={['Admin', 'Trainer']}><PrizeGivingPage /></ProtectedRoute>} />
-                <Route path="produce" element={<ProtectedRoute roles={['Admin', 'Trainer']}><ProducePage /></ProtectedRoute>} />
+                <Route path="prize-giving" element={<ProtectedRoute><PrizeGivingPage /></ProtectedRoute>} />
+                <Route path="produce" element={<ProtectedRoute><ProducePage /></ProtectedRoute>} />
                 <Route path="chat" element={<AfterDrawOnly><ChatTab /></AfterDrawOnly>} />
                 <Route path="contact" element={<ContactOrganisersPage />} />
                 <Route path="announcements" element={<ProtectedRoute roles={['Admin']}><AnnouncementsPage /></ProtectedRoute>} />
@@ -251,7 +251,7 @@ export default function App() {
                 <ProtectedRoute roles={['Admin', 'Trainer']}><CompetitionEditor /></ProtectedRoute>
               } />
               <Route path="admin/competitions/:id/format" element={
-                <ProtectedRoute roles={['Admin', 'Trainer']}><FormatPage /></ProtectedRoute>
+                <ProtectedRoute roles={['Admin', 'Trainer']}><LegacyEventRedirect /></ProtectedRoute>
               } />
               <Route path="admin/rules" element={
                 <ProtectedRoute roles={['Admin']}><RulesLibraryPage /></ProtectedRoute>

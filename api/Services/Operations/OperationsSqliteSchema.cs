@@ -12,6 +12,7 @@ public static class OperationsSqliteSchema
         await EnsureSessionColumnsAsync(db);
         await EnsureVolunteerShiftColumnsAsync(db);
         await CreateAsync(db);
+        await EventReliabilitySqliteSchema.EnsureAsync(db);
     }
 
     private static async Task EnsureSessionColumnsAsync(AppDbContext db)

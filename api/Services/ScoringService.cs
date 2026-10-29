@@ -132,12 +132,12 @@ public class ScoringService
     public Task<RaceScoreDto> ApplyLegacyAsync(
         int raceId, IReadOnlyList<FinishingPlaceDto> places,
         IReadOnlyList<FinishingPlaceDto>? expected, string? actorUserId, string? reason = null,
-        CancellationToken cancellationToken = default, string? actorLabel = null)
+        CancellationToken cancellationToken = default, string? actorLabel = null, DateTime? finishedAt = null)
         => ApplyCoreAsync(raceId,
             places.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated, p.Status, p.RefereeNote, p.Points)).ToList(),
             actorUserId, null,
             expected?.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated, p.Status)).ToList(),
-            $"legacy-{Guid.NewGuid():N}", reason, strictValidation: false, cancellationToken, actorLabel);
+            $"legacy-{Guid.NewGuid():N}", reason, strictValidation: false, cancellationToken, actorLabel, finishedAt);
 
     public Task<RaceScoreDto> OverrideRacePointsAsync(
         int raceId, int teamId, double points, string reason,
@@ -229,6 +229,7 @@ public class ScoringService
             _db.Results.RemoveRange(race.Results);
             race.IsComplete = false;
             race.StartedAt = null;
+            race.StartIsExplicit = false;
             race.FinishedAt = null;
             if (race.Heat is { } heat)
             {
@@ -352,6 +353,12 @@ public class ScoringService
                 var label = string.IsNullOrWhiteSpace(heat.Label) ? $"Heat {heat.OrderIndex}" : heat.Label;
                 body = $"🔔 Ring call ({arena}): {entry.Team?.DisplayName ?? $"Team #{entry.TeamId}"} (Lane {entry.LaneIndex}) needed at the collecting ring now for {label}.";
             }
+            var tag = $"missing-team:{heatId}";
+            var cleanBody = body!.Trim();
+            var existing = await _db.ChatMessages.FirstOrDefaultAsync(m => m.CompetitionId == heat.Session!.CompetitionId
+                && m.Tag == tag && m.Body == cleanBody && m.Type == ChatMessageType.Announcement
+                && !m.AdminOnly && m.RecipientUserId == null, cancellationToken);
+            if (existing is not null) return existing;
             var msg = new ChatMessage
             {
                 CompetitionId = heat.Session!.CompetitionId, UserId = userId,
@@ -390,7 +397,7 @@ public class ScoringService
         {
             await LockHeatForRaceAsync(raceId, cancellationToken);
             var race = await _db.Races
-                .Include(r => r.Heat).ThenInclude(h => h!.Session)
+                .Include(r => r.Heat).ThenInclude(h => h!.Session).ThenInclude(s => s!.Competition)
                 .Include(r => r.Results).ThenInclude(result => result.Team)
                 .FirstOrDefaultAsync(r => r.Id == raceId, cancellationToken)
                 ?? throw new KeyNotFoundException("Race not found.");
@@ -399,8 +406,18 @@ public class ScoringService
                 throw new ScoreSignedOffException(
                     "Signed-off results must be reopened before race timing can be edited.");
 
+            at = at.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(at, DateTimeKind.Utc) : at.ToUniversalTime();
+            if (start && hasClientTimestamp) ValidateRecordedTime(at, race.Heat!.Session!.Competition!, DateTime.UtcNow);
             if (start)
             {
+                // Completed scores are never reopened by a delayed or repeated Start.
+                if (race.IsComplete) return race;
+                // Legacy saves inferred the next start during prop changes. Replace that only once.
+                if (!race.StartIsExplicit)
+                {
+                    race.StartedAt = at;
+                    race.StartIsExplicit = true;
+                }
                 // A retried Start can arrive after the Stop that followed it: keep the finish.
                 if (hasClientTimestamp && race.FinishedAt is not null && race.FinishedAt >= at)
                     return race;
@@ -409,6 +426,7 @@ public class ScoringService
                     // This is a newer run. Its start becomes the ordering marker
                     // used to reject a delayed Stop from the previous run.
                     race.StartedAt = at;
+                    race.StartIsExplicit = true;
                     race.FinishedAt = null;
                 }
                 else
@@ -419,10 +437,11 @@ public class ScoringService
 
                 if (race.Heat is { } heat)
                 {
-                    heat.StartedAt ??= at;
+                    // Starts can reach the server out of race order after an offline spell.
+                    heat.StartedAt = new[] { heat.StartedAt, race.StartedAt }.Min();
                     if (heat.Session is { } session)
                     {
-                        session.StartedAt ??= at;
+                        session.StartedAt = new[] { session.StartedAt, heat.StartedAt }.Min();
                         if (session.Status == SessionStatus.Upcoming)
                             session.Status = SessionStatus.InArena;
                     }
@@ -442,11 +461,19 @@ public class ScoringService
             return race;
         }, cancellationToken);
 
+    private static void ValidateRecordedTime(DateTime at, Competition competition, DateTime now)
+    {
+        if (at > now.AddMinutes(1) || at < now.AddDays(-7)
+            || at < competition.StartDate.Date.AddDays(-1)
+            || at >= (competition.EndDate ?? competition.StartDate).Date.AddDays(2))
+            throw new ScoreValidationException("That time is outside this event or the last seven days. Check this phone’s date and time.");
+    }
+
     private async Task<RaceScoreDto> ApplyCoreAsync(
         int raceId, IReadOnlyList<FinishingPlace> finishingPlaces, string? actorUserId,
         int? expectedRevision, IReadOnlyList<FinishingPlace>? expectedResults,
         string requestId, string? reason, bool strictValidation,
-        CancellationToken cancellationToken, string? actorLabel = null)
+        CancellationToken cancellationToken, string? actorLabel = null, DateTime? finishedAt = null)
     {
         ValidateRequest(finishingPlaces, requestId);
         finishingPlaces = Normalise(finishingPlaces);
@@ -462,7 +489,7 @@ public class ScoringService
         var race = await _db.Races
             .Include(r => r.Heat).ThenInclude(h => h!.Entries).ThenInclude(e => e.Team)
             .Include(r => r.Heat).ThenInclude(h => h!.Races)
-            .Include(r => r.Heat).ThenInclude(h => h!.Session)
+            .Include(r => r.Heat).ThenInclude(h => h!.Session).ThenInclude(s => s!.Competition)
             .Include(r => r.Results)
             .FirstOrDefaultAsync(r => r.Id == raceId, cancellationToken)
             ?? throw new InvalidOperationException("Race not found");
@@ -672,22 +699,22 @@ public class ScoringService
         _db.Results.RemoveRange(race.Results);
         await _db.Results.AddRangeAsync(fresh, cancellationToken);
         race.IsComplete = true;
-        race.StartedAt ??= now;
-        race.FinishedAt ??= now;
+        var recordedFinish = finishedAt.HasValue
+            ? finishedAt.Value.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(finishedAt.Value, DateTimeKind.Utc) : finishedAt.Value.ToUniversalTime() : now;
+        if (finishedAt.HasValue) ValidateRecordedTime(recordedFinish, heat.Session!.Competition!, now);
+        if (race.StartIsExplicit && race.StartedAt > recordedFinish)
+            throw new ScoreValidationException("The finish time is before the race started. Check this phone’s date and time.");
+        race.StartedAt ??= recordedFinish;
+        race.FinishedAt ??= recordedFinish;
         if (fresh.Count > 0)
         {
-            var nextRace = heat.Races
-                .OrderBy(r => r.OrderIndex)
-                .ThenBy(r => r.Id)
-                .FirstOrDefault(r => r.Id != raceId && !r.IsComplete && (r.OrderIndex > race.OrderIndex || (r.OrderIndex == race.OrderIndex && r.Id > race.Id)));
-            if (nextRace is not null)
-                nextRace.StartedAt ??= now;
-            heat.StartedAt ??= now;
+            heat.StartedAt = heat.Races.Select(r => r.StartedAt).Append(heat.StartedAt).Min();
             if (heat.Races.Count > 0 && heat.Races.All(r => r.Id == raceId || r.IsComplete))
-                heat.FinishedAt ??= now;
+                // The last upload need not be the race that finished last on the ground.
+                heat.FinishedAt = heat.Races.Max(r => r.FinishedAt);
             if (heat.Session is { } session)
             {
-                session.StartedAt ??= now;
+                session.StartedAt = new[] { session.StartedAt, heat.StartedAt }.Min();
                 if (session.Status == SessionStatus.Upcoming)
                     session.Status = SessionStatus.InArena;
             }
@@ -726,7 +753,7 @@ public class ScoringService
                 if (sessionHeats.Count > 0 && sessionHeats.All(h => h.Races.Count > 0 && h.Races.All(r => r.IsComplete)))
                 {
                     session.Status = SessionStatus.Finished;
-                    session.FinishedAt ??= now;
+                    session.FinishedAt = sessionHeats.SelectMany(h => h.Races).Max(r => r.FinishedAt);
                     session.ProvisionalUntil = now.AddMinutes(15);
                     session.OfficialConfirmedAt = null;
                     await _db.SaveChangesAsync(cancellationToken);

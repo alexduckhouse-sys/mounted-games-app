@@ -15,7 +15,7 @@ import type { ChatMessage, LiveStream } from '../../types';
 import './chat.css';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
-import { useLanguage } from '../../i18n/LanguageContext';
+import { useLanguage, useT } from '../../i18n/LanguageContext';
 import { activeLocale, tr } from '../../i18n/translate';
 
 const LAST_CHAT_COMP_KEY = 'mg.lastChatComp';
@@ -491,6 +491,7 @@ function StaffStreamCard({ active, fallback, competitionId, canBroadcast, canEdi
   const [editing, setEditing] = useState(false);
   const closeSettings = useCallback(() => setEditing(false), []);
   const changeRef = useRef<HTMLButtonElement>(null);
+  const t = useT();
   const streamName = active ? active.caption || `${active.arenaName} · ${active.angleName}` : fallback ? 'Competition stream' : 'No stream is set';
   return <div className="staff-stream-wrap">
     <div className="staff-stream mg-card">
@@ -505,6 +506,7 @@ function StaffStreamCard({ active, fallback, competitionId, canBroadcast, canEdi
         {active
           ? <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/stream-controls`}>Control the stream</Link>
           : <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/stream-controls?tab=replay`}>Replays</Link>}
+        <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/produce`}>{t('shell.menu.producerOverlay')}</Link>
         <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/commentary`}>Commentary desk</Link>
       </div>
     )}

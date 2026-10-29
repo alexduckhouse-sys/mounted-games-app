@@ -409,6 +409,9 @@ public static class DemoDataCleaner
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.DeletedByUserId, (string?)null), ct);
 
         // Their own rows (several cascade in the database too; removed here so nothing depends on that).
+        await db.Set<SubstitutionRequest>().Where(r => gone.Contains(r.RequestedByUserId)).ExecuteDeleteAsync(ct);
+        await db.Set<SubstitutionRequest>().Where(r => r.DecidedByUserId != null && gone.Contains(r.DecidedByUserId))
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.DecidedByUserId, (string?)null), ct);
         await db.TrainerNotes.Where(n => gone.Contains(n.UserId)).ExecuteDeleteAsync(ct);
         await db.StartingPoints.Where(p => gone.Contains(p.OwnerUserId)).ExecuteDeleteAsync(ct);
         await db.AccountIps.Where(a => gone.Contains(a.UserId)).ExecuteDeleteAsync(ct);

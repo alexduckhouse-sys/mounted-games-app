@@ -944,7 +944,11 @@ public class SessionsCrudTests : IClassFixture<ApiFactory>
             h.DurationMinutes = 30;
             h.StartedAt = t0;
             h.FinishedAt = t0.AddMinutes(25);
-            foreach (var r in h.Races) r.IsComplete = true;
+            var index = 0;
+            foreach (var r in h.Races.OrderBy(r => r.OrderIndex)) {
+                r.IsComplete = true; r.StartIsExplicit = true;
+                r.StartedAt = t0.AddMinutes(index * 5); r.FinishedAt = t0.AddMinutes(++index * 5);
+            }
             await db.SaveChangesAsync();
         });
 

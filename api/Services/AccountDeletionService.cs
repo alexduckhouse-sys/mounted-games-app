@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Entities;
+using MountedGames.Api.Entities.Operations;
 using MountedGames.Api.Entities.Commerce;
 using MountedGames.Api.Entities.Seasons;
 
@@ -49,6 +50,9 @@ public sealed class AccountDeletionService(AppDbContext db, UserManager<AppUser>
         var optInEmail = (user.Email ?? string.Empty).Trim().ToLowerInvariant();
         if (optInEmail.Length > 0)
             await db.EmailOptIns.Where(o => o.Email == optInEmail).ExecuteDeleteAsync(ct);
+        await db.Set<SubstitutionRequest>().Where(r => r.RequestedByUserId == id).ExecuteDeleteAsync(ct);
+        await db.Set<SubstitutionRequest>().Where(r => r.DecidedByUserId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.DecidedByUserId, (string?)null), ct);
         await db.TrainerNotes.Where(n => n.UserId == id).ExecuteDeleteAsync(ct);
         await db.StartingPoints.Where(p => p.OwnerUserId == id).ExecuteDeleteAsync(ct);
         // The networks it signed in from, and the ones blocked because of it. A blocked account keeps both: the blocks stay

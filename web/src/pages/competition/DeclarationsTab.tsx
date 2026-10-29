@@ -1,3 +1,4 @@
+import { RequestSubstitution, SubstitutionRequests } from './reliability/SubstitutionRequests';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Check, ChevronRight } from 'lucide-react';
@@ -248,6 +249,11 @@ export function DeclarationsTab() {
         </Notice>
       )}
 
+      {user && <SubstitutionRequests competitionId={competition.id} canDecide={isOrganiser} />}
+      {user && (forms ?? []).filter((f, index, all) => (f.isLocked || declarationsClosed)
+        && all.findIndex(other => other.teamId === f.teamId) === index
+        && (f.submittedByUserId === user.id || myTeams.some(team => team.id === f.teamId)))
+        .map(f => <RequestSubstitution key={f.id} competitionId={competition.id} form={f} />)}
       {lockError && <Notice>{lockError}</Notice>}
       {deleteError && <Notice onDismiss={() => setDeleteError('')}>{deleteError}</Notice>}
       {stat}

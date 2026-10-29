@@ -57,7 +57,7 @@ function Harness({ allowAudit = false, activeIdx = 1, heatOverride = h, queued =
   const [pending, setPending] = useState<PendingPlace[]>(initial);
   return (
     <ScoringSection
-      heat={heatOverride} races={heatOverride.races} activeRace={heatOverride.races[activeIdx] ?? null} onSelectRace={onSelectRace} sessionBase={3}
+      heat={heatOverride} races={heatOverride.races} activeRace={heatOverride.races[activeIdx] ? { ...heatOverride.races[activeIdx], startIsExplicit: true, startedAt: '2026-10-29T09:00:00Z' } : null} onSelectRace={onSelectRace} sessionBase={3}
       laneRules={rules} qualifiers={3} pending={pending} canScore allowAudit={allowAudit} queued={queued}
       onClickTeam={(teamId) => setPending((p) => [...p, { teamId, place: p.length + 1, eliminated: false }])}
       onToggleElim={(teamId) => setPending((p) => [...p.filter((x) => x.teamId !== teamId), { teamId, place: 0, eliminated: true }])}

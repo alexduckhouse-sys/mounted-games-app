@@ -1,3 +1,6 @@
+import { reliability } from './reliability.ts';
+import { timing } from './timing.ts';
+import { completion } from './completion.ts';
 /**
  * MACHINE-DRAFTED Welsh (`cy`): written by an AI model, not by a native speaker, and not yet reviewed.
  * It needs a native-speaker review before it is relied on at an event; see ../REVIEW.md for the terms that were
@@ -19,6 +22,6 @@ import { admin } from './admin.ts';
 import { desk } from './desk.ts';
 import { teams } from './teams.ts';
 
-export const AREAS = { common, shell, auth, account, entries, competition, teams, site, ops, screen, admin, desk, ops2, ops3 } as const;
+export const AREAS = { reliability, timing, completion, common, shell, auth, account, entries, competition, teams, site, ops, screen, admin, desk, ops2, ops3 } as const;
 
-export const cy: Catalogue = { ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...site, ...ops, ...screen, ...admin, ...desk, ...ops2, ...ops3 };
+export const cy: Catalogue = { ...reliability, ...timing, ...completion, ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...site, ...ops, ...screen, ...admin, ...desk, ...ops2, ...ops3 };

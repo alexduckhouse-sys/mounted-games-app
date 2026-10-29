@@ -2070,6 +2070,19 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("EquipmentAcknowledgement");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.Operations.HeatCall", b =>
+                {
+                    b.Property<int>("HeatId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CalledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("HeatId");
+
+                    b.ToTable("HeatCall");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.Operations.Protest", b =>
                 {
                     b.Property<int>("Id")
@@ -2338,6 +2351,71 @@ namespace MountedGames.Api.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Rulebook");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Operations.SubstitutionRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DecidedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DeclarationFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("DeclarationFormId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("InRiderEntryId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("OutRiderEntryId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("ReplacementHorseName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ReplacementRiderName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RequestedByUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeclarationFormId");
+
+                    b.HasIndex("CompetitionId", "Status");
+
+                    b.ToTable("SubstitutionRequest");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.Operations.TeamStatusEvent", b =>
@@ -2730,6 +2808,9 @@ namespace MountedGames.Api.Data.Migrations
 
                     b.Property<int>("OrderIndex")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("StartIsExplicit")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTime?>("StartedAt")
                         .HasColumnType("timestamp with time zone");
@@ -4772,6 +4853,17 @@ namespace MountedGames.Api.Data.Migrations
                     b.Navigation("Competition");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.Operations.HeatCall", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Heat", "Heat")
+                        .WithMany()
+                        .HasForeignKey("HeatId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Heat");
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.Operations.Protest", b =>
                 {
                     b.HasOne("MountedGames.Api.Entities.Competition", "Competition")
@@ -4828,6 +4920,17 @@ namespace MountedGames.Api.Data.Migrations
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.Operations.RiderSwapEvent", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.DeclarationForm", "DeclarationForm")
+                        .WithMany()
+                        .HasForeignKey("DeclarationFormId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DeclarationForm");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Operations.SubstitutionRequest", b =>
                 {
                     b.HasOne("MountedGames.Api.Entities.DeclarationForm", "DeclarationForm")
                         .WithMany()
