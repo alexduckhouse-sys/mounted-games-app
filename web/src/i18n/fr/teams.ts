@@ -268,6 +268,7 @@ export const teams: AreaCatalogue<typeof en> = {
   'teams.stream.syncLive': 'Retour au direct',
   'teams.stream.instantReplay': 'Rediffusion instantanée de 15 secondes',
   'teams.stream.pip': 'Image dans l’image',
+  'teams.stream.more': 'Plus d’options',
   'teams.stream.closeFull': 'Quitter le plein écran',
   'teams.stream.openFull': 'Plein écran',
   'teams.stream.play': 'Lecture',

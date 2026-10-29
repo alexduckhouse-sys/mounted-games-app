@@ -267,6 +267,7 @@ export const teams = {
   'teams.stream.syncLive': 'Jump to live',
   'teams.stream.instantReplay': 'Instant 15 second replay',
   'teams.stream.pip': 'Picture in picture',
+  'teams.stream.more': 'More options',
   'teams.stream.closeFull': 'Close full screen',
   'teams.stream.openFull': 'Open full screen',
   'teams.stream.play': 'Play',
