@@ -8,6 +8,7 @@ import PrintEventPage from '../operations/PrintEventPage';
 import { TackCheckTab } from './TackCheckTab';
 import type { PrintableTackCheck } from './TackCheckPrint';
 import { chooseOption } from '../../test/select';
+vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canOrganise: () => true }) }));
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), put: vi.fn() } }));
 
@@ -209,6 +210,16 @@ describe('tack check print view', () => {
     expect(screen.getByText('Ash A (withdrawn)')).toBeInTheDocument();
     expect(screen.getByText('No declaration yet')).toBeInTheDocument();
     expect(screen.getByText('No teams entered yet.')).toBeInTheDocument();
+  });
+
+  it('keeps each team in its own table body so its riders never split across two printed pages', async () => {
+    get.mockResolvedValueOnce({ data: printable() });
+    renderPrint();
+    await screen.findByRole('heading', { name: 'Under 12' });
+    const bodies = document.querySelectorAll('tbody.event-print-team');
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]).toHaveTextContent('Oak A (HC)');
+    expect(bodies[0]).toHaveTextContent('Ruby Reserve');
   });
 
   it('adds a tack bonus column to the printed results only when a section has bonus points', async () => {

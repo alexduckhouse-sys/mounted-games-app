@@ -1,7 +1,7 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { defaultDraft, defaultSection, type CreatorDraft } from '../../../lib/creatorDraft';
 import { HatbandEditor, HatbandList } from './Hatbands';
 
@@ -39,14 +39,31 @@ describe('HatbandEditor', () => {
     expect(rows.map((r) => r.textContent)).toEqual(['Red', 'White', 'Blue', 'Yellow']);
   });
 
-  it('moves a hatband up or down, and the first and last cannot go further', async () => {
+  it('puts hatbands in order with the arrow keys on the six-dot grip, and focus follows the row', async () => {
     const { draft } = setup({ laneHatbands: ['Red', 'Blue', 'Green'] });
-    expect(screen.getByRole('button', { name: 'Move Red up' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Move Green down' })).toBeDisabled();
-    await userEvent.click(screen.getByRole('button', { name: 'Move Blue up' }));
+    expect(screen.queryByRole('button', { name: /^Move .* (up|down)$/ })).not.toBeInTheDocument();
+    const grip = (name: string) => screen.getByRole('button', { name: `Move ${name}: drag, or use the up and down arrow keys` });
+    grip('Blue').focus();
+    await userEvent.keyboard('{ArrowUp}');
     expect(draft().laneHatbands).toEqual(['Blue', 'Red', 'Green']);
-    await userEvent.click(screen.getByRole('button', { name: 'Move Blue down' }));
-    expect(draft().laneHatbands).toEqual(['Red', 'Blue', 'Green']);
+    await waitFor(() => expect(grip('Red')).not.toHaveFocus());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getAllByRole('button', { name: /^Move .*: drag/ })[0]));
+    // The first cannot go further up, and the last cannot go further down.
+    await userEvent.keyboard('{ArrowUp}');
+    expect(draft().laneHatbands).toEqual(['Blue', 'Red', 'Green']);
+    grip('Green').focus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(draft().laneHatbands).toEqual(['Blue', 'Red', 'Green']);
+  });
+
+  it('puts hatbands in order by dragging the grip', () => {
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ height: 56, width: 400, top: 0, left: 0, right: 400, bottom: 56, x: 0, y: 0, toJSON: () => ({}) });
+    const { draft } = setup({ laneHatbands: ['Red', 'Blue', 'Green'] });
+    const grip = screen.getByRole('button', { name: 'Move Red: drag, or use the up and down arrow keys' });
+    fireEvent(grip, new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, clientY: 100 }));
+    fireEvent(window, new MouseEvent('pointermove', { clientY: 160 }));
+    fireEvent(window, new MouseEvent('pointerup', {}));
+    expect(draft().laneHatbands).toEqual(['Blue', 'Red', 'Green']);
   });
 
   it('changes a colour from the ⋯ menu: name and colour save as they are typed, and a custom colour keeps its name', async () => {

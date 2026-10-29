@@ -84,4 +84,9 @@ The design-plan PRs wrote their own Welsh and French, as the owner asked, and no
 - **Smaller ones:** `common.undo`, `account.supporters.loading` / `failed`, `site.shop.noEventShops`, `site.shop.contactPlaceholder`, `site.profiles.newProfile`, `teams.following.unfollowed`, `teams.rulebooks.add` / `addHint` / `addHintDock`.
 - **Scoring (PR #312):** `desk.stream.bc.unlock` is now "Tap to unlock." (`Tapiwch i ddatgloi.` / `Touchez pour déverrouiller.`).
 
-More design-plan PRs are still open (organiser tools, dock filters and race rules, admin and the wizard, accounts and commerce). Each one lists its new keys in its PR description. Add them here as they merge.
+- **Accounts, club members and payouts (PR #315):** a new `acct` area (`acct.ts`, about 240 keys): club members (`acct.members.*`), seller payouts (`acct.payouts.*`), the demo payment flow (`acct.demo.*`), payment screens (`acct.pay.*`) and the team profile organiser forms (`acct.tp.*`). Please check `acct.demo.*` reads clearly as "no real money" in both languages.
+- **Organiser operations (PR #316):** `ops3.plan.*` (about 50 keys, mostly scorer links in `ops3.plan.scorer.*`, plus the demo mark-paid labels, the equipment roll-back message, the rulebook search and the sections saved badge). Changed values: `ops.view.scorers` is now "People and QR codes", and `screen.qr.description` and `ops2.print.p.steps` point there.
+- **Admin and the wizard (PR #314):** `admin.accounts.comps.search` / `searchPlaceholder` / `noMatch`, `admin.format.rules.createRace`, and the grip labels `admin.creator.hat.move` and `admin.format.dialog.move` (these replace the old move up / move down pairs). Changed values: `admin.creator.pay.testMode` (demo wording) and `admin.creator.sections.none` ("No limit").
+- **Print (PR #317):** `ops2.print.p.postcode`.
+
+Two design-plan PRs are still open (organiser tools in the dock, and dock filters with the race rules sheet). Each lists its new keys in its PR description. Add them here as they merge.

@@ -235,6 +235,7 @@ export const ops2: AreaCatalogue<typeof en> = {
   'ops2.print.p.scan': 'Scannez pour le programme, les scores et le direct',
   'ops2.print.p.emergency': 'Informations d’urgence sur le lieu (appelez le 999 ou le 112)',
   'ops2.print.p.venueLoc': 'Lieu :',
+  'ops2.print.p.postcode': 'Code postal :',
   'ops2.print.p.locDetails': 'Détails du lieu dans le programme de l’événement',
   'ops2.print.p.w3w': 'Adresse what3words :',
   'ops2.print.p.gps': 'Position GPS :',

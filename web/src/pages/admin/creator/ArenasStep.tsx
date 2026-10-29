@@ -1,3 +1,5 @@
+import { AnimatePresence } from 'framer-motion';
+import { LeavingRow } from '../../../components/LeavingRow';
 import { useT } from '../../../i18n/LanguageContext';
 import { changeArenas, resizeArenas } from '../../../lib/creatorArenas';
 import { lanesOfArena, MAX_ARENA_LANES, MAX_ARENAS, MIN_ARENA_LANES, type CreatorDraft } from '../../../lib/creatorDraft';
@@ -17,8 +19,10 @@ export function ArenasStep({ draft, change, problems, clear }: StepProps<Creator
       <div className="cw-card mt-3">
         <StepperRow label={t('admin.creator.arenas.howMany')} name={t('admin.creator.arenas.number')} value={String(draft.arenas.length)} min={1} max={MAX_ARENAS}
           onChange={(n) => change(resizeArenas(draft, n))} />
+        <AnimatePresence initial={false}>
         {draft.arenas.map((a, i) => (
-          <div key={i} className="cw-row" style={{ alignItems: 'flex-end', flexWrap: 'wrap', paddingTop: 12, paddingBottom: 14 }}>
+          <LeavingRow as="div" key={i}>
+          <div className="cw-row" style={{ alignItems: 'flex-end', flexWrap: 'wrap', paddingTop: 12, paddingBottom: 14 }}>
             <Field label={t('admin.creator.arenas.arenaN', { n: i + 1 })} error={problems[`arena.${i}.name`]} className="min-w-[200px] flex-1">
               {({ id, invalid, describedBy }) => (
                 <div className={fieldClass} data-invalid={invalid}>
@@ -33,7 +37,9 @@ export function ArenasStep({ draft, change, problems, clear }: StepProps<Creator
                 onChange={(n) => patch(i, { lanes: String(n) })} />
             </div>
           </div>
+          </LeavingRow>
         ))}
+        </AnimatePresence>
       </div>
     </section>
   );

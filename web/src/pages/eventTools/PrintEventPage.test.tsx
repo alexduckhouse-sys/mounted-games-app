@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import PrintEventPage from '../operations/PrintEventPage';
 import { chooseOption } from '../../test/select';
+const organiser = vi.hoisted(() => ({ value: true }));
+vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canOrganise: () => organiser.value }) }));
 
 vi.mock('../../api', () => ({ api: { get: vi.fn() } }));
 
@@ -29,6 +31,23 @@ describe('PrintEventPage', () => {
     expect(screen.queryByText('North A')).not.toBeInTheDocument();
     await act(async () => { resolveDraw({ data: { competition: { id: 12, name: 'Spring event', startDate: '2031-05-04T09:00:00Z' }, sessions: [] } }); });
     expect(await screen.findByText('No draw has been set up yet.')).toBeInTheDocument();
+  });
+
+  it('shows the organiser-only buttons to organisers and hides them from spectators', async () => {
+    organiser.value = true;
+    const { unmount } = render(<MemoryRouter initialEntries={['/event-tools/12/print/results']}><Routes><Route path="/event-tools/:competitionId/print/:view" element={<PrintEventPage />} /></Routes></MemoryRouter>);
+    expect(await screen.findByText('North A')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /TV/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Sponsor/ })).toBeInTheDocument();
+    unmount();
+    organiser.value = false;
+    render(<MemoryRouter initialEntries={['/event-tools/12/print/results']}><Routes><Route path="/event-tools/:competitionId/print/:view" element={<PrintEventPage />} /></Routes></MemoryRouter>);
+    expect(await screen.findByText('North A')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /TV/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Sponsor/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: /QR/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /^Print$/ })).toBeInTheDocument();
+    organiser.value = true;
   });
 
   it('labels unfinished results as provisional in the A4 view', async () => {
