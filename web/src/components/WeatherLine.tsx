@@ -1,8 +1,8 @@
-import { CloudLightning, CloudRain, Sun } from 'lucide-react';
+import { CloudLightning, CloudRain, Sun, Wind } from 'lucide-react';
 import { PAGE_WIDTH_CLASS, usePageWidthValue } from './pageWidthState';
 import { useWeatherLine } from './WeatherLineContext';
 
-const ICONS = { thunder: CloudLightning, rain: CloudRain, sun: Sun } as const;
+const ICONS = { thunder: CloudLightning, rain: CloudRain, sun: Sun, wind: Wind } as const;
 
 /**
  * The organiser's weather line, under the ticker in the top bar. At most one, only when `WeatherAlert` has something

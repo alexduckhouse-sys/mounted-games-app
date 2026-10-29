@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
-import { api } from '../../../api';
 import { Field } from '../../auth/Field';
 import { useT } from '../../../i18n/LanguageContext';
 import { NumberField } from '../../../components/NumberField';
@@ -9,7 +8,7 @@ import { riderIssues, type DecRider } from '../../../lib/decForm';
 import {
   asked, breach, limitText, NUMBER_FIELD, OPTIONAL, STANDARD_CONFIG, type DecFormConfig, type ExtraAnswers, type Requirement,
 } from '../../../lib/decFormConfig';
-import type { CertifiedHorseLookup, SavedRider } from '../../../types';
+import type { SavedRider } from '../../../types';
 import '../../../components/sitePages.css';
 
 interface Props {
@@ -39,13 +38,12 @@ const wide = () => typeof window !== 'undefined' && typeof window.matchMedia ===
  * the classes decide where it sits. Pick a saved rider to fill every field, or type a new one.
  * It asks only what the competition's dec form setup asks for.
  */
-export function RiderPanel({ title, reserve, editing, form, choices, addLabel, ready, onChange, onPick, onCommit, onClose, onRemove, config = STANDARD_CONFIG, competitionId }: Props) {
+export function RiderPanel({ title, reserve, editing, form, choices, addLabel, ready, onChange, onPick, onCommit, onClose, onRemove, config = STANDARD_CONFIG }: Props) {
   const t = useT();
   const nameRef = useRef<HTMLInputElement>(null);
   /** A label that says when an answer can be skipped. */
   const labelOf = (text: string, requirement: Requirement) =>
     requirement === OPTIONAL ? <>{text} <span className="font-normal text-[rgb(var(--mg-muted))]">{t('entries.rider.optional')}</span></> : text;
-  const [certLookup, setCertLookup] = useState<{ key: string; data: CertifiedHorseLookup } | null>(null);
   const slotKey = `${title}|${editing}`;
   // On a laptop the cursor goes straight to the name; on a phone that would only throw the keyboard up.
   useEffect(() => { (wide() ? nameRef.current : closeRef.current)?.focus(); }, [slotKey]);
@@ -62,42 +60,6 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
       if (opener?.isConnected) opener.focus();
     };
   }, []);
-
-  const passportQuery = form.extra.ponyPassport.trim();
-  const ponyQuery = form.pony.trim();
-  const ownerQuery = (form.ponyOwnerFullName ?? '').trim();
-  const lookupKey = JSON.stringify([passportQuery, ponyQuery, ownerQuery, competitionId]);
-  const canLookup = !reserve && (passportQuery !== '' || (ponyQuery !== '' && ownerQuery !== ''));
-
-  useEffect(() => {
-    if (!canLookup) return;
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      if (!api?.get) return;
-      Promise.resolve(
-        api.get<CertifiedHorseLookup>('/event-tools/certified-horses/lookup', {
-          params: {
-            passportCode: passportQuery || undefined,
-            ponyName: ponyQuery || undefined,
-            ownerFullName: ownerQuery || undefined,
-            competitionId,
-          },
-        }),
-      )
-        .then((res) => {
-          if (!cancelled && res?.data) setCertLookup({ key: lookupKey, data: res.data });
-        })
-        .catch(() => {
-          if (!cancelled) setCertLookup(null);
-        });
-    }, 250);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [canLookup, passportQuery, ponyQuery, ownerQuery, competitionId, lookupKey]);
-
-  const activeCertLookup = canLookup && certLookup?.key === lookupKey ? certLookup.data : null;
 
   const issues = riderIssues(form, reserve, config);
   const dobBad = !!issues.invalid.dob;
@@ -207,30 +169,6 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
                 </div>
               )}
             </Field>
-          )}
-          {!reserve && activeCertLookup?.found && (
-            <Notice
-              tone={activeCertLookup.status === 'Expired' || activeCertLookup.status === 'TooRecent' ? 'problem' : 'info'}
-              role="status"
-              className="col-span-2"
-            >
-              <strong>
-                {activeCertLookup.status === 'Certified' ? t('entries.rider.certified')
-                  : activeCertLookup.status === 'Expired' ? t('entries.rider.vaccineExpired')
-                    : activeCertLookup.status === 'TooRecent' ? t('entries.rider.tooRecent') : t('entries.rider.found')}
-              </strong>
-              {activeCertLookup.lastFluVaccineDate && <>
-                {' '}
-                {activeCertLookup.status === 'Expired'
-                  ? t('entries.rider.lastVaccineExpired', { date: activeCertLookup.lastFluVaccineDate ?? '—' })
-                  : `${t('entries.rider.lastVaccine', { date: activeCertLookup.lastFluVaccineDate ?? '—' })}${activeCertLookup.lastTetanusDate ? t('entries.rider.lastTetanus', { date: activeCertLookup.lastTetanusDate }) : ''}`}
-              </>}
-              {activeCertLookup.officialNotes && (
-                <span className="mt-1 block font-medium">
-                  {activeCertLookup.inspectorRole ?? t('entries.rider.official')}{activeCertLookup.inspectedByName ? ` ${activeCertLookup.inspectedByName}` : ''}: “{activeCertLookup.officialNotes}”
-                </span>
-              )}
-            </Notice>
           )}
           {!reserve && asked(config.ponyAge) && (
             <Field label={labelOf(t('entries.rider.ponyAge'), config.ponyAge)} error={issues.invalid.ponyAge}>

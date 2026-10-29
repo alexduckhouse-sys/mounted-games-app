@@ -6,6 +6,8 @@ public class Race
     public int HeatId { get; set; }
     public Heat? Heat { get; set; }
 
+    public int ProgrammeRevision { get; set; }
+
     public string Name { get; set; } = string.Empty;
     public int OrderIndex { get; set; }
     public bool IsComplete { get; set; }

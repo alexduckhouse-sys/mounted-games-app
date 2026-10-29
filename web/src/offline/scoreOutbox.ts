@@ -23,6 +23,8 @@ export interface QueuedScore {
   /** Unique per save, including two edits made within the same millisecond. */
   saveId?: string;
   raceId: number;
+  expectedProgrammeRevision?: number;
+  programmeChanged?: boolean;
   competitionId: number;
   sessionId: number;
   /** e.g. "Heat 2 · Barrel Race", for the outbox panel. */
@@ -82,7 +84,8 @@ export function settle(list: QueuedScore[], sent: QueuedScore, outcome: SendOutc
       return list;
     case 'conflict': {
       const race = outcome.heat.races.find((r) => r.id === sent.raceId);
-      return list.map((q) => same(q) ? { ...q, state: 'conflict', theirs: placingsOf(race?.results ?? []) } : q);
+      const changed = ((race as { programmeRevision?: number } | undefined)?.programmeRevision ?? 0) !== (sent.expectedProgrammeRevision ?? 0);
+      return list.map((q) => same(q) ? { ...q, state: 'conflict', ...(changed ? { programmeChanged: true } : {}), theirs: placingsOf(race?.results ?? []) } : q);
     }
     case 'failed':
       return list.map((q) => same(q) ? { ...q, state: 'failed', error: outcome.message } : q);
@@ -99,7 +102,7 @@ function samePlacings(a: Placing[], b: Placing[]): boolean {
 
 /** Send mine anyway: it now replaces the results the other device saved. */
 export function overrule(list: QueuedScore[], raceId: number, reason?: string): QueuedScore[] {
-  return list.map((q) => q.raceId === raceId && q.state === 'conflict'
+  return list.map((q) => q.raceId === raceId && q.state === 'conflict' && !q.programmeChanged
     ? { ...q, state: 'waiting', expected: q.theirs ?? [], theirs: undefined, ...(reason === undefined ? {} : { reason }) }
     : q);
 }
@@ -222,6 +225,7 @@ export function parseOutboxBackup(
     out.push({
       ...(typeof item.saveId === 'string' && item.saveId ? { saveId: item.saveId } : {}),
       raceId: item.raceId,
+      ...(typeof item.expectedProgrammeRevision === 'number' && Number.isInteger(item.expectedProgrammeRevision) && item.expectedProgrammeRevision >= 0 ? { expectedProgrammeRevision: item.expectedProgrammeRevision } : {}),
       competitionId: compId,
       sessionId: item.sessionId,
       label: item.label.trim(),

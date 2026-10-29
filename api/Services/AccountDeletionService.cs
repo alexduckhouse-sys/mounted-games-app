@@ -44,6 +44,10 @@ public sealed class AccountDeletionService(AppDbContext db, UserManager<AppUser>
         // Read fresh: a block outlives the account. Deleting must not be a way to lift it.
         var blocked = await db.Users.AsNoTracking().AnyAsync(u => u.Id == id && u.BlockedAt != null, ct);
 
+        await Vaccinations.VaccinationPrivacy.AnonymiseAccountAsync(db, id, ct);
+        await Apple.AppleFeatures.DeleteAccountAsync(db, id, ct);
+        await db.Set<WindRaceDecision>().Where(x => x.ActorUserId == id).ExecuteUpdateAsync(s => s.SetProperty(x => x.ActorUserId, (string?)null), ct);
+
         // --- Private to the person: removed. ---
         // Marketing opt-ins for the account's address. They are stored trimmed and lower-cased, so match the same way.
         var optInEmail = (user.Email ?? string.Empty).Trim().ToLowerInvariant();

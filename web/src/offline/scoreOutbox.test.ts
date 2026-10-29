@@ -286,3 +286,10 @@ describe('serializeOutboxBackup, parseOutboxBackup and mergeOutboxBackup', () =>
     expect(parseOutboxBackup('[{"raceId":1,"sessionId":1,"label":"x","places":[{"teamId":1,"place":1,"eliminated":"no"}]}]', 1)).toBeNull();
   });
 });
+
+it('retains old-programme results as a conflict that cannot be forced onto a replacement', () => {
+  const sent = queued(1, { expectedProgrammeRevision: 0 });
+  const result = settle([sent], sent, { kind: 'conflict', sessionId: 1, heat: { races: [{ id: 1, programmeRevision: 1, results: [] }] } as never });
+  expect(result[0]).toMatchObject({ state: 'conflict', programmeChanged: true, places: sent.places });
+  expect(overrule(result, 1, 'Keep mine')).toEqual(result);
+});

@@ -6,6 +6,7 @@ import { parseEmbedOptions } from '../../lib/embed';
 import { CompetitionEmbed } from './CompetitionEmbed';
 import { EmbedFrame, EmbedMessage } from './EmbedFrame';
 import { SeasonEmbed } from './SeasonEmbed';
+import { BroadcastOverlay } from './BroadcastOverlay';
 
 function NotAvailable() {
   const t = useT();
@@ -27,6 +28,7 @@ export function EmbedApp() {
     <LanguageProvider initial={langFromBrowser(typeof navigator === 'undefined' ? null : navigator.language)}>
     <BrowserRouter>
       <Routes>
+        <Route path="/embed/competitions/:id/overlay" element={<BroadcastOverlay />} />
         <Route path="/embed/competitions/:id/standings" element={<CompetitionEmbed view="standings" />} />
         <Route path="/embed/competitions/:id/results" element={<CompetitionEmbed view="results" />} />
         <Route path="/embed/competitions/:id/timetable" element={<CompetitionEmbed view="timetable" />} />

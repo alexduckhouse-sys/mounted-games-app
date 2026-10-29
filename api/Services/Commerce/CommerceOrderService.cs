@@ -142,9 +142,10 @@ public sealed class CommerceOrderService(AppDbContext db)
                 var requestedHookups = 0;
                 foreach (var requested in grouped)
                 {
-                    var title = listings[requested.ListingId].CatalogueItem!.Title;
-                    if (VenueCapacity.IsStableTitle(title)) requestedStables += requested.Quantity;
-                    if (VenueCapacity.IsHookupTitle(title)) requestedHookups += requested.Quantity;
+                    var item = listings[requested.ListingId].CatalogueItem!;
+                    var kind = item.FulfilmentKind;
+                    if (VenueCapacity.ReservesStable(kind, item.Title)) requestedStables += requested.Quantity;
+                    if (VenueCapacity.ReservesHookup(kind, item.Title)) requestedHookups += requested.Quantity;
                 }
                 if (requestedStables > 0 || requestedHookups > 0)
                 {
@@ -199,6 +200,9 @@ public sealed class CommerceOrderService(AppDbContext db)
                         CatalogueItemId = item.Id,
                         SellerUserId = listing.SellerUserId,
                         TitleSnapshot = item.Title,
+                        FulfilmentKindSnapshot = item.FulfilmentKind,
+                        FulfilmentFromDate = item.FulfilmentFromDate,
+                        FulfilmentUntilDate = item.FulfilmentUntilDate,
                         UnitPriceMinorSnapshot = item.PriceMinor,
                         Quantity = requested.Quantity,
                         // Only an item that asks for a detail keeps one.
@@ -249,8 +253,8 @@ public sealed class CommerceOrderService(AppDbContext db)
         var requestedHookups = 0;
         foreach (var line in order.Lines)
         {
-            if (VenueCapacity.IsStableTitle(line.TitleSnapshot)) requestedStables += line.Quantity;
-            if (VenueCapacity.IsHookupTitle(line.TitleSnapshot)) requestedHookups += line.Quantity;
+            if (VenueCapacity.ReservesStable(line.FulfilmentKindSnapshot, line.TitleSnapshot)) requestedStables += line.Quantity;
+            if (VenueCapacity.ReservesHookup(line.FulfilmentKindSnapshot, line.TitleSnapshot)) requestedHookups += line.Quantity;
         }
         if (requestedStables > 0 || requestedHookups > 0)
         {

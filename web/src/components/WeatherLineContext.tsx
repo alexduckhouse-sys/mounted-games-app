@@ -3,7 +3,7 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from 're
 /** The one weather line the shell shows under the ticker, set by `WeatherAlert` on the event page. */
 export interface WeatherLineModel {
   tone: 'warn' | 'paused' | 'clear';
-  icon: 'thunder' | 'rain' | 'sun';
+  icon: 'thunder' | 'rain' | 'sun' | 'wind';
   text: string;
   /** The underlined words at the end. Only a tappable line has them. */
   actionLabel?: string;

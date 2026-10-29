@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { api } from '../../api';
+import { useAuth } from '../../auth/AuthContext';
+import { venueDay } from '../../lib/windForecast';
+import { parseForecastHours } from '../../lib/weatherAlert';
+import { WindReviewSheet } from '../../components/WindReviewSheet';
 import { Notice } from '../../components/Notice';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { usePageWidth } from '../../components/pageWidthState';
@@ -19,6 +23,9 @@ import { weatherConditionKey } from '../../lib/weatherText';
 
 interface ForecastApiResponse {
   utc_offset_seconds?: number;
+  fetchedAt?: string;
+  timezone?: string;
+  gustIntervals?: { startsAt: number; endsAt: number; gustMph: number }[];
   daily?: {
     time?: string[];
     weather_code?: number[];
@@ -28,7 +35,7 @@ interface ForecastApiResponse {
     wind_speed_10m_max?: number[];
   };
   hourly?: {
-    time?: (string | null)[];
+    time?: (string | number | null)[];
     temperature_2m?: number[];
     weather_code?: number[];
     precipitation_probability?: number[];
@@ -101,9 +108,9 @@ function buildDayWeather(
   const byInstant = new Map<number, HourForecast>();
   if (Array.isArray(hourly?.time)) {
     hourly.time.forEach((raw, i) => {
-      if (typeof raw !== 'string') return;
-      const zoned = /(?:Z|[+-]\d{2}:\d{2})$/i.test(raw);
-      const startsAt = zoned ? Date.parse(raw)
+      if (typeof raw !== 'string' && !finite(raw)) return;
+      const zoned = /(?:Z|[+-]\d{2}:\d{2})$/i.test(String(raw));
+      const startsAt = finite(raw) ? raw * 1000 : zoned ? Date.parse(String(raw))
         : finite(offset) ? Date.parse(`${raw}Z`) - offset * 1000 : NaN;
       if (!Number.isFinite(startsAt)) return;
       const at = new Date(startsAt);
@@ -144,6 +151,8 @@ function buildDayWeather(
 
 export function WeatherPage() {
   usePageWidth('wide');
+  const { canOrganise } = useAuth();
+  const [windOpen, setWindOpen] = useState(false);
   const { t, locale } = useLanguage();
   const { competition, reload } = useCompetition();
   const [refreshVersion, setRefreshVersion] = useState(0);
@@ -240,6 +249,8 @@ export function WeatherPage() {
   return (
     <div className="rf-page mx-auto flex w-full max-w-xl flex-col pb-8 pt-3">
       <h1 className="sr-only">{t('teams.weather.title')}</h1>
+      {canOrganise(competition) && <button className="kit-pill mb-3" onClick={() => setWindOpen(true)}>{t('wind.review')}</button>}
+      {windOpen && <WindReviewSheet competition={competition} prompt={null} hours={parseForecastHours(activeForecast)} reload={reload} onClose={() => setWindOpen(false)} />}
       {days.length > 1 && (
         <div className="sp-seg mb-3" role="tablist" aria-label={t('teams.weather.chooseDay')}>
           {days.map((day, index) => {
@@ -273,6 +284,13 @@ export function WeatherPage() {
         </>}
       </section>
 
+      {activeForecast?.gustIntervals && <section className="ev-card p-4" aria-label={t('wind.forecast')}>
+        <details><summary className="sp-t1">{t('wind.forecast')}</summary>
+        {activeForecast.fetchedAt && <p className="sp-note">{t('wind.updated', { time: formatTime(new Date(activeForecast.fetchedAt)) })}</p>}
+        {activeForecast.gustIntervals.filter(g => venueDay(new Date((g.endsAt - 1) * 1000), activeForecast.timezone) === selectedDay).map(g =>
+          <p className="sp-t2" key={g.endsAt}>{formatTime(new Date(g.startsAt * 1000))}–{formatTime(new Date(g.endsAt * 1000))} · {t('wind.peak', { speed: Math.round(g.gustMph) })}</p>)}
+        </details><p className="sp-note">{t('wind.awareness')}</p>
+      </section>}
       <section aria-label={t('teams.weather.timetableAria')}>
         <h2 className="sp-sec">{t('teams.weather.throughDay')}</h2>
         {dayRows.length === 0 ? (

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useDayForecast } from '../hooks/useDayForecast';
+import { useWindSettings } from '../hooks/useWindSettings';
 import { useNow } from '../hooks/useNow';
 import { useT } from '../i18n/LanguageContext';
 import { formatTime } from '../lib/time';
@@ -11,11 +12,13 @@ import {
 import type { CompetitionDetail } from '../types';
 import { useSetWeatherLine } from './WeatherLineContext';
 import { ClearSheet, WarnSheet } from './WeatherSheets';
+import { WindReviewSheet } from './WindReviewSheet';
+import { readWindSnooze, windPrompt, windSnoozed, writeWindSnooze, type WindPrompt } from '../lib/windForecast';
 
 const time = (ms: number) => formatTime(new Date(ms));
 
 /** The warning sheet keeps what it was opened with, so it does not change under the organiser's thumb mid-edit. */
-type Open = { type: 'warn'; run: HazardRun; arenas: string[]; allPaused: boolean } | { type: 'clear'; kind: Hazard; since: number };
+type Open = { type: 'warn'; run: HazardRun; arenas: string[]; allPaused: boolean } | { type: 'clear'; kind: Hazard; since: number } | { type: 'wind'; prompt: WindPrompt | null };
 
 /**
  * Weather alerts for organisers on an event day. It watches today's forecast near the venue and, when thunder or
@@ -29,15 +32,27 @@ export function WeatherAlert({ competition, reload }: { competition: Competition
   const now = useNow(60_000);
   const nowMs = now.getTime();
   const sessions = competition.sessions;
-  const allowed = canOrganise(competition) && isEventDay(competition, sessions, now) && racingToCome(sessions);
+  const windPaused = sessions.some(s => s.status !== 2 && s.notes?.includes('[pausefor:wind]') && s.notes.includes('[paused:'));
+  const allowed = canOrganise(competition) && (windPaused || isEventDay(competition, sessions, now)) && racingToCome(sessions);
   const hours = useDayForecast(competition.latitude, competition.longitude, allowed);
   const [snoozes, setSnoozes] = useState<Snoozes>(() => readSnoozes(competition.id));
   const [open, setOpen] = useState<Open | null>(null);
   const state: WeatherLineState = allowed ? weatherLineState({ now: nowMs, hours, sessions, snoozes }) : { phase: 'none' };
 
+  const [windSnooze, setWindSnooze] = useState(() => readWindSnooze(competition.id));
+  const [windMemory, setWindMemory] = useState<{ hours: typeof hours; now: number; prompt: WindPrompt | null; review: number; official: number }>({ hours: null, now: 0, prompt: null, review: 25, official: 35 });
+  const windSettings = useWindSettings(competition.id, allowed);
+  const reviewSpeed = windSettings?.selections.length ? Math.min(...windSettings.selections.map(s => Math.min(s.reviewMph, s.venueLimitMph ?? 150))) : 25;
+  const officialSpeed = windSettings?.selections.length ? Math.min(...windSettings.selections.map(s => s.officialReviewMph)) : 35;
+  const gust = windPrompt(hours, nowMs, windMemory.prompt, reviewSpeed, officialSpeed);
+  if (windMemory.hours !== hours || windMemory.now !== nowMs || windMemory.review !== reviewSpeed || windMemory.official !== officialSpeed)
+    setWindMemory({ hours, now: nowMs, prompt: gust, review: reviewSpeed, official: officialSpeed });
+  const windArenaKey = openArenas(sessions).sort().join('|');
+  const showWind = allowed && (windPaused || (gust && !windSnoozed(gust, windSnooze, windArenaKey) && !windSettings?.acknowledgements.some(a => windSnoozed(gust, a, windArenaKey))));
+
   // What the line says and does is worked out here; the shell only draws it.
   let tone: 'warn' | 'paused' | 'clear' = 'warn';
-  let icon: 'thunder' | 'rain' | 'sun' = 'thunder';
+  let icon: 'thunder' | 'rain' | 'sun' | 'wind' = 'thunder';
   let text = '';
   let actionLabel: string | undefined;
   let opens: Open | null = null;
@@ -65,7 +80,12 @@ export function WeatherAlert({ competition, reload }: { competition: Competition
     actionLabel = t('shell.weather.line.startAgain');
     opens = { type: 'clear', kind: state.kind, since: state.since };
   }
-  const visible = state.phase !== 'none';
+  if (showWind) {
+    tone = windPaused ? 'paused' : 'warn'; icon = 'wind';
+    text = windPaused ? t(gust ? 'wind.paused' : 'wind.recheck') : t('wind.line', { speed: Math.round(gust!.peakMph), from: time(gust!.startsAt), until: time(gust!.endsAt) });
+    actionLabel = t('wind.review'); opens = { type: 'wind', prompt: gust };
+  }
+  const visible = state.phase !== 'none' || !!showWind;
 
   // The line is published to the shell. Opening goes through a ref so the published line only changes when its words do.
   const opensRef = useRef<Open | null>(null);
@@ -85,6 +105,7 @@ export function WeatherAlert({ competition, reload }: { competition: Competition
   }
 
   const common = { competitionId: competition.id, sessions, nowMs, reload, onClose: () => setOpen(null) };
+  if (open?.type === 'wind') return <WindReviewSheet competition={competition} prompt={open.prompt} hours={hours} reload={reload} onClose={() => setOpen(null)} onSnooze={open.prompt ? () => { const value = { ...open.prompt!, arena: windArenaKey }; setWindSnooze(value); writeWindSnooze(competition.id, value); } : undefined} />;
   if (open?.type === 'warn') {
     return <WarnSheet {...common} run={open.run} arenas={open.arenas} allPaused={open.allPaused} onHandled={handled} />;
   }

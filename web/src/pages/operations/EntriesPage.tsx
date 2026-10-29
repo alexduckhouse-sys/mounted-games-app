@@ -23,6 +23,7 @@ import { heightText } from '../../lib/decForm';
 import { displaySectionName } from '../../lib/section';
 import { parsePassSignupIdFromSearch } from '../../lib/stablingPass';
 import type { CompetitionEntrySettings, DeclarationForm, RiderEntry, SectionSignup } from '../../types';
+import { ArrivalBookings, ArrivalGateLookup } from '../../components/wallet/ArrivalBookings';
 import { useCompetition } from '../competition/context';
 import { RefineChoiceRow, RefineDateTimeRow, RefineHeader, RefineList, RefinePage, RefineSection } from '../refine/Refine';
 import type { TeamEntry } from './types';
@@ -66,6 +67,7 @@ interface LockTime { declarationsCloseAt: string | null }
 export function EntriesPage() {
   const t = useT();
   const { competition, reload } = useCompetition();
+  const [arrivalsOpen, setArrivalsOpen] = useState(false);
   const { search } = useLocation();
   const passSignupId = parsePassSignupIdFromSearch(search);
   const [passNotice, setPassNotice] = useState<string | null>(null);
@@ -209,6 +211,11 @@ export function EntriesPage() {
         {error && <Notice>{error}</Notice>}
         {passNotice && <Notice>{passNotice}</Notice>}
         {toast.node}
+        <ArrivalGateLookup competitionId={competition.id} />
+        <details className="rf-list" onToggle={e => setArrivalsOpen(e.currentTarget.open)}>
+          <summary className="rf-row">{t('apple.arrival.title')}</summary>
+          {arrivalsOpen && <ArrivalBookings competitionId={competition.id} staff />}
+        </details>
 
         <RefineList as="div">
           <div className="rf-row">

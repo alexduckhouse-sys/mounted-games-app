@@ -31,7 +31,7 @@ public class PassportDateRangeSecurityTests(ApiFactory f) : IClassFixture<ApiFac
         using var admin = await f.AdminAsync();
         var response = await admin.PutAsJsonAsync($"/api/event-tools/competitions/{competition}/passport-check/teams/{team}",
             new SetPassportCheckRequest("Fake Pony", true, LastFluVaccineDate: flu, LastTetanusDate: tetanus));
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.False(await f.WithDbAsync(db => Task.FromResult(db.Set<PassportCheck>().Any(p => p.TeamId == team))));
     }
 
@@ -45,8 +45,8 @@ public class PassportDateRangeSecurityTests(ApiFactory f) : IClassFixture<ApiFac
         var status = PassportCheckService.EvaluateStatus(DateOnly.MaxValue, true,
             ref flu, ref fluExpiry, ref tetanus, ref tetanusExpiry);
         Assert.False(status.Certified);
-        Assert.Equal("TooRecent", status.Status);
-        Assert.Equal("9999-12-31", fluExpiry);
-        Assert.Equal("9999-12-31", tetanusExpiry);
+        Assert.Equal("LegacyManualInspection", status.Status);
+        Assert.Equal(explicitExpiry, fluExpiry);
+        Assert.Equal(explicitExpiry, tetanusExpiry);
     }
 }

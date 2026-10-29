@@ -288,6 +288,7 @@ export interface ResultRow {
 }
 
 export interface Race {
+  programmeRevision?: number;
   id: number;
   heatId: number;
   name: string;

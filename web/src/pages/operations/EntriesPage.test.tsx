@@ -34,6 +34,7 @@ describe('EntriesPage', () => {
   beforeEach(() => {
     vi.mocked(api.get).mockImplementation(async (url) => {
       const path = String(url);
+      if (path.includes('/arrival-bookings')) return { data: [] } as never;
       if (path.endsWith('/entries')) return { data: entries } as never;
       if (path.endsWith('/signups')) return { data: signups } as never;
       if (path === '/declaration-forms') return { data: forms } as never;
@@ -103,6 +104,7 @@ describe('EntriesPage', () => {
     const pendingOnly = { id: 201, teamId: null, status: 0, competitionSectionId: 11, sectionName: 'Under 12', fullName: 'Casey', amountMinor: 1500, createdAt: '' };
     vi.mocked(api.get).mockImplementation(async (url) => {
       const path = String(url);
+      if (path.includes('/arrival-bookings')) return { data: [] } as never;
       if (path.endsWith('/entries')) return { data: [] } as never;
       if (path.endsWith('/signups')) return { data: [pendingOnly] } as never;
       if (path === '/declaration-forms') return { data: [] } as never;

@@ -1,3 +1,4 @@
+import { EntrantVaccinationCheck } from '../eventTools/vaccinations/EntrantVaccinationCheck';
 import { useId, useMemo, useState } from 'react';
 import { ChevronDown, Flag, Shield } from 'lucide-react';
 import { RoundSearch } from '../../components/RoundSearch';
@@ -121,6 +122,7 @@ export function DecFormList({ forms, teams, sections, config, canDelete, onDelet
                             </span>
                             <span className="text-[rgb(var(--mg-muted))]">{r.horseName ?? '—'}{r.ponyHeightHands != null ? ` · ${heightText(r.ponyHeightHands)} hh` : ''}</span>
                             {detailLine(r, config) && <span className="basis-full text-xs text-[rgb(var(--mg-muted))]">{detailLine(r, config)}</span>}
+                            {(form.submittedByUserId || form.termsAcceptedAt || canDelete(form)) && r.horseName && <EntrantVaccinationCheck competitionId={form.competitionId} riderId={r.id} />}
                             {r.flags?.map((flag) => <span key={flag} className="mg-flag basis-full">{flag}</span>)}
                           </li>
                         ))}

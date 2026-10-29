@@ -25,6 +25,7 @@ import { formatPoints } from '../../lib/formatPoints';
 import { isUnaffiliated } from '../../lib/clubName';
 import { useLanguage } from '../../i18n/LanguageContext';
 import './following.css';
+import { LiveActivityChoice } from '../../native/LiveActivityChoice';
 
 const PUSH = { mgTransition: 'push' } as const;
 const GROUPS = [
@@ -146,6 +147,7 @@ export function FollowingTab() {
         <button type="button" className="fc-star" aria-pressed="true" aria-label={t('teams.unfollow', { name: team.displayName })} onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}><FollowStar on className="h-[22px] w-[22px]" /></button>
       </div>
       {lines}
+      <LiveActivityChoice competitionId={competition.id} teamId={team.id} teamName={team.displayName} />
     </motion.li>;
   };
   const star = 'flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[rgb(var(--mg-heading))] hover:bg-[rgb(var(--mg-subtle))]';

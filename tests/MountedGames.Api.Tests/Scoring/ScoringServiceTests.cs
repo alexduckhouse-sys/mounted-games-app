@@ -463,7 +463,7 @@ public class ScoringServiceTests : IClassFixture<ApiFactory>
     public async Task SessionsDayControlsEndpoints_ChangeCancelRace_ClearRerun_CombineHeat_AndHold()
     {
         var a = await _f.CreateArenaAsync(2);
-        var (_, races) = await _f.AddHeatAsync(a.SessionId, a.TeamIds, raceCount: 2);
+        var (_, races) = await _f.AddHeatAsync(a.SessionId, a.TeamIds, raceCount: 3);
         var client = await _f.AdminAsync();
 
         // 1. Mid-session change race name across heats
@@ -477,8 +477,10 @@ public class ScoringServiceTests : IClassFixture<ApiFactory>
         // 2. Score race 1, flag under review, then clear for re-run via DELETE /api/sessions/races/{raceId}/results
         using (var scope = _f.Services.CreateScope())
         {
-            await Service(scope).ApplyRaceResultsAsync(races[0],
-                new[] { new FinishingPlace(a.TeamIds[0], 1, false), new FinishingPlace(a.TeamIds[1], 2, false) }, null);
+            await Service(scope).ApplyVersionedAsync(races[0], new UpdateRaceScoreRequest(
+                new[] { new FinishingPlaceDto(a.TeamIds[0], 1, false), new FinishingPlaceDto(a.TeamIds[1], 2, false) },
+                0, Guid.NewGuid().ToString(), null,
+                updatedSession.Heats[0].Races.First(r => r.Id == races[0]).ProgrammeRevision), null);
         }
 
         var reviewResp = await client.PutAsJsonAsync(
@@ -491,12 +493,14 @@ public class ScoringServiceTests : IClassFixture<ApiFactory>
         var rerunScore = await rerunResp.Content.ReadFromJsonAsync<RaceScoreDto>();
         Assert.Empty(rerunScore!.Results);
 
-        // 3. Cancel race 2 across session
+        // 3. Scoring has started race 2's clock. Only the still-future race 3 can be cancelled.
+        Assert.Equal(System.Net.HttpStatusCode.Conflict, (await client.DeleteAsync(
+            $"/api/competitions/{a.CompetitionId}/sessions/{a.SessionId}/races/{races[1]}")).StatusCode);
         var cancelResp = await client.DeleteAsync(
-            $"/api/competitions/{a.CompetitionId}/sessions/{a.SessionId}/races/{races[1]}");
+            $"/api/competitions/{a.CompetitionId}/sessions/{a.SessionId}/races/{races[2]}");
         cancelResp.EnsureSuccessStatusCode();
         var afterCancel = await cancelResp.Content.ReadFromJsonAsync<SessionDto>();
-        Assert.Single(afterCancel!.Heats[0].Races);
+        Assert.Equal(new[] { races[0], races[1] }, afterCancel!.Heats[0].Races.Select(r => r.Id));
 
         // 4. Hold competition with custom resume time
         await _f.WithDbAsync(async db =>

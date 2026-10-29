@@ -2,6 +2,8 @@ import type { AreaCatalogue } from '../messages';
 import type { account as en } from '../en/account';
 
 export const account: AreaCatalogue<typeof en> = {
+  "account.account.exportEventData": "Lawrlwytho fy nghofnodion cyrraedd a brechu",
+  "account.account.exportFailed": "Nid oedd modd lawrlwytho eich cofnodion. Rhowch gynnig arall arni.",
   'account.role.admin': 'Gweinyddwr',
   'account.role.manager': 'Rheolwr tîm',
   'account.role.trainer': 'Hyfforddwr',

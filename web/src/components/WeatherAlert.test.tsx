@@ -134,7 +134,7 @@ describe('WeatherAlert: the pause sheet', () => {
     });
     expect(reload).toHaveBeenCalled();
     expect(JSON.parse(localStorage.getItem('mg.weather.snooze.7') ?? '{}').thunder).toBeGreaterThan(at(17));
-    expect(screen.queryByRole('button', { name: /Thunder likely/ })).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Thunder likely/ })).toBeNull());
   });
 
   it('tells without pausing when the switch is off, and the draft follows the switch until it is edited', async () => {
@@ -298,6 +298,7 @@ describe('WeatherAlert: paused and all clear', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(state.post).toHaveBeenCalledWith('/competitions/7/sessions/resume', {
       arenaName: 'Main Arena',
+      reason: 'thunder',
       announcement: expect.stringContaining('Racing is starting again'),
     });
     expect(reload).toHaveBeenCalled();
@@ -334,9 +335,10 @@ describe('WeatherAlert: paused and all clear', () => {
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Continue and tell everyone' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    const calls = state.post.mock.calls.map(([, body]) => body as { arenaName?: string; announcement?: string });
+    const calls = state.post.mock.calls.map(([, body]) => body as { arenaName?: string; reason?: string; announcement?: string });
     // The retry goes over the arenas again (resuming an arena twice is harmless), but never repeats the announcement.
     expect(calls.map((c) => c.arenaName)).toEqual(['Main Arena', 'Second Arena', 'Main Arena', 'Second Arena']);
+    expect(calls.every((call) => call.reason === 'thunder')).toBe(true);
     expect(calls[0].announcement).toBeTruthy();
     expect(calls.slice(1).every((c) => c.announcement === undefined)).toBe(true);
   });
@@ -348,7 +350,7 @@ describe('WeatherAlert: paused and all clear', () => {
     await userEvent.click(screen.getByRole('button', { name: /No thunder since/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Continue and tell everyone' }));
     await waitFor(() => expect(state.post).toHaveBeenCalledTimes(1));
-    expect(state.post.mock.calls[0][1]).toMatchObject({ arenaName: undefined });
+    expect(state.post.mock.calls[0][1]).toMatchObject({ arenaName: undefined, reason: 'thunder' });
   });
 
   it('will not send an empty announcement when starting again', async () => {

@@ -73,7 +73,7 @@ async function send(item: QueuedScore): Promise<SendOutcome> {
     const client = item.viaLink ? scorerApi : api;
     const path = item.viaLink ? `/scorer/races/${item.raceId}/results` : `/races/${item.raceId}/results`;
     const { data } = await client.post<Heat>(path,
-      { places: item.places, expected: item.expected, ...(item.reason ? { reason: item.reason } : {}) }, { timeout: 15_000 });
+      { places: item.places, expected: item.expected, ...(item.expectedProgrammeRevision != null ? { expectedProgrammeRevision: item.expectedProgrammeRevision } : {}), ...(item.reason ? { reason: item.reason } : {}) }, { timeout: 15_000 });
     return { kind: 'saved', sessionId: item.sessionId, heat: data };
   } catch (err) {
     return outcomeOfError(err, item.viaLink);

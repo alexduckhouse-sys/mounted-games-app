@@ -295,13 +295,14 @@ public class SponsorsController(AppDbContext db, ILiveBroadcaster live, TimeProv
         return await WithTotalsAsync(sponsor);
     }
 
-    /// <summary>Skips the sponsor card on screen for everyone watching. Nothing is stored.</summary>
+    /// <summary>Skips the sponsor card for viewers and records the advance for broadcast sources.</summary>
     [HttpPost("skip")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
-    public async Task<ActionResult<SponsorControlDto>> Skip(int competitionId)
+    public async Task<ActionResult<SponsorControlDto>> Skip(int competitionId, [FromServices] MountedGames.Api.Services.Broadcast.BroadcastService broadcast)
     {
         var control = new SponsorControlDto("skip");
+        await broadcast.SkipSponsorAsync(competitionId, HttpContext.RequestAborted);
         await live.SponsorControl(competitionId, control);
         return control;
     }

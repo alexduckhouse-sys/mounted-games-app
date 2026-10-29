@@ -8,6 +8,7 @@ using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Hubs;
+using MountedGames.Api.Services.Broadcast;
 
 namespace MountedGames.Api.Controllers;
 
@@ -17,7 +18,7 @@ namespace MountedGames.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/competitions/{competitionId:int}/overlays")]
-public class StreamOverlaysController(AppDbContext db, ILiveBroadcaster live, TimeProvider time) : ControllerBase
+public class StreamOverlaysController(AppDbContext db, ILiveBroadcaster live, TimeProvider time, BroadcastService broadcast) : ControllerBase
 {
     private const int MaxLookBytes = 4000;
     private const int MaxArenas = 12;
@@ -87,7 +88,7 @@ public class StreamOverlaysController(AppDbContext db, ILiveBroadcaster live, Ti
 
     /// <summary>
     /// Shows a race's score card now, skips it, or changes its display (hidden rows, display names, time on
-    /// screen) for every viewer. Nothing is stored and results are untouched; viewers apply it to the card they hold.
+    /// screen) for every viewer. The public cue is retained briefly for broadcast sources joining mid-card; results are untouched.
     /// </summary>
     [HttpPost("score-card")]
     [Authorize(Policy = CompetitionStaff.Policy)]
@@ -106,6 +107,7 @@ public class StreamOverlaysController(AppDbContext db, ILiveBroadcaster live, Ti
 
         var control = new ScoreCardControlDto(req.HeatId, req.RaceId, req.Action,
             (req.HiddenTeamIds ?? []).Distinct().Take(MaxNames).ToList(), names, req.Seconds);
+        await broadcast.RecordScoreAsync(competitionId, control, HttpContext.RequestAborted);
         await live.ScoreCardControl(competitionId, control);
         return control;
     }
@@ -115,7 +117,7 @@ public class StreamOverlaysController(AppDbContext db, ILiveBroadcaster live, Ti
 
     /// <summary>
     /// Steps a prize-giving on the stream: each call carries every place given so far, so a viewer who joins part-way
-    /// catches up at the next place. Team and club names are read from the event; nothing is stored.
+    /// catches up at the next place. Public names and places are retained briefly for broadcast sources joining mid-reveal.
     /// </summary>
     [HttpPost("prize-giving")]
     [Authorize(Policy = CompetitionStaff.Policy)]
@@ -126,6 +128,7 @@ public class StreamOverlaysController(AppDbContext db, ILiveBroadcaster live, Ti
         if (req.Action == "clear")
         {
             var cleared = new PrizeGivingDto("clear", null, null, [], false);
+            await broadcast.RecordPrizeAsync(competitionId, cleared, HttpContext.RequestAborted);
             await live.PrizeGiving(competitionId, cleared);
             return cleared;
         }
@@ -151,6 +154,7 @@ public class StreamOverlaysController(AppDbContext db, ILiveBroadcaster live, Ti
         var given = new PrizeGivingDto("show", section.Id, string.IsNullOrWhiteSpace(section.DisplayName) ? section.AgeGroup : section.DisplayName,
             places.Select(p => new PrizeGivingPlaceDto(p.TeamId, p.Place, teams[p.TeamId].DisplayName, teams[p.TeamId].Club, p.Points)).ToList(),
             req.Champions);
+        await broadcast.RecordPrizeAsync(competitionId, given, HttpContext.RequestAborted);
         await live.PrizeGiving(competitionId, given);
         return given;
     }

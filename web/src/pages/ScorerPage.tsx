@@ -1,3 +1,4 @@
+import { windDraftKey } from '../lib/windScoring';
 import { useWakeLock } from '../hooks/useWakeLock';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useDialogFocus } from '../components/useDialogFocus';
@@ -22,7 +23,7 @@ import { enqueue, placingsOf, type QueuedScore } from '../offline/scoreOutbox';
 import { nextRoundLanes } from '../lib/nextRoundLanes';
 import { sessionPointsBase, withQueuedResults } from '../lib/queuedView';
 import { dropDrafts, pushUndo, undoSave, type UndoEntry } from '../lib/scoreUndo';
-import { clearDeadHeat, markDeadHeat, overridePoints, nextRaceToScore, placesFromResults, tapTeam, toggleEliminated } from '../lib/raceScoring';
+import { clearDeadHeat, markDeadHeat, overridePoints, nextRaceToScore, placesFromResults, readScoringDraft, writeScoringDraft, tapTeam, toggleEliminated } from '../lib/raceScoring';
 import { inLaneOrder } from '../lib/laneOrder';
 import { displayLaneFor, lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './competition/laneRules';
 import { HEAT_SAVED, isSaveInFlight, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
@@ -729,6 +730,15 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
   const heat = heats.find((h) => h.id === chosenHeatId) ?? heats.find((h) => !heatIsComplete(h)) ?? heats[0] ?? null;
   const races = (heat?.races ?? []).slice().sort((a, b) => a.orderIndex - b.orderIndex);
   const activeRace = races.find((r) => r.id === chosenRaceId) ?? races.find((r) => !r.isComplete) ?? races[races.length - 1] ?? null;
+  const draftKey = activeRace && heat ? windDraftKey(heat.id, activeRace.id, activeRace.programmeRevision ?? 0) : null;
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const programmeKey = sessions.flatMap(s => s.heats.flatMap(h => h.races.map(r => `${r.id}:${r.programmeRevision ?? 0}`))).join('|');
+  const [undoProgramme, setUndoProgramme] = useState(programmeKey);
+  if (undoProgramme !== programmeKey) { setUndoProgramme(programmeKey); setUndoStack([]); }
+  if (pendingKey !== draftKey) {
+    setPendingKey(draftKey); setPending(draftKey ? readScoringDraft(draftKey) : null);
+  }
+  useEffect(() => { if (draftKey && pendingKey === draftKey && pending !== null) writeScoringDraft(draftKey, pending); }, [draftKey, pendingKey, pending]);
   // Keep the screen on while a race is open for scoring.
   useWakeLock(Boolean(activeRace && !activeRace.isComplete));
   // A heat with more teams than lanes races only the lanes, so points are out of the lanes, not the teams.
@@ -774,6 +784,9 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
   /** Queues the race's result; false when it can't be saved yet (the error says why). */
   function submit(places: PendingPlace[] = shown): boolean {
     if (!activeRace || !heat) return false;
+    if (outbox.some(q => q.raceId === activeRace.id && (q.expectedProgrammeRevision ?? 0) !== (activeRace.programmeRevision ?? 0))) {
+      setSaveError('Scores for the earlier race are still on this phone. Keep a backup and review them before scoring the replacement.'); return false;
+    }
     const reason = reasons[activeRace.id]?.trim();
     if ((activeRace.results.length > 0 || outbox.some((item) => item.raceId === activeRace.id)) && !reason) {
       setSaveError('Add a reason for this correction before saving.');
@@ -789,6 +802,7 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
       label: `${heat.label ?? `Heat ${heatIndex + 1}`} · ${activeRace.name}`,
       places: [...places, ...restOfQualifier(heat, places), ...sitOutPlaces(heat, races.findIndex((r) => r.id === activeRace.id), laneRules)],
       expected: placingsOf(activeRace.results),
+      expectedProgrammeRevision: (activeRace as { programmeRevision?: number }).programmeRevision ?? 0,
       teamNames: Object.fromEntries(heat.entries.map((e) => [e.teamId, e.teamName])),
       queuedAt: new Date().toISOString(),
       state: 'waiting',
@@ -845,7 +859,10 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
       return result.outbox;
     });
     const owner = heats.find((h) => h.races.some((r) => r.id === lastUndo.raceId));
-    if (owner) { setChosenHeatId(owner.id); setChosenRaceId(lastUndo.raceId); }
+    if (owner) {
+      writeScoringDraft(windDraftKey(owner.id, lastUndo.raceId, owner.races.find(r => r.id === lastUndo.raceId)?.programmeRevision ?? 0), restore);
+      setChosenHeatId(owner.id); setChosenRaceId(lastUndo.raceId);
+    }
     setPending(restore.length > 0 ? restore : null);
   }
 
@@ -858,7 +875,7 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
   }
 
   const clashes: ScoreClashItem[] = outbox
-    .filter((q) => q.state === 'conflict' && q.sessionId === session.id)
+    .filter((q) => q.state === 'conflict' && !q.programmeChanged && q.sessionId === session.id)
     .map((q) => {
       const serverRace = heats.flatMap((h) => h.races).find((r) => r.id === q.raceId);
       return {
@@ -1022,7 +1039,7 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
       {viewHeat && (
         <ScoringSection
           competitionId={session.competitionId}
-          key={`${viewHeat.id}:${activeRace?.id}`}
+          key={`${viewHeat.id}:${activeRace?.id}:${activeRace?.programmeRevision ?? 0}`}
           heat={viewHeat}
           races={viewRaces}
           activeRace={viewRaces.find((r) => r.id === activeRace?.id) ?? null}

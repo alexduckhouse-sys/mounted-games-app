@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { ChevronRight, Minus, Plus, X } from 'lucide-react';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { CatalogueFulfilmentEditor } from '../../components/wallet/CatalogueFulfilmentEditor';
 import { CardDropdownRow } from '../../components/CardDropdownRow';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { confirmDialog } from '../../components/ConfirmDialog';
@@ -233,6 +234,7 @@ function SellerCatalogueContent() {
           <button type="button" className="sp-add cs-addbar cs-addbar-plain" disabled={busy} onClick={() => setSheet('edit')}>Edit details</button>
         </div>
 
+        <CatalogueFulfilmentEditor key={active.id} itemId={active.id} onChanged={load} />
         <h2 className="sp-sec">Events</h2>
         <div className="sp-card">
           {itemListings.map((listing) => {

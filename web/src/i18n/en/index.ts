@@ -13,16 +13,20 @@ import { site } from './site.ts';
 import { admin } from './admin.ts';
 import { desk } from './desk.ts';
 import { teams } from './teams.ts';
+import { broadcast } from './broadcast.ts';
+import { vaccinations } from './vaccinations.ts';
+import { apple } from './apple.ts';
+import { wind } from './wind.ts';
 
 /** The areas of the catalogue, one file each. Keys are `area.thing`; an area never reuses another's prefix. */
-export const AREAS = { common, shell, auth, account, entries, competition, teams, site, ops, screen, admin, desk, ops2, ops3 } as const;
+export const AREAS = { common, shell, auth, account, entries, competition, teams, site, ops, screen, admin, desk, ops2, ops3, broadcast, vaccinations, apple, wind } as const;
 
 /**
  * English is the source language and the fallback for everything missing from Welsh or French. Where a string
  * moved here from a component it is byte-identical to what the component showed, so tests that read English keep
  * passing.
  */
-export const en = { ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...site, ...ops, ...screen, ...admin, ...desk, ...ops2, ...ops3 } satisfies Record<string, Message>;
+export const en = { ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...site, ...ops, ...screen, ...admin, ...desk, ...ops2, ...ops3, ...broadcast, ...vaccinations, ...apple, ...wind } satisfies Record<string, Message>;
 
 export type MessageKey = keyof typeof en;
 /** A non-English catalogue: any subset of the English keys. */

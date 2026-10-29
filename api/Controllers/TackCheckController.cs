@@ -102,13 +102,9 @@ public sealed class TackCheckController(AppDbContext db, MountedGames.Api.Hubs.I
 
     [HttpGet("/api/event-tools/certified-horses/lookup")]
     [Authorize]
-    public Task<CertifiedHorseLookupDto> LookupCertifiedHorse(
-        [FromQuery] string? passportCode = null,
-        [FromQuery] string? ponyName = null,
-        [FromQuery] string? ownerFullName = null,
-        [FromQuery] int? competitionId = null,
-        CancellationToken ct = default)
-        => new PassportCheckService(db).LookupCertifiedHorseAsync(passportCode, ponyName, ownerFullName, competitionId, User, ct);
+    public ActionResult<CertifiedHorseLookupDto> LookupCertifiedHorse()
+        => Problem(statusCode: 410, title: "Passport lookup retired",
+            detail: "Open the pony on its authorised declaration or the event passport board.");
 
     /// <summary>Tack check bonus points are part of the standings, so live screens refetch them.</summary>
     private Task BroadcastStandingsAsync(int competitionId, int sectionId, int? teamId = null)

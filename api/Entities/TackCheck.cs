@@ -64,12 +64,7 @@ public class TackCheckMark
     public DateTime RecordedAt { get; set; } = DateTime.UtcNow;
 }
 
-/// <summary>
-/// A pony whose passport (and vaccinations) a steward has checked on arrival, for a competition with
-/// <see cref="Competition.EnablePassportCheck"/> on. Staff only. There is no pony entity, so a pony is its name
-/// within one team: <c>PonyKey</c> is the name trimmed and lower-cased, which keeps the tick when the declaration
-/// is edited. Ponies in different teams are never compared, because many ponies share a name.
-/// </summary>
+/// <summary>Legacy manual inspection, retained as history. Name-only keys do not establish horse identity or current admission.</summary>
 public class PassportCheck
 {
     public int Id { get; set; }
@@ -94,11 +89,7 @@ public class PassportCheck
     public string? OfficialNotes { get; set; }
 }
 
-/// <summary>
-/// Cross-competition equine passport and vaccination record inspected by a vet or official.
-/// Matched by normalised <see cref="PassportCode"/> (when present) or by (<see cref="HorseKey"/>, <see cref="OwnerKey"/>).
-/// Certification automatically expires when <see cref="FluValidUntil"/> or <see cref="TetanusValidUntil"/> is in the past.
-/// </summary>
+/// <summary>Legacy cross-event manual evidence. No new automatic matching or certification uses this record.</summary>
 public class CertifiedHorse
 {
     public int Id { get; set; }

@@ -34,15 +34,17 @@ function mount(data: CompetitionDetail, forms: DeclarationForm[] = [], reload = 
     if (String(url).endsWith('/scorer-links')) return Promise.resolve({ data: emptyScorerLinks });
     return Promise.resolve({ data: [] });
   });
-  return render(
+  const view = (data: CompetitionDetail) => (
     <MemoryRouter initialEntries={['/competitions/1/session/1']}>
       <CompetitionContext.Provider value={{
         competition: data, reload, saveOverlay, streams: [], streamingEnabled: false, invoke: vi.fn(), ready: 0, streamMessages: [],
       }}>
         <Routes><Route path="/competitions/:id/session/:sessionId" element={<SessionPage />} /></Routes>
       </CompetitionContext.Provider>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+  const mounted = render(view(data));
+  return { ...mounted, updateCompetition: (next: CompetitionDetail) => mounted.rerender(view(next)) };
 }
 
 const entries = (n: number): HeatEntry[] => Array.from({ length: n }, (_, i) => ({
@@ -290,6 +292,18 @@ describe('SessionPage', () => {
       await completeRace();
       await opened('Flag');
       expect(localStorage.getItem(draftKey(1))).toBeNull();
+    });
+
+    it('keeps an earlier programme draft without loading it into a replacement', async () => {
+      keepDraft(1, [{ teamId: 2, place: 1, eliminated: false }]);
+      const data = scoringData(3);
+      data.sessions[0].heats[0].races[0] = race(1, { name: 'Replacement', programmeRevision: 1 });
+      mount(data);
+      await opened('Replacement');
+      expect(placed()).toBe(0);
+      expect(JSON.parse(localStorage.getItem(draftKey(1))!)).toEqual([{ teamId: 2, place: 1, eliminated: false }]);
+      await tapRider('Rider 1', 1);
+      await waitFor(() => expect(JSON.parse(localStorage.getItem(`${draftKey(1)}:programme:1`)!)).toEqual([{ teamId: 1, place: 1, eliminated: false }]));
     });
 
     it('ignores a damaged draft', async () => {
@@ -1008,6 +1022,7 @@ describe('SessionPage', () => {
       await userEvent.click(screen.getAllByRole('button', { name: 'Change race' }).at(-1)!);
       await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/1/sessions/1/races/1', {
         newName: 'Sword',
+        expectedProgrammeRevision: 0,
         applyToAllHeats: true,
       }));
       await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/chat', {
@@ -1028,10 +1043,42 @@ describe('SessionPage', () => {
     await openOrganiserTools();
     expect(screen.getByRole('list', { name: 'Remaining uncompleted races' })).toHaveTextContent('Flag');
     await userEvent.click(screen.getByRole('button', { name: 'Save race line-up' }));
-    expect(api.put).toHaveBeenCalledWith('/competitions/1/sessions/1/races', { raceNames: ['Bending', 'Flag'] });
+    expect(api.put).toHaveBeenCalledWith('/competitions/1/sessions/1/races', {
+      raceNames: ['Bending', 'Flag'], expectedProgramme: {
+        plannedRaces: [], heatIds: [1], races: [
+          { raceId: 1, heatId: 1, orderIndex: 1, name: 'Bending', programmeRevision: 0 },
+          { raceId: 2, heatId: 1, orderIndex: 2, name: 'Flag', programmeRevision: 0 },
+        ],
+      },
+    });
     vi.mocked(api.put).mockRejectedValueOnce({ response: { data: { message: 'Protected game cannot move.' } } });
     await userEvent.click(screen.getByRole('button', { name: 'Save race line-up' }));
     expect(await screen.findByText('Protected game cannot move.')).toBeVisible();
+  });
+
+  it('keeps the original programme snapshot while a race-list draft receives a live replacement', async () => {
+    const data = scoringData(2);
+    const { updateCompetition } = mount(data);
+    await opened('Bending');
+    await openOrganiserTools();
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Flag' }));
+
+    const changed = structuredClone(data);
+    changed.sessions[0].heats[0].races[1].name = 'Approved replacement';
+    changed.sessions[0].heats[0].races[1].programmeRevision = 1;
+    updateCompetition(changed);
+    vi.mocked(api.put).mockRejectedValueOnce({ response: { status: 409, data: { message: 'The race programme changed. Refresh and review it.' } } });
+    await userEvent.click(screen.getByRole('button', { name: 'Save race line-up' }));
+
+    expect(api.put).toHaveBeenCalledWith('/competitions/1/sessions/1/races', {
+      raceNames: ['Bending'], expectedProgramme: {
+        plannedRaces: [], heatIds: [1], races: [
+          { raceId: 1, heatId: 1, orderIndex: 1, name: 'Bending', programmeRevision: 0 },
+          { raceId: 2, heatId: 1, orderIndex: 2, name: 'Flag', programmeRevision: 0 },
+        ],
+      },
+    });
+    expect(await screen.findByText('The race programme changed. Refresh and review it.')).toBeVisible();
   });
 
   describe('Commentator facts, post-race summary modal, and QR Access', () => {
@@ -1175,7 +1222,12 @@ it('adds a race from race tools without dropping protected games', async () => {
   await userEvent.selectOptions(within(sheet).getByRole('combobox', { name: 'Race to add' }), 'Sword');
   await userEvent.click(within(sheet).getByRole('button', { name: 'Add race' }));
   await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/1/sessions/1/races', {
-    raceNames: ['Bending', 'Flag', 'Sword'],
+    raceNames: ['Bending', 'Flag', 'Sword'], expectedProgramme: {
+      plannedRaces: [], heatIds: [1], races: [
+        { raceId: 1, heatId: 1, orderIndex: 1, name: 'Bending', programmeRevision: 0 },
+        { raceId: 2, heatId: 1, orderIndex: 2, name: 'Flag', programmeRevision: 0 },
+      ],
+    },
   }));
 });
 

@@ -38,3 +38,10 @@ describe('preview matches server scoring', () => {
     expect(withQueuedResults(h, [q], 4).races[0].results[2].points).toBe(1.5);
   });
 });
+
+ it('keeps queued scores from an earlier programme out of the replacement preview', () => {
+  const h = heat(1, { races: [race(1, { programmeRevision: 1 })] });
+  const q: QueuedScore = { raceId: 1, competitionId: 1, sessionId: 1, label: 'Earlier race', expected: [], teamNames: {}, queuedAt: '', state: 'waiting', places: [{ teamId: 1, place: 1, eliminated: false }] };
+  expect(withQueuedResults(h, [q], 4)).toBe(h);
+  expect(withQueuedResults(h, [{ ...q, expectedProgrammeRevision: 1 }], 4).races[0].isComplete).toBe(true);
+});

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
+import type { ArrivalBooking } from '../../components/wallet/walletTypes';
 import { autoConfirm } from '../../test/confirm';
 import { EntriesPage } from './EntriesPage';
 
@@ -16,6 +17,9 @@ vi.mock('../../api', () => ({ api: { get: vi.fn(), put: vi.fn(), post: vi.fn() }
 
 const base = { competitionSectionId: 11, sectionName: 'Under 12', createdAt: '', teamId: null };
 let signups: Array<Record<string, unknown>> = [];
+const arrival: ArrivalBooking = { id: 'example-booking', competitionId: 7, competitionName: 'Spring Open', startDate: '2031-05-04T09:00:00Z', endDate: null, venue: 'Showground',
+  vehicleRegistration: 'EXAMPLE', reference: 'example-reference', revision: 2, signupId: 1, admission: 'paid', needsReview: false, voided: false, walletAvailable: false,
+  benefits: [{ sourceId: 9, orderLineId: 10, kind: 3, quantity: 2, status: 'paid', fromDate: '2031-05-04', untilDate: '2031-05-06', allocations: [{ resource: 'B1', night: '2031-05-04' }] }] };
 const settings = { competitionId: 7, entriesClosed: false, maxStables: 20, stablesBooked: 8, maxHookups: 5, hookupsBooked: 2 };
 
 function show(path = '/competitions/7/entries') {
@@ -32,8 +36,10 @@ beforeEach(() => {
     { ...base, id: 5, fullName: 'Recent Rae', status: 0, amountMinor: 1000, contactEmail: 'rae@example.test', lastReminderSentAt: new Date().toISOString() },
     { ...base, id: 6, fullName: 'No Email Ned', status: 0, amountMinor: 1000 },
   ];
-  vi.mocked(api.get).mockImplementation(async (url) => {
+  vi.mocked(api.get).mockImplementation(async (url, options) => {
     const path = String(url);
+    if (path.endsWith('/arrival-bookings')) return { data: (options?.params as { signupId?: number } | undefined)?.signupId === 1 ? [arrival] : [] } as never;
+    if (path.endsWith('/arrival-bookings/entitlements')) return { data: [] } as never;
     if (path.endsWith('/entries')) return { data: [] } as never;
     if (path.endsWith('/signups')) return { data: signups } as never;
     if (path.endsWith('/entry-settings')) return { data: settings } as never;
@@ -49,7 +55,9 @@ beforeEach(() => {
 describe('EntriesPage filters and capacity', () => {
   it('opens the current booking from a pass QR without marking it paid or checked in', async () => {
     show('/competitions/7/entries?pass=1');
-    expect(await screen.findByLabelText('Stable boxes')).toHaveValue('Barn B');
+    expect(await screen.findByLabelText('Vehicle registration')).toHaveValue('EXAMPLE');
+    expect(screen.getByText('Older stabling details')).toBeInTheDocument();
+    expect(screen.getByText('Barn B')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Show: Paid (1)' })).toBeInTheDocument();
     expect(api.post).not.toHaveBeenCalled();
     expect(api.put).not.toHaveBeenCalled();
@@ -116,18 +124,22 @@ describe('EntriesPage filters and capacity', () => {
     expect(screen.getByText(/Rider: Kit · born 05\/04\/2015 · Biscuit/)).toBeInTheDocument();
     expect(screen.getByText('Staff only')).toBeInTheDocument();
     expect(screen.getByText(/Emergency contact: Sam/)).toBeInTheDocument();
-    expect(screen.getByLabelText('Stable boxes')).toHaveValue('Barn B');
-    await user.clear(screen.getByLabelText('Stable boxes'));
-    await user.type(screen.getByLabelText('Stable boxes'), 'Barn C');
-    await user.click(screen.getByRole('button', { name: 'Save allocation' }));
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/signups/1/stabling', { stableAssignment: 'Barn C', hookupAssignment: '' }));
+    expect(screen.getByText('Older stabling details')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Stable boxes')).not.toBeInTheDocument();
+    await user.type(await screen.findByLabelText('Stable or hook-up number'), 'B2');
+    await user.click(screen.getByRole('button', { name: 'Allocate' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/arrival-bookings/example-booking/allocations', {
+      expectedRevision: 2, allocations: [{ sourceId: 9, resource: 'B1', night: '2031-05-04' }, { sourceId: 9, resource: 'B2', night: '2031-05-04' }],
+    }));
 
     await user.clear(screen.getByLabelText('Vehicle registration'));
     await user.type(screen.getByLabelText('Vehicle registration'), 'xy99 zzz');
+    await user.tab();
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/arrival-bookings/example-booking', { expectedRevision: 2, vehicleRegistration: 'XY99 ZZZ', sources: [{ orderLineId: 10, quantity: 2 }] }));
     await user.selectOptions(screen.getByLabelText('Arrives'), 'SaturdayMorning');
     await user.click(screen.getByRole('button', { name: 'Save arrival' }));
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/my/signups/1/arrival', { arrivalWindow: 'SaturdayMorning', vehicleRegistration: 'XY99 ZZZ' }));
-    expect(screen.getByRole('button', { name: 'Download pass' })).toBeInTheDocument();
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/my/signups/1/arrival', { arrivalWindow: 'SaturdayMorning', vehicleRegistration: 'AB12 CDE' }));
+    expect(screen.getByRole('button', { name: 'Download arrival card' })).toBeInTheDocument();
   });
 
   it('offers a waiting-list place after asking, saying how many people are emailed', async () => {

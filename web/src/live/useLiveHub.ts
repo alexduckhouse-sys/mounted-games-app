@@ -125,6 +125,7 @@ export function useLiveHub(competitionId: number | null, handlers: LiveHandlers)
       };
       const broadcastCoalesced = <A extends unknown[]>(event: string, fn: (h: LiveHandlers, ...a: A) => void) => (...args: A) => {
         for (const sub of subscribers) sub.deliverCoalesced(event, fn, ...args);
+        if (subscribers.size && (event === 'sessionUpdated' || event === 'resultsUpdated')) window.dispatchEvent(new Event('mg:live-progress'));
       };
 
       conn.on('streamUpdated', broadcast((h, s) => h.onStreamUpdated?.(s as LiveStream)));

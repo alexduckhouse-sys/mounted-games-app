@@ -80,6 +80,8 @@ public static class DbInitializer
     private static async Task EnsureSqliteSchemaAsync(AppDbContext db)
     {
         await db.Database.EnsureCreatedAsync();
+        await WindFeature.EnsureSqliteAsync(db);
+        await Broadcast.BroadcastFeature.EnsureSqliteAsync(db);
         await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=5000;");
 
         await db.Database.ExecuteSqlRawAsync("""
@@ -455,6 +457,7 @@ public static class DbInitializer
             """);
 
         await Commerce.CommerceSqliteSchema.EnsureAsync(db);
+        await Apple.AppleFeatures.EnsureAppleSqliteSchema(db);
 
         await Seasons.SeasonsSqliteSchema.EnsureAsync(db);
 
@@ -464,6 +467,7 @@ public static class DbInitializer
         await ResultsSqliteSchema.EnsureAsync(db);
 
         await TackCheck.TackCheckSqliteSchema.EnsureAsync(db);
+        await Vaccinations.VaccinationFeature.EnsureSqliteAsync(db);
         await EntryExtensionsSqliteSchema.EnsureAsync(db);
         await Accounts.AccountAccessSqliteSchema.EnsureAsync(db);
         await Notifications.NotificationSqliteSchema.EnsureAsync(db);
@@ -562,6 +566,7 @@ public static class DbInitializer
         }
 
         await SeedRaceTemplatesAsync(db);
+        await WindFeature.SeedTemplatesAsync(db);
 
         // Canonical UK Pony Clubs list. Add only — never delete clubs that already exist
         // in the DB (they may be referenced by teams or saved riders).

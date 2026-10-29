@@ -71,6 +71,10 @@ public class AppDbContext : IdentityDbContext<AppUser>
     {
         base.OnModelCreating(b);
         b.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
+        Services.Broadcast.BroadcastFeature.ConfigureModels(b);
+        Services.Apple.AppleFeatures.ConfigureAppleModels(b);
+        Services.WindFeature.Configure(b);
+        Services.Vaccinations.VaccinationFeature.ConfigureModels(b);
 
         b.Entity<CompetitionCollaborator>(e =>
         {

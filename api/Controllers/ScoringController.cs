@@ -45,7 +45,7 @@ public class ScoringController : ControllerBase
         {
             await _scoring.ApplyLegacyAsync(raceId, req.Places, req.Expected,
                 User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
-                correctionReason, cancellationToken);
+                correctionReason, cancellationToken, expectedProgrammeRevision: req.ExpectedProgrammeRevision);
         }
         catch (ScoreConflictException ex) { return await ScoreConflict(race, ex.Message, ex.ExistingPlaces, ex.IncomingPlaces); }
         catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
@@ -208,6 +208,7 @@ public class ScoringController : ControllerBase
             await _scoring.ClearRaceForRerunAsync(raceId, actor, reason ?? "Score cleared.", cancellationToken);
         }
         catch (KeyNotFoundException) { return NotFound(); }
+        catch (ScoreConflictException ex) { return Conflict(new { message = ex.Message }); }
         catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
         catch (Exception ex) when (IsScoringConcurrency(ex))
         { return Conflict(new { message = "These results were changed on another device." }); }
@@ -300,9 +301,10 @@ public class ScoringController : ControllerBase
         try
         {
             race = await _scoring.UpdateRaceClockAsync(
-                raceId, true, tappedAt, req?.At is not null, cancellationToken);
+                raceId, true, tappedAt, req?.At is not null, cancellationToken, req?.ExpectedProgrammeRevision);
         }
         catch (KeyNotFoundException) { return NotFound(); }
+        catch (ScoreConflictException ex) { return Conflict(new { message = ex.Message }); }
         catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
         catch (Exception ex) when (IsScoringConcurrency(ex))
         { return Conflict(new { message = "These results were changed on another device." }); }
@@ -351,9 +353,10 @@ public class ScoringController : ControllerBase
         try
         {
             race = await _scoring.UpdateRaceClockAsync(
-                raceId, false, finishedAt, req?.At is not null, cancellationToken);
+                raceId, false, finishedAt, req?.At is not null, cancellationToken, req?.ExpectedProgrammeRevision);
         }
         catch (KeyNotFoundException) { return NotFound(); }
+        catch (ScoreConflictException ex) { return Conflict(new { message = ex.Message }); }
         catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
         catch (Exception ex) when (IsScoringConcurrency(ex))
         { return Conflict(new { message = "These results were changed on another device." }); }

@@ -1,3 +1,4 @@
+import { windDraftKey as draftKeyFor, sessionProgramme } from '../../lib/windScoring';
 import { arenaCrewPath } from './crewDutyHelpers';
 import { SessionSharePrint } from '../operations/SessionSharePrint';
 import { SessionDutyBoard } from './SessionDutyBoard';
@@ -42,7 +43,7 @@ import { commentatorFacts } from '../../lib/commentatorFacts';
 import type { CardMark } from '../../lib/refereeCards';
 import { BetweenHeats, HeatPickerBar, HeatTableView } from './HeatViews';
 import {
-  clearDeadHeat, markDeadHeat, overridePoints, nextRaceToScore, placesFromResults, readScoringDraft, scoringDraftKey as draftKeyFor, tapTeam, toggleEliminated,
+  clearDeadHeat, markDeadHeat, overridePoints, nextRaceToScore, placesFromResults, readScoringDraft, tapTeam, toggleEliminated,
   writeScoringDraft, type PendingPlace,
 } from '../../lib/raceScoring';
 import { isSaveInFlight, OUTBOX_STORAGE_ERROR, updateOutbox, useScoreOutbox } from '../../offline/useScoreOutbox';
@@ -274,7 +275,10 @@ function SessionScoring() {
   // The placings being entered belong to one race, so they are stored with that race's draft key.
   // Switching race swaps them, in the same render, for that race's saved draft (a draft always wins)
   // or else nothing. Until the scorer changes something, a finished race simply shows its saved results.
-  const scoringDraftKey = activeHeatId && activeRaceId ? draftKeyFor(activeHeatId, activeRaceId) : null;
+  const programmeKey = orderedHeats.flatMap(h => h.races.map(r => `${r.id}:${r.programmeRevision ?? 0}`)).join('|');
+  const [undoProgramme, setUndoProgramme] = useState(programmeKey);
+  if (undoProgramme !== programmeKey) { setUndoProgramme(programmeKey); setUndoStack([]); }
+  const scoringDraftKey = activeHeatId && activeRaceId ? draftKeyFor(activeHeatId, activeRaceId, orderedRaces.find(r => r.id === activeRaceId)?.programmeRevision ?? 0) : null;
   // Saves still waiting on this phone are shown as if sent, so the summary, table and next lanes don't wait for signal.
   const viewHeats = useMemo(() => orderedHeats.map((h) => withQueuedResults(h, outbox, sessionBase)), [orderedHeats, outbox, sessionBase]);
   const viewHeat = viewHeats.find((h) => h.id === activeHeatId) ?? null;
@@ -408,7 +412,7 @@ function SessionScoring() {
   function resetPending() { changePending(() => []); }
 
   function clearRaceDraft(raceId: number, heatId: number) {
-    const key = draftKeyFor(heatId, raceId);
+    const key = draftKeyFor(heatId, raceId, orderedHeats.find(h => h.id === heatId)?.races.find(r => r.id === raceId)?.programmeRevision ?? 0);
     setPendingState((current) => current.key === key ? { key, places: [], edited: true } : current);
     setUndoStack((current) => current.filter((entry) => entry.raceId !== raceId));
     setCorrectionReasons((current) => { const next = { ...current }; delete next[raceId]; return next; });
@@ -479,6 +483,9 @@ function SessionScoring() {
   /** Queues the race's result; false when it can't be saved yet (the error says why). */
   function submit(places: PendingPlace[] = pending): boolean {
     if (!activeRace || !activeHeat || !session) return false;
+    if (outbox.some(q => q.raceId === activeRace.id && (q.expectedProgrammeRevision ?? 0) !== (activeRace.programmeRevision ?? 0))) {
+      setSaveError('Scores for the earlier race are still on this phone. Keep a backup and review them before scoring the replacement.'); return false;
+    }
     const reason = correctionReasons[activeRace.id]?.trim();
     if ((activeRace.results.length > 0 || outbox.some((item) => item.raceId === activeRace.id)) && !reason) {
       setSaveError('Add a reason for this correction before saving.');
@@ -494,6 +501,7 @@ function SessionScoring() {
       label: `${activeHeat.label ?? `Heat ${heatIndex + 1}`} · ${activeRace.name}`,
       places: [...places, ...restOfQualifier(activeHeat, places), ...sitOutPlaces(activeHeat, orderedRaces.findIndex((r) => r.id === activeRace.id), lanesOf(session))],
       expected: placingsOf(activeRace.results),
+      expectedProgrammeRevision: (activeRace as { programmeRevision?: number }).programmeRevision ?? 0,
       teamNames: Object.fromEntries(activeHeat.entries.map((e) => [e.teamId, e.teamName])),
       queuedAt: new Date().toISOString(),
       state: 'waiting',
@@ -576,8 +584,8 @@ function SessionScoring() {
     setActiveHeatId(heat.id);
     setActiveRaceId(lastUndo.raceId);
     setView('score');
-    setPendingState({ key: draftKeyFor(heat.id, lastUndo.raceId), places: restore, edited: restore.length > 0 });
-    if (restore.length === 0) writeScoringDraft(draftKeyFor(heat.id, lastUndo.raceId), []);
+    setPendingState({ key: draftKeyFor(heat.id, lastUndo.raceId, heat.races.find(r => r.id === lastUndo.raceId)?.programmeRevision ?? 0), places: restore, edited: restore.length > 0 });
+    if (restore.length === 0) writeScoringDraft(draftKeyFor(heat.id, lastUndo.raceId, heat.races.find(r => r.id === lastUndo.raceId)?.programmeRevision ?? 0), []);
   }
 
   const sectionQuery = session.competitionSectionId != null ? `?section=${session.competitionSectionId}` : '';
@@ -595,7 +603,7 @@ function SessionScoring() {
   }
 
   const clashes: ScoreClashItem[] = outbox
-    .filter((q) => q.state === 'conflict' && q.sessionId === session.id)
+    .filter((q) => q.state === 'conflict' && !q.programmeChanged && q.sessionId === session.id)
     .map((q) => {
       const serverRace = orderedHeats.flatMap((h) => h.races).find((r) => r.id === q.raceId);
       return {
@@ -828,7 +836,7 @@ function SessionScoring() {
           {view === 'score' && (viewHeat ? (
             <ScoringSection
               competitionId={competition.id}
-              key={`${viewHeat.id}:${activeRaceId}`}
+              key={`${viewHeat.id}:${activeRaceId}:${activeRace?.programmeRevision ?? 0}`}
               heat={viewHeat}
               races={viewRaces}
               activeRace={viewRaces.find((r) => r.id === activeRaceId) ?? null}
@@ -920,10 +928,12 @@ function SessionScoring() {
                 try {
                   await api.put(`/competitions/${competition.id}/sessions/${session.id}/races`, {
                     raceNames: [...programme, raceName],
+                    expectedProgramme: sessionProgramme(session),
                   });
                   reload();
-                } catch {
-                  setSaveError('Couldn’t add race. Check your signal and try again.');
+                } catch (error) {
+                  const message = (error as { response?: { data?: { message?: string } } }).response?.data?.message;
+                  setSaveError(message || 'Couldn’t add race. Check your signal and try again.');
                 }
               } : undefined}
             />
@@ -1204,7 +1214,9 @@ function ScoreAdjustmentsPanel({
     () => races.filter((r) => !r.isComplete).map((r) => r.name).join('\n'),
     [races],
   );
-  const [remainingRacesDraft, setRemainingRacesDraft] = useState<string | null>(null);
+  const [remainingRacesDraft, setRemainingRacesDraft] = useState<{
+    text: string; expectedProgramme: ReturnType<typeof sessionProgramme>; races: typeof races;
+  } | null>(null);
 
   const underReviewTeamIds = useMemo(() => {
     const flagged = new Set<number>();
@@ -1264,7 +1276,7 @@ function ScoreAdjustmentsPanel({
       };
     });
     try {
-      await api.post(`/races/${targetRace.id}/results`, { places, reason });
+      await api.post(`/races/${targetRace.id}/results`, { places, reason, expectedProgrammeRevision: targetRace.programmeRevision ?? 0 });
       onError(null);
       onChanged();
     } catch {
@@ -1339,7 +1351,7 @@ function ScoreAdjustmentsPanel({
     if (!targetRace) return;
     try {
       await api.delete(`/sessions/races/${targetRace.id}/results`);
-      writeScoringDraft(draftKeyFor(heat.id, targetRace.id), []);
+      writeScoringDraft(draftKeyFor(heat.id, targetRace.id, targetRace.programmeRevision ?? 0), []);
       onRaceCleared(targetRace.id, heat.id);
       updateOutbox((list) => list.filter((q) => q.raceId !== targetRace.id));
       onError(null);
@@ -1361,6 +1373,7 @@ function ScoreAdjustmentsPanel({
     try {
       await api.put(`/competitions/${session.competitionId}/sessions/${session.id}/races/${targetRace.id}`, {
         newName: nextName,
+        expectedProgrammeRevision: targetRace.programmeRevision ?? 0,
         applyToAllHeats: true,
       });
       if (announceRaceUpdate) {
@@ -1648,20 +1661,25 @@ function ScoreAdjustmentsPanel({
         <RaceListPicker
           label="Remaining uncompleted races"
           ariaLabel="Remaining uncompleted races"
-          races={(remainingRacesDraft ?? uncompletedRacesText).split('\n').map((s) => s.trim()).filter(Boolean)}
-          onChange={(next) => setRemainingRacesDraft(next.join('\n'))}
+          races={(remainingRacesDraft?.text ?? uncompletedRacesText).split('\n').map((s) => s.trim()).filter(Boolean)}
+          onChange={(next) => setRemainingRacesDraft((previous) => ({
+            text: next.join('\n'), expectedProgramme: previous?.expectedProgramme ?? sessionProgramme(session),
+            races: previous?.races ?? races.map((race) => ({ ...race })),
+          }))}
         />
         <div className="flex items-center gap-2">
           <button
             type="button"
             className="btn-ghost !py-1.5 !px-2.5 text-xs"
             onClick={async () => {
-              const text = remainingRacesDraft ?? uncompletedRacesText;
+              const text = remainingRacesDraft?.text ?? uncompletedRacesText;
               const remaining = text.split('\n').map((s) => s.trim()).filter(Boolean);
-              const raceNames = races.flatMap((race) => race.isComplete ? [race.name] : remaining.length ? [remaining.shift()!] : []);
+              const raceNames = (remainingRacesDraft?.races ?? races).flatMap((race) => race.isComplete ? [race.name] : remaining.length ? [remaining.shift()!] : []);
               raceNames.push(...remaining);
               try {
-                await api.put(`/competitions/${session.competitionId}/sessions/${session.id}/races`, { raceNames });
+                await api.put(`/competitions/${session.competitionId}/sessions/${session.id}/races`, {
+                  raceNames, expectedProgramme: remainingRacesDraft?.expectedProgramme ?? sessionProgramme(session),
+                });
                 setRemainingRacesDraft(null);
                 onError(null);
                 onChanged();

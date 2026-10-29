@@ -353,6 +353,431 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.Apple.AppleChangeClock", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<long>("Value")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AppleChangeClock", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Value = 0L
+                        });
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Apple.ArrivalAllocation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ArrivalBookingSourceId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Night")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Resource")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ArrivalBookingSourceId");
+
+                    b.HasIndex("CompetitionId", "Kind", "Resource", "Night")
+                        .IsUnique();
+
+                    b.ToTable("ArrivalAllocations", (string)null);
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Apple.ArrivalBooking", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LegacyAllocationSnapshot")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LegacyReconciledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OwnerUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("SignupId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VehicleRegistration")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompetitionId");
+
+                    b.HasIndex("Reference")
+                        .IsUnique();
+
+                    b.HasIndex("SignupId")
+                        .IsUnique();
+
+                    b.ToTable("ArrivalBookings", (string)null);
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Apple.ArrivalBookingSource", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<Guid>("ArrivalBookingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("EventOrderLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventOrderLineId");
+
+                    b.HasIndex("ArrivalBookingId", "EventOrderLineId")
+                        .IsUnique();
+
+                    b.ToTable("ArrivalBookingSources", (string)null);
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Apple.LiveActivityRegistration", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActivityId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("EndRequested")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("Ended")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("InstallationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("LastTimestamp")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("LeaseToken")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LeaseUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProtectedPushToken")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Sandbox")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("TeamId")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TeamId");
+
+                    b.HasIndex("InstallationId", "ActivityId")
+                        .IsUnique();
+
+                    b.ToTable("LiveActivityRegistrations", (string)null);
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Apple.NativeInstallation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CapabilityHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("NativeInstallations", (string)null);
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Apple.WalletDeviceRegistration", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("DeliveredCursor")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("DeviceHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("LeaseToken")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LeaseUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("PendingCursor")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ProtectedPushToken")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("WalletPassId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WalletPassId", "DeviceHash")
+                        .IsUnique();
+
+                    b.ToTable("WalletDeviceRegistrations", (string)null);
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Apple.WalletPass", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ArrivalBookingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AuthenticationTokenHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long>("ChangeCursor")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("LastCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProtectedAuthenticationToken")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long>("Revision")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Serial")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ArrivalBookingId")
+                        .IsUnique();
+
+                    b.HasIndex("Serial")
+                        .IsUnique();
+
+                    b.ToTable("WalletPasses", (string)null);
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.BroadcastCue", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Arena")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid>("CommandId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("SectionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("StartsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CommandId")
+                        .IsUnique();
+
+                    b.HasIndex("CompetitionId", "Arena", "StartsAt");
+
+                    b.ToTable("BroadcastCues", (string)null);
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.BroadcastOutput", b =>
+                {
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Arena")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTime>("DiscardBefore")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Hidden")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<long>("SponsorOffset")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("CompetitionId", "Arena");
+
+                    b.ToTable("BroadcastOutputs", (string)null);
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.BroadcastSnapshot", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Arena")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SectionKey")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompetitionId", "Arena", "SectionKey", "ObservedAt");
+
+                    b.ToTable("BroadcastSnapshots", (string)null);
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.CalendarHeatVersion", b =>
                 {
                     b.Property<int>("Id")
@@ -753,6 +1178,15 @@ namespace MountedGames.Api.Data.Migrations
                         .HasMaxLength(60)
                         .HasColumnType("character varying(60)");
 
+                    b.Property<string>("FulfilmentFromDate")
+                        .HasColumnType("text");
+
+                    b.Property<int>("FulfilmentKind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FulfilmentUntilDate")
+                        .HasColumnType("text");
+
                     b.Property<string>("ImageUrl")
                         .HasMaxLength(2048)
                         .HasColumnType("character varying(2048)");
@@ -991,6 +1425,25 @@ namespace MountedGames.Api.Data.Migrations
 
                     b.Property<int>("EventOrderId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("FulfilmentFromDate")
+                        .HasColumnType("text");
+
+                    b.Property<int>("FulfilmentKindSnapshot")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("FulfilmentReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FulfilmentReviewedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<long>("FulfilmentRevision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FulfilmentUntilDate")
+                        .HasColumnType("text");
 
                     b.Property<int>("LineTotalMinor")
                         .HasColumnType("integer");
@@ -1695,6 +2148,40 @@ namespace MountedGames.Api.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("EntriesDigestRuns");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.EventVaccinationSettings", b =>
+                {
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PolicyVersionId")
+                        .IsRequired()
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("ReferenceDateBasis")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("VenueRulesJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("CompetitionId");
+
+                    b.HasIndex("PolicyVersionId");
+
+                    b.ToTable("EventVaccinationSettings", (string)null);
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.FinalsTieOrder", b =>
@@ -2730,6 +3217,11 @@ namespace MountedGames.Api.Data.Migrations
 
                     b.Property<int>("OrderIndex")
                         .HasColumnType("integer");
+
+                    b.Property<int>("ProgrammeRevision")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.Property<DateTime?>("StartedAt")
                         .HasColumnType("timestamp with time zone");
@@ -4333,6 +4825,441 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("TrainerNotes");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.VaccinationDeclarationHorse", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DeclarationFormId")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("HorseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PassportSnapshot")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PonyNameSnapshot")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RiderEntryId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompetitionId");
+
+                    b.HasIndex("DeclarationFormId");
+
+                    b.HasIndex("HorseId");
+
+                    b.HasIndex("RiderEntryId")
+                        .IsUnique();
+
+                    b.ToTable("VaccinationDeclarationHorses", (string)null);
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.VaccinationEvidence", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateOnly?>("ArrivalOn")
+                        .HasColumnType("date");
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("CompleteHistory")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("DatesJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("DeclarationHorseId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("ExceptionReview")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly?>("LastOtherVaccinationOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("RecordedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RecordedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompetitionId");
+
+                    b.HasIndex("DeclarationHorseId", "Revision")
+                        .IsUnique();
+
+                    b.ToTable("VaccinationEvidence", (string)null);
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.VaccinationHorse", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompetitionId");
+
+                    b.ToTable("VaccinationHorses", (string)null);
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.VaccinationInspection", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("DeclarationHorseId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EvaluationJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly>("EventStartOn")
+                        .HasColumnType("date");
+
+                    b.Property<long>("EvidenceId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("EvidenceRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("InspectedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("InspectedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LinkRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PolicyVersionId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SettingsRevision")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompetitionId");
+
+                    b.HasIndex("EvidenceId");
+
+                    b.HasIndex("DeclarationHorseId", "LinkRevision")
+                        .IsUnique();
+
+                    b.ToTable("VaccinationInspections", (string)null);
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.VaccinationPolicyVersion", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<bool>("Automatic")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Edition")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly?>("EffectiveFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EffectiveUntil")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Organisation")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RulesJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SourceUrl")
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly?>("VerifiedOn")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("VaccinationPolicyVersions", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = "pc-2026-01-v1",
+                            Automatic = true,
+                            Edition = "January 2026",
+                            EffectiveFrom = new DateOnly(2026, 1, 1),
+                            EffectiveUntil = new DateOnly(2026, 12, 31),
+                            Organisation = "Pony Club",
+                            RulesJson = "{\"Mandatory\":[\"V2: 21\\u201360 days after V1. V3: 120\\u2013180 days after V2.\",\"Courses before 2024: V2 at 21\\u201392 days; V3 no later than seven calendar months after V2. Ambiguous cohort dates need official review.\",\"Later boosters: no more than 12 calendar months apart. A broken course needs a restart.\",\"Do not attend on the injection date or the six following days. Day 7 is allowed.\",\"Bring the passport with the vet\\u0027s signed and stamped record. Documented October\\u2013December 2022 vaccine-shortage exceptions (up to 15 months, then a booster within nine months) need official review.\"],\"Recommended\":[\"A booster within six calendar months plus 21 days before arrival is recommended.\"]}",
+                            SourceUrl = "https://resources.pcuk.org/wp-content/uploads/2024/08/The-Pony-Club-Equine-Influenza-VACCINATION-RULE.pdf",
+                            VerifiedOn = new DateOnly(2026, 10, 29)
+                        },
+                        new
+                        {
+                            Id = "manual-v1",
+                            Automatic = false,
+                            Edition = "Source required",
+                            Organisation = "Local / other",
+                            RulesJson = "{\"Mandatory\":[\"Official review is needed until the current policy has been verified.\"],\"Recommended\":[]}"
+                        },
+                        new
+                        {
+                            Id = "fei-2026-unverified-v1",
+                            Automatic = false,
+                            Edition = "2026 — source required",
+                            Organisation = "FEI",
+                            RulesJson = "{\"Mandatory\":[\"Official review is needed until the current policy has been verified.\"],\"Recommended\":[]}"
+                        },
+                        new
+                        {
+                            Id = "mgagb-unverified-v1",
+                            Automatic = false,
+                            Edition = "Source required",
+                            Organisation = "MGAGB",
+                            RulesJson = "{\"Mandatory\":[\"Official review is needed until the current policy has been verified.\"],\"Recommended\":[]}"
+                        },
+                        new
+                        {
+                            Id = "eguk-unverified-v1",
+                            Automatic = false,
+                            Edition = "Source required",
+                            Organisation = "EGUK",
+                            RulesJson = "{\"Mandatory\":[\"Official review is needed until the current policy has been verified.\"],\"Recommended\":[]}"
+                        },
+                        new
+                        {
+                            Id = "struk-unverified-v1",
+                            Automatic = false,
+                            Edition = "Source required",
+                            Organisation = "STRUK",
+                            RulesJson = "{\"Mandatory\":[\"Official review is needed until the current policy has been verified.\"],\"Recommended\":[]}"
+                        });
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.WindAcknowledgement", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("AcknowledgedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Arena")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("EndsAt")
+                        .HasColumnType("bigint");
+
+                    b.Property<double>("PeakMph")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("Severity")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("StartsAt")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompetitionId", "EndsAt");
+
+                    b.ToTable("WindAcknowledgements", (string)null);
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.WindRaceDecision", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActorUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("AfterJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Authority")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("BeforeJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Fingerprint")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProfileId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RequestId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SessionId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("CompetitionId", "RequestId")
+                        .IsUnique();
+
+                    b.ToTable("WindRaceDecisions", (string)null);
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.WindRulesSelection", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("AdoptionConfirmed")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EventLevel")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<double>("OfficialReviewMph")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("PermittedRacesJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProfileId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PublishedSpare")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<double>("ReviewMph")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SectionId")
+                        .HasColumnType("integer");
+
+                    b.Property<double?>("VenueLimitMph")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("VenueNotes")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompetitionId", "SectionId")
+                        .IsUnique();
+
+                    b.ToTable("WindRulesSelections", (string)null);
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
@@ -4401,6 +5328,103 @@ namespace MountedGames.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Club");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Apple.ArrivalAllocation", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Apple.ArrivalBookingSource", "Source")
+                        .WithMany("Allocations")
+                        .HasForeignKey("ArrivalBookingSourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Source");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Apple.ArrivalBooking", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Competition", null)
+                        .WithMany()
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Apple.ArrivalBookingSource", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Apple.ArrivalBooking", "Booking")
+                        .WithMany("Sources")
+                        .HasForeignKey("ArrivalBookingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MountedGames.Api.Entities.Commerce.EventOrderLine", null)
+                        .WithMany()
+                        .HasForeignKey("EventOrderLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Booking");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Apple.LiveActivityRegistration", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Apple.NativeInstallation", null)
+                        .WithMany()
+                        .HasForeignKey("InstallationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MountedGames.Api.Entities.Team", null)
+                        .WithMany()
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Apple.WalletDeviceRegistration", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Apple.WalletPass", null)
+                        .WithMany()
+                        .HasForeignKey("WalletPassId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Apple.WalletPass", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Apple.ArrivalBooking", null)
+                        .WithMany()
+                        .HasForeignKey("ArrivalBookingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.BroadcastCue", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Competition", null)
+                        .WithMany()
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.BroadcastOutput", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Competition", null)
+                        .WithMany()
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.BroadcastSnapshot", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Competition", null)
+                        .WithMany()
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.CalendarHeatVersion", b =>
@@ -4680,6 +5704,21 @@ namespace MountedGames.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Run");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.EventVaccinationSettings", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Competition", null)
+                        .WithMany()
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MountedGames.Api.Entities.VaccinationPolicyVersion", null)
+                        .WithMany()
+                        .HasForeignKey("PolicyVersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.FinalsTieOrder", b =>
@@ -5466,11 +6505,113 @@ namespace MountedGames.Api.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.VaccinationDeclarationHorse", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Competition", null)
+                        .WithMany()
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MountedGames.Api.Entities.VaccinationHorse", null)
+                        .WithMany()
+                        .HasForeignKey("HorseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.VaccinationEvidence", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Competition", null)
+                        .WithMany()
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MountedGames.Api.Entities.VaccinationDeclarationHorse", null)
+                        .WithMany()
+                        .HasForeignKey("DeclarationHorseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.VaccinationHorse", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Competition", null)
+                        .WithMany()
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.VaccinationInspection", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Competition", null)
+                        .WithMany()
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MountedGames.Api.Entities.VaccinationDeclarationHorse", null)
+                        .WithMany()
+                        .HasForeignKey("DeclarationHorseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MountedGames.Api.Entities.VaccinationEvidence", null)
+                        .WithMany()
+                        .HasForeignKey("EvidenceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.WindAcknowledgement", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Competition", null)
+                        .WithMany()
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.WindRaceDecision", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("MountedGames.Api.Entities.Competition", null)
+                        .WithMany()
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.WindRulesSelection", b =>
+                {
+                    b.HasOne("MountedGames.Api.Entities.Competition", null)
+                        .WithMany()
+                        .HasForeignKey("CompetitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.AppUser", b =>
                 {
                     b.Navigation("CoachedTeams");
 
                     b.Navigation("Notes");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Apple.ArrivalBooking", b =>
+                {
+                    b.Navigation("Sources");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.Apple.ArrivalBookingSource", b =>
+                {
+                    b.Navigation("Allocations");
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.Club", b =>

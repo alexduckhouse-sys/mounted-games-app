@@ -9,6 +9,8 @@ import { Sheet } from './Sheet';
 import { useToast } from './Toast';
 import { TickerNumber } from './TickerNumber';
 
+const scoreKey = (score: QueuedScore) => `${score.raceId}@${score.saveId ?? score.queuedAt}`;
+
 /** Results saved on this phone that haven't reached the server yet, and any that need a decision. */
 export function ScoreOutboxPanel({ competitionId, competitionName, alwaysImport = false, viaLink = false }: { competitionId: number; competitionName?: string; alwaysImport?: boolean; viaLink?: boolean }) {
   const queued = useScoreOutbox().filter((q) => q.competitionId === competitionId);
@@ -16,7 +18,9 @@ export function ScoreOutboxPanel({ competitionId, competitionName, alwaysImport 
   const [storageError, setStorageError] = useState(false);
   const update = (change: (list: QueuedScore[]) => QueuedScore[]) => setStorageError(!updateOutbox(change));
   const waiting = queued.filter((q) => q.state === 'waiting');
-  const conflict = queued.find((q) => q.state === 'conflict');
+  const [keptOnPhone, setKeptOnPhone] = useState<Set<string>>(() => new Set());
+  const conflict = queued.find((q) => q.state === 'conflict' && (!q.programmeChanged || !keptOnPhone.has(scoreKey(q))));
+  const keepOnPhone = (score: QueuedScore) => setKeptOnPhone((current) => new Set(current).add(scoreKey(score)));
   const toast = useToast();
   const showToast = toast.show;
 
@@ -58,24 +62,45 @@ export function ScoreOutboxPanel({ competitionId, competitionName, alwaysImport 
       {storageError && <Notice>{OUTBOX_STORAGE_ERROR}</Notice>}
       {conflict && (
         <Sheet
-          title={`${conflict.label} was scored on another phone too`}
-          description="The results don’t match. Choose which to keep."
-          onClose={() => undefined}
-          dismissible={false}
+          key={scoreKey(conflict)}
+          title={conflict.programmeChanged ? `${conflict.label}: programme changed` : `${conflict.label} was scored on another phone too`}
+          description={conflict.programmeChanged ? "These scores belong to the earlier race programme. Keep a backup and ask the organiser to review them. They cannot be sent as results for the replacement race." : "The results don’t match. Choose which to keep."}
+          onClose={() => { if (conflict.programmeChanged) keepOnPhone(conflict); }}
+          dismissible={Boolean(conflict.programmeChanged)}
         >
-          <dl className="kit-sheet-text grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-            <dt className="font-semibold">Theirs</dt><dd>{describePlacings(conflict.theirs ?? [], conflict.teamNames)}</dd>
-            <dt className="font-semibold">Yours</dt><dd>{describePlacings(conflict.places, conflict.teamNames)}</dd>
-          </dl>
-          <label className="kit-sheet-field">Reason for replacing these results
-            <textarea className="input" maxLength={1000} value={reasonOf(conflict)} onChange={(event) => setReason(conflict, event.target.value)} />
-          </label>
-          <div className="kit-acts">
-            <button type="button" className="kit-pill kit-pill-fill" onClick={() => update((l) => discard(l, conflict.raceId))}>Keep theirs</button>
-            <button type="button" className="kit-pill" disabled={!reasonOf(conflict).trim()} onClick={() => update((l) => overrule(l, conflict.raceId, reasonOf(conflict).trim()))}>Use mine</button>
-          </div>
+          {({ close }) => <>
+            <dl className="kit-sheet-text grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+              {!conflict.programmeChanged && <><dt className="font-semibold">Theirs</dt><dd>{describePlacings(conflict.theirs ?? [], conflict.teamNames)}</dd></>}
+              <dt className="font-semibold">Yours</dt><dd>{describePlacings(conflict.places, conflict.teamNames)}</dd>
+            </dl>
+            {conflict.programmeChanged ? <>
+              <OutboxTransfer competitionId={competitionId} competitionName={competitionName} viaLink={viaLink} showImport={false} />
+              {storageError && <Notice>{OUTBOX_STORAGE_ERROR}</Notice>}
+              <div className="kit-acts">
+                <button type="button" className="kit-pill kit-pill-fill" onClick={() => close()}>Keep on this phone</button>
+                <button type="button" className="kit-redtext" onClick={async () => {
+                  if (await confirmDialog({ title: 'Discard these old scores?', message: 'Keep a backup before removing scores for the earlier race programme.', confirmLabel: 'Discard old scores', destructive: true })) update((list) => discard(list, conflict.raceId));
+                }}>Discard old scores</button>
+              </div>
+            </> : <>
+              <label className="kit-sheet-field">Reason for replacing these results
+                <textarea className="input" maxLength={1000} value={reasonOf(conflict)} onChange={(event) => setReason(conflict, event.target.value)} />
+              </label>
+              <div className="kit-acts">
+                <button type="button" className="kit-pill kit-pill-fill" onClick={() => update((list) => discard(list, conflict.raceId))}>Keep theirs</button>
+                <button type="button" className="kit-pill" disabled={!reasonOf(conflict).trim()} onClick={() => update((list) => overrule(list, conflict.raceId, reasonOf(conflict).trim()))}>Use mine</button>
+              </div>
+            </>}
+          </>}
         </Sheet>
       )}
+      {queued.filter((score) => score.state === 'conflict' && score.programmeChanged && keptOnPhone.has(scoreKey(score))).map((score) => (
+        <Notice key={scoreKey(score)} actionLabel="Review old scores" onAction={() => setKeptOnPhone((current) => {
+          const next = new Set(current); next.delete(scoreKey(score)); return next;
+        })}>
+          {score.label}: the programme changed. Your earlier scores are still on this phone for the organiser to review.
+        </Notice>
+      ))}
       {queued.filter((q) => q.state === 'failed').map((q) => (
         <Notice
           key={q.raceId}
