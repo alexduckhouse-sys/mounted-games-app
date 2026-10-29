@@ -278,9 +278,9 @@ describe('RaceRulesSheet and 4 governing body rulebooks', () => {
     );
 
     expect(await screen.findByText('Swap bottle between tables.')).toBeInTheDocument();
-    // One 44px+ settings row replaces the row of small tabs.
+    // The sheet shows the event's rules: no rulebook tabs or picker.
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Rulebook' })).toHaveAttribute('data-value', 'EGUK');
+    expect(screen.queryByRole('combobox', { name: 'Rulebook' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /rulebook page/i })).not.toBeInTheDocument();
 
     const dialog = screen.getByRole('dialog');
