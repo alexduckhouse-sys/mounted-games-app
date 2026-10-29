@@ -134,6 +134,64 @@ public class CalendarEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.NotFound, (await _f.CreateClient().GetAsync("/api/competitions/99999999/calendar.ics")).StatusCode);
     }
 
+    [Fact]
+    public async Task CompetitionIcs_ExportsCorrectUkAllDayDates_ForBstLocalMidnightAndUtcMidnight()
+    {
+        var s = await SeedAsync(name: "Summer Championships");
+
+        // 19–20 July 2026 stored as midnight UK local time (00:00 BST = 23:00Z the previous day)
+        await _f.InDbAsync(async db =>
+        {
+            var c = await db.Competitions.SingleAsync(x => x.Id == s.CompetitionId);
+            c.StartDate = new DateTime(2026, 7, 18, 23, 0, 0, DateTimeKind.Utc);
+            c.EndDate = new DateTime(2026, 7, 19, 23, 0, 0, DateTimeKind.Utc);
+            await db.SaveChangesAsync();
+        });
+
+        var bstMidnightBody = await TextAsync(await _f.CreateClient().GetAsync($"/api/competitions/{s.CompetitionId}/calendar.ics"));
+        Assert.Contains("\r\nDTSTART;VALUE=DATE:20260719\r\n", bstMidnightBody);
+        Assert.Contains("\r\nDTEND;VALUE=DATE:20260721\r\n", bstMidnightBody);
+
+        // 19–20 July 2026 stored as UTC midnight (00:00Z)
+        await _f.InDbAsync(async db =>
+        {
+            var c = await db.Competitions.SingleAsync(x => x.Id == s.CompetitionId);
+            c.StartDate = new DateTime(2026, 7, 19, 0, 0, 0, DateTimeKind.Utc);
+            c.EndDate = new DateTime(2026, 7, 20, 0, 0, 0, DateTimeKind.Utc);
+            await db.SaveChangesAsync();
+        });
+
+        var utcMidnightBody = await TextAsync(await _f.CreateClient().GetAsync($"/api/competitions/{s.CompetitionId}/calendar.ics"));
+        Assert.Contains("\r\nDTSTART;VALUE=DATE:20260719\r\n", utcMidnightBody);
+        Assert.Contains("\r\nDTEND;VALUE=DATE:20260721\r\n", utcMidnightBody);
+
+        // Timed start with a date-only BST midnight end date (20 July 00:00 BST = 19 July 23:00Z) defaults to 17:00 BST (16:00Z) on 20 July
+        await _f.InDbAsync(async db =>
+        {
+            var c = await db.Competitions.SingleAsync(x => x.Id == s.CompetitionId);
+            c.StartDate = new DateTime(2026, 7, 19, 8, 0, 0, DateTimeKind.Utc);
+            c.EndDate = new DateTime(2026, 7, 19, 23, 0, 0, DateTimeKind.Utc);
+            await db.SaveChangesAsync();
+        });
+
+        var timedStartBody = await TextAsync(await _f.CreateClient().GetAsync($"/api/competitions/{s.CompetitionId}/calendar.ics"));
+        Assert.Contains("\r\nDTSTART:20260719T080000Z\r\n", timedStartBody);
+        Assert.Contains("\r\nDTEND:20260720T160000Z\r\n", timedStartBody);
+
+        // 1-day date-only competition with EndDate == null (stored as 00:00 BST = 23:00Z the day before) exports a 1-day VALUE=DATE event
+        await _f.InDbAsync(async db =>
+        {
+            var c = await db.Competitions.SingleAsync(x => x.Id == s.CompetitionId);
+            c.StartDate = new DateTime(2026, 7, 18, 23, 0, 0, DateTimeKind.Utc);
+            c.EndDate = null;
+            await db.SaveChangesAsync();
+        });
+
+        var oneDayBstBody = await TextAsync(await _f.CreateClient().GetAsync($"/api/competitions/{s.CompetitionId}/calendar.ics"));
+        Assert.Contains("\r\nDTSTART;VALUE=DATE:20260719\r\n", oneDayBstBody);
+        Assert.Contains("\r\nDTEND;VALUE=DATE:20260720\r\n", oneDayBstBody);
+    }
+
     // ----- Team feed: the secret link -----
 
     [Fact]
