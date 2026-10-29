@@ -124,23 +124,23 @@ function Shell({ width }: { width: PageWidth }) {
                 ? <BackLink to={pageHeader.backTo} className="mg-hdr-icon" aria-label={pageHeader.backLabel ?? t('shell.header.back')}><ChevronLeft /></BackLink>
                 : <Link to={inAdminArea ? '/admin' : '/events'} className="mg-logo" aria-label={inAdminArea ? t('shell.header.adminHome') : t('shell.header.home')}>MG</Link>}
               {pageHeader?.plain ? (
-                <div className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5">
+                <div className="flex min-h-10 min-w-0 flex-1 flex-col justify-center gap-0.5">
                   <h1 className="mg-display truncate text-[22px] font-semibold leading-none">{pageHeader.title}</h1>
-                  {pageHeader.subtitle && <span className="mg-header-sub truncate text-[13px] font-medium leading-tight">{pageHeader.subtitle}</span>}
+                  {pageHeader.subtitle && <span className="mg-header-sub truncate text-[13px] font-medium leading-4">{pageHeader.subtitle}</span>}
                 </div>
               ) : pageHeader ? (
-                <Link to="/events" className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 text-left !text-inherit !no-underline">
+                <Link to="/events" className="flex min-h-10 min-w-0 flex-1 flex-col justify-center gap-0.5 text-left !text-inherit !no-underline">
                   <span className="mg-display truncate text-[22px] font-semibold leading-none">{pageHeader.title}</span>
-                  <span className="mg-header-sub flex items-center gap-1 text-[13px] font-medium leading-tight">
+                  <span className="mg-header-sub flex items-center gap-1 text-[13px] font-medium leading-4">
                     <span className="truncate">{pageHeader.subtitle ?? title ?? t('common.mountedGames')}</span>
                     <ChevronDown aria-hidden="true" className="h-3 w-3 shrink-0" />
                   </span>
                   <span className="sr-only">{t('shell.header.events')}</span>
                 </Link>
               ) : title ? (
-                <Link to="/events" className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 text-left !text-inherit !no-underline">
+                <Link to="/events" className="flex min-h-10 min-w-0 flex-1 flex-col justify-center gap-0.5 text-left !text-inherit !no-underline">
                   <span className="mg-display truncate text-lg font-bold leading-tight">{title}</span>
-                  {subtitle && <span className="mg-header-sub truncate text-[13px] leading-tight">{subtitle}</span>}
+                  {subtitle && <span className="mg-header-sub truncate text-[13px] leading-4">{subtitle}</span>}
                   <span className="sr-only">{t('shell.header.events')}</span>
                 </Link>
               ) : (
