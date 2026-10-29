@@ -220,4 +220,14 @@ describe('EventDetailsPage', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/event-tools/competitions/7/clone', expect.objectContaining({ name: 'Spring Open copy' })));
     expect(await screen.findByRole('link', { name: 'Open it' })).toHaveAttribute('href', '/competitions/9');
   });
+
+  it('saves the outdoor or indoor arena setting at once', async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByRole('switch', { name: 'Passport and vaccination check' });
+    await user.click(screen.getByRole('button', { name: 'Arena: Outdoor' }));
+    await user.click(screen.getByRole('option', { name: 'Indoor' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7', expect.objectContaining({ isIndoor: true, name: 'Spring Open' })));
+    expect(await screen.findByText('Arena setting saved')).toBeInTheDocument();
+  });
 });

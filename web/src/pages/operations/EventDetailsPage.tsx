@@ -35,7 +35,7 @@ const TACK_OPTIONS: Array<{ value: TackChoice; label: MessageKey }> = [
   { value: 'points', label: 'ops.detail.tack.points' },
 ];
 /** What a save was about: the phrase for a failure and the word shown when it worked (both translated where used). */
-type What = 'name' | 'organiser' | 'start' | 'end' | 'venue' | 'postcode' | 'gate' | 'pin' | 'directions' | 'entrance' | 'number' | 'email' | 'notes' | 'passport' | 'cards' | 'tack';
+type What = 'name' | 'organiser' | 'start' | 'end' | 'venue' | 'postcode' | 'indoor' | 'gate' | 'pin' | 'directions' | 'entrance' | 'number' | 'email' | 'notes' | 'passport' | 'cards' | 'tack';
 const WHAT: Record<What, { what: MessageKey; saved: MessageKey }> = {
   name: { what: 'ops.detail.what.name', saved: 'ops.detail.saved.name' },
   organiser: { what: 'ops.detail.what.organiser', saved: 'ops.detail.saved.organiser' },
@@ -43,6 +43,7 @@ const WHAT: Record<What, { what: MessageKey; saved: MessageKey }> = {
   end: { what: 'ops.detail.what.end', saved: 'ops.detail.saved.end' },
   venue: { what: 'ops.detail.what.venue', saved: 'ops.detail.saved.venue' },
   postcode: { what: 'ops.detail.what.postcode', saved: 'ops.detail.saved.postcode' },
+  indoor: { what: 'ops.detail.what.indoor', saved: 'ops.detail.saved.indoor' },
   gate: { what: 'ops.detail.what.gate', saved: 'ops.detail.saved.gate' },
   pin: { what: 'ops.detail.what.pin', saved: 'ops.detail.saved.pin' },
   directions: { what: 'ops.detail.what.directions', saved: 'ops.detail.saved.directions' },
@@ -182,6 +183,17 @@ export function EventDetailsPage() {
           {/* Blank is sent as blank, not null: the API leaves a value alone on null and clears it on blank. */}
           <TextField key={`pc-${competition.postcode ?? ''}`} label={t('ops.detail.postcode')} value={competition.postcode ?? ''} onSave={(value) => saveBasics('postcode', { postcode: value })} />
         </div>
+        <RefineList as="div">
+          <RefineChoiceRow
+            label={t('ops.detail.arenaType')}
+            value={competition.isIndoor ? 'indoor' : 'outdoor'}
+            options={[
+              { value: 'outdoor', label: t('ops.detail.outdoor') },
+              { value: 'indoor', label: t('ops.detail.indoor') },
+            ]}
+            onChange={(choice) => void saveBasics('indoor', { isIndoor: choice === 'indoor' })}
+          />
+        </RefineList>
 
         <RefineSection title={t('ops.detail.horsebox')} />
         <div className="ops-fields">

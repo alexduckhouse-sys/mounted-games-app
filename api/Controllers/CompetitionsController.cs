@@ -316,6 +316,7 @@ public class CompetitionsController : ControllerBase
                 UseRefereeCards = req.UseRefereeCards,
             }).ToJson(),
             LaneHatbands = PlannedRaceList.Write(req.LaneHatbands),
+            IsIndoor = req.IsIndoor,
             StartDate = req.StartDate,
             EndDate = req.EndDate,
             CreatedByUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
@@ -405,6 +406,7 @@ public class CompetitionsController : ControllerBase
         c.PaymentDestination = string.IsNullOrWhiteSpace(req.PaymentDestination) ? null : req.PaymentDestination.Trim();
         c.TermsText = string.IsNullOrWhiteSpace(req.TermsText) ? null : req.TermsText.Trim();
         if (req.LaneHatbands is not null) c.LaneHatbands = PlannedRaceList.Write(req.LaneHatbands);
+        if (req.IsIndoor.HasValue) c.IsIndoor = req.IsIndoor.Value;
         if (req.UseRefereeCards.HasValue)
         {
             c.DecFormConfigJson = (MountedGames.Api.Services.DecForms.DecFormConfig.For(c) with

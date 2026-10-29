@@ -82,6 +82,7 @@ export function draftFromCompetition(c: CompetitionDetail): CreatorDraft {
     location: c.location ?? '', postcode: c.postcode ?? '', competitionNumber: c.competitionNumber ?? '', contactEmail: c.contactEmail ?? '', what3Words: c.what3Words ?? '', appleMapsUrl: c.appleMapsUrl ?? '',
     lat: c.latitude != null ? String(c.latitude) : '', lon: c.longitude != null ? String(c.longitude) : '',
     description: c.description ?? '', paymentDestination: c.paymentDestination ?? '', termsText: c.termsText ?? '',
+    isIndoor: Boolean(c.isIndoor),
     sections: finished,
     arenas: arenasFromSections(finished),
     breaks,

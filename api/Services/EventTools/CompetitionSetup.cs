@@ -19,7 +19,8 @@ public sealed record CompetitionSetup(
     string? LaneHatbands, bool EnablePassportCheck, string? PaymentDestination,
     IReadOnlyList<CompetitionSetup.SectionSetup> Sections,
     IReadOnlyList<CompetitionSetup.SessionSetup> Sessions,
-    string? PaymentLinkUrl = null)
+    string? PaymentLinkUrl = null,
+    bool IsIndoor = false)
 {
     public sealed record SectionSetup(
         SectionFormat Format, string AgeGroup, string DisplayName, string? RunoffRaceName, TieBreakRule TieBreakRule,
@@ -105,7 +106,8 @@ public sealed record CompetitionSetup(
                 s.FinalistCount, s.UsesRaceFinals, s.PriceMinor, s.MaxParticipants,
                 s.HasFinal, s.CarryPointsIntoFinal, s.DoublePointsInFinal)).ToList(),
             sessions,
-            source.PaymentLinkUrl);
+            source.PaymentLinkUrl,
+            source.IsIndoor);
     }
 
     static List<FinalHeatSetup>? FinalHeatsOf(Session session, DateTime eventStart)
@@ -197,6 +199,7 @@ public sealed class CompetitionSetupService(AppDbContext db)
                 DecFormConfigJson = PinPayoutClub(setup.DecFormConfigJson, creatorClubId),
                 LaneHatbands = setup.LaneHatbands,
                 EnablePassportCheck = setup.EnablePassportCheck,
+                IsIndoor = setup.IsIndoor,
                 PaymentDestination = keepPaymentDetails ? setup.PaymentDestination : null,
                 PaymentLinkUrl = keepPaymentDetails ? setup.PaymentLinkUrl : null,
                 CreatedByUserId = creatorUserId,

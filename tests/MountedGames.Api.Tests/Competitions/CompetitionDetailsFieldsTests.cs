@@ -123,7 +123,7 @@ public class CompetitionDetailsFieldsTests : IClassFixture<ApiFactory>
         using var scope = _f.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var name = await db.Competitions.AsNoTracking().Where(c => c.Id == id).Select(c => c.Name).SingleAsync();
-        foreach (var column in new[] { "Postcode", "CompetitionNumber", "ContactEmail", "PaymentLinkUrl" })
+        foreach (var column in new[] { "Postcode", "CompetitionNumber", "ContactEmail", "PaymentLinkUrl", "IsIndoor" })
             await db.Database.ExecuteSqlRawAsync($"ALTER TABLE Competitions DROP COLUMN {column};");
 
         await DbInitializer.SeedAsync(_f.Services);
@@ -136,11 +136,36 @@ public class CompetitionDetailsFieldsTests : IClassFixture<ApiFactory>
         c.CompetitionNumber = "N1";
         c.ContactEmail = "x@example.org";
         c.PaymentLinkUrl = "https://buy.stripe.com/test_123";
+        c.IsIndoor = true;
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
         var reloaded = await db.Competitions.SingleAsync(x => x.Id == id);
         Assert.Equal("AB1 2CD", reloaded.Postcode);
         Assert.Equal("https://buy.stripe.com/test_123", reloaded.PaymentLinkUrl);
+        Assert.True(reloaded.IsIndoor);
+    }
+
+    [Fact]
+    public async Task IsIndoor_IsStoredOnCreateAndUpdatedAndReturnedOnSummaryAndDetail()
+    {
+        var admin = await _f.AdminAsync();
+        var id = await CreateAsync(admin, new { name = $"Indoor {Guid.NewGuid():N}", startDate = Start, isIndoor = true });
+
+        Assert.True((await LoadAsync(id)).IsIndoor);
+        var detail = await (await _f.CreateClient().GetAsync($"/api/competitions/{id}")).ReadAsync<CompetitionDetail>();
+        Assert.True(detail!.IsIndoor);
+
+        // Null on update leaves IsIndoor untouched.
+        (await admin.PutAsJsonAsync($"/api/competitions/{id}", Update())).EnsureSuccessStatusCode();
+        Assert.True((await LoadAsync(id)).IsIndoor);
+
+        // Explicit false switches back to outdoor.
+        var switchOutdoor = Update();
+        switchOutdoor["isIndoor"] = false;
+        (await admin.PutAsJsonAsync($"/api/competitions/{id}", switchOutdoor)).EnsureSuccessStatusCode();
+        Assert.False((await LoadAsync(id)).IsIndoor);
+        var updatedDetail = await (await _f.CreateClient().GetAsync($"/api/competitions/{id}")).ReadAsync<CompetitionDetail>();
+        Assert.False(updatedDetail!.IsIndoor);
     }
 
     [Fact]

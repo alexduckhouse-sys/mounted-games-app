@@ -167,6 +167,8 @@ export interface CompetitionSummary {
   sessionCount: number;
   /** Sessions that have heats: the timetable is exact for these. Older API responses leave it out. */
   heatedSessionCount?: number;
+  /** True when the competition runs indoors (suppresses outdoor weather warnings). */
+  isIndoor?: boolean;
 }
 
 export interface CompetitionPickerItem {
@@ -420,6 +422,8 @@ export interface CompetitionDetail {
   termsText?: string | null;
   /** The hatband colour in each lane, index 0 being lane 1; set when the competition is created. Null when not set. */
   laneHatbands?: string[] | null;
+  /** True when the competition runs indoors (suppresses outdoor weather warnings). */
+  isIndoor?: boolean;
   /** Where entry fees are paid out: the organiser's club and its masked account. Public, no personal data. */
   payoutsTo?: PayoutsTo | null;
   /** Venue capacity limit for stables across entries and shop orders. Null when unlimited. */

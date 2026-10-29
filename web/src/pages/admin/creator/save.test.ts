@@ -205,4 +205,11 @@ describe('saveCreator existing breaks', () => {
     expect(api.post).not.toHaveBeenCalledWith('/competitions/3/sessions', expect.anything());
     expect(api.delete).not.toHaveBeenCalled();
   });
+
+  it('sends isIndoor on competition create and update', async () => {
+    const draft = { ...defaultDraft(new Date('2026-06-01T08:00:00Z')), name: 'Winter Indoor', isIndoor: true, sections: [], breaks: [] };
+    vi.mocked(api.post).mockResolvedValueOnce({ data: { id: 12 } });
+    await saveCreator(draft, { editingId: null, competition: null, teamCounts: {}, progress: () => {} });
+    expect(api.post).toHaveBeenCalledWith('/competitions', expect.objectContaining({ name: 'Winter Indoor', isIndoor: true }));
+  });
 });

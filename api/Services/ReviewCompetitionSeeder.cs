@@ -130,6 +130,7 @@ public static class ReviewCompetitionSeeder
                     EndDate = day.AddHours(17),
                     IsActive = offset >= 0,
                     IsArchived = offset < 0,
+                    IsIndoor = name.Contains("Winter", StringComparison.OrdinalIgnoreCase) || name.Contains("Indoor", StringComparison.OrdinalIgnoreCase),
                     Location = location,
                     Description = "Full schedule, declarations and live heat scoring.",
                 };

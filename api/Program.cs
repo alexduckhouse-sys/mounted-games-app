@@ -161,9 +161,12 @@ builder.Services.AddHostedService<StreamSweeper>();
 builder.Services.AddHttpClient("weather", c =>
 {
     c.Timeout = TimeSpan.FromSeconds(5);
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("MountedGamesApp/1.0 (+https://mounted-games-app.vercel.app)");
 });
 // Owns its own size-limited cache (weather keys come from query-string coordinates).
-builder.Services.AddSingleton<WeatherCache>(_ => new WeatherCache());
+var metOfficeApiKey = builder.Configuration["Weather:MetOfficeApiKey"] ?? builder.Configuration["METOFFICE_API_KEY"];
+var useDualWeatherProviders = !builder.Environment.IsEnvironment("Testing") || !string.IsNullOrWhiteSpace(metOfficeApiKey);
+builder.Services.AddSingleton<WeatherCache>(_ => new WeatherCache(metOfficeApiKey, useDualWeatherProviders));
 builder.Services.AddHttpClient(PushNotifier.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(10))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 // Email is off unless Email:Enabled, Email:ApiKey and Email:From are all set (see Services/Email).

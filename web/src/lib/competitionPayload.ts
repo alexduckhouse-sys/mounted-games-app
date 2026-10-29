@@ -23,6 +23,7 @@ export function competitionUpdateBody(competition: CompetitionDetail, patch: Rec
     endDate: competition.endDate ?? null,
     isActive: competition.isActive,
     isArchived: competition.isArchived,
+    isIndoor: Boolean(competition.isIndoor),
     ...patch,
   };
 }

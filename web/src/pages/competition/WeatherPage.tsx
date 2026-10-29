@@ -245,7 +245,7 @@ export function WeatherPage() {
     : '';
 
   // Thunder or heavy rain on the day: organisers get a quiet way to the announcements page.
-  const badWeather = !!weather?.hours.some((hour) => hazardOf({ startsAt: hour.startsAt, weatherCode: hour.weather_code, rainMm: hour.precipitation, rainChance: hour.precipitation_probability }) != null);
+  const badWeather = !competition.isIndoor && !!weather?.hours.some((hour) => hazardOf({ startsAt: hour.startsAt, weatherCode: hour.weather_code, rainMm: hour.precipitation, rainChance: hour.precipitation_probability }) != null);
   const mayOrganise = canOrganise(competition) && hasRole('Admin');
   const isToday = selectedDay === today;
   const nowLabel = isToday ? t('teams.weather.now') : selectedDateLabel;

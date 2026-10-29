@@ -1624,6 +1624,9 @@ namespace MountedGames.Api.Data.Migrations
                     b.Property<bool>("IsArchived")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsIndoor")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("LaneHatbands")
                         .HasColumnType("text");
 
