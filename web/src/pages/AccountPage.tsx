@@ -19,6 +19,7 @@ import '../components/sitePages.css';
 export function AccountPage() {
   const t = useT();
   const { user, refreshUser, adoptSession } = useAuth();
+  const [exporting, setExporting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -29,6 +30,18 @@ export function AccountPage() {
   const toast = useToast();
   usePageHeader({ title: t('account.account.title'), plain: true, backTo: '/me', backLabel: t('account.backToMe') });
   if (!user) return null;
+
+  async function downloadEventData() {
+    setExporting(true);
+    try {
+      const response = await api.get('/auth/me/event-day-data');
+      const url = URL.createObjectURL(new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' }));
+      const link = document.createElement('a'); link.href = url; link.download = 'my-event-day-data.json';
+      document.body.appendChild(link); link.click(); link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch { toast.show(t('account.account.exportFailed')); }
+    finally { setExporting(false); }
+  }
 
   function startEditing() {
     setDraft(user?.fullName ?? '');
@@ -92,6 +105,10 @@ export function AccountPage() {
       <LinkedSignIns {...signIns} onChanged={(message) => toast.show(message)} />
       <p className="sp-note">{t('account.account.privacyBefore')}<Link to="/privacy" className="font-semibold text-[rgb(var(--mg-heading))] underline">{t('account.account.privacyLink')}</Link>{t('account.account.privacyAfter')}</p>
       <div className="mt-4">
+        <button type="button" className="sp-row" disabled={exporting} onClick={() => void downloadEventData()}>
+          <span className="sp-t1 sp-grow">{t('account.account.exportEventData')}</span>
+          <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" />
+        </button>
         <DeleteAccountPanel hasPassword={signIns.info?.hasPassword ?? true} linkedProviders={signIns.info?.logins.map((l) => l.provider) ?? []} />
       </div>
       {passwordOpen && <ChangePasswordSheet onClose={() => setPasswordOpen(false)} onChanged={() => { setPasswordOpen(false); toast.show(t('account.account.passwordChanged')); }} />}

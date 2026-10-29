@@ -9,7 +9,7 @@ extension TeamProgressAttributes.ContentState {
         case .unknown: return "Checking…"
         case .drawPending: return "Waiting for the draw"
         case .paused: return "Paused"
-        case .finished: return "Finished for today"
+        case .finished: return "Finished"
         case .withdrawn: return "Withdrawn"
         case .inArena:
             guard let count = shownCount, count > 0 else { return "You're on" }

@@ -18,6 +18,7 @@ using MountedGames.Api.Services.Operations;
 namespace MountedGames.Api.Controllers;
 
 [ApiController]
+[WindConflictFilter]
 [Route("api/competitions/{competitionId:int}/sessions")]
 public class SessionsController : ControllerBase
 {
@@ -107,51 +108,66 @@ public class SessionsController : ControllerBase
     [CompetitionAccess("competitionId")]
     public async Task<ActionResult<SessionDto>> Update(int competitionId, int id, UpdateSessionRequest req)
     {
-        var s = await SessionsWithDetail()
-            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
-        if (s is null) return NotFound();
-        var prevScheduled = s.ScheduledStart;
-        var prevMinutesPerHeat = s.MinutesPerHeat;
-        // A drawn session that hasn't started keeps its lanes but its time is free to change. Once it has started or
-        // has a scored race, its times are a record and can't be rewritten here ("Move everything later" still works).
-        if (req.ScheduledStart.HasValue && prevScheduled.HasValue && req.ScheduledStart.Value != prevScheduled.Value && IsRunOrScored(s))
-            return Conflict(new { message = "This session has started or has scores, so its start time can't be changed." });
-        if (req.Name is not null)
+        Session? changedSession = null;
+        var delayMinutes = 0;
+        var outcome = await _db.Database.CreateExecutionStrategy().ExecuteAsync<ActionResult<SessionDto>>(async () =>
         {
-            if (string.IsNullOrWhiteSpace(req.Name)) return BadRequest(new { message = "A session needs a name." });
-            s.Name = req.Name.Trim();
-        }
-        if (req.ArenaName is not null)
-            s.ArenaName = string.IsNullOrWhiteSpace(req.ArenaName) ? null : req.ArenaName.Trim();
-        if (req.ScheduledStart.HasValue) s.ScheduledStart = req.ScheduledStart.Value;
-        if (req.MinutesPerHeat.HasValue) s.MinutesPerHeat = req.MinutesPerHeat.Value;
-        if (req.DurationMinutes.HasValue && s.Heats.Count == 0) s.DurationMinutes = req.DurationMinutes.Value;
-        if (PlannedFinalRaceLists.FirstInvalidKey(req.PlannedFinalRaces) is { } badKey)
-            return BadRequest(new { message = $"'{badKey}' isn't a final. Use a single letter from B to Z." });
-        if (req.LanesPerHeat.HasValue || req.PlannedRaces is not null || req.PlannedFinalRaces is not null)
-        {
-            // Heat size and the race list are structure: they can't change once the session has started or been scored.
-            if (HasScores(s) && ((req.LanesPerHeat.HasValue && req.LanesPerHeat != s.LanesPerHeat)
-                || (req.PlannedRaces is not null && PlannedRaceList.Write(req.PlannedRaces) != s.PlannedRaces)
-                || (req.PlannedFinalRaces is not null && PlannedFinalRaceLists.Write(req.PlannedFinalRaces) != s.PlannedFinalRaces)))
-                return Conflict(new { message = "This session has started or has scores, so its structure can't change." });
-            if (req.LanesPerHeat.HasValue) s.LanesPerHeat = req.LanesPerHeat.Value;
-            if (req.PlannedRaces is not null) s.PlannedRaces = PlannedRaceList.Write(req.PlannedRaces);
-            if (req.PlannedFinalRaces is not null) s.PlannedFinalRaces = PlannedFinalRaceLists.Write(req.PlannedFinalRaces);
-        }
-        if (!IsRunOrScored(s))
-            RetimeHeats(s, prevScheduled, prevMinutesPerHeat);
-        await _db.SaveChangesAsync();
+            _db.ChangeTracker.Clear();
+            await using var transaction = await _db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+            await WindRaceGuard.LockSessionAsync(_db, id);
+            var s = await SessionsWithDetail()
+                .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+            if (s is null) return NotFound();
+            var prevScheduled = s.ScheduledStart;
+            var prevMinutesPerHeat = s.MinutesPerHeat;
+            // A drawn session that hasn't started keeps its lanes but its time is free to change. Once it has started or
+            // has a scored race, its times are a record and can't be rewritten here ("Move everything later" still works).
+            if (req.ScheduledStart.HasValue && prevScheduled.HasValue && req.ScheduledStart.Value != prevScheduled.Value && IsRunOrScored(s))
+                return Conflict(new { message = "This session has started or has scores, so its start time can't be changed." });
+            if (req.Name is not null)
+            {
+                if (string.IsNullOrWhiteSpace(req.Name)) return BadRequest(new { message = "A session needs a name." });
+                s.Name = req.Name.Trim();
+            }
+            if (req.ArenaName is not null)
+                s.ArenaName = string.IsNullOrWhiteSpace(req.ArenaName) ? null : req.ArenaName.Trim();
+            if (req.ScheduledStart.HasValue) s.ScheduledStart = req.ScheduledStart.Value;
+            if (req.MinutesPerHeat.HasValue) s.MinutesPerHeat = req.MinutesPerHeat.Value;
+            if (req.DurationMinutes.HasValue && s.Heats.Count == 0) s.DurationMinutes = req.DurationMinutes.Value;
+            if (PlannedFinalRaceLists.FirstInvalidKey(req.PlannedFinalRaces) is { } badKey)
+                return BadRequest(new { message = $"'{badKey}' isn't a final. Use a single letter from B to Z." });
+            if (s.Heats.Count > 0 && ((req.PlannedRaces != null && PlannedRaceList.Write(req.PlannedRaces) != s.PlannedRaces)
+                || (req.PlannedFinalRaces != null && PlannedFinalRaceLists.Write(req.PlannedFinalRaces) != s.PlannedFinalRaces)))
+                return Conflict(new { message = "Heats already exist. Review the materialised race programme before changing its planned list." });
+            if (req.LanesPerHeat.HasValue || req.PlannedRaces is not null || req.PlannedFinalRaces is not null)
+            {
+                // Heat size and the race list are structure: they can't change once the session has started or been scored.
+                if (HasScores(s) && ((req.LanesPerHeat.HasValue && req.LanesPerHeat != s.LanesPerHeat)
+                    || (req.PlannedRaces is not null && PlannedRaceList.Write(req.PlannedRaces) != s.PlannedRaces)
+                    || (req.PlannedFinalRaces is not null && PlannedFinalRaceLists.Write(req.PlannedFinalRaces) != s.PlannedFinalRaces)))
+                    return Conflict(new { message = "This session has started or has scores, so its structure can't change." });
+                if (req.LanesPerHeat.HasValue) s.LanesPerHeat = req.LanesPerHeat.Value;
+                if (req.PlannedRaces is not null) s.PlannedRaces = PlannedRaceList.Write(req.PlannedRaces);
+                if (req.PlannedFinalRaces is not null) s.PlannedFinalRaces = PlannedFinalRaceLists.Write(req.PlannedFinalRaces);
+            }
+            if (!IsRunOrScored(s))
+                RetimeHeats(s, prevScheduled, prevMinutesPerHeat);
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
 
-        var dto = s.ToDto();
-        await _live.SessionUpdated(competitionId, dto);
-        if (prevScheduled.HasValue && s.ScheduledStart.HasValue)
+            var dto = s.ToDto();
+            changedSession = s;
+            delayMinutes = prevScheduled.HasValue && s.ScheduledStart.HasValue
+                ? (int)Math.Round((s.ScheduledStart.Value - prevScheduled.Value).TotalMinutes) : 0;
+            return dto;
+        });
+        if (outcome.Value is { } dto)
         {
-            var delayMin = (int)Math.Round((s.ScheduledStart.Value - prevScheduled.Value).TotalMinutes);
-            if (delayMin >= 5)
-                await NotifySessionDelayAsync(competitionId, s, delayMin);
+            await _live.SessionUpdated(competitionId, dto);
+            if (changedSession != null && delayMinutes >= 5)
+                await NotifySessionDelayAsync(competitionId, changedSession, delayMinutes);
         }
-        return dto;
+        return outcome;
     }
 
     [HttpPut("{id:int}/status")]
@@ -926,51 +942,37 @@ public class SessionsController : ControllerBase
     public async Task<ActionResult<SessionDto>> ChangeRace(
         int competitionId, int id, int raceId, ChangeSessionRaceRequest req)
     {
-        if (string.IsNullOrWhiteSpace(req.NewName))
-            return BadRequest(new { message = "A race name is required." });
-        var s = await SessionsWithDetail()
-            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
-        if (s is null) return NotFound();
-        var targetHeat = s.Heats.FirstOrDefault(h => h.Races.Any(r => r.Id == raceId));
-        var targetRace = targetHeat?.Races.FirstOrDefault(r => r.Id == raceId);
-        if (targetRace is null || targetHeat is null) return NotFound();
-
-        var newName = req.NewName.Trim();
-        var oldName = targetRace.Name;
-        var targetOrder = targetRace.OrderIndex;
-
-        if (req.ApplyToAllHeats)
+        var outcome = await _db.Database.CreateExecutionStrategy().ExecuteAsync<ActionResult<SessionDto>>(async () =>
         {
-            foreach (var heat in s.Heats)
-            {
-                if (targetHeat.RaceRoundId.HasValue && heat.RaceRoundId == targetHeat.RaceRoundId)
-                {
-                    foreach (var r in heat.Races) r.Name = newName;
-                    if (!string.IsNullOrWhiteSpace(heat.Label) && heat.Label.StartsWith(oldName + " ·", StringComparison.OrdinalIgnoreCase))
-                        heat.Label = newName + heat.Label[oldName.Length..];
-                }
-                else if (!targetHeat.RaceRoundId.HasValue)
-                {
-                    foreach (var r in heat.Races.Where(r => r.OrderIndex == targetOrder))
-                        r.Name = newName;
-                }
-            }
-            var planned = PlannedRaceList.Read(s.PlannedRaces)?.ToList();
-            if (planned is not null && targetOrder >= 1 && targetOrder <= planned.Count)
-            {
-                planned[targetOrder - 1] = newName;
-                s.PlannedRaces = PlannedRaceList.Write(planned);
-            }
-        }
-        else
-        {
-            targetRace.Name = newName;
-        }
+            _db.ChangeTracker.Clear();
+            if (string.IsNullOrWhiteSpace(req.NewName))
+                return BadRequest(new { message = "A race name is required." });
+            await using var transaction = await _db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+            await WindRaceGuard.LockSessionAsync(_db, id);
+            var s = await SessionsWithDetail()
+                .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+            if (s is null) return NotFound();
+            var targetHeat = s.Heats.FirstOrDefault(h => h.Races.Any(r => r.Id == raceId));
+            var targetRace = targetHeat?.Races.FirstOrDefault(r => r.Id == raceId);
+            if (targetRace is null || targetHeat is null) return NotFound();
 
-        await _db.SaveChangesAsync();
-        var dto = s.ToDto();
-        await _live.SessionUpdated(competitionId, dto);
-        return dto;
+            if (req.NewName.Trim().Length > 150) return BadRequest(new { message = "Race names must be 150 characters or fewer." });
+            var affected = WindRaceGuard.Scope(s, targetRace);
+            if (!req.ApplyToAllHeats && affected.Count > 1)
+                return Conflict(new { message = "A replacement must cover the complete contest. Review all its heats together." });
+            if (await WindRaceGuard.ProtectedAsync(_db, affected))
+                return Conflict(new { message = "This contest has started or has scoring history. Its race cannot be replaced." });
+            if (affected.Any(r => r.ProgrammeRevision != (req.ExpectedProgrammeRevision ?? 0)))
+                return Conflict(new { message = "The programme changed. Reload it and review the change again." });
+            WindRaceGuard.Replace(s, targetRace, affected, req.NewName.Trim());
+
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+            var dto = s.ToDto();
+            return dto;
+        });
+        if (outcome.Value is { } dto) await _live.SessionUpdated(competitionId, dto);
+        return outcome;
     }
 
     /// <summary>Mid-session cancellation/removal of a race across all heats of the session.</summary>
@@ -979,46 +981,48 @@ public class SessionsController : ControllerBase
     [CompetitionAccess("competitionId")]
     public async Task<ActionResult<SessionDto>> CancelRace(int competitionId, int id, int raceId)
     {
-        var s = await SessionsWithDetail()
-            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
-        if (s is null) return NotFound();
-        var targetHeat = s.Heats.FirstOrDefault(h => h.Races.Any(r => r.Id == raceId));
-        var targetRace = targetHeat?.Races.FirstOrDefault(r => r.Id == raceId);
-        if (targetRace is null || targetHeat is null) return NotFound();
-
-        var targetOrder = targetRace.OrderIndex;
-        List<Race> RacesToRemove(Heat heat) => targetHeat.RaceRoundId.HasValue && heat.RaceRoundId == targetHeat.RaceRoundId
-            ? heat.Races.ToList()
-            : heat.Races.Where(r => r.OrderIndex == targetOrder).ToList();
-
-        // Cancelling deletes the race and its results, so refuse when any affected race has results or is signed off.
-        // (A save's revision counter alone doesn't count: clearing a race leaves it behind, and clearing is the way out.)
-        var affected = s.Heats.SelectMany(RacesToRemove).ToList();
-        var affectedIds = affected.Select(r => r.Id).ToList();
-        var isSignedOff = await _db.Set<RaceScoreState>().AsNoTracking()
-            .AnyAsync(x => affectedIds.Contains(x.RaceId) && x.IsSignedOff);
-        if (isSignedOff || affected.Any(r => r.Results.Count > 0))
-            return Conflict(new { message = "This race has recorded or signed-off results, so it can't be cancelled. Clear its results first." });
-
-        foreach (var heat in s.Heats.ToList())
+        var outcome = await _db.Database.CreateExecutionStrategy().ExecuteAsync<ActionResult<SessionDto>>(async () =>
         {
-            var toRemove = RacesToRemove(heat);
-            foreach (var r in toRemove)
-            {
-                _db.Results.RemoveRange(r.Results);
-                _db.Races.Remove(r);
-                heat.Races.Remove(r);
-            }
-            var order = 1;
-            foreach (var remaining in heat.Races.OrderBy(r => r.OrderIndex))
-                remaining.OrderIndex = order++;
-        }
+            _db.ChangeTracker.Clear();
+            await using var transaction = await _db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+            await WindRaceGuard.LockSessionAsync(_db, id);
+            var s = await SessionsWithDetail()
+                .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+            if (s is null) return NotFound();
+            var targetHeat = s.Heats.FirstOrDefault(h => h.Races.Any(r => r.Id == raceId));
+            var targetRace = targetHeat?.Races.FirstOrDefault(r => r.Id == raceId);
+            if (targetRace is null || targetHeat is null) return NotFound();
 
-        await _db.SaveChangesAsync();
-        var reloaded = await SessionsWithDetail().FirstAsync(x => x.Id == id);
-        var dto = reloaded.ToDto();
-        await _live.SessionUpdated(competitionId, dto);
-        return dto;
+            var scope = WindRaceGuard.Scope(s, targetRace);
+            List<Race> RacesToRemove(Heat heat) => heat.Races.Where(scope.Contains).ToList();
+
+            // Clearing results for a rerun does not remove the contest's scoring history.
+            var affected = s.Heats.SelectMany(RacesToRemove).ToList();
+            if (await WindRaceGuard.ProtectedAsync(_db, affected))
+                return Conflict(new { message = "This race has started or has scoring history, so it cannot be cancelled here." });
+
+            foreach (var heat in s.Heats.ToList())
+            {
+                var toRemove = RacesToRemove(heat);
+                foreach (var r in toRemove)
+                {
+                    _db.Results.RemoveRange(r.Results);
+                    _db.Races.Remove(r);
+                    heat.Races.Remove(r);
+                }
+                var order = 1;
+                foreach (var remaining in heat.Races.OrderBy(r => r.OrderIndex))
+                    remaining.OrderIndex = order++;
+            }
+
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+            var reloaded = await SessionsWithDetail().FirstAsync(x => x.Id == id);
+            var dto = reloaded.ToDto();
+            return dto;
+        });
+        if (outcome.Value is { } dto) await _live.SessionUpdated(competitionId, dto);
+        return outcome;
     }
 
     /// <summary>Clears recorded results and clock for a stopped race so it can be re-run cleanly.</summary>
@@ -1087,83 +1091,87 @@ public class SessionsController : ControllerBase
     public async Task<ActionResult<SessionDto>> CombineHeat(
         int competitionId, int id, CombineHeatRequest req)
     {
-        var s = await SessionsWithDetail()
-            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
-        if (s is null) return NotFound();
+        var outcome = await WindRaceGuard.WithTimetableLockAsync<ActionResult<SessionDto>>(_db, competitionId, async () =>
+        {
+            var s = await SessionsWithDetail()
+                .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+            if (s is null) return NotFound();
 
-        Session? sourceSession = null;
-        if (req.SourceSessionId.HasValue && req.SourceSessionId.Value != id)
-        {
-            sourceSession = await SessionsWithDetail()
-                .FirstOrDefaultAsync(x => x.Id == req.SourceSessionId.Value && x.CompetitionId == competitionId);
-            if (sourceSession is null) return NotFound();
-        }
-
-        var teamIdsToMerge = new List<int>();
-        if (req.TeamIds is { Count: > 0 })
-        {
-            if (!await TeamsBelongAsync(competitionId, req.TeamIds))
-                return BadRequest(new { message = "Some of those teams aren't in this competition." });
-            teamIdsToMerge.AddRange(req.TeamIds);
-        }
-        if (sourceSession is not null)
-        {
-            var fromHeats = sourceSession.Heats.SelectMany(h => h.Entries).OrderBy(e => e.LaneIndex).Select(e => e.TeamId).ToList();
-            if (fromHeats.Count > 0)
+            Session? sourceSession = null;
+            if (req.SourceSessionId.HasValue && req.SourceSessionId.Value != id)
             {
-                teamIdsToMerge.AddRange(fromHeats);
+                sourceSession = await SessionsWithDetail()
+                    .FirstOrDefaultAsync(x => x.Id == req.SourceSessionId.Value && x.CompetitionId == competitionId);
+                if (sourceSession is null) return NotFound();
             }
-            else if (sourceSession.CompetitionSectionId.HasValue)
+
+            var teamIdsToMerge = new List<int>();
+            if (req.TeamIds is { Count: > 0 })
             {
-                var secTeams = await _db.Teams
-                    .Where(t => t.CompetitionId == competitionId && t.CompetitionSectionId == sourceSession.CompetitionSectionId.Value && t.EntryStatus == TeamEntryStatus.Active)
-                    .Select(t => t.Id)
-                    .ToListAsync();
-                teamIdsToMerge.AddRange(secTeams);
+                if (!await TeamsBelongAsync(competitionId, req.TeamIds))
+                    return BadRequest(new { message = "Some of those teams aren't in this competition." });
+                teamIdsToMerge.AddRange(req.TeamIds);
             }
-        }
-        teamIdsToMerge = await WithoutOutTeamsAsync(competitionId, teamIdsToMerge.Distinct().ToList());
-
-        var targetHeat = s.Heats.OrderBy(h => h.OrderIndex)
-            .FirstOrDefault(h => !req.TargetHeatId.HasValue || h.Id == req.TargetHeatId.Value);
-        if (targetHeat is null)
-        {
-            targetHeat = new Heat
+            if (sourceSession is not null)
             {
-                SessionId = s.Id,
-                Label = "Combined Heat 1",
-                OrderIndex = 1,
-            };
-            _db.Heats.Add(targetHeat);
+                var fromHeats = sourceSession.Heats.SelectMany(h => h.Entries).OrderBy(e => e.LaneIndex).Select(e => e.TeamId).ToList();
+                if (fromHeats.Count > 0)
+                {
+                    teamIdsToMerge.AddRange(fromHeats);
+                }
+                else if (sourceSession.CompetitionSectionId.HasValue)
+                {
+                    var secTeams = await _db.Teams
+                        .Where(t => t.CompetitionId == competitionId && t.CompetitionSectionId == sourceSession.CompetitionSectionId.Value && t.EntryStatus == TeamEntryStatus.Active)
+                        .Select(t => t.Id)
+                        .ToListAsync();
+                    teamIdsToMerge.AddRange(secTeams);
+                }
+            }
+            teamIdsToMerge = await WithoutOutTeamsAsync(competitionId, teamIdsToMerge.Distinct().ToList());
+
+            var targetHeat = s.Heats.OrderBy(h => h.OrderIndex)
+                .FirstOrDefault(h => !req.TargetHeatId.HasValue || h.Id == req.TargetHeatId.Value);
+            if (targetHeat is null)
+            {
+                targetHeat = new Heat
+                {
+                    SessionId = s.Id,
+                    Label = "Combined Heat 1",
+                    OrderIndex = 1,
+                };
+                _db.Heats.Add(targetHeat);
+                await _db.SaveChangesAsync();
+                var planned = PlannedRaceList.Read(s.PlannedRaces) ?? ["Bending", "Flag", "Mug"];
+                var rOrder = 1;
+                foreach (var rName in planned)
+                    _db.Races.Add(new Race { HeatId = targetHeat.Id, Name = rName, OrderIndex = rOrder++ });
+                await _db.SaveChangesAsync();
+            }
+
+            var existingTeamIds = targetHeat.Entries.Select(e => e.TeamId).ToHashSet();
+            var nextLane = targetHeat.Entries.Count == 0 ? 1 : targetHeat.Entries.Max(e => e.LaneIndex) + 1;
+            foreach (var tid in teamIdsToMerge.Where(t => !existingTeamIds.Contains(t)))
+            {
+                _db.HeatEntries.Add(new HeatEntry { HeatId = targetHeat.Id, TeamId = tid, LaneIndex = nextLane++ });
+                existingTeamIds.Add(tid);
+            }
+
+            var mode = ParseScoringMode(req.ScoringMode);
+            s.Notes = ScoringService.ApplyScoringModeTag(s.Notes, mode);
+            s.LanesPerHeat = Math.Max(s.LanesPerHeat ?? 0, existingTeamIds.Count);
+            if (sourceSession is not null && !s.Name.Contains('+'))
+                s.Name = $"{s.Name} + {sourceSession.Name}";
+            if (sourceSession is not null && req.RemoveSourceSession && !HasScores(sourceSession))
+                _db.Sessions.Remove(sourceSession);
+
             await _db.SaveChangesAsync();
-            var planned = PlannedRaceList.Read(s.PlannedRaces) ?? ["Bending", "Flag", "Mug"];
-            var rOrder = 1;
-            foreach (var rName in planned)
-                _db.Races.Add(new Race { HeatId = targetHeat.Id, Name = rName, OrderIndex = rOrder++ });
-            await _db.SaveChangesAsync();
-        }
-
-        var existingTeamIds = targetHeat.Entries.Select(e => e.TeamId).ToHashSet();
-        var nextLane = targetHeat.Entries.Count == 0 ? 1 : targetHeat.Entries.Max(e => e.LaneIndex) + 1;
-        foreach (var tid in teamIdsToMerge.Where(t => !existingTeamIds.Contains(t)))
-        {
-            _db.HeatEntries.Add(new HeatEntry { HeatId = targetHeat.Id, TeamId = tid, LaneIndex = nextLane++ });
-            existingTeamIds.Add(tid);
-        }
-
-        var mode = ParseScoringMode(req.ScoringMode);
-        s.Notes = ScoringService.ApplyScoringModeTag(s.Notes, mode);
-        s.LanesPerHeat = Math.Max(s.LanesPerHeat ?? 0, existingTeamIds.Count);
-        if (sourceSession is not null && !s.Name.Contains('+'))
-            s.Name = $"{s.Name} + {sourceSession.Name}";
-        if (sourceSession is not null && req.RemoveSourceSession && !HasScores(sourceSession))
-            _db.Sessions.Remove(sourceSession);
-
-        await _db.SaveChangesAsync();
-        var reloaded = await SessionsWithDetail().FirstAsync(x => x.Id == s.Id);
-        var dto = reloaded.ToDto();
-        await _live.SessionUpdated(competitionId, dto);
-        return dto;
+            var reloaded = await SessionsWithDetail().FirstAsync(x => x.Id == s.Id);
+            var dto = reloaded.ToDto();
+            return dto;
+        });
+        if (outcome.Value is { } dto) await _live.SessionUpdated(competitionId, dto);
+        return outcome;
     }
 
     [HttpPut("{id:int}/combined-scoring")]
@@ -1172,15 +1180,19 @@ public class SessionsController : ControllerBase
     public async Task<ActionResult<SessionDto>> SetCombinedScoring(
         int competitionId, int id, SetCombinedScoringRequest req)
     {
-        var s = await SessionsWithDetail()
-            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
-        if (s is null) return NotFound();
-        var mode = ParseScoringMode(req.ScoringMode);
-        s.Notes = ScoringService.ApplyScoringModeTag(s.Notes, mode);
-        await _db.SaveChangesAsync();
-        var dto = s.ToDto();
-        await _live.SessionUpdated(competitionId, dto);
-        return dto;
+        var outcome = await WindRaceGuard.WithTimetableLockAsync<ActionResult<SessionDto>>(_db, competitionId, async () =>
+        {
+            var s = await SessionsWithDetail()
+                .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+            if (s is null) return NotFound();
+            var mode = ParseScoringMode(req.ScoringMode);
+            s.Notes = ScoringService.ApplyScoringModeTag(s.Notes, mode);
+            await _db.SaveChangesAsync();
+            var dto = s.ToDto();
+            return dto;
+        });
+        if (outcome.Value is { } dto) await _live.SessionUpdated(competitionId, dto);
+        return outcome;
     }
 
     /// <summary>Places the competition (or arena) on hold, shifting remaining unstarted sessions to a custom resume time or by delay minutes.</summary>
@@ -1298,72 +1310,86 @@ public class SessionsController : ControllerBase
     public async Task<ActionResult<SessionDto>> UpdateSessionRaces(
         int competitionId, int id, UpdateSessionRacesRequest req)
     {
-        var s = await SessionsWithDetail()
-            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
-        if (s is null) return NotFound();
-
-        var names = (req.RaceNames ?? Array.Empty<string>())
-            .Where(r => !string.IsNullOrWhiteSpace(r))
-            .Select(r => r.Trim())
-            .ToList();
-        if (names.Count == 0)
-            return BadRequest(new { message = "At least one race name is required." });
-        if (names.Any(name => name.Length > 150))
-            return BadRequest(new { message = "Race names must be 150 characters or fewer." });
-
-        var raceIds = s.Heats.SelectMany(h => h.Races).Select(r => r.Id).ToList();
-        var recordedIds = (await _db.Set<RaceScoreState>()
-            .Where(state => raceIds.Contains(state.RaceId) && (state.Revision > 0 || state.IsSignedOff))
-            .Select(state => state.RaceId).ToListAsync()).ToHashSet();
-        var programmes = s.Heats.Select(heat => new
+        var outcome = await _db.Database.CreateExecutionStrategy().ExecuteAsync<ActionResult<SessionDto>>(async () =>
         {
-            Heat = heat,
-            Races = heat.Races.OrderBy(r => r.OrderIndex).ThenBy(r => r.Id).ToList(),
-        }).ToList();
-        // The request is the full programme. Validate every heat before changing anything: a
-        // different completion order must never shift recorded races or erase another heat's game.
-        foreach (var programme in programmes)
-        {
-            for (var index = 0; index < programme.Races.Count; index++)
+            _db.ChangeTracker.Clear();
+            await using var transaction = await _db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+            await WindRaceGuard.LockSessionAsync(_db, id);
+            var s = await SessionsWithDetail()
+                .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+            if (s is null) return NotFound();
+
+            if (!WindRaceGuard.MatchesProgramme(s, req.ExpectedProgramme))
+                return Conflict(new { message = "The race programme changed. Refresh it and review your changes before trying again; nothing was saved." });
+
+            var names = (req.RaceNames ?? Array.Empty<string>())
+                .Where(r => !string.IsNullOrWhiteSpace(r))
+                .Select(r => r.Trim())
+                .ToList();
+            if (names.Count == 0)
+                return BadRequest(new { message = "At least one race name is required." });
+            if (names.Any(name => name.Length > 150))
+                return BadRequest(new { message = "Race names must be 150 characters or fewer." });
+
+            if (s.Heats.Any(h => h.RaceRoundId != null) || s.PlannedFinalRaces != null)
+                return Conflict(new { message = "Review each race round or lettered final separately before changing its races." });
+            var raceIds = s.Heats.SelectMany(h => h.Races).Select(r => r.Id).ToList();
+            var recordedIds = (await _db.Set<RaceScoreState>()
+                .Where(state => raceIds.Contains(state.RaceId) && (state.Revision > 0 || state.IsSignedOff))
+                .Select(state => state.RaceId).ToListAsync()).ToHashSet();
+            var programmes = s.Heats.Select(heat => new
             {
-                var race = programme.Races[index];
-                var protectedRace = race.IsComplete || race.StartedAt.HasValue || race.Results.Count > 0 || recordedIds.Contains(race.Id);
-                if (protectedRace && (index >= names.Count || !string.Equals(race.Name, names[index], StringComparison.OrdinalIgnoreCase)))
-                    return Conflict(new { message = "The race programmes differ at a recorded or started race. Keep those races in their original positions; nothing was saved." });
-            }
-        }
-
-        var hasUncompleted = false;
-        foreach (var programme in programmes)
-        {
-            for (var index = 0; index < programme.Races.Count; index++)
+                Heat = heat,
+                Races = heat.Races.OrderBy(r => r.OrderIndex).ThenBy(r => r.Id).ToList(),
+            }).ToList();
+            // The request is the full programme. Validate every heat before changing anything: a
+            // different completion order must never shift recorded races or erase another heat's game.
+            foreach (var programme in programmes)
             {
-                var race = programme.Races[index];
-                if (index >= names.Count) { _db.Races.Remove(race); continue; }
-                // Preserve IDs and order even for an unchanged future game (offline scorers refer to them).
-                if (!race.IsComplete && !race.StartedAt.HasValue && !recordedIds.Contains(race.Id)) race.Name = names[index];
+                for (var index = 0; index < programme.Races.Count; index++)
+                {
+                    var race = programme.Races[index];
+                    var protectedRace = await WindRaceGuard.ProtectedAsync(_db, [race]);
+                    if (protectedRace && (index >= names.Count || !string.Equals(race.Name, names[index], StringComparison.OrdinalIgnoreCase)))
+                        return Conflict(new { message = "The race programmes differ at a recorded or started race. Keep those races in their original positions; nothing was saved." });
+                }
             }
-            var order = programme.Races.Select(r => r.OrderIndex).DefaultIfEmpty(0).Max();
-            for (var index = programme.Races.Count; index < names.Count; index++)
-                _db.Races.Add(new Race { HeatId = programme.Heat.Id, Name = names[index], OrderIndex = ++order });
-            var heatHasUncompleted = names.Count > programme.Races.Count || programme.Races.Take(names.Count).Any(r => !r.IsComplete);
-            if (heatHasUncompleted) programme.Heat.FinishedAt = null;
-            hasUncompleted |= heatHasUncompleted;
-        }
-        s.PlannedRaces = PlannedRaceList.Write(names);
-        if (s.Status == SessionStatus.Finished && hasUncompleted)
-        {
-            s.Status = SessionStatus.InArena;
-            s.FinishedAt = null;
-            s.ProvisionalUntil = null;
-            s.OfficialConfirmedAt = null;
-        }
 
-        await _db.SaveChangesAsync();
-        var reloaded = await SessionsWithDetail().FirstAsync(x => x.Id == id);
-        var dto = reloaded.ToDto();
-        await _live.SessionUpdated(competitionId, dto);
-        return dto;
+            var hasUncompleted = false;
+            foreach (var programme in programmes)
+            {
+                for (var index = 0; index < programme.Races.Count; index++)
+                {
+                    var race = programme.Races[index];
+                    if (index >= names.Count) { _db.Races.Remove(race); continue; }
+                    // Preserve IDs and order even for an unchanged future game (offline scorers refer to them).
+                    if (!race.IsComplete && !race.StartedAt.HasValue && !recordedIds.Contains(race.Id) && race.Name != names[index])
+                    { race.Name = names[index]; race.ProgrammeRevision++; }
+                }
+                var order = programme.Races.Select(r => r.OrderIndex).DefaultIfEmpty(0).Max();
+                for (var index = programme.Races.Count; index < names.Count; index++)
+                    _db.Races.Add(new Race { HeatId = programme.Heat.Id, Name = names[index], OrderIndex = ++order });
+                var heatHasUncompleted = names.Count > programme.Races.Count || programme.Races.Take(names.Count).Any(r => !r.IsComplete);
+                if (heatHasUncompleted) programme.Heat.FinishedAt = null;
+                hasUncompleted |= heatHasUncompleted;
+            }
+            s.PlannedRaces = PlannedRaceList.Write(names);
+            if (s.Status == SessionStatus.Finished && hasUncompleted)
+            {
+                s.Status = SessionStatus.InArena;
+                s.FinishedAt = null;
+                s.ProvisionalUntil = null;
+                s.OfficialConfirmedAt = null;
+            }
+
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+            var reloaded = await SessionsWithDetail().FirstAsync(x => x.Id == id);
+            var dto = reloaded.ToDto();
+            return dto;
+        });
+        if (outcome.Value is { } dto) await _live.SessionUpdated(competitionId, dto);
+        return outcome;
     }
 
     /// <summary>Shifts ScheduledStart on all uncompleted sessions (and their uncompleted heats) by DeltaMinutes.</summary>
@@ -1376,34 +1402,37 @@ public class SessionsController : ControllerBase
         if (req.DeltaMinutes is 0 or < -720 or > 720)
             return BadRequest(new { message = "Shift must be between -720 and 720 minutes (non-zero)." });
 
-        var sessions = await SessionsWithDetail()
-            .Where(s => s.CompetitionId == competitionId)
-            .OrderBy(s => s.OrderIndex)
-            .ToListAsync();
-
-        var delta = TimeSpan.FromMinutes(req.DeltaMinutes);
-        var targetSessions = sessions.Where(s =>
-            s.Status != SessionStatus.Finished
-            && (string.IsNullOrWhiteSpace(req.ArenaName)
-                || string.Equals(s.ArenaName?.Trim(), req.ArenaName.Trim(), StringComparison.OrdinalIgnoreCase)))
-            .ToList();
-
-        foreach (var s in targetSessions)
+        var outcome = await WindRaceGuard.WithTimetableLockAsync(_db, competitionId, async () =>
         {
-            if (s.ScheduledStart.HasValue)
+            var sessions = await SessionsWithDetail()
+                .Where(s => s.CompetitionId == competitionId)
+                .OrderBy(s => s.OrderIndex)
+                .ToListAsync();
+
+            var delta = TimeSpan.FromMinutes(req.DeltaMinutes);
+            var targetSessions = sessions.Where(s =>
+                s.Status != SessionStatus.Finished
+                && (string.IsNullOrWhiteSpace(req.ArenaName)
+                    || string.Equals(s.ArenaName?.Trim(), req.ArenaName.Trim(), StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+
+            foreach (var s in targetSessions)
             {
-                s.ScheduledStart = s.ScheduledStart.Value.Add(delta);
-                s.Notes = ApplyShiftNote(s.Notes, req.DeltaMinutes);
+                if (s.ScheduledStart.HasValue)
+                {
+                    s.ScheduledStart = s.ScheduledStart.Value.Add(delta);
+                    s.Notes = ApplyShiftNote(s.Notes, req.DeltaMinutes);
+                }
+                foreach (var h in s.Heats.Where(h => !h.FinishedAt.HasValue && h.ScheduledStart.HasValue))
+                    h.ScheduledStart = h.ScheduledStart!.Value.Add(delta);
             }
-            foreach (var h in s.Heats.Where(h => !h.FinishedAt.HasValue && h.ScheduledStart.HasValue))
-                h.ScheduledStart = h.ScheduledStart!.Value.Add(delta);
-        }
 
-        await _db.SaveChangesAsync();
-        foreach (var s in targetSessions)
-            await _live.SessionUpdated(competitionId, s.ToDto());
-
-        return sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList();
+            await _db.SaveChangesAsync();
+            return (All: sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
+                Changed: targetSessions.Select(s => s.ToDto()).ToList());
+        });
+        foreach (var session in outcome.Changed) await _live.SessionUpdated(competitionId, session);
+        return outcome.All;
     }
 
     /// <summary>Marks uncompleted sessions in the competition (or optional arena) as paused at the current UTC timestamp.</summary>
@@ -1413,39 +1442,43 @@ public class SessionsController : ControllerBase
     public async Task<ActionResult<IEnumerable<SessionDto>>> PauseTimetable(
         int competitionId, PauseTimetableRequest? req = null)
     {
-        var sessions = await SessionsWithDetail()
-            .Where(s => s.CompetitionId == competitionId)
-            .OrderBy(s => s.OrderIndex)
-            .ToListAsync();
-
         var reason = req?.Reason?.Trim().ToLowerInvariant();
         if (!string.IsNullOrEmpty(reason) && !PauseReasons.Contains(reason))
-            return BadRequest(new { message = "Reason must be 'thunder' or 'rain'." });
+            return BadRequest(new { message = "Reason must be 'thunder', 'rain' or 'wind'." });
         if (!IsValidAnnouncement(req?.Announcement))
             return BadRequest(new { message = "The announcement must be 2000 characters or fewer." });
 
-        var arenaName = req?.ArenaName;
-        var targetSessions = sessions.Where(s =>
-            s.Status != SessionStatus.Finished
-            && (string.IsNullOrWhiteSpace(arenaName)
-                || string.Equals(s.ArenaName?.Trim(), arenaName.Trim(), StringComparison.OrdinalIgnoreCase)))
-            .ToList();
-
-        var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        foreach (var s in targetSessions)
+        var outcome = await WindRaceGuard.WithTimetableLockAsync(_db, competitionId, async () =>
         {
-            if (!ParsePauseNoteMs(s.Notes).HasValue) s.Notes = ApplyPauseNote(s.Notes, nowMs);
-            // A session already paused keeps its original pause time; it only learns why.
-            if (!string.IsNullOrEmpty(reason)) s.Notes = ApplyPauseReason(s.Notes, reason);
-        }
+            var sessions = await SessionsWithDetail()
+                .Where(s => s.CompetitionId == competitionId)
+                .OrderBy(s => s.OrderIndex)
+                .ToListAsync();
 
-        var message = AddWeatherAnnouncement(competitionId, req?.Announcement);
-        await _db.SaveChangesAsync();
-        foreach (var s in targetSessions)
-            await _live.SessionUpdated(competitionId, s.ToDto());
-        await BroadcastAsync(competitionId, message);
+            var arenaName = req?.ArenaName;
+            var targetSessions = sessions.Where(s =>
+                s.Status != SessionStatus.Finished
+                && (string.IsNullOrWhiteSpace(arenaName)
+                    || string.Equals(s.ArenaName?.Trim(), arenaName.Trim(), StringComparison.OrdinalIgnoreCase)))
+                .ToList();
 
-        return sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList();
+            var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            foreach (var s in targetSessions)
+            {
+                if (!ParsePauseNoteMs(s.Notes).HasValue) s.Notes = ApplyPauseNote(s.Notes, nowMs);
+                // A session already paused keeps its original pause time; it only learns why.
+                if (!string.IsNullOrEmpty(reason)) s.Notes = ApplyPauseReason(s.Notes, reason);
+            }
+
+            var message = AddWeatherAnnouncement(competitionId, req?.Announcement);
+            await _db.SaveChangesAsync();
+            return (All: sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
+                Changed: targetSessions.Select(s => s.ToDto()).ToList(), Message: message);
+        });
+        foreach (var session in outcome.Changed)
+            await _live.SessionUpdated(competitionId, session);
+        await BroadcastAsync(competitionId, outcome.Message);
+        return outcome.All;
     }
 
     /// <summary>Resumes paused sessions in the competition (or optional arena), converting elapsed pause time into a permanent shift.</summary>
@@ -1455,71 +1488,87 @@ public class SessionsController : ControllerBase
     public async Task<ActionResult<IEnumerable<SessionDto>>> ResumeTimetable(
         int competitionId, ResumeTimetableRequest? req = null)
     {
-        var sessions = await SessionsWithDetail()
-            .Where(s => s.CompetitionId == competitionId)
-            .OrderBy(s => s.OrderIndex)
-            .ToListAsync();
-
         if (!IsValidAnnouncement(req?.Announcement))
             return BadRequest(new { message = "The announcement must be 2000 characters or fewer." });
 
-        var arenaName = req?.ArenaName;
-        var targetSessions = sessions.Where(s =>
-            s.Status != SessionStatus.Finished
-            && (string.IsNullOrWhiteSpace(arenaName)
-                || string.Equals(s.ArenaName?.Trim(), arenaName.Trim(), StringComparison.OrdinalIgnoreCase)))
-            .ToList();
+        var resumeReason = req?.Reason?.Trim().ToLowerInvariant();
+        if (!string.IsNullOrEmpty(resumeReason) && !PauseReasons.Contains(resumeReason))
+            return BadRequest(new { message = "Check the pause reason before resuming." });
 
-        var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var updatedSessions = new List<Session>();
-        var pausedSessionStarts = new Dictionary<int, DateTime?>();
-        var pausedTimings = TimetableTimes.Compute(sessions, DateTimeOffset.FromUnixTimeMilliseconds(nowMs).UtcDateTime, pausedSessionStarts);
-        foreach (var s in targetSessions)
+        var outcome = await WindRaceGuard.WithTimetableLockAsync(_db, competitionId, async () =>
         {
-            var pausedMs = ParsePauseNoteMs(s.Notes);
-            if (!pausedMs.HasValue) continue;
+            var sessions = await SessionsWithDetail()
+                .Where(s => s.CompetitionId == competitionId)
+                .OrderBy(s => s.OrderIndex)
+                .ToListAsync();
 
-            var cleanedNotes = RemovePauseNote(s.Notes);
-            s.Notes = cleanedNotes;
-            var elapsedMs = Math.Max(0, nowMs - pausedMs.Value);
-            var deltaMinutes = elapsedMs >= 30_000 ? Math.Max(1, (int)Math.Round(elapsedMs / 60_000.0, MidpointRounding.AwayFromZero)) : 0;
-            if (deltaMinutes > 0)
+            var arenaName = req?.ArenaName;
+            var targetSessions = sessions.Where(s =>
+                s.Status != SessionStatus.Finished
+                && (string.IsNullOrWhiteSpace(arenaName)
+                    || string.Equals(s.ArenaName?.Trim(), arenaName.Trim(), StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+
+            var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var updatedSessions = new List<Session>();
+            var pausedSessionStarts = new Dictionary<int, DateTime?>();
+            var pausedTimings = TimetableTimes.Compute(sessions, DateTimeOffset.FromUnixTimeMilliseconds(nowMs).UtcDateTime, pausedSessionStarts);
+            foreach (var s in targetSessions)
             {
-                var appliedShift = deltaMinutes;
-                if (!s.StartedAt.HasValue && pausedSessionStarts.TryGetValue(s.Id, out var pausedStart) && pausedStart.HasValue)
+                var pausedMs = ParsePauseNoteMs(s.Notes);
+                if (!pausedMs.HasValue) continue;
+                if (!string.IsNullOrEmpty(resumeReason))
                 {
-                    // Include any delay already inherited from earlier sessions. A manual shift
-                    // replaces that delay, so adding only the pause would make the timetable jump back.
+                    if (s.Notes?.Contains($"[pausefor:{resumeReason}]", StringComparison.Ordinal) != true) continue;
+                    var withoutThisReason = s.Notes.Replace($"[pausefor:{resumeReason}]", "").Trim();
+                    if (withoutThisReason.Contains("[pausefor:", StringComparison.Ordinal))
+                    { s.Notes = withoutThisReason; updatedSessions.Add(s); continue; }
+                }
+
+
+                var cleanedNotes = RemovePauseNote(s.Notes);
+                s.Notes = cleanedNotes;
+                var elapsedMs = Math.Max(0, nowMs - pausedMs.Value);
+                var deltaMinutes = elapsedMs >= 30_000 ? Math.Max(1, (int)Math.Round(elapsedMs / 60_000.0, MidpointRounding.AwayFromZero)) : 0;
+                if (deltaMinutes > 0)
+                {
+                    var appliedShift = deltaMinutes;
+                    if (!s.StartedAt.HasValue && pausedSessionStarts.TryGetValue(s.Id, out var pausedStart) && pausedStart.HasValue)
+                    {
+                        // Include any delay already inherited from earlier sessions. A manual shift
+                        // replaces that delay, so adding only the pause would make the timetable jump back.
+                        if (s.ScheduledStart.HasValue)
+                            appliedShift = (int)Math.Round((pausedStart.Value - s.ScheduledStart.Value).TotalMinutes, MidpointRounding.AwayFromZero);
+                        else
+                            s.ScheduledStart = pausedStart.Value.AddMinutes(-appliedShift);
+                    }
                     if (s.ScheduledStart.HasValue)
-                        appliedShift = (int)Math.Round((pausedStart.Value - s.ScheduledStart.Value).TotalMinutes, MidpointRounding.AwayFromZero);
-                    else
-                        s.ScheduledStart = pausedStart.Value.AddMinutes(-appliedShift);
+                    {
+                        s.ScheduledStart = s.ScheduledStart.Value.AddMinutes(appliedShift);
+                        s.Notes = ApplyShiftNote(s.Notes, appliedShift);
+                    }
+                    foreach (var h in s.Heats.Where(h => !h.FinishedAt.HasValue && !h.StartedAt.HasValue))
+                    {
+                        // A live session keeps its actual start. Pin its remaining heats to the paused
+                        // timetable so the elapsed pause survives the StartedAt override on resume.
+                        if (s.StartedAt.HasValue && pausedTimings.TryGetValue(h.Id, out var timing))
+                            h.ScheduledStart = timing.Start;
+                        else if (h.ScheduledStart.HasValue)
+                            h.ScheduledStart = h.ScheduledStart.Value.AddMinutes(appliedShift);
+                    }
                 }
-                if (s.ScheduledStart.HasValue)
-                {
-                    s.ScheduledStart = s.ScheduledStart.Value.AddMinutes(appliedShift);
-                    s.Notes = ApplyShiftNote(s.Notes, appliedShift);
-                }
-                foreach (var h in s.Heats.Where(h => !h.FinishedAt.HasValue && !h.StartedAt.HasValue))
-                {
-                    // A live session keeps its actual start. Pin its remaining heats to the paused
-                    // timetable so the elapsed pause survives the StartedAt override on resume.
-                    if (s.StartedAt.HasValue && pausedTimings.TryGetValue(h.Id, out var timing))
-                        h.ScheduledStart = timing.Start;
-                    else if (h.ScheduledStart.HasValue)
-                        h.ScheduledStart = h.ScheduledStart.Value.AddMinutes(appliedShift);
-                }
+                updatedSessions.Add(s);
             }
-            updatedSessions.Add(s);
-        }
 
-        var message = AddWeatherAnnouncement(competitionId, req?.Announcement);
-        await _db.SaveChangesAsync();
-        foreach (var s in updatedSessions)
-            await _live.SessionUpdated(competitionId, s.ToDto());
-        await BroadcastAsync(competitionId, message);
-
-        return sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList();
+            var message = AddWeatherAnnouncement(competitionId, req?.Announcement);
+            await _db.SaveChangesAsync();
+            return (All: sessions.OrderBy(s => s.OrderIndex).Select(s => s.ToDto()).ToList(),
+                Changed: updatedSessions.Select(s => s.ToDto()).ToList(), Message: message);
+        });
+        foreach (var session in outcome.Changed)
+            await _live.SessionUpdated(competitionId, session);
+        await BroadcastAsync(competitionId, outcome.Message);
+        return outcome.All;
     }
 
     /// <summary>
@@ -1543,7 +1592,7 @@ public class SessionsController : ControllerBase
     }
 
     private const int MaxAnnouncementLength = 2000;
-    private static readonly string[] PauseReasons = ["thunder", "rain"];
+    private static readonly string[] PauseReasons = ["thunder", "rain", "wind"];
 
     private static bool IsValidAnnouncement(string? body) => body is null || body.Length <= MaxAnnouncementLength;
 
@@ -1621,22 +1670,26 @@ public class SessionsController : ControllerBase
         if (!TryNormalizeGateCheckStatus(req.Status, out var normalizedStatus))
             return BadRequest(new { message = "Status must be 'at-gate', 'warming-up', 'missing', or null." });
 
-        var session = await SessionsWithDetail()
-            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
-        if (session is null) return NotFound();
+        var outcome = await WindRaceGuard.WithTimetableLockAsync<ActionResult<SessionDto>>(_db, competitionId, async () =>
+        {
+            var session = await SessionsWithDetail()
+                .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+            if (session is null) return NotFound();
 
-        var heat = session.Heats.FirstOrDefault(h => h.Id == heatId);
-        if (heat is null) return NotFound();
+            var heat = session.Heats.FirstOrDefault(h => h.Id == heatId);
+            if (heat is null) return NotFound();
 
-        if (!heat.Entries.Any(e => e.TeamId == req.TeamId))
-            return BadRequest(new { message = "Team is not in this heat." });
+            if (!heat.Entries.Any(e => e.TeamId == req.TeamId))
+                return BadRequest(new { message = "Team is not in this heat." });
 
-        session.Notes = ApplyGateCheckNote(session.Notes, heatId, req.TeamId, normalizedStatus);
-        await _db.SaveChangesAsync();
+            session.Notes = ApplyGateCheckNote(session.Notes, heatId, req.TeamId, normalizedStatus);
+            await _db.SaveChangesAsync();
 
-        var dto = session.ToDto();
-        await _live.SessionUpdated(competitionId, dto);
-        return dto;
+            var dto = session.ToDto();
+            return dto;
+        });
+        if (outcome.Value is { } dto) await _live.SessionUpdated(competitionId, dto);
+        return outcome;
     }
 
     /// <summary>Sends a priority Farrier / Vet / First Aid call for an arena to competition notices and optionally pauses the arena.</summary>
@@ -1652,68 +1705,74 @@ public class SessionsController : ControllerBase
         if (req.Note is { Length: > 300 })
             return BadRequest(new { message = "Note must be 300 characters or fewer." });
 
-        var session = await SessionsWithDetail()
-            .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
-        if (session is null) return NotFound();
-
-        var arena = !string.IsNullOrWhiteSpace(req.ArenaName)
-            ? req.ArenaName.Trim()
-            : (!string.IsNullOrWhiteSpace(session.ArenaName) ? session.ArenaName.Trim() : "Main Arena");
-        var extraNote = req.Note?.Trim();
-        var body = !string.IsNullOrEmpty(extraNote)
-            ? $"{serviceTitle} needed at {arena}: {extraNote}"
-            : $"{serviceTitle} needed at {arena}";
-
-        var pausedSessions = new List<Session>();
-        if (req.HoldArena)
+        List<SessionDto> pausedDtos = [];
+        var outcome = await WindRaceGuard.WithTimetableLockAsync<ActionResult<ChatMessageDto>>(_db, competitionId, async () =>
         {
-            var arenaSessions = await SessionsWithDetail()
-                .Where(s => s.CompetitionId == competitionId && s.Status != SessionStatus.Finished)
-                .OrderBy(s => s.OrderIndex)
-                .ToListAsync();
-            var sessionArena = string.IsNullOrWhiteSpace(session.ArenaName) ? "Main Arena" : session.ArenaName.Trim();
-            var targetSessions = arenaSessions
-                .Where(s => s.Id == session.Id
-                    || string.Equals(
-                        string.IsNullOrWhiteSpace(s.ArenaName) ? "Main Arena" : s.ArenaName.Trim(),
-                        sessionArena,
-                        StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(
-                        string.IsNullOrWhiteSpace(s.ArenaName) ? "Main Arena" : s.ArenaName.Trim(),
-                        arena,
-                        StringComparison.OrdinalIgnoreCase))
-                .ToList();
-            var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            foreach (var target in targetSessions)
+            var session = await SessionsWithDetail()
+                .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
+            if (session is null) return NotFound();
+
+            var arena = !string.IsNullOrWhiteSpace(req.ArenaName)
+                ? req.ArenaName.Trim()
+                : (!string.IsNullOrWhiteSpace(session.ArenaName) ? session.ArenaName.Trim() : "Main Arena");
+            var extraNote = req.Note?.Trim();
+            var body = !string.IsNullOrEmpty(extraNote)
+                ? $"{serviceTitle} needed at {arena}: {extraNote}"
+                : $"{serviceTitle} needed at {arena}";
+
+            var pausedSessions = new List<Session>();
+            if (req.HoldArena)
             {
-                if (!ParsePauseNoteMs(target.Notes).HasValue)
+                var arenaSessions = await SessionsWithDetail()
+                    .Where(s => s.CompetitionId == competitionId && s.Status != SessionStatus.Finished)
+                    .OrderBy(s => s.OrderIndex)
+                    .ToListAsync();
+                var sessionArena = string.IsNullOrWhiteSpace(session.ArenaName) ? "Main Arena" : session.ArenaName.Trim();
+                var targetSessions = arenaSessions
+                    .Where(s => s.Id == session.Id
+                        || string.Equals(
+                            string.IsNullOrWhiteSpace(s.ArenaName) ? "Main Arena" : s.ArenaName.Trim(),
+                            sessionArena,
+                            StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(
+                            string.IsNullOrWhiteSpace(s.ArenaName) ? "Main Arena" : s.ArenaName.Trim(),
+                            arena,
+                            StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                foreach (var target in targetSessions)
                 {
-                    target.Notes = ApplyPauseNote(target.Notes, nowMs);
-                    pausedSessions.Add(target);
+                    if (!ParsePauseNoteMs(target.Notes).HasValue)
+                    {
+                        target.Notes = ApplyPauseNote(target.Notes, nowMs);
+                        pausedSessions.Add(target);
+                    }
                 }
             }
-        }
 
-        var authorName = User.FindFirst("fullName")?.Value ?? "Organiser";
-        var msg = new ChatMessage
+            var authorName = User.FindFirst("fullName")?.Value ?? "Organiser";
+            var msg = new ChatMessage
+            {
+                CompetitionId = competitionId,
+                UserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
+                AuthorName = authorName.Length > 60 ? authorName[..60] : authorName,
+                Body = body,
+                Type = ChatMessageType.Announcement,
+                Tag = $"assistance:{serviceKey}",
+            };
+            _db.ChatMessages.Add(msg);
+            await _db.SaveChangesAsync();
+
+            pausedDtos = pausedSessions.Select(s => s.ToDto()).ToList();
+            return msg.ToDto();
+        });
+        if (outcome.Value is { } dto)
         {
-            CompetitionId = competitionId,
-            UserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
-            AuthorName = authorName.Length > 60 ? authorName[..60] : authorName,
-            Body = body,
-            Type = ChatMessageType.Announcement,
-            Tag = $"assistance:{serviceKey}",
-        };
-        _db.ChatMessages.Add(msg);
-        await _db.SaveChangesAsync();
-
-        foreach (var paused in pausedSessions)
-            await _live.SessionUpdated(competitionId, paused.ToDto());
-
-        var msgDto = msg.ToDto();
-        await _live.Announcement(competitionId, msgDto);
-        await _live.ChatMessage(competitionId, msgDto);
-        return msgDto;
+            foreach (var paused in pausedDtos) await _live.SessionUpdated(competitionId, paused);
+            await _live.Announcement(competitionId, dto);
+            await _live.ChatMessage(competitionId, dto);
+        }
+        return outcome;
     }
 
     internal static bool TryNormalizeGateCheckStatus(string? raw, out string? normalized)
@@ -1934,6 +1993,10 @@ public class SessionsController : ControllerBase
     /// <summary>Records why a session is paused (<c>[pausefor:thunder]</c> or <c>rain</c>), replacing any earlier reason.</summary>
     private static string ApplyPauseReason(string? notes, string reason)
     {
+        // A second hazard must not erase an existing wind pause (or vice versa).
+        if ((reason == "wind" || notes?.Contains("[pausefor:wind]", StringComparison.Ordinal) == true)
+            && notes?.Contains("[pausefor:", StringComparison.Ordinal) == true)
+            return notes.Contains($"[pausefor:{reason}]", StringComparison.Ordinal) ? notes : $"{notes} [pausefor:{reason}]";
         var cleaned = System.Text.RegularExpressions.Regex.Replace(notes ?? string.Empty, @"\s*\[pausefor:[a-z]+\]\s*", " ").Trim();
         var tag = $"[pausefor:{reason}]";
         return string.IsNullOrWhiteSpace(cleaned) ? tag : $"{cleaned} {tag}";
@@ -1958,15 +2021,15 @@ public class SessionsController : ControllerBase
             : CombinedHeatScoringMode.BySection;
 }
 
-public record ChangeSessionRaceRequest(string NewName, bool ApplyToAllHeats = true);
+public record ChangeSessionRaceRequest(string NewName, bool ApplyToAllHeats = true, int? ExpectedProgrammeRevision = null);
 public record SetUnderReviewRequest(bool UnderReview, string? Note = null);
 public record CombineHeatRequest(int? SourceSessionId = null, IReadOnlyList<int>? TeamIds = null, string? ScoringMode = "BySection", int? TargetHeatId = null, bool RemoveSourceSession = false);
 public record SetCombinedScoringRequest(string ScoringMode);
 public record HoldCompetitionRequest(string? ResumeTime = null, int? DelayMinutes = null, string? ArenaName = null, bool PostAnnouncement = true);
-public record UpdateSessionRacesRequest(IReadOnlyList<string> RaceNames);
+public record UpdateSessionRacesRequest(IReadOnlyList<string> RaceNames, WindProgrammeSnapshot? ExpectedProgramme = null);
 public record ShiftSessionTimesRequest(int DeltaMinutes, string? ArenaName = null);
 public record PauseTimetableRequest(string? ArenaName = null, string? Reason = null, string? Announcement = null);
-public record ResumeTimetableRequest(string? ArenaName = null, string? Announcement = null);
+public record ResumeTimetableRequest(string? ArenaName = null, string? Announcement = null, string? Reason = null);
 public record WeatherNoticeRequest(string Body);
 public record PacePredictionDto(double? AvgMinutesPerRace, int? RecommendedMinutesPer5RaceHeat, double Multiplier, int SampleHeats);
 public record UpdateGateCheckRequest(int TeamId, string? Status);

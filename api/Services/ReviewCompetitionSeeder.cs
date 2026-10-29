@@ -372,6 +372,13 @@ public static class ReviewCompetitionSeeder
     /// </summary>
     internal static async Task DeleteCompetitionGraphAsync(AppDbContext db, List<int> ids)
     {
+    foreach (var id in ids) {
+        await Vaccinations.VaccinationPrivacy.DeleteCompetitionAsync(db, id);
+        await Apple.AppleFeatures.DeleteCompetitionAsync(db, id);
+    }
+    await db.Set<WindRaceDecision>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.Set<WindRulesSelection>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.Set<WindAcknowledgement>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
     var sessionIds = db.Sessions.Where(x => ids.Contains(x.CompetitionId)).Select(x => x.Id);
     var heatIds = db.Heats.Where(x => sessionIds.Contains(x.SessionId)).Select(x => x.Id);
     var raceIds = db.Races.Where(x => heatIds.Contains(x.HeatId)).Select(x => x.Id);
@@ -471,6 +478,9 @@ public static class ReviewCompetitionSeeder
     await db.ChatMessages.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
     await db.LiveStreams.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
     await db.StreamOverlays.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.Set<BroadcastSnapshot>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.Set<BroadcastCue>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
+    await db.Set<BroadcastOutput>().Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();
     var sponsorIds = db.Sponsors.Where(x => ids.Contains(x.CompetitionId)).Select(x => x.Id);
     await db.SponsorExposures.Where(x => sponsorIds.Contains(x.SponsorId)).ExecuteDeleteAsync();
     await db.Sponsors.Where(x => ids.Contains(x.CompetitionId)).ExecuteDeleteAsync();

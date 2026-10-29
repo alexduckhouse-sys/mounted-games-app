@@ -130,3 +130,11 @@
 .sx-auto-count { position: absolute; left: 10px; right: 10px; bottom: 3px; height: 2px; border-radius: 1px; background: currentColor; opacity: .7; transform-origin: left center; animation: sx-auto-count var(--sx-count, 10s) linear forwards; }
 @keyframes sx-auto-count { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 html[data-lite="true"] .sx-auto-count { animation-duration: var(--sx-count, 10s) !important; }
+.sx-broadcast { margin-top: 20px; border-top: 1px solid var(--mg-border, #dce1e8); padding: 16px 0; }
+.sx-broadcast summary { cursor: pointer; font-weight: 700; min-height: 44px; }
+.sx-broadcast-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; }
+.sx-broadcast-row select, .sx-broadcast-row input, .sx-broadcast-url input { min-height: 44px; font-size: 16px; border: 1px solid var(--mg-border, #dce1e8); border-radius: 8px; padding: 6px 10px; background: var(--mg-surface, white); color: inherit; max-width: 60%; }
+.sx-broadcast-row input { width: 90px; }
+.sx-broadcast-preview { width: 100%; aspect-ratio: 16 / 9; border: 1px solid var(--mg-border, #dce1e8); border-radius: 8px; }
+.sx-broadcast-url { display: block; margin: 12px 0; }
+.sx-broadcast-url input { display: block; width: 100%; max-width: none; margin-top: 6px; }

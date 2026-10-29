@@ -153,7 +153,7 @@ export function ClearSheet({ kind, since, pausedArenas, competitionId, sessions,
       // Sessions with no arena can only be resumed together with everything else.
       const targets = pausedArenas.includes('') ? [''] : pausedArenas;
       for (const arenaName of targets) {
-        await api.post(`/competitions/${competitionId}/sessions/resume`, { arenaName: arenaName || undefined, announcement: told.current ? undefined : draft.trim() });
+        await api.post(`/competitions/${competitionId}/sessions/resume`, { arenaName: arenaName || undefined, reason: kind, announcement: told.current ? undefined : draft.trim() });
         told.current = true;
       }
       reload();

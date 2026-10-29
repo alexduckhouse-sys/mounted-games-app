@@ -28,8 +28,9 @@ it('collects frames and stops the camera after a complete scan', async () => {
   const onBackup = vi.fn();
   render(<ScoreBackupScanner onBackup={onBackup} />);
   fireEvent.click(screen.getByText('Scan backup QR codes'));
-  await waitFor(() => expect(onBackup).toHaveBeenCalledWith(raw));
-  expect(stop).toHaveBeenCalled();
+  // The scan runs on a real 350ms timer, and the camera stops in the effect cleanup after the state change commits.
+  await waitFor(() => expect(onBackup).toHaveBeenCalledWith(raw), { timeout: 3000 });
+  await waitFor(() => expect(stop).toHaveBeenCalled());
   expect(screen.getByText('1 of 1 codes scanned')).toBeInTheDocument();
   act(() => fireEvent.click(screen.getByText('Clear scan')));
   expect(screen.queryByText('1 of 1 codes scanned')).toBeNull();

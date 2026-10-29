@@ -34,7 +34,7 @@ interface ScoreAuditProps {
 
 export function ScoreAuditPanel(props: ScoreAuditProps) {
   const { user } = useAuth();
-  return <ScoreAuditRecord key={`${props.raceId}:${user?.id ?? ''}`} {...props} />;
+  return <ScoreAuditRecord key={`${props.raceId}:${props.race?.programmeRevision ?? 0}:${user?.id ?? ''}`} {...props} />;
 }
 
 function ScoreAuditRecord({ raceId, onChanged, heat, race = null, teams }: ScoreAuditProps) {
@@ -101,6 +101,7 @@ function ScoreAuditRecord({ raceId, onChanged, heat, race = null, teams }: Score
           };
         }),
         expectedRevision: score.revision,
+        expectedProgrammeRevision: race?.programmeRevision ?? 0,
         requestId: requestId('correction'),
         reason: correctionReason.trim(),
       });

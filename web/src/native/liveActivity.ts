@@ -7,8 +7,7 @@ import { isIosApp } from './platform';
  * The Swift side is `ios/App/App/LiveActivityPlugin.swift`; the card itself is the `MGLiveActivity` widget
  * extension. Field names and numbers mirror the TeamProgress DTO (camelCase, numeric status) and the
  * snapshot envelope of `GET /api/competitions/{competitionId}/teams/{teamId}/progress`:
- * `{ progress, observedAt, staleAt }`. That endpoint isn't wired in yet, so callers pass fixture
- * snapshots for now (see `fixtures.ts`). `staleAt` becomes the activity's stale date, after which iOS
+ * `{ progress, observedAt, staleAt }`. The native coordinator reads this endpoint directly. `staleAt` becomes the activity's stale date, after which iOS
  * shows the card as out of date.
  *
  * Nothing here may carry a rider's name or anything private: the card shows on a locked phone.
@@ -88,7 +87,7 @@ export const RESTART_AFTER_MS = 7.5 * 60 * 60 * 1000;
 const NO_COUNT: ReadonlySet<number> = new Set([TeamProgressStatus.Unknown, TeamProgressStatus.DrawPending]);
 const ENDS: ReadonlySet<number> = new Set([TeamProgressStatus.Finished, TeamProgressStatus.Withdrawn]);
 
-/** True when this status means the team has nothing more to follow today. */
+/** True when this status means the team has nothing more to follow in this competition. */
 export function endsActivity(status: TeamProgressStatus): boolean {
   return ENDS.has(status);
 }

@@ -1,0 +1,20 @@
+html.broadcast-document, .broadcast-document body, .broadcast-document #root { background: transparent !important; margin: 0; width: 100%; height: 100%; overflow: hidden; }
+.bc-source { position: fixed; inset: 0; background: transparent; container-type: size; font-family: Barlow, sans-serif; color: white; }
+.bc-canvas { position: absolute; width: 100%; height: 100%; font-size: min(1.56cqw, 2.78cqh); line-height: 1.2; }
+.bc-card { position: absolute; width: 35%; background: var(--bc-background, #0F1E3D); border-radius: .6em; overflow: hidden; box-shadow: 0 .15em .5em #0003; }
+.bc-card header { padding: .65em .8em; background: #183460; border-top: .08em solid var(--bc-accent, #F5B82E); font-family: 'Barlow Condensed', sans-serif; font-size: 1.25em; font-weight: 700; }
+.bc-card header small { display: block; font-size: .65em; font-family: Barlow, sans-serif; font-weight: 500; margin-top: .25em; }
+.bc-lineup, .bc-score { left: 5%; bottom: 16%; }
+.bc-standings { right: 5%; bottom: 16%; width: 30%; }
+.bc-podium { left: 27%; width: 46%; bottom: 20%; }
+.bc-row { display: grid; grid-template-columns: 1.8em 1fr auto; gap: .55em; align-items: center; padding: .42em .8em; border-top: 1px solid #ffffff20; }
+.bc-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bc-row small { opacity: .8; }
+.bc-row strong { text-align: right; }
+.bc-place { font-variant-numeric: tabular-nums; }
+.bc-banner { position: absolute; left: 5%; right: 5%; top: 5%; background: #183460f2; padding: .5em .8em; border-radius: .4em; }
+.bc-next { position: absolute; bottom: 7%; left: 5%; max-width: 65%; background: #183460f2; padding: .55em .8em; border-radius: .4em; }
+.bc-sponsors { position: absolute; right: 5%; bottom: 7%; display: flex; flex-direction: column; text-align: right; gap: .2em; max-width: 25%; font-size: .7em; }
+.bc-sponsors span { background: #11203bf2; padding: .3em .6em; border-radius: .2em; }
+.bc-preview { background-color: #c9cdd3; background-image: conic-gradient(#e8e9eb 25%, transparent 0 50%, #e8e9eb 0 75%, transparent 0); background-size: 24px 24px; }
+.bc-diagnostic { position: absolute; z-index: 5; top: 0; left: 0; margin: 0; padding: 4px 8px; color: #172a45; background: #fff; font-size: 12px; }

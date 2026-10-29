@@ -50,124 +50,16 @@ public class PassportVaccineTests(ApiFactory f) : IClassFixture<ApiFactory>
         });
 
     [Fact]
-    public async Task VetInspection_CertifiesHorseAcrossCompetitions_AndSupportsLiveLookup()
+    public async Task LegacyCertificateNeverCertifiesAnotherEvent()
     {
-        var (comp1, _, club, team1) = await SeedEnabledCompetitionAsync(EventStart);
-        await DeclarePonyAsync(team1, "Amy Archer", "Bramble", passport: "GBR-826099111", owner: "Sarah Clarke");
-        var admin = await f.AdminAsync();
-
-        var r = await admin.PutAsJsonAsync($"/api/event-tools/competitions/{comp1}/passport-check/teams/{team1}",
-            new SetPassportCheckRequest(
-                PonyName: "Bramble",
-                Checked: true,
-                PassportCode: "gbr-826099111",
-                OwnerFullName: "Sarah Clarke",
-                LastFluVaccineDate: "2031-01-10",
-                FluValidUntil: null, // defaults to +12m -> 2032-01-10
-                LastTetanusDate: "2030-06-01",
-                TetanusValidUntil: null, // defaults to +24m -> 2032-06-01
-                InspectorRole: "Vet",
-                OfficialNotes: "Passports and boosters verified"));
-        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
-        var pony = await r.ReadAsync<PassportCheckPonyDto>();
-        Assert.True(pony.Certified);
-        Assert.Equal("Certified", pony.Status);
-        Assert.NotNull(pony.CheckedAt);
-        Assert.Equal("GBR-826099111", pony.PassportCode);
-        Assert.Equal("Sarah Clarke", pony.OwnerFullName);
-        Assert.Equal("2032-01-10", pony.FluValidUntil);
-        Assert.Equal("2032-06-01", pony.TetanusValidUntil);
-        Assert.Equal("Vet", pony.InspectorRole);
-        Assert.Equal("Passports and boosters verified", pony.OfficialNotes);
-
-        // Live lookup by passportCode
-        var lookupByCode = await (await admin.GetAsync($"/api/event-tools/certified-horses/lookup?passportCode=gbr-826099111&competitionId={comp1}"))
-            .ReadAsync<CertifiedHorseLookupDto>();
-        Assert.True(lookupByCode.Found);
-        Assert.True(lookupByCode.Certified);
-        Assert.Equal("Certified", lookupByCode.Status);
-        Assert.Equal("Passports and boosters verified", lookupByCode.OfficialNotes);
-
-        // Live lookup by ponyName + ownerFullName
-        var lookupByOwner = await (await admin.GetAsync($"/api/event-tools/certified-horses/lookup?ponyName=Bramble&ownerFullName=Sarah%20Clarke&competitionId={comp1}"))
-            .ReadAsync<CertifiedHorseLookupDto>();
-        Assert.True(lookupByOwner.Found);
-        Assert.True(lookupByOwner.Certified);
-        Assert.Equal("GBR-826099111", lookupByOwner.PassportCode);
-
-        // Second competition while vaccine dates are still valid: automatically certified on the board!
-        var (comp2, _, _, team2) = await SeedEnabledCompetitionAsync(EventStart.AddMonths(2));
-        await DeclarePonyAsync(team2, "Amy Archer", "Bramble", owner: "Sarah Clarke");
-        var board2 = await (await admin.GetAsync($"/api/event-tools/competitions/{comp2}/passport-check")).ReadAsync<PassportCheckBoardDto>();
-        Assert.Equal(1, board2.Checked);
-        var pony2 = Assert.Single(board2.Sections.Single().Teams.Single().Ponies);
-        Assert.True(pony2.Certified);
-        Assert.Equal("Certified", pony2.Status);
-        Assert.Equal("Passports and boosters verified", pony2.OfficialNotes);
-    }
-
-    [Fact]
-    public async Task AutoExpiry_RemovesCertifiedTickWhenVaccineOrTetanusDateRunsOut_KeepingNotesVisible()
-    {
-        var (comp1, _, _, team1) = await SeedEnabledCompetitionAsync(EventStart);
-        await DeclarePonyAsync(team1, "Ben Brook", "Pepper", passport: "GBR-826000222", owner: "Tom Brook");
-        var admin = await f.AdminAsync();
-
-        // Inspect at comp1 with FluValidUntil before a future competition
-        var r = await admin.PutAsJsonAsync($"/api/event-tools/competitions/{comp1}/passport-check/teams/{team1}",
-            new SetPassportCheckRequest(
-                PonyName: "Pepper",
-                Checked: true,
-                PassportCode: "GBR-826000222",
-                OwnerFullName: "Tom Brook",
-                LastFluVaccineDate: "2030-04-01",
-                FluValidUntil: "2031-04-01", // already expired relative to EventStart (2031-05-20)!
-                LastTetanusDate: "2030-04-01",
-                TetanusValidUntil: "2032-04-01",
-                InspectorRole: "Vet",
-                OfficialNotes: "Annual booster due after April 2031"));
-        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
-        var expiredPony = await r.ReadAsync<PassportCheckPonyDto>();
-        Assert.False(expiredPony.Certified);
-        Assert.Equal("Expired", expiredPony.Status);
-        Assert.Null(expiredPony.CheckedAt); // tick is automatically removed!
-        Assert.Equal("2030-04-01", expiredPony.LastFluVaccineDate);
-        Assert.Equal("2031-04-01", expiredPony.FluValidUntil);
-        Assert.Equal("Vet", expiredPony.InspectorRole);
-        Assert.Equal("Annual booster due after April 2031", expiredPony.OfficialNotes);
-
-        var board = await (await admin.GetAsync($"/api/event-tools/competitions/{comp1}/passport-check")).ReadAsync<PassportCheckBoardDto>();
-        Assert.Equal(0, board.Checked);
-
-        var lookup = await (await admin.GetAsync($"/api/event-tools/certified-horses/lookup?passportCode=GBR-826000222&competitionId={comp1}"))
-            .ReadAsync<CertifiedHorseLookupDto>();
-        Assert.True(lookup.Found);
-        Assert.False(lookup.Certified);
-        Assert.Equal("Expired", lookup.Status);
-        Assert.Equal("Annual booster due after April 2031", lookup.OfficialNotes);
-    }
-
-    [Fact]
-    public async Task SevenDayPostVaccinationRule_FlagsTooRecentFluBooster()
-    {
-        var (comp, _, _, team) = await SeedEnabledCompetitionAsync(EventStart);
-        await DeclarePonyAsync(team, "Chloe Cole", "Acorn", passport: "GBR-826000333");
-        var admin = await f.AdminAsync();
-
-        // Flu booster given 3 days before EventStart (2031-05-17 vs 2031-05-20)
-        var r = await admin.PutAsJsonAsync($"/api/event-tools/competitions/{comp}/passport-check/teams/{team}",
-            new SetPassportCheckRequest(
-                PonyName: "Acorn",
-                Checked: true,
-                PassportCode: "GBR-826000333",
-                LastFluVaccineDate: "2031-05-17",
-                InspectorRole: "Official",
-                OfficialNotes: "Booster given 3 days before arrival"));
-        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
-        var dto = await r.ReadAsync<PassportCheckPonyDto>();
-        Assert.False(dto.Certified);
-        Assert.Equal("TooRecent", dto.Status);
-        Assert.Null(dto.CheckedAt);
+        var (comp, _, _, team) = await SeedEnabledCompetitionAsync();
+        await DeclarePonyAsync(team, "Fake Rider", "Fake Pony", "FAKE-PASSPORT", "Fake Owner");
+        await f.WithDbAsync(async db => { db.Add(new CertifiedHorse { HorseName = "Fake Pony", HorseKey = "fake pony", PassportCode = "FAKE-PASSPORT", LastFluVaccineDate = "2031-01-01" }); await db.SaveChangesAsync(); });
+        using var admin = await f.AdminAsync();
+        var board = await (await admin.GetAsync($"/api/event-tools/competitions/{comp}/passport-check")).ReadAsync<PassportCheckBoardDto>();
+        var pony = Assert.Single(board.Sections.Single().Teams.Single().Ponies);
+        Assert.False(pony.Certified); Assert.Equal("Unchecked", pony.Status); Assert.Null(pony.LastFluVaccineDate); Assert.Equal(0, board.Checked);
+        Assert.Equal(HttpStatusCode.Gone, (await admin.GetAsync("/api/event-tools/certified-horses/lookup?passportCode=FAKE-PASSPORT")).StatusCode);
     }
 
     [Theory]

@@ -23,6 +23,11 @@ import { desk } from './desk.ts';
 import { teams } from './teams.ts';
 import { acct } from './acct.ts';
 
-export const AREAS = { reliability, timing, completion, common, shell, auth, account, entries, competition, teams, site, ops, screen, admin, desk, ops2, ops3, acct } as const;
+import { broadcast } from './broadcast.ts';
+import { vaccinations } from './vaccinations.ts';
+import { apple } from './apple.ts';
+import { wind } from './wind.ts';
 
-export const cy: Catalogue = { ...reliability, ...timing, ...completion, ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...site, ...ops, ...screen, ...admin, ...desk, ...ops2, ...ops3, ...acct };
+export const AREAS = { reliability, timing, completion, common, shell, auth, account, entries, competition, teams, site, ops, screen, admin, desk, ops2, ops3, acct, broadcast, vaccinations, apple, wind } as const;
+
+export const cy: Catalogue = { ...reliability, ...timing, ...completion, ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...site, ...ops, ...screen, ...admin, ...desk, ...ops2, ...ops3, ...acct, ...broadcast, ...vaccinations, ...apple, ...wind };

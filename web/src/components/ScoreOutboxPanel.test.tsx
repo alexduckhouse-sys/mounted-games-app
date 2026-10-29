@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
@@ -133,6 +133,38 @@ describe('ScoreOutboxPanel', () => {
       seed(item(1, { state: 'conflict' }));
       render(<ScoreOutboxPanel competitionId={1} />);
       expect(screen.getByText('Theirs').nextSibling).toHaveTextContent('No results');
+    });
+  });
+
+  describe('when the programme changed', () => {
+    const conflict = () => seed(item(1, { state: 'conflict', programmeChanged: true, expectedProgrammeRevision: 0, theirs }));
+
+    it('exports a backup from inside the sheet without changing or resending old scores', async () => {
+      conflict();
+      const before = localStorage.getItem(KEY);
+      const share = vi.fn().mockResolvedValue(undefined);
+      vi.stubGlobal('navigator', Object.create(navigator, { share: { value: share } }));
+      render(<ScoreOutboxPanel competitionId={1} competitionName="Synthetic event" />);
+      const sheet = screen.getByRole('dialog');
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Send unsent scores to another phone' }));
+      expect(share).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('"programmeChanged":true') }));
+      expect(localStorage.getItem(KEY)).toBe(before);
+      expect(post).not.toHaveBeenCalled();
+      expect(within(sheet).queryByRole('button', { name: 'Use mine' })).not.toBeInTheDocument();
+    });
+
+    it.each(['Keep on this phone', 'Escape'])('can close with %s and reopen the retained scores', async (action) => {
+      conflict();
+      const before = localStorage.getItem(KEY);
+      render(<ScoreOutboxPanel competitionId={1} />);
+      if (action === 'Escape') fireEvent(screen.getByRole('dialog'), new Event('cancel', { cancelable: true }));
+      else await userEvent.click(screen.getByRole('button', { name: action }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(localStorage.getItem(KEY)).toBe(before);
+      expect(post).not.toHaveBeenCalled();
+      await userEvent.click(screen.getByRole('button', { name: 'Review old scores' }));
+      expect(screen.getByRole('dialog')).toHaveAccessibleName('Heat 1 · Barrel Race: programme changed');
+      expect(screen.getByText('Yours').nextSibling).toHaveTextContent('1st Red Rum · 2nd Shergar');
     });
   });
 

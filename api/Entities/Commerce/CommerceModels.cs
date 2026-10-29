@@ -1,5 +1,7 @@
 namespace MountedGames.Api.Entities.Commerce;
 
+public enum ArrivalFulfilmentKind { Unclassified = 0, Other = 1, Admission = 2, Stable = 3, Hookup = 4 }
+
 public enum CommerceItemCategory
 {
     Merchandise = 0,
@@ -64,6 +66,9 @@ public class CatalogueItem
     public string Currency { get; private set; } = "GBP";
     public int? StockQuantity { get; set; }
     public CommerceItemCategory Category { get; set; }
+    public ArrivalFulfilmentKind FulfilmentKind { get; set; }
+    public string? FulfilmentFromDate { get; set; }
+    public string? FulfilmentUntilDate { get; set; }
     public string? ImageUrl { get; set; }
     /// <summary>What the buyer is asked for with this item, such as "Stable number" (at most 60 characters). Null means nothing is asked.</summary>
     public string? DetailPrompt { get; set; }
@@ -156,6 +161,12 @@ public class EventOrderLine
     public int CatalogueItemId { get; set; }
     public string SellerUserId { get; set; } = string.Empty;
     public string TitleSnapshot { get; set; } = string.Empty;
+    public ArrivalFulfilmentKind FulfilmentKindSnapshot { get; set; }
+    public string? FulfilmentFromDate { get; set; }
+    public string? FulfilmentUntilDate { get; set; }
+    public string? FulfilmentReviewedByUserId { get; set; }
+    public DateTime? FulfilmentReviewedAt { get; set; }
+    public long FulfilmentRevision { get; set; } = 1;
     public int UnitPriceMinorSnapshot { get; set; }
     public int Quantity { get; set; }
     public int ReservedStockQuantity { get; set; }

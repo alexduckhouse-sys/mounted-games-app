@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.Http.Json;
-using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Services.TackCheck;
@@ -90,66 +89,23 @@ public class PassportCheckTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Board_ListsEachTeamsPonies_AndSameNamedPoniesInOtherTeamsAreSeparate()
+    public async Task SameNamedPoniesStaySeparateAndLegacyInspectionIsOnlyHistory()
     {
         var (arena, owner) = await WorldAsync();
         var board = await EnableAsync(owner, arena);
-        Assert.True(board.Enabled);
-        Assert.Equal((0, 3), (board.Checked, board.Total));
-        var teams = Assert.Single(board.Sections).Teams;
-        var first = teams.Single(t => t.TeamId == arena.TeamIds[0]);
-        Assert.True(first.HasDeclaration);
-        // Two riders share Bramble within the team; the rider with no pony name is left off.
-        Assert.Equal(["Bramble", "Pepper"], first.Ponies.Select(p => p.PonyName));
-        Assert.Equal(["Amy Archer", "Ben Brook"], first.Ponies[0].Riders);
-        Assert.False(teams.Single(t => t.TeamId == arena.TeamIds[2]).HasDeclaration);
-
-        var ticked = await (await TickAsync(owner, arena, arena.TeamIds[0], " BRAMBLE")).ReadAsync<PassportCheckPonyDto>();
-        Assert.NotNull(ticked.CheckedAt);
-        Assert.False(string.IsNullOrEmpty(ticked.CheckedByName));
-        // Ticking twice changes nothing.
-        Assert.Equal(HttpStatusCode.OK, (await TickAsync(owner, arena, arena.TeamIds[0], "Bramble")).StatusCode);
-
-        board = await (await owner.GetAsync($"{Base(arena.CompetitionId)}/passport-check")).ReadAsync<PassportCheckBoardDto>();
-        Assert.Equal((1, 3), (board.Checked, board.Total));
-        Assert.Null(board.Sections[0].Teams.Single(t => t.TeamId == arena.TeamIds[1]).Ponies.Single().CheckedAt);
-
-        var cleared = await (await TickAsync(owner, arena, arena.TeamIds[0], "Bramble", on: false)).ReadAsync<PassportCheckPonyDto>();
-        Assert.Null(cleared.CheckedAt);
-        Assert.Equal(0, await _f.WithDbAsync(db => db.Set<PassportCheck>().CountAsync(x => x.CompetitionId == arena.CompetitionId)));
-    }
-
-    [Fact]
-    public async Task Ticks_SurviveADeclarationEdit_AndTurningTheCheckOffAndOn()
-    {
-        var (arena, owner) = await WorldAsync();
-        await EnableAsync(owner, arena);
-        (await TickAsync(owner, arena, arena.TeamIds[1], "Bramble")).EnsureSuccessStatusCode();
-
-        // The trainer edits the declaration: riders are written again, the pony keeps its name.
+        Assert.Equal((0, 4), (board.Checked, board.Total));
+        Assert.Equal(3, board.Sections.Single().Teams.Single(t => t.TeamId == arena.TeamIds[0]).Ponies.Count);
+        Assert.Equal(HttpStatusCode.Conflict, (await TickAsync(owner, arena, arena.TeamIds[0], "Bramble")).StatusCode);
         await _f.WithDbAsync(async db =>
         {
-            var form = await db.DeclarationForms.Include(f => f.Riders).SingleAsync(f => f.TeamId == arena.TeamIds[1]);
-            db.RiderEntries.RemoveRange(form.Riders);
-            form.Riders.Add(new RiderEntry { FullName = "Eve Ely-Smith", HorseName = "Bramble" });
-            await db.SaveChangesAsync();
+            db.Add(new PassportCheck { CompetitionId = arena.CompetitionId, TeamId = arena.TeamIds[1], PonyKey = "bramble", PonyName = "Bramble", OfficialNotes = "Fake legacy inspection" }); await db.SaveChangesAsync();
         });
-        Assert.False((await EnableAsync(owner, arena, on: false)).Enabled);
-        var board = await EnableAsync(owner, arena);
-        var pony = board.Sections[0].Teams.Single(t => t.TeamId == arena.TeamIds[1]).Ponies.Single();
-        Assert.NotNull(pony.CheckedAt);
-        Assert.Equal(["Eve Ely-Smith"], pony.Riders);
-    }
-
-    [Fact]
-    public async Task Ticks_MustNameAPonyOnTheTeamsDeclaration()
-    {
-        var (arena, owner) = await WorldAsync();
-        await EnableAsync(owner, arena);
-        Assert.Equal(HttpStatusCode.NotFound, (await TickAsync(owner, arena, arena.TeamIds[1], "Pepper")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await TickAsync(owner, arena, arena.TeamIds[2], "Bramble")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await TickAsync(owner, arena, (await _f.CreateArenaAsync(1)).TeamIds[0], "Bramble")).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await TickAsync(owner, arena, arena.TeamIds[0], "")).StatusCode);
+        board = await (await owner.GetAsync($"{Base(arena.CompetitionId)}/passport-check")).ReadAsync<PassportCheckBoardDto>();
+        var pony = board.Sections.Single().Teams.Single(t => t.TeamId == arena.TeamIds[1]).Ponies.Single();
+        Assert.False(pony.Certified); Assert.Equal("LegacyManualInspection", pony.Status); Assert.Equal("Fake legacy inspection", pony.OfficialNotes);
+        Assert.Equal(0, board.Checked);
+        Assert.False((await EnableAsync(owner, arena, false)).Enabled);
+        Assert.Equal("LegacyManualInspection", (await EnableAsync(owner, arena)).Sections.Single().Teams.Single(t => t.TeamId == arena.TeamIds[1]).Ponies.Single().Status);
     }
 
     [Theory]

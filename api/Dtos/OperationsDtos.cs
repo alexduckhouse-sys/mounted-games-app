@@ -40,7 +40,7 @@ public record ScorePlaceDto(int TeamId, int Place, bool Eliminated, double Point
     ResultStatus Status = ResultStatus.Finished, string? RefereeNote = null);
 public record UpdateRaceScoreRequest(
     IReadOnlyList<FinishingPlaceDto>? Places, int ExpectedRevision,
-    string RequestId, string? Reason);
+    string RequestId, string? Reason, int? ExpectedProgrammeRevision = null);
 public record ScoreActionRequest(int ExpectedRevision, string RequestId, string? Reason);
 public record RaceScoreDto(int RaceId, int Revision, bool IsSignedOff,
     DateTime? SignedOffAt, string? SignedOffByUserId, IReadOnlyList<ScorePlaceDto> Results,

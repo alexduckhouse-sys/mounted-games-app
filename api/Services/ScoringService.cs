@@ -126,18 +126,18 @@ public class ScoringService
         return ApplyCoreAsync(raceId,
             request.Places.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated, p.Status, p.RefereeNote, p.Points)).ToList(),
             actorUserId, request.ExpectedRevision, null, request.RequestId, request.Reason,
-            strictValidation: true, cancellationToken, actorLabel);
+            strictValidation: true, cancellationToken, actorLabel, request.ExpectedProgrammeRevision);
     }
 
     public Task<RaceScoreDto> ApplyLegacyAsync(
         int raceId, IReadOnlyList<FinishingPlaceDto> places,
         IReadOnlyList<FinishingPlaceDto>? expected, string? actorUserId, string? reason = null,
-        CancellationToken cancellationToken = default, string? actorLabel = null, DateTime? finishedAt = null)
+        CancellationToken cancellationToken = default, string? actorLabel = null, int? expectedProgrammeRevision = null, DateTime? finishedAt = null)
         => ApplyCoreAsync(raceId,
             places.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated, p.Status, p.RefereeNote, p.Points)).ToList(),
             actorUserId, null,
             expected?.Select(p => new FinishingPlace(p.TeamId, p.Place, p.Eliminated, p.Status)).ToList(),
-            $"legacy-{Guid.NewGuid():N}", reason, strictValidation: false, cancellationToken, actorLabel, finishedAt);
+            $"legacy-{Guid.NewGuid():N}", reason, strictValidation: false, cancellationToken, actorLabel, expectedProgrammeRevision, finishedAt);
 
     public Task<RaceScoreDto> OverrideRacePointsAsync(
         int raceId, int teamId, double points, string reason,
@@ -208,7 +208,7 @@ public class ScoringService
             ? (string.IsNullOrWhiteSpace(note) ? "Flagged result under review." : $"Under review: {note.Trim()}")
             : "Cleared under-review flag.";
         return await ApplyCoreAsync(raceId, places, actorUserId, null, null,
-            $"review-{Guid.NewGuid():N}", reasonText, strictValidation: false, cancellationToken);
+            $"review-{Guid.NewGuid():N}", reasonText, strictValidation: false, cancellationToken, expectedProgrammeRevision: race.ProgrammeRevision);
     }
 
     public Task<RaceScoreDto> ClearRaceForRerunAsync(
@@ -287,7 +287,7 @@ public class ScoringService
                 : new FinishingPlace(e.TeamId, r.Placing ?? 0, r.Eliminated, ResultStatuses.Of(r), r.RefereeNote, r.Points)
             : new FinishingPlace(e.TeamId, idx + 1, false, ResultStatus.Finished, e.TeamId == teamId ? note : null)).ToList();
         return await ApplyCoreAsync(raceId, places, actorUserId, null, null,
-            $"adj-{Guid.NewGuid():N}", reason, strictValidation: false, cancellationToken);
+            $"adj-{Guid.NewGuid():N}", reason, strictValidation: false, cancellationToken, expectedProgrammeRevision: race.ProgrammeRevision);
     }
 
     public async Task<RaceScoreDto> GetAsync(int raceId, CancellationToken cancellationToken = default)
@@ -390,7 +390,7 @@ public class ScoringService
 
     public Task<Race> UpdateRaceClockAsync(
         int raceId, bool start, DateTime at, bool hasClientTimestamp,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, int? expectedProgrammeRevision = null)
         => ExecuteTransactionAsync(async () =>
         {
             await LockHeatForRaceAsync(raceId, cancellationToken);
@@ -399,6 +399,7 @@ public class ScoringService
                 .Include(r => r.Results).ThenInclude(result => result.Team)
                 .FirstOrDefaultAsync(r => r.Id == raceId, cancellationToken)
                 ?? throw new KeyNotFoundException("Race not found.");
+            WindRaceGuard.CheckVersion(race, expectedProgrammeRevision);
             if (await _db.Set<RaceScoreState>()
                     .AnyAsync(state => state.RaceId == raceId && state.IsSignedOff, cancellationToken))
                 throw new ScoreSignedOffException(
@@ -471,7 +472,7 @@ public class ScoringService
         int raceId, IReadOnlyList<FinishingPlace> finishingPlaces, string? actorUserId,
         int? expectedRevision, IReadOnlyList<FinishingPlace>? expectedResults,
         string requestId, string? reason, bool strictValidation,
-        CancellationToken cancellationToken, string? actorLabel = null, DateTime? finishedAt = null)
+        CancellationToken cancellationToken, string? actorLabel = null, int? expectedProgrammeRevision = null, DateTime? finishedAt = null)
     {
         ValidateRequest(finishingPlaces, requestId);
         finishingPlaces = Normalise(finishingPlaces);
@@ -491,6 +492,7 @@ public class ScoringService
             .Include(r => r.Results)
             .FirstOrDefaultAsync(r => r.Id == raceId, cancellationToken)
             ?? throw new InvalidOperationException("Race not found");
+        WindRaceGuard.CheckVersion(race, expectedProgrammeRevision);
         var heat = race.Heat ?? throw new InvalidOperationException("Race has no heat");
         // With more teams than lanes some teams have no lane this race: they sit it out, whatever was sent for them.
         var sitOut = SitOutTeamIds(race, heat);

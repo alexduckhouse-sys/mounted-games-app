@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { isLiteModeActive } from '../lite/liteMode';
-import { dayKey } from '../lib/timetableDay';
+import { venueDay } from '../lib/windForecast';
 import { parseForecastHours, type ForecastHour } from '../lib/weatherAlert';
 
 const MINUTE = 60_000;
@@ -27,16 +27,18 @@ export function useDayForecast(lat: number | null | undefined, lon: number | nul
     let cancelled = false;
     let lastGood = 0;
     let lastTry = 0;
+    let zone: string | undefined;
     const controller = new AbortController();
 
     async function load() {
       lastTry = Date.now();
       try {
-        const response = await api.get('/weather/forecast', { params: { lat, lon, date: dayKey(new Date()) }, signal: controller.signal });
+        const response = await api.get('/weather/forecast', { params: { lat, lon, date: venueDay(new Date(), zone) }, signal: controller.signal });
         const hours = parseForecastHours(response.data);
         if (cancelled) return;
         if (hours) {
           lastGood = Date.now();
+          zone = hours.find(h => h.venueZone)?.venueZone;
           setForecast({ key: key as string, hours });
           return;
         }
