@@ -42,6 +42,7 @@ export const deskCommentary: AreaCatalogue<typeof en> = {
   'desk.commentary.tvKiosk': 'Ciosg teledu',
   'desk.commentary.scoring': 'Sgorio',
   'desk.commentary.viewGroup': 'Golwg y ddesg sylwebu',
+  'desk.commentary.view': 'Golwg',
   'desk.commentary.sideBySide': 'Ochr yn ochr',
   'desk.commentary.currentLanes': 'Lonydd y rhagras presennol',
   'desk.commentary.standingsInOrder': 'Safleoedd yn eu trefn',

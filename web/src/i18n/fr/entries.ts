@@ -286,6 +286,7 @@ export const entries: AreaCatalogue<typeof en> = {
   'entries.tab.signInPrompt': 'Les entraîneurs se connectent pour envoyer les formulaires de leurs équipes.',
   'entries.tab.noTeams': 'Vous n’avez aucune équipe dans cette compétition.',
   'entries.tab.chooseTeam': 'Choisir une équipe',
+  'entries.tab.fillFor': 'Remplir un formulaire pour',
   'entries.deadline.locked': 'Verrouillé',
   'entries.deadline.locks': 'Verrouillage {when}',
   'entries.deadline.sentUntil': 'Envoyé. Vous pouvez le modifier jusqu’au {when}.',

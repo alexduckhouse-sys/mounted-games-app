@@ -17,7 +17,7 @@ import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
 import { Sheet } from '../../components/Sheet';
 import { useDockAction } from '../../components/TickerContext';
-import { RefineDateTimeRow } from '../refine/Refine';
+import { RefineChoiceRow, RefineDateTimeRow } from '../refine/Refine';
 import { PageGrid } from '../../components/PageGrid';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
@@ -169,6 +169,18 @@ export function DeclarationsTab() {
 
   const count = forms?.length ?? 0;
 
+  // Teams that are still in the event are the ones expected to send a form.
+  const expected = competition.teams.filter((item) => !item.isWithdrawn);
+  const formsIn = expected.filter((item) => forms?.some((f) => f.teamId === item.id)).length;
+  const stat = forms !== null && expected.length > 0 && (
+    <p className="sp-note !m-0" role="status">{decFormStat(formsIn, expected.length)}</p>
+  );
+  // Organisers' tools (deadline, QR code, export) sit behind the dock button; with no dock they stay on the page.
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const docked = useDockAction(isOrganiser ? { label: t('entries.tab.toolsTitle'), icon: 'settings', onClick: () => setToolsOpen(true) } : null);
+  const inSheet = docked && isOrganiser;
+  // With the tools in the sheet, an organiser's page opens on the search; the team they fill a form for is chosen there.
+  const organiserLayout = inSheet;
   const teamRail = desktop && user != null && myTeams.length > 1;
   const editor = declarationsClosed && !isOrganiser ? null : team && forms && config && (
     <DecFormEditor key={team.id} competition={competition} team={team} existing={existing} draft={draft}
@@ -183,6 +195,7 @@ export function DeclarationsTab() {
       config={config ?? STANDARD_CONFIG}
       canDelete={(f) => isOrganiser || (!declarationsClosed && user != null && (f.submittedByUserId === user.id || myTeams.some((t) => t.id === f.teamId)))}
       onDelete={(f) => void remove(f.id)}
+      summary={organiserLayout ? stat : undefined}
     />
   );
   const rail = (
@@ -207,12 +220,6 @@ export function DeclarationsTab() {
     </button>
   );
 
-  // Teams that are still in the event are the ones expected to send a form.
-  const expected = competition.teams.filter((item) => !item.isWithdrawn);
-  const formsIn = expected.filter((item) => forms?.some((f) => f.teamId === item.id)).length;
-  const stat = forms !== null && expected.length > 0 && (
-    <p className="sp-note !m-0" role="status">{decFormStat(formsIn, expected.length)}</p>
-  );
   const qr = (
     <div className="sp-card">
       <button type="button" className="sp-row" aria-expanded={showQr} onClick={() => setShowQr((open) => !open)}>
@@ -227,10 +234,6 @@ export function DeclarationsTab() {
       )}
     </div>
   );
-  // Organisers' tools (deadline, QR code, export) sit behind the dock button; with no dock they stay on the page.
-  const [toolsOpen, setToolsOpen] = useState(false);
-  const docked = useDockAction(isOrganiser ? { label: t('entries.tab.toolsTitle'), icon: 'settings', onClick: () => setToolsOpen(true) } : null);
-  const inSheet = docked && isOrganiser;
   const exportFooter = isOrganiser && !inSheet && <div className="flex justify-end">{exportButton}</div>;
   const deadlineRow = (
     <div className="sp-card">
@@ -242,6 +245,13 @@ export function DeclarationsTab() {
     <Sheet title={t('entries.tab.toolsTitle')} onClose={() => setToolsOpen(false)}>
       <div className="flex flex-col gap-3">
         {deadlineRow}
+        {myTeams.length > 1 && (
+          <div className="sp-card">
+            <RefineChoiceRow label={t('entries.tab.fillFor')} value={String(chosen ?? '')} placeholder={t('entries.tab.chooseTeam')}
+              options={myTeams.map((item) => ({ value: String(item.id), label: item.displayName }))}
+              onChange={(value) => { setChosen(Number(value)); setToolsOpen(false); }} />
+          </div>
+        )}
         {qr}
         <div className="flex justify-end">{exportButton}</div>
       </div>
@@ -264,7 +274,7 @@ export function DeclarationsTab() {
 
       {lockError && <Notice>{lockError}</Notice>}
       {deleteError && <Notice onDismiss={() => setDeleteError('')}>{deleteError}</Notice>}
-      {stat}
+      {!organiserLayout && stat}
       {!inSheet && qr}
     </>
   );
@@ -295,7 +305,7 @@ export function DeclarationsTab() {
         <p className="text-sm text-[rgb(var(--mg-muted))]">{t('entries.tab.noTeams')}</p>
       ) : (
         <>
-          {myTeams.length > 1 && (
+          {myTeams.length > 1 && !organiserLayout && (
             <div role="group" aria-label={t('entries.tab.chooseTeam')} className="mg-chips !flex-wrap !overflow-visible">
               {myTeams.map((t) => (
                 <button key={t.id} type="button" className="mg-chip" aria-pressed={team?.id === t.id} onClick={() => setChosen(t.id)}>

@@ -18,6 +18,12 @@ main:has(.rf-hd) { padding-top: 0; }
 .rf-ttl { margin: 0 0 0 12px; display: flex; align-items: center; gap: 8px; font: 700 26px/1.05 var(--mg-font-display); letter-spacing: .01em; color: rgb(var(--mg-header-ink)); overflow-wrap: anywhere; }
 .rf-ttl-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .rf-ttl-row .rf-ttl { flex: 1; min-width: 0; }
+/* In the app the title sits in the top bar; what's left (actions, a line of detail, tabs) tucks up under it. */
+.rf-hd-slim { padding-top: 0; }
+.rf-hd-slim > .rf-sub:first-child { margin-top: 0; }
+/* With only a status line left (Sections' "Saved"), there's no band: the status floats at the top right of the page. */
+.rf-hd-slim:not(:has(a, button, .rf-sub, .rf-tabs, .rf-demo)) { position: relative; height: 0; padding: 0; border: 0; background: none; border-image: none; }
+.rf-hd-slim:not(:has(a, button, .rf-sub, .rf-tabs, .rf-demo)) .rf-hd-top { position: absolute; top: 4px; right: 16px; min-height: 0; }
 .rf-sub { margin: 4px 0 0 12px; font: 400 14px/1.3 var(--mg-font); color: rgb(var(--mg-header-sub)); }
 .rf-tabs { position: relative; display: flex; gap: 2px; overflow-x: auto; margin: 8px -8px -12px -4px; padding: 0 8px; scrollbar-width: none; }
 .rf-tabs::-webkit-scrollbar { display: none; }

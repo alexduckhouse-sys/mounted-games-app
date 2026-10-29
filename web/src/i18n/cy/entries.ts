@@ -286,6 +286,7 @@ export const entries: AreaCatalogue<typeof en> = {
   'entries.tab.signInPrompt': 'Mae hyfforddwyr yn mewngofnodi i anfon ffurflenni datgan ar gyfer eu timau.',
   'entries.tab.noTeams': 'Nid oes gennych unrhyw dimau yn y gystadleuaeth hon.',
   'entries.tab.chooseTeam': 'Dewis tîm',
+  'entries.tab.fillFor': 'Llenwi ffurflen ar gyfer',
   'entries.deadline.locked': 'Wedi cloi',
   'entries.deadline.locks': 'Yn cloi {when}',
   'entries.deadline.sentUntil': 'Wedi’i anfon. Gallwch ei newid tan {when}.',

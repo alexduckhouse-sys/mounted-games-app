@@ -40,22 +40,29 @@ it('sends the server command names for camera zoom and quality', async () => {
 
 it.each(['failed', 'conflict'])('does not claim or display an overlay saved after %s', async (outcome) => {
   state.save.mockResolvedValue(outcome); show();
-  fireEvent.click(screen.getByRole('button', { name: 'Toplist' }));
+  fireEvent.click(screen.getByRole('radio', { name: 'Toplist' }));
   await act(async () => {});
-  expect(screen.getByRole('button', { name: 'Off' })).toHaveAttribute('aria-pressed', 'true');
-  expect(screen.getByRole('alert')).toHaveTextContent(outcome === 'conflict' ? 'The overlay changed on another phone. Check it and try again.' : 'Couldn’t update the overlay. Check your signal and try again.');
+  expect(screen.getByRole('radio', { name: 'Off' })).toHaveAttribute('aria-checked', 'true');
+  expect(screen.getByRole('alert')).toHaveTextContent(outcome === 'conflict' ? 'The overlay changed on another phone. Check it and try again.' : 'Couldn’t change the overlay. Check your signal and try again.');
   expect(screen.getByRole('button', { name: outcome === 'conflict' ? 'Show me' : 'Try again' })).toBeVisible();
-  expect(screen.queryByText('Showing toplist centred on stream')).toBeNull();
+});
+
+it('offers every overlay the Commentary desk has', () => {
+  show();
+  for (const name of ['Off', 'Toplist', 'Heat table', 'Podium', 'Race result', 'Up next', 'Favourites', 'Race title', 'Sponsors']) {
+    expect(screen.getByRole('radio', { name })).toBeVisible();
+  }
+  expect(screen.queryByRole('radio', { name: 'Lanes' })).toBeNull();
 });
 
 it('serialises overlay saves and accepts subsequent changes from another device', async () => {
   const pending = deferred<'saved'>(); state.save.mockReturnValueOnce(pending.promise);
-  const view = show(); fireEvent.click(screen.getByRole('button', { name: 'Toplist' }));
-  expect(screen.getByRole('button', { name: 'Lanes' })).toBeDisabled();
+  const view = show(); fireEvent.click(screen.getByRole('radio', { name: 'Toplist' }));
+  expect(screen.getByRole('radio', { name: 'Heat table' })).toBeDisabled();
   await act(async () => { pending.resolve('saved'); });
   state.overlay = { ...DEFAULT_OVERLAY, look: { liveCard: 'heat' } };
   view.rerender(<MemoryRouter><ProducePage /></MemoryRouter>);
-  expect(screen.getByRole('button', { name: 'Heat table' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('radio', { name: 'Heat table' })).toHaveAttribute('aria-checked', 'true');
 });
 
 it('retains an unsaved banner and does not post a chat announcement on failure', async () => {
@@ -75,12 +82,15 @@ it('lets an organiser post a stream banner without calling the admin-only announ
   expect(api.post).not.toHaveBeenCalled();
 });
 
-it('says a change worked with a toast, and offers Try again when a camera command fails', async () => {
+it('saves an overlay and a strip, and offers Try again when a camera command fails', async () => {
   show();
-  fireEvent.click(screen.getByRole('button', { name: 'Toplist' }));
+  fireEvent.click(screen.getByRole('radio', { name: 'Toplist' }));
   await act(async () => {});
-  expect(screen.getByRole('status')).toHaveTextContent('Showing toplist centred on stream');
+  expect((state.overlay.look as Record<string, unknown>).liveCard).toBe('toplist');
   expect(screen.queryByRole('alert')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Live heat bar' }));
+  await act(async () => {});
+  expect(state.overlay.stripMode).toBe(2);
 
   vi.mocked(api.post).mockRejectedValueOnce(new Error('offline'));
   fireEvent.click(screen.getByRole('button', { name: '2x Zoom' }));

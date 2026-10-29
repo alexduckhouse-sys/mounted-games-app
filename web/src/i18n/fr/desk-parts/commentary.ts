@@ -42,6 +42,7 @@ export const deskCommentary: AreaCatalogue<typeof en> = {
   'desk.commentary.tvKiosk': 'Borne TV',
   'desk.commentary.scoring': 'Notation',
   'desk.commentary.viewGroup': 'Vue du pupitre de commentaire',
+  'desk.commentary.view': 'Vue',
   'desk.commentary.sideBySide': 'Côte à côte',
   'desk.commentary.currentLanes': 'Couloirs de la manche en cours',
   'desk.commentary.standingsInOrder': 'Classement dans l’ordre',

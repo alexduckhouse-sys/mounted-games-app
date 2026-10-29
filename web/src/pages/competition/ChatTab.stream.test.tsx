@@ -20,16 +20,16 @@ beforeEach(() => { Object.defineProperty(HTMLElement.prototype, 'scrollTo', { co
 it('lets an admin or an owning trainer change the stream fallback, but not a trainer who cannot organise', async () => {
   const { rerender } = render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
   expect(screen.getByText('Stream link is set')).toBeVisible();
-  expect(screen.getByRole('button', { name: 'Change' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Go live' })).toBeVisible();
   context.roles = ['Trainer']; context.enabled = false; rerender(<MemoryRouter><ChatTab /></MemoryRouter>);
-  expect(screen.getByRole('button', { name: 'Change' })).toBeVisible();
-  context.organiser = false; rerender(<MemoryRouter><ChatTab /></MemoryRouter>); expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Go live' })).toBeVisible();
+  context.organiser = false; rerender(<MemoryRouter><ChatTab /></MemoryRouter>); expect(screen.queryByRole('button', { name: 'Go live' })).toBeNull();
 });
 
 it('closes stream settings when the right to manage the stream is lost and does not reopen or save stale input', async () => {
   context.roles = ['Trainer'];
   const { rerender } = render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
-  fireEvent.click(screen.getByRole('button', { name: 'Change' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Go live' }));
   fireEvent.change(screen.getByPlaceholderText('https://youtu.be/… or https://twitch.tv/channel'), { target: { value: 'https://youtu.be/stale' } });
 
   context.organiser = false;
@@ -45,7 +45,7 @@ it('closes stream settings when the right to manage the stream is lost and does 
 });
 it('saves and clears only the stream URL using the dedicated endpoint', async () => {
   render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
-  fireEvent.click(screen.getByRole('button', { name: 'Change' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Go live' }));
   fireEvent.change(screen.getByPlaceholderText('https://youtu.be/… or https://twitch.tv/channel'), { target: { value: 'https://youtu.be/new' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save' })); await act(flush);
   expect(api.put).toHaveBeenCalledWith('/competitions/1/stream-url', { streamUrl: 'https://youtu.be/new' });
@@ -226,7 +226,8 @@ it('marks only the selected announcement as pinned when two announcements have t
 it('offers camera controls to competition collaborators without granting global chat moderation', async () => {
   context.roles = ['Member']; context.organiser = true; context.enabled = true;
   render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
-  expect(screen.getByRole('link', { name: 'Go live' })).toHaveAttribute('href', '/competitions/1/broadcast');
+  fireEvent.click(screen.getByRole('button', { name: 'Go live' }));
+  expect(within(screen.getByRole('dialog', { name: 'Stream settings' })).getByRole('link', { name: 'Go live' })).toHaveAttribute('href', '/competitions/1/broadcast');
   expect(screen.queryByRole('textbox', { name: 'Announcement' })).toBeNull();
 });
 
@@ -263,12 +264,13 @@ it('lets an admin post an announcement straight away, with no edit mode note', a
   expect(api.post).toHaveBeenCalled();
 });
 
-it('gives organisers a clear Go live button, whether or not streaming is switched on', async () => {
+it('gives organisers a Go live button on the stream card, whether or not streaming is switched on', async () => {
   context.roles = ['Admin']; context.enabled = true;
   const { rerender } = render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
-  const goLive = screen.getByRole('link', { name: 'Go live' });
-  expect(goLive).toHaveAttribute('href', '/competitions/1/broadcast');
-  expect(screen.queryByText(/Streaming isn’t set up yet/)).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Go live' }));
+  expect(within(screen.getByRole('dialog', { name: 'Stream settings' })).getByRole('link', { name: 'Go live' })).toHaveAttribute('href', '/competitions/1/broadcast');
+  fireEvent.click(screen.getByRole('button', { name: 'Close stream settings' }));
+  expect(screen.queryByText(/Streaming isn’t switched on/)).toBeNull();
   // Nothing is live: the controls are hidden and organisers still reach their saved replays.
   expect(screen.queryByRole('link', { name: 'Control the stream' })).toBeNull();
   expect(screen.getByRole('link', { name: 'Replays' })).toHaveAttribute('href', '/competitions/1/stream-controls?tab=replay');
@@ -278,7 +280,7 @@ it('gives organisers a clear Go live button, whether or not streaming is switche
 
   context.enabled = false; rerender(<MemoryRouter><ChatTab /></MemoryRouter>);
   expect(screen.queryByRole('link', { name: 'Go live' })).toBeNull();
-  expect(screen.getByText('Streaming isn’t set up yet. Add the Cloudflare keys to switch it on.')).toBeVisible();
+  expect(screen.getByText('Streaming isn’t switched on for this site yet. A site admin can turn it on.')).toBeVisible();
 });
 
 it('hides Go live once a stream is on but keeps the control and desk links', async () => {
@@ -294,7 +296,7 @@ it('hides Go live once a stream is on but keeps the control and desk links', asy
 it('does not tell the public streaming is not set up', async () => {
   context.roles = [];
   render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
-  expect(screen.queryByText(/Streaming isn’t set up yet/)).toBeNull();
+  expect(screen.queryByText(/Streaming isn’t switched on/)).toBeNull();
   expect(screen.queryByRole('link', { name: /Go live/ })).toBeNull();
 });
 
@@ -326,7 +328,7 @@ it('reports stream-link failures, preserves the input and restores focus on clos
  
   vi.mocked(api.put).mockRejectedValue(new Error('offline'));
   render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
-  const opener = screen.getByRole('button', { name: 'Change' });
+  const opener = screen.getByRole('button', { name: 'Go live' });
   fireEvent.click(opener);
   const close = screen.getByRole('button', { name: 'Close stream settings' });
   expect(close).toHaveFocus();
@@ -362,7 +364,7 @@ it('swipes the all-announcements sheet and the stream settings sheet down to clo
   };
   context.roles = ['Admin'];
   render(<MemoryRouter><ChatTab /></MemoryRouter>); await act(flush);
-  fireEvent.click(screen.getByRole('button', { name: 'Change' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Go live' }));
   swipe(screen.getByRole('dialog', { name: 'Stream settings' }));
   expect(screen.queryByRole('dialog', { name: 'Stream settings' })).toBeNull();
 });

@@ -41,6 +41,7 @@ export const deskCommentary = {
   'desk.commentary.tvKiosk': 'TV kiosk',
   'desk.commentary.scoring': 'Scoring',
   'desk.commentary.viewGroup': 'Commentary desk view',
+  'desk.commentary.view': 'View',
   'desk.commentary.sideBySide': 'Side by side',
   'desk.commentary.currentLanes': 'Current heat lanes',
   'desk.commentary.standingsInOrder': 'Toplist in order',

@@ -63,7 +63,7 @@ export function TackCheckTab({ competitionId }: { competitionId: string }) {
   </label>;
   const settings = board && section && <SettingsForm key={section.sectionId} competitionId={competitionId} section={section} onSaved={replace} />;
   return <section aria-labelledby="tack-title">
-    <RefineSection title={t('ops3.tc.title')} />
+    {/* The page title above already says Tack check, so the section's heading is for screen readers only. */}
     <h2 id="tack-title" className="sr-only">{t('ops3.tc.title')}</h2>
     {!inSheet && printLink}
     {error && <Notice className="tools-msg" actionLabel={t('common.tryAgain')} onAction={() => setAttempt((n) => n + 1)}>{error}</Notice>}

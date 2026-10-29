@@ -247,8 +247,7 @@ describe('CommentaryDeskPage', () => {
     expect(await within(overlays).findByText(/Couldn’t reach the camera phone/)).toBeInTheDocument();
 
     // No heat table view any more; lanes show heat / toplist points and Up next lists what follows
-    const viewGroup = screen.getByRole('group', { name: 'Commentary desk view' });
-    expect(within(viewGroup).queryByRole('button', { name: 'Heat Table' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Heat Table' })).toBeNull();
     expect(screen.queryByRole('region', { name: 'Current heat table' })).toBeNull();
     expect(screen.queryByText(/Say this/)).toBeNull();
     expect(screen.getByLabelText('Rank 1st, 3 in this heat, 3 on the toplist')).toHaveTextContent('3 / 3');
@@ -396,7 +395,7 @@ describe('CommentaryDeskPage in the dock', () => {
     expect(screen.queryByRole('link', { name: /TV kiosk/i })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Commentary desk controls' }));
     const sheet = within(await screen.findByRole('dialog', { name: 'Commentary desk controls' }));
-    expect(sheet.getByRole('group', { name: /view/i })).toBeInTheDocument();
+    expect(sheet.getByRole('button', { name: /^View/ })).toHaveTextContent('Side by side');
     expect(sheet.getByRole('link', { name: /TV kiosk/i })).toBeInTheDocument();
     expect(sheet.getByRole('link', { name: /Score and commentate/i })).toBeInTheDocument();
     expect(sheet.getByRole('button', { name: /^Heat/ })).toBeInTheDocument();

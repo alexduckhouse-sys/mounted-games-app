@@ -10,12 +10,10 @@ import { useToast } from '../../components/Toast';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
 import { useT } from '../../i18n/LanguageContext';
-import { displaySectionName } from '../../lib/section';
 import { DEFAULT_OVERLAY, overlayRequest, parseOverlay } from '../../lib/overlays';
 import { useCompetition } from './context';
+import { DeskOverlays } from './streamControls/DeskOverlays';
 import type { StreamCommand, StreamOverlay } from '../../types';
-
-type OverlayCardMode = 'none' | 'toplist' | 'heat' | 'lanes' | 'next';
 
 export function ProducePage() {
   const t = useT();
@@ -42,15 +40,6 @@ export function ProducePage() {
   const overlaysRef = useRef<HTMLDivElement>(null);
   const [showDualCamQr, setShowDualCamQr] = useState(false);
   const [secondAngle, setSecondAngle] = useState('Finish line');
-
-  const lookObj = (overlay.look ?? {}) as Record<string, unknown>;
-  const rawMode = typeof lookObj.liveCard === 'string' ? lookObj.liveCard : overlay.bannerText;
-  const activeCard: OverlayCardMode =
-    rawMode === 'toplist' || rawMode === 'heat' || rawMode === 'lanes' || rawMode === 'next' ? rawMode : 'none';
-  const activeSectionId =
-    typeof lookObj.liveSectionId === 'number'
-      ? lookObj.liveSectionId
-      : (competition.sections[0]?.id ?? null);
 
   const targetArena = activeStream?.arenaName || competition.sessions[0]?.arenaName || 'Arena 1';
 
@@ -101,20 +90,6 @@ export function ProducePage() {
       busyRef.current = false;
       setBusy(false);
     }
-  };
-
-  const selectOverlayCard = async (mode: OverlayCardMode, sectionId: number | null = activeSectionId) => {
-    const nextLook = { ...lookObj, liveCard: mode, liveSectionId: sectionId };
-    const nextBanner =
-      mode === 'none'
-        ? overlay.bannerText && ['toplist', 'heat', 'lanes', 'next'].includes(overlay.bannerText)
-          ? null
-          : overlay.bannerText
-        : mode;
-    await pushOverlay(
-      { look: nextLook, bannerText: nextBanner },
-      mode === 'none' ? t('desk.stream.pr.cleared') : t('desk.stream.pr.showingCentred', { mode: t(`desk.stream.card.shown.${mode}`) }),
-    );
   };
 
   const sendCommand = async (streamId: number, command: StreamCommand['command'], value?: string, note?: string) => {
@@ -175,7 +150,7 @@ export function ProducePage() {
             </button>
           </div>
           <p className="text-xs text-[rgb(var(--mg-muted))]">
-            {t('desk.stream.pr.scanIntro', { arena: targetArena })}
+            {t('desk.stream.pr.scanIntro')}
           </p>
           <div className="flex flex-wrap gap-2">
             {['Finish line', 'Changeover line', 'Collecting ring', 'Main stand'].map((preset) => (
@@ -209,9 +184,6 @@ export function ProducePage() {
             <Sliders className="h-5 w-5 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
             <h1 className="text-xl font-bold">{t('desk.stream.pr.title')}</h1>
           </div>
-          <p className="mt-0.5 text-xs text-[rgb(var(--mg-muted))]">
-            {t('desk.stream.pr.intro')}
-          </p>
         </div>
         {!docked && cameraButtons}
       </div>
@@ -219,7 +191,7 @@ export function ProducePage() {
       {problem && (
         <Notice
           actionLabel={problem.show ? t('desk.stream.showMe') : problem.retry ? t('common.tryAgain') : undefined}
-          onAction={problem.show ? () => overlaysRef.current?.querySelector<HTMLElement>('[aria-pressed="true"]')?.focus() : problem.retry}
+          onAction={problem.show ? () => overlaysRef.current?.querySelector<HTMLElement>('[aria-checked="true"], [aria-pressed="true"]')?.focus() : problem.retry}
         >
           {problem.text}
         </Notice>
@@ -321,90 +293,41 @@ export function ProducePage() {
         )}
       </div>
 
-      {/* Centred Live Stream Overlays */}
-      <div ref={overlaysRef} className="mg-card flex flex-col gap-3 p-4">
-        <div className="flex items-center justify-between">
+      {/* The same one-tap overlays as the Commentary desk, then the strips that sit along the video */}
+      <div ref={overlaysRef} className="flex flex-col gap-4">
+        <DeskOverlays />
+        <div className="mg-card flex flex-col gap-3 p-4">
           <div className="flex items-center gap-2">
             <Layers className="h-4 w-4 text-[rgb(var(--mg-heading))]" aria-hidden="true" />
-            <h2 className="text-sm font-bold">{t('desk.stream.pr.overlaysHeading')}</h2>
+            <h2 className="text-sm font-bold">{t('desk.stream.pr.stripsHeading')}</h2>
           </div>
-          {activeCard !== 'none' && (
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              className="mg-btn mg-btn-secondary text-xs"
-              onClick={() => void selectOverlayCard('none')}
-            >
-              {t('desk.stream.pr.hideOverlay')}
-            </button>
-          )}
-        </div>
-        <p className="text-xs text-[rgb(var(--mg-muted))]">
-          {t('desk.stream.pr.popups')}
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {(
-            [
-              { id: 'none', label: t('desk.stream.card.off') },
-              { id: 'toplist', label: t('desk.stream.card.toplist') },
-              { id: 'heat', label: t('desk.stream.card.heat') },
-              { id: 'lanes', label: t('desk.stream.card.lanes') },
-              { id: 'next', label: t('desk.stream.card.next') },
-            ] as const
-          ).map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              aria-pressed={activeCard === item.id}
+              aria-pressed={overlay.scoreCardMode !== 2}
               className="mg-stream-chip text-xs"
-              onClick={() => void selectOverlayCard(item.id)}
+              onClick={() => void pushOverlay({ scoreCardMode: overlay.scoreCardMode === 2 ? 0 : 2 })}
             >
-              {item.label}
+              {t('desk.stream.pr.scoreStrip')}
             </button>
-          ))}
-        </div>
-
-        {activeCard === 'toplist' && competition.sections.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            {competition.sections.map((sec) => (
-              <button
-                key={sec.id}
-                type="button"
-                aria-pressed={activeSectionId === sec.id}
-                className="mg-stream-chip text-xs"
-                onClick={() => void selectOverlayCard('toplist', sec.id)}
-              >
-                {displaySectionName(sec.displayName)}
-              </button>
-            ))}
+            <button
+              type="button"
+              aria-pressed={overlay.stripMode !== 2}
+              className="mg-stream-chip text-xs"
+              onClick={() => void pushOverlay({ stripMode: overlay.stripMode === 2 ? 0 : 2 })}
+            >
+              {t('desk.stream.pr.lowerThird')}
+            </button>
+            <button
+              type="button"
+              aria-pressed={overlay.sponsorMode !== 2}
+              className="mg-stream-chip text-xs"
+              onClick={() => void pushOverlay({ sponsorMode: overlay.sponsorMode === 2 ? 0 : 2 })}
+            >
+              <Sparkles aria-hidden="true" className="mr-1 h-3.5 w-3.5" />
+              {t('desk.stream.pr.sponsors')}
+            </button>
           </div>
-        )}
-
-        <div className="flex flex-wrap gap-2 border-t border-[rgb(var(--mg-line))] pt-3">
-          <button
-            type="button"
-            aria-pressed={overlay.scoreCardMode !== 2}
-            className="mg-stream-chip text-xs"
-            onClick={() => void pushOverlay({ scoreCardMode: overlay.scoreCardMode === 2 ? 0 : 2 })}
-          >
-            {t('desk.stream.pr.scoreStrip')}
-          </button>
-          <button
-            type="button"
-            aria-pressed={overlay.stripMode !== 2}
-            className="mg-stream-chip text-xs"
-            onClick={() => void pushOverlay({ stripMode: overlay.stripMode === 2 ? 0 : 2 })}
-          >
-            {t('desk.stream.pr.lowerThird')}
-          </button>
-          <button
-            type="button"
-            aria-pressed={overlay.sponsorMode !== 2}
-            className="mg-stream-chip text-xs"
-            onClick={() => void pushOverlay({ sponsorMode: overlay.sponsorMode === 2 ? 0 : 2 })}
-          >
-            <Sparkles aria-hidden="true" className="mr-1 h-3.5 w-3.5" />
-            {t('desk.stream.pr.sponsors')}
-          </button>
         </div>
       </div>
 

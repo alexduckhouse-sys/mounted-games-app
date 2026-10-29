@@ -368,7 +368,7 @@ export function CommentaryDeskPage() {
   const docked = useDockAction({ label: t('desk.commentary.controls'), icon: 'settings', onClick: () => setControlsOpen(true) });
   const renderControls = (close?: (after?: () => void) => void) => (
     <div className="flex flex-col gap-3">
-      {(competition.sections.length > 1 || sectionHeats.length > 1) && <RefineList as="div">
+      <RefineList as="div">
         {competition.sections.length > 1 && (
           <RefineChoiceRow label={t('desk.commentary.section')} value={String(sectionId ?? '')} onChange={(value) => chooseSection(Number(value))}
             options={competition.sections.map((sec) => ({ value: String(sec.id), label: displaySectionName(sec.displayName) }))} />
@@ -377,18 +377,13 @@ export function CommentaryDeskPage() {
           <RefineChoiceRow label={t('desk.commentary.heat')} value={String(activeHeatItem?.heat.id ?? '')} onChange={(value) => setSelectedHeatId(Number(value))}
             options={sectionHeats.map((item) => ({ value: String(item.heat.id), label: item.label }))} />
         )}
-      </RefineList>}
-      <div className="mg-seg" role="group" aria-label={t('desk.commentary.viewGroup')}>
-            <button type="button" aria-pressed={mode === 'split'} onClick={() => setMode('split')}>
-              {t('desk.commentary.sideBySide')}
-            </button>
-            <button type="button" aria-pressed={mode === 'lanes'} onClick={() => setMode('lanes')}>
-              {t('desk.commentary.currentLanes')}
-            </button>
-            <button type="button" aria-pressed={mode === 'standings'} onClick={() => setMode('standings')}>
-              {t('desk.commentary.standingsInOrder')}
-            </button>
-          </div>
+        <RefineChoiceRow<DeskMode> label={t('desk.commentary.view')} value={mode} onChange={setMode}
+          options={[
+            { value: 'split', label: t('desk.commentary.sideBySide') },
+            { value: 'lanes', label: t('desk.commentary.currentLanes') },
+            { value: 'standings', label: t('desk.commentary.standingsInOrder') },
+          ]} />
+      </RefineList>
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"

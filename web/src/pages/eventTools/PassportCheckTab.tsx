@@ -157,7 +157,7 @@ export function PassportCheckTab({ competitionId }: { competitionId: string }) {
     || matches(p.ownerFullName);
 
   return <section aria-labelledby="passport-title">
-    <RefineSection title={t('ops3.pc.title')} />
+    {/* The page title above already says Passport check, so the section's heading is for screen readers only. */}
     <h2 id="passport-title" className="sr-only">{t('ops3.pc.title')}</h2>
     {error && <Notice className="tools-msg" actionLabel={!board ? t('common.tryAgain') : undefined} onAction={() => setAttempt((n) => n + 1)}>{error}</Notice>}
     {!board && !error && <p role="status" className="rf-note">{t('ops3.pc.loading')}</p>}

@@ -8,6 +8,7 @@ import { decDraftKey } from '../../lib/decForm';
 import { CompetitionContext } from './context';
 import { DeclarationsTab } from './DeclarationsTab';
 import { autoConfirm } from '../../test/confirm';
+import { chooseOption } from '../../test/select';
 import { CurrentCompetitionProvider } from '../../competition/CurrentCompetitionContext';
 import { TickerProvider } from '../../components/TickerContext';
 import { TopBarTicker } from '../../components/TopBarTicker';
@@ -62,8 +63,8 @@ function mount(extra: Partial<CompetitionDetail> = {}, url = '/competitions/4/de
 }
 
 
-function mountDocked() {
-  const value = { competition: comp(), reload: vi.fn(), streams: [], streamingEnabled: false, invoke: vi.fn(), ready: 1, streamMessages: [] };
+function mountDocked(extra: Partial<CompetitionDetail> = {}) {
+  const value = { competition: comp(extra), reload: vi.fn(), streams: [], streamingEnabled: false, invoke: vi.fn(), ready: 1, streamMessages: [] };
   return render(
     <MemoryRouter initialEntries={['/competitions/4/declarations']}>
       <CurrentCompetitionProvider>
@@ -938,6 +939,22 @@ describe('DeclarationsTab: organiser tools in the dock', () => {
     expect(sheet.getByRole('button', { name: 'Dec forms close: Not set' })).toBeInTheDocument();
     expect(sheet.getByRole('button', { name: 'Show dec form QR code' })).toBeInTheDocument();
     expect(sheet.getByRole('button', { name: /Export CSV \(0\)/ })).toBeDisabled();
+  });
+
+  it('opens an organiser on the search, and picks the team to fill in from the sheet', async () => {
+    state.user!.roles = ['Admin'];
+    const user = userEvent.setup();
+    mountDocked({ teams: [
+      team(7, { competitionId: 4, competitionSectionId: 5, clubId: 1, displayName: 'Stockport C', trainerUserId: 'u1' }),
+      team(8, { competitionId: 4, competitionSectionId: 5, clubId: 1, displayName: 'Stockport D', trainerUserId: null }),
+    ] });
+    await user.click(await screen.findByRole('button', { name: 'Dec form tools' }));
+    expect(screen.queryByRole('group', { name: 'Choose a team' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Team name')).not.toBeInTheDocument();
+    const sheet = within(await screen.findByRole('dialog', { name: 'Dec form tools' }));
+    chooseOption(sheet.getByRole('button', { name: /^Fill in a form for/ }), 'Stockport D');
+    expect(await screen.findByLabelText('Team name')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Dec form tools' })).not.toBeInTheDocument());
   });
 
   it('keeps the QR code on the page for a trainer and puts nothing in the dock', async () => {

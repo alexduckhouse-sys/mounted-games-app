@@ -294,6 +294,7 @@ export const entries = {
   'entries.tab.signInPrompt': 'Trainers sign in to send declaration forms for their teams.',
   'entries.tab.noTeams': 'You have no teams in this competition.',
   'entries.tab.chooseTeam': 'Choose a team',
+  'entries.tab.fillFor': 'Fill in a form for',
   'entries.deadline.locked': 'Locked',
   'entries.deadline.locks': 'Locks {when}',
   'entries.deadline.sentUntil': 'Sent. You can change it until {when}.',
