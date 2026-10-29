@@ -176,7 +176,10 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
         {onToday.length > 0 && (
           <section className="cp-enter cp-today" aria-label={t('shell.events.onToday')}>
             <h2 className="sr-only">{t('shell.events.onToday')}</h2>
-            {onToday.map((competition) => <TodayCard key={competition.id} competition={competition} selected={current?.id === competition.id} onChoose={() => choose(competition)} warm={handlersFor(competition.id)} />)}
+            {/* One event on gets the big navy card; several get compact rows so they don't stack into a wall of navy. */}
+            {onToday.length === 1
+              ? <TodayCard competition={onToday[0]} selected={current?.id === onToday[0].id} onChoose={() => choose(onToday[0])} warm={handlersFor(onToday[0].id)} />
+              : <div className="cp-list">{onToday.map((competition) => <LiveEventRow key={competition.id} competition={competition} selected={current?.id === competition.id} onChoose={() => choose(competition)} warm={handlersFor(competition.id)} />)}</div>}
           </section>
         )}
         {later.length > 0 && (past ? groupList : (
@@ -283,6 +286,42 @@ function TodayCard({ competition, selected, onChoose, warm }: { competition: Com
         {t('shell.events.open')}<span className="sr-only">: {competition.name}</span>
       </button>
     </div>
+  );
+}
+
+/** One of several events on today: the same row as the lists below, with a small live dot instead of a navy card. A live
+    event gets just its name and one line (age group, then heat); the dot and the section's own heading say it is live. */
+function LiveEventRow({ competition, selected, onChoose, warm }: { competition: CompetitionPickerItem; selected: boolean; onChoose: () => void; warm: WarmHandlers }) {
+  const { t } = useLanguage();
+  const subId = useId();
+  const { live } = competition;
+  const details = [competition.location?.trim(), competitionDateText(competition.startDate, competition.endDate)].filter(Boolean).join(' · ');
+  const liveLine = live ? [displaySectionName(live.sectionName), live.heatLabel].filter(Boolean).join(' · ') : '';
+  // The name matches the big card's button; the age group and heat on now (or, for a quiet event, its place and dates) are its description.
+  return (
+    <button aria-pressed={selected} aria-label={`${t('shell.events.open')}: ${competition.name}`} aria-describedby={live || details ? subId : undefined} onClick={onChoose} {...warm} className={`cp-row cp-live-row ${selected ? 'cp-row-current' : ''}`}>
+      <span className="cp-icon">
+        <CompetitionIcon id={competition.icon} labelled className="text-[16px]" />
+      </span>
+      <span className="cp-body">
+        <strong className="cp-title">{competition.name}</strong>
+        {live ? (
+          <span id={subId} className="cp-live-sub">
+            <span className="sr-only">{t('shell.events.liveBadge')}: </span>
+            <span className="cp-live-line"><LiveText heat={liveLine} /></span>
+          </span>
+        ) : details && (
+          <span id={subId} className="cp-live-sub">
+            <span className="cp-live-meta">{details}</span>
+          </span>
+        )}
+      </span>
+      {/* Red only when a heat is really on; an event that is just on today gets the quiet words. */}
+      {live
+        ? <span aria-hidden="true" className="cp-live-dot" />
+        : <span aria-hidden="true" className="cp-live-mark-quiet">{t('shell.events.onToday')}</span>}
+      <ChevronRight className="h-3.5 w-3.5 cp-chevron" aria-hidden="true" />
+    </button>
   );
 }
 
