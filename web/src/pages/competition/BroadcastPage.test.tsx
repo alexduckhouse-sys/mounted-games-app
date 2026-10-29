@@ -404,3 +404,7 @@ it('pre-fills arena and camera angle from query parameters when pairing a 2nd ca
   expect(screen.getByRole('button', { name: 'Second Arena' })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('button', { name: 'Finish line' })).toHaveAttribute('aria-pressed', 'true');
 });
+
+it('sets the displayed initial quality on the publisher before camera permission', () => {
+  const view = show(); expect(publisher.setQualityPreset).toHaveBeenCalledWith('1080p'); expect(publisher.capture).not.toHaveBeenCalled(); view.unmount();
+});

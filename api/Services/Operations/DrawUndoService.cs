@@ -300,7 +300,6 @@ public static class DrawUndoService
         else
             db.Set<DrawChange>().Remove(targetChange);
         await db.SaveChangesAsync(cancellationToken);
-        StandingsService.Invalidate(competitionId);
 
         var nextStatus = await GetStatusAsync(db, competitionId, cancellationToken);
         return (

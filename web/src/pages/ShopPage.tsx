@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 import { usePageWidth } from '../components/pageWidthState';
 import { usePageHeader } from '../components/CompactPageBarContext';
 import { LazyImage } from '../components/LazyImage';
+import { logoSrc } from '../lib/sponsors';
 import { RoundSearch } from '../components/RoundSearch';
 import { Sheet } from '../components/Sheet';
 import '../components/sitePages.css';
@@ -165,7 +166,7 @@ export function ShopClassifieds({ intro, query = '', filters = NO_SHOP_FILTERS, 
   }
   useEffect(() => {
     let cancelled = false;
-    api.get<ShopPost[]>('/shop/posts')
+    api.get<ShopPost[]>('/shop/posts', { params: { imageMode: 'urls' } })
       .then((r) => { if (!cancelled) setPosts(Array.isArray(r.data) ? r.data : []); })
       .catch(() => { /* leave the list as it was; the page then shows its empty state */ })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -391,7 +392,7 @@ function PostRow({
     <li className={`sp-listing ${post.isDeleted ? 'opacity-60' : ''}`.trim()}>
       <button type="button" onClick={onToggle} aria-expanded={open} className="sp-listing-head">
         {post.imageBase64
-          ? <LazyImage src={post.imageBase64} alt="" className="sp-thumb" compact />
+          ? <LazyImage src={logoSrc(post.imageBase64, import.meta.env.VITE_API_BASE)} alt="" className="sp-thumb" compact />
           : <span role="img" aria-label={t('site.shop.noPhoto', { title: post.title })} className="sp-thumb"><ImageIcon className="h-[22px] w-[22px]" aria-hidden="true" /></span>}
         <span className="sp-grow !gap-1">
           <strong className="text-[17px] font-semibold leading-tight">{post.title}</strong>
@@ -402,7 +403,7 @@ function PostRow({
       </button>
       {open && (
         <div className="mg-reveal space-y-2 border-t border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-subtle))] px-3 py-3">
-          {post.imageBase64 && <LazyImage src={post.imageBase64} alt={post.title} className="max-h-60 w-full rounded-md object-cover" />}
+          {post.imageBase64 && <LazyImage src={logoSrc(post.imageBase64, import.meta.env.VITE_API_BASE)} alt={post.title} className="max-h-60 w-full rounded-md object-cover" />}
           <p className="whitespace-pre-wrap text-sm">{post.body}</p>
           {post.contactInfo && <p className="mg-meta">{t('site.shop.contact', { info: post.contactInfo })}</p>}
           <div className="flex flex-wrap items-center gap-1.5">

@@ -24,7 +24,7 @@ interface Props {
   /** The desk's lane order for the race on now; the lane labels come from here. */
   laneOrder?: readonly BriefingLaneOrder[];
   /** Changes whenever the desk reloads from a live update. */
-  refreshTick: number;
+  refreshTick: number | string;
 }
 
 function isBriefing(data: unknown, heatId: number): data is CommentatorBriefing {

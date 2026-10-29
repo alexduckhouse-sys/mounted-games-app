@@ -259,8 +259,6 @@ public class ScoringService
             });
             await _db.SaveChangesAsync(cancellationToken);
             ActiveClashes.TryRemove(raceId, out _);
-            if (race.Heat?.Session is { } clearedSession)
-                StandingsService.Invalidate(clearedSession.CompetitionId);
             return ToDto(raceId, state.Revision, false, null, null, Array.Empty<ScorePlaceDto>());
         }, cancellationToken);
 
@@ -711,8 +709,6 @@ public class ScoringService
         await ClearMissingTeamCallsAsync(heat, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         ActiveClashes.TryRemove(raceId, out _);
-        if (heat.Session is { } scoredSession)
-            StandingsService.Invalidate(scoredSession.CompetitionId);
         if (fresh.Count > 0)
         {
             if (isQualifier && heat.RaceRoundId is not null)

@@ -128,6 +128,7 @@ builder.Services.AddScoped<ScoringService>();
 builder.Services.AddSingleton<ScorerTokenGuard>();
 builder.Services.AddScoped<RaceFinalService>();
 builder.Services.AddScoped<StandingsService>();
+builder.Services.AddSingleton<CompetitionSnapshotCache>();
 builder.Services.AddScoped<MountedGames.Api.Services.EventTools.ResultsBookService>();
 builder.Services.AddScoped<MountedGames.Api.Services.EventTools.EventArchiveService>();
 builder.Services.AddSingleton<ILiveBroadcaster, LiveBroadcaster>();
@@ -213,7 +214,7 @@ builder.Services.Configure<GzipCompressionProviderOptions>(o => o.Level = Compre
 builder.Services.AddRequestLimits(builder.Configuration);
 builder.Services.AddTrustedProxies(builder.Configuration);
 builder.Services.AddProblemDetails();
-builder.Services.AddControllers();
+builder.Services.AddControllers(o => o.Filters.Add<JsonEtagResultFilter>());
 builder.Services.AddOpenApi();
 var signalR = builder.Services.AddSignalR();
 // With several API instances (Vercel scales the container out), Redis carries hub messages between them.

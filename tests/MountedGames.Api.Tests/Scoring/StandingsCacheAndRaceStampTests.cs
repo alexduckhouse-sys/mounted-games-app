@@ -55,7 +55,7 @@ public class StandingsCacheAndRaceStampTests : IClassFixture<ApiFactory>
 
         using var scope1 = _f.Services.CreateScope();
         var db1 = scope1.ServiceProvider.GetRequiredService<AppDbContext>();
-        var cache = scope1.ServiceProvider.GetRequiredService<IMemoryCache>();
+        var cache = scope1.ServiceProvider.GetRequiredService<CompetitionSnapshotCache>();
         var standings = new StandingsService(db1, cache);
 
         var initial = await standings.RowsAsync(a.CompetitionId);

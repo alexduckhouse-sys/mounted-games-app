@@ -8,6 +8,7 @@ using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Hubs;
 using MountedGames.Api.Services.Sponsors;
+using System.Linq.Expressions;
 
 namespace MountedGames.Api.Controllers;
 
@@ -23,6 +24,17 @@ public class SponsorsController(AppDbContext db, ILiveBroadcaster live, TimeProv
 
     private static string? LogoUrl(Sponsor s) =>
         s.LogoBytes is null ? null : $"/api/competitions/{s.CompetitionId}/sponsors/{s.Id}/logo?v={s.LogoVersion}";
+
+    private sealed record SponsorSummary(int Id, int CompetitionId, string Name, string? LinkUrl,
+        bool HasLogo, int LogoVersion, SponsorTier Tier, int SortOrder, SponsorPlacement ShowOn,
+        bool IsEnabled, DateTime? StartsAt, DateTime? EndsAt)
+    {
+        public string? LogoUrl => HasLogo ? $"/api/competitions/{CompetitionId}/sponsors/{Id}/logo?v={LogoVersion}" : null;
+    }
+
+    private static readonly Expression<Func<Sponsor, SponsorSummary>> Summary = s => new(
+        s.Id, s.CompetitionId, s.Name, s.LinkUrl, s.LogoBytes != null, s.LogoVersion,
+        s.Tier, s.SortOrder, s.ShowOn, s.IsEnabled, s.StartsAt, s.EndsAt);
 
     /// <summary>The sponsors on show now: enabled, inside their dates and with somewhere to appear.</summary>
     [HttpGet]
@@ -71,11 +83,13 @@ public class SponsorsController(AppDbContext db, ILiveBroadcaster live, TimeProv
     public async Task<ActionResult<IReadOnlyList<SponsorAdminDto>>> Manage(int competitionId)
     {
         var sponsors = await db.Sponsors.AsNoTracking().Where(s => s.CompetitionId == competitionId)
-            .OrderBy(s => s.SortOrder).ThenBy(s => s.Id).ToListAsync();
+            .OrderBy(s => s.SortOrder).ThenBy(s => s.Id).Select(Summary).ToListAsync();
         var totals = await db.SponsorExposures.AsNoTracking().Where(e => e.Sponsor!.CompetitionId == competitionId)
             .GroupBy(e => e.SponsorId).Select(g => new { SponsorId = g.Key, Views = g.Sum(e => e.Views), Seconds = g.Sum(e => e.Seconds) })
             .ToDictionaryAsync(t => t.SponsorId);
-        return sponsors.Select(s => ToAdminDto(s, totals.GetValueOrDefault(s.Id)?.Views ?? 0, totals.GetValueOrDefault(s.Id)?.Seconds ?? 0)).ToList();
+        return sponsors.Select(s => new SponsorAdminDto(s.Id, s.Name, s.LinkUrl, s.LogoUrl,
+            s.Tier, s.SortOrder, s.ShowOn, s.IsEnabled, s.StartsAt, s.EndsAt,
+            totals.GetValueOrDefault(s.Id)?.Views ?? 0, totals.GetValueOrDefault(s.Id)?.Seconds ?? 0)).ToList();
     }
 
     [HttpGet("stats")]
@@ -90,6 +104,7 @@ public class SponsorsController(AppDbContext db, ILiveBroadcaster live, TimeProv
         var sponsors = await db.Sponsors.AsNoTracking()
             .Where(s => s.CompetitionId == competitionId)
             .OrderBy(s => s.Tier).ThenBy(s => s.SortOrder).ThenBy(s => s.Id)
+            .Select(Summary)
             .ToListAsync();
 
         var exposures = await db.SponsorExposures.AsNoTracking()
@@ -131,7 +146,7 @@ public class SponsorsController(AppDbContext db, ILiveBroadcaster live, TimeProv
                 s.Id,
                 s.Name,
                 s.LinkUrl,
-                LogoUrl(s),
+                s.LogoUrl,
                 s.Tier,
                 TierLabel(s.Tier),
                 s.ShowOn,

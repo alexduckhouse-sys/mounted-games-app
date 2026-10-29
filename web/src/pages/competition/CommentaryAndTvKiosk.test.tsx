@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
+import { useLiveHub } from '../../live/useLiveHub';
 import { CompactPageBarProvider } from '../../components/CompactPageBarContext';
 import { competition, heat, race, result, session, standing, team } from '../../test/factories';
 import type { CompetitionDetail, DeclarationForm, LiveStream } from '../../types';
@@ -26,7 +27,7 @@ vi.mock('../../api', () => ({
 }));
 
 vi.mock('../../live/useLiveHub', () => ({
-  useLiveHub: () => ({ connected: true }),
+  useLiveHub: vi.fn(() => ({ connected: true })),
 }));
 
 const sampleStreams: LiveStream[] = [
@@ -144,7 +145,8 @@ function makeComp(): CompetitionDetail {
 
 function renderWithCompetition(initialEntry: string, comp = makeComp(), lang: 'en' | 'cy' | 'fr' = 'en') {
   const reload = vi.fn();
-  return render(
+  const invoke = vi.fn();
+  const view = (standingsVersion: number) => (
     <LanguageProvider initial={lang}>
     <MemoryRouter initialEntries={[initialEntry]}>
       <CompactPageBarProvider>
@@ -155,8 +157,10 @@ function renderWithCompetition(initialEntry: string, comp = makeComp(), lang: 'e
             reload,
             streams: sampleStreams,
             streamingEnabled: true,
-            invoke: vi.fn(),
+            invoke,
             ready: 1,
+            standingsVersion,
+            connected: true,
             streamMessages: [],
             sponsors: [],
           }}
@@ -168,8 +172,10 @@ function renderWithCompetition(initialEntry: string, comp = makeComp(), lang: 'e
         </CompetitionContext.Provider>
       </CompactPageBarProvider>
     </MemoryRouter>
-    </LanguageProvider>,
+    </LanguageProvider>
   );
+  const rendered = render(view(0));
+  return { ...rendered, updateStandingsVersion: (version: number) => rendered.rerender(view(version)) };
 }
 
 beforeEach(() => {
@@ -369,4 +375,51 @@ describe('TvKioskPage', () => {
     render(<StreamControlStrip competitionId={1} useScorerClient />);
     render(<MemoryRouter><QrAccessModal open onClose={vi.fn()} competitionId={1} competitionName="Spring" /></MemoryRouter>);
   });
+});
+
+it.each(['commentary', 'tv'])('uses the parent live connection on the %s page', async (page) => {
+  renderWithCompetition(`/competitions/1/${page}`);
+  await waitFor(() => expect(api.get).toHaveBeenCalledWith('/competitions/1/standings', { params: { sectionId: 9 } }));
+  expect(useLiveHub).not.toHaveBeenCalled();
+  expect(vi.mocked(api.get).mock.calls.some(([url]) => url === '/competitions/1')).toBe(false);
+});
+
+it.each(['commentary', 'tv'])('refreshes %s standings from shared invalidations without replacing the competition graph or subscribing again', async (page) => {
+  const comp = makeComp();
+  const standingsUrl = '/competitions/1/standings';
+  const briefingUrl = '/competitions/1/sessions/1/heats/10/commentator-briefing';
+  const previousGet = vi.mocked(api.get).getMockImplementation()!;
+  let totalPoints = 3;
+  vi.mocked(api.get).mockImplementation((url, config) => url === standingsUrl
+    ? Promise.resolve({ data: [standing(1, totalPoints, { teamName: 'North A', wins: 1 })] })
+    : previousGet(url, config));
+  const callsTo = (url: string) => vi.mocked(api.get).mock.calls.filter(([called]) => called === url);
+  const rendered = renderWithCompetition(`/competitions/1/${page}?section=9`, comp);
+  await waitFor(() => expect(callsTo(standingsUrl)).toHaveLength(1));
+  if (page === 'tv') {
+    const slides = screen.getByRole('group', { name: 'TV scoreboard slide' });
+    await userEvent.click(within(slides).getByRole('button', { name: 'Live Section Standings' }));
+    await screen.findByRole('region', { name: 'Live Section Standings' });
+  } else {
+    await waitFor(() => expect(callsTo(briefingUrl)).toHaveLength(1));
+  }
+
+  // Tack-check and HC notifications can invalidate standings without changing scores.
+  // The helper retains this exact competition object, all graph arrays, and hub ready value.
+  for (const version of [1, 2]) {
+    totalPoints = 30 + version;
+    rendered.updateStandingsVersion(version);
+    await waitFor(() => expect(callsTo(standingsUrl)).toHaveLength(version + 1));
+    expect(callsTo(standingsUrl).at(-1)?.[1]).toEqual({ params: { sectionId: 9 } });
+    if (page === 'commentary') {
+      await waitFor(() => expect(callsTo(briefingUrl)).toHaveLength(version + 1));
+      const talkingPoints = screen.getByRole('region', { name: 'Key talking points' });
+      expect(await within(talkingPoints).findByText(new RegExp(`North A \\(${totalPoints} pts, 1 win\\)`))).toBeInTheDocument();
+    } else {
+      const standings = screen.getByRole('region', { name: 'Live Section Standings' });
+      expect(await within(standings).findByText(String(totalPoints))).toBeInTheDocument();
+    }
+    expect(useLiveHub).not.toHaveBeenCalled();
+    expect(callsTo('/competitions/1')).toHaveLength(0);
+  }
 });

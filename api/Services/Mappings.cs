@@ -85,7 +85,7 @@ public static class Mappings
         p.Id, p.AuthorName, p.PonyClubName, p.AuthorUserId,
         p.Title, p.Body, p.PriceMinor, p.ContactInfo, p.ImageBase64,
         p.CreatedAt, p.IsDeleted,
-        p.Comments?.Count ?? 0, p.Reports?.Count ?? 0);
+        p.Comments?.Count(c => !c.IsDeleted && !c.IsPrivate) ?? 0, p.Reports?.Count ?? 0);
 
     public static ShopCommentDto ToDto(this ShopComment c) => new(
         c.Id, c.PostId, c.AuthorUserId, c.AuthorName,

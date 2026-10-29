@@ -19,7 +19,8 @@ const render45 = vi.hoisted(() => vi.fn());
 vi.mock('../../components/stream/ReplayInspector', () => ({ renderTrimmedFollowClip: render45 }));
 const fakeMedia = {} as MediaStream;
 vi.mock('../../components/stream/LiveVideo', () => ({
-  LiveVideo: ({ onMedia }: { onMedia?: (media: MediaStream | null) => void }) => {
+  LiveVideo: ({ onMedia, enableDvr }: { onMedia?: (media: MediaStream | null) => void; enableDvr?: boolean }) => {
+    expect(enableDvr).toBe(false);
     useEffect(() => { onMedia?.(fakeMedia); return () => onMedia?.(null); }, [onMedia]);
     return <div data-testid="live-video" />;
   },

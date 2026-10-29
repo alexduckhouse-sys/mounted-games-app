@@ -29,6 +29,7 @@ describe('the shop', () => {
   it('lists tack and kit as rows with where, when and the price', async () => {
     mount();
     const row = await screen.findByRole('button', { name: /Grey saddle/ });
+    expect(api.get).toHaveBeenCalledWith('/shop/posts', { params: { imageMode: 'urls' } });
     expect(row).toHaveTextContent('Sam · Stockport');
     expect(row).toHaveTextContent('just now');
     expect(row).toHaveTextContent('£120.00');

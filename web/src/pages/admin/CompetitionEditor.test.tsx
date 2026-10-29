@@ -1004,7 +1004,7 @@ describe('CompetitionEditor: creating', () => {
     await screen.findByRole('heading', { level: 2, name: 'Competition created' });
     const settings = vi.mocked(api.put).mock.calls.filter(([url]) => String(url).endsWith('/settings') && String(url).includes('/sessions/'));
     expect(settings).toHaveLength(1);
-    expect(settings[0][1]).toEqual({ laneRotationMode: 2 });
+    expect(settings[0][1]).toEqual({ laneRotationMode: 2, minutesPerHeat: 10 });
   });
 
   it('goes back to the step with the problem when something earlier is wrong', async () => {
@@ -1248,7 +1248,7 @@ describe('CompetitionEditor: editing', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(screen.getByText('Competition page')).toBeInTheDocument());
     expect(api.put).toHaveBeenCalledWith('/competitions/7/sections/22', expect.objectContaining({ tieBreakRule: 3 }));
-    expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/32/settings', { laneRotationMode: 1 });
+    expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/32/settings', { laneRotationMode: 1, minutesPerHeat: 10 });
   });
 
   it('adds new sessions, removes ones taken off, and removes a section and a break that were taken out', async () => {

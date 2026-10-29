@@ -95,7 +95,7 @@ export function StreamControlsPage() {
         {onAir ? (
           <div className="sx-video">
             <LiveVideo competitionId={competition.id} streams={liveStreams} sessions={competition.sessions} invoke={invoke} ready={ready}
-              messages={streamMessages} canBroadcast={false} competitionName={competition.name} publicLayout onMedia={onMedia} />
+              messages={streamMessages} canBroadcast={false} competitionName={competition.name} publicLayout onMedia={onMedia} enableDvr={false} />
           </div>
         ) : <div className="sx-notlive" role="status">{t('desk.stream.page.notLive')}</div>}
 

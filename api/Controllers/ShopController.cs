@@ -27,26 +27,50 @@ public class ShopController : ControllerBase
 
     [HttpGet("posts")]
     [AllowAnonymous]
-    public async Task<IEnumerable<ShopPostDto>> List([FromQuery] int take = 50, [FromQuery] bool includeDeleted = false)
+    public async Task<IEnumerable<ShopPostDto>> List([FromQuery] int take = 50, [FromQuery] bool includeDeleted = false, [FromQuery] string? imageMode = null)
     {
         take = Math.Clamp(take, 1, 200);
         var isAdmin = User.IsInRole(Roles.Admin);
-        var q = _db.ShopPosts.Include(p => p.Comments).Include(p => p.Reports).AsQueryable();
+        var q = _db.ShopPosts.AsNoTracking();
         if (!includeDeleted || !isAdmin) q = q.Where(p => !p.IsDeleted);
-        var rows = await q.OrderByDescending(p => p.CreatedAt).Take(take).ToListAsync();
-        return rows.Select(r => r.ToDto());
+        return await Summaries(q.OrderByDescending(p => p.CreatedAt).Take(take), imageMode == "urls").ToListAsync(HttpContext.RequestAborted);
     }
 
     [HttpGet("posts/{id:int}")]
     [AllowAnonymous]
-    public async Task<ActionResult<ShopPostDto>> Get(int id)
+    public async Task<ActionResult<ShopPostDto>> Get(int id, [FromQuery] string? imageMode = null)
     {
-        var p = await _db.ShopPosts
-            .Include(x => x.Comments).Include(x => x.Reports)
-            .FirstOrDefaultAsync(x => x.Id == id);
+        var p = await Summaries(_db.ShopPosts.AsNoTracking().Where(x => x.Id == id), imageMode == "urls")
+            .FirstOrDefaultAsync(HttpContext.RequestAborted);
         if (p is null) return NotFound();
         if (p.IsDeleted && !User.IsInRole(Roles.Admin)) return NotFound();
-        return p.ToDto();
+        return p;
+    }
+
+    private static IQueryable<ShopPostDto> Summaries(IQueryable<ShopPost> posts, bool imageUrls)
+        => posts.Select(p => new ShopPostDto(p.Id, p.AuthorName, p.PonyClubName, p.AuthorUserId,
+            p.Title, p.Body, p.PriceMinor, p.ContactInfo,
+            imageUrls ? (p.ImageBase64 != null ? "/api/shop/posts/" + p.Id + "/images/0" : null) : p.ImageBase64,
+            p.CreatedAt, p.IsDeleted, p.Comments.Count(c => !c.IsDeleted && !c.IsPrivate), p.Reports.Count));
+
+    // Revalidate on every use so moderation/deletion and replacement also apply to saved URLs.
+    [HttpGet("posts/{id:int}/images/0")]
+    [AllowAnonymous]
+    public async Task<IActionResult> Image(int id)
+    {
+        Response.Headers.CacheControl = "private, no-cache";
+        var isAdmin = User.IsInRole(Roles.Admin);
+        var data = await _db.ShopPosts.AsNoTracking().Where(p => p.Id == id && (!p.IsDeleted || isAdmin))
+            .Select(p => p.ImageBase64).FirstOrDefaultAsync(HttpContext.RequestAborted);
+        if (string.IsNullOrEmpty(data) || data.Length > MaxImageBase64Bytes || !ImageDataUrl.IsMatch(data)) return NotFound();
+        var comma = data.IndexOf(',');
+        byte[] bytes;
+        try { bytes = Convert.FromBase64String(data[(comma + 1)..]); }
+        catch (FormatException) { return NotFound(); }
+        var contentType = data[5..data.IndexOf(';')];
+        var etag = new Microsoft.Net.Http.Headers.EntityTagHeaderValue(
+            $"\"{Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))}\"");
+        return File(bytes, contentType, lastModified: null, entityTag: etag);
     }
 
     [HttpPost("posts")]
