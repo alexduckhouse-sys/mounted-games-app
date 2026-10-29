@@ -11,6 +11,7 @@ import { Notice } from '../../components/Notice';
 import { Sheet } from '../../components/Sheet';
 import { useDockAction } from '../../components/TickerContext';
 import { apiErrorMessage } from '../../lib/apiError';
+import { parsePausedAtMs } from '../../lib/time';
 import { competitionUpdateBody } from '../../lib/competitionPayload';
 import { HATBAND_COLOURS, MAX_LANES, lanesFor } from '../../lib/creatorDraft';
 import { dayKey } from '../../lib/timetableDay';
@@ -157,6 +158,10 @@ export function TimetablePage() {
 
   /** This block and every later one in its arena, whether or not each follows on. */
   const shiftFrom = (list: Item[], item: Item, minutes: number) => run(t('ops.tt.fail.move'), () => pushItems(list.slice(list.indexOf(item)), minutes));
+
+  // A timetable that was put on hold (by a weather alert, say) carries on from here.
+  const paused = competition.sessions.some((s) => s.status !== 2 && parsePausedAtMs(s.notes) != null);
+  const resume = () => run(t('ops.tt.fail.continue'), () => api.post(`/competitions/${competition.id}/sessions/resume`, {}));
 
   const shiftAll = (by: number) => run(t('ops.tt.fail.moveAll'), () => api.post(`/competitions/${competition.id}/sessions/shift-times`, { deltaMinutes: by }));
 
@@ -309,6 +314,12 @@ export function TimetablePage() {
   const controls = (
     <>
         <RefineList as="div">
+          {paused && (
+            <div className="rf-row">
+              <span className="rf-grow rf-t1">{t('ops.tt.paused')}</span>
+              <button type="button" className="rf-btn rf-btn-primary" disabled={busy} onClick={() => void resume()}>{t('ops.tt.continue')}</button>
+            </div>
+          )}
           <div className="rf-row ops-mv">
             <span className="rf-grow rf-t1">{t('ops.tt.moveAll')}</span>
             <span className="ops-step-ctl" role="group" aria-label={t('ops.tt.moveAllAria')}>

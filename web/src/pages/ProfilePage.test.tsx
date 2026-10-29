@@ -271,7 +271,11 @@ describe('ProfilePage: shop and account', () => {
     expect(await account.findByText('2')).toBeInTheDocument();
     expect(account.getByRole('link', { name: 'My account' })).toHaveAttribute('href', '/me/account');
     expect(account.getByRole('link', { name: /Settings/ })).toHaveAttribute('href', '/settings');
-    expect(account.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+    // Sign out is its own full-width pill below the lists, not a row inside Account.
+    expect(account.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
+    const signOut = screen.getByRole('button', { name: 'Sign out' });
+    expect(signOut).toHaveClass('kit-pill', 'sp-signout');
+    expect(signOut.closest('.sp-card')).toBeNull();
   });
 
   it('leaves out my entries for an admin', () => {
@@ -281,7 +285,7 @@ describe('ProfilePage: shop and account', () => {
 
   it('signs out and goes home', async () => {
     mount();
-    await userEvent.click(section('Account').getByRole('button', { name: 'Sign out' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(localStorage.getItem('mg.auth')).toBeNull();
     expect(screen.getByText('Home page')).toBeInTheDocument();
   });

@@ -10,16 +10,6 @@
 /* The chip stays 32px tall; the tap area is 44px. */
 .tt-chip::after { content: ""; position: absolute; inset: -6px 0; }
 
-/* The timing sheet (DelaySheet): minutes to move the times by, typed. */
-.tt-delay-form { display: flex; flex-direction: column; gap: 10px; }
-.tt-delay-row { display: flex; align-items: center; gap: 10px; color: rgb(var(--mg-ink)); font: 600 16px/1.2 var(--mg-font); }
-.tt-delay-row > label { flex: 1; }
-.tt-delay-input {
-  width: 88px; min-height: 44px; padding: 0 12px; border: 1px solid rgb(var(--mg-control)); border-radius: 10px;
-  background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); font: 700 18px/1 var(--mg-font); font-variant-numeric: tabular-nums; text-align: right;
-}
-.tt-delay-error { margin: 0; color: rgb(var(--mg-red)); font: 600 14px/1.35 var(--mg-font); }
-
 /* The filter sheet: day tabs across the top, age group tiles, then the arena slider. */
 .tt-sheet .kit-sheet-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .tt-days { position: relative; display: flex; margin: 0 -20px; border-bottom: 1px solid rgb(var(--mg-rule-soft)); }
