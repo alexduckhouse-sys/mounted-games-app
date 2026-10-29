@@ -100,7 +100,7 @@ describe('TimetablePage', () => {
     expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
     cleanup();
 
-    const first = competition.sessions[0];
+    const first = competition.sessions[0] as { notes?: string };
     const before = first.notes;
     first.notes = '[paused:1700000000000]';
     try {

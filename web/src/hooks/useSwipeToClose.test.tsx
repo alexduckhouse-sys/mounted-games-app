@@ -1,28 +1,28 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { Profiler, type ReactElement } from 'react';
+import { act, fireEvent, render as renderPlain, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSwipeToClose } from './useSwipeToClose';
 
 let renders = 0;
-function Probe({ onClose, enabled = true, height = 400 }: { onClose: () => void; enabled?: boolean; height?: number }) {
+function Probe({ onClose, enabled = true }: { onClose: () => void; enabled?: boolean }) {
   const { ref, handlers, dragging } = useSwipeToClose<HTMLDivElement>(onClose, enabled);
-  renders += 1;
   return (
-    <div
-      ref={(node) => {
-        (ref as { current: HTMLDivElement | null }).current = node;
-        if (node) node.getBoundingClientRect = () => ({ height }) as DOMRect;
-      }}
-      data-testid="pop"
-      data-dragging={dragging}
-      {...handlers}
-    >
-      <ul data-testid="list"><li data-testid="row">Row</li></ul>
-      <input aria-label="Name" />
-    </div>
+    <Profiler id="probe" onRender={() => { renders += 1; }}>
+      <div ref={ref} data-testid="pop" data-dragging={dragging} {...handlers}>
+        <ul data-testid="list"><li data-testid="row">Row</li></ul>
+        <input aria-label="Name" />
+      </div>
+    </Profiler>
   );
 }
 
 const pop = () => screen.getByTestId('pop');
+/** Renders the probe and gives its element a height (jsdom has no layout). */
+function render(ui: ReactElement, height = 400) {
+  const view = renderPlain(ui);
+  pop().getBoundingClientRect = () => ({ height }) as DOMRect;
+  return view;
+}
 const touches = (y: number, x = 0) => ({ touches: [{ clientX: x, clientY: y }], changedTouches: [{ clientX: x, clientY: y }] });
 const ended = (y: number, x = 0) => ({ touches: [], changedTouches: [{ clientX: x, clientY: y }] });
 
@@ -86,7 +86,7 @@ describe('useSwipeToClose', () => {
 
   it('closes a short pop-up after 48px, and on a quick flick', () => {
     const short = vi.fn();
-    const { unmount } = render(<Probe onClose={short} height={80} />);
+    const { unmount } = render(<Probe onClose={short} />, 80);
     pull(0, 48);
     expect(short).toHaveBeenCalledTimes(1);
     unmount();

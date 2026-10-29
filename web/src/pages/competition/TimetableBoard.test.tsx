@@ -3,7 +3,6 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { LanguageProvider } from '../../i18n/LanguageContext';
 import { setActiveLang } from '../../i18n/translate';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { api } from '../../api';
 import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
 import { TickerProvider, useTicker } from '../../components/TickerContext';
 import { FAVOURITES_KEY } from '../../lib/favourites';
@@ -584,7 +583,7 @@ it('formats delays of an hour or more as hours and minutes, and sends organisers
     ],
   });
 
-  const { unmount } = renderWithDock();
+  renderWithDock();
   const lateRow = screen.getByRole('link', { name: /Very Late Heat/ });
   expect(lateRow.querySelector('.tt-planned')!.textContent).toBe('+1h 34m');
   expect(screen.getByText('Main Arena is running 1h 34m late')).toHaveClass('tt-late-line');
