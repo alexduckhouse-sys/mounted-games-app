@@ -251,14 +251,15 @@ describe('ScorerPage', () => {
     ] }) });
     open();
     await opened('Bending');
-    await user.click(screen.getByRole('tab', { name: 'Heat 2' }));
+    await user.click(screen.getByRole('button', { name: /^Heat:/ }));
+    await user.click(screen.getByRole('option', { name: /Heat 2/ }));
     expect(screen.getByRole('region', { name: 'Scoring Mug' })).toBeInTheDocument();
 
-    const picker = screen.getByLabelText('Session');
-    expect(screen.queryByRole('option', { name: 'Lunch' })).not.toBeInTheDocument();
-    await user.selectOptions(picker, 'Teams');
+    await user.click(screen.getByRole('button', { name: /^Heat:/ }));
+    expect(screen.queryByRole('option', { name: /Lunch/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('option', { name: /Seniors · Final/ }));
     expect(screen.getByRole('region', { name: 'Scoring Ball' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Final' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('button', { name: /^Heat:.*Final/ })).toBeInTheDocument();
   });
 
   it('says when nothing is timetabled for the arena, or the session has no heats', async () => {

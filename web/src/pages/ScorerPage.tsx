@@ -33,6 +33,8 @@ import { useLiveHub } from '../live/useLiveHub';
 import { useReplayPreparation } from '../live/useReplayPreparation';
 import { ReplayPreparation } from '../components/stream/ReplayPreparation';
 import { CameraLockButtons } from '../components/stream/CameraLocks';
+import { HeatPickerBar, type HeatPickItem } from './competition/HeatViews';
+import { arenaOf, groupOf, heatBarLabel, heatStatus } from '../lib/heatChoices';
 import { SelectField } from '../components/SelectField';
 import type { Heat, LiveStream, LiveStreamsResponse, ScorerSession, Session, StreamQualityPreset } from '../types';
 
@@ -743,6 +745,21 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
   // In a qualifier only the teams that go through to the final are placed; the rest score 1 point each.
   const qualifierCap = heat?.raceRoundStage === 1 ? qualifiersOf(session) : null;
 
+  // One list for the whole arena: every heat of every session this link covers, in the order the parent sorted them.
+  const pickItems: HeatPickItem[] = sessions.flatMap((s) => s.heats
+    .slice()
+    .sort((x, y) => x.orderIndex - y.orderIndex)
+    .map((h, index) => {
+      const ref = { session: s, heat: h, index };
+      return {
+        key: `${s.id}:${h.id}`,
+        label: heatBarLabel(ref),
+        status: heatStatus(ref),
+        selected: s.id === session.id && h.id === heat?.id,
+        onSelect: () => choose({ session: s.id, heat: h.id }),
+      };
+    }));
+
   function choose(change: { session?: number; heat?: number; race?: number }) {
     setPostRaceRecap(null);
     if (change.session !== undefined) { setChosenSessionId(change.session); setChosenHeatId(null); setChosenRaceId(null); }
@@ -951,28 +968,13 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
         </Sheet>
       )}
 
-      {sessions.length > 1 && (
-        <label className="flex flex-col gap-1 text-sm font-semibold">Session
-          <select className="input min-h-11" value={session.id} onChange={(event) => choose({ session: Number(event.target.value) })}>
-            {sessions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        </label>
-      )}
       {heats.length === 0 && <p className="mg-card p-4">No heats in this session yet.</p>}
-      {heats.length > 0 && (
-        <div className="flex gap-1.5 overflow-x-auto pb-1" role="tablist" aria-label="Heats">
-          {heats.map((h, i) => (
-            <button
-              key={h.id}
-              role="tab"
-              aria-selected={h.id === heat?.id}
-              onClick={() => choose({ heat: h.id })}
-              className={`min-h-11 whitespace-nowrap rounded-md px-3 text-sm font-semibold ${h.id === heat?.id ? 'bg-brand-600 text-white' : heatIsComplete(h) ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-800'}`}
-            >
-              {h.label ?? `Heat ${i + 1}`}
-            </button>
-          ))}
-        </div>
+      {pickItems.length > 0 && (
+        <HeatPickerBar
+          arena={arenaOf(session)}
+          label={heat ? heatBarLabel({ session, heat, index: Math.max(0, heatIndex) }) : groupOf(session)}
+          items={pickItems}
+        />
       )}
 
       {commentatorMode && viewHeat && (
