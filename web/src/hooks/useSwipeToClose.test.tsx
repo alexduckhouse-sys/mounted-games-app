@@ -1,4 +1,4 @@
-import { Profiler, type ReactElement } from 'react';
+import { Profiler, StrictMode, type ReactElement } from 'react';
 import { act, fireEvent, render as renderPlain, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSwipeToClose } from './useSwipeToClose';
@@ -53,6 +53,13 @@ describe('useSwipeToClose', () => {
     for (let y = 140; y <= 200; y += 10) fireEvent.touchMove(pop(), touches(y));
     expect(pop().style.transform).toBe('translateY(100px)');
     expect(renders).toBe(after);
+  });
+
+  it('still listens for touches when React runs its effects twice (development)', () => {
+    const onClose = vi.fn();
+    render(<StrictMode><Probe onClose={onClose} /></StrictMode>);
+    pull(100, 260);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('takes over the touch so the page does not scroll, and eases back from a slow short pull', () => {

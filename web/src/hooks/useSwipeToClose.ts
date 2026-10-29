@@ -166,7 +166,8 @@ export function useSwipeToClose<T extends HTMLElement>(onClose: () => void, enab
       element.removeEventListener('touchcancel', onCancel);
     };
   });
-  useEffect(() => () => { detach.current?.(); clearSettle(); }, []);
+  // On unmount (and when React re-runs effects in development) let go of the element, so the next run attaches afresh.
+  useEffect(() => () => { detach.current?.(); detach.current = null; attached.current = null; clearSettle(); }, []);
 
   // Mouse and pen. A finger is handled above, so touch pointers are ignored here (one input stream, never two).
   const handlers = {
