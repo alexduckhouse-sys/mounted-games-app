@@ -20,6 +20,7 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import { RefineHeader, RefinePage, type RefineTab } from '../refine/Refine';
 import { useCompetition } from './context';
 import { AutoTab } from './streamControls/AutoTab';
+import { BroadcastSetup } from './streamControls/BroadcastSetup';
 import { CameraTab } from './streamControls/CameraTab';
 import { OverlayTab } from './streamControls/OverlayTab';
 import { ReplayTab } from './streamControls/ReplayTab';
@@ -125,7 +126,7 @@ export function StreamControlsPage() {
         </div>
 
         <div key={tab} role="tabpanel" className="mg-settle" aria-label={panelLabel}>
-          {(tab === 'overlay' || (phone && tab === 'auto')) && <OverlayTab competition={competition} overlay={overlay} tiles={tiles} canChange={Boolean(saveOverlay)} />}
+          {(tab === 'overlay' || (phone && tab === 'auto')) && <><OverlayTab competition={competition} overlay={overlay} tiles={tiles} canChange={Boolean(saveOverlay)} /><BroadcastSetup competition={competition} /></>}
           {(tab === 'auto' || (phone && tab === 'overlay')) && <AutoTab competition={competition} auto={auto} setOn={setOn} setRule={setRule}
             prizeGiving={{ on: tiles.options.autoPrizeGiving, disabled: tiles.busy || !saveOverlay, set: (on) => void tiles.setOptions({ autoPrizeGiving: on }) }} />}
           {tab === 'replay' && (

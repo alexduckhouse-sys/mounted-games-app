@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Data;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Commerce;
+using MountedGames.Api.Entities.Apple;
 
 namespace MountedGames.Api.Services;
 
@@ -35,6 +36,12 @@ public static class VenueCapacity
             || title.Contains("electric", StringComparison.OrdinalIgnoreCase);
     }
 
+    // Unreviewed historical items retain their existing capacity hold, never a pass entitlement.
+    public static bool ReservesStable(ArrivalFulfilmentKind kind, string title) => kind == ArrivalFulfilmentKind.Stable
+        || (kind == ArrivalFulfilmentKind.Unclassified && IsStableTitle(title));
+    public static bool ReservesHookup(ArrivalFulfilmentKind kind, string title) => kind == ArrivalFulfilmentKind.Hookup
+        || (kind == ArrivalFulfilmentKind.Unclassified && IsHookupTitle(title));
+
     public static async Task<VenueCapacitySnapshot> GetCapacityAsync(
         AppDbContext db,
         int competitionId,
@@ -55,6 +62,7 @@ public static class VenueCapacity
             from m in mj.DefaultIfEmpty()
             where sec.CompetitionId == competitionId
                 && (!excludeSignupId.HasValue || s.Id != excludeSignupId.Value)
+                && !db.Set<ArrivalBooking>().Any(b => b.SignupId == s.Id && b.LegacyReconciledAt != null)
                 && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending)
                 && !e.IsWithdrawn
                 && (!e.IsWaitlist || (e.WaitlistOfferExpiresAt != null && e.WaitlistOfferExpiresAt > nowUtc))
@@ -73,7 +81,7 @@ public static class VenueCapacity
                 && (order.Status == CommerceOrderStatus.AwaitingManualPayment
                     || order.Status == CommerceOrderStatus.AwaitingTestPayment
                     || order.Status == CommerceOrderStatus.Paid)
-            select new { line.TitleSnapshot, line.Quantity }
+            select new { line.FulfilmentKindSnapshot, line.TitleSnapshot, line.Quantity }
         ).ToListAsync(ct);
 
         var shopStables = 0;
@@ -81,8 +89,8 @@ public static class VenueCapacity
         foreach (var line in orderLines)
         {
             var qty = Math.Max(0, line.Quantity);
-            if (IsStableTitle(line.TitleSnapshot)) shopStables += qty;
-            if (IsHookupTitle(line.TitleSnapshot)) shopHookups += qty;
+            if (ReservesStable(line.FulfilmentKindSnapshot, line.TitleSnapshot)) shopStables += qty;
+            if (ReservesHookup(line.FulfilmentKindSnapshot, line.TitleSnapshot)) shopHookups += qty;
         }
 
         var stablesBooked = entryStables + shopStables;

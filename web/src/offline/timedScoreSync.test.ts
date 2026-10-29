@@ -16,7 +16,7 @@ it.each([false, true])('sends durable timing before the score with the same cred
   vi.mocked(client.post).mockResolvedValueOnce({ data: {} }).mockResolvedValueOnce({ data: heat(1) });
   await flushOutbox();
   const prefix = viaLink ? '/scorer' : '';
-  expect(client.post).toHaveBeenNthCalledWith(1, `${prefix}/races/1/start`, { at: q.startedAt }, { timeout: 15000 });
+  expect(client.post).toHaveBeenNthCalledWith(1, `${prefix}/races/1/start`, { at: q.startedAt, expectedProgrammeRevision: 0 }, { timeout: 15000 });
   expect(client.post).toHaveBeenNthCalledWith(2, `${prefix}/races/1/results`, expect.objectContaining({ finishedAt: q.finishedAt }), { timeout: 15000 });
   expect(readOutbox()).toEqual([]);
 });

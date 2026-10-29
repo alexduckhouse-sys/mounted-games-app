@@ -370,6 +370,17 @@ describe('ScorerPage', () => {
     expect(saved?.sessions[0].heats.find((h) => h.id === newer.id)?.races).toHaveLength(2);
   });
 
+  it('retains earlier draft taps separately when the programme changes online', async () => {
+    open(); await opened('Bending');
+    await tapTeams(userEvent.setup(), ['Team 2']);
+    const oldKey = 'mg.draft.scoring:1:11';
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(oldKey)!)).toEqual([{ teamId: 2, place: 1, eliminated: false }]));
+    const newer = heatWith({ races: [race(11, { name: 'Replacement', programmeRevision: 1 }), race(12, { name: 'Flag' })] });
+    act(() => { window.dispatchEvent(new CustomEvent(HEAT_SAVED, { detail: { sessionId: 1, heat: newer } })); });
+    await opened('Replacement'); expect(placed()).toBe(0);
+    expect(JSON.parse(localStorage.getItem(oldKey)!)).toEqual([{ teamId: 2, place: 1, eliminated: false }]);
+  });
+
   it('reloads when the phone comes back online or the page is shown again', async () => {
     open();
     await screen.findByText('Scoring as Sam');

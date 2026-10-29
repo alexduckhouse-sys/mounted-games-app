@@ -18,7 +18,7 @@ export function pointsForPlace(heat: Heat, sessionBase: number, place: number, e
  * those results, so the summary, the heat table and the next lanes don't wait for signal. Only for display.
  */
 export function withQueuedResults(heat: Heat, queued: readonly QueuedScore[], sessionBase: number): Heat {
-  const mine = queued.filter((q) => heat.races.some((r) => r.id === q.raceId));
+  const mine = queued.filter((q) => heat.races.some((r) => r.id === q.raceId && (r.programmeRevision ?? 0) === (q.expectedProgrammeRevision ?? 0)));
   if (mine.length === 0) return heat;
   return {
     ...heat,

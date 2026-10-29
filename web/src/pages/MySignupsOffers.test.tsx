@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
+import type { ArrivalBooking } from '../components/wallet/walletTypes';
 import { autoConfirm } from '../test/confirm';
 import { MySignupsPage, type ExtendedMySignup } from './MySignupsPage';
 
@@ -19,8 +20,8 @@ const signup = (extra: Partial<ExtendedMySignup> = {}): ExtendedMySignup => ({
 });
 const inHours = (h: number) => new Date(Date.now() + h * 3600_000).toISOString();
 
-async function open(rows: ExtendedMySignup[]) {
-  vi.mocked(api.get).mockResolvedValue({ data: rows });
+async function open(rows: ExtendedMySignup[], bookings: ArrivalBooking[] = []) {
+  vi.mocked(api.get).mockImplementation(async url => ({ data: String(url) === '/me/signups' ? rows : String(url).endsWith('/arrival-bookings') ? bookings : [] }) as never);
   render(<MemoryRouter><MySignupsPage /></MemoryRouter>);
   await userEvent.click(await screen.findByRole('button', { name: /Spring Games/ }));
   return within(await screen.findByRole('dialog'));
@@ -73,13 +74,25 @@ describe('my entries: rider, offers and arrival pass', () => {
     expect(await screen.findByText('That spot has already been filled.', undefined, { timeout: 3000 })).toBeInTheDocument();
   });
 
-  it('offers the arrival pass for a paid entry with stabling', async () => {
-    const sheet = await open([signup({ status: 1, stablesCount: 2, stableAssignment: 'Barn B' })]);
-    expect(sheet.getByRole('button', { name: 'Save arrival pass' })).toBeInTheDocument();
+  it('offers an arrival card only from the canonical booking, with its confirmed shop entitlement', async () => {
+    const booking: ArrivalBooking = { id: 'example-booking', competitionId: 11, competitionName: 'Spring Games', startDate: future, endDate: null, venue: null,
+      vehicleRegistration: 'EXAMPLE', reference: 'example-reference', revision: 1, signupId: 1, admission: 'pending', needsReview: false, voided: false, walletAvailable: false,
+      benefits: [{ sourceId: 1, orderLineId: 9, kind: 3, quantity: 2, status: 'paid', fromDate: '2031-05-04', untilDate: '2031-05-06', allocations: [] }] };
+    const sheet = await open([signup({ status: 0 })], [booking]);
+    expect(await sheet.findByRole('button', { name: 'Download arrival card' })).toBeInTheDocument();
+    expect(sheet.getByText('Stabling · 2 · Confirmed')).toBeInTheDocument();
+    expect(sheet.getByText('Admission: Payment pending')).toBeInTheDocument();
+    expect(sheet.queryByRole('button', { name: 'Add to Apple Wallet' })).not.toBeInTheDocument();
   });
 
-  it('has no arrival pass without a payment', async () => {
+  it('does not infer a pass or paid stabling from a paid entry and legacy stable count', async () => {
+    const sheet = await open([signup({ status: 1, stablesCount: 2, stableAssignment: 'Barn B' })]);
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/competitions/11/arrival-bookings', { params: { signupId: 1 } }));
+    expect(sheet.queryByRole('button', { name: 'Download arrival card' })).not.toBeInTheDocument();
+  });
+
+  it('has no arrival card without a canonical booking', async () => {
     const sheet = await open([signup({ status: 0, stablesCount: 2 })]);
-    expect(sheet.queryByRole('button', { name: 'Save arrival pass' })).not.toBeInTheDocument();
+    expect(sheet.queryByRole('button', { name: 'Download arrival card' })).not.toBeInTheDocument();
   });
 });

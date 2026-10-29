@@ -57,7 +57,7 @@ public sealed class WeatherCache : IDisposable
         $"weather:at:{Format(lat)}:{Format(lon)}:{when.ToString("yyyy-MM-ddTHH", CultureInfo.InvariantCulture)}";
 
     public static string ForecastKey(double lat, double lon, DateTime date) =>
-        $"weather:forecast:{Format(lat)}:{Format(lon)}:{date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+        $"weather:forecast:v2:{Format(lat)}:{Format(lon)}:{date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
 
     /// <summary>
     /// Forecasts for the next two days move quickly, so they live for 30 minutes; further out (or

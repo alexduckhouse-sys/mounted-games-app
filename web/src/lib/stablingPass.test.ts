@@ -1,5 +1,7 @@
+import type { ArrivalBooking } from '../components/wallet/walletTypes';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  buildLorryPassFromBooking,
   buildLorryStablingPassFromMySignup,
   buildLorryStablingPassFromSectionSignup,
   buildOfflineWalletPassHtml,
@@ -176,5 +178,47 @@ describe('stablingPass', () => {
     createObjectUrlSpy.mockRestore();
     revokeObjectUrlSpy.mockRestore();
     clickSpy.mockRestore();
+  });
+});
+
+const canonical: ArrivalBooking = { id: 'example', competitionId: 7, competitionName: 'Example & <event>', startDate: '2031-05-04', endDate: null, venue: null,
+  vehicleRegistration: '', reference: 'opaque-example-reference', revision: 3, admission: 'none', needsReview: false, voided: false, walletAvailable: false,
+  benefits: [{ sourceId: 1, orderLineId: 8, kind: 3, quantity: 2, status: 'paid', fromDate: '2031-05-04', untilDate: '2031-05-06', allocations: [{ resource: '<Stable A>', night: '2031-05-04' }] },
+    { sourceId: 2, orderLineId: 9, kind: 4, quantity: 1, status: 'paid', fromDate: '2031-05-04', untilDate: '2031-05-06', allocations: [{ resource: 'Hook-up B', night: '2031-05-05' }] },
+    { sourceId: 3, orderLineId: 10, kind: 3, quantity: 6, status: 'pending', fromDate: '2031-05-04', untilDate: '2031-05-06', allocations: [] }] };
+describe('canonical arrival cards', () => {
+  it('prints only paid shop quantities and allocations, without entrant or signup identifiers', () => {
+    const pass = buildLorryPassFromBooking(canonical, 'https://example.test///');
+    expect(pass.stablesCount).toBe(2); expect(pass.stableAssignment).toBe('<Stable A> (2031-05-04)'); expect(pass.hookupAssignment).toBe('Hook-up B (2031-05-05)');
+    expect(pass.verificationUrl).toBe('https://example.test/competitions/7/entries?arrival=opaque-example-reference');
+    expect(pass.signupId).toBe(0); expect(pass.entrantName).toBe(''); expect(pass.clubOrTeamName).toBe('Example & <event>');
+    const html = buildOfflineWalletPassHtml(pass, '<svg data-example="qr"></svg>');
+    expect(html).toContain('&lt;Stable A&gt; (2031-05-04)'); expect(html).not.toContain('<Stable A>'); expect(html).not.toContain(' · #0');
+    expect(html).toContain('Staff must check this pass online'); expect(html).toContain('@media print'); expect(html).toContain('<svg data-example="qr"></svg>');
+  });
+  it.each(['pending', 'unavailable', 'cancelled', 'conflict', 'review'] as const)('never prints a broad PAID badge for %s admission', admission => {
+    expect(buildLorryPassFromBooking({ ...canonical, benefits: canonical.benefits.slice(0, 2), admission }).paymentStatus).toBe('PENDING');
+  });
+  it.each(['pending', 'unavailable', 'cancelled', 'conflict', 'review'] as const)('never prints a broad PAID badge while a benefit is %s', status => {
+    expect(buildLorryPassFromBooking({ ...canonical, admission: 'paid', benefits: [{ ...canonical.benefits[0], status }] }).paymentStatus).toBe('PENDING');
+  });
+  it('marks an empty booking, a voided booking and a legacy booking as pending', () => {
+    for (const changes of [{ benefits: [] }, { voided: true }, { needsReview: true }]) expect(buildLorryPassFromBooking({ ...canonical, ...changes }).paymentStatus).toBe('PENDING');
+  });
+  it('prints confirmed unallocated stabling without inventing a box, and uses the vehicle label', () => {
+    const pass = buildLorryPassFromBooking({ ...canonical, vehicleRegistration: 'EXAMPLE', benefits: [{ ...canonical.benefits[0], allocations: [] }] });
+    expect(pass.paymentStatus).toBe('PAID'); expect(pass.stableAssignment).toBe('To be allocated'); expect(pass.hookupAssignment).toBeNull(); expect(pass.clubOrTeamName).toBe('EXAMPLE');
+    expect(pass.verificationUrl).toMatch(new RegExp(`^${window.location.origin}`));
+    expect(buildLorryPassFromBooking({ ...canonical, benefits: [] }).stableAssignment).toBe('No paid stabling');
+  });
+  it('downloads the printable canonical card and releases its temporary URL', async () => {
+    const pass = buildLorryPassFromBooking(canonical); let blob!: Blob;
+    vi.spyOn(URL, 'createObjectURL').mockImplementation(value => { blob = value as Blob; return 'blob:example-card'; });
+    const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    let download = ''; const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { download = this.download; });
+    expect(downloadOfflineWalletPass(pass)).toBe('lorry-stabling-pass-7-0.html'); expect(download).toBe('lorry-stabling-pass-7-0.html'); expect(click).toHaveBeenCalledOnce();
+    const text = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsText(blob); });
+    expect(text).toContain('opaque-example-reference'); expect(text).not.toContain('?pass='); expect(blob.type).toBe('text/html;charset=utf-8');
+    expect(document.querySelector('a[download]')).toBeNull(); expect(revoke).toHaveBeenCalledWith('blob:example-card');
   });
 });

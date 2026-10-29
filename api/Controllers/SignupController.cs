@@ -10,6 +10,7 @@ using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Entities.Commerce;
+using MountedGames.Api.Entities.Apple;
 using MountedGames.Api.Entities.Operations;
 using MountedGames.Api.Security;
 using MountedGames.Api.Services;
@@ -673,6 +674,8 @@ public class SignupController : ControllerBase
             .Include(s => s.Section)
             .FirstOrDefaultAsync(s => s.Id == signupId && s.Section!.CompetitionId == competitionId);
         if (signup is null) return NotFound();
+        if (await _db.Set<ArrivalBooking>().AnyAsync(x => x.SignupId == signupId && x.LegacyReconciledAt != null))
+            return Conflict(new { message = "Use the arrival booking to change this allocation or vehicle." });
 
         var ex = await _db.Set<SignupExtras>().FindAsync(signup.Id);
         if (ex is null)
@@ -1907,6 +1910,9 @@ public class SignupController : ControllerBase
             ex = new SignupExtras { SignupId = mySignup.Id };
             _db.Add(ex);
         }
+        if (await _db.Set<ArrivalBooking>().AnyAsync(x => x.SignupId == signupId)
+            && !string.Equals(ex.VehicleRegistration ?? "", vehicleRegistration ?? "", StringComparison.OrdinalIgnoreCase))
+            return Conflict(new { message = "Change the vehicle on its arrival booking." });
         ex.ArrivalWindow = arrivalWindow;
         ex.VehicleRegistration = vehicleRegistration;
         await _db.SaveChangesAsync();
@@ -2287,6 +2293,8 @@ public class SignupController : ControllerBase
             .Include(s => s.Section).ThenInclude(sec => sec!.Competition)
             .FirstOrDefaultAsync(s => s.Id == signupId && s.Section!.CompetitionId == competitionId);
         if (signup is null) return NotFound();
+        if (await _db.Set<ArrivalBooking>().AnyAsync(x => x.SignupId == signupId && x.LegacyReconciledAt != null))
+            return Conflict(new { message = "Use the arrival booking to change this allocation or vehicle." });
 
         var ex = await _db.Set<SignupExtras>().FindAsync(signup.Id);
         var meta = await _db.Set<SignupMatchmaking>().FindAsync(signup.Id);

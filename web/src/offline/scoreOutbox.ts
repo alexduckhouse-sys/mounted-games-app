@@ -23,6 +23,8 @@ export interface QueuedScore {
   /** Unique per save, including two edits made within the same millisecond. */
   saveId?: string;
   raceId: number;
+  expectedProgrammeRevision?: number;
+  programmeChanged?: boolean;
   competitionId: number;
   sessionId: number;
   arenaName?: string;
@@ -91,7 +93,8 @@ export function settle(list: QueuedScore[], sent: QueuedScore, outcome: SendOutc
       return list;
     case 'conflict': {
       const race = outcome.heat.races.find((r) => r.id === sent.raceId);
-      return list.map((q) => same(q) ? { ...q, state: 'conflict', theirs: placingsOf(race?.results ?? []) } : q);
+      const changed = ((race as { programmeRevision?: number } | undefined)?.programmeRevision ?? 0) !== (sent.expectedProgrammeRevision ?? 0);
+      return list.map((q) => same(q) ? { ...q, state: 'conflict', ...(changed ? { programmeChanged: true } : {}), theirs: placingsOf(race?.results ?? []) } : q);
     }
     case 'failed':
       return list.map((q) => same(q) ? { ...q, state: 'failed', error: outcome.message } : q);
@@ -108,7 +111,7 @@ function samePlacings(a: Placing[], b: Placing[]): boolean {
 
 /** Send mine anyway: it now replaces the results the other device saved. */
 export function overrule(list: QueuedScore[], raceId: number, reason?: string): QueuedScore[] {
-  return list.map((q) => q.raceId === raceId && q.state === 'conflict'
+  return list.map((q) => q.raceId === raceId && q.state === 'conflict' && !q.programmeChanged
     ? { ...q, state: 'waiting', expected: q.theirs ?? [], theirs: undefined, ...(reason === undefined ? {} : { reason }) }
     : q);
 }
@@ -231,6 +234,7 @@ export function parseOutboxBackup(
     out.push({
       ...(typeof item.saveId === 'string' && item.saveId ? { saveId: item.saveId } : {}),
       raceId: item.raceId,
+      ...(typeof item.expectedProgrammeRevision === 'number' && Number.isInteger(item.expectedProgrammeRevision) && item.expectedProgrammeRevision >= 0 ? { expectedProgrammeRevision: item.expectedProgrammeRevision } : {}),
       competitionId: compId,
       sessionId: item.sessionId,
       ...(typeof item.arenaName === 'string' ? { arenaName: item.arenaName } : {}),
@@ -260,11 +264,16 @@ export function parseOutboxBackup(
   return out;
 }
 
+export class OutboxProgrammeConflict extends Error {
+  constructor() { super('This backup has scores for a different race programme. Keep both backups and ask the organiser to review them before importing.'); }
+}
+
 /** Merges imported backup scores into the current outbox, replacing older entries for the same race while preserving newer local saves. */
 export function mergeOutboxBackup(existing: QueuedScore[], imported: QueuedScore[]): QueuedScore[] {
   return imported.reduce((acc, item) => {
     const current = acc.find((q) => q.raceId === item.raceId);
     if (current) {
+      if ((current.expectedProgrammeRevision ?? 0) !== (item.expectedProgrammeRevision ?? 0)) throw new OutboxProgrammeConflict();
       const currentMs = Date.parse(current.queuedAt);
       const importedMs = Date.parse(item.queuedAt);
       if (Number.isFinite(currentMs) && Number.isFinite(importedMs) && currentMs > importedMs) {

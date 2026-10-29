@@ -21,6 +21,12 @@ import { listenForInstall } from './hooks/usePwaInstall'
 const root = createRoot(document.getElementById('root')!)
 
 if (isEmbedPath(window.location.pathname)) {
+  // Browser sources must remain transparent while their code/data is still loading.
+  if (/^\/embed\/competitions\/\d+\/overlay\/?$/.test(window.location.pathname)) {
+    document.documentElement.style.background = 'transparent';
+    document.body.style.background = 'transparent';
+    document.getElementById('root')!.style.background = 'transparent';
+  }
   // The widget on a club's site is its own small app. It must not read the visitor's sign-in, saved
   // settings or caches, so it skips the providers, the service worker and the score outbox entirely.
   void import('./pages/embed/EmbedApp').then(({ EmbedApp }) => root.render(

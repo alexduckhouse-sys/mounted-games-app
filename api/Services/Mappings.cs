@@ -156,7 +156,7 @@ public static class Mappings
         r.Id, r.HeatId, r.Name, r.OrderIndex, r.IsComplete,
         r.StartedAt, r.FinishedAt,
         r.Results.OrderBy(x => x.Placing ?? int.MaxValue).Select(x => x.ToDto()).ToList(),
-        r.HasOpenProtest, r.StartIsExplicit);
+        r.HasOpenProtest, r.ProgrammeRevision, r.StartIsExplicit);
 
     public static HeatDto ToDto(this Heat h) => new(
         h.Id, h.SessionId, h.Label, h.OrderIndex,

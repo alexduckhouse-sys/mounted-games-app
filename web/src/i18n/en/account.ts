@@ -2,6 +2,8 @@ import type { Message } from '../messages';
 
 /** Me, My account, My entries, My teams, the dec forms index and what needs the person. */
 export const account = {
+  "account.account.exportEventData": "Download my arrival and vaccination records",
+  "account.account.exportFailed": "Your records could not be downloaded. Please try again.",
   'account.role.admin': 'Admin',
   'account.role.manager': 'Team manager',
   'account.role.trainer': 'Trainer',

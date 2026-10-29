@@ -144,7 +144,7 @@ export function ScoringSection({
   onAddRace, onRenameRace, onRerunRace, runoffTeams, onPickRunoffWinner, heatTools, protestCompetitionId,
 }: ScoringProps) {
   const t = useT();
-  const localStart = useRaceStart(activeRace?.id, activeRace?.startIsExplicit ? activeRace.startedAt : null, activeRace?.isComplete);
+  const localStart = useRaceStart(activeRace?.id, activeRace?.startIsExplicit ? activeRace.startedAt : null, activeRace?.isComplete, activeRace?.programmeRevision ?? 0);
   const [skippedStart, setSkippedStart] = useState<number | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const [sheet, setSheet] = useState(false);
@@ -416,11 +416,11 @@ export function ScoringSection({
               </Notice>
             )}
 
-            {localStart?.error && <Notice>{localStart.error} <button type="button" className="underline" onClick={() => { if (discardRaceStart(activeRace.id)) setSkippedStart(activeRace.id); }}>{t('timing.skip')}</button></Notice>}
+            {localStart?.error && <Notice>{localStart.error} <button type="button" className="underline" onClick={() => { if (discardRaceStart(activeRace.id, activeRace.programmeRevision ?? 0)) setSkippedStart(activeRace.id); }}>{t('timing.skip')}</button></Notice>}
             {needsStart && <div className="space-y-2 px-3 py-2 text-center">
               {startError && <Notice>{startError}</Notice>}
               <button type="button" className="mg-btn mg-btn-primary" onClick={() => {
-                if (!queueRaceStart(activeRace.id, viaScorerLink)) {
+                if (!queueRaceStart(activeRace.id, viaScorerLink, undefined, activeRace.programmeRevision ?? 0)) {
                   setStartError(t('timing.storage'));
                 } else setStartError(null);
               }}>{t('timing.start')}</button>

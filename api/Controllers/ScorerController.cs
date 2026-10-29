@@ -14,7 +14,7 @@ namespace MountedGames.Api.Controllers;
 /// <summary>
 /// What a scorer link can do: read its competition's timetable, and enter or replace scores in every arena.
 /// No account, no JWT: <see cref="ScorerLinkAccessAttribute"/> checks the <c>X-Scorer-Token</c> header. There is
-/// deliberately no clock, sign-off, timetable, team, entry or chat action here. A race outside the link's
+/// deliberately no stop-clock, sign-off, timetable, team, entry or chat action here. A race outside the link's
 /// competition is 404, exactly as if it didn't exist. Scores still go through <see cref="ScoringService"/>.
 /// </summary>
 [ApiController]
@@ -102,7 +102,8 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
             return BadRequest(new { message = "Note must be 1000 characters or fewer." });
         try
         {
-            await scoring.ApplyLegacyAsync(raceId, req.Places, req.Expected, null, req.Reason, ct, ActorLabel, req.FinishedAt);
+            await scoring.ApplyLegacyAsync(raceId, req.Places, req.Expected, null, req.Reason, ct, ActorLabel,
+                expectedProgrammeRevision: req.ExpectedProgrammeRevision, finishedAt: req.FinishedAt);
         }
         catch (ScoreConflictException ex) { return await ConflictAsync(race, ex.Message); }
         catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
@@ -127,12 +128,13 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
         try
         {
             var race = await scoring.UpdateRaceClockAsync(raceId, true,
-                request.At ?? DateTime.UtcNow, request.At is not null, ct);
+                request.At ?? DateTime.UtcNow, request.At is not null, ct, request.ExpectedProgrammeRevision);
             await BroadcastAsync(raceId);
             return race.ToDto();
         }
         catch (KeyNotFoundException) { return NotFound(); }
         catch (ScoreValidationException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (ScoreConflictException ex) { return Conflict(new { message = ex.Message }); }
         catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
         catch (Exception ex) when (ScoringController.IsScoringConcurrency(ex))
         { return Conflict(new { message = "The race changed on another device. Try again." }); }
@@ -148,26 +150,30 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
         if (!SessionsController.TryNormalizeGateCheckStatus(req.Status, out var normalizedStatus))
             return BadRequest(new { message = "Status must be 'at-gate', 'warming-up', 'missing', or null." });
 
-        var heat = await db.Heats
-            .Include(h => h.Session)
-            .Include(h => h.Entries)
-            .FirstOrDefaultAsync(h => h.Id == heatId && h.Session!.CompetitionId == Link.CompetitionId, ct);
-        if (heat?.Session is null) return NotFound();
+        var outcome = await WindRaceGuard.WithTimetableLockAsync<ActionResult<SessionDto>>(db, Link.CompetitionId, async () =>
+        {
+            var heat = await db.Heats
+                .Include(h => h.Session)
+                .Include(h => h.Entries)
+                .FirstOrDefaultAsync(h => h.Id == heatId && h.Session!.CompetitionId == Link.CompetitionId, ct);
+            if (heat?.Session is null) return NotFound();
 
-        if (!heat.Entries.Any(e => e.TeamId == req.TeamId))
-            return BadRequest(new { message = "Team is not in this heat." });
+            if (!heat.Entries.Any(e => e.TeamId == req.TeamId))
+                return BadRequest(new { message = "Team is not in this heat." });
 
-        heat.Session.Notes = SessionsController.ApplyGateCheckNote(heat.Session.Notes, heatId, req.TeamId, normalizedStatus);
-        await db.SaveChangesAsync(ct);
+            heat.Session.Notes = SessionsController.ApplyGateCheckNote(heat.Session.Notes, heatId, req.TeamId, normalizedStatus);
+            await db.SaveChangesAsync(ct);
 
-        var session = await db.Sessions.AsNoTracking()
-            .Include(s => s.Section)
-            .Include(s => s.Heats).ThenInclude(h => h.Entries).ThenInclude(e => e.Team)
-            .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
-            .FirstAsync(s => s.Id == heat.SessionId, ct);
-        var dto = session.ToDto();
-        await live.SessionUpdated(Link.CompetitionId, dto);
-        return dto;
+            var session = await db.Sessions.AsNoTracking()
+                .Include(s => s.Section)
+                .Include(s => s.Heats).ThenInclude(h => h.Entries).ThenInclude(e => e.Team)
+                .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team)
+                .FirstAsync(s => s.Id == heat.SessionId, ct);
+            var dto = session.ToDto();
+            return dto;
+        }, ct);
+        if (outcome.Value is { } dto) await live.SessionUpdated(Link.CompetitionId, dto);
+        return outcome;
     }
 
     /// <summary>True only for a race in this link's competition.</summary>

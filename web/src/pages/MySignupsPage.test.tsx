@@ -18,11 +18,12 @@ const signup = (id: number, extra: Partial<MySignup> = {}): MySignup => ({
   id, competitionId: id + 10, competitionName: `Event ${id}`, competitionStart: future, competitionSectionId: 1, sectionName: 'Under 14', fullName: 'Ellie Hart',
   amountMinor: 1800, status: 0, createdAt: '2026-10-01T00:00:00Z', ...extra,
 });
+const mockSignups = (rows: ExtendedMySignup[]) => vi.mocked(api.get).mockImplementation(async url => ({ data: String(url) === '/me/signups' ? rows : [] }) as never);
 const mount = () => render(<MemoryRouter><MySignupsPage /></MemoryRouter>);
 
 beforeEach(() => {
   auth.user = { id: 'u1' };
-  vi.mocked(api.get).mockResolvedValue({ data: [] });
+  mockSignups([]);
 });
 
 const openRow = async (name: string | RegExp) => {
@@ -54,12 +55,12 @@ describe('MySignupsPage', () => {
   });
 
   it('shows one plain row per entry, coming up and past, with the status on the right', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: [
+    mockSignups([
       signup(1, { teamName: 'Stockport A', sectionName: 'Teams Open' }),
       signup(2, { status: 1, paidAt: '2026-10-12T10:00:00Z', amountMinor: 9500 }),
       signup(3, { competitionStart: old, status: 2 }),
       signup(4, { competitionStart: old, status: 3, amountMinor: 0 }),
-    ] });
+    ]);
     mount();
     const coming = await screen.findByRole('region', { name: 'Coming up' });
     const past = screen.getByRole('region', { name: 'Past' });
@@ -78,7 +79,7 @@ describe('MySignupsPage', () => {
   });
 
   it('says Demo paid for an entry paid through the demo checkout, and Paid for the rest', async () => {
-    vi.mocked(api.get).mockImplementation(async (url) => (String(url) === '/commerce/entry-payments/mine'
+    vi.mocked(api.get).mockImplementation(async (url) => (String(url).includes('/arrival-') ? { data: [] } : String(url) === '/commerce/entry-payments/mine'
       ? { data: [{ id: 5, target: 1, targetId: 1, isTest: true, status: 0 }, { id: 6, target: 0, targetId: 2, isTest: true, status: 0 }] }
       : { data: [signup(1, { status: 1, paidAt: '2026-10-12T10:00:00Z' }), signup(2, { status: 1, paidAt: '2026-10-12T10:00:00Z' })] }) as never);
     mount();
@@ -93,6 +94,7 @@ describe('MySignupsPage', () => {
 
   it('reads Paid when the list of demo payments can’t be loaded', async () => {
     vi.mocked(api.get).mockImplementation(async (url) => {
+      if (String(url).includes('/arrival-')) return { data: [] } as never;
       if (String(url) === '/commerce/entry-payments/mine') throw new Error('offline');
       return { data: [signup(1, { status: 1 })] } as never;
     });
@@ -101,7 +103,7 @@ describe('MySignupsPage', () => {
   });
 
   it('opens a sheet for an unpaid entry with How to pay, to the event’s details', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: [signup(1), signup(2, { status: 1 })] });
+    mockSignups([signup(1), signup(2, { status: 1 })]);
     mount();
     const sheet = await openRow(/^Event 1/);
     const pay = sheet.getByRole('link', { name: 'How to pay for Event 1' });
@@ -116,7 +118,7 @@ describe('MySignupsPage', () => {
   });
 
   it('shows the Pony Club inside the sheet, and the demo payment note for paid entries only', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: [signup(1, { ponyClubName: 'Cheshire PC' }), signup(2, { amountMinor: 0 })] });
+    mockSignups([signup(1, { ponyClubName: 'Cheshire PC' }), signup(2, { amountMinor: 0 })]);
     mount();
     const first = await openRow(/^Event 1/);
     expect(first.getByText('Pony Club: Cheshire PC')).toBeInTheDocument();
@@ -130,7 +132,7 @@ describe('MySignupsPage', () => {
     vi.mocked(api.get).mockRejectedValue(new Error('offline'));
     mount();
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load your entries. Check your signal and try again.');
-    vi.mocked(api.get).mockResolvedValue({ data: [signup(3)] });
+    mockSignups([signup(3)]);
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByText('Event 3')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).toBeNull();
@@ -146,7 +148,7 @@ describe('MySignupsPage', () => {
   });
 
   it('shows an incoming pair request as its own small card at the top, and lets a rider accept it', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: [incoming()] });
+    mockSignups([incoming()]);
     vi.mocked(api.post).mockResolvedValue({
       data: { ...incoming(), lookingForPair: false, teamId: 22, teamName: 'Alice Partner & Ellie Hart', pairRequestStatus: 'Accepted' },
     });
@@ -162,7 +164,7 @@ describe('MySignupsPage', () => {
   });
 
   it('lets a rider decline a pair request, and says so when that fails', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: [incoming()] });
+    mockSignups([incoming()]);
     vi.mocked(api.post).mockRejectedValue(new Error('offline'));
     mount();
     await userEvent.click(await screen.findByRole('button', { name: 'Decline pair request from Alice Partner' }));
@@ -173,7 +175,7 @@ describe('MySignupsPage', () => {
   });
 
   it('says in the sheet when a pair request was sent and is waiting', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: [{ ...signup(6), pairRequestToSignupId: 7, pairRequestToName: 'Bea Rider', pairRequestStatus: 'Pending', lookingForPair: true, stablesCount: 1, waitingForGuestSpot: true, lookingForGuestRiders: true }] });
+    mockSignups([{ ...signup(6), pairRequestToSignupId: 7, pairRequestToName: 'Bea Rider', pairRequestStatus: 'Pending', lookingForPair: true, stablesCount: 1, waitingForGuestSpot: true, lookingForGuestRiders: true }]);
     mount();
     const sheet = await openRow(/^Event 6/);
     expect(sheet.getByText('Pair request sent to Bea Rider, waiting for an answer')).toBeInTheDocument();
@@ -190,7 +192,7 @@ describe('MySignupsPage', () => {
       stablingClubOrTeam: 'Cheshire PC',
       drawComplete: false,
     };
-    vi.mocked(api.get).mockResolvedValue({ data: [entry] });
+    mockSignups([entry]);
     vi.mocked(api.post).mockResolvedValue({
       data: { ...entry, status: 3, isWithdrawn: true, refundPending: true, teamId: null, teamName: null },
     });
@@ -210,7 +212,7 @@ describe('MySignupsPage', () => {
 
   it('does nothing when the rider changes their mind, and says so when withdrawing fails', async () => {
     const entry: ExtendedMySignup = { ...signup(8, { status: 1, amountMinor: 4000, teamName: 'Cheshire A' }), drawComplete: false };
-    vi.mocked(api.get).mockResolvedValue({ data: [entry] });
+    mockSignups([entry]);
     vi.mocked(api.post).mockRejectedValue(new Error('offline'));
     mount();
     autoConfirm(false);
@@ -224,7 +226,7 @@ describe('MySignupsPage', () => {
 
   it('shows the API’s draw-happened message when the draw was made after the page loaded', async () => {
     const entry: ExtendedMySignup = { ...signup(8, { status: 1, amountMinor: 4000, teamName: 'Cheshire A' }), drawComplete: false };
-    vi.mocked(api.get).mockResolvedValue({ data: [entry] });
+    mockSignups([entry]);
     vi.mocked(api.post).mockRejectedValue({ response: { status: 409, data: { code: 'draw-happened', message: 'You can’t withdraw once the draw has happened.' } } });
     mount();
     autoConfirm(true);
@@ -235,7 +237,7 @@ describe('MySignupsPage', () => {
 
   it('keeps the signal advice for a 409 that is not about the draw', async () => {
     const entry: ExtendedMySignup = { ...signup(8, { status: 1, amountMinor: 4000, teamName: 'Cheshire A' }), drawComplete: false };
-    vi.mocked(api.get).mockResolvedValue({ data: [entry] });
+    mockSignups([entry]);
     vi.mocked(api.post).mockRejectedValue({ response: { status: 409, data: { message: 'This entry is no longer active.' } } });
     mount();
     autoConfirm(true);
@@ -244,7 +246,7 @@ describe('MySignupsPage', () => {
   });
 
   it('hides Withdraw once the draw has taken place', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: [{ ...signup(9, { status: 1, amountMinor: 4000 }), drawComplete: true }] });
+    mockSignups([{ ...signup(9, { status: 1, amountMinor: 4000 }), drawComplete: true }]);
     mount();
     const sheet = await openRow(/^Event 9/);
     expect(sheet.queryByRole('button', { name: 'Withdraw' })).not.toBeInTheDocument();
@@ -254,26 +256,26 @@ describe('MySignupsPage', () => {
 
 describe('withdrawal and trusted multi-team declarations', () => {
   it('shows completed refunds rather than stale withdrawal text', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: [{ ...signup(1, { status: 2 }), isWithdrawn: true, refundPending: false }] });
+    mockSignups([{ ...signup(1, { status: 2 }), isWithdrawn: true, refundPending: false }]);
     mount();
     expect(await screen.findByText('Refunded')).toBeInTheDocument();
     expect(screen.queryByText('Refund pending')).not.toBeInTheDocument();
   });
 
   it('shows a withdrawn entry and a waiting-list entry in plain words', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: [{ ...signup(1, { status: 3 }), isWithdrawn: true }, { ...signup(2), isWaitlist: true }] });
+    mockSignups([{ ...signup(1, { status: 3 }), isWithdrawn: true }, { ...signup(2), isWaitlist: true }]);
     mount();
     expect(await screen.findByText('Withdrawn')).toBeInTheDocument();
     expect(screen.getByText('Waiting list')).not.toHaveClass('sp-st-amber');
   });
 
   it('links every granted team in the sheet, and keeps the primary-team fallback', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: [
+    mockSignups([
       { ...signup(1, { status: 1 }), declarationAccessGranted: true, linkedTeams: [{ id: 21, name: 'Synthetic A' }, { id: 22, name: 'Synthetic B' }] },
       { ...signup(2, { status: 1, teamId: 23, teamName: 'Synthetic C' }), declarationAccessGranted: true },
       { ...signup(3, { status: 1 }), declarationAccessGranted: false, linkedTeams: [{ id: 24, name: 'Untrusted' }] },
       { ...signup(4, { status: 3 }), declarationAccessGranted: true, linkedTeams: [{ id: 25, name: 'Cancelled' }] },
-    ] });
+    ]);
     mount();
     const many = await openRow(/^Event 1/);
     expect(many.getByRole('link', { name: 'Dec form for Synthetic A' })).toHaveAttribute('href', '/competitions/11/declarations?team=21');
@@ -289,7 +291,7 @@ describe('withdrawal and trusted multi-team declarations', () => {
 });
 
 it('keeps withdrawal available after the event starts if no draw exists', async () => {
-  vi.mocked(api.get).mockResolvedValue({ data: [{ ...signup(1, { competitionStart: old, status: 1 }), drawComplete: false }] });
+  mockSignups([{ ...signup(1, { competitionStart: old, status: 1 }), drawComplete: false }]);
   mount();
   expect((await openRow(/^Event 1/)).getByRole('button', { name: 'Withdraw' })).toBeInTheDocument();
 });

@@ -128,6 +128,10 @@ builder.Services.AddScoped<ScoringService>();
 builder.Services.AddSingleton<ScorerTokenGuard>();
 builder.Services.AddScoped<RaceFinalService>();
 builder.Services.AddScoped<StandingsService>();
+MountedGames.Api.Services.Apple.AppleFeatures.AddAppleFeatures(builder.Services, builder.Configuration);
+builder.Services.AddHostedService<WindDecisionDelivery>();
+MountedGames.Api.Services.Vaccinations.VaccinationFeature.AddVaccinationChecks(builder.Services);
+builder.Services.AddScoped<MountedGames.Api.Services.Broadcast.BroadcastService>();
 builder.Services.AddSingleton<CompetitionSnapshotCache>();
 builder.Services.AddScoped<MountedGames.Api.Services.EventTools.ResultsBookService>();
 builder.Services.AddScoped<MountedGames.Api.Services.EventTools.EventArchiveService>();
@@ -216,7 +220,12 @@ builder.Services.Configure<GzipCompressionProviderOptions>(o => o.Level = Compre
 builder.Services.AddRequestLimits(builder.Configuration);
 builder.Services.AddTrustedProxies(builder.Configuration);
 builder.Services.AddProblemDetails();
-builder.Services.AddControllers(o => o.Filters.Add<JsonEtagResultFilter>());
+builder.Services.AddScoped<MountedGames.Api.Services.Broadcast.BroadcastCaptureFilter>();
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add<MountedGames.Api.Services.Broadcast.BroadcastCaptureFilter>();
+    options.Filters.Add<JsonEtagResultFilter>();
+});
 builder.Services.AddOpenApi();
 var signalR = builder.Services.AddSignalR();
 // With several API instances (Vercel scales the container out), Redis carries hub messages between them.

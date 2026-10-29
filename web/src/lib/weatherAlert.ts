@@ -14,6 +14,10 @@ export type Hazard = 'thunder' | 'rain';
 export interface ForecastHour {
   /** The start of the hour, as a Unix time in milliseconds. */
   startsAt: number;
+  /** Maximum gust in the preceding hour; unknown when absent. */
+  gustMph?: number | null;
+  fetchedAt?: number;
+  venueZone?: string;
   weatherCode: number | null;
   /** Millimetres of rain in the hour. */
   rainMm: number | null;
@@ -52,21 +56,30 @@ const finite = (value: unknown): value is number => typeof value === 'number' &&
  */
 export function parseForecastHours(data: unknown): ForecastHour[] | null {
   if (!data || typeof data !== 'object') return null;
-  const body = data as { error?: unknown; fallback?: unknown; utc_offset_seconds?: unknown; hourly?: Record<string, unknown> };
+  const body = data as { error?: unknown; fallback?: unknown; utc_offset_seconds?: unknown; fetchedAt?: unknown; timezone?: unknown; gustIntervals?: unknown; hourly?: Record<string, unknown> };
   if (body.error || body.fallback || !body.hourly || !Array.isArray(body.hourly.time)) return null;
   const offset = body.utc_offset_seconds;
   const column = (name: string): unknown[] => (Array.isArray(body.hourly?.[name]) ? body.hourly[name] as unknown[] : []);
   const codes = column('weather_code');
   const rain = column('precipitation');
   const chance = column('precipitation_probability');
+  const gusts = new Map<number, number>();
+  if (Array.isArray(body.gustIntervals)) for (const value of body.gustIntervals) {
+    if (!value || typeof value !== 'object') continue;
+    const g = value as Record<string, unknown>;
+    if (finite(g.endsAt) && finite(g.startsAt) && g.endsAt - g.startsAt === 3600 && finite(g.gustMph) && g.gustMph >= 0) gusts.set(g.endsAt, g.gustMph);
+  }
+  const fetchedAt = typeof body.fetchedAt === 'string' ? Date.parse(body.fetchedAt) : NaN;
   const hours: ForecastHour[] = [];
   body.hourly.time.forEach((raw, i) => {
-    if (typeof raw !== 'string') return;
-    const zoned = /(?:Z|[+-]\d{2}:\d{2})$/i.test(raw);
-    const startsAt = zoned ? Date.parse(raw) : finite(offset) ? Date.parse(`${raw}Z`) - offset * 1000 : Date.parse(raw);
+    if (typeof raw !== 'string' && !finite(raw)) return;
+    if (finite(raw) && (raw < 946684800 || raw > 7258118400)) return;
+    const zoned = /(?:Z|[+-]\d{2}:\d{2})$/i.test(String(raw));
+    const startsAt = finite(raw) ? raw * 1000 : zoned ? Date.parse(String(raw)) : finite(offset) ? Date.parse(`${raw}Z`) - offset * 1000 : Date.parse(String(raw));
     if (!Number.isFinite(startsAt)) return;
     hours.push({
       startsAt,
+      ...(finite(raw) ? { gustMph: gusts.get(raw) ?? null, fetchedAt, venueZone: typeof body.timezone === 'string' ? body.timezone : undefined } : {}),
       weatherCode: finite(codes[i]) ? codes[i] : null,
       rainMm: finite(rain[i]) ? rain[i] : null,
       rainChance: finite(chance[i]) ? chance[i] : null,
@@ -156,16 +169,17 @@ const arenaOf = (session: Session) => session.arenaName?.trim() ?? '';
 const unfinished = (session: Session) => session.status !== 2;
 
 /** Why a session was paused, from the `[pausefor:thunder]` tag the pause request leaves in its notes. */
-export function parsePauseReason(notes?: string | null): Hazard | null {
-  const reason = notes?.match(/\[pausefor:(thunder|rain)\]/)?.[1];
-  return reason === 'thunder' || reason === 'rain' ? reason : null;
+export function parsePauseReason(notes?: string | null): Hazard | 'wind' | null {
+  if (notes?.includes('[pausefor:wind]')) return 'wind';
+  const reason = notes?.match(/\[pausefor:(thunder|rain|wind)\]/)?.[1];
+  return reason === 'thunder' || reason === 'rain' || reason === 'wind' ? reason : null;
 }
 
 export interface PauseState {
   /** Every unfinished session is paused (for any reason). */
   allPaused: boolean;
   /** Sessions paused for weather, if there are any. */
-  weather: { kind: Hazard; pausedAt: number; arenas: string[] } | null;
+  weather: { kind: Hazard | 'wind'; pausedAt: number; arenas: string[] } | null;
 }
 
 export function pauseState(sessions: Session[]): PauseState {
@@ -173,7 +187,7 @@ export function pauseState(sessions: Session[]): PauseState {
   const paused = open.filter((s) => parsePausedAtMs(s.notes) != null);
   const forWeather = paused.filter((s) => parsePauseReason(s.notes) != null);
   const weather = forWeather.length === 0 ? null : {
-    kind: forWeather.some((s) => parsePauseReason(s.notes) === 'thunder') ? 'thunder' as const : 'rain' as const,
+    kind: forWeather.some((s) => parsePauseReason(s.notes) === 'wind') ? 'wind' as const : forWeather.some((s) => parsePauseReason(s.notes) === 'thunder') ? 'thunder' as const : 'rain' as const,
     pausedAt: Math.min(...forWeather.map((s) => parsePausedAtMs(s.notes) as number)),
     arenas: [...new Set(forWeather.map(arenaOf))],
   };
@@ -202,7 +216,7 @@ export const racingToCome = (sessions: Session[]) => sessions.some((s) => sessio
 export type WeatherLineState =
   | { phase: 'none' }
   | { phase: 'warn'; run: HazardRun }
-  | { phase: 'paused'; kind: Hazard; forecastKnown: boolean }
+  | { phase: 'paused'; kind: Hazard | 'wind'; forecastKnown: boolean }
   | { phase: 'clear'; kind: Hazard; since: number };
 
 /**
@@ -213,7 +227,7 @@ export function weatherLineState(input: { now: number; hours: ForecastHour[] | n
   const { now, hours, sessions, snoozes } = input;
   const { weather } = pauseState(sessions);
   if (weather) {
-    if (!hours) return { phase: 'paused', kind: weather.kind, forecastKnown: false };
+    if (!hours || weather.kind === 'wind') return { phase: 'paused', kind: weather.kind, forecastKnown: !!hours };
     const status = clearStatus(hours, weather.kind, weather.pausedAt, now);
     return status.clear
       ? { phase: 'clear', kind: weather.kind, since: status.since }

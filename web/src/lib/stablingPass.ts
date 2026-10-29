@@ -1,3 +1,4 @@
+import type { ArrivalBooking } from '../components/wallet/walletTypes';
 import type { CompetitionDetail, MySignup, SectionSignup, SignupPaymentStatus } from '../types';
 import { clubLabel } from './clubName';
 
@@ -183,7 +184,7 @@ export function buildOfflineWalletPassHtml(
 </head>
 <body>
   <article class="card">
-    <p class="kicker">Lorry Windscreen &amp; Stabling Pass · #${escapeHtml(String(pass.signupId))}</p>
+    <p class="kicker">Lorry &amp; Stabling Pass${pass.signupId ? ` · #${escapeHtml(String(pass.signupId))}` : ''}</p>
     <h1 class="title">${escapeHtml(pass.clubOrTeamName)}</h1>
     <p class="sub">${escapeHtml(pass.competitionName)} · ${escapeHtml(venueLine)}</p>
     <span class="badge">${escapeHtml(pass.paymentStatus)}</span>
@@ -222,4 +223,24 @@ export function downloadOfflineWalletPass(
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   return filename;
+}
+
+
+/** One projection feeds the HTML card, booking screen, Wallet and staff gate check. */
+export function buildLorryPassFromBooking(booking: ArrivalBooking, origin?: string): LorryStablingPassData {
+  const base = (origin ?? window.location.origin).replace(/\/+$/, '');
+  const paid = booking.benefits.filter(x => x.status === 'paid');
+  const stables = paid.filter(x => x.kind === 3);
+  const hooks = paid.filter(x => x.kind === 4);
+  const path = `/competitions/${booking.competitionId}/entries?arrival=${booking.reference}`;
+  const statuses = [booking.admission, ...booking.benefits.map(x => x.status)];
+  const confirmed = statuses.some(status => status === 'paid') && statuses.every(status => status === 'paid' || status === 'none');
+  return { signupId: 0, competitionId: booking.competitionId, competitionName: booking.competitionName,
+    competitionStart: booking.startDate, competitionEnd: booking.endDate, venueLocation: booking.venue,
+    venuePostcode: null, venueWhat3Words: null, sectionName: '', clubOrTeamName: booking.vehicleRegistration || booking.competitionName,
+    entrantName: '', paymentStatus: !booking.voided && !booking.needsReview && confirmed ? 'PAID' : 'PENDING',
+    stablesCount: stables.reduce((sum, x) => sum + x.quantity, 0),
+    stableAssignment: stables.flatMap(x => x.allocations.map(a => `${a.resource} (${a.night})`)).join(', ') || (stables.length ? 'To be allocated' : 'No paid stabling'),
+    hookupAssignment: hooks.flatMap(x => x.allocations.map(a => `${a.resource} (${a.night})`)).join(', ') || null,
+    vehicleRegistration: booking.vehicleRegistration, arrivalNotes: 'Staff must check this pass online. A saved card may have changed since it was downloaded.', verificationPath: path, verificationUrl: base + path };
 }

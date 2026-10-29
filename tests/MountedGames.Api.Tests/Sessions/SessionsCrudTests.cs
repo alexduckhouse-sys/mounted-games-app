@@ -15,6 +15,17 @@ public class SessionsCrudTests : IClassFixture<ApiFactory>
 
     private static string Url(Arena a, string suffix = "") => $"/api/competitions/{a.CompetitionId}/sessions{suffix}";
 
+    private static async Task<object> ProgrammeAsync(HttpClient client, Arena arena)
+    {
+        var session = await (await client.GetAsync(Url(arena, $"/{arena.SessionId}"))).ReadAsync<SessionDto>();
+        return new {
+            plannedRaces = session.PlannedRaces ?? [], heatIds = session.Heats.Select(h => h.Id).ToArray(),
+            races = session.Heats.SelectMany(h => h.Races.Select(r => new {
+                raceId = r.Id, heatId = h.Id, r.OrderIndex, r.Name, r.ProgrammeRevision,
+            })).ToArray(),
+        };
+    }
+
     private static CreateSessionRequest NewSession(int? sectionId = null, string name = "New session", int order = 5,
         bool isBreak = false, SessionKind? kind = null)
         => new(sectionId, name, "Arena 1", new DateTime(2030, 5, 1, 9, 0, 0, DateTimeKind.Utc), order, "notes", isBreak, 30, kind, "Main ring");
@@ -511,24 +522,24 @@ public class SessionsCrudTests : IClassFixture<ApiFactory>
         var r = await admin.DeleteAsync(Url(a, $"/{a.SessionId}/races/{races[0]}"));
 
         Assert.Equal(HttpStatusCode.Conflict, r.StatusCode);
-        Assert.Contains("can't be cancelled", (await r.ReadAsync<System.Text.Json.JsonElement>()).GetProperty("message").GetString());
+        Assert.Contains("cannot be cancelled", (await r.ReadAsync<System.Text.Json.JsonElement>()).GetProperty("message").GetString());
         Assert.True(await _f.InDbAsync(db => db.Races.AnyAsync(x => x.Id == races[0])));
     }
 
     [Fact]
-    public async Task CancelRace_Succeeds_OnceItsResultsHaveBeenCleared()
+    public async Task CancelRace_PreservesScoringHistory_AfterResultsHaveBeenCleared()
     {
         var (a, _, _, races) = await ScoredTwoHeatSessionAsync();
         var admin = await _f.AdminAsync();
         Assert.Equal(HttpStatusCode.Conflict, (await admin.DeleteAsync(Url(a, $"/{a.SessionId}/races/{races[0]}"))).StatusCode);
 
-        // Cancelling a race removes the same-numbered race from every heat, so both must be cleared.
+        // Clear both heats for a rerun; this must not allow the recorded contest to be deleted.
         foreach (var raceId in races)
             Assert.True((await admin.DeleteAsync($"/api/sessions/races/{raceId}/results")).IsSuccessStatusCode);
 
         var r = await admin.DeleteAsync(Url(a, $"/{a.SessionId}/races/{races[0]}"));
-        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
-        Assert.False(await _f.InDbAsync(db => db.Races.AnyAsync(x => x.Id == races[0])));
+        Assert.Equal(HttpStatusCode.Conflict, r.StatusCode);
+        Assert.True(await _f.InDbAsync(db => db.Races.AnyAsync(x => x.Id == races[0])));
     }
 
     [Fact]
@@ -549,7 +560,7 @@ public class SessionsCrudTests : IClassFixture<ApiFactory>
         });
         var name = await _f.InDbAsync(db => db.Races.Where(r => r.Id == heat.RaceIds[0]).Select(r => r.Name).SingleAsync());
 
-        var res = await admin.PutAsJsonAsync(Url(arena, $"/{arena.SessionId}/races"), new { raceNames = new[] { name, "Extra game" } });
+        var res = await admin.PutAsJsonAsync(Url(arena, $"/{arena.SessionId}/races"), new { raceNames = new[] { name, "Extra game" }, expectedProgramme = await ProgrammeAsync(admin, arena) });
 
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
         var s = await _f.InDbAsync(db => db.Sessions.AsNoTracking().SingleAsync(x => x.Id == arena.SessionId));
@@ -830,7 +841,7 @@ public class SessionsCrudTests : IClassFixture<ApiFactory>
             await db.SaveChangesAsync();
         });
 
-        var res = await admin.PutAsJsonAsync(Url(a, $"/{a.SessionId}/races"), new { raceNames = new[] { "Bending", "Mug", "Flag" } });
+        var res = await admin.PutAsJsonAsync(Url(a, $"/{a.SessionId}/races"), new { raceNames = new[] { "Bending", "Mug", "Flag" }, expectedProgramme = await ProgrammeAsync(admin, a) });
 
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
         var updated = await res.ReadAsync<SessionDto>();
@@ -856,6 +867,44 @@ public class SessionsCrudTests : IClassFixture<ApiFactory>
         Assert.Equal(start.AddMinutes(15), sessions.Single(s => s.Id == a.SessionId).ScheduledStart);
     }
     [Fact]
+    public async Task UpdateSessionRaces_MissingProgramme_IsRejectedWithoutChangingRaces()
+    {
+        var arena = await _f.CreateArenaAsync();
+        await _f.AddHeatAsync(arena.SessionId, arena.TeamIds);
+        var admin = await _f.AdminAsync();
+        var before = await admin.GetStringAsync(Url(arena, $"/{arena.SessionId}"));
+        var response = await admin.PutAsJsonAsync(Url(arena, $"/{arena.SessionId}/races"), new { raceNames = new[] { "Replacement" } });
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal(before, await admin.GetStringAsync(Url(arena, $"/{arena.SessionId}")));
+    }
+
+    [Fact]
+    public async Task UpdateSessionRaces_CompetingEdits_OnlyOneCanReplaceTheSameProgramme()
+    {
+        var arena = await _f.CreateArenaAsync();
+        await _f.AddHeatAsync(arena.SessionId, arena.TeamIds);
+        var admin = await _f.AdminAsync();
+        var expectedProgramme = await ProgrammeAsync(admin, arena);
+        var responses = await Task.WhenAll(new[] { "First replacement", "Second replacement" }.Select(name =>
+            admin.PutAsJsonAsync(Url(arena, $"/{arena.SessionId}/races"), new { raceNames = new[] { name }, expectedProgramme })));
+        Assert.Single(responses, r => r.StatusCode == HttpStatusCode.OK);
+        Assert.Single(responses, r => r.StatusCode == HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task UpdateSessionRaces_EmptySession_StillChecksThePlannedProgramme()
+    {
+        var arena = await _f.CreateArenaAsync();
+        var admin = await _f.AdminAsync();
+        var expectedProgramme = await ProgrammeAsync(admin, arena);
+        (await admin.PutAsJsonAsync(Url(arena, $"/{arena.SessionId}/races"), new { raceNames = new[] { "First plan" }, expectedProgramme })).EnsureSuccessStatusCode();
+        var rejected = await admin.PutAsJsonAsync(Url(arena, $"/{arena.SessionId}/races"), new { raceNames = new[] { "Stale plan" }, expectedProgramme });
+        Assert.Equal(HttpStatusCode.Conflict, rejected.StatusCode);
+        var session = await (await admin.GetAsync(Url(arena, $"/{arena.SessionId}"))).ReadAsync<SessionDto>();
+        Assert.Equal(new[] { "First plan" }, session.PlannedRaces);
+    }
+
+    [Fact]
     public async Task UpdateSessionRaces_UnchangedFullProgramme_PreservesEveryHeatAndRaceId()
     {
         var arena = await _f.CreateArenaAsync();
@@ -868,7 +917,7 @@ public class SessionsCrudTests : IClassFixture<ApiFactory>
             await db.SaveChangesAsync();
         });
         var names = await _f.InDbAsync(db => db.Races.Where(r => first.RaceIds.Contains(r.Id)).OrderBy(r => r.OrderIndex).Select(r => r.Name).ToListAsync());
-        var response = await admin.PutAsJsonAsync(Url(arena, $"/{arena.SessionId}/races"), new { raceNames = names });
+        var response = await admin.PutAsJsonAsync(Url(arena, $"/{arena.SessionId}/races"), new { raceNames = names, expectedProgramme = await ProgrammeAsync(admin, arena) });
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var updated = await response.ReadAsync<SessionDto>();
         Assert.Equal(first.RaceIds, updated.Heats.Single(h => h.Id == first.HeatId).Races.OrderBy(r => r.OrderIndex).Select(r => r.Id));
@@ -888,13 +937,13 @@ public class SessionsCrudTests : IClassFixture<ApiFactory>
             await db.SaveChangesAsync();
         });
         var names = await _f.InDbAsync(db => db.Races.Where(r => heat.RaceIds.Contains(r.Id)).OrderBy(r => r.OrderIndex).Select(r => r.Name).ToListAsync());
-        var response = await admin.PutAsJsonAsync(Url(arena, $"/{arena.SessionId}/races"), new { raceNames = new[] { "New unscored game", names[1], "Extra game" } });
+        var response = await admin.PutAsJsonAsync(Url(arena, $"/{arena.SessionId}/races"), new { raceNames = new[] { "New unscored game", names[1], "Extra game" }, expectedProgramme = await ProgrammeAsync(admin, arena) });
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var races = (await response.ReadAsync<SessionDto>()).Heats.Single().Races.OrderBy(r => r.OrderIndex).ToList();
         Assert.Equal(heat.RaceIds[0], races[0].Id);
         Assert.Equal(heat.RaceIds[1], races[1].Id);
         Assert.True(races[1].IsComplete);
-        var rejected = await admin.PutAsJsonAsync(Url(arena, $"/{arena.SessionId}/races"), new { raceNames = new[] { names[1] } });
+        var rejected = await admin.PutAsJsonAsync(Url(arena, $"/{arena.SessionId}/races"), new { raceNames = new[] { names[1] }, expectedProgramme = await ProgrammeAsync(admin, arena) });
         Assert.Equal(HttpStatusCode.Conflict, rejected.StatusCode);
         Assert.Contains("nothing was saved", await rejected.Content.ReadAsStringAsync());
     }

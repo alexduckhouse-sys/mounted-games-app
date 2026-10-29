@@ -320,3 +320,13 @@ describe('exportCompetitionOutbox, importCompetitionOutbox and shareOrCopyOutbox
     await expect(shareOrCopyOutboxBackup(1)).resolves.toBe('unavailable');
   });
 });
+
+
+it('rejects a cross-programme backup without writing or flushing retained scores', () => {
+  seed(queued(1, { expectedProgrammeRevision: 0 }));
+  const before = localStorage.getItem(KEY);
+  const imported = queued(1, { expectedProgrammeRevision: 1, queuedAt: '2026-06-01T13:00:00Z' });
+  expect(importCompetitionOutbox(JSON.stringify([imported]))).toEqual({ ok: false, error: expect.stringContaining('different race programme') });
+  expect(localStorage.getItem(KEY)).toBe(before);
+  expect(post).not.toHaveBeenCalled();
+});

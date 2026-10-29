@@ -2,6 +2,8 @@ import type { AreaCatalogue } from '../messages';
 import type { account as en } from '../en/account';
 
 export const account: AreaCatalogue<typeof en> = {
+  "account.account.exportEventData": "Télécharger mes dossiers d’arrivée et de vaccination",
+  "account.account.exportFailed": "Vos dossiers n’ont pas pu être téléchargés. Veuillez réessayer.",
   'account.role.admin': 'Administrateur',
   'account.role.manager': 'Responsable d’équipe',
   'account.role.trainer': 'Entraîneur',

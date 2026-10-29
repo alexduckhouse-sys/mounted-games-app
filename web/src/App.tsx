@@ -1,6 +1,7 @@
 import { LegacyEventRedirect } from './components/LegacyEventRedirect';
 import { lazy, Suspense, useEffect } from 'react';
 import { PageLoadBoundary } from './components/PageLoadBoundary';
+import { NativeLiveActivityCoordinator } from './native/NativeLiveActivityCoordinator';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { LanguageProvider } from './i18n/LanguageContext';
 import { AuthProvider } from './auth/AuthContext';
@@ -137,6 +138,7 @@ export default function App() {
     <LiteMotionConfig>
     <ThemeProvider>
       <AuthProvider>
+        <NativeLiveActivityCoordinator />
         <NeedsYouProvider>
         <CurrentCompetitionProvider>
         <NavExtrasProvider>

@@ -199,7 +199,7 @@ public class WeatherEndpointsTests : IClassFixture<ApiFactory>
 
         Assert.Equal(HttpStatusCode.OK, status);
         Assert.Equal(22.1, body.GetProperty("daily").GetProperty("temperature_2m_max")[0].GetDouble());
-        Assert.Contains("start_date=2030-07-04&end_date=2030-07-04", Assert.Single(_f.Http.Requests));
+        Assert.Contains("start_date=2030-07-03&end_date=2030-07-05", Assert.Single(_f.Http.Requests));
     }
 
     [Fact]

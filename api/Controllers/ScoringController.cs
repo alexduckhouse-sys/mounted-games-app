@@ -48,7 +48,7 @@ public class ScoringController : ControllerBase
         {
             await _scoring.ApplyLegacyAsync(raceId, req.Places, req.Expected,
                 User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
-                correctionReason, cancellationToken, finishedAt: req.FinishedAt);
+                correctionReason, cancellationToken, expectedProgrammeRevision: req.ExpectedProgrammeRevision, finishedAt: req.FinishedAt);
         }
         catch (ScoreConflictException ex) { return await ScoreConflict(race, ex.Message, ex.ExistingPlaces, ex.IncomingPlaces); }
         catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
@@ -178,9 +178,10 @@ public class ScoringController : ControllerBase
             {
                 await _scoring.ApplyLegacyAsync(raceId, places, expected: null,
                     User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
-                    "Score clash resolved", cancellationToken);
+                    "Score clash resolved", cancellationToken, expectedProgrammeRevision: req.ExpectedProgrammeRevision);
             }
             catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
+            catch (ScoreConflictException ex) { return Conflict(new { message = ex.Message }); }
             catch (ScoreValidationException ex) { return BadRequest(new { message = ex.Message }); }
         }
         else
@@ -211,6 +212,7 @@ public class ScoringController : ControllerBase
             await _scoring.ClearRaceForRerunAsync(raceId, actor, reason ?? "Score cleared.", cancellationToken);
         }
         catch (KeyNotFoundException) { return NotFound(); }
+        catch (ScoreConflictException ex) { return Conflict(new { message = ex.Message }); }
         catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
         catch (Exception ex) when (IsScoringConcurrency(ex))
         { return Conflict(new { message = "These results were changed on another device." }); }
@@ -304,10 +306,11 @@ public class ScoringController : ControllerBase
         try
         {
             race = await _scoring.UpdateRaceClockAsync(
-                raceId, true, tappedAt, req?.At is not null, cancellationToken);
+                raceId, true, tappedAt, req?.At is not null, cancellationToken, req?.ExpectedProgrammeRevision);
         }
         catch (ScoreValidationException ex) { return BadRequest(new { message = ex.Message }); }
         catch (KeyNotFoundException) { return NotFound(); }
+        catch (ScoreConflictException ex) { return Conflict(new { message = ex.Message }); }
         catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
         catch (Exception ex) when (IsScoringConcurrency(ex))
         { return Conflict(new { message = "These results were changed on another device." }); }
@@ -356,9 +359,10 @@ public class ScoringController : ControllerBase
         try
         {
             race = await _scoring.UpdateRaceClockAsync(
-                raceId, false, finishedAt, req?.At is not null, cancellationToken);
+                raceId, false, finishedAt, req?.At is not null, cancellationToken, req?.ExpectedProgrammeRevision);
         }
         catch (KeyNotFoundException) { return NotFound(); }
+        catch (ScoreConflictException ex) { return Conflict(new { message = ex.Message }); }
         catch (ScoreSignedOffException ex) { return Conflict(new { message = ex.Message }); }
         catch (Exception ex) when (IsScoringConcurrency(ex))
         { return Conflict(new { message = "These results were changed on another device." }); }
@@ -418,4 +422,4 @@ public class ScoringController : ControllerBase
     }
 }
 
-public record ResolveScoreClashRequest(bool UseIncoming, IReadOnlyList<FinishingPlaceDto>? Places = null);
+public record ResolveScoreClashRequest(bool UseIncoming, IReadOnlyList<FinishingPlaceDto>? Places = null, int? ExpectedProgrammeRevision = null);

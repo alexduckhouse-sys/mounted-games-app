@@ -7,6 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- CMS ships in the .NET SDK and ASP.NET shared runtime; no extra NuGet package. -->
+    <Reference Include="System.Security.Cryptography.Pkcs" HintPath="$(MSBuildToolsPath)/System.Security.Cryptography.Pkcs.dll" Private="false" />
     <InternalsVisibleTo Include="MountedGames.Api.Tests" />
   </ItemGroup>
 

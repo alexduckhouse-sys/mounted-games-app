@@ -12,12 +12,12 @@ import { Sheet } from '../components/Sheet';
 import { priceLabel } from '../lib/money';
 import { guestRiderSummary } from '../lib/guestRider';
 import { groupSignups } from '../lib/mySignups';
-import { buildLorryStablingPassFromMySignup, downloadOfflineWalletPass } from '../lib/stablingPass';
+import { ArrivalBookings, MyArrivalBookings } from '../components/wallet/ArrivalBookings';
 import { displaySectionName } from '../lib/section';
 import type { MySignup } from '../types';
 import { DemoEntryPayment } from './commerce/DemoEntryPayment';
 import type { TestPayment } from './commerce/types';
-import { offerTimeLeft, qrSvgMarkup, waitlistOfferState } from './operations/entryLogic';
+import { offerTimeLeft, waitlistOfferState } from './operations/entryLogic';
 import '../components/sitePages.css';
 
 export interface ExtendedMySignup extends MySignup {
@@ -172,6 +172,7 @@ function SignupList() {
       {loadFailed && signups == null && <Notice actionLabel={t('common.tryAgain')} onAction={() => { setLoadFailed(false); setAttempt((n) => n + 1); }}>{t('account.signups.loadFailed')}</Notice>}
       {error && <Notice onDismiss={() => setError(null)}>{error}</Notice>}
 
+      <MyArrivalBookings />
       {signups && signups.length === 0 && (
         <div className="mg-card space-y-3 p-5">
           <p className="mg-lede">{t('account.signups.none')}</p>
@@ -240,12 +241,6 @@ function EntrySheet({ signup: s, demoPaid, onClose, onWithdraw, onAccept }: { si
   }, [s.waitlistOfferExpiresAt]);
   const offer = s.isWaitlist && !s.isWithdrawn ? waitlistOfferState(s.waitlistOfferExpiresAt, now) : { state: 'none' as const };
   const guestLine = guestRiderSummary(s.guest);
-  const hasPass = s.status === 1 && !s.isWaitlist && !s.isWithdrawn
-    && ((s.stablesCount ?? 0) > 0 || (s.hookupsCount ?? 0) > 0 || !!s.stableAssignment?.trim() || !!s.vehicleRegistration?.trim());
-  function savePass() {
-    const pass = buildLorryStablingPassFromMySignup(s);
-    downloadOfflineWalletPass(pass, qrSvgMarkup(pass.verificationUrl));
-  }
   const canWithdraw = (s.status === 0 || s.status === 1) && !s.isWithdrawn && !s.drawComplete;
   const declarationTeams = s.declarationAccessGranted && s.status < 2 && !s.isWithdrawn
     ? s.linkedTeams?.length ? s.linkedTeams : s.teamId ? [{ id: s.teamId, name: s.teamName || s.fullName }] : [] : [];
@@ -273,7 +268,7 @@ function EntrySheet({ signup: s, demoPaid, onClose, onWithdraw, onAccept }: { si
             </section>
           )}
           <div className="flex flex-col gap-2">
-            {hasPass && <button type="button" className="kit-pill" onClick={savePass}>{t('account.signups.saveArrivalPass')}</button>}
+<ArrivalBookings competitionId={s.competitionId} signupId={s.id} />
             {status.due && <Link to={`/competitions/${s.competitionId}/details`} className="kit-pill kit-pill-fill" aria-label={t('account.signups.howToPayAria', { competition: s.competitionName })}>{t('account.signups.howToPay')}</Link>}
             {declarationTeams.map((team) => (
               <Link key={team.id} to={`/competitions/${s.competitionId}/declarations?team=${team.id}`} className="kit-pill">
