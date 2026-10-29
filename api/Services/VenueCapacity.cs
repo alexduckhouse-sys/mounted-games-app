@@ -47,13 +47,14 @@ public static class VenueCapacity
         int competitionId,
         int? excludeSignupId = null,
         int? excludeOrderId = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        DateTime? nowUtc = null)
     {
         var settings = await db.Set<CompetitionEntrySettings>()
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.CompetitionId == competitionId, ct);
 
-        var nowUtc = DateTime.UtcNow;
+        var effectiveNowUtc = nowUtc ?? DateTime.UtcNow;
         var signupRows = await (
             from s in db.SectionSignups.AsNoTracking()
             join sec in db.CompetitionSections.AsNoTracking() on s.CompetitionSectionId equals sec.Id
@@ -65,7 +66,7 @@ public static class VenueCapacity
                 && !db.Set<ArrivalBooking>().Any(b => b.SignupId == s.Id && b.LegacyReconciledAt != null)
                 && (s.Status == SignupPaymentStatus.Paid || s.Status == SignupPaymentStatus.Pending)
                 && !e.IsWithdrawn
-                && (!e.IsWaitlist || (e.WaitlistOfferExpiresAt != null && e.WaitlistOfferExpiresAt > nowUtc))
+                && (!e.IsWaitlist || (e.WaitlistOfferExpiresAt != null && e.WaitlistOfferExpiresAt > effectiveNowUtc))
                 && (m == null || !m.WaitingForGuestSpot)
             select new { e.StablesCount, e.HookupsCount }
         ).ToListAsync(ct);

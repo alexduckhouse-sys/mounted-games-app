@@ -449,9 +449,11 @@ public class SessionsController : ControllerBase
     {
         var s = await _db.Sessions
             .Include(s => s.Heats).ThenInclude(h => h.Entries)
-            .Include(s => s.Heats).ThenInclude(h => h.Races)
+            .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results)
             .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
         if (s is null) return NotFound();
+        if (req.ReplaceExisting && s.Heats.Any(h => h.Races.Any(r => r.IsComplete || r.Results.Count > 0)))
+            return Conflict(new { message = "This session already has race results, so its heats can't be replaced." });
         if (!await TeamsBelongAsync(competitionId, req.TeamIds)) return BadRequest(new { message = "Some of those teams aren't in this competition." });
 
         var teamIds = await WithoutOutTeamsAsync(competitionId, req.TeamIds.Distinct().ToList());
@@ -744,9 +746,11 @@ public class SessionsController : ControllerBase
     {
         var s = await _db.Sessions
             .Include(s => s.Heats).ThenInclude(h => h.Entries)
-            .Include(s => s.Heats).ThenInclude(h => h.Races)
+            .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results)
             .FirstOrDefaultAsync(s => s.Id == id && s.CompetitionId == competitionId);
         if (s is null) return NotFound();
+        if (req.ReplaceExisting && s.Heats.Any(h => h.Races.Any(r => r.IsComplete || r.Results.Count > 0)))
+            return Conflict(new { message = "This session already has race results, so its heats can't be replaced." });
         if (!await TeamsBelongAsync(competitionId, req.TeamIds)) return BadRequest(new { message = "Some of those teams aren't in this competition." });
 
         var teamIds = await WithoutOutTeamsAsync(competitionId, req.TeamIds.Distinct().ToList());

@@ -1030,11 +1030,15 @@ public class SignupController : ControllerBase
                 if (capErr is not null)
                     return Conflict(new { message = capErr });
             }
-            var amount = meta?.WaitingForGuestSpot == true ? 0L : meta?.LookingForPair == true
-                ? signup.Section!.PriceMinor / 2 : (long)signup.Section!.PriceMinor * ex.TeamsCount;
-            if (amount > int.MaxValue) return BadRequest(new { message = "The total entry fee is too large." });
-            signup.AmountMinor = (int)amount;
+            if (signup.AmountMinor == 0)
+            {
+                var amount = meta?.WaitingForGuestSpot == true ? 0L : meta?.LookingForPair == true
+                    ? signup.Section!.PriceMinor / 2 : (long)signup.Section!.PriceMinor * ex.TeamsCount;
+                if (amount > int.MaxValue) return BadRequest(new { message = "The total entry fee is too large." });
+                signup.AmountMinor = (int)amount;
+            }
             ex.IsWaitlist = false;
+            ex.WaitlistOfferExpiresAt = null;
         }
         if (signup.Status != SignupPaymentStatus.Paid)
         {
@@ -1141,12 +1145,61 @@ public class SignupController : ControllerBase
         }
         signup.Status = req.Status;
         if (req.Status is SignupPaymentStatus.Cancelled or SignupPaymentStatus.Refunded)
+        {
+            await DetachAndCleanUpUnDrawnTeamsAsync(_db, signup, User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, "Entry cancelled or refunded by competition staff.");
             await ReleasePendingPairAsync(signup.Id);
+        }
         // Cancellation and refunds do not erase the original receipt date.
         if (req.Status == SignupPaymentStatus.Paid) signup.PaidAt = DateTime.UtcNow;
         else if (req.Status == SignupPaymentStatus.Pending) signup.PaidAt = null;
         await _db.SaveChangesAsync();
         return signup.ToDto();
+    }
+
+    internal static async Task DetachAndCleanUpUnDrawnTeamsAsync(AppDbContext db, SectionSignup signup, string? actorUserId, string reason, CancellationToken ct = default)
+    {
+        var links = await db.Set<SignupTeamLink>().Where(x => x.SignupId == signup.Id).ToListAsync(ct);
+        var meta = await db.Set<SignupMatchmaking>().FindAsync([signup.Id], ct);
+        var teamIds = meta?.DeclarationAccessGranted == true
+            ? links.Select(x => x.TeamId).Concat(signup.TeamId is int primary ? new[] { primary } : Array.Empty<int>()).Distinct().ToArray()
+            : Array.Empty<int>();
+        var teams = teamIds.Length == 0
+            ? new List<Team>()
+            : await db.Teams.Include(t => t.HeatEntries).Include(t => t.DeclarationForms)
+                .Where(t => teamIds.Contains(t.Id) && t.CompetitionSectionId == signup.CompetitionSectionId)
+                .ToListAsync(ct);
+        if (teams.Any(t => t.HeatEntries.Count > 0))
+            return;
+
+        signup.TeamId = null;
+        db.RemoveRange(links);
+        if (meta is not null)
+        {
+            meta.DeclarationAccessGranted = false;
+        }
+        foreach (var team in teams)
+        {
+            var shared = await db.SectionSignups.AnyAsync(s => s.Id != signup.Id
+                && (s.Status == SignupPaymentStatus.Pending || s.Status == SignupPaymentStatus.Paid)
+                && (s.TeamId == team.Id || db.Set<SignupTeamLink>().Any(l => l.SignupId == s.Id && l.TeamId == team.Id)), ct);
+            if (shared) continue;
+            if (team.DeclarationForms.Count == 0)
+            {
+                db.Teams.Remove(team);
+            }
+            else if (team.EntryStatus != TeamEntryStatus.Withdrawn)
+            {
+                team.EntryStatus = TeamEntryStatus.Withdrawn;
+                db.Add(new TeamStatusEvent
+                {
+                    CompetitionId = team.CompetitionId,
+                    TeamId = team.Id,
+                    Status = TeamEntryStatus.Withdrawn,
+                    ActorUserId = actorUserId,
+                    Reason = reason,
+                });
+            }
+        }
     }
 
     [HttpDelete("api/signups/{id:int}")]
@@ -1272,6 +1325,12 @@ public class SignupController : ControllerBase
     /// <summary>The 409 for a withdrawal after the draw. The web matches on <c>code</c>, so keep it as it is.</summary>
     internal static readonly object DrawHappened = new { code = "draw-happened", message = "You can’t withdraw once the draw has happened." };
 
+    private Task<bool> SectionHasDrawAsync(int competitionId, int sectionId) =>
+        _db.Heats.AnyAsync(h =>
+            h.Session!.CompetitionId == competitionId
+            && (h.Session.CompetitionSectionId == null || h.Session.CompetitionSectionId == sectionId)
+            && h.Entries.Count > 0);
+
     /// <summary>
     /// Allows an entrant to withdraw their own signup before the draw is made, freeing up their spot in
     /// MaxParticipants, detaching/removing any un-drawn team, and flagging the signup as "Withdrawn — refund pending".
@@ -1385,6 +1444,8 @@ public class SignupController : ControllerBase
             return BadRequest(new { message = "Pair requests are only available in Pairs sections." });
         if (mySignup.TeamId != null)
             return BadRequest(new { message = "This entry is already paired up on a team." });
+        if (await SectionHasDrawAsync(mySignup.Section.CompetitionId, mySignup.CompetitionSectionId))
+            return Conflict(new { message = "The draw has already been made for this section." });
 
         var target = await _db.SectionSignups
             .Include(s => s.Section)
@@ -1467,6 +1528,9 @@ public class SignupController : ControllerBase
             await _db.SaveChangesAsync();
             return (await BuildMySignupDtosAsync(new List<SectionSignup> { mySignup })).Single();
         }
+
+        if (await SectionHasDrawAsync(mySignup.Section!.CompetitionId, mySignup.CompetitionSectionId))
+            return Conflict(new { message = "The draw has already been made for this section." });
 
         // Mutual accept: form their Pair team immediately ("Rider 1 & Rider 2", no "A" suffix) and link both signups!
         var clubName = (requester.PonyClubName ?? mySignup.PonyClubName ?? string.Empty).Trim();
@@ -2029,6 +2093,7 @@ public class SignupController : ControllerBase
             if (!isDemo && !hasTestPayment)
             {
                 signup.Status = SignupPaymentStatus.Refunded;
+                await DetachAndCleanUpUnDrawnTeamsAsync(_db, signup, User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, "Entry refunded by competition staff.");
                 await ReleasePendingPairAsync(signup.Id);
             }
         }
@@ -2284,10 +2349,16 @@ public class SignupController : ControllerBase
     [HttpPost("api/competitions/{competitionId:int}/signups/{signupId:int}/offer-waitlist-spot")]
     [Authorize(Policy = CompetitionStaff.Policy)]
     [CompetitionAccess("competitionId")]
-    public async Task<ActionResult<SectionSignupExtendedDto>> OfferWaitlistSpot(
+    public Task<ActionResult<SectionSignupExtendedDto>> OfferWaitlistSpot(
         int competitionId, int signupId,
         [FromServices] SignupConfirmationService confirmation, [FromServices] TimeProvider clock,
-        [FromBody] OfferWaitlistSpotInput? req = null)
+        [FromBody] OfferWaitlistSpotInput? req = null) =>
+        InEntryTransactionAsync(() => OfferWaitlistSpotOnceAsync(competitionId, signupId, confirmation, clock, req));
+
+    private async Task<ActionResult<SectionSignupExtendedDto>> OfferWaitlistSpotOnceAsync(
+        int competitionId, int signupId,
+        SignupConfirmationService confirmation, TimeProvider clock,
+        OfferWaitlistSpotInput? req)
     {
         var signup = await _db.SectionSignups
             .Include(s => s.Section).ThenInclude(sec => sec!.Competition)
@@ -2308,11 +2379,17 @@ public class SignupController : ControllerBase
             return Conflict(new { message = "There is no space in this section to offer a waitlist spot yet." });
         if (meta?.WaitingForGuestSpot != true && (ex.StablesCount > 0 || ex.HookupsCount > 0))
         {
-            var capacity = await VenueCapacity.GetCapacityAsync(_db, competitionId, excludeSignupId: signup.Id);
+            var capacity = await VenueCapacity.GetCapacityAsync(_db, competitionId, excludeSignupId: signup.Id, nowUtc: nowUtc);
             var capErr = VenueCapacity.CheckCapacityError(capacity, ex.StablesCount, ex.HookupsCount);
             if (capErr is not null)
                 return Conflict(new { message = capErr });
         }
+
+        var expectedAmount = meta?.WaitingForGuestSpot == true ? 0L : meta?.LookingForPair == true
+            ? signup.Section.PriceMinor / 2 : (long)signup.Section.PriceMinor * teamsCount;
+        var amountMinor = (int)Math.Min(expectedAmount, int.MaxValue);
+        if (signup.AmountMinor == 0)
+            signup.AmountMinor = amountMinor;
 
         var compStart = signup.Section.Competition?.StartDate;
         var defaultHours = compStart.HasValue && compStart.Value > nowUtc && compStart.Value <= nowUtc.AddHours(72) ? 6 : 24;
@@ -2322,13 +2399,9 @@ public class SignupController : ControllerBase
         ex.WaitlistOfferExpiresAt = expiresAtUtc;
         await _db.SaveChangesAsync();
 
-        var expectedAmount = meta?.WaitingForGuestSpot == true ? 0L : meta?.LookingForPair == true
-            ? signup.Section.PriceMinor / 2 : (long)signup.Section.PriceMinor * teamsCount;
-        var amountMinor = (int)Math.Min(expectedAmount, int.MaxValue);
-
         if (!string.IsNullOrWhiteSpace(signup.ContactEmail))
         {
-            await confirmation.SendWaitlistOfferAsync(signup, signup.Section.Competition!, signup.Section, expiresAtUtc, amountMinor);
+            await confirmation.SendWaitlistOfferAsync(signup, signup.Section.Competition!, signup.Section, expiresAtUtc, signup.AmountMinor);
         }
 
         var guest = (await LoadGuestMapAsync(new[] { signup.Id })).GetValueOrDefault(signup.Id);
@@ -2373,7 +2446,7 @@ public class SignupController : ControllerBase
             return Conflict(new { message = "That spot has already been filled." });
         if (meta?.WaitingForGuestSpot != true && (ex.StablesCount > 0 || ex.HookupsCount > 0))
         {
-            var capacity = await VenueCapacity.GetCapacityAsync(_db, competitionId, excludeSignupId: signup.Id);
+            var capacity = await VenueCapacity.GetCapacityAsync(_db, competitionId, excludeSignupId: signup.Id, nowUtc: nowUtc);
             var capErr = VenueCapacity.CheckCapacityError(capacity, ex.StablesCount, ex.HookupsCount);
             if (capErr is not null)
                 return Conflict(new { message = capErr });
@@ -2383,7 +2456,7 @@ public class SignupController : ControllerBase
             ? signup.Section.PriceMinor / 2 : (long)signup.Section.PriceMinor * teamsCount;
         if (amount > int.MaxValue) return BadRequest(new { message = "The total entry fee is too large." });
 
-        var amountMinor = (int)amount;
+        var amountMinor = signup.AmountMinor > 0 ? signup.AmountMinor : (int)amount;
         var isFree = amountMinor == 0;
         signup.AmountMinor = amountMinor;
         signup.Status = isFree ? SignupPaymentStatus.Paid : SignupPaymentStatus.Pending;

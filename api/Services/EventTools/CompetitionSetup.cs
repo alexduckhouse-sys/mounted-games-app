@@ -174,7 +174,7 @@ public sealed class CompetitionSetupService(AppDbContext db)
 
     /// <summary>Creates a new competition, owned by <paramref name="creatorUserId"/>, from a set-up. Returns the competition and its counts.</summary>
     public async Task<(Competition Competition, int Sections, int Sessions)> CreateAsync(
-        CompetitionSetup setup, string name, DateTime startDate, DateTime? endDate, string creatorUserId, CancellationToken ct)
+        CompetitionSetup setup, string name, DateTime startDate, DateTime? endDate, string creatorUserId, CancellationToken ct, string? sourceOwnerUserId = null)
     {
         Validate(name, startDate, endDate);
         var strategy = db.Database.CreateExecutionStrategy();
@@ -183,6 +183,13 @@ public sealed class CompetitionSetupService(AppDbContext db)
             db.ChangeTracker.Clear();
             var creatorClubId = await db.Users.AsNoTracking().Where(u => u.Id == creatorUserId)
                 .Select(u => u.ClubId).FirstOrDefaultAsync(ct);
+            var keepPaymentDetails = sourceOwnerUserId is null || sourceOwnerUserId == creatorUserId;
+            if (!keepPaymentDetails && creatorClubId.HasValue)
+            {
+                var sourceOwnerClubId = await db.Users.AsNoTracking().Where(u => u.Id == sourceOwnerUserId)
+                    .Select(u => u.ClubId).FirstOrDefaultAsync(ct);
+                keepPaymentDetails = sourceOwnerClubId == creatorClubId;
+            }
             await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
             var clone = new Competition
             {
@@ -202,8 +209,8 @@ public sealed class CompetitionSetupService(AppDbContext db)
                 DecFormConfigJson = PinPayoutClub(setup.DecFormConfigJson, creatorClubId),
                 LaneHatbands = setup.LaneHatbands,
                 EnablePassportCheck = setup.EnablePassportCheck,
-                PaymentDestination = setup.PaymentDestination,
-                PaymentLinkUrl = setup.PaymentLinkUrl,
+                PaymentDestination = keepPaymentDetails ? setup.PaymentDestination : null,
+                PaymentLinkUrl = keepPaymentDetails ? setup.PaymentLinkUrl : null,
                 CreatedByUserId = creatorUserId,
             };
             db.Competitions.Add(clone);

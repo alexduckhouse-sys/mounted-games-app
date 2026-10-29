@@ -878,6 +878,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
                 return Conflict(new { message = "Only a successful test payment can be refunded." });
             signup.Status = SignupPaymentStatus.Refunded;
             signup.PaidAt = null;
+            await SignupController.DetachAndCleanUpUnDrawnTeamsAsync(db, signup, userId, "Demo entry refunded.", cancellationToken);
             var payment = NewTestPayment(
                 competitionId,
                 TestPaymentTarget.SectionSignup,

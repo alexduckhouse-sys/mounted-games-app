@@ -16,11 +16,7 @@ public sealed class PrintableEventService(AppDbContext db)
             .OrderBy(x => x.OrderIndex).ThenBy(x => x.Id)
             .Select(x => new PrintableSessionDto(
                 x.Id, x.Section?.DisplayName ?? string.Empty, x.Name, x.ArenaName, x.OrderIndex,
-                OrderedHeats(x).Select(h => new PrintableHeatDto(
-                    h.Id, h.Label ?? $"Heat {h.OrderIndex}", HeatStart(x, h, timings),
-                    h.Entries.OrderBy(e => e.LaneIndex).Select(e => new PrintableTeamDto(
-                        e.TeamId, e.Team!.DisplayName, e.Team.Club!.Name, e.Team.Suffix, e.LaneIndex)).ToArray(),
-                    h.Races.OrderBy(r => r.OrderIndex).Select(r => new PrintableRaceDto(r.Id, r.Name, r.OrderIndex)).ToArray())).ToArray()))
+                BuildDrawHeats(x, timings)))
             .ToArray();
         return new PrintableDrawDto(ToCompetition(competition), sessions);
     }
@@ -129,26 +125,197 @@ public sealed class PrintableEventService(AppDbContext db)
         return new PrintableResultsDto(ToCompetition(competition), provisional, sections, heats, sessionSummaries);
     }
 
+    private static IReadOnlyList<PrintableHeatDto> BuildDrawHeats(
+        Session session,
+        IReadOnlyDictionary<int, Calendar.HeatTime>? timings = null)
+    {
+        var ordered = OrderedHeats(session).ToList();
+        if (ordered.Count > 0)
+        {
+            var finalHeats = ordered
+                .Where(h => SectionScoring.IsFinalHeat(h) || Operations.CompetitionDrawService.IsFinalSession(session))
+                .ToList();
+            return ordered.Select(h =>
+            {
+                var teams = h.Entries.OrderBy(e => e.LaneIndex).Select(e => new PrintableTeamDto(
+                    e.TeamId, e.Team!.DisplayName, e.Team.Club!.Name, e.Team.Suffix, e.LaneIndex)).ToArray();
+                if (teams.Length == 0 && (SectionScoring.IsFinalHeat(h) || Operations.CompetitionDrawService.IsFinalSession(session)))
+                {
+                    var tierIdx = FinalTierIndex(h, finalHeats);
+                    teams = BlankDrawTeams(BlankFinalTeamCount(session, tierIdx, Math.Max(1, finalHeats.Count)));
+                }
+                var races = h.Races.OrderBy(r => r.OrderIndex)
+                    .Select(r => new PrintableRaceDto(r.Id, r.Name, r.OrderIndex))
+                    .ToArray();
+                return new PrintableHeatDto(
+                    h.Id, h.Label ?? $"Heat {h.OrderIndex}", HeatStart(session, h, timings), teams, races);
+            }).ToArray();
+        }
+
+        var planned = PlannedFinalHeats(session);
+        if (planned.Count == 0) return [];
+        var stepMinutes = session.MinutesPerHeat is > 0 ? session.MinutesPerHeat.Value : 30;
+        return planned.Select((p, idx) =>
+        {
+            var heatId = -(session.Id * 100 + idx + 1);
+            var start = session.ScheduledStart?.AddMinutes(idx * stepMinutes);
+            var teams = BlankDrawTeams(BlankFinalTeamCount(session, idx, planned.Count));
+            var races = p.Races.Select((name, rIdx) => new PrintableRaceDto(-(Math.Abs(heatId) * 100 + rIdx + 1), name, rIdx + 1)).ToArray();
+            return new PrintableHeatDto(heatId, p.Label, start, teams, races);
+        }).ToArray();
+    }
+
     private static PrintableScoreHeatDto[] BuildScoreHeats(
         IEnumerable<Session> sessions,
         IReadOnlyDictionary<int, Calendar.HeatTime>? timings = null)
-        => sessions
-            .OrderBy(x => x.OrderIndex).ThenBy(x => x.Id)
-            .SelectMany(x => OrderedHeats(x).Select(h => new { Session = x, Heat = h }))
-            .Select(x => new PrintableScoreHeatDto(
-                x.Heat.Id, x.Heat.Label ?? $"Heat {x.Heat.OrderIndex}", x.Session.Section?.DisplayName ?? string.Empty,
-                x.Session.Name, HeatStart(x.Session, x.Heat, timings),
-                x.Heat.Races.OrderBy(r => r.OrderIndex).Select(r => new PrintableScoreRaceDto(
-                    r.Id, r.Name,
-                    x.Heat.Entries.OrderBy(e => e.LaneIndex).Select(e =>
-                    {
-                        var result = r.Results.SingleOrDefault(y => y.TeamId == e.TeamId);
-                        return new PrintableScoreCellDto(e.TeamId, e.Team!.DisplayName, result?.Placing, result?.Eliminated ?? false, result?.Points,
-                            e.LaneIndex, !string.IsNullOrWhiteSpace(e.BibColourOverride) ? e.BibColourOverride : (ResultStatuses.PublicBibDescription(e.Team.BibDescription) ?? e.Team.BibColour), result?.IsSitOut ?? false,
-                            result is null ? ResultStatus.Finished : ResultStatuses.Of(result));
-                    }).ToArray())).ToArray(),
-                x.Session.Id))
+    {
+        var result = new List<PrintableScoreHeatDto>();
+        foreach (var session in sessions.OrderBy(x => x.OrderIndex).ThenBy(x => x.Id))
+        {
+            var ordered = OrderedHeats(session).ToList();
+            if (ordered.Count > 0)
+            {
+                var finalHeats = ordered
+                    .Where(h => SectionScoring.IsFinalHeat(h) || Operations.CompetitionDrawService.IsFinalSession(session))
+                    .ToList();
+                foreach (var heat in ordered)
+                {
+                    var isBlankFinal = heat.Entries.Count == 0
+                        && (SectionScoring.IsFinalHeat(heat) || Operations.CompetitionDrawService.IsFinalSession(session));
+                    var blankCount = isBlankFinal
+                        ? BlankFinalTeamCount(session, FinalTierIndex(heat, finalHeats), Math.Max(1, finalHeats.Count))
+                        : 0;
+                    var races = heat.Races.OrderBy(r => r.OrderIndex).Select(r => new PrintableScoreRaceDto(
+                        r.Id, r.Name,
+                        isBlankFinal
+                            ? BlankScoreCells(blankCount)
+                            : heat.Entries.OrderBy(e => e.LaneIndex).Select(e =>
+                            {
+                                var cellResult = r.Results.SingleOrDefault(y => y.TeamId == e.TeamId);
+                                return new PrintableScoreCellDto(
+                                    e.TeamId,
+                                    e.Team!.DisplayName,
+                                    cellResult?.Placing,
+                                    cellResult?.Eliminated ?? false,
+                                    cellResult?.Points,
+                                    e.LaneIndex,
+                                    !string.IsNullOrWhiteSpace(e.BibColourOverride)
+                                        ? e.BibColourOverride
+                                        : (ResultStatuses.PublicBibDescription(e.Team.BibDescription) ?? e.Team.BibColour),
+                                    cellResult?.IsSitOut ?? false,
+                                    cellResult is null ? ResultStatus.Finished : ResultStatuses.Of(cellResult));
+                            }).ToArray())).ToArray();
+
+                    result.Add(new PrintableScoreHeatDto(
+                        heat.Id,
+                        heat.Label ?? $"Heat {heat.OrderIndex}",
+                        session.Section?.DisplayName ?? string.Empty,
+                        session.Name,
+                        HeatStart(session, heat, timings),
+                        races,
+                        session.Id));
+                }
+                continue;
+            }
+
+            var planned = PlannedFinalHeats(session);
+            if (planned.Count == 0) continue;
+            var stepMinutes = session.MinutesPerHeat is > 0 ? session.MinutesPerHeat.Value : 30;
+            for (var idx = 0; idx < planned.Count; idx++)
+            {
+                var p = planned[idx];
+                var heatId = -(session.Id * 100 + idx + 1);
+                var start = session.ScheduledStart?.AddMinutes(idx * stepMinutes);
+                var blankCount = BlankFinalTeamCount(session, idx, planned.Count);
+                var races = p.Races.Select((name, rIdx) => new PrintableScoreRaceDto(
+                    -(Math.Abs(heatId) * 100 + rIdx + 1),
+                    name,
+                    BlankScoreCells(blankCount))).ToArray();
+                result.Add(new PrintableScoreHeatDto(
+                    heatId,
+                    p.Label,
+                    session.Section?.DisplayName ?? string.Empty,
+                    session.Name,
+                    start,
+                    races,
+                    session.Id));
+            }
+        }
+        return result.ToArray();
+    }
+
+    private static int FinalTierIndex(Heat heat, IReadOnlyList<Heat> finalHeats)
+    {
+        var label = heat.Label?.Trim() ?? string.Empty;
+        if (label.Length >= 2 && char.IsLetter(label[0]) && char.IsWhiteSpace(label[1]))
+            return Math.Max(0, char.ToUpperInvariant(label[0]) - 'A');
+        for (var i = 0; i < finalHeats.Count; i++)
+        {
+            if (finalHeats[i].Id == heat.Id) return i;
+        }
+        return 0;
+    }
+
+    private static int BlankFinalTeamCount(Session session, int tierIndex, int totalFinalHeats)
+    {
+        var lanes = session.LanesPerHeat is > 0
+            ? session.LanesPerHeat.Value
+            : (session.Section?.Format == SectionFormat.Individual ? 4 : 6);
+        var activeTeams = session.Section?.Teams.Count(t =>
+            !t.IsHorsConcours && t.EntryStatus == TeamEntryStatus.Active) ?? 0;
+        var pool = activeTeams > 0 ? activeTeams : (session.Section?.MaxParticipants ?? 0);
+
+        if (totalFinalHeats <= 1)
+        {
+            var target = session.Section?.FinalistCount is > 0 ? session.Section.FinalistCount.Value : lanes;
+            var count = pool > 0 ? Math.Min(target, pool) : target;
+            return Math.Max(1, count);
+        }
+
+        var remaining = pool > 0 ? Math.Max(0, Math.Min(lanes, pool - tierIndex * lanes)) : lanes;
+        return remaining > 0 ? remaining : lanes;
+    }
+
+    private static PrintableTeamDto[] BlankDrawTeams(int count)
+        => Enumerable.Range(1, Math.Max(1, count))
+            .Select(lane => new PrintableTeamDto(-lane, string.Empty, string.Empty, string.Empty, lane))
             .ToArray();
+
+    private static PrintableScoreCellDto[] BlankScoreCells(int count)
+        => Enumerable.Range(1, Math.Max(1, count))
+            .Select(lane => new PrintableScoreCellDto(-lane, string.Empty, null, false, null, lane, null, false, ResultStatus.Finished))
+            .ToArray();
+
+    private static IReadOnlyList<(string Label, IReadOnlyList<string> Races)> PlannedFinalHeats(Session session)
+    {
+        if (session.Heats.Count > 0 || !Operations.CompetitionDrawService.IsFinalSession(session))
+            return [];
+
+        var aRaces = PlannedRaceList.Read(session.PlannedRaces) ?? [];
+        var byTier = PlannedFinalRaceLists.Read(session.PlannedFinalRaces);
+        var tiers = new List<(string Letter, IReadOnlyList<string> Races)>();
+
+        if (aRaces.Count > 0)
+            tiers.Add(("A", aRaces));
+        else if (byTier is not null && byTier.TryGetValue("A", out var tierA) && tierA.Count > 0)
+            tiers.Add(("A", tierA));
+
+        if (byTier is not null)
+        {
+            foreach (var kv in byTier.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                if (string.Equals(kv.Key, "A", StringComparison.OrdinalIgnoreCase)) continue;
+                if (kv.Value.Count > 0)
+                    tiers.Add((kv.Key.ToUpperInvariant(), kv.Value));
+            }
+        }
+
+        if (tiers.Count == 0) return [];
+        if (tiers.Count == 1 && (byTier is null || byTier.Count == 0))
+            return [("Final", tiers[0].Races)];
+
+        return tiers.Select(t => ($"{t.Letter} Final", t.Races)).ToList();
+    }
 
     /// <summary>
     /// Every team of every section with its declared riders and ponies, so the organiser can check the entries
@@ -213,7 +380,7 @@ public sealed class PrintableEventService(AppDbContext db)
         => db.Competitions.AsNoTracking().AsSplitQuery()
             .Include(x => x.Sections).ThenInclude(x => x.Teams).ThenInclude(x => x.Club)
             .Include(x => x.Sections).ThenInclude(x => x.Teams).ThenInclude(x => x.Results).ThenInclude(x => x.Race)!.ThenInclude(x => x!.Heat)!.ThenInclude(x => x!.Session)
-            .Include(x => x.Sessions).ThenInclude(x => x.Section)
+            .Include(x => x.Sessions).ThenInclude(x => x.Section)!.ThenInclude(x => x!.Teams)
             .Include(x => x.Sessions).ThenInclude(x => x.Heats).ThenInclude(x => x.Entries).ThenInclude(x => x.Team)!.ThenInclude(x => x!.Club)
             .Include(x => x.Sessions).ThenInclude(x => x.Heats).ThenInclude(x => x.Races).ThenInclude(x => x.Results)
             .SingleOrDefaultAsync(x => x.Id == competitionId, ct);
