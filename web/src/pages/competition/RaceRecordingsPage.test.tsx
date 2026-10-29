@@ -108,10 +108,10 @@ describe('Race recordings page', () => {
     expect(details).toEqual({ title: 'Under 12 Session 1 · Heat 1 · Mug' });
   });
 
-  it('lists a race recorded twice as two rows and keeps recordings that fit no race under Other recordings', () => {
+  it('lists a race recorded twice as two rows, the newest first and keeps recordings that fit no race under Other recordings', () => {
     saved = [clip('new', { raceId: 111, createdAt: '2026-06-01T10:30:00Z' }), clip('old', { raceId: 111, createdAt: '2026-06-01T10:00:00Z' }), clip('Stray clip', { raceId: 999 })];
     mount();
-    expect(screen.getByText('Bending (recorded again)')).toBeInTheDocument();
+    expect(screen.getByText('Bending (earlier recording)')).toBeInTheDocument();
     const other = screen.getByRole('region', { name: 'Other recordings' });
     expect(within(other).getByText('Stray clip')).toBeInTheDocument();
   });

@@ -65,7 +65,7 @@ export function RaceRecordingsPage() {
   function clipRows(name: string, list: SavedReplayClip[]) {
     return list.map((clip, index) => {
       const time = timeOf(clip.createdAt, locale);
-      const shown = index === 0 ? name : t('desk.recordings.again', { name });
+      const shown = index === 0 ? name : t('desk.recordings.earlier', { name });
       const detail = [time && t('desk.recordings.recorded', { time }), lengthText(t, Math.round(clip.durationSeconds))].filter(Boolean).join(' · ');
       return (
         <Fragment key={clip.id}>
@@ -75,7 +75,7 @@ export function RaceRecordingsPage() {
               {open?.id === clip.id ? t('common.close') : t('desk.stream.rt.watch')}
             </button>
             <button type="button" className="rf-btn rr-btn" aria-label={t('desk.recordings.shareLabel', { name: shown })}
-              onClick={() => void shareOrDownloadFile(new File([clip.blob], fileNameFor(clip), { type: clip.mimeType }), { title: clip.label })}>{t('timing.share')}</button>
+              onClick={() => void shareOrDownloadFile(new File([clip.blob], fileNameFor(clip), { type: clip.mimeType }), { title: clip.label })}>{t('desk.recordings.share')}</button>
           </li>
           {open?.id === clip.id && (
             <li className="rr-player">
