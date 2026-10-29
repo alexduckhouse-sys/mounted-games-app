@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { PageLoadBoundary } from './components/PageLoadBoundary';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { LanguageProvider } from './i18n/LanguageContext';
 import { AuthProvider } from './auth/AuthContext';
 import { NeedsYouProvider } from './pages/profile/NeedsYouProvider';
@@ -63,7 +63,6 @@ const InvitePage = lazy(() => import('./pages/InvitePage').then((module) => ({ d
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage').then((module) => ({ default: module.ForgotPasswordPage })));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage').then((module) => ({ default: module.ResetPasswordPage })));
 const CompetitionEditor = lazy(() => import('./pages/admin/CompetitionEditor').then((module) => ({ default: module.CompetitionEditor })));
-const FormatPage = lazy(() => import('./pages/admin/FormatPage').then((module) => ({ default: module.FormatPage })));
 const RulesLibraryPage = lazy(() => import('./pages/admin/RulesLibraryPage').then((module) => ({ default: module.RulesLibraryPage })));
 const ArenaCrewPage = lazy(() => import('./pages/competition/ArenaCrewPage').then((module) => ({ default: module.ArenaCrewPage })));
 const VolunteerRotaPage = lazy(() => import('./pages/competition/VolunteerRotaPage').then((module) => ({ default: module.VolunteerRotaPage })));
@@ -98,6 +97,12 @@ const AccountPage = lazy(() => import('./pages/AccountPage').then((module) => ({
 const TestEntryPaymentPage = lazy(() => import('./pages/commerce/TestEntryPaymentPage').then((module) => ({ default: module.TestEntryPaymentPage })));
 const MySignupsPage = lazy(() => import('./pages/MySignupsPage').then((module) => ({ default: module.MySignupsPage })));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then((module) => ({ default: module.NotFoundPage })));
+
+/** The old Format page: its jobs now live in the Set up pages, so old links land on Before the day. */
+function FormatRedirect() {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/competitions/${id}/operations`} replace />;
+}
 
 function OpeningPage() {
   const t = useT();
@@ -251,9 +256,7 @@ export default function App() {
               <Route path="admin/competitions/:id" element={
                 <ProtectedRoute roles={['Admin', 'Trainer']}><CompetitionEditor /></ProtectedRoute>
               } />
-              <Route path="admin/competitions/:id/format" element={
-                <ProtectedRoute roles={['Admin', 'Trainer']}><FormatPage /></ProtectedRoute>
-              } />
+              <Route path="admin/competitions/:id/format" element={<FormatRedirect />} />
               <Route path="admin/rules" element={
                 <ProtectedRoute roles={['Admin']}><RulesLibraryPage /></ProtectedRoute>
               } />

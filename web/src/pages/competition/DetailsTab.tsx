@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Notice } from '../../components/Notice';
 import { useToast } from '../../components/Toast';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronRight, ClipboardList, Mail, MapPin, QrCode as QrCodeIcon, Sparkles, Users } from 'lucide-react';
+import { ChevronDown, ChevronRight, ClipboardList, Mail, MapPin, QrCode as QrCodeIcon, Users } from 'lucide-react';
 import { useStillMotion } from '../../lite/useStillMotion';
 import { activeLocale } from '../../i18n/translate';
 import { eventDetailRows, type DetailRow } from './eventDetailRows';
@@ -234,10 +234,7 @@ export function DetailsTab() {
           </div>
           {competition.sections.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              <Link to={`/admin/competitions/${competition.id}/format`} className="sp-pill" title="Form teams and heats from paid entries">
-                <Sparkles className="h-4 w-4" aria-hidden="true" /> Format competition
-              </Link>
-              <Link to={`/admin/competitions/${competition.id}/format#fm-dec`} className="sp-pill" title="Choose what the dec form asks for, such as weight or your own questions">
+              <Link to={`/competitions/${competition.id}/operations/entries`} className="sp-pill" title="Choose what the dec form asks for, such as weight or your own questions">
                 <ClipboardList className="h-4 w-4" aria-hidden="true" /> Dec form setup
               </Link>
               <a href="#scorer-links" className="sp-pill"><QrCodeIcon className="h-4 w-4" aria-hidden="true" /> Scorer QR codes</a>

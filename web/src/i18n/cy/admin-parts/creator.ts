@@ -55,7 +55,6 @@ export const adminCreator: AreaCatalogue<typeof en> = {
   'admin.creator.break.everyone': 'Pawb',
   'admin.creator.break.add': 'Ychwanegu at yr amserlen',
   'admin.creator.break.breakLower': 'egwyl',
-  'admin.creator.hat.byLane': 'Bandiau het fesul lôn',
   'admin.creator.hat.lane': 'Lôn {n}',
   'admin.creator.hat.heading': 'Bandiau het',
   'admin.creator.hat.bandName': 'Enw’r band het',

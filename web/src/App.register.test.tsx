@@ -17,3 +17,12 @@ describe('the old /register address', () => {
     expect(window.location.pathname).toBe('/signup');
   });
 });
+
+describe('the old Format page address', () => {
+  it('goes to Before the day for that competition', async () => {
+    window.history.replaceState(null, '', '/admin/competitions/4/format');
+    render(<App />);
+    await vi.waitFor(() => expect(window.location.pathname).not.toBe('/admin/competitions/4/format'));
+    expect(window.location.pathname).toBe('/competitions/4/operations');
+  });
+});
