@@ -165,6 +165,8 @@ export interface CompetitionSummary {
   sectionCount: number;
   teamCount: number;
   sessionCount: number;
+  /** A shorter name for the events list, when the official name is very long. */
+  shortName?: string | null;
   /** Sessions that have heats: the timetable is exact for these. Older API responses leave it out. */
   heatedSessionCount?: number;
 }
@@ -175,6 +177,8 @@ export interface CompetitionPickerItem {
   startDate: string;
   endDate: string | null;
   icon: string;
+  /** A shorter name for the events list, when the official name is very long. Fall back to `name`. */
+  shortName?: string | null;
   location?: string | null;
   ageGroupCount?: number;
   live?: { sectionName?: string | null; heatLabel: string; arenaName?: string | null } | null;
@@ -386,6 +390,8 @@ export interface CompetitionDetail {
   appleMapsUrl?: string | null;
   /** The venue's postcode, upper-cased. Null when the organiser hasn't given one. */
   postcode?: string | null;
+  /** A shorter name for the events list, when the official name is very long. The competition itself always shows `name`. */
+  shortName?: string | null;
   /** The governing body's number for the competition. */
   competitionNumber?: string | null;
   /** Where entrants write to the organiser. Shown on the public Details tab. */

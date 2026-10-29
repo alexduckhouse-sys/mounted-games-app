@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Check } from 'lucide-react';
 import { useT } from '../../../i18n/LanguageContext';
 import { COMPETITION_ICONS, competitionIcon } from '../../../competition/icons';
-import type { CreatorDraft } from '../../../lib/creatorDraft';
+import { SHORT_NAME_MAX, type CreatorDraft } from '../../../lib/creatorDraft';
 import { RefinePanelRow } from '../../refine/Refine';
 import { StepHeading } from './controls';
 import { TextBox, type StepProps } from './parts';
@@ -52,6 +52,8 @@ export function AboutStep({ draft, change, problems, clear }: StepProps<CreatorD
         <div className="cw-panel">
           <TextBox label={t('admin.creator.name')} value={draft.name} error={problems.name} onChange={(name) => { change({ name }); clear('name'); }} />
           <TextBox label={t('admin.creator.organiser')} value={draft.organiserName} onChange={(organiserName) => change({ organiserName })} />
+          <TextBox label={<>{t('admin.creator.shortName')} <span className="font-normal text-[rgb(var(--mg-muted))]">{t('admin.creator.optional')}</span></>}
+            value={draft.shortName} maxLength={SHORT_NAME_MAX} hint={t('admin.creator.shortNameHint')} onChange={(shortName) => change({ shortName })} />
         </div>
         <IconPicker value={draft.icon} onChange={(icon) => change({ icon })} />
       </div>

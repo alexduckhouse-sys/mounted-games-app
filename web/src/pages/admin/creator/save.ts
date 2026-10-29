@@ -31,6 +31,8 @@ export function basicsPayload(draft: CreatorDraft) {
   const hasEnd = draft.endDate || draft.endTime;
   return {
     name: draft.name.trim(),
+    // Blank is sent as blank, not null: on an update, null means leave it as it is.
+    shortName: draft.shortName.trim(),
     icon: draft.icon,
     location: draft.location.trim() || null,
     description: draft.description.trim() || null,

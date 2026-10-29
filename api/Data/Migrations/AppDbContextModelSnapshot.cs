@@ -1669,6 +1669,10 @@ namespace MountedGames.Api.Data.Migrations
                         .HasMaxLength(12)
                         .HasColumnType("character varying(12)");
 
+                    b.Property<string>("ShortName")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
                     b.Property<bool>("SignupsLocked")
                         .HasColumnType("boolean");
 

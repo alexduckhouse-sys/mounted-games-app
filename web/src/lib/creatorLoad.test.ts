@@ -23,6 +23,13 @@ describe('draftFromCompetition', () => {
     expect(draftFromCompetition(competition({ postcode: null }))).toMatchObject({ postcode: '', competitionNumber: '', contactEmail: '' });
   });
 
+  it('loads the short name, and a copy keeps it', () => {
+    const c = competition({ shortName: 'Midlands Pairs' });
+    expect(draftFromCompetition(c)).toMatchObject({ shortName: 'Midlands Pairs' });
+    expect(copyOfCompetition(c)).toMatchObject({ shortName: 'Midlands Pairs' });
+    expect(draftFromCompetition(competition({ shortName: null }))).toMatchObject({ shortName: '' });
+  });
+
   it('opens a competition with nothing planned: one session per age group, races left for later', () => {
     const d = draftFromCompetition(competition({
       name: 'Old', startDate: '2026-06-01T08:30:00', endDate: '2026-06-02T16:00:00', icon: undefined, organiserName: 'Pony Club', location: 'Field',

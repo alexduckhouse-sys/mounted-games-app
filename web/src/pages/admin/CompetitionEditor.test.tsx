@@ -108,6 +108,20 @@ describe('CompetitionEditor: the steps', () => {
     expect(step('Arenas')).toBeDisabled();
   });
 
+  it('keeps an optional short name in the draft, limited to 40 characters, with a hint about the events list', async () => {
+    mount();
+    await next();
+    const box = screen.getByLabelText(/Short name/);
+    expect(box).toHaveAttribute('maxlength', '40');
+    expect(screen.getByText('Shown in the events list when the full name is very long. The full name always shows on the competition itself.')).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('Name'), 'Midlands Area Mounted Games Pairs and Individuals Championship 2026');
+    await userEvent.type(box, 'Midlands Pairs');
+    expect(stored()).toMatchObject({ name: 'Midlands Area Mounted Games Pairs and Individuals Championship 2026', shortName: 'Midlands Pairs' });
+    await next();
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByLabelText(/Short name/)).toHaveValue('Midlands Pairs');
+  });
+
   it('walks to the review step, where Next turns into Create competition', async () => {
     mount();
     await next();
@@ -968,7 +982,7 @@ describe('CompetitionEditor: creating', () => {
   it('creates the competition, its age groups, sessions with estimated starts, and breaks, then offers a timetable', async () => {
     seed('review', {
       organiserName: 'Cheshire PC', location: 'Tatton', description: 'Notes', paymentDestination: 'Bank', termsText: 'T', passportCheck: true,
-      postcode: ' wa16 6qn ', competitionNumber: ' 2026-041 ', contactEmail: ' entries@example.org ',
+      postcode: ' wa16 6qn ', competitionNumber: ' 2026-041 ', contactEmail: ' entries@example.org ', shortName: ' Spring ',
       sections: [
         { ...defaultSection(), ageGroup: 'Juniors', format: 3, priceGbp: '12.5', maxParticipants: '16', finalistCount: '6', runoffRaceName: '2 Flag', minutesPerRace: '5', maxTeamsPerHeat: '4', tieBreak: 2, sessions: [{ races: ['Bending', 'Bottle'] }, { races: null }] },
         { ...defaultSection(), ageGroup: 'Open', usesRaceFinals: true, arena: 'Arena 2' },
@@ -982,7 +996,7 @@ describe('CompetitionEditor: creating', () => {
 
     expect(api.post).toHaveBeenCalledWith('/competitions', expect.objectContaining({
       name: 'Spring Games', organiserName: 'Cheshire PC', location: 'Tatton', paymentDestination: 'Bank', termsText: 'T', description: 'Notes',
-      postcode: 'wa16 6qn', competitionNumber: '2026-041', contactEmail: 'entries@example.org',
+      postcode: 'wa16 6qn', competitionNumber: '2026-041', contactEmail: 'entries@example.org', shortName: 'Spring',
       startDate: new Date('2026-10-24T09:00').toISOString(), endDate: new Date('2026-10-24T17:00').toISOString(),
       laneHatbands: ['Red', 'White', 'Blue', 'Yellow', 'Green', 'Black'],
     }));
@@ -1152,7 +1166,7 @@ describe('CompetitionEditor: the draft', () => {
 
 describe('CompetitionEditor: editing', () => {
   const saved = competition({
-    id: 7, name: 'Autumn Area', icon: 'trophy', location: 'Tatton', description: 'Notes', organiserName: 'Cheshire PC', paymentDestination: 'Bank 12-34',
+    id: 7, name: 'Autumn Area', shortName: 'Autumn', icon: 'trophy', location: 'Tatton', description: 'Notes', organiserName: 'Cheshire PC', paymentDestination: 'Bank 12-34',
     createdByUserId: 'u1', what3Words: 'a.b.c', latitude: 53.1, longitude: -2.2,
     startDate: '2026-10-24T08:30:00', endDate: '2026-10-25T16:00:00',
     sections: [
@@ -1228,6 +1242,16 @@ describe('CompetitionEditor: editing', () => {
     expect(within(open).getByText('Bottle')).toBeInTheDocument();
   });
 
+  it('shows the saved short name, and sends a blank one when it is cleared', async () => {
+    mount('/admin/competitions/7');
+    await screen.findByDisplayValue('Autumn Area');
+    expect(screen.getByLabelText(/Short name/)).toHaveValue('Autumn');
+    await userEvent.clear(screen.getByLabelText(/Short name/));
+    await userEvent.click(step('Review'));
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7', expect.objectContaining({ name: 'Autumn Area', shortName: '' })));
+  });
+
   it('saves the details, the age groups and the sessions, and keeps breaks, without touching heats or teams', async () => {
     mount('/admin/competitions/7');
     await screen.findByDisplayValue('Autumn Area');
@@ -1237,7 +1261,7 @@ describe('CompetitionEditor: editing', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(screen.getByText('Competition page')).toBeInTheDocument());
 
-    expect(api.put).toHaveBeenCalledWith('/competitions/7', expect.objectContaining({ name: 'Autumn Area', isActive: true, isArchived: false, organiserName: 'Cheshire PC', postcode: '', competitionNumber: '', contactEmail: '' }));
+    expect(api.put).toHaveBeenCalledWith('/competitions/7', expect.objectContaining({ name: 'Autumn Area', isActive: true, isArchived: false, organiserName: 'Cheshire PC', shortName: 'Autumn', postcode: '', competitionNumber: '', contactEmail: '' }));
     expect(api.put).toHaveBeenCalledWith('/competitions/7/sections/21', expect.objectContaining({ priceMinor: 5000, maxParticipants: 12, finalistCount: 6, runoffRaceName: '2 Flag' }));
     expect(api.put).toHaveBeenCalledWith('/competitions/7/sections/22', expect.objectContaining({ maxParticipants: 0 }));
     expect(api.put).toHaveBeenCalledWith('/competitions/7/sections/21', expect.objectContaining({ hasFinal: true, carryPointsIntoFinal: false, doublePointsInFinal: false }));

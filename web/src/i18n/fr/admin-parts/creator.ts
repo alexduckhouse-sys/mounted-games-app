@@ -18,6 +18,8 @@ export const adminCreator: AreaCatalogue<typeof en> = {
   'admin.creator.doneSr': ', terminée',
   'admin.creator.name': 'Nom',
   'admin.creator.organiser': 'Organisateur',
+  'admin.creator.shortName': 'Nom court',
+  'admin.creator.shortNameHint': 'Affiché dans la liste des événements quand le nom complet est très long. Le nom complet reste toujours visible sur la compétition elle-même.',
   'admin.creator.noMatch': 'Aucun résultat.',
   'admin.creator.choose': 'Choisir',
   'admin.creator.remove': 'Retirer',

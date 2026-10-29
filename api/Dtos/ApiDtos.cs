@@ -11,12 +11,12 @@ public record CreateClubRequest(string Name, string? Region = null, string? BibC
 public record CompetitionSummary(
     int Id, string Name, string? Location, DateTime StartDate, DateTime? EndDate,
     bool IsActive, bool IsArchived, int SectionCount, int TeamCount, int SessionCount,
-    int HeatedSessionCount = 0);
+    int HeatedSessionCount = 0, string? ShortName = null);
 
 public record PickerLiveHeat(string? SectionName, string HeatLabel, string? ArenaName);
 public record CompetitionPickerItem(
     int Id, string Name, DateTime StartDate, DateTime? EndDate, string Icon,
-    string? Location, int AgeGroupCount, PickerLiveHeat? Live, bool IsDemo = false, bool EntriesOpen = false);
+    string? Location, int AgeGroupCount, PickerLiveHeat? Live, bool IsDemo = false, bool EntriesOpen = false, string? ShortName = null);
 public record CompetitionPickerPage(IReadOnlyList<CompetitionPickerItem> Items, bool HasMore, IReadOnlyList<int>? Years = null, IReadOnlyList<string>? Locations = null);
 
 /// <summary>How far an event is from where we think the viewer is, in whole miles. Never the viewer's position itself.</summary>
@@ -32,6 +32,7 @@ public static class CompetitionFields
 {
     public const int PostcodeMax = 12;
     public const int CompetitionNumberMax = 40;
+    public const int ShortNameMax = 40;
     public const int LorryWhat3WordsMax = 120;
     public const int LorryDirectionsNoteMax = 1000;
     public const int PaymentLinkUrlMax = 500;
@@ -133,7 +134,8 @@ public record CompetitionDetail(
     int? MaxStables = null,
     int? MaxHookups = null,
     int? StablesRemaining = null,
-    int? HookupsRemaining = null);
+    int? HookupsRemaining = null,
+    string? ShortName = null);
 
 public record CreateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -156,7 +158,8 @@ public record CreateCompetitionRequest(
     [MaxLength(CompetitionFields.LorryDirectionsNoteMax)] string? LorryDirectionsNote = null,
     [MaxLength(CompetitionFields.PaymentLinkUrlMax)] string? PaymentLinkUrl = null,
     [Range(0, 2000)] int? MaxStables = null,
-    [Range(0, 2000)] int? MaxHookups = null);
+    [Range(0, 2000)] int? MaxHookups = null,
+    [MaxLength(CompetitionFields.ShortNameMax)] string? ShortName = null);
 
 public record UpdateCompetitionRequest(
     string Name, string? Location, string? Description,
@@ -182,7 +185,9 @@ public record UpdateCompetitionRequest(
     [MaxLength(CompetitionFields.LorryDirectionsNoteMax)] string? LorryDirectionsNote = null,
     [MaxLength(CompetitionFields.PaymentLinkUrlMax)] string? PaymentLinkUrl = null,
     [Range(0, 2000)] int? MaxStables = null,
-    [Range(0, 2000)] int? MaxHookups = null);
+    [Range(0, 2000)] int? MaxHookups = null,
+    /// <summary>Null leaves the short name as it is; a blank value clears it.</summary>
+    [MaxLength(CompetitionFields.ShortNameMax)] string? ShortName = null);
 
 public record SetSignupsLockedRequest(bool Locked);
 

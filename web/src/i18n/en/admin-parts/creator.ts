@@ -20,6 +20,8 @@ export const adminCreator = {
   // Shared little words
   'admin.creator.name': 'Name',
   'admin.creator.organiser': 'Organiser',
+  'admin.creator.shortName': 'Short name',
+  'admin.creator.shortNameHint': 'Shown in the events list when the full name is very long. The full name always shows on the competition itself.',
   'admin.creator.noMatch': 'No match.',
   'admin.creator.choose': 'Choose',
   'admin.creator.remove': 'Remove',

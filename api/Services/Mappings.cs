@@ -18,7 +18,8 @@ public static class Mappings
         c.Sections?.Count ?? 0,
         c.Teams?.Count ?? 0,
         c.Sessions?.Count ?? 0,
-        c.Sessions?.Count(s => s.Heats.Count > 0) ?? 0);
+        c.Sessions?.Count(s => s.Heats.Count > 0) ?? 0,
+        c.ShortName);
 
     public static CompetitionDetail ToDto(
         this Competition c,
@@ -49,7 +50,8 @@ public static class Mappings
         LorryLongitude: c.LorryLongitude, LorryDirectionsNote: c.LorryDirectionsNote,
         PaymentLinkUrl: includePaymentDetails ? CompetitionFields.ResolvePaymentLinkUrl(c.PaymentLinkUrl, c.PaymentDestination) : null,
         MaxStables: maxStables, MaxHookups: maxHookups,
-        StablesRemaining: stablesRemaining, HookupsRemaining: hookupsRemaining);
+        StablesRemaining: stablesRemaining, HookupsRemaining: hookupsRemaining,
+        ShortName: c.ShortName);
 
     /// <param name="activeSignups">Paid and pending entries: the ones that count towards <c>MaxParticipants</c>.</param>
     public static CompetitionSectionDto ToDto(this CompetitionSection s, int activeSignups = 0) =>

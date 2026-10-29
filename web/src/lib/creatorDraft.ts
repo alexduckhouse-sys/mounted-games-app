@@ -12,6 +12,8 @@ export const MAIN_ARENA = 'Main arena';
 /** Minutes a whole heat takes in the arena, including every race in its list. */
 export const DEFAULT_MINUTES = 10;
 export const lanesFor = (format: number) => (format === 1 ? 4 : 6);
+/** The longest short name the API accepts (`CompetitionFields.ShortNameMax`). */
+export const SHORT_NAME_MAX = 40;
 export const MAX_SESSIONS = 6;
 
 export const STEP_IDS = ['start', 'about', 'when', 'arenas', 'sections', 'structure', 'races', 'dec', 'payment', 'review'] as const;
@@ -122,6 +124,8 @@ export interface CreatorDraft {
   endTime: string;
   location: string;
   postcode: string;
+  /** A shorter name for the events list when the official name is very long. Blank uses the full name. */
+  shortName: string;
   /** The governing body's number for the event. */
   competitionNumber: string;
   /** Where entrants write to the organiser. */
@@ -180,7 +184,7 @@ export function defaultDraft(today: Date = new Date()): CreatorDraft {
   return {
     step: 0, name: '', icon: 'flag', organiserName: '',
     startDate: today.toISOString().slice(0, 10), startTime: '09:00', endDate: '', endTime: '17:00',
-    location: '', postcode: '', competitionNumber: '', contactEmail: '', what3Words: '', appleMapsUrl: '', lat: '', lon: '', description: '', paymentDestination: '', termsText: '',
+    location: '', postcode: '', shortName: '', competitionNumber: '', contactEmail: '', what3Words: '', appleMapsUrl: '', lat: '', lon: '', description: '', paymentDestination: '', termsText: '',
     sections: [defaultSection()], arenas: [defaultArena()], breaks: [], laneHatbands: [],
   };
 }
@@ -423,6 +427,7 @@ export function readDraft(raw: unknown, today: Date = new Date()): CreatorDraft 
     name: r.name,
     icon: text(r.icon, base.icon),
     organiserName: text(r.organiserName),
+    shortName: text(r.shortName),
     startDate: text(r.startDate, base.startDate), startTime: text(r.startTime, base.startTime),
     endDate: text(r.endDate), endTime: text(r.endTime, base.endTime),
     location: text(r.location), postcode: text(r.postcode), competitionNumber: text(r.competitionNumber), contactEmail: text(r.contactEmail), what3Words: text(r.what3Words),
