@@ -84,6 +84,12 @@
 /* Phones keep one column: the two groups are transparent. */
 .live-col { display: contents; }
 .live-stream-head { display: none; }
+/* Phones: an organiser's announcement box sits at the foot of the screen, above the tabs, like a chat box. */
+@media (max-width: 1023px) {
+  .live-page-staff { padding-bottom: 12px; }
+  .live-page-staff .live-col-main { display: flex; flex: 1; flex-direction: column; gap: 12px; }
+  .live-page-staff .live-composer { position: sticky; z-index: 20; bottom: calc(69px + 12px + env(safe-area-inset-bottom, 0px)); margin-top: auto; box-shadow: var(--mg-shadow-sm); }
+}
 .live-compose-field textarea { min-height: 44px; padding: 12px 0; resize: none; }
 @media (min-width: 700px) and (max-width: 1023px) { .live-page { width: 100%; max-width: 560px; margin: 0 auto; } }
 

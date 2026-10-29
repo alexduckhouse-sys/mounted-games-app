@@ -38,12 +38,12 @@ export function ContactOrganisersPage() {
   const { competition } = useCompetition();
   const [params] = useSearchParams();
   const authSession = user ? `${user.id}:${[...user.roles].sort().join(',')}` : 'signed-out';
-  // Organisers read and answer messages in the one Messages & Announcements flow; old links and notifications land there.
+  // Organisers read and answer messages on the Announcements page; old links and notifications land there.
   if (hasRole('Admin') || canOrganise(competition)) {
     const withId = params.get('with');
     return <Navigate replace to={withId
       ? `/competitions/${competition.id}/messages/${encodeURIComponent(withId)}`
-      : `/competitions/${competition.id}/announcements?tab=messages`} />;
+      : `/competitions/${competition.id}/announcements`} />;
   }
   return <ContactOrganisersSession key={authSession} />;
 }

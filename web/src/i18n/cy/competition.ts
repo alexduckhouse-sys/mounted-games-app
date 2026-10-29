@@ -275,8 +275,4 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.seasonRound.confirmMessagePublished': 'Nid yw {name} yn cyfrif tuag at y tymor hwn mwyach ac mae’r canlyniadau cyhoeddedig yn cael eu dileu. Gallwch ei hychwanegu’n ôl yn nes ymlaen, ond bydd rhaid cyhoeddi eto.',
   'competition.seasonRound.confirmLabel': 'Tynnu’r rownd',
   'competition.seasonRound.error': 'Methwyd tynnu’r rownd hon. Gwiriwch eich signal a rhowch gynnig arall arni.',
-  'competition.messages.title': 'Negeseuon a chyhoeddiadau',
-  'competition.messages.tabAnnouncements': 'Cyhoeddiadau',
-  'competition.messages.tabMessages': 'Negeseuon',
-  'competition.messages.tabsLabel': 'Cyhoeddiadau a negeseuon',
 };

@@ -52,11 +52,10 @@ describe('AnnouncementsPage', () => {
     vi.mocked(api.delete).mockReset().mockResolvedValue({ data: {} });
   });
 
-  it('shows pinned, the new box and sent without the pinned one on the Announcements tab', async () => {
+  it('shows pinned, sent without the pinned one and messages on one page, with the new box at the foot', async () => {
     mount();
-    expect(await screen.findByRole('heading', { name: 'Messages & Announcements' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Announcements' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: 'Messages (1)' })).toHaveAttribute('aria-selected', 'false');
+    expect(await screen.findByRole('heading', { name: 'Announcements' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab')).toBeNull();
     expect(await screen.findByRole('heading', { name: 'Pinned' })).toBeInTheDocument();
     const pinned = screen.getByRole('heading', { name: 'Pinned' }).parentElement!;
     expect(within(pinned).getByText('Finals at four')).toBeInTheDocument();
@@ -68,24 +67,12 @@ describe('AnnouncementsPage', () => {
     expect(within(sent).getAllByRole('listitem')).toHaveLength(1);
     expect(within(sent).getByText('Lunch at one')).toBeInTheDocument();
     expect(screen.queryByRole('switch')).toBeNull();
-    expect(screen.queryByRole('list', { name: 'Messages' })).toBeNull();
-  });
-
-  it('switches to the chat list on the Messages tab, with one row for each person', async () => {
-    const user = userEvent.setup();
-    mount();
-    await user.click(await screen.findByRole('tab', { name: 'Messages (1)' }));
-    const link = await screen.findByRole('link', { name: /Pat Rider · Warwickshire Hunt A/ });
+    const link = screen.getByRole('link', { name: /Pat Rider · Warwickshire Hunt A/ });
     expect(link).toHaveAttribute('href', '/competitions/1/messages/u1');
     expect(within(link).getByLabelText('1 unread')).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText('Write an announcement')).toBeNull();
-    expect(screen.getByRole('tab', { name: /^Messages/ })).toHaveAttribute('aria-selected', 'true');
-  });
-
-  it('opens on the Messages tab from ?tab=messages (the address old links redirect to)', async () => {
-    mount('/competitions/1/announcements?tab=messages');
-    expect(await screen.findByRole('link', { name: /Pat Rider/ })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Pinned' })).toBeNull();
+    const foot = screen.getByRole('region', { name: 'New announcement' });
+    expect(foot).toHaveClass('rf-foot');
+    expect(within(foot).getByPlaceholderText('Write an announcement')).toBeInTheDocument();
   });
 
   it('sends anyone who is not an organiser to the contact page instead', async () => {
@@ -103,9 +90,7 @@ describe('AnnouncementsPage', () => {
 
   it('hides Pinned and Sent when there is nothing to show, and says when there are no messages', async () => {
     feed = [];
-    const user = userEvent.setup();
     mount();
-    await user.click(await screen.findByRole('tab', { name: 'Messages' }));
     expect(await screen.findByText('No messages yet')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Pinned' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Sent' })).toBeNull();

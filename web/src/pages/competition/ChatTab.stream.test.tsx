@@ -273,9 +273,9 @@ it('gives organisers a Go live button on the stream card, whether or not streami
   expect(within(screen.getByRole('dialog', { name: 'Stream settings' })).getByRole('link', { name: 'Go live' })).toHaveAttribute('href', '/competitions/1/broadcast');
   fireEvent.click(screen.getByRole('button', { name: 'Close stream settings' }));
   expect(screen.queryByText(/Streaming isn’t switched on/)).toBeNull();
-  // Nothing is live: the controls are hidden and organisers still reach their saved replays.
+  // Nothing is live: no stream controls, and replays live on their own page rather than a button here.
   expect(screen.queryByRole('link', { name: 'Control the stream' })).toBeNull();
-  expect(screen.getByRole('link', { name: 'Replays' })).toHaveAttribute('href', '/competitions/1/stream-controls?tab=replay');
+  expect(screen.queryByRole('link', { name: 'Replays' })).toBeNull();
   expect(screen.getByRole('link', { name: 'Commentary desk' })).toHaveAttribute('href', '/competitions/1/commentary');
   expect(screen.queryByRole('link', { name: 'Prize-giving' })).toBeNull();
   expect(screen.queryByText('End stream')).toBeNull();

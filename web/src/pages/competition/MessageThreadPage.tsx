@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowRight, ChevronLeft } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { Link, Navigate, useParams } from 'react-router-dom';
+import { Navigate, useParams } from 'react-router-dom';
 import { useCompetition } from './context';
 import { useChatFeed } from './useChatFeed';
 import { useAuth } from '../../auth/AuthContext';
@@ -15,7 +15,7 @@ import { BUBBLE_IN, BUBBLE_SHOWN, BUBBLE_SPRING } from '../../lib/motion';
 import { useStillMotion } from '../../lite/useStillMotion';
 import { clockTime, markSeen, messageThreads, threadMessages } from '../../lib/announcements';
 import { accountKind, type AdminUser, type BlockedAccount } from '../admin/accountAccessTypes';
-import { RefineFoot, RefinePage } from '../refine/Refine';
+import { RefineFoot, RefineHeader, RefinePage } from '../refine/Refine';
 import type { ChatMessage } from '../../types';
 import './announcements.css';
 
@@ -147,16 +147,14 @@ function ThreadSession({ userId }: { userId: string }) {
 
   return (
     <RefinePage className="ann-page ann-thread-page">
-      <header className="rf-hd">
-        <div className="rf-hd-top">
-          <Link className="rf-ib" to={`/competitions/${competition.id}/announcements?tab=messages`} aria-label={t('site.contact.backToMessages')}><ChevronLeft className="h-5 w-5" aria-hidden="true" /></Link>
-          <span className="rf-ctx">{competition.name}</span>
-        </div>
-        <div className="ann-title-row">
-          <h1 className="rf-ttl">{name}</h1>
-          {canBlock && blocked === false && <button type="button" className="ann-red ann-red-on-navy" disabled={working} onClick={() => void block()}>Block</button>}
-        </div>
-      </header>
+      {/* The name and back arrow go up into the app's top bar; Block sits just under it. */}
+      <RefineHeader
+        back={`/competitions/${competition.id}/announcements`} backLabel={t('site.contact.backToMessages')}
+        context={competition.name} title={name}
+        actions={canBlock && blocked === false
+          ? <button type="button" className="ann-red ann-red-on-navy" disabled={working} onClick={() => void block()}>Block</button>
+          : undefined}
+      />
 
       <div className="ann-body ann-thread-body">
         {chip && <span className="ann-chip">{chip}</span>}
@@ -177,8 +175,10 @@ function ThreadSession({ userId }: { userId: string }) {
               initial={still || feed.loading ? false : BUBBLE_IN} animate={BUBBLE_SHOWN} transition={BUBBLE_SPRING}
               style={{ transformOrigin: message.recipientUserId ? 'bottom right' : 'bottom left' }}>
               <span>{message.body}</span>
-              <time dateTime={message.createdAt}>{clockTime(message.createdAt)}</time>
-              <button type="button" className="ann-more" aria-label={t('site.contact.moreFor', { body: message.body })} onClick={() => setMenuFor(message)}>⋯</button>
+              <span className="ann-bubble-foot">
+                <time dateTime={message.createdAt}>{clockTime(message.createdAt)}</time>
+                <button type="button" className="ann-more" aria-label={t('site.contact.moreFor', { body: message.body })} onClick={() => setMenuFor(message)}>⋯</button>
+              </span>
             </motion.li>
           ))}
         </ol>

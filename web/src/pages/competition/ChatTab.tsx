@@ -14,6 +14,7 @@ import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { LiveVideo } from '../../components/stream/LiveVideo';
 import type { ChatMessage, LiveStream } from '../../types';
 import './chat.css';
+import { useQuietTicker } from '../../components/TickerContext';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
 import { useLanguage, useT } from '../../i18n/LanguageContext';
@@ -219,7 +220,7 @@ function ChatTabSession() {
         <div className="mg-section-head">
           <h2 id="announcements-title">{t('teams.chat.announcements')}</h2>
           {canPost && (
-            <Link to={`/competitions/${competition.id}/announcements?tab=messages`} className="inline-flex min-h-11 items-center text-xs font-semibold text-[rgb(var(--mg-heading))] underline">
+            <Link to={`/competitions/${competition.id}/announcements`} className="inline-flex min-h-11 items-center text-xs font-semibold text-[rgb(var(--mg-heading))] underline">
               Messages{privateCount > 0 ? ` (${privateCount})` : ''}
             </Link>
           )}
@@ -305,6 +306,8 @@ function ChatTabSession() {
 
       {canPost ? (
         <>
+          {/* Organisers get no news ticker here: the announcement box sits at the foot of the screen instead. */}
+          <QuietTicker />
           <div className="live-col live-col-rail">
             <div className="mg-section-head live-stream-head"><h2>{t('teams.stream.stream')}</h2></div>
             <StaffStreamCard key={canManageStream ? 'editable' : 'read-only'} active={activeStreams[0] ?? null} fallback={competition.streamUrl ?? null} competitionId={competition.id} canBroadcast={canBroadcast} canEditStream={canManageStream} streamingNotSetUp={canManageStream && streamingChecked && !streamingEnabled} onSaved={reload} />
@@ -449,6 +452,11 @@ function AnnouncementsOverlay({ messages, staff, canModerate, canBlockAuthors, p
   </div>;
 }
 
+function QuietTicker() {
+  useQuietTicker();
+  return null;
+}
+
 function StaffStreamCard({ active, fallback, competitionId, canBroadcast, canEditStream, streamingNotSetUp, onSaved }: {
   active: LiveStream | null;
   fallback: string | null;
@@ -474,9 +482,7 @@ function StaffStreamCard({ active, fallback, competitionId, canBroadcast, canEdi
     </div>
     {canBroadcast && (
       <div className="staff-stream-actions">
-        {active
-          ? <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/stream-controls`}>Control the stream</Link>
-          : <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/stream-controls?tab=replay`}>Replays</Link>}
+        {active && <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/stream-controls`}>Control the stream</Link>}
         <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/produce`}>{t('shell.menu.producerOverlay')}</Link>
         <Link className="mg-btn mg-btn-secondary" to={`/competitions/${competitionId}/commentary`}>Commentary desk</Link>
       </div>

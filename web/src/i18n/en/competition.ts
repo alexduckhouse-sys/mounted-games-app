@@ -275,8 +275,4 @@ export const competition = {
   'competition.seasonRound.confirmMessagePublished': '{name} stops counting towards this season and its published results are deleted. You can add it back later, but you would need to publish again.',
   'competition.seasonRound.confirmLabel': 'Remove round',
   'competition.seasonRound.error': 'This round couldn’t be removed. Check your signal and try again.',
-  'competition.messages.title': 'Messages & Announcements',
-  'competition.messages.tabAnnouncements': 'Announcements',
-  'competition.messages.tabMessages': 'Messages',
-  'competition.messages.tabsLabel': 'Announcements and messages',
 } satisfies Record<string, Message>;

@@ -1,14 +1,13 @@
 import { WhatsAppComposer } from '../operations/WhatsAppComposer';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
-import { Link, Navigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useCompetition } from './context';
 import { useChatFeed } from './useChatFeed';
 import { useAuth } from '../../auth/AuthContext';
 import { api, pinChatMessage } from '../../api';
 import { Notice } from '../../components/Notice';
-import { useT } from '../../i18n/LanguageContext';
-import { RefineHeader, RefineList, RefinePage } from '../refine/Refine';
+import { RefineFoot, RefineHeader, RefineList, RefinePage } from '../refine/Refine';
 import {
   clockTime, initials, markSeen, messageThreads, pinnedAnnouncement, readSeen, sentAnnouncements, sentLabel,
 } from '../../lib/announcements';
@@ -32,12 +31,9 @@ export function AnnouncementsPage() {
 }
 
 function AnnouncementsSession() {
-  const t = useT();
   const { competition, reload } = useCompetition();
   const { hasRole, canOrganise } = useAuth();
   const isAdmin = hasRole('Admin') || canOrganise(competition);
-  const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') === 'messages' ? 'messages' : 'announcements';
   const feed = useChatFeed(competition.id, 'Couldn’t load the announcements. Check your signal and try again.');
   const [body, setBody] = useState(() => readDraft(competition.id));
   const [sending, setSending] = useState(false);
@@ -46,6 +42,14 @@ function AnnouncementsSession() {
   const busy = useRef(false);
 
   useEffect(() => { writeDraft(competition.id, body); }, [competition.id, body]);
+  // The box grows with what is typed, up to about five lines, then scrolls.
+  const boxRef = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
+    box.style.height = 'auto';
+    box.style.height = `${Math.min(box.scrollHeight, 140)}px`;
+  }, [body]);
 
   const pinned = pinnedAnnouncement(feed.messages);
   const sent = useMemo(() => sentAnnouncements(feed.messages), [feed.messages]);
@@ -98,24 +102,14 @@ function AnnouncementsSession() {
     finally { busy.current = false; reload(); }
   }
 
-  const unreadTotal = threads.reduce((sum, thread) => sum + thread.unread, 0);
-  const openTab = (next: 'announcements' | 'messages') => setParams(next === 'messages' ? { tab: 'messages' } : {}, { replace: true });
-
   return (
     <RefinePage className="ann-page">
-      <RefineHeader
-        back={`/competitions/${competition.id}/chat`} backLabel="Back to live stream" context={competition.name} title={t('competition.messages.title')}
-        tabsKind="tablist" tabsLabel={t('competition.messages.tabsLabel')}
-        tabs={[
-          { label: t('competition.messages.tabAnnouncements'), active: tab === 'announcements', onSelect: () => openTab('announcements') },
-          { label: unreadTotal > 0 ? `${t('competition.messages.tabMessages')} (${unreadTotal})` : t('competition.messages.tabMessages'), active: tab === 'messages', onSelect: () => openTab('messages') },
-        ]}
-      />
+      <RefineHeader back={`/competitions/${competition.id}/chat`} backLabel="Back to live stream" context={competition.name} title="Announcements" />
       <div className="ann-body">
         {error && <Notice actionLabel={error.retry ? 'Try again' : undefined} onAction={error.retry}>{error.text}</Notice>}
         {!error && feed.error && <Notice actionLabel="Try again" onAction={feed.load}>{feed.error}</Notice>}
 
-        {tab === 'announcements' && pinned && (
+        {pinned && (
           <section aria-labelledby="ann-pinned">
             <h2 id="ann-pinned" className="ann-h">Pinned</h2>
             <div key={pinned.id} className="ann-card ann-pinned mg-reveal">
@@ -125,23 +119,7 @@ function AnnouncementsSession() {
           </section>
         )}
 
-        {tab === 'announcements' && isAdmin && <section aria-labelledby="ann-new">
-          <h2 id="ann-new" className="ann-h">New announcement</h2>
-          <div className="ann-compose">
-            <textarea
-              aria-label="New announcement"
-              placeholder="Write an announcement"
-              value={body}
-              maxLength={2000}
-              onChange={(event) => setBody(event.target.value)}
-            />
-            <button type="button" className="ann-send" aria-label="Send" disabled={!body.trim() || sending} onClick={() => void send()}>
-              <ArrowRight className="h-5 w-5" aria-hidden="true" />
-            </button>
-          </div>
-        </section>}
-
-        {tab === 'announcements' && sent.length > 0 && (
+        {sent.length > 0 && (
           <section aria-labelledby="ann-sent">
             <h2 id="ann-sent" className="ann-h">Sent</h2>
             <RefineList label="Sent announcements">
@@ -159,9 +137,9 @@ function AnnouncementsSession() {
           </section>
         )}
 
-        {tab === 'messages' && isAdmin && (
+        {isAdmin && (
           <section aria-labelledby="ann-messages">
-            <h2 id="ann-messages" className="sr-only">Messages</h2>
+            <h2 id="ann-messages" className="ann-h">Messages</h2>
             <RefineList label="Messages">
               {threads.map((thread) => {
                 const team = teamOf(thread.userId);
@@ -186,6 +164,25 @@ function AnnouncementsSession() {
           </section>
         )}
       </div>
+      {/* The box to write a new announcement sits at the foot of the page, like a chat box, so the page reads top down. */}
+      {isAdmin && (
+        <RefineFoot aboveTabs label="New announcement">
+          <form className="ann-compose" onSubmit={(event) => { event.preventDefault(); void send(); }}>
+            <textarea
+              ref={boxRef}
+              aria-label="New announcement"
+              placeholder="Write an announcement"
+              rows={1}
+              value={body}
+              maxLength={2000}
+              onChange={(event) => setBody(event.target.value)}
+            />
+            <button type="submit" className="ann-send" aria-label="Send" disabled={!body.trim() || sending}>
+              <ArrowRight className="h-5 w-5" aria-hidden="true" />
+            </button>
+          </form>
+        </RefineFoot>
+      )}
     </RefinePage>
   );
 }

@@ -175,28 +175,11 @@ describe('signed in', () => {
 });
 
 describe('an organiser opening the old contact address', () => {
-  it('lands on the Messages tab of Messages & Announcements, and never fetches the chat here', () => {
+  it('lands on Announcements, where their messages are, and never fetches the chat here', () => {
     state.roles = ['Admin'];
     mount({}, ['/competitions/1/contact']);
     expect(screen.getByTestId('where')).toHaveTextContent('/competitions/1/announcements');
     expect(state.get).not.toHaveBeenCalled();
-  });
-
-  it('keeps the tab in the address', () => {
-    state.roles = ['Trainer']; state.organise = true;
-    function Search() { return <p data-testid="search">{useLocation().search}</p>; }
-    const value = { competition: competition({ staffChatEnabled: true }), reload: vi.fn(), streams: [], streamingEnabled: false, invoke: vi.fn(), ready: 1, streamMessages: [] };
-    render(
-      <MemoryRouter initialEntries={['/competitions/1/contact']}>
-        <CompetitionContext.Provider value={value}>
-          <Routes>
-            <Route path="/competitions/:id/contact" element={<ContactOrganisersPage />} />
-            <Route path="*" element={<Search />} />
-          </Routes>
-        </CompetitionContext.Provider>
-      </MemoryRouter>,
-    );
-    expect(screen.getByTestId('search')).toHaveTextContent('?tab=messages');
   });
 
   it('opens a person\'s thread from a ?with= link (old notification and bookmark links)', () => {

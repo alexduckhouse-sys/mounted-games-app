@@ -11,11 +11,10 @@
 .ann-red:disabled { opacity: .5; cursor: not-allowed; }
 .ann-red-on-navy { color: rgb(252 165 165); }
 
-.ann-compose { position: relative; }
-.ann-compose textarea { display: block; box-sizing: border-box; width: 100%; height: 156px; resize: none; padding: 14px 64px 14px 14px; border: 1.5px solid rgb(var(--mg-border)); border-radius: 14px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); font: 400 17px/1.4 var(--mg-font); }
+.ann-compose { display: flex; align-items: flex-end; gap: 8px; width: 100%; }
+.ann-compose textarea { display: block; flex: 1; min-width: 0; box-sizing: border-box; min-height: 44px; max-height: 140px; resize: none; padding: 10px 16px; border: 1.5px solid rgb(var(--mg-border)); border-radius: 22px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); font: 400 16px/1.4 var(--mg-font); }
 .ann-compose textarea:focus { outline: 0; border-color: rgb(var(--mg-heading)); }
 .ann-send { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex: none; border: 0; border-radius: 50%; background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); cursor: pointer; }
-.ann-compose .ann-send { position: absolute; right: 10px; bottom: 10px; }
 .ann-send:disabled { opacity: .4; cursor: default; }
 .ann-send:focus-visible, .ann-pill:focus-visible, .ann-red:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
 
@@ -40,13 +39,18 @@
 .ann-blocked span { flex: 1; }
 .ann-messages { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .ann-bubble { max-width: 82%; padding: 9px 12px; border-radius: 16px; font: 400 16px/1.35 var(--mg-font); overflow-wrap: anywhere; }
-.ann-bubble time { display: inline-block; margin-top: 3px; font: 500 11px/1 var(--mg-font); opacity: .7; }
+.ann-bubble > span:first-child { display: block; }
+.ann-bubble-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 3px; }
+.ann-bubble time { font: 500 11px/1 var(--mg-font); opacity: .7; }
 .ann-bubble-in { align-self: flex-start; background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); color: rgb(var(--mg-ink)); }
 .ann-bubble-out { align-self: flex-end; background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); }
 .ann-input { display: flex; align-items: center; gap: 8px; width: 100%; }
 .ann-input input { flex: 1; min-width: 0; height: 44px; box-sizing: border-box; padding: 0 16px; border: 1.5px solid rgb(var(--mg-border)); border-radius: 999px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); font: 400 16px/1 var(--mg-font); }
 .ann-input input:focus { outline: 0; border-color: rgb(var(--mg-heading)); }
-.ann-thread-page .rf-foot { padding-block: 8px; }
+.ann-thread-page .rf-foot, .ann-page .rf-foot { padding-block: 8px; }
+/* The writing box stays at the foot of the screen even when there is little above it. */
+.ann-page, .ann-thread-page { display: flex; flex-direction: column; min-height: calc(100dvh - var(--mg-shell-h, 56px) - 66px - env(safe-area-inset-bottom, 0px)); }
+.ann-page > .ann-body, .ann-thread-page > .ann-body { flex: 1; padding-bottom: 24px; }
 
 /* Motion. Send buttons and pills squeeze as they are pressed; a new unread count pops in. */
 .ann-send, .ann-pill { transition: background-color var(--mg-dur-fast) var(--mg-ease-out), border-color var(--mg-dur-fast) var(--mg-ease-out), opacity var(--mg-dur-fast) var(--mg-ease-out), scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1); }
@@ -57,6 +61,6 @@
 
 /* 44px tap targets: the pill stays slim, its hit area does not. */
 .ann-pill::after { content: ''; position: absolute; inset: -6px -4px; }
-.ann-more { position: relative; display: inline-block; margin-left: 8px; padding: 0 4px; border: 0; background: transparent; color: inherit; font: 700 16px/1 var(--mg-font); opacity: .7; cursor: pointer; }
+.ann-more { position: relative; display: inline-block; padding: 0 4px; border: 0; background: transparent; color: inherit; font: 700 16px/1 var(--mg-font); opacity: .7; cursor: pointer; }
 .ann-more::after { content: ''; position: absolute; inset: -14px -10px; }
 .ann-more:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }

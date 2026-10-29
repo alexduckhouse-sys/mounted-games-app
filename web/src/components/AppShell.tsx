@@ -62,7 +62,7 @@ function Shell({ width }: { width: PageWidth }) {
   const chromeHidden = useChromeHidden();
   const onLiveFeed = /\/competitions\/\d+\/chat\/?$/.test(location.pathname);
   // No ticker over a message composer, or behind the creator wizard's Back / Next footer.
-  const noTicker = /^\/competitions\/\d+\/(contact|messages\/[^/]+)\/?$/.test(location.pathname)
+  const noTicker = /^\/competitions\/\d+\/(contact|announcements|messages\/[^/]+)\/?$/.test(location.pathname)
     || /^\/admin\/competitions\/(new|\d+(\/format)?)\/?$/.test(location.pathname);
   // The ticker docks above the tab bar on every page but filming. An event's own pages feed it; elsewhere it follows
   // the event last opened, and it only shows when there is news (or a page button such as the timetable's filters).
