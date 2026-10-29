@@ -1,3 +1,4 @@
+import { Upload } from 'lucide-react';
 import { useT } from '../../i18n/LanguageContext';
 import { useMemo, useState, type ChangeEvent } from 'react';
 import { tr } from '../../i18n/translate';
@@ -88,9 +89,11 @@ export function RemindUnpaidSheet({ competition, signups, onChanged, onClose }: 
             <label className="rf-fld">{t('ops2.money.addMsg')}
               <textarea rows={2} maxLength={500} value={note} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setNote(e.target.value)} />
             </label>
+            {busy && <div className="et-progress" role="progressbar" aria-label={t('ops2.money.sending', { what: plural(chosen.length, 'ops2.money.n.reminder') })} />}
             <div className="et-actions">
               <button type="button" className="rf-btn rf-btn-primary" disabled={busy || chosen.length === 0} onClick={() => void send()}>
-                {chosen.length === 0 ? t('ops2.money.pick') : t('ops2.money.sendWhat', { what: plural(chosen.length, 'ops2.money.n.reminder') })}
+                {busy ? t('ops2.money.sending', { what: plural(chosen.length, 'ops2.money.n.reminder') })
+                  : chosen.length === 0 ? t('ops2.money.pick') : t('ops2.money.sendWhat', { what: plural(chosen.length, 'ops2.money.n.reminder') })}
               </button>
             </div>
           </>
@@ -236,8 +239,9 @@ export function BacsMatchSheet({ competition, signups, onChanged, onClose }: She
         {error && <Notice>{error}</Notice>}
         {note && <Notice role="status">{note}</Notice>}
         <p className="rf-note">{t('ops2.money.chooseCsv')}</p>
-        <label className="rf-fld">{t('ops2.money.statement')}
-          <input type="file" accept=".csv,text/csv" disabled={busy} onChange={(e) => void pickFile(e)} />
+        <label className="rf-btn et-file">
+          <Upload className="h-4 w-4" aria-hidden="true" />{t('ops2.money.statement')}
+          <input type="file" className="sr-only" accept=".csv,text/csv" disabled={busy} onChange={(e) => void pickFile(e)} />
         </label>
         {rows && rows.length === 0 && <p className="rf-note">{t('ops2.money.nothingLeft')}</p>}
         {rows && rows.length > 0 && (

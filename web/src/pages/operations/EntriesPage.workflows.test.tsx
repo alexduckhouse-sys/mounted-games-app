@@ -211,7 +211,7 @@ describe('Entry tools', () => {
     show();
     await openTool(user, 'Match a bank statement');
     const csv = 'Date,Reference,Amount\n01/05/2031,MG-7-2 Pending Pru,15.50\n02/05/2031,Mystery,9.99\n';
-    await user.upload(screen.getByLabelText('Bank statement (CSV)'), new File([csv], 'statement.csv', { type: 'text/csv' }));
+    await user.upload(screen.getByLabelText('Choose bank statement (CSV)'), new File([csv], 'statement.csv', { type: 'text/csv' }));
     expect(await screen.findByText('Matches')).toBeInTheDocument();
     expect(screen.getByText('No match')).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: /: Mystery$/ })).toBeDisabled();
@@ -227,7 +227,7 @@ describe('Entry tools', () => {
     show();
     await openTool(user, 'Match a bank statement');
     const csv = 'Date,Reference,Amount\n01/05/2031,MG-7-2 Pending Pru,10.00\n';
-    await user.upload(screen.getByLabelText('Bank statement (CSV)'), new File([csv], 'statement.csv', { type: 'text/csv' }));
+    await user.upload(screen.getByLabelText('Choose bank statement (CSV)'), new File([csv], 'statement.csv', { type: 'text/csv' }));
     expect(await screen.findByText('Amount differs')).toBeInTheDocument();
     expect(screen.getByText('Check this one on the entry and mark it paid there if it’s right.')).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: /: MG-7-2 Pending Pru$/ })).toBeDisabled();

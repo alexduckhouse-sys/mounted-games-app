@@ -1,3 +1,4 @@
+import { SelectField } from '../../components/SelectField';
 import { useT } from '../../i18n/LanguageContext';
 import { useEffect, useState } from 'react';
 import { Search } from 'lucide-react';
@@ -315,13 +316,13 @@ export function PassportCheckTab({ competitionId }: { competitionId: string }) {
                       </div>
                       <label className="rf-fld">
                         {t('ops3.pc.f.role')}
-                        <select
+                        <SelectField
                           value={draft.inspectorRole}
                           onChange={(e) => updateDraft(key, pony, { inspectorRole: e.target.value === 'Vet' ? 'Vet' : 'Official' })}
                         >
                           <option value="Vet">{t('ops3.pc.vet')}</option>
                           <option value="Official">{t('ops3.pc.official')}</option>
-                        </select>
+                        </SelectField>
                       </label>
                       <label className="rf-fld sm:col-span-2">
                         {t('ops3.pc.f.said')}

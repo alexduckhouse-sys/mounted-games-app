@@ -285,6 +285,8 @@ describe('DeclarationsTab: the dec form', () => {
     expect(screen.getByText('Sent. You can still change it.')).toHaveAttribute('data-tone', 'good');
     expect(screen.getByRole('button', { name: 'Send changes' })).toBeDisabled();
     expect(screen.getByText('Nothing has changed since you sent it.')).toBeInTheDocument();
+    // The saved form replaces just this team's on screen; the list isn't fetched again.
+    expect(state.get.mock.calls.filter(([path]) => path === '/declaration-forms')).toHaveLength(1);
   });
 
   it('lets the form be sent again after a change', async () => {
