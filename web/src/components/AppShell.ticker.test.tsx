@@ -14,7 +14,7 @@ import { AppShell } from './AppShell';
 import { CompactPageBarProvider } from './CompactPageBarContext';
 import { CompetitionMetaProvider } from './CompetitionMetaContext';
 import { NavExtrasProvider } from './NavExtrasContext';
-import { TickerProvider, useTicker } from './TickerContext';
+import { TickerProvider, useQuietTicker, useTicker } from './TickerContext';
 import { useHideChrome } from './ScreenChrome';
 
 vi.mock('../api', async (importOriginal) => ({
@@ -23,26 +23,28 @@ vi.mock('../api', async (importOriginal) => ({
 }));
 vi.mock('../weather/weather', () => ({ getWeather: vi.fn() }));
 vi.mock('./ConnectionPill', () => ({ ConnectionPill: () => null }));
-vi.mock('./TopBarTicker', () => ({ TopBarTicker: ({ low }: { low?: boolean }) => <div data-testid="dock" data-low={String(!!low)} /> }));
+vi.mock('./TopBarTicker', () => ({ TopBarTicker: ({ low, quiet }: { low?: boolean; quiet?: boolean }) => <div data-testid="dock" data-low={String(!!low)} data-quiet={String(!!quiet)} /> }));
 vi.mock('./TickerFeed', () => ({ TickerFeed: ({ competitionId }: { competitionId: number }) => <span data-testid="feed">{competitionId}</span> }));
 
 const line: TickerItem = { key: 'live-1', kind: 'live', text: 'Now: Seniors Session 1 · Heat 1' };
 const remembered = () => { document.cookie = `mg.competition=${encodeURIComponent(JSON.stringify({ id: 4, name: 'Spring Games' }))}; Path=/`; };
 
-function Publish({ items, watch = null }: { items: TickerItem[]; watch?: number | null }) {
-  const { setItems, setWatchCompetitionId } = useTicker();
+function Publish({ items, watch = null, button = false, notFound = false }: { items: TickerItem[]; watch?: number | null; button?: boolean; notFound?: boolean }) {
+  const { setItems, setWatchCompetitionId, setDockAction } = useTicker();
+  useEffect(() => { setDockAction(button ? { label: 'Add', count: 0, icon: 'plus', onClick: () => undefined } : null); }, [button, setDockAction]);
   useEffect(() => { setItems(items); }, [items, setItems]);
   useEffect(() => { setWatchCompetitionId(watch); }, [watch, setWatchCompetitionId]);
-  return null;
+  return notFound ? <QuietPage /> : null;
 }
+function QuietPage() { useQuietTicker(); return null; }
 function Hide() { useHideChrome(true); return null; }
-function mount(path: string, items: TickerItem[] = [line], watch: number | null = null) {
+function mount(path: string, items: TickerItem[] = [line], watch: number | null = null, button = false, notFound = false) {
   return render(
     <MotionConfig reducedMotion="always"><MemoryRouter initialEntries={[path]}>
       <LiteModeProvider><AuthProvider><ThemeProvider><CurrentCompetitionProvider><NavExtrasProvider><AgeGroupsProvider><CompetitionMetaProvider><CompactPageBarProvider><TickerProvider>
         <Routes>
           <Route element={<AppShell />}>
-            <Route path="*" element={<Publish items={items} watch={watch} />} />
+            <Route path="*" element={<Publish items={items} watch={watch} button={button} notFound={notFound} />} />
           </Route>
         </Routes>
       </TickerProvider></CompactPageBarProvider></CompetitionMetaProvider></AgeGroupsProvider></NavExtrasProvider></CurrentCompetitionProvider></ThemeProvider></AuthProvider></LiteModeProvider>
@@ -79,13 +81,25 @@ describe('AppShell: the ticker on every page', () => {
   });
 
   it('sits at the bottom of pages with no tab bar', () => {
-    const { unmount } = mount('/settings');
-    expect(dock()).toHaveAttribute('data-low', 'true');
-    expect(main()).toHaveClass('pb-24');
-    unmount();
     mount('/admin');
     expect(dock()).toHaveAttribute('data-low', 'true');
     expect(main()).toHaveClass('pt-3', 'pb-24');
+  });
+
+  it.each(['/settings', '/privacy', '/terms', '/refunds', '/cookies', '/safeguarding', '/unsubscribe', '/seasons', '/seasons/3'])(
+    'keeps the news line off %s but still shows that page\'s own dock button', (path) => {
+      const { unmount } = mount(path);
+      expect(dock()).toHaveAttribute('data-quiet', 'true');
+      expect(main()).not.toHaveClass('pb-24');
+      unmount();
+      mount(path, [line], null, true);
+      expect(main()).toHaveClass('pb-24');
+    });
+
+  it('keeps the news line off the not-found page, which the address alone cannot tell', () => {
+    mount('/nothing/here', [line], null, false, true);
+    expect(dock()).toHaveAttribute('data-quiet', 'true');
+    expect(main()).not.toHaveClass('pb-24');
   });
 
   it('keeps the usual spacing when there is no news, and shows for live video alone', () => {
@@ -100,7 +114,7 @@ describe('AppShell: the ticker on every page', () => {
   });
 
   it('counts live video as something to show', () => {
-    mount('/settings', [], 4);
+    mount('/admin', [], 4);
     expect(main()).toHaveClass('pb-24');
   });
 

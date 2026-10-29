@@ -11,7 +11,8 @@ const session = (extra: Partial<Session>) => makeSession(extra.id ?? 1, extra);
 const auth = vi.hoisted(() => ({ user: { id: 'example-user', roles: ['Admin'] } as { id: string; roles: string[] } | null, token: 'example-session' }));
 vi.mock('../../../auth/AuthContext', () => ({ useAuth: () => auth }));
 vi.mock('../../../api', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
-vi.mock('../../../live/useLiveHub', () => ({ useLiveHub: () => ({ connected: true }) }));
+const live = vi.hoisted(() => ({ ready: 0, standingsVersion: 0 }));
+vi.mock('../context', () => ({ useCompetition: () => live }));
 beforeEach(() => { auth.user = { id: 'example-user', roles: ['Admin'] }; auth.token = 'example-session'; vi.mocked(api.get).mockResolvedValue({ data: [] }); vi.mocked(api.post).mockResolvedValue({ data: {} }); });
 it('selects current and next two independently in each arena, excluding completed heats and breaks', () => {
   const rows = [session({ id: 1, orderIndex: 1, arenaName: 'A', heats: [heat({ id: 1, finishedAt: 'now' }), heat({ id: 2 }), heat({ id: 3 }), heat({ id: 4 }), heat({ id: 5 })] }),
@@ -146,4 +147,21 @@ it('ignores a decision completing after the event changes', async () => {
   rerender(<SubstitutionRequests competitionId={2} canDecide onChanged={onChanged} />);
   await act(async () => { complete({ data: {} }); });
   expect(onChanged).not.toHaveBeenCalled();
+});
+
+it('refreshes call status from parent live invalidation', async () => {
+  vi.mocked(api.get).mockResolvedValue({ data: [] });
+  const { result, rerender } = renderHook(() => useHeatCalls(1));
+  await waitFor(() => expect(api.get).toHaveBeenCalled());
+  vi.mocked(api.get).mockResolvedValue({ data: [{ heatId: 10, calledAt: 'now' }] });
+  live.standingsVersion++;
+  rerender();
+  await waitFor(() => expect(result.current.calls).toEqual([{ heatId: 10, calledAt: 'now' }]));
+});
+it('does not poll private requests while signed out', () => {
+  auth.token = '';
+  const interval = vi.spyOn(window, 'setInterval');
+  render(<SubstitutionRequests competitionId={1} canDecide />);
+  expect(interval).not.toHaveBeenCalled();
+  expect(api.get).not.toHaveBeenCalled();
 });

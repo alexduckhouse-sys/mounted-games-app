@@ -190,7 +190,7 @@ it('wires the viewer, changes cameras, passes announcements and uses captions or
   expect(screen.getByText('The final')).toBeVisible();
   act(() => FakePeer.instances[0].track()); await tick(2000); expect(screen.queryByText('Connecting…')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Audio only' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Sync live' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Jump to live' }));
   fireEvent.click(screen.getByRole('button', { name: 'Finish line' })); await settle();
   expect(p.invoke).toHaveBeenCalledWith('StopWatching', 1); expect(p.invoke).toHaveBeenCalledWith('WatchStream', 1, 2);
   expect(screen.getByText('Live from')).toBeVisible();
@@ -241,7 +241,7 @@ it('supports viewer quality switching, audio-only mode, sync live, picture-in-pi
   fireEvent.click(screen.getByRole('button', { name: 'Audio only' }));
   expect(onAudioOnly).toHaveBeenCalledWith(true);
   expect(screen.getByText(/Video hidden. Audio continues./)).toBeVisible();
-  fireEvent.click(screen.getByRole('button', { name: 'Sync live' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Jump to live' }));
   expect(onSyncLive).toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Picture in picture' }));
   expect(requestPip).toHaveBeenCalled();
@@ -432,4 +432,22 @@ it('uses director stream ID without a value in the public multi-camera layout an
   expect(screen.getByRole('button', { name: 'Finish line' })).toHaveAttribute('aria-pressed', 'true');
   rerender(<MemoryRouter><LiveVideo {...p} publicLayout streams={[]} fallback="https://example.test/live" /></MemoryRouter>);
   expect(screen.getByRole('link', { name: 'Open stream' })).toHaveAttribute('href', 'https://example.test/live');
+});
+
+it('leaves recording to the controller and keeps saved replay playback available', async () => {
+  replayBufferFixture([replayFixture('one')]);
+  const media = asMedia(new FakeMediaStream());
+  const { rerender, unmount } = render(<StreamPlayer media={media} stream={liveStream()} label={null} enableDvr={false} />);
+  await settle(); expect(replayBuffers.createReplayBuffer).not.toHaveBeenCalled();
+  expect(screen.queryByRole('button', { name: 'Instant 15 second replay' })).toBeNull();
+  expect(screen.getByRole('button', { name: /Saved replays/ })).toBeVisible();
+  rerender(<StreamPlayer media={media} stream={liveStream()} label={null} />);
+  expect(replayBuffers.createReplayBuffer).toHaveBeenCalledOnce(); unmount();
+});
+it('passes controller DVR ownership through the connected live player', async () => {
+  vi.stubGlobal('RTCPeerConnection', fakePeerConstructor); vi.stubGlobal('MediaStream', fakeStreamConstructor);
+  replayBufferFixture(); const onMedia = vi.fn();
+  const view = render(<MemoryRouter><LiveVideo {...props()} onMedia={onMedia} enableDvr={false} /></MemoryRouter>);
+  await settle(); act(() => FakePeer.instances[0].track()); await tick(2000);
+  expect(onMedia).toHaveBeenCalled(); expect(replayBuffers.createReplayBuffer).not.toHaveBeenCalled(); view.unmount();
 });

@@ -123,7 +123,7 @@ export function TeamImportPanel({ competitionId, onImported }: { competitionId: 
             {row.errors.length > 0 ? <RefineStatus tone="bad">{t('ops3.import.fix')}</RefineStatus> : <RefineStatus tone="ok">{t('ops3.import.ready')}</RefineStatus>}
           </li>)}
         </RefineList>
-        <RefineFoot label={t('ops3.import.addTeams')}>
+        <RefineFoot inline label={t('ops3.import.addTeams')}>
           <button type="button" className="rf-btn rf-btn-primary rf-wide" disabled={hasErrors || busy !== null} onClick={applyImport}>{busy === 'apply' ? t('ops3.import.adding') : t('ops3.import.addN', { count: preview.validRows })}</button>
         </RefineFoot>
       </>}

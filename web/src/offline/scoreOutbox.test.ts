@@ -210,7 +210,7 @@ describe('describePlacings', () => {
   });
 
   it('falls back to the team number when a name is missing', () => {
-    expect(describePlacings([{ teamId: 9, place: 1, eliminated: false }], {})).toBe('1st Team 9');
+    expect(describePlacings([{ teamId: 9, place: 1, eliminated: false }], {})).toBe('1st Unnamed team');
   });
 
   it('uses the right ordinal suffixes', () => {

@@ -30,12 +30,19 @@ export interface TotalRow {
   hc: boolean;
   /** Shared by teams still level after the tie-break; null for HC. */
   position: number | null;
+  /** Level with a neighbour on place, so it reads "=1st"; false for HC. */
+  joint: boolean;
   /** Why this team is above the one below it when they are level on points. */
   why: string | null;
 }
 
 export interface OutLine { teamId: number; teamName: string; reason: string }
-export interface PlaceLine { teamId: number; teamName: string; place: number; points: number; hc: boolean }
+export interface PlaceLine { teamId: number; teamName: string; place: number; points: number; hc: boolean; /** Tied with another team for this place (a dead heat). */ joint: boolean }
+
+/** "1st", or "=1st" when the place is shared. */
+export function placeText(place: number, joint: boolean): string {
+  return `${joint ? '=' : ''}${ordinal(place)}`;
+}
 
 export interface RaceSummary {
   raceName: string;
@@ -105,10 +112,11 @@ export function heatTotals(heat: Heat, races: Race[], upTo: number, hc: Readonly
     const prev = ranked[i - 1];
     const next = ranked[i + 1];
     const why = next && next.total === f.total && !organiserDecides(rule) ? tieKey(f, next, rule).why : null;
-    rows.push({ teamId: f.teamId, teamName: f.teamName, points: f.total, hc: false, position: prev && level(prev, f) ? rows[i - 1].position : i + 1, why });
+    rows.push({ teamId: f.teamId, teamName: f.teamName, points: f.total, hc: false, position: prev && level(prev, f) ? rows[i - 1].position : i + 1, joint: false, why });
   });
+  for (const row of rows) row.joint = rows.filter((other) => other.position === row.position).length > 1;
   for (const f of facts.filter((x) => hc.has(x.teamId)).sort((a, b) => b.total - a.total)) {
-    rows.push({ teamId: f.teamId, teamName: f.teamName, points: f.total, hc: true, position: null, why: null });
+    rows.push({ teamId: f.teamId, teamName: f.teamName, points: f.total, hc: true, position: null, joint: false, why: null });
   }
   return rows;
 }
@@ -117,11 +125,11 @@ export function summariseRace(input: SummaryInput): RaceSummary | null {
   const { heat, races, raceIndex, hcTeamIds, rule, notes } = input;
   const race = races[raceIndex];
   if (!race || !race.isComplete) return null;
-  const nameOf = (id: number) => heat.entries.find((e) => e.teamId === id)?.teamName ?? `Team ${id}`;
+  const nameOf = (id: number) => heat.entries.find((e) => e.teamId === id)?.teamName ?? 'Unnamed team';
 
   const placings = race.results.filter((r) => real(r) && !r.eliminated && (r.placing ?? 0) > 0)
     .sort((a, b) => a.placing! - b.placing!)
-    .map((r): PlaceLine => ({ teamId: r.teamId, teamName: nameOf(r.teamId), place: r.placing!, points: r.points, hc: hcTeamIds.has(r.teamId) }));
+    .map((r, _i, all): PlaceLine => ({ teamId: r.teamId, teamName: nameOf(r.teamId), place: r.placing!, points: r.points, hc: hcTeamIds.has(r.teamId), joint: all.some((o) => o !== r && o.placing === r.placing) }));
   const out = race.results.filter((r) => real(r) && r.eliminated)
     .map((r): OutLine => ({ teamId: r.teamId, teamName: nameOf(r.teamId), reason: reasonFor(r, notes) }));
   const totals = heatTotals(heat, races, raceIndex, hcTeamIds, rule);
@@ -132,7 +140,7 @@ export function summariseRace(input: SummaryInput): RaceSummary | null {
 
 function ending(input: SummaryInput, totals: TotalRow[]): { heading: string; lines: string[] } {
   const { heat, races, qualifiers, hcTeamIds, notes } = input;
-  const nameOf = (id: number) => heat.entries.find((e) => e.teamId === id)?.teamName ?? `Team ${id}`;
+  const nameOf = (id: number) => heat.entries.find((e) => e.teamId === id)?.teamName ?? 'Unnamed team';
   if (heat.raceRoundStage === 1) {
     // The same pick the server makes: finishers by placing, hors concours teams skipped, the top N.
     const all = races.flatMap((r) => r.results).filter((r) => real(r) && !r.eliminated && (r.placing ?? 0) > 0)
@@ -155,10 +163,23 @@ function ending(input: SummaryInput, totals: TotalRow[]): { heading: string; lin
   }
   const lines = totals.map((t) => t.hc
     ? `${t.teamName}: hors concours, ${formatPoints(t.points)} points, not ranked`
-    : `${ordinal(t.position ?? 0)} ${t.teamName}: ${formatPoints(t.points)} ${t.points === 1 ? 'point' : 'points'}${t.why ? `, ahead on tie-break: ${t.why}` : ''}`);
+    : `${placeText(t.position ?? 0, t.joint)} ${t.teamName}: ${formatPoints(t.points)} ${t.points === 1 ? 'point' : 'points'}${t.why ? `, ahead on tie-break: ${t.why}` : ''}`);
   const shared = totals.filter((t) => !t.hc).some((t, i, list) => i > 0 && list[i - 1].position === t.position);
   if (shared) lines.push(organiserDecides(input.rule)
     ? 'Teams are level on points: the organiser decides the order.'
     : 'Some teams are still level after the tie-break: the organiser decides the order.');
   return { heading: heat.raceRoundStage === 2 ? 'Final result' : 'Heat result', lines };
+}
+
+/**
+ * One quiet sentence for screen readers when a heat's last race is in: "Heat 2 finished. Warwickshire Hunt A won."
+ * Hors concours teams never win; teams still level at the top are named together.
+ */
+export function heatFinishedSentence(heatName: string, totals: readonly TotalRow[]): string {
+  const top = totals.filter((t) => !t.hc && t.position === 1);
+  const done = `${heatName} finished.`;
+  if (top.length === 0 || top[0].points <= 0) return done;
+  if (top.length === 1) return `${done} ${top[0].teamName} won.`;
+  const names = top.map((t) => t.teamName);
+  return `${done} ${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} are level at the top.`;
 }

@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { MotionConfig } from 'framer-motion';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -33,7 +34,7 @@ interface Props {
 function Harness({ activeIdx = 1, initial = [], onSubmit = vi.fn(), onSelectRace = vi.fn(), onUndo, canScore = true }: Props) {
   const [pending, setPending] = useState<PendingPlace[]>(initial);
   return (
-    <>
+    <MotionConfig reducedMotion="always">
       <input aria-label="Somewhere else" />
       <ScoringSection
         heat={h} races={h.races} activeRace={{ ...h.races[activeIdx], startIsExplicit: true, startedAt: '2026-10-29T09:00:00Z' }} onSelectRace={onSelectRace} sessionBase={3}
@@ -43,7 +44,7 @@ function Harness({ activeIdx = 1, initial = [], onSubmit = vi.fn(), onSelectRace
         onReset={() => setPending([])} onSubmit={onSubmit} onUndo={onUndo}
         correctionReason="" onCorrectionReason={() => {}}
       />
-    </>
+    </MotionConfig>
   );
 }
 

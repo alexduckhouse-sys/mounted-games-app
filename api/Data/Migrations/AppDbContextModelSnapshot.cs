@@ -1305,6 +1305,22 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("CompetitionEntrySettings", (string)null);
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.CompetitionReadRevision", b =>
+                {
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("Detail")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("Standings")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("CompetitionId");
+
+                    b.ToTable("CompetitionReadRevisions", (string)null);
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.CompetitionSection", b =>
                 {
                     b.Property<int>("Id")

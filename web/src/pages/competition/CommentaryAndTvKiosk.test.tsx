@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
+import { useLiveHub } from '../../live/useLiveHub';
 import { CompactPageBarProvider } from '../../components/CompactPageBarContext';
 import { competition, heat, race, result, session, standing, team } from '../../test/factories';
 import type { CompetitionDetail, DeclarationForm, LiveStream } from '../../types';
@@ -12,6 +13,9 @@ import { CompetitionContext } from './context';
 import { TvKioskPage } from './TvKioskPage';
 import { StreamControlStrip } from '../../components/stream/StreamControlStrip';
 import { QrAccessModal } from '../../components/QrAccessModal';
+import { CurrentCompetitionProvider } from '../../competition/CurrentCompetitionContext';
+import { TickerProvider } from '../../components/TickerContext';
+import { TopBarTicker } from '../../components/TopBarTicker';
 
 vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canManage: () => true, canOrganise: () => true }) }));
 const saveOverlay = vi.fn().mockResolvedValue('saved');
@@ -26,7 +30,7 @@ vi.mock('../../api', () => ({
 }));
 
 vi.mock('../../live/useLiveHub', () => ({
-  useLiveHub: () => ({ connected: true }),
+  useLiveHub: vi.fn(() => ({ connected: true })),
 }));
 
 const sampleStreams: LiveStream[] = [
@@ -144,7 +148,8 @@ function makeComp(): CompetitionDetail {
 
 function renderWithCompetition(initialEntry: string, comp = makeComp(), lang: 'en' | 'cy' | 'fr' = 'en') {
   const reload = vi.fn();
-  return render(
+  const invoke = vi.fn();
+  const view = (standingsVersion: number) => (
     <LanguageProvider initial={lang}>
     <MemoryRouter initialEntries={[initialEntry]}>
       <CompactPageBarProvider>
@@ -155,8 +160,10 @@ function renderWithCompetition(initialEntry: string, comp = makeComp(), lang: 'e
             reload,
             streams: sampleStreams,
             streamingEnabled: true,
-            invoke: vi.fn(),
+            invoke,
             ready: 1,
+            standingsVersion,
+            connected: true,
             streamMessages: [],
             sponsors: [],
           }}
@@ -168,8 +175,10 @@ function renderWithCompetition(initialEntry: string, comp = makeComp(), lang: 'e
         </CompetitionContext.Provider>
       </CompactPageBarProvider>
     </MemoryRouter>
-    </LanguageProvider>,
+    </LanguageProvider>
   );
+  const rendered = render(view(0));
+  return { ...rendered, updateStandingsVersion: (version: number) => rendered.rerender(view(version)) };
 }
 
 beforeEach(() => {
@@ -203,20 +212,20 @@ beforeEach(() => {
 });
 
 describe('CommentaryDeskPage', () => {
-  it('renders key talking points, stream controls, Score & Commentate link, heat / toplist points, Up next and QR Access modal', async () => {
+  it('renders key talking points, stream controls, Score and commentate link, heat / toplist points, Up next and QR access modal', async () => {
     const user = userEvent.setup();
     renderWithCompetition('/competitions/1/commentary?section=9');
 
     expect(await screen.findByRole('heading', { name: /Commentary desk · Under 17/ })).toBeInTheDocument();
 
-    // Score & Commentate quick link
-    const scoreLink = screen.getByRole('link', { name: /Score & Commentate/ });
+    // Score and commentate quick link
+    const scoreLink = screen.getByRole('link', { name: /Score and commentate/ });
     expect(scoreLink).toHaveAttribute('href', '/competitions/1/session/1?heat=10&commentator=1');
 
     // Key talking points banner
     const talkingPoints = screen.getByRole('region', { name: 'Key talking points' });
     expect(within(talkingPoints).getByText(/North A \(3 pts, 1 win\)/)).toBeInTheDocument();
-    expect(within(talkingPoints).getByText(/South B \(2 pts\) holds 2nd — East C is 1 pts behind/)).toBeInTheDocument();
+    expect(within(talkingPoints).getByText(/South B \(2 pts\) holds 2nd, 1 pt ahead of East C/)).toBeInTheDocument();
     expect(within(talkingPoints).getByText(/North A won Bending \(\+3 pts\)/)).toBeInTheDocument();
 
     // One-tap overlays replace the old stream strip
@@ -244,9 +253,8 @@ describe('CommentaryDeskPage', () => {
     expect(await within(overlays).findByText(/Couldn’t reach the camera phone/)).toBeInTheDocument();
 
     // No heat table view any more; lanes show heat / toplist points and Up next lists what follows
-    const viewGroup = screen.getByRole('group', { name: 'Commentary desk view' });
-    expect(within(viewGroup).queryByRole('button', { name: 'Heat Table' })).toBeNull();
-    expect(screen.queryByRole('region', { name: 'Current Heat Table' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Heat Table' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Current heat table' })).toBeNull();
     expect(screen.queryByText(/Say this/)).toBeNull();
     expect(screen.getByLabelText('Rank 1st, 3 in this heat, 3 on the toplist')).toHaveTextContent('3 / 3');
     expect(screen.getByLabelText('Rank 3rd, 1 in this heat, 1 on the toplist')).toHaveTextContent('1 / 1');
@@ -254,15 +262,15 @@ describe('CommentaryDeskPage', () => {
     expect(within(upNext).getAllByRole('listitem')).toHaveLength(1);
     expect(within(upNext).getByText('Bending · Session 1 · Heat 2')).toBeInTheDocument();
 
-    // Open QR Access Modal
-    await user.click(screen.getByRole('button', { name: /QR Access/ }));
+    // Open QR access Modal
+    await user.click(screen.getByRole('button', { name: /QR access/ }));
     const qrModal = await screen.findByRole('dialog', { name: 'Share with QR codes' });
-    await user.click(within(qrModal).getByRole('tab', { name: /Screens, PA & Spectator QR Codes/ }));
-    expect(within(qrModal).getByText('2nd Phone Stream Controller')).toBeInTheDocument();
+    await user.click(within(qrModal).getByRole('tab', { name: /Screens, PA and spectator QR codes/ }));
+    expect(within(qrModal).getByText('Second phone stream controls')).toBeInTheDocument();
     await user.click(within(qrModal).getAllByRole('button', { name: /Copy link/ })[0]);
     expect(await within(qrModal).findByText('Link copied')).toBeInTheDocument();
-    await user.click(within(qrModal).getByRole('tab', { name: /Volunteer & Scorer QR Links/ }));
-    await user.click(within(qrModal).getByRole('button', { name: 'Close QR access modal' }));
+    await user.click(within(qrModal).getByRole('tab', { name: /Volunteer and scorer QR links/ }));
+    await user.click(within(qrModal).getByRole('button', { name: 'Close' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Share with QR codes' })).toBeNull());
   });
 });
@@ -273,7 +281,7 @@ describe('CommentaryDeskPage lanes', () => {
     comp.laneHatbands = ['Red', 'Blue', 'Lilac #B79CED'];
     comp.teams[0] = { ...comp.teams[0], bibDescription: '[flag:gb] Red with white spots' };
     renderWithCompetition('/competitions/1/commentary?section=9', comp);
-    const lanes = await screen.findByRole('region', { name: 'Current Heat — Lanes in Order' });
+    const lanes = await screen.findByRole('region', { name: 'Current heat · lanes in order' });
     expect(within(lanes).getByText(/Lanes for Mug/)).toBeInTheDocument();
     // Race 2 moves everyone up one lane: East C 1, North A 2, South B 3.
     const rows = within(lanes).getAllByRole('listitem').filter((li) => li.parentElement?.parentElement === lanes);
@@ -292,7 +300,7 @@ describe('CommentaryDeskPage lanes', () => {
     comp.laneHatbands = ['Red', 'Blue', 'Green'];
     comp.sessions[0] = { ...comp.sessions[0], lanesPerHeat: 2 };
     renderWithCompetition('/competitions/1/commentary?section=9', comp);
-    const lanes = await screen.findByRole('region', { name: 'Current Heat — Lanes in Order' });
+    const lanes = await screen.findByRole('region', { name: 'Current heat · lanes in order' });
     const sitting = within(lanes).getByText('Sits out').closest('li')!;
     expect(within(sitting).queryByText(/hatband/)).toBeNull();
   });
@@ -310,7 +318,7 @@ describe('TvKioskPage', () => {
     expect(screen.getByRole('button', { name: 'Sleid nesaf' })).toBeInTheDocument();
   });
 
-  it('supports Current Heat Table slide, removes redundant Club columns, and offers Auto-follow live section, Full screen, Stream Controls & QR Access', async () => {
+  it('supports Current heat table slide, removes redundant Club columns, and offers Auto-follow live section, Full screen, Stream Controls & QR access', async () => {
     const user = userEvent.setup();
     renderWithCompetition('/competitions/1/tv');
 
@@ -318,14 +326,14 @@ describe('TvKioskPage', () => {
     expect(screen.getByRole('button', { name: 'Auto-follow live section' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: /Full screen/ })).toBeInTheDocument();
 
-    // Expand collapsible Stream Controls on TV Kiosk
+    // Expand collapsible Stream Controls on TV kiosk
     await user.click(screen.getByRole('button', { name: /Stream Controls/ }));
     expect(await screen.findByRole('region', { name: 'Live stream control strip' })).toBeInTheDocument();
 
-    // Switch to Current Heat Table slide (the old slide wipes off before the new one arrives)
+    // Switch to Current heat table slide (the old slide wipes off before the new one arrives)
     const slideGroup = screen.getByRole('group', { name: 'TV scoreboard slide' });
-    await user.click(within(slideGroup).getByRole('button', { name: 'Current Heat Table' }));
-    expect(await screen.findByRole('region', { name: 'Current Heat Table' })).toBeInTheDocument();
+    await user.click(within(slideGroup).getByRole('button', { name: 'Current heat table' }));
+    expect(await screen.findByRole('region', { name: 'Current heat table' })).toBeInTheDocument();
 
     // Switch to Latest Race Result slide and verify Club column is removed
     await user.click(within(slideGroup).getByRole('button', { name: 'Latest Race Result' }));
@@ -334,21 +342,21 @@ describe('TvKioskPage', () => {
     expect(latestHeaders).toEqual(['Place', 'Bib', 'Team', 'Race Pts', 'Total Pts']);
     expect(latestHeaders).not.toContain('Club');
 
-    // Switch to Live Section Standings slide and verify Club column is removed
-    await user.click(within(slideGroup).getByRole('button', { name: 'Live Section Standings' }));
-    const standingsSection = await screen.findByRole('region', { name: 'Live Section Standings' });
+    // Switch to Live toplist slide and verify Club column is removed
+    await user.click(within(slideGroup).getByRole('button', { name: 'Live toplist' }));
+    const standingsSection = await screen.findByRole('region', { name: 'Live toplist' });
     const standingsHeaders = within(standingsSection).getAllByRole('columnheader').map((th) => th.textContent);
     expect(standingsHeaders).toEqual(['Rank', 'Bib', 'Team', 'Heat Pts', 'Finals Pts', 'Total Pts']);
     expect(standingsHeaders).not.toContain('Club');
 
-    // Open QR Access Modal from TV Kiosk
-    await user.click(screen.getByRole('button', { name: /QR Access/ }));
+    // Open QR access Modal from TV kiosk
+    await user.click(screen.getByRole('button', { name: /QR access/ }));
     expect(await screen.findByRole('dialog', { name: 'Share with QR codes' })).toBeInTheDocument();
   });
 
   it('lists the lane draw for the next race, rotated as the commentary desk shows it', async () => {
     renderWithCompetition('/competitions/1/tv');
-    const draw = await screen.findByRole('region', { name: 'In the Ring and Next Heat Lane Draw' });
+    const draw = await screen.findByRole('region', { name: 'In the ring and next heat lane draw' });
     const first = within(draw).getAllByRole('list')[0];
     const rows = within(first).getAllByRole('listitem');
     // Same order as the commentary desk test above: race 2 moves everyone up one lane.
@@ -363,10 +371,88 @@ describe('TvKioskPage', () => {
     render(<StreamControlStrip competitionId={1} />);
     const strip = screen.getByRole('region', { name: 'Live stream control strip' });
     expect(within(strip).getByText(/Ready for stream overlays & remote camera/)).toBeInTheDocument();
-    await user.click(within(strip).getByRole('button', { name: /Show Lanes on Stream/ }));
+    await user.click(within(strip).getByRole('button', { name: /Show lanes on stream/ }));
     expect(within(strip).getByRole('status')).toHaveTextContent('Sign in as an organiser to change overlays.');
 
     render(<StreamControlStrip competitionId={1} useScorerClient />);
     render(<MemoryRouter><QrAccessModal open onClose={vi.fn()} competitionId={1} competitionName="Spring" /></MemoryRouter>);
+  });
+});
+
+it.each(['commentary', 'tv'])('uses the parent live connection on the %s page', async (page) => {
+  renderWithCompetition(`/competitions/1/${page}`);
+  await waitFor(() => expect(api.get).toHaveBeenCalledWith('/competitions/1/standings', { params: { sectionId: 9 } }));
+  expect(useLiveHub).not.toHaveBeenCalled();
+  expect(vi.mocked(api.get).mock.calls.some(([url]) => url === '/competitions/1')).toBe(false);
+});
+
+it.each(['commentary', 'tv'])('refreshes %s standings from shared invalidations without replacing the competition graph or subscribing again', async (page) => {
+  const comp = makeComp();
+  const standingsUrl = '/competitions/1/standings';
+  const briefingUrl = '/competitions/1/sessions/1/heats/10/commentator-briefing';
+  const previousGet = vi.mocked(api.get).getMockImplementation()!;
+  let totalPoints = 3;
+  vi.mocked(api.get).mockImplementation((url, config) => url === standingsUrl
+    ? Promise.resolve({ data: [standing(1, totalPoints, { teamName: 'North A', wins: 1 })] })
+    : previousGet(url, config));
+  const callsTo = (url: string) => vi.mocked(api.get).mock.calls.filter(([called]) => called === url);
+  const rendered = renderWithCompetition(`/competitions/1/${page}?section=9`, comp);
+  await waitFor(() => expect(callsTo(standingsUrl)).toHaveLength(1));
+  if (page === 'tv') {
+    const slides = screen.getByRole('group', { name: 'TV scoreboard slide' });
+    await userEvent.click(within(slides).getByRole('button', { name: 'Live toplist' }));
+    await screen.findByRole('region', { name: 'Live toplist' });
+  } else {
+    await waitFor(() => expect(callsTo(briefingUrl)).toHaveLength(1));
+  }
+
+  // Tack-check and HC notifications can invalidate standings without changing scores.
+  // The helper retains this exact competition object, all graph arrays, and hub ready value.
+  for (const version of [1, 2]) {
+    totalPoints = 30 + version;
+    rendered.updateStandingsVersion(version);
+    await waitFor(() => expect(callsTo(standingsUrl)).toHaveLength(version + 1));
+    expect(callsTo(standingsUrl).at(-1)?.[1]).toEqual({ params: { sectionId: 9 } });
+    if (page === 'commentary') {
+      await waitFor(() => expect(callsTo(briefingUrl)).toHaveLength(version + 1));
+      const talkingPoints = screen.getByRole('region', { name: 'Key talking points' });
+      expect(await within(talkingPoints).findByText(new RegExp(`North A \\(${totalPoints} pts, 1 win\\)`))).toBeInTheDocument();
+    } else {
+      const standings = screen.getByRole('region', { name: 'Live toplist' });
+      expect(await within(standings).findByText(String(totalPoints))).toBeInTheDocument();
+    }
+    expect(useLiveHub).not.toHaveBeenCalled();
+    expect(callsTo('/competitions/1')).toHaveLength(0);
+  }
+});
+
+describe('CommentaryDeskPage in the dock', () => {
+  it('moves the header controls into a sheet and keeps the title on the page', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/competitions/1/commentary?section=9']}>
+        <CurrentCompetitionProvider>
+          <TickerProvider>
+            <CompactPageBarProvider>
+              <CompetitionContext.Provider value={{ competition: makeComp(), saveOverlay, reload: vi.fn(), streams: sampleStreams, streamingEnabled: true, invoke: vi.fn(), ready: 1, streamMessages: [], sponsors: [] }}>
+                <Routes><Route path="/competitions/:id/commentary" element={<CommentaryDeskPage />} /></Routes>
+              </CompetitionContext.Provider>
+            </CompactPageBarProvider>
+            <TopBarTicker />
+          </TickerProvider>
+        </CurrentCompetitionProvider>
+      </MemoryRouter>,
+    );
+    await screen.findByRole('region', { name: 'Current heat · lanes in order' });
+    expect(screen.queryByRole('button', { name: /QR access/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: /TV kiosk/i })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Commentary desk controls' }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Commentary desk controls' }));
+    expect(sheet.getByRole('button', { name: /^View/ })).toHaveTextContent('Side by side');
+    expect(sheet.getByRole('link', { name: /TV kiosk/i })).toBeInTheDocument();
+    expect(sheet.getByRole('link', { name: /Score and commentate/i })).toBeInTheDocument();
+    expect(sheet.getByRole('button', { name: /^Heat/ })).toBeInTheDocument();
+    await user.click(sheet.getByRole('button', { name: /QR access/ }));
+    expect(await screen.findByRole('dialog', { name: 'Share with QR codes' })).toBeInTheDocument();
   });
 });

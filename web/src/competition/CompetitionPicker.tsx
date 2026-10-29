@@ -17,6 +17,7 @@ import { CompetitionListSkeleton } from '../components/Skeletons';
 import { usePageHeader } from '../components/CompactPageBarContext';
 import { useAuth } from '../auth/AuthContext';
 import { Sheet } from '../components/Sheet';
+import { useDockAction } from '../components/TickerContext';
 import { RoundSearch } from '../components/RoundSearch';
 import { RefineSwitchRow } from '../pages/refine/Refine';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -100,6 +101,9 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
   }, [past, page, saved, filterKey, yearFilter, locationFilter, serverSearch, mineOnly, unfiltered, refresh]);
 
   const filterCount = (yearFilter !== 'all' ? 1 : 0) + (locationFilter !== 'all' ? 1 : 0) + (mineOnly ? 1 : 0);
+  // On the archive the filters open from the button beside the ticker dock; the inline button stays when there is no dock.
+  const archiveFiltersLabel = t('shell.events.archiveFilters');
+  const docked = useDockAction(past ? { label: archiveFiltersLabel, icon: 'filters', count: filterCount, onClick: () => setSheetOpen(true) } : null);
   const items = state.key === filterKey ? state.items : [];
   const matches = items;
   const years = state.years;
@@ -128,13 +132,13 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
       <PlainHeader past={past} />
       <h1 id={headingId} className="sr-only">{past ? t('shell.events.titlePast') : t('shell.events.title')}</h1>
       {past && (
-        <div className="mg-band mg-band-header pb-3 pt-0">
+        <div className="mg-band mg-band-header py-3">
           <div className="fk-find fk-band">
             <RoundSearch band label={t('shell.events.search')} placeholder={t('shell.events.searchPlaceholder')} value={search} onChange={(text) => { setSearch(text); setPage(1); }} />
-            <button type="button" className="fk-fbtn" aria-label={filterCount ? `${t('shell.events.archiveFilters')}, ${filterCount} set` : t('shell.events.archiveFilters')} onClick={() => setSheetOpen(true)}>
+            {!docked && <button type="button" className="fk-fbtn" aria-label={filterCount ? `${t('shell.events.archiveFilters')}, ${filterCount} set` : t('shell.events.archiveFilters')} onClick={() => setSheetOpen(true)}>
               <SlidersHorizontal aria-hidden="true" className="h-5 w-5" />
               {filterCount > 0 && <span className="fk-count" aria-hidden="true">{filterCount}</span>}
-            </button>
+            </button>}
           </div>
         </div>
       )}
@@ -148,7 +152,7 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
       {!mineOnly && state.savedCopy && !loading && shouldNoticeSavedCopy(state.savedAt, true, now) && <Notice tone="info" icon={Clock}>{t('shell.events.refreshWhenOnline', { updated: lastUpdatedText(state.savedAt, now) })}</Notice>}
       <div className="flex flex-col gap-3.5" aria-busy={loading}>
         {onToday.length > 0 && (
-          <section aria-label={t('shell.events.onToday')}>
+          <section className="mg-settle" aria-label={t('shell.events.onToday')}>
             <h2 className="sp-sec sp-first">{t('shell.events.onToday')}</h2>
             <div className="mg-cards-grid flex flex-col gap-1.5">
               {onToday.map((competition) => <TodayCard key={competition.id} competition={competition} selected={current?.id === competition.id} onChoose={() => choose(competition)} warm={handlersFor(competition.id)} />)}
@@ -156,7 +160,7 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
           </section>
         )}
         {later.length > 0 && groups.map((group) => (
-          <section key={group.heading} aria-label={group.heading}>
+          <section key={group.heading} className="mg-settle" aria-label={group.heading}>
             <h2 className="sp-sec sp-first">{group.heading}{past && !(state.hasMore && group === groups[groups.length - 1]) && <small>{t('shell.events.yearCount', { count: group.items.length })}</small>}</h2>
             <div className="mg-lines mg-lines-grid">
               {group.items.map((competition) => <CompetitionRow key={competition.id} competition={competition} past={past} selected={current?.id === competition.id} onChoose={() => choose(competition)} warm={handlersFor(competition.id)} />)}

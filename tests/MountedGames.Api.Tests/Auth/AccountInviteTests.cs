@@ -27,7 +27,7 @@ public class AccountInviteTests : IClassFixture<EmailApiFactory>
     private async Task<(InviteDto Invite, string Token)> InviteAsync(InviteAccess access = InviteAccess.Organiser, string? email = null)
     {
         var address = email ?? NewEmail();
-        var admin = await _f.AdminAsync();
+        var admin = access == InviteAccess.SiteAdmin ? await MasterAsync() : await _f.AdminAsync();
         var response = await admin.PostAsJsonAsync("/api/admin/invites", new CreateInviteRequest(address, access));
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var invite = await response.ReadAsync<InviteDto>();
@@ -46,6 +46,37 @@ public class AccountInviteTests : IClassFixture<EmailApiFactory>
 
     private Task<HttpResponseMessage> LookupAsync(string token)
         => _f.CreateClient().PostAsJsonAsync("/api/auth/invites/lookup", new InviteTokenRequest(token));
+
+    private async Task<HttpClient> MasterAsync(bool master = true)
+    {
+        var (_, auth) = await _f.SignupAsync("Member");
+        using var scope = _f.Services.CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+        var user = await users.FindByIdAsync(auth.User.Id);
+        Assert.True((await users.AddToRolesAsync(user!, master ? [Roles.Admin, Roles.MasterAdmin] : [Roles.Admin])).Succeeded);
+        return _f.WithToken((await _f.LoginAsync(auth.User.Email, Password)).Token);
+    }
+
+    [Fact]
+    public async Task OnlyMasterAdminsCanCreateResendOrCancelSiteAdminInvitations()
+    {
+        using var admin = await MasterAsync(master: false);
+        using var master = await MasterAsync();
+        var address = NewEmail();
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.PostAsJsonAsync("/api/admin/invites",
+            new CreateInviteRequest(address, InviteAccess.SiteAdmin))).StatusCode);
+        Assert.False(await _f.WithDbAsync(db => db.AccountInvites.AnyAsync(i => i.Email == address)));
+        var created = await master.PostAsJsonAsync("/api/admin/invites", new CreateInviteRequest(address, InviteAccess.SiteAdmin));
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var invite = await created.ReadAsync<InviteDto>();
+        await _f.InDbAsync(db => db.AccountInvites.Where(i => i.Id == invite.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(i => i.LastSentAt, DateTime.UtcNow.AddMinutes(-2))));
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.PostAsync($"/api/admin/invites/{invite.Id}/resend", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.DeleteAsync($"/api/admin/invites/{invite.Id}")).StatusCode);
+        Assert.Equal(1, await _f.WithDbAsync(db => db.AccountInvites.Where(i => i.Id == invite.Id).Select(i => i.SendCount).SingleAsync()));
+        Assert.Equal(HttpStatusCode.OK, (await master.PostAsync($"/api/admin/invites/{invite.Id}/resend", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await master.DeleteAsync($"/api/admin/invites/{invite.Id}")).StatusCode);
+    }
 
     // ---- who can ----
 
@@ -72,7 +103,7 @@ public class AccountInviteTests : IClassFixture<EmailApiFactory>
     public async Task CreatingSendsAnEmailWithOneLink_AndStoresOnlyTheHashOfTheToken()
     {
         var address = NewEmail().ToUpperInvariant();
-        var admin = await _f.AdminAsync();
+        var admin = await MasterAsync();
 
         var response = await admin.PostAsJsonAsync("/api/admin/invites", new CreateInviteRequest($"  {address}  ", InviteAccess.SiteAdmin));
         var invite = await response.ReadAsync<InviteDto>();
@@ -97,7 +128,7 @@ public class AccountInviteTests : IClassFixture<EmailApiFactory>
     [Fact]
     public async Task CreateRefusesBadAddressesUnknownAccessExistingAccountsAndDuplicates()
     {
-        var admin = await _f.AdminAsync();
+        var admin = await MasterAsync();
         Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsJsonAsync("/api/admin/invites", new CreateInviteRequest("not-an-email", InviteAccess.Organiser))).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsJsonAsync("/api/admin/invites", new CreateInviteRequest("", InviteAccess.Organiser))).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsJsonAsync("/api/admin/invites", new CreateInviteRequest(NewEmail(), (InviteAccess)7))).StatusCode);

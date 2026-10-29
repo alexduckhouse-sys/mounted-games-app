@@ -138,7 +138,7 @@ public record CompetitionDetail(
 public record CreateCompetitionRequest(
     string Name, string? Location, string? Description,
     double? Latitude, double? Longitude,
-    string? What3Words, string? AppleMapsUrl,
+    string? What3Words, [MaxLength(500)] string? AppleMapsUrl,
     DateTime StartDate, DateTime? EndDate,
     [MaxLength(CompetitionFields.PostcodeMax)] string? Postcode = null,
     string? StreamUrl = null,
@@ -161,7 +161,7 @@ public record CreateCompetitionRequest(
 public record UpdateCompetitionRequest(
     string Name, string? Location, string? Description,
     double? Latitude, double? Longitude,
-    string? What3Words, string? AppleMapsUrl,
+    string? What3Words, [MaxLength(500)] string? AppleMapsUrl,
     DateTime StartDate, DateTime? EndDate,
     bool IsActive, bool IsArchived,
     [MaxLength(CompetitionFields.PostcodeMax)] string? Postcode = null,

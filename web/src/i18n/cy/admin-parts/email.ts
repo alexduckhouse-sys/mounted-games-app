@@ -104,7 +104,6 @@ export const adminEmail: AreaCatalogue<typeof en> = {
   'admin.email.sheet.descTrainers': 'At yr hyfforddwyr, {people}. Ni allwch ei ddad-anfon.',
   'admin.email.sheet.descOrganisers': 'At y trefnwyr a’r gweinyddwyr, {people}. Ni allwch ei ddad-anfon.',
   'admin.email.sheet.descAdmins': 'At y gweinyddwyr, {people}. Ni allwch ei ddad-anfon.',
-  'admin.email.sheet.notYet': 'Ddim eto',
 
   'admin.email.err.counts': 'Methwyd cyfrif pwy sydd ar bob rhestr. Gwiriwch eich signal a rhowch gynnig arall arni.',
   'admin.email.err.dropped': 'Stopiodd yr anfon am fod y cysylltiad wedi diflannu. Parhewch pan fyddwch ar-lein eto.',

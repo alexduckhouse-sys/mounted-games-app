@@ -130,9 +130,9 @@ export function buildArenaCrewRaceCardFromDiagram(
   }
 
   const zones: ArenaCrewZoneProps[] = [
-    buildZone('start', 'Start / Finish Line', startCounts),
-    buildZone('centre', 'Centre Line (Poles 1–4)', centreCounts),
-    buildZone('top', 'Changeover / Top Line', topCounts),
+    buildZone('start', 'Start/finish line', startCounts),
+    buildZone('centre', 'Centre line (poles 1–4)', centreCounts),
+    buildZone('top', 'Changeover line', topCounts),
   ];
 
   return {

@@ -469,6 +469,7 @@ public static class DbInitializer
         await Accounts.AccountAccessSqliteSchema.EnsureAsync(db);
         await Notifications.NotificationSqliteSchema.EnsureAsync(db);
         await ChatModerationSqliteSchema.EnsureAsync(db);
+        await CompetitionReadRevisionSchemaV1.EnsureSqliteAsync(db);
 
     }
 

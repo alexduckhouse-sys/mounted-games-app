@@ -2,7 +2,7 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { ReplaySegmentStore, type ReplaySegment } from './replaySegments';
 
 function database() {
-  const values = new Map<string, { id: string; end: number; blob: Blob }>();
+  const values = new Map<string, { id: string; end?: number; blob?: Blob; owner?: string; expiresAt?: number; leaseUntil?: number }>();
   const state = { openError: false, blocked: false, throwOpen: false, quota: false, readError: false, deleteThrows: false, stalled: false, openStalled: false };
   const createObjectStore = vi.fn();
   function transaction() {
@@ -37,7 +37,7 @@ it('writes complete recordings to disk, releases their RAM copies and reads them
   const db = database(); const store = new ReplaySegmentStore(1800_000); const item = segment('first'); const blob = item.blob;
   await store.add(item); expect(item.disk).toBe(true); expect(item.blob).toBeUndefined();
   expect(await store.read(item)).toBe(blob); expect(store.retainedSeconds).toBe(1); expect(db.createObjectStore).toHaveBeenCalled();
-  store.clear(); await Promise.resolve(); expect(db.values.size).toBe(0);
+  store.clear(); await Promise.resolve(); expect(db.values.has('first')).toBe(false); await store.dispose(); expect(db.values.size).toBe(0);
 });
 it('evicts old disk recordings when its byte budget is reached', async () => {
   const db = database(); const store = new ReplaySegmentStore(60_000, 64, 4);
@@ -45,7 +45,7 @@ it('evicts old disk recordings when its byte budget is reached', async () => {
   expect(store.segments.map((s) => s.id)).toEqual(['second']); expect(db.values.has('first')).toBe(false); expect(store.warning).toMatch(/limit/);
 });
 it('removes expired recordings left by a previous crashed session', async () => {
-  const db = database(); db.values.set('abandoned', { id: 'abandoned', end: 0, blob: new Blob(['old']) });
+  const db = database(); db.values.set('abandoned', { id: 'abandoned', end: -86_400_000, blob: new Blob(['old']) });
   const store = new ReplaySegmentStore(1000); await store.add(segment('new')); expect(db.values.has('abandoned')).toBe(false);
 });
 it.each(['openError', 'blocked', 'throwOpen'] as const)('falls back to bounded RAM when opening storage fails: %s', async (failure) => {
@@ -104,4 +104,42 @@ it('deletes a late completed write before closing on disposal', async () => {
   completeWrite!(); await writing; await disposing;
   expect(values.size).toBe(0); expect(close).toHaveBeenCalledOnce();
   await store.add(segment('after-disposal')); expect(store.segments).toEqual([]);
+});
+
+it('keeps another active owner history and pinned exports when a short viewer opens', async () => {
+  vi.useFakeTimers(); vi.spyOn(Date, 'now').mockRestore(); vi.setSystemTime(1000);
+  const db = database(); const controller = new ReplaySegmentStore(1800_000);
+  const old = segment('controller', 1000, 2000); await controller.add(old); old.pins++;
+  await vi.advanceTimersByTimeAsync(1802_000);
+  const viewer = new ReplaySegmentStore(60_000); await viewer.add(segment('viewer', Date.now(), Date.now() + 1000));
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+  expect(db.values.has('controller')).toBe(true); expect(await controller.read(old)).toBeInstanceOf(Blob);
+  await viewer.dispose(); expect(db.values.has('controller')).toBe(true);
+  old.pins--; controller.prune(Date.now()); await Promise.resolve(); expect(db.values.has('controller')).toBe(false);
+  await controller.dispose();
+});
+it('expires abandoned records by their own deadline and removes expired owner leases', async () => {
+  const db = database();
+  db.values.set('owner:crashed', { id: 'owner:crashed', leaseUntil: 1000 });
+  db.values.set('expired', { id: 'expired', end: 0, expiresAt: 2000, owner: 'owner:crashed', blob: new Blob(['old']) });
+  db.values.set('long', { id: 'long', end: 0, expiresAt: 1800_000, owner: 'owner:crashed', blob: new Blob(['keep']) });
+  const viewer = new ReplaySegmentStore(1000); await viewer.add(segment('new'));
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+  expect(db.values.has('expired')).toBe(false); expect(db.values.has('owner:crashed')).toBe(false); expect(db.values.has('long')).toBe(true);
+  await viewer.dispose();
+});
+it('orders late completed segments and prunes against the newest timestamp', async () => {
+  database(); const store = new ReplaySegmentStore(1000);
+  await store.add(segment('new', 4000, 5000)); await store.add(segment('late', 1000, 2000));
+  expect(store.segments.map((item) => item.id)).toEqual(['new']); await store.dispose();
+});
+
+it('isolates retention from old tabs without deleting their recordings', async () => {
+  database(); const open = vi.spyOn(indexedDB, 'open');
+  const deleteDatabase = vi.fn();
+  Object.defineProperty(indexedDB, 'deleteDatabase', { configurable: true, value: deleteDatabase });
+  const store = new ReplaySegmentStore(60_000); await store.add(segment('current'));
+  expect(open).toHaveBeenCalledWith('mg-replay-buffer-v2', 1);
+  expect(deleteDatabase).not.toHaveBeenCalled();
+  expect(store.segments).toHaveLength(1); await store.dispose();
 });

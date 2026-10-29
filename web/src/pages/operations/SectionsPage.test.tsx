@@ -85,6 +85,16 @@ describe('SectionsPage', () => {
     expect(within(pairs).getByRole('button', { name: 'Remove Flag' })).toBeInTheDocument();
   });
 
+  it('shows a quiet Saved badge in the header after a change, not a paragraph in the page', async () => {
+    const user = userEvent.setup();
+    show();
+    const pairs = await screen.findByRole('region', { name: 'Under 15 Pairs' });
+    await user.click(within(pairs).getByRole('button', { name: 'Edit' }));
+    await user.click(await within(pairs).findByRole('button', { name: 'Sack' }));
+    expect(await screen.findByText('Saved')).toBeInTheDocument();
+    expect(screen.getByText('Saved').closest('p')).toBeNull();
+  });
+
   it('edits a race list: add from the library, move, remove, preset and leave for later, saving each time', async () => {
     const user = userEvent.setup();
     show();
@@ -93,7 +103,9 @@ describe('SectionsPage', () => {
     await user.click(await within(pairs).findByRole('button', { name: 'Sack' }));
     await waitFor(() => expect(lastDraft().sections[1].sessions[0].races).toEqual(['Flag', 'Bending', 'Sack']));
 
-    await user.click(within(pairs).getByRole('button', { name: 'Move Sack up' }));
+    const grip = within(pairs).getByRole('button', { name: /^Move Sack:/ });
+    grip.focus();
+    await user.keyboard('{ArrowUp}');
     await waitFor(() => expect(lastDraft().sections[1].sessions[0].races).toEqual(['Flag', 'Sack', 'Bending']));
     await user.click(within(pairs).getByRole('button', { name: 'Remove Flag' }));
     await waitFor(() => expect(lastDraft().sections[1].sessions[0].races).toEqual(['Sack', 'Bending']));
@@ -105,6 +117,20 @@ describe('SectionsPage', () => {
     await user.click(within(pairs).getByRole('button', { name: 'Leave for later' }));
     await waitFor(() => expect(lastDraft().sections[1].sessions[0].races).toBeNull());
     expect(pairs).toHaveTextContent('Left for later');
+  });
+
+  it('moves a race down with the arrow keys on its grip and saves', async () => {
+    const user = userEvent.setup();
+    show();
+    const pairs = await screen.findByRole('region', { name: 'Under 15 Pairs' });
+    await user.click(within(pairs).getByRole('button', { name: 'Edit' }));
+    await user.click(await within(pairs).findByRole('button', { name: 'Sack' }));
+    await waitFor(() => expect(lastDraft().sections[1].sessions[0].races).toEqual(['Flag', 'Bending', 'Sack']));
+    expect(within(pairs).queryByRole('button', { name: /Move Sack up/ })).toBeNull();
+
+    within(pairs).getByRole('button', { name: /^Move Flag:/ }).focus();
+    await user.keyboard('{ArrowDown}');
+    await waitFor(() => expect(lastDraft().sections[1].sessions[0].races).toEqual(['Bending', 'Flag', 'Sack']));
   });
 
   it('saves taps on the steppers once they stop, and minutes go in fives', async () => {

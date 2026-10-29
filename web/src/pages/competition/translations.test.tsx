@@ -85,7 +85,7 @@ describe('the tack and turnout table in French', () => {
     } as never);
     inLang('fr', <TackLeaderboard competitionId={1} sectionId={5} />);
     expect(await screen.findByRole('heading', { name: 'Harnachement et tenue' })).toBeInTheDocument();
-    expect(screen.getByText(/Tableau séparé/)).toBeInTheDocument();
+    expect(screen.getByText(/Non ajouté au classement/)).toBeInTheDocument();
     expect(screen.getByText('Non noté')).toBeInTheDocument();
     expect(screen.getByText('Oak A')).toBeInTheDocument();
   });

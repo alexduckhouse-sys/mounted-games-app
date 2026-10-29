@@ -50,12 +50,21 @@ export function SubstitutionRequests({ competitionId, canDecide = false, onChang
     }
   }, [competitionId, scope, t]);
   useEffect(() => {
-    const first = window.setTimeout(() => { void reload(); }, 0);
-    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void reload(); }, 15000);
-    const update = () => { void reload(); };
+    if (!scope.signedIn) return invalidate;
+    let timer: number | undefined;
+    const update = () => { if (document.visibilityState !== 'hidden') void reload(); };
+    const visibility = () => {
+      clearTimeout(first); clearInterval(timer); timer = undefined;
+      if (document.visibilityState !== 'hidden') {
+        void reload();
+        timer = window.setInterval(update, 15000);
+      }
+    };
+    const first = window.setTimeout(visibility, 0);
+    document.addEventListener('visibilitychange', visibility);
     window.addEventListener('mg:substitutions', update);
-    return () => { invalidate(); clearTimeout(first); clearInterval(timer); window.removeEventListener('mg:substitutions', update); };
-  }, [reload, invalidate]);
+    return () => { invalidate(); clearTimeout(first); clearInterval(timer); document.removeEventListener('visibilitychange', visibility); window.removeEventListener('mg:substitutions', update); };
+  }, [reload, invalidate, scope.signedIn]);
   async function decide(id: number, approve: boolean) {
     if (!scope.signedIn || !canDecide || !requests.some(request => request.id === id && request.status === 'pending')) return;
     const epoch = lifecycle.current;

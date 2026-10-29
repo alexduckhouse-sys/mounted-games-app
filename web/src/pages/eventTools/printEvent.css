@@ -94,4 +94,12 @@
   .event-poster-qr { margin-top: 36px; width: 15cm; }
   .event-poster-scan { font-size: 36px; }
   .event-poster-link { font-size: 20px; }
+  /* A poster is one sheet: no break inside it, and the gate poster (which also carries the emergency box) uses a smaller code so all of it fits. */
+  .event-poster { break-inside: avoid; }
+  .event-print-section.event-poster .event-poster-qr { margin-top: 12px; width: 10cm; }
+  .event-print-section.event-poster .my-6 { margin-block: 8px !important; }
+  .event-print-section.event-poster .mt-8 { margin-top: 14px !important; }
+  .event-print-header-posters { display: none !important; }
+  /* Tack check: a team's rows stay together. */
+  .event-print-team, .event-print-page tr { break-inside: avoid; }
 }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { axiosError, competition, heat, race, session } from '../test/factories';
+import { axiosError, competition, heat, race, session, team } from '../test/factories';
 import { applyResultsUpdate, isNetworkError, replaceHeat, retryOnNetworkError, type ResultsUpdate } from './liveUpdates';
 
 const detail = () => competition({
@@ -26,6 +26,47 @@ describe('replaceHeat', () => {
 });
 
 describe('applyResultsUpdate', () => {
+  const withCards = () => competition({
+    teams: [team(1, { refereeCard: 'yellow' }), team(2, { refereeCard: 'red' })],
+    sessions: [session(1, { heats: [heat(10, { entries: [
+      { id: 1, teamId: 1, teamName: 'Team 1', laneIndex: 1, refereeCard: 'yellow' },
+      { id: 2, teamId: 2, teamName: 'Team 2', laneIndex: 2, refereeCard: 'red' },
+    ] })] })],
+  });
+
+  it('updates HC status without erasing referee cards or changing another team', () => {
+    const before = withCards();
+    const after = applyResultsUpdate(before, { teamId: 1, isHorsConcours: true });
+    expect(after.teams[0]).toMatchObject({ isHorsConcours: true, refereeCard: 'yellow' });
+    expect(after.teams[1]).toBe(before.teams[1]);
+    expect(after.sessions).toBe(before.sessions);
+    expect(applyResultsUpdate(after, { teamId: 1, isHorsConcours: false }).teams[0].isHorsConcours).toBe(false);
+  });
+
+  it.each([1, null])('leaves cards untouched on a tack-check standings invalidation for team %s', (teamId) => {
+    const before = withCards();
+    expect(applyResultsUpdate(before, { sectionId: 5, teamId, tackCheck: true })).toBe(before);
+  });
+
+  it('ignores malformed team changes instead of guessing a card or HC value', () => {
+    const before = withCards();
+    expect(applyResultsUpdate(before, { teamId: 1, isHorsConcours: 'yes' } as unknown as ResultsUpdate)).toBe(before);
+    expect(applyResultsUpdate(before, { teamId: null, refereeCard: 'red' } as unknown as ResultsUpdate)).toBe(before);
+  });
+
+  it('changes or clears a referee card only when the payload explicitly carries that field', () => {
+    const before = withCards();
+    const after = applyResultsUpdate(before, { teamId: 1, refereeCard: 'red' });
+    expect(after.teams[0].refereeCard).toBe('red');
+    expect(after.sessions[0].heats[0].entries[0].refereeCard).toBe('red');
+    expect(after.teams[1]).toBe(before.teams[1]);
+    expect(after.sessions[0].heats[0].entries[1]).toBe(before.sessions[0].heats[0].entries[1]);
+    const cleared = applyResultsUpdate(after, { teamId: 1, refereeCard: null });
+    expect(cleared.teams[0].refereeCard).toBeNull();
+    expect(cleared.sessions[0].heats[0].entries[0].refereeCard).toBeNull();
+    expect(applyResultsUpdate(before, { teamId: 1 } as ResultsUpdate)).toBe(before);
+  });
+
   it('replaces a whole heat when the update carries one', () => {
     const updated = heat(11, { label: 'Final' });
     expect(applyResultsUpdate(detail(), { sessionId: 1, heat: updated }).sessions[0].heats[1]).toBe(updated);

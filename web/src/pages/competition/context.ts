@@ -16,6 +16,10 @@ export interface CompetitionCtx {
   streamingChecked?: boolean;
   invoke: StreamInvoke;
   ready: number;
+  /** Status of the competition’s shared live connection. */
+  connected?: boolean;
+  /** Includes tack bonuses and other standings changes absent from the detail score graph. */
+  standingsVersion?: number;
   streamMessages: { message: ChatMessage; receivedAt: number }[];
   /** When this copy of the competition last came from the server, or null for an undated saved copy. */
   updatedAt?: Date | null;

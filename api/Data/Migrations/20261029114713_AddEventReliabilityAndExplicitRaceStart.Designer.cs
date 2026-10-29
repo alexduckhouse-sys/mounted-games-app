@@ -1308,6 +1308,22 @@ namespace MountedGames.Api.Data.Migrations
                     b.ToTable("CompetitionEntrySettings", (string)null);
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.CompetitionReadRevision", b =>
+                {
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("Detail")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("Standings")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("CompetitionId");
+
+                    b.ToTable("CompetitionReadRevisions", (string)null);
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.CompetitionSection", b =>
                 {
                     b.Property<int>("Id")
@@ -4704,6 +4720,22 @@ namespace MountedGames.Api.Data.Migrations
                         .HasConstraintName("FK_CompetitionEntrySettings_Competition");
                 });
 
+            modelBuilder.Entity("MountedGames.Api.Entities.CompetitionReadRevision", b =>
+                {
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("Detail")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("Standings")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("CompetitionId");
+
+                    b.ToTable("CompetitionReadRevisions", (string)null);
+                });
+
             modelBuilder.Entity("MountedGames.Api.Entities.CompetitionSection", b =>
                 {
                     b.HasOne("MountedGames.Api.Entities.Competition", "Competition")
@@ -5607,6 +5639,22 @@ namespace MountedGames.Api.Data.Migrations
                     b.Navigation("Sessions");
 
                     b.Navigation("Teams");
+                });
+
+            modelBuilder.Entity("MountedGames.Api.Entities.CompetitionReadRevision", b =>
+                {
+                    b.Property<int>("CompetitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("Detail")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("Standings")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("CompetitionId");
+
+                    b.ToTable("CompetitionReadRevisions", (string)null);
                 });
 
             modelBuilder.Entity("MountedGames.Api.Entities.CompetitionSection", b =>

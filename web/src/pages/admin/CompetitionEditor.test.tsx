@@ -441,7 +441,8 @@ describe('CompetitionEditor: arenas', () => {
     fireEvent.change(within(lanes).getByRole('spinbutton'), { target: { value: '99' } });
     expect(stored().arenas[1].lanes).toBe('12');
     await userEvent.click(screen.getByRole('button', { name: 'Less: Number of arenas' }));
-    expect(screen.queryByLabelText('Arena 2')).not.toBeInTheDocument();
+    // The removed row folds away rather than vanishing.
+    await waitFor(() => expect(screen.queryByLabelText('Arena 2')).not.toBeInTheDocument());
   });
 
   it('takes the age groups along when an arena is renamed or its lanes change', async () => {
@@ -469,7 +470,7 @@ describe('CompetitionEditor: sections', () => {
     expect(within(second).getByRole('spinbutton', { name: 'Max entries, Under 8' })).toHaveValue(10);
     expect(stored().sections[1]).toMatchObject({ ageGroup: 'Under 8', arena: 'Main arena', maxTeamsPerHeat: '6' });
     await userEvent.click(within(group).getByRole('button', { name: 'Remove Seniors' }));
-    expect(screen.queryByRole('group', { name: 'Seniors' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('group', { name: 'Seniors' })).not.toBeInTheDocument());
     expect(screen.getByRole('group', { name: 'Under 8' })).toBeInTheDocument();
   });
 
@@ -522,10 +523,37 @@ describe('CompetitionEditor: sections', () => {
     expect(stored().sections[0].maxParticipants).toBe('10');
     fireEvent.change(entries, { target: { value: '99' } });
     expect(stored().sections[0].maxParticipants).toBe('60');
+    fireEvent.change(entries, { target: { value: '1' } });
+    expect(stored().sections[0].maxParticipants).toBe('1');
+    // Down from 1 is "No limit", which is stored as empty (the API treats empty and 0 alike).
+    await userEvent.click(screen.getByRole('button', { name: 'Less: Max entries, Seniors' }));
+    expect(stored().sections[0].maxParticipants).toBe('');
+    expect(entries).toHaveAttribute('placeholder', 'No limit');
+    expect(entries).toHaveValue(null);
+    expect(screen.getByRole('button', { name: 'Less: Max entries, Seniors' })).toBeDisabled();
+    fireEvent.change(entries, { target: { value: '5' } });
+    expect(stored().sections[0].maxParticipants).toBe('5');
     fireEvent.change(entries, { target: { value: '0' } });
-    expect(stored().sections[0].maxParticipants).toBe('1');
-    fireEvent.change(entries, { target: { value: '' } });
-    expect(stored().sections[0].maxParticipants).toBe('1');
+    expect(stored().sections[0].maxParticipants).toBe('');
+  });
+
+  it('lets the price be typed exactly, pence and all, and the box be emptied for free', async () => {
+    seed('sections');
+    mount();
+    const price = screen.getByRole('spinbutton', { name: 'Price in pounds, Seniors' });
+    await userEvent.click(price);
+    await userEvent.type(price, '12.5');
+    expect(stored().sections[0].priceGbp).toBe('12.5');
+    expect(price).toHaveValue(12.5);
+    await userEvent.type(price, '5');
+    expect(stored().sections[0].priceGbp).toBe('12.55');
+    // The steppers move by whole pounds and keep the pence.
+    await userEvent.click(screen.getByRole('button', { name: 'More: Price in pounds, Seniors' }));
+    expect(stored().sections[0].priceGbp).toBe('13.55');
+    await userEvent.clear(price);
+    expect(stored().sections[0].priceGbp).toBe('');
+    await userEvent.tab();
+    expect(price).toHaveValue(0);
   });
 });
 
@@ -605,7 +633,7 @@ describe('CompetitionEditor: structure and timing', () => {
     seed('structure');
     mount();
     const hats = screen.getByRole('group', { name: 'Hatbands' });
-    expect(within(hats).getAllByRole('button', { name: /^Move .* up$/ })).toHaveLength(6);
+    expect(within(hats).getAllByRole('button', { name: /^Move .*: drag/ })).toHaveLength(6);
   });
 });
 
@@ -729,6 +757,8 @@ describe('CompetitionEditor: races', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Session 1' }));
     await userEvent.click(screen.getByRole('button', { name: 'Remove Flag Race' }));
     expect(stored().sections[0].sessions.map((s: { races: string[] }) => s.races)).toEqual([['Bending'], ['Bending']]);
+    // The removed row folds away, then is gone.
+    await waitFor(() => expect(screen.queryByText('Flag Race')).not.toBeInTheDocument());
     // Turn following off and it can change on its own.
     await userEvent.click(screen.getByRole('tab', { name: 'Session 2' }));
     await userEvent.click(sw('Same races as Session 1'));
@@ -1004,7 +1034,7 @@ describe('CompetitionEditor: creating', () => {
     await screen.findByRole('heading', { level: 2, name: 'Competition created' });
     const settings = vi.mocked(api.put).mock.calls.filter(([url]) => String(url).endsWith('/settings') && String(url).includes('/sessions/'));
     expect(settings).toHaveLength(1);
-    expect(settings[0][1]).toEqual({ laneRotationMode: 2 });
+    expect(settings[0][1]).toEqual({ laneRotationMode: 2, minutesPerHeat: 10 });
   });
 
   it('goes back to the step with the problem when something earlier is wrong', async () => {
@@ -1021,7 +1051,7 @@ describe('CompetitionEditor: creating', () => {
     mount();
     await userEvent.click(createButton());
     expect(api.post).not.toHaveBeenCalled();
-    expect(screen.getByText('Please fix the highlighted fields.')).toBeInTheDocument();
+    expect(screen.getByText('Check the highlighted boxes.')).toBeInTheDocument();
   });
 
   it('shows what went wrong, keeps the draft, and points to the competition if it was created', async () => {
@@ -1248,7 +1278,7 @@ describe('CompetitionEditor: editing', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(screen.getByText('Competition page')).toBeInTheDocument());
     expect(api.put).toHaveBeenCalledWith('/competitions/7/sections/22', expect.objectContaining({ tieBreakRule: 3 }));
-    expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/32/settings', { laneRotationMode: 1 });
+    expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/32/settings', { laneRotationMode: 1, minutesPerHeat: 10 });
   });
 
   it('adds new sessions, removes ones taken off, and removes a section and a break that were taken out', async () => {
@@ -1333,7 +1363,26 @@ describe('CompetitionEditor: editing', () => {
     await userEvent.click(step('Payment and rules'));
     expect(await screen.findByText('Entry fees are paid out to Cheshire PC \u2014 \u2022\u2022\u2022\u20221234 \u00b7 Ready')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Set up payouts' })).not.toBeInTheDocument();
-    expect(screen.getByText('Test mode: no real money moves yet.')).toBeInTheDocument();
+    // A real competition says nothing about test mode.
+    expect(screen.queryByText(/demo competition/)).not.toBeInTheDocument();
+  });
+
+  it('says a demo competition takes no real money, and only a demo one does', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/competitions/7') return { data: { ...saved, isDemo: true } };
+      return { data: [] };
+    });
+    mount('/admin/competitions/7');
+    await screen.findByDisplayValue('Autumn Area');
+    await userEvent.click(step('Payment and rules'));
+    expect(await screen.findByText('This is a demo competition, so no real money is taken or sent.')).toBeInTheDocument();
+  });
+
+  it('does not mention demo mode when making a new competition', async () => {
+    seed('payment');
+    mount();
+    expect(await screen.findByTestId('payouts-to')).toBeInTheDocument();
+    expect(screen.queryByText(/demo competition/)).not.toBeInTheDocument();
   });
 
   it('links an admin to Set up payouts when the club is not ready', async () => {
@@ -1347,6 +1396,21 @@ describe('CompetitionEditor: editing', () => {
     await userEvent.click(step('Payment and rules'));
     expect(await screen.findByText(/Cheshire PC hasn't finished setting up payouts yet/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Set up payouts' })).toHaveAttribute('href', '/me/payouts');
+  });
+
+  it('shows a skeleton, not a bare word, while an existing competition loads', async () => {
+    let release!: (value: unknown) => void;
+    vi.mocked(api.get).mockImplementation((async (url: string) => {
+      if (url === '/competitions/7') return new Promise((resolve) => { release = resolve; });
+      return { data: [] };
+    }) as never);
+    mount('/admin/competitions/7');
+    const loading = screen.getByRole('status');
+    expect(loading).toHaveTextContent('Loading');
+    expect(loading.querySelector('.mg-skel')).not.toBeNull();
+    release({ data: competition({ ...saved, sessions: [] }) });
+    await screen.findByDisplayValue('Autumn Area');
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
   it('keeps a local draft instead of reloading from the server', async () => {

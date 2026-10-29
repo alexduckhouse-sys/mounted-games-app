@@ -4,7 +4,7 @@ import { confirmDialog } from '../../../components/ConfirmDialog';
 import { Notice } from '../../../components/Notice';
 import { Sheet } from '../../../components/Sheet';
 import { useToast } from '../../../components/Toast';
-import { api } from '../../../api';
+import { api, readStoredAuth } from '../../../api';
 import { useAuth } from '../../../auth/AuthContext';
 import { useLanguage, useT } from '../../../i18n/LanguageContext';
 import { FLAG_COMPETITION_ICONS } from '../../../competition/icons';
@@ -20,6 +20,8 @@ import {
 import { asked, STANDARD_CONFIG, type DecFormConfig } from '../../../lib/decFormConfig';
 import type { CompetitionDetail, DeclarationForm, SavedRider, SavedTeamDeclaration, Team } from '../../../types';
 import { RefineChoiceRow } from '../../refine/Refine';
+import { isUnder18 } from '../../../lib/riderPrivacy';
+import { parseDob } from '../../../lib/decForm';
 import { RiderPanel } from './RiderPanel';
 import { TermsDialog } from './TermsDialog';
 import '../../../components/sitePages.css';
@@ -133,15 +135,15 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
 
   // Keep the work in progress, so a dropped signal or a reload doesn't lose it. The tick is never kept.
   useEffect(() => {
-    if (submitted || !touched) return;
+    if (submitted || !touched || !user || readStoredAuth()?.user.id !== user.id) return;
     const draftToKeep: DecFormDraft = { teamId: team.id, teamName, bibs, flag, trainerName, phone, notes, slots };
-    try { localStorage.setItem(decDraftKey(competition.id, team.id), JSON.stringify(draftToKeep)); } catch { /* storage full or blocked */ }
-  }, [submitted, touched, competition.id, team.id, teamName, bibs, flag, trainerName, phone, notes, slots]);
+    try { localStorage.setItem(decDraftKey(competition.id, team.id, user?.id), JSON.stringify({ ...draftToKeep, userId: user.id, savedAt: Date.now() })); } catch { /* storage full or blocked */ }
+  }, [submitted, touched, user, competition.id, team.id, teamName, bibs, flag, trainerName, phone, notes, slots]);
 
   const choices = useMemo(
     () => savedChoices(saved, slots).map((r) => ({
       ...r,
-      fullName: r.horseName ? `${r.fullName} — ${r.horseName}` : r.fullName,
+      fullName: r.horseName ? `${r.fullName} · ${r.horseName}` : r.fullName,
     })),
     [saved, slots],
   );
@@ -206,7 +208,7 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
     try {
       const { data } = await api.post<DeclarationForm>('/declaration-forms',
         buildSubmitBody({ teamId: team.id, teamName, bibs, flag, trainerName, phone, notes }, slots, config));
-      try { localStorage.removeItem(decDraftKey(competition.id, team.id)); } catch { /* ignore */ }
+      try { localStorage.removeItem(decDraftKey(competition.id, team.id, user?.id)); } catch { /* ignore */ }
       setSubmitted(true);
       setSentBefore(true);
       setActive(null);
@@ -282,7 +284,6 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
                 <Copy aria-hidden="true" className="h-[18px] w-[18px] shrink-0 text-[rgb(var(--mg-heading))]" strokeWidth={2.25} />
                 <span className="sp-grow">
                   <span className="sp-t1">{t('entries.dec.copyTeam')}</span>
-                  <span className="sp-t2">{t('entries.dec.copyTeamHelp')}</span>
                 </span>
                 <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} />
               </button>
@@ -354,7 +355,7 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
 
         {active != null ? (
           <RiderPanel
-            key={JSON.stringify([user?.id, user?.roles])}
+            key={JSON.stringify([user?.id, user?.roles, active])}
             title={panelTitle(slots, active)}
             reserve={reserve}
             editing={editing}
@@ -368,11 +369,12 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
             onPick={(pick) => {
               const original = saved.find((s) => s.id === pick.id) ?? {
                 ...pick,
-                fullName: pick.horseName && pick.fullName.endsWith(` — ${pick.horseName}`)
-                  ? pick.fullName.slice(0, -(` — ${pick.horseName}`).length)
+                fullName: pick.horseName && pick.fullName.endsWith(` · ${pick.horseName}`)
+                  ? pick.fullName.slice(0, -(` · ${pick.horseName}`).length)
                   : pick.fullName,
               };
               const next = riderFromSaved(original, reserve);
+              if (isUnder18(parseDob(next.dob))) next.useInitialOnly = true;
               if (original.clubId && original.clubId !== team.clubId) next.savedRiderId = null;
               setForm(next);
             }}
@@ -384,9 +386,7 @@ export function DecFormEditor({ competition, team, existing, draft, priorPhone, 
           <section aria-label={t('entries.dec.nextStep')} className="hidden flex-col items-start gap-3 rounded-xl border-[1.5px] border-[rgb(var(--mg-heading))] bg-[rgb(var(--mg-surface))] p-6 lg:flex">
             <CircleCheck aria-hidden="true" className="h-7 w-7 text-[rgb(var(--mg-heading))]" />
             <h3 className="mg-display text-[28px] font-bold leading-none text-[rgb(var(--mg-heading))]">{full ? t('entries.dec.teamComplete') : t('entries.dec.pickSlot')}</h3>
-            <p className="text-base leading-snug text-[rgb(var(--mg-body))]">
-              {full ? t('entries.dec.teamCompleteHelp') : t('entries.dec.pickSlotHelp')}
-            </p>
+            {full && <p className="text-base leading-snug text-[rgb(var(--mg-body))]">{t('entries.dec.teamCompleteHelp')}</p>}
           </section>
         )}
       </div>

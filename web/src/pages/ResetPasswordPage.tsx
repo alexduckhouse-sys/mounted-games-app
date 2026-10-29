@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useId, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { CircleCheck, Eye, EyeOff } from 'lucide-react';
+import { CircleCheck } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { Notice } from '../components/Notice';
 import { PasswordChecklist } from '../components/PasswordChecklist';
+import { PasswordInput } from '../components/PasswordInput';
 import { apiErrorStatus } from '../lib/apiError';
 import { friendlyPasswordErrors, passwordMeetsRules } from '../lib/passwordRules';
 import { tokenFromHash } from '../offline/scorerLink';
@@ -44,7 +45,6 @@ export function ResetPasswordPage() {
   const [token] = useState(() => tokenFromHash(window.location.hash));
   const [phase, setPhase] = useState<Phase>(token ? { kind: 'checking' } : { kind: 'dead', why: 'invalid' });
   const [password, setPassword] = useState('');
-  const [show, setShow] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -111,14 +111,14 @@ export function ResetPasswordPage() {
       {phase.kind === 'checking' && <p role="status" className="text-[15px]">One moment…</p>}
 
       {phase.kind === 'unreachable' && (
-        <div className="flex flex-col gap-4">
+        <div className="mg-swap flex flex-col gap-4">
           <h1 className="mg-h1 !text-[34px] !leading-none">Reset your password</h1>
           <Notice actionLabel="Try again" onAction={() => void check()}>Couldn’t check this link. Check your signal and try again.</Notice>
         </div>
       )}
 
       {phase.kind === 'dead' && (
-        <div className="flex flex-col gap-4">
+        <div className="mg-swap flex flex-col gap-4">
           <h1 className="mg-h1 !text-[34px] !leading-none">Reset your password</h1>
           <Notice>{DEAD_WORDING[phase.why]}</Notice>
           {phase.why === 'used'
@@ -128,7 +128,7 @@ export function ResetPasswordPage() {
       )}
 
       {phase.kind === 'done' && (
-        <div className="flex flex-col gap-4">
+        <div className="mg-swap flex flex-col gap-4">
           <h1 className="mg-h1 !text-[34px] !leading-none">Password changed</h1>
           <Notice tone="info" icon={CircleCheck}>Your password has been changed and you’ve been signed out on every device. Sign in with your new password.</Notice>
           <Link to="/login" className="mg-btn mg-btn-primary w-full">Sign in</Link>
@@ -136,20 +136,15 @@ export function ResetPasswordPage() {
       )}
 
       {phase.kind === 'ready' && (
-        <form onSubmit={submit} className="flex flex-1 flex-col gap-[18px]" noValidate>
+        <form onSubmit={submit} className="mg-swap flex flex-1 flex-col gap-[18px]" noValidate>
           <h1 className="mg-h1 !text-[34px] !leading-none">Choose a new password</h1>
           <p className="m-0 text-[15px] text-[rgb(var(--mg-body))]">Once it’s changed, you’ll be signed out everywhere and can sign in with the new one.</p>
           <div className="flex flex-col gap-1.5">
             <Field label="New password" error={error}>
               {({ id, invalid, describedBy }) => (
-                <div className="mg-field" data-invalid={invalid}>
-                  <input id={id} type={show ? 'text' : 'password'} value={password} autoComplete="new-password" autoFocus aria-invalid={invalid}
-                    aria-describedby={[rulesId, describedBy].filter(Boolean).join(' ')} onChange={(event) => { setPassword(event.target.value); setError(null); }} />
-                  <button type="button" onClick={() => setShow((v) => !v)} aria-label={show ? 'Hide password' : 'Show password'} aria-pressed={show}
-                    className="-mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[rgb(var(--mg-muted))] hover:text-[rgb(var(--mg-ink))]">
-                    {show ? <EyeOff aria-hidden="true" className="h-[18px] w-[18px]" /> : <Eye aria-hidden="true" className="h-[18px] w-[18px]" />}
-                  </button>
-                </div>
+                <PasswordInput id={id} value={password} autoComplete="new-password" autoFocus invalid={invalid}
+                  describedBy={[rulesId, describedBy].filter(Boolean).join(' ')} showLabel="Show password" hideLabel="Hide password"
+                  onChange={(event) => { setPassword(event.target.value); setError(null); }} />
               )}
             </Field>
             <PasswordChecklist password={password} id={rulesId} />

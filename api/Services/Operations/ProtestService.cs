@@ -37,7 +37,7 @@ public class ProtestService(AppDbContext db)
         // A race's protests include the ones against its whole heat, since those block it too.
         if (raceId is not null)
         {
-            var raceHeat = await db.Races.AsNoTracking().Where(r => r.Id == raceId).Select(r => (int?)r.HeatId).FirstOrDefaultAsync(ct);
+            var raceHeat = await db.Races.AsNoTracking().Where(r => r.Id == raceId && r.Heat!.Session!.CompetitionId == competitionId).Select(r => (int?)r.HeatId).FirstOrDefaultAsync(ct);
             query = query.Where(p => p.RaceId == raceId || (p.RaceId == null && p.HeatId == raceHeat));
         }
         var protests = await query.OrderBy(p => p.Status == ProtestStatus.Open ? 0 : 1)

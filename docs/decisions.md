@@ -1,5 +1,14 @@
 # Project decisions
 
+## 2026-10-29: Efficiency caches use committed database revisions
+- Why: standings and anonymous competition snapshots need reusable work across bursts of readers without retaining stale scores after a write, rollback or missed cross-instance message.
+- Approach: per-competition database revisions change in the same transaction through versioned triggers; bounded local snapshots check the committed revision, coalesce fills in their own scope and return independent DTOs. Signed-in detail reads bypass the shared cache.
+- Rejected: global invalidation on every database write; local-only or pub/sub-only invalidation; a short account-state cache that delays lock, block or session revocation. Immediate account checks remain uncached.
+- Scope: implement the agreed efficiency work with safe middleware savings; item 2.3 (stateful SignalR reconnect) remains excluded. Replay buffers use explicit ownership and retain saved clips.
+- Revisit if: hosting or event delivery changes enough to justify reconnect infrastructure, or profiling shows revision reads dominate request cost.
+- Files: `api/Data/CompetitionReadRevisionSchemaV1.cs`, `api/Services/{CompetitionSnapshotCache,CompetitionDetailReader,StandingsService}.cs`, `api/Auth/LiveAccounts.cs`, `web/src/live/replaySegments.ts`.
+- Source: efficiency handoff review and implementation chat, 29 October 2026. The migration must be applied before deploying the API; production was not changed by this implementation.
+
 ## 2026-10-27: Heat-result pushes wait for the iOS app decision; family accounts are a maybe
 - Why: the owner wants push notifications for a followed team's heat results ("Came 2nd in Heat 3, now 4th overall") considered together with the native iOS app and Live Activities, not built for web push first. Family accounts (one parent account holding several children's rider and pony details) were called "meh": possible later, not now.
 - Rejected for now: heat-result web pushes on their own; family accounts.
@@ -295,3 +304,10 @@
 - **Volunteer check-in is low-friction.** Anyone, signed in or not, can mark a duty as here with no name. A signed-in caller is recorded (`CheckedInByUserId`/`Name`), an anonymous one leaves them empty. The IP-block check and the write rate limit still apply. The public list hides `CheckedInByName`; staff and the person who checked in still see it. Who can claim shifts is unchanged. The web banner finds a signed-out person's duties from the teams they follow on the device.
 - **Deleting an account also erases the opt-in rows** for the account's email address (matched trimmed and lower-case).
 - Files: `api/Controllers/SignupController.cs`, `api/Hubs/LiveHub.cs`, `api/Security/ProxyClientIpMiddleware.cs`, `web/src/pwa.ts`, `web/src/components/BackLink.tsx`, `web/src/pages/operations/posterLinks.ts`, `.gitignore`.
+
+## 2026-10-28: The stats hub is public in full
+- Why: owner decision (plan item F1-P3-6): tapping a rider, pony or club on `/stats` should not hit a sign-in wall. The earlier split ("sign in for more detail") had no recorded privacy reason.
+- Rule: an anonymous caller gets exactly what a signed-in non-admin gets: `Games`, `BestGames`, `WorstGames`, `Entries`, `Partnerships`, `Clubs` and `Seasons` for every kind. `StatsViewer` is now `StatsViewer(bool SeesFullNames)`; `StatsProfileDto.Detailed` stays in the response (always true) so older clients keep working.
+- Unchanged: names. `RiderNames.Display(..., viewer.SeesFullNames)` and `UseInitialOnly` are as before: site admins see full names, everyone else sees what each rider chose, and a rider who asked for initials only is not findable by surname. No referee's note is read.
+- Supersedes the 2026-10-26 entry above where it says riders, ponies and clubs still need a sign-in.
+- Files: `api/Services/Stats/StatsService.cs`, `api/Controllers/StatsController.cs`, `api/Dtos/StatsDtos.cs`, tests in `tests/MountedGames.Api.Tests/Stats/StatsEndpointsTests.cs`; the web sign-in prompt and its `site.stats.signIn*` keys are gone.

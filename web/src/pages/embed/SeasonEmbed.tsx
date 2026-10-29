@@ -47,6 +47,7 @@ export function SeasonEmbed() {
       <div className="emb-table-wrap">
         <table className="emb-table">
           <caption className="sr-only">{t('screen.embed.seasonStandings')}</caption>
+          <colgroup><col className="emb-c-pos" /><col /><col className="emb-c-num" /><col className="emb-c-num" /></colgroup>
           <thead><tr><th scope="col">{t('screen.embed.colPos')}</th><th scope="col">{t('screen.embed.colTeam')}</th><th scope="col" className="emb-num">{t('screen.embed.colRounds')}</th><th scope="col" className="emb-num">{t('screen.embed.colPts')}</th></tr></thead>
           <tbody>
             {rows.map((row) => (

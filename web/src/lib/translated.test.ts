@@ -65,7 +65,7 @@ describe('French', () => {
   it('warns about limits in words', () => {
     setActiveLang('fr');
     const girth: CustomField = { id: 'g', label: 'Girth', type: 1, required: false, min: 20, max: 90, unit: 'cm' };
-    expect(breachWarning('over')).toBe('Au-dessus de la limite — sera signalé');
+    expect(breachWarning('over')).toBe('Au-dessus de la limite (sera signalé)');
     expect(limitText(girth)).toBe('Attendu : 20 à 90 cm');
     expect(limitText({ ...girth, min: null })).toBe('Pas plus de 90 cm');
     expect(limitText({ ...girth, max: null })).toBe('Au moins 20 cm');

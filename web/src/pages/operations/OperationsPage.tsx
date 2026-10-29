@@ -3,7 +3,7 @@ import { OfficialResultsDownload } from './OfficialResultsDownload';
 import { useT } from '../../i18n/LanguageContext';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { usePageWidth } from '../../components/pageWidthState';
-import { MoreHorizontal, RefreshCw } from 'lucide-react';
+import { MoreHorizontal } from 'lucide-react';
 import { Notice } from '../../components/Notice';
 import { useToast } from '../../components/Toast';
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
@@ -77,6 +77,7 @@ function OperationsPageContent() {
   const [sectionId, setSectionId] = useState<number | null>(competition.sections[0]?.id ?? null);
   const [seed, setSeed] = useState('1');
   const [preview, setPreview] = useState<DrawPreview | null>(null);
+  const [previous, setPrevious] = useState<DrawPreview | null>(null);
   const [round, setRound] = useState(0);
   const [drawError, setDrawError] = useState<string | null>(null);
   const toast = useToast();
@@ -118,6 +119,7 @@ function OperationsPageContent() {
         `/competitions/${competition.id}/sections/${sectionId}/draw/preview`,
         { seed: parsedSeed },
       );
+      setPrevious(preview);
       setPreview(data);
       setRound(0);
       setSheet(null);
@@ -171,11 +173,6 @@ function OperationsPageContent() {
       <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
     </button>
   );
-  const recheck = (
-    <button type="button" className="rf-ib" aria-label={loadingReadiness ? t('ops.page.checking') : t('ops.page.recheck')} onClick={() => void loadReadiness()} disabled={loadingReadiness}>
-      <RefreshCw className={`h-5 w-5 ${loadingReadiness ? 'motion-safe:animate-spin' : ''}`} aria-hidden="true" />
-    </button>
-  );
 
   const legacyTab = searchParams.get('tab');
   if (!tool && toolParam) return <Navigate to={hubPath} replace />;
@@ -188,7 +185,7 @@ function OperationsPageContent() {
   let title = t('ops.hub.title');
   let context = competition.name;
   let subtitle: string | undefined;
-  let actions: ReactNode = tool ? null : recheck;
+  let actions: ReactNode = null;
   if (tool === 'draw') {
     title = t('ops.view.draw');
     if (preview) {
@@ -206,17 +203,24 @@ function OperationsPageContent() {
   return (
     <RefinePage className={wide ? 'ops-wide' : ''}>
       {toast.node}
-      <RefineHeader back={tool ? hubPath : `/competitions/${competition.id}`} backLabel={tool ? t('ops.hub.back') : t('ops.page.backToEvent')} context={context} actions={actions} title={title} subtitle={subtitle} />
+      <RefineHeader back={tool ? hubPath : `/competitions/${competition.id}`} backLabel={tool ? t('ops.hub.back') : t('ops.page.backToEvent')} context={context} actions={actions}
+        onRefresh={tool ? undefined : () => void loadReadiness()} refreshLabel={t('ops.page.recheck')} title={title} subtitle={subtitle} />
 
       <DrawUndoBanner competitionId={competition.id} version={undoVersion} onRestored={() => { reloadCompetition(); void loadReadiness(); }} />
 
       {loadError && (!readiness || tool !== null) && <Notice actionLabel={t('common.tryAgain')} onAction={() => void loadReadiness()}>{loadError}</Notice>}
-      {!tool && loadingReadiness && !readiness && <p role="status" className="rf-note">{t('ops.page.checkingDetails')}</p>}
-
-      {!tool && (
-        <BeforeTheDayHub competition={competition} readiness={readiness} groups={groups} mayDuplicate={mayDuplicate} refreshFailed={loadError !== null && readiness !== null} checkedAt={checkedAt} retrying={loadingReadiness} onRetry={() => void loadReadiness()} />
+      {!tool && loadingReadiness && !readiness && (
+        <div role="status" className="ops-skel" aria-busy="true">
+          <span className="sr-only">{t('ops.page.checkingDetails')}</span>
+          {[0, 1, 2, 3].map((row) => <span key={row} className="mg-skel ops-skel-row" aria-hidden="true" />)}
+        </div>
       )}
 
+      {!tool && !(loadingReadiness && !readiness) && (
+        <div key="hub" className="ops-fade"><BeforeTheDayHub competition={competition} readiness={readiness} groups={groups} mayDuplicate={mayDuplicate} refreshFailed={loadError !== null && readiness !== null} checkedAt={checkedAt} retrying={loadingReadiness} onRetry={() => void loadReadiness()} /></div>
+      )}
+
+      {tool && tool !== 'draw' && <div key={tool} className="ops-fade">
       {tool === 'entries' && <EntriesPanel canWrite={canWrite} onTimetableChanged={reloadCompetition} />}
 
       {tool === 'protests' && (
@@ -242,22 +246,23 @@ function OperationsPageContent() {
         <div className="rf-list"><Link className="rf-row" to={`/competitions/${competition.id}/prize-giving`}>{t('screen.pg.title')}</Link><OfficialResultsDownload competitionId={competition.id} /></div>
         <ResultsBookTab competitionId={String(competition.id)} />
       </div>}
-      {!tool && mayDuplicate && <div className="rf-list"><SaveStartingPoint competitionId={competition.id} competitionName={competition.name} /></div>}
       {tool === 'duplicate' && mayDuplicate && <><DuplicateEventPanel competition={competition} /><div className="rf-list"><SaveStartingPoint competitionId={competition.id} competitionName={competition.name} /></div></>}
+      </div>}
+      {!tool && mayDuplicate && <div className="rf-list"><SaveStartingPoint competitionId={competition.id} competitionName={competition.name} /></div>}
 
       {tool === 'draw' && (
-        <section aria-label={t('ops.page.sectionDraw')}>
+        <section aria-label={t('ops.page.sectionDraw')} className="ops-fade">
           {competition.sections.length === 0 && <RefineNote>{t('ops.page.addSectionFirst')}</RefineNote>}
           {!preview && sheet !== 'draw' && (
             <DrawSettingsForm sections={competition.sections} sectionId={sectionId} seed={seed} previewing={previewing} onSection={changeSection} onSeed={changeSeed} onPreview={() => void previewDraw()} />
           )}
           {drawError && <Notice>{drawError}</Notice>}
-          {preview && <DrawResult preview={preview} round={round} onRound={setRound} onNewSeed={newSeed} busy={previewing} />}
+          {preview && <DrawResult preview={preview} previous={previous} round={round} onRound={setRound} onNewSeed={newSeed} busy={previewing} />}
         </section>
       )}
 
       {showDrawFoot && preview && (
-        <RefineFoot aboveTabs column label={t('ops.page.applyDraw')}>
+        <RefineFoot inline aboveTabs column label={t('ops.page.applyDraw')}>
           <span className="rf-t2">{t('ops.page.applyNote')}</span>
           <div className="rf-actions">
             <button type="button" className="rf-btn" onClick={() => { setPreview(null); setDrawError(null); }}>{t('ops.page.discard')}</button>

@@ -265,7 +265,7 @@ public sealed partial class EventArchiveService(
                         session.Status.ToString(),
                         heatLabel,
                         entry.LaneIndex,
-                        entry.Team?.DisplayName ?? $"Team {entry.TeamId}",
+                        entry.Team?.DisplayName ?? "Unnamed team",
                         entry.Team?.Club?.Name ?? string.Empty,
                         raceNames
                     ]);

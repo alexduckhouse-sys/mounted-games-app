@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import type { PassportCheckBoard } from '../../types';
 import { PassportCheckTab } from './PassportCheckTab';
+import { chooseOption } from '../../test/select';
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), put: vi.fn() } }));
 
@@ -38,7 +39,7 @@ describe('passport check tab', () => {
 
     const toggle = await screen.findByLabelText('Check passports at this event');
     expect(toggle).not.toBeChecked();
-    expect(screen.getByText(/Turn this on to tick off ponies/)).toBeInTheDocument();
+    expect(screen.getByText(/Tick ponies off as they arrive/)).toBeInTheDocument();
     await userEvent.click(toggle);
 
     await waitFor(() => expect(put).toHaveBeenCalledWith('/event-tools/competitions/12/passport-check/settings', { enabled: true }));
@@ -122,7 +123,7 @@ describe('passport check tab', () => {
 
     await userEvent.type(screen.getByLabelText('Passport code'), 'GBR-826001234');
     await userEvent.type(screen.getByLabelText('Owner full name'), 'Sarah Clarke');
-    await userEvent.selectOptions(screen.getByLabelText('Role'), 'Vet');
+    chooseOption(screen.getByLabelText('Role'), 'Vet');
     await userEvent.type(screen.getByLabelText('What the vet / official said'), 'Booster overdue');
     await userEvent.click(screen.getByRole('button', { name: 'Save & certify' }));
 

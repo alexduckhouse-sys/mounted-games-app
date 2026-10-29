@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
@@ -278,16 +278,16 @@ describe('RaceRulesSheet and 4 governing body rulebooks', () => {
     );
 
     expect(await screen.findByText('Swap bottle between tables.')).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'EGUK' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Pony Club' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'MGA' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'STRUK' })).toBeInTheDocument();
+    // The sheet shows the event's rules: no rulebook tabs or picker.
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Rulebook' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /rulebook page/i })).not.toBeInTheDocument();
 
     const dialog = screen.getByRole('dialog');
-    fireEvent.pointerDown(dialog.parentElement!);
-    expect(onClose).toHaveBeenCalledTimes(1);
+    fireEvent.click(dialog);
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole('button', { name: 'Close rules' }));
-    expect(onClose).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(2));
 
     // Test fallback path in fetchRaceTemplateByName
     clearRaceDetailCache();

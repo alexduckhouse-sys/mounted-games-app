@@ -166,15 +166,15 @@ describe('tie-break reasons on the toplist', () => {
 
   it('flags a dead heat as level with run-off wording on both teams when nothing separates them', () => {
     const list = buildToplist([st(1, 3), st(2, 3)], [], [], SECTION, null);
-    expect(list.rows.map((r) => r.tieBreakReason)).toEqual(['Level on points and countback — run-off if on cut-off', 'Level on points and countback — run-off if on cut-off']);
-    expect(toplistNote(list.rows[1])).toBe('Level on points and countback — run-off if on cut-off');
+    expect(list.rows.map((r) => r.tieBreakReason)).toEqual(['Level on points and countback (run-off if on cut-off)', 'Level on points and countback (run-off if on cut-off)']);
+    expect(toplistNote(list.rows[1])).toBe('Level on points and countback (run-off if on cut-off)');
   });
 
   it('explains through the results when races exist, even for the same total', () => {
     const sess = [session(1, [heat(1, [1, 2], [rs(1, [result(1, 1, { points: 3 }), result(2, 1, { points: 3 })])])])];
     const list = buildToplist([st(1, 3), st(2, 3)], sess, [], SECTION, null);
-    expect(list.rows[0].tieBreakReason).toBe('Level on points and countback — run-off if on cut-off');
-    expect(list.rows[1].tieBreakReason).toBe('Level on points and countback — run-off if on cut-off');
+    expect(list.rows[0].tieBreakReason).toBe('Level on points and countback (run-off if on cut-off)');
+    expect(list.rows[1].tieBreakReason).toBe('Level on points and countback (run-off if on cut-off)');
   });
 
   it('does not repeat the reason on the second of a pair when the first had a real reason', () => {
@@ -201,8 +201,8 @@ describe('tie-break reasons on the toplist', () => {
   });
 
   it('copies a backend reason of the first team only when it is the run-off wording', () => {
-    const list = buildToplist([st(1, 5, { tieBreakReason: 'Level on points and countback — run-off if on cut-off' }), st(2, 5)], [], [], SECTION, null);
-    expect(list.rows[1].tieBreakReason).toBe('Level on points and countback — run-off if on cut-off');
+    const list = buildToplist([st(1, 5, { tieBreakReason: 'Level on points and countback (run-off if on cut-off)' }), st(2, 5)], [], [], SECTION, null);
+    expect(list.rows[1].tieBreakReason).toBe('Level on points and countback (run-off if on cut-off)');
     const other = buildToplist([st(1, 5, { tieBreakReason: 'Ahead on something' }), st(2, 5, { tieBreakOrder: 3 })], [], [], SECTION, null);
     expect(other.rows[1].tieBreakReason).toBeNull();
   });
@@ -214,7 +214,7 @@ describe('tie-break reasons on the toplist', () => {
 
   it('treats a manual order on only one of two level teams as unresolved', () => {
     const list = buildToplist([st(1, 5, { tieBreakOrder: 1 }), st(2, 5)], [], [], SECTION, null);
-    expect(list.rows.map((r) => r.tieBreakReason)).toEqual(['Level on points and countback — run-off if on cut-off', 'Level on points and countback — run-off if on cut-off']);
+    expect(list.rows.map((r) => r.tieBreakReason)).toEqual(['Level on points and countback (run-off if on cut-off)', 'Level on points and countback (run-off if on cut-off)']);
   });
 });
 
@@ -232,8 +232,8 @@ describe('explainTieBreak direct cases', () => {
   });
 
   it('only calls it referee order when the manual orders differ', () => {
-    expect(explainTieBreak(st(1, 5, { tieBreakOrder: 2 }), st(2, 5, { tieBreakOrder: 2 }), [], SECTION)).toBe('Level on points and countback — run-off if on cut-off');
-    expect(explainTieBreak(st(1, 5, { tieBreakOrder: 1 }), st(2, 5), [], SECTION)).toBe('Level on points and countback — run-off if on cut-off');
+    expect(explainTieBreak(st(1, 5, { tieBreakOrder: 2 }), st(2, 5, { tieBreakOrder: 2 }), [], SECTION)).toBe('Level on points and countback (run-off if on cut-off)');
+    expect(explainTieBreak(st(1, 5, { tieBreakOrder: 1 }), st(2, 5), [], SECTION)).toBe('Level on points and countback (run-off if on cut-off)');
   });
 
   it('says nothing for zero-point teams that have not raced while nothing is scored', () => {
@@ -261,7 +261,7 @@ describe('explainTieBreak direct cases', () => {
     expect(explainTieBreak(st(1, 3, { wins: 1 }), st(2, 3, { wins: 0 }), [], SECTION)).toBe('Ahead of Team 2 on Countback (1× 1st place vs 0× 1st places)');
     expect(explainTieBreak(st(1, 3, { wins: 0 }), st(2, 3, { wins: 2 }), [], SECTION)).toBe('Settled by run-off / referee order');
     const noWins = { ...st(1, 3), wins: undefined } as unknown as StandingRow;
-    expect(explainTieBreak(noWins, { ...noWins, teamId: 2 }, [], SECTION)).toBe('Level on points and countback — run-off if on cut-off');
+    expect(explainTieBreak(noWins, { ...noWins, teamId: 2 }, [], SECTION)).toBe('Level on points and countback (run-off if on cut-off)');
   });
 
   it('uses the last shared race when countback is level', () => {
@@ -286,12 +286,12 @@ describe('explainTieBreak direct cases', () => {
 
   it('skips races only one of the teams rode and does not credit the lower team', () => {
     const sess = sessionWith({ 1: [result(1, null, { points: 3 })], 2: [result(1, null, { points: 1 }), result(2, null, { points: 2 })] });
-    expect(explainTieBreak(st(1, 4), st(2, 4), [sess], SECTION)).toBe('Settled by run-off / referee order'.replace('Settled by run-off / referee order', 'Level on points and countback — run-off if on cut-off'));
+    expect(explainTieBreak(st(1, 4), st(2, 4), [sess], SECTION)).toBe('Settled by run-off / referee order'.replace('Settled by run-off / referee order', 'Level on points and countback (run-off if on cut-off)'));
   });
 
   it('treats equal placing and points in the last race as no difference', () => {
     const sess = sessionWith({ 1: [result(1, 1, { points: 4 }), result(2, 1, { points: 4 })] });
-    expect(explainTieBreak(st(1, 4), st(2, 4), [sess], SECTION)).toBe('Level on points and countback — run-off if on cut-off');
+    expect(explainTieBreak(st(1, 4), st(2, 4), [sess], SECTION)).toBe('Level on points and countback (run-off if on cut-off)');
   });
 
   it('prefers the A-Final comparison: points, then placings, and ignores finals only one team rode', () => {
@@ -303,18 +303,18 @@ describe('explainTieBreak direct cases', () => {
     expect(explainTieBreak(st(1, 9), st(2, 9), [spread], SECTION)).toBe('Ahead on A-Final placing');
     // Equal everything in the final falls through to the other checks.
     const same = finalOnly([result(1, 1, { points: 3 }), result(2, 1, { points: 3 })]);
-    expect(explainTieBreak(st(1, 3), st(2, 3), [same], SECTION)).toBe('Level on points and countback — run-off if on cut-off');
+    expect(explainTieBreak(st(1, 3), st(2, 3), [same], SECTION)).toBe('Level on points and countback (run-off if on cut-off)');
     // Only one team rode the final.
     const oneSided = finalOnly([result(1, 1, { points: 3 })]);
     expect(explainTieBreak(st(1, 3), st(2, 3), [oneSided], SECTION)).toMatch(/^Ahead of Team 2 on Countback/);
     // Eliminated or unplaced results are not counted as places.
     const elim = finalOnly([result(1, null, { points: 3, eliminated: true }), result(2, 2, { points: 3, eliminated: true })], [result(1, 1, { points: 3, eliminated: true }), result(2, null, { points: 3 })]);
-    expect(explainTieBreak(st(1, 6), st(2, 6), [elim], SECTION)).toBe('Level on points and countback — run-off if on cut-off');
+    expect(explainTieBreak(st(1, 6), st(2, 6), [elim], SECTION)).toBe('Level on points and countback (run-off if on cut-off)');
   });
 
   it('ignores races with no results and races neither team rode', () => {
     const sess = session(1, [heat(1, [1, 2], [race(1), race(2, { isComplete: true, results: [result(5, 1, { points: 3 })] })])]);
-    expect(explainTieBreak(st(1, 3), st(2, 3), [sess], SECTION)).toBe('Level on points and countback — run-off if on cut-off');
+    expect(explainTieBreak(st(1, 3), st(2, 3), [sess], SECTION)).toBe('Level on points and countback (run-off if on cut-off)');
   });
 
   it('only looks at race sessions in this section, in running order', () => {
@@ -466,7 +466,7 @@ describe('tie-break facts ordering and odd results', () => {
   it('treats a missing wins figure on a standing as zero when explaining a tie', () => {
     const noWins = (id: number) => ({ ...st(id, 5), wins: undefined } as unknown as StandingRow);
     const list = buildToplist([noWins(1), noWins(2)], [], [], SECTION, null);
-    expect(list.rows.map((r) => r.tieBreakReason)).toEqual(['Level on points and countback — run-off if on cut-off', 'Level on points and countback — run-off if on cut-off']);
+    expect(list.rows.map((r) => r.tieBreakReason)).toEqual(['Level on points and countback (run-off if on cut-off)', 'Level on points and countback (run-off if on cut-off)']);
   });
 
   it('treats a missing races-run figure as zero before anything is scored', () => {

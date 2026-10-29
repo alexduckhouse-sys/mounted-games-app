@@ -15,6 +15,7 @@ import { accountKind } from './accountAccessTypes';
 
 vi.mock('../../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api')>()),
+  getIpBlocks: async () => (await import('../../api')).api.get('/ip-blocks'),
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }));
 vi.mock('../../auth/AuthContext', () => ({

@@ -1,27 +1,40 @@
 import { api } from '../api';
 import { savedCopyKeys, serviceWorkerSavedAt, writeSavedCopy } from '../offline/savedCopies';
 import type { CompetitionDetail } from '../types';
+import type { AxiosResponse } from 'axios';
 
-/**
- * Warms the `GET /api/competitions/:id` response and local `savedCopies` store
- * on pointer-down / mouse-enter so navigating into a competition is instantaneous.
- */
+type Pending = { identity: string | null; response: Promise<AxiosResponse<CompetitionDetail>> };
+const pending = new Map<number, Pending>();
+
+// An opaque identity prevents a request from one sign-in being adopted by another.
+function identity(): string | null {
+  try { return localStorage.getItem('mg.auth'); } catch { return null; }
+}
+
+/** Adopt only an identical, still-running detail fetch. First-view remains a separate request. */
+export function pendingCompetitionPrefetch(competitionId: number): Promise<AxiosResponse<CompetitionDetail>> | undefined {
+  const request = pending.get(competitionId);
+  return request?.identity === identity() ? request?.response : undefined;
+}
+
+/** Warm public saved data and let immediate navigation share the same in-flight request. */
 export function prefetchCompetition(competitionId: number): Promise<void> {
-  return api
-    .get<CompetitionDetail>(`/competitions/${competitionId}`)
-    .then(({ data, headers }) => {
-      if (
-        serviceWorkerSavedAt(headers) === null &&
-        data &&
-        typeof data === 'object' &&
-        Array.isArray(data.sessions)
-      ) {
-        writeSavedCopy(savedCopyKeys.competition(competitionId), data);
-      }
-    })
-    .catch(() => {
-      // Best-effort warm-up; navigation handles any real error.
-    });
+  const existing = pendingCompetitionPrefetch(competitionId);
+  if (existing) return existing.then(() => {}, () => {});
+  const startedAs = identity();
+  const response = api.get<CompetitionDetail>(`/competitions/${competitionId}`).then((result) => {
+    if (identity() !== startedAs) throw new Error('Sign-in changed while loading the competition.');
+    const { data, headers } = result;
+    if (serviceWorkerSavedAt(headers) === null && data && typeof data === 'object' && Array.isArray(data.sessions)) {
+      writeSavedCopy(savedCopyKeys.competition(competitionId), data);
+    }
+    return result;
+  });
+  const request = { identity: startedAs, response };
+  pending.set(competitionId, request);
+  return response.then(() => {}, () => {}).finally(() => {
+    if (pending.get(competitionId) === request) pending.delete(competitionId);
+  });
 }
 
 /**

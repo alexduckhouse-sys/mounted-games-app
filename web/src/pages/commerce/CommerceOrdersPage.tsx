@@ -141,7 +141,7 @@ function CommerceOrdersContent() {
         renderResult={({ payment, retry }) => (
           <>
             <OutcomeState payment={payment} />
-            <RefineFoot column>
+            <RefineFoot inline column>
               {payment.status === 1 && <button type="button" className="rf-btn rf-btn-primary" onClick={retry}>{t('common.tryAgain')}</button>}
               <button type="button" className={`rf-btn ${payment.status === 1 ? 'rf-btn-text' : 'rf-btn-primary'}`} onClick={() => setPaying(false)}>{t('ops3.orders.backOrder')}</button>
             </RefineFoot>

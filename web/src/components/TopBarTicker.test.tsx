@@ -4,7 +4,7 @@ import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CurrentCompetitionProvider } from '../competition/CurrentCompetitionContext';
 import type { TickerItem } from '../lib/ticker';
-import { TickerProvider, useTicker, type DockAction } from './TickerContext';
+import { TickerProvider, useDockAction, useTicker, type DockAction } from './TickerContext';
 import { TopBarTicker } from './TopBarTicker';
 
 const live: TickerItem = { key: 'live-1', kind: 'live', text: 'Now: Seniors Session 1 · Heat 1' };
@@ -23,13 +23,13 @@ function Go({ to }: { to: string }) {
   const navigate = useNavigate();
   return <button onClick={() => navigate(to)}>Go {to}</button>;
 }
-function Page({ items, watch = null, action = null, low }: { items: TickerItem[]; watch?: number | null; action?: DockAction | null; low?: boolean }) {
+function Page({ items, watch = null, action = null, low, quiet }: { items: TickerItem[]; watch?: number | null; action?: DockAction | null; low?: boolean; quiet?: boolean }) {
   return (
     <MemoryRouter initialEntries={['/competitions/1']}>
       <CurrentCompetitionProvider>
         <TickerProvider>
           <Publish items={items} watch={watch} action={action} />
-          <TopBarTicker low={low} />
+          <TopBarTicker low={low} quiet={quiet} />
           <Go to="/competitions/1/chat" />
           <button>Outside</button>
         </TickerProvider>
@@ -72,6 +72,15 @@ describe('TopBarTicker: what it shows', () => {
     expect(container.querySelector('.mg-strip-bar')).toBeNull();
     const second = show([]);
     expect(second.container.querySelector('.mg-strip-bar')).toBeNull();
+  });
+
+  it('leaves the news line out on a quiet page, and shows nothing at all without a page button', () => {
+    const { container, unmount } = render(<Page items={[live]} quiet />);
+    expect(container.querySelector('.mg-dock')).toBeNull();
+    unmount();
+    const withButton = render(<Page items={[live]} quiet action={{ label: 'Add', count: 0, icon: 'plus', onClick: () => undefined }} />);
+    expect(withButton.container.querySelector('.mg-strip-bar')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument();
   });
 
   it('links a session line to that session', () => {
@@ -316,5 +325,66 @@ describe('TopBarTicker: the page button beside the dock', () => {
     render(<Page items={[]} action={action(0)} />);
     expect(document.querySelector('.mg-strip-bar')).toBeNull();
     expect(screen.getByRole('button', { name: 'Day, arena and age group' })).toBeVisible();
+  });
+  it('shows on a page outside any competition, without the ticker line', () => {
+    document.cookie = 'mg.competition=; Path=/; Max-Age=0';
+    render(<Page items={[live]} action={{ ...action(0), icon: 'plus', label: 'Sell something' }} />);
+    expect(document.querySelector('.mg-strip-bar')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Sell something' })).toBeVisible();
+  });
+
+  it.each(['filters', 'list', 'settings', 'plus', 'print'] as const)('draws the %s icon', (icon) => {
+    render(<Page items={[]} action={{ ...action(0), icon }} />);
+    expect(screen.getByRole('button', { name: 'Day, arena and age group' }).querySelector('svg')).not.toBeNull();
+  });
+});
+
+describe('useDockAction', () => {
+  function AddPage({ on = true, onClick }: { on?: boolean; onClick: () => void }) {
+    const docked = useDockAction(on ? { label: 'Add a round', icon: 'plus', onClick } : null);
+    return <p>{docked ? 'docked' : 'on its own'}</p>;
+  }
+  function Shell({ on, onClick }: { on?: boolean; onClick: () => void }) {
+    return (
+      <MemoryRouter initialEntries={['/seasons']}>
+        <CurrentCompetitionProvider>
+          <TickerProvider>
+            <AddPage on={on} onClick={onClick} />
+            <TopBarTicker />
+          </TickerProvider>
+        </CurrentCompetitionProvider>
+      </MemoryRouter>
+    );
+  }
+
+  it('puts the page button in the dock and calls the latest handler', () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const { rerender } = render(<Shell onClick={first} />);
+    expect(screen.getByText('docked')).toBeVisible();
+    rerender(<Shell onClick={second} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add a round' }));
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledOnce();
+  });
+
+  it('takes the button away when the page passes null or closes', () => {
+    const { rerender, unmount } = render(<Shell onClick={vi.fn()} />);
+    rerender(<Shell on={false} onClick={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: 'Add a round' })).toBeNull();
+    rerender(<Shell onClick={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Add a round' })).toBeVisible();
+    unmount();
+    expect(document.querySelector('.mg-dock')).toBeNull();
+  });
+
+  it('says so when there is no dock, so the page shows its own button', () => {
+    render(<AddPage onClick={vi.fn()} />);
+    expect(screen.getByText('on its own')).toBeVisible();
+  });
+
+  it('says there is no dock when the shell leaves it off the page, even inside the provider', () => {
+    render(<MemoryRouter><CurrentCompetitionProvider><TickerProvider><AddPage onClick={vi.fn()} /></TickerProvider></CurrentCompetitionProvider></MemoryRouter>);
+    expect(screen.getByText('on its own')).toBeVisible();
   });
 });

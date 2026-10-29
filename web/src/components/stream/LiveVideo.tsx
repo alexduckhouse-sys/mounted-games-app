@@ -13,7 +13,7 @@ import { StreamChips } from './StreamChips';
 import { StreamPlayer } from './StreamPlayer';
 import { useT } from '../../i18n/LanguageContext';
 
-export function LiveVideo({ competitionId, streams, sessions, invoke, ready, messages, canBroadcast, fallback, competitionName, publicLayout = false, showPlaceholder = false, lastCommand, onMedia }: {
+export function LiveVideo({ competitionId, streams, sessions, invoke, ready, messages, canBroadcast, fallback, competitionName, publicLayout = false, showPlaceholder = false, lastCommand, onMedia, enableDvr = true }: {
   competitionId: number; streams: LiveStream[]; sessions: Session[]; invoke: StreamInvoke; ready: number;
   messages: { message: ChatMessage; receivedAt: number }[]; canBroadcast: boolean; fallback?: string | null; competitionName: string;
   publicLayout?: boolean; showPlaceholder?: boolean; lastCommand?: StreamCommand | null;
@@ -21,6 +21,7 @@ export function LiveVideo({ competitionId, streams, sessions, invoke, ready, mes
    * Hands the live video to the page (for example to record replays from it), with the id of the stream it is
    * playing (also while it connects, when the video is still null). Called with just null when the player goes away.
    */
+  enableDvr?: boolean;
   onMedia?: (media: MediaStream | null, streamId?: number) => void;
 }) {
   const { lite } = useLiteMode();
@@ -70,7 +71,7 @@ export function LiveVideo({ competitionId, streams, sessions, invoke, ready, mes
       </div>
       {typeof RTCPeerConnection === 'undefined' ? <p role="status" className="mg-card p-4">{t('teams.stream.unsupported')}</p>
         : lite && !tapped ? <TapToWatch stream={selected} captionBar={publicLayout} onTap={() => setTapped(true)} />
-        : <ConnectedPlayer key={selected.id} stream={selected} invoke={invoke} ready={ready} onMedia={onMedia} announcement={messages.filter((item) => item.message.type === 2).at(-1)} captionBar={publicLayout} label={label} competitionName={competitionName} />}
+        : <ConnectedPlayer key={selected.id} stream={selected} invoke={invoke} ready={ready} onMedia={onMedia} enableDvr={enableDvr} announcement={messages.filter((item) => item.message.type === 2).at(-1)} captionBar={publicLayout} label={label} competitionName={competitionName} />}
       <p className={`m-0 text-xs text-[rgb(var(--mg-muted))] ${publicLayout ? 'px-4 pt-2' : ''}`}>{SPECTATOR_NOTICE}</p>
     </> : fallback ? <CompStreamCard key={fallback} streamUrl={fallback} compName={competitionName} publicLayout={publicLayout} />
       : showPlaceholder ? <div className="live-stream-placeholder mg-card" role="status"><strong>{t('teams.stream.notStarted')}</strong></div> : null}
@@ -85,7 +86,8 @@ function TapToWatch({ stream, captionBar, onTap }: { stream: LiveStream; caption
     <small>{stream.arenaName} · {stream.angleName}. {t('teams.stream.dataNote')}</small>
   </button>;
 }
-function ConnectedPlayer({ stream, invoke, ready, announcement, captionBar, label, competitionName, onMedia }: {
+function ConnectedPlayer({ stream, invoke, ready, announcement, captionBar, label, competitionName, onMedia, enableDvr }: {
+  enableDvr: boolean;
   stream: LiveStream; competitionName: string; invoke: StreamInvoke; ready: number; onMedia?: (media: MediaStream | null, streamId?: number) => void;
   announcement?: { message: ChatMessage; receivedAt: number };
   captionBar?: boolean; label: string | null;
@@ -106,7 +108,7 @@ function ConnectedPlayer({ stream, invoke, ready, announcement, captionBar, labe
   // With the video hidden this is a radio: the lock screen names the event, the arena and the heat on air.
   useShowgroundRadio(snapshot.audioOnly === true, { competitionName, arenaName: stream.arenaName, heatLabel: label });
   useEffect(() => { viewer.current!.sync(ready, stream.generation); }, [ready, stream.generation, stream.competitionId, stream.id, invoke]);
-  return <StreamPlayer media={snapshot.media} stream={stream} label={label} reconnecting={snapshot.state === 'reconnecting'} message={snapshot.message || (snapshot.state === 'connecting' ? t('teams.stream.connecting') : null)} announcement={announcement} captionBar={captionBar} quality={snapshot.preferredRid ?? 'f'} onQuality={(rid) => viewer.current?.setQuality(rid)} audioOnly={snapshot.audioOnly} onAudioOnly={(enabled) => viewer.current?.setAudioOnly(enabled)} onSyncLive={() => viewer.current?.syncLive()} />;
+  return <StreamPlayer enableDvr={enableDvr} media={snapshot.media} stream={stream} label={label} reconnecting={snapshot.state === 'reconnecting'} message={snapshot.message || (snapshot.state === 'connecting' ? t('teams.stream.connecting') : null)} announcement={announcement} captionBar={captionBar} quality={snapshot.preferredRid ?? 'f'} onQuality={(rid) => viewer.current?.setQuality(rid)} audioOnly={snapshot.audioOnly} onAudioOnly={(enabled) => viewer.current?.setAudioOnly(enabled)} onSyncLive={() => viewer.current?.syncLive()} />;
 }
 export function CompStreamCard({ streamUrl, compName, publicLayout = false }: { streamUrl: string; compName: string; publicLayout?: boolean }) {
   const t = useT();

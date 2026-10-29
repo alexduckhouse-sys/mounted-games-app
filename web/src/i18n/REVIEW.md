@@ -72,3 +72,24 @@ Left for a native speaker, because the fix depends on judgement rather than a cl
 - Welsh wording in `match.title`, `plannedNow`, `events.mine`, `laneOrder`, the install-the-app text, the stabling words, `theirPhone`, `deadline.sent*`, `lookingPair`, `onNow` and `equineId`.
 - French `volunteers.summary` / `taken` and `screen.ov.watching`.
 - Strings built in shared helpers that are still English: tie-break reasons in `lib/toplist.ts`, the "+10 min" delay text, `hatbandName()` outside the stream overlay, `lib/commentatorFacts`, `lib/arenaCrewSheet`, and CSV file contents (deliberately English).
+
+## Added by the design plan (28–29 October 2026)
+
+The design-plan PRs wrote their own Welsh and French, as the owner asked, and none of it has had a second pass. These keys are new or changed since PR #302. To see the English, run `git diff 67b32b56^1 origin/main -- web/src/i18n/en`.
+
+- **Things I sell** (`site.seller.*`, about 90 keys in `site`): the seller catalogue, item form, preset items (stabling, shavings, haylage, electric hook-up), stock, options and the archive and withdraw confirmations. Please check the stabling words and `site.seller.cat.camping` against the vocabulary table above.
+- **Seasons** (`site.seasons.*` and `site.seasons.form.*`, about 60 keys): the season form, adding a round, points multipliers and the tie wording. `struck-through` became `crossed-out` in `site.seasons.caption` and `site.profiles.roundsIn`.
+- **Stats** (`site.stats.*`, `teams.team.pointQuota`): "Point quota" was renamed to "Average points" (`Avg points`, `Avg pts`, `Per race`), and the sign-in lines went because stats are now public.
+- **Sign-up and sign-in** (`auth.signup.role*Hint`, `auth.password.capsLock`): the hints under each "I am a" tick, and the caps lock warning.
+- **Smaller ones:** `common.undo`, `account.supporters.loading` / `failed`, `site.shop.noEventShops`, `site.shop.contactPlaceholder`, `site.profiles.newProfile`, `teams.following.unfollowed`, `teams.rulebooks.add` / `addHint` / `addHintDock`.
+- **Scoring (PR #312):** `desk.stream.bc.unlock` is now "Tap to unlock." (`Tapiwch i ddatgloi.` / `Touchez pour déverrouiller.`).
+
+- **Accounts, club members and payouts (PR #315):** a new `acct` area (`acct.ts`, about 240 keys): club members (`acct.members.*`), seller payouts (`acct.payouts.*`), the demo payment flow (`acct.demo.*`), payment screens (`acct.pay.*`) and the team profile organiser forms (`acct.tp.*`). Please check `acct.demo.*` reads clearly as "no real money" in both languages.
+- **Organiser operations (PR #316):** `ops3.plan.*` (about 50 keys, mostly scorer links in `ops3.plan.scorer.*`, plus the demo mark-paid labels, the equipment roll-back message, the rulebook search and the sections saved badge). Changed values: `ops.view.scorers` is now "People and QR codes", and `screen.qr.description` and `ops2.print.p.steps` point there.
+- **Admin and the wizard (PR #314):** `admin.accounts.comps.search` / `searchPlaceholder` / `noMatch`, `admin.format.rules.createRace`, and the grip labels `admin.creator.hat.move` and `admin.format.dialog.move` (these replace the old move up / move down pairs). Changed values: `admin.creator.pay.testMode` (demo wording) and `admin.creator.sections.none` ("No limit").
+- **Print (PR #317):** `ops2.print.p.postcode`.
+
+- **Organiser tools in the dock and dock filters (PRs #310, #311):** the tools sheets (`ops.tt.toolsSheet`, `ops2.entries.toolsSheet`, `ops3.tc.settingsSheet`, `entries.tab.toolsTitle`, `entries.tab.exportTitle`), the dec-form QR and export lines (`entries.tab.showQr` / `qrLabel` / `qrScan` / `exportCsv` / `fillFor` / `formsClose`), `ops.tt.addBreakIn`, `competition.rules.raceRules`, the commentary and stream sheets (`desk.commentary.view` / `controls` / `pickWhat`, `desk.stream.pr.*` sheet lines), `screen.pg.setUpTitle` and `teams.stream.controls`.
+- **Entries, timetable and money (PR #321):** `ops.tt.lockedNote`, `ops2.entries.outFold` ("Withdrawn or no-show"), `ops2.money.sending` and `ops2.money.statement`.
+- **Stream controls (PR #323):** the phone tabs `desk.stream.tab.cameras` / `graphics` / `replays`, and `teams.stream.more` ("More options" on the player).
+- **Public competition pages (PR #324):** the steward and horsebox cards (`competition.steward.*`, `competition.horsebox.heading`), the delay sheet (`competition.timetable.delay*`, `laneFor`), `competition.details.shop` / `ended`, `competition.toplist.finalResults`, `competition.scoring.savedStandings`, `teams.list.changeTrainer`, `teams.following.heatTotals` and the weather lines `teams.weather.noLocation` / `setLocation` / `organiserAction`. Changed values: `competition.scoring.savedStandings` and `desk.commentary.savedStandings` now say "toplist" rather than "standings" (English only; cy/fr unchanged). Please check the delay sheet wording, which organisers read under pressure.

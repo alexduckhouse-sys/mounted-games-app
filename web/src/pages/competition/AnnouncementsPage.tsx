@@ -5,11 +5,11 @@ import { Link } from 'react-router-dom';
 import { useCompetition } from './context';
 import { useChatFeed } from './useChatFeed';
 import { useAuth } from '../../auth/AuthContext';
-import { api } from '../../api';
+import { api, pinChatMessage } from '../../api';
 import { Notice } from '../../components/Notice';
 import { RefineHeader, RefineList, RefinePage } from '../refine/Refine';
 import {
-  BANNER_TAG, bannerMessages, clockTime, initials, markSeen, messageThreads, pinnedAnnouncement, readSeen, sentAnnouncements, sentLabel,
+  clockTime, initials, markSeen, messageThreads, pinnedAnnouncement, readSeen, sentAnnouncements, sentLabel,
 } from '../../lib/announcements';
 import type { ChatMessage } from '../../types';
 import './announcements.css';
@@ -29,8 +29,8 @@ export function AnnouncementsPage() {
 
 function AnnouncementsSession() {
   const { competition, reload } = useCompetition();
-  const { hasRole } = useAuth();
-  const isAdmin = hasRole('Admin');
+  const { hasRole, canOrganise } = useAuth();
+  const isAdmin = hasRole('Admin') || canOrganise(competition);
   const feed = useChatFeed(competition.id, 'Couldn’t load the announcements. Check your signal and try again.');
   const [body, setBody] = useState(() => readDraft(competition.id));
   const [sending, setSending] = useState(false);
@@ -47,7 +47,7 @@ function AnnouncementsSession() {
 
   async function send() {
     const text = body.trim();
-    if (!text || busy.current) return;
+    if (!isAdmin || !text || busy.current) return;
     busy.current = true;
     setSending(true);
     setError(null);
@@ -66,36 +66,28 @@ function AnnouncementsSession() {
     }
   }
 
-  async function clearBanners(banners: ChatMessage[]) {
-    await Promise.all(banners.map((banner) => api.delete(`/competitions/${competition.id}/chat/${banner.id}`)));
-    banners.forEach((banner) => feed.remove(banner.id));
-  }
-
   async function pin(target: ChatMessage) {
-    if (busy.current) return;
+    if (!isAdmin || busy.current) return;
     busy.current = true;
     setError(null);
-    const previous = bannerMessages(feed.messages);
     try {
-      const { data } = await api.post<ChatMessage>(`/competitions/${competition.id}/chat/announcement`, { body: target.body, tag: BANNER_TAG });
-      if (!data || typeof data.id !== 'number' || data.tag !== BANNER_TAG) throw new Error('Invalid announcement response');
+      const { data } = await pinChatMessage(competition.id, target.id);
+      if (!data || data.id !== target.id) throw new Error('Invalid announcement response');
       feed.add(data);
-      try { await clearBanners(previous); }
-      catch { setError({ text: 'That announcement is pinned, but the old one couldn’t be cleared. Check your signal and try again.' }); }
     } catch {
       setError({ text: 'Couldn’t pin that announcement. Check your signal and try again.', retry: () => void pin(target) });
-    } finally {
-      busy.current = false;
-      reload();
-    }
+    } finally { busy.current = false; reload(); }
   }
 
   async function unpin() {
-    if (busy.current) return;
+    if (!isAdmin || !pinned || busy.current) return;
     busy.current = true;
     setError(null);
-    try { await clearBanners(bannerMessages(feed.messages)); }
-    catch { setError({ text: 'Couldn’t unpin that. Check your signal and try again.', retry: () => void unpin() }); feed.load(); }
+    try {
+      const { data } = await pinChatMessage(competition.id, pinned.id);
+      if (!data || data.id !== pinned.id) throw new Error('Invalid announcement response');
+      feed.add(data);
+    } catch { setError({ text: 'Couldn’t unpin that. Check your signal and try again.', retry: () => void unpin() }); }
     finally { busy.current = false; reload(); }
   }
 
@@ -111,12 +103,12 @@ function AnnouncementsSession() {
             <h2 id="ann-pinned" className="ann-h">Pinned</h2>
             <div key={pinned.id} className="ann-card ann-pinned mg-reveal">
               <p className="ann-text">{pinned.body}</p>
-              <button type="button" className="ann-red" onClick={() => void unpin()}>Unpin</button>
+              {isAdmin && <button type="button" className="ann-red" onClick={() => void unpin()}>Unpin</button>}
             </div>
           </section>
         )}
 
-        <section aria-labelledby="ann-new">
+        {isAdmin && <section aria-labelledby="ann-new">
           <h2 id="ann-new" className="ann-h">New announcement</h2>
           <div className="ann-compose">
             <textarea
@@ -130,7 +122,7 @@ function AnnouncementsSession() {
               <ArrowRight className="h-5 w-5" aria-hidden="true" />
             </button>
           </div>
-        </section>
+        </section>}
 
         {sent.length > 0 && (
           <section aria-labelledby="ann-sent">
@@ -143,7 +135,7 @@ function AnnouncementsSession() {
                     <span className="ann-meta">{sentLabel(message, justSentId)}</span>
                     <WhatsAppComposer text={`${competition.name}\n\n${message.body}\n\n${location.origin}/competitions/${competition.id}/chat`} />
                   </span>
-                  <button type="button" className="ann-pill" aria-label={`Pin: ${message.body}`} onClick={() => void pin(message)}>Pin</button>
+                  {isAdmin && <button type="button" className="ann-pill" aria-label={`Pin: ${message.body}`} onClick={() => void pin(message)}>Pin</button>}
                 </li>
               ))}
             </RefineList>

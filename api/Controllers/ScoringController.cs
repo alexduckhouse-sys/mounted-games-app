@@ -1,3 +1,5 @@
+using MountedGames.Api.Security;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Data.Sqlite;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -29,6 +31,7 @@ public class ScoringController : ControllerBase
         _live = live;
     }
 
+    [EnableRateLimiting(RequestLimits.ScorePolicy)]
     [HttpPost("api/races/{raceId:int}/results")]
     [CompetitionAccess("raceId", CompetitionResource.Race)]
     public async Task<ActionResult<HeatDto>> SubmitRaceResults(
@@ -291,6 +294,7 @@ public class ScoringController : ControllerBase
     /// </summary>
     [HttpPost("api/races/{raceId:int}/start")]
     [CompetitionAccess("raceId", CompetitionResource.Race)]
+    [EnableRateLimiting(RequestLimits.ScorePolicy)]
     public async Task<ActionResult<RaceDto>> StartRace(int raceId,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RaceClockRequest? req = null,
         CancellationToken cancellationToken = default)

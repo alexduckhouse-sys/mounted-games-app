@@ -28,6 +28,7 @@ import { WhenWhereStep } from './creator/WhenWhereStep';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
 import { PageProblem } from '../../components/PageProblem';
+import { CreatorSkeleton } from '../../components/Skeletons';
 import { usePageWidth } from '../../components/pageWidthState';
 import './creator/wizard.css';
 
@@ -206,7 +207,7 @@ export function CompetitionEditor() {
     window.location.reload();
   }
 
-  if (loading) return <div className="p-6 text-sm text-slate-500">{t('common.loading')}</div>;
+  if (loading) return <CreatorSkeleton label={t('common.loading')} />;
   if (loadFailed && !stored) {
     return (
       <PageProblem title={t('admin.accounts.ed.loadFailed')} primaryLabel={t('common.reload')} onPrimary={() => window.location.reload()} secondaryLabel={t('common.goBack')} onSecondary={() => navigate(-1)}>
@@ -268,7 +269,7 @@ export function CompetitionEditor() {
                 {stepId === 'structure' && <StructureStep {...props} templates={templates} teamCounts={teamCounts} />}
                 {stepId === 'races' && <RacesStep {...props} templates={templates} />}
                 {stepId === 'dec' && <DecFormStep competitionId={isEdit ? editingId : null} canChange={mayOrganise} />}
-                {stepId === 'payment' && <PaymentNotesStep {...props} payoutsTo={payoutsToShow} canSetUpPayouts={hasRole('Manager') || hasRole('Admin')} canSetPassportCheck={!isEdit} />}
+                {stepId === 'payment' && <PaymentNotesStep {...props} payoutsTo={payoutsToShow} canSetUpPayouts={hasRole('Manager') || hasRole('Admin')} canSetPassportCheck={!isEdit} isDemo={!!competition?.isDemo} />}
                 {stepId === 'review' && (
                   <ReviewStep {...props} teamCounts={teamCounts} real={real} onEdit={go} isEdit={isEdit}
                     payoutsText={payoutsText(payoutsToShow)} />

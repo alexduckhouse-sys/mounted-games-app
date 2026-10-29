@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.RateLimiting;
+using MountedGames.Api.Security;
 using MountedGames.Api.Services.Accounts;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
@@ -22,6 +24,8 @@ public class VolunteerAndEmergencyController(
 {
     [HttpGet("volunteer-shifts")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<IReadOnlyList<VolunteerShiftDto>>> ListVolunteerShifts(
         int id, [FromQuery] bool unfilledOnly = false, CancellationToken ct = default)
     {
@@ -445,8 +449,12 @@ public class VolunteerAndEmergencyController(
         var checkInTeamIds = await GetViewerCheckInTeamIdsAsync(id, userId, isStaff, ct);
         var viewerClubName = await GetViewerClubNameAsync(userId, ct);
 
+        if (string.Equals(shift.AttendanceStatus, "Here", StringComparison.OrdinalIgnoreCase))
+            return ToShiftDto(shift, isStaff, userId, checkInTeamIds, viewerClubName);
+
+        var canAttribute = CanViewerCheckInShift(shift, isStaff, userId, checkInTeamIds, viewerClubName);
         string? checkedInName = null;
-        if (!string.IsNullOrEmpty(userId))
+        if (canAttribute)
         {
             var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
             checkedInName = CompetitionFields.Trimmed(req?.CheckedInByName)
@@ -458,7 +466,7 @@ public class VolunteerAndEmergencyController(
 
         shift.AttendanceStatus = "Here";
         shift.CheckedInAt = DateTime.UtcNow;
-        shift.CheckedInByUserId = string.IsNullOrEmpty(userId) ? null : userId;
+        shift.CheckedInByUserId = canAttribute ? userId : null;
         shift.CheckedInByName = checkedInName;
         shift.CheckedInByStaffOverride = false;
 
@@ -896,7 +904,8 @@ public class VolunteerAndEmergencyController(
                 Id: c.Id,
                 ShiftId: c.ShiftId,
                 UserId: isStaff || (!string.IsNullOrEmpty(currentUserId) && c.UserId == currentUserId) ? c.UserId : string.Empty,
-                VolunteerName: c.VolunteerName,
+                VolunteerName: isStaff || (!string.IsNullOrEmpty(currentUserId) && c.UserId == currentUserId)
+                    ? c.VolunteerName : RiderNames.Display(c.VolunteerName, useInitialOnly: true, viewerSeesFullNames: false),
                 ClubName: c.ClubName,
                 ContactPhone: isStaff ? c.ContactPhone : null,
                 ClaimedAt: DateTime.SpecifyKind(c.ClaimedAt, DateTimeKind.Utc),

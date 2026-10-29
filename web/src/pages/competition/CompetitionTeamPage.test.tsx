@@ -280,7 +280,7 @@ describe('CompetitionTeamPage detailed view', () => {
     expect(fact('Average per race')).toHaveTextContent('5.0 pts');
     expect(fact('Average place')).toHaveTextContent('1.0');
     expect(screen.queryByText('Races won', { selector: 'dt' })).toBeNull();
-    expect(screen.queryByText('Point quota', { selector: 'dt' })).toBeNull();
+    expect(screen.queryByText('Avg points', { selector: 'dt' })).toBeNull();
     expect(within(stats).queryByText('By race')).toBeNull();
     expect(within(stats).getByRole('link', { name: 'See all stats' })).toHaveAttribute('href', '/competitions/1/teams/1/stats');
 
@@ -339,7 +339,7 @@ describe('declaration forms', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Oak A' })).toBeInTheDocument();
     expect(vi.mocked(api.get).mock.calls.map((call) => call[0])).not.toContain('/declaration-forms');
     expect(screen.queryByText('Private Test Coach')).toBeNull();
-    expect(screen.queryByText('No dec form yet.')).toBeNull();
+    expect(screen.queryByText('No declaration form yet.')).toBeNull();
     expect(screen.queryByText('Loading declaration…')).toBeNull();
   });
 });

@@ -7,11 +7,11 @@ import { useCompetition } from '../competition/context';
 import { Chevron, RefineList, RefineNote, RefineSection, RefineSheet, RefineStatus } from '../refine/Refine';
 import { RedrawPreviewView } from './RedrawPreviewView';
 import { RiderSwapSheet } from './RiderSwapSheet';
+import { statusMessage, type StatusSheet } from './entryStatus';
 import type { SetTeamEntryStatusResult, TeamEntry, TeamEntryStatus } from './types';
 import { apiMessage, isOffline, statusOf } from './types';
 import './operations.css';
 
-interface StatusSheet { team: TeamEntry; next: TeamEntryStatus }
 
 const STATUS_LABEL: Record<TeamEntryStatus, string> = {
   get 0() { return tr('ops2.panel.inDraw'); }, get 1() { return tr('ops2.protest.withdrawn'); }, get 2() { return tr('ops2.redraw.noShow'); },
@@ -151,10 +151,7 @@ export function EntriesPanel({ canWrite, onTimetableChanged }: { canWrite: boole
           onClose={() => setSheet(null)}
           onDone={(result) => {
             setSheet(null);
-            const places = result.heatPlacesChanged;
-            setMessage(sheet.next === 0
-              ? (places > 0 ? t('ops2.panel.backIn', { name: sheet.team.teamName, places: t('ops2.panel.heats', { count: places }) }) : t('ops2.panel.backInDraw', { name: sheet.team.teamName }))
-              : (places > 0 ? t('ops2.panel.outOf', { name: sheet.team.teamName, places: t('ops2.panel.unscoredHeats', { count: places }) }) : t('ops2.panel.isOut', { name: sheet.team.teamName })));
+            setMessage(statusMessage(sheet, result));
             onTimetableChanged();
             void load();
           }}
@@ -173,7 +170,8 @@ export function EntriesPanel({ canWrite, onTimetableChanged }: { canWrite: boole
   );
 }
 
-function StatusSheetView({ competitionId, sheet, onClose, onDone }: {
+/** The sheet for withdrawing a team, marking it a no-show or reinstating it, with the organiser's reason. */
+export function StatusSheetView({ competitionId, sheet, onClose, onDone }: {
   competitionId: number;
   sheet: StatusSheet;
   onClose: () => void;

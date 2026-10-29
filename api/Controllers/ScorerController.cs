@@ -88,6 +88,7 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
     /// The save the phone's outbox sends: places plus the results the scorer saw, answered with the heat, or with the
     /// winning heat on a conflict. Same behaviour as the staff endpoint of the same shape.
     /// </summary>
+    [EnableRateLimiting(RequestLimits.ScorePolicy)]
     [HttpPost("api/scorer/races/{raceId:int}/results")]
     public async Task<ActionResult<HeatDto>> SubmitResults(int raceId, SubmitRaceResultsRequest req, CancellationToken ct)
     {
@@ -118,6 +119,7 @@ public class ScorerController(AppDbContext db, ScoringService scoring, ILiveBroa
 
     /// <summary>Record the flag-down time within the scorer link's competition.</summary>
     [HttpPost("api/scorer/races/{raceId:int}/start")]
+    [EnableRateLimiting(RequestLimits.ScorePolicy)]
     public async Task<ActionResult<RaceDto>> StartRace(int raceId, RaceClockRequest request, CancellationToken ct)
     {
         if (Link.Scope == ScorerLink.ScopeCamera) return StatusCode(403);

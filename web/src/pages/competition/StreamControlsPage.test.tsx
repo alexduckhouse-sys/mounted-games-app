@@ -97,6 +97,26 @@ describe('StreamControlsPage', () => {
     expect(screen.getByRole('tab', { name: 'Auto' })).toHaveAttribute('aria-selected', 'true');
   });
 
+  it('on a phone shows Cameras, Graphics and Replays, with Auto inside Graphics', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(max-width: 767px)', media: query, onchange: null,
+      addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
+    }));
+    try {
+      const user = userEvent.setup();
+      mount({ url: '/competitions/1/stream-controls?tab=auto' });
+      const tabs = within(screen.getByRole('tablist', { name: 'Stream controls' })).getAllByRole('tab');
+      expect(tabs.map((tab) => tab.textContent)).toEqual(['Cameras', 'Graphics', 'Replays']);
+      expect(screen.getByRole('tab', { name: 'Graphics' })).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByRole('tabpanel', { name: 'Graphics' })).toHaveTextContent('Run automations');
+      await user.click(screen.getByRole('tab', { name: 'Replays' }));
+      expect(screen.getByRole('tab', { name: 'Replays' })).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByRole('tabpanel', { name: 'Replays' })).not.toHaveTextContent('Run automations');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('puts End stream in the header, asks first, then ends every live camera', async () => {
     const user = userEvent.setup();
     const asked = autoConfirm(true);

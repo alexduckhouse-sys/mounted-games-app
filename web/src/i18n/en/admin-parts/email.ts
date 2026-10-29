@@ -114,7 +114,6 @@ export const adminEmail = {
   'admin.email.sheet.descTrainers': 'To the trainers, {people}. You can’t unsend it.',
   'admin.email.sheet.descOrganisers': 'To the organisers and admins, {people}. You can’t unsend it.',
   'admin.email.sheet.descAdmins': 'To the admins, {people}. You can’t unsend it.',
-  'admin.email.sheet.notYet': 'Not yet',
 
   // Errors
   'admin.email.err.counts': 'Couldn’t count who is on each list. Check your signal and try again.',

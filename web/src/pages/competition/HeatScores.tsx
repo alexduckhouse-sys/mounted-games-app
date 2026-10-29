@@ -343,7 +343,6 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
   const manyRaces = columns.length >= 6;
   // When a race re-ranks the heat, climbers swell and lift and big climbs sparkle.
   const rowsRef = useRankMotion<HTMLTableSectionElement>(grid.teams.map((team) => team.id));
-  const minWidth = manyRaces ? undefined : 12 + (finished ? 18 : 0) + 100 + (showCarriedForward ? 26 : 0) + columns.length * 22 + 40;
 
   return (
     <div className={`mx-auto flex w-full max-w-xl flex-col gap-4 ${embedded ? '' : 'pt-3'}`}>
@@ -361,8 +360,8 @@ export function HeatScores({ session, heats, activeHeatId, embedded = false, bar
       {!heat ? <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">{t('competition.heat.noHeats')}</p> : (
         <section aria-label={t('competition.scoring.scores')} className={bare ? 'overflow-hidden' : 'mg-card overflow-hidden'}>
           {grid.teams.length === 0 ? <p className="p-4 text-[rgb(var(--mg-muted))]">{t('competition.heat.noTeams')}</p> : (
-            <div className="overflow-x-auto">
-              <table className={`heat-grid${manyRaces ? ' heat-grid-many' : ''}`} style={{ minWidth }}>
+            <div className="overflow-hidden">
+              <table className={`heat-grid${manyRaces ? ' heat-grid-many' : ''}`}>
                 <thead>
                   <tr>
                     {finished && <th scope="col" className="heat-rank">#</th>}

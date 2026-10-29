@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence } from 'framer-motion';
-import { Headphones, Maximize, PictureInPicture2, Play, Radio, RotateCcw, VolumeX, X } from 'lucide-react';
+import { Headphones, Maximize, MoreHorizontal, PictureInPicture2, Play, Radio, RotateCcw, VolumeX, X } from 'lucide-react';
 import type { ChatMessage, LiveStream, StreamQualityRid } from '../../types';
 import type { MessageKey } from '../../i18n/en';
 import { useReplayPreparation } from '../../live/useReplayPreparation';
@@ -20,10 +20,11 @@ const QUALITY_TIERS = [
   { rid: 'q', label: '360p', title: 'teams.stream.qualityLow' },
 ] as const satisfies readonly { rid: StreamQualityRid; label: string; title: MessageKey }[];
 
-export function StreamPlayer({ media, stream, label, reconnecting = false, message, announcement, captionBar = false, quality = 'f', onQuality, audioOnly, onAudioOnly, onSyncLive }: {
+export function StreamPlayer({ media, stream, label, reconnecting = false, message, announcement, captionBar = false, quality = 'f', onQuality, audioOnly, onAudioOnly, onSyncLive, enableDvr = true }: {
   media: MediaStream | null; stream: LiveStream; label: string | null; reconnecting?: boolean; message?: string | null;
   announcement?: { message: ChatMessage; receivedAt: number }; captionBar?: boolean;
   quality?: StreamQualityRid; onQuality?: (rid: StreamQualityRid) => void;
+  enableDvr?: boolean;
   audioOnly?: boolean; onAudioOnly?: (audioOnly: boolean) => void; onSyncLive?: () => void;
 }) {
   const t = useT();
@@ -33,6 +34,8 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
   const restoreFocus = useRef<HTMLElement | null>(null);
   const replayBufferRef = useRef<ReturnType<typeof createReplayBuffer> | null>(null);
   const [full, setFull] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreId = useId();
   const [muted, setMuted] = useState(true);
   const [needsPlay, setNeedsPlay] = useState(false);
   const replayPreparation = useReplayPreparation();
@@ -65,7 +68,7 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
     onSyncLive?.();
   }
   useEffect(() => {
-    if (!media) {
+    if (!media || !enableDvr) {
       replayBufferRef.current?.dispose();
       replayBufferRef.current = null;
       return;
@@ -79,7 +82,7 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
     buf.start(media);
     replayBufferRef.current = buf;
     return () => { buf.dispose(); replayBufferRef.current = null; };
-  }, [media, stream.competitionId, stream.id, stream.arenaName]);
+  }, [media, stream.competitionId, stream.id, stream.arenaName, enableDvr]);
   function triggerInstantReplay() {
     const buffer = replayBufferRef.current;
     if (buffer) void replayPreparation.prepare((options) => buffer.saveClip(label || `${stream.arenaName} -15s`, { ...options, durationSeconds: 15 }), showReplay);
@@ -168,6 +171,7 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
     )}
     <StreamOverlays stream={stream} label={label} reconnecting={reconnecting} muted={muted} onSound={unmute} announcement={announcement} hideCaption={captionBar && !full}>
       <div className="pointer-events-auto absolute right-3 top-3 flex items-center gap-1.5">
+        <div id={moreId} className={`${moreOpen ? 'mg-stream-glass absolute right-0 top-11 z-10 flex flex-col items-stretch gap-1.5 rounded-xl p-2' : 'hidden'} sm:contents`}>
         {onQuality && (
           <div role="group" aria-label={t('teams.stream.quality')} className="mg-stream-glass flex items-center gap-0.5 rounded-full p-0.5 text-[11px] font-bold">
             {QUALITY_TIERS.map((tier) => (
@@ -211,6 +215,17 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
         {media && (
           <button
             type="button"
+            className="mg-stream-control !min-h-8 !min-w-8"
+            aria-label={t('teams.stream.pip')}
+            onClick={togglePip}
+          >
+            <PictureInPicture2 className="h-4 w-4" aria-hidden="true" />
+          </button>
+        )}
+        </div>
+        {media && enableDvr && (
+          <button
+            type="button"
             className="mg-stream-control !min-h-8 !rounded-full px-2.5 text-xs font-bold"
             aria-label={t('teams.stream.instantReplay')}
             onClick={triggerInstantReplay}
@@ -224,16 +239,7 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
           arenaName={stream.arenaName}
           onSelectClip={showReplay}
         />
-        {media && (
-          <button
-            type="button"
-            className="mg-stream-control !min-h-8 !min-w-8"
-            aria-label={t('teams.stream.pip')}
-            onClick={togglePip}
-          >
-            <PictureInPicture2 className="h-4 w-4" aria-hidden="true" />
-          </button>
-        )}
+        <button type="button" className="mg-stream-control !min-h-8 !min-w-8 sm:hidden" aria-label={t('teams.stream.more')} aria-expanded={moreOpen} aria-controls={moreId} onClick={() => setMoreOpen((open) => !open)}><MoreHorizontal className="h-4 w-4" aria-hidden="true" /></button>
         {(full || !captionBar) && <button className="mg-stream-control" data-stream-close={full || undefined} aria-label={full ? t('teams.stream.closeFull') : t('teams.stream.openFull')} onClick={full ? close : open}>{full ? <X /> : <Maximize />}</button>}
       </div>
       {needsPlay && <button className="mg-stream-control pointer-events-auto absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 !rounded-xl px-4" onClick={() => { void videoRef.current!.play().then(() => setNeedsPlay(false)).catch(() => setNeedsPlay(true)); }}><Play /> {t('teams.stream.play')}</button>}

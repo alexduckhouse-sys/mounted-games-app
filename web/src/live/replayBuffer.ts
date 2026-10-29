@@ -53,6 +53,8 @@ export interface ReplayBufferOptions {
   streamId?: number;
   arenaName: string;
   windowSeconds?: number; // default 1800 (30 minutes)
+  /** Keep earlier cameras in this arena when a media stream is replaced. */
+  retainOnSwitch?: boolean;
   timesliceMs?: number; // default 1000
   resolutionLabel?: string;
   createRecorder?: (stream: MediaStream, mimeType?: string) => MediaRecorderLike;
@@ -450,6 +452,7 @@ export function createReplayBuffer(options: ReplayBufferOptions): ReplayBufferHa
   let timer: ReturnType<typeof setTimeout> | undefined;
   let stopped: Promise<void> = Promise.resolve();
   let epoch = 0;
+  let historyEpoch = 0;
   let sequence = 0;
   let saving = false;
   const sessionId = crypto.randomUUID();
@@ -459,6 +462,7 @@ export function createReplayBuffer(options: ReplayBufferOptions): ReplayBufferHa
   function beginSegment() {
     if (!recording || !stream) return;
     const ticket = epoch;
+    const historyTicket = historyEpoch;
     const mimeType = replayMimeType();
     const startedAt = now();
     const parts: Blob[] = [];
@@ -471,9 +475,10 @@ export function createReplayBuffer(options: ReplayBufferOptions): ReplayBufferHa
         : new MediaRecorder(stream, { ...(mimeType ? { mimeType } : {}), videoBitsPerSecond: 4_000_000, audioBitsPerSecond: 128_000 }) as unknown as MediaRecorderLike;
       recorder = current;
       current.ondataavailable = ({ data }) => {
-        if (!data.size || ticket !== epoch) return;
+        if (!data.size || historyTicket !== historyEpoch) return;
         bytes += data.size;
         if (bytes > 32 * 1024 * 1024) {
+          if (ticket !== epoch) return;
           recording = false; store.warning = 'Recording used too much memory. Replay recording has stopped.'; status();
           if (current.state !== 'inactive') current.stop();
           return;
@@ -481,6 +486,7 @@ export function createReplayBuffer(options: ReplayBufferOptions): ReplayBufferHa
         parts.push(data);
       };
       current.onerror = (event) => {
+        if (ticket !== epoch) return;
         const error = (event as { error?: { name?: string } })?.error;
         if (error?.name !== 'InvalidModificationError') recording = false;
         store.warning = recording ? 'The recording changed. Replay recording is restarting.' : 'Replay recording stopped. Restart the camera to try again.';
@@ -492,7 +498,7 @@ export function createReplayBuffer(options: ReplayBufferOptions): ReplayBufferHa
         if (recorder === current) recorder = null;
         // Every blob below contains ALL chunks of one completed recorder session.
         const blob = new Blob(parts, { type: current.mimeType || mimeType || 'video/webm' });
-        const saved = ticket === epoch && blob.size > 0 && bytes <= 32 * 1024 * 1024
+        const saved = historyTicket === historyEpoch && blob.size > 0 && bytes <= 32 * 1024 * 1024
           ? store.add({ id: `${sessionId}-${sequence++}`, start: startedAt, end: endedAt, size: blob.size, blob, pins: 0 })
           : Promise.resolve();
         void saved.finally(() => { status(); settle(); });
@@ -518,7 +524,8 @@ export function createReplayBuffer(options: ReplayBufferOptions): ReplayBufferHa
     if (recorder && recorder.state !== 'inactive') recorder.stop();
   };
   const start = (next: MediaStream): boolean => {
-    stop(); epoch++; store.clear();
+    stop(); epoch++;
+    if (!options.retainOnSwitch) { historyEpoch++; store.clear(); }
     stream = next;
     if (!next) return false;
     recording = true;
@@ -585,7 +592,7 @@ export function createReplayBuffer(options: ReplayBufferOptions): ReplayBufferHa
     }
   };
   return {
-    get supported() { return supported; }, get recording() { return recording; }, start, stop, dispose: () => { stop(); epoch++; void stopped.finally(() => store.dispose()); }, saveClip,
+    get supported() { return supported; }, get recording() { return recording; }, start, stop, dispose: () => { stop(); epoch++; historyEpoch++; void stopped.finally(() => store.dispose()); }, saveClip,
     markRaceBookmark: (label, seconds = 45) => saveClip(label, seconds), chunkCount: () => store.segments.length,
   };
 }

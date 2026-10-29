@@ -1,5 +1,8 @@
 import { layoutRunGraph, shortLabel } from '../lib/runGraph';
 
+/** The drawing is never wider than this, so a phone shows it whole; more runs than fit get slimmer bars. */
+const FIT = 360;
+
 /** One bar: how the run went. `top` is the place over the bar; `label` is the one or two short lines under it. */
 export interface GraphRun {
   id: string | number;
@@ -15,22 +18,23 @@ export interface GraphRun {
 /**
  * A bar graph with a bar for each run: navy bars, the place over each, the heat (or event and month) under it, the
  * points scale up the side, and a dashed amber line behind the bars at the average. Everything it shows is also written
- * out (place, label, scale, and a list for screen readers), so nothing depends on colour. Drawn as plain inline SVG; with
- * more runs than fit a phone it scrolls sideways instead of squeezing the bars.
+ * out (place, label, scale, and a list for screen readers), so nothing depends on colour. Drawn as plain inline SVG that
+ * fits the width: with many runs the bars get slimmer, and the place and label are left off a bar too narrow to carry
+ * them (the list for screen readers and each bar's tip still say everything).
  */
 export function RunGraph({ runs, average, ariaLabel, averageNote }: { runs: readonly GraphRun[]; average: number | null; ariaLabel: string; averageNote: string }) {
-  const layout = layoutRunGraph(runs.map((run) => run.value), average);
-  const scrolls = runs.length > 7;
+  const layout = layoutRunGraph(runs.map((run) => run.value), average, FIT);
+  const showTop = layout.slot >= 22;
+  const labelLimit = Math.min(9, Math.floor(layout.slot / 6));
   return (
     <figure className="m-0 flex flex-col gap-2">
-      <div className={scrolls ? 'overflow-x-auto' : undefined} data-no-swipe="">
+      <div data-no-swipe="">
         <svg
           role="img"
           aria-label={ariaLabel}
           viewBox={`0 0 ${layout.width} ${layout.height}`}
-          width={scrolls ? layout.width : '100%'}
-          height={scrolls ? layout.height : undefined}
-          style={{ display: 'block', maxWidth: scrolls ? 'none' : layout.width * 1.4 }}
+          width="100%"
+          style={{ display: 'block', maxWidth: layout.width * 1.4 }}
         >
           {layout.scale.ticks.map((tick, index) => (
             <g key={tick}>
@@ -47,9 +51,9 @@ export function RunGraph({ runs, average, ariaLabel, averageNote }: { runs: read
               <g key={run.id}>
                 <title>{run.description}</title>
                 <rect x={bar.x} y={bar.y} width={bar.width} height={Math.max(bar.height, 2)} rx="5" style={{ fill: 'rgb(var(--mg-heading))' }} />
-                <text x={bar.centre} y={bar.y - 6} textAnchor="middle" fontSize="13" fontWeight="700" style={{ fill: 'rgb(var(--mg-ink))', paintOrder: 'stroke', stroke: 'rgb(var(--mg-surface))', strokeWidth: 3 }}>{run.top}</text>
-                {run.label.slice(0, 2).map((line, row) => (
-                  <text key={row} x={bar.centre} y={layout.bottom + 16 + row * 14} textAnchor="middle" fontSize="12" style={{ fill: 'rgb(var(--mg-muted))' }}>{shortLabel(line)}</text>
+                {showTop && <text x={bar.centre} y={bar.y - 6} textAnchor="middle" fontSize="13" fontWeight="700" style={{ fill: 'rgb(var(--mg-ink))', paintOrder: 'stroke', stroke: 'rgb(var(--mg-surface))', strokeWidth: 3 }}>{run.top}</text>}
+                {labelLimit >= 3 && run.label.slice(0, 2).map((line, row) => (
+                  <text key={row} x={bar.centre} y={layout.bottom + 16 + row * 14} textAnchor="middle" fontSize="12" style={{ fill: 'rgb(var(--mg-muted))' }}>{shortLabel(line, labelLimit)}</text>
                 ))}
               </g>
             );

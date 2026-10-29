@@ -45,6 +45,17 @@ describe('layoutRunGraph', () => {
   });
 });
 
+describe('layoutRunGraph fitting', () => {
+  it('keeps the natural slots for a few runs and narrows them to fit for many', () => {
+    expect(layoutRunGraph([1, 2, 3], null, 360).slot).toBe(52);
+    const many = layoutRunGraph(Array.from({ length: 20 }, (_, index) => index), null, 360);
+    expect(many.slot).toBeLessThan(20);
+    expect(many.width).toBeLessThanOrEqual(360);
+    expect(many.bars.every((bar) => bar.width >= 3 && bar.width < many.slot)).toBe(true);
+    expect(layoutRunGraph([], null, 360).bars).toEqual([]);
+  });
+});
+
 describe('shortLabel', () => {
   it('leaves a short label and cuts a long one with an ellipsis', () => {
     expect(shortLabel('Heat 2')).toBe('Heat 2');

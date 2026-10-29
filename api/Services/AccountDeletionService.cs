@@ -70,6 +70,9 @@ public sealed class AccountDeletionService(AppDbContext db, UserManager<AppUser>
         await db.CompetitionCollaborators.Where(c => c.UserId == id).ExecuteDeleteAsync(ct);
         // The rider roster holds other people's children; entries already made from it keep their own copy of the details.
         var riders = db.SavedRiders.Where(r => r.CreatedByUserId == id);
+        // Detaching the roster must not undo a child's current surname privacy choice.
+        await db.RiderEntries.Where(e => e.SavedRiderId != null && riders.Where(r => r.UseInitialOnly).Select(r => r.Id).Contains(e.SavedRiderId.Value))
+            .ExecuteUpdateAsync(s => s.SetProperty(e => e.UseInitialOnly, true), ct);
         await db.RiderEntries.Where(e => e.SavedRiderId != null && riders.Select(r => r.Id).Contains(e.SavedRiderId.Value))
             .ExecuteUpdateAsync(s => s.SetProperty(e => e.SavedRiderId, (int?)null), ct);
         await riders.ExecuteDeleteAsync(ct);
@@ -115,6 +118,8 @@ public sealed class AccountDeletionService(AppDbContext db, UserManager<AppUser>
             .SetProperty(r => r.IpAddress, (string?)null), ct);
 
         // --- Event and accounting history: kept, with the account link removed. ---
+        await db.DeclarationForms.Where(d => d.SubmittedByUserId == id || d.Team!.TrainerUserId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.TrainerPhone, (string?)null), ct);
         await db.DeclarationForms.Where(d => d.SubmittedByUserId == id)
             .ExecuteUpdateAsync(s => s.SetProperty(d => d.SubmittedByUserId, (string?)null), ct);
         // Protest logs stay with the competition; only the account links go.

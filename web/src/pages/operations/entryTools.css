@@ -24,3 +24,12 @@
 .et-sub:first-child { border-top: 0; padding-top: 0; }
 .et-sub-name { margin: 0; font: 700 14px/1.2 var(--mg-font); color: rgb(var(--mg-ink)); }
 @media (max-width: 479px) { .et-two { grid-template-columns: 1fr; } }
+/* The bank statement picker is an outlined pill; the real file input sits inside it, hidden. */
+.et-file { align-self: flex-start; border-radius: 999px; cursor: pointer; }
+.et-file:has(input:focus-visible) { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
+.et-file:has(input:disabled) { opacity: .6; cursor: default; }
+/* While reminders send, a thin bar sweeps across. */
+.et-progress { position: relative; height: 4px; border-radius: 2px; overflow: hidden; background: rgb(var(--mg-rule-soft)); }
+.et-progress::after { content: ''; position: absolute; inset: 0 auto 0 0; width: 40%; border-radius: 2px; background: rgb(var(--mg-button)); animation: et-sweep 1.1s var(--mg-ease-out) infinite; }
+@keyframes et-sweep { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+@media (prefers-reduced-motion: reduce) { .et-progress::after { animation: none; width: 100%; opacity: .5; } }

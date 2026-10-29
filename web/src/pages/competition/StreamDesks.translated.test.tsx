@@ -99,7 +99,7 @@ describe('stream desks in French and Welsh', () => {
     fireEvent.click(screen.getByRole('button', { name: /Afficher les couloirs/ }));
     await act(async () => {});
     expect(save).toHaveBeenCalled();
-    expect(screen.queryByText('Live Stream & Overlay Controls')).toBeNull();
+    expect(screen.queryByText('Live stream and overlay controls')).toBeNull();
   });
 
   it('shows the remote stream controller in Welsh', async () => {
@@ -120,7 +120,7 @@ describe('stream desks in French and Welsh', () => {
     cleanup();
     render(<LanguageProvider initial="fr"><SavedReplaysDrawer open competitionId={99} onClose={vi.fn()} onSelectClip={vi.fn()} onCaptureBufferClip={vi.fn()} bufferedSeconds={42} /></LanguageProvider>);
     expect(screen.getByRole('dialog', { name: 'Rediffusions enregistrées' })).toBeInTheDocument();
-    expect(screen.getByText('42 s en mémoire tampon')).toBeInTheDocument();
+    expect(screen.getByText('42 s enregistrées')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Enregistrer la dernière minute' })).toBeInTheDocument();
     expect(screen.getByText('Aucune rediffusion enregistrée pour l’instant')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Fermer les rediffusions enregistrées' })).toHaveFocus();
@@ -137,7 +137,7 @@ describe('stream desks in French and Welsh', () => {
     expect(screen.getByText('Wedi’i docio: 00:00.0 – 00:15.0 (15.0 eil)')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Cadw’r uchafbwynt' })).toBeInTheDocument();
     expect(screen.getByText('Tapiwch y fideo ddwywaith i chwyddo’r ffocws')).toBeInTheDocument();
-    expect(screen.queryByText('Save Highlight')).toBeNull();
+    expect(screen.queryByText('Save highlight')).toBeNull();
   });
 });
 

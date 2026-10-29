@@ -51,7 +51,7 @@ internal static class ReminderPlan
                             if (team is null) continue;
                             Add($"1h:{s.Id}:h{h.Id}:t{team.Id}", s.CompetitionId, heatStart, 60,
                                 "60 minutes until your heat",
-                                $"{team.DisplayName} — {s.Name} ({label}, Lane {entry.LaneIndex}) starts around {NotificationScheduler.UkTime(heatStart):HH:mm}.", usersByTeam[team.Id]);
+                                $"{team.DisplayName} · {s.Name} ({label}, lane {entry.LaneIndex}) starts around {NotificationScheduler.UkTime(heatStart):HH:mm}.", usersByTeam[team.Id]);
                         }
                     }
                 }
@@ -63,7 +63,7 @@ internal static class ReminderPlan
                         .SelectMany(t => usersByTeam[t.Id]).ToHashSet();
                     if (s.Kind == SessionKind.Race && s.Heats.Count > 0)
                         Add($"1h:{s.Id}", s.CompetitionId, scheduled, 60, $"1 hour to {s.Name}",
-                            $"Starts at {NotificationScheduler.UkTime(scheduled):HH:mm} — {s.Section?.DisplayName ?? "—"}.", users);
+                            $"Starts at {NotificationScheduler.UkTime(scheduled):HH:mm} · {s.Section?.DisplayName ?? "—"}.", users);
                     if (s.Kind == SessionKind.Briefing)
                         Add($"brief:{s.Id}", s.CompetitionId, scheduled, 30, "Briefing in 30 minutes", s.Name, users);
                 }

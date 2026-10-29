@@ -61,7 +61,7 @@ describe('formatting', () => {
       { label: 'Podiums', value: '2', detail: '1st 1 · 2nd 1 · 3rd 0' },
       { label: 'Average place', value: '1.5', detail: 'Over 2 placed entries' },
       { label: 'A Final', value: '100%', detail: '1 of 1 with finals' },
-      { label: 'Point quota', value: '58.3%', detail: '7 of 12 points' },
+      { label: 'Avg points', value: '58.3%', detail: '7 of 12 points' },
       { label: 'Races won', value: '25%', detail: '1 of 4 races' },
     ]);
     const empty = summaryTiles(summary({ entries: 1, placedEntries: 0, averagePlace: null, entriesWithFinals: 0, aFinalPercent: null, races: 1, wins: 0, winPercent: 0 }));

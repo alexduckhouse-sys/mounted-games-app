@@ -123,7 +123,7 @@ public class PublicReadRateLimitTests : IClassFixture<LowPublicLimitFactory>
     public PublicReadRateLimitTests(LowPublicLimitFactory f) => _f = f;
 
     [Fact]
-    public async Task ShareCardsAndCalendarFilesAreLimitedPerAddress()
+    public async Task PublicReadsAreLimitedPerAddressIncludingCompetitionDetails()
     {
         var id = await _f.SeedCompetitionAsync();
         foreach (var url in new[] { $"/api/share/competitions/{id}", $"/api/competitions/{id}/calendar.ics" })
@@ -138,11 +138,14 @@ public class PublicReadRateLimitTests : IClassFixture<LowPublicLimitFactory>
             Assert.Equal(HttpStatusCode.TooManyRequests, last.StatusCode);
         }
 
-        // Another address has its own allowance, and ordinary reads are untouched.
+        // Another address has its own allowance; competition details use the same public-read protection.
         var other = new HttpRequestMessage(HttpMethod.Get, $"/api/share/competitions/{id}");
         other.Headers.Add("X-Test-Ip", "198.51.100.3");
         Assert.Equal(HttpStatusCode.OK, (await _f.CreateClient().SendAsync(other)).StatusCode);
-        for (var i = 0; i < 6; i++)
-            Assert.Equal(HttpStatusCode.OK, (await _f.CreateClient().GetAsync($"/api/competitions/{id}")).StatusCode);
+        using var details = _f.CreateClient();
+        details.DefaultRequestHeaders.Add("X-Test-Ip", "198.51.100.4");
+        for (var i = 0; i < 4; i++)
+            Assert.Equal(i < 3 ? HttpStatusCode.OK : HttpStatusCode.TooManyRequests,
+                (await details.GetAsync($"/api/competitions/{id}")).StatusCode);
     }
 }

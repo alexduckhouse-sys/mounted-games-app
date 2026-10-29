@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,6 +8,10 @@ import { decDraftKey } from '../../lib/decForm';
 import { CompetitionContext } from './context';
 import { DeclarationsTab } from './DeclarationsTab';
 import { autoConfirm } from '../../test/confirm';
+import { chooseOption } from '../../test/select';
+import { CurrentCompetitionProvider } from '../../competition/CurrentCompetitionContext';
+import { TickerProvider } from '../../components/TickerContext';
+import { TopBarTicker } from '../../components/TopBarTicker';
 
 const state = vi.hoisted(() => ({
   user: { id: 'u1', fullName: 'Alex Morgan', email: 'alex@example.com', clubId: 1, clubName: 'Stockport PC', roles: ['Trainer'] } as { id: string; fullName: string; email: string; clubId: number | null; clubName: string; roles: Role[] } | null,
@@ -26,7 +30,7 @@ vi.mock('../../auth/AuthContext', () => ({
     canOrganise: () => state.organise,
   }),
 }));
-vi.mock('../../api', () => ({ api: { get: state.get, post: state.post, put: state.put, delete: state.del } }));
+vi.mock('../../api', () => ({ readStoredAuth: () => state.user ? { user: state.user } : null, api: { get: state.get, post: state.post, put: state.put, delete: state.del } }));
 vi.mock('../../lib/csv', async (importOriginal) => ({ ...(await importOriginal<typeof import('../../lib/csv')>()), downloadCsv: state.download }));
 
 const saved: SavedRider[] = [
@@ -58,6 +62,20 @@ function mount(extra: Partial<CompetitionDetail> = {}, url = '/competitions/4/de
   );
 }
 
+
+function mountDocked(extra: Partial<CompetitionDetail> = {}) {
+  const value = { competition: comp(extra), reload: vi.fn(), streams: [], streamingEnabled: false, invoke: vi.fn(), ready: 1, streamMessages: [] };
+  return render(
+    <MemoryRouter initialEntries={['/competitions/4/declarations']}>
+      <CurrentCompetitionProvider>
+        <TickerProvider>
+          <CompetitionContext.Provider value={value}><DeclarationsTab /></CompetitionContext.Provider>
+          <TopBarTicker />
+        </TickerProvider>
+      </CurrentCompetitionProvider>
+    </MemoryRouter>,
+  );
+}
 
 const opened = () => screen.findByLabelText('Team name');
 const riderRows = () => within(screen.getByRole('list', { name: 'Riders' })).queryAllByRole('listitem');
@@ -159,19 +177,19 @@ describe('DeclarationsTab: the dec form', () => {
     mount();
     await opened();
     await user.click(addBar());
-    await user.click(screen.getByRole('button', { name: 'Ella Hughes — Pickle' }));
+    await user.click(screen.getByRole('button', { name: 'Ella Hughes · Pickle' }));
     expect(screen.getByLabelText('Rider')).toHaveValue('Ella Hughes');
     expect(screen.getByLabelText('Date of birth')).toHaveValue('05/04/2015');
     expect(screen.getByLabelText('Pony')).toHaveValue('Pickle');
     expect(screen.getByLabelText('Height (hh)')).toHaveValue('13.2');
     await user.click(screen.getByRole('button', { name: 'Add rider' }));
-    expect(screen.queryByRole('button', { name: 'Ella Hughes — Pickle' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Oliver Smith — Bramble' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Ella Hughes · Pickle' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Oliver Smith · Bramble' })).toBeInTheDocument();
   });
 
   async function fillTeam(user: ReturnType<typeof userEvent.setup>) {
     await user.click(addBar());
-    for (const name of ['Ella Hughes — Pickle', 'Oliver Smith — Bramble', 'Maisie Clarke — Toffee', 'Harry Wood — Jasper']) {
+    for (const name of ['Ella Hughes · Pickle', 'Oliver Smith · Bramble', 'Maisie Clarke · Toffee', 'Harry Wood · Jasper']) {
       await user.click(screen.getByRole('button', { name }));
       await user.click(screen.getByRole('button', { name: 'Add rider' }));
     }
@@ -188,7 +206,7 @@ describe('DeclarationsTab: the dec form', () => {
     const panel = screen.getByRole('region', { name: 'Add a non-riding reserve' });
     expect(within(panel).queryByLabelText('Pony')).not.toBeInTheDocument();
     expect(within(panel).queryByLabelText('Height (hh)')).not.toBeInTheDocument();
-    await user.click(within(panel).getByRole('button', { name: 'Ruby Ash — Domino' }));
+    await user.click(within(panel).getByRole('button', { name: 'Ruby Ash · Domino' }));
     expect(within(panel).getByRole('button', { name: 'Add reserve' })).toBeEnabled();
     await user.click(within(panel).getByRole('button', { name: 'Add reserve' }));
     expect(riderRows()).toHaveLength(6);
@@ -204,7 +222,7 @@ describe('DeclarationsTab: the dec form', () => {
     mount();
     await opened();
     await user.click(addBar());
-    await user.click(screen.getByRole('button', { name: 'Ella Hughes — Pickle' }));
+    await user.click(screen.getByRole('button', { name: 'Ella Hughes · Pickle' }));
     await user.click(screen.getByRole('button', { name: 'Add rider' }));
     await user.click(within(riderRows()[0]).getByRole('button'));
     const panel = screen.getByRole('region', { name: 'Edit rider' });
@@ -220,7 +238,7 @@ describe('DeclarationsTab: the dec form', () => {
     expect(addBar()).toHaveTextContent('Add rider 1');
     await user.click(addBar());
     expect(within(screen.getByRole('region', { name: 'Add a rider' })).queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument();
-    await user.click(within(screen.getByRole('region', { name: 'Add a rider' })).getByRole('button', { name: 'Close' }));
+    await user.keyboard('{Escape}'); // on a phone the panel is a sheet with no Close button
     expect(screen.queryByRole('region', { name: 'Add a rider' })).not.toBeInTheDocument();
   });
 
@@ -241,7 +259,7 @@ describe('DeclarationsTab: the dec form', () => {
     await fillTeam(user);
     // The reserve slot opens after the fifth rider; leaving it empty is fine.
     expect(screen.getByRole('region', { name: 'Add a non-riding reserve' })).toBeInTheDocument();
-    await user.click(within(screen.getByRole('region', { name: 'Add a non-riding reserve' })).getByRole('button', { name: 'Close' }));
+    await user.keyboard('{Escape}');
     expect(addBar()).toHaveTextContent('Add a reserve');
     expect(screen.getByText('Agree to the terms to send it.')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Team complete' })).toBeInTheDocument();
@@ -264,10 +282,12 @@ describe('DeclarationsTab: the dec form', () => {
     expect(body.riders).toHaveLength(5);
     expect(body.riders[0]).toMatchObject({ savedRiderId: 1, fullName: 'Ella Hughes', dateOfBirth: '2015-04-05', horseName: 'Pickle', ponyHeightHands: 13.2, isCaptain: false, isReserve: false, orderIndex: 0 });
     expect(body.riders[4]).toMatchObject({ savedRiderId: null, fullName: 'Sam New', dateOfBirth: '2016-02-01', ponyHeightHands: 12 });
-    expect(await screen.findByText('Dec form sent. You can still change it.')).toBeInTheDocument();
+    expect(await screen.findByText('Declaration form sent. You can still change it.')).toBeInTheDocument();
     expect(screen.getByText('Sent. You can still change it.')).toHaveAttribute('data-tone', 'good');
     expect(screen.getByRole('button', { name: 'Send changes' })).toBeDisabled();
     expect(screen.getByText('Nothing has changed since you sent it.')).toBeInTheDocument();
+    // The saved form replaces just this team's on screen; the list isn't fetched again.
+    expect(state.get.mock.calls.filter(([path]) => path === '/declaration-forms')).toHaveLength(1);
   });
 
   it('lets the form be sent again after a change', async () => {
@@ -277,7 +297,7 @@ describe('DeclarationsTab: the dec form', () => {
     await fillTeam(user);
     await user.click(agree());
     await user.click(screen.getByRole('button', { name: 'Send dec form' }));
-    await screen.findByText('Dec form sent. You can still change it.');
+    await screen.findByText('Declaration form sent. You can still change it.');
     await user.type(screen.getByLabelText('Notes'), 'Late arrival');
     expect(screen.getByRole('button', { name: 'Send changes' })).toBeEnabled();
     expect(screen.getByText('Sending again replaces the last one.')).toBeInTheDocument();
@@ -304,7 +324,7 @@ describe('DeclarationsTab: the dec form', () => {
     await fillTeam(user);
     await user.click(agree());
     await user.click(screen.getByRole('button', { name: 'Send dec form' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t send the dec form. Check your signal and try again.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t send the declaration form. Check your signal and try again.');
   });
 
   it('sends the form again from Try again in the problem strip', async () => {
@@ -414,7 +434,7 @@ describe('DeclarationsTab: the dec form', () => {
     await opened();
     const asked = autoConfirm([false, true]);
     await user.click(await screen.findByRole('button', { name: 'Delete this dec form' }));
-    await waitFor(() => expect(asked).toHaveBeenCalledWith('The dec form for Stockport C goes for good.'));
+    await waitFor(() => expect(asked).toHaveBeenCalledWith('The declaration form for Stockport C goes for good.'));
     expect(state.del).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Delete this dec form' }));
     await waitFor(() => expect(state.del).toHaveBeenCalledWith('/declaration-forms/9'));
@@ -456,7 +476,7 @@ describe('DeclarationsTab: the dec form', () => {
     mount();
     await opened();
     await user.click(addBar());
-    for (const name of ['Ella Hughes — Pickle', 'Oliver Smith — Bramble', 'Maisie Clarke — Toffee', 'Harry Wood — Jasper']) {
+    for (const name of ['Ella Hughes · Pickle', 'Oliver Smith · Bramble', 'Maisie Clarke · Toffee', 'Harry Wood · Jasper']) {
       await user.click(screen.getByRole('button', { name }));
       await user.click(screen.getByRole('button', { name: 'Add rider' }));
     }
@@ -477,9 +497,9 @@ describe('DeclarationsTab: the dec form', () => {
     mount();
     await opened();
     await user.click(addBar());
-    expect(screen.getByRole('button', { name: 'Ella Hughes — Pickle' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Ella Hughes — Flash' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Ella Hughes — Flash' }));
+    expect(screen.getByRole('button', { name: 'Ella Hughes · Pickle' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ella Hughes · Flash' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Ella Hughes · Flash' }));
     expect(screen.getByLabelText('Rider')).toHaveValue('Ella Hughes');
     expect(screen.getByLabelText('Pony')).toHaveValue('Flash');
     expect(screen.getByLabelText('Height (hh)')).toHaveValue('14.0');
@@ -521,7 +541,7 @@ describe('DeclarationsTab: the dec form', () => {
       throw new Error(`unexpected ${url}`);
     });
     mount();
-    expect(await screen.findByText(/Dec forms closed on 1 Jan\./)).toBeInTheDocument();
+    expect(await screen.findByText(/Declaration forms closed on 1 Jan\./)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Message the organisers' })).toHaveAttribute('href', '/competitions/4/contact');
     expect(screen.queryByLabelText('Team name')).not.toBeInTheDocument();
   });
@@ -593,7 +613,7 @@ describe('DeclarationsTab: drafts', () => {
   it('keeps nothing until something is typed', async () => {
     mount();
     await screen.findByRole('heading', { name: 'Stockport C' });
-    expect(localStorage.getItem(decDraftKey(4, 7))).toBeNull();
+    expect(localStorage.getItem(decDraftKey(4, 7, 'u1'))).toBeNull();
   });
 
   it('keeps work in progress on the device, and brings it back with the same team open', async () => {
@@ -601,35 +621,35 @@ describe('DeclarationsTab: drafts', () => {
     const first = mount();
     await user.type(await screen.findByLabelText('Bibs'), 'Green stripes');
     await user.click(addBar());
-    await user.click(screen.getByRole('button', { name: 'Ella Hughes — Pickle' }));
+    await user.click(screen.getByRole('button', { name: 'Ella Hughes · Pickle' }));
     await user.click(screen.getByRole('button', { name: 'Add rider' }));
-    expect(JSON.parse(localStorage.getItem(decDraftKey(4, 7))!)).toMatchObject({ teamId: 7, bibs: 'Green stripes' });
+    expect(JSON.parse(localStorage.getItem(decDraftKey(4, 7, 'u1'))!)).toMatchObject({ teamId: 7, bibs: 'Green stripes' });
     first.unmount();
 
     mount();
     expect(await screen.findByDisplayValue('Green stripes')).toBeInTheDocument();
     expect(within(riderRows()[0]).getByText('Ella Hughes')).toBeInTheDocument();
-    expect(screen.queryByText('Dec form sent. You can still change it.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Declaration form sent. You can still change it.')).not.toBeInTheDocument();
   });
 
   it('forgets the draft once the form has gone in', async () => {
     const user = userEvent.setup();
     mount();
     await user.type(await screen.findByLabelText('Bibs'), 'Green');
-    expect(localStorage.getItem(decDraftKey(4, 7))).not.toBeNull();
+    expect(localStorage.getItem(decDraftKey(4, 7, 'u1'))).not.toBeNull();
     await user.click(addBar());
-    for (const name of ['Ella Hughes — Pickle', 'Oliver Smith — Bramble', 'Maisie Clarke — Toffee', 'Harry Wood — Jasper', 'Ruby Ash — Domino']) {
+    for (const name of ['Ella Hughes · Pickle', 'Oliver Smith · Bramble', 'Maisie Clarke · Toffee', 'Harry Wood · Jasper', 'Ruby Ash · Domino']) {
       await user.click(screen.getByRole('button', { name }));
       await user.click(screen.getByRole('button', { name: 'Add rider' }));
     }
     await user.click(agree());
     await user.click(screen.getByRole('button', { name: 'Send dec form' }));
-    await screen.findByText('Dec form sent. You can still change it.');
-    expect(localStorage.getItem(decDraftKey(4, 7))).toBeNull();
+    await screen.findByText('Declaration form sent. You can still change it.');
+    expect(localStorage.getItem(decDraftKey(4, 7, 'u1'))).toBeNull();
   });
 
   it('ignores a draft that does not fit the team', async () => {
-    localStorage.setItem(decDraftKey(4, 7), JSON.stringify({ teamId: 7, slots: [null, null] }));
+    localStorage.setItem(decDraftKey(4, 7, 'u1'), JSON.stringify({ teamId: 7, slots: [null, null] }));
     mount();
     expect(await screen.findByText('0 of 5 · 4 needed · reserve optional')).toBeInTheDocument();
   });
@@ -650,7 +670,7 @@ describe('DeclarationsTab: around the form', () => {
     const pill = await screen.findByRole('link', { name: 'Sign in' });
     expect(pill).toHaveAttribute('href', '/login');
     expect(pill).toHaveClass('sp-pill');
-    expect(screen.getByText('Trainers sign in to send dec forms for their teams.')).toBeInTheDocument();
+    expect(screen.getByText('Trainers sign in to send declaration forms for their teams.')).toBeInTheDocument();
     expect(document.querySelector('.mg-notice')).toBeNull();
     expect(screen.queryByLabelText('Team name')).not.toBeInTheDocument();
   });
@@ -737,7 +757,7 @@ describe('DeclarationsTab: around the form', () => {
     expect(screen.queryByRole('region', { name: 'U12 Pairs' })).not.toBeInTheDocument();
     await user.clear(search);
     await user.type(search, 'nobody');
-    expect(screen.getByText('No dec form matches “nobody”.')).toBeInTheDocument();
+    expect(screen.getByText('No declaration form matches “nobody”.')).toBeInTheDocument();
   });
 
   it('puts a form for a team that is not in the list under Other', async () => {
@@ -759,15 +779,15 @@ describe('DeclarationsTab: around the form', () => {
     ];
     mount();
     await user.click(await screen.findByRole('button', { name: /^Other Club A/ }));
-    expect(screen.queryByRole('button', { name: 'Delete the dec form for Other Club A' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete the declaration form for Other Club A' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /^Stockport C.*Sent/ }));
     const asked = autoConfirm([false, true]);
-    await user.click(await screen.findByRole('button', { name: 'Delete the dec form for Stockport C' }));
-    await waitFor(() => expect(asked).toHaveBeenCalledWith('The dec form for Stockport C goes for good.'));
+    await user.click(await screen.findByRole('button', { name: 'Delete the declaration form for Stockport C' }));
+    await waitFor(() => expect(asked).toHaveBeenCalledWith('The declaration form for Stockport C goes for good.'));
     expect(state.del).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('button', { name: 'Delete the dec form for Stockport C' }));
+    await user.click(screen.getByRole('button', { name: 'Delete the declaration form for Stockport C' }));
     await waitFor(() => expect(state.del).toHaveBeenCalledWith('/declaration-forms/9'));
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Delete the dec form for Stockport C' })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Delete the declaration form for Stockport C' })).not.toBeInTheDocument());
   });
 
   it('says so when a dec form could not be deleted, and keeps it in the list', async () => {
@@ -777,9 +797,9 @@ describe('DeclarationsTab: around the form', () => {
     mount();
     autoConfirm(true);
     await user.click(await screen.findByRole('button', { name: /^Stockport C.*Sent/ }));
-    await user.click(await screen.findByRole('button', { name: 'Delete the dec form for Stockport C' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t delete the dec form. Check your signal and try again.');
-    expect(screen.getByRole('button', { name: 'Delete the dec form for Stockport C' })).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Delete the declaration form for Stockport C' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t delete the declaration form. Check your signal and try again.');
+    expect(screen.getByRole('button', { name: 'Delete the declaration form for Stockport C' })).toBeInTheDocument();
   });
 
   it('exports the forms as a CSV with height and trainer columns', async () => {
@@ -910,5 +930,100 @@ describe('DeclarationsTab: copy a previous team', () => {
     mount();
     await opened();
     expect(screen.queryByRole('button', { name: /Copy a previous team/ })).not.toBeInTheDocument();
+  });
+});
+
+
+it('runs the deadline clock only while a future deadline is visible and stops at closing', async () => {
+  vi.useFakeTimers();
+  const start = Date.parse('2040-01-01T10:00:00Z');
+  vi.setSystemTime(start);
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  state.get.mockImplementation(async (url: string) => ({ data: url.endsWith('/lock-time')
+    ? { competitionId: 4, declarationsCloseAt: new Date(start + 2_000).toISOString(), isClosed: false } : [] }));
+  const interval = vi.spyOn(globalThis, 'setInterval');
+  let view!: ReturnType<typeof mount>;
+  try {
+    await act(async () => { view = mount(); });
+    expect(interval).toHaveBeenCalledWith(expect.any(Function), 1000);
+    act(() => { vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden'); document.dispatchEvent(new Event('visibilitychange')); });
+    expect(vi.getTimerCount()).toBe(0);
+    act(() => { vi.setSystemTime(start + 3_000); vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible'); document.dispatchEvent(new Event('visibilitychange')); });
+    expect(screen.getByText(/Declaration forms closed on/)).toBeVisible();
+    expect(vi.getTimerCount()).toBe(0);
+  } finally { view?.unmount(); vi.useRealTimers(); }
+});
+
+it.each([null, '2020-01-01T10:00:00Z'])('does not start a clock for an absent or elapsed deadline: %s', async (declarationsCloseAt) => {
+  const interval = vi.spyOn(globalThis, 'setInterval');
+  state.get.mockImplementation(async (url: string) => ({ data: url.endsWith('/lock-time')
+    ? { competitionId: 4, declarationsCloseAt, isClosed: false } : [] }));
+  await act(async () => { mount(); });
+  expect(interval).not.toHaveBeenCalled();
+});
+
+describe('DeclarationsTab: organiser tools in the dock', () => {
+  it('moves the deadline, QR code and export into a sheet for organisers', async () => {
+    state.user!.roles = ['Admin'];
+    const user = userEvent.setup();
+    mountDocked();
+    await opened();
+    expect(screen.queryByRole('button', { name: /^Dec forms close/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Export CSV/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show dec form QR code' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Dec form tools' }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Dec form tools' }));
+    expect(sheet.getByRole('button', { name: 'Dec forms close: Not set' })).toBeInTheDocument();
+    expect(sheet.getByRole('button', { name: 'Show dec form QR code' })).toBeInTheDocument();
+    expect(sheet.getByRole('button', { name: /Export CSV \(0\)/ })).toBeDisabled();
+  });
+
+  it('opens an organiser on the search, and picks the team to fill in from the sheet', async () => {
+    state.user!.roles = ['Admin'];
+    const user = userEvent.setup();
+    mountDocked({ teams: [
+      team(7, { competitionId: 4, competitionSectionId: 5, clubId: 1, displayName: 'Stockport C', trainerUserId: 'u1' }),
+      team(8, { competitionId: 4, competitionSectionId: 5, clubId: 1, displayName: 'Stockport D', trainerUserId: null }),
+    ] });
+    await user.click(await screen.findByRole('button', { name: 'Dec form tools' }));
+    expect(screen.queryByRole('group', { name: 'Choose a team' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Team name')).not.toBeInTheDocument();
+    const sheet = within(await screen.findByRole('dialog', { name: 'Dec form tools' }));
+    chooseOption(sheet.getByRole('button', { name: /^Fill in a form for/ }), 'Stockport D');
+    expect(await screen.findByLabelText('Team name')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Dec form tools' })).not.toBeInTheDocument());
+  });
+
+  it('keeps the QR code on the page for a trainer and puts nothing in the dock', async () => {
+    mountDocked();
+    await opened();
+    expect(screen.getByRole('button', { name: 'Show dec form QR code' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Dec form tools' })).not.toBeInTheDocument();
+  });
+});
+
+describe('declaration security privacy controls', () => {
+  it('defaults children to initials and preserves a deliberate opt-out during date edits', async () => {
+    const user = userEvent.setup();
+    mount(); await opened();
+    await user.click(addBar());
+    const control = screen.getByRole('switch', { name: 'Show surname as initial only on public start lists and results' });
+    await user.type(screen.getByLabelText('Date of birth'), '01/01/2015');
+    expect(control).toHaveAttribute('aria-checked', 'true');
+    await user.click(control);
+    await user.clear(screen.getByLabelText('Date of birth'));
+    await user.type(screen.getByLabelText('Date of birth'), '02/01/2015');
+    expect(control).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('does not restore the previous account’s draft after switching users', async () => {
+    const user = userEvent.setup();
+    const view = mount(); await opened();
+    await user.type(screen.getByLabelText('Bibs'), 'Fake private draft');
+    expect(localStorage.getItem(decDraftKey(4, 7, 'u1'))).toContain('Fake private draft');
+    view.unmount();
+    state.user = { ...state.user!, id: 'u2' }; state.organise = true;
+    mount(); await opened();
+    expect(screen.getByLabelText('Bibs')).toHaveValue('');
   });
 });

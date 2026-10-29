@@ -30,7 +30,7 @@ public sealed class AccountAccessController(AppDbContext db, AccountAccessServic
     {
         var staffIds = db.UserRoles.Join(db.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => new { ur.UserId, r.Name })
             .Where(x => x.Name == Roles.Admin || x.Name == Roles.Trainer).Select(x => x.UserId);
-        var query = db.Users.AsNoTracking().Where(u => staffIds.Contains(u.Id));
+        var query = db.Users.AsNoTracking().Where(u => staffIds.Contains(u.Id) || u.LockedAt != null || u.BlockedAt != null);
         if (!string.IsNullOrWhiteSpace(q))
         {
             var term = q.Trim().ToLower();

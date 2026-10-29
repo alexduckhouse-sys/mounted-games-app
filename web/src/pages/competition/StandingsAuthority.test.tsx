@@ -33,14 +33,14 @@ beforeEach(() => {
 });
 
 describe.each([
-  ['TV', TvKioskPage, 'Live Section Standings'],
-  ['commentator', CommentaryDeskPage, 'Standings — Each Team in Order'],
+  ['TV', TvKioskPage, 'Live toplist'],
+  ['commentator', CommentaryDeskPage, 'Toplist · each team in order'],
 ] as const)('%s official standings', (label, Page, region) => {
   it('keeps official totals and labels them as saved when a live refresh fails', async () => {
     const view = render(<MemoryRouter><Page /></MemoryRouter>);
     expect(screen.queryByText('Staff stream controls')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Stream Controls' })).toBeNull();
-    if (label === 'TV') await userEvent.click(screen.getByRole('button', { name: 'Live Section Standings' }));
+    if (label === 'TV') await userEvent.click(screen.getByRole('button', { name: 'Live toplist' }));
     const rows = await screen.findByRole('region', { name: region });
     await waitFor(() => expect(rows).toHaveTextContent('8.5'));
     const previous = state.value as { competition: ReturnType<typeof competition>; reload: () => void };
@@ -52,10 +52,10 @@ describe.each([
     await waitFor(() => expect(state.get.mock.calls.length).toBeGreaterThan(calls));
     await new Promise((resolve) => setTimeout(resolve, 20));
     // A refresh that fails shows nothing at first: old standings only get a notice once they have lasted 30 seconds.
-    expect(screen.queryByText('Showing saved standings while results refresh.')).toBeNull();
+    expect(screen.queryByText('Showing the saved toplist while results refresh.')).toBeNull();
     held.value = true;
     view.rerender(<MemoryRouter><Page /></MemoryRouter>);
-    await screen.findByText('Showing saved standings while results refresh.');
+    await screen.findByText('Showing the saved toplist while results refresh.');
     expect(screen.getByRole('region', { name: region })).toHaveTextContent('8.5');
   });
 });

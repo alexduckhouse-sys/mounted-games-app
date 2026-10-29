@@ -26,6 +26,7 @@ vi.mock('../../auth/AuthContext', () => ({
   }),
 }));
 vi.mock('../../api', () => ({
+  pinChatMessage: async (competitionId: number, messageId: number) => (await import('../../api')).api.post(`/competitions/${competitionId}/chat/${messageId}/pin`, {}),
   api: { get: state.get, post: state.post, put: vi.fn(), delete: vi.fn() },
 }));
 vi.mock('../../live/useLiveHub', () => ({

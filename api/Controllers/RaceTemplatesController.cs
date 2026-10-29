@@ -1,3 +1,5 @@
+using MountedGames.Api.Security;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -19,6 +21,8 @@ public class RaceTemplatesController : ControllerBase
 
     [HttpGet]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<IEnumerable<RaceTemplateDto>> List()
     {
         var rows = await _db.RaceTemplates.OrderBy(r => r.Name).ToListAsync();
@@ -28,6 +32,8 @@ public class RaceTemplatesController : ControllerBase
     [HttpGet("names")]
     [AllowAnonymous]
     [ExcludeFromCodeCoverage]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<IReadOnlyList<string>> ListNames()
     {
         return await _db.RaceTemplates
@@ -40,6 +46,8 @@ public class RaceTemplatesController : ControllerBase
     [HttpGet("by-name/{name}")]
     [AllowAnonymous]
     [ExcludeFromCodeCoverage]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<BuiltInRaceMetadata.RaceTemplateDetailDto>> GetByName(string name, [FromQuery] SectionFormat? format = null)
     {
         var trimmed = (name ?? string.Empty).Trim();
@@ -69,6 +77,8 @@ public class RaceTemplatesController : ControllerBase
 
     [HttpGet("{id:int}")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<RaceTemplateDto>> Get(int id)
     {
         var r = await _db.RaceTemplates.FindAsync(id);

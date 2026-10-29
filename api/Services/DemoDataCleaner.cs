@@ -589,6 +589,9 @@ public static class DemoDataCleaner
             var principalTable = Quote(principal.GetTableName()!, principal.GetSchema());
             foreach (var table in tables.Where(t => t.Type.ClrType != principalType))
             {
+                // Cache revisions retain tombstones for deleted competitions (and key 0 is the
+                // shared detail revision). They deliberately are not references to domain rows.
+                if (table.Type.ClrType == typeof(CompetitionReadRevision)) continue;
                 var store = Microsoft.EntityFrameworkCore.Metadata.StoreObjectIdentifier.Table(
                     table.Type.GetTableName()!, table.Type.GetSchema());
                 if (!table.Type.GetProperties().Any(p => p.GetColumnName(store) == column)) continue;

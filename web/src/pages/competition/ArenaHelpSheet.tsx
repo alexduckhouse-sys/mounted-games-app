@@ -6,6 +6,7 @@ import { Sheet } from '../../components/Sheet';
 import { useArenaAssistance } from '../../hooks/useArenaAssistance';
 import { ARENA_ASSISTANCE_SERVICES } from '../../lib/arenaAssistance';
 import type { ArenaAssistanceService } from '../../types';
+import '../refine/refine.css';
 
 /** Farrier, vet and first aid calls for one arena. Each one is confirmed first because it posts a notice for the whole event. */
 export function ArenaHelpSheet({ competitionId, sessionId, arenaName, onClose }: {
@@ -51,10 +52,10 @@ export function ArenaHelpSheet({ competitionId, sessionId, arenaName, onClose }:
           );
         })}
       </div>
-      <label className="rt-link">
+      <div className="rt-link">
         <span className="rt-link-text"><span className="rt-link-name">{t('desk.commentary.pauseArena')}</span><span className="rt-link-sub">{t('desk.commentary.pauseHint')}</span></span>
-        <input type="checkbox" role="switch" checked={holdArena} onChange={() => setHoldArena((on) => !on)} />
-      </label>
+        <button type="button" role="switch" aria-checked={holdArena} aria-label={t('desk.commentary.pauseArena')} className="rf-sw" onClick={() => setHoldArena((on) => !on)}><span aria-hidden="true" /></button>
+      </div>
       {sent.length > 0 && <Notice tone="info" role="status">{t('desk.commentary.noticeSent')}</Notice>}
       {error && <Notice>{error}</Notice>}
     </Sheet>

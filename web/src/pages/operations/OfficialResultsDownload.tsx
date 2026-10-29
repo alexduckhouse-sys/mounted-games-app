@@ -115,7 +115,7 @@ export function OfficialResultsDownload({ competitionId, className = 'rf-row' }:
             '',
             'Referee Card Incident',
             '',
-            teamMap.get(tId) ?? `Team #${tId}`,
+            teamMap.get(tId) ?? 'Unnamed team',
             '',
             '',
             card === 'yellow' ? 'Yellow card' : 'Red card',
@@ -127,7 +127,7 @@ export function OfficialResultsDownload({ competitionId, className = 'rf-row' }:
       const compName = detail.name || 'competition';
       downloadCsv(`${safeFilename(compName)}-official-results-pack.csv`, toCsv(header, rows));
     } catch (caught) {
-      setError(problemMessage(caught, t('ops2.print.checkSignal'))); 
+      setError(problemMessage(caught, t('ops2.print.checkSignal')));
     } finally {
       pending.current = false;
       setExportingResults(false);
