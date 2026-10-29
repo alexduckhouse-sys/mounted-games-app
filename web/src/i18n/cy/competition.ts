@@ -187,7 +187,6 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.heat.sectionHeats': 'Rhagrasys {section}',
   'competition.heat.raceOf': 'Ras {n} o {total} · {name}',
   'competition.heat.finalResult': 'Canlyniad terfynol',
-  'competition.heat.starts': 'Yn dechrau {time}',
   'competition.heat.startsLate': 'Yn dechrau {time} · yn rhedeg {delay} yn hwyr',
   'competition.heat.startTbc': 'Amser dechrau i’w gadarnhau',
   'competition.heat.stageFinal': 'Terfynol',

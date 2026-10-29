@@ -187,7 +187,6 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.heat.sectionHeats': 'Manches {section}',
   'competition.heat.raceOf': 'Course {n} sur {total} · {name}',
   'competition.heat.finalResult': 'Résultat final',
-  'competition.heat.starts': 'Début à {time}',
   'competition.heat.startsLate': 'Début à {time} · retard de {delay}',
   'competition.heat.startTbc': 'Heure de début à confirmer',
   'competition.heat.stageFinal': 'Finale',

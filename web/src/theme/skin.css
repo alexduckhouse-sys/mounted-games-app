@@ -31,6 +31,8 @@
   --mg-late-time: 138 90 0;
   --mg-done-bg: 239 241 244;
   --mg-elim: 200 32 47;
+  /* A heat table 0 for an elimination: a muted red that sits beside the scores without shouting. */
+  --mg-zero: 196 67 80;
   --mg-ok: 31 107 67;
   --mg-overlay: 15 42 74;
   /* Pop-up kit: two message colours (information, problems), the toast pill, and the delete button. */
@@ -157,6 +159,7 @@
   --mg-late-time: 251 191 36;
   --mg-done-bg: 38 50 70;
   --mg-elim: 248 113 113;
+  --mg-zero: 232 128 136;
   --mg-ok: 110 200 150;
   --mg-overlay: 0 0 0;
   --mg-info-bg: 30 46 72;
