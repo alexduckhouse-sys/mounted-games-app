@@ -39,7 +39,7 @@ Some organiser and site admin pages shipped without following this file (found 2
 
 ## Look
 
-- **Colours:** navy `#17385F` is the brand colour. Red `#E12A39` is only for LIVE/ON AIR, unread counts and destructive actions. The page background is light grey (`#F7F7F7`); cards and lists are white with `#DADADA` borders.
+- **Colours:** navy `#17385F` is the brand colour. Red `#E12A39` is only for LIVE/ON AIR, unread counts and destructive actions. The one exception is the muted red 0 for an elimination in the heat table. The page background is light grey (`#F7F7F7`); cards and lists are white with `#DADADA` borders.
 - **Type:** Barlow for text, Barlow Condensed for titles and big numbers.
 - **Cards look** is the default: white rounded cards (radius about 12px) on the grey page, rows inside separated by a thin rule.
 - **Full width** is used where the live site already does it: the event's Details tab and the organiser tools under it (tack check, passport check, print sheets, results book). Lists run edge to edge with no line above or below the list; the lines between rows stay. People and QR codes keeps the cards look.
@@ -181,10 +181,16 @@ The owner reviewed each public page as "live capture beside a tidier version" on
   - switching tabs uses a quick 160ms crossfade, starting part-faded (never from a blank page);
   - bottom pop-ups (sheets, confirm boxes, the "Save quick access" card, organiser sheets) use the **quick slide** picked on 28 October 2026: straight up in about 280ms, straight down in about 200ms, no bounce. Any of them can be swiped down: it follows the finger, and letting go past a quarter of its height (or after a quick flick) closes it, otherwise it slides back. Reduced motion and Lite mode skip the movement. Spring and lift-and-fade were the other options.
 - **Heat page:**
-  - built as it is now, with bigger team names;
   - no "Lane N" line, no ‹ › arrows, no Official mark, nothing underlined;
-  - the diagonal race names run full length, and "#" and "TEAM" sit on the baseline at the foot of them;
-  - PTS is right-aligned;
+  - the score table is heat table v3 (picked on the canvas "MG App header refresh", 29 October 2026):
+    - top left: the age group (15px, muted), the heat (20px, bold navy) and the start time with no "Starts", and no "Team" label;
+    - race names are all 10.5px, medium weight, at 55°, in the same place in their lane; the running race is navy, not bolder;
+    - faint dividers between races (none before the first) that fade out towards the top;
+    - the header grows to fit the longest race name in the heat, so names aren't cut short (only the last two lanes stop at the card edge);
+    - team names 13.5px medium; alternate rows are shaded instead of ruled; thin faint lines between race columns;
+    - three tints only: alternate rows, the running race column (pale blue) and the PTS column (pale navy);
+    - an elimination is a muted red 0 (`--mg-zero`); DNS, DNF and R keep their letters; a race not run yet is a short faint bar;
+    - PTS is right-aligned at the foot of the header;
   - to change heat, a heat-list button beside the ticker dock opens a bottom sheet of the day's heats grouped by age group, with the current heat ticked.
 - **Teams, competitions, past competitions:** the tidier versions were liked as they stand. Competitions loses its search bar.
 - **Arena setup:** the ring crew splits into Top, Middle and Start line.

@@ -19,6 +19,7 @@ import { ordinal } from '../../lib/toplist';
 import type { Heat, HeatEntry, Race } from '../../types';
 import { displayLaneFor, sitsOutOf, type LaneRules } from './laneRules';
 import './heat.css';
+import { useHeatHeadHeight } from './useHeatHeadHeight';
 import './scoring.css';
 import { formatPoints } from '../../lib/formatPoints';
 import { triggerScorerHaptic } from '../../lib/userPrefs';
@@ -514,7 +515,9 @@ export function HeatGrid({ heat, races, activeRaceId, activeIndex, rules, pendin
   cardsByTeam?: Record<number, RefereeCard>;
 }) {
   const teams = inLaneOrder(heat, activeIndex, rules);
-  const manyRaces = races.length >= 6;
+  const manyRaces = races.length >= 8;
+  const headRef = useRef<HTMLTableSectionElement>(null);
+  const headHeight = useHeatHeadHeight(headRef, `${races.map((r) => r.name).join('|')}|${manyRaces}`);
   const activeRace = races.find((r) => r.id === activeRaceId) ?? null;
   const allDone = races.length > 0 && races.every((r) => r.isComplete);
   const metaText = activeRace
@@ -555,14 +558,14 @@ export function HeatGrid({ heat, races, activeRaceId, activeIndex, rules, pendin
       return <>{formatPoints(r.points)}</>;
     }
     if (sitsOutOf(heat, entry, raceIdx, rules)) return <span className="heat-dash sitout">S</span>;
-    return <span className="heat-dash">–</span>;
+    return <span aria-hidden="true" className="heat-dash-empty" />;
   }
 
   return (
     <section aria-label="Heat table" className="sc-card overflow-hidden">
       <div className="overflow-hidden">
-        <table className={`heat-grid${manyRaces ? ' heat-grid-many' : ''}`}>
-          <thead>
+        <table className={`heat-grid${manyRaces ? ' heat-grid-many' : ''}`} style={{ '--heat-head-h': `${headHeight}px` } as CSSProperties}>
+          <thead ref={headRef}>
             <tr>
               <th scope="col" className="heat-team-head">
                 <div className="heat-title">
@@ -589,7 +592,7 @@ export function HeatGrid({ heat, races, activeRaceId, activeIndex, rules, pendin
                 <tr key={t.teamId}>
                   <th scope="row" className="heat-team" title={t.teamName}>
                     <div className="heat-team-link">
-                      <span className={`heat-team-name${t.teamName.length > 16 || manyRaces ? ' heat-team-name-long' : ''}`}>
+                      <span className="heat-team-name">
                         <span aria-hidden="true" className="mr-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full align-middle" style={{ background: dotColour(t.bibColour) }} />
                         {t.teamName}
                         <TeamCardBadge card={card} />
@@ -598,7 +601,7 @@ export function HeatGrid({ heat, races, activeRaceId, activeIndex, rules, pendin
                       <span className="heat-team-lane">{lane === 'S' ? 'Sit out' : `Lane ${lane}`}</span>
                     </div>
                   </th>
-                  {races.map((r, i) => <td key={r.id} className={`heat-cell ${i === 0 ? 'heat-cell-first' : ''}`}>{cellFor(r, i, t)}</td>)}
+                  {races.map((r, i) => <td key={r.id} className="heat-cell">{cellFor(r, i, t)}</td>)}
                   <td className="heat-total">{formatPoints(total)}</td>
                 </tr>
               );
