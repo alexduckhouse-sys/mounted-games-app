@@ -1,7 +1,7 @@
 import { Component, type RefObject } from 'react';
 import { useLocation, useNavigationType } from 'react-router-dom';
 import { useStillMotion } from '../lite/useStillMotion';
-import { transitionFor, transitionPlan, type PageTransitionKind } from '../lib/pageTransition';
+import { READY_WAIT_MS, transitionFor, transitionPlan, type PageTransitionKind } from '../lib/pageTransition';
 
 interface Props {
   /** The element the routed page renders into. Header, ticker and tab bar are outside it and stay still. */
@@ -77,6 +77,29 @@ class PageTransitionHost extends Component<Props> {
   componentDidUpdate(_prev: Props, _state: unknown, snapshot: Snapshot | null) {
     const main = this.props.mainRef.current;
     if (!snapshot || !main) return;
+    if (!opening(main)) { this.run(main, snapshot); return; }
+    // The new page is still opening (a skeleton is showing). Hold the old page where it was for a moment, then move the
+    // real page in, so the slide or fade isn't spent on the skeleton with the page popping in after it.
+    const hold = frame(snapshot.copy.cloneNode(true) as HTMLElement, snapshot.box, 2);
+    main.style.visibility = 'hidden';
+    const stop = () => {
+      observer.disconnect();
+      window.clearTimeout(timer);
+      hold.remove();
+      main.style.visibility = '';
+      this.cleanup = null;
+    };
+    const start = () => {
+      stop();
+      this.run(main, snapshot);
+    };
+    const observer = new MutationObserver(() => { if (!opening(main)) start(); });
+    const timer = window.setTimeout(start, READY_WAIT_MS);
+    observer.observe(main, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-busy'] });
+    this.cleanup = stop;
+  }
+
+  private run(main: HTMLElement, snapshot: Snapshot) {
     const { kind, copy, box, scrollReset } = snapshot;
     const plan = transitionPlan(kind);
     const timing: KeyframeAnimationOptions = { duration: plan.duration, easing: plan.easing, fill: 'both' };
@@ -119,6 +142,11 @@ class PageTransitionHost extends Component<Props> {
   render() {
     return null;
   }
+}
+
+/** True while the routed page shows a loading placeholder (its code or first data still on the way). */
+function opening(main: HTMLElement): boolean {
+  return main.querySelector('[aria-busy="true"]') !== null;
 }
 
 /** Put this next to the element the routed page renders into. */
