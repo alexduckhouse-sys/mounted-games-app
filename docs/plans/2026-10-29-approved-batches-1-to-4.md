@@ -1,6 +1,6 @@
 # Approved event improvements: batches 1–4
 
-29 October 2026. User approved planning and implementation of the first four delivery batches. External integration projects remain for separate review. Base: `2265ad64`. Changes remain local and uncommitted; no deployment or production database changes.
+29 October 2026. User approved planning and implementation of the first four delivery batches. External integration projects remain for separate review. Base: `2265ad64`. The initial delivery was local and uncommitted. The user subsequently authorised a pull request, merge and production migration; shipping verification is recorded below.
 
 ## Scope and acceptance
 
@@ -67,3 +67,14 @@ Independent review identified a retry-strategy transaction issue in substitution
 | Source delivery | 151 changed/new source, test and plan files copied to the attached review checkout and hash-verified. Diff whitespace check passed. No packages installed, commits, pushes or deployment. |
 
 Coverage-percentage gates were not rerun. Before release, run those CI gates, exercise the migration on staging PostgreSQL, and check physical phone sharing/scanning and event push delivery. The implementation is ready for code review with the two full-suite timing flakes recorded above.
+
+
+## Shipping verification
+
+Merged current main (`e8bab743`) into the feature branch, preserving its security checks, translations, dock layout, competition read-revision migration and shared live connection. Call-ups now reuse the shared connection; private substitution polling stops while signed out or hidden. Start taps use the scoring rate-limit allowance. The latest migration designer includes the pre-existing competition read-revision entity, with no extra database operations.
+
+- API: 3,321 passed, eight Redis-dependent tests skipped locally; line coverage 95.87% (95% required).
+- Web: full suite passed after integration fixes; 124 Node tests passed. Coverage: statements 98.62%, branches 97.10%, functions 98.25%, lines 99.35% (97% required).
+- Lint, TypeScript and production build passed. Merged phone/desktop layouts checked with synthetic data, without horizontal overflow or page errors.
+- EF reports no pending model changes. The migration was applied twice successfully on isolated Neon branch `verify-event-improvements-20261029`; migration history, defaults, tables, keys and cascade constraints were verified.
+- Production application and merge are recorded on the pull request after CI. The migration adds schema only; it does not delete existing records.
