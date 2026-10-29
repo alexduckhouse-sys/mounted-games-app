@@ -26,7 +26,12 @@ const present = (value: string | null | undefined) => (value?.trim() ? value.tri
 
 /** Where the venue is on a map: the organiser's own link, or a search for the pin when only its position is known. */
 export function venueMapUrl(competition: Pick<DetailFields, 'appleMapsUrl' | 'latitude' | 'longitude'>): string | null {
-  if (competition.appleMapsUrl) return competition.appleMapsUrl;
+  if (competition.appleMapsUrl && competition.appleMapsUrl.length <= 500) {
+    try {
+      const url = new URL(competition.appleMapsUrl);
+      if (url.protocol === 'https:' && !url.username && !url.password) return url.href;
+    } catch { /* Fall back to coordinates for an invalid saved link. */ }
+  }
   if (competition.latitude != null && competition.longitude != null) {
     return `https://www.google.com/maps/search/?api=1&query=${competition.latitude},${competition.longitude}`;
   }

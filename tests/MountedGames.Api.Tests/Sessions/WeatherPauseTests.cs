@@ -181,7 +181,7 @@ public class WeatherPauseTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task AnOrganisingTrainer_CanPauseAndTellEveryone_EvenThoughTheChatEndpointIsAdminOnly()
+    public async Task AnOrganisingTrainer_CanPauseAndTellEveryone_ThroughBothAnnouncementRoutes()
     {
         var a = await _f.CreateArenaAsync();
         var (client, auth) = await _f.ApprovedTrainerAsync();
@@ -195,7 +195,7 @@ public class WeatherPauseTests : IClassFixture<ApiFactory>
 
         Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync(Url(a, "/pause"), new { reason = "thunder", announcement = text })).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync(Url(a, "/weather-notice"), new { body = text + " again" })).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden,
+        Assert.Equal(HttpStatusCode.OK,
             (await client.PostAsJsonAsync($"/api/competitions/{a.CompetitionId}/chat/announcement", new AnnouncementRequest("x", null))).StatusCode);
         Assert.Contains((await ChatAsync(a)), m => m.Body == text + " again");
     }

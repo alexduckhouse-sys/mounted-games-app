@@ -48,6 +48,18 @@ public class CompetitionFileImportTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Import_ProtectsSingleLetterSurnames()
+    {
+        await using var db = await Database();
+        var file = Sample() with { Sections = [Juniors(new CompetitionImportHeat("08:30", [["Fake B", "Fake C."], ["Fake Fullsurname"]]))] };
+        await CompetitionFileImport.ImportAsync(db, file);
+        var riders = await db.RiderEntries.ToDictionaryAsync(r => r.FullName, r => r.UseInitialOnly);
+        Assert.True(riders["Fake B"]);
+        Assert.True(riders["Fake C."]);
+        Assert.False(riders["Fake Fullsurname"]);
+    }
+
+    [Fact]
     public async Task Import_BuildsSectionsTimetableLanesRacesAndRiders()
     {
         await using var db = await Database();

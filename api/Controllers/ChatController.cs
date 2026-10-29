@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.RateLimiting;
+using MountedGames.Api.Security;
 using MountedGames.Api.Services.Accounts;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
@@ -31,12 +33,15 @@ public class ChatController : ControllerBase
     }
 
     [HttpGet]
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<IEnumerable<ChatMessageDto>> Recent(int competitionId, [FromQuery] int take = 100)
     {
         take = Math.Clamp(take, 1, 500);
         var userId = _users.GetUserId(User);
         var query = _db.ChatMessages.Where(m => m.CompetitionId == competitionId)
-            .VisibleTo(userId, User.IsInRole(Roles.Admin))
+            .VisibleTo(userId, await _db.CanManageAsync(User, competitionId, HttpContext.RequestAborted))
             .WithoutBlockedAuthors(_db, userId);
         var messages = await query
             .OrderByDescending(m => m.CreatedAt)
@@ -48,8 +53,8 @@ public class ChatController : ControllerBase
 
     /// <summary>
     /// Any signed-in user can message the organisers privately; those messages are seen only by
-    /// admins and the sender. An admin's message goes to the public feed, unless it replies to a
-    /// user's thread (<c>ReplyToUserId</c>), in which case only admins and that user see it.
+    /// competition staff and the sender. A staff member's message goes to the public feed, unless it replies to a
+    /// user's thread (<c>ReplyToUserId</c>), in which case only competition staff and that user see it.
     /// </summary>
     [HttpPost]
     [Authorize]
@@ -61,12 +66,12 @@ public class ChatController : ControllerBase
         var user = await _users.GetUserAsync(User);
         if (user is null || user.LockoutEnd == DateTimeOffset.MaxValue
             || user.LockedAt != null || user.BlockedAt != null) return Unauthorized();
-        var isAdmin = User.IsInRole(Roles.Admin);
+        var isManager = await _db.CanManageAsync(User, competitionId, HttpContext.RequestAborted);
         var replyTo = string.IsNullOrWhiteSpace(req.ReplyToUserId) ? null : req.ReplyToUserId.Trim();
         if (replyTo is not null)
         {
-            if (!isAdmin) return Forbid();
-            // Only into a thread that exists: an admin can't push private messages at arbitrary accounts.
+            if (!isManager) return Forbid();
+            // Only into a thread that exists: staff can't push private messages at arbitrary accounts.
             var hasThread = await _db.ChatMessages.AnyAsync(m =>
                 m.CompetitionId == competitionId && m.AdminOnly && m.UserId == replyTo);
             if (!hasThread) return BadRequest(new { message = "That person hasn't messaged the organisers." });
@@ -74,7 +79,7 @@ public class ChatController : ControllerBase
                 return StatusCode(403, new { message = "You can't send a private reply to this person." });
         }
 
-        if (!isAdmin)
+        if (!User.IsInRole(Roles.Admin))
         {
             if (await _db.IsIpBlockedAsync(HttpContext))
                 return StatusCode(403, new { message = "Posting from this network is blocked." });
@@ -95,7 +100,7 @@ public class ChatController : ControllerBase
             AuthorName = authorName,
             Body = ProfanityFilter.Clean(req.Body.Trim()),
             Type = ChatMessageType.Chat,
-            AdminOnly = !isAdmin || replyTo is not null,
+            AdminOnly = !isManager || replyTo is not null,
             RecipientUserId = replyTo,
             IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
         };
@@ -110,7 +115,8 @@ public class ChatController : ControllerBase
     }
 
     [HttpDelete("{messageId:int}")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
     public async Task<IActionResult> Delete(int competitionId, int messageId)
     {
         var msg = await _db.ChatMessages.FirstOrDefaultAsync(m => m.Id == messageId && m.CompetitionId == competitionId);
@@ -145,7 +151,8 @@ public class ChatController : ControllerBase
     }
 
     [HttpPost("announcement")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
     public async Task<ActionResult<ChatMessageDto>> Announce(int competitionId, AnnouncementRequest req,
         CancellationToken cancellationToken = default)
     {
@@ -198,7 +205,8 @@ public class ChatController : ControllerBase
     }
 
     [HttpPost("{messageId:int}/pin")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
     public async Task<ActionResult<ChatMessageDto>> PinAnnouncement(int competitionId, int messageId,
         CancellationToken cancellationToken = default)
     {
@@ -217,7 +225,8 @@ public class ChatController : ControllerBase
                 if (message.Tag?.StartsWith("missing-team", StringComparison.OrdinalIgnoreCase) == true)
                     throw new ScoreValidationException("Ring calls clear when their heat starts and cannot be pinned.");
                 // Keep the intended state when the provider retries after an ambiguous commit.
-                shouldPin ??= !string.Equals(message.Tag, "pinned", StringComparison.OrdinalIgnoreCase);
+                shouldPin ??= !string.Equals(message.Tag, "pinned", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(message.Tag, "banner", StringComparison.OrdinalIgnoreCase);
                 previous.AddRange(await ClearPinnedTagsAsync(competitionId, cancellationToken));
                 previous.RemoveAll(m => m.Id == messageId);
                 message.Type = ChatMessageType.Announcement;
@@ -238,7 +247,7 @@ public class ChatController : ControllerBase
     private async Task<List<ChatMessage>> ClearPinnedTagsAsync(int competitionId, CancellationToken cancellationToken)
     {
         var messages = await _db.ChatMessages.Where(m => m.CompetitionId == competitionId
-                && m.Tag != null && m.Tag.ToLower() == "pinned" && !m.AdminOnly && m.RecipientUserId == null)
+                && m.Tag != null && (m.Tag.ToLower() == "pinned" || m.Tag.ToLower() == "banner") && !m.AdminOnly && m.RecipientUserId == null)
             .ToListAsync(cancellationToken);
         foreach (var message in messages) message.Tag = null;
         return messages;

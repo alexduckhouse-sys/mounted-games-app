@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { api, readStoredAuth, readToken, writeStoredAuth, type StoredAuth } from '../api';
+import { api, AUTH_CHANGED_EVENT, readStoredAuth, readToken, writeStoredAuth, type StoredAuth } from '../api';
 import { unsubscribeFromPush } from '../lib/push';
 import type { AuthResponse, CompetitionAccess, ExternalAuthResponse, Role, UserProfile } from '../types';
 
@@ -102,6 +102,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try { localStorage.removeItem(OLD_EDITOR_MODE_KEY); } catch { /* storage blocked */ }
   }, []);
   const [auth, setAuth] = useState<StoredAuth | null>(() => readStoredAuth());
+  useEffect(() => {
+    const sync = () => setAuth(readStoredAuth());
+    const storage = (event: StorageEvent) => { if (event.key === 'mg.auth' || event.key === null) sync(); };
+    window.addEventListener(AUTH_CHANGED_EVENT, sync);
+    window.addEventListener('storage', storage);
+    return () => { window.removeEventListener(AUTH_CHANGED_EVENT, sync); window.removeEventListener('storage', storage); };
+  }, []);
   const [loading, setLoading] = useState(false);
   const [signedOut, setSignedOut] = useState(false);
   const [notice, setNotice] = useState<{ token: string; kind: 'requested' | 'approved' } | null>(null);

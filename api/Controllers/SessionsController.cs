@@ -1,3 +1,5 @@
+using MountedGames.Api.Security;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -40,6 +42,9 @@ public class SessionsController : ControllerBase
         .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team);
 
     [HttpGet]
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<IEnumerable<SessionDto>> List(int competitionId)
     {
         var sessions = await SessionsWithDetail()
@@ -50,6 +55,9 @@ public class SessionsController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<SessionDto>> Get(int competitionId, int id)
     {
         var s = await SessionsWithDetail()
@@ -243,6 +251,8 @@ public class SessionsController : ControllerBase
 
     [HttpGet("{id:int}/heats/{heatId:int}/commentator-briefing")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<CommentatorBriefingDto>> GetCommentatorBriefing(
         int competitionId,
         int id,

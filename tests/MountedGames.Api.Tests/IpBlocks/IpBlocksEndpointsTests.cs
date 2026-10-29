@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Dtos;
+using MountedGames.Api.Auth;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Tests.Infrastructure;
 
@@ -12,6 +13,30 @@ public class IpBlocksEndpointsTests : IClassFixture<ApiFactory>
 {
     private readonly ApiFactory _f;
     public IpBlocksEndpointsTests(ApiFactory f) => _f = f;
+
+    [Theory]
+    [InlineData("invalid")]
+    [InlineData("https://example.invalid")]
+    [InlineData("123456")]
+    public async Task InvalidAddressesAreRejected(string address)
+    {
+        var admin = await _f.AdminAsync();
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsJsonAsync("/api/ip-blocks", new CreateIpBlockRequest(address, null))).StatusCode);
+    }
+
+    [Fact]
+    public async Task CanonicalIpv6BlockWorksOnPublicReads_WithoutReturningItsFullAddress()
+    {
+        var admin = await _f.AdminAsync();
+        const string address = "2001:db8:0:0:0:0:0:5";
+        var response = await admin.PostAsJsonAsync("/api/ip-blocks", new CreateIpBlockRequest(address, "test"));
+        var block = await response.ReadAsync<IpBlockDto>();
+        Assert.Equal("2001:0db8:*", block.IpAddress);
+        var client = _f.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-Ip", "2001:db8::5");
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/shop/posts")).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.PostAsJsonAsync("/api/ip-blocks", new CreateIpBlockRequest("2001:db8::5", null))).StatusCode);
+    }
 
     [Fact]
     public async Task List_ReturnsNewestFirst()
@@ -28,7 +53,7 @@ public class IpBlocksEndpointsTests : IClassFixture<ApiFactory>
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var list = (await r.ReadAsync<List<IpBlockDto>>()).Where(b => b.IpAddress.StartsWith("192.0.2.")).ToList();
-        Assert.Equal(new[] { "192.0.2.2", "192.0.2.1" }, list.Select(b => b.IpAddress));
+        Assert.Equal(new[] { "192.0.2.*", "192.0.2.*" }, list.Select(b => b.IpAddress));
         Assert.Equal("spam", list[0].Reason);
     }
 
@@ -41,7 +66,7 @@ public class IpBlocksEndpointsTests : IClassFixture<ApiFactory>
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var dto = await r.ReadAsync<IpBlockDto>();
-        Assert.Equal("198.51.100.7", dto.IpAddress);
+        Assert.Equal("198.51.100.*", dto.IpAddress);
         Assert.Equal("trolling", dto.Reason);
         Assert.NotNull(dto.CreatedByUserId);
         Assert.True(await _f.WithDbAsync(db => db.IpBlocks.AnyAsync(b => b.Id == dto.Id)));
@@ -98,7 +123,7 @@ public class IpBlocksEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.NotFound, (await admin.DeleteAsync("/api/ip-blocks/999999")).StatusCode);
     }
 
-    public static IEnumerable<object[]> AdminOnly() => new[]
+    public static IEnumerable<object[]> MasterAdminOnly() => new[]
     {
         new object[] { "GET", "/api/ip-blocks" },
         new object[] { "POST", "/api/ip-blocks" },
@@ -106,15 +131,28 @@ public class IpBlocksEndpointsTests : IClassFixture<ApiFactory>
     };
 
     private static HttpRequestMessage Req(string method, string path)
-        => new(new HttpMethod(method), path) { Content = JsonContent.Create(new { ipAddress = "1.1.1.1" }) };
+        => new(new HttpMethod(method), path) { Content = JsonContent.Create(new { ipAddress = "192.0.2.1" }) };
 
     [Theory]
-    [MemberData(nameof(AdminOnly))]
+    [MemberData(nameof(MasterAdminOnly))]
     public async Task Returns401_WhenAnonymous(string method, string path)
         => Assert.Equal(HttpStatusCode.Unauthorized, (await _f.CreateClient().SendAsync(Req(method, path))).StatusCode);
 
     [Theory]
-    [MemberData(nameof(AdminOnly))]
+    [MemberData(nameof(MasterAdminOnly))]
+    public async Task Returns403_WhenOrdinaryAdmin(string method, string path)
+    {
+        var master = await _f.AdminAsync();
+        var email = $"ip-admin-{Guid.NewGuid():N}@example.invalid";
+        const string password = "FakeTestPassw0rd!";
+        (await master.PostAsJsonAsync("/api/auth/register", new RegisterRequest(email, password, "Fake site admin", Roles.Admin, null))).EnsureSuccessStatusCode();
+        var account = await _f.LoginAsync(email, password);
+        Assert.DoesNotContain(Roles.MasterAdmin, account.User.Roles);
+        Assert.Equal(HttpStatusCode.Forbidden, (await _f.WithToken(account.Token).SendAsync(Req(method, path))).StatusCode);
+    }
+
+    [Theory]
+    [MemberData(nameof(MasterAdminOnly))]
     public async Task Returns403_WhenTrainer(string method, string path)
         => Assert.Equal(HttpStatusCode.Forbidden, (await (await _f.TrainerAsync()).SendAsync(Req(method, path))).StatusCode);
 }

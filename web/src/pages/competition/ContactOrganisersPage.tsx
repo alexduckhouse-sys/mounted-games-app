@@ -48,9 +48,10 @@ export function ContactOrganisersPage() {
 function ContactOrganisersSession() {
   const t = useT();
   const { competition, reload } = useCompetition();
-  const { user, canEdit, hasRole } = useAuth();
-  const isAdmin = hasRole('Admin');
-  const canModerate = canEdit();
+  const { user, canOrganise, hasRole } = useAuth();
+  const isAdmin = hasRole('Admin') || canOrganise(competition);
+  const canBlock = hasRole('Admin');
+  const canModerate = isAdmin;
   const privateMessagingAvailable = competition.staffChatEnabled === true;
   const canMessageOrganisers = !!user && !isAdmin;
   const desktop = useIsDesktop();
@@ -154,7 +155,7 @@ function ContactOrganisersSession() {
   }
 
   async function blockMessageAuthor(id: number): Promise<boolean> {
-    if (!canModerate) return false;
+    if (!canBlock) return false;
     if (!(await confirmDialog({ title: t('site.contact.blockTitle'), message: t('site.contact.blockMessage'), confirmLabel: t('site.contact.blockSender'), destructive: true }))) return false;
     setActionError(null);
     setActionNotice(null);
@@ -323,7 +324,7 @@ function ContactOrganisersSession() {
         <Sheet title={t('site.contact.thisMessage')} description={menuFor.body.length > 90 ? `${menuFor.body.slice(0, 90)}…` : menuFor.body} onClose={() => setMenuFor(null)}>
           {({ close }) => (
             <div className="kit-acts">
-              {!menuFor.recipientUserId && (
+              {canBlock && !menuFor.recipientUserId && (
                 <button type="button" className="kit-redtext" onClick={() => { void blockMessageAuthor(menuFor.id).then((done) => { if (done) close(); }); }}>{t('site.contact.blockSender')}</button>
               )}
               <button type="button" className="kit-redtext" onClick={() => { void removeMessage(menuFor.id).then((done) => { if (done) close(); }); }}>{t('site.contact.deleteLabel')}</button>

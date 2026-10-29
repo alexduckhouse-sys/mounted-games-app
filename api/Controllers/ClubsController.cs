@@ -1,3 +1,5 @@
+using MountedGames.Api.Security;
+using Microsoft.AspNetCore.RateLimiting;
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -18,10 +20,16 @@ public class ClubsController : ControllerBase
     public ClubsController(AppDbContext db) => _db = db;
 
     [HttpGet]
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<IEnumerable<ClubDto>> List() =>
         (await _db.Clubs.OrderBy(c => c.Name).ToListAsync()).Select(c => c.ToDto());
 
     [HttpGet("{id:int}")]
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<ClubDto>> Get(int id)
     {
         var club = await _db.Clubs.FindAsync(id);
