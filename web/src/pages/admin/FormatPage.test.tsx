@@ -71,7 +71,7 @@ describe('On the day', () => {
     expect(screen.getByText(/Cheshire Halloween Pairs · .* · Kelsall Hill/)).toBeInTheDocument();
     const steps = screen.getByRole('list', { name: 'Steps' });
     expect(within(steps).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-      expect.stringContaining('Close signups'), expect.stringContaining('Form teams'), expect.stringContaining('Race lists'), expect.stringContaining('Timetable')]);
+      expect.stringContaining('Close entries'), expect.stringContaining('Form teams'), expect.stringContaining('Race lists'), expect.stringContaining('Timetable')]);
     expect(within(steps).getByText('Timetable').closest('li')).toHaveAttribute('aria-current', 'step');
     expect(screen.getByRole('link', { name: 'Change the structure' })).toHaveAttribute('href', '/admin/competitions/5');
   });
@@ -173,7 +173,10 @@ describe('On the day: race lists', () => {
     await userEvent.click(within(junior).getByRole('button', { name: /Races for Junior pairs/ }));
     const dialog = await screen.findByRole('dialog', { name: 'Races for Junior pairs' });
     expect(within(dialog).getAllByRole('listitem')).toHaveLength(2);
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Move Bottle up' }));
+    const grip = within(dialog).getByRole('button', { name: 'Move Bottle: drag, or use the up and down arrow keys' });
+    expect(within(dialog).queryByRole('button', { name: /^Move .* (up|down)$/ })).not.toBeInTheDocument();
+    grip.focus();
+    await userEvent.keyboard('{ArrowUp}');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Remove Bending' }));
     await userEvent.type(within(dialog).getByLabelText('Race name'), 'Litter{Enter}');
     await userEvent.click(within(dialog).getByRole('combobox', { name: 'Add a race from the library' }));
@@ -315,7 +318,7 @@ describe('On the day: signups and teams', () => {
   it('closes and re-opens signups from the first step', async () => {
     comp = build({ signupsLocked: false });
     mount();
-    await userEvent.click(await screen.findByRole('button', { name: 'Close signups now' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Close entries now' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/5/signups-locked', { locked: true }));
   });
 
@@ -325,11 +328,11 @@ describe('On the day: signups and teams', () => {
     mount();
     const panel = await screen.findByRole('region', { name: 'Form teams' });
     const card = within(panel).getByText('Junior pairs').closest('div.mg-card') as HTMLElement;
-    expect(card).toHaveTextContent('1 paid signup');
+    expect(card).toHaveTextContent('1 paid entry');
     await userEvent.click(within(card).getByRole('button', { name: 'Preview' }));
-    expect(await within(card).findByText(/Preview · 1 team from 2 signups/)).toBeInTheDocument();
+    expect(await within(card).findByText(/Preview · 1 team from 2 entries/)).toBeInTheDocument();
     await userEvent.click(within(card).getByRole('button', { name: /Create teams/ }));
-    expect(await within(card).findByText(/Created · 1 team from 2 signups/)).toBeInTheDocument();
+    expect(await within(card).findByText(/Created · 1 team from 2 entries/)).toBeInTheDocument();
     expect(api.post).toHaveBeenLastCalledWith('/competitions/5/sections/1/form-teams', { ridersPerTeam: 2, preview: false, replaceExisting: true });
   });
 
@@ -337,7 +340,7 @@ describe('On the day: signups and teams', () => {
     auth.organise = false;
     mount();
     expect(await screen.findByText(/Only admins, the person who runs this competition/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Back to comp' })).toHaveAttribute('href', '/competitions/5');
+    expect(screen.getByRole('link', { name: 'Back to competition' })).toHaveAttribute('href', '/competitions/5');
   });
 
   it('says so when the competition will not load', async () => {

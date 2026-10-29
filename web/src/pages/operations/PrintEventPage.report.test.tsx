@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { downloadCsv } from '../../lib/csv';
 import PrintEventPage from './PrintEventPage';
+vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canOrganise: () => true }) }));
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
 vi.mock('../../lib/csv', async (importOriginal) => ({ ...(await importOriginal<typeof import('../../lib/csv')>()), downloadCsv: vi.fn() }));
@@ -173,10 +174,18 @@ describe('PrintEventPage staff QR posters', () => {
     vi.mocked(api.post).mockReset();
     vi.mocked(api.get).mockImplementation(async (url: string) => {
       if (url.endsWith('/scorer-links')) return { data: { arenas: [], defaultExpiresAt: '', links: [old] } };
-      return { data: { id: 12, name: 'Spring event', startDate: '2031-05-04T09:00:00Z', endDate: null, location: null } };
+      return { data: { id: 12, name: 'Spring event', startDate: '2031-05-04T09:00:00Z', endDate: null, location: null, postcode: 'AB1 2CD' } };
     });
     vi.mocked(api.post).mockResolvedValue({ data: { link: { ...old, id: 9 }, token: 'mgs_tok', path: '' } });
     window.print = vi.fn();
+  });
+
+  it('prints the venue postcode in the emergency box and drops the page header above the posters', async () => {
+    show('/event-tools/12/print/posters');
+    await screen.findByText('Ring 1');
+    expect(screen.getByText('Postcode:')).toBeInTheDocument();
+    expect(screen.getByText('AB1 2CD')).toBeInTheDocument();
+    expect(document.querySelector('.event-print-header-posters')).not.toBeNull();
   });
 
   it('makes no links on load, then mints them and prints when Print is pressed', async () => {

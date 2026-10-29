@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
-import { Check, ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Minus, Plus, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Minus, Plus, RefreshCw, X } from 'lucide-react';
 import { BackLink } from '../../components/BackLink';
+import { useInAppShell, usePageHeader } from '../../components/CompactPageBarContext';
 import { TickerNumber } from '../../components/TickerNumber';
 import { usePageWidth } from '../../components/pageWidthState';
 import { useExitDelay } from '../../hooks/useExitDelay';
@@ -28,6 +29,9 @@ interface HeaderProps {
   context: string;
   /** Trailing controls in the top row (an overflow button, a star, "+ Add item"). */
   actions?: ReactNode;
+  /** A refresh button: the app's own one in the top bar, or one in the top row outside the app. */
+  onRefresh?: () => void;
+  refreshLabel?: string;
   title: string;
   /** A page-level action on the right of the title row (for example "End stream"). */
   titleAction?: ReactNode;
@@ -54,9 +58,13 @@ function moveTabFocus(event: ReactKeyboardEvent<HTMLElement>) {
   tabs[next].click();
 }
 
-export function RefineHeader({ back, onBack, backLabel = 'Back', context, actions, title, titleAction, demo, subtitle, tabs, tabsLabel = 'Sections', tabsKind = 'nav', children }: HeaderProps) {
+export function RefineHeader({ back, onBack, backLabel = 'Back', context, actions, onRefresh, refreshLabel, title, titleAction, demo, subtitle, tabs, tabsLabel = 'Sections', tabsKind = 'nav', children }: HeaderProps) {
   const tabsRef = useRef<HTMLElement>(null);
   const [moreTabs, setMoreTabs] = useState(false);
+  // In the app the back arrow, title and context go up into the top bar, so the page doesn't stack a second
+  // header under it. An in-page back step (onBack) has no route for the top bar, so that header stays whole.
+  const inTopBar = useInAppShell() && !(onBack && !back);
+  usePageHeader(inTopBar ? { title, subtitle: context || undefined, plain: true, backTo: back, backLabel: back ? backLabel : undefined, onRefresh, refreshLabel } : null, 1);
   const activeTab = tabs?.findIndex((tab) => tab.active) ?? -1;
   // A long tab strip scrolls sideways on a phone: keep the open tab in view and fade the edge while more tabs are hidden.
   useEffect(() => {
@@ -72,6 +80,29 @@ export function RefineHeader({ back, onBack, backLabel = 'Back', context, action
     window.addEventListener('resize', update);
     return () => { nav.removeEventListener('scroll', update); window.removeEventListener('resize', update); };
   }, [activeTab]);
+  const tabStrip = tabs && tabs.length > 0 && (
+    <nav ref={tabsRef} className={`rf-tabs ${moreTabs ? 'rf-tabs-more' : ''}`} aria-label={tabsLabel} role={tabsKind === 'tablist' ? 'tablist' : undefined} onKeyDown={tabsKind === 'tablist' ? moveTabFocus : undefined}>
+      {tabs.map((tab) => tabsKind === 'tablist' ? (
+        <button key={tab.label} type="button" role="tab" aria-selected={tab.active} tabIndex={tab.active ? 0 : -1} className="rf-tab" onClick={tab.onSelect}>{tab.label}</button>
+      ) : tab.to ? (
+        <Link key={tab.label} to={tab.to} className="rf-tab" aria-current={tab.active ? 'page' : undefined}>{tab.label}</Link>
+      ) : (
+        <button key={tab.label} type="button" className="rf-tab" aria-current={tab.active ? 'page' : undefined} onClick={tab.onSelect}>{tab.label}</button>
+      ))}
+    </nav>
+  );
+  if (inTopBar) {
+    const row = actions || titleAction || demo;
+    if (!row && !subtitle && !children && !tabStrip) return null;
+    return (
+      <header className="rf-hd rf-hd-slim">
+        {row && <div className="rf-hd-top">{demo && <DemoChip />}<span className="rf-ctx" />{actions}{titleAction}</div>}
+        {subtitle && <p className="rf-sub">{subtitle}</p>}
+        {children}
+        {tabStrip}
+      </header>
+    );
+  }
   return (
     <header className="rf-hd">
       <div className="rf-hd-top">
@@ -79,6 +110,7 @@ export function RefineHeader({ back, onBack, backLabel = 'Back', context, action
         {!back && onBack && <button type="button" className="rf-ib" aria-label={backLabel} onClick={onBack}><ChevronLeft className="h-5 w-5" aria-hidden="true" /></button>}
         <span className="rf-ctx">{context}</span>
         {actions}
+        {onRefresh && <button type="button" className="rf-ib" aria-label={refreshLabel ?? 'Refresh'} onClick={onRefresh}><RefreshCw className="h-5 w-5" aria-hidden="true" /></button>}
       </div>
       {titleAction ? (
         <div className="rf-ttl-row">
@@ -88,17 +120,7 @@ export function RefineHeader({ back, onBack, backLabel = 'Back', context, action
       ) : <h1 className="rf-ttl">{title}{demo && <DemoChip />}</h1>}
       {subtitle && <p className="rf-sub">{subtitle}</p>}
       {children}
-      {tabs && tabs.length > 0 && (
-        <nav ref={tabsRef} className={`rf-tabs ${moreTabs ? 'rf-tabs-more' : ''}`} aria-label={tabsLabel} role={tabsKind === 'tablist' ? 'tablist' : undefined} onKeyDown={tabsKind === 'tablist' ? moveTabFocus : undefined}>
-          {tabs.map((tab) => tabsKind === 'tablist' ? (
-            <button key={tab.label} type="button" role="tab" aria-selected={tab.active} tabIndex={tab.active ? 0 : -1} className="rf-tab" onClick={tab.onSelect}>{tab.label}</button>
-          ) : tab.to ? (
-            <Link key={tab.label} to={tab.to} className="rf-tab" aria-current={tab.active ? 'page' : undefined}>{tab.label}</Link>
-          ) : (
-            <button key={tab.label} type="button" className="rf-tab" aria-current={tab.active ? 'page' : undefined} onClick={tab.onSelect}>{tab.label}</button>
-          ))}
-        </nav>
-      )}
+      {tabStrip}
     </header>
   );
 }
@@ -158,14 +180,19 @@ export function RefineQty({ name, value, onChange, max = 99, disabled = false }:
 }
 
 /** The screen's one primary action, sticky under the content. `aboveTabs` lifts it over a competition's bottom tabs. */
-export function RefineFoot({ children, column = false, aboveTabs = false, label }: { children: ReactNode; column?: boolean; aboveTabs?: boolean; label?: string }) {
-  return <div className={`rf-foot ${column ? 'rf-foot-col' : ''} ${aboveTabs ? 'rf-above-tabs' : ''}`.trim()} role={label ? 'region' : undefined} aria-label={label}>{children}</div>;
+/**
+ * The screen's actions at the bottom. Sticky only where it must stay in reach (the creator wizard, a message composer);
+ * `inline` puts the buttons at the end of the page instead, which is the house default ("no Back/Next footers").
+ */
+export function RefineFoot({ children, column = false, aboveTabs = false, inline = false, label }: { children: ReactNode; column?: boolean; aboveTabs?: boolean; inline?: boolean; label?: string }) {
+  return <div className={`rf-foot ${inline ? 'rf-foot-inline' : ''} ${column ? 'rf-foot-col' : ''} ${aboveTabs && !inline ? 'rf-above-tabs' : ''}`.replace(/\s+/g, ' ').trim()} role={label ? 'region' : undefined} aria-label={label}>{children}</div>;
 }
 
 interface SheetProps { title: string; onClose: () => void; children: ReactNode }
 
 /** Modal bottom sheet: traps focus, closes on Esc, the scrim, the × button or a swipe down (sliding away first), and returns focus to whatever opened it. */
 export function RefineSheet({ title, onClose, children }: SheetProps) {
+  const t = useT();
   const titleId = useId();
   const { closing, close } = useExitDelay(onClose);
   const { ref, handlers, style, dragging } = useSwipeToClose<HTMLDivElement>(close);
@@ -199,7 +226,7 @@ export function RefineSheet({ title, onClose, children }: SheetProps) {
         <span className="rf-grab" aria-hidden="true" />
         <div className="rf-sheet-head">
           <h2 id={titleId}>{title}</h2>
-          <button type="button" className="rf-ib" aria-label="Close" onClick={() => close()}><X className="h-5 w-5" aria-hidden="true" /></button>
+          <button type="button" className="rf-ib" aria-label={t('common.close')} onClick={() => close()}><X className="h-5 w-5" aria-hidden="true" /></button>
         </div>
         {children}
       </div>
@@ -218,24 +245,69 @@ function placeUnder(element: HTMLElement | null): Place | null {
   return { top: rect.bottom + 4, right: Math.max(8, window.innerWidth - rect.right + 12), max: Math.max(160, window.innerHeight - rect.bottom - 16) };
 }
 
-/** A small panel fixed under a row. It closes on Escape, on a click outside it and its row, and on resize. */
-function FloatingPanel({ anchor, place, onClose, children }: { anchor: RefObject<HTMLElement | null>; place: Place; onClose: () => void; children: ReactNode }) {
+/** What a keyboard can move between inside a floating panel. */
+const PANEL_ITEMS = '.rf-choice:not(:disabled)';
+const PANEL_FIRST = '[aria-selected="true"], [role="menuitem"], input:not(:disabled), button:not(:disabled), select:not(:disabled)';
+
+/**
+ * A small panel fixed under a row (`id` is what the row's `aria-controls` points at). It closes on Escape, on a click
+ * outside it and its row, when focus moves out of it, on resize and when the page scrolls. Focus moves into it when it opens, Up/Down/Home/End
+ * move between its choices, and focus goes back to the row when it closes.
+ */
+function FloatingPanel({ id, anchor, place, onClose, children }: { id: string; anchor: RefObject<HTMLElement | null>; place: Place; onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   useEffect(() => { closeRef.current = onClose; });
   useEffect(() => {
+    const panel = ref.current;
+    const trigger = anchor.current;
+    if (panel && !panel.contains(document.activeElement)) panel.querySelector<HTMLElement>(PANEL_FIRST)?.focus({ preventScroll: true });
     const away = (event: MouseEvent) => {
       const target = event.target as Node;
       if (!ref.current?.contains(target) && !anchor.current?.contains(target)) closeRef.current();
     };
-    const esc = (event: KeyboardEvent) => { if (event.key === 'Escape') { closeRef.current(); anchor.current?.focus(); } };
+    const key = (event: KeyboardEvent) => {
+      // preventDefault keeps a sheet around the row from closing along with the list.
+      if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); anchor.current?.focus(); return; }
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+      const items = [...(ref.current?.querySelectorAll<HTMLElement>(PANEL_ITEMS) ?? [])];
+      if (items.length === 0 || !ref.current?.contains(document.activeElement)) return;
+      event.preventDefault();
+      const at = items.indexOf(document.activeElement as HTMLElement);
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+        : event.key === 'ArrowDown' ? (at + 1) % items.length : (at <= 0 ? items.length - 1 : at - 1);
+      items[next].focus({ preventScroll: true });
+    };
+    // A scroll anywhere else leaves the panel floating away from its row. The panel's own scrolling, and the scroll a
+    // phone makes to bring a field into view while someone types in it, do not close it.
+    const scroll = (event: Event) => {
+      if (ref.current?.contains(event.target as Node)) return;
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && ref.current?.contains(active) && active.matches('input, textarea')) return;
+      closeRef.current();
+    };
+    // Tabbing on through a calendar's fields stays open; focus going anywhere else on the page closes it.
+    const focusOut = (event: FocusEvent) => {
+      const target = event.target as Node;
+      if (!ref.current?.contains(target) && !anchor.current?.contains(target)) closeRef.current();
+    };
     const resize = () => closeRef.current();
     document.addEventListener('mousedown', away);
-    document.addEventListener('keydown', esc);
+    document.addEventListener('keydown', key);
+    document.addEventListener('focusin', focusOut);
     window.addEventListener('resize', resize);
-    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); window.removeEventListener('resize', resize); };
+    window.addEventListener('scroll', scroll, { capture: true, passive: true });
+    return () => {
+      document.removeEventListener('mousedown', away);
+      document.removeEventListener('keydown', key);
+      document.removeEventListener('focusin', focusOut);
+      window.removeEventListener('resize', resize);
+      window.removeEventListener('scroll', scroll, { capture: true });
+      // Choosing something removes the focused item, which would drop focus on the page: put it back on the row.
+      if (document.activeElement == null || document.activeElement === document.body) trigger?.focus();
+    };
   }, [anchor]);
-  return createPortal(<div ref={ref} className="skin rf-pop" style={{ top: place.top, right: place.right, maxHeight: place.max }}>{children}</div>, document.body);
+  return createPortal(<div ref={ref} id={id} className="skin rf-pop" style={{ top: place.top, right: place.right, maxHeight: place.max }}>{children}</div>, anchor.current?.closest('dialog') ?? document.body);
 }
 
 /**
@@ -252,6 +324,7 @@ export function RefineChoiceRow<T extends string>({ label, value, options, onCha
   const [custom, setCustom] = useState('');
   const [place, setPlace] = useState<Place | null>(null);
   const rowRef = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
   const known = options.find((option) => option.value === value);
   const current = known?.label ?? (value || placeholder || t('site.choice.placeholder'));
 
@@ -282,12 +355,12 @@ export function RefineChoiceRow<T extends string>({ label, value, options, onCha
   );
   return (
     <div className="rf-choice-wrap">
-      <button ref={rowRef} type="button" className="rf-row rf-choice-row" aria-haspopup="listbox" aria-expanded={open} aria-label={`${label}: ${current}`} disabled={disabled} onClick={toggle}>
+      <button ref={rowRef} type="button" className="rf-row rf-choice-row" aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? panelId : undefined} aria-label={`${label}: ${current}`} disabled={disabled} onClick={toggle}>
         <span className="rf-grow rf-t1">{label}</span>
         <span className={`rf-choice-val ${known || value ? '' : 'rf-choice-empty'}`}>{current}</span>
         <ChevronRight className="rf-chev h-4 w-4" aria-hidden="true" />
       </button>
-      {open && place && <FloatingPanel anchor={rowRef} place={place} onClose={close}>{list}</FloatingPanel>}
+      {open && place && <FloatingPanel id={panelId} anchor={rowRef} place={place} onClose={close}>{list}</FloatingPanel>}
     </div>
   );
 }
@@ -300,15 +373,16 @@ export function RefinePanelRow({ label, ariaLabel, value, children }: { label: s
   const [open, setOpen] = useState(false);
   const [place, setPlace] = useState<Place | null>(null);
   const rowRef = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
   return (
     <div className="rf-choice-wrap">
-      <button ref={rowRef} type="button" className="rf-row rf-choice-row" aria-haspopup="listbox" aria-expanded={open} aria-label={ariaLabel}
+      <button ref={rowRef} type="button" className="rf-row rf-choice-row" aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? panelId : undefined} aria-label={ariaLabel}
         onClick={() => { if (open) { setOpen(false); return; } setPlace(placeUnder(rowRef.current)); setOpen(true); }}>
         <span className="rf-grow rf-t1">{label}</span>
         <span className="rf-choice-val" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{value}</span>
         <ChevronRight className="rf-chev h-4 w-4" aria-hidden="true" />
       </button>
-      {open && place && <FloatingPanel anchor={rowRef} place={place} onClose={() => setOpen(false)}>{children(() => setOpen(false))}</FloatingPanel>}
+      {open && place && <FloatingPanel id={panelId} anchor={rowRef} place={place} onClose={() => setOpen(false)}>{children(() => setOpen(false))}</FloatingPanel>}
     </div>
   );
 }
@@ -338,6 +412,7 @@ export function RefineDateTimeRow({ label, value, onChange, eventDays = [], remo
   const [time, setTime] = useState('09:00');
   const [month, setMonth] = useState(() => startOfDay(new Date()));
   const rowRef = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
   const text = dateTimeText(value);
 
   function begin() {
@@ -364,13 +439,13 @@ export function RefineDateTimeRow({ label, value, onChange, eventDays = [], remo
 
   return (
     <div className="rf-choice-wrap">
-      <button ref={rowRef} type="button" className="rf-row rf-choice-row" aria-haspopup="dialog" aria-expanded={open} aria-label={`${label}: ${text || 'Not set'}`} disabled={disabled} onClick={begin}>
+      <button ref={rowRef} type="button" className="rf-row rf-choice-row" aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? panelId : undefined} aria-label={`${label}: ${text || 'Not set'}`} disabled={disabled} onClick={begin}>
         <span className="rf-grow rf-t1">{label}</span>
         <span className={`rf-choice-val ${text ? '' : 'rf-choice-empty'}`}>{text || 'Not set'}</span>
         <ChevronRight className="rf-chev h-4 w-4" aria-hidden="true" />
       </button>
       {open && place && (
-        <FloatingPanel anchor={rowRef} place={place} onClose={() => setOpen(false)}>
+        <FloatingPanel id={panelId} anchor={rowRef} place={place} onClose={() => setOpen(false)}>
           <div role="dialog" aria-label={label} className="rf-cal">
             <div className="rf-cal-head">
               <button type="button" className="rf-ib" aria-label="Previous month" onClick={() => shift(-1)}><ChevronLeft className="h-5 w-5" aria-hidden="true" /></button>
@@ -414,6 +489,7 @@ export function RefineMenu({ label, items, disabled = false, text }: { label: st
   const [open, setOpen] = useState(false);
   const [place, setPlace] = useState<Place | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
   function toggle() {
     if (open) { setOpen(false); return; }
     setPlace(placeUnder(buttonRef.current));
@@ -422,14 +498,14 @@ export function RefineMenu({ label, items, disabled = false, text }: { label: st
   return (
     <>
       {text ? (
-        <button ref={buttonRef} type="button" className="rf-btn" aria-label={label} aria-haspopup="menu" aria-expanded={open} disabled={disabled} onClick={toggle}>{text}</button>
+        <button ref={buttonRef} type="button" className="rf-btn" aria-label={label} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? panelId : undefined} disabled={disabled} onClick={toggle}>{text}</button>
       ) : (
-        <button ref={buttonRef} type="button" className="ops-ibtn" aria-label={label} aria-haspopup="menu" aria-expanded={open} disabled={disabled} onClick={toggle}>
+        <button ref={buttonRef} type="button" className="ops-ibtn" aria-label={label} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? panelId : undefined} disabled={disabled} onClick={toggle}>
           <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
         </button>
       )}
       {open && place && (
-        <FloatingPanel anchor={buttonRef} place={place} onClose={() => setOpen(false)}>
+        <FloatingPanel id={panelId} anchor={buttonRef} place={place} onClose={() => setOpen(false)}>
           <div role="menu" aria-label={label} className="rf-choices">
             {items.map((item) => (
               <button key={item.label} type="button" role="menuitem" className={`rf-choice ${item.danger ? 'rf-menu-danger' : ''}`.trim()} onClick={() => { setOpen(false); item.onSelect(); }}>

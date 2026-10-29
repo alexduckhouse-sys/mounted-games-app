@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MotionConfig } from 'framer-motion';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { axiosError, heat, race, result, session } from '../test/factories';
@@ -52,7 +53,7 @@ async function tapTeams(user: ReturnType<typeof userEvent.setup>, names: string[
 
 function open(hash = '#t=mgs_token') {
   window.history.replaceState(null, '', `/score${hash}`);
-  return render(<ScorerPage />);
+  return render(<MotionConfig reducedMotion="always"><ScorerPage /></MotionConfig>);
 }
 
 beforeEach(() => {
@@ -192,7 +193,7 @@ describe('ScorerPage', () => {
     await user.click(screen.getByRole('button', { name: /^Team 3, lane/ }));
     await waitFor(() => expect(placed()).toBe(2));
     await user.click(screen.getByRole('button', { name: 'SAVE SCORES' }));
-    const sheet = await screen.findByRole('dialog', { name: 'Why were teams eliminated?' });
+    const sheet = await screen.findByRole('dialog', { name: 'Why are they out?' });
     // The official faults sit in a grid, with the non-finishes and Other in their own group after them.
     const reasons = within(sheet).getByRole('group', { name: 'Reason for Team 2' });
     expect(reasons).toHaveClass('sc-reasons');
@@ -566,7 +567,7 @@ it('labels scoped scores honestly and keeps organiser and stream tools off a sco
   await opened('Bending');
   await userEvent.click(await screen.findByRole('button', { name: 'Yes, show them' }));
   const facts = await screen.findByRole('region', { name: 'Live commentator facts' });
-  expect(facts).toHaveTextContent('Available scores: 3 pts');
+  expect(facts).toHaveTextContent('Points so far: 3');
   expect(facts).not.toHaveTextContent('Rank');
   expect(screen.queryByRole('region', { name: 'Live stream control strip' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Score history & correction' })).toBeNull();

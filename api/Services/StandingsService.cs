@@ -133,7 +133,7 @@ public sealed class StandingsService(AppDbContext db, CompetitionSnapshotCache? 
                     else if (i > 0)
                     {
                         var prevReason = ties.Explain(orderedFacts, orderedFacts[i - 1], orderedFacts[i], row.TeamName);
-                        if (prevReason == "Level on points and countback — run-off if on cut-off")
+                        if (prevReason == "Level on points and countback (run-off if on cut-off)")
                             reason = prevReason;
                     }
                 }

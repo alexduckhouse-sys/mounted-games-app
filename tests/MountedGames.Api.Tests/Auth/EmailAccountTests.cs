@@ -582,7 +582,7 @@ public class EmailOffAccountTests : IClassFixture<EmailOffApiFactory>
     }
 }
 
-/// <summary>The resend limit is a few a minute for each person.</summary>
+/// <summary>The resend limit is per person, with the legacy permit override still supported.</summary>
 public class EmailResendLimitTests : IClassFixture<EmailResendLimitTests.Factory>
 {
     public sealed class Factory : EmailApiFactory
@@ -598,7 +598,7 @@ public class EmailResendLimitTests : IClassFixture<EmailResendLimitTests.Factory
     public EmailResendLimitTests(Factory f) => _f = f;
 
     [Fact]
-    public async Task ThirdResendInAMinute_Gets429_ButAnotherPersonIsNotAffected()
+    public async Task ThirdResendInTheWindow_Gets429_ButAnotherPersonIsNotAffected()
     {
         var a = await Register();
         var b = await Register();

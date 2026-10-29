@@ -13,6 +13,8 @@ import { computeTimings, formatTime } from '../../lib/time';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
 import { timetableRows, type TimetableRow } from '../../lib/timetableRows';
 import { useCompetition } from './context';
+import { useAuth } from '../../auth/AuthContext';
+import { hazardOf } from '../../lib/weatherAlert';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { activeLocale } from '../../i18n/translate';
 import { weatherConditionKey } from '../../lib/weatherText';
@@ -146,6 +148,7 @@ export function WeatherPage() {
   usePageWidth('wide');
   const { t, locale } = useLanguage();
   const { competition, reload } = useCompetition();
+  const { canOrganise, hasRole } = useAuth();
   const [refreshVersion, setRefreshVersion] = useState(0);
   const refresh = useCallback(() => {
     reload();
@@ -234,6 +237,9 @@ export function WeatherPage() {
       })
     : '';
 
+  // Thunder or heavy rain on the day: organisers get a quiet way to the announcements page.
+  const badWeather = !!weather?.hours.some((hour) => hazardOf({ startsAt: hour.startsAt, weatherCode: hour.weather_code, rainMm: hour.precipitation, rainChance: hour.precipitation_probability }) != null);
+  const mayOrganise = canOrganise(competition) && hasRole('Admin');
   const isToday = selectedDay === today;
   const nowLabel = isToday ? t('teams.weather.now') : selectedDateLabel;
 
@@ -253,9 +259,15 @@ export function WeatherPage() {
         </div>
       )}
 
+      <div key={selectedDay} className="mg-swap">
+      {badWeather && mayOrganise && (
+        <Link to={`/competitions/${competition.id}/announcements`} className="mg-text-link mb-3 inline-flex min-h-11 items-center">{t('teams.weather.organiserAction')}</Link>
+      )}
       <section aria-label={t('teams.weather.summary')} className={weather ? 'ev-card flex items-center gap-4 p-4' : undefined}>
         {!weather ? (
-          lat == null || lon == null ? <Notice tone="info">{t('teams.weather.noLocation')}</Notice>
+          lat == null || lon == null ? (
+            <Notice tone="info" actionLabel={canOrganise(competition) ? t('teams.weather.setLocation') : undefined} actionTo={canOrganise(competition) ? `/competitions/${competition.id}/event-details` : undefined}>{t('teams.weather.noLocation')}</Notice>
+          )
             : fetched?.key !== requestKey ? <Notice tone="info">{t('teams.weather.loading')}</Notice>
               : <Notice actionLabel={t('common.tryAgain')} onAction={refresh}>{t('teams.weather.error')}</Notice>
         ) : <>
@@ -290,12 +302,12 @@ export function WeatherPage() {
               const title = race && row.heat ? [sectionText, heatName].filter(Boolean).join(' · ') : heatName;
               const words = rowWeather
                 ? [t(weatherConditionKey(rowWeather.weather_code)), rowWeather.precipitation_probability >= 20 ? t('teams.weather.rainChance', { percent: Math.round(rowWeather.precipitation_probability) }) : null].filter(Boolean).join(', ')
-                : t('teams.weather.rowUnavailable');
+                : weather ? t('teams.weather.rowUnavailable') : '';
 
               const inner = (
                 <>
                   <span className="w-[46px] shrink-0 mg-display text-xl font-bold leading-none text-[rgb(var(--mg-heading))]">{formatTime(row.effective)}</span>
-                  <span className="sp-grow"><span className="sp-t1 !text-[15px]">{title}</span><span className="sp-t2">{words}</span></span>
+                  <span className="sp-grow"><span className="sp-t1 !text-[15px]">{title}</span>{words && <span className="sp-t2">{words}</span>}</span>
                   {rowWeather && <WeatherIcon code={rowWeather.weather_code} isDay={rowWeather.is_day !== 0} className="h-9 w-9" />}
                   {rowWeather && <span className="w-10 shrink-0 text-right mg-display text-lg font-bold">{`${Math.round(rowWeather.temperature_2m)}°`}</span>}
                   {race ? <ChevronRight aria-hidden="true" className="sp-chev h-4 w-4" strokeWidth={2.5} /> : <span className="h-4 w-4 shrink-0" aria-hidden="true" />}
@@ -310,6 +322,7 @@ export function WeatherPage() {
           </div>
         )}
       </section>
+      </div>
     </div>
   );
 }

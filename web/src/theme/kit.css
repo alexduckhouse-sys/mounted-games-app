@@ -53,6 +53,8 @@ dialog.kit-sheet::backdrop { background: rgb(var(--mg-overlay) / .45); }
 .kit-sheet-field { display: flex; flex-direction: column; gap: 6px; font: 600 14px/1.3 var(--mg-font); color: rgb(var(--mg-body)); }
 .kit-sheet-field input { min-height: 46px; padding: 0 12px; border: 1.5px solid rgb(var(--mg-control)); border-radius: 10px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); font: 500 16px/1 var(--mg-font); }
 .kit-sheet-field textarea { min-height: 88px; padding: 10px 12px; border: 1.5px solid rgb(var(--mg-control)); border-radius: 10px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); font: 500 16px/1.35 var(--mg-font); resize: none; }
+.kit-sheet-field .mg-field input { min-height: 44px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.kit-sheet-field .mg-field { min-height: 46px; }
 .kit-sheet-field input:focus-visible, .kit-sheet-field textarea:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 1px; }
 @media (min-width: 640px) {
   dialog.kit-sheet { margin: auto; border-radius: 20px; }
@@ -81,13 +83,22 @@ dialog.mg-confirm-host::backdrop { background: transparent; }
 /* Kind 3: one navy toast pill just above the bottom tabs, with a small green tick. Taps go straight through. */
 .kit-toast { position: fixed; z-index: 90; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); translate: -50% 0; display: inline-flex; align-items: center; gap: 8px; max-width: calc(100vw - 32px); min-height: 40px; padding: 0 16px 0 10px; border-radius: 999px; background: rgb(var(--mg-toast-bg)); color: rgb(var(--mg-toast-ink)); font: 600 14px/1.2 var(--mg-font); box-shadow: 0 8px 20px rgb(var(--mg-overlay) / .3); pointer-events: none; }
 body:has(.mg-tabs) .kit-toast { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+/* Above the ticker dock when it shows, so a toast never covers it. */
+body:has(.mg-dock-low) .kit-toast { bottom: calc(68px + env(safe-area-inset-bottom, 0px)); }
+body:has(.mg-dock:not(.mg-dock-low)) .kit-toast { bottom: calc(132px + env(safe-area-inset-bottom, 0px)); }
 .kit-toast-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kit-toast svg { flex: none; width: 22px; height: 22px; padding: 4px; border-radius: 50%; background: rgb(var(--mg-toast-tick)); }
+.kit-toast svg[data-tone="error"] { background: rgb(var(--mg-danger)); }
+.kit-toast-act { position: relative; flex: none; margin: 0 -8px 0 2px; padding: 0 12px; min-height: 36px; border: 0; border-radius: 999px; background: transparent; color: inherit; font: 700 14px/1 var(--mg-font); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; pointer-events: auto; }
+.kit-toast-act::after { content: ''; position: absolute; inset: -4px 0; }
+.kit-toast-act:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
 .kit-toast path { fill: none; stroke: #fff; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; }
 
 /* The "save quick access" banner: floats just above the bottom tabs, never dims or blocks the page. */
 .mg-remember { position: fixed; z-index: 40; left: max(12px, env(safe-area-inset-left, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); margin: 0 auto; max-width: 30rem; display: flex; flex-direction: column; gap: 10px; padding: 12px 12px 12px 14px; border: 1px solid rgb(var(--mg-rule)); border-radius: 16px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); box-shadow: 0 10px 28px rgb(var(--mg-overlay) / .16), 0 1px 3px rgb(var(--mg-overlay) / .08); font-family: var(--mg-font); animation: mg-remember-in 280ms var(--mg-sheet-ease); }
 body:has(.mg-tabs) .mg-remember { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+body:has(.mg-dock-low) .mg-remember { bottom: calc(68px + env(safe-area-inset-bottom, 0px)); }
+body:has(.mg-dock:not(.mg-dock-low)) .mg-remember { bottom: calc(132px + env(safe-area-inset-bottom, 0px)); }
 .mg-remember.is-closing { animation: mg-remember-out 200ms ease-in forwards; pointer-events: none; }
 .mg-remember-title { margin: 0; font: 800 17px/1.1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
 .mg-remember-text { margin: 3px 0 0; font: 500 13.5px/1.4 var(--mg-font); color: rgb(var(--mg-body)); }
@@ -115,3 +126,13 @@ html[data-lite="true"] .mg-remember { box-shadow: none; }
 .mg-install-step b { font-weight: 700; }
 .mg-install-n { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); font: 700 13px/1 var(--mg-font); }
 .mg-install-icon { width: 22px; height: 22px; color: rgb(var(--mg-heading)); }
+
+/* The race rules sheet: title and close button stay put, only the rules scroll. */
+dialog.rules-sheet { overflow: hidden; }
+.rules-sheet > .kit-sheet-inner { max-height: 92dvh; overflow: hidden; }
+.rules-sheet .kit-sheet-title { padding-right: 48px; flex: none; }
+.rules-sheet-close { position: absolute; top: 6px; right: 10px; z-index: 1; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: rgb(var(--mg-heading)); cursor: pointer; }
+.rules-sheet-close:hover { background: rgb(var(--mg-subtle)); }
+.rules-sheet-close:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
+/* The scroll bar sits in the sheet's side gutter, so the cards keep a gap on the right like on the left. */
+.rules-sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 12px 4px 0; margin-right: -12px; scrollbar-width: thin; }

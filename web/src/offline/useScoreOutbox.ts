@@ -144,7 +144,7 @@ export function exportCompetitionOutbox(competitionId: number, now?: string): st
   return serializeOutboxBackup(readOutbox(), competitionId, now);
 }
 
-export const OUTBOX_IMPORT_ERROR = 'That backup could not be read. Check that the whole JSON backup was copied.';
+export const OUTBOX_IMPORT_ERROR = 'That backup couldn’t be read. Check you copied the whole message and try again.';
 
 /** Validate and merge a JSON backup of offline scores into the active outbox, flushing immediately if online. */
 export function importCompetitionOutbox(
@@ -175,7 +175,7 @@ export async function shareOrCopyOutboxBackup(
   competitionName?: string,
 ): Promise<'shared' | 'copied' | 'unavailable'> {
   const json = exportCompetitionOutbox(competitionId);
-  const title = competitionName ? `${competitionName} — offline score backup` : 'Offline score backup';
+  const title = competitionName ? `${competitionName}: offline score backup` : 'Offline score backup';
   if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
     try {
       await navigator.share({ title, text: json });

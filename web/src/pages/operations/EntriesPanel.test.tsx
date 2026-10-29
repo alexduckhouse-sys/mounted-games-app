@@ -235,7 +235,7 @@ describe('EntriesPanel', () => {
 
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/7/declaration-forms/90/swap', expect.objectContaining({ outRiderEntryId: 2, inRiderEntryId: 3, overrideLock: false, reason: null })));
     expect(await screen.findByText(/Team 1: Cara Reserve in for Bea Rider/)).toBeInTheDocument();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
   it('needs the override box and a reason for a locked declaration', async () => {

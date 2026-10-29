@@ -102,3 +102,23 @@ export function PageSkeleton() {
     </Placeholder>
   );
 }
+
+/** The competition creator while an existing competition loads: the step list at the side, a heading and a card of settings rows. */
+export function CreatorSkeleton({ label }: { label: string }) {
+  return (
+    <Placeholder label={label} className="mx-auto grid w-full max-w-5xl gap-8 px-4 py-6 min-[900px]:grid-cols-[220px_minmax(0,1fr)]">
+      <div className="hidden flex-col gap-3 min-[900px]:flex">
+        {NAME_WIDTHS.map((w, i) => <Bar key={i} w={w} h={20} />)}
+      </div>
+      <div className="flex flex-col gap-4">
+        <Bar w="42%" h={30} />
+        <Bar w="70%" h={14} />
+        <div className="mg-card mg-list">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="mg-row"><span className="flex flex-1 flex-col gap-1.5"><Bar w={NAME_WIDTHS[i]} h={16} /><Bar w="30%" h={12} /></span><Bar w={64} h={24} style={{ borderRadius: 999 }} /></div>
+          ))}
+        </div>
+      </div>
+    </Placeholder>
+  );
+}

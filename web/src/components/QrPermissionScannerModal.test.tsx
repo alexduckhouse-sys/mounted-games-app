@@ -7,8 +7,8 @@ const close = vi.fn(), navigate = vi.fn(), verified = vi.fn();
 const token = 'mgs_test_permission';
 const mount = (open = true) => render(<QrPermissionScannerModal open={open} onClose={close} onNavigate={navigate} onScorerVerified={verified} />);
 function submit(value: string) {
-  fireEvent.change(screen.getByLabelText('Permission link or key'), { target: { value } });
-  fireEvent.click(screen.getByRole('button', { name: 'Verify permission key' }));
+  fireEvent.change(screen.getByLabelText('Scoring or camera link'), { target: { value } });
+  fireEvent.click(screen.getByRole('button', { name: 'Open link' }));
 }
 function camera(getUserMedia: ReturnType<typeof vi.fn>) {
   Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia } });
@@ -80,7 +80,7 @@ describe('permission QR verification', () => {
   it('ignores verification completed after closing', async () => {
     let resolve!: (value: { data: typeof session }) => void;
     vi.mocked(scorerApi.get).mockReturnValue(new Promise((r) => { resolve = r; }));
-    const view = mount(); submit(token); expect(screen.getByRole('button', { name: 'Verifying key…' })).toBeDisabled();
+    const view = mount(); submit(token); expect(screen.getByRole('button', { name: 'Opening…' })).toBeDisabled();
     view.unmount(); await act(async () => resolve({ data: session }));
     expect(navigate).not.toHaveBeenCalled(); expect(readScorerToken()).toBeNull();
   });
@@ -88,13 +88,13 @@ describe('permission QR verification', () => {
     let reject!: (reason: Error) => void;
     vi.mocked(scorerApi.get).mockReturnValue(new Promise((_resolve, no) => { reject = no; }));
     const view = mount(); submit(token);
-    fireEvent.submit(screen.getByLabelText('Permission link or key').closest('form')!);
+    fireEvent.submit(screen.getByLabelText('Scoring or camera link').closest('form')!);
     expect(scorerApi.get).toHaveBeenCalledTimes(1);
     view.unmount(); await act(async () => reject(new Error('late failure')));
     expect(navigate).not.toHaveBeenCalled();
   });
   it('rejects an empty form submission without making a request', () => {
-    mount(); fireEvent.submit(screen.getByLabelText('Permission link or key').closest('form')!);
+    mount(); fireEvent.submit(screen.getByLabelText('Scoring or camera link').closest('form')!);
     expect(screen.getByRole('alert')).toHaveTextContent('That QR code isn’t a scoring or camera code');
     expect(scorerApi.get).not.toHaveBeenCalled();
   });
@@ -120,16 +120,16 @@ describe('permission QR verification', () => {
 describe('camera and photo scanning', () => {
   it('shows camera errors and leaves manual entry available', async () => {
     camera(vi.fn().mockRejectedValue(new Error('denied'))); mount();
-    expect(await screen.findByText(/The camera is blocked/)).toBeInTheDocument(); expect(screen.getByLabelText('Permission link or key')).toBeEnabled();
+    expect(await screen.findByText(/The camera is blocked/)).toBeInTheDocument(); expect(screen.getByLabelText('Scoring or camera link')).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: 'Paste the link' }));
-    expect(screen.getByLabelText('Permission link or key')).toHaveFocus();
+    expect(screen.getByLabelText('Scoring or camera link')).toHaveFocus();
   });
   it('lets the Paste the link pill jump to the field while the camera is running', async () => {
     camera(vi.fn().mockResolvedValue({ getTracks: () => [] }));
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
     mount();
     fireEvent.click(await screen.findByRole('button', { name: 'Paste the link' }));
-    expect(screen.getByLabelText('Permission link or key')).toHaveFocus();
+    expect(screen.getByLabelText('Scoring or camera link')).toHaveFocus();
   });
   it('stops a camera that arrives after closing', async () => {
     const stop = vi.fn(); let resolve!: (stream: unknown) => void;
@@ -147,7 +147,7 @@ describe('camera and photo scanning', () => {
     const stop = vi.fn(); camera(vi.fn().mockResolvedValue({ getTracks: () => [{ stop }] }));
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockRejectedValue(new Error('play blocked'));
     const view = mount(); await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalled());
-    expect(screen.getByLabelText('Permission link or key')).toBeEnabled(); view.unmount(); expect(stop).toHaveBeenCalled();
+    expect(screen.getByLabelText('Scoring or camera link')).toBeEnabled(); view.unmount(); expect(stop).toHaveBeenCalled();
   });
   it('ignores early frames and transient detector errors, then resumes scanning', async () => {
     vi.useFakeTimers(); camera(vi.fn().mockResolvedValue({ getTracks: () => [] }));

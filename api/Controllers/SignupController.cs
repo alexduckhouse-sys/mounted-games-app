@@ -566,6 +566,8 @@ public class SignupController : ControllerBase
 
     [HttpGet("api/competitions/{competitionId:int}/entry-settings")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<CompetitionEntrySettingsDto>> GetEntrySettings(int competitionId, [FromServices] TimeProvider clock)
     {
         var comp = await _db.Competitions.AsNoTracking().FirstOrDefaultAsync(c => c.Id == competitionId);
@@ -740,7 +742,7 @@ public class SignupController : ControllerBase
         var nowUtc = clock.GetUtcNow().UtcDateTime;
         var entriesClosed = section.Competition?.SignupsLocked == true || (closeAt.HasValue && closeAt.Value <= nowUtc);
         if (entriesClosed && !isCompetitionOrganiser)
-            return StatusCode(403, new { message = "Signups are closed for this competition." });
+            return StatusCode(403, new { message = "Entries are closed for this competition." });
 
         var name = req.FullName?.Trim();
         if (string.IsNullOrEmpty(name)) return BadRequest(new { message = "Full name required." });
@@ -1048,6 +1050,8 @@ public class SignupController : ControllerBase
     /// <summary>Public matchmaking listings for a competition: solo riders looking for a pair, whole teams looking for guest riders, and riders waiting for a guest ride spot.</summary>
     [HttpGet("api/competitions/{competitionId:int}/matchmaking")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<IEnumerable<MatchmakingEntryDto>>> Matchmaking(int competitionId)
     {
         var rows = await _db.SectionSignups
@@ -1151,7 +1155,7 @@ public class SignupController : ControllerBase
             .AnyAsync(x => x.Target == TestPaymentTarget.SectionSignup && x.TargetId == id);
         if (hasTestPayment || (signup.AmountMinor > 0 &&
                 signup.Status is SignupPaymentStatus.Paid or SignupPaymentStatus.Refunded))
-            return Conflict(new { message = "This signup has payment history and must be kept for the audit record." });
+            return Conflict(new { message = "This entry has payment history, so it can’t be deleted." });
         await ReleasePendingPairAsync(signup.Id);
         if (signup.AmountMinor > 0)
         {
@@ -2182,7 +2186,7 @@ public class SignupController : ControllerBase
         var clubName = req.PonyClubName?.Trim();
         var explicitIds = (req.SignupIds ?? Array.Empty<int>()).Distinct().ToArray();
         if (string.IsNullOrEmpty(clubName) && explicitIds.Length == 0)
-            return BadRequest(new { message = "Specify a Pony Club name or signup IDs to mark paid." });
+            return BadRequest(new { message = "Choose a Pony Club or at least one entry to mark paid." });
 
         var rows = await _db.SectionSignups
             .Include(s => s.Section)

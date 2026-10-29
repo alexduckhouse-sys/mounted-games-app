@@ -36,4 +36,5 @@ export const common: AreaCatalogue<typeof en> = {
   'common.qty.group': 'Nifer ar gyfer {name}',
   'common.qty.remove': 'Tynnu un {name}',
   'common.qty.add': 'Ychwanegu un {name}',
+  'common.undo': 'Dadwneud',
 };

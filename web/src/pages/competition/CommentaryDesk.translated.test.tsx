@@ -50,8 +50,8 @@ beforeEach(() => {
 afterEach(() => setActiveLang('en'));
 
 describe.each([
-  ['fr' as Lang, { desk: 'Pupitre de commentaire', sideBySide: 'Côte à côte', upNext: 'À suivre', english: 'Side-by-Side' }],
-  ['cy' as Lang, { desk: 'Desg sylwebu', sideBySide: 'Ochr yn ochr', upNext: 'Nesaf', english: 'Side-by-Side' }],
+  ['fr' as Lang, { desk: 'Pupitre de commentaire', sideBySide: 'Côte à côte', upNext: 'À suivre', english: 'Side by side' }],
+  ['cy' as Lang, { desk: 'Desg sylwebu', sideBySide: 'Ochr yn ochr', upNext: 'Nesaf', english: 'Side by side' }],
 ])('commentary desk in %s', (lang, words) => {
   beforeEach(() => {
     vi.mocked(api.get).mockReset();
@@ -75,7 +75,8 @@ describe.each([
       </LanguageProvider>,
     );
     expect(await screen.findByText(new RegExp(words.desk))).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: words.sideBySide })).toBeInTheDocument();
+    // The view is a dropdown row now; its button shows the chosen view.
+    expect(screen.getByText(words.sideBySide)).toBeInTheDocument();
     expect(screen.getAllByText(words.upNext).length).toBeGreaterThan(0);
     expect(screen.queryByText(words.english)).toBeNull();
     expect(screen.queryByText('Up next')).toBeNull();

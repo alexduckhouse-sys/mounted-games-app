@@ -37,7 +37,7 @@ export function TimetableClashes({ competition }: { competition: CompetitionDeta
   if (sessions.length === 0) return null;
 
   return (
-    <section aria-label={t('ops.clash.aria')}>
+    <section className="ops-clashes" aria-label={t('ops.clash.aria')}>
       <RefineSection title={t('ops.clash.title')} meta={clashes.length} />
       <RefineNote>{t('ops.clash.note')}</RefineNote>
       {sessions.map(({ session, found }) => (

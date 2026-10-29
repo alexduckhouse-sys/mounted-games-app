@@ -21,8 +21,8 @@ vi.mock('../competition/EmbedCard', () => ({ EmbedCard: () => <p>embed</p> }));
 const mount = (lang: Lang, page: React.ReactElement) => render(<LanguageProvider initial={lang}><MemoryRouter>{page}</MemoryRouter></LanguageProvider>);
 
 describe.each([
-  { lang: 'cy' as const, nothing: 'Ni chaiff dim ei restru', find: 'Dod o hyd i feiciwr', noSponsors: 'Dim noddwyr eto', share: 'Rhannu', noTeams: 'Dim timau wedi cofrestru eto.', none: 'Dim gwrthwynebiadau.', heat: 'Sgwad 1' },
-  { lang: 'fr' as const, nothing: 'Rien n’est affiché avant', find: 'Trouver un cavalier', noSponsors: 'Aucun sponsor pour l’instant', share: 'Partager', noTeams: 'Aucune équipe n’est encore inscrite.', none: 'Aucune réclamation.', heat: 'Manche 1' },
+  { lang: 'cy' as const, nothing: 'Teipiwch o leiaf', find: 'Dod o hyd i feiciwr', noSponsors: 'Dim noddwyr eto', share: 'Rhannu', noTeams: 'Dim timau wedi cofrestru eto.', none: 'Dim gwrthwynebiadau.', heat: 'Sgwad 1' },
+  { lang: 'fr' as const, nothing: 'Saisissez au moins', find: 'Trouver un cavalier', noSponsors: 'Aucun sponsor pour l’instant', share: 'Partager', noTeams: 'Aucune équipe n’est encore inscrite.', none: 'Aucune réclamation.', heat: 'Manche 1' },
 ])('organiser pages, second half, in $lang', ({ lang, nothing, find, noSponsors, share, noTeams, none, heat }) => {
   beforeEach(() => { vi.mocked(api.get).mockReset(); });
   afterEach(() => { setActiveLang('en'); });
@@ -64,7 +64,7 @@ describe('English is unchanged', () => {
     vi.useFakeTimers();
     mount('en', <EmergencySearch competitionId={7} />);
     act(() => { fireEvent.change(screen.getByLabelText('Find a rider'), { target: { value: 'a' } }); });
-    expect(screen.getByText(/Type at least 2 letters to search/)).toBeInTheDocument();
+    expect(screen.getByText(/Type at least 2 letters/)).toBeInTheDocument();
     vi.useRealTimers();
   });
 });

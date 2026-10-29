@@ -49,6 +49,9 @@ public class TeamsController : ControllerBase
     public TeamsController(AppDbContext db, MountedGames.Api.Hubs.ILiveBroadcaster live) { _db = db; _live = live; }
 
     [HttpGet]
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<IEnumerable<TeamDto>> List(int competitionId) =>
         (await _db.Teams
             .Include(t => t.Club).Include(t => t.Section).Include(t => t.Trainer).Include(t => t.Results)
@@ -379,7 +382,7 @@ public class TeamsController : ControllerBase
         var team = await _db.Teams
             .Include(t => t.Competition).Include(t => t.Trainer)
             .FirstOrDefaultAsync(t => t.SupporterJoinKey != null && t.SupporterJoinKey.ToUpper() == keyUpper);
-        if (team is null) return NotFound(new { message = "No team matches that key. Double-check with the trainer." });
+        if (team is null) return NotFound(new { message = "No team matches that code. Check it with your trainer." });
 
         // Don't let the team's own trainer request to "support" their own team.
         if (team.TrainerUserId == userId)
@@ -442,7 +445,7 @@ public class TeamsController : ControllerBase
         if (team is null) return (null, NotFound());
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userId)) return (null, Unauthorized());
-        if (team.TrainerUserId != userId && !User.IsInRole(Roles.Admin)
+        if (team.TrainerUserId != userId && !await _db.CanManageAsync(User, team.CompetitionId)
             && !await _db.IsClubManagerAsync(User, team.ClubId)) return (null, Forbid());
         return (team, null);
     }
@@ -453,7 +456,7 @@ public class TeamsController : ControllerBase
         if (string.IsNullOrEmpty(userId)) return false;
         if (User.IsInRole(Roles.Admin)) return true;
         var team = await _db.Teams.AsNoTracking().FirstOrDefaultAsync(t => t.Id == teamId);
-        return team is not null && (team.TrainerUserId == userId || await _db.IsClubManagerAsync(User, team.ClubId));
+        return team is not null && (team.TrainerUserId == userId || await _db.CanManageAsync(User, team.CompetitionId) || await _db.IsClubManagerAsync(User, team.ClubId));
     }
 
     private static string GenerateKey()

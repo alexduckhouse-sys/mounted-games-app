@@ -1,25 +1,27 @@
+import { tr } from '../i18n/translate.ts';
 import type { ClubMember, ClubRoleChange, MemberRole, TrainerRequest } from '../types';
 
 /** The three groups on the Members screen, most senior first. */
-export const MEMBER_GROUPS: { role: MemberRole; title: string }[] = [
-  { role: 'Manager', title: 'Club managers' },
-  { role: 'Trainer', title: 'Trainers' },
-  { role: 'Member', title: 'Members' },
-];
+export const MEMBER_ROLES: MemberRole[] = ['Manager', 'Trainer', 'Member'];
+
+const GROUP_KEY = { Manager: 'acct.members.group.manager', Trainer: 'acct.members.group.trainer', Member: 'acct.members.group.member' } as const;
+const ROLE_KEY = { Manager: 'acct.members.role.manager', Trainer: 'acct.members.role.trainer', Member: 'acct.members.role.member' } as const;
+
+export const memberGroups = (): { role: MemberRole; title: string }[] => MEMBER_ROLES.map((role) => ({ role, title: tr(GROUP_KEY[role]) }));
 
 /** The three choices on a person's role switch. */
-export const ROLE_LABEL: Record<MemberRole, string> = { Manager: 'Club manager', Trainer: 'Trainer', Member: 'Member' };
+export const roleLabel = (role: MemberRole): string => tr(ROLE_KEY[role]);
 
 /** Groups with nobody in them are left out. */
 export function groupMembers(members: readonly ClubMember[]): { role: MemberRole; title: string; people: ClubMember[] }[] {
-  return MEMBER_GROUPS
+  return memberGroups()
     .map((group) => ({ ...group, people: members.filter((m) => m.role === group.role) }))
     .filter((group) => group.people.length > 0);
 }
 
 /** "Stockport A, B" is what the design shows for a trainer; others have no second line unless a request is waiting. */
 export function memberSubline(member: ClubMember): string {
-  if (member.awaitingAdmin) return 'Waiting for an admin to approve';
+  if (member.awaitingAdmin) return tr('acct.members.awaitingAdmin');
   return member.role === 'Member' ? '' : member.teams.join(', ');
 }
 
@@ -31,7 +33,7 @@ export function canEditMember(member: ClubMember, myId: string | undefined, isAd
 
 /** "Wants to join as {role}". */
 export function wantsToJoinAs(request: TrainerRequest): string {
-  return request.requestedRole === 'Manager' ? 'a club manager' : 'a trainer';
+  return request.requestedRole === 'Manager' ? tr('acct.members.asManager') : tr('acct.members.asTrainer');
 }
 
 /** The list after a role change came back: applied at once, or filed with the admins and left as it was. */

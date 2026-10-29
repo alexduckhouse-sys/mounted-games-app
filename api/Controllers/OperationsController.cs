@@ -1,3 +1,5 @@
+using MountedGames.Api.Security;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -118,6 +120,8 @@ public class OperationsController(
 
     [HttpGet("arena-crew-sheet")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<ArenaCrewPropSheetDto>> GetArenaCrewSheet(
         int competitionId,
         [FromQuery] int? sessionId = null,

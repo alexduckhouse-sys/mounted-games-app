@@ -1,3 +1,5 @@
+using MountedGames.Api.Security;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Data;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
@@ -267,8 +269,26 @@ public class CommerceController(AppDbContext db) : ControllerBase
         return NoContent();
     }
 
+    /// <summary>The events whose shop has at least one item on sale, so the shop page lists only those.</summary>
+    [HttpGet("competitions/with-items")]
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
+    public async Task<ActionResult<IReadOnlyList<int>>> CompetitionsWithItems(CancellationToken cancellationToken)
+    {
+        var ids = await db.Set<CompetitionListing>()
+            .AsNoTracking()
+            .Where(x => x.Status == CommerceListingStatus.Approved && x.CatalogueItem!.IsActive)
+            .Select(x => x.CompetitionId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        return ids;
+    }
+
     [HttpGet("competitions/{competitionId:int}/listings")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<IReadOnlyList<PublicCompetitionListingDto>>> PublicListings(
         int competitionId,
         CancellationToken cancellationToken)
@@ -348,6 +368,8 @@ public class CommerceController(AppDbContext db) : ControllerBase
 
     [HttpGet("competitions/{competitionId:int}/settings")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<EventCommerceSettingsDto>> Settings(
         int competitionId,
         CancellationToken cancellationToken)
@@ -558,7 +580,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
             if (replay is not null)
             {
                 if (!Matches(replay, TestPaymentTarget.Order, id, TestPaymentOperation.Checkout, request.Outcome))
-                    return Conflict(new { message = "That idempotency key was already used for a different payment action." });
+                    return Conflict(new { message = "This payment is already being processed. Refresh the page and check your orders." });
                 return new DemoOrderPaymentResultDto(order.ToDto(), replay.ToDto());
             }
             if (order.Status is CommerceOrderStatus.Paid or CommerceOrderStatus.Cancelled or CommerceOrderStatus.Refunded)
@@ -628,7 +650,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
         if (userId is null) return Unauthorized();
         var key = request.IdempotencyKey?.Trim();
         if (string.IsNullOrEmpty(key) || key.Length > 100)
-            return BadRequest(new { message = "An idempotency key of at most 100 characters is required." });
+            return BadRequest(new { message = "Something went wrong sending that payment. Refresh the page and try again." });
         return await InSerializableTransactionAsync<DemoOrderPaymentResultDto>(async () =>
         {
             var order = await _orders.LoadAsync(id, cancellationToken);
@@ -639,7 +661,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
             if (replay is not null)
             {
                 if (!Matches(replay, TestPaymentTarget.Order, id, TestPaymentOperation.Refund, null))
-                    return Conflict(new { message = "That idempotency key was already used for a different payment action." });
+                    return Conflict(new { message = "This payment is already being processed. Refresh the page and check your orders." });
                 return new DemoOrderPaymentResultDto(order.ToDto(), replay.ToDto());
             }
             var paidPayment = order.TestPayments
@@ -756,7 +778,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
             if (replay is not null)
             {
                 if (!Matches(replay, TestPaymentTarget.SectionSignup, id, TestPaymentOperation.Checkout, request.Outcome))
-                    return Conflict(new { message = "That idempotency key was already used for a different payment action." });
+                    return Conflict(new { message = "This payment is already being processed. Refresh the page and check your orders." });
                 return new DemoEntryPaymentResultDto(signup.Id, signup.Status, signup.PaidAt, replay.ToDto());
             }
             if (signup.Status != SignupPaymentStatus.Pending)
@@ -831,7 +853,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
         if (userId is null) return Unauthorized();
         var key = request.IdempotencyKey?.Trim();
         if (string.IsNullOrEmpty(key) || key.Length > 100)
-            return BadRequest(new { message = "An idempotency key of at most 100 characters is required." });
+            return BadRequest(new { message = "Something went wrong sending that payment. Refresh the page and try again." });
         return await InSerializableTransactionAsync<DemoEntryPaymentResultDto>(async () =>
         {
             var signup = await db.SectionSignups.Include(x => x.Section)
@@ -844,7 +866,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
             if (replay is not null)
             {
                 if (!Matches(replay, TestPaymentTarget.SectionSignup, id, TestPaymentOperation.Refund, null))
-                    return Conflict(new { message = "That idempotency key was already used for a different payment action." });
+                    return Conflict(new { message = "This payment is already being processed. Refresh the page and check your orders." });
                 return new DemoEntryPaymentResultDto(signup.Id, signup.Status, signup.PaidAt, replay.ToDto());
             }
             var paidPayment = await db.Set<TestPaymentRecord>()
@@ -984,7 +1006,7 @@ public class CommerceController(AppDbContext db) : ControllerBase
     {
         var key = request.IdempotencyKey?.Trim();
         if (string.IsNullOrEmpty(key) || key.Length > 100)
-            return "An idempotency key of at most 100 characters is required.";
+            return "Something went wrong sending that payment. Refresh the page and try again.";
         return Enum.IsDefined(request.Outcome) ? null : "Invalid test outcome.";
     }
 

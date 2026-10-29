@@ -1,3 +1,5 @@
+using MountedGames.Api.Security;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,6 +17,8 @@ public class RulebooksController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<IReadOnlyList<RulebookSummaryDto>>> List(CancellationToken cancellationToken) =>
         await db.Set<Rulebook>().AsNoTracking()
             .OrderBy(r => r.Title).ThenByDescending(r => r.UpdatedAt)
@@ -23,6 +27,8 @@ public class RulebooksController(AppDbContext db) : ControllerBase
 
     [HttpGet("{id:int}")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<RulebookDto>> Get(int id, CancellationToken cancellationToken)
     {
         var row = await db.Set<Rulebook>().AsNoTracking().FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
@@ -102,8 +108,8 @@ public class RulebooksController(AppDbContext db) : ControllerBase
         var source = Normalise(request.SourceUrl);
         if (source?.Length > 2000) return "Source URL must be 2000 characters or fewer.";
         if (source is not null && (!Uri.TryCreate(source, UriKind.Absolute, out var uri)
-                || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)))
-            return "Source URL must be an absolute http or https URL.";
+                || uri.Scheme != Uri.UriSchemeHttps || string.IsNullOrEmpty(uri.Host) || !string.IsNullOrEmpty(uri.UserInfo)))
+            return "Use an https link without a username or password.";
         return null;
     }
 

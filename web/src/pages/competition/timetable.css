@@ -5,8 +5,10 @@
 .tt-chips { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 10px; }
 .tt-chip {
   display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 0 8px 0 12px; border: 0; border-radius: 16px;
-  background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); font: 600 13px/1 var(--mg-font); cursor: pointer;
+  position: relative; background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)); font: 600 13px/1 var(--mg-font); cursor: pointer;
 }
+/* The chip stays 32px tall; the tap area is 44px. */
+.tt-chip::after { content: ""; position: absolute; inset: -6px 0; }
 
 /* The timing sheet (DelaySheet): minutes to move the times by, typed. */
 .tt-delay-form { display: flex; flex-direction: column; gap: 10px; }
@@ -111,12 +113,12 @@ a.tt-row:hover { background: rgb(var(--mg-subtle)); }
 a.tt-row:focus-visible { outline-offset: -2px; }
 .tt-time { font: 700 23px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; color: rgb(var(--mg-heading)); }
 .tt-time-late { color: rgb(var(--mg-late-time)); }
-.tt-time-early { color: #2E8B4F; }
+.tt-time-early { color: rgb(var(--mg-ok)); }
 .tt-event { display: flex; min-width: 0; flex-wrap: wrap; align-items: baseline; column-gap: 6px; padding: 3px 0; overflow-wrap: anywhere; }
 .tt-event strong { font-size: 16px; font-weight: 600; line-height: 1.25; }
 .tt-sub { font-size: 13px; line-height: 1.25; color: rgb(var(--mg-muted)); }
 .tt-planned { font-size: 13px; line-height: 1.25; color: rgb(var(--mg-late-time)); }
-.tt-planned-early { color: #2E8B4F; }
+.tt-planned-early { color: rgb(var(--mg-ok)); }
 .tt-onnow { color: rgb(var(--mg-red)); font: 700 10px/1 var(--mg-font); letter-spacing: .06em; }
 .tt-provisional-note { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); font: 500 14px/1.35 var(--mg-font); }
 .tt-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
@@ -125,8 +127,8 @@ a.tt-row:focus-visible { outline-offset: -2px; }
 .tt-key li { display: flex; align-items: center; gap: 5px; }
 .tt-chevron { color: rgb(var(--mg-faint)); }
 .tt-live { background: rgb(var(--mg-live-row)); box-shadow: inset 3px 0 0 rgb(var(--mg-red)); }
-.tt-followed:not(.tt-live) { background: rgb(var(--mg-tint)); box-shadow: inset 3px 0 0 #C08308; }
-.tt-fav-star { display: inline-block; margin-left: 5px; vertical-align: -1px; fill: #C08308; color: #C08308; }
+.tt-followed:not(.tt-live) { background: rgb(var(--mg-tint)); box-shadow: inset 3px 0 0 rgb(var(--mg-warn)); }
+.tt-fav-star { display: inline-block; margin-left: 5px; vertical-align: -1px; fill: rgb(var(--mg-warn)); color: rgb(var(--mg-warn)); }
 a.tt-live:hover { background: rgb(var(--mg-live-row)); filter: brightness(.98); }
 .tt-late .tt-time { color: rgb(var(--mg-late-time)); }
 .tt-finished { min-height: 44px; }
@@ -142,3 +144,7 @@ a.tt-live:hover { background: rgb(var(--mg-live-row)); filter: brightness(.98); 
   .tt-body > * { grid-column: 1 / -1; }
   .tt-body > .tt-group, .tt-body > .tt-cell { grid-column: auto; }
 }
+
+/* A followed team's drawn lane in an upcoming heat, with a bar in that lane's hatband colour. */
+.tt-lane { display: flex; align-items: center; gap: 6px; }
+.tt-hatband { flex: none; width: 4px; height: 14px; border-radius: 2px; box-shadow: 0 0 0 1px rgb(var(--mg-muted) / .5); }

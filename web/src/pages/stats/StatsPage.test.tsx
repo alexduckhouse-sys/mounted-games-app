@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
+import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
 import type { StatsProfile } from '../../types';
 import { StatsPage } from './StatsPage';
 
@@ -42,12 +43,18 @@ const detailed: StatsProfile = {
   seasons: [{ seasonId: 'example-season', teamProfileId: 'example-team', teamName: 'Example Club A', seasonName: '2031 Season', year: 2031, rank: 1, points: 3, eventsEntered: 1 }],
 };
 
+/** The one app-bar header a page sets: its title, subtitle and where Back goes. */
+function HeaderProbe() {
+  const { header } = useCompactPageBarState();
+  return <span data-testid="header">{header ? `${header.title}|${header.subtitle ?? ''}|${header.backTo ?? ''}|${header.backLabel ?? ''}` : 'none'}</span>;
+}
+
 function renderAt(path: string) {
-  return render(<MemoryRouter initialEntries={[path]}><Routes>
+  return render(<MemoryRouter initialEntries={[path]}><CompactPageBarProvider><Routes>
     <Route path="/stats" element={<StatsPage />} />
     <Route path="/stats/:kind" element={<StatsPage />} />
-    <Route path="/login" element={<p>Login page</p>} />
-  </Routes></MemoryRouter>);
+    <Route path="/competitions/:id" element={<p>Competition page</p>} />
+  </Routes><HeaderProbe /></CompactPageBarProvider></MemoryRouter>);
 }
 
 beforeEach(() => {
@@ -120,7 +127,7 @@ describe('StatsPage browse', () => {
     renderAt('/stats');
     expect(await screen.findByRole('link', { name: /Jones, Ann/ })).toBeInTheDocument();
     await userEvent.type(screen.getByRole('searchbox'), 'o');
-    expect(screen.getByText('Type at least two letters to narrow the list.')).toBeInTheDocument();
+    expect(screen.getByText('Type at least 2 letters.')).toBeInTheDocument();
     await userEvent.type(screen.getByRole('searchbox'), 'li');
     await waitFor(() => expect(screen.queryByRole('link', { name: /Jones, Ann/ })).not.toBeInTheDocument());
     expect(await screen.findByText('Oliver S.')).toBeInTheDocument();
@@ -166,36 +173,37 @@ describe('StatsPage browse', () => {
   it('goes back from a profile to the same tab', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: anonymous });
     renderAt('/stats/ponies?name=bramble');
-    expect(await screen.findByRole('link', { name: 'Back to the list' })).toHaveAttribute('href', '/stats?kind=ponies');
+    // One header, in the app bar: Back to the same tab, and the name.
+    await waitFor(() => expect(screen.getByTestId('header')).toHaveTextContent('Oliver S.|Pony stats|/stats?kind=ponies|Back to the list'));
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
   });
 });
 
 describe('StatsPage profile', () => {
-  it('shows the summary and a sign-in prompt to anonymous visitors', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: anonymous });
+  it('shows everyone the same detail, with no sign-in prompt', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: detailed });
     renderAt('/stats/riders?name=oliver%20s.');
     expect(screen.getByRole('status')).toHaveTextContent('Loading statistics…');
-    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Oliver S.');
-    expect(screen.getByText('Rider stats')).toBeInTheDocument();
+    expect(await screen.findByText('Games in individual and pairs')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Summary' })).toBeInTheDocument();
-    expect(screen.queryByText('Games in individual and pairs')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Competitions')).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Ponies ridden' })).toBeInTheDocument();
+    expect(screen.queryByText(/Sign in to see/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('header')).toHaveTextContent('Oliver S.|Rider stats|/stats?kind=riders|Back to the list');
     expect(api.get).toHaveBeenCalledWith('/stats/riders?name=oliver%20s.', expect.anything());
-    await userEvent.click(screen.getByRole('link', { name: 'Sign in' }));
-    expect(screen.getByText('Login page')).toBeInTheDocument();
   });
 
-  it('shows a team its games without a sign-in, and still asks for one for the rest', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: { ...anonymous, kind: 2, name: 'North A', raceFiguresAllFormats: true,
-      games: detailed.games, bestGames: ['Bending'], worstGames: [] } });
+  it('shows a team its games and the rest too', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: { ...detailed, kind: 2, name: 'North A', raceFiguresAllFormats: true, bestGames: ['Bending'], worstGames: [] } });
     renderAt('/stats/teams?name=north%20a');
     expect(await screen.findByText('Games')).toBeInTheDocument();
     expect(screen.getByText('Best').nextSibling).toHaveTextContent('Bending');
-    expect(screen.getByText('Sign in to see every competition and the rider and pony partnerships.')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: /Competitions/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Sign in to see/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Competitions')).toBeInTheDocument();
   });
 
-  it('shows games, competitions and ponies to a signed-in viewer', async () => {
-    vi.mocked(useAuth).mockReturnValue({ user: { id: 'u1' } } as unknown as ReturnType<typeof useAuth>);
+  it('lists games, competitions, seasons, clubs and ponies as full-width rows with a chevron', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: detailed });
     renderAt('/stats/riders?name=oliver%20s.');
     expect(await screen.findByText('Games in individual and pairs')).toBeInTheDocument();
@@ -205,12 +213,43 @@ describe('StatsPage profile', () => {
     expect(within(competitions).getByText(/U14 \(Pairs\) · North A on Bramble/)).toBeInTheDocument();
     expect(within(competitions).getByText('1st')).toBeInTheDocument();
     expect(within(competitions).getByText('of 6')).toBeInTheDocument();
-    expect(within(competitions).getByText(/A Final\. Point quota 50% \(3 of 6 points over 2 races\)/)).toBeInTheDocument();
+    expect(within(competitions).getByText(/A Final\. Avg points 50% \(3 of 6 points over 2 races\)/)).toBeInTheDocument();
     expect(within(competitions).getByText('2nd of 6')).toBeInTheDocument();
     expect(within(competitions).getAllByText('HC')).toHaveLength(2);
-    expect(within(screen.getByRole('list', { name: 'Ponies ridden' })).getByRole('link', { name: 'Bramble' })).toHaveAttribute('href', '/stats/ponies?name=bramble');
+    // Each row is one link across its whole width, with a chevron.
+    const pony = within(screen.getByRole('list', { name: 'Ponies ridden' })).getByRole('link', { name: /Bramble/ });
+    expect(pony).toHaveAttribute('href', '/stats/ponies?name=bramble');
+    expect(pony).toHaveClass('rf-row');
+    expect(pony.querySelector('.rf-chev')).not.toBeNull();
+    expect(pony).toHaveTextContent('2 entries · 2 competitions');
+    const season = within(screen.getByRole('list', { name: 'Seasons' })).getByRole('link', { name: /2031 Season/ });
+    expect(season).toHaveAttribute('href', '/seasons/example-season');
+    expect(season.querySelector('.rf-chev')).not.toBeNull();
     expect(within(screen.getByRole('list', { name: 'Clubs represented' })).getByRole('link', { name: /North/ })).toHaveAttribute('href', '/stats/clubs?name=north');
-    expect(within(screen.getByRole('list', { name: 'Seasons' })).getByText('2031 Season')).toBeInTheDocument();
+  });
+
+  it('links each past competition to its page', async () => {
+    vi.mocked(api.get).mockResolvedValue({ data: detailed });
+    renderAt('/stats/riders?name=oliver%20s.');
+    const competitions = await screen.findByLabelText('Competitions');
+    const open = within(competitions).getByRole('link', { name: 'Open Spring Games' });
+    expect(open).toHaveAttribute('href', '/competitions/1');
+    expect(open).toHaveClass('rf-row');
+    expect(within(competitions).getByRole('link', { name: 'Open Autumn Cup' })).toHaveAttribute('href', '/competitions/4');
+    await userEvent.click(open);
+    expect(screen.getByText('Competition page')).toBeInTheDocument();
+  });
+
+  it('fades the list in when another tab is chosen', async () => {
+    vi.mocked(api.get).mockImplementation(async (_url, config) => browse((config?.params as { kind: number }).kind, ['Someone']));
+    renderAt('/stats');
+    const before = (await screen.findByRole('link', { name: /Someone/ })).closest('.mg-settle');
+    expect(before).not.toBeNull();
+    await userEvent.click(screen.getByRole('link', { name: 'Ponies' }));
+    const after = (await screen.findByRole('link', { name: /Someone/ })).closest('.mg-settle');
+    expect(after).not.toBeNull();
+    // A new element each time, so the quick fade plays again.
+    expect(after).not.toBe(before);
   });
 
   it.each([

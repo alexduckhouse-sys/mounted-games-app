@@ -74,3 +74,16 @@ it('passes on that a header is plain, for pages that belong to no competition', 
   render(<CompactPageBarProvider><ReadPlain /><Plain /></CompactPageBarProvider>);
   expect(screen.getByTestId('plain')).toHaveTextContent('plain|/dashboard|Back to Me');
 });
+
+it('lets a higher-priority header win over its page’s own, whichever published last', () => {
+  function Page({ inner }: { inner: boolean }) {
+    usePageHeader({ title: 'Seasons', plain: true });
+    return inner ? <Inner /> : null;
+  }
+  function Inner() { usePageHeader({ title: 'Create a season', plain: true }, 1); return null; }
+  const { rerender } = render(<CompactPageBarProvider><ReadHeader /><Page inner /></CompactPageBarProvider>);
+  // The page's effect runs after its child's, but the child's title stays.
+  expect(screen.getByTestId('page-header')).toHaveTextContent('Create a season');
+  rerender(<CompactPageBarProvider><ReadHeader /><Page inner={false} /></CompactPageBarProvider>);
+  expect(screen.getByTestId('page-header')).toHaveTextContent('Seasons');
+});

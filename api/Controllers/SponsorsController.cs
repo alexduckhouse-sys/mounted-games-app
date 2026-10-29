@@ -1,3 +1,4 @@
+using MountedGames.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -38,6 +39,9 @@ public class SponsorsController(AppDbContext db, ILiveBroadcaster live, TimeProv
 
     /// <summary>The sponsors on show now: enabled, inside their dates and with somewhere to appear.</summary>
     [HttpGet]
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<IReadOnlyList<SponsorDto>>> List(int competitionId)
     {
         if (!await db.Competitions.AnyAsync(c => c.Id == competitionId)) return NotFound();
@@ -57,6 +61,9 @@ public class SponsorsController(AppDbContext db, ILiveBroadcaster live, TimeProv
     /// staff can also fetch it when it isn't, for the organiser's list.
     /// </summary>
     [HttpGet("{sponsorId:int}/logo")]
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<IActionResult> Logo(int competitionId, int sponsorId)
     {
         var logo = await db.Sponsors.AsNoTracking().Where(s => s.Id == sponsorId && s.CompetitionId == competitionId)
@@ -325,6 +332,7 @@ public class SponsorsController(AppDbContext db, ILiveBroadcaster live, TimeProv
     /// Adds a batch of "shown" counts to today's totals. Open to everyone and limited per address; the counters
     /// hold no address, account or device. Sponsors that aren't this competition's are ignored.
     /// </summary>
+    [AllowAnonymous]
     [HttpPost("exposures")]
     [EnableRateLimiting("sponsor-exposure")]
     public async Task<IActionResult> Exposures(int competitionId, SponsorExposureBatch batch)

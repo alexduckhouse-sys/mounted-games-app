@@ -8,6 +8,10 @@ import PrintEventPage from '../operations/PrintEventPage';
 import { TackCheckTab } from './TackCheckTab';
 import type { PrintableTackCheck } from './TackCheckPrint';
 import { chooseOption } from '../../test/select';
+import { CurrentCompetitionProvider } from '../../competition/CurrentCompetitionContext';
+import { TickerProvider } from '../../components/TickerContext';
+import { TopBarTicker } from '../../components/TopBarTicker';
+vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ canOrganise: () => true }) }));
 
 vi.mock('../../api', () => ({ api: { get: vi.fn(), put: vi.fn() } }));
 
@@ -31,7 +35,45 @@ function renderTab() {
   return render(<MemoryRouter><TackCheckTab competitionId="12" /></MemoryRouter>);
 }
 
+function renderDocked() {
+  return render(
+    <MemoryRouter>
+      <CurrentCompetitionProvider>
+        <TickerProvider>
+          <TackCheckTab competitionId="12" />
+          <TopBarTicker />
+        </TickerProvider>
+      </CurrentCompetitionProvider>
+    </MemoryRouter>,
+  );
+}
+
 beforeEach(() => { get.mockReset(); put.mockReset(); });
+
+describe('tack check tab with the dock', () => {
+  it('keeps the set-up on the page until the age group is configured', async () => {
+    get.mockResolvedValueOnce({ data: board(section({ configured: false, isEnabled: false })) });
+    renderDocked();
+    expect(await screen.findByLabelText('Run a tack check for Under 12')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Print tack check forms/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Tack check settings' })).not.toBeInTheDocument();
+  });
+
+  it('moves the settings, age group and print link into a sheet once configured', async () => {
+    get.mockResolvedValueOnce({ data: board(section(), section({ sectionId: 6, sectionName: 'Under 15' })) });
+    renderDocked();
+    expect(await screen.findByRole('button', { name: 'Tack check settings' })).toBeInTheDocument();
+    expect(screen.getByText('Results')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Sector 1')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Print tack check forms/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Tack check settings' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Tack check settings' });
+    expect(within(sheet).getByRole('link', { name: /Print tack check forms/ })).toBeInTheDocument();
+    expect(within(sheet).getByLabelText('Age group')).toBeInTheDocument();
+    expect(within(sheet).getByLabelText('Sector 1')).toBeInTheDocument();
+    expect(within(sheet).getByRole('button', { name: 'Save tack check' })).toBeInTheDocument();
+  });
+});
 
 describe('tack check tab', () => {
   it('starts an unconfigured age group with the default sectors, switched on, and saves the set-up', async () => {
@@ -71,7 +113,7 @@ describe('tack check tab', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save tack check' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Give every sector a name');
     await userEvent.type(first, 'Hat');
-    await userEvent.click(screen.getByLabelText(/Tack & Turnout table/));
+    await userEvent.click(screen.getByLabelText(/Tack and turnout table/));
     const max = screen.getByLabelText('Most points per rider per sector');
     await userEvent.clear(max);
     await userEvent.type(max, '0');
@@ -209,6 +251,16 @@ describe('tack check print view', () => {
     expect(screen.getByText('Ash A (withdrawn)')).toBeInTheDocument();
     expect(screen.getByText('No declaration yet')).toBeInTheDocument();
     expect(screen.getByText('No teams entered yet.')).toBeInTheDocument();
+  });
+
+  it('keeps each team in its own table body so its riders never split across two printed pages', async () => {
+    get.mockResolvedValueOnce({ data: printable() });
+    renderPrint();
+    await screen.findByRole('heading', { name: 'Under 12' });
+    const bodies = document.querySelectorAll('tbody.event-print-team');
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]).toHaveTextContent('Oak A (HC)');
+    expect(bodies[0]).toHaveTextContent('Ruby Reserve');
   });
 
   it('adds a tack bonus column to the printed results only when a section has bonus points', async () => {

@@ -1,3 +1,5 @@
+using MountedGames.Api.Security;
+using Microsoft.AspNetCore.RateLimiting;
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -18,10 +20,16 @@ public class ClubsController : ControllerBase
     public ClubsController(AppDbContext db) => _db = db;
 
     [HttpGet]
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<IEnumerable<ClubDto>> List() =>
         (await _db.Clubs.OrderBy(c => c.Name).ToListAsync()).Select(c => c.ToDto());
 
     [HttpGet("{id:int}")]
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<ClubDto>> Get(int id)
     {
         var club = await _db.Clubs.FindAsync(id);
@@ -108,7 +116,7 @@ public class ClubsController : ControllerBase
             || await _db.Set<MountedGames.Api.Entities.Seasons.TeamProfile>().AnyAsync(p => p.ClubId == id)
             || await _db.ClubPayoutAccounts.AnyAsync(p => p.ClubId == id);
         if (inUse)
-            return Conflict(new { message = "This club has linked records and cannot be deleted." });
+            return Conflict(new { message = "This club has teams or members, so it can’t be deleted." });
         _db.Clubs.Remove(club);
         await _db.SaveChangesAsync();
         return NoContent();

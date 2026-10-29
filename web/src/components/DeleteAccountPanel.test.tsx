@@ -56,6 +56,18 @@ const openSheet = async () => {
   return within(screen.getByRole('dialog', { name: 'Delete your account?' }));
 };
 
+describe('DeleteAccountPanel tap targets and eye', () => {
+  it('has a full-size red button and an eye on the password box', async () => {
+    mount();
+    const button = screen.getByRole('button', { name: 'Delete my account' });
+    expect(button).toHaveClass('sp-red', 'sp-red-tall');
+    await userEvent.click(button);
+    const sheet = within(screen.getByRole('dialog', { name: 'Delete your account?' }));
+    await userEvent.click(sheet.getByRole('button', { name: 'Show password' }));
+    expect(sheet.getByLabelText(/password/i, { selector: 'input' })).toHaveAttribute('type', 'text');
+  });
+});
+
 describe('DeleteAccountPanel', () => {
   it('shows only the first button until asked, and keeping the account closes the sheet', async () => {
     mount();

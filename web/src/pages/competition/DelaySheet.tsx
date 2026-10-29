@@ -1,7 +1,8 @@
 import { useId, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Sheet } from '../../components/Sheet';
-import { delayInWords } from '../../lib/timetableRows';
+import { formatDelayDuration } from '../../lib/time';
+import { useT } from '../../i18n/LanguageContext';
 import '../../components/sitePages.css';
 
 /**
@@ -27,11 +28,13 @@ export function DelaySheet({ arena, lateMinutes, paused, busy, pace, rearrangeTo
   const [minutes, setMinutes] = useState('');
   const [error, setError] = useState<string | null>(null);
   const fieldId = useId();
+  const t = useT();
+  const late = Math.max(0, Math.round(lateMinutes));
 
   return (
     <Sheet
-      title={arena ? `${arena} timing` : 'Timing'}
-      description={lateMinutes > 0 ? `Running ${delayInWords(lateMinutes)} late` : 'Running on time'}
+      title={arena ? t('competition.timetable.delayTitleArena', { arena }) : t('competition.timetable.delayTitle')}
+      description={lateMinutes > 0 ? t('competition.timetable.late', { delay: late >= 60 ? formatDelayDuration(late) : t('competition.timetable.minutes', { count: late }) }) : t('competition.timetable.delayOnTime')}
       initialFocus="input"
       onClose={onClose}
     >
@@ -40,18 +43,18 @@ export function DelaySheet({ arena, lateMinutes, paused, busy, pace, rearrangeTo
           event.preventDefault();
           const parsed = Number(minutes);
           if (!Number.isInteger(parsed) || parsed === 0 || parsed < -720 || parsed > 720) {
-            setError('Enter a whole number of minutes from -720 to 720, but not 0.');
+            setError(t('competition.timetable.delayRange'));
             return;
           }
           setError(null);
           // The page's own notice sits behind the sheet, so a failure is said here too.
           if (await onShift(parsed)) close();
-          else setError('Couldn’t move the times. Check your signal and try again.');
+          else setError(t('competition.timetable.delayMoveFailed'));
         }
         return (
           <form className="tt-delay-form" noValidate onSubmit={(event) => void shift(event)}>
             <div className="tt-delay-row">
-              <label htmlFor={fieldId}>Move times by</label>
+              <label htmlFor={fieldId}>{t('competition.timetable.delayMoveBy')}</label>
               <input
                 id={fieldId}
                 type="number"
@@ -64,16 +67,16 @@ export function DelaySheet({ arena, lateMinutes, paused, busy, pace, rearrangeTo
                 aria-describedby={`${fieldId}-hint`}
                 className="tt-delay-input"
               />
-              <span aria-hidden="true">min</span>
+              <span aria-hidden="true">{t('competition.timetable.delayUnit')}</span>
             </div>
-            <p id={`${fieldId}-hint`} className="sp-note">A minus moves them earlier, for example −10.</p>
+            <p id={`${fieldId}-hint`} className="sp-note">{t('competition.timetable.delayHint')}</p>
             {error && <p className="tt-delay-error" role="alert">{error}</p>}
-            {pace != null && <p className="sp-note">Races are taking about {pace.toFixed(1)} minutes each.</p>}
+            {pace != null && <p className="sp-note">{t('competition.timetable.delayPace', { minutes: pace.toFixed(1) })}</p>}
             <div className="kit-acts">
-              <button type="submit" className="kit-pill kit-pill-fill" disabled={busy || !minutes.trim()}>Shift</button>
-              {paused && <button type="button" className="kit-pill" disabled={busy} onClick={onContinue}>Continue the timetable</button>}
+              <button type="submit" className="kit-pill kit-pill-fill" disabled={busy || !minutes.trim()}>{t('competition.timetable.delayShift')}</button>
+              {paused && <button type="button" className="kit-pill" disabled={busy} onClick={onContinue}>{t('competition.timetable.delayContinue')}</button>}
             </div>
-            {rearrangeTo && <Link className="ev-text-btn" to={rearrangeTo}>Change the order or add a break</Link>}
+            {rearrangeTo && <Link className="ev-text-btn" to={rearrangeTo}>{t('competition.timetable.delayRearrange')}</Link>}
           </form>
         );
       }}

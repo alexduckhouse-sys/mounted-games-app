@@ -7,6 +7,7 @@ import { api } from '../../api';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
 import { useToast } from '../../components/Toast';
+import { useDockAction } from '../../components/TickerContext';
 import { competitionCalendarUrl, competitionLink } from '../../lib/sharing';
 import {
   SPONSOR_PLACEMENTS, dateToEnd, dateToStart, endToDate, hasPlacement, isHttpsLink, parseSponsorAdmin, parseSponsorAdmins, sponsorStatus, startToDate, withPlacement,
@@ -85,6 +86,8 @@ export function SponsorsSharingPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const base = `/competitions/${competition.id}/sponsors`;
+  const canAdd = view.kind === 'list' && items != null && !busy && items.length < MAX_SPONSORS;
+  const docked = useDockAction(canAdd ? { label: t('ops2.sponsors.titleAdd'), icon: 'plus', onClick: () => { setError(null); setView({ kind: 'add' }); } } : null);
 
   useEffect(() => {
     let cancelled = false;
@@ -180,9 +183,9 @@ export function SponsorsSharingPage() {
                   ))}
                   {items.length === 0 && <div className="rf-row"><span className="rf-t2">{t('ops2.sponsors.none')}</span></div>}
                 </RefineList>
-                <button type="button" className="ops-addbar ops-addbar-gap" disabled={busy || items.length >= MAX_SPONSORS} onClick={() => { setError(null); setView({ kind: 'add' }); }}>
+                {!docked && <button type="button" className="ops-addbar ops-addbar-gap" disabled={busy || items.length >= MAX_SPONSORS} onClick={() => { setError(null); setView({ kind: 'add' }); }}>
                   <Plus className="h-4 w-4" aria-hidden="true" />{t('ops2.sponsors.titleAdd')}
-                </button>
+                </button>}
               </>
             )}
 
@@ -269,7 +272,7 @@ function AddSponsor({ busy, onCreate, onProblem }: { busy: boolean; onCreate: (n
         <label className="rf-fld">{t('ops2.sponsors.name')}<input autoFocus value={name} placeholder={t('ops2.sponsors.namePlaceholder')} maxLength={80} onChange={(event) => setName(event.target.value)} /></label>
         <label className="rf-fld">{t('ops2.sponsors.website')}<input type="url" inputMode="url" value={link} placeholder="https://" maxLength={300} onChange={(event) => setLink(event.target.value)} /></label>
       </div>
-      <button type="submit" hidden aria-hidden="true" tabIndex={-1}>{t('ops2.sponsors.add')}</button>
+      <div className="kit-acts ops-gap"><button type="submit" className="kit-pill kit-pill-fill" disabled={busy || !name.trim()}>{t('ops3.plan.sponsors.addPill')}</button></div>
     </form>
   );
 }

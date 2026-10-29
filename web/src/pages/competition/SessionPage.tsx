@@ -17,15 +17,14 @@ import { Sheet } from '../../components/Sheet';
 import { useToast } from '../../components/Toast';
 import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useDialogFocus } from '../../components/useDialogFocus';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import {
-  AlertTriangle, ChevronLeft, ClipboardList, Coffee, Wand2, X, Table2, Trophy,
+  AlertTriangle, ChevronLeft, ClipboardList, Coffee, SlidersHorizontal, Wand2, Table2, Trophy,
 } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api';
-import type { CompetitionDetail, DeclarationForm, Heat, Session, StandingRow } from '../../types';
+import { TieBreakRule, type CompetitionDetail, type DeclarationForm, type Heat, type Session, type StandingRow } from '../../types';
 import type { QueuedScore } from '../../offline/scoreOutbox';
 import { SessionEndTransition } from './SessionEndTransition';
 import { HeatScores } from './HeatScores';
@@ -50,6 +49,7 @@ import { laneLabel, LANE_ROTATION_LABELS, LaneRotationMode, type LaneRotationMod
 import { lanesOf, qualifiersOf, restOfQualifier, sitOutPlaces } from './laneRules';
 import { useRaceNotes } from './useRaceNotes';
 import { formatPoints } from '../../lib/formatPoints';
+import { heatTotals as rankHeat, placeText } from '../../lib/raceSummary';
 import { ScorerLinksCard } from './ScorerLinksCard';
 import { QrAccessModal } from '../../components/QrAccessModal';
 import { bibAccent } from '../../lib/bib';
@@ -173,6 +173,7 @@ function SessionScoring() {
   const outbox = useScoreOutbox();
   const [showTransition, setShowTransition] = useState(false);
   const [showGenerator, setShowGenerator] = useState(false);
+  const [showAdjustments, setShowAdjustments] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
   const [callSheetOpen, setCallSheetOpen] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -891,21 +892,14 @@ function SessionScoring() {
                   <div className="flex flex-wrap items-center gap-3">
                     <LaneRotationControl session={session} onChanged={reload} />
                     {orderedHeats.some((h) => h.raceRoundStage) && <QualifiersControl session={session} onChanged={reload} />}
-                    <button className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => setShowGenerator(true)}>
+                    <button className="btn-ghost min-h-11 px-3 text-sm" onClick={() => setShowGenerator(true)}>
                       <Wand2 className="w-3.5 h-3.5" /> Set up heats
                     </button>
                   </div>
                   {viewHeat && (
-                    <ScoreAdjustmentsPanel
-                      session={session}
-                      heat={viewHeat}
-                      activeRaceId={activeRaceId}
-                      hcTeamIds={hcTeamIds}
-                      raceNotes={{ ...savedNotes, ...summaryNotes }}
-                      onChanged={reload}
-                      onError={setSaveError}
-                      onRaceCleared={clearRaceDraft}
-                    />
+                    <button type="button" className="btn-ghost min-h-11 px-3 text-sm" onClick={() => setShowAdjustments(true)}>
+                      <SlidersHorizontal className="h-4 w-4" aria-hidden="true" /> Score adjustments
+                    </button>
                   )}
                   <div className="mt-4 border-t border-[rgb(var(--mg-rule-soft))] pt-3">
                     <SessionDutyBoard competitionId={competition.id} session={session} />
@@ -930,7 +924,7 @@ function SessionScoring() {
           ) : (
             <div className="card flex flex-wrap items-center justify-between gap-2 p-3 text-sm text-slate-500 dark:text-slate-300">
               No heats in this session yet.
-              <button className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => setShowGenerator(true)}>
+              <button className="btn-ghost min-h-11 px-3 text-sm" onClick={() => setShowGenerator(true)}>
                 <Wand2 className="w-3.5 h-3.5" /> Set up heats
               </button>
             </div>
@@ -952,20 +946,32 @@ function SessionScoring() {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {showGenerator && (
-          <GenerateHeatsModal
-            session={session}
-            onClose={() => setShowGenerator(false)}
-            onDone={() => { setShowGenerator(false); reload(); }}
-          />
-        )}
-      </AnimatePresence>
+      {showAdjustments && viewHeat && (
+        <ScoreAdjustmentsSheet
+          session={session}
+          heat={viewHeat}
+          activeRaceId={activeRaceId}
+          hcTeamIds={hcTeamIds}
+          raceNotes={{ ...savedNotes, ...summaryNotes }}
+          onChanged={reload}
+          onRaceCleared={clearRaceDraft}
+          onClose={() => setShowAdjustments(false)}
+        />
+      )}
+
+      {showGenerator && (
+        <GenerateHeatsModal
+          session={session}
+          onClose={() => setShowGenerator(false)}
+          onDone={() => { setShowGenerator(false); reload(); }}
+        />
+      )}
 
       {mayManage && postRaceRecap?.session.competitionId === competition.id && postRaceRecap.session.id === session.id && (
         <PostRaceCommentatorModal
           competition={competition}
           recap={postRaceRecap}
+          hcTeamIds={hcTeamIds}
           onClose={() => setPostRaceRecap(null)}
         />
       )}
@@ -991,12 +997,15 @@ function SessionScoring() {
 function PostRaceCommentatorModal({
   competition,
   recap,
+  hcTeamIds,
   onClose,
 }: {
   competition: CompetitionDetail;
   recap: PostRaceRecapState;
+  hcTeamIds: ReadonlySet<number>;
   onClose: () => void;
 }) {
+  const { canOrganise } = useAuth();
   const sectionId = recap.session.competitionSectionId ?? competition.sections[0]?.id ?? -1;
   const section = competition.sections.find((s) => s.id === sectionId) ?? null;
   const cutoffPlaces = section?.finalistCount ?? 6;
@@ -1008,18 +1017,11 @@ function PostRaceCommentatorModal({
     started: standings.some((row) => row.racesRun > 0),
   }), [standings]);
 
+  // The same ranking as the announcer card: tie-breaks applied, "=1st" only while still level, hors concours unranked.
   const heatTotals = useMemo(() => {
-    const entries = recap.heat.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex);
-    return entries
-      .map((entry) => {
-        const pts = recap.heat.races.reduce(
-          (sum, r) => sum + (r.results.find((res) => res.teamId === entry.teamId)?.points ?? 0),
-          0,
-        );
-        return { teamId: entry.teamId, teamName: entry.teamName, laneIndex: entry.laneIndex, points: pts };
-      })
-      .sort((a, b) => b.points - a.points || a.laneIndex - b.laneIndex);
-  }, [recap.heat]);
+    const races = recap.heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+    return rankHeat(recap.heat, races, races.length - 1, hcTeamIds, section?.tieBreakRule ?? TieBreakRule.Countback);
+  }, [recap.heat, hcTeamIds, section?.tieBreakRule]);
 
 
   return (
@@ -1029,15 +1031,15 @@ function PostRaceCommentatorModal({
           {/* Updated heat table */}
           <section aria-label="Updated heat table" className="space-y-2">
             <h3 className="mg-display m-0 flex items-center gap-1.5 text-sm font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-              <Table2 className="h-4 w-4" aria-hidden="true" /> Updated Heat Table · {recap.heat.label || 'Heat'}
+              <Table2 className="h-4 w-4" aria-hidden="true" /> Updated heat table · {recap.heat.label || 'Heat'}
             </h3>
             <ul className="m-0 flex flex-wrap gap-2 list-none p-0 text-xs">
-              {heatTotals.map((row, idx) => (
+              {heatTotals.map((row) => (
                 <li
                   key={row.teamId}
                   className="rounded-md border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-ground))] px-2.5 py-1 font-semibold"
                 >
-                  {ordinal(idx + 1)} {row.teamName}: {formatPoints(row.points)} pts
+                  {row.hc ? '' : `${placeText(row.position ?? 0, row.joint)} `}{row.teamName}{row.hc ? ' (HC)' : ''}: {formatPoints(row.points)} pts
                 </li>
               ))}
             </ul>
@@ -1051,10 +1053,10 @@ function PostRaceCommentatorModal({
 
           {/* Official section toplist */}
           <section aria-label="Updated section toplist" className="space-y-2">
-            <p className="m-0 text-xs">Queued scores are not included in the official standings yet.</p>
+            <p className="m-0 text-xs">Scores waiting for signal aren’t in the official toplist yet.</p>
             <div className="flex items-center justify-between gap-2">
               <h3 className="mg-display m-0 flex items-center gap-1.5 text-sm font-bold uppercase tracking-[0.04em] text-[rgb(var(--mg-heading))]">
-                <Trophy className="h-4 w-4" aria-hidden="true" /> Official Section Toplist
+                <Trophy className="h-4 w-4" aria-hidden="true" /> Official toplist
               </h3>
               <span className="text-xs font-semibold text-[rgb(var(--mg-muted))]">
                 Top {cutoffPlaces} Finals cut-off
@@ -1088,7 +1090,7 @@ function PostRaceCommentatorModal({
           </section>
 
           {/* 1-tap stream overlay buttons */}
-          <StreamControlStrip competitionId={competition.id} sectionId={sectionId} activeHeatId={recap.heat.id} compact />
+          {canOrganise(competition) && <StreamControlStrip competitionId={competition.id} sectionId={sectionId} activeHeatId={recap.heat.id} compact />}
           <div className="kit-acts">
             <button type="button" className="kit-pill kit-pill-fill" onClick={() => close()}>Close</button>
           </div>
@@ -1157,18 +1159,38 @@ function QualifiersControl({ session, onChanged }: { session: Session; onChanged
 }
 
 /** Run-off +0.01 tie-breaker, per-race manual score override, team point adjustment, 1-tap HC, Under Review flag, and mid-session race controls for organisers. */
-function ScoreAdjustmentsPanel({
-  session, heat, activeRaceId, hcTeamIds, raceNotes, onChanged, onError, onRaceCleared,
-}: {
+/** The sheet itself sits beside the page's other sheets, not inside Organiser tools, so a swipe or Escape closes only this one. */
+function ScoreAdjustmentsSheet({ onClose, ...props }: AdjustmentsProps & { onClose: () => void }) {
+  return (
+    <Sheet title="Score adjustments" description="Run-offs, points by hand, hors concours, Under Review and race changes for this heat." onClose={onClose}>
+      {({ close }) => (
+        <>
+          <ScoreAdjustmentsBody {...props} />
+          <div className="kit-acts"><button type="button" className="kit-pill" onClick={() => close()}>Close</button></div>
+        </>
+      )}
+    </Sheet>
+  );
+}
+
+interface AdjustmentsProps {
   session: Session;
   heat: Heat;
   activeRaceId: number | null;
   hcTeamIds: Set<number>;
   raceNotes: Record<number, string>;
   onChanged: () => void;
-  onError: (msg: string | null) => void;
   onRaceCleared: (raceId: number, heatId: number) => void;
-}) {
+}
+
+/** The adjustments themselves. Save errors show here, inside the sheet, not on the page behind it. */
+function ScoreAdjustmentsBody({
+  session, heat, activeRaceId, hcTeamIds, raceNotes, onChanged, onRaceCleared,
+}: AdjustmentsProps) {
+  const [error, setError] = useState<string | null>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+  // The sheet scrolls, so bring a new error into view rather than leaving it above the fold.
+  useEffect(() => { if (error) errorRef.current?.scrollIntoView?.({ block: 'nearest' }); }, [error]);
   const entries = heat.entries.slice().sort((a, b) => a.laneIndex - b.laneIndex);
   const races = heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex);
   const defaultTeamId = entries[0]?.teamId ?? 0;
@@ -1233,7 +1255,7 @@ function ScoreAdjustmentsPanel({
 
   async function recordRunoffWinner() {
     setAppliedRunoffWinnerId(runoffWinnerId);
-    onError(null);
+    setError(null);
     const winnerTotal = standings.find((s) => s.teamId === runoffWinnerId)?.rawTotal;
     const tiedIds = standings.filter((s) => s.rawTotal === winnerTotal).map((s) => s.teamId);
     if (tiedIds.length >= 2) {
@@ -1243,7 +1265,7 @@ function ScoreAdjustmentsPanel({
         onChanged();
       } catch {
         // The order on screen is only local until the server has it, and finals seeding reads the server's.
-        onError('Couldn’t save the run-off result. Check your signal and try again.');
+        setError('Couldn’t save the run-off result. Check your signal and try again.');
       }
     }
   }
@@ -1265,21 +1287,21 @@ function ScoreAdjustmentsPanel({
     });
     try {
       await api.post(`/races/${targetRace.id}/results`, { places, reason });
-      onError(null);
+      setError(null);
       onChanged();
     } catch {
-      onError('Couldn’t save score adjustment. Check your signal and try again.');
+      setError('Couldn’t save score adjustment. Check your signal and try again.');
     }
   }
 
   async function saveOverride() {
     const pts = Number(overridePoints);
     if (overridePoints.trim() === '' || Number.isNaN(pts) || pts < 0 || !Number.isInteger(pts * 2)) {
-      onError('Enter whole or half points, such as 3 or 2.5.');
+      setError('Enter whole or half points, such as 3 or 2.5.');
       return;
     }
     const formatted = formatPoints(pts);
-    const reason = overrideReason.trim() || `Manual score override to ${formatted} pts`;
+    const reason = overrideReason.trim() || `Points set to ${formatted} pts`;
     await submitPointDirective(overrideTeamId, `[pts:${formatted}]`, reason, pts);
     setOverrideReason('');
   }
@@ -1287,16 +1309,16 @@ function ScoreAdjustmentsPanel({
   async function applyAdjustment() {
     const delta = Number(adjustDelta);
     if (adjustDelta.trim() === '' || Number.isNaN(delta) || delta === 0) {
-      onError('Enter a non-zero point adjustment.');
+      setError('Enter a non-zero point adjustment.');
       return;
     }
     if (!Number.isInteger(delta * 2)) {
-      onError('Adjust by whole or half points, such as 1 or -0.5.');
+      setError('Adjust by whole or half points, such as 1 or -0.5.');
       return;
     }
     const reason = adjustReason.trim();
     if (!reason) {
-      onError('Add a reason for this point adjustment.');
+      setError('Add a reason for this point adjustment.');
       return;
     }
     const formatted = formatPoints(Math.abs(delta));
@@ -1310,10 +1332,10 @@ function ScoreAdjustmentsPanel({
     const nextHc = !hcTeamIds.has(hcTargetTeamId);
     try {
       await api.put(`/competitions/${session.competitionId}/teams/${hcTargetTeamId}`, { isHorsConcours: nextHc });
-      onError(null);
+      setError(null);
       onChanged();
     } catch {
-      onError('Couldn’t change hors concours. Check your signal and try again.');
+      setError('Couldn’t change hors concours. Check your signal and try again.');
     }
   }
 
@@ -1328,10 +1350,10 @@ function ScoreAdjustmentsPanel({
       });
       setLocalReviewOverrides((cur) => ({ ...cur, [key]: nextReview }));
       setReviewNote('');
-      onError(null);
+      setError(null);
       onChanged();
     } catch {
-      onError('Couldn’t update Under Review status. Check your signal and try again.');
+      setError('Couldn’t update Under Review status. Check your signal and try again.');
     }
   }
 
@@ -1342,10 +1364,10 @@ function ScoreAdjustmentsPanel({
       writeScoringDraft(draftKeyFor(heat.id, targetRace.id), []);
       onRaceCleared(targetRace.id, heat.id);
       updateOutbox((list) => list.filter((q) => q.raceId !== targetRace.id));
-      onError(null);
+      setError(null);
       onChanged();
     } catch {
-      onError('Couldn’t clear race for re-run. Check your signal and try again.');
+      setError('Couldn’t clear race for re-run. Check your signal and try again.');
     }
   }
 
@@ -1353,7 +1375,7 @@ function ScoreAdjustmentsPanel({
     if (!targetRace) return;
     const nextName = raceNameDraft.trim();
     if (!nextName) {
-      onError('Enter the replacement race name.');
+      setError('Enter the replacement race name.');
       return;
     }
     const raceIndex = races.findIndex((r) => r.id === targetRace.id);
@@ -1374,10 +1396,10 @@ function ScoreAdjustmentsPanel({
         }
       }
       setRaceNameDraft('');
-      onError(null);
+      setError(null);
       onChanged();
     } catch {
-      onError('Couldn’t change race. Check your signal and try again.');
+      setError('Couldn’t change race. Check your signal and try again.');
     }
   }
 
@@ -1396,22 +1418,23 @@ function ScoreAdjustmentsPanel({
           // Non-fatal if chat announcement fails
         }
       }
-      onError(null);
+      setError(null);
       onChanged();
     } catch {
-      onError('Couldn’t cancel race. Check your signal and try again.');
+      setError('Couldn’t cancel race. Check your signal and try again.');
     }
   }
 
   return (
-    <div className="mt-3 space-y-3 border-t border-slate-200 dark:border-slate-700 pt-3 text-xs">
+    <div className="space-y-3 text-sm">
+      {error && <div ref={errorRef}><Notice>{error}</Notice></div>}
       {cardsEnabled && entries.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[rgb(var(--mg-rule-soft))] bg-[rgb(var(--mg-subtle))] px-3 py-2">
           <span className="font-semibold">Disciplinary card</span>
           <div className="flex flex-wrap items-center gap-1.5">
             <select
               aria-label="Disciplinary card team"
-              className="input !min-h-0 !py-1 text-xs"
+              className="input min-h-11 text-sm"
               value={cardTeamId}
               onChange={(e) => setCardTeamId(Number(e.target.value))}
             >
@@ -1425,7 +1448,7 @@ function ScoreAdjustmentsPanel({
                   key={opt}
                   type="button"
                   aria-pressed={active}
-                  className={`btn-ghost !py-1 !px-2 text-xs ${active ? 'ring-1 ring-[rgb(var(--mg-heading))] font-bold' : ''}`}
+                  className={`btn-ghost min-h-11 px-3 text-sm ${active ? 'ring-1 ring-[rgb(var(--mg-heading))] font-bold' : ''}`}
                   onClick={() => {
                     setStoredCard(session.competitionId, cardTeamId, opt === 'none' ? null : opt);
                     setCardsTick((t) => t + 1);
@@ -1446,14 +1469,14 @@ function ScoreAdjustmentsPanel({
             <span className="font-semibold">Short-handed team</span>
             <select
               aria-label="Short-handed team"
-              className="input !min-h-0 !py-1 text-xs"
+              className="input min-h-11 text-sm"
               value={hcTargetTeamId}
               onChange={(e) => setHcTargetTeamId(Number(e.target.value))}
             >
               {entries.map((e) => <option key={e.teamId} value={e.teamId}>{e.teamName}</option>)}
             </select>
           </label>
-          <button type="button" className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => void toggleOneTapHc()}>
+          <button type="button" className="btn-ghost min-h-11 px-3 text-sm" onClick={() => void toggleOneTapHc()}>
             {hcTeamIds.has(hcTargetTeamId) ? 'Remove team HC' : 'Mark team HC (Hors Concours)'}
           </button>
         </div>
@@ -1465,14 +1488,14 @@ function ScoreAdjustmentsPanel({
             <span className="font-semibold">Run-off winner</span>
             <select
               aria-label="Run-off winner"
-              className="input !min-h-0 !py-1 text-xs"
+              className="input min-h-11 text-sm"
               value={runoffWinnerId}
               onChange={(e) => setRunoffWinnerId(Number(e.target.value))}
             >
               {entries.map((e) => <option key={e.teamId} value={e.teamId}>{e.teamName}</option>)}
             </select>
           </label>
-          <button type="button" className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => void recordRunoffWinner()}>
+          <button type="button" className="btn-ghost min-h-11 px-3 text-sm" onClick={() => void recordRunoffWinner()}>
             Record run-off winner
           </button>
           {appliedRunoffWinnerId != null && (
@@ -1493,7 +1516,7 @@ function ScoreAdjustmentsPanel({
             <span className="font-semibold">Under review team</span>
             <select
               aria-label="Under review team"
-              className="input !min-h-0 !py-1 text-xs"
+              className="input min-h-11 text-sm"
               value={reviewTeamId}
               onChange={(e) => setReviewTeamId(Number(e.target.value))}
             >
@@ -1506,13 +1529,13 @@ function ScoreAdjustmentsPanel({
               aria-label="Under review note"
               type="text"
               placeholder="e.g. Steward enquiry"
-              className="input !min-h-0 !py-1 text-xs"
+              className="input min-h-11 text-sm"
               value={reviewNote}
               onChange={(e) => setReviewNote(e.target.value)}
             />
           </label>
-          <button type="button" className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => void toggleUnderReview()}>
-            {underReviewTeamIds.has(reviewTeamId) ? 'Remove Under Review' : 'Flag Under Review'}
+          <button type="button" className="btn-ghost min-h-11 px-3 text-sm" onClick={() => void toggleUnderReview()}>
+            {underReviewTeamIds.has(reviewTeamId) ? 'Remove under review' : 'Flag under review'}
           </button>
           {underReviewTeamIds.size > 0 && (
             <div className="flex flex-wrap items-center gap-1.5" aria-label="Under review results">
@@ -1533,10 +1556,10 @@ function ScoreAdjustmentsPanel({
       {targetRace && entries.length > 0 && (
         <div className="flex flex-wrap items-end gap-2">
           <label className="flex flex-col gap-1">
-            <span className="font-semibold">Override team</span>
+            <span className="font-semibold">Team</span>
             <select
-              aria-label="Override team"
-              className="input !min-h-0 !py-1 text-xs"
+              aria-label="Team"
+              className="input min-h-11 text-sm"
               value={overrideTeamId}
               onChange={(e) => setOverrideTeamId(Number(e.target.value))}
             >
@@ -1549,24 +1572,24 @@ function ScoreAdjustmentsPanel({
               aria-label="Custom points"
               type="number"
               step="0.5"
-              className="input !min-h-0 !py-1 text-xs w-20"
+              className="input min-h-11 text-sm w-20"
               value={overridePoints}
               onChange={(e) => setOverridePoints(e.target.value)}
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="font-semibold">Override reason</span>
+            <span className="font-semibold">Reason</span>
             <input
-              aria-label="Override reason"
+              aria-label="Reason"
               type="text"
               placeholder="e.g. Combined heat"
-              className="input !min-h-0 !py-1 text-xs"
+              className="input min-h-11 text-sm"
               value={overrideReason}
               onChange={(e) => setOverrideReason(e.target.value)}
             />
           </label>
-          <button type="button" className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => void saveOverride()}>
-            Save override
+          <button type="button" className="btn-ghost min-h-11 px-3 text-sm" onClick={() => void saveOverride()}>
+            Set points
           </button>
         </div>
       )}
@@ -1577,7 +1600,7 @@ function ScoreAdjustmentsPanel({
             <span className="font-semibold">Adjustment team</span>
             <select
               aria-label="Adjustment team"
-              className="input !min-h-0 !py-1 text-xs"
+              className="input min-h-11 text-sm"
               value={adjustTeamId}
               onChange={(e) => setAdjustTeamId(Number(e.target.value))}
             >
@@ -1590,7 +1613,7 @@ function ScoreAdjustmentsPanel({
               aria-label="Point adjustment"
               type="number"
               step="0.5"
-              className="input !min-h-0 !py-1 text-xs w-20"
+              className="input min-h-11 text-sm w-20"
               value={adjustDelta}
               onChange={(e) => setAdjustDelta(e.target.value)}
             />
@@ -1601,12 +1624,12 @@ function ScoreAdjustmentsPanel({
               aria-label="Adjustment reason"
               type="text"
               placeholder="Required reason"
-              className="input !min-h-0 !py-1 text-xs"
+              className="input min-h-11 text-sm"
               value={adjustReason}
               onChange={(e) => setAdjustReason(e.target.value)}
             />
           </label>
-          <button type="button" className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => void applyAdjustment()}>
+          <button type="button" className="btn-ghost min-h-11 px-3 text-sm" onClick={() => void applyAdjustment()}>
             Apply adjustment
           </button>
         </div>
@@ -1623,7 +1646,7 @@ function ScoreAdjustmentsPanel({
               placeholder={targetRace.name}
             />
           </div>
-          <label className="flex items-center gap-1.5 py-1.5">
+          <label className="flex min-h-11 items-center gap-1.5">
             <input
               type="checkbox"
               aria-label="Post announcement to competition"
@@ -1632,13 +1655,13 @@ function ScoreAdjustmentsPanel({
             />
             <span>Post announcement to competition</span>
           </label>
-          <button type="button" className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => void changeRaceMidSession()}>
+          <button type="button" className="btn-ghost min-h-11 px-3 text-sm" onClick={() => void changeRaceMidSession()}>
             Change race
           </button>
-          <button type="button" className="btn-ghost !py-1.5 !px-2.5 text-xs text-rose-700 dark:text-rose-300" onClick={() => void cancelRaceMidSession()}>
+          <button type="button" className="btn-ghost min-h-11 px-3 text-sm text-rose-700 dark:text-rose-300" onClick={() => void cancelRaceMidSession()}>
             Cancel race
           </button>
-          <button type="button" className="btn-ghost !py-1.5 !px-2.5 text-xs" onClick={() => void clearRaceForRerun()}>
+          <button type="button" className="btn-ghost min-h-11 px-3 text-sm" onClick={() => void clearRaceForRerun()}>
             Re-run stopped race
           </button>
         </div>
@@ -1654,7 +1677,7 @@ function ScoreAdjustmentsPanel({
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="btn-ghost !py-1.5 !px-2.5 text-xs"
+            className="btn-ghost min-h-11 px-3 text-sm"
             onClick={async () => {
               const text = remainingRacesDraft ?? uncompletedRacesText;
               const remaining = text.split('\n').map((s) => s.trim()).filter(Boolean);
@@ -1663,11 +1686,11 @@ function ScoreAdjustmentsPanel({
               try {
                 await api.put(`/competitions/${session.competitionId}/sessions/${session.id}/races`, { raceNames });
                 setRemainingRacesDraft(null);
-                onError(null);
+                setError(null);
                 onChanged();
               } catch (error) {
                 const message = (error as { response?: { data?: { message?: string } } }).response?.data?.message;
-                onError(message || 'Couldn’t update session races. Check your signal and try again.');
+                setError(message || 'Couldn’t update session races. Check your signal and try again.');
               }
             }}
           >
@@ -1694,8 +1717,6 @@ interface GeneratorProps {
 }
 
 function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-  useDialogFocus(dialogRef, onClose, 'button');
   const { competition } = useCompetition();
   const sectionTeams = useMemo(
     () => competition.teams.filter((t) => session.competitionSectionId == null || t.competitionSectionId === session.competitionSectionId),
@@ -1787,24 +1808,10 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
   const raceCount = races.split('\n').map((r) => r.trim()).filter(Boolean).length || 0;
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-sm grid place-items-center p-3"
-      onClick={onClose}
-    >
-      <motion.div
-        ref={dialogRef} role="dialog" aria-modal="true" aria-label="Set up heats"
-        initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 10, opacity: 0 }}
-        className="card w-full max-w-xl max-h-[90vh] overflow-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 p-3 border-b border-slate-200 dark:border-slate-800">
-          <Wand2 className="w-4 h-4 text-brand-600" />
-          <h3 className="font-semibold text-sm flex-1">Set up heats</h3>
-          <button onClick={onClose} aria-label="Close" className="btn-ghost !py-1 !px-1.5"><X className="w-4 h-4" /></button>
-        </div>
-
-        <div className="p-3 space-y-3">
+    <Sheet title="Set up heats" onClose={onClose}>
+      {({ close }) => (
+        <>
+        <div className="space-y-3 text-sm">
           <div>
             <div className="flex items-end justify-between gap-2 flex-wrap">
               <label className="text-xs font-semibold">
@@ -1815,15 +1822,15 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
                 </span>
               </label>
               <div className="flex gap-2 items-center">
-                <label className="flex items-center gap-1 text-[11px] cursor-pointer">
+                <label className="flex min-h-11 cursor-pointer items-center gap-1.5 text-xs">
                   <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
                   Show teams without dec forms
                 </label>
                 <button
-                  className="text-[11px] underline"
+                  className="min-h-11 px-2 text-xs underline"
                   onClick={() => setSelected(new Set(groupedByClub.flatMap((g) => g.teams).map((t) => t.id)))}
                 >All</button>
-                <button className="text-[11px] underline" onClick={() => setSelected(new Set())}>None</button>
+                <button className="min-h-11 px-2 text-xs underline" onClick={() => setSelected(new Set())}>None</button>
               </div>
             </div>
             <div className="mt-1.5 space-y-1.5 max-h-56 overflow-auto p-1.5 border border-slate-200 dark:border-slate-700 rounded-lg">
@@ -1844,7 +1851,7 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
                       return (
                         <label
                           key={t.id}
-                          className={`flex items-center gap-1.5 text-xs cursor-pointer px-1 py-0.5 rounded ${hasDec ? '' : 'opacity-60'}`}
+                          className={`flex min-h-11 items-center gap-1.5 text-xs cursor-pointer px-1 rounded ${hasDec ? '' : 'opacity-60'}`}
                           title={hasDec ? 'Dec form submitted' : 'No dec form yet'}
                         >
                           <input type="checkbox" checked={selected.has(t.id)} onChange={() => toggle(t.id)} />
@@ -1879,12 +1886,12 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
               <span className="text-xs font-semibold">Max teams per heat</span>
               <NumberField
                 min={1} max={20}
-                className="input mt-1 text-sm"
+                className="input mt-1 min-h-11 text-sm"
                 value={lanes}
                 onChange={(e) => setLanes(Math.max(1, parseInt(e.target.value, 10) || 1))}
               />
             </label>
-            <label className="flex items-end gap-1.5 text-xs">
+            <label className="flex min-h-11 items-end gap-1.5 text-xs">
               <input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} />
               Replace existing heats
             </label>
@@ -1903,18 +1910,20 @@ function GenerateHeatsModal({ session, onClose, onDone }: GeneratorProps) {
           {submitError && <Notice>{submitError}</Notice>}
         </div>
 
-        <div className="flex items-center gap-2 p-3 border-t border-slate-200 dark:border-slate-800">
-          <button onClick={onClose} className="btn-ghost !py-1.5 !px-3 text-xs">Cancel</button>
-          <button
-            onClick={submit}
-            disabled={busy || selected.size === 0 || raceCount === 0}
-            className="btn-primary !py-1.5 !px-3 text-xs ml-auto"
-          >
-            <Wand2 className="w-3.5 h-3.5" /> {busy ? 'Generating…' : 'Generate'}
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
+          <div className="kit-acts">
+            <button type="button" onClick={() => close()} className="kit-pill">Cancel</button>
+            <button
+              type="button"
+              onClick={submit}
+              disabled={busy || selected.size === 0 || raceCount === 0}
+              className="kit-pill kit-pill-fill ml-auto"
+            >
+              <Wand2 className="w-3.5 h-3.5" aria-hidden="true" /> {busy ? 'Generating…' : 'Generate'}
+            </button>
+          </div>
+        </>
+      )}
+    </Sheet>
   );
 }
 

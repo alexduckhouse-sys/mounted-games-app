@@ -18,7 +18,8 @@ import { site } from './site.ts';
 import { admin } from './admin.ts';
 import { desk } from './desk.ts';
 import { teams } from './teams.ts';
+import { acct } from './acct.ts';
 
-export const AREAS = { common, shell, auth, account, entries, competition, teams, site, ops, screen, admin, desk, ops2, ops3 } as const;
+export const AREAS = { common, shell, auth, account, entries, competition, teams, site, ops, screen, admin, desk, ops2, ops3, acct } as const;
 
-export const cy: Catalogue = { ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...site, ...ops, ...screen, ...admin, ...desk, ...ops2, ...ops3 };
+export const cy: Catalogue = { ...common, ...shell, ...auth, ...account, ...entries, ...competition, ...teams, ...site, ...ops, ...screen, ...admin, ...desk, ...ops2, ...ops3, ...acct };

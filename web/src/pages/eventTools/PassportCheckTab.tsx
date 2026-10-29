@@ -1,3 +1,4 @@
+import { SelectField } from '../../components/SelectField';
 import { useT } from '../../i18n/LanguageContext';
 import { useEffect, useState } from 'react';
 import { Search } from 'lucide-react';
@@ -157,9 +158,8 @@ export function PassportCheckTab({ competitionId }: { competitionId: string }) {
     || matches(p.ownerFullName);
 
   return <section aria-labelledby="passport-title">
-    <RefineSection title={t('ops3.pc.title')} />
+    {/* The page title above already says Passport check, so the section's heading is for screen readers only. */}
     <h2 id="passport-title" className="sr-only">{t('ops3.pc.title')}</h2>
-    <RefineNote>{t('ops3.pc.intro')}</RefineNote>
     {error && <Notice className="tools-msg" actionLabel={!board ? t('common.tryAgain') : undefined} onAction={() => setAttempt((n) => n + 1)}>{error}</Notice>}
     {!board && !error && <p role="status" className="rf-note">{t('ops3.pc.loading')}</p>}
     {board && <div className="tools-form">
@@ -316,13 +316,13 @@ export function PassportCheckTab({ competitionId }: { competitionId: string }) {
                       </div>
                       <label className="rf-fld">
                         {t('ops3.pc.f.role')}
-                        <select
+                        <SelectField
                           value={draft.inspectorRole}
                           onChange={(e) => updateDraft(key, pony, { inspectorRole: e.target.value === 'Vet' ? 'Vet' : 'Official' })}
                         >
                           <option value="Vet">{t('ops3.pc.vet')}</option>
                           <option value="Official">{t('ops3.pc.official')}</option>
-                        </select>
+                        </SelectField>
                       </label>
                       <label className="rf-fld sm:col-span-2">
                         {t('ops3.pc.f.said')}

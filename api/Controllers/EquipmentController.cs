@@ -1,3 +1,5 @@
+using MountedGames.Api.Security;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MountedGames.Api.Services;
@@ -18,6 +20,8 @@ public class EquipmentController : ControllerBase
     /// <summary>Aggregated equipment list for a competition.</summary>
     [HttpGet("api/competitions/{competitionId:int}/equipment")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<EquipmentResponse>> Compute(int competitionId)
     {
         var r = await _calc.ComputeAsync(competitionId);

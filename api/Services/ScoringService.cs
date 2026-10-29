@@ -348,7 +348,7 @@ public class ScoringService
                     ?? throw new ScoreValidationException("Team is not in this heat.");
                 var arena = string.IsNullOrWhiteSpace(heat.Session!.ArenaName) ? "Main Arena" : heat.Session.ArenaName.Trim();
                 var label = string.IsNullOrWhiteSpace(heat.Label) ? $"Heat {heat.OrderIndex}" : heat.Label;
-                body = $"🔔 Ring call ({arena}): {entry.Team?.DisplayName ?? $"Team #{entry.TeamId}"} (Lane {entry.LaneIndex}) needed at the collecting ring now for {label}.";
+                body = $"🔔 Ring call ({arena}): {entry.Team?.DisplayName ?? "Unnamed team"} (Lane {entry.LaneIndex}) needed at the collecting ring now for {label}.";
             }
             var msg = new ChatMessage
             {
@@ -760,7 +760,7 @@ public class ScoringService
                 .Select(e => new
                 {
                     e.TeamId,
-                    TeamName = e.Team?.DisplayName ?? $"Team {e.TeamId}",
+                    TeamName = e.Team?.DisplayName ?? "Unnamed team",
                     Points = heat.Races.SelectMany(r => r.Results).Where(res => res.TeamId == e.TeamId).Sum(res => res.Points),
                 })
                 .OrderByDescending(x => x.Points)
@@ -777,7 +777,7 @@ public class ScoringService
                 var ord = PushNotifier.Ordinal(rank);
                 messages.Add((row.TeamId, new PushPayload(
                     Title: "Your heat's results are in",
-                    Body: $"{ord} in {heatLabel} — {PointValues.Format(row.Points)} pts ({row.TeamName})",
+                    Body: $"{ord} in {heatLabel} · {PointValues.Format(row.Points)} pts ({row.TeamName})",
                     Tag: $"heat-results:{heat.Id}:{row.TeamId}",
                     Url: url)));
             }

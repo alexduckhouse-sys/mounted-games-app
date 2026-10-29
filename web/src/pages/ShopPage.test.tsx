@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { ShopClassifieds, ShopPage } from './ShopPage';
+import { TickerProvider, useDockHost, useTicker } from '../components/TickerContext';
 
 import { autoConfirm } from '../test/confirm';
 vi.mock('../api', () => ({ api: { get: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
@@ -18,7 +19,8 @@ beforeEach(() => {
   auth.admin = false;
   vi.mocked(api.get).mockImplementation(async (url: string) => ({
     data: url === '/competitions'
-      ? [{ id: 4, name: 'Spring Games', location: 'Hartpury', isArchived: false }, { id: 5, name: 'Old Games', isArchived: true }]
+      ? [{ id: 4, name: 'Spring Games', location: 'Hartpury', isArchived: false }, { id: 5, name: 'Old Games', isArchived: true }, { id: 6, name: 'Empty Games', isArchived: false }]
+      : url === '/commerce/competitions/with-items' ? [4, 5]
       : url === '/shop/posts' ? [post, poles] : [],
   }));
 });
@@ -120,6 +122,31 @@ describe('the shop', () => {
     expect(screen.getByText('No event shops match that search.')).toBeInTheDocument();
   });
 
+  it('lists only the events that have something on sale, with a short note when none do', async () => {
+    mount();
+    await userEvent.click(screen.getByRole('button', { name: 'Event shops' }));
+    expect(await screen.findByRole('link', { name: /Spring Games/ })).toBeInTheDocument();
+    expect(screen.queryByText(/Empty Games/)).not.toBeInTheDocument();
+  });
+
+  it('says so when no event shop has anything for sale', async () => {
+    vi.mocked(api.get).mockImplementation(async (url: string) => ({ data: url === '/competitions' ? [{ id: 6, name: 'Empty Games', isArchived: false }] : [] }));
+    mount();
+    await userEvent.click(screen.getByRole('button', { name: 'Event shops' }));
+    expect(await screen.findByText('No event shops have anything for sale yet.')).toBeInTheDocument();
+    expect(screen.queryByText(/Empty Games/)).not.toBeInTheDocument();
+  });
+
+  it('shows every live event rather than hide them all when the list of stocked events cannot be fetched', async () => {
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (url === '/commerce/competitions/with-items') throw new Error('offline');
+      return { data: url === '/competitions' ? [{ id: 6, name: 'Empty Games', isArchived: false }] : [] };
+    });
+    mount();
+    await userEvent.click(screen.getByRole('button', { name: 'Event shops' }));
+    expect(await screen.findByRole('link', { name: /Empty Games/ })).toBeInTheDocument();
+  });
+
   it('says so when there are no events', async () => {
     vi.mocked(api.get).mockImplementation(async () => ({ data: [] }));
     mount();
@@ -198,5 +225,55 @@ describe('the shop', () => {
     expect(await screen.findByText(/Nothing for sale yet/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'New post' }));
     expect(within(screen.getByText('New shop post').parentElement!).getByLabelText(/Title/)).toBeInTheDocument();
+  });
+});
+
+describe('the shop comments', () => {
+  const comment = { id: 9, authorName: 'Pat', body: 'Still available?', isPrivate: false, createdAt: new Date().toISOString() };
+
+  async function openComments() {
+    auth.user = { id: 'buyer', fullName: 'Bea Buyer' };
+    vi.mocked(api.get).mockImplementation(async (url: string) => ({ data: url === '/shop/posts' ? [poles] : url.endsWith('/comments') ? [comment] : [] }));
+    vi.mocked(api.post).mockResolvedValue({ data: {} });
+    mount();
+    await userEvent.click(await screen.findByRole('button', { name: /Bending poles/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Comments/ }));
+    await screen.findByText('Still available?');
+  }
+
+  it('sends from the round navy arrow button, faded until there is something to send', async () => {
+    await openComments();
+    const send = screen.getByRole('button', { name: 'Send comment' });
+    expect(send).toHaveClass('ev-send');
+    expect(send).toBeDisabled();
+    await userEvent.type(screen.getByRole('textbox', { name: /comment/i }), 'Is it still free?');
+    expect(send).toBeEnabled();
+    await userEvent.click(send);
+    expect(api.post).toHaveBeenCalledWith('/shop/posts/2/comments', expect.objectContaining({ body: 'Is it still free?' }));
+  });
+
+  it('shows the time quietly and legibly, not in tiny slate type', async () => {
+    await openComments();
+    const stamp = screen.getByText('just now', { selector: 'span.ml-1\\.5' });
+    expect(stamp.className).toContain('--mg-faint');
+    expect(stamp.className).not.toContain('slate');
+    expect(stamp.className).not.toContain('text-[9px]');
+  });
+});
+
+describe('the Sell something button beside the ticker dock', () => {
+  function Probe() {
+    useDockHost();
+    const { dockAction } = useTicker();
+    return dockAction ? <button type="button" data-testid="dock" onClick={dockAction.onClick}>{dockAction.label}</button> : null;
+  }
+
+  it('moves the pinned bar to the dock and opens the form in a sheet', async () => {
+    auth.user = { id: 'seller', fullName: 'Sam Seller' };
+    render(<MemoryRouter><TickerProvider><ShopPage /><Probe /></TickerProvider></MemoryRouter>);
+    await screen.findByText('Grey saddle');
+    expect(document.querySelector('.sp-sell-bar')).toBeNull();
+    await userEvent.click(screen.getByTestId('dock'));
+    expect(within(screen.getByRole('dialog')).getByText('New shop post')).toBeInTheDocument();
   });
 });

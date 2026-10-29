@@ -1,9 +1,12 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { autoConfirm } from '../../test/confirm';
+import { CurrentCompetitionProvider } from '../../competition/CurrentCompetitionContext';
+import { TickerProvider } from '../../components/TickerContext';
+import { TopBarTicker } from '../../components/TopBarTicker';
 import { EntriesPage } from './EntriesPage';
 
 const reload = vi.fn();
@@ -26,8 +29,25 @@ const forms = [{
 const config = { config: { dob: 2, dobFormat: 0, weight: 0, weightUnit: 0, ponyHeight: 2, ponyPassport: 0, ponyAge: 0, membershipNumber: 0, emergencyContact: 0, medicalNotes: 0, trainerPhone: 1, bib: 1,
   customFields: [{ id: 'f1', label: 'Pony weight', type: 1, required: false, min: null, max: 80, unit: 'kg' }, { id: 'f2', label: 'Saddle size', type: 0, required: false }] }, isStandard: false, formsSubmitted: 1 };
 
+function Address() {
+  return <output data-testid="address">{useLocation().search}</output>;
+}
+
 function show() {
   return render(<MemoryRouter><EntriesPage /></MemoryRouter>);
+}
+
+function showDocked() {
+  return render(
+    <MemoryRouter>
+      <CurrentCompetitionProvider>
+        <TickerProvider>
+          <EntriesPage />
+          <TopBarTicker />
+        </TickerProvider>
+      </CurrentCompetitionProvider>
+    </MemoryRouter>,
+  );
 }
 
 describe('EntriesPage', () => {
@@ -62,8 +82,11 @@ describe('EntriesPage', () => {
     expect(first).toHaveTextContent('Paid');
     expect(first).toHaveTextContent('Form in');
     expect(first).toHaveTextContent('Flagged');
-    expect(screen.getByText('Pending payment')).toBeInTheDocument();
+    expect(screen.getByText('Not paid', { selector: '.ops-badge-pending' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Elm B/ })).toHaveTextContent('Missing');
+    // Withdrawn teams fold away at the end of their section.
+    expect(screen.queryByRole('button', { name: /Ash C/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Withdrawn or no-show (1)' }));
     expect(screen.getByRole('button', { name: /Ash C/ })).toHaveTextContent('Withdrawn');
     expect(screen.getByText('Entries open')).toBeInTheDocument();
     expect(screen.getByText('1 paid · 1 not paid')).toBeInTheDocument();
@@ -91,7 +114,7 @@ describe('EntriesPage', () => {
     const asked = autoConfirm(true);
     show();
     await screen.findByRole('button', { name: /^Elm B/ });
-    expect(screen.getAllByText('Pending payment')).toHaveLength(1);
+    expect(screen.getAllByText('Not paid', { selector: '.ops-badge-pending' })).toHaveLength(1);
     expect(screen.getByText('£10 by bank transfer')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Mark Elm B paid' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/7/signups/102/mark-paid'));
@@ -111,9 +134,10 @@ describe('EntriesPage', () => {
     });
     autoConfirm(true);
     show();
-    expect(await screen.findByText('Awaiting payment')).toBeInTheDocument();
-    expect(screen.getByText('Casey')).toBeInTheDocument();
-    expect(screen.getByText('Pending payment', { selector: '.ops-badge-pending' })).toBeInTheDocument();
+    // In the main list, in its own section, marked Not paid.
+    expect(await screen.findByText('Casey')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Under 12' })).toBeInTheDocument();
+    expect(screen.getByText('Not paid', { selector: '.ops-badge-pending' })).toBeInTheDocument();
     expect(screen.queryByText('No entries yet.')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Mark Casey paid' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/7/signups/201/mark-paid'));
@@ -132,18 +156,50 @@ describe('EntriesPage', () => {
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/signups/101/status', { status: 0 }));
   });
 
-  it('withdraws after asking, and reinstates', async () => {
+  it('withdraws with a reason, marks a no-show and reinstates, all from the entry', async () => {
     const user = userEvent.setup();
-    const asked = autoConfirm(true);
+    vi.mocked(api.put).mockResolvedValue({ data: { team: entries[0], heatPlacesChanged: 0, changedSessionIds: [] } });
     show();
     await user.click(await screen.findByRole('button', { name: /Oak A/ }));
     await user.click(screen.getByRole('button', { name: 'Withdraw this entry' }));
-    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/teams/1/entry-status', { status: 1, reason: null }));
-    expect(asked.titles).toEqual(['Withdraw Oak A?']);
+    let sheet = screen.getByRole('dialog');
+    await user.type(within(sheet).getByLabelText('Reason'), 'Pony lame');
+    await user.click(within(sheet).getByRole('button', { name: 'Withdraw team' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/teams/1/entry-status', { status: 1, reason: 'Pony lame' }));
+    expect(await screen.findByText('Oak A is out.')).toBeInTheDocument();
 
+    await user.click(screen.getByRole('button', { name: /^Elm B/ }));
+    await user.click(screen.getByRole('button', { name: 'No-show' }));
+    sheet = screen.getByRole('dialog');
+    await user.click(within(sheet).getByRole('button', { name: 'Mark as no-show' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/teams/2/entry-status', { status: 2, reason: null }));
+
+    await user.click(screen.getByRole('button', { name: 'Withdrawn or no-show (1)' }));
     await user.click(screen.getByRole('button', { name: /Ash C/ }));
     await user.click(screen.getByRole('button', { name: 'Reinstate' }));
+    sheet = screen.getByRole('dialog');
+    await user.click(within(sheet).getByRole('button', { name: 'Reinstate team' }));
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/teams/3/entry-status', { status: 0, reason: null }));
+  });
+
+  it('opens the rider swap from the entry', async () => {
+    const user = userEvent.setup();
+    show();
+    await user.click(await screen.findByRole('button', { name: /Oak A/ }));
+    await user.click(screen.getByRole('button', { name: 'Swap rider' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('keeps the chosen filter in the address', async () => {
+    const user = userEvent.setup();
+    render(<MemoryRouter initialEntries={['/competitions/7/operations/entries?show=pending']}><EntriesPage /><Address /></MemoryRouter>);
+    expect(await screen.findByRole('button', { name: 'Show: Pending payment (1)' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Show: Pending payment (1)' }));
+    await user.click(screen.getByRole('option', { name: 'Paid (1)' }));
+    expect(screen.getByTestId('address')).toHaveTextContent('?show=paid');
+    await user.click(screen.getByRole('button', { name: 'Show: Paid (1)' }));
+    await user.click(screen.getByRole('option', { name: 'All teams' }));
+    expect(screen.getByTestId('address')).toBeEmptyDOMElement();
   });
 
   it('closes entries', async () => {
@@ -218,5 +274,21 @@ describe('EntriesPage', () => {
     show();
     await user.click(await screen.findByRole('button', { name: 'Close entries' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Nope.');
+  });
+
+  it('puts the entry and dec form tools in a sheet opened from the dock', async () => {
+    const user = userEvent.setup();
+    showDocked();
+    await screen.findByRole('button', { name: /Oak A/ });
+    expect(screen.queryByText('Entries open')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Close entries' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Entries and dec form tools' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Entries and dec form tools' });
+    expect(within(sheet).getByText('Entries open')).toBeInTheDocument();
+    expect(within(sheet).getByRole('button', { name: 'Entry tools' })).toBeInTheDocument();
+    expect(within(sheet).getByText('Show')).toBeInTheDocument();
+    expect(within(sheet).getByText('Questions and flags')).toBeInTheDocument();
+    await user.click(within(sheet).getByRole('button', { name: 'Close entries' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/7/signups-locked', { locked: true }));
   });
 });

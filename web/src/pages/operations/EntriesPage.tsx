@@ -1,6 +1,6 @@
 import { useT } from '../../i18n/LanguageContext';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { ChangePop } from '../../components/ChangePop';
 import { ChevronDown } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
@@ -11,6 +11,8 @@ import { api } from '../../api';
 import { activeLocale, tr } from '../../i18n/translate';
 import { confirmDialog } from '../../components/ConfirmDialog';
 import { Notice } from '../../components/Notice';
+import { Sheet } from '../../components/Sheet';
+import { useDockAction } from '../../components/TickerContext';
 import { useToast } from '../../components/Toast';
 import { apiErrorMessage } from '../../lib/apiError';
 import { downloadCsv, safeFilename } from '../../lib/csv';
@@ -27,6 +29,9 @@ import { useCompetition } from '../competition/context';
 import { RefineChoiceRow, RefineDateTimeRow, RefineHeader, RefineList, RefinePage, RefineSection } from '../refine/Refine';
 import type { TeamEntry } from './types';
 import { EntryTools } from './EntryTools';
+import { StatusSheetView } from './EntriesPanel';
+import { statusMessage, type StatusSheet } from './entryStatus';
+import { RiderSwapSheet } from './RiderSwapSheet';
 import { SignupDetail } from './SignupDetail';
 import { FILTERS, bucketCounts, capacityLines, fetchEntrySettings, signupBucket, type EntryFilter } from './entryLogic';
 import './operations.css';
@@ -80,8 +85,20 @@ export function EntriesPage() {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [capacity, setCapacity] = useState<CompetitionEntrySettings | null>(null);
-  const [{ filter, openSignup }, setSelection] = useState<{ filter: EntryFilter; openSignup: number | null; openedPass: string | null }>({ filter: 'all', openSignup: null, openedPass: null });
-  const setFilter = (next: EntryFilter) => setSelection((previous) => ({ ...previous, filter: next }));
+  const [selection, setSelection] = useState<{ filter: EntryFilter; openSignup: number | null; openedPass: string | null }>({ filter: 'all', openSignup: null, openedPass: null });
+  const { openSignup } = selection;
+  // The chosen filter lives in the address (?show=pending), so Back returns to the same filtered list.
+  const [params, setParams] = useSearchParams();
+  const fromAddress = FILTERS.find((f) => f.value === params.get('show'))?.value;
+  const filter = fromAddress ?? selection.filter;
+  const setFilter = (next: EntryFilter) => {
+    setSelection((previous) => ({ ...previous, filter: next }));
+    setParams((previous) => {
+      const kept = new URLSearchParams(previous);
+      if (next === 'all') kept.delete('show'); else kept.set('show', next);
+      return kept;
+    }, { replace: true });
+  };
   const setOpenSignup = (next: number | null) => setSelection((previous) => ({ ...previous, openSignup: next }));
 
   const load = useCallback(async () => {
@@ -141,15 +158,18 @@ export function EntriesPage() {
   }, [signups, entries]);
   const closed = Boolean(competition.signupsLocked);
 
+  // Each section lists its teams, with any unpaid entry that has no team yet at the top as Not paid.
   const groups = useMemo(() => {
-    const map = new Map<number, { name: string; teams: TeamEntry[] }>();
-    for (const entry of entries ?? []) {
-      const group = map.get(entry.sectionId) ?? { name: displaySectionName(entry.sectionName), teams: [] };
-      group.teams.push(entry);
-      map.set(entry.sectionId, group);
-    }
+    const map = new Map<number, { name: string; teams: TeamEntry[]; unpaid: SectionSignup[] }>();
+    const groupFor = (id: number, name: string) => {
+      const group = map.get(id) ?? { name: displaySectionName(name), teams: [], unpaid: [] };
+      map.set(id, group);
+      return group;
+    };
+    for (const entry of entries ?? []) groupFor(entry.sectionId, entry.sectionName).teams.push(entry);
+    for (const signup of awaitingPayment) groupFor(signup.competitionSectionId, signup.sectionName).unpaid.push(signup);
     return [...map.entries()];
-  }, [entries]);
+  }, [entries, awaitingPayment]);
 
   const toggleEntries = () => run(t('ops2.entries.changeEntries'), async () => {
     await api.post(`/competitions/${competition.id}/signups-locked`, { locked: !closed });
@@ -178,15 +198,10 @@ export function EntriesPage() {
     await run(t('ops2.entries.payError'), () => api.post(`/competitions/${competition.id}/signups/${signup.id}/mark-paid`));
   };
 
-  async function withdraw(team: TeamEntry) {
-    if (!(await confirmDialog({ title: t('ops2.entries.withdrawQ', { name: team.teamName }), message: t('ops2.entries.withdrawMsg'), confirmLabel: t('ops2.panel.withdraw'), destructive: true }))) return;
-    await run(t('ops2.entries.withdrawError'), () => api.put(`/competitions/${competition.id}/teams/${team.teamId}/entry-status`, { status: 1, reason: null }));
-    reload();
-  }
-  async function reinstate(team: TeamEntry) {
-    await run(t('ops2.entries.reinstateError'), () => api.put(`/competitions/${competition.id}/teams/${team.teamId}/entry-status`, { status: 0, reason: null }));
-    reload();
-  }
+  // Withdraw, no-show and reinstate share the hub's reason sheet; a rider swap has its own.
+  const [statusSheet, setStatusSheet] = useState<StatusSheet | null>(null);
+  const [swapTeam, setSwapTeam] = useState<TeamEntry | null>(null);
+  const [outOpen, setOutOpen] = useState<number[]>([]);
   async function copyLink() {
     try { await navigator.clipboard.writeText(`${window.location.origin}/competitions/${competition.id}/declarations`); toast.show(t('ops2.sponsors.linkCopied')); }
     catch { setError(t('ops2.entries.copyError')); }
@@ -202,14 +217,12 @@ export function EntriesPage() {
 
   const days = eventDays(competition.startDate, competition.endDate);
 
-  return (
-    <RefinePage>
-      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.hub.back')} context={competition.name} title={t('ops2.entries.title')} />
-      <div className="ops-cards ops-entries" aria-busy={busy}>
-        {error && <Notice>{error}</Notice>}
-        {passNotice && <Notice>{passNotice}</Notice>}
-        {toast.node}
+  // The tools live in one sheet opened from the dock; with no dock (page on its own) they stay on the page.
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const docked = useDockAction({ label: t('ops2.entries.toolsSheet'), icon: 'settings', onClick: () => setToolsOpen(true) });
 
+  const controls = (
+    <>
         <RefineList as="div">
           <div className="rf-row">
             <span className="rf-grow">
@@ -227,94 +240,10 @@ export function EntriesPage() {
           <RefineChoiceRow label={t('ops2.entries.show')} value={filter} onChange={setFilter}
             options={FILTERS.map((f) => ({ value: f.value, label: f.value === 'all' ? t('ops2.entries.allTeams') : `${f.label} (${counts[f.value]})` }))} />
         </RefineList>
-
-        {filter !== 'all' && (
-          <SignupList
-            signups={shown} filter={filter} busy={busy} openId={openSignup} competition={competition}
-            onOpen={(id) => setOpenSignup(openSignup === id ? null : id)} onMarkPaid={(s) => void markSignupPaid(s)} onChanged={reloadAll}
-          />
-        )}
-
-        {filter === 'all' && entries !== null && entries.length === 0 && awaitingPayment.length === 0 && <p className="rf-note">{t('ops2.entries.noEntries')}</p>}
-        {filter === 'all' && awaitingPayment.length > 0 && (
-          <>
-            <RefineSection title={t('ops2.entries.awaiting')} />
-            <SignupList
-              signups={awaitingPayment} filter="pending" busy={busy} openId={openSignup} competition={competition}
-              onOpen={(id) => setOpenSignup(openSignup === id ? null : id)} onMarkPaid={(x) => void markSignupPaid(x)} onChanged={reloadAll}
-            />
-          </>
-        )}
-        {filter === 'all' && groups.map(([sectionId, group]) => (
-          <Fragment key={sectionId}>
-            <RefineSection title={group.name} />
-            <RefineList as="div" label={group.name}>
-              <AnimatePresence initial={false}>
-              {group.teams.map((team) => {
-                const mine = live.filter((s) => s.teamId === team.teamId);
-                const paid = mine.length > 0 && mine.every((s) => s.status === 1);
-                const form = forms.find((f) => f.teamId === team.teamId);
-                const flags = (form?.riders ?? []).flatMap((r) => r.flags ?? []);
-                const out = team.status !== 0;
-                const tag = out ? { text: t('ops2.protest.withdrawn'), tone: 'mut' } : !form ? { text: t('ops2.entries.missing'), tone: 'mut' } : flags.length > 0 ? { text: t('ops2.entries.flagged'), tone: 'warn' } : { text: t('ops2.entries.received'), tone: 'ok' };
-                const isOpen = open === team.teamId;
-                const pending = !out && mine.length > 0 && !paid;
-                const owed = mine.filter((s) => s.status === 0).reduce((sum, s) => sum + s.amountMinor, 0);
-                return (
-                  <LeavingRow as="div" key={team.teamId}>
-                    <button type="button" className="rf-row ops-entry-row" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : team.teamId)}>
-                      <span className="rf-grow">
-                        <span className="rf-t1">{team.teamName}</span>
-                        <span className="rf-t2">
-                          {mine.length > 0 && !pending && <span className={paid ? 'ops-paid' : 'ops-unpaid'}><ChangePop value={paid ? paidWord(competition.isDemo) : t('ops2.entries.notPaid')} tick={paid}>{paid ? paidWord(competition.isDemo) : t('ops2.entries.notPaid')}</ChangePop></span>}
-                          {mine.length > 0 && !pending && form ? ' · ' : ''}{form ? t('ops2.entries.formIn', { when: whenText(form.submittedAt) }) : ''}
-                        </span>
-                      </span>
-                      <span className={`rf-st rf-${tag.tone}`}>{tag.text}</span>
-                      <ChevronDown className={`rf-chev rf-chev-down h-4 w-4 ${isOpen ? 'ops-flip' : ''}`} aria-hidden="true" />
-                    </button>
-                    {pending && (
-                      <div className="ops-pending">
-                        <span className="ops-badge-pending">{t('ops2.entries.pendingPayment')}</span>
-                        {owed > 0 && <span className="rf-t2">{t('ops2.entries.byBank', { fee: feeText(owed) })}</span>}
-                        <button type="button" className="rf-btn rf-btn-primary ops-markpaid" disabled={busy} aria-label={t('ops2.entries.markPaidAria', { name: team.teamName })} onClick={() => void setPaid(team, true)}>{t('ops2.entries.markPaid')}</button>
-                      </div>
-                    )}
-                    {isOpen && (
-                      <div className="ops-entry-body">
-                        {mine.length > 0 && (
-                          <div className="ops-line">
-                            <span className="rf-grow"><span className="rf-t1"><ChangePop value={paid ? paidWord(competition.isDemo) : t('ops2.entries.notPaidYet')} tick={paid}>{paid ? paidWord(competition.isDemo) : t('ops2.entries.notPaidYet')}</ChangePop></span></span>
-                            <button type="button" className="rf-btn" disabled={busy} onClick={() => void setPaid(team, !paid)}>{paid ? t('ops2.entries.markNotPaid') : t('ops2.entries.markPaid')}</button>
-                          </div>
-                        )}
-                        {form ? <FormView form={form} flags={flags} /> : (
-                          <div className="ops-line">
-                            <span className="rf-grow"><span className="rf-t1">{t('ops2.entries.notReceived')}</span></span>
-                            <button type="button" className="rf-btn" onClick={() => void copyLink()}>{t('ops2.entries.copyForm')}</button>
-                          </div>
-                        )}
-                        {signups.filter((s) => s.teamId === team.teamId).map((s, _i, all) => (
-                          <div key={s.id} className="et-sub">
-                            {all.length > 1 && <p className="et-sub-name">{s.fullName}</p>}
-                            <SignupDetail competition={competition} signup={s} onChanged={reloadAll} />
-                          </div>
-                        ))}
-                        <div className="ops-line ops-line-end">
-                          {out
-                            ? (team.canReinstate ? <button type="button" className="rf-btn" disabled={busy} onClick={() => void reinstate(team)}>{t('ops2.panel.reinstate')}</button> : <span className="rf-t2">{t('ops2.entries.outOfDraw')}</span>)
-                            : <button type="button" className="ops-danger-link" disabled={busy} onClick={() => void withdraw(team)}>{t('ops2.entries.withdrawThis')}</button>}
-                        </div>
-                      </div>
-                    )}
-                  </LeavingRow>
-                );
-              })}
-              </AnimatePresence>
-            </RefineList>
-          </Fragment>
-        ))}
-
+    </>
+  );
+  const decForm = (
+    <>
         <RefineSection title={t('ops2.entries.decForm')} />
         <RefineList as="div">
           <div className="rf-row">
@@ -333,7 +262,139 @@ export function EntriesPage() {
           )}
         </RefineList>
         {setup && config && <SetupEditor config={config} busy={busy} onSave={saveConfig} />}
+    </>
+  );
+
+  const renderTeam = (team: TeamEntry) => {
+      const mine = live.filter((s) => s.teamId === team.teamId);
+      const paid = mine.length > 0 && mine.every((s) => s.status === 1);
+      const form = forms.find((f) => f.teamId === team.teamId);
+      const flags = (form?.riders ?? []).flatMap((r) => r.flags ?? []);
+      const out = team.status !== 0;
+      const tag = out ? { text: t('ops2.protest.withdrawn'), tone: 'mut' } : !form ? { text: t('ops2.entries.missing'), tone: 'mut' } : flags.length > 0 ? { text: t('ops2.entries.flagged'), tone: 'warn' } : { text: t('ops2.entries.received'), tone: 'ok' };
+      const isOpen = open === team.teamId;
+      const pending = !out && mine.length > 0 && !paid;
+      const owed = mine.filter((s) => s.status === 0).reduce((sum, s) => sum + s.amountMinor, 0);
+      return (
+        <LeavingRow as="div" key={team.teamId}>
+          <button type="button" className="rf-row ops-entry-row" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : team.teamId)}>
+            <span className="rf-grow">
+              <span className="rf-t1">{team.teamName}</span>
+              <span className="rf-t2">
+                {mine.length > 0 && !pending && <span className={paid ? 'ops-paid' : 'ops-unpaid'}><ChangePop value={paid ? paidWord(competition.isDemo) : t('ops2.entries.notPaid')} tick={paid}>{paid ? paidWord(competition.isDemo) : t('ops2.entries.notPaid')}</ChangePop></span>}
+                {mine.length > 0 && !pending && form ? ' · ' : ''}{form ? t('ops2.entries.formIn', { when: whenText(form.submittedAt) }) : ''}
+              </span>
+            </span>
+            <span className={`rf-st rf-${tag.tone}`}>{tag.text}</span>
+            <ChevronDown className={`rf-chev rf-chev-down h-4 w-4 ${isOpen ? 'ops-flip' : ''}`} aria-hidden="true" />
+          </button>
+          {pending && (
+            <div className="ops-pending">
+              <span className="ops-badge-pending">{t('ops2.entries.notPaid')}</span>
+              {owed > 0 && <span className="rf-t2">{t('ops2.entries.byBank', { fee: feeText(owed) })}</span>}
+              <button type="button" className="rf-btn rf-btn-primary ops-markpaid" disabled={busy} aria-label={t('ops2.entries.markPaidAria', { name: team.teamName })} onClick={() => void setPaid(team, true)}>{t('ops2.entries.markPaid')}</button>
+            </div>
+          )}
+          {isOpen && (
+            <div className="ops-entry-body">
+              {mine.length > 0 && (
+                <div className="ops-line">
+                  <span className="rf-grow"><span className="rf-t1"><ChangePop value={paid ? paidWord(competition.isDemo) : t('ops2.entries.notPaidYet')} tick={paid}>{paid ? paidWord(competition.isDemo) : t('ops2.entries.notPaidYet')}</ChangePop></span></span>
+                  <button type="button" className="rf-btn" disabled={busy} onClick={() => void setPaid(team, !paid)}>{paid ? t('ops2.entries.markNotPaid') : t('ops2.entries.markPaid')}</button>
+                </div>
+              )}
+              {form ? <FormView form={form} flags={flags} /> : (
+                <div className="ops-line">
+                  <span className="rf-grow"><span className="rf-t1">{t('ops2.entries.notReceived')}</span></span>
+                  <button type="button" className="rf-btn" onClick={() => void copyLink()}>{t('ops2.entries.copyForm')}</button>
+                </div>
+              )}
+              {signups.filter((s) => s.teamId === team.teamId).map((s, _i, all) => (
+                <div key={s.id} className="et-sub">
+                  {all.length > 1 && <p className="et-sub-name">{s.fullName}</p>}
+                  <SignupDetail competition={competition} signup={s} onChanged={reloadAll} />
+                </div>
+              ))}
+              <div className="ops-line ops-line-end">
+                {out
+                  ? (team.canReinstate ? <button type="button" className="rf-btn" disabled={busy} onClick={() => setStatusSheet({ team, next: 0 })}>{t('ops2.panel.reinstate')}</button> : <span className="rf-t2">{t('ops2.entries.outOfDraw')}</span>)
+                  : <>
+                    <button type="button" className="rf-btn" disabled={busy} onClick={() => setSwapTeam(team)}>{t('ops2.panel.swap')}</button>
+                    <button type="button" className="rf-btn" disabled={busy} onClick={() => setStatusSheet({ team, next: 2 })}>{t('ops2.redraw.noShow')}</button>
+                    <button type="button" className="ops-danger-link" disabled={busy} onClick={() => setStatusSheet({ team, next: 1 })}>{t('ops2.entries.withdrawThis')}</button>
+                  </>}
+              </div>
+            </div>
+          )}
+        </LeavingRow>
+      );
+  };
+
+  return (
+    <RefinePage>
+      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.hub.back')} context={competition.name} title={t('ops2.entries.title')} />
+      <div className="ops-cards ops-entries" aria-busy={busy}>
+        {error && <Notice>{error}</Notice>}
+        {passNotice && <Notice>{passNotice}</Notice>}
+        {toast.node}
+
+        {!docked && controls}
+
+        {filter !== 'all' && (
+          <SignupList
+            signups={shown} filter={filter} busy={busy} openId={openSignup} competition={competition}
+            onOpen={(id) => setOpenSignup(openSignup === id ? null : id)} onMarkPaid={(s) => void markSignupPaid(s)} onChanged={reloadAll}
+          />
+        )}
+
+        {filter === 'all' && entries !== null && entries.length === 0 && awaitingPayment.length === 0 && <p className="rf-note">{t('ops2.entries.noEntries')}</p>}
+        {filter === 'all' && groups.map(([sectionId, group]) => {
+          const inDraw = group.teams.filter((team) => team.status === 0);
+          const outTeams = group.teams.filter((team) => team.status !== 0);
+          const showOut = outOpen.includes(sectionId);
+          return (
+            <Fragment key={sectionId}>
+              <RefineSection title={group.name} />
+              <RefineList as="div" label={group.name}>
+                {group.unpaid.map((s) => (
+                  <SignupRow key={s.id} signup={s} badge={t('ops2.entries.notPaid')} busy={busy} open={openSignup === s.id} competition={competition}
+                    onOpen={() => setOpenSignup(openSignup === s.id ? null : s.id)} onMarkPaid={() => void markSignupPaid(s)} onChanged={reloadAll} />
+                ))}
+                <AnimatePresence initial={false}>{inDraw.map(renderTeam)}</AnimatePresence>
+                {outTeams.length > 0 && (
+                  <button type="button" className="rf-row ops-out-fold" aria-expanded={showOut}
+                    onClick={() => setOutOpen((list) => (showOut ? list.filter((id) => id !== sectionId) : [...list, sectionId]))}>
+                    <span className="rf-grow rf-t2">{t('ops2.entries.outFold', { count: outTeams.length })}</span>
+                    <ChevronDown className={`rf-chev rf-chev-down h-4 w-4 ${showOut ? 'ops-flip' : ''}`} aria-hidden="true" />
+                  </button>
+                )}
+                <AnimatePresence initial={false}>{showOut && outTeams.map(renderTeam)}</AnimatePresence>
+              </RefineList>
+            </Fragment>
+          );
+        })}
+
+        {!docked && decForm}
       </div>
+      {statusSheet && (
+        <StatusSheetView
+          key={`${statusSheet.team.teamId}:${statusSheet.next}`}
+          competitionId={competition.id}
+          sheet={statusSheet}
+          onClose={() => setStatusSheet(null)}
+          onDone={(result) => { setStatusSheet(null); toast.show(statusMessage(statusSheet, result)); reload(); void load(); }}
+        />
+      )}
+      {swapTeam && (
+        <RiderSwapSheet competitionId={competition.id} team={swapTeam} canWrite onClose={() => setSwapTeam(null)}
+          onSwapped={(text) => { toast.show(text); void load(); }} />
+      )}
+      {docked && toolsOpen && (
+        <Sheet title={t('ops2.entries.toolsSheet')} onClose={() => setToolsOpen(false)}>
+          {controls}
+          {decForm}
+        </Sheet>
+      )}
     </RefinePage>
   );
 }
@@ -348,36 +409,45 @@ function SignupList({ signups, filter, busy, openId, competition, onOpen, onMark
   if (signups.length === 0) return <p className="rf-note">{empty[filter]}</p>;
   return (
     <RefineList as="div" label={t('ops2.panel.entries')}>
-      {signups.map((s) => {
-        const bucket = signupBucket(s);
-        const isOpen = openId === s.id;
-        const tag = bucket === 'paid' ? { text: paidWord(competition.isDemo), tone: 'ok' } : bucket === 'pending' ? { text: t('ops2.entries.pendingPayment'), tone: 'warn' } : bucket === 'waitlist' ? { text: t('ops2.entries.f.waitlist'), tone: 'mut' } : { text: t('ops2.protest.withdrawn'), tone: 'mut' };
-        return (
-          <div key={s.id}>
-            <button type="button" className="rf-row ops-entry-row" aria-expanded={isOpen} onClick={() => onOpen(s.id)}>
-              <span className="rf-grow">
-                <span className="rf-t1">{s.fullName}</span>
-                <span className="rf-t2">{displaySectionName(s.sectionName)} · {feeText(s.amountMinor)}{s.teamName ? ` · ${s.teamName}` : ''}</span>
-              </span>
-              <span className={`rf-st rf-${tag.tone}`}>{tag.text}</span>
-              <ChevronDown className={`rf-chev rf-chev-down h-4 w-4 ${isOpen ? 'ops-flip' : ''}`} aria-hidden="true" />
-            </button>
-            {bucket === 'pending' && (
-              <div className="ops-pending">
-                <span className="ops-badge-pending">{t('ops2.entries.pendingPayment')}</span>
-                <span className="rf-t2">{t('ops2.entries.byBank', { fee: feeText(s.amountMinor) })}</span>
-                <button type="button" className="rf-btn rf-btn-primary ops-markpaid" disabled={busy} aria-label={t('ops2.entries.markPaidAria', { name: s.fullName })} onClick={() => onMarkPaid(s)}>{t('ops2.entries.markPaid')}</button>
-              </div>
-            )}
-            {isOpen && (
-              <div className="ops-entry-body">
-                <SignupDetail competition={competition} signup={s} onChanged={onChanged} />
-              </div>
-            )}
-          </div>
-        );
-      })}
+      {signups.map((s) => (
+        <SignupRow key={s.id} signup={s} badge={t('ops2.entries.pendingPayment')} busy={busy} open={openId === s.id} competition={competition}
+          onOpen={() => onOpen(s.id)} onMarkPaid={() => onMarkPaid(s)} onChanged={onChanged} />
+      ))}
     </RefineList>
+  );
+}
+
+/** One entry with no team yet, opening in place; an unpaid one carries its badge and a quick Mark paid. */
+function SignupRow({ signup: s, badge, busy, open: isOpen, competition, onOpen, onMarkPaid, onChanged }: {
+  signup: SectionSignup; badge: string; busy: boolean; open: boolean; competition: ReturnType<typeof useCompetition>['competition'];
+  onOpen: () => void; onMarkPaid: () => void; onChanged: () => Promise<void>;
+}) {
+  const t = useT();
+  const bucket = signupBucket(s);
+  const tag = bucket === 'paid' ? { text: paidWord(competition.isDemo), tone: 'ok' } : bucket === 'pending' ? { text: badge, tone: 'warn' } : bucket === 'waitlist' ? { text: t('ops2.entries.f.waitlist'), tone: 'mut' } : { text: t('ops2.protest.withdrawn'), tone: 'mut' };
+  return (
+    <div>
+      <button type="button" className="rf-row ops-entry-row" aria-expanded={isOpen} onClick={onOpen}>
+        <span className="rf-grow">
+          <span className="rf-t1">{s.fullName}</span>
+          <span className="rf-t2">{displaySectionName(s.sectionName)} · {feeText(s.amountMinor)}{s.teamName ? ` · ${s.teamName}` : ''}</span>
+        </span>
+        <span className={`rf-st rf-${tag.tone}`}>{tag.text}</span>
+        <ChevronDown className={`rf-chev rf-chev-down h-4 w-4 ${isOpen ? 'ops-flip' : ''}`} aria-hidden="true" />
+      </button>
+      {bucket === 'pending' && (
+        <div className="ops-pending">
+          <span className="ops-badge-pending">{badge}</span>
+          <span className="rf-t2">{t('ops2.entries.byBank', { fee: feeText(s.amountMinor) })}</span>
+          <button type="button" className="rf-btn rf-btn-primary ops-markpaid" disabled={busy} aria-label={t('ops2.entries.markPaidAria', { name: s.fullName })} onClick={onMarkPaid}>{t('ops2.entries.markPaid')}</button>
+        </div>
+      )}
+      {isOpen && (
+        <div className="ops-entry-body">
+          <SignupDetail competition={competition} signup={s} onChanged={onChanged} />
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -4,6 +4,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api';
 import { autoConfirm } from '../../test/confirm';
+import { CurrentCompetitionProvider } from '../../competition/CurrentCompetitionContext';
+import { TickerProvider } from '../../components/TickerContext';
+import { TopBarTicker } from '../../components/TopBarTicker';
 import { TimetablePage } from './TimetablePage';
 
 const reload = vi.fn();
@@ -36,6 +39,18 @@ const preview = {
 
 function show() {
   return render(<MemoryRouter><TimetablePage /></MemoryRouter>);
+}
+function showDocked() {
+  return render(
+    <MemoryRouter>
+      <CurrentCompetitionProvider>
+        <TickerProvider>
+          <TimetablePage />
+          <TopBarTicker />
+        </TickerProvider>
+      </CurrentCompetitionProvider>
+    </MemoryRouter>,
+  );
 }
 const startOf = (id: number) => at(id === 3 ? 80 : id === 2 ? 40 : 0);
 
@@ -163,12 +178,34 @@ describe('TimetablePage', () => {
     await user.keyboard('{ArrowUp}');
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/2', { scheduledStart: startOf(1) }));
     expect(api.put).toHaveBeenCalledWith('/competitions/7/sessions/1', { scheduledStart: at(50) });
-    // Nothing before the first, so up on the first one does nothing; other keys are ignored.
+    // Lunch is first now and nothing is before it, so up does nothing; other keys are ignored.
+    await waitFor(() => expect(grip).toHaveAttribute('aria-disabled', 'false'));
     vi.mocked(api.put).mockClear();
-    const first = screen.getByRole('button', { name: /^Move Under 12 · Session 1: drag/ });
-    first.focus();
     await user.keyboard('{ArrowUp}{a}');
     expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it('shows a moved block at its new time while it saves, and keeps the grip focused', async () => {
+    let finish = () => {};
+    vi.mocked(api.put).mockImplementation(() => new Promise((resolve) => { finish = () => resolve({ data: {} }); }));
+    const user = userEvent.setup();
+    const { container } = show();
+    await user.click(await screen.findByRole('switch', { name: 'Drag to change the order' }));
+    const timeOf = (id: number) => container.querySelector(`[data-tt-row="${id}"] .ops-time`)?.textContent;
+    const firstTime = timeOf(1);
+    const grip = screen.getByRole('button', { name: /^Move Lunch: drag/ });
+    grip.focus();
+    await user.keyboard('{ArrowUp}');
+    // Before the save answers, Lunch already sits first with Session 1's old start.
+    await waitFor(() => expect(timeOf(2)).toBe(firstTime));
+    expect([...container.querySelectorAll('[data-tt-row]')].map((row) => row.getAttribute('data-tt-row'))).toEqual(['2', '1', '3']);
+    expect(grip).toHaveFocus();
+    expect(grip).toHaveAttribute('aria-disabled', 'true');
+    // A second press while it saves does nothing.
+    const calls = vi.mocked(api.put).mock.calls.length;
+    await user.keyboard('{ArrowDown}');
+    expect(api.put).toHaveBeenCalledTimes(calls);
+    finish();
   });
 
   it('drags a block down the order with a pointer and saves the new times', async () => {
@@ -436,5 +473,22 @@ describe('TimetablePage after the draw', () => {
     show();
     await user.click(await screen.findByRole('button', { name: /Under 12 · Session 1/ }));
     expect(screen.getByText(/has started or has scores/)).toBeInTheDocument();
+  });
+
+  it('puts the timetable tools in a sheet opened from the dock, with the break form back on the page', async () => {
+    const user = userEvent.setup();
+    showDocked();
+    await screen.findByRole('button', { name: /Under 12 · Session 1/ });
+    expect(screen.queryByText('Move everything')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add a hatband' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add a break' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Timetable tools' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Timetable tools' });
+    for (const name of ['Move everything', 'Each one follows on from the one before', 'Drag to change the order', 'Send the timetable', 'Hatbands', 'Lanes for heat 1']) {
+      expect(within(sheet).getByText(name)).toBeInTheDocument();
+    }
+    await user.click(within(sheet).getByRole('button', { name: 'Add a break' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Timetable tools' })).not.toBeInTheDocument());
+    expect(await screen.findByRole('button', { name: 'Add break' })).toBeInTheDocument();
   });
 });

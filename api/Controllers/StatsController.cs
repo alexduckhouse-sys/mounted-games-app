@@ -12,10 +12,10 @@ using MountedGames.Api.Services.Stats;
 namespace MountedGames.Api.Controllers;
 
 /// <summary>
-/// The statistics hub (<c>/stats</c> on the web). Anyone may search, browse and see a profile's headline numbers, and a
-/// team profile's per-game breakdown too. For riders and ponies the per-game breakdown, and for every kind the list of
-/// entries and the rider and pony partnerships, are for signed-in viewers only.
-/// The service decides that from the caller, so the detail never leaves the API for an anonymous request.
+/// The statistics hub (<c>/stats</c> on the web). Anyone, signed in or not, may search, browse and see a full profile:
+/// headline numbers, per-game breakdown, entries, partnerships, clubs and seasons. The only thing that varies by caller
+/// is names: site admins see riders' full names, everyone else sees what each rider chose to show (initials only for
+/// those who asked). The service decides that from the caller.
 /// Every call is limited per user or address by the <c>stats</c> policy (<c>RateLimits:StatsPerMinute</c>).
 /// </summary>
 [ApiController]
@@ -27,7 +27,7 @@ public sealed class StatsController(AppDbContext db, StandingsService standings)
 {
     private readonly StatsService _stats = new(db, standings);
 
-    private StatsViewer Viewer => new(User.Identity?.IsAuthenticated == true, User.IsInRole(Roles.Admin));
+    private StatsViewer Viewer => new(User.IsInRole(Roles.Admin));
 
     [HttpGet("search")]
     public async Task<ActionResult<StatsSearchDto>> Search([FromQuery] string? q, CancellationToken ct)

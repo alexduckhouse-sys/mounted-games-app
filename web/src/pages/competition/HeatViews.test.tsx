@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, Link } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
@@ -30,5 +30,30 @@ describe('HeatPickerBar back button', () => {
     await user.click(back);
     // MemoryRouter has no window history index, so BackLink uses the fixed parent: the scoring list.
     expect(screen.getByText('Scoring list')).toBeInTheDocument();
+  });
+});
+
+describe('HeatPickerBar list', () => {
+  const open = async () => {
+    const user = userEvent.setup();
+    render(<MemoryRouter><p>Elsewhere</p><HeatPickerBar arena="Main" label="Seniors · Heat 1" items={items} /></MemoryRouter>);
+    await user.click(screen.getByRole('button', { name: 'Heat: Main, Seniors · Heat 1' }));
+    expect(screen.getByRole('listbox', { name: 'Heats' })).toBeInTheDocument();
+    return user;
+  };
+
+  it('closes on a tap outside, but not on a tap inside the bar', async () => {
+    await open();
+    fireEvent.pointerDown(screen.getByRole('listbox', { name: 'Heats' }));
+    expect(screen.getByRole('listbox', { name: 'Heats' })).toBeInTheDocument();
+    fireEvent.pointerDown(screen.getByText('Elsewhere'));
+    expect(screen.queryByRole('listbox', { name: 'Heats' })).toBeNull();
+  });
+
+  it('closes on Escape and puts focus back on the bar button', async () => {
+    await open();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('listbox', { name: 'Heats' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Heat: Main, Seniors · Heat 1' })).toHaveFocus();
   });
 });

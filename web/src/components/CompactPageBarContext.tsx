@@ -36,17 +36,22 @@ interface CompactPageBarState {
   publish: (owner: symbol, config: CompactPageBarConfig) => void;
   clear: (owner: symbol) => void;
   header: PageHeaderEntry | null;
-  publishHeader: (owner: symbol, entry: PageHeaderEntry) => void;
+  publishHeader: (owner: symbol, entry: PageHeaderEntry, priority?: number) => void;
   clearHeader: (owner: symbol) => void;
 }
 
 const CompactPageBarCtx = createContext<CompactPageBarState | null>(null);
+/** True below the app shell's page outlet, where a published title shows in the top bar. */
+const InAppShellCtx = createContext(false);
 
 export function CompactPageBarProvider({ children }: { children: ReactNode }) {
   const [entry, setEntry] = useState<{ owner: symbol; config: CompactPageBarConfig } | null>(null);
-  const [headerEntry, setHeaderEntry] = useState<{ owner: symbol; value: PageHeaderEntry } | null>(null);
-  const publishHeader = useCallback((owner: symbol, value: PageHeaderEntry) => setHeaderEntry({ owner, value }), []);
-  const clearHeader = useCallback((owner: symbol) => setHeaderEntry((current) => current?.owner === owner ? null : current), []);
+  const [headerEntries, setHeaderEntries] = useState<{ owner: symbol; value: PageHeaderEntry; priority: number }[]>([]);
+  const publishHeader = useCallback((owner: symbol, value: PageHeaderEntry, priority = 0) =>
+    setHeaderEntries((list) => [...list.filter((item) => item.owner !== owner), { owner, value, priority }]), []);
+  const clearHeader = useCallback((owner: symbol) => setHeaderEntries((list) => list.filter((item) => item.owner !== owner)), []);
+  // The highest priority wins, and the latest of equals, so a RefineHeader's title beats its page's own.
+  const headerEntry = headerEntries.reduce<(typeof headerEntries)[number] | null>((best, item) => !best || item.priority >= best.priority ? item : best, null);
   const publish = useCallback((owner: symbol, config: CompactPageBarConfig) => setEntry({ owner, config }), []);
   const clear = useCallback((owner: symbol) => setEntry((current) => current?.owner === owner ? null : current), []);
   const value = useMemo<CompactPageBarState>(() => ({
@@ -60,7 +65,17 @@ export function CompactPageBarProvider({ children }: { children: ReactNode }) {
   return <CompactPageBarCtx.Provider value={value}>{children}</CompactPageBarCtx.Provider>;
 }
 
+/** Wraps the app shell's page outlet. */
+export function InAppShell({ children }: { children: ReactNode }) {
+  return <InAppShellCtx.Provider value>{children}</InAppShellCtx.Provider>;
+}
+
 // This provider and its hooks deliberately share the same context module.
+// eslint-disable-next-line react-refresh/only-export-components
+export function useInAppShell() {
+  return useContext(InAppShellCtx);
+}
+
 // eslint-disable-next-line react-refresh/only-export-components
 export function useCompactPageBarState() {
   const context = useContext(CompactPageBarCtx);
@@ -86,25 +101,26 @@ export function useCompactPageBar(config: CompactPageBarConfig) {
  * Does nothing outside the app shell, so pages stay renderable on their own.
  */
 // eslint-disable-next-line react-refresh/only-export-components
-export function usePageHeader(config: PageHeaderConfig) {
+export function usePageHeader(config: PageHeaderConfig | null, priority = 0) {
   const context = useContext(CompactPageBarCtx);
   const owner = useRef(Symbol('page-header'));
-  const refresh = useRef(config.onRefresh);
-  const edit = useRef(config.onEdit);
-  useLayoutEffect(() => { refresh.current = config.onRefresh; edit.current = config.onEdit; });
-  const { title, subtitle, refreshLabel, editLabel, editing, plain, backTo, backLabel } = config;
-  const hasRefresh = !!config.onRefresh;
-  const hasEdit = !!config.onEdit;
+  const refresh = useRef(config?.onRefresh);
+  const edit = useRef(config?.onEdit);
+  useLayoutEffect(() => { refresh.current = config?.onRefresh; edit.current = config?.onEdit; });
+  const on = config != null;
+  const { title = '', subtitle, refreshLabel, editLabel, editing, plain, backTo, backLabel } = config ?? {};
+  const hasRefresh = !!config?.onRefresh;
+  const hasEdit = !!config?.onEdit;
   const publishHeader = context?.publishHeader;
   const clearHeader = context?.clearHeader;
   useLayoutEffect(() => {
-    if (!publishHeader || !clearHeader) return;
+    if (!on || !publishHeader || !clearHeader) return;
     const ownerKey = owner.current;
     publishHeader(ownerKey, {
       title, subtitle, refreshLabel, editLabel, editing, plain, backTo, backLabel,
       refresh: hasRefresh ? () => refresh.current?.() : undefined,
       edit: hasEdit ? () => edit.current?.() : undefined,
-    });
+    }, priority);
     return () => clearHeader(ownerKey);
-  }, [title, subtitle, refreshLabel, editLabel, editing, plain, backTo, backLabel, hasRefresh, hasEdit, publishHeader, clearHeader]);
+  }, [on, title, subtitle, refreshLabel, editLabel, editing, plain, backTo, backLabel, hasRefresh, hasEdit, priority, publishHeader, clearHeader]);
 }

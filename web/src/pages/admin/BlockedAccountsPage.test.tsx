@@ -6,7 +6,14 @@ import { api } from '../../api';
 import { autoConfirm } from '../../test/confirm';
 import { BlockedAccountsPage } from './BlockedAccountsPage';
 
-vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
+const auth = vi.hoisted(() => ({ master: false }));
+vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ hasRole: (role: string) => role === 'MasterAdmin' && auth.master }) }));
+beforeEach(() => { auth.master = false; });
+
+vi.mock('../../api', () => ({
+  getIpBlocks: async () => (await import('../../api')).api.get('/ip-blocks'),
+  createIpBlock: async ({ ip, reason }: { ip: string; reason: string }) => (await import('../../api')).api.post('/ip-blocks', { ipAddress: ip, reason }),
+  deleteIpBlock: async (id: number) => (await import('../../api')).api.delete(`/ip-blocks/${id}`), api: { get: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
 
 const blockedRow = (id: string, name: string, extra: Record<string, unknown> = {}) => ({ id, fullName: name, email: `${id}@example.com`, roles: ['Member'], blockedAt: '2026-10-22T10:00:00Z', blockedByName: 'Demo Admin', reason: 'Spam in chat', ...extra });
 const person = (id: string, name: string, extra: Record<string, unknown> = {}) => ({ id, fullName: name, email: `${id}@example.com`, clubId: null, clubName: null, roles: ['Member'], isLockedOut: false, createdAt: '2026-10-01T00:00:00Z', isLocked: false, isBlocked: false, ...extra });
@@ -19,7 +26,7 @@ describe('BlockedAccountsPage', () => {
   beforeEach(() => {
     blockedList = [blockedRow('b1', 'Bad Bob')];
     people = [person('p1', 'Pat Rider'), person('b1', 'Bad Bob', { isBlocked: true })];
-    vi.mocked(api.get).mockImplementation(async (url: string) => ({ data: url === '/admin/blocked-users' ? blockedList : people }) as never);
+    vi.mocked(api.get).mockImplementation(async (url: string) => ({ data: url === '/ip-blocks' ? [] : url === '/admin/blocked-users' ? blockedList : people }) as never);
     vi.mocked(api.post).mockResolvedValue({ data: { networksBlocked: 2 } });
     vi.mocked(api.delete).mockResolvedValue({ data: {} });
   });
@@ -133,4 +140,32 @@ describe('BlockedAccountsPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load the blocked accounts');
     expect(await screen.findByText('No one is blocked')).toBeInTheDocument();
   });
+});
+
+it('lists masked manual IP blocks and can add and lift them for a master admin', async () => {
+  auth.master = true;
+  const user = userEvent.setup(); const confirmation = autoConfirm(true);
+  let addresses: { id: number; ipAddress: string; reason: string; createdAt: string }[] = [{ id: 9, ipAddress: '192.0.2.55', reason: 'Fake test block', createdAt: '2026-10-29T00:00:00Z' }];
+  vi.mocked(api.get).mockImplementation(async (url: string) => ({ data: url === '/ip-blocks' ? addresses : [] }) as never);
+  vi.mocked(api.delete).mockImplementation(async () => { addresses = []; return { data: {} }; });
+  mount();
+  expect(await screen.findByText('192.0.2.*')).toBeInTheDocument();
+  expect(screen.queryByText('192.0.2.55')).toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Unblock 192.0.2.*' }));
+  await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/ip-blocks/9'));
+  await user.click(screen.getByRole('button', { name: '+ Block an IP address' }));
+  await user.type(screen.getByLabelText('IP address'), '192.0.2.56');
+  await user.type(screen.getByLabelText('Reason'), 'Fake test');
+  await user.click(screen.getByRole('button', { name: /^Block address$/ }));
+  await waitFor(() => expect(api.post).toHaveBeenCalledWith('/ip-blocks', { ipAddress: '192.0.2.56', reason: 'Fake test' }));
+  confirmation.stop();
+});
+
+it('does not request or show manual IP controls to an ordinary site admin', async () => {
+  vi.mocked(api.get).mockResolvedValue({ data: [] });
+  mount();
+  expect(await screen.findByText('No one is blocked')).toBeInTheDocument();
+  expect(api.get).not.toHaveBeenCalledWith('/ip-blocks');
+  expect(screen.queryByRole('heading', { name: 'Blocked IP addresses' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '+ Block an IP address' })).not.toBeInTheDocument();
 });

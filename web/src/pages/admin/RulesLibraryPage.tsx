@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, Plus, Search } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import { api } from '../../api';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { Notice } from '../../components/Notice';
@@ -10,6 +10,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { apiErrorMessage } from '../../lib/apiError';
 import type { RaceTemplate } from '../../types';
 import { RulebooksPanel } from '../operations/RulebooksPage';
+import { useDockAction } from '../../components/TickerContext';
 import { Chevron, RefineHeader, RefineList, RefinePage } from '../refine/Refine';
 import '../operations/operations.css';
 
@@ -30,6 +31,8 @@ export function RulesLibraryPage() {
   const [view, setView] = useState<View>({ kind: 'list' });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // "New race" is the + beside the ticker dock while the list shows.
+  const docked = useDockAction(mayEdit && view.kind === 'list' ? { label: t('admin.format.rules.newRace'), icon: 'plus', onClick: () => { setError(null); setView({ kind: 'new' }); } } : null);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,7 +90,6 @@ export function RulesLibraryPage() {
         : <RefineHeader onBack={toList} backLabel={t('admin.format.rules.backToLibrary')} context={t('admin.format.rules.title')} title={title} />}
       <div className="ops-cards ops-tt ops-admin" aria-busy={busy}>
         {error && <Notice>{error}</Notice>}
-        {view.kind !== 'list' && <button type="button" className="ops-back" onClick={toList}><ChevronLeft className="h-4 w-4" aria-hidden="true" />{t('admin.format.rules.title')}</button>}
 
         {view.kind === 'list' && (
           <>
@@ -108,7 +110,7 @@ export function RulesLibraryPage() {
                 {shown.length === 0 && <div className="rf-row"><span className="rf-t2">{races.length === 0 ? t('admin.format.rules.noRaces') : t('admin.format.rules.noMatch')}</span></div>}
               </RefineList>
             )}
-            {mayEdit && <button type="button" className="ops-addbar ops-addbar-gap" onClick={() => { setError(null); setView({ kind: 'new' }); }}><Plus className="h-4 w-4" aria-hidden="true" />{t('admin.format.rules.newRace')}</button>}
+            {mayEdit && !docked && <button type="button" className="ops-addbar ops-addbar-gap" onClick={() => { setError(null); setView({ kind: 'new' }); }}><Plus className="h-4 w-4" aria-hidden="true" />{t('admin.format.rules.newRace')}</button>}
 
             <h2 className="rf-sec ops-tt-head"><span>{t('admin.format.rules.rulebooks')}</span></h2>
             <RefineList as="div" label={t('admin.format.rules.rulebooks')}>
@@ -141,6 +143,7 @@ function NewRace({ busy, onCreate }: { busy: boolean; onCreate: (name: string) =
     <form onSubmit={(event) => { event.preventDefault(); void submit(); }}>
       <h2 className="rf-sec ops-tt-head"><span>{t('admin.format.rules.about')}</span></h2>
       <label className="rf-fld">{t('admin.format.rules.name')}<input autoFocus value={name} maxLength={80} onChange={(event) => setName(event.target.value)} onBlur={() => void submit()} /></label>
+      <div className="mt-4 flex"><button type="submit" className="rf-btn rf-btn-primary" disabled={busy || !name.trim()}>{t('admin.format.rules.createRace')}</button></div>
     </form>
   );
 }

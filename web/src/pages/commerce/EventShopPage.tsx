@@ -1,3 +1,4 @@
+import { ShoppingBasket } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { Link } from 'react-router-dom';
 import { usePageHeader } from '../../components/CompactPageBarContext';
@@ -164,7 +165,7 @@ function EventShopContent() {
         <OrderLines order={order} />
         <DemoPaymentNotice what="order" className="mt-3" />
         <RefineNote>{t('site.shop.payOrganiser')} {t('site.shop.collect')}</RefineNote>
-        <RefineFoot><button type="button" className="rf-btn rf-btn-primary rf-wide" onClick={backToShop}>{t('site.shop.backToShop')}</button></RefineFoot>
+        <RefineFoot inline><button type="button" className="rf-btn rf-btn-primary rf-wide" onClick={backToShop}>{t('site.shop.backToShop')}</button></RefineFoot>
       </RefinePage>
     );
   }
@@ -243,6 +244,7 @@ function EventShopContent() {
         </section>
       ))}
       {hasBasket && <DemoPaymentNotice what="order" className="mt-3" />}
+      <p className="sp-note">Your order and payment are directly with {competition.organiserName || `the organiser of ${competition.name}`} or the seller named on the item. <Link to="/refunds" className="underline">Cancellation and refund information</Link>.</p>
       {hasBasket && (user ? (
         <button type="button" ref={(node) => { orderButton.current = node; }} className="ev-bar" disabled={busy} onClick={() => void checkout()}>{busy ? t('site.shop.placing') : orderLabel}</button>
       ) : (
@@ -253,13 +255,11 @@ function EventShopContent() {
       {user && <div className="pt-1"><Link className="ev-text-btn" to="/me/orders">{t('site.shop.yourOrders')}</Link></div>}
       <p className="sp-note">{t('site.shop.sellerNote')}</p>
       {hasBasket && !orderVisible && (
-        <div className="shop-basket-bar" role="region" aria-label={t('site.shop.basket')}>
-          <span className="shop-basket-text">
-            <span className="shop-basket-count">{itemsText(basketCount)}</span>
-            <span className="shop-basket-total">{feeText(estimatedTotal)}</span>
-          </span>
-          <button type="button" className="kit-pill kit-pill-fill" onClick={showOrderButton}>{t('site.shop.checkout')}</button>
-        </div>
+        <button type="button" className="shop-basket-btn" onClick={showOrderButton}
+          aria-label={`${t('site.shop.checkout')}: ${itemsText(basketCount)}, ${feeText(estimatedTotal)}`}>
+          <ShoppingBasket aria-hidden="true" className="h-[22px] w-[22px]" />
+          <span className="shop-basket-n" aria-hidden="true">{basketCount}</span>
+        </button>
       )}
     </div>
   );
@@ -311,7 +311,7 @@ function ShopHeader() {
   const { competition } = useCompetition();
   const start = new Date(competition.startDate);
   const when = Number.isNaN(start.getTime()) ? '' : start.toLocaleDateString(locale, { day: 'numeric', month: 'short' });
-  usePageHeader({ title: t('site.shop.eventShopOne'), subtitle: [competition.name, when].filter(Boolean).join(' · '), plain: true, backTo: '/shop', backLabel: t('site.shop.backToShop') });
+  usePageHeader({ title: t('site.shop.eventShopOne'), subtitle: [competition.name, when].filter(Boolean).join(' · '), plain: true, backTo: `/competitions/${competition.id}/details`, backLabel: t('entries.page.backToDetails') });
   return null;
 }
 
@@ -342,7 +342,7 @@ function ShopOutcome({ order, payment, retry, onShop }: { order: EventOrder; pay
         <OutcomeState payment={payment} title={t('site.shop.orderN', { id: order.id })} detail={t('site.shop.demoPaid', { amount: pounds(payment.amountMinor), time: clock(payment.createdAt, locale) })} />
         <OrderLines order={order} />
         <RefineNote>{t('site.shop.collect')} {t('site.shop.showNumber')}</RefineNote>
-        <RefineFoot>
+        <RefineFoot inline>
           <button type="button" className="rf-btn" onClick={onShop}>{t('site.shop.shop')}</button>
           <Link className="rf-btn rf-btn-primary rf-grow" to={`/me/orders?order=${order.id}`}>{t('site.shop.viewReceipt')}</Link>
         </RefineFoot>
@@ -353,7 +353,7 @@ function ShopOutcome({ order, payment, retry, onShop }: { order: EventOrder; pay
     return (
       <>
         <OutcomeState payment={payment} detail={t('site.shop.nothingCharged', { id: order.id })} />
-        <RefineFoot column>
+        <RefineFoot inline column>
           <button type="button" className="rf-btn rf-btn-primary" onClick={retry}>{t('common.tryAgain')}</button>
           <button type="button" className="rf-btn rf-btn-text" onClick={onShop}>{t('site.shop.backToShop')}</button>
         </RefineFoot>
@@ -363,7 +363,7 @@ function ShopOutcome({ order, payment, retry, onShop }: { order: EventOrder; pay
   return (
     <>
       <OutcomeState payment={payment} title={t('site.shop.paymentCancelled')} detail={t('site.shop.cancelledDetail', { id: order.id })} />
-      <RefineFoot>
+      <RefineFoot inline>
         <button type="button" className="rf-btn rf-btn-primary rf-wide" onClick={onShop}>{t('site.shop.backToShop')}</button>
       </RefineFoot>
     </>

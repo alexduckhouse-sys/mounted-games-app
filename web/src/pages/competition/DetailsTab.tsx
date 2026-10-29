@@ -10,7 +10,7 @@ import { eventDetailRows, type DetailRow } from './eventDetailRows';
 import { useCompetition } from './context';
 import { EntryManagement } from './EntryManagement';
 import { useEntrySettings } from './entrySettings';
-import { competitionDateText } from '../../lib/competitionDates';
+import { competitionDateText, hasEnded } from '../../lib/competitionDates';
 import { competitionCalendarUrl, competitionLink } from '../../lib/sharing';
 import { QrCode } from '../../components/QrCode';
 import { Sheet } from '../../components/Sheet';
@@ -149,6 +149,7 @@ export function DetailsTab() {
   const enterLabel = !user ? t('competition.details.signInToEnter') : competition.sections.some((s) => s.format === 2) ? t('competition.details.enterTeam') : t('competition.details.enter');
   const enterTo = `/competitions/${competition.id}/enter`;
   const closed = entrySettings.closed && !mayOrganise;
+  const ended = !mayOrganise && hasEnded(competition.startDate, competition.endDate, new Date());
 
   return (
     <div className="rf-page mx-auto flex w-full max-w-xl flex-col pb-4 pt-3 lg:max-w-3xl">
@@ -182,7 +183,6 @@ export function DetailsTab() {
         <LinkRow to="../teams" label={t('competition.details.teams')} />
         {showDecForms && <LinkRow to="../declarations" label={t('competition.details.decForms')} />}
         <LinkRow to="../shop" label={t('competition.details.shop')} />
-        <LinkRow to="../shop" label={t('competition.details.stabling')} />
         <LinkRow to="../rulebooks" label={t('competition.details.rules')} />
         <LinkRow to="../arena" label={t('competition.details.arena')} />
         {user && <LinkRow to="../volunteers" label={t('competition.details.volunteers')} />}
@@ -215,7 +215,9 @@ export function DetailsTab() {
             ))}
           </div>
           {competition.sections.map((section) => <MatchmakingBoard key={section.id} competitionId={competition.id} section={section} />)}
-          {closed ? (
+          {ended ? (
+            <Notice tone="info" className="mx-4 mt-3">{t('competition.details.ended')}</Notice>
+          ) : closed ? (
             <Notice tone="info" className="mx-4 mt-3">{t('competition.details.entriesClosed')}</Notice>
           ) : (
             <Link to={user ? enterTo : '/login'} state={user ? undefined : { from: enterTo }} className="ev-bar">{enterLabel}</Link>

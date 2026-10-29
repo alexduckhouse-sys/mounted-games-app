@@ -1,3 +1,5 @@
+using MountedGames.Api.Security;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -52,6 +54,8 @@ public sealed class TackCheckController(AppDbContext db, MountedGames.Api.Hubs.I
     /// <summary>The Tack &amp; Turnout table: team points per sector in sections that score their tack check.</summary>
     [HttpGet("tack-check/leaderboard")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<TackLeaderboardDto>> Leaderboard(int competitionId, CancellationToken ct)
     {
         if (!await db.Competitions.AnyAsync(c => c.Id == competitionId, ct)) return NotFound();

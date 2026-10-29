@@ -267,16 +267,20 @@ public class ChatModerationTests(ApiFactory f) : IClassFixture<ApiFactory>
     [InlineData("GET", "/api/competitions/1/chat/reports", true)]
     [InlineData("GET", "/api/competitions/1/chat/reports/1/message", true)]
     [InlineData("POST", "/api/competitions/1/chat/reports/1/resolve", true)]
-    public async Task Endpoints_RequireSignInAndReviewRequiresAdmin(string method, string url, bool adminOnly)
+    public async Task Endpoints_RequireSignInAndReviewRequiresCompetitionStaff(string method, string url, bool staffOnly)
     {
         using var request = new HttpRequestMessage(new HttpMethod(method), url) { Content = JsonContent.Create(new { reason = "Review" }) };
         Assert.Equal(HttpStatusCode.Unauthorized, (await f.CreateClient().SendAsync(request)).StatusCode);
-        if (adminOnly)
+        if (staffOnly)
         {
-            foreach (var client in new[] { (await f.SignupAsync("Member")).Client, (await f.ApprovedTrainerAsync()).Client })
+            foreach (var (client, expected) in new[]
+            {
+                ((await f.SignupAsync("Member")).Client, HttpStatusCode.Forbidden),
+                ((await f.ApprovedTrainerAsync()).Client, HttpStatusCode.NotFound),
+            })
             {
                 using var forbidden = new HttpRequestMessage(new HttpMethod(method), url);
-                Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(forbidden)).StatusCode);
+                Assert.Equal(expected, (await client.SendAsync(forbidden)).StatusCode);
             }
         }
     }

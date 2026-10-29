@@ -38,6 +38,8 @@ describe('InvitePage', () => {
     expect(window.location.hash).toBe('');
     expect(screen.getByLabelText('Email')).toHaveValue('new@example.com');
     expect(screen.getByLabelText('Email')).toHaveAttribute('readonly');
+    // The box looks locked: the readonly input sits in a field the stylesheet greys out.
+    expect(screen.getByLabelText('Email').closest('.mg-field')!.querySelector('input[readonly]')).not.toBeNull();
     expect(screen.getByLabelText('Your name')).toBeInTheDocument();
     expect(screen.getByLabelText('Password')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create account' })).toBeDisabled();
@@ -76,6 +78,7 @@ describe('InvitePage', () => {
     mount();
     expect(await screen.findByRole('alert')).toHaveTextContent('has expired or isn’t valid');
     expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to sign in' })).toHaveAttribute('href', '/login');
   });
 
   it('uses its own wording when a 404 carries no message, and asks to check the connection when offline', async () => {

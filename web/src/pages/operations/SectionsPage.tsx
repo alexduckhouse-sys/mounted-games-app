@@ -2,7 +2,9 @@ import { useT } from '../../i18n/LanguageContext';
 import { tr } from '../../i18n/translate';
 import type { Translate } from '../../i18n/translate';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Minus, Plus, X } from 'lucide-react';
+import { Check, Minus, Plus, X } from 'lucide-react';
+import { GripButton } from '../../components/GripButton';
+import { useRowDrag } from '../../hooks/useRowDrag';
 import { TickerNumber } from '../../components/TickerNumber';
 import { api } from '../../api';
 import { useAuth } from '../../auth/AuthContext';
@@ -59,6 +61,8 @@ export function SectionsPage() {
   const [seen, setSeen] = useState<CompetitionDetail>(competition);
   const [saving, setSaving] = useState(false);
   const [waiting, setWaiting] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+  const savedTimer = useRef<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retryable, setRetryable] = useState(false);
   const [templates, setTemplates] = useState<string[]>([]);
@@ -68,6 +72,13 @@ export function SectionsPage() {
   const dirty = useRef(false);
   const timer = useRef<number | null>(null);
   const competitionRef = useRef(competition);
+  useEffect(() => () => { if (savedTimer.current) window.clearTimeout(savedTimer.current); }, []);
+  /** Shows the quiet "Saved" badge for a moment. */
+  function noteSaved() {
+    setJustSaved(true);
+    if (savedTimer.current) window.clearTimeout(savedTimer.current);
+    savedTimer.current = window.setTimeout(() => setJustSaved(false), 2500);
+  }
   useEffect(() => { competitionRef.current = competition; });
 
   // A fresh copy of the competition replaces the draft, unless there are changes waiting to be saved.
@@ -94,6 +105,7 @@ export function SectionsPage() {
       const current = competitionRef.current;
       await saveCreator(latest.current, { editingId: current.id, competition: current, teamCounts: teamCountsOf(current), progress: () => {} });
       dirty.current = false;
+      noteSaved();
       reload();
     } catch (caught) {
       if (caught instanceof SaveError && caught.status === 409) {
@@ -132,7 +144,7 @@ export function SectionsPage() {
     setSaving(true);
     setError(null);
     setRetryable(false);
-    try { await work(); reload(); }
+    try { await work(); noteSaved(); reload(); }
     catch (caught) { setError(messageOf(caught, t('ops.sections.settingFail', { what }))); }
     finally { setSaving(false); }
   }
@@ -183,10 +195,9 @@ export function SectionsPage() {
   const busy = saving;
   return (
     <RefinePage>
-      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.hub.back')} context={competition.name} title={t('ops.sections.title')} />
+      <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.hub.back')} context={competition.name} title={t('ops.sections.title')} actions={<span role="status" className={`ops-saved${busy || justSaved ? ' is-on' : ''}`}>{busy ? t('common.saving') : justSaved ? <><Check className="h-4 w-4" aria-hidden="true" />{t('ops3.plan.sections.saved')}</> : null}</span>} />
       <div className="ops-sections" aria-busy={busy}>
         {error && <Notice actionLabel={retryable ? t('common.tryAgain') : undefined} onAction={() => void flush()}>{error}</Notice>}
-        {busy && <p role="status" className="rf-note">{t('common.saving')}</p>}
         <hr className="ops-navybar ops-navybar-first" />
         {draft.sections.map((section, index) => {
           const saved = section.existingId ? sectionsById.get(section.existingId) : undefined;
@@ -303,14 +314,16 @@ function RaceEditor({ section, templates, disabled, onChange }: { section: Secti
   const fixed = onFinal ? Boolean(section.finalHasHeats || section.finalScored) : Boolean(session?.hasHeats || session?.scored);
   const readOnly = disabled || fixed;
   const list = races ?? [];
+  const { grab, keys, lifted, rowStyle } = useRowDrag();
 
   const set = (next: string[] | null) => onChange(onFinal
     ? { ...section, finalRaces: next }
     : { ...section, sessions: section.sessions.map((s, i) => (i === active ? { ...s, races: next } : s)) });
   const move = (from: number, to: number) => {
-    if (to < 0 || to >= list.length) return;
+    if (to < 0 || to >= list.length || from === to) return;
     const next = [...list];
-    [next[from], next[to]] = [next[to], next[from]];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
     set(next);
   };
   const add = (name: string) => { const text = name.trim(); if (text) { set([...list, text]); setQuery(''); } };
@@ -339,14 +352,13 @@ function RaceEditor({ section, templates, disabled, onChange }: { section: Secti
       )}
       {fixed && <p className="rf-note">{t('ops.sections.fixed')}</p>}
       {races === null && !fixed && <p className="rf-note">{t('ops.sections.later')}</p>}
-      <ol className="ops-race-list">
+      <ol className="ops-race-list" data-row-list="">
         {list.map((name, i) => (
-          <li key={`${name}-${i}`}>
+          <li key={`${name}-${i}`} data-race-row="" data-lifted={lifted(i)} style={rowStyle(i)}>
+            {!readOnly && <GripButton label={t('ops.sections.move', { name })} onPointerDown={(e) => grab(e, i, list.length, move)} onKeyDown={(e) => keys(e, i, list.length, move)} />}
             <span className="ops-race-n">{i + 1}</span>
             <span className="ops-race-name">{name}</span>
             {!readOnly && <>
-              <button type="button" className="ops-ibtn" aria-label={t('ops.sections.moveUp', { name })} onClick={() => move(i, i - 1)} disabled={i === 0}><ArrowUp className="h-4 w-4" aria-hidden="true" /></button>
-              <button type="button" className="ops-ibtn" aria-label={t('ops.sections.moveDown', { name })} onClick={() => move(i, i + 1)} disabled={i === list.length - 1}><ArrowDown className="h-4 w-4" aria-hidden="true" /></button>
               <button type="button" className="ops-ibtn ops-ibtn-red" aria-label={t('ops.sections.removeRace', { name })} onClick={() => set(list.filter((_, j) => j !== i))}><X className="h-4 w-4" aria-hidden="true" /></button>
             </>}
           </li>

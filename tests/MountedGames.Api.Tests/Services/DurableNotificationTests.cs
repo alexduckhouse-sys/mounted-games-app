@@ -289,7 +289,9 @@ public class DurableNotificationTests(ApiFactory factory) : IClassFixture<ApiFac
     [Fact]
     public async Task ReminderPlan_UsesDelayedStartAndOneBasedHeatLabel()
     {
-        var now = DateTime.UtcNow;
+        // Midday, so every session lands on the same timetable day: a delay doesn't carry past midnight, and with the
+        // real clock this failed between about 23:10 and 00:40 UTC.
+        var now = DateTime.UtcNow.Date.AddHours(12);
         var section = await factory.NewSectionAsync();
         var plans = await factory.InDbAsync(async db =>
         {

@@ -4,6 +4,7 @@ import { ChevronRight, ExternalLink, Pencil, Plus, Trash2, X } from 'lucide-reac
 import { api } from '../../api';
 import { Notice } from '../../components/Notice';
 import { useToast } from '../../components/Toast';
+import { useDockAction } from '../../components/TickerContext';
 import { useAuth } from '../../auth/AuthContext';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { useCompetition } from '../competition/context';
@@ -73,12 +74,12 @@ function GlobalRulebooks() {
     </div>
   );
 
-  const headerFor = (draft: RulebookDraft | null, busy: boolean, onAdd: () => void, onClose: () => void) => {
+  const headerFor = (draft: RulebookDraft | null, busy: boolean, docked: boolean, onAdd: () => void, onClose: () => void) => {
     const editing = draft !== null;
     const actions = tab === 'rulebooks'
       ? (editing
         ? <button type="button" className="rf-ib" aria-label="Close editor" onClick={onClose} disabled={busy}><X className="h-5 w-5" aria-hidden="true" /></button>
-        : canWrite ? <button type="button" className="rf-btn" onClick={onAdd} disabled={busy}><Plus aria-hidden="true" className="h-4 w-4" />Add rulebook</button> : null)
+        : canWrite && !docked ? <button type="button" className="rf-btn" onClick={onAdd} disabled={busy}><Plus aria-hidden="true" className="h-4 w-4" />{t('teams.rulebooks.add')}</button> : null)
       : null;
 
     return (
@@ -96,10 +97,10 @@ function GlobalRulebooks() {
   return (
     <RefinePage wide>
       {tab === 'rulebooks' ? (
-        <RulebooksPanel renderHeader={({ draft, busy, onAdd, onClose }) => headerFor(draft, busy, onAdd, onClose)} onShowGameRules={() => setTab('races')} />
+        <RulebooksPanel renderHeader={({ draft, busy, docked, onAdd, onClose }) => headerFor(draft, busy, docked, onAdd, onClose)} onShowGameRules={() => setTab('races')} />
       ) : (
         <>
-          {headerFor(null, false, () => {}, () => {})}
+          {headerFor(null, false, false, () => {}, () => {})}
           <GameRulesList />
         </>
       )}
@@ -131,7 +132,7 @@ function GameRulesList() {
   }, [races, search]);
 
   return (
-    <div className="mt-3 flex flex-col gap-2.5">
+    <div className="mt-3 flex flex-col gap-2.5 ops-fade">
       <RoundSearch label={t('teams.rulebooks.findRace')} placeholder={t('teams.rulebooks.findRace')} value={search} onChange={setSearch} />
       {failed ? <Notice actionLabel={t('common.tryAgain')} onAction={() => { setFailed(false); setAttempt((n) => n + 1); }}>{t('teams.rulebooks.rulesError')}</Notice>
         : races === null ? <p role="status" className="sp-note">{t('teams.rulebooks.loadingGameRules')}</p>
@@ -157,7 +158,7 @@ export function RulebooksPanel({
   renderHeader,
   onShowGameRules,
 }: {
-  renderHeader?: (controls: { draft: RulebookDraft | null; busy: boolean; onAdd: () => void; onClose: () => void }) => ReactNode;
+  renderHeader?: (controls: { draft: RulebookDraft | null; busy: boolean; docked: boolean; onAdd: () => void; onClose: () => void }) => ReactNode;
   /** Lets the empty-list line take you to the Game rules tab. */
   onShowGameRules?: () => void;
 } = {}) {
@@ -169,8 +170,11 @@ export function RulebooksPanel({
   const [texts, setTexts] = useState<Record<number, Rulebook>>({});
   const [opening, setOpening] = useState(false);
   const [draft, setDraft] = useState<RulebookDraft | null>(null);
+  const [find, setFind] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  // "Add a rulebook" is the + beside the ticker dock while the list shows.
+  const docked = useDockAction(canWrite && !draft && !busy ? { label: t('teams.rulebooks.add'), icon: 'plus', onClick: () => edit() } : null);
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
 
@@ -194,6 +198,10 @@ export function RulebooksPanel({
   }, [load]);
 
   const selected = selectedId != null ? texts[selectedId] ?? null : null;
+  const shownBooks = useMemo(() => {
+    const q = find.trim().toLowerCase();
+    return q ? rulebooks.filter((item) => item.title.toLowerCase().includes(q) || item.edition.toLowerCase().includes(q)) : rulebooks;
+  }, [rulebooks, find]);
 
   /** Fetch one rulebook's text, once; later opens reuse it until it is edited or deleted. */
   async function open(id: number) {
@@ -275,10 +283,10 @@ export function RulebooksPanel({
   return (
     <div>
       {renderHeader
-        ? renderHeader({ draft, busy, onAdd: () => edit(), onClose: () => setDraft(null) })
-        : canWrite && !draft && (
+        ? renderHeader({ draft, busy, docked, onAdd: () => edit(), onClose: () => setDraft(null) })
+        : canWrite && !draft && !docked && (
           <div className="mb-3 flex justify-end">
-            <button type="button" className="rf-btn" onClick={() => edit()} disabled={busy}><Plus aria-hidden="true" className="h-4 w-4" />Add rulebook</button>
+            <button type="button" className="rf-btn" onClick={() => edit()} disabled={busy}><Plus aria-hidden="true" className="h-4 w-4" />{t('teams.rulebooks.add')}</button>
           </div>
         )}
 
@@ -289,22 +297,26 @@ export function RulebooksPanel({
         <RefineNote>
           {t('teams.rulebooks.noRulebook')}{' '}
           {onShowGameRules ? <>{t('teams.rulebooks.see')}{' '}<button type="button" className="ev-link underline" onClick={onShowGameRules}>{t('teams.rulebooks.gameRules')}</button>{' '}{t('teams.rulebooks.seeAfter')}</> : t('teams.rulebooks.gameRulesHas')}
-          {canWrite && ' Use Add rulebook to publish one.'}
+          {canWrite && ` ${t(docked ? 'teams.rulebooks.addHintDock' : 'teams.rulebooks.addHint')}`}
         </RefineNote>
       )}
 
       {draft && <RulebookEditor draft={draft} setDraft={setDraft} busy={busy} onSave={save} onCancel={() => setDraft(null)} />}
 
       {rulebooks.length > 0 && !draft && (
-        <div className="mt-3 flex flex-col gap-4 lg:grid lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start lg:gap-6">
+        <div className="mt-3 flex flex-col gap-4 lg:grid lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start lg:gap-6 ops-fade">
+          <div className="flex flex-col gap-2.5">
+          <RoundSearch label={t('ops3.plan.rulebooks.find')} placeholder={t('ops3.plan.rulebooks.find')} value={find} onChange={setFind} />
+          {shownBooks.length === 0 && <p className="sp-note">{t('ops3.plan.rulebooks.noMatch', { query: find.trim() })}</p>}
           <RefineList as="div">
-            {rulebooks.map((item) => (
+            {shownBooks.map((item) => (
               <button key={item.id} type="button" className="rf-row" aria-current={selectedId === item.id ? 'true' : undefined} onClick={() => void open(item.id)}>
                 <span className="rf-grow"><span className="rf-t1">{item.title}</span><span className="rf-t2">{item.edition}</span></span>
                 {selectedId === item.id && <RefineStatus tone="ok">{t('teams.rulebooks.showing')}</RefineStatus>}
               </button>
             ))}
           </RefineList>
+          </div>
 
           {opening && !selected && <p role="status" className="rf-note">{t('teams.rulebooks.loadingRulebook')}</p>}
           {selected && <article className="rulebook-reader">
@@ -338,7 +350,7 @@ function RulebookEditor({ draft, setDraft, busy, onSave, onCancel }: {
         <Field label="Source link (optional)"><input type="url" maxLength={2000} placeholder="https://…" value={draft.sourceUrl} onChange={(event) => setDraft({ ...draft, sourceUrl: event.target.value })} /></Field>
         <Field label="Rulebook text"><textarea className="ops-textarea" required maxLength={250000} value={draft.text} onChange={(event) => setDraft({ ...draft, text: event.target.value })} /></Field>
       </form>
-      <RefineFoot aboveTabs label="Save rulebook">
+      <RefineFoot inline aboveTabs label="Save rulebook">
         <button type="button" className="rf-btn" onClick={onCancel} disabled={busy}>Cancel</button>
         <button type="submit" form="rulebook-form" className="rf-btn rf-btn-primary rf-grow" disabled={busy}>{busy ? 'Saving…' : 'Save rulebook'}</button>
       </RefineFoot>

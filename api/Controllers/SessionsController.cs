@@ -1,3 +1,5 @@
+using MountedGames.Api.Security;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -40,6 +42,9 @@ public class SessionsController : ControllerBase
         .Include(s => s.Heats).ThenInclude(h => h.Races).ThenInclude(r => r.Results).ThenInclude(rs => rs.Team);
 
     [HttpGet]
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<IEnumerable<SessionDto>> List(int competitionId)
     {
         var sessions = await SessionsWithDetail()
@@ -50,6 +55,9 @@ public class SessionsController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<SessionDto>> Get(int competitionId, int id)
     {
         var s = await SessionsWithDetail()
@@ -243,6 +251,8 @@ public class SessionsController : ControllerBase
 
     [HttpGet("{id:int}/heats/{heatId:int}/commentator-briefing")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<CommentatorBriefingDto>> GetCommentatorBriefing(
         int competitionId,
         int id,
@@ -834,10 +844,10 @@ public class SessionsController : ControllerBase
                 var heatLabel = !string.IsNullOrWhiteSpace(heat.Label) ? heat.Label! : $"Heat {heat.OrderIndex}";
                 foreach (var entry in heat.Entries.OrderBy(e => e.LaneIndex))
                 {
-                    var teamName = entry.Team?.DisplayName ?? $"Team {entry.TeamId}";
+                    var teamName = entry.Team?.DisplayName ?? "Unnamed team";
                     messages.Add((entry.TeamId, new PushPayload(
                         Title: "Timetable delay / Redraw alert",
-                        Body: $"Heats redrawn for {s.Name} — {teamName} is in {heatLabel}, Lane {entry.LaneIndex}.",
+                        Body: $"Heats redrawn for {s.Name}. {teamName} is in {heatLabel}, lane {entry.LaneIndex}.",
                         Tag: $"session-redraw:{s.Id}:{heat.Id}:{entry.TeamId}",
                         Url: $"/competitions/{competitionId}")));
                 }
@@ -1254,8 +1264,8 @@ public class SessionsController : ControllerBase
         if (req.PostAnnouncement)
         {
             var body = !string.IsNullOrWhiteSpace(resumeDisplay)
-                ? $"Competition on hold — we will continue at {resumeDisplay}"
-                : $"Competition on hold — delayed by {req.DelayMinutes ?? 0} minutes";
+                ? $"Competition on hold. We’ll continue at {resumeDisplay}."
+                : $"Competition on hold. Delayed by {req.DelayMinutes ?? 0} minutes.";
             var msg = new ChatMessage
             {
                 CompetitionId = competitionId,
@@ -1651,7 +1661,7 @@ public class SessionsController : ControllerBase
             : (!string.IsNullOrWhiteSpace(session.ArenaName) ? session.ArenaName.Trim() : "Main Arena");
         var extraNote = req.Note?.Trim();
         var body = !string.IsNullOrEmpty(extraNote)
-            ? $"{serviceTitle} needed at {arena} — {extraNote}"
+            ? $"{serviceTitle} needed at {arena}: {extraNote}"
             : $"{serviceTitle} needed at {arena}";
 
         var pausedSessions = new List<Session>();

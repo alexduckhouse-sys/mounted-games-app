@@ -226,6 +226,15 @@ describe('embedded season standings', () => {
     expect(screen.getByRole('link', { name: 'Powered by Mounted Games' })).toHaveAttribute('href', `/seasons/${id}`);
   });
 
+  it('keeps its columns fixed so a long team name wraps rather than scrolling the card', async () => {
+    routes[`/api/seasons/${id}`] = () => json(season);
+    routes[`/api/seasons/${id}/standings`] = () => json(standings);
+    const { container } = open(`/embed/seasons/${id}/standings`);
+    await screen.findByText('Hunt A');
+    expect(container.querySelectorAll('.emb-table colgroup col')).toHaveLength(4);
+    expect(container.querySelector('.emb-table-wrap')).not.toBeNull();
+  });
+
   it('handles an empty table, a missing season, a bad id and a failed load', async () => {
     routes[`/api/seasons/${id}`] = () => json({ ...season, bestResultsToCount: null, rounds: [{ isIncluded: true }] });
     routes[`/api/seasons/${id}/standings`] = () => json({ standings: [] });

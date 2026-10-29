@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../../i18n/LanguageContext';
 import { Notice } from '../../components/Notice';
 import { TickerNumber } from '../../components/TickerNumber';
@@ -19,12 +19,19 @@ export function EquipmentPage() {
   const [loadFailed, setLoadFailed] = useState(false);
   const [refreshed, setRefreshed] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Ticks the organiser has made that the server hasn't confirmed yet (key -> wanted state). They show at once,
+  // and one save at a time carries them, so ticking one item never locks the others.
+  const [pending, setPending] = useState<Record<string, boolean>>({});
+  const pendingRef = useRef<Record<string, boolean>>({});
+  const readinessRef = useRef<CompetitionReadiness | null>(null);
+  const sending = useRef(false);
 
   const load = useCallback(async () => {
     setError(null);
     setLoadFailed(false);
     try {
       const { data } = await api.get<CompetitionReadiness>(`/competitions/${competition.id}/operations/readiness`);
+      readinessRef.current = data;
       setReadiness(data);
     } catch (caught) {
       setError(apiMessage(caught, t('ops.equip.loadError')));
@@ -39,35 +46,65 @@ export function EquipmentPage() {
   const lines = useMemo(() => equipmentLines(readiness?.equipmentChecklist ?? []), [readiness]);
   const acknowledged = useMemo(() => new Set((readiness?.equipmentChecklist ?? []).filter((item) => item.acknowledged).map((item) => item.key)), [readiness]);
 
-  async function toggle(keys: string[], on: boolean) {
-    if (!readiness || busy) return;
-    const next = new Set(acknowledged);
-    for (const key of keys) { if (on) next.add(key); else next.delete(key); }
+  function setPendingNow(next: Record<string, boolean>) {
+    pendingRef.current = next;
+    setPending(next);
+  }
+
+  /** Sends the waiting ticks, one request at a time; whatever was ticked meanwhile goes in the next one. */
+  async function pump() {
+    if (sending.current) return;
+    sending.current = true;
     setBusy(true);
-    setError(null);
-    setRefreshed(null);
     try {
-      const { data } = await api.put<CompetitionReadiness>(`/competitions/${competition.id}/operations/equipment-acknowledgements`,
-        { acknowledgedKeys: [...next], expectedFingerprint: readiness.equipmentFingerprint });
-      setReadiness(data);
-    } catch (caught) {
-      const status = (caught as { response?: { status?: number } })?.response?.status;
-      if (status === 409) {
-        await load();
-        setRefreshed(apiMessage(caught, t('ops.equip.changed')));
-      } else {
-        setError(apiMessage(caught, t('ops.equip.saveError')));
+      while (readinessRef.current && Object.keys(pendingRef.current).length > 0) {
+        const current = readinessRef.current;
+        const sent = { ...pendingRef.current };
+        const server = new Set(current.equipmentChecklist.filter((item) => item.acknowledged).map((item) => item.key));
+        for (const [key, on] of Object.entries(sent)) { if (on) server.add(key); else server.delete(key); }
+        try {
+          const { data } = await api.put<CompetitionReadiness>(`/competitions/${competition.id}/operations/equipment-acknowledgements`,
+            { acknowledgedKeys: [...server], expectedFingerprint: current.equipmentFingerprint });
+          readinessRef.current = data;
+          setReadiness(data);
+          // Keep any tick that changed while this save was away.
+          const rest = Object.fromEntries(Object.entries(pendingRef.current).filter(([key, on]) => !(key in sent) || sent[key] !== on));
+          setPendingNow(rest);
+        } catch (caught) {
+          const status = (caught as { response?: { status?: number } })?.response?.status;
+          const undone = new Set(Object.keys(pendingRef.current));
+          setPendingNow({});
+          if (status === 409) {
+            await load();
+            setRefreshed(apiMessage(caught, t('ops.equip.changed')));
+          } else {
+            const names = lines.filter((line) => line.keys.some((key) => undone.has(key))).map((line) => line.label);
+            setError(t('ops3.plan.equip.rolledBack', { names: names.join(', ') || t('ops3.plan.equip.thatTick') }));
+          }
+          break;
+        }
       }
     } finally {
+      sending.current = false;
       setBusy(false);
     }
+  }
+
+  function toggle(keys: string[], on: boolean) {
+    if (!readiness) return;
+    setError(null);
+    setRefreshed(null);
+    const next = { ...pendingRef.current };
+    for (const key of keys) next[key] = on;
+    setPendingNow(next);
+    void pump();
   }
 
   const groups = [
     { name: t('ops.equip.big'), rows: lines.filter((line) => line.big) },
     { name: t('ops.equip.little'), rows: lines.filter((line) => !line.big) },
   ].filter((group) => group.rows.length > 0);
-  const isOn = (keys: string[]) => keys.every((key) => acknowledged.has(key));
+  const isOn = (keys: string[]) => keys.every((key) => (key in pending ? pending[key] : acknowledged.has(key)));
 
   return (
     <RefinePage>
@@ -85,7 +122,7 @@ export function EquipmentPage() {
                 const on = isOn(row.keys);
                 return (
                   <label key={row.name} className="rf-row ops-check">
-                    <input type="checkbox" checked={on} disabled={busy} onChange={(event) => void toggle(row.keys, event.target.checked)} />
+                    <input type="checkbox" checked={on} onChange={(event) => toggle(row.keys, event.target.checked)} />
                     <span className={`rf-grow rf-t1 ${on ? 'ops-struck' : ''}`}>{row.label}</span>
                   </label>
                 );

@@ -257,7 +257,7 @@ public sealed class TieBreaker
         }
 
         if (rule is TieBreakRule.RunOff or TieBreakRule.Manual)
-            return "Level on points and countback — run-off if on cut-off";
+            return "Level on points and countback (run-off if on cut-off)";
 
         var aHasFinals = above.FinalPlacingCounts is { Length: > 0 } || above.FinalRecentPoints is { Length: > 0 };
         var bHasFinals = below.FinalPlacingCounts is { Length: > 0 } || below.FinalRecentPoints is { Length: > 0 };
@@ -283,7 +283,7 @@ public sealed class TieBreaker
             return $"Ahead{target} on Countback ({aCount}× {place} {aWord} vs {bCount}× {place} {bWord})";
         }
 
-        return "Level on points and countback — run-off if on cut-off";
+        return "Level on points and countback (run-off if on cut-off)";
     }
 
     public static string Ordinal(int n)

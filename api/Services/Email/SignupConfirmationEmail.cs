@@ -41,7 +41,7 @@ public static class SignupConfirmationEmail
         sb.AppendLine($"Event: {competition.Name}");
         sb.AppendLine($"Date: {FormatDates(competition.StartDate, competition.EndDate)}");
         if (!string.IsNullOrWhiteSpace(competition.Location)) sb.AppendLine($"Where: {competition.Location.Trim()}");
-        sb.AppendLine($"Class: {section.DisplayName}");
+        sb.AppendLine($"Age group: {section.DisplayName}");
         sb.AppendLine($"Entry fee: {Money(signup.AmountMinor)}");
         sb.AppendLine();
 
@@ -103,7 +103,7 @@ public static class SignupConfirmationEmail
         html.Append(EmailHtml.Row("Date", FormatDates(competition.StartDate, competition.EndDate)));
         if (!string.IsNullOrWhiteSpace(competition.Location))
             html.Append(EmailHtml.Row("Where", competition.Location.Trim()));
-        html.Append(EmailHtml.Row("Class", section.DisplayName));
+        html.Append(EmailHtml.Row("Age group", section.DisplayName));
         html.Append(EmailHtml.Row("Entry fee", Money(signup.AmountMinor)));
         html.Append("</table>");
 
@@ -154,11 +154,11 @@ public static class SignupConfirmationEmail
         var sb = new StringBuilder();
         sb.AppendLine("Hello,");
         sb.AppendLine();
-        sb.AppendLine($"This is a polite reminder that your entry fee for {section.DisplayName} at {competition.Name} is still awaiting payment.");
+        sb.AppendLine($"Just a reminder that the entry fee for {section.DisplayName} at {competition.Name} hasn’t been paid yet.");
         sb.AppendLine();
         sb.AppendLine($"Event: {competition.Name}");
         sb.AppendLine($"Date: {FormatDates(competition.StartDate, competition.EndDate)}");
-        sb.AppendLine($"Class: {section.DisplayName}");
+        sb.AppendLine($"Age group: {section.DisplayName}");
         sb.AppendLine($"Amount due: {amountText}");
         sb.AppendLine($"Payment reference: {paymentRef}");
         if (!string.IsNullOrWhiteSpace(competition.PaymentDestination))
@@ -180,17 +180,17 @@ public static class SignupConfirmationEmail
             sb.AppendLine(competitionUrl);
         }
         sb.AppendLine();
-        sb.AppendLine("If you have already sent your transfer, thank you — the organiser will mark your entry paid once it clears.");
+        sb.AppendLine("If you’ve already sent your transfer, thank you. The organiser will mark your entry paid once it arrives.");
         sb.AppendLine();
         sb.AppendLine("Mounted Games");
 
         var html = new StringBuilder();
         html.Append("<p style=\"margin:0 0 12px;\">Hello,</p>");
-        html.Append($"<p style=\"margin:0 0 16px;\">This is a polite reminder that your entry fee for <strong>{EmailHtml.Encode(section.DisplayName)}</strong> at <strong>{EmailHtml.Encode(competition.Name)}</strong> is still awaiting payment.</p>");
+        html.Append($"<p style=\"margin:0 0 16px;\">Just a reminder that the entry fee for <strong>{EmailHtml.Encode(section.DisplayName)}</strong> at <strong>{EmailHtml.Encode(competition.Name)}</strong> hasn’t been paid yet.</p>");
         html.Append("<table role=\"presentation\" style=\"width:100%;border-collapse:collapse;margin:0 0 16px;\">");
         html.Append(EmailHtml.Row("Event", competition.Name));
         html.Append(EmailHtml.Row("Date", FormatDates(competition.StartDate, competition.EndDate)));
-        html.Append(EmailHtml.Row("Class", section.DisplayName));
+        html.Append(EmailHtml.Row("Age group", section.DisplayName));
         html.Append(EmailHtml.Row("Amount due", amountText));
         html.Append(EmailHtml.Row("Payment reference", paymentRef));
         if (!string.IsNullOrWhiteSpace(competition.PaymentDestination))
@@ -200,7 +200,7 @@ public static class SignupConfirmationEmail
             html.Append($"<p style=\"margin:0 0 12px;\"><strong>Note from the organiser:</strong><br>{EmailHtml.EncodeMultiline(trimmedNote)}</p>");
         if (!string.IsNullOrEmpty(competitionUrl))
             html.Append(EmailHtml.Button(competitionUrl, "Open competition page"));
-        html.Append("<p style=\"margin:16px 0 12px;color:#475569;font-size:13px;\">If you have already sent your transfer, thank you — the organiser will mark your entry paid once it clears.</p>");
+        html.Append("<p style=\"margin:16px 0 12px;color:#475569;font-size:13px;\">If you’ve already sent your transfer, thank you. The organiser will mark your entry paid once it arrives.</p>");
 
         var subject = OneLine($"Payment reminder: {competition.Name} ({section.DisplayName})");
         return new EmailMessage(toAddress, subject, sb.ToString(), EmailHtml.Wrap(html.ToString()));
@@ -216,16 +216,16 @@ public static class SignupConfirmationEmail
         var sb = new StringBuilder();
         sb.AppendLine("Hello,");
         sb.AppendLine();
-        sb.AppendLine($"Good news — a spot has opened up in {section.DisplayName} at {competition.Name}.");
+        sb.AppendLine($"Good news: a place has come up in {section.DisplayName} at {competition.Name}.");
         sb.AppendLine();
         sb.AppendLine($"Event: {competition.Name}");
-        sb.AppendLine($"Class: {section.DisplayName}");
+        sb.AppendLine($"Age group: {section.DisplayName}");
         sb.AppendLine($"Entry fee: {amountText}");
         sb.AppendLine($"Accept before: {deadlineText}");
         if (!string.IsNullOrEmpty(myEntriesUrl))
         {
             sb.AppendLine();
-            sb.AppendLine("Accept your spot and proceed to payment on My Entries:");
+            sb.AppendLine("Accept your place on My entries:");
             sb.AppendLine(myEntriesUrl);
         }
         sb.AppendLine();
@@ -233,15 +233,15 @@ public static class SignupConfirmationEmail
 
         var html = new StringBuilder();
         html.Append("<p style=\"margin:0 0 12px;\">Hello,</p>");
-        html.Append($"<p style=\"margin:0 0 16px;\">Good news — a spot has opened up in <strong>{EmailHtml.Encode(section.DisplayName)}</strong> at <strong>{EmailHtml.Encode(competition.Name)}</strong>.</p>");
+        html.Append($"<p style=\"margin:0 0 16px;\">Good news: a place has come up in <strong>{EmailHtml.Encode(section.DisplayName)}</strong> at <strong>{EmailHtml.Encode(competition.Name)}</strong>.</p>");
         html.Append("<table role=\"presentation\" style=\"width:100%;border-collapse:collapse;margin:0 0 16px;\">");
         html.Append(EmailHtml.Row("Event", competition.Name));
-        html.Append(EmailHtml.Row("Class", section.DisplayName));
+        html.Append(EmailHtml.Row("Age group", section.DisplayName));
         html.Append(EmailHtml.Row("Entry fee", amountText));
         html.Append(EmailHtml.Row("Accept before", deadlineText));
         html.Append("</table>");
         if (!string.IsNullOrEmpty(myEntriesUrl))
-            html.Append(EmailHtml.Button(myEntriesUrl, "Accept spot & proceed to payment"));
+            html.Append(EmailHtml.Button(myEntriesUrl, "Accept place"));
 
         var subject = OneLine($"Spot available: {section.DisplayName} at {competition.Name}");
         return new EmailMessage(toAddress, subject, sb.ToString(), EmailHtml.Wrap(html.ToString()));
@@ -269,7 +269,7 @@ public static class SignupConfirmationEmail
         {
             var secName = s.Section?.DisplayName ?? "Section";
             var label = !string.IsNullOrWhiteSpace(s.TeamName) ? $"{s.FullName} ({s.TeamName})" : s.FullName;
-            sb.AppendLine($"- {secName}: {label} — {Money(s.AmountMinor)}");
+            sb.AppendLine($"- {secName}: {label} · {Money(s.AmountMinor)}");
         }
         if (!string.IsNullOrEmpty(competitionUrl))
         {
