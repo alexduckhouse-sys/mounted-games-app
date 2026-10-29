@@ -78,7 +78,6 @@ describe('Replay tab', () => {
   it('shows empty lists and notes when nothing is recorded', () => {
     mount('/competitions/1/stream-controls?tab=replay', []);
     expect(screen.getByText(/Replays are recorded from the video on this page/)).toBeInTheDocument();
-    expect(screen.getByText('Each race is recorded here once it is scored.')).toBeInTheDocument();
     expect(screen.getByText('No saved replays')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Instant replay · 30s/ })).toBeDisabled();
   });
@@ -115,22 +114,12 @@ describe('Replay tab', () => {
     expect(screen.getByText('No saved replays')).toBeInTheDocument();
   });
 
-  it('lists race recordings as watch-only, with no editing controls', async () => {
-    const user = userEvent.setup();
-    saved = [clip('Seniors · Race 1', { source: 'race', createdAt: '2026-06-01T10:05:00Z' }), clip('Older race', { source: 'race', createdAt: '2026-06-01T09:00:00Z' })];
+  it('links to the race recordings page instead of listing them, and keeps race clips out of saved replays', () => {
+    saved = [clip('Seniors · Race 1', { source: 'race', createdAt: '2026-06-01T10:05:00Z' })];
     mount();
-    const list = screen.getByLabelText('Race recordings');
-    expect(within(list).getAllByRole('button').map((b) => b.textContent)).toEqual([expect.stringContaining('Seniors · Race 1'), expect.stringContaining('Older race')]);
-    await user.click(within(list).getAllByRole('button', { name: /Watch/ })[0]);
-    const player = screen.getByRole('region', { name: 'Replay: Seniors · Race 1' });
-    expect(within(player).getByRole('button', { name: 'Play' })).toBeInTheDocument();
-    for (const name of ['Start here', 'End here', 'Zoom in', 'Add camera point', 'Slow-mo', 'Save clip', 'Reset framing', 'Remove', 'Cancel clip']) {
-      expect(within(player).queryByRole('button', { name })).toBeNull();
-    }
-    expect(within(player).queryByRole('slider', { name: /Replay framing/ })).toBeNull();
-    expect(screen.queryByText(/Drag the frame to follow the riders/)).toBeNull();
-    await user.click(within(player).getByRole('button', { name: 'Close' }));
-    expect(screen.queryByRole('region', { name: /^Replay:/ })).toBeNull();
+    expect(within(screen.getByLabelText('Race recordings')).getByRole('link', { name: /Race recordings/ })).toHaveAttribute('href', '/competitions/1/recordings');
+    expect(screen.queryByText('Seniors · Race 1')).toBeNull();
+    expect(screen.getByText('No saved replays')).toBeInTheDocument();
   });
 
   it('opens and closes a saved replay from its row', async () => {
@@ -297,14 +286,13 @@ describe('Replay editor', () => {
 });
 
 describe('Race recordings from scored races', () => {
-  const card = (key: string): QueuedScoreCard => ({ key, arenaName: 'Main Arena', heading: 'Seniors · Heat 1', card: { raceName: 'Race 2' } as never, receivedAt: 0 });
+  const card = (key: string): QueuedScoreCard => ({ key, arenaName: 'Main Arena', heading: 'Seniors · Heat 1', card: { raceName: 'Race 2', raceId: 9, heatId: 4 } as never, receivedAt: 0 });
 
-  it('keeps a 45 second recording when a race is scored and lists it for watching', async () => {
+  it('keeps a 45 second recording when a race is scored, noting which race it was for', async () => {
     const view = mount();
     view.scored([card('r1')]);
     view.scored([card('r1'), card('r2')]);
     await waitFor(() => expect(handle.saveClip).toHaveBeenCalledWith('Seniors · Heat 1 · Race 2', expect.objectContaining({ durationSeconds: 45 })));
-    expect(buffer.tagSavedReplay).toHaveBeenCalledWith('instant-1', 'race');
-    await waitFor(() => expect(within(screen.getByLabelText('Race recordings')).getByRole('button', { name: /Watch/ })).toBeInTheDocument());
+    await waitFor(() => expect(buffer.tagSavedReplay).toHaveBeenCalledWith('instant-1', 'race', undefined, { raceId: 9, heatId: 4 }));
   });
 });

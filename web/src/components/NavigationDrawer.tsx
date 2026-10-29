@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useExitDelay } from '../hooks/useExitDelay';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { CalendarDays, X, Settings, History, SlidersHorizontal, CloudSun, Star, ShoppingBag, ChevronRight, ChevronDown, BarChart3, Trophy, QrCode, Users, IdCard, Mic, Monitor, ClipboardList } from 'lucide-react';
+import { CalendarDays, X, Settings, History, SlidersHorizontal, CloudSun, Star, ShoppingBag, ChevronRight, ChevronDown, BarChart3, Trophy, QrCode, Users, IdCard, Mic, Monitor, ClipboardList, Film } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import { useLiteMode } from '../lite/LiteModeContext';
@@ -101,6 +101,7 @@ export function NavigationDrawer({ onClose }: { onClose: () => void }) {
   const sectionQuery = selectedSection ? `?section=${selectedSection}` : '';
   const dayLinks = [
     { to: `${base}/commentary${sectionQuery}`, label: 'PA desk', icon: Mic },
+    { to: `${base}/recordings`, label: t('shell.menu.raceRecordings'), icon: Film },
     { to: `${base}/tv${sectionQuery}`, label: 'TV kiosk', icon: Monitor },
     { to: `${base}/prize-giving${sectionQuery}`, label: t('screen.pg.title'), icon: Trophy },
     ...(hasRole('Admin') ? [{ to: `${base}/announcements`, label: t('teams.chat.announcements'), icon: ClipboardList }] : []),

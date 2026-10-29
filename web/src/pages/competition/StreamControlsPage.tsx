@@ -129,7 +129,7 @@ export function StreamControlsPage() {
           {(tab === 'auto' || (phone && tab === 'overlay')) && <AutoTab competition={competition} auto={auto} setOn={setOn} setRule={setRule}
             prizeGiving={{ on: tiles.options.autoPrizeGiving, disabled: tiles.busy || !saveOverlay, set: (on) => void tiles.setOptions({ autoPrizeGiving: on }) }} />}
           {tab === 'replay' && (
-            <ReplayTab clips={clips} openId={openClipId} onOpen={setOpenClipId} controller={replay} instantLength={instantLength}
+            <ReplayTab competitionId={competition.id} clips={clips} openId={openClipId} onOpen={setOpenClipId} controller={replay} instantLength={instantLength}
               onInstantLength={(length) => { saveInstantLength(length); setInstantLength(length); }} />
           )}
           {tab === 'camera' && (

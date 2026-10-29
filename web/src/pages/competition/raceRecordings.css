@@ -1,0 +1,13 @@
+/* Race recordings (/competitions/:id/recordings). Built on the refine rows; the player is the Stream controls one (rp-*). */
+.rr-page { padding-bottom: 32px; }
+.rr-heat { margin-top: 10px; }
+.rr-heat-title { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 0 0 6px; padding: 0 2px; font: 700 15px/1.2 var(--mg-font); color: rgb(var(--mg-ink)); }
+.rr-heat-title > span + span { font: 500 12px/1 var(--mg-font); color: rgb(var(--mg-muted)); }
+.rr-row { gap: 8px; }
+.rr-row .rr-btn { flex: none; min-height: 44px; padding: 0 14px; }
+.rr-gap .rf-t1 { font-weight: 500; color: rgb(var(--mg-muted)); }
+.rr-player { padding: 0 12px 12px; background: rgb(var(--mg-surface)); }
+.rr-player > .rp { margin-top: 0; }
+.rr-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin-top: 16px; padding: 18px 16px; border: 1px solid rgb(var(--mg-line)); border-radius: var(--mg-radius-card); background: rgb(var(--mg-surface)); }
+.rr-empty-title { margin: 0; font: 700 18px/1.2 var(--mg-font-display); color: rgb(var(--mg-heading)); }
+.rr-empty p { margin: 0; font: 400 15px/1.4 var(--mg-font); color: rgb(var(--mg-ink)); }

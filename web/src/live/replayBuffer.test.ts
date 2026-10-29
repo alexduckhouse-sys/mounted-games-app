@@ -145,6 +145,7 @@ describe('saved replay edits and highlights', () => {
     const changed = vi.fn(); const unsubscribe = subscribeSavedReplays(changed); const original = clip(); addSavedReplay(original);
     expect(tagSavedReplay(original.id, 'race')).toMatchObject({ source: 'race' });
     expect(getSavedReplays()[0].source).toBe('race'); expect(changed).toHaveBeenCalled();
+    expect(tagSavedReplay(original.id, 'race', undefined, { raceId: 7, heatId: 3 })).toMatchObject({ source: 'race', raceId: 7, heatId: 3 });
     expect(tagSavedReplay('missing', 'instant')).toBeNull(); unsubscribe();
   });
   it('evicts old saved clips and respects competition-specific clearing', () => {
