@@ -1,6 +1,6 @@
 /* The toplist in the flat page language (theme/flat.css): rows on the page with hairlines, the place and points in
    Barlow Condensed, team names wrapping onto a second line rather than cut off. A followed team, a tie and the
-   champions are tinted bands running to the screen edges; a followed team also has a gold bar at the very edge. */
+   champions are tinted bands running to the screen edges, with no bar at the side. */
 .tl { --tl-line: rgb(var(--mg-heading) / .07); --tl-tie: rgb(var(--mg-heading) / .06); }
 .tl-list { display: flex; flex-direction: column; border-bottom: 1px solid var(--tl-line); }
 .tl-row { position: relative; display: flex; align-items: center; min-height: 48px; transition: background-color 250ms var(--mg-ease-out); }
