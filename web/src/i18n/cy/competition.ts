@@ -226,7 +226,7 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.rules.penalties': 'Rheolau a chosbau',
   'competition.rules.loadingRace': 'Yn llwytho rheolau’r ras…',
   'competition.posters.qrOnPrint': 'Crëir codau QR pan fyddwch yn argraffu',
-  'competition.rules.rulebook': 'Llyfr rheolau',
+  'competition.rules.raceRules': 'Rheolau’r ras',
   'competition.rules.pairsVersion': 'Fersiwn parau',
   'competition.rules.individualVersion': 'Fersiwn unigol',
   'competition.timetable.shiftFailed': 'Methu symud yr amserlen. Gwiriwch eich signal a rhowch gynnig arall arni.',

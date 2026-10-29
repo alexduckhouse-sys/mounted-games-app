@@ -134,7 +134,7 @@ describe('race rules sheet loading and closing', () => {
     expect(api.get).not.toHaveBeenCalled();
     view.rerender(sheet('Fake Race'));
     expect(await screen.findByRole('dialog', { name: 'Fake Race' })).toBeInTheDocument();
-    await screen.findByText('Rulebooks · Fake Race');
+    await screen.findByRole('group', { name: 'Race rules' });
     expect(api.get).toHaveBeenCalledTimes(1);
   });
 
@@ -156,7 +156,7 @@ describe('race rules sheet loading and closing', () => {
     expect(screen.getByRole('dialog', { name: 'Second race' })).toBeInTheDocument();
     await act(async () => { first.resolve({ data: template('First race') }); });
     expect(screen.getByRole('dialog', { name: 'Second race' })).toBeInTheDocument();
-    expect(screen.queryByText('Rulebooks · First race')).not.toBeInTheDocument();
+    expect(screen.queryByText(/First race/)).not.toBeInTheDocument();
   });
 
   it('can close during a fetch and reopen its cached result without another request', async () => {
@@ -167,7 +167,7 @@ describe('race rules sheet loading and closing', () => {
     await act(async () => { pending.resolve({ data: template() }); });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     view.rerender(sheet('Fake Race'));
-    await screen.findByText('Rulebooks · Fake Race');
+    await screen.findByRole('group', { name: 'Race rules' });
     expect(api.get).toHaveBeenCalledTimes(1);
   });
 
@@ -192,23 +192,20 @@ describe('race rules sheet loading and closing', () => {
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 
-  it('puts the rulebook in one settings row, not a row of small tabs, and lets you switch it', async () => {
+  it('shows the event’s rules without naming or offering a rulebook', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: template('Fake race') });
     render(sheet('Fake race'));
-    const row = await screen.findByRole('combobox', { name: 'Rulebook' });
+    const rules = await screen.findByRole('group', { name: 'Race rules' });
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
-    expect(row).toHaveClass('min-h-14');
-    expect(row).toHaveTextContent('EGUK');
-    fireEvent.click(row);
-    fireEvent.click(await screen.findByRole('option', { name: 'MGA' }));
-    expect(screen.getByRole('combobox', { name: 'Rulebook' })).toHaveTextContent('MGA');
-    expect(screen.getByRole('group', { name: 'MGA rules' })).toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Rulebook/)).not.toBeInTheDocument();
+    expect(rules).not.toHaveTextContent('EGUK · Fake race');
   });
 
   it('keeps the close button and title outside the scrolling rules, and fits the diagram to its own shape', async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { ...template('Fake race'), diagramJson: '[]' } });
     render(sheet('Fake race'));
-    await screen.findByRole('combobox', { name: 'Rulebook' });
+    await screen.findByRole('group', { name: 'Race rules' });
     const close = screen.getByRole('button', { name: 'Close rules' });
     const scroller = document.querySelector('.rules-sheet-body')!;
     expect(scroller.contains(close)).toBe(false);

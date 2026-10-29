@@ -226,7 +226,7 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.rules.penalties': 'Règles et pénalités',
   'competition.rules.loadingRace': 'Chargement des règles de la course…',
   'competition.posters.qrOnPrint': 'Les codes QR sont créés à l’impression',
-  'competition.rules.rulebook': 'Règlement',
+  'competition.rules.raceRules': 'Règles de la course',
   'competition.rules.pairsVersion': 'Version en paires',
   'competition.rules.individualVersion': 'Version individuelle',
   'competition.timetable.shiftFailed': 'Impossible de décaler le programme. Vérifiez votre signal et réessayez.',

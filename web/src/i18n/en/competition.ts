@@ -226,7 +226,7 @@ export const competition = {
   'competition.rules.penalties': 'Rules & penalties',
   'competition.rules.loadingRace': 'Loading race rules…',
   'competition.posters.qrOnPrint': 'QR codes are created when you print',
-  'competition.rules.rulebook': 'Rulebook',
+  'competition.rules.raceRules': 'Race rules',
   'competition.rules.pairsVersion': 'Pairs version',
   'competition.rules.individualVersion': 'Individual version',
   'competition.timetable.shiftFailed': 'Couldn’t shift the timetable. Check your signal and try again.',

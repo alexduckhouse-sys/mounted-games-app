@@ -132,7 +132,7 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
       <PlainHeader past={past} />
       <h1 id={headingId} className="sr-only">{past ? t('shell.events.titlePast') : t('shell.events.title')}</h1>
       {past && (
-        <div className="mg-band mg-band-header pb-3 pt-0">
+        <div className="mg-band mg-band-header py-3">
           <div className="fk-find fk-band">
             <RoundSearch band label={t('shell.events.search')} placeholder={t('shell.events.searchPlaceholder')} value={search} onChange={(text) => { setSearch(text); setPage(1); }} />
             {!docked && <button type="button" className="fk-fbtn" aria-label={filterCount ? `${t('shell.events.archiveFilters')}, ${filterCount} set` : t('shell.events.archiveFilters')} onClick={() => setSheetOpen(true)}>

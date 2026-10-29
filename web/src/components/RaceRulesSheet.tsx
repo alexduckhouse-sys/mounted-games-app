@@ -7,7 +7,6 @@ import { findRaceTemplate } from '../lib/raceTemplates';
 import type { RaceTemplate, SectionFormat } from '../types';
 import { Notice } from './Notice';
 import { RaceDiagram } from './RaceDiagram';
-import { DropdownRow } from './DropdownRow';
 import { Sheet } from './Sheet';
 
 import { useT } from '../i18n/LanguageContext';
@@ -136,8 +135,8 @@ export function RaceRulebookSection({
   diagramHeight?: number;
   /** Size the diagram to its own shape instead of `diagramHeight`, so it has no empty bars on a phone. */
   fitDiagram?: boolean;
-  /** How the rulebook is chosen: a row of small tabs (pages) or one settings row (the sheet, where tabs are too small to tap). */
-  picker?: 'tabs' | 'row';
+  /** `tabs` lets a reader switch rulebook (the rulebook pages); `none` shows the event's rules with no rulebook named (the sheet: the organiser set the rulebook when they made the competition). */
+  picker?: 'tabs' | 'none';
 }) {
   const t = useT();
   const [activeBody, setActiveBody] = useState<GoverningBody>('EGUK');
@@ -146,43 +145,33 @@ export function RaceRulebookSection({
 
   return (
     <div className="mt-3 space-y-3" aria-label={t('competition.rules.rulebooksFor', { name: template.name })}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      {picker === 'tabs' && <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 text-sm font-bold text-[rgb(var(--mg-heading))]">
           <BookOpen className="h-4 w-4" aria-hidden="true" />
           <span>{t('competition.rules.rulebooks', { name: template.name })}</span>
         </div>
-        {picker === 'tabs' && (
-          <div role="tablist" aria-label={t('competition.rules.body')} className="flex flex-wrap gap-1.5">
-            {GOVERNING_BODIES.map((body) => {
-              const selected = activeBody === body;
-              return (
-                <button
-                  key={body}
-                  type="button"
-                  role="tab"
-                  aria-selected={selected}
-                  onClick={() => setActiveBody(body)}
-                  className={`rounded-full px-3 py-1 text-xs font-bold transition ${
-                    selected
-                      ? 'bg-[rgb(var(--mg-button))] text-[rgb(var(--mg-button-ink))]'
-                      : 'bg-[rgb(var(--mg-subtle))] text-[rgb(var(--mg-ink))] hover:bg-[rgb(var(--mg-tint))]'
-                  }`}
-                >
-                  {body}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-      {picker === 'row' && (
-        <DropdownRow
-          label={t('competition.rules.rulebook')}
-          value={activeBody}
-          options={GOVERNING_BODIES.map((body) => ({ value: body, label: body }))}
-          onChange={(body) => setActiveBody(body as GoverningBody)}
-        />
-      )}
+        <div role="tablist" aria-label={t('competition.rules.body')} className="flex flex-wrap gap-1.5">
+          {GOVERNING_BODIES.map((body) => {
+            const selected = activeBody === body;
+            return (
+              <button
+                key={body}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                onClick={() => setActiveBody(body)}
+                className={`rounded-full px-3 py-1 text-xs font-bold transition ${
+                  selected
+                    ? 'bg-[rgb(var(--mg-button))] text-[rgb(var(--mg-button-ink))]'
+                    : 'bg-[rgb(var(--mg-subtle))] text-[rgb(var(--mg-ink))] hover:bg-[rgb(var(--mg-tint))]'
+                }`}
+              >
+                {body}
+              </button>
+            );
+          })}
+        </div>
+      </div>}
 
       {showDiagram && template.diagramJson && (
         <div className="overflow-hidden rounded-lg border border-[rgb(var(--mg-rule))]">
@@ -192,13 +181,13 @@ export function RaceRulebookSection({
 
       <div
         role={picker === 'tabs' ? 'tabpanel' : 'group'}
-        aria-label={t('competition.rules.bodyRules', { body: current.body })}
+        aria-label={picker === 'tabs' ? t('competition.rules.bodyRules', { body: current.body }) : t('competition.rules.raceRules')}
         className="rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-subtle))] p-3 space-y-2.5 text-sm"
       >
-        <div className="flex flex-wrap items-baseline justify-between gap-1 border-b border-[rgb(var(--mg-rule-soft))] pb-2">
+        {picker === 'tabs' && <div className="flex flex-wrap items-baseline justify-between gap-1 border-b border-[rgb(var(--mg-rule-soft))] pb-2">
           <div className="font-bold text-[rgb(var(--mg-heading))]">{current.title}</div>
           {current.edition !== UNVERIFIED_EDITION && <span className="text-xs text-[rgb(var(--mg-muted))]">{current.edition}</span>}
-        </div>
+        </div>}
 
         <div className="grid gap-2 sm:grid-cols-2">
           <div>
@@ -270,7 +259,7 @@ export function RaceRulesSheet({
             {template && (
               <div className="space-y-3">
                 {template.summary && <p className="text-sm text-[rgb(var(--mg-body))]">{template.summary}</p>}
-                <RaceRulebookSection template={template} showDiagram fitDiagram picker="row" />
+                <RaceRulebookSection template={template} showDiagram fitDiagram picker="none" />
               </div>
             )}
           </div>
