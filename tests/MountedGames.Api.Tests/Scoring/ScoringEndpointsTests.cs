@@ -353,18 +353,18 @@ public class ScoringEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task StartRace_IgnoresTapTimeInTheFuture_OrOlderThanTenMinutes()
+    public async Task StartRace_RejectsFutureTime_AndPreservesOfflineTapOlderThanTenMinutes()
     {
         var a = await _f.CreateArenaAsync(2);
         var (_, races) = await _f.AddHeatAsync(a.SessionId, a.TeamIds);
         var (_, races2) = await _f.AddHeatAsync(a.SessionId, a.TeamIds, "H2", 2);
         var admin = await _f.AdminAsync();
 
-        var future = await (await admin.PostAsJsonAsync($"/api/races/{races[0]}/start", new RaceClockRequest(DateTime.UtcNow.AddHours(1)))).ReadAsync<RaceDto>();
+        var future = await admin.PostAsJsonAsync($"/api/races/{races[0]}/start", new RaceClockRequest(DateTime.UtcNow.AddHours(1)));
         var stale = await (await admin.PostAsJsonAsync($"/api/races/{races2[0]}/start", new RaceClockRequest(DateTime.UtcNow.AddMinutes(-30)))).ReadAsync<RaceDto>();
 
-        Assert.True(future.StartedAt!.Value < DateTime.UtcNow.AddMinutes(1));
-        Assert.True(stale.StartedAt!.Value > DateTime.UtcNow.AddMinutes(-1));
+        Assert.Equal(HttpStatusCode.BadRequest, future.StatusCode);
+        Assert.True(stale.StartedAt!.Value < DateTime.UtcNow.AddMinutes(-29));
     }
 
     [Fact]

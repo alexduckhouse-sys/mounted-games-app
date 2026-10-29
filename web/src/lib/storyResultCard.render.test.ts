@@ -143,10 +143,10 @@ describe('fonts, PNG and sharing', () => {
     vi.stubGlobal('navigator', { share: vi.fn(), canShare: () => false });
     expect(await shareOrDownloadStoryResultCard(data)).toBe('downloaded');
     vi.stubGlobal('navigator', { share: vi.fn() });
-    expect(await shareOrDownloadStoryResultCard(data)).toBe('shared');
+    expect(await shareOrDownloadStoryResultCard(data)).toBe('downloaded');
     vi.stubGlobal('navigator', {});
     expect(await shareOrDownloadStoryResultCard(data)).toBe('downloaded');
-    expect(click).toHaveBeenCalledTimes(2);
+    expect(click).toHaveBeenCalledTimes(3);
     // The download link's address is let go a few seconds later.
     vi.useFakeTimers();
     await shareOrDownloadStoryResultCard(data);

@@ -25,12 +25,21 @@ export interface QueuedScore {
   raceId: number;
   competitionId: number;
   sessionId: number;
+  arenaName?: string;
+  sessionName?: string;
+  lanes?: Record<number, number>;
+  /** Display-only provisional points for offline backups; never a scoring override. */
+  previewPoints?: Record<number, number>;
   /** e.g. "Heat 2 · Barrel Race", for the outbox panel. */
   label: string;
   places: Placing[];
   expected: Placing[];
   teamNames: Record<number, string>;
   queuedAt: string;
+  /** Exact device taps, retained through offline transfer and retries. */
+  startedAt?: string;
+  finishedAt?: string;
+  timingOmitted?: boolean;
   reason?: string;
   /** Sent with a scorer link's token instead of a signed-in account. */
   viaLink?: boolean;
@@ -224,6 +233,17 @@ export function parseOutboxBackup(
       raceId: item.raceId,
       competitionId: compId,
       sessionId: item.sessionId,
+      ...(typeof item.arenaName === 'string' ? { arenaName: item.arenaName } : {}),
+      ...(typeof item.sessionName === 'string' ? { sessionName: item.sessionName } : {}),
+      ...(item.lanes && typeof item.lanes === 'object' && !Array.isArray(item.lanes) ? {
+        lanes: Object.fromEntries(Object.entries(item.lanes).filter(([key, value]) => Number.isInteger(Number(key)) && typeof value === 'number' && Number.isInteger(value) && value > 0)),
+      } : {}),
+      ...(item.previewPoints && typeof item.previewPoints === 'object' && !Array.isArray(item.previewPoints) ? {
+        previewPoints: Object.fromEntries(Object.entries(item.previewPoints).filter(([key, value]) =>
+          Number.isSafeInteger(Number(key)) && Number(key) > 0 &&
+          (item.places as Placing[]).some((placing) => placing.teamId === Number(key)) &&
+          typeof value === 'number' && Number.isFinite(value) && value >= 0)),
+      } : {}),
       label: item.label.trim(),
       places: item.places,
       expected,
@@ -231,6 +251,9 @@ export function parseOutboxBackup(
       queuedAt: typeof item.queuedAt === 'string' && item.queuedAt ? item.queuedAt : new Date().toISOString(),
       ...(typeof item.reason === 'string' && item.reason.trim() ? { reason: item.reason.trim() } : {}),
       ...(viaLink ? { viaLink: true } : {}),
+      ...(item.timingOmitted === true ? { timingOmitted: true } : {}),
+      ...(typeof item.startedAt === 'string' && Number.isFinite(Date.parse(item.startedAt)) ? { startedAt: item.startedAt } : {}),
+      ...(typeof item.finishedAt === 'string' && Number.isFinite(Date.parse(item.finishedAt)) ? { finishedAt: item.finishedAt } : {}),
       state: 'waiting',
     });
   }

@@ -10,7 +10,7 @@ import { formatClubInvoiceSummary, groupClubInvoices, unpaidReminderCandidates }
 import {
   matchBankStatementLines, parseBankStatementCsv, type BankStatementMatchRow, type TreasurerOrderRow,
 } from '../../lib/treasurerCsv';
-import { whatsAppUrl } from '../../lib/whatsapp';
+import { formatPaymentReminderWhatsApp, whatsAppUrl } from '../../lib/whatsapp';
 import type { MessageKey } from '../../i18n/en/index';
 import type { CompetitionDetail, SectionSignup, SendUnpaidRemindersResult } from '../../types';
 import { RefineList, RefineSheet } from '../refine/Refine';
@@ -18,6 +18,7 @@ import {
   fetchShopOrders, markClubPaid, markOrderPaid, markSignupPaid, reminderHoursLeft, sendUnpaidReminders,
 } from './entryLogic';
 import './entryTools.css';
+import { WhatsAppComposer } from './WhatsAppComposer';
 
 interface SheetProps {
   competition: CompetitionDetail;
@@ -86,6 +87,10 @@ export function RemindUnpaidSheet({ competition, signups, onChanged, onClose }: 
                 </label>
               ))}
             </RefineList>
+            <RefineList as="div" label={tr('completion.reminders')}>{rows.map(r => <div className="rf-row" key={r.signup.id}>
+              <span className="rf-grow rf-t1">{r.signup.fullName}</span>
+              <WhatsAppComposer title={tr('completion.reminder')} text={formatPaymentReminderWhatsApp({ entrantName: r.signup.fullName, competitionName: competition.name, sectionName: r.signup.sectionName, amountMinor: r.signup.amountMinor, reference: r.paymentReference, paymentDestination: competition.paymentDestination })} />
+            </div>)}</RefineList>
             <label className="rf-fld">{t('ops2.money.addMsg')}
               <textarea rows={2} maxLength={500} value={note} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setNote(e.target.value)} />
             </label>

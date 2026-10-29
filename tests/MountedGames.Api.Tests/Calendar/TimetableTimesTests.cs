@@ -289,7 +289,7 @@ public class TimetableTimesTests
     }
 
     [Fact]
-    public void FirstRaceAutoDelay_AndLearnedPaceMultiplier_ScaleAndShiftRemainingHeats()
+    public void FirstRaceAutoDelay_KeepsConfiguredDurationsWhilePaceIsAdvisory()
     {
         var finishedFastHeat = new Heat
         {
@@ -314,8 +314,8 @@ public class TimetableTimesTests
 
         // First race was 10m after 09:00 scheduled start -> 10m - 2m = 8m effective delay (09:08).
         Assert.Equal(At(9, 8), times[1].Start);
-        // Upcoming 30m heat is scaled by 0.75x to 23m.
-        Assert.Equal(23, times[2].DurationMinutes);
+        // Pace suggestions never silently shorten the published duration.
+        Assert.Equal(30, times[2].DurationMinutes);
     }
 
     [Fact]

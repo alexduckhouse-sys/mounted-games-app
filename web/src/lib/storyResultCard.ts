@@ -1,3 +1,4 @@
+import { canShareFile } from './shareFile';
 // Unused in web UI yet — reserved for iOS / upcoming wiring
 import type { StandingRow } from '../types';
 import type { ToplistRow } from './toplist';
@@ -384,9 +385,7 @@ function storyCardFile(blob: Blob, data: StoryResultCardData): File {
 
 /** True when the phone's share sheet takes image files, so a Share button can hand the card straight over. */
 export function canShareStoryResultCard(blob: Blob, data: StoryResultCardData): boolean {
-  const nav = typeof navigator !== 'undefined' ? navigator : undefined;
-  if (!nav || typeof nav.share !== 'function') return false;
-  return typeof nav.canShare === 'function' ? nav.canShare({ files: [storyCardFile(blob, data)] }) : true;
+  return canShareFile(storyCardFile(blob, data));
 }
 
 /** Opens the share sheet with the card. Call it straight from a tap: iOS refuses a share that follows other async work. */

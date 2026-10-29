@@ -1,7 +1,8 @@
+import { useT } from '../i18n/LanguageContext';
 import { useEffect, useState } from 'react';
 import { CloudOff } from 'lucide-react';
 import { describePlacings, discard, overrule, retry, type QueuedScore } from '../offline/scoreOutbox';
-import { flushOutbox, inFlightGraceRemainingMs, OUTBOX_STORAGE_ERROR, SCORE_SENT, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
+import { sendScoreWithoutTiming, flushOutbox, inFlightGraceRemainingMs, OUTBOX_STORAGE_ERROR, SCORE_SENT, updateOutbox, useScoreOutbox } from '../offline/useScoreOutbox';
 import { confirmDialog } from './ConfirmDialog';
 import { OutboxTransfer } from './OutboxTransfer';
 import { Notice } from './Notice';
@@ -11,6 +12,7 @@ import { TickerNumber } from './TickerNumber';
 
 /** Results saved on this phone that haven't reached the server yet, and any that need a decision. */
 export function ScoreOutboxPanel({ competitionId, competitionName, alwaysImport = false, viaLink = false }: { competitionId: number; competitionName?: string; alwaysImport?: boolean; viaLink?: boolean }) {
+  const t = useT();
   const queued = useScoreOutbox().filter((q) => q.competitionId === competitionId);
   const [reasons, setReasons] = useState<Record<number, string>>({});
   const [storageError, setStorageError] = useState(false);
@@ -83,6 +85,7 @@ export function ScoreOutboxPanel({ competitionId, competitionName, alwaysImport 
           onAction={() => update((l) => retry(l, q.raceId, reasonOf(q).trim() || undefined))}
           extra={(
             <>
+              {(q.startedAt || q.finishedAt) && <button type="button" className="kit-pill" onClick={() => setStorageError(!sendScoreWithoutTiming(q.raceId))}>{t('reliability.withoutTiming')}</button>}
               <label className="flex w-full flex-col gap-1 font-semibold">Reason for correction (if needed)
                 <textarea className="input" maxLength={1000} value={reasonOf(q)} onChange={(event) => setReason(q, event.target.value)} />
               </label>

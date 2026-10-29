@@ -39,7 +39,7 @@ export function SessionsTab() {
       {showManage && (
         <>
           {ordered.length > 0 && <span aria-hidden="true">·</span>}
-          <Link className="mg-text-link text-xs" to={`/competitions/${competition.id}/operations/timetable-and-draw`}>Manage timetable</Link>
+          <Link className="mg-text-link text-xs" to={`/competitions/${competition.id}/timetable-and-draw`}>Manage timetable</Link>
         </>
       )}
     </nav>

@@ -1,5 +1,6 @@
+import { CallUpStrip } from './reliability/CallUpStrip';
 import { clubLabel } from '../../lib/clubName';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ClipboardCheck, Mic, Monitor, QrCode as QrCodeIcon, Radio, Sparkles, Trophy, Users } from 'lucide-react';
 import { api } from '../../api';
@@ -18,7 +19,6 @@ import { statusLetter } from '../../lib/resultStatus';
 import { publicRiderName } from '../../lib/riderNames';
 import { displaySectionName } from '../../lib/section';
 import { buildToplist, sectionScoreVersion } from '../../lib/toplist';
-import { useLiveHub } from '../../live/useLiveHub';
 import type { DeclarationForm, Heat, Session, StandingRow, Team } from '../../types';
 import { useCompetition } from './context';
 import { Notice } from '../../components/Notice';
@@ -46,7 +46,7 @@ export function CommentaryDeskPage() {
   usePageWidth('wide');
   const t = useT();
   const { lang } = useLanguage();
-  const { competition, reload } = useCompetition();
+  const { competition, connected = false, standingsVersion = 0, ready } = useCompetition();
   const { canOrganise } = useAuth();
   const canControlStreams = canOrganise(competition);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -63,27 +63,7 @@ export function CommentaryDeskPage() {
   const [selectedHeatId, setSelectedHeatId] = useState<number | null>(null);
   const [standingsBySection, setStandingsBySection] = useState<Record<number, { rows: StandingRow[]; source: typeof refreshSource; failed?: boolean }>>({});
   const [declarations, setDeclarations] = useState<DeclarationForm[]>([]);
-  const [refreshTick, setRefreshTick] = useState(0);
   const [showQrModal, setShowQrModal] = useState(false);
-
-  const bumpRefresh = useCallback(() => {
-    setRefreshTick((n) => n + 1);
-  }, []);
-
-  const { connected } = useLiveHub(competition.id, {
-    onReady: () => {
-      reload();
-      bumpRefresh();
-    },
-    onSessionUpdated: () => {
-      reload();
-      bumpRefresh();
-    },
-    onResultsUpdated: () => {
-      reload();
-      bumpRefresh();
-    },
-  });
 
   usePageHeader({
     title: t('desk.commentary.title'),
@@ -97,8 +77,8 @@ export function CommentaryDeskPage() {
     [competition.sessions, sectionId],
   );
 
-  const refreshSource = useMemo(() => ({ competitionId: competition.id, scoreVersion, teams: competition.teams, sections: competition.sections, refreshTick }),
-    [competition.id, scoreVersion, competition.teams, competition.sections, refreshTick]);
+  const refreshSource = useMemo(() => ({ competitionId: competition.id, scoreVersion, teams: competition.teams, sections: competition.sections, ready, standingsVersion }),
+    [competition.id, scoreVersion, competition.teams, competition.sections, ready, standingsVersion]);
 
   useEffect(() => {
     if (sectionId == null) return;
@@ -127,7 +107,7 @@ export function CommentaryDeskPage() {
         if (!cancelled) setDeclarations([]);
       });
     return () => { cancelled = true; };
-  }, [competition.id, refreshTick]);
+  }, [competition.id, ready, standingsVersion]);
 
   const chooseSection = (nextId: number) => {
     setSelectedSectionId(nextId);
@@ -419,6 +399,7 @@ export function CommentaryDeskPage() {
   return (
     <div className="mx-auto flex w-full flex-col gap-4 py-3">
       {standingsStale && (standings.length ? savedNotice && <Notice tone="info">{t('desk.commentary.savedStandings')}</Notice> : <Notice tone="info">{t('desk.commentary.waitingOfficial')}</Notice>)}
+      {canControlStreams && <CallUpStrip competitionId={competition.id} sessions={competition.sessions} />}
       {/* Top Bar */}
       <header className="mg-card flex flex-col gap-3 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -566,7 +547,7 @@ export function CommentaryDeskPage() {
               declarations={declarations}
               finalistCount={section?.finalistCount}
               laneOrder={activeLanes?.lanes.map((l) => ({ teamId: l.entry.teamId, lane: l.lane, sitting: l.sitting }))}
-              refreshTick={refreshTick}
+              refreshTick={`${ready}:${standingsVersion}:${scoreVersion}`}
             />
           )}
 

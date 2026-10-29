@@ -1,3 +1,4 @@
+import { WhatsAppComposer } from '../operations/WhatsAppComposer';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -132,6 +133,7 @@ function AnnouncementsSession() {
                   <span className="ann-grow">
                     <span className="ann-text">{message.body}</span>
                     <span className="ann-meta">{sentLabel(message, justSentId)}</span>
+                    <WhatsAppComposer text={`${competition.name}\n\n${message.body}\n\n${location.origin}/competitions/${competition.id}/chat`} />
                   </span>
                   {isAdmin && <button type="button" className="ann-pill" aria-label={`Pin: ${message.body}`} onClick={() => void pin(message)}>Pin</button>}
                 </li>

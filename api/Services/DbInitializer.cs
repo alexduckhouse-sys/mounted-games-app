@@ -240,6 +240,7 @@ public static class DbInitializer
         await EnsureColumnAsync(db, "Heats", "RaceRoundId", "INTEGER NULL");
         await EnsureColumnAsync(db, "Heats", "RaceRoundStage", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "HeatEntries", "BibColourOverride", "TEXT NULL");
+        await EnsureColumnAsync(db, "Races", "StartIsExplicit", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "Races", "HasOpenProtest", "INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "CompetitionSections", "RunoffRaceName", "TEXT NULL");
         await EnsureColumnAsync(db, "CompetitionSections", "TieBreakRule", "INTEGER NOT NULL DEFAULT 0");
@@ -468,6 +469,7 @@ public static class DbInitializer
         await Accounts.AccountAccessSqliteSchema.EnsureAsync(db);
         await Notifications.NotificationSqliteSchema.EnsureAsync(db);
         await ChatModerationSqliteSchema.EnsureAsync(db);
+        await CompetitionReadRevisionSchemaV1.EnsureSqliteAsync(db);
 
     }
 

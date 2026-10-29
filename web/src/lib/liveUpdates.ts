@@ -2,12 +2,14 @@ import type { CompetitionDetail, Heat } from '../types';
 
 /**
  * `resultsUpdated` carries either a whole heat (results saved, duration
- * changed) or a race clock change (`raceId` plus `started` or `finished`).
+ * changed), a race clock change, a team change, or a tack-check standings invalidation.
  */
 export type ResultsUpdate =
   | { sessionId: number; heat: Heat }
   | { sessionId: number; raceId: number; started?: string | null; finished?: string | null }
-  | { teamId: number; refereeCard?: 'yellow' | 'red' | null };
+  | { teamId: number; refereeCard?: 'yellow' | 'red' | null }
+  | { teamId: number; isHorsConcours: boolean }
+  | { sectionId: number; teamId: number | null; tackCheck: true };
 
 export function replaceHeat(competition: CompetitionDetail, sessionId: number, heat: Heat): CompetitionDetail {
   return {
@@ -22,6 +24,14 @@ export function replaceHeat(competition: CompetitionDetail, sessionId: number, h
 export function applyResultsUpdate(competition: CompetitionDetail, update: ResultsUpdate): CompetitionDetail {
   if ('heat' in update) return update.heat ? replaceHeat(competition, update.sessionId, update.heat) : competition;
   if ('teamId' in update && !('sessionId' in update)) {
+    if ('isHorsConcours' in update && typeof update.isHorsConcours === 'boolean') {
+      return {
+        ...competition,
+        teams: competition.teams.map((t) => t.id === update.teamId ? { ...t, isHorsConcours: update.isHorsConcours } : t),
+      };
+    }
+    // Tack-check events only invalidate the standings; an omitted card never means clear it.
+    if (!('refereeCard' in update) || typeof update.teamId !== 'number') return competition;
     const card = update.refereeCard ?? null;
     return {
       ...competition,

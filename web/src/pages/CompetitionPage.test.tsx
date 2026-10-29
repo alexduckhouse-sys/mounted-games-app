@@ -2,8 +2,10 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
-import { competition } from '../test/factories';
+import { competition, team, session } from '../test/factories';
 import { CompetitionPage } from './CompetitionPage';
+import { prefetchCompetition } from '../lib/competitionPrefetch';
+import { useCompetition } from './competition/context';
 
 const state = vi.hoisted(() => ({
   handlers: null as null | Record<string, (...args: never[]) => void>,
@@ -106,4 +108,78 @@ describe('CompetitionPage initial onReady race prevention', () => {
     expect(await screen.findByText('Competition loaded')).toBeVisible();
     expect(calls).toBe(2);
   });
+});
+
+function DetailProbe() {
+  const { competition: detail } = useCompetition();
+  return <><p>{detail.name}</p><p>{detail.teams[0]?.refereeCard ?? "no card"}</p></>;
+}
+function mountDetail() {
+  return render(<MemoryRouter initialEntries={['/competitions/1']}><Routes>
+    <Route path="/competitions/:id/*" element={<CompetitionPage />}><Route path="*" element={<DetailProbe />} /></Route>
+  </Routes></MemoryRouter>);
+}
+
+it('adopts a pending full-detail hover request while keeping the small first-view request separate', async () => {
+  let finish!: (value: unknown) => void;
+  vi.mocked(api.get).mockImplementation(((url: string) => {
+    if (url === '/competitions/1') return new Promise<unknown>((resolve) => { finish = resolve; });
+    if (url.endsWith('/first-view')) return new Promise(() => {});
+    return Promise.resolve({ data: [], headers: {} });
+  }) as typeof api.get);
+  const warm = prefetchCompetition(1);
+  mountDetail();
+  expect(vi.mocked(api.get).mock.calls.filter(([url]) => url === '/competitions/1')).toHaveLength(1);
+  expect(vi.mocked(api.get).mock.calls.some(([url]) => url === '/competitions/1/first-view')).toBe(true);
+  await act(async () => { finish({ data: competition({ name: 'Fake prefetched event' }), headers: {} }); await warm; });
+  expect(await screen.findByText('Fake prefetched event')).toBeVisible();
+});
+
+it('opens first-view and full detail during repeated live updates and keeps those updates', async () => {
+  let finish!: (value: unknown) => void;
+  let firstView!: (value: unknown) => void;
+  vi.mocked(api.get).mockImplementation(((url: string) => {
+    if (url === '/competitions/1') return new Promise<unknown>((resolve) => { finish = resolve; });
+    if (url.endsWith('/first-view')) return new Promise<unknown>((resolve) => { firstView = resolve; });
+    return Promise.resolve({ data: [], headers: {} });
+  }) as typeof api.get);
+  mountDetail();
+  act(() => state.handlers?.onResultsUpdated?.({ teamId: 7, refereeCard: 'yellow' } as never));
+  await act(async () => firstView({ data: competition({ name: 'Fake first view', teams: [team(7)] }), headers: {} }));
+  expect(screen.getByText('Fake first view')).toBeVisible();
+  expect(screen.getByText('yellow')).toBeVisible();
+  act(() => state.handlers?.onResultsUpdated?.({ teamId: 7, refereeCard: 'red' } as never));
+  await act(async () => finish({ data: competition({ name: 'Fake full event', teams: [team(7)] }), headers: {} }));
+  expect(screen.getByText('Fake full event')).toBeVisible();
+  expect(screen.getByText('red')).toBeVisible();
+  expect(vi.mocked(api.get).mock.calls.filter(([url]) => url === '/competitions/1')).toHaveLength(1);
+});
+
+
+it('finishes the active prefetch during session traffic, preserves patches and queues one fresh reconciliation', async () => {
+  let finish!: (value: unknown) => void;
+  const signals: AbortSignal[] = [];
+  vi.mocked(api.get).mockImplementation(((url: string, options?: { signal?: AbortSignal }) => {
+    if (url === '/competitions/1') {
+      if (options?.signal) signals.push(options.signal);
+      return new Promise<unknown>((resolve) => { if (!options?.signal) finish = resolve; });
+    }
+    if (url.endsWith('/first-view')) return new Promise(() => {});
+    return Promise.resolve({ data: [], headers: {} });
+  }) as typeof api.get);
+  const warm = prefetchCompetition(1);
+  mountDetail();
+  act(() => {
+    state.handlers?.onResultsUpdated?.({ teamId: 7, refereeCard: 'red' } as never);
+    state.handlers?.onSessionUpdated?.(session(4) as never);
+    state.handlers?.onSessionUpdated?.(session(5) as never);
+  });
+  expect(vi.mocked(api.get).mock.calls.filter(([url]) => url === '/competitions/1')).toHaveLength(1);
+  await act(async () => { finish({ data: competition({ name: 'Fake loaded snapshot', teams: [team(7)] }), headers: {} }); await warm; });
+  expect(screen.getByText('Fake loaded snapshot')).toBeVisible();
+  expect(screen.getByText('red')).toBeVisible();
+  expect(signals).toHaveLength(1);
+  act(() => state.handlers?.onSessionUpdated?.(session(6) as never));
+  expect(signals[0].aborted).toBe(false);
+  expect(vi.mocked(api.get).mock.calls.filter(([url]) => url === '/competitions/1')).toHaveLength(2);
 });

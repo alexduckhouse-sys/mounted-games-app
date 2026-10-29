@@ -1,7 +1,8 @@
+import { PaceReview } from '../../components/PaceReview';
 import { useT } from '../../i18n/LanguageContext';
 import { activeLocale } from '../../i18n/translate';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
-import { ArrowDown, ArrowUp, Minus, Pencil, Plus } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, Minus, Pencil, Plus } from 'lucide-react';
 import { useSavedToast } from '../../components/SavedTick';
 import { TickerNumber } from '../../components/TickerNumber';
 import { api } from '../../api';
@@ -332,7 +333,7 @@ export function TimetablePage() {
   );
   const lower = (
     <>
-        <h2 className="rf-sec ops-tt-head"><span>{t('ops.tt.hatbands')}</span><span>{bands.length}</span></h2>
+        <details className="rf-list"><summary className="rf-row"><span className="rf-grow rf-t1">{t('ops.tt.hatbands')}</span><span className="rf-t2">{bands.length}</span><ChevronDown className="rf-chev h-4 w-4" aria-hidden="true" /></summary>
         <RefineList as="div" label={t('ops.tt.hatbands')}>
           {bands.map((band, i) => (
             <Fragment key={i}>
@@ -359,7 +360,8 @@ export function TimetablePage() {
         </RefineList>
         {bands.length > 0 && <div className="ops-end-left"><button type="button" className="ops-danger-link" disabled={busy} onClick={() => { setChanging(null); void saveBands([]); }}>{t('ops.tt.removeAllBands')}</button></div>}
 
-        <h2 className="rf-sec ops-tt-head"><span>{t('ops.tt.draw')}</span></h2>
+        </details>
+        <details className="rf-list"><summary className="rf-row"><span className="rf-grow rf-t1">{t('shell.menu.laneDraw')}</span><ChevronDown className="rf-chev h-4 w-4" aria-hidden="true" /></summary>
         <RefineList as="div">
           <RefineChoiceRow label={t('ops.tt.section')} value={sectionId} options={competition.sections.map((s) => ({ value: String(s.id), label: s.displayName }))} disabled={busy || competition.sections.length === 0}
             onChange={(value) => { setSectionId(value); setPreview(null); }} />
@@ -386,6 +388,7 @@ export function TimetablePage() {
             </div>
           </>
         )}
+        </details>
     </>
   );
 
@@ -394,12 +397,14 @@ export function TimetablePage() {
       {savedToast.node}
       <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.hub.back')} context={competition.name} title={t('ops.tt.title')} />
       <div ref={pageRef} className="ops-cards ops-tt" aria-busy={busy}>
+        <PaceReview competitionId={competition.id} />
         <DrawUndoBanner competitionId={competition.id} version={undoVersion} onRestored={reload} />
         <TimetableClashes competition={competition} />
         {error && <Notice>{error}</Notice>}
         {notice && <Notice tone="info" onDismiss={() => setNotice(null)}>{notice}</Notice>}
 
         {!docked && controls}
+        {!docked && lower}
 
         {groups.map(({ name, list: saved }) => {
           const group = { name, list: moved?.sessions === competition.sessions && saved[0]?.session.id === moved.first
@@ -488,7 +493,6 @@ export function TimetablePage() {
           );
         })}
 
-        {!docked && lower}
       </div>
       {docked && toolsOpen && (
         <Sheet title={t('ops.tt.toolsSheet')} onClose={() => setToolsOpen(false)}>

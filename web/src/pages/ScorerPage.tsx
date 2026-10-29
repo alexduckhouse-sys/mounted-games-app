@@ -786,6 +786,9 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
       raceId: activeRace.id,
       competitionId: session.competitionId,
       sessionId: session.id,
+      arenaName: session.arenaName ?? undefined,
+      sessionName: session.name,
+      lanes: Object.fromEntries(heat.entries.map((entry) => [entry.teamId, Number(displayLaneFor(heat, entry, races.findIndex((r) => r.id === activeRace.id), laneRules))])),
       label: `${heat.label ?? `Heat ${heatIndex + 1}`} · ${activeRace.name}`,
       places: [...places, ...restOfQualifier(heat, places), ...sitOutPlaces(heat, races.findIndex((r) => r.id === activeRace.id), laneRules)],
       expected: placingsOf(activeRace.results),
@@ -793,6 +796,9 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
       queuedAt: new Date().toISOString(),
       state: 'waiting',
     };
+    // Keep the same provisional display calculation in the backup, separate from scoring overrides.
+    const previewRace = withQueuedResults(heat, [item], sessionBase).races.find((race) => race.id === item.raceId);
+    item.previewPoints = Object.fromEntries((previewRace?.results ?? []).map((row) => [row.teamId, row.points]));
     const queuedBefore = outbox.find((q) => q.raceId === activeRace.id) ?? null;
     const nextOutbox = enqueue(outbox, item);
     if (!updateOutbox((list) => enqueue(list, item))) { setSaveError(OUTBOX_STORAGE_ERROR); return false; }
@@ -1032,6 +1038,7 @@ function ArenaScoring({ sessions, outbox, canStream }: { sessions: Session[]; ou
           qualifiers={qualifiersOf(session)}
           pending={shown}
           canScore
+          viaScorerLink
           queued={outbox}
           onClickTeam={clickTeam}
           onToggleElim={toggleElim}

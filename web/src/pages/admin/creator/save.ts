@@ -60,6 +60,28 @@ export function finalListsOf(section: SectionDraft): Record<string, string[]> {
   return out;
 }
 
+/** Independent writes run three at a time. Drain work already sent before reporting the first error. */
+async function saveIndependent<T, R>(items: readonly T[], save: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  let failed = false;
+  let failure: unknown;
+  const worker = async () => {
+    while (!failed && next < items.length) {
+      const index = next++;
+      try {
+        results[index] = await save(items[index], index);
+      } catch (error) {
+        if (!failed) failure = error;
+        failed = true;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(3, items.length) }, worker));
+  if (failed) throw failure;
+  return results;
+}
+
 /**
  * Saves the draft: the competition, its age groups, their sessions (with the estimated start times that make the
  * provisional timetable) and its breaks. Never touches teams, entries, heats or results. Sessions that have heats are
@@ -99,8 +121,7 @@ export async function saveCreator(draft: CreatorDraft, opts: {
     if (!keptSections.has(old.id)) await step(tr('admin.creator.save.removing', { name: old.displayName }), () => api.delete(`${base}/sections/${old.id}`));
   }
 
-  const sectionIds: number[] = [];
-  for (const s of draft.sections) {
+  const sectionIds = await saveIndependent(draft.sections, async (s) => {
     const name = sectionName(s);
     const common = {
       runoffRaceName: s.runoffRaceName.trim() || null,
@@ -115,15 +136,15 @@ export async function saveCreator(draft: CreatorDraft, opts: {
     };
     if (s.existingId) {
       await step(tr('admin.creator.save.saving', { name }), () => api.put(`${base}/sections/${s.existingId}`, { ...common, maxParticipants: common.maxParticipants ?? 0 }));
-      sectionIds.push(s.existingId);
+      return s.existingId;
     } else {
       const made = await step(tr('admin.creator.save.adding', { name }), () => api.post<{ id: number }>(`${base}/sections`, { format: s.format, ageGroup: s.ageGroup.trim(), displayName: name, ...common }));
-      sectionIds.push(made.data.id);
+      return made.data.id;
     }
-  }
+  });
 
-  const setLaneRotation = (sessionId: number, laneRotationMode: number, name: string) =>
-    step(tr('admin.creator.save.laneOrder', { name }), () => api.put(`${base}/sessions/${sessionId}/settings`, { laneRotationMode }));
+  const setLaneRotation = (sessionId: number, laneRotationMode: number, minutesPerHeat: number, name: string) =>
+    step(tr('admin.creator.save.laneOrder', { name }), () => api.put(`${base}/sessions/${sessionId}/settings`, { laneRotationMode, minutesPerHeat }));
 
   // Sessions and breaks, with the estimated times.
   const real = realFixedItems(competition);
@@ -148,6 +169,8 @@ export async function saveCreator(draft: CreatorDraft, opts: {
     }
   }
 
+  // Updates can retime heats and send delay notices. Creates only write their own row.
+  const newSessions: Array<() => Promise<void>> = [];
   for (const p of plan) {
     const section = draft.sections[p.sectionIndex];
     const session = section.sessions[p.sessionIndex];
@@ -160,18 +183,24 @@ export async function saveCreator(draft: CreatorDraft, opts: {
         ? { minutesPerHeat: minutes, arenaName: arena }
         : { arenaName: arena, minutesPerHeat: minutes, lanesPerHeat: heatSizeOf(section), plannedRaces: session.races ?? [], scheduledStart: row?.start.toISOString(), durationMinutes: row && row.minutes > 0 ? row.minutes : undefined, orderIndex: orderOf(`s${p.key}`) };
       await step(tr('admin.creator.save.saving', { name: p.name }), () => api.put(`${base}/sessions/${session.existingId}`, body));
-      if (section.laneRotation !== undefined && !session.hasHeats) await setLaneRotation(session.existingId, section.laneRotation, p.name);
+      if (section.laneRotation !== undefined && !session.hasHeats) await setLaneRotation(session.existingId, section.laneRotation, minutes, p.name);
     } else {
-      const made = await step(tr('admin.creator.save.adding', { name: p.name }), () => api.post<{ id?: number }>(`${base}/sessions`, {
-        competitionSectionId: sectionIds[p.sectionIndex], name: p.name, arenaName: arena, scheduledStart: row?.start.toISOString() ?? null,
-        orderIndex: orderOf(`s${p.key}`), notes: null, isBreak: false, durationMinutes: row && row.minutes > 0 ? row.minutes : null,
-        kind: SessionKind.Race, location: null, lanesPerHeat: heatSizeOf(section), minutesPerHeat: minutes, plannedRaces: session.races ?? [],
-      }));
-      // Move up is what every new session does already, so only another choice needs saying.
-      if (section.laneRotation && made.data?.id) await setLaneRotation(made.data.id, section.laneRotation, p.name);
+      newSessions.push(async () => {
+        const made = await step(tr('admin.creator.save.adding', { name: p.name }), () => api.post<{ id?: number }>(`${base}/sessions`, {
+          competitionSectionId: sectionIds[p.sectionIndex], name: p.name, arenaName: arena, scheduledStart: row?.start.toISOString() ?? null,
+          orderIndex: orderOf(`s${p.key}`), notes: null, isBreak: false, durationMinutes: row && row.minutes > 0 ? row.minutes : null,
+          kind: SessionKind.Race, location: null, lanesPerHeat: heatSizeOf(section), minutesPerHeat: minutes, plannedRaces: session.races ?? [],
+        }));
+        // Finish this session before freeing its slot, even if another create has failed.
+        if (made.data?.id && section.laneRotation) {
+          await setLaneRotation(made.data.id, section.laneRotation, minutes, p.name);
+        }
+      });
     }
   }
+  await saveIndependent(newSessions, (save) => save());
 
+  const newFinals: Array<() => Promise<unknown>> = [];
   let nextFinalOrder = topOrder + rows.length + 1;
   for (const [sectionIndex, section] of draft.sections.entries()) {
     if (section.usesRaceFinals || section.hasFinal === false) continue;
@@ -188,18 +217,21 @@ export async function saveCreator(draft: CreatorDraft, opts: {
         : { arenaName: arena, minutesPerHeat: minutes, lanesPerHeat: heatSizeOf(section), plannedRaces: section.finalRaces ?? [], plannedFinalRaces };
       await step(tr('admin.creator.save.saving', { name: fName }), () => api.put(`${base}/sessions/${section.finalSessionId}`, body));
     } else if (hasFinalRaces || (!sectionLocked(section) && hasFinalists)) {
-      await step(tr('admin.creator.save.adding', { name: fName }), () => api.post(`${base}/sessions`, {
+      const orderIndex = nextFinalOrder++;
+      newFinals.push(() => step(tr('admin.creator.save.adding', { name: fName }), () => api.post(`${base}/sessions`, {
         competitionSectionId: sectionIds[sectionIndex], name: fName, arenaName: arena, scheduledStart: null,
-        orderIndex: nextFinalOrder++, notes: null, isBreak: false, durationMinutes: null,
+        orderIndex, notes: null, isBreak: false, durationMinutes: null,
         kind: SessionKind.Race, location: null, lanesPerHeat: heatSizeOf(section), minutesPerHeat: minutes, plannedRaces: section.finalRaces ?? [], plannedFinalRaces,
-      }));
+      })));
     }
   }
+  await saveIndependent(newFinals, (save) => save());
 
   const keptBreaks = new Set(draft.breaks.flatMap((b) => (b.existingId ? [b.existingId] : [])));
   for (const old of (competition?.sessions ?? []).filter((s) => !isRace(s))) {
     if (!keptBreaks.has(old.id)) await step(tr('admin.creator.save.removing', { name: old.name }), () => api.delete(`${base}/sessions/${old.id}`));
   }
+  const newBreaks: Array<() => Promise<unknown>> = [];
   for (const [i, b] of draft.breaks.entries()) {
     const window = breakWindow(b);
     if (b.existingId) {
@@ -211,11 +243,12 @@ export async function saveCreator(draft: CreatorDraft, opts: {
       }));
       continue;
     }
-    await step(tr('admin.creator.save.adding', { name: b.name.trim() || tr('admin.creator.save.breakLower') }), () => api.post(`${base}/sessions`, {
+    newBreaks.push(() => step(tr('admin.creator.save.adding', { name: b.name.trim() || tr('admin.creator.save.breakLower') }), () => api.post(`${base}/sessions`, {
       competitionSectionId: null, name: b.name.trim(), arenaName: b.arena.trim() || null, scheduledStart: window?.start.toISOString() ?? null,
       orderIndex: orderOf(`b${i}`), notes: null, isBreak: b.kind === 1, durationMinutes: parseInt(b.minutes, 10) || null,
       kind: b.kind, location: null,
-    }));
+    })));
   }
+  await saveIndependent(newBreaks, (save) => save());
   return id;
 }

@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
+import { nodeTests } from './src/test/nodeTests.ts';
 
 // Vitest covers the logic layer in src/**/*.test.{ts,tsx}. The older node:test suite in tests/*.mjs
 // keeps running separately (`npm test` runs both), so it is never picked up here.
@@ -9,12 +10,23 @@ export default defineConfig({
     alias: { 'virtual:pwa-register': fileURLToPath(new URL('./src/test/pwa-register-stub.ts', import.meta.url)) },
   },
   test: {
-    environment: 'jsdom',
     // Some UI tests take 6-8 s when the machine is busy (e.g. a dotnet test alongside); the 5 s
     // default turned that into false failures.
     testTimeout: 15_000,
-    include: ['src/**/*.test.{ts,tsx}'],
-    setupFiles: ['src/test/setup.ts'],
+    // Both projects inherit aliases, timeouts and mock/global resets. New tests default to the browser.
+    projects: [
+      {
+        extends: true,
+        test: { name: 'node', environment: 'node', include: nodeTests, setupFiles: [] },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'browser', environment: 'jsdom', include: ['src/**/*.test.{ts,tsx}'],
+          exclude: nodeTests, setupFiles: ['src/test/setup.ts'],
+        },
+      },
+    ],
     restoreMocks: true,
     mockReset: true,
     unstubGlobals: true,

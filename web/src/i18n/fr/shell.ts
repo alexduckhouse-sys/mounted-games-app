@@ -2,6 +2,10 @@ import type { AreaCatalogue } from '../messages';
 import type { shell as en } from '../en/shell';
 
 export const shell: AreaCatalogue<typeof en> = {
+  'shell.menu.producerOverlay': 'Habillage de production',
+  'shell.menu.decQuestions': 'Questions de déclaration',
+  'shell.menu.timetableHint': 'Régler le programme et le tirage',
+  'shell.menu.laneDraw': 'Tirage des couloirs',
   // Header
   'shell.header.backToTimetable': 'Retour au programme',
   'shell.header.back': 'Retour',
