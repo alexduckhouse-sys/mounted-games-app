@@ -24,7 +24,7 @@ public sealed class TackCheckService(AppDbContext db)
             .Where(s => s.CompetitionId == competitionId).ToListAsync(ct);
         var setups = await SetupsAsync(competitionId, withMarks: true, ct);
         var teams = await db.Teams.AsNoTracking().Include(t => t.Club)
-            .Include(t => t.DeclarationForms).ThenInclude(f => f.Riders)
+            .Include(t => t.DeclarationForms).ThenInclude(f => f.Riders).ThenInclude(r => r.SavedRider)
             .Where(t => t.CompetitionId == competitionId).ToListAsync(ct);
         return new TackCheckBoardDto(competitionId, sections
             .OrderBy(s => s.DisplayName, StringComparer.OrdinalIgnoreCase).ThenBy(s => s.Id)
@@ -191,7 +191,7 @@ public sealed class TackCheckService(AppDbContext db)
     {
         var competition = await db.Competitions.AsNoTracking().AsSplitQuery()
             .Include(x => x.Sections).ThenInclude(x => x.Teams).ThenInclude(x => x.Club)
-            .Include(x => x.Sections).ThenInclude(x => x.Teams).ThenInclude(x => x.DeclarationForms).ThenInclude(x => x.Riders)
+            .Include(x => x.Sections).ThenInclude(x => x.Teams).ThenInclude(x => x.DeclarationForms).ThenInclude(x => x.Riders).ThenInclude(r => r.SavedRider)
             .SingleOrDefaultAsync(x => x.Id == competitionId, ct);
         if (competition is null) return null;
         var setups = await SetupsAsync(competitionId, withMarks: false, ct);
@@ -204,7 +204,7 @@ public sealed class TackCheckService(AppDbContext db)
                     : DefaultSectors.ToList();
                 var teams = section.Teams.OrderBy(t => t.DisplayName, StringComparer.OrdinalIgnoreCase).ThenBy(t => t.Id).Select(team =>
                 {
-                    var riders = DeclaredRiders(team).Select(r => new PrintableEntryRiderDto(r.FullName, PonyName(r.HorseName),
+                    var riders = DeclaredRiders(team).Select(r => new PrintableEntryRiderDto(RiderNames.Display(r.FullName, r.UseInitialOnly || (r.SavedRider?.UseInitialOnly ?? false), viewerSeesFullNames: false), PonyName(r.HorseName),
                         r.IsCaptain, r.IsReserve, r.IsGuestRider)).ToArray();
                     return new PrintableEntryTeamDto(team.Id, team.DisplayName, team.Club?.Name ?? string.Empty,
                         team.BibDescription ?? team.BibColour, team.EntryStatus != TeamEntryStatus.Active, team.IsHorsConcours, riders);
@@ -228,7 +228,7 @@ public sealed class TackCheckService(AppDbContext db)
     internal static IReadOnlyList<string> TeamRiderLabels(CompetitionSection section, Team team)
     {
         var declared = DeclaredRiders(team)
-            .Select(r => r.FullName.Trim())
+            .Select(r => RiderNames.Display(r.FullName, r.UseInitialOnly || (r.SavedRider?.UseInitialOnly ?? false), viewerSeesFullNames: false))
             .Where(name => name.Length > 0)
             .ToList();
         if (declared.Count > 0) return declared;
@@ -253,7 +253,7 @@ public sealed class TackCheckService(AppDbContext db)
         db.ChangeTracker.Clear();
         var setups = await SetupsAsync(competitionId, withMarks: true, ct);
         var teams = await db.Teams.AsNoTracking().Include(t => t.Club)
-            .Include(t => t.DeclarationForms).ThenInclude(f => f.Riders)
+            .Include(t => t.DeclarationForms).ThenInclude(f => f.Riders).ThenInclude(r => r.SavedRider)
             .Where(t => t.CompetitionSectionId == section.Id && t.CompetitionId == competitionId).ToListAsync(ct);
         return SectionDto(section, setups.GetValueOrDefault(section.Id), teams);
     }

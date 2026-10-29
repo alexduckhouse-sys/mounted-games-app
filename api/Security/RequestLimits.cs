@@ -9,10 +9,13 @@ namespace MountedGames.Api.Security;
 
 public static class RequestLimits
 {
+    public const string AuthPolicy = "auth";
+    public const string ScorePolicy = "score";
+    public const string PublicMetricsPolicy = "sponsor-exposure";
     /// <summary>The statistics hub: search and profiles, per signed-in user or per address (<c>RateLimits:StatsPerMinute</c>, 60).</summary>
     public const string StatsPolicy = "stats";
 
-    /// <summary>"Resend my confirmation email": per signed-in user (<c>RateLimits:EmailResendPerMinute</c>, 3).</summary>
+    /// <summary>Email resends, invitations and test sends: per signed-in user (5 requests per 15 minutes by default).</summary>
     public const string EmailResendPolicy = "email-resend";
 
     /// <summary>Entering a competition section (which can send a confirmation email): per signed-in user or IP (<c>RateLimits:SignupPerMinute</c>, 15).</summary>
@@ -51,14 +54,16 @@ public static class RequestLimits
     public const string PasswordResetLinkPolicy = "password-reset-link";
 
     /// <summary>
-    /// Per-minute limits for sign-in (per IP), geocoding (per IP), API writes (per user, or per IP when anonymous), the public
-    /// calendar and link-preview reads (per IP) and sponsor "shown" counts (per IP). <c>RateLimits:AuthPerMinute</c>,
+    /// Per-minute limits for sign-in (per account and IP), geocoding (per IP), API writes (per user, or per IP when anonymous), the public
+    /// calendar and link-preview reads (per IP) and sponsor "shown" counts (per IP). <c>RateLimits:AuthPerMinute</c> (8),
+    /// <c>RateLimits:AuthPerIpPerMinute</c> (60),
     /// <c>RateLimits:GeocodePerMinute</c>, <c>RateLimits:WritesPerMinute</c>, <c>RateLimits:PublicReadsPerMinute</c> and
     /// <c>RateLimits:SponsorExposurePerMinute</c> override the defaults.
     /// </summary>
     public static IServiceCollection AddRequestLimits(this IServiceCollection services, IConfiguration configuration)
     {
-        var authPermits = configuration.GetValue("RateLimits:AuthPerMinute", 5);
+        var authPermits = configuration.GetValue("RateLimits:AuthPerMinute", 8);
+        var authIpPermits = configuration.GetValue("RateLimits:AuthPerIpPerMinute", 60);
         var writePermits = configuration.GetValue("RateLimits:WritesPerMinute", 60);
         // Volunteers at one venue often share an address, so scorer-link saves get a roomier allowance.
         var scorerPermits = configuration.GetValue("RateLimits:ScorerWritesPerMinute", 240);
@@ -67,7 +72,9 @@ public static class RequestLimits
         var exposurePermits = configuration.GetValue("RateLimits:SponsorExposurePerMinute", 300);
         // Each search reads across every competition, so the web waits for a pause in typing before it asks.
         var statsPermits = configuration.GetValue("RateLimits:StatsPerMinute", 60);
-        var resendPermits = configuration.GetValue("RateLimits:EmailResendPerMinute", 3);
+        var resendPermits = configuration.GetValue<int?>("RateLimits:EmailResendLimit")
+            ?? configuration.GetValue("RateLimits:EmailResendPerMinute", 5);
+        var resendWindow = TimeSpan.FromMinutes(configuration.GetValue("RateLimits:EmailResendWindowMinutes", 15));
         var signupPermits = configuration.GetValue("RateLimits:SignupPerMinute", 15);
         var joinPermits = configuration.GetValue("RateLimits:TeamJoinPerMinute", 10);
         var reportPermits = configuration.GetValue("RateLimits:ShopReportsPerMinute", 10);
@@ -78,9 +85,20 @@ public static class RequestLimits
         var resetLinkPermits = configuration.GetValue("RateLimits:PasswordResetLinksPerMinute", 20);
         return services.AddRateLimiter(options =>
         {
-            Configure(options, authPermits, writePermits, geocodePermits, scorerPermits, publicReadPermits, exposurePermits);
+            Configure(options, authPermits, authIpPermits, writePermits, geocodePermits, scorerPermits, publicReadPermits, exposurePermits);
             options.AddPolicy(StatsPolicy, context => Partition(context, $"stats:{WritePartition(context)}", statsPermits));
-            options.AddPolicy(EmailResendPolicy, context => Partition(context, $"email-resend:{WritePartition(context)}", resendPermits));
+            options.AddPolicy(EmailResendPolicy, context => Partition(context, $"email-resend:{WritePartition(context)}", resendPermits, resendWindow));
+            options.OnRejected = (context, _) =>
+            {
+                var retrySeconds = 60;
+                if (Policy(context.HttpContext) == EmailResendPolicy)
+                {
+                    var retry = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var remaining) ? remaining : resendWindow;
+                    retrySeconds = Math.Max(1, (int)Math.Ceiling(retry.TotalSeconds));
+                }
+                context.HttpContext.Response.Headers.RetryAfter = retrySeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                return ValueTask.CompletedTask;
+            };
             options.AddPolicy(SignupPolicy, context => Partition(context, $"signup:{WritePartition(context)}", signupPermits));
             options.AddPolicy(TeamJoinPolicy, context => Partition(context, $"team-join:{WritePartition(context)}", joinPermits));
             options.AddPolicy(ShopReportPolicy, context => Partition(context, $"shop-report:{context.Connection.RemoteIpAddress}", reportPermits));
@@ -93,48 +111,58 @@ public static class RequestLimits
         });
     }
 
-    private static void Configure(RateLimiterOptions options, int authPermits, int writePermits, int geocodePermits, int scorerPermits, int publicReadPermits, int exposurePermits)
+    private static void Configure(RateLimiterOptions options, int authPermits, int authIpPermits, int writePermits, int geocodePermits, int scorerPermits, int publicReadPermits, int exposurePermits)
     {
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-        options.AddPolicy("auth", context => Partition(context, $"auth:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}", authPermits));
+        // OAuth identity is only trusted after provider validation. Its pre-validation guard is the
+        // global IP allowance; an unverified token or body field must never choose an account bucket.
+        options.AddPolicy(AuthPolicy, context => AuthRateLimitIdentityMiddleware.ExternalSignIn(context)
+            ? RateLimitPartition.GetNoLimiter("external-account-unknown") : Partition(context,
+            $"auth-account:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}:{AuthRateLimitIdentityMiddleware.AccountKey(context)}", authPermits));
+        options.AddPolicy(ScorePolicy, context => Partition(context, $"scorer:{(context.User.Identity?.IsAuthenticated == true ? WritePartition(context) : ScorerPartition(context))}", scorerPermits));
         // Geocoding can call the paid What3Words API, so callers are limited per IP.
         options.AddPolicy("geocode", context => Partition(context, $"geocode:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}", geocodePermits));
         // Anonymous reads made by crawlers and calendar apps (link previews, calendar files and feeds).
         options.AddPolicy("public-read", context => Partition(context, $"public-read:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}", publicReadPermits));
         // Sponsor "shown" counts are anonymous, so they are limited per IP; the web batches them to a couple a minute.
         options.AddPolicy("sponsor-exposure", context => Partition(context, $"sponsor-exposure:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}", exposurePermits));
-        options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
-            !context.Request.Path.StartsWithSegments("/api") || HttpMethods.IsGet(context.Request.Method)
-                || HttpMethods.IsHead(context.Request.Method) || HttpMethods.IsOptions(context.Request.Method)
-                ? RateLimitPartition.GetNoLimiter("read")
-                : context.Request.Path.StartsWithSegments("/api/scorer")
-                    ? Partition(context, $"scorer:{ScorerPartition(context)}", scorerPermits)
-                    : Partition(context, $"write:{WritePartition(context)}", writePermits));
-        options.OnRejected = (context, _) =>
-        {
-            context.HttpContext.Response.Headers.RetryAfter = "60";
-            return ValueTask.CompletedTask;
-        };
+        // Auth has a separate venue-wide ceiling in addition to its account allowance. Both use the
+        // same Redis-aware partition helper, so replicas cannot each grant another full allowance.
+        options.GlobalLimiter = PartitionedRateLimiter.CreateChained(
+            PartitionedRateLimiter.Create<HttpContext, string>(context => Policy(context) == AuthPolicy
+                ? Partition(context, $"auth-ip:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}", authIpPermits)
+                : RateLimitPartition.GetNoLimiter("not-auth")),
+            PartitionedRateLimiter.Create<HttpContext, string>(context =>
+                !context.Request.Path.StartsWithSegments("/api") || HttpMethods.IsGet(context.Request.Method)
+                    || HttpMethods.IsHead(context.Request.Method) || HttpMethods.IsOptions(context.Request.Method)
+                    || Policy(context) is AuthPolicy or ScorePolicy or PublicMetricsPolicy
+                    ? RateLimitPartition.GetNoLimiter("separate-policy-or-read")
+                    : context.Request.Path.StartsWithSegments("/api/scorer")
+                        ? Partition(context, $"scorer:{ScorerPartition(context)}", scorerPermits)
+                        : Partition(context, $"write:{WritePartition(context)}", writePermits)));
     }
 
     /// <summary>
-    /// A per-minute window for <paramref name="key"/>. With Redis reachable, the window is shared by every API
+    /// A fixed window (one minute by default) for <paramref name="key"/>. With Redis reachable, it is shared by every API
     /// instance; otherwise each instance counts on its own. The two use different keys, so a switch starts afresh.
     /// </summary>
-    private static RateLimitPartition<string> Partition(HttpContext context, string key, int permits)
+    private static RateLimitPartition<string> Partition(HttpContext context, string key, int permits, TimeSpan? window = null)
     {
+        var duration = window ?? TimeSpan.FromMinutes(1);
         var redis = context.RequestServices.GetService<RedisConnection>()?.Available;
         return redis is null
-            ? RateLimitPartition.GetFixedWindowLimiter($"memory:{key}", _ => Window(permits))
+            ? RateLimitPartition.GetFixedWindowLimiter($"memory:{key}", _ => Window(permits, duration))
             : RateLimitPartition.Get($"mg:rl:{key}", partitionKey => new ResilientRedisRateLimiter(
                 new RedisFixedWindowRateLimiter<string>(partitionKey, new RedisFixedWindowRateLimiterOptions
                 {
                     ConnectionMultiplexerFactory = () => redis,
                     PermitLimit = permits,
-                    Window = TimeSpan.FromMinutes(1),
+                    Window = duration,
                 }),
-                new FixedWindowRateLimiter(Window(permits))));
+                new FixedWindowRateLimiter(Window(permits, duration))));
     }
+
+    internal static string? Policy(HttpContext context) => context.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName;
 
     private static string ScorerPartition(HttpContext context)
     {
@@ -162,10 +190,10 @@ public static class RequestLimits
             : $"ip:{context.Connection.RemoteIpAddress}";
     }
 
-    private static FixedWindowRateLimiterOptions Window(int permits) => new()
+    private static FixedWindowRateLimiterOptions Window(int permits, TimeSpan duration) => new()
     {
         PermitLimit = permits,
-        Window = TimeSpan.FromMinutes(1),
+        Window = duration,
         QueueLimit = 0,
     };
 

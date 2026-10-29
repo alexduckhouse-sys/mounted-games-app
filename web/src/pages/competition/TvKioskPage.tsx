@@ -91,6 +91,22 @@ export function TvKioskPage() {
   const [standingsPage, setStandingsPage] = useState(0);
   const still = useStillMotion();
   const [playing, setPlaying] = useState(true);
+  // The bar fades away after 3 seconds without a pointer, touch or key, and comes back on any of them.
+  const [barIdle, setBarIdle] = useState(false);
+  useEffect(() => {
+    let timer = window.setTimeout(() => setBarIdle(true), 3000);
+    const wake = () => {
+      setBarIdle(false);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setBarIdle(true), 3000);
+    };
+    const events = ['pointermove', 'pointerdown', 'touchstart', 'keydown', 'focusin'] as const;
+    for (const name of events) window.addEventListener(name, wake, { passive: true });
+    return () => {
+      window.clearTimeout(timer);
+      for (const name of events) window.removeEventListener(name, wake);
+    };
+  }, []);
   const [standingsBySection, setStandingsBySection] = useState<Record<number, { rows: StandingRow[]; source: typeof refreshSource; failed?: boolean }>>({});
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -291,7 +307,7 @@ export function TvKioskPage() {
     <div className="flex min-h-[82vh] flex-col justify-between gap-4 rounded-xl bg-[rgb(var(--mg-surface))] p-4 shadow-sm sm:p-6">
       {standingsStale && (standings.length ? savedNotice && <Notice tone="info">{t('competition.scoring.savedStandings')}</Notice> : <Notice tone="info">{t('screen.tv.waitingStandings')}</Notice>)}
       {/* Top TV Header & Controls */}
-      <header className="flex flex-col gap-3 border-b-2 border-[rgb(var(--mg-heading))] pb-4">
+      <header className={`flex flex-col gap-3 border-b-2 border-[rgb(var(--mg-heading))] pb-4 transition-opacity duration-200 motion-reduce:transition-none ${barIdle ? 'pointer-events-none opacity-0' : 'opacity-100'}`}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <span

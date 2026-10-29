@@ -196,6 +196,7 @@ export function RulebooksPage() {
           </div>
         </div>
       )}
+      <p className="sp-note">Rulebooks are published by their respective governing bodies (IMGA, MGAGB, Pony Club, EGUK and STRUK). This app is an independent competition tool.</p>
     </div>
   );
 }

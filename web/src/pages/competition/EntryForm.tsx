@@ -15,6 +15,7 @@ import { entryOptions, entryTitle, feeText, type EntryKind } from '../../lib/ent
 import { ageGroupWarning, blankGuestRider, guestDobIso, guestRiderBody, guestRiderProblem, MAX_GUEST_NAME, type GuestRiderFields } from '../../lib/guestRider';
 import { normalisePaymentLinkUrl } from '../../lib/paymentLink';
 import { displaySectionName } from '../../lib/section';
+import { isUnder18 } from '../../lib/riderPrivacy';
 import { CONSENT_VERSION } from '../../lib/termsTick';
 import type { CompetitionDetail, CompetitionSection, SectionSignup } from '../../types';
 import { useEntrySettings } from './entrySettings';
@@ -81,6 +82,7 @@ function EntryFormDetails({ competition, section, kind, step, onSent, onConflict
   const [stablingClubOrTeam, setStablingClubOrTeam] = useState(draft?.stablingClubOrTeam ?? '');
   const [guestFields, setGuestFields] = useState<GuestRiderFields>(blankGuestRider);
   const [showGuestProblem, setShowGuestProblem] = useState(false);
+  const privacyChosen = useRef(false);
   const [privacy, setPrivacy] = useState<RiderPrivacy>({ useInitialOnly: draft?.useInitialOnly ?? false });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<{ text: string; retry: boolean } | null>(null);
@@ -240,6 +242,7 @@ function EntryFormDetails({ competition, section, kind, step, onSent, onConflict
           {hasStables && stablesCount > 0 && <div className="sp-fact"><dt>{t('entries.form.stables')}</dt><dd>{stablesCount}</dd></div>}
         </dl>
         <div className="pt-2"><Link to={`${base}${query}`} className="ev-text-btn">{t('entries.form.edit')}</Link></div>
+        <p className="sp-note">Your entry and payment are directly with {competition.organiserName || `the organiser of ${competition.name}`}. <Link to="/refunds" className="underline">Cancellation and refund information</Link>.</p>
         <button type="button" className="ev-bar" disabled={busy || !ready} onClick={() => void submit()}>{busy ? t('entries.form.submitting') : t('entries.form.submit')}</button>
         {error}
         {toast.node}
@@ -307,7 +310,7 @@ function EntryFormDetails({ competition, section, kind, step, onSent, onConflict
               <legend className="px-1.5 text-[13px] font-bold uppercase tracking-[0.06em] text-[rgb(var(--mg-heading))]">{t('entries.guest.legendRider')}</legend>
               <p className="sp-note !m-0">{t('entries.guest.riderNote')}</p>
               <label className="rf-fld">{t('entries.guest.riderName')}<input autoComplete="off" maxLength={MAX_GUEST_NAME} value={guestFields.riderName} onChange={(e) => setGuest({ riderName: e.target.value })} /></label>
-              <label className="rf-fld">{t('entries.guest.riderDob')}<input type="date" autoComplete="off" max={new Date().toISOString().slice(0, 10)} value={guestFields.riderDob} onChange={(e) => setGuest({ riderDob: e.target.value })} /></label>
+              <label className="rf-fld">{t('entries.guest.riderDob')}<input type="date" autoComplete="off" max={new Date().toISOString().slice(0, 10)} value={guestFields.riderDob} onChange={(e) => { setGuest({ riderDob: e.target.value }); if (!privacyChosen.current && isUnder18(e.target.value)) setPrivacy((cur) => ({ ...cur, useInitialOnly: true })); }} /></label>
               {ageWarning && <Notice tone="info">{ageWarning} {t('entries.guest.ageStill')}</Notice>}
               <label className="rf-fld">{t('entries.guest.ponyName')}<input autoComplete="off" maxLength={MAX_GUEST_NAME} value={guestFields.ponyName} onChange={(e) => setGuest({ ponyName: e.target.value })} /></label>
             </fieldset>
@@ -322,10 +325,11 @@ function EntryFormDetails({ competition, section, kind, step, onSent, onConflict
             {showGuestProblem && guestProblem && <Notice role="alert">{guestProblem}</Notice>}
           </div>
         )}
-        <RiderPrivacyFields termsText={competition.termsText} value={privacy} onChange={(patch) => setPrivacy((cur) => ({ ...cur, ...patch }))} />
+        <RiderPrivacyFields termsText={competition.termsText} value={privacy} onChange={(patch) => { if (patch.useInitialOnly !== undefined) privacyChosen.current = true; setPrivacy((cur) => ({ ...cur, ...patch })); }} />
       </form>
       {draftSaved && <p className="sp-note">{t('entries.form.draftSaved')}</p>}
       {priceMinor > 0 && <DemoPaymentNotice what="entry" className="mt-3" />}
+      <p className="sp-note">Your entry and payment are directly with {competition.organiserName || `the organiser of ${competition.name}`}. <Link to="/refunds" className="underline">Cancellation and refund information</Link>.</p>
       <button type="button" className="ev-bar" disabled={busy || !ready} onClick={next}>{busy ? t('entries.form.submitting') : nextLabel}</button>
       {error}
     </>

@@ -173,6 +173,7 @@ export function RaceRulebookSection({
         </div>
       </div>}
 
+      {current.edition === UNVERIFIED_EDITION && <p className="sp-note">App summary guide — check the official rulebook for edition-specific rules.</p>}
       {showDiagram && template.diagramJson && (
         <div className="overflow-hidden rounded-lg border border-[rgb(var(--mg-rule))]">
           <RaceDiagram drop fit={fitDiagram} diagramJson={template.diagramJson} height={diagramHeight} />

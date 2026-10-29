@@ -12,6 +12,7 @@ import { ContactOrganisersPage } from './ContactOrganisersPage';
 const state = vi.hoisted(() => ({
   token: 'fake-admin-token' as string | null,
   roles: ['Admin'] as Role[],
+  organise: false,
   handlers: null as LiveHandlers | null,
   get: vi.fn(),
   post: vi.fn(),
@@ -23,10 +24,11 @@ vi.mock('../../auth/AuthContext', () => ({
     token: state.token,
     canEdit: () => state.roles.includes('Admin'),
     hasRole: (role: Role) => state.roles.includes(role),
-    canOrganise: () => false,
+    canOrganise: () => state.organise,
   }),
 }));
 vi.mock('../../api', () => ({
+  pinChatMessage: async (competitionId: number, messageId: number) => (await import('../../api')).api.post(`/competitions/${competitionId}/chat/${messageId}/pin`, {}),
   api: { get: state.get, post: state.post, put: vi.fn(), delete: vi.fn() },
 }));
 vi.mock('../../live/useLiveHub', () => ({
@@ -68,6 +70,7 @@ function mountContact(extra: Partial<CompetitionDetail> = {}) {
 beforeEach(() => {
   state.token = 'fake-admin-token';
   state.roles = ['Admin'];
+  state.organise = false;
   state.handlers = null;
   HTMLElement.prototype.scrollTo = vi.fn();
 });
@@ -183,6 +186,7 @@ describe('ChatTab and ContactOrganisersPage auth sessions', () => {
   it('keeps Announcements on ChatTab free of private messages and links admins to Organiser messages', async () => {
     state.token = 'fake-admin-token';
     state.roles = ['Admin'];
+  state.organise = false;
     state.get.mockResolvedValue({
       data: [
         chat(1, { body: 'Official heat 1 update', type: 2, adminOnly: false }),
@@ -195,4 +199,12 @@ describe('ChatTab and ContactOrganisersPage auth sessions', () => {
     expect(screen.queryByText('Private question from rider')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: /^Messages \(1\)$/ })).toHaveAttribute('href', '/competitions/1/contact');
   });
+});
+
+it('allows this event organiser to announce and see the inbox without network-blocking access', async () => {
+  state.roles = ['Trainer']; state.organise = true;
+  state.get.mockResolvedValue({ data: [] });
+  mountChat({ staffChatEnabled: true });
+  expect(await screen.findByRole('button', { name: 'Send' })).toBeInTheDocument();
+  expect(screen.queryByText('Block this sender')).toBeNull();
 });

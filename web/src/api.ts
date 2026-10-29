@@ -1,6 +1,8 @@
 import axios, { AxiosError, type AxiosInstance, type AxiosResponse } from 'axios';
 
 const TOKEN_KEY = 'mg.auth';
+export const AUTH_CHANGED_EVENT = 'mg:auth-changed';
+const notifyAuthChanged = () => queueMicrotask(() => window.dispatchEvent(new Event(AUTH_CHANGED_EVENT)));
 
 export interface StoredAuth {
   token: string;
@@ -24,6 +26,8 @@ export function readStoredAuth(): StoredAuth | null {
     const parsed = JSON.parse(raw) as StoredAuth;
     if (new Date(parsed.expiresAt).getTime() < Date.now()) {
       localStorage.removeItem(TOKEN_KEY);
+      clearPrivateDrafts();
+      notifyAuthChanged();
       return null;
     }
     return parsed;
@@ -32,9 +36,21 @@ export function readStoredAuth(): StoredAuth | null {
   }
 }
 
+export function clearPrivateDrafts() {
+  try {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('mg.draft.entry.') || key.startsWith('mg.draft.decform.')
+        || key.startsWith('competitionEditor:') || key === 'mg.draft.admin-email'
+        || key.startsWith('mg.announceDraft.')) localStorage.removeItem(key);
+    }
+  } catch { /* Storage may be unavailable. */ }
+}
+
 export function writeStoredAuth(auth: StoredAuth | null) {
+  if (!auth || readStoredAuth()?.user.id !== auth.user.id) clearPrivateDrafts();
   if (auth) localStorage.setItem(TOKEN_KEY, JSON.stringify(auth));
   else localStorage.removeItem(TOKEN_KEY);
+  notifyAuthChanged();
 }
 
 export function readToken(): string | null {
@@ -88,3 +104,15 @@ api.interceptors.response.use(
     return Promise.reject(err);
   }
 );
+
+export interface IpBlock {
+  id: number;
+  ipAddress: string;
+  reason: string | null;
+  createdAt: string;
+}
+
+export const getIpBlocks = () => api.get<IpBlock[]>('/ip-blocks');
+export const createIpBlock = (input: { ip: string; reason: string }) => api.post<IpBlock>('/ip-blocks', { ipAddress: input.ip, reason: input.reason });
+export const deleteIpBlock = (id: number) => api.delete(`/ip-blocks/${id}`);
+export const pinChatMessage = (competitionId: number, messageId: number) => api.post<import('./types').ChatMessage>(`/competitions/${competitionId}/chat/${messageId}/pin`, {});

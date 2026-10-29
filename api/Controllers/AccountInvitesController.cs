@@ -34,9 +34,11 @@ public sealed class AccountInvitesController(
     }
 
     [HttpPost("api/admin/invites")]
+    [EnableRateLimiting(RequestLimits.EmailResendPolicy)]
     [Authorize(Roles = Roles.Admin)]
     public async Task<ActionResult<InviteDto>> Create(CreateInviteRequest request, CancellationToken ct)
     {
+        if (request.Access == InviteAccess.SiteAdmin && !User.IsInRole(Roles.MasterAdmin)) return Forbid();
         try
         {
             var (invite, _) = await invites.CreateAsync(request.Email, request.Access, User.FindFirstValue(ClaimTypes.NameIdentifier)!, ct);
@@ -46,9 +48,12 @@ public sealed class AccountInvitesController(
     }
 
     [HttpPost("api/admin/invites/{id:int}/resend")]
+    [EnableRateLimiting(RequestLimits.EmailResendPolicy)]
     [Authorize(Roles = Roles.Admin)]
     public async Task<ActionResult<InviteDto>> Resend(int id, CancellationToken ct)
     {
+        if (!User.IsInRole(Roles.MasterAdmin)
+            && await db.AccountInvites.AnyAsync(i => i.Id == id && i.Access == InviteAccess.SiteAdmin, ct)) return Forbid();
         try
         {
             var (invite, _) = await invites.ResendAsync(id, ct);
@@ -61,6 +66,8 @@ public sealed class AccountInvitesController(
     [Authorize(Roles = Roles.Admin)]
     public async Task<IActionResult> Cancel(int id, CancellationToken ct)
     {
+        if (!User.IsInRole(Roles.MasterAdmin)
+            && await db.AccountInvites.AnyAsync(i => i.Id == id && i.Access == InviteAccess.SiteAdmin, ct)) return Forbid();
         try { await invites.CancelAsync(id, ct); return NoContent(); }
         catch (AccountInviteException ex) { return Problem(statusCode: ex.StatusCode, title: "Invitation not cancelled", detail: ex.Message); }
     }

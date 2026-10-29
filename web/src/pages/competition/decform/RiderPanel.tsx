@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { api } from '../../../api';
+import { isUnder18 } from '../../../lib/riderPrivacy';
 import { Field } from '../../auth/Field';
 import { useT } from '../../../i18n/LanguageContext';
 import { NumberField } from '../../../components/NumberField';
 import { Notice } from '../../../components/Notice';
-import { riderIssues, type DecRider } from '../../../lib/decForm';
+import { parseDob, riderIssues, type DecRider } from '../../../lib/decForm';
 import {
   asked, breach, limitText, NUMBER_FIELD, OPTIONAL, STANDARD_CONFIG, type DecFormConfig, type ExtraAnswers, type Requirement,
 } from '../../../lib/decFormConfig';
@@ -131,6 +132,12 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
           </div>
         )}
 
+        <div className="sp-row">
+          <span className="sp-grow"><span className="sp-t1">Show surname as initial only on public start lists and results</span><span className="sp-t2">For example, Oliver S.</span></span>
+          <button type="button" role="switch" aria-label="Show surname as initial only on public start lists and results" aria-checked={form.useInitialOnly} className="rf-sw"
+            onClick={() => onChange({ useInitialOnly: !form.useInitialOnly, privacyChoiceMade: true })}><span aria-hidden="true" /></button>
+        </div>
+
         <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-3">
           <Field label={t('entries.rider.rider')}>
             {({ id }) => (
@@ -145,7 +152,10 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
               {({ id }) => (
                 <div className="mg-field" data-invalid={dobBad}>
                   <input id={id} value={form.dob} placeholder="dd/mm/yyyy" inputMode="numeric" autoComplete="off" aria-invalid={dobBad}
-                    onChange={(e) => onChange({ dob: e.target.value.replace(/[^\d/]/g, '').slice(0, 10) })} />
+                    onChange={(e) => {
+                      const dob = e.target.value.replace(/[^\d/]/g, '').slice(0, 10);
+                      onChange({ dob, ...(!form.privacyChoiceMade && isUnder18(parseDob(dob)) ? { useInitialOnly: true } : {}) });
+                    }} />
                 </div>
               )}
             </Field>
@@ -154,7 +164,12 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
             <Field label={labelOf(t('entries.rider.yearOfBirth'), config.dob)} error={issues.invalid.birthYear}>
               {({ id }) => (
                 <div className="mg-field" data-invalid={!!issues.invalid.birthYear}>
-                  <NumberField id={id} value={extra.birthYear} placeholder="2014" autoComplete="off" onChange={(e) => setExtra({ birthYear: e.target.value })} />
+                  <NumberField id={id} value={extra.birthYear} placeholder="2014" autoComplete="off" onChange={(e) => {
+                    const birthYear = e.target.value;
+                    const year = Number(birthYear);
+                    const age = new Date().getFullYear() - year;
+                    onChange({ extra: { ...extra, birthYear }, ...(!form.privacyChoiceMade && /^\d{4}$/.test(birthYear) && age >= 0 && age <= 18 ? { useInitialOnly: true } : {}) });
+                  }} />
                 </div>
               )}
             </Field>
@@ -312,11 +327,12 @@ export function RiderPanel({ title, reserve, editing, form, choices, addLabel, r
           </div>
         )}
 
+        {asked(config.medicalNotes) && <p id="medical-privacy-note" className="sp-note">Shared with the people authorised to manage this team’s declaration and the event organisers, who can pass it to first-aiders when needed. Deleted automatically after the event: after 7 days, or 14 days from the start if no end date is set.</p>}
         {asked(config.medicalNotes) && (
           <Field label={labelOf(t('entries.rider.medical'), config.medicalNotes)}>
             {({ id }) => (
               <div className="mg-field !items-start">
-                <textarea id={id} value={extra.medicalNotes} maxLength={1000} placeholder={t('entries.rider.medicalPlaceholder')} onChange={(e) => setExtra({ medicalNotes: e.target.value })} />
+                <textarea aria-describedby="medical-privacy-note" id={id} value={extra.medicalNotes} maxLength={1000} placeholder={t('entries.rider.medicalPlaceholder')} onChange={(e) => setExtra({ medicalNotes: e.target.value })} />
               </div>
             )}
           </Field>

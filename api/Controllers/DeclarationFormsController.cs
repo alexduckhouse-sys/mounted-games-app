@@ -1,12 +1,14 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MountedGames.Api.Auth;
 using MountedGames.Api.Data;
 using MountedGames.Api.Dtos;
 using MountedGames.Api.Entities;
 using MountedGames.Api.Services;
+using MountedGames.Api.Security;
 using MountedGames.Api.Services.DecForms;
 
 namespace MountedGames.Api.Controllers;
@@ -35,6 +37,8 @@ public class DeclarationFormsController : ControllerBase
     private bool IsClosed(DateTime? closeAt) => closeAt.HasValue && _clock.GetUtcNow().UtcDateTime >= closeAt.Value;
 
     [HttpGet("competition/{competitionId:int}/lock-time")]
+    [AllowAnonymous, PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<DeclarationLockTimeDto>> GetLockTime(int competitionId)
     {
         if (!await _db.Competitions.AnyAsync(c => c.Id == competitionId)) return NotFound();
@@ -65,6 +69,8 @@ public class DeclarationFormsController : ControllerBase
     }
 
     [HttpGet]
+    [AllowAnonymous, PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<IEnumerable<DeclarationFormDto>> List(
         [FromQuery] int? competitionId = null,
         [FromQuery] int? teamId = null)
@@ -79,7 +85,7 @@ public class DeclarationFormsController : ControllerBase
         var q = _db.DeclarationForms
             .Include(d => d.Team).ThenInclude(t => t!.Competition)
             .Include(d => d.SubmittedBy)
-            .Include(d => d.Riders)
+            .Include(d => d.Riders).ThenInclude(r => r.SavedRider)
             .AsQueryable();
 
         // Public declarations omit private details; drafts are visible only to their owners.
@@ -119,7 +125,7 @@ public class DeclarationFormsController : ControllerBase
             .Include(d => d.Team).ThenInclude(t => t!.Competition)
             .Include(d => d.Team).ThenInclude(t => t!.Section)
             .Include(d => d.SubmittedBy)
-            .Include(d => d.Riders)
+            .Include(d => d.Riders).ThenInclude(r => r.SavedRider)
             .Where(d => d.Team != null && d.Riders.Count > 0)
             .Where(d => d.SubmittedByUserId == uid
                 || d.Team!.TrainerUserId == uid
@@ -175,12 +181,14 @@ public class DeclarationFormsController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    [AllowAnonymous, PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<DeclarationFormDto>> Get(int id)
     {
         var d = await _db.DeclarationForms
             .Include(d => d.Team).ThenInclude(t => t!.Competition)
             .Include(d => d.SubmittedBy)
-            .Include(d => d.Riders)
+            .Include(d => d.Riders).ThenInclude(r => r.SavedRider)
             .FirstOrDefaultAsync(d => d.Id == id);
         if (d is null) return NotFound();
         var uid = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;

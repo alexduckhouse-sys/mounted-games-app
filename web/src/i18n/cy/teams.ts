@@ -271,6 +271,7 @@ export const teams: AreaCatalogue<typeof en> = {
   'teams.stream.syncLive': 'Neidio i’r byw',
   'teams.stream.instantReplay': 'Ailchwarae 15 eiliad ar unwaith',
   'teams.stream.pip': 'Llun mewn llun',
+  'teams.stream.more': 'Mwy o ddewisiadau',
   'teams.stream.closeFull': 'Cau’r sgrin lawn',
   'teams.stream.openFull': 'Agor y sgrin lawn',
   'teams.stream.play': 'Chwarae',

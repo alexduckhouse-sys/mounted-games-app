@@ -47,6 +47,7 @@ public class CompetitionsController : ControllerBase
     [HttpGet("/api/geocode")]
     [AllowAnonymous]
     [EnableRateLimiting("geocode")]
+    [PublicRead]
     public async Task<ActionResult<GeocodeResult>> Geocode(
         [FromQuery] string? postcode = null,
         [FromQuery] string? w3w = null,
@@ -98,6 +99,8 @@ public class CompetitionsController : ControllerBase
 
     [HttpGet("picker")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<CompetitionPickerPage>> Picker(
         [FromQuery] bool past = false, [FromQuery] int page = 1, [FromQuery] int pageSize = 24,
         CancellationToken ct = default, [FromQuery] int? year = null,
@@ -114,6 +117,7 @@ public class CompetitionsController : ControllerBase
     [HttpGet("picker/near-you")]
     [AllowAnonymous]
     [EnableRateLimiting(RequestLimits.NearYouPolicy)]
+    [PublicRead]
     public async Task<ActionResult<CompetitionNearYouPage>> NearYou(
         [FromServices] LocationInference locations, [FromQuery] int page = 1, [FromQuery] int pageSize = 24,
         [FromQuery] string? sort = null, CancellationToken ct = default)
@@ -154,6 +158,9 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpGet]
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<IEnumerable<CompetitionSummary>> List([FromQuery] bool includeArchived = false)
     {
         var q = _db.Competitions
@@ -171,6 +178,9 @@ public class CompetitionsController : ControllerBase
         _db.Set<EventCommerceSettings>().AsNoTracking().AnyAsync(x => x.CompetitionId == competitionId && x.IsDemo);
 
     [HttpGet("{id:int}")]
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<CompetitionDetail>> Get(int id)
     {
         var c = await _db.Competitions
@@ -208,6 +218,9 @@ public class CompetitionsController : ControllerBase
     /// racing in them. The web shows it straight away and swaps in the full timetable when that arrives.
     /// </summary>
     [HttpGet("{id:int}/first-view")]
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<CompetitionDetail>> FirstView(int id)
     {
         var c = await _db.Competitions.AsNoTracking().Include(x => x.Sections).FirstOrDefaultAsync(x => x.Id == id);
@@ -290,6 +303,11 @@ public class CompetitionsController : ControllerBase
         if (!CompetitionFields.TryNormalisePaymentLinkUrl(req.PaymentLinkUrl, out var paymentLinkUrl))
             return BadRequest(new { message = PaymentLinkProblem });
         var appleUrl = string.IsNullOrWhiteSpace(req.AppleMapsUrl) ? null : req.AppleMapsUrl.Trim();
+        if (appleUrl is not null && (appleUrl.Length > 500
+            || !Uri.TryCreate(appleUrl, UriKind.Absolute, out var appleUri)
+            || appleUri.Scheme != Uri.UriSchemeHttps || string.IsNullOrEmpty(appleUri.Host)
+            || !string.IsNullOrEmpty(appleUri.UserInfo)))
+            return BadRequest(new { message = "Use a full https:// map link with no sign-in details, up to 500 characters." });
         var lat = req.Latitude;
         var lon = req.Longitude;
         if (lat is null || lon is null)
@@ -381,6 +399,11 @@ public class CompetitionsController : ControllerBase
         c.Location = req.Location;
         c.Description = req.Description;
         var appleUrl = string.IsNullOrWhiteSpace(req.AppleMapsUrl) ? null : req.AppleMapsUrl.Trim();
+        if (appleUrl is not null && (appleUrl.Length > 500
+            || !Uri.TryCreate(appleUrl, UriKind.Absolute, out var appleUri)
+            || appleUri.Scheme != Uri.UriSchemeHttps || string.IsNullOrEmpty(appleUri.Host)
+            || !string.IsNullOrEmpty(appleUri.UserInfo)))
+            return BadRequest(new { message = "Use a full https:// map link with no sign-in details, up to 500 characters." });
         var newLat = req.Latitude;
         var newLon = req.Longitude;
         if (newLat is null || newLon is null)
@@ -678,7 +701,8 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpDelete("{id:int}/sections/{sectionId:int}")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("id")]
     public async Task<IActionResult> DeleteSection(int id, int sectionId, [FromQuery] bool force = false)
     {
         var section = await _db.CompetitionSections
@@ -740,6 +764,9 @@ public class CompetitionsController : ControllerBase
     }
 
     [HttpGet("{id:int}/standings")]
+    [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<IReadOnlyList<StandingRow>>> Standings(int id,
         [FromServices] StandingsService standings, [FromQuery] int? sectionId = null)
         => await standings.RowsAsync(id, sectionId, HttpContext.RequestAborted);

@@ -152,13 +152,13 @@ public sealed class PrintableEventService(AppDbContext db)
 
     /// <summary>
     /// Every team of every section with its declared riders and ponies, so the organiser can check the entries
-    /// before the event. Staff only: it shows riders' full names.
+    /// before the event. Staff only; surname privacy still applies to printed lists.
     /// </summary>
     public async Task<PrintableEntriesDto?> EntriesAsync(int competitionId, CancellationToken ct)
     {
         var competition = await db.Competitions.AsNoTracking().AsSplitQuery()
             .Include(x => x.Sections).ThenInclude(x => x.Teams).ThenInclude(x => x.Club)
-            .Include(x => x.Sections).ThenInclude(x => x.Teams).ThenInclude(x => x.DeclarationForms).ThenInclude(x => x.Riders)
+            .Include(x => x.Sections).ThenInclude(x => x.Teams).ThenInclude(x => x.DeclarationForms).ThenInclude(x => x.Riders).ThenInclude(r => r.SavedRider)
             .SingleOrDefaultAsync(x => x.Id == competitionId, ct);
         if (competition is null) return null;
         var sections = competition.Sections.OrderBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id)
@@ -167,7 +167,7 @@ public sealed class PrintableEventService(AppDbContext db)
                 {
                     var form = team.DeclarationForms.OrderByDescending(f => f.SubmittedAt).ThenByDescending(f => f.Id).FirstOrDefault();
                     var riders = (form?.Riders ?? []).OrderBy(r => r.IsReserve).ThenBy(r => r.OrderIndex).ThenBy(r => r.Id)
-                        .Select(r => new PrintableEntryRiderDto(r.FullName, string.IsNullOrWhiteSpace(r.HorseName) ? null : r.HorseName.Trim(),
+                        .Select(r => new PrintableEntryRiderDto(RiderNames.Display(r.FullName, r.UseInitialOnly || (r.SavedRider?.UseInitialOnly ?? false), viewerSeesFullNames: false), string.IsNullOrWhiteSpace(r.HorseName) ? null : r.HorseName.Trim(),
                             r.IsCaptain, r.IsReserve, r.IsGuestRider)).ToArray();
                     return new PrintableEntryTeamDto(team.Id, team.DisplayName, team.Club?.Name ?? string.Empty,
                         ResultStatuses.PublicBibDescription(team.BibDescription) ?? team.BibColour, team.EntryStatus != TeamEntryStatus.Active, team.IsHorsConcours, riders);

@@ -19,3 +19,13 @@ describe('RiderPrivacyFields', () => {
     expect((screen.getByLabelText('I agree') as HTMLInputElement).checked).toBe(true);
   });
 });
+
+
+it('shows and changes the surname privacy choice independently of consent', () => {
+  const onChange = vi.fn();
+  render(<RiderPrivacyFields value={{ useInitialOnly: true }} onChange={onChange} />);
+  const privacy = screen.getByRole('switch', { name: 'Show surname as initial only on public start lists and results' });
+  expect(privacy).toHaveAttribute('aria-checked', 'true');
+  fireEvent.click(privacy);
+  expect(onChange).toHaveBeenLastCalledWith({ useInitialOnly: false });
+});

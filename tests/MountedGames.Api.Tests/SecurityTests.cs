@@ -193,7 +193,7 @@ public class SecurityTests
             var user = new AppUser { UserName = "fake-login@example.invalid", Email = "fake-login@example.invalid", FullName = "Fake Login" };
             Assert.True((await users.CreateAsync(user, "FakeKnown1!")).Succeeded);
         }
-        for (var i = 0; i < 5; i++)
+        for (var i = 0; i < 8; i++)
         {
             using var wrong = await server.Send(HttpMethod.Post, "/api/auth/login", body: new { email = "fake-login@example.invalid", password = "FakeWrong1!" });
             Assert.Equal(HttpStatusCode.Unauthorized, wrong.StatusCode);
@@ -209,7 +209,7 @@ public class SecurityTests
     public async Task AuthLimiterRejectsRepeatedAttemptsAndIgnoresSpoofedForwardedHeaders()
     {
         await using var server = await SecurityServer.Start();
-        for (var i = 0; i < 5; i++)
+        for (var i = 0; i < 8; i++)
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, "/limit");
             request.Headers.Add("X-Forwarded-For", $"192.0.2.{i + 1}");
@@ -220,6 +220,155 @@ public class SecurityTests
         Assert.Equal(HttpStatusCode.TooManyRequests, refused.StatusCode);
         Assert.Equal("60", refused.Headers.GetValues("Retry-After").Single());
         Assert.True(refused.Headers.Contains("Content-Security-Policy"));
+    }
+
+    [Fact]
+    public async Task EmailActionsAllowFivePerFifteenMinutes_WithoutSharingAnotherPersonsQuota()
+    {
+        await using var server = await SecurityServer.Start();
+        for (var i = 0; i < 5; i++)
+        {
+            using var allowed = await server.Send(HttpMethod.Post, "/api/email-test", "owner", Roles.Trainer);
+            Assert.Equal(HttpStatusCode.NoContent, allowed.StatusCode);
+        }
+        using var refused = await server.Send(HttpMethod.Post, "/api/email-test", "owner", Roles.Trainer);
+        Assert.Equal(HttpStatusCode.TooManyRequests, refused.StatusCode);
+        Assert.InRange(refused.Headers.RetryAfter!.Delta!.Value.TotalSeconds, 890, 900);
+        using var other = await server.Send(HttpMethod.Post, "/api/email-test", "other", Roles.Trainer);
+        Assert.Equal(HttpStatusCode.NoContent, other.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(null, 2)]
+    [InlineData("3", 3)]
+    public async Task EmailLimitKeepsLegacyOverrides_AndPrefersTheNewLimit(string? limit, int allowedCount)
+    {
+        await using var server = await SecurityServer.Start(configure: configuration =>
+        {
+            configuration["RateLimits:EmailResendPerMinute"] = "2";
+            configuration["RateLimits:EmailResendLimit"] = limit;
+            configuration["RateLimits:EmailResendWindowMinutes"] = "2";
+        });
+        for (var i = 0; i < allowedCount; i++)
+        {
+            using var allowed = await server.Client.PostAsync("/api/email-test", null);
+            Assert.Equal(HttpStatusCode.NoContent, allowed.StatusCode);
+        }
+        using var refused = await server.Client.PostAsync("/api/email-test", null);
+        Assert.Equal(HttpStatusCode.TooManyRequests, refused.StatusCode);
+        Assert.InRange(refused.Headers.RetryAfter!.Delta!.Value.TotalSeconds, 110, 120);
+    }
+
+    [Fact]
+    public async Task SharedVenueAllowsDifferentAccounts_ButNormalisedAccountAndVenueStayBounded()
+    {
+        await using var server = await SecurityServer.Start();
+        for (var i = 0; i < 30; i++)
+        {
+            using var response = await server.Client.PostAsJsonAsync("/api/auth/login", new { email = $"fake-parent-{i}@example.invalid", password = "wrong" });
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        }
+        for (var i = 0; i < 8; i++)
+        {
+            using var response = await server.Client.PostAsJsonAsync("/api/auth/login", new { email = "fake-target@example.invalid", password = "wrong" });
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        }
+        using var refused = await server.Client.PostAsJsonAsync("/api/auth/login", new { email = "  FAKE-TARGET@EXAMPLE.INVALID  ", password = "wrong" });
+        Assert.Equal(HttpStatusCode.TooManyRequests, refused.StatusCode);
+    }
+
+    [Fact]
+    public async Task VenueCeilingStillStopsRotatingAccountNames()
+    {
+        await using var server = await SecurityServer.Start();
+        for (var i = 0; i < 60; i++)
+        {
+            using var response = await server.Client.PostAsJsonAsync("/api/auth/login", new { email = $"fake-parent-{i}@example.invalid", password = "wrong" });
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        }
+        using var refused = await server.Client.PostAsJsonAsync("/api/auth/login", new { email = "fake-extra@example.invalid", password = "wrong" });
+        Assert.Equal(HttpStatusCode.TooManyRequests, refused.StatusCode);
+    }
+
+    [Fact]
+    public async Task MetricsAndScoresHaveTheirOwnBudgets_AndDoNotPreventSignInOrOtherWrites()
+    {
+        await using var server = await SecurityServer.Start();
+        for (var i = 0; i < 60; i++)
+        {
+            using var metrics = await server.Client.PostAsync("/api/metrics-test", null);
+            using var scores = await server.Client.PostAsync("/api/score-test", null);
+            Assert.Equal(HttpStatusCode.NoContent, metrics.StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, scores.StatusCode);
+        }
+        using var write = await server.Client.PostAsync("/api/write-test", null);
+        using var auth = await server.Client.PostAsync("/limit", null);
+        Assert.Equal(HttpStatusCode.NoContent, write.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, auth.StatusCode);
+        for (var i = 60; i < 300; i++) await server.Client.PostAsync("/api/metrics-test", null);
+        using var metricsRefused = await server.Client.PostAsync("/api/metrics-test", null);
+        Assert.Equal(HttpStatusCode.TooManyRequests, metricsRefused.StatusCode);
+        for (var i = 60; i < 240; i++) await server.Client.PostAsync("/api/score-test", null);
+        using var scoresRefused = await server.Client.PostAsync("/api/score-test", null);
+        Assert.Equal(HttpStatusCode.TooManyRequests, scoresRefused.StatusCode);
+    }
+
+    [Fact]
+    public async Task AuthIdentityUsesTheBoundProperty_AndRefusesOversizedBodies()
+    {
+        await using var server = await SecurityServer.Start();
+        for (var i = 0; i < 8; i++)
+        {
+            using var body = new StringContent("{\"email\":\"ignored@example.invalid\",\"EMAIL\":\"fake-target@example.invalid\",\"username\":\"different-" + i + "\",\"password\":\"wrong\"}", System.Text.Encoding.UTF8, "application/json");
+            using var response = await server.Client.PostAsync("/api/auth/login", body);
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        }
+        using var refused = await server.Client.PostAsJsonAsync("/api/auth/login", new { email = "fake-target@example.invalid", password = "wrong" });
+        Assert.Equal(HttpStatusCode.TooManyRequests, refused.StatusCode);
+        using var oversized = await server.Client.PostAsJsonAsync("/api/auth/login", new { email = "fake-target@example.invalid", password = new string('x', 66000) });
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, oversized.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("utf-16", false, 401)]
+    [InlineData("utf-16", true, 401)]
+    [InlineData("utf-8", true, 401)]
+    [InlineData("unicode", false, 401)]
+    [InlineData("us-ascii", false, 415)]
+    public async Task AuthJsonEncodingsMatchTheController(string charset, bool includeBom, int status)
+    {
+        await using var server = await SecurityServer.Start();
+        var encoding = System.Text.Encoding.GetEncoding(charset);
+        var body = encoding.GetBytes("{\"email\":\"fake-encoding@example.invalid\",\"password\":\"wrong\"}");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login");
+        request.Content = new ByteArrayContent(includeBom ? encoding.GetPreamble().Concat(body).ToArray() : body);
+        request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json") { CharSet = charset };
+        using var response = await server.Client.SendAsync(request);
+        Assert.Equal(status, (int)response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("utf-16", false)]
+    [InlineData("utf-8", true)]
+    public async Task AuthBodyEncodingCannotSelectAnotherAccountBucket(string charset, bool includeBom)
+    {
+        await using var server = await SecurityServer.Start();
+        const string body = "{\"email\":\"fake-encoding@example.invalid\",\"password\":\"wrong\"}";
+        for (var i = 0; i < 8; i++)
+        {
+            using var plain = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+            using var response = await server.Client.PostAsync("/api/auth/login", plain);
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        }
+        var encoding = System.Text.Encoding.GetEncoding(charset);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login");
+        request.Headers.Add("Test-User", "other");
+        request.Content = new ByteArrayContent(includeBom
+            ? encoding.GetPreamble().Concat(encoding.GetBytes(body)).ToArray()
+            : encoding.GetBytes(body));
+        request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json") { CharSet = charset };
+        using var refused = await server.Client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.TooManyRequests, refused.StatusCode);
     }
 
     [Fact]
@@ -425,7 +574,7 @@ internal sealed class SecurityServer(WebApplication app, HttpClient client, stri
     public WebApplication App => app;
     public HttpClient Client => client;
 
-    public static async Task<SecurityServer> Start(int? authLimit = null)
+    public static async Task<SecurityServer> Start(int? authLimit = null, Action<ConfigurationManager>? configure = null)
     {
         var directory = Directory.CreateTempSubdirectory("mg-security-").FullName;
         var webroot = Directory.CreateDirectory(Path.Combine(directory, "wwwroot")).FullName;
@@ -449,6 +598,7 @@ internal sealed class SecurityServer(WebApplication app, HttpClient client, stri
         builder.Services.AddSingleton<ILiveBroadcaster, LiveBroadcaster>();
         builder.Services.AddControllers().AddApplicationPart(typeof(SignupController).Assembly);
         if (authLimit.HasValue) builder.Configuration["RateLimits:AuthPerMinute"] = authLimit.Value.ToString();
+        configure?.Invoke(builder.Configuration);
         builder.Services.AddRequestLimits(builder.Configuration);
         builder.Services.AddTrustedProxies(builder.Configuration);
         builder.Services.AddProblemDetails();
@@ -458,11 +608,15 @@ internal sealed class SecurityServer(WebApplication app, HttpClient client, stri
         app.UseExceptionHandler();
         app.UseRouting();
         app.UseAuthentication();
+        app.UseMiddleware<AuthRateLimitIdentityMiddleware>();
         app.UseRateLimiter();
         app.UseAuthorization();
         app.UseStaticFiles();
         app.MapControllers();
         app.MapPost("/api/write-test", () => Results.NoContent());
+        app.MapPost("/api/email-test", () => Results.NoContent()).RequireRateLimiting(RequestLimits.EmailResendPolicy);
+        app.MapPost("/api/metrics-test", () => Results.NoContent()).RequireRateLimiting(RequestLimits.PublicMetricsPolicy);
+        app.MapPost("/api/score-test", () => Results.NoContent()).RequireRateLimiting(RequestLimits.ScorePolicy);
         app.MapPost("/limit", () => Results.NoContent()).RequireRateLimiting("auth");
         app.MapGet("/fail", (Func<IResult>)(() => throw new InvalidOperationException("Fake internal detail")));
         app.MapFallbackToFile("index.html");

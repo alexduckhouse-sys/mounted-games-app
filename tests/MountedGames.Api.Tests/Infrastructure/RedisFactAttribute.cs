@@ -15,12 +15,13 @@ public sealed class RedisFactAttribute : FactAttribute
 }
 
 /// <summary>The real API pointed at the test Redis, with its own sign-in limit; two of these act as two instances.</summary>
-public sealed class RedisApiFactory(int authPerMinute = 100000, string? redisUrl = null) : ApiFactory
+public sealed class RedisApiFactory(int authPerMinute = 100000, string? redisUrl = null, int authPerIpPerMinute = 100000) : ApiFactory
 {
     protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
     {
         base.ConfigureWebHost(builder);
         builder.UseSetting("Redis:ConnectionString", redisUrl ?? RedisFactAttribute.Url);
         builder.UseSetting("RateLimits:AuthPerMinute", authPerMinute.ToString());
+        builder.UseSetting("RateLimits:AuthPerIpPerMinute", authPerIpPerMinute.ToString());
     }
 }

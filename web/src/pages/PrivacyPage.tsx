@@ -99,7 +99,13 @@ function PrivacyPolicy() {
             emergency contact details, medical notes, pony passport and owner details, pony age and answers to extra
             questions. These fields are available to the competition’s organisers, the trainer or person who submitted
             the form, and administrators. They are excluded from public declarations. Your saved rider list is available
-            to you and administrators. Competition signups record your name, club, contact details and payment status.
+            to you, approved trainers and managers of your club, and administrators. Competition signups record your name, club, contact details and payment status.
+          </li>
+          <li className="mg-lede">
+            <strong>Results and history.</strong> Locked declarations and competition results feed into <Link to="/stats" className="underline">career stats</Link> and <Link to="/seasons" className="underline">season tables</Link>. Public rider names honour the surname-initial setting; private declaration answers are not published there.
+          </li>
+          <li className="mg-lede">
+            <strong>After an event.</strong> We automatically remove medical notes, rider weights, emergency contacts, pony passport numbers and the trainer’s phone number once the event ended more than 7 days ago. If no end date is set, this happens after 14 days from the start. Birth dates are reduced to birth years. Results and public rider history remain. Cleanup runs when the service is running, so it may happen later after a period of inactivity.
           </li>
           <li className="mg-lede">
             <strong>Club payout details.</strong> If you set up payouts for your club, we keep the club’s business
@@ -122,7 +128,7 @@ function PrivacyPolicy() {
         </ul>
         <p className="mg-lede">
           We use this information to run accounts and competition features, including entries, declarations, scoring,
-          timetables, notifications and moderation. Your information is kept on our secure cloud servers.
+          timetables, notifications and moderation. Your information is kept on our secure cloud servers. We use Resend to deliver account, entry and other transactional emails. Optional news emails include an unsubscribe link.
           We don’t sell your data or use it for advertising.
         </p>
       </div>
@@ -146,8 +152,7 @@ function PrivacyPolicy() {
           </Link>{' '}
           and choose “Delete my account”. You’ll be asked for your password. If you only use Google, Apple or
           Facebook to sign in, you’ll sign in with it once more instead. Your notes, saved riders, push
-          notifications and private marketplace messages are deleted. Chat messages, marketplace posts and comments
-          you wrote stay, but your name, IP address and contact details are taken off them. Declarations and signups
+          notifications, chat messages, marketplace posts and comments you wrote are deleted, along with your private marketplace messages. Declarations and signups
           stay as the competition’s record (a signup keeps the payer’s name because it’s also a payment record, but
           loses your contact details). Competitions you created and teams you coached stay, with no owner.
         </p>
@@ -251,6 +256,7 @@ function TermsPolicy() {
           facilities, insurance requirements, safety rules, official decisions or changes to the event.
         </p>
         <p className="mg-lede">
+          Mounted Games is an independent competition tool and is not an official service of the governing bodies named in its guides. Their names and rulebooks belong to the respective organisations.
           Signal, device and service interruptions can affect live information. Check with event officials if a
           timetable, score or announcement appears incomplete or out of date. These statements do not limit any
           rights you have under applicable law.
@@ -276,6 +282,12 @@ function RefundsPolicy() {
             or seller’s cancellation, withdrawal and refund terms. Contact them about a withdrawal, cancellation,
             postponement or refund. The app does not set a standard refund deadline, certificate requirement or
             cancellation charge. Your rights depend on the transaction and applicable law as well as any valid terms.
+          </li>
+          <li className="mg-lede">
+            <strong>Event Shop goods.</strong> When you buy physical goods online from a business, you normally have 14 days after delivery to tell the seller you want to cancel, then another 14 days to return them. Exceptions include personalised goods. Your rights if goods are faulty still apply. See <a href="https://www.gov.uk/accepting-returns-and-giving-refunds" className="underline">UK cancellation and refund guidance</a>.
+          </li>
+          <li className="mg-lede">
+            <strong>Event bookings.</strong> Dated leisure bookings may be exempt from the usual cooling-off period. Check the organiser’s terms for entries, stabling and hook-up bookings before ordering. This does not remove any rights you have if the service is not provided as agreed.
           </li>
           <li className="mg-lede">
             <strong>Tack &amp; kit shop and event stalls.</strong> Agree payment and collection with the seller and check
@@ -335,10 +347,8 @@ function SafeguardingPolicy() {
         <h3 className="mg-h2">Children &amp; arena filming</h3>
         <p className="mg-lede">
           Many riders are under 18. Private declaration details, including dates of birth, weight, medical notes and
-          emergency contacts, are only visible to the competition’s organisers, whoever sent in the form, and
-          administrators. Public pages can show rider names and competition
-          information. Use the surname-initial and filming-preference options where available, and discuss filming
-          concerns with the organiser before the event.
+          emergency contacts, are available only to the event organisers, administrators, the team’s trainer, the person who sent the form and approved staff managing its club. Public pages can show rider names and competition
+          information. Use the surname-initial option to shorten public names. If a child cannot be filmed for safeguarding reasons, contact the event organiser before the competition to discuss arrangements. There is no individual filming opt-out in the app.
         </p>
         <p className="mg-lede">
           Live streams can show identifiable riders and spectators. Broadcasters and viewers can save replay clips,

@@ -34,8 +34,9 @@ public class ChatModerationController(AppDbContext db, TimeProvider time) : Cont
         }
         await next();
     }
-    private IQueryable<ChatMessage> VisibleMessages(int competitionId) => db.ChatMessages
-        .Where(m => m.CompetitionId == competitionId).VisibleTo(UserId, User.IsInRole(Roles.Admin));
+    private async Task<IQueryable<ChatMessage>> VisibleMessagesAsync(int competitionId) => db.ChatMessages
+        .Where(m => m.CompetitionId == competitionId)
+        .VisibleTo(UserId, await db.CanManageAsync(User, competitionId, Cancellation));
 
     [HttpPost("api/competitions/{competitionId:int}/chat/{messageId:int}/report")]
     public async Task<IActionResult> Report(int competitionId, int messageId, ReportChatMessageRequest request)
@@ -43,7 +44,7 @@ public class ChatModerationController(AppDbContext db, TimeProvider time) : Cont
         var reason = request.Reason?.Trim();
         if (string.IsNullOrWhiteSpace(reason) || reason.Length > 1000)
             return BadRequest(new { message = "Tell us what happened in 1 to 1,000 characters." });
-        if (!await VisibleMessages(competitionId).AnyAsync(m => m.Id == messageId, Cancellation)) return NotFound();
+        if (!await (await VisibleMessagesAsync(competitionId)).AnyAsync(m => m.Id == messageId, Cancellation)) return NotFound();
         if (await db.ChatReports.AnyAsync(r => r.MessageId == messageId && r.ReporterUserId == UserId, Cancellation))
             return NoContent();
         var report = new ChatReport
@@ -61,7 +62,7 @@ public class ChatModerationController(AppDbContext db, TimeProvider time) : Cont
             // A second device can submit the same report concurrently.
             if (await db.ChatReports.AnyAsync(r => r.MessageId == messageId && r.ReporterUserId == UserId, Cancellation))
                 return NoContent();
-            if (!await VisibleMessages(competitionId).AnyAsync(m => m.Id == messageId, Cancellation)) return NotFound();
+            if (!await (await VisibleMessagesAsync(competitionId)).AnyAsync(m => m.Id == messageId, Cancellation)) return NotFound();
             throw;
         }
         return NoContent();
@@ -70,7 +71,7 @@ public class ChatModerationController(AppDbContext db, TimeProvider time) : Cont
     [HttpPost("api/competitions/{competitionId:int}/chat/{messageId:int}/block-user")]
     public async Task<IActionResult> BlockUser(int competitionId, int messageId)
     {
-        var message = await VisibleMessages(competitionId).AsNoTracking().SingleOrDefaultAsync(m => m.Id == messageId, Cancellation);
+        var message = await (await VisibleMessagesAsync(competitionId)).AsNoTracking().SingleOrDefaultAsync(m => m.Id == messageId, Cancellation);
         if (message == null) return NotFound();
         if (message.UserId == null || message.UserId == UserId)
             return BadRequest(new { message = "You can't block yourself or a deleted account." });
@@ -109,7 +110,8 @@ public class ChatModerationController(AppDbContext db, TimeProvider time) : Cont
         return NoContent();
     }
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
     [HttpGet("api/competitions/{competitionId:int}/chat/reports")]
     public Task<List<ChatReportDto>> Reports(int competitionId, [FromQuery] int take = 50, [FromQuery] int? beforeId = null)
         => db.ChatReports.AsNoTracking().Where(r => r.Message.CompetitionId == competitionId
@@ -118,7 +120,8 @@ public class ChatModerationController(AppDbContext db, TimeProvider time) : Cont
             .Select(r => new ChatReportDto(r.Id, r.MessageId, r.ReporterUserId, r.Reason, r.CreatedAt, r.ResolvedAt))
             .ToListAsync(Cancellation);
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
     [HttpGet("api/competitions/{competitionId:int}/chat/reports/{reportId:int}/message")]
     public async Task<ActionResult<ChatMessageDto>> ReportedMessage(int competitionId, int reportId)
     {
@@ -129,7 +132,8 @@ public class ChatModerationController(AppDbContext db, TimeProvider time) : Cont
         return message == null ? NotFound() : message.ToDto();
     }
 
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Policy = CompetitionStaff.Policy)]
+    [CompetitionAccess("competitionId")]
     [HttpPost("api/competitions/{competitionId:int}/chat/reports/{reportId:int}/resolve")]
     public async Task<IActionResult> Resolve(int competitionId, int reportId)
     {

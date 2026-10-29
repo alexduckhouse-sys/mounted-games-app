@@ -137,7 +137,7 @@ export function ReplayEditor({ clip, editable, justMade, onClose, onCancelClip, 
         {editable && (
           <span className="rp-frame" role="slider" tabIndex={0} aria-label={t('desk.stream.ed.framing')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(frame.x)}
             aria-valuetext={t('desk.stream.ed.framingValue', { x: Math.round(frame.x), y: Math.round(frame.y), z: frame.z.toFixed(1) })} data-drag={dragging !== null}
-            style={{ left: `${rect.left}%`, top: `${rect.top}%`, width: `${rect.width}%`, height: `${rect.height}%` }}
+            style={{ transform: `translate3d(${(rect.left / rect.width) * 100}%, ${(rect.top / rect.height) * 100}%, 0)`, width: `${rect.width}%`, height: `${rect.height}%` }}
             onPointerDown={onDragStart} onKeyDown={onFrameKey}><span className="rp-z">{zoomLabel(frame.z)}</span></span>
         )}
       </div>

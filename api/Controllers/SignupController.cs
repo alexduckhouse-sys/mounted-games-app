@@ -566,6 +566,8 @@ public class SignupController : ControllerBase
 
     [HttpGet("api/competitions/{competitionId:int}/entry-settings")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<CompetitionEntrySettingsDto>> GetEntrySettings(int competitionId, [FromServices] TimeProvider clock)
     {
         var comp = await _db.Competitions.AsNoTracking().FirstOrDefaultAsync(c => c.Id == competitionId);
@@ -1048,6 +1050,8 @@ public class SignupController : ControllerBase
     /// <summary>Public matchmaking listings for a competition: solo riders looking for a pair, whole teams looking for guest riders, and riders waiting for a guest ride spot.</summary>
     [HttpGet("api/competitions/{competitionId:int}/matchmaking")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<IEnumerable<MatchmakingEntryDto>>> Matchmaking(int competitionId)
     {
         var rows = await _db.SectionSignups

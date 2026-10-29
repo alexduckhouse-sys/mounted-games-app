@@ -1005,6 +1005,7 @@ function PostRaceCommentatorModal({
   hcTeamIds: ReadonlySet<number>;
   onClose: () => void;
 }) {
+  const { canOrganise } = useAuth();
   const sectionId = recap.session.competitionSectionId ?? competition.sections[0]?.id ?? -1;
   const section = competition.sections.find((s) => s.id === sectionId) ?? null;
   const cutoffPlaces = section?.finalistCount ?? 6;
@@ -1089,7 +1090,7 @@ function PostRaceCommentatorModal({
           </section>
 
           {/* 1-tap stream overlay buttons */}
-          <StreamControlStrip competitionId={competition.id} sectionId={sectionId} activeHeatId={recap.heat.id} compact />
+          {canOrganise(competition) && <StreamControlStrip competitionId={competition.id} sectionId={sectionId} activeHeatId={recap.heat.id} compact />}
           <div className="kit-acts">
             <button type="button" className="kit-pill kit-pill-fill" onClick={() => close()}>Close</button>
           </div>

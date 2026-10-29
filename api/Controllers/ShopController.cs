@@ -25,8 +25,23 @@ public class ShopController : ControllerBase
     private const string BadImageMessage = "That image isn't a supported picture. Use a JPEG, PNG, WebP or GIF.";
     private const int MaxImageBase64Bytes = 700_000; // ≈500 KB image when base64-encoded
 
+    private static bool IsSupportedImage(string value)
+    {
+        if (!ImageDataUrl.IsMatch(value)) return false;
+        var comma = value.IndexOf(',');
+        byte[] bytes;
+        try { bytes = Convert.FromBase64String(value[(comma + 1)..]); }
+        catch (FormatException) { return false; }
+        var actual = Services.Sponsors.SponsorLogos.Detect(bytes);
+        if (bytes.Length >= 6 && (bytes.AsSpan(0, 6).SequenceEqual("GIF87a"u8) || bytes.AsSpan(0, 6).SequenceEqual("GIF89a"u8)))
+            actual = "image/gif";
+        return actual is not null && value[..comma] == $"data:{actual};base64";
+    }
+
     [HttpGet("posts")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<IEnumerable<ShopPostDto>> List([FromQuery] int take = 50, [FromQuery] bool includeDeleted = false)
     {
         take = Math.Clamp(take, 1, 200);
@@ -39,6 +54,8 @@ public class ShopController : ControllerBase
 
     [HttpGet("posts/{id:int}")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<ShopPostDto>> Get(int id)
     {
         var p = await _db.ShopPosts
@@ -69,15 +86,15 @@ public class ShopController : ControllerBase
         var image = req.ImageBase64;
         if (image is { Length: > MaxImageBase64Bytes })
             return BadRequest(new { message = "Image is too large (max ~500 KB after compression)." });
-        if (!string.IsNullOrEmpty(image) && !ImageDataUrl.IsMatch(image))
+        if (!string.IsNullOrEmpty(image) && !IsSupportedImage(image))
             return BadRequest(new { message = BadImageMessage });
         var post = new ShopPost
         {
             AuthorUserId = userId,
             AuthorName = name.Length > 150 ? name[..150] : name,
             PonyClubName = req.PonyClubName?.Trim(),
-            Title = title,
-            Body = body,
+            Title = ProfanityFilter.Clean(title),
+            Body = ProfanityFilter.Clean(body),
             PriceMinor = req.PriceMinor,
             ContactInfo = req.ContactInfo?.Trim(),
             ImageBase64 = string.IsNullOrEmpty(image) ? null : image,
@@ -96,7 +113,7 @@ public class ShopController : ControllerBase
             return StatusCode(403, new { message = "Posting from this network is blocked." });
         if (req.ImageBase64 is { Length: > MaxImageBase64Bytes })
             return BadRequest(new { message = "Image is too large (max ~500 KB after compression)." });
-        if (!string.IsNullOrEmpty(req.ImageBase64) && !ImageDataUrl.IsMatch(req.ImageBase64))
+        if (!string.IsNullOrEmpty(req.ImageBase64) && !IsSupportedImage(req.ImageBase64))
             return BadRequest(new { message = BadImageMessage });
         if (req.PriceMinor is < 0 or > 100_000_000)
             return BadRequest(new { message = "Price must be zero or positive." });
@@ -114,8 +131,8 @@ public class ShopController : ControllerBase
         var canEdit = User.IsInRole(Roles.Admin) || (!string.IsNullOrEmpty(userId) && post.AuthorUserId == userId);
         if (!canEdit) return Forbid();
 
-        if (!string.IsNullOrEmpty(title)) post.Title = title;
-        if (!string.IsNullOrEmpty(body)) post.Body = body;
+        if (!string.IsNullOrEmpty(title)) post.Title = ProfanityFilter.Clean(title);
+        if (!string.IsNullOrEmpty(body)) post.Body = ProfanityFilter.Clean(body);
         if (req.PriceMinor.HasValue) post.PriceMinor = req.PriceMinor;
         if (req.ContactInfo is not null) post.ContactInfo = req.ContactInfo.Trim();
         if (req.PonyClubName is not null) post.PonyClubName = req.PonyClubName.Trim();
@@ -142,6 +159,8 @@ public class ShopController : ControllerBase
 
     [HttpGet("posts/{id:int}/comments")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<IEnumerable<ShopCommentDto>> Comments(int id)
     {
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
@@ -183,7 +202,7 @@ public class ShopController : ControllerBase
             PostId = id,
             AuthorUserId = userId,
             AuthorName = name.Length > 150 ? name[..150] : name,
-            Body = body,
+            Body = ProfanityFilter.Clean(body),
             IsPrivate = req.IsPrivate,
             ToUserId = req.IsPrivate ? (req.ToUserId ?? post.AuthorUserId) : null,
             IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),

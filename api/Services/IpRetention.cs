@@ -112,3 +112,75 @@ public sealed class IpRetentionSweeper(IServiceScopeFactory scopes, TimeProvider
         }
     }
 }
+
+/// <summary>Removes event-only personal details while retaining rider identity and competition history.</summary>
+public sealed class CompetitionDataRetention(AppDbContext db, TimeProvider time)
+{
+    public async Task<int> SweepAsync(CancellationToken ct = default)
+    {
+        var endedBefore = time.GetUtcNow().UtcDateTime.AddDays(-7);
+        var startedBefore = time.GetUtcNow().UtcDateTime.AddDays(-14);
+        var expired = db.Competitions.Where(c => c.EndDate != null
+            ? c.EndDate < endedBefore
+            : c.StartDate < startedBefore).Select(c => c.Id);
+        // Set-based, idempotent updates avoid loading sensitive values or racing another instance's sweep.
+        var riders = db.RiderEntries.Where(r => expired.Contains(r.DeclarationForm!.Team!.CompetitionId)
+            && (r.MedicalNotes != null || r.EmergencyContactName != null || r.EmergencyContactPhone != null
+                || r.WeightKg != null || r.PonyPassportNumber != null || r.DateOfBirth != null));
+        var changed = await riders.ExecuteUpdateAsync(s => s
+            .SetProperty(r => r.MedicalNotes, (string?)null)
+            .SetProperty(r => r.EmergencyContactName, (string?)null)
+            .SetProperty(r => r.EmergencyContactPhone, (string?)null)
+            .SetProperty(r => r.WeightKg, (decimal?)null)
+            .SetProperty(r => r.PonyPassportNumber, (string?)null)
+            .SetProperty(r => r.BirthYear, r => r.DateOfBirth != null ? r.DateOfBirth.Value.Year : r.BirthYear)
+            .SetProperty(r => r.DateOfBirth, (DateTime?)null), ct);
+        changed += await db.DeclarationForms.Where(d => expired.Contains(d.Team!.CompetitionId) && d.TrainerPhone != null)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.TrainerPhone, (string?)null), ct);
+        var signups = db.SectionSignups.Where(s => expired.Contains(s.Section!.CompetitionId)).Select(s => s.Id);
+        // Guest details have no birth-year field. The linked declaration retains the year for results;
+        // discard the guest copy instead of substituting a made-up birthday.
+        changed += await db.Set<MountedGames.Api.Entities.SignupGuestDetails>()
+            .Where(g => signups.Contains(g.SignupId) && (g.EmergencyContactName != null || g.EmergencyContactPhone != null
+                || g.GuardianName != null || g.GuardianPhone != null || g.RiderDateOfBirth != null))
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(g => g.EmergencyContactName, (string?)null)
+                .SetProperty(g => g.EmergencyContactPhone, (string?)null)
+                .SetProperty(g => g.GuardianName, (string?)null)
+                .SetProperty(g => g.GuardianPhone, (string?)null)
+                .SetProperty(g => g.RiderDateOfBirth, (DateTime?)null), ct);
+        return changed;
+    }
+}
+
+/// <summary>Runs on startup and daily while an API instance is awake, catching up after scale-to-zero.</summary>
+public sealed class CompetitionDataRetentionSweeper(IServiceScopeFactory scopes, TimeProvider time,
+    ILogger<CompetitionDataRetentionSweeper> log, TimeSpan? startupDelay = null, TimeSpan? interval = null) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            var delay = startupDelay ?? TimeSpan.FromSeconds(15);
+            if (delay > TimeSpan.Zero) await Task.Delay(delay, time, stoppingToken);
+            using var timer = new PeriodicTimer(interval ?? TimeSpan.FromDays(1), time);
+            do { await RunOnceAsync(stoppingToken); }
+            while (await timer.WaitForNextTickAsync(stoppingToken));
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
+    }
+
+    public async Task RunOnceAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var scope = scopes.CreateScope();
+            var changed = await scope.ServiceProvider.GetRequiredService<CompetitionDataRetention>().SweepAsync(ct);
+            if (changed > 0) log.LogInformation("Cleared expired event personal details from {Count} records.", changed);
+        }
+        catch (Exception) when (!ct.IsCancellationRequested)
+        {
+            log.LogWarning("Competition data retention sweep could not complete.");
+        }
+    }
+}
