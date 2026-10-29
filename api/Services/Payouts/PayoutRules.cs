@@ -74,7 +74,7 @@ public static partial class PayoutRules
     public static string Masked(string? last4) => string.IsNullOrEmpty(last4) ? string.Empty : Bullets + last4;
 
     /// <summary>"Barclays ••••1234" style line for a saved account (bank name omitted when unknown).</summary>
-    public static string? MaskedAccount(ClubPayoutAccount a)
+    public static string? MaskedAccount(IPayoutAccount a)
     {
         var last4 = a.AccountLast4 ?? a.IbanLast4;
         return string.IsNullOrEmpty(last4) ? null : Masked(last4);

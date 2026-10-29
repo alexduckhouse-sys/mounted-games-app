@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../auth/AuthContext';
@@ -9,12 +10,12 @@ import { Notice } from '../components/Notice';
 import { PageSkeleton } from '../components/Skeletons';
 import { apiErrorMessage } from '../lib/apiError';
 import {
-  BUSINESS_TYPES, REGIONS, SCHEDULES, bankLine, businessTypeLabel, regionLabel, scheduleLabel, bankProblems, digitsOnly, emptyBank, formFrom, formatIban, formatSortCode,
-  needsRegistrationNumber, payoutStatusLine, registrationLabel, stepProblems,
+  BUSINESS_TYPES, EU_COUNTRIES, REGIONS, SCHEDULES, bankLine, businessTypeLabel, regionLabel, scheduleLabel, bankProblems, digitsOnly, emptyBank, formFrom, formatIban, formatSortCode,
+  isSafeStripeUrl, needsRegistrationNumber, payoutStatusLine, registrationLabel, stepProblems, stripeStatusInfo,
   type BankForm, type PayoutForm, type Problems,
 } from '../lib/payouts';
 import { useT } from '../i18n/LanguageContext';
-import type { Club, ClubPayouts, PayoutRegion } from '../types';
+import type { Club, ClubPayouts, PayoutRegion, StripeOnboardResponse } from '../types';
 import { FormSheet, SheetField } from './clubShop/ui';
 import '../components/sitePages.css';
 import './clubShop/clubShop.css';
@@ -41,24 +42,59 @@ const regionText = (region: PayoutRegion) => {
   return found ? `${regionLabel(found.value)} (${found.currency === 'GBP' ? '£' : '€'})` : '';
 };
 
+function navigateToExternalUrl(url: string, onRedirect?: (url: string) => void) {
+  if (!isSafeStripeUrl(url)) return;
+  if (onRedirect) {
+    onRedirect(url);
+    return;
+  }
+  if (typeof window !== 'undefined' && !window.navigator?.userAgent?.includes('jsdom')) {
+    window.location.assign(url);
+  }
+}
+
 /**
- * A club's payout set-up on one page: who gets paid, and where the money goes. Each row saves what the matching
- * step of the old wizard saved. It's a stand-in for a payment provider's onboarding: nothing is verified and no
- * money moves yet. Bank numbers are typed here, sent once and never shown again; only the masked version comes back.
+ * A club's or personal payout set-up on one page: Stripe Connect hosted onboarding for online card, Apple Pay &
+ * Google Pay payments, plus manual BACS bank transfer & organisation details below. Bank numbers are typed here,
+ * sent once and never shown again; only the masked version comes back.
  */
-export function PayoutsPage() {
+export function PayoutsPage({ onStripeRedirect }: { onStripeRedirect?: (url: string) => void } = {}) {
   const t = useT();
   const { user, hasRole } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const stripeReturnRef = useRef(searchParams.get('stripe'));
+  const setSearchParamsRef = useRef(setSearchParams);
+  useEffect(() => {
+    setSearchParamsRef.current = setSearchParams;
+  }, [setSearchParams]);
+
+  const scopeParam = searchParams.get('scope');
+  const forcePersonal = scopeParam === 'personal';
+  const rawClubParam = searchParams.get('clubId');
+  const queryClubId = rawClubParam && /^\d+$/.test(rawClubParam) && Number(rawClubParam) > 0 ? Number(rawClubParam) : null;
   const isAdmin = hasRole('Admin');
+  const canManageClub = Boolean(isAdmin || hasRole('Manager') || hasRole('Trainer'));
   const [clubs, setClubs] = useState<Club[]>([]);
   const [picked, setPicked] = useState<number | null>(null);
-  const clubId = isAdmin ? picked ?? user?.clubId ?? null : user?.clubId ?? null;
+  const clubId = forcePersonal
+    ? null
+    : isAdmin
+      ? picked ?? queryClubId ?? user?.clubId ?? null
+      : queryClubId ?? (canManageClub ? user?.clubId ?? null : null);
+  const isPersonal = forcePersonal || (!isAdmin && clubId == null);
+  const targetClubId = isPersonal ? 0 : clubId;
+  const basePath = isPersonal ? '/me/payouts' : clubId != null ? `/clubs/${clubId}/payouts` : null;
+
   const [data, setData] = useState<ClubPayouts | null>(null);
   const [loadFailed, setLoadFailed] = useState<number | null>(null);
   const [sheet, setSheet] = useState<SheetName | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const current = data && data.clubId === clubId ? data : null;
+  const [stripeBusy, setStripeBusy] = useState(false);
+  const [euCountry, setEuCountry] = useState<string | null>(null);
+
+  const current = data && targetClubId != null && (data.clubId === targetClubId || (isPersonal && data.clubId === 0)) ? data : null;
+  const effectiveEuCountry = (euCountry || current?.bank?.ibanCountry || 'IE').toUpperCase();
   usePageHeader({ title: t('acct.payouts.title'), subtitle: current?.clubName ?? user?.clubName ?? undefined, plain: true, backTo: '/me', backLabel: t('acct.members.back') });
 
   useEffect(() => {
@@ -69,25 +105,46 @@ export function PayoutsPage() {
   }, [isAdmin]);
 
   useEffect(() => {
-    if (clubId == null) return;
+    if (!basePath || targetClubId == null) return;
     let cancelled = false;
-    api.get<ClubPayouts>(`/clubs/${clubId}/payouts`).then(({ data: d }) => {
+    const stripeParam = stripeReturnRef.current;
+    const shouldSyncStripe = stripeParam === 'return' || stripeParam === 'refresh';
+    if (shouldSyncStripe) {
+      stripeReturnRef.current = null;
+    }
+    api.get<ClubPayouts>(basePath).then(async ({ data: d }) => {
       if (cancelled) return;
       if (!isPayouts(d)) throw new Error('unexpected response');
       setData(d);
       setLoadFailed(null);
-    }).catch(() => { if (!cancelled) setLoadFailed(clubId); });
+      if (shouldSyncStripe) {
+        try {
+          const { data: synced } = await api.post<ClubPayouts>(`${basePath}/stripe/sync`);
+          if (!cancelled && isPayouts(synced)) setData(synced);
+        } catch (err) {
+          if (!cancelled) setNotice(apiErrorMessage(err, 'Couldn’t refresh your Stripe status. Check your signal and try again.'));
+        } finally {
+          if (!cancelled) {
+            setSearchParamsRef.current((prev) => {
+              const next = new URLSearchParams(prev);
+              next.delete('stripe');
+              return next;
+            }, { replace: true });
+          }
+        }
+      }
+    }).catch(() => { if (!cancelled) setLoadFailed(targetClubId); });
     return () => { cancelled = true; };
-  }, [clubId, attempt]);
+  }, [basePath, targetClubId, attempt]);
 
   if (!user) return null;
 
   /** Once every detail is in, finish the set-up: there is no separate Finish button any more. */
   async function adopt(d: ClubPayouts) {
     setData(d);
-    if (d.missing.length > 0 || d.status === 2) return;
+    if (!basePath || d.missing.length > 0 || (d.status === 2 && d.manualBacsReady !== false)) return;
     try {
-      const { data: finished } = await api.post<ClubPayouts>(`/clubs/${d.clubId}/payouts/finish`);
+      const { data: finished } = await api.post<ClubPayouts>(`${basePath}/finish`);
       setData(finished);
     } catch (err) {
       setNotice(apiErrorMessage(err, t('acct.payouts.finishFail')));
@@ -96,10 +153,10 @@ export function PayoutsPage() {
 
   /** Saves some of the details. Returns null when it worked, or what went wrong. */
   async function save(body: object): Promise<SaveFailure | null> {
-    if (clubId == null) return { problems: {}, message: t('acct.payouts.chooseFirst') };
+    if (!basePath) return { problems: {}, message: t('acct.payouts.chooseFirst') };
     setNotice(null);
     try {
-      const { data: d } = await api.put<ClubPayouts>(`/clubs/${clubId}/payouts`, body);
+      const { data: d } = await api.put<ClubPayouts>(basePath, body);
       await adopt(d);
       return null;
     } catch (err) {
@@ -109,13 +166,13 @@ export function PayoutsPage() {
   }
 
   async function saveBank(form: BankForm, region: PayoutRegion): Promise<SaveFailure | null> {
-    if (clubId == null) return { problems: {}, message: t('acct.payouts.chooseFirst') };
+    if (!basePath) return { problems: {}, message: t('acct.payouts.chooseFirst') };
     setNotice(null);
     try {
       const body = region === 0
         ? { accountHolder: form.accountHolder, sortCode: form.sortCode, accountNumber: form.accountNumber }
         : { accountHolder: form.accountHolder, iban: form.iban, bic: form.bic || null };
-      const { data: d } = await api.put<ClubPayouts>(`/clubs/${clubId}/payouts/bank`, body);
+      const { data: d } = await api.put<ClubPayouts>(`${basePath}/bank`, body);
       await adopt(d);
       return null;
     } catch (err) {
@@ -130,13 +187,34 @@ export function PayoutsPage() {
     if (failure) setNotice(failure.message ?? Object.values(failure.problems)[0] ?? t('acct.payouts.cantSave'));
   }
 
+  async function startStripeOnboard() {
+    if (!basePath || stripeBusy) return;
+    setNotice(null);
+    setStripeBusy(true);
+    try {
+      const { data: res } = current?.region === 1
+        ? await api.post<StripeOnboardResponse>(`${basePath}/stripe/onboard`, { country: effectiveEuCountry })
+        : await api.post<StripeOnboardResponse>(`${basePath}/stripe/onboard`);
+      if (!res?.url || !isSafeStripeUrl(res.url)) {
+        setNotice('Couldn’t start Stripe setup. Stripe returned an invalid onboarding address.');
+        return;
+      }
+      navigateToExternalUrl(res.url, onStripeRedirect);
+    } catch (err) {
+      setNotice(apiErrorMessage(err, 'Couldn’t start Stripe setup. Check your signal and try again.'));
+    } finally {
+      setStripeBusy(false);
+    }
+  }
+
   const status = current ? payoutStatusLine(current) : null;
+  const stripeInfo = current ? stripeStatusInfo(current) : null;
 
   return (
     <div className="skin cs-page">
       <h1 className="sr-only">{t('acct.payouts.title')}</h1>
 
-      {isAdmin && (
+      {isAdmin && !forcePersonal && (
         <div className="sp-card">
           <CardDropdownRow label={t('acct.payouts.club')} value={clubId == null ? '' : String(clubId)}
             options={[{ value: '', label: t('acct.payouts.chooseClub') }, ...clubs.map((c) => ({ value: String(c.id), label: c.name }))]}
@@ -144,17 +222,16 @@ export function PayoutsPage() {
         </div>
       )}
 
-      {clubId == null && !isAdmin && <p className="sp-note">{t('acct.payouts.noClub')}</p>}
-      {clubId != null && !current && (
+      {targetClubId != null && !current && (
         <div className="cs-gap">
-          {loadFailed === clubId
+          {loadFailed === targetClubId
             ? <Notice actionLabel={t('acct.members.tryAgain')} onAction={() => { setLoadFailed(null); setAttempt((n) => n + 1); }}>{t('acct.payouts.loadFail')}</Notice>
             : <PageSkeleton />}
         </div>
       )}
       {notice && <div className="cs-gap"><Notice>{notice}</Notice></div>}
 
-      {current && status && (
+      {current && status && stripeInfo && (
         <>
           <p role="status" className="cs-status" data-tone={status.ready ? 'good' : 'warn'}>{status.text}</p>
 
@@ -170,6 +247,41 @@ export function PayoutsPage() {
               onChange={(value) => { if (Number(value) !== current.region) void choose({ region: Number(value) }); }} />
             <DetailRow label={t('acct.payouts.legalRow')} value={current.legalName} onOpen={() => setSheet('legal')} />
             <DetailRow label={t('acct.payouts.personRow')} value={current.personFullName} onOpen={() => setSheet('person')} />
+          </div>
+
+          <h2 className="sp-sec">Connect with Stripe (Card, Apple Pay &amp; Google Pay)</h2>
+          <div className="sp-card" data-testid="stripe-connect-card">
+            {current.region === 1 && (
+              <CardDropdownRow
+                label="Stripe country"
+                value={effectiveEuCountry}
+                options={EU_COUNTRIES.map((c) => ({ value: c.code, label: c.name }))}
+                onChange={(value) => { if (value) setEuCountry(value); }}
+              />
+            )}
+            <div className="sp-row" style={{ alignItems: 'flex-start', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span className="sp-t1">Stripe Connect</span>
+                <span
+                  className="sp-val"
+                  data-testid="stripe-status-badge"
+                  data-tone={stripeInfo.state === 'ready' ? 'good' : stripeInfo.state === 'incomplete' ? 'warn' : undefined}
+                >
+                  {stripeInfo.badge}
+                </span>
+              </div>
+              <p className="sp-note" style={{ margin: 0 }}>{stripeInfo.description}</p>
+              <div style={{ marginTop: '0.25rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={stripeBusy}
+                  onClick={() => void startStripeOnboard()}
+                >
+                  {stripeBusy ? 'Opening Stripe…' : stripeInfo.buttonLabel}
+                </button>
+              </div>
+            </div>
           </div>
 
           <h2 className="sp-sec">{t('acct.payouts.moneySection')}</h2>

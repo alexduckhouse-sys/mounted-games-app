@@ -117,6 +117,7 @@ function ProfileDetails() {
   const comingUp = events.upcoming.filter((event) => canOrganise({ id: event.id })).length;
 
   const runsClub = isAdmin || hasRole('Manager');
+  const canManageClubPayouts = runsClub || hasRole('Trainer');
   const showClub = isAdmin || clubId != null || hasRole('Trainer') || hasRole('Manager') || (teams?.length ?? 0) > 0;
   const showTeams = !isAdmin || (teams?.length ?? 0) > 0;
   const teamsHere = competitionId == null ? [] : (teams ?? NO_TEAMS).filter((t) => t.competitionId === competitionId);
@@ -230,7 +231,7 @@ function ProfileDetails() {
             )}
             <ListRow to="/declarations" label={t('account.profile.decForms')} value={decFormCount} />
             {runsClub && <ListRow to="/me/members" label={t('account.profile.members')} />}
-            {runsClub && <ListRow to="/me/payouts" label={t('account.profile.payouts')} />}
+            {canManageClubPayouts && <ListRow to="/me/payouts" label={t('account.profile.payouts')} />}
           </div>
         </section>
       )}
@@ -238,6 +239,7 @@ function ProfileDetails() {
       <Section title={t('account.profile.shop')}>
         <ListRow to="/me/catalogue" label={t('account.profile.thingsISell')} value={itemCount != null ? String(itemCount) : undefined} />
         <ListRow to="/me/orders" label={t('account.profile.orders')} />
+        <ListRow to="/me/payouts?scope=personal" label={t('account.profile.payouts')} />
       </Section>
 
       <Section title={t('account.profile.account')}>

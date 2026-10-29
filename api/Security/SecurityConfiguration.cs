@@ -5,6 +5,16 @@ namespace MountedGames.Api.Security;
 
 public static class SecurityConfiguration
 {
+    public static readonly string[] SecretKeys =
+    [
+        "Jwt:Key",
+        "Admin:Key",
+        "Auth:Facebook:AppSecret",
+        "Stripe:SecretKey",
+        "Stripe:WebhookSecret",
+        "Stripe:ConnectWebhookSecret",
+    ];
+
     public static void Validate(IConfiguration configuration, IHostEnvironment environment)
     {
         if (environment.IsDevelopment()) return;
@@ -12,6 +22,10 @@ public static class SecurityConfiguration
         RequireExternalSecret(configuration, "Admin:Key", 20, required: false);
         // Optional (Facebook sign-in is off without it). Facebook issues 32-character app secrets.
         RequireExternalSecret(configuration, "Auth:Facebook:AppSecret", 32, required: false);
+        // Optional until online card payments are enabled; when set, they must come from deployment secrets.
+        RequireExternalSecret(configuration, "Stripe:SecretKey", 16, required: false);
+        RequireExternalSecret(configuration, "Stripe:WebhookSecret", 16, required: false);
+        RequireExternalSecret(configuration, "Stripe:ConnectWebhookSecret", 16, required: false);
         // Optional. When set it must be the SHA-256 of the master admin key in hex, so a typo can't silently disable it.
         var masterHash = configuration["MasterAdmin:KeyHash"];
         if (!string.IsNullOrWhiteSpace(masterHash) && !MasterAdminKey.IsValidHash(masterHash))

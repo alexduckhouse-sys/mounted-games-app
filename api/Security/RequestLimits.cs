@@ -141,6 +141,8 @@ public static class RequestLimits
                 !context.Request.Path.StartsWithSegments("/api") || HttpMethods.IsGet(context.Request.Method)
                     || HttpMethods.IsHead(context.Request.Method) || HttpMethods.IsOptions(context.Request.Method)
                     || Policy(context) is AuthPolicy or ScorePolicy or PublicMetricsPolicy
+                    || context.Request.Path.StartsWithSegments("/api/webhooks/stripe")
+                    || context.Request.Path.StartsWithSegments("/api/webhooks/stripe-connect")
                     ? RateLimitPartition.GetNoLimiter("separate-policy-or-read")
                     : context.Request.Path.StartsWithSegments("/api/scorer")
                         ? Partition(context, $"scorer:{ScorerPartition(context)}", scorerPermits)

@@ -448,11 +448,16 @@ export interface CompetitionEntrySettings {
   hookupsRemaining?: number | null;
 }
 
-/** The public summary of a club's payouts. `maskedAccount` is like "••••1234" and only appears once `ready`. */
+/** The public summary of a club's or organiser's payouts. `maskedAccount` is like "••••1234" and only appears once `ready`. */
 export interface PayoutsTo {
   clubName: string;
   maskedAccount: string | null;
   ready: boolean;
+  stripeConnected?: boolean;
+  stripeChargesEnabled?: boolean;
+  stripePayoutsEnabled?: boolean;
+  stripeDetailsSubmitted?: boolean;
+  manualBacsReady?: boolean;
 }
 
 /** Payout set-up status: 0 not started, 1 in progress, 2 ready. */
@@ -473,7 +478,7 @@ export interface PayoutBank {
   ibanCountry: string | null;
 }
 
-/** A club's payout set-up, for its managers and admins. Includes the responsible person's date of birth. */
+/** A club's or personal payout set-up, for its managers, trainers, organisers, sellers, and admins. */
 export interface ClubPayouts {
   clubId: number;
   clubName: string;
@@ -500,6 +505,19 @@ export interface ClubPayouts {
   /** Field keys still missing or invalid before the account can be finished. */
   missing: string[];
   updatedAt: string | null;
+  stripeConnected?: boolean;
+  stripeChargesEnabled?: boolean;
+  stripePayoutsEnabled?: boolean;
+  stripeDetailsSubmitted?: boolean;
+  stripeConfigured?: boolean;
+  manualBacsReady?: boolean;
+  stripeAccountId?: string | null;
+}
+
+/** Reply from `POST .../payouts/stripe/onboard`. */
+export interface StripeOnboardResponse {
+  url: string;
+  stripeAccountId: string;
 }
 
 export type ArrivalWindow = 'FridayEvening' | 'SaturdayMorning' | 'Other';

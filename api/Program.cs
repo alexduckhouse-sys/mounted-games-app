@@ -201,6 +201,14 @@ builder.Services.AddHttpClient("geocoding", c =>
     c.Timeout = TimeSpan.FromSeconds(5);
 });
 builder.Services.AddScoped<GeocodingService>();
+builder.Services.AddHttpClient(MountedGames.Api.Services.Payouts.StripeConnectService.HttpClientName, c =>
+    {
+        c.BaseAddress = new Uri("https://api.stripe.com/");
+        c.Timeout = TimeSpan.FromSeconds(15);
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
+    .RemoveAllLoggers();
+builder.Services.AddScoped<MountedGames.Api.Services.Payouts.StripeConnectService>();
 
 var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
     ?? new[] { "http://localhost:5173", "http://localhost:4173" };

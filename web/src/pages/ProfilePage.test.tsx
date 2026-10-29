@@ -159,9 +159,15 @@ describe('ProfilePage: my club', () => {
     expect(await section('My club').findByRole('link', { name: /Members/ })).toHaveAttribute('href', '/me/members');
   });
 
-  it('gives a team manager a Payouts row', async () => {
+  it('gives a team manager and a trainer a Payouts row in My club', async () => {
     mount({ roles: ['Manager'] });
     expect(await section('My club').findByRole('link', { name: /Payouts/ })).toHaveAttribute('href', '/me/payouts');
+  });
+
+  it('gives a trainer a Payouts row in My club without a Members row', async () => {
+    mount({ roles: ['Trainer'] });
+    expect(await section('My club').findByRole('link', { name: /Payouts/ })).toHaveAttribute('href', '/me/payouts');
+    expect(section('My club').queryByRole('link', { name: /Members/ })).not.toBeInTheDocument();
   });
 
   it('shows an admin the Members row too', async () => {
@@ -254,13 +260,14 @@ describe('ProfilePage: my club', () => {
 });
 
 describe('ProfilePage: shop and account', () => {
-  it('has Things I sell, with how many are on sale, and Orders and sales', async () => {
+  it('has Things I sell, with how many are on sale, Orders and sales, and personal Payouts', async () => {
     responses['/commerce/catalogue'] = [{ id: 1, isActive: true }, { id: 2, isActive: true }, { id: 3, isActive: false }];
     mount();
     const shop = section('Shop');
     expect(shop.getByRole('link', { name: /Things I sell/ })).toHaveAttribute('href', '/me/catalogue');
     expect(await shop.findByText('2')).toBeInTheDocument();
     expect(shop.getByRole('link', { name: 'Orders and sales' })).toHaveAttribute('href', '/me/orders');
+    expect(shop.getByRole('link', { name: /Payouts/ })).toHaveAttribute('href', '/me/payouts?scope=personal');
   });
 
   it('has My entries (with a count), My account and Settings, then Sign out', async () => {
