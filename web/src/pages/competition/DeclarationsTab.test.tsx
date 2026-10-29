@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -925,6 +925,35 @@ describe('DeclarationsTab: copy a previous team', () => {
     await opened();
     expect(screen.queryByRole('button', { name: /Copy a previous team/ })).not.toBeInTheDocument();
   });
+});
+
+
+it('runs the deadline clock only while a future deadline is visible and stops at closing', async () => {
+  vi.useFakeTimers();
+  const start = Date.parse('2040-01-01T10:00:00Z');
+  vi.setSystemTime(start);
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  state.get.mockImplementation(async (url: string) => ({ data: url.endsWith('/lock-time')
+    ? { competitionId: 4, declarationsCloseAt: new Date(start + 2_000).toISOString(), isClosed: false } : [] }));
+  const interval = vi.spyOn(globalThis, 'setInterval');
+  let view!: ReturnType<typeof mount>;
+  try {
+    await act(async () => { view = mount(); });
+    expect(interval).toHaveBeenCalledWith(expect.any(Function), 1000);
+    act(() => { vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden'); document.dispatchEvent(new Event('visibilitychange')); });
+    expect(vi.getTimerCount()).toBe(0);
+    act(() => { vi.setSystemTime(start + 3_000); vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible'); document.dispatchEvent(new Event('visibilitychange')); });
+    expect(screen.getByText(/Declaration forms closed on/)).toBeVisible();
+    expect(vi.getTimerCount()).toBe(0);
+  } finally { view?.unmount(); vi.useRealTimers(); }
+});
+
+it.each([null, '2020-01-01T10:00:00Z'])('does not start a clock for an absent or elapsed deadline: %s', async (declarationsCloseAt) => {
+  const interval = vi.spyOn(globalThis, 'setInterval');
+  state.get.mockImplementation(async (url: string) => ({ data: url.endsWith('/lock-time')
+    ? { competitionId: 4, declarationsCloseAt, isClosed: false } : [] }));
+  await act(async () => { mount(); });
+  expect(interval).not.toHaveBeenCalled();
 });
 
 describe('DeclarationsTab: organiser tools in the dock', () => {

@@ -3,6 +3,7 @@ import { createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { CacheFirst, NetworkFirst, NetworkOnly } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
+import { isLazyBuildAsset, canCacheBuildAsset } from './offline/assetCachePolicy';
 import { pickNotificationClient } from './lib/notificationClient';
 import { canCachePublicApi, isEmbedRequest, markSavedResponse, NAVIGATION_DENYLIST, stampPublicResponse } from './offline/cachePolicy';
 
@@ -37,6 +38,18 @@ registerRoute(
 registerRoute(
   ({ url }) => url.origin === self.location.origin && /^\/flags\/[a-z-]+\.svg$/.test(url.pathname),
   new CacheFirst({ cacheName: 'mg-flags-v1', plugins: [new ExpirationPlugin({ maxEntries: 260, maxAgeSeconds: 60 * 60 * 24 * 180 })] }),
+);
+
+// Keep lazy languages and tools after first use without downloading them for every visitor.
+registerRoute(
+  ({ url, request }) => isLazyBuildAsset(url, self.location.origin, request.method),
+  new CacheFirst({
+    cacheName: 'mg-lazy-assets-v1',
+    plugins: [
+      { cacheWillUpdate: async ({ response }: { response: Response }) => canCacheBuildAsset(response) ? response : null },
+      new ExpirationPlugin({ maxEntries: 160, maxAgeSeconds: 60 * 60 * 24 * 30 }),
+    ],
+  }),
 );
 
 // Account data, forms and writes always go to the server.

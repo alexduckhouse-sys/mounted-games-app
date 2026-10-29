@@ -70,6 +70,9 @@ public class AppDbContext : IdentityDbContext<AppUser>
     protected override void OnModelCreating(ModelBuilder b)
     {
         base.OnModelCreating(b);
+        b.Entity<CompetitionReadRevision>().HasKey(r => r.CompetitionId);
+        b.Entity<CompetitionReadRevision>().Property(r => r.CompetitionId).ValueGeneratedNever();
+        b.Entity<CompetitionReadRevision>().ToTable("CompetitionReadRevisions");
         b.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
 
         b.Entity<CompetitionCollaborator>(e =>
@@ -590,19 +593,4 @@ public class AppDbContext : IdentityDbContext<AppUser>
         });
     }
 
-    public override int SaveChanges(bool acceptAllChangesOnSuccess)
-    {
-        var count = base.SaveChanges(acceptAllChangesOnSuccess);
-        if (count > 0)
-            Services.StandingsService.BumpVersion();
-        return count;
-    }
-
-    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
-    {
-        var count = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
-        if (count > 0)
-            Services.StandingsService.BumpVersion();
-        return count;
-    }
 }

@@ -20,10 +20,11 @@ const QUALITY_TIERS = [
   { rid: 'q', label: '360p', title: 'teams.stream.qualityLow' },
 ] as const satisfies readonly { rid: StreamQualityRid; label: string; title: MessageKey }[];
 
-export function StreamPlayer({ media, stream, label, reconnecting = false, message, announcement, captionBar = false, quality = 'f', onQuality, audioOnly, onAudioOnly, onSyncLive }: {
+export function StreamPlayer({ media, stream, label, reconnecting = false, message, announcement, captionBar = false, quality = 'f', onQuality, audioOnly, onAudioOnly, onSyncLive, enableDvr = true }: {
   media: MediaStream | null; stream: LiveStream; label: string | null; reconnecting?: boolean; message?: string | null;
   announcement?: { message: ChatMessage; receivedAt: number }; captionBar?: boolean;
   quality?: StreamQualityRid; onQuality?: (rid: StreamQualityRid) => void;
+  enableDvr?: boolean;
   audioOnly?: boolean; onAudioOnly?: (audioOnly: boolean) => void; onSyncLive?: () => void;
 }) {
   const t = useT();
@@ -67,7 +68,7 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
     onSyncLive?.();
   }
   useEffect(() => {
-    if (!media) {
+    if (!media || !enableDvr) {
       replayBufferRef.current?.dispose();
       replayBufferRef.current = null;
       return;
@@ -81,7 +82,7 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
     buf.start(media);
     replayBufferRef.current = buf;
     return () => { buf.dispose(); replayBufferRef.current = null; };
-  }, [media, stream.competitionId, stream.id, stream.arenaName]);
+  }, [media, stream.competitionId, stream.id, stream.arenaName, enableDvr]);
   function triggerInstantReplay() {
     const buffer = replayBufferRef.current;
     if (buffer) void replayPreparation.prepare((options) => buffer.saveClip(label || `${stream.arenaName} -15s`, { ...options, durationSeconds: 15 }), showReplay);
@@ -222,7 +223,7 @@ export function StreamPlayer({ media, stream, label, reconnecting = false, messa
           </button>
         )}
         </div>
-        {media && (
+        {media && enableDvr && (
           <button
             type="button"
             className="mg-stream-control !min-h-8 !rounded-full px-2.5 text-xs font-bold"

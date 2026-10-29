@@ -268,7 +268,6 @@ public class TeamsController : ControllerBase
             signup.TeamId = null;
         _db.Teams.Remove(t);
         await _db.SaveChangesAsync();
-        StandingsService.Invalidate(competitionId);
         return NoContent();
     }
 

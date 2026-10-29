@@ -1,20 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createReplayBuffer, removeSavedReplay, tagSavedReplay, type ReplayBufferHandle, type ReplayBufferStatus, type SavedReplayClip } from '../live/replayBuffer';
-import { ReplaySegmentStore } from '../live/replaySegments';
 import { useReplayPreparation } from '../live/useReplayPreparation';
 import type { QueuedScoreCard } from '../lib/scoreCard';
 
 export const RACE_RECORDING_SECONDS = 45;
-
-function startPreservingSegments(handle: ReplayBufferHandle, stream: MediaStream) {
-  const originalClear = ReplaySegmentStore.prototype.clear;
-  ReplaySegmentStore.prototype.clear = () => {};
-  try {
-    handle.start(stream);
-  } finally {
-    ReplaySegmentStore.prototype.clear = originalClear;
-  }
-}
 
 /**
  * Records the live video this device is watching into the 30-minute replay buffer, so a producer can save an instant
@@ -54,6 +43,7 @@ export function useControllerReplay({ competitionId, arena, streamId, media, sco
       streamId: streamIdRef.current ?? undefined,
       arenaName: arena || 'Arena',
       windowSeconds: 1800,
+      retainOnSwitch: true,
       onStatus: setStatus,
     });
     buffer.current = handle;
@@ -65,7 +55,7 @@ export function useControllerReplay({ competitionId, arena, streamId, media, sco
 
   useEffect(() => {
     if (!buffer.current) return;
-    if (media) startPreservingSegments(buffer.current, media);
+    if (media) buffer.current.start(media);
     else buffer.current.stop();
   }, [media, armed, competitionId, arena]);
 

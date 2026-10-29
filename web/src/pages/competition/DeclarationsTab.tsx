@@ -52,9 +52,23 @@ function DeclarationsSession() {
   const [deleteError, setDeleteError] = useState('');
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
+    const deadline = Date.parse(lockInfo?.declarationsCloseAt ?? '');
+    if (!Number.isFinite(deadline) || lockInfo?.isClosed) return;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const tick = () => {
+      const value = Date.now();
+      setNow(value);
+      if (value >= deadline && timer !== undefined) { clearInterval(timer); timer = undefined; }
+    };
+    const resume = () => {
+      if (timer !== undefined) { clearInterval(timer); timer = undefined; }
+      tick();
+      if (document.visibilityState !== 'hidden' && Date.now() < deadline) timer = setInterval(tick, 1000);
+    };
+    resume();
+    document.addEventListener('visibilitychange', resume);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', resume); };
+  }, [lockInfo?.declarationsCloseAt, lockInfo?.isClosed]);
 
   const isOrganiser = hasRole('Admin') || canOrganise(competition);
   const declarationsClosed = Boolean(lockInfo?.declarationsCloseAt && (lockInfo.isClosed || now >= new Date(lockInfo.declarationsCloseAt).getTime()));
