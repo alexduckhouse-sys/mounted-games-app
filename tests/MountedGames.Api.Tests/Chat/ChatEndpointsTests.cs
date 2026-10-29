@@ -350,13 +350,13 @@ public class ChatEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Delete_Returns401_WhenAnonymous_And403_WhenTrainer()
+    public async Task Delete_Returns401_WhenAnonymous_And404_WhenUnrelatedTrainer()
     {
         var a = await _f.CreateArenaAsync(1);
         var id = await SeedMessageAsync(a, "x", DateTime.UtcNow);
 
         Assert.Equal(HttpStatusCode.Unauthorized, (await _f.CreateClient().DeleteAsync(Url(a, $"/{id}"))).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await (await _f.TrainerAsync()).DeleteAsync(Url(a, $"/{id}"))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await (await _f.TrainerAsync()).DeleteAsync(Url(a, $"/{id}"))).StatusCode);
     }
 
     // ---- BlockAuthor ----
@@ -482,12 +482,12 @@ public class ChatEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Announce_Returns401_WhenAnonymous_And403_WhenTrainer()
+    public async Task Announce_Returns401_WhenAnonymous_And404_WhenUnrelatedTrainer()
     {
         var a = await _f.CreateArenaAsync(1);
         var body = new AnnouncementRequest("x", null);
         Assert.Equal(HttpStatusCode.Unauthorized, (await _f.CreateClient().PostAsJsonAsync(Url(a, "/announcement"), body)).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await (await _f.TrainerAsync()).PostAsJsonAsync(Url(a, "/announcement"), body)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await (await _f.TrainerAsync()).PostAsJsonAsync(Url(a, "/announcement"), body)).StatusCode);
     }
 
     [Fact]
@@ -566,13 +566,8 @@ public class ChatEndpointsTests : IClassFixture<ApiFactory>
     public async Task RingPrefix_DoesNotChangeGenericChatPrivacy_OrPrivateReplies()
     {
         var a = await _f.CreateArenaAsync(1);
-        var (owner, auth) = await _f.ApprovedTrainerAsync();
-        await _f.WithDbAsync(async db =>
-        {
-            (await db.Competitions.FindAsync(a.CompetitionId))!.CreatedByUserId = auth.User.Id;
-            await db.SaveChangesAsync();
-        });
-        var sent = await (await owner.PostAsJsonAsync(Url(a),
+        var (sender, auth) = await _f.ApprovedTrainerAsync();
+        var sent = await (await sender.PostAsJsonAsync(Url(a),
             new PostChatMessageRequest("🔔 Ring call: synthetic private question"))).ReadAsync<ChatMessageDto>();
         Assert.True(sent.AdminOnly);
         Assert.Equal(ChatMessageType.Chat, sent.Type);
@@ -586,7 +581,7 @@ public class ChatEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task OwnerCanCallOwnHeat_ButCannotModerateChat_OrCallOtherCompetitions()
+    public async Task OwnerCanCallAndAnnounceForOwnHeat_ButCannotPinRingCalls_OrCallOtherCompetitions()
     {
         var a = await _f.CreateArenaAsync(2);
         var other = await _f.CreateArenaAsync(1);
@@ -601,8 +596,8 @@ public class ChatEndpointsTests : IClassFixture<ApiFactory>
         var call = await owner.PostAsJsonAsync($"/api/heats/{heatId}/call-missing-team", new CallMissingTeamRequest(a.TeamIds[0]));
         Assert.Equal(HttpStatusCode.OK, call.StatusCode);
         var id = (await call.ReadAsync<ChatMessageDto>()).Id;
-        Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsJsonAsync(Url(a, "/announcement"), new AnnouncementRequest("Test", null))).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsync(Url(a, $"/{id}/pin"), null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync(Url(a, "/announcement"), new AnnouncementRequest("Test", null))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsync(Url(a, $"/{id}/pin"), null)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await owner.PostAsJsonAsync($"/api/heats/{otherHeat}/call-missing-team", new CallMissingTeamRequest(other.TeamIds[0]))).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync($"/api/heats/{heatId}/call-missing-team", new CallMissingTeamRequest(other.TeamIds[0]))).StatusCode);
     }

@@ -42,7 +42,7 @@ public class CustomEmailTests : IClassFixture<EmailApiFactory>
     }
 
     /// <summary>An approved trainer whose account has a real, confirmed mailbox (sign-ups by username get a made-up one).</summary>
-    private async Task<string> MailableOrganiserAsync(bool confirmed = true)
+    private async Task<string> MailableOrganiserAsync(bool confirmed = true, bool optedIn = true)
     {
         var (_, auth) = await _f.ApprovedTrainerAsync();
         var address = $"organiser-{Guid.NewGuid():N}@example.org";
@@ -52,6 +52,7 @@ public class CustomEmailTests : IClassFixture<EmailApiFactory>
             user.Email = address;
             user.NormalizedEmail = address.ToUpperInvariant();
             user.EmailConfirmed = confirmed;
+            if (optedIn) db.EmailOptIns.Add(new EmailOptIn { Email = address, WordingVersion = "test", Source = "test", UnsubscribeTokenHash = Guid.NewGuid().ToString("N") });
             await db.SaveChangesAsync();
         });
         return address;
@@ -201,14 +202,14 @@ public class CustomEmailTests : IClassFixture<EmailApiFactory>
     }
 
     [Fact]
-    public async Task OnlyTheNewsAudienceGetsAnUnsubscribeFooter()
+    public async Task PromotionalAudiencesGetAnUnsubscribeFooter()
     {
         var admin = await AdminAsync();
         var news = await (await admin.PostAsJsonAsync("/api/admin/custom-emails/preview", Content(CustomEmailAudience.News))).ReadAsync<CustomEmailPreviewDto>();
         var trainers = await (await admin.PostAsJsonAsync("/api/admin/custom-emails/preview", Content(CustomEmailAudience.Trainers))).ReadAsync<CustomEmailPreviewDto>();
         Assert.Contains("Unsubscribe", news.Html);
-        Assert.DoesNotContain("nsubscribe", trainers.Html + trainers.Text);
-        Assert.Contains("you run or help run competitions", trainers.Text);
+        Assert.Contains("Unsubscribe", trainers.Html + trainers.Text);
+        Assert.Contains("asked to hear about new competitions", trainers.Text);
     }
 
     [Fact]
@@ -470,8 +471,33 @@ public class CustomEmailTests : IClassFixture<EmailApiFactory>
         Assert.Equal((2, 2, 0), (second.Sent, second.Total, second.Failed));
     }
 
+    [Theory]
+    [InlineData(CustomEmailAudience.Trainers)]
+    [InlineData(CustomEmailAudience.OrganisersAndAdmins)]
+    public async Task PromotionalRolesRequireConsent_AndUnsubscribeIsRecheckedBeforeSending(CustomEmailAudience audience)
+    {
+        var admin = await AdminAsync();
+        await OptInsAsync();
+        var optedIn = await MailableOrganiserAsync();
+        var neverConsented = await MailableOrganiserAsync(optedIn: false);
+        var withdrawn = await MailableOrganiserAsync();
+        var recipients = await _f.WithDbAsync(db => CustomEmailAudiences.ResolveAsync(db, audience, default));
+        Assert.DoesNotContain(recipients, r => r.Address == neverConsented);
+        var started = await StartAsync(admin, Content(audience));
+        await _f.InDbAsync(async db =>
+        {
+            await db.EmailOptIns.Where(o => o.Email == withdrawn).ExecuteUpdateAsync(s => s.SetProperty(o => o.UnsubscribedAt, DateTime.UtcNow));
+        });
+        var done = await FinishAsync(admin, started.Id);
+        Assert.Equal(1, done.Skipped);
+        Assert.Empty(SentTo([neverConsented, withdrawn]));
+        var message = Assert.Single(SentTo([optedIn]));
+        Assert.Contains("Unsubscribe", message.Text);
+        Assert.True(message.Body.GetProperty("headers").TryGetProperty("List-Unsubscribe", out _));
+    }
+
     [Fact]
-    public async Task TrainersAreMailedAtTheirAccountAddress_WithNoUnsubscribeLink()
+    public async Task ConsentingTrainersAreMailedWithAnUnsubscribeLink()
     {
         var admin = await AdminAsync();
         await OptInsAsync();
@@ -484,8 +510,10 @@ public class CustomEmailTests : IClassFixture<EmailApiFactory>
 
         Assert.Equal(done.Total, done.Sent);
         var message = Assert.Single(SentTo([organiserAddress]), m => m.Subject == "Spring news");
-        Assert.DoesNotContain("nsubscribe", message.Text);
-        Assert.False(message.Body.TryGetProperty("headers", out _));
+        Assert.Contains("Unsubscribe", message.Text);
+        Assert.True(message.Body.TryGetProperty("headers", out var headers));
+        Assert.True(headers.TryGetProperty("List-Unsubscribe", out _));
+        Assert.Equal("List-Unsubscribe=One-Click", headers.GetProperty("List-Unsubscribe-Post").GetString());
     }
 
     [Fact]
@@ -893,7 +921,7 @@ public class CustomEmailTests : IClassFixture<EmailApiFactory>
 
         // A footer with only a picture keeps the usual line.
         var pictureOnly = await PreviewOkAsync(admin, Content(CustomEmailAudience.Trainers, Text("Hi"), new EmailBlockDto(EmailBlockType.Footer, ImageId: imageId)));
-        Assert.Contains("you run or help run competitions", pictureOnly.Html);
+        Assert.Contains("asked to hear about new competitions", pictureOnly.Html);
         Assert.Contains("<img ", pictureOnly.Html);
     }
 

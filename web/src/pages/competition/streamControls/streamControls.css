@@ -4,6 +4,13 @@
 .sx-end:disabled { opacity: .5; cursor: not-allowed; }
 .sx-body { display: flex; flex-direction: column; gap: 0; padding-top: 12px; }
 .sx-video { overflow: hidden; border-radius: 12px; }
+/* On a phone the tabs and a smaller picture stay put under the top bar while the panel below scrolls.
+   The slim header here is only the 42px tab strip and its 1px rule. */
+@media (max-width: 767px) {
+  .sx-page > .rf-hd { position: sticky; top: var(--mg-shell-h, 0px); z-index: 11; }
+  .sx-pin { position: sticky; top: calc(var(--mg-shell-h, 0px) + 43px); z-index: 10; display: flex; justify-content: center; padding: 6px 0; background: rgb(var(--mg-ground)); }
+  .sx-pin > * { width: 56%; }
+}
 .sx-notlive { display: flex; align-items: center; justify-content: center; aspect-ratio: 16 / 9; border-radius: 12px; background: rgb(var(--mg-header-deep)); color: #fff; font: 700 15px/1 var(--mg-font); }
 .sx-note-live { margin: 10px 2px 0; font: 500 13px/1.4 var(--mg-font); color: rgb(var(--mg-muted)); }
 .sx-status { margin: 10px 0 0; }
@@ -71,7 +78,7 @@
 .rp-len { font: 600 13px/1 var(--mg-font); color: #C9D4E3; white-space: nowrap; }
 .rp-video { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; background: #0B1F37; touch-action: none; }
 .rp-media { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
-.rp-frame { position: absolute; border: 2px solid #F2C230; border-radius: 4px; box-shadow: 0 0 0 999px rgb(11 31 55 / .45); cursor: grab; }
+.rp-frame { position: absolute; left: 0; top: 0; will-change: transform; border: 2px solid #F2C230; border-radius: 4px; box-shadow: 0 0 0 999px rgb(11 31 55 / .45); cursor: grab; }
 .rp-frame[data-drag="true"] { cursor: grabbing; }
 .rp-frame:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .rp-z { position: absolute; right: 4px; bottom: 4px; padding: 2px 6px; border-radius: 4px; background: #F2C230; color: #0F2A4A; font: 800 11px/1 var(--mg-font); }

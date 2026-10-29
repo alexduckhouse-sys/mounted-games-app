@@ -1,3 +1,4 @@
+using MountedGames.Api.Security;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -34,6 +35,7 @@ public sealed class CustomEmailsController(AppDbContext db, CustomEmailService e
         => RunAsync(() => emails.PreviewAsync(request, ct));
 
     /// <summary>Sends the email to the signed-in admin's own address only, marked [Test].</summary>
+    [EnableRateLimiting(RequestLimits.EmailResendPolicy)]
     [HttpPost("api/admin/custom-emails/test")]
     [Authorize(Roles = Roles.Admin)]
     public Task<ActionResult<CustomEmailTestDto>> Test(CustomEmailContentRequest request, CancellationToken ct)
@@ -110,6 +112,7 @@ public sealed class CustomEmailsController(AppDbContext db, CustomEmailService e
     [HttpGet("api/email-images/{id:guid}")]
     [AllowAnonymous]
     [EnableRateLimiting("public-read")]
+    [PublicRead]
     public async Task<IActionResult> Image(Guid id, CancellationToken ct)
     {
         var image = await db.CustomEmailImages.AsNoTracking().Where(i => i.Id == id).Select(i => new { i.Bytes, i.ContentType }).FirstOrDefaultAsync(ct);

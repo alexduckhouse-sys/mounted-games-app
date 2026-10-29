@@ -150,3 +150,15 @@ describe('entry form convenience and isolation', () => {
     expect(onSent).toHaveBeenCalledOnce();
   });
 });
+
+
+it('defaults a guest child to surname initials and honours an explicit choice', async () => {
+  render(view({ kind: 'guest' }));
+  const privacy = screen.getByRole('switch', { name: 'Show surname as initial only on public start lists and results' });
+  const dob = screen.getByLabelText(/Date of birth/i);
+  fireEvent.change(dob, { target: { value: '2015-01-01' } });
+  expect(privacy).toHaveAttribute('aria-checked', 'true');
+  await userEvent.click(privacy);
+  fireEvent.change(dob, { target: { value: '2015-01-02' } });
+  expect(privacy).toHaveAttribute('aria-checked', 'false');
+});

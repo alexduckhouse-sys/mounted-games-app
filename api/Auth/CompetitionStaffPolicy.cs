@@ -13,16 +13,20 @@ namespace MountedGames.Api.Auth;
 public static class CompetitionStaff
 {
     public const string Policy = "CompetitionStaff";
+    public const string SeasonPolicy = "SeasonStaff";
 
     /// <summary>Authorization with this policy registered; used by the app and by test hosts.</summary>
     public static IServiceCollection AddAuthorizationWithCompetitionStaff(this IServiceCollection services)
     {
         services.AddAuthorization(options =>
-            options.AddPolicy(Policy, policy => policy.AddRequirements(new Requirement())));
+        {
+            options.AddPolicy(Policy, policy => policy.AddRequirements(new Requirement()));
+            options.AddPolicy(SeasonPolicy, policy => policy.AddRequirements(new Requirement(AllowClubManagers: true)));
+        });
         return services.AddScoped<IAuthorizationHandler, Handler>();
     }
 
-    public sealed class Requirement : IAuthorizationRequirement;
+    public sealed record Requirement(bool AllowClubManagers = false) : IAuthorizationRequirement;
 
     public sealed class Handler(AppDbContext db) : AuthorizationHandler<Requirement>
     {
@@ -33,6 +37,7 @@ public static class CompetitionStaff
             {
                 var uid = user.FindFirstValue(ClaimTypes.NameIdentifier);
                 if (user.IsInRole(Roles.Admin) || user.IsInRole(Roles.Trainer)
+                    || (requirement.AllowClubManagers && user.IsInRole(Roles.Manager))
                     || (!string.IsNullOrEmpty(uid) && await db.CompetitionCollaborators.AnyAsync(c => c.UserId == uid)))
                 {
                     context.Succeed(requirement);

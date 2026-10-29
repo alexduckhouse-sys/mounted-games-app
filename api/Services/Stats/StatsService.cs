@@ -60,6 +60,7 @@ public sealed class StatsService(AppDbContext db, StandingsService? standings = 
             .OrderByDescending(t => t.Competition!.StartDate).Take(MaxSearchRows)
             .Select(t => new NameRow(t.Club!.Name, t.CompetitionId, t.Id)).ToListAsync(ct);
 
+        teams = await PrivacySafeTeamRowsAsync(teams, viewer, ct);
         var counted = await CountedCompetitionsAsync(
             riders.Select(r => r.CompetitionId).Concat(ponies.Select(r => r.CompetitionId))
                 .Concat(teams.Select(t => t.CompetitionId)).Concat(clubs.Select(t => t.CompetitionId)), ct);
@@ -129,6 +130,7 @@ public sealed class StatsService(AppDbContext db, StandingsService? standings = 
             }
         }
 
+        if (kind == StatsSubjectKind.Team) rows = await PrivacySafeTeamRowsAsync(rows, viewer, ct);
         var all = RankedHits(kind, rows, q, counted).ToList();
         var items = all.Skip((page - 1) * BrowsePageSize).Take(BrowsePageSize).ToList();
         return new StatsBrowseDto(kind, StatsNames.Tidy(query), page, BrowsePageSize, all.Count, items);
@@ -174,6 +176,7 @@ public sealed class StatsService(AppDbContext db, StandingsService? standings = 
         var rows = await TeamsNamed(StatsNames.Tokens(key))
             .OrderByDescending(t => t.Competition!.StartDate).Take(MaxProfileRows)
             .Select(t => new NameRow(t.DisplayName, t.CompetitionId, t.Id)).ToListAsync(ct);
+        rows = await PrivacySafeTeamRowsAsync(rows, viewer, ct);
         return await TeamsProfileAsync(StatsSubjectKind.Team, key, rows, viewer, ct);
     }
 
@@ -259,13 +262,14 @@ public sealed class StatsService(AppDbContext db, StandingsService? standings = 
         rows = rows.Where(t => counted.Contains(t.CompetitionId)).ToList();
         var places = await PlacesAsync(rows, ct);
 
+        var shownNames = await ProtectedTeamNamesAsync(currentIds, new StatsViewer(false), ct);
         return current.Select(team =>
         {
             var shares = pastOf[team.Id]
                 .Where(id => places.TryGetValue(id, out var p) && p.TeamsPlaced > 1)
                 .Select(id => (double)places[id].Place / places[id].TeamsPlaced)
                 .ToList();
-            return new FavouriteHistoryDto(team.Id, StatsNames.Tidy(team.DisplayName),
+            return new FavouriteHistoryDto(team.Id, StatsNames.Tidy(shownNames.GetValueOrDefault(team.Id, team.DisplayName)),
                 shares.Count == 0 ? null : Math.Round(shares.Average(), 4), shares.Count);
         }).ToList();
     }
@@ -366,6 +370,7 @@ public sealed class StatsService(AppDbContext db, StandingsService? standings = 
         var sessionTables = await SessionTablesAsync(sessionIds, ct);
         var resultsByTeam = results.ToLookup(r => r.TeamId);
         var membersByTeam = kept.ToLookup(m => m.TeamId);
+        var shownTeamNames = await ProtectedTeamNamesAsync(ids, viewer, ct);
         var entries = entryTeams.Select(t =>
         {
             var teamResults = resultsByTeam[t.TeamId].ToList();
@@ -386,7 +391,7 @@ public sealed class StatsService(AppDbContext db, StandingsService? standings = 
             var teamMax = teamResults.Sum(MaxFor);
             return new StatsEntryDto(
                 t.CompetitionId, t.CompetitionName, t.StartDate, t.SectionId, t.SectionName, t.Format,
-                t.TeamId, t.TeamName, t.ClubName, t.IsHorsConcours,
+                t.TeamId, shownTeamNames.GetValueOrDefault(t.TeamId, t.TeamName), t.ClubName, t.IsHorsConcours,
                 kind == StatsSubjectKind.Pony ? JoinNames(members.Select(m => m.RiderName)) : null,
                 kind == StatsSubjectKind.Rider ? JoinNames(members.Select(m => m.PonyName)) : null,
                 placing?.Place, placing?.TeamsPlaced ?? 0, placing?.FinalTier,
@@ -497,6 +502,15 @@ public sealed class StatsService(AppDbContext db, StandingsService? standings = 
             .OrderByDescending(p => p.Entries).ThenBy(p => p.RiderName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(p => p.PonyName, StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+    private async Task<List<NameRow>> PrivacySafeTeamRowsAsync(List<NameRow> rows, StatsViewer viewer, CancellationToken ct)
+    {
+        var names = await ProtectedTeamNamesAsync(rows.Select(r => r.TeamId), viewer, ct);
+        return rows.Select(r => r with { Name = names.GetValueOrDefault(r.TeamId, r.Name) }).ToList();
+    }
+
+    private Task<Dictionary<int, string>> ProtectedTeamNamesAsync(IEnumerable<int> teamIds, StatsViewer viewer, CancellationToken ct)
+        => viewer.SeesFullNames ? Task.FromResult(new Dictionary<int, string>()) : SeasonRiderPrivacy.ProtectedEventTeamNamesAsync(db, teamIds, ct);
 
     // ----- queries -----
 

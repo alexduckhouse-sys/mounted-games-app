@@ -66,6 +66,7 @@ public class EmailOptInsController(
     }
 
     /// <summary>Site admins only: sends a short test email to the signed-in admin (or an explicit address) and reports the delivery status.</summary>
+    [EnableRateLimiting(RequestLimits.EmailResendPolicy)]
     [HttpPost("api/admin/email-test")]
     [Authorize(Roles = Roles.Admin)]
     public async Task<IActionResult> SendTest(

@@ -368,6 +368,7 @@ export const ops: AreaCatalogue<typeof en> = {
   'ops.tt.name': 'Nom',
   'ops.tt.start': 'Début',
   'ops.tt.followOn': 'Suivre le précédent',
+  'ops.tt.lockedNote': 'Celle-ci a commencé ou a des scores, son heure ne peut donc pas être changée ici. « Tout décaler » décale toujours ce qui reste.',
   'ops.tt.length': 'Durée',
   'ops.tt.timePerHeat': 'Durée par manche',
   'ops.tt.minLabel': '{label} (min)',

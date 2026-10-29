@@ -8,7 +8,9 @@ import type { ChatMessage, Team } from '../../types';
 import { AnnouncementsPage } from './AnnouncementsPage';
 import { CompetitionContext } from './context';
 
-vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
+vi.mock('../../api', () => ({
+  pinChatMessage: async (competitionId: number, messageId: number) => (await import('../../api')).api.post(`/competitions/${competitionId}/chat/${messageId}/pin`, {}),
+  api: { get: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
 vi.mock('../../auth/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'admin', roles: ['Admin'] }, hasRole: (role: string) => role === 'Admin', canEdit: () => true }),
 }));
@@ -90,42 +92,39 @@ describe('AnnouncementsPage', () => {
 
   it('pins a sent announcement as the new notice and clears the old one', async () => {
     const user = userEvent.setup();
-    vi.mocked(api.post).mockResolvedValueOnce({ data: chat(10, { body: 'Lunch at one', tag: 'banner', createdAt: at(11) }) });
+    vi.mocked(api.post).mockResolvedValueOnce({ data: chat(1, { body: 'Lunch at one', tag: 'pinned', createdAt: at(1) }) });
     mount();
     await user.click(await screen.findByRole('button', { name: 'Pin: Lunch at one' }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/chat/announcement', { body: 'Lunch at one', tag: 'banner' }));
-    await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/competitions/1/chat/3'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/chat/1/pin', {}));
+    expect(api.delete).not.toHaveBeenCalled();
     const pinned = (await screen.findByRole('heading', { name: 'Pinned' })).parentElement!;
     await waitFor(() => expect(within(pinned).getByText('Lunch at one')).toBeInTheDocument());
   });
 
-  it('reports a pin that fails, or whose old notice could not be cleared', async () => {
+  it('keeps the existing pin when the server refuses a change', async () => {
     const user = userEvent.setup();
     vi.mocked(api.post).mockRejectedValueOnce(new Error('offline'));
     mount();
     await user.click(await screen.findByRole('button', { name: 'Pin: Lunch at one' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t pin that announcement');
-
-    vi.mocked(api.post).mockResolvedValueOnce({ data: chat(10, { body: 'Lunch at one', tag: 'banner', createdAt: at(11) }) });
-    vi.mocked(api.delete).mockRejectedValueOnce(new Error('offline'));
-    await user.click(screen.getByRole('button', { name: 'Pin: Lunch at one' }));
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('old one couldn’t be cleared'));
-
+    expect(within(screen.getByRole('heading', { name: 'Pinned' }).parentElement!).getByText('Finals at four')).toBeInTheDocument();
     vi.mocked(api.post).mockResolvedValueOnce({ data: { nope: true } });
-    await user.click(screen.getByRole('button', { name: 'Pin: Finals at four' }));
+    await user.click(screen.getByRole('button', { name: 'Pin: Lunch at one' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t pin that announcement'));
   });
 
-  it('unpins, and says when that fails', async () => {
+  it('unpins through the pin endpoint and preserves the announcement', async () => {
     const user = userEvent.setup();
     mount();
-    vi.mocked(api.delete).mockRejectedValueOnce(new Error('offline'));
+    vi.mocked(api.post).mockRejectedValueOnce(new Error('offline'));
     await user.click(await screen.findByRole('button', { name: 'Unpin' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t unpin that');
+    vi.mocked(api.post).mockResolvedValueOnce({ data: chat(3, { body: 'Finals at four', tag: null }) });
     await user.click(screen.getByRole('button', { name: 'Unpin' }));
-    await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/competitions/1/chat/3'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/1/chat/3/pin', {}));
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Pinned' })).toBeNull());
     expect(screen.getByRole('heading', { name: 'Sent' })).toBeInTheDocument();
+    expect(api.delete).not.toHaveBeenCalled();
   });
 
   it('offers to try again when the messages will not load', async () => {

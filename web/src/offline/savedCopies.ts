@@ -31,9 +31,10 @@ function writeIndex(keys: string[]) {
 
 /** Account-only payment details must never survive in a shared public copy. */
 function publicCopyData<T>(key: string, data: T): T {
-  if (!/^competition\.\d+$/.test(key) || data == null || typeof data !== 'object' || !('paymentDestination' in data)) return data;
+  if (!/^competition\.\d+$/.test(key) || data == null || typeof data !== 'object' || !('paymentDestination' in data || 'paymentLinkUrl' in data)) return data;
   const copy = { ...data } as Record<string, unknown>;
   delete copy.paymentDestination;
+  delete copy.paymentLinkUrl;
   return copy as T;
 }
 

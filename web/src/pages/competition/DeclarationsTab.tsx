@@ -10,7 +10,7 @@ import type { DeclarationForm, SectionSignup, Team } from '../../types';
 import { downloadCsv, safeFilename } from '../../lib/csv';
 import { decFormsCsv } from '../../lib/decFormCsv';
 import type { LockInfo } from '../../lib/decFormDeadline';
-import { decDraftKey, decFormStat, parseDraft, ridersRequired, type DecFormDraft } from '../../lib/decForm';
+import { readDecDraft, decFormStat, ridersRequired } from '../../lib/decForm';
 import { DecFormEditor } from './decform/DecFormEditor';
 import { DecFormList } from './DecFormList';
 import { confirmDialog } from '../../components/ConfirmDialog';
@@ -25,11 +25,12 @@ import { parseConfigResponse, STANDARD_CONFIG, type DecFormConfig } from '../../
 import '../../components/sitePages.css';
 import '../../components/eventPages.css';
 
-function readDraft(competitionId: number, teamId: number, required: number): DecFormDraft | null {
-  try { return parseDraft(localStorage.getItem(decDraftKey(competitionId, teamId)), required); } catch { return null; }
+export function DeclarationsTab() {
+  const { user } = useAuth();
+  return <DeclarationsSession key={user ? `${user.id}:${user.roles.join(',')}` : 'signed-out'} />;
 }
 
-export function DeclarationsTab() {
+function DeclarationsSession() {
   const { t, locale } = useLanguage();
   usePageWidth('wide');
   const desktop = useIsDesktop();
@@ -136,15 +137,15 @@ export function DeclarationsTab() {
   const wanted = Number(params.get('team'));
   const requiredFor = (t: Team) => ridersRequired(competition.sections.find((s) => s.id === t.competitionSectionId)?.format);
   const withDraft = useMemo(
-    () => myTeams.find((t) => readDraft(competition.id, t.id, ridersRequired(competition.sections.find((s) => s.id === t.competitionSectionId)?.format)) !== null),
-    [competition.id, competition.sections, myTeams],
+    () => myTeams.find((t) => readDecDraft(competition.id, t.id, ridersRequired(competition.sections.find((s) => s.id === t.competitionSectionId)?.format), user?.id) !== null),
+    [competition.id, competition.sections, myTeams, user?.id],
   );
   const automatic = myTeams.find((t) => t.id === wanted) ?? withDraft ?? (myTeams.length === 1 ? myTeams[0] : undefined);
   const team = myTeams.find((t) => t.id === chosen) ?? automatic;
   const existing = team ? forms?.find((f) => f.teamId === team.id) : undefined;
   // Read when a team is opened, so unfinished work comes back but a form that has since been sent doesn't.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the draft is only looked up when the team changes
-  const draft = useMemo(() => (team ? readDraft(competition.id, team.id, requiredFor(team)) : null), [competition.id, team?.id]);
+  const draft = useMemo(() => (team ? readDecDraft(competition.id, team.id, requiredFor(team), user?.id) : null), [competition.id, team?.id, user?.id]);
   const priorPhone = forms?.find((f) => f.submittedByUserId === user?.id && f.submittedByPhone)?.submittedByPhone ?? undefined;
 
   async function remove(id: number) {

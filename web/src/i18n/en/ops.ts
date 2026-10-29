@@ -368,6 +368,7 @@ export const ops = {
   'ops.tt.name': 'Name',
   'ops.tt.start': 'Start',
   'ops.tt.followOn': 'Follow on from the one before',
+  'ops.tt.lockedNote': 'This one has started or has scores, so its time can’t be changed here. “Move everything” still moves what is left.',
   'ops.tt.length': 'Length',
   'ops.tt.timePerHeat': 'Time per heat',
   'ops.tt.minLabel': '{label} (min)',

@@ -244,6 +244,7 @@ function EventShopContent() {
         </section>
       ))}
       {hasBasket && <DemoPaymentNotice what="order" className="mt-3" />}
+      <p className="sp-note">Your order and payment are directly with {competition.organiserName || `the organiser of ${competition.name}`} or the seller named on the item. <Link to="/refunds" className="underline">Cancellation and refund information</Link>.</p>
       {hasBasket && (user ? (
         <button type="button" ref={(node) => { orderButton.current = node; }} className="ev-bar" disabled={busy} onClick={() => void checkout()}>{busy ? t('site.shop.placing') : orderLabel}</button>
       ) : (

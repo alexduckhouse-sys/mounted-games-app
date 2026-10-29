@@ -162,11 +162,15 @@
 .ops-grip { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 44px; margin: 0 -6px 0 -10px; border: 0; border-radius: 10px; background: transparent; color: rgb(var(--mg-faint)); cursor: grab; touch-action: none; }
 .ops-grip { position: relative; }
 .ops-grip::after { content: ''; position: absolute; inset: 0 -2px; }
-.ops-grip:hover:not(:disabled), .ops-grip:focus-visible { background: rgb(var(--mg-tint) / .7); color: rgb(var(--mg-heading)); }
-.ops-grip:disabled { opacity: .4; cursor: default; }
+.ops-grip:hover:not([aria-disabled="true"]), .ops-grip:focus-visible { background: rgb(var(--mg-tint) / .7); color: rgb(var(--mg-heading)); }
+.ops-grip[aria-disabled="true"] { opacity: .4; cursor: default; }
 .ops-grip-gap { flex: none; width: 40px; margin: 0 -6px 0 -10px; }
 .ops-tt-row[data-lifted="true"] { position: relative; z-index: 2; box-shadow: var(--mg-shadow-sm); background: rgb(var(--mg-tint)); }
 .ops-tt-row[data-lifted="true"] .ops-grip { cursor: grabbing; }
+/* While a block is lifted the others slide out of its way; the edit panel and clash list open gently. */
+.ops-tt:has([data-lifted="true"]) [data-tt-row]:not([data-lifted="true"]) { transition: transform .2s var(--mg-ease-out); }
+.ops-tt-edit, .ops-clashes { animation: rf-reveal 200ms var(--mg-ease-out); }
+@media (prefers-reduced-motion: reduce) { .ops-tt [data-tt-row] { transition: none !important; } .ops-tt-edit, .ops-clashes { animation: none; } }
 .ops-addrow { margin: 0; border-radius: 0; border-top: 1px solid rgb(var(--mg-rule-soft)); background: transparent; min-height: 52px; }
 /* Entries and dec forms */
 .ops-entries .rf-sec { margin-top: 20px; border-bottom: 0; font-size: 22px; }
@@ -176,7 +180,9 @@
 .ops-flip { transform: rotate(180deg); }
 .ops-entry-body { display: flex; flex-direction: column; gap: 10px; padding: 8px 16px 14px; background: rgb(var(--mg-subtle)); border-top: 1px solid rgb(var(--mg-rule-soft)); }
 .ops-line { display: flex; align-items: center; gap: 12px; min-height: 44px; }
-.ops-line-end { justify-content: flex-end; }
+.ops-line-end { justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+/* Withdrawn and no-show teams fold away at the end of their section. */
+.ops-out-fold { min-height: 48px; }
 .ops-form { display: flex; flex-direction: column; gap: 8px; }
 .ops-riders { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .ops-riders li { display: flex; align-items: center; gap: 8px; min-height: 44px; }

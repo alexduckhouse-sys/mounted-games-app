@@ -1,3 +1,5 @@
+using MountedGames.Api.Security;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Data;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
@@ -270,6 +272,8 @@ public class CommerceController(AppDbContext db) : ControllerBase
     /// <summary>The events whose shop has at least one item on sale, so the shop page lists only those.</summary>
     [HttpGet("competitions/with-items")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<IReadOnlyList<int>>> CompetitionsWithItems(CancellationToken cancellationToken)
     {
         var ids = await db.Set<CompetitionListing>()
@@ -283,6 +287,8 @@ public class CommerceController(AppDbContext db) : ControllerBase
 
     [HttpGet("competitions/{competitionId:int}/listings")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<IReadOnlyList<PublicCompetitionListingDto>>> PublicListings(
         int competitionId,
         CancellationToken cancellationToken)
@@ -362,6 +368,8 @@ public class CommerceController(AppDbContext db) : ControllerBase
 
     [HttpGet("competitions/{competitionId:int}/settings")]
     [AllowAnonymous]
+    [PublicRead]
+    [EnableRateLimiting("public-read")]
     public async Task<ActionResult<EventCommerceSettingsDto>> Settings(
         int competitionId,
         CancellationToken cancellationToken)

@@ -37,7 +37,7 @@ function Group({ title, items, tone }: { title: string; items: string[]; tone: '
   const colour = tone === 'in' ? '--mg-ok' : tone === 'out' ? '--mg-elim' : '--mg-muted';
   return (
     <section className="rounded-[10px] bg-[rgb(var(--mg-subtle))] p-3.5" style={{ borderLeft: `6px solid rgb(var(${colour}))` }} aria-label={title}>
-      <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: `rgb(var(${colour}))` }}>{title}</h3>
+      <h3 className="text-sm font-bold" style={{ color: `rgb(var(${colour}))` }}>{title}</h3>
       {items.length === 0
         ? <p className="mt-1 text-lg text-[rgb(var(--mg-muted))]">{t('desk.commentary.nothing')}</p>
         : <ul className="mt-1 space-y-1.5">{items.map((item) => <li key={item} className="text-xl font-semibold leading-snug text-[rgb(var(--mg-ink))]">{item}</li>)}</ul>}
