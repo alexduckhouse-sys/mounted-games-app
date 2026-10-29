@@ -1,26 +1,23 @@
 import { HeatCalledBadge } from './reliability/CallUpStrip';
 import { useHeatCalls, type HeatCall } from './reliability/heatCalls';
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ChevronRight, Clock, Star, X } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
-import { api } from '../../api';
-import { Notice } from '../../components/Notice';
 import { Sheet } from '../../components/Sheet';
 import { useOptionalTicker } from '../../components/TickerContext';
 import { usePageWidth } from '../../components/pageWidthState';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { SponsorStrip } from '../../components/SponsorStrip';
 import { useFavourites } from '../../hooks/useFavourites';
-import { computeTimings, formatDelayDuration, formatShiftDelta, formatTime, parsePausedAtMs, predictMinutesPerRace } from '../../lib/time';
+import { computeTimings, formatDelayDuration, formatShiftDelta, formatTime, parsePausedAtMs } from '../../lib/time';
 import { displaySectionName } from '../../lib/section';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
 import { hatbandColour } from '../../lib/hatbands';
 import { arenaDelays, isPlannedFinal, lastFinishedRow, sessionOrdinals, TIMETABLE_COLOURS, timetableRows, type TimetableRow, type TimetableStatus } from '../../lib/timetableRows';
 import { HeatRing } from '../../components/HeatRing';
-import { DelaySheet } from './DelaySheet';
 import { useLanguage, useT } from '../../i18n/LanguageContext';
 import type { Translate } from '../../i18n/translate';
 import './timetable.css';
@@ -64,6 +61,7 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
   const { competition, reload, updatedAt } = useCompetition();
   const { calls } = useHeatCalls(competition.id);
   const { canOrganise } = useAuth();
+  const navigate = useNavigate();
   const favHook = useFavourites() as {
     favourites?: { competitionId: number; teamId: number }[];
     isTeamFav?: (compId: number, teamId: number) => boolean;
@@ -96,43 +94,8 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
   const [arena, setArena] = useState(() => { try { return localStorage.getItem(arenaKey) ?? ''; } catch { return ''; } });
   const [sectionFilter, setSectionFilter] = useState('');
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [delayOpen, setDelayOpen] = useState(false);
   // Which way the list slides in after the day changes, and a counter that restarts the slide.
   const [dayMove, setDayMove] = useState<{ count: number; dir: 'left' | 'right' }>({ count: 0, dir: 'right' });
-  const [shifting, setShifting] = useState(false);
-  const [actionError, setActionError] = useState<{ text: string; retry?: () => void } | null>(null);
-  const pace = useMemo(() => predictMinutesPerRace(competition.sessions ?? []), [competition.sessions]);
-
-  async function shiftTimes(deltaMinutes: number) {
-    setShifting(true);
-    setActionError(null);
-    try {
-      await api.post(`/competitions/${competition.id}/sessions/shift-times`, {
-        deltaMinutes,
-        arenaName: selectedArena || undefined,
-      });
-      reload();
-      return true;
-    } catch {
-      setActionError({ text: t('competition.timetable.shiftFailed'), retry: () => void shiftTimes(deltaMinutes) });
-      return false;
-    } finally {
-      setShifting(false);
-    }
-  }
-  // Pause has gone; this only sets going again a timetable that was paused before.
-  async function resume() {
-    setShifting(true);
-    setActionError(null);
-    try {
-      await api.post(`/competitions/${competition.id}/sessions/resume`, { arenaName: selectedArena || undefined });
-      reload();
-    } catch {
-      setActionError({ text: t('competition.timetable.continueFailed'), retry: () => void resume() });
-    } finally {
-      setShifting(false);
-    }
-  }
   function chooseArena(name: string) {
     setArena(name);
     try { if (name) localStorage.setItem(arenaKey, name); else localStorage.removeItem(arenaKey); } catch { /* storage blocked */ }
@@ -154,11 +117,6 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
   const arenas = [...new Set(rows.map((row) => row.session.arenaName?.trim()).filter((name): name is string => !!name))];
   const showArenaSelect = sectionId == null && arenas.length > 1;
   const selectedArena = showArenaSelect && arenas.includes(arena) ? arena : '';
-  const isPaused = (competition.sessions ?? []).some(
-    (s) => s.status !== 2
-      && (!selectedArena || s.arenaName?.trim() === selectedArena)
-      && parsePausedAtMs(s.notes) != null,
-  );
   const sections = useMemo(
     () => (competition.sections ?? []).map((s) => ({
       id: s.id,
@@ -240,9 +198,9 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
     subtitle: updated ? `${competition.name} · ${updated}` : competition.name,
     onRefresh: reload,
     refreshLabel: t('competition.timetable.refresh'),
-    onEdit: showQualifiers ? () => setDelayOpen(true) : undefined,
+    // The pencil goes to the organiser's Timetable & draw page, where times move, the order changes and a paused timetable continues.
+    onEdit: showQualifiers ? () => navigate(`/competitions/${competition.id}/timetable-and-draw`) : undefined,
     editLabel: t('competition.timetable.changeTiming'),
-    editing: delayOpen,
   });
   const ticker = useOptionalTicker();
   const setDockAction = ticker?.setDockAction;
@@ -295,26 +253,12 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
           {late.arena ? t('competition.timetable.lateArena', { arena: late.arena, delay: delayText(late.minutes, t) }) : t('competition.timetable.late', { delay: delayText(late.minutes, t) })}
         </p>
       ))}
-      {showQualifiers && delayOpen && (
-        <DelaySheet
-          arena={selectedArena}
-          lateMinutes={Math.max(0, ...lateArenas.filter((late) => !selectedArena || late.arena === selectedArena).map((late) => late.minutes))}
-          paused={isPaused}
-          busy={shifting}
-          pace={pace.avgMinutesPerRace != null && (pace.sampleHeats >= 2 || pace.sampleRaces >= 5) ? pace.avgMinutesPerRace : null}
-          rearrangeTo={`/competitions/${competition.id}/timetable-and-draw`}
-          onShift={shiftTimes}
-          onContinue={() => void resume()}
-          onClose={() => setDelayOpen(false)}
-        />
-      )}
       {(selectedArena || sectionLabel) && (
         <div className="tt-chips">
           {selectedArena && <button type="button" className="tt-chip" aria-label={t('competition.timetable.removeFilter', { name: selectedArena })} onClick={() => chooseArena('')}>{selectedArena}<X aria-hidden="true" size={15} strokeWidth={2.2} /></button>}
           {sectionLabel && <button type="button" className="tt-chip" aria-label={t('competition.timetable.removeFilter', { name: sectionLabel })} onClick={() => setSectionFilter('')}>{sectionLabel}<X aria-hidden="true" size={15} strokeWidth={2.2} /></button>}
         </div>
       )}
-      {actionError && <Notice className="mx-4 my-2" actionLabel={actionError.retry ? t('common.tryAgain') : undefined} onAction={actionError.retry}>{actionError.text}</Notice>}
       <div className={`tt-body${swapClass}`}>
         {lead}
         {visibleRows.some(isProvisionalRow) && (

@@ -1,5 +1,7 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render as renderPlain, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MotionConfig } from 'framer-motion';
+import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import type { RaceTemplate } from '../types';
@@ -16,6 +18,9 @@ const bending: RaceTemplate = {
   diagramJson: JSON.stringify([{ t: 'pole', x: 20 }, { t: 'pole', x: 40 }, { t: 'item', kind: 'mug' }]),
 };
 const bare: RaceTemplate = { id: 2, name: 'Sack', isBuiltIn: false };
+
+// Most tests want the sheet gone the moment it is dismissed; the leave animation has its own test.
+const render = (ui: ReactElement) => renderPlain(<MotionConfig reducedMotion="always">{ui}</MotionConfig>);
 
 beforeEach(() => {
   resetRaceTemplates();
@@ -51,6 +56,19 @@ describe('RaceRulesButton', () => {
     await screen.findAllByText('Weave through the poles.');
     await userEvent.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() => expect(button).toHaveFocus());
+  });
+
+  it('fades the dim and slides the sheet away before it unmounts, whichever way it is dismissed', async () => {
+    renderPlain(<MotionConfig reducedMotion="never"><RaceRulesButton raceName="Bending" /></MotionConfig>);
+    const button = screen.getByRole('button', { name: 'Rules for Bending' });
+    await userEvent.click(button);
+    const dialog = await screen.findByRole('dialog');
+    const overlay = dialog.parentElement!;
+    await userEvent.keyboard('{Escape}');
+    expect(overlay).toHaveClass('is-closing');
+    expect(dialog).toHaveClass('is-closing');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     await waitFor(() => expect(button).toHaveFocus());
   });
 

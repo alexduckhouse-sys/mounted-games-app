@@ -1,9 +1,8 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { LanguageProvider } from '../../i18n/LanguageContext';
 import { setActiveLang } from '../../i18n/translate';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { api } from '../../api';
 import { CompactPageBarProvider, useCompactPageBarState } from '../../components/CompactPageBarContext';
 import { TickerProvider, useTicker } from '../../components/TickerContext';
 import { FAVOURITES_KEY } from '../../lib/favourites';
@@ -46,8 +45,11 @@ function DockProbe() {
   const { dockAction } = useTicker();
   return dockAction ? <button type="button" onClick={dockAction.onClick}>{`${dockAction.label} (${dockAction.count})`}</button> : null;
 }
+function LocationProbe() {
+  return <output data-testid="path">{useLocation().pathname}</output>;
+}
 function renderWithDock(ui = <TimetableBoard />) {
-  return render(<MemoryRouter><CompactPageBarProvider><TickerProvider><HeaderProbe /><DockProbe />{ui}</TickerProvider></CompactPageBarProvider></MemoryRouter>);
+  return render(<MemoryRouter><CompactPageBarProvider><TickerProvider><HeaderProbe /><DockProbe /><LocationProbe />{ui}</TickerProvider></CompactPageBarProvider></MemoryRouter>);
 }
 const filterButton = () => screen.queryByRole('button', { name: /^Day, arena and age group/ });
 const openFilters = () => { fireEvent.click(filterButton()!); return screen.getByRole('dialog', { name: 'Day, arena and age group' }); };
@@ -541,8 +543,7 @@ it('links heat rows directly to the heat without a lanes dropdown and shows a si
   expect(within(sheet).getByRole('group', { name: 'Arena' })).toBeInTheDocument();
 });
 
-it('formats delays of an hour or more as hours and minutes, and lets organisers move the times by typed minutes from the timing sheet behind the pencil', async () => {
-  const postSpy = vi.spyOn(api, 'post').mockResolvedValue({ data: [] } as never);
+it('formats delays of an hour or more as hours and minutes, and sends organisers from the pencil to the Timetable and draw page', () => {
   auth.organise = true;
   const completedRaces = [1, 2, 3, 4, 5].map((id) => race(id, { isComplete: true, startIsExplicit: true, startedAt: `${day}T09:${String((id - 1) * 4).padStart(2, '0')}:00`, finishedAt: `${day}T09:${String(id * 4).padStart(2, '0')}:00` }));
   setCompetition({
@@ -582,67 +583,21 @@ it('formats delays of an hour or more as hours and minutes, and lets organisers 
     ],
   });
 
-  const { unmount } = renderWithDock();
+  renderWithDock();
   const lateRow = screen.getByRole('link', { name: /Very Late Heat/ });
   expect(lateRow.querySelector('.tt-planned')!.textContent).toBe('+1h 34m');
   expect(screen.getByText('Main Arena is running 1h 34m late')).toHaveClass('tt-late-line');
 
-  // The timing sheet stays out of the way until the pencil in the header opens it.
+  // The pencil goes straight to the full page (no pop-up first), where the times are moved.
   expect(screen.queryByRole('dialog')).toBeNull();
-  const pencil = screen.getByRole('button', { name: 'Change the timing' });
-  fireEvent.click(pencil);
-  expect(pencil).toHaveAttribute('aria-pressed', 'true');
-  const sheet = screen.getByRole('dialog', { name: 'Timing' });
-  expect(sheet).toHaveTextContent('Running 1h 34m late');
-  expect(within(sheet).getByText('Races are taking about 4.0 minutes each.')).toBeInTheDocument();
-  // There is no Pause any more, and nothing is paused to continue.
-  expect(within(sheet).queryByRole('switch')).toBeNull();
-  expect(within(sheet).queryByRole('button', { name: 'Continue the timetable' })).toBeNull();
-
-  fireEvent.change(within(sheet).getByRole('spinbutton', { name: 'Move times by' }), { target: { value: '95' } });
-  fireEvent.click(within(sheet).getByRole('button', { name: 'Shift' }));
-  await waitFor(() => expect(postSpy).toHaveBeenCalledWith('/competitions/1/sessions/shift-times', { deltaMinutes: 95, arenaName: undefined }));
-  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-  expect(pencil).toHaveAttribute('aria-pressed', 'false');
-  unmount();
-
-  // A timetable paused before Pause went can still be set going again from the sheet.
-  setCompetition({
-    sessions: [
-      session(2, {
-        status: 0,
-        orderIndex: 2,
-        arenaName: 'Main Arena',
-        scheduledStart: `${day}T10:00:00`,
-        notes: '[paused:1700000000000]',
-        heats: [heat(21, { sessionId: 2, orderIndex: 0, label: 'Paused Heat' })],
-      }),
-    ],
-  });
-  renderWithDock();
   fireEvent.click(screen.getByRole('button', { name: 'Change the timing' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Continue the timetable' }));
-  await waitFor(() => expect(postSpy).toHaveBeenCalledWith('/competitions/1/sessions/resume', { arenaName: undefined }));
-  postSpy.mockRestore();
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(screen.getByTestId('path')).toHaveTextContent('/competitions/1/timetable-and-draw');
 });
 
 it('gives everyone else no pencil', () => {
   renderWithDock();
   expect(screen.queryByRole('button', { name: 'Change the timing' })).toBeNull();
-});
-
-it('moves only the arena being shown', async () => {
-  auth.organise = true;
-  localStorage.setItem('mg.tt.arena.1', 'Arena Two');
-  const post = vi.spyOn(api, 'post').mockResolvedValue({ data: [] } as never);
-  renderWithDock();
-  fireEvent.click(screen.getByRole('button', { name: 'Change the timing' }));
-  const sheet = screen.getByRole('dialog', { name: 'Arena Two timing' });
-  expect(sheet).toHaveTextContent('Running on time');
-  fireEvent.change(within(sheet).getByRole('spinbutton', { name: 'Move times by' }), { target: { value: '-10' } });
-  fireEvent.click(within(sheet).getByRole('button', { name: 'Shift' }));
-  await waitFor(() => expect(post).toHaveBeenCalledWith('/competitions/1/sessions/shift-times', { deltaMinutes: -10, arenaName: 'Arena Two' }));
-  post.mockRestore();
 });
 
 it('updates the paused timetable as time passes without requiring a competition reload', () => {
@@ -659,32 +614,6 @@ it('updates the paused timetable as time passes without requiring a competition 
   expect(reload).not.toHaveBeenCalled();
   view.unmount();
   expect(vi.getTimerCount()).toBe(0);
-});
-
-it('reports continue and shift failures, keeping the sheet open with the minutes typed', async () => {
-  auth.organise = true;
-  setCompetition({ sessions: [session(2, {
-    arenaName: 'Main Arena', scheduledStart: `${day}T10:00:00`, notes: '[paused:1700000000000]',
-    heats: [heat(21, { sessionId: 2, label: 'Paused Heat' })],
-  })] });
-  const post = vi.spyOn(api, 'post').mockRejectedValue(new Error('offline'));
-  renderWithDock();
-  fireEvent.click(screen.getByRole('button', { name: 'Change the timing' }));
-  const sheet = screen.getByRole('dialog', { name: 'Timing' });
-  fireEvent.click(within(sheet).getByRole('button', { name: 'Continue the timetable' }));
-  await waitFor(() => expect(post).toHaveBeenCalledWith('/competitions/1/sessions/resume', { arenaName: undefined }));
-  expect(await screen.findByText('Couldn’t continue the timetable. Check your signal and try again.')).toBeInTheDocument();
-  const input = within(sheet).getByRole('spinbutton', { name: 'Move times by' });
-  fireEvent.change(input, { target: { value: '12' } });
-  fireEvent.click(within(sheet).getByRole('button', { name: 'Shift' }));
-  expect(await within(sheet).findByRole('alert')).toHaveTextContent('Couldn’t move the times');
-  expect(screen.getByText('Couldn’t shift the timetable. Check your signal and try again.')).toBeInTheDocument();
-  expect(input).toHaveValue(12);
-
-  // "Try again" on the page's notice sends the same move again.
-  fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-  await waitFor(() => expect(post).toHaveBeenCalledTimes(3));
-  post.mockRestore();
 });
 
 it('warms a row once when a delay moves its start time while you watch, but not on first draw', () => {

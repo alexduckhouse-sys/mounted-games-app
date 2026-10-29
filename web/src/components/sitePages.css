@@ -11,13 +11,17 @@ main:has(.sp-top) { padding-top: 0; }
 .sp-card > :last-child, .sp-card > :last-child > :last-child { border-bottom-left-radius: 11px; border-bottom-right-radius: 11px; }
 /* A dropdown row's button takes whatever corner its wrapper got, so it still rounds when the row sits inside one more wrapper (Settings' Lite mode row). */
 .sp-dropdown > .sp-row { border-radius: inherit; }
+/* The rule above also rounds whatever sits first or last inside a card's first or last row, so a round avatar or a pill in a header row
+   would be squared off. These two keep their own shape (the same workaround as .cs-ava in clubShop.css). */
+.sp-card .sp-row > .sp-ava { border-radius: 50%; }
+.sp-card .sp-row > .sp-pill { border-radius: 999px; }
 .sp-gap { margin-top: 12px; }
 
 /* Rows */
 .sp-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 10px 14px 10px 16px; box-sizing: border-box; border: 0; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)) !important; text-align: left; text-decoration: none !important; font: inherit; }
 a.sp-row, button.sp-row { cursor: pointer; }
 button.sp-row:disabled { cursor: default; background: rgb(var(--mg-surface)); }
-a.sp-row:hover, button.sp-row:hover { background: rgb(var(--mg-subtle)); }
+@media (hover: hover) { a.sp-row:hover, button.sp-row:hover { background: rgb(var(--mg-subtle)); } }
 .sp-row:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
 .sp-grow { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .sp-t1 { font: 600 16px/1.25 var(--mg-font); color: rgb(var(--mg-ink)); overflow-wrap: anywhere; }
@@ -45,18 +49,18 @@ a.sp-row:hover, button.sp-row:hover { background: rgb(var(--mg-subtle)); }
 
 /* A full-width grey bar for adding something: "+ Choose a competition" */
 .sp-add { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 52px; border: 0; border-radius: 12px; background: rgb(var(--mg-tint)); color: rgb(var(--mg-heading)) !important; font: 700 16px/1 var(--mg-font); text-decoration: none !important; cursor: pointer; }
-.sp-add:hover { background: rgb(var(--mg-tint) / .75); }
+@media (hover: hover) { .sp-add:hover { background: rgb(var(--mg-tint) / .75); } }
 .sp-add:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
 
 /* Pills: filled for the main action, outlined for the rest */
 .sp-pill { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 18px; border: 1.5px solid rgb(var(--mg-button)); border-radius: 999px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)) !important; font: 700 15px/1 var(--mg-font); text-decoration: none !important; white-space: nowrap; cursor: pointer; }
-.sp-pill:hover { background: rgb(var(--mg-subtle)); }
+@media (hover: hover) { .sp-pill:hover { background: rgb(var(--mg-subtle)); } }
 .sp-pill-fill { background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)) !important; }
-.sp-pill-fill:hover { background: rgb(var(--mg-button)); filter: brightness(1.12); }
+@media (hover: hover) { .sp-pill-fill:hover { background: rgb(var(--mg-button)); filter: brightness(1.12); } }
 .sp-pill:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
 .sp-acts { display: flex; flex-wrap: wrap; gap: 8px; }
 .sp-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; border: 0; background: transparent; color: rgb(var(--mg-heading)) !important; font: 700 15px/1 var(--mg-font); text-decoration: none !important; cursor: pointer; }
-.sp-link:hover { text-decoration: underline !important; }
+@media (hover: hover) { .sp-link:hover { text-decoration: underline !important; } }
 
 /* Pages that are only a message and a button or two */
 .sp-small { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding-top: 24px; }
@@ -92,7 +96,7 @@ a.sp-row:hover, button.sp-row:hover { background: rgb(var(--mg-subtle)); }
 .sp-listings { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .sp-listing { overflow: hidden; border: 1px solid rgb(var(--mg-line)); border-radius: var(--mg-radius-card); background: rgb(var(--mg-surface)); box-shadow: var(--mg-shadow-sm); }
 .sp-listing-head { display: flex; align-items: flex-start; gap: 14px; width: 100%; padding: 14px; border: 0; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)) !important; text-align: left; cursor: pointer; }
-.sp-listing-head:hover { background: rgb(var(--mg-subtle)); }
+@media (hover: hover) { .sp-listing-head:hover { background: rgb(var(--mg-subtle)); } }
 .sp-listing-head:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
 .sp-thumb { flex: none; width: 68px; height: 68px; border-radius: 10px; background: rgb(var(--mg-tint)); color: rgb(var(--mg-faint)); display: flex; align-items: center; justify-content: center; object-fit: cover; }
 .sp-price { flex: none; font: 800 23px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
@@ -134,7 +138,12 @@ body:has(.mg-dock:not(.mg-dock-low)) .sp-sell-bar { bottom: calc(130px + env(saf
 .sp-ava { flex: none; display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 26px; background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); font: 800 19px/1 var(--mg-font-display); }
 .sp-num { flex: none; min-width: 28px; text-align: center; font: 700 20px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
 .sp-num[data-tone="warn"] { color: rgb(var(--mg-late-ink)); }
-.sp-pill-sm { min-height: 36px; padding: 0 14px; font-size: 14px; }
+.sp-pill-sm { position: relative; min-height: 36px; padding: 0 14px; font-size: 14px; }
+/* The small pill keeps its looks but still has a 44px tap area. */
+.sp-pill-sm::after { content: ''; position: absolute; inset: -4px -4px; }
+/* Sign out: a full-width pill at the very end of the Me page, apart from the lists. */
+.sp-signout-wrap { margin-top: 20px; }
+.kit-pill.sp-signout { width: 100%; border-color: rgb(var(--mg-elim)); color: rgb(var(--mg-elim)) !important; }
 .sp-pill-tall { min-height: 44px; }
 .sp-red { min-height: 36px; padding: 0 6px; border: 0; background: transparent; color: rgb(var(--mg-elim)); font: 700 14px/1 var(--mg-font); text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 4px; cursor: pointer; }
 .sp-red-tall { min-height: 44px; }

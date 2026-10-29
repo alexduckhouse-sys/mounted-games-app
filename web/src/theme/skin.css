@@ -192,7 +192,7 @@ body, body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-i
   font: 600 14px/1 var(--mg-font); text-decoration: none !important; cursor: pointer;
   transition: background-color var(--mg-dur-fast) var(--mg-ease-out), border-color var(--mg-dur-fast) var(--mg-ease-out), color var(--mg-dur-fast) var(--mg-ease-out), scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1);
 }
-.mg-nav-btn:hover { background: rgb(255 255 255 / .08); }
+@media (hover: hover) { .mg-nav-btn:hover { background: rgb(255 255 255 / .08); } }
 .mg-nav-btn[aria-pressed="true"] { background: #fff; color: rgb(var(--mg-header)); }
 .mg-header :focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .mg-strip-bar { display: flex; align-items: stretch; overflow: hidden; border-radius: 14px; background: rgb(var(--mg-header-deep)); color: #fff; box-shadow: 0 6px 18px rgb(15 42 74 / .3); }
@@ -229,7 +229,7 @@ body, body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-i
   flex-shrink: 0; width: 48px; display: flex; align-items: center; justify-content: center; border-left: 1px solid rgb(255 255 255 / .14);
   background: transparent; color: #fff; cursor: pointer;
 }
-.mg-strip-next:hover { background: rgb(255 255 255 / .08); }
+@media (hover: hover) { .mg-strip-next:hover { background: rgb(255 255 255 / .08); } }
 .mg-strip-bar :focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
 /* The organiser's weather line sits under the ticker: one quiet line, no motion of its own beyond the ticker's entrance. */
 .mg-weather-bar { background: rgb(var(--mg-weather-bg)); color: rgb(var(--mg-weather-ink)); border-top: 1px solid rgb(var(--mg-rule)); }
@@ -254,7 +254,7 @@ button.mg-weather-line { cursor: pointer; }
   display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; border-bottom: 1px solid rgb(255 255 255 / .1);
   color: #fff !important; font: 500 14px/1.35 var(--mg-font); text-decoration: none !important;
 }
-.mg-strip-item:hover { background: rgb(255 255 255 / .06); }
+@media (hover: hover) { .mg-strip-item:hover { background: rgb(255 255 255 / .06); } }
 .mg-strip-item .mg-badge { margin-top: -1px; }
 .mg-tabs {
   position: fixed; inset: auto 0 0 0; z-index: 30; background: rgb(var(--mg-surface)); border-top: 1px solid rgb(var(--mg-rule));
@@ -336,15 +336,15 @@ button.mg-weather-line { cursor: pointer; }
 .mg-nav-btn:active:not(:disabled), .mg-tint-link:active, .sc-tool-btn:active:not(:disabled), .mg-stream-control:active:not(:disabled) { --mg-press-t: 90ms; scale: .96; }
 .mg-small-btn, .mg-sell-btn, .sc-tool-btn, .mg-stream-control { transition: scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1); }
 .mg-btn-primary { background: rgb(var(--mg-button)); border-color: rgb(var(--mg-button)); color: #fff !important; }
-.mg-btn-primary:hover:not(:disabled) { filter: brightness(1.12); }
+@media (hover: hover) { .mg-btn-primary:hover:not(:disabled) { filter: brightness(1.12); } }
 .mg-btn-secondary { background: rgb(var(--mg-surface)); border-color: rgb(var(--mg-control)); color: rgb(var(--mg-heading)) !important; }
-.mg-btn-secondary:hover:not(:disabled) { border-color: rgb(var(--mg-heading)); }
+@media (hover: hover) { .mg-btn-secondary:hover:not(:disabled) { border-color: rgb(var(--mg-heading)); } }
 .mg-icon-btn {
   flex-shrink: 0; width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px;
   border: 1px solid rgb(var(--mg-control)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); cursor: pointer;
   transition: background-color var(--mg-dur-fast) var(--mg-ease-out), border-color var(--mg-dur-fast) var(--mg-ease-out), color var(--mg-dur-fast) var(--mg-ease-out), scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1);
 }
-.mg-icon-btn:hover:not(:disabled) { border-color: rgb(var(--mg-heading)); }
+@media (hover: hover) { .mg-icon-btn:hover:not(:disabled) { border-color: rgb(var(--mg-heading)); } }
 .mg-icon-btn:disabled { opacity: .5; cursor: not-allowed; }
 .mg-btn:focus-visible, .mg-icon-btn:focus-visible, .mg-chip:focus-visible, .mg-row:focus-visible, .mg-tint-link:focus-visible, .mg-text-link:focus-visible {
   outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px;
@@ -377,7 +377,7 @@ button.mg-weather-line { cursor: pointer; }
 .mg-field input::-webkit-caps-lock-indicator { display: none !important; }
 .mg-field input::-webkit-credentials-auto-fill-button { visibility: hidden; pointer-events: none; position: absolute; right: 0; }
 .mg-eye { flex: none; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: 0 -8px 0 0; border: 0; border-radius: 8px; background: transparent; color: rgb(var(--mg-muted)); cursor: pointer; }
-.mg-eye:hover { color: rgb(var(--mg-ink)); }
+@media (hover: hover) { .mg-eye:hover { color: rgb(var(--mg-ink)); } }
 .mg-eye:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
 /* A box that is pre-filled and locked (the invited email) reads as such, like .rf-fld input[readonly]. */
 .mg-field:has(input[readonly]), .mg-field[data-readonly="true"] { background: rgb(var(--mg-subtle)); color: rgb(var(--mg-muted)); }
@@ -415,7 +415,7 @@ button.mg-weather-line { cursor: pointer; }
   background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)) !important; text-align: left; text-decoration: none !important;
   transition: background-color var(--mg-dur-fast) var(--mg-ease-out);
 }
-a.mg-row:hover, button.mg-row:hover { background: rgb(var(--mg-subtle)); }
+@media (hover: hover) { a.mg-row:hover, button.mg-row:hover { background: rgb(var(--mg-subtle)); } }
 a.mg-row:active, button.mg-row:active { background: rgb(var(--mg-tint) / .65); }
 .mg-chips { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
 .mg-chips::-webkit-scrollbar { display: none; }
@@ -461,7 +461,7 @@ a.mg-row:active, button.mg-row:active { background: rgb(var(--mg-tint) / .65); }
 .mg-lines { overflow: hidden; border: 1px solid rgb(var(--mg-line)); border-radius: var(--mg-radius-card); background: rgb(var(--mg-surface)); box-shadow: var(--mg-shadow-sm); }
 .mg-lines > * + * { border-top: 1px solid rgb(var(--mg-rule-soft)); }
 .mg-line { display: grid; align-items: center; column-gap: 12px; width: 100%; min-height: 56px; padding: 6px 10px 6px 12px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)) !important; text-align: left; text-decoration: none !important; transition: background-color var(--mg-dur-fast) var(--mg-ease-out); }
-a.mg-line:hover, button.mg-line:hover { background: rgb(var(--mg-subtle)); }
+@media (hover: hover) { a.mg-line:hover, button.mg-line:hover { background: rgb(var(--mg-subtle)); } }
 a.mg-line:active, button.mg-line:active { background: rgb(var(--mg-tint) / .65); }
 .mg-line:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
 .mg-line-late { background: rgb(var(--mg-late-bg) / .35); box-shadow: inset 3px 0 0 rgb(var(--mg-late-time)); }
@@ -488,11 +488,11 @@ a.mg-line:active, button.mg-line:active { background: rgb(var(--mg-tint) / .65);
 .card, .skin .card { background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); border-radius: var(--mg-radius-card); box-shadow: var(--mg-shadow-sm); backdrop-filter: none; }
 .btn-primary, .btn-ghost, .btn-danger, .skin .btn-primary, .skin .btn-ghost, .skin .btn-danger { border-radius: 10px; box-shadow: none; font-family: var(--mg-font); }
 .btn-primary, .skin .btn-primary { background: rgb(var(--mg-button)); border: 1.5px solid rgb(var(--mg-button)); color: #fff; }
-.btn-primary:hover:not(:disabled), .skin .btn-primary:hover:not(:disabled) { background: rgb(var(--mg-button)); filter: brightness(1.12); }
+@media (hover: hover) { .btn-primary:hover:not(:disabled), .skin .btn-primary:hover:not(:disabled) { background: rgb(var(--mg-button)); filter: brightness(1.12); } }
 .btn-ghost, .skin .btn-ghost { background: rgb(var(--mg-surface)); border: 1.5px solid rgb(var(--mg-control)); color: rgb(var(--mg-heading)); }
-.btn-ghost:hover:not(:disabled), .skin .btn-ghost:hover:not(:disabled) { background: rgb(var(--mg-surface)); border-color: rgb(var(--mg-heading)); }
+@media (hover: hover) { .btn-ghost:hover:not(:disabled), .skin .btn-ghost:hover:not(:disabled) { background: rgb(var(--mg-surface)); border-color: rgb(var(--mg-heading)); } }
 .btn-danger, .skin .btn-danger { background: rgb(var(--mg-danger)); border: 1.5px solid rgb(var(--mg-danger)); color: #fff; }
-.btn-danger:hover:not(:disabled), .skin .btn-danger:hover:not(:disabled) { background: rgb(var(--mg-danger)); filter: brightness(1.1); }
+@media (hover: hover) { .btn-danger:hover:not(:disabled), .skin .btn-danger:hover:not(:disabled) { background: rgb(var(--mg-danger)); filter: brightness(1.1); } }
 .input, .skin .input { border-radius: 10px; border: 1.5px solid rgb(var(--mg-control)); background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)); font-family: var(--mg-font); }
 .input:focus, .skin .input:focus { border-color: rgb(var(--mg-heading)); --tw-ring-color: rgb(var(--mg-heading) / .35); }
 
@@ -609,7 +609,10 @@ dialog.mg-sheet[open] { animation: mg-sheet-in 280ms var(--mg-sheet-ease); }
 dialog.mg-drawer[open]::backdrop, dialog.mg-sheet[open]::backdrop { animation: mg-fade-in .5s ease-out; }
 dialog.mg-drawer.is-closing { animation: mg-drawer-out .28s ease-in forwards; }
 dialog.mg-sheet.is-closing { animation: mg-sheet-out 200ms ease-in forwards; }
-dialog.is-closing::backdrop { animation: mg-fade-out .38s ease-in-out forwards; }
+/* The closing rule names [open] too: the dialog stays open while it leaves, and the plain rule above would out-rank it. */
+dialog.is-closing::backdrop, dialog.mg-drawer.is-closing[open]::backdrop, dialog.mg-sheet.is-closing[open]::backdrop { animation: mg-fade-out .38s ease-in-out forwards; }
+/* The dim eases back to full when a short pull lets go; while a finger drags it follows it exactly. */
+dialog.mg-sheet:not(.is-dragging)::backdrop { transition: opacity 220ms var(--mg-sheet-ease); }
 /* An answered confirm leaves like a sheet (ConfirmDialog plays it on a still copy); its dim fades a little slower. */
 .mg-confirm-backdrop.mg-confirm-leaving { pointer-events: none; animation: mg-fade-out .3s ease-in-out forwards; }
 .mg-confirm-leaving .mg-confirm { animation: mg-sheet-out 200ms ease-in forwards; }
@@ -792,7 +795,7 @@ html[data-lite="true"] .mg-seg > button[aria-pressed="true"] {
 
 /* Confirmation sheet: see theme/kit.css. */
 .mg-btn-danger { background: rgb(var(--mg-danger)); border-color: rgb(var(--mg-danger)); color: #fff !important; }
-.mg-btn-danger:hover:not(:disabled) { filter: brightness(1.1); }
+@media (hover: hover) { .mg-btn-danger:hover:not(:disabled) { filter: brightness(1.1); } }
 
 
 /* Motion for the pop-up kit (kit.css) and the public site pages (sitePages.css, eventPages.css). Buttons squeeze a

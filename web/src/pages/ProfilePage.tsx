@@ -244,10 +244,11 @@ function ProfileDetails() {
         {!isAdmin && <ListRow to="/me/signups" label={t('account.profile.myEntries')} value={entries ? String(entries.length) : undefined} />}
         <ListRow to="/me/account" label={t('account.profile.myAccount')} />
         <ListRow to="/settings" label={t('account.profile.settings')} sub={t('account.profile.settingsSub')} />
-        <button type="button" className="sp-row" onClick={() => { logout(); navigate(signOutDestination(), { replace: true }); }}>
-          <span className="sp-grow"><span className="sp-t1">{t('common.signOut')}</span></span>
-        </button>
       </Section>
+
+      <div className="sp-signout-wrap">
+        <button type="button" className="kit-pill sp-signout" onClick={() => { logout(); navigate(signOutDestination(), { replace: true }); }}>{t('common.signOut')}</button>
+      </div>
     </div>
   );
 }

@@ -76,6 +76,13 @@ html, body, #root {
   height: 100%;
 }
 
+/* A guard against sideways panning: if anything on a phone ever ends up wider than the screen, the page still can't be
+   dragged left or right (and doesn't rubber-band). `clip`, not `hidden`, so sticky headers keep working. */
+html, body {
+  overflow-x: clip;
+  overscroll-behavior-x: none;
+}
+
 body {
   margin: 0;
   font-family: var(--mg-font);

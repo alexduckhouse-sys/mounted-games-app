@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -91,6 +91,31 @@ describe('TimetablePage', () => {
     await user.click(screen.getByRole('button', { name: 'More minutes' }));
     await user.click(screen.getByRole('button', { name: 'Later' }));
     await waitFor(() => expect(api.post).toHaveBeenLastCalledWith('/competitions/7/sessions/shift-times', { deltaMinutes: 20 }));
+  });
+
+  it('offers to continue a timetable that was put on hold, and only then', async () => {
+    const user = userEvent.setup();
+    show();
+    await screen.findByRole('button', { name: 'Earlier' });
+    expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
+    cleanup();
+
+    const first = competition.sessions[0] as { notes?: string };
+    const before = first.notes;
+    first.notes = '[paused:1700000000000]';
+    try {
+      show();
+      expect(await screen.findByText('The timetable is on hold')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Continue' }));
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/7/sessions/resume', {}));
+      await waitFor(() => expect(reload).toHaveBeenCalled());
+
+      vi.mocked(api.post).mockRejectedValueOnce(new Error('offline'));
+      await user.click(screen.getByRole('button', { name: 'Continue' }));
+      expect(await screen.findByText(/Couldn’t continue the timetable/)).toBeInTheDocument();
+    } finally {
+      first.notes = before;
+    }
   });
 
   it('sets the time per heat and moves what follows when each follows on', async () => {

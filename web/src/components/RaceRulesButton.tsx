@@ -4,6 +4,7 @@ import { Info } from 'lucide-react';
 import { equipmentFromDiagram } from '../lib/raceEquipment';
 import { findRaceTemplate, loadRaceTemplates, raceNameKey } from '../lib/raceTemplates';
 import type { RaceTemplate, SectionFormat } from '../types';
+import { useExitDelay } from '../hooks/useExitDelay';
 import { Notice } from './Notice';
 import { useT } from '../i18n/LanguageContext';
 import { RaceDiagram } from './RaceDiagram';
@@ -32,10 +33,13 @@ export function RaceRulesButton({ raceName, format, className = '', label }: { r
   const sheetRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
-  function close() {
+  // The sheet and the dim behind it leave the way Sheet's do (skin.css), then the sheet unmounts.
+  const { closing, close } = useExitDelay(() => {
     setOpen(false);
     window.setTimeout(() => buttonRef.current?.focus(), 0);
-  }
+  });
+  const closeRef = useRef(close);
+  useEffect(() => { closeRef.current = close; });
 
   useEffect(() => {
     if (!open) return;
@@ -52,7 +56,7 @@ export function RaceRulesButton({ raceName, format, className = '', label }: { r
     document.body.style.overflow = 'hidden';
     sheetRef.current?.querySelector<HTMLElement>('button')?.focus();
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') { event.preventDefault(); close(); return; }
+      if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); return; }
       if (event.key !== 'Tab') return;
       const focusable = [...(sheetRef.current?.querySelectorAll<HTMLElement>('button:not([disabled])') ?? [])];
       if (focusable.length === 0) return;
@@ -78,8 +82,8 @@ export function RaceRulesButton({ raceName, format, className = '', label }: { r
       {label ?? <Info aria-hidden="true" className="h-4 w-4" />}
     </button>
     {open && createPortal(
-      <div className="race-rules-overlay" onPointerDown={(event) => { if (event.target === event.currentTarget) close(); }}>
-        <SwipeSheet ref={sheetRef} onClose={close} role="dialog" aria-modal="true" aria-labelledby={titleId} className="race-rules-sheet">
+      <div className={`race-rules-overlay${closing ? ' is-closing' : ''}`} onPointerDown={(event) => { if (event.target === event.currentTarget) close(); }}>
+        <SwipeSheet ref={sheetRef} onClose={close} role="dialog" aria-modal="true" aria-labelledby={titleId} className={`race-rules-sheet${closing ? ' is-closing' : ''}`}>
           <span className="race-rules-handle" aria-hidden="true" />
           <div className="race-rules-head">
             <h2 id={titleId}>{raceName}</h2>
@@ -106,7 +110,7 @@ export function RaceRulesButton({ raceName, format, className = '', label }: { r
             )}
             {!template.summary && !template.rules && equipment.length === 0 && <Notice tone="info" role={null}>{t('competition.rules.none')}</Notice>}
           </div>}
-          <div className="kit-acts race-rules-acts"><button type="button" className="kit-pill kit-pill-fill" aria-label={t('competition.rules.close')} onClick={close}>{t('common.close')}</button></div>
+          <div className="kit-acts race-rules-acts"><button type="button" className="kit-pill kit-pill-fill" aria-label={t('competition.rules.close')} onClick={() => close()}>{t('common.close')}</button></div>
         </SwipeSheet>
       </div>,
       document.body,
