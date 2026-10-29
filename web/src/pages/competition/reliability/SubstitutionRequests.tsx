@@ -79,7 +79,8 @@ export function SubstitutionRequests({ competitionId, canDecide = false, onChang
     } finally { if (epoch === lifecycle.current) setDecision(null); }
   }
   const visible = canDecide ? requests.filter(r => r.status === 'pending') : requests;
-  if (!visible.length && !error) return null;
+  // The compact pill only shows when there is something to decide; a failed check alone doesn't earn space above the lanes.
+  if (!visible.length && (!error || compact)) return null;
   const panel = <section className="sp-card" aria-label={t('reliability.requests')}>
     <h2 className="sp-t1 px-4 pt-3">{canDecide ? t('reliability.pending') : t('reliability.yourRequests')}</h2>
     {error && <Notice actionLabel={t('reliability.tryAgain')} onAction={() => void reload()}>{error}</Notice>}
@@ -90,7 +91,7 @@ export function SubstitutionRequests({ competitionId, canDecide = false, onChang
       {canDecide ? <div className="kit-acts"><button type="button" className="kit-pill kit-pill-fill" disabled={busy !== null} onClick={() => void decide(request.id, true)}>{t('reliability.approve')}</button><button type="button" className="kit-pill" disabled={busy !== null} onClick={() => void decide(request.id, false)}>{t('reliability.decline')}</button></div> : <p role="status" className="sp-note">{request.status === 'pending' ? t('reliability.waiting') : request.status === 'approved' ? t('reliability.approved') : t('reliability.declined')}</p>}
     </div>)}
   </section>;
-  return compact ? <><button type="button" className="kit-pill" onClick={() => setOpen(true)}>{t('reliability.pending')} · {visible.length}{error ? ' !' : ''}</button>{open && <Sheet title={t('reliability.requests')} onClose={() => setOpen(false)}>{panel}</Sheet>}</> : panel;
+  return compact ? <><button type="button" className="kit-pill" onClick={() => setOpen(true)}>{t('reliability.pending')} · {visible.length}</button>{open && <Sheet title={t('reliability.requests')} onClose={() => setOpen(false)}>{panel}</Sheet>}</> : panel;
 }
 export function RequestSubstitution({ competitionId, form, onChanged }: { competitionId: number; form: DeclarationForm; onChanged?: () => void }) {
   const t = useT();

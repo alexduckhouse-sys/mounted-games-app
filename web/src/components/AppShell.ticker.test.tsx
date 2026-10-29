@@ -132,7 +132,7 @@ describe('AppShell: the ticker on every page', () => {
 });
 
 describe('AppShell: a page that hides the chrome (the scoring screen)', () => {
-  it('drops the app header and the ticker dock, and the room kept for the dock', () => {
+  it('keeps the app header but drops the ticker dock and the room kept for it', () => {
     render(
       <MotionConfig reducedMotion="always"><MemoryRouter initialEntries={['/competitions/4/session/9']}>
         <LiteModeProvider><AuthProvider><ThemeProvider><CurrentCompetitionProvider><NavExtrasProvider><AgeGroupsProvider><CompetitionMetaProvider><CompactPageBarProvider><TickerProvider>
@@ -145,7 +145,7 @@ describe('AppShell: a page that hides the chrome (the scoring screen)', () => {
       </MemoryRouter></MotionConfig>,
     );
     expect(dock()).toBeNull();
-    expect(screen.queryByRole('banner')).toBeNull();
+    expect(screen.getByRole('banner')).toBeInTheDocument();
     expect(main()).not.toHaveClass('pb-44');
   });
 });

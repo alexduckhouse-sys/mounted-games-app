@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -55,7 +56,7 @@ async function tapTeams(user: ReturnType<typeof userEvent.setup>, names: string[
 
 function open(hash = '#t=mgs_token') {
   window.history.replaceState(null, '', `/score${hash}`);
-  return render(<MotionConfig reducedMotion="always"><ScorerPage /></MotionConfig>);
+  return render(<MotionConfig reducedMotion="always"><MemoryRouter><ScorerPage /></MemoryRouter></MotionConfig>);
 }
 
 beforeEach(() => {
@@ -72,6 +73,9 @@ describe('ScorerPage', () => {
   it('imports a backup using scorer-link credentials', async () => {
     open();
     await opened('Bending');
+    // Import lives in the race tools sheet (⋯), not at the top of the page.
+    await userEvent.click(screen.getByRole('button', { name: 'Race tools' }));
+    await userEvent.click(screen.getByRole('button', { name: /Import scores/ }));
     await userEvent.click(screen.getByText('Import scores from another phone'));
     fireEvent.change(screen.getByLabelText('Backup'), { target: { value: JSON.stringify([{
       raceId: 11, competitionId: 1, sessionId: 1, label: 'Synthetic race',
@@ -91,12 +95,12 @@ describe('ScorerPage', () => {
 
   it('keeps the token from the address, tidies the address bar and shows the arena', async () => {
     open();
-    expect(await screen.findByRole('heading', { name: 'Spring Games · Main' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Spring Games' })).toBeInTheDocument();
     expect(localStorage.getItem('mg.scorer.token')).toBe('mgs_token');
     expect(window.location.hash).toBe('');
     expect(window.location.pathname).toBe('/score');
     expect(link.get).toHaveBeenCalledWith('/scorer/session');
-    expect(screen.getByText('Scoring as Sam')).toBeInTheDocument();
+    expect(screen.getByText('Main · Scoring as Sam')).toBeInTheDocument();
     expect(await opened('Bending')).toBeInTheDocument();
     // No clock or sign-off controls for a link.
     expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
@@ -106,7 +110,7 @@ describe('ScorerPage', () => {
   it('uses the token already on the phone when the address has none', async () => {
     localStorage.setItem('mg.scorer.token', 'mgs_stored');
     open('');
-    expect(await screen.findByText('Scoring as Sam')).toBeInTheDocument();
+    expect(await screen.findByText('Main · Scoring as Sam')).toBeInTheDocument();
   });
 
   it('saves a race to the phone’s outbox for the link, then moves to the next race', async () => {
@@ -318,17 +322,17 @@ describe('ScorerPage', () => {
     await waitFor(() => expect(link.get).toHaveBeenCalledTimes(2));
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong');
     await user.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(await screen.findByText('Scoring as Sam')).toBeInTheDocument();
+    expect(await screen.findByText('Main · Scoring as Sam')).toBeInTheDocument();
   });
 
   it('shows a recently saved copy when offline without any notice', async () => {
     link.get.mockResolvedValueOnce({ data: timetable() }).mockRejectedValue(axiosError());
     const first = open();
-    await screen.findByText('Scoring as Sam');
+    await screen.findByText('Main · Scoring as Sam');
     first.unmount();
 
     open('');
-    expect(screen.getByText('Scoring as Sam')).toBeInTheDocument();
+    expect(screen.getByText('Main · Scoring as Sam')).toBeInTheDocument();
     await waitFor(() => expect(link.get).toHaveBeenCalledTimes(2));
     expect(screen.queryByText(/Last updated/)).not.toBeInTheDocument();
     expect(screen.queryByText(/No signal/)).not.toBeInTheDocument();
@@ -340,12 +344,12 @@ describe('ScorerPage', () => {
     const user = userEvent.setup();
     link.get.mockResolvedValueOnce({ data: timetable() }).mockRejectedValue(axiosError());
     const first = open();
-    await screen.findByText('Scoring as Sam');
+    await screen.findByText('Main · Scoring as Sam');
     first.unmount();
     localStorage.setItem('mg.scorer.sessionAt', new Date(Date.now() - 60 * 60_000).toISOString());
 
     open('');
-    expect(screen.getByText('Scoring as Sam')).toBeInTheDocument();
+    expect(screen.getByText('Main · Scoring as Sam')).toBeInTheDocument();
     expect(await screen.findByText(/Last updated \d\d:\d\d\. No signal\. Scores you enter will send/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Try again/ }));
     await waitFor(() => expect(link.get).toHaveBeenCalledTimes(3));
@@ -373,7 +377,7 @@ describe('ScorerPage', () => {
 
   it('reloads when the phone comes back online or the page is shown again', async () => {
     open();
-    await screen.findByText('Scoring as Sam');
+    await screen.findByText('Main · Scoring as Sam');
     const calls = link.get.mock.calls.length;
     act(() => { window.dispatchEvent(new Event('online')); });
     await waitFor(() => expect(link.get.mock.calls.length).toBeGreaterThan(calls));
