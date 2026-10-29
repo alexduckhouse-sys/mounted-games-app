@@ -105,7 +105,7 @@ function Shell({ width }: { width: PageWidth }) {
         <header className="mg-header">
           {compactBar ? (
             <div className={`mg-compact-bar mx-auto ${cap}`}>
-              <BackLink to={compactBar.backTo} className="mg-nav-btn !px-0" aria-label={compactBar.backLabel ?? t('shell.header.backToTimetable')}><ChevronLeft className="h-5 w-5" /></BackLink>
+              <BackLink to={compactBar.backTo} className="mg-hdr-icon" aria-label={compactBar.backLabel ?? t('shell.header.backToTimetable')}><ChevronLeft /></BackLink>
               <div className="mg-compact-copy">
                 <span className="mg-compact-title">{compactBar.title}</span>
                 <span className="mg-compact-subtitle">{compactBar.subtitle}</span>
@@ -116,42 +116,42 @@ function Shell({ width }: { width: PageWidth }) {
                 </span>
               } />
               <LiteChip onOpen={openLiteSettings} />
-              <button onClick={openMenu} className="mg-nav-btn !px-0" aria-label={t('shell.header.openMenu')} aria-haspopup="dialog" aria-expanded={menuOpen}><Menu className="h-5 w-5" /></button>
+              <button onClick={openMenu} className="mg-hdr-icon" aria-label={t('shell.header.openMenu')} aria-haspopup="dialog" aria-expanded={menuOpen}><Menu /></button>
             </div>
           ) : (
-            <div className={`mx-auto flex ${cap} items-center gap-2.5 py-1.5 pl-4 pr-3 sm:py-3`}>
+            <div className={`mx-auto flex ${cap} items-center gap-3 px-4 pb-2 pt-3 sm:py-3`}>
               {pageHeader?.backTo
-                ? <BackLink to={pageHeader.backTo} className="mg-nav-btn !px-0" aria-label={pageHeader.backLabel ?? t('shell.header.back')}><ChevronLeft className="h-5 w-5" /></BackLink>
+                ? <BackLink to={pageHeader.backTo} className="mg-hdr-icon" aria-label={pageHeader.backLabel ?? t('shell.header.back')}><ChevronLeft /></BackLink>
                 : <Link to={inAdminArea ? '/admin' : '/events'} className="mg-logo" aria-label={inAdminArea ? t('shell.header.adminHome') : t('shell.header.home')}>MG</Link>}
               {pageHeader?.plain ? (
-                <div className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5">
-                  <h1 className="mg-display truncate text-[22px] font-bold leading-none">{pageHeader.title}</h1>
-                  {pageHeader.subtitle && <span className="mg-header-sub truncate text-[13px] leading-tight">{pageHeader.subtitle}</span>}
+                <div className="flex min-h-10 min-w-0 flex-1 flex-col justify-center gap-0.5">
+                  <h1 className="mg-display truncate text-[22px] font-semibold leading-none">{pageHeader.title}</h1>
+                  {pageHeader.subtitle && <span className="mg-header-sub truncate text-[13px] font-medium leading-4">{pageHeader.subtitle}</span>}
                 </div>
               ) : pageHeader ? (
-                <Link to="/events" className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 text-left !text-inherit !no-underline">
-                  <span className="mg-display truncate text-[22px] font-bold leading-none">{pageHeader.title}</span>
-                  <span className="mg-header-sub flex items-center gap-1 text-[13px] leading-tight">
+                <Link to="/events" className="flex min-h-10 min-w-0 flex-1 flex-col justify-center gap-0.5 text-left !text-inherit !no-underline">
+                  <span className="mg-display truncate text-[22px] font-semibold leading-none">{pageHeader.title}</span>
+                  <span className="mg-header-sub flex items-center gap-1 text-[13px] font-medium leading-4">
                     <span className="truncate">{pageHeader.subtitle ?? title ?? t('common.mountedGames')}</span>
                     <ChevronDown aria-hidden="true" className="h-3 w-3 shrink-0" />
                   </span>
                   <span className="sr-only">{t('shell.header.events')}</span>
                 </Link>
               ) : title ? (
-                <Link to="/events" className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 text-left !text-inherit !no-underline">
+                <Link to="/events" className="flex min-h-10 min-w-0 flex-1 flex-col justify-center gap-0.5 text-left !text-inherit !no-underline">
                   <span className="mg-display truncate text-lg font-bold leading-tight">{title}</span>
-                  {subtitle && <span className="mg-header-sub truncate text-[13px] leading-tight">{subtitle}</span>}
+                  {subtitle && <span className="mg-header-sub truncate text-[13px] leading-4">{subtitle}</span>}
                   <span className="sr-only">{t('shell.header.events')}</span>
                 </Link>
               ) : (
                 <span className="min-w-0 flex-1 truncate text-base font-semibold">{t('common.mountedGames')}</span>
               )}
               {pageHeader?.refresh && <RefreshButton onRefresh={pageHeader.refresh} label={pageHeader.refreshLabel ?? t('shell.header.refresh')} />}
-              {pageHeader?.edit && <button type="button" onClick={pageHeader.edit} className="mg-nav-btn !px-0" aria-label={pageHeader.editLabel ?? 'Edit'} aria-pressed={!!pageHeader.editing}><Pencil className="h-[18px] w-[18px]" /></button>}
+              {pageHeader?.edit && <button type="button" onClick={pageHeader.edit} className="mg-hdr-icon" aria-label={pageHeader.editLabel ?? 'Edit'} aria-pressed={!!pageHeader.editing}><Pencil /></button>}
               <ConnectionPill />
               {!user && choosingCompetition && <Link to="/login" className="mg-nav-btn">{t('common.signIn')}</Link>}
               <LiteChip onOpen={openLiteSettings} />
-              <button onClick={openMenu} className="mg-nav-btn !px-0" aria-label={t('shell.header.openMenu')} aria-haspopup="dialog" aria-expanded={menuOpen}><Menu className="h-5 w-5" /></button>
+              <button onClick={openMenu} className="mg-hdr-icon" aria-label={t('shell.header.openMenu')} aria-haspopup="dialog" aria-expanded={menuOpen}><Menu /></button>
             </div>
           )}
         </header>
@@ -190,5 +190,5 @@ function RefreshButton({ onRefresh, label }: { onRefresh: () => void; label: str
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setSpinning(false), 900);
   };
-  return <button type="button" onClick={tap} className="mg-nav-btn !px-0" aria-label={label}><RotateCw className={`h-[18px] w-[18px]${spinning ? ' mg-spin-once' : ''}`} /></button>;
+  return <button type="button" onClick={tap} className="mg-hdr-icon mg-hdr-icon-sub" aria-label={label}><RotateCw className={spinning ? 'mg-spin-once' : undefined} /></button>;
 }

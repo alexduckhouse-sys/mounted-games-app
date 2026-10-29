@@ -105,13 +105,12 @@ function AgeGroupSelect({ sections, value, teamCount, seamless = false, onChange
   const current = sections.find((s) => s.id === value);
   const options = sections.map((sec) => ({ value: String(sec.id), label: displaySectionName(sec.displayName) }));
   return (
-    <div className={`mg-band-header pt-2.5 ${seamless ? 'pb-1.5' : 'pb-2.5'}`}>
-      <Dropdown label={t('competition.timetable.ageGroup')} value={value == null ? '' : String(value)} options={options} onChange={(id) => onChange(Number(id))} buttonClassName="flex min-h-10 w-full items-stretch overflow-hidden rounded-lg border border-[rgb(var(--mg-header-line))] text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
-        <span className="mg-display flex min-w-0 flex-1 items-baseline gap-2 self-center px-3 text-base font-bold uppercase leading-none tracking-[0.04em]">
-          <span className="truncate">{displaySectionName(current?.displayName)}</span>
-          <span className="shrink-0 text-xs font-medium normal-case tracking-normal text-[rgb(var(--mg-header-sub))]">{t('competition.scoring.teamCount', { count: teamCount })}</span>
-        </span>
-        <span aria-hidden="true" className="flex w-11 shrink-0 items-center justify-center border-l border-[rgb(var(--mg-header-line))] bg-white/10"><ChevronDown className="h-[18px] w-[18px]" /></span>
+    <div className={`mg-band-header pt-0 ${seamless ? 'pb-1.5' : 'pb-3'}`}>
+      <Dropdown label={t('competition.timetable.ageGroup')} value={value == null ? '' : String(value)} options={options} onChange={(id) => onChange(Number(id))} buttonClassName="relative flex h-7 w-full items-center gap-2 rounded-lg border-0 bg-white/[.07] pl-3 pr-2 text-left before:absolute before:inset-x-0 before:-inset-y-2 before:content-[''] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+        <span className="min-w-0 truncate text-[15px] font-semibold leading-none">{displaySectionName(current?.displayName)}</span>
+        <span aria-hidden="true" className="h-[3px] w-[3px] shrink-0 rounded-full bg-[rgb(var(--mg-header-sub))]" />
+        <span className="flex-1 text-[13px] font-medium leading-none text-[rgb(var(--mg-header-sub))]">{t('competition.scoring.teamCount', { count: teamCount })}</span>
+        <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0" />
       </Dropdown>
     </div>
   );
