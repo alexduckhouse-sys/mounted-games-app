@@ -6,6 +6,7 @@ import { Sheet } from '../../components/Sheet';
 import { useArenaAssistance } from '../../hooks/useArenaAssistance';
 import { ARENA_ASSISTANCE_SERVICES } from '../../lib/arenaAssistance';
 import type { ArenaAssistanceService } from '../../types';
+import '../refine/refine.css';
 
 /** Farrier, vet and first aid calls for one arena. Each one is confirmed first because it posts a notice for the whole event. */
 export function ArenaHelpSheet({ competitionId, sessionId, arenaName, onClose }: {

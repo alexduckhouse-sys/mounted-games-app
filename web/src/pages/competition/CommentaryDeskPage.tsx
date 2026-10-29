@@ -626,7 +626,7 @@ export function CommentaryDeskPage() {
                           {t('desk.commentary.firsts', { count: row.wins })}
                         </span>
                         <span className="mg-display text-xl font-bold tabular-nums text-[rgb(var(--mg-heading))]">
-                          {t('desk.commentary.pointsN', { count: row.totalPoints })}
+                          {t('desk.commentary.pointsN', { count: Number(formatPoints(row.totalPoints)) })}
                         </span>
                       </div>
                     </div>
