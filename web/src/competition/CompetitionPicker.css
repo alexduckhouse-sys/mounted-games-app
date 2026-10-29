@@ -1,0 +1,91 @@
+/* The events page. A competition on today gets a plain navy panel; upcoming ones are rows under month
+   headings, the archive's under year headings. Names wrap rather than truncate. Weights: 700 for the event
+   name only, 600 for headings, titles and actions, 500 for supporting text. */
+
+.cp-stack { display: flex; flex-direction: column; gap: 12px; }
+/* Straight under the header (only the hidden page title before it), the list needs its own gap. */
+.cp-stack:nth-child(2) { padding-top: 16px; }
+
+/* On today. */
+.cp-today { display: flex; flex-direction: column; gap: 10px; }
+.cp-now { display: flex; flex-direction: column; align-items: flex-start; padding: 16px; border-radius: 16px; background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); }
+/* Symbol tiles (trophy, world) are navy, so on this navy panel they turn white. */
+.cp-now { --ci-tile: var(--mg-button-ink); --ci-ink: var(--mg-button); }
+/* The badge on the left, the competition's flag or icon on the right. */
+.cp-now-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; align-self: stretch; min-height: 22px; }
+.cp-now-tag { font: 600 13px/1 var(--mg-font); opacity: .75; }
+/* Long names wrap at whole words to the card's full width ('pretty' rather than 'balance', which would leave a wide empty
+   strip on the right), with tight leading so three lines don't open up gaps. */
+.cp-now-name { margin-top: 10px; font: 700 28px/1.12 var(--mg-font); letter-spacing: -.015em; overflow-wrap: break-word; text-wrap: pretty; }
+@media (max-width: 359px) { .cp-now-name { font-size: 25px; } }
+.cp-now-meta { margin-top: 6px; font: 500 14.5px/1.4 var(--mg-font); opacity: .78; }
+.cp-now-line { display: flex; align-items: flex-start; gap: 10px; align-self: stretch; margin-top: 12px; padding: 8px 12px; border-radius: 10px; background: rgb(var(--mg-button-ink) / .1); font: 600 15px/1.3 var(--mg-font); }
+/* What is on, then where, a step quieter underneath. */
+.cp-now-line .cp-swap > * { display: flex; flex-direction: column; gap: 1px; }
+.cp-live-place { font: 500 13.5px/1.3 var(--mg-font); opacity: .8; }
+.cp-now-line::before { content: ""; flex: none; width: 8px; height: 8px; margin-top: calc((1.3em - 8px) / 2); border-radius: 50%; background: rgb(var(--mg-red)); box-shadow: 0 0 0 3px rgb(var(--mg-red) / .3); }
+.cp-now-open { transition: background-color var(--mg-dur-fast) var(--mg-ease-out), scale 140ms var(--mg-ease-out); display: flex; align-items: center; justify-content: center; align-self: stretch; min-height: 46px; margin-top: 8px; border: 0; border-radius: 999px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)); font: 600 16px/1 var(--mg-font); cursor: pointer; }
+@media (hover: hover) { .cp-now-open:hover { background: rgb(var(--mg-surface) / .9); } }
+.cp-now-open:active { scale: .985; }
+.cp-now-open:focus-visible { outline: 2px solid rgb(var(--mg-button-ink)); outline-offset: 3px; }
+
+/* Month and year headings: sentence case, no rule under them. */
+.cp-group + .cp-group { margin-top: 8px; }
+.cp-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 12px 0 2px; font: 600 20px/1.2 var(--mg-font); letter-spacing: -.005em; color: rgb(var(--mg-heading)); }
+.cp-heading small { font: 500 13px/1 var(--mg-font); color: rgb(var(--mg-muted)); }
+
+/* Rows run edge to edge on the page. Lines only between rows and one closing each month; none under a heading.
+   The line is the heading colour at 7%, a light cool grey (about #E8EAED on the default theme) that follows each theme. */
+.cp-list { --cp-divider: rgb(var(--mg-heading) / .07); display: flex; flex-direction: column; }
+.cp-row { transition: background-color 120ms var(--mg-ease-out); display: grid; grid-template-columns: 40px minmax(0, 1fr) 28px 12px; align-items: center; column-gap: 12px; width: 100%; min-height: 64px; padding: 10px 4px 10px 0; border: 0; background: transparent; color: rgb(var(--mg-ink)); text-align: left; font: inherit; cursor: pointer; }
+.cp-row + .cp-row { border-top: 1px solid var(--cp-divider); }
+.cp-row:last-child { border-bottom: 1px solid var(--cp-divider); }
+@media (hover: hover) { .cp-row:hover { background: rgb(var(--mg-subtle)); } }
+.cp-row:active { background: rgb(var(--mg-heading) / .06); }
+.cp-row:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
+.cp-row-current { box-shadow: inset 3px 0 0 rgb(var(--mg-heading)); }
+
+/* The date block keeps to the top of the row, level with the name's first line, when a long name makes the row tall; the
+   flag and arrow stay centred. In a one-line row the block is the tallest thing, so nothing moves. */
+.cp-date { display: flex; flex-direction: column; align-items: center; gap: 2px; align-self: start; }
+.cp-dow { font: 600 12.5px/1 var(--mg-font); color: rgb(var(--mg-muted)); }
+.cp-day { font: 700 30px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
+
+.cp-body { min-width: 0; }
+/* Long names wrap onto as many lines as they need, never cut off. */
+/* One size for every name, short or long: long official names wrap onto as many lines as they need and the row grows
+   with them. Words break only when a single word is wider than the column. */
+.cp-title { display: block; font: 600 16px/1.3 var(--mg-font); letter-spacing: -.005em; color: rgb(var(--mg-ink)); overflow-wrap: break-word; text-wrap: pretty; }
+/* Every flag and symbol sits centred in the same 28px slot, so they read as one column down the list. */
+.cp-icon { display: flex; align-items: center; justify-content: center; width: 28px; height: 18px; }
+.cp-chevron { grid-column: 4; color: rgb(var(--mg-faint)); }
+
+/* Past competitions: a full-width row at the end of the list. */
+.cp-more { margin: 4px 0 0; }
+.cp-past.sp-link { display: flex; justify-content: space-between; width: 100%; min-height: 56px; padding: 0 4px 0 0; font: 600 16px/1 var(--mg-font); }
+
+/* Motion. The list rises 6px as it fades in over its placeholder (replacing the shared plain fade on this page), and a
+   changed live line crossfades: the old words fade out over the new ones in the same spot. */
+.cp-enter { animation: cp-enter 220ms var(--mg-ease-out) both; }
+@keyframes cp-enter { from { opacity: 0; transform: translateY(6px); } }
+.cp-swap { display: grid; min-width: 0; }
+.cp-swap > * { grid-area: 1 / 1; }
+.cp-swap-in { animation: mg-fade-in 200ms var(--mg-ease-out); }
+.cp-swap-out { animation: mg-fade-out 200ms var(--mg-ease-out) forwards; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .cp-enter, .cp-swap-in { animation: none; }
+  .cp-swap-out { display: none; }
+  .cp-row, .cp-now-open { transition: none; }
+  .cp-now-open:active { scale: none; }
+}
+html[data-lite="true"] .cp-enter { animation: none; }
+
+/* Desktop: the panel for today stays on the left while the list scrolls on the right. */
+@media (min-width: 1024px) {
+  .cp-split { display: grid; grid-template-columns: minmax(340px, 5fr) minmax(0, 7fr); grid-auto-flow: row dense; column-gap: 48px; row-gap: 14px; align-items: start; }
+  .cp-split > * { grid-column: 2; }
+  .cp-split > .cp-today { grid-column: 1; grid-row: 1 / span 20; position: sticky; top: 24px; }
+  .cp-now { padding: 22px; }
+  .cp-now-name { font-size: 32px; }
+  .cp-split .cp-group:first-of-type .cp-heading { margin-top: 0; }
+}

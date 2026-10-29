@@ -67,9 +67,10 @@ function Shell({ width }: { width: PageWidth }) {
   // The ticker docks above the tab bar on every page but filming. An event's own pages feed it; elsewhere it follows
   // the event last opened, and it only shows when there is news (or a page button such as the timetable's filters).
   const ticker = useOptionalTicker();
-  // Legal pages, unsubscribe, settings and seasons are quiet: no news line over them, only a page's own dock button.
-  const quietTicker = QUIET_TICKER_PATHS.test(location.pathname) || ticker?.quiet === true;
-  const feedCompetitionId = !filmingMode && competitionId == null && ticker ? current?.id ?? null : null;
+  // Legal pages, unsubscribe, settings, seasons and the events list are quiet: no news line over them, only a page's own
+  // dock button. The events list already shows what's on in its own panel.
+  const quietTicker = choosingCompetition || QUIET_TICKER_PATHS.test(location.pathname) || ticker?.quiet === true;
+  const feedCompetitionId = !filmingMode && !choosingCompetition && competitionId == null && ticker ? current?.id ?? null : null;
   const dockShown = !filmingMode && !chromeHidden && !noTicker && ticker != null
     && (ticker.dockAction != null || (!quietTicker && current != null && (ticker.items.length > 0 || ticker.watchCompetitionId != null)));
   // Public pages get the EGUK look; signed-in tools (dashboard, teams, admin) keep their own.
@@ -125,12 +126,12 @@ function Shell({ width }: { width: PageWidth }) {
                 : <Link to={inAdminArea ? '/admin' : '/events'} className="mg-logo" aria-label={inAdminArea ? t('shell.header.adminHome') : t('shell.header.home')}>MG</Link>}
               {pageHeader?.plain ? (
                 <div className="flex min-h-10 min-w-0 flex-1 flex-col justify-center gap-0.5">
-                  <h1 className="mg-display truncate text-[22px] font-semibold leading-none">{pageHeader.title}</h1>
+                  <h1 className="truncate text-[20px] font-semibold leading-none tracking-[-0.01em]">{pageHeader.title}</h1>
                   {pageHeader.subtitle && <span className="mg-header-sub truncate text-[13px] font-medium leading-4">{pageHeader.subtitle}</span>}
                 </div>
               ) : pageHeader ? (
                 <Link to="/events" className="flex min-h-10 min-w-0 flex-1 flex-col justify-center gap-0.5 text-left !text-inherit !no-underline">
-                  <span className="mg-display truncate text-[22px] font-semibold leading-none">{pageHeader.title}</span>
+                  <span className="truncate text-[20px] font-semibold leading-none tracking-[-0.01em]">{pageHeader.title}</span>
                   <span className="mg-header-sub flex items-center gap-1 text-[13px] font-medium leading-4">
                     <span className="truncate">{pageHeader.subtitle ?? title ?? t('common.mountedGames')}</span>
                     <ChevronDown aria-hidden="true" className="h-3 w-3 shrink-0" />
@@ -139,7 +140,7 @@ function Shell({ width }: { width: PageWidth }) {
                 </Link>
               ) : title ? (
                 <Link to="/events" className="flex min-h-10 min-w-0 flex-1 flex-col justify-center gap-0.5 text-left !text-inherit !no-underline">
-                  <span className="mg-display truncate text-lg font-bold leading-tight">{title}</span>
+                  <span className="truncate text-lg font-semibold leading-tight tracking-[-0.01em]">{title}</span>
                   {subtitle && <span className="mg-header-sub truncate text-[13px] leading-4">{subtitle}</span>}
                   <span className="sr-only">{t('shell.header.events')}</span>
                 </Link>
@@ -149,7 +150,7 @@ function Shell({ width }: { width: PageWidth }) {
               {pageHeader?.refresh && <RefreshButton onRefresh={pageHeader.refresh} label={pageHeader.refreshLabel ?? t('shell.header.refresh')} />}
               {pageHeader?.edit && <button type="button" onClick={pageHeader.edit} className="mg-hdr-icon" aria-label={pageHeader.editLabel ?? 'Edit'} aria-pressed={!!pageHeader.editing}><Pencil /></button>}
               <ConnectionPill />
-              {!user && choosingCompetition && <Link to="/login" className="mg-nav-btn">{t('common.signIn')}</Link>}
+              {!user && choosingCompetition && <Link to="/login" className="mg-hdr-signin">{t('common.signIn')}</Link>}
               <LiteChip onOpen={openLiteSettings} />
               <button onClick={openMenu} className="mg-hdr-icon" aria-label={t('shell.header.openMenu')} aria-haspopup="dialog" aria-expanded={menuOpen}><Menu /></button>
             </div>
