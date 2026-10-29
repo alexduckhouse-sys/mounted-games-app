@@ -2,20 +2,19 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { competition, chat, team } from '../../test/factories';
-import { autoConfirm } from '../../test/confirm';
+import { competition, chat } from '../../test/factories';
 import type { CompetitionDetail, Role } from '../../types';
 import { CompetitionContext } from './context';
 import { ContactOrganisersPage } from './ContactOrganisersPage';
 
-const state = vi.hoisted(() => ({ user: true, roles: ['Member'] as string[], get: vi.fn(), post: vi.fn(), del: vi.fn() }));
+const state = vi.hoisted(() => ({ user: true, roles: ['Member'] as string[], organise: false, get: vi.fn(), post: vi.fn(), del: vi.fn() }));
 
 vi.mock('../../auth/AuthContext', () => ({
   useAuth: () => ({
     user: state.user ? { id: 'me', fullName: 'Sam Ellis', roles: state.roles } : null,
     canEdit: () => state.roles.includes('Admin'),
     hasRole: (role: Role) => state.roles.includes(role),
-    canOrganise: () => false,
+    canOrganise: () => state.organise,
   }),
 }));
 vi.mock('../../api', () => ({ api: { get: state.get, post: state.post, put: vi.fn(), delete: state.del } }));
@@ -33,6 +32,8 @@ function mount(extra: Partial<CompetitionDetail> = {}, initial: string[] = ['/co
       <CompetitionContext.Provider value={value}>
         <Routes>
           <Route path="/competitions/:id/contact" element={<ContactOrganisersPage />} />
+          <Route path="/competitions/:id/announcements" element={<Where />} />
+          <Route path="/competitions/:id/messages/:userId" element={<Where />} />
           <Route path="*" element={<Where />} />
         </Routes>
       </CompetitionContext.Provider>
@@ -46,6 +47,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   state.user = true;
   state.roles = ['Member'];
+  state.organise = false;
   state.get.mockResolvedValue({ data: [] });
 });
 
@@ -172,141 +174,56 @@ describe('signed in', () => {
   });
 });
 
-describe('an organiser', () => {
-  const sam = { id: 'sam', name: 'Sam Lee' };
-  const incoming = (id: number, body: string, createdAt: string, userId = sam.id, authorName = sam.name) =>
-    chat(id, { body, type: 0, adminOnly: true, userId, authorName, createdAt });
-  const reply = (id: number, body: string, createdAt: string, to = sam.id) =>
-    chat(id, { body, type: 0, adminOnly: true, userId: 'me', recipientUserId: to, authorName: 'Sam Ellis', createdAt });
-
-  beforeEach(() => {
+describe('an organiser opening the old contact address', () => {
+  it('lands on the Messages tab of Messages & Announcements, and never fetches the chat here', () => {
     state.roles = ['Admin'];
-    state.get.mockResolvedValue({ data: [
-      incoming(1, 'Can Leo ride Pepper in Heat 2?', daysAgo(0), 'sam'),
-      incoming(2, 'Is there camping on site?', daysAgo(3), 'kim', 'Kim Park'),
-      reply(3, 'Yes, in the far field.', daysAgo(3), 'kim'),
-    ] });
+    mount({}, ['/competitions/1/contact']);
+    expect(screen.getByTestId('where')).toHaveTextContent('/competitions/1/announcements');
+    expect(state.get).not.toHaveBeenCalled();
   });
 
-  const mountAdmin = () => mount({ teams: [team(1, { trainerUserId: 'sam', displayName: 'Warwickshire Hunt A' })] });
-
-  it('sees a chat list with one row for each person: name and team, the last message, time and unread count', async () => {
-    localStorage.setItem('mg.threadSeen.1', JSON.stringify({ kim: new Date().toISOString() }));
-    mountAdmin();
-    const list = await screen.findByRole('list', { name: 'Messages' });
-    const rows = within(list).getAllByRole('listitem');
-    expect(rows).toHaveLength(2);
-    expect(rows[0]).toHaveTextContent('Sam Lee · Warwickshire Hunt A');
-    expect(rows[0]).toHaveTextContent('Can Leo ride Pepper in Heat 2?');
-    expect(within(rows[0]).getByLabelText('1 unread')).toHaveTextContent('1');
-    expect(rows[1]).toHaveTextContent('Kim Park');
-    expect(rows[1]).toHaveTextContent('Yes, in the far field.');
-    expect(within(rows[1]).queryByLabelText(/unread/)).not.toBeInTheDocument();
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  it('keeps the tab in the address', () => {
+    state.roles = ['Trainer']; state.organise = true;
+    function Search() { return <p data-testid="search">{useLocation().search}</p>; }
+    const value = { competition: competition({ staffChatEnabled: true }), reload: vi.fn(), streams: [], streamingEnabled: false, invoke: vi.fn(), ready: 1, streamMessages: [] };
+    render(
+      <MemoryRouter initialEntries={['/competitions/1/contact']}>
+        <CompetitionContext.Provider value={value}>
+          <Routes>
+            <Route path="/competitions/:id/contact" element={<ContactOrganisersPage />} />
+            <Route path="*" element={<Search />} />
+          </Routes>
+        </CompetitionContext.Provider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('search')).toHaveTextContent('?tab=messages');
   });
 
-  it('says so when nobody has written', async () => {
-    state.get.mockResolvedValue({ data: [] });
-    mountAdmin();
-    expect(await screen.findByText('No messages yet.')).toBeInTheDocument();
-  });
-
-  it('says so when the messages cannot be loaded', async () => {
-    state.get.mockRejectedValueOnce(new Error('offline'));
-    mountAdmin();
-    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load messages');
-  });
-
-  it('opens one thread per person, with their messages on the left, their own replies on the right and a reply box', async () => {
+  it('opens a person\'s thread from a ?with= link (old notification and bookmark links)', () => {
+    state.roles = ['Admin'];
     mount({}, ['/competitions/1/contact?with=kim']);
-    expect(await screen.findByText('Is there camping on site?')).toBeInTheDocument();
-    expect(screen.getByText('Only you and Kim Park see this')).toBeInTheDocument();
-    expect(screen.queryByText('Can Leo ride Pepper in Heat 2?')).not.toBeInTheDocument();
-    expect(screen.getByText('Is there camping on site?').closest('.ev-bub')).toHaveClass('ev-bub-them');
-    expect(screen.getByText('Yes, in the far field.').closest('.ev-bub')).toHaveClass('ev-bub-me');
-    expect(screen.getByPlaceholderText('Reply')).toBeInTheDocument();
+    expect(screen.getByTestId('where')).toHaveTextContent('/competitions/1/messages/kim');
   });
+});
 
-  it('opens a thread from the list, and reading it is remembered', async () => {
-    mountAdmin();
-    await userEvent.click(await screen.findByRole('button', { name: /Sam Lee/ }));
-    expect(await screen.findByText('Only you and Sam Lee see this')).toBeInTheDocument();
-    await waitFor(() => expect(JSON.parse(localStorage.getItem('mg.threadSeen.1') ?? '{}').sam).toBeTruthy());
-  });
-
-  it('replies privately to the person whose thread is open', async () => {
-    state.post.mockResolvedValue({ data: reply(9, 'See you there.', new Date().toISOString(), 'kim') });
-    mount({}, ['/competitions/1/contact?with=kim']);
-    await screen.findByText('Is there camping on site?');
-    const send = screen.getByRole('button', { name: 'Send' });
-    expect(send).toBeDisabled();
-    await userEvent.type(screen.getByPlaceholderText('Reply'), 'See you there.');
-    await userEvent.click(send);
-    expect(state.post).toHaveBeenCalledWith('/competitions/1/chat', { body: 'See you there.', replyToUserId: 'kim' });
-    expect(await screen.findByText('See you there.', { selector: '.ev-bub' })).toBeInTheDocument();
-  });
-
-  it('deletes a message from its menu, after asking', async () => {
-    const asked = autoConfirm(true);
-    state.del.mockResolvedValue({ data: {} });
-    mount({}, ['/competitions/1/contact?with=kim']);
-    await screen.findByText('Is there camping on site?');
-    await userEvent.click(screen.getByRole('button', { name: 'More for message: Is there camping on site?' }));
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete message' }));
-    await waitFor(() => expect(asked).toHaveBeenCalledWith('It disappears for everyone.'));
-    expect(state.del).toHaveBeenCalledWith('/competitions/1/chat/2');
-    await waitFor(() => expect(screen.queryByText('Is there camping on site?')).not.toBeInTheDocument());
-  });
-
-  it('keeps a message when the question is answered no, and says so when it cannot be deleted', async () => {
-    autoConfirm([false, true]);
-    state.del.mockRejectedValue(new Error('offline'));
-    mount({}, ['/competitions/1/contact?with=kim']);
-    await screen.findByText('Is there camping on site?');
-    await userEvent.click(screen.getByRole('button', { name: 'More for message: Is there camping on site?' }));
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete message' }));
-    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
-    expect(state.del).not.toHaveBeenCalled();
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete message' }));
-    expect(await screen.findByText('Couldn’t delete that message. Check your signal and try again.')).toBeInTheDocument();
-    expect(screen.getByText('Is there camping on site?', { selector: '.ev-bub' })).toBeInTheDocument();
-  });
-
-  it('blocks a sender from a message\'s menu, after asking, and says what was blocked', async () => {
-    autoConfirm(true);
-    state.post.mockResolvedValue({ data: { alreadyBlocked: false, ipAddress: '203.0.113.9' } });
-    mount({}, ['/competitions/1/contact?with=kim']);
-    await screen.findByText('Is there camping on site?');
-    await userEvent.click(screen.getByRole('button', { name: 'More for message: Is there camping on site?' }));
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Block sender' }));
-    expect(await screen.findByText('Blocked IP 203.0.113.9.')).toBeInTheDocument();
-    expect(state.post).toHaveBeenCalledWith('/competitions/1/chat/2/block-author', {});
-  });
-
-  it('says so when a sender cannot be blocked', async () => {
-    autoConfirm(true);
-    state.post.mockRejectedValue({ response: { data: { message: 'No IP on record.' } } });
-    mount({}, ['/competitions/1/contact?with=kim']);
-    await screen.findByText('Is there camping on site?');
-    await userEvent.click(screen.getByRole('button', { name: 'More for message: Is there camping on site?' }));
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Block sender' }));
-    expect(await screen.findByText('No IP on record.')).toBeInTheDocument();
-  });
-
-  it('offers only Delete on the organisers\' own replies', async () => {
-    mount({}, ['/competitions/1/contact?with=kim']);
-    await screen.findByText('Yes, in the far field.');
-    await userEvent.click(screen.getByRole('button', { name: 'More for message: Yes, in the far field.' }));
-    const sheet = within(screen.getByRole('dialog'));
-    expect(sheet.getByRole('button', { name: 'Delete message' })).toHaveClass('kit-redtext');
-    expect(sheet.queryByRole('button', { name: 'Block sender' })).not.toBeInTheDocument();
-  });
-
-  it('does not offer a menu to someone who is not an admin', async () => {
+describe('everyone else', () => {
+  it('sees only their own thread with the organisers, with no moderation menu', async () => {
     state.roles = ['Member'];
-    state.get.mockResolvedValue({ data: [incoming(1, 'Hello', daysAgo(0), 'me')] });
+    state.get.mockResolvedValue({ data: [
+      chat(1, { body: 'Hello', type: 0, adminOnly: true, userId: 'me', createdAt: daysAgo(0) }),
+      chat(2, { body: 'Someone else\'s', type: 0, adminOnly: true, userId: 'other', createdAt: daysAgo(0) }),
+      chat(3, { body: 'Reply for me', type: 0, adminOnly: true, userId: 'org', recipientUserId: 'me', authorName: 'Org', createdAt: daysAgo(0) }),
+    ] });
     mount();
     await screen.findByText('Hello');
+    expect(screen.getByText('Reply for me')).toBeInTheDocument();
+    expect(screen.queryByText('Someone else\'s')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /More for message/ })).not.toBeInTheDocument();
+  });
+
+  it('is told when private messaging is switched off', async () => {
+    mount({ staffChatEnabled: false });
+    expect(await screen.findByText('Messaging the organisers isn’t available for this event yet.')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
   });
 });

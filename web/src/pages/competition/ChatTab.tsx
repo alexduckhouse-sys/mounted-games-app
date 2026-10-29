@@ -219,7 +219,7 @@ function ChatTabSession() {
         <div className="mg-section-head">
           <h2 id="announcements-title">{t('teams.chat.announcements')}</h2>
           {canPost && (
-            <Link to={`/competitions/${competition.id}/contact`} className="text-xs font-semibold text-[rgb(var(--mg-heading))] underline">
+            <Link to={`/competitions/${competition.id}/announcements?tab=messages`} className="inline-flex min-h-11 items-center text-xs font-semibold text-[rgb(var(--mg-heading))] underline">
               Messages{privateCount > 0 ? ` (${privateCount})` : ''}
             </Link>
           )}

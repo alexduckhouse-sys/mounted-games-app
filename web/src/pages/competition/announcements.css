@@ -20,7 +20,7 @@
 .ann-send:focus-visible, .ann-pill:focus-visible, .ann-red:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
 
 .ann-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px 12px 16px; }
-.ann-pill { flex: none; min-height: 32px; padding: 0 14px; border: 1.5px solid rgb(var(--mg-border)); border-radius: 999px; background: transparent; color: rgb(var(--mg-heading)); font: 600 13px/1 var(--mg-font); cursor: pointer; }
+.ann-pill { position: relative; flex: none; min-height: 32px; padding: 0 14px; border: 1.5px solid rgb(var(--mg-border)); border-radius: 999px; background: transparent; color: rgb(var(--mg-heading)); font: 600 13px/1 var(--mg-font); cursor: pointer; }
 .ann-pill:hover:not(:disabled) { border-color: rgb(var(--mg-heading)); }
 
 .ann-thread { display: flex; align-items: center; gap: 12px; padding: 10px 14px 10px 16px; color: rgb(var(--mg-ink)) !important; text-decoration: none !important; }
@@ -40,7 +40,7 @@
 .ann-blocked span { flex: 1; }
 .ann-messages { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .ann-bubble { max-width: 82%; padding: 9px 12px; border-radius: 16px; font: 400 16px/1.35 var(--mg-font); overflow-wrap: anywhere; }
-.ann-bubble time { display: block; margin-top: 3px; font: 500 11px/1 var(--mg-font); opacity: .7; }
+.ann-bubble time { display: inline-block; margin-top: 3px; font: 500 11px/1 var(--mg-font); opacity: .7; }
 .ann-bubble-in { align-self: flex-start; background: rgb(var(--mg-surface)); border: 1px solid rgb(var(--mg-line)); color: rgb(var(--mg-ink)); }
 .ann-bubble-out { align-self: flex-end; background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)); }
 .ann-input { display: flex; align-items: center; gap: 8px; width: 100%; }
@@ -54,3 +54,9 @@
 .ann-thread { transition: background-color var(--mg-dur-fast) var(--mg-ease-out); }
 .ann-unread { animation: mg-change-pop .42s var(--mg-ease-out); }
 @media (prefers-reduced-motion: reduce) { .ann-send, .ann-pill, .ann-thread { transition: none; } .ann-unread { animation: none; } }
+
+/* 44px tap targets: the pill stays slim, its hit area does not. */
+.ann-pill::after { content: ''; position: absolute; inset: -6px -4px; }
+.ann-more { position: relative; display: inline-block; margin-left: 8px; padding: 0 4px; border: 0; background: transparent; color: inherit; font: 700 16px/1 var(--mg-font); opacity: .7; cursor: pointer; }
+.ann-more::after { content: ''; position: absolute; inset: -14px -10px; }
+.ann-more:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }

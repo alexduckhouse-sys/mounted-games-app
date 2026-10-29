@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useCompetition } from './context';
 import { useChatFeed } from './useChatFeed';
 import { useAuth } from '../../auth/AuthContext';
 import { api, pinChatMessage } from '../../api';
 import { Notice } from '../../components/Notice';
+import { useT } from '../../i18n/LanguageContext';
 import { RefineHeader, RefineList, RefinePage } from '../refine/Refine';
 import {
   clockTime, initials, markSeen, messageThreads, pinnedAnnouncement, readSeen, sentAnnouncements, sentLabel,
@@ -21,15 +22,21 @@ const writeDraft = (competitionId: number, text: string) => {
 
 /** Organiser page: what is pinned, a box to send a new announcement, what has been sent, and private messages. */
 export function AnnouncementsPage() {
-  const { user } = useAuth();
+  const { user, hasRole, canOrganise } = useAuth();
+  const { competition } = useCompetition();
   const session = user ? `${user.id}:${[...user.roles].sort().join(',')}` : 'signed-out';
+  // Only organisers run announcements and read the inbox; everyone else messages them from the contact page.
+  if (!(hasRole('Admin') || canOrganise(competition))) return <Navigate to={`/competitions/${competition.id}/contact`} replace />;
   return <AnnouncementsSession key={session} />;
 }
 
 function AnnouncementsSession() {
+  const t = useT();
   const { competition, reload } = useCompetition();
   const { hasRole, canOrganise } = useAuth();
   const isAdmin = hasRole('Admin') || canOrganise(competition);
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') === 'messages' ? 'messages' : 'announcements';
   const feed = useChatFeed(competition.id, 'Couldn’t load the announcements. Check your signal and try again.');
   const [body, setBody] = useState(() => readDraft(competition.id));
   const [sending, setSending] = useState(false);
@@ -90,14 +97,24 @@ function AnnouncementsSession() {
     finally { busy.current = false; reload(); }
   }
 
+  const unreadTotal = threads.reduce((sum, thread) => sum + thread.unread, 0);
+  const openTab = (next: 'announcements' | 'messages') => setParams(next === 'messages' ? { tab: 'messages' } : {}, { replace: true });
+
   return (
     <RefinePage className="ann-page">
-      <RefineHeader back={`/competitions/${competition.id}/chat`} backLabel="Back to live stream" context={competition.name} title="Announcements" />
+      <RefineHeader
+        back={`/competitions/${competition.id}/chat`} backLabel="Back to live stream" context={competition.name} title={t('competition.messages.title')}
+        tabsKind="tablist" tabsLabel={t('competition.messages.tabsLabel')}
+        tabs={[
+          { label: t('competition.messages.tabAnnouncements'), active: tab === 'announcements', onSelect: () => openTab('announcements') },
+          { label: unreadTotal > 0 ? `${t('competition.messages.tabMessages')} (${unreadTotal})` : t('competition.messages.tabMessages'), active: tab === 'messages', onSelect: () => openTab('messages') },
+        ]}
+      />
       <div className="ann-body">
         {error && <Notice actionLabel={error.retry ? 'Try again' : undefined} onAction={error.retry}>{error.text}</Notice>}
         {!error && feed.error && <Notice actionLabel="Try again" onAction={feed.load}>{feed.error}</Notice>}
 
-        {pinned && (
+        {tab === 'announcements' && pinned && (
           <section aria-labelledby="ann-pinned">
             <h2 id="ann-pinned" className="ann-h">Pinned</h2>
             <div key={pinned.id} className="ann-card ann-pinned mg-reveal">
@@ -107,7 +124,7 @@ function AnnouncementsSession() {
           </section>
         )}
 
-        {isAdmin && <section aria-labelledby="ann-new">
+        {tab === 'announcements' && isAdmin && <section aria-labelledby="ann-new">
           <h2 id="ann-new" className="ann-h">New announcement</h2>
           <div className="ann-compose">
             <textarea
@@ -123,7 +140,7 @@ function AnnouncementsSession() {
           </div>
         </section>}
 
-        {sent.length > 0 && (
+        {tab === 'announcements' && sent.length > 0 && (
           <section aria-labelledby="ann-sent">
             <h2 id="ann-sent" className="ann-h">Sent</h2>
             <RefineList label="Sent announcements">
@@ -140,9 +157,9 @@ function AnnouncementsSession() {
           </section>
         )}
 
-        {isAdmin && (
+        {tab === 'messages' && isAdmin && (
           <section aria-labelledby="ann-messages">
-            <h2 id="ann-messages" className="ann-h">Messages</h2>
+            <h2 id="ann-messages" className="sr-only">Messages</h2>
             <RefineList label="Messages">
               {threads.map((thread) => {
                 const team = teamOf(thread.userId);

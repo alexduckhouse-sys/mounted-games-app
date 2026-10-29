@@ -275,4 +275,8 @@ export const competition: AreaCatalogue<typeof en> = {
   'competition.seasonRound.confirmMessagePublished': '{name} ne compte plus pour cette saison et ses résultats publiés sont supprimés. Vous pourrez la rajouter plus tard, mais il faudra publier à nouveau.',
   'competition.seasonRound.confirmLabel': 'Retirer la manche',
   'competition.seasonRound.error': 'Impossible de retirer cette manche. Vérifiez votre signal et réessayez.',
+  'competition.messages.title': 'Messages et annonces',
+  'competition.messages.tabAnnouncements': 'Annonces',
+  'competition.messages.tabMessages': 'Messages',
+  'competition.messages.tabsLabel': 'Annonces et messages',
 };

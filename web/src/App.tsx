@@ -201,8 +201,8 @@ export default function App() {
                 <Route path="produce" element={<ProtectedRoute roles={['Admin', 'Trainer']}><ProducePage /></ProtectedRoute>} />
                 <Route path="chat" element={<AfterDrawOnly><ChatTab /></AfterDrawOnly>} />
                 <Route path="contact" element={<ContactOrganisersPage />} />
-                <Route path="announcements" element={<ProtectedRoute roles={['Admin']}><AnnouncementsPage /></ProtectedRoute>} />
-                <Route path="messages/:userId" element={<ProtectedRoute roles={['Admin']}><MessageThreadPage /></ProtectedRoute>} />
+                <Route path="announcements" element={<ProtectedRoute roles={['Admin', 'Trainer']}><AnnouncementsPage /></ProtectedRoute>} />
+                <Route path="messages/:userId" element={<ProtectedRoute roles={['Admin', 'Trainer']}><MessageThreadPage /></ProtectedRoute>} />
                 <Route path="details" element={<DetailsTab />} />
                 <Route path="sponsors" element={<SponsorsPage />} />
                 <Route path="live" element={<Navigate to="../chat" replace />} />

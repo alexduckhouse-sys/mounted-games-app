@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,9 +9,10 @@ import type { ChatMessage, Team } from '../../types';
 import { CompetitionContext } from './context';
 import { MessageThreadPage } from './MessageThreadPage';
 
+const state = vi.hoisted(() => ({ roles: ['Admin'] as string[], organise: false }));
 vi.mock('../../api', () => ({ api: { get: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
 vi.mock('../../auth/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 'admin', roles: ['Admin'] }, hasRole: () => true, canEdit: () => true }),
+  useAuth: () => ({ user: { id: 'admin', roles: state.roles }, hasRole: (role: string) => state.roles.includes(role), canEdit: () => true, canOrganise: () => state.organise }),
 }));
 vi.mock('../../live/useLiveHub', () => ({ useLiveHub: () => ({ connected: true }) }));
 
@@ -25,7 +26,10 @@ function mount(teams: Team[] = []) {
   return render(
     <MemoryRouter initialEntries={['/competitions/1/messages/u1']}>
       <CompetitionContext.Provider value={value}>
-        <Routes><Route path="/competitions/:id/messages/:userId" element={<MessageThreadPage />} /></Routes>
+        <Routes>
+          <Route path="/competitions/:id/messages/:userId" element={<MessageThreadPage />} />
+          <Route path="/competitions/:id/contact" element={<p>Contact page</p>} />
+        </Routes>
       </CompetitionContext.Provider>
     </MemoryRouter>,
   );
@@ -34,6 +38,8 @@ function mount(teams: Team[] = []) {
 describe('MessageThreadPage', () => {
   beforeEach(() => {
     localStorage.clear();
+    state.roles = ['Admin'];
+    state.organise = false;
     feed = [
       chat(1, { adminOnly: true, userId: 'u1', authorName: 'Pat Rider', body: 'Where do we park?', createdAt: at(1) }),
       chat(2, { adminOnly: true, userId: 'admin', recipientUserId: 'u1', authorName: 'Org', body: 'Field two', createdAt: at(2) }),
@@ -54,7 +60,7 @@ describe('MessageThreadPage', () => {
     expect(screen.getByText('Field two')).toBeInTheDocument();
     expect(screen.queryByText('Not this thread')).toBeNull();
     expect(await screen.findByRole('button', { name: 'Block' })).toHaveClass('ann-red');
-    expect(screen.getByRole('link', { name: 'Back to messages' })).toHaveAttribute('href', '/competitions/1/contact');
+    expect(screen.getByRole('link', { name: 'Back to messages' })).toHaveAttribute('href', '/competitions/1/announcements?tab=messages');
   });
 
   it('works out the role from the account when they have no team here', async () => {
@@ -138,5 +144,75 @@ describe('MessageThreadPage', () => {
     });
     mount();
     expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load the messages');
+  });
+
+  it('sends anyone who is not an organiser to the contact page', async () => {
+    state.roles = ['Member'];
+    mount();
+    expect(await screen.findByText('Contact page')).toBeInTheDocument();
+  });
+
+  it('lets an event organiser who is not a site admin read and reply, without Block', async () => {
+    state.roles = ['Trainer']; state.organise = true;
+    mount();
+    expect(await screen.findByText('Where do we park?')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Block' })).toBeNull();
+    expect(api.get).not.toHaveBeenCalledWith('/admin/blocked-users', expect.anything());
+    await userEvent.click(screen.getByRole('button', { name: 'More for message: Where do we park?' }));
+    const sheet = within(screen.getByRole('dialog'));
+    expect(sheet.getByRole('button', { name: 'Delete message' })).toBeInTheDocument();
+    expect(sheet.queryByRole('button', { name: 'Block sender' })).toBeNull();
+  });
+
+  it('deletes a message from its menu, after asking', async () => {
+    const user = userEvent.setup();
+    const asked = autoConfirm(true);
+    mount();
+    await user.click(await screen.findByRole('button', { name: 'More for message: Where do we park?' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete message' }));
+    await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/competitions/1/chat/1'));
+    await waitFor(() => expect(screen.queryByText('Where do we park?')).toBeNull());
+    asked.stop();
+  });
+
+  it('keeps a message when the question is answered no, and says so when it cannot be deleted', async () => {
+    const user = userEvent.setup();
+    const asked = autoConfirm([false, true]);
+    vi.mocked(api.delete).mockRejectedValueOnce(new Error('offline'));
+    mount();
+    await user.click(await screen.findByRole('button', { name: 'More for message: Where do we park?' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete message' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(api.delete).not.toHaveBeenCalled();
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete message' }));
+    expect(await screen.findByText('Couldn’t delete that message. Check your signal and try again.')).toBeInTheDocument();
+    expect(screen.getAllByText('Where do we park?').length).toBeGreaterThan(0);
+    asked.stop();
+  });
+
+  it('blocks a sender\'s network from a message\'s menu, and says what was blocked', async () => {
+    const user = userEvent.setup();
+    const asked = autoConfirm(true);
+    vi.mocked(api.post).mockResolvedValueOnce({ data: { alreadyBlocked: false, ipAddress: '203.0.113.9' } });
+    mount();
+    await user.click(await screen.findByRole('button', { name: 'More for message: Where do we park?' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Block sender' }));
+    expect(await screen.findByText('Blocked IP 203.0.113.9.')).toBeInTheDocument();
+    expect(api.post).toHaveBeenCalledWith('/competitions/1/chat/1/block-author', {});
+    asked.stop();
+  });
+
+  it('says so when a sender cannot be blocked, and offers only Delete on the organisers\' own replies', async () => {
+    const user = userEvent.setup();
+    const asked = autoConfirm(true);
+    vi.mocked(api.post).mockRejectedValueOnce({ response: { data: { message: 'No IP on record.' } } });
+    mount();
+    await user.click(await screen.findByRole('button', { name: 'More for message: Where do we park?' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Block sender' }));
+    expect(await screen.findByText('No IP on record.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'More for message: Field two' }));
+    expect(within(screen.getByRole('dialog')).queryByRole('button', { name: 'Block sender' })).toBeNull();
+    asked.stop();
   });
 });
