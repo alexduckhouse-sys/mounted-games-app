@@ -182,9 +182,10 @@ body, body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-i
 /* Header bar, live strip and bottom tabs */
 .mg-header { background: rgb(var(--mg-header)); color: #fff; font-family: var(--mg-font); }
 .mg-logo {
-  flex-shrink: 0; width: 32px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
-  background: rgb(var(--mg-red)); color: #fff; font: 700 15px/1 var(--mg-font-display); text-decoration: none !important;
+  position: relative; box-sizing: border-box; flex-shrink: 0; width: 40px; height: 40px; border-radius: 12px; padding-top: 1px; display: flex; align-items: center; justify-content: center;
+  background: rgb(var(--mg-red)); color: #fff; font: 700 19px/1 var(--mg-font-display); letter-spacing: -0.02em; text-decoration: none !important;
 }
+.mg-logo::before { content: ""; position: absolute; inset: 3px; border-radius: 9px; border: 1px solid rgb(255 255 255 / .55); pointer-events: none; }
 .mg-header-sub { color: rgb(var(--mg-header-sub)); }
 .mg-nav-btn {
   flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; min-width: 44px;
@@ -194,6 +195,17 @@ body, body:has(.skin) { background: rgb(var(--mg-ground)); color: rgb(var(--mg-i
 }
 @media (hover: hover) { .mg-nav-btn:hover { background: rgb(255 255 255 / .08); } }
 .mg-nav-btn[aria-pressed="true"] { background: #fff; color: rgb(var(--mg-header)); }
+/* Header icon buttons: no box, 32x40 visible, 44x48 tap area. */
+.mg-hdr-icon {
+  position: relative; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 40px;
+  padding: 0; border: 0; border-radius: 10px; background: transparent; color: #fff; cursor: pointer; text-decoration: none !important;
+  transition: background-color var(--mg-dur-fast) var(--mg-ease-out), color var(--mg-dur-fast) var(--mg-ease-out), scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1);
+}
+.mg-hdr-icon::before { content: ""; position: absolute; inset: -4px -6px; }
+.mg-hdr-icon > svg { width: 15px; height: 15px; }
+.mg-hdr-icon-sub { color: rgb(var(--mg-header-sub)); }
+.mg-hdr-icon[aria-pressed="true"] { background: #fff; color: rgb(var(--mg-header)); }
+@media (hover: hover) { .mg-hdr-icon:hover { background: rgb(255 255 255 / .08); } .mg-hdr-icon[aria-pressed="true"]:hover { background: #fff; } }
 .mg-header :focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .mg-strip-bar { display: flex; align-items: stretch; overflow: hidden; border-radius: 14px; background: rgb(var(--mg-header-deep)); color: #fff; box-shadow: 0 6px 18px rgb(15 42 74 / .3); }
 /* The ticker dock: just above the tab bar on every competition page, with room for one page button beside it. */
@@ -333,7 +345,7 @@ button.mg-weather-line { cursor: pointer; }
 .mg-btn:disabled { opacity: .5; cursor: not-allowed; }
 /* Buttons dip under a finger and spring back on release. `scale` (not transform) leaves any positioning transform alone. */
 .mg-btn:active:not(:disabled), .mg-icon-btn:active:not(:disabled), .mg-chip:active:not(:disabled), .mg-small-btn:active:not(:disabled), .mg-sell-btn:active:not(:disabled),
-.mg-nav-btn:active:not(:disabled), .mg-tint-link:active, .sc-tool-btn:active:not(:disabled), .mg-stream-control:active:not(:disabled) { --mg-press-t: 90ms; scale: .96; }
+.mg-nav-btn:active:not(:disabled), .mg-hdr-icon:active, .mg-tint-link:active, .sc-tool-btn:active:not(:disabled), .mg-stream-control:active:not(:disabled) { --mg-press-t: 90ms; scale: .96; }
 .mg-small-btn, .mg-sell-btn, .sc-tool-btn, .mg-stream-control { transition: scale var(--mg-press-t, 260ms) cubic-bezier(.34, 1.56, .64, 1); }
 .mg-btn-primary { background: rgb(var(--mg-button)); border-color: rgb(var(--mg-button)); color: #fff !important; }
 @media (hover: hover) { .mg-btn-primary:hover:not(:disabled) { filter: brightness(1.12); } }
@@ -497,7 +509,7 @@ a.mg-line:active, button.mg-line:active { background: rgb(var(--mg-tint) / .65);
 .input:focus, .skin .input:focus { border-color: rgb(var(--mg-heading)); --tw-ring-color: rgb(var(--mg-heading) / .35); }
 
 @media (prefers-reduced-motion: reduce) {
-  .mg-btn, .mg-tab, .mg-nav-btn, .mg-icon-btn, .mg-chip, .mg-row, .mg-line, .mg-seg > button, .mg-toggle > button, .mg-pill, .mg-conn-pill, .mg-field, .mg-tint-link { transition: none; }
+  .mg-btn, .mg-tab, .mg-nav-btn, .mg-hdr-icon, .mg-icon-btn, .mg-chip, .mg-row, .mg-line, .mg-seg > button, .mg-toggle > button, .mg-pill, .mg-conn-pill, .mg-field, .mg-tint-link { transition: none; }
   .mg-badge-live::before, .mg-dropdown-menu, .mg-strip-panel { animation: none; }
   .skin *, .skin *::before, .skin *::after {
     animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important;

@@ -89,7 +89,12 @@ Some organiser and site admin pages shipped without following this file (found 2
   - Desktop has a sidebar.
   - On phone the page title sits in the navy bar with a back arrow.
 - **MG logo:** opens the site admin dashboard, on site admin pages only.
-- **Event app chrome:** keep the event app's top bar, notice line, "Main Arena running X behind" line and bottom tabs exactly as built. The only chrome change ever agreed is a squircle menu button.
+- **Event app chrome:** keep the event app's top bar, notice line, "Main Arena running X behind" line and bottom tabs exactly as built. The top bar's look was reworked on 29 October 2026 (see Top bar below); the layout and lines stay as built.
+- **Top bar (option C, 29 October 2026):** everything on a 4px grid with 16px side margins. 40px content row, 12px above and 8px below.
+  - Logo: 40px rounded square (radius 12) with a thin inner ring.
+  - Header icons (refresh, menu, edit, back) are unboxed, 15px, in a 32×40 box with a 44×48 tap area (`.mg-hdr-icon`). Refresh is pale, the rest white. This replaces the squircle menu button; the box was dropped on purpose.
+  - Page title is semibold 22px, subtitle medium 13px.
+  - Age group selector: one 28px soft-filled bar with the name, a dot, the team count and a chevron, in sentence case.
 - **Footers:** no Back/Next footers except in the creator wizard, where Back / "Step N of 10" / Next sit in a bottom bar.
 
 ## Areas and pages
@@ -170,7 +175,7 @@ The owner reviewed each public page as "live capture beside a tidier version" on
 
   The build is on `demo/public-pages`, from `demo/event-pages` and `demo/site-pages`.
 - **Ticker dock:** the ticker sits in a dock at the bottom of every event page (PR #215 brings it to the rest).
-- **Back button:** a boxed 44px arrow matching the menu button (`.mg-nav-btn`) on every page that has a back button.
+- **Back button:** an unboxed arrow (`.mg-hdr-icon`, see Top bar) on every page that has a back button.
 - **Page transitions** (picked by the owner, so they're an exception to "leave animations alone"):
   - opening a page and going back use a push;
   - switching tabs uses a quick 160ms crossfade, starting part-faded (never from a blank page);
