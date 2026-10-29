@@ -101,7 +101,7 @@ export function LoginPage() {
     <AuthFrame>
       <form onSubmit={submit} className="flex flex-1 flex-col" noValidate>
        {/* Keyed so the form fades when it swaps to the shared-key version and back. */}
-       <div key={useKey ? 'key' : 'password'} className="mg-swap flex flex-col gap-[18px]">
+       <div key={useKey ? 'key' : 'password'} className="mg-swap flex flex-1 flex-col gap-[18px]">
         <h1 className="mg-h1 !text-[34px] !leading-none">{useKey ? t('auth.login.organiserTitle') : t('common.signIn')}</h1>
 
         {!useKey && (
@@ -159,13 +159,13 @@ export function LoginPage() {
                 </div>
               )}
             </Field>
-            <Field label={t('auth.field.password')} error={error}>
+            <Field label={t('auth.field.password')} error={error}
+              errorAction={passwordRefused ? <Link to="/forgot-password" className="text-sm font-semibold text-[rgb(var(--mg-heading))] !underline">{t('auth.forgot.link')}</Link> : undefined}>
               {({ id, invalid, describedBy }) => (
                 <PasswordInput id={id} value={password} autoComplete="current-password" invalid={invalid} describedBy={describedBy}
                   onChange={(e) => { setPassword(e.target.value); setError(null); }} />
               )}
             </Field>
-            {passwordRefused && <Link to="/forgot-password" className="-mt-2 self-end text-sm font-semibold text-[rgb(var(--mg-heading))] !underline">{t('auth.forgot.link')}</Link>}
           </>
         )}
 
@@ -177,10 +177,13 @@ export function LoginPage() {
           </p>
         )}
 
-        <button type="button" onClick={swap} className="mx-auto flex min-h-11 items-center gap-2 text-[15px] font-semibold text-[rgb(var(--mg-muted))]">
-          {useKey ? <ArrowLeft aria-hidden="true" className="h-4 w-4" /> : <KeyRound aria-hidden="true" className="h-4 w-4" />}
-          {useKey ? t('auth.login.backToSignIn') : t('auth.login.sharedKey')}
-        </button>
+        {/* A quiet footer: pushed to the bottom of the page, but part of the normal flow so it scrolls with the form. */}
+        <div className="mt-auto flex justify-center pt-4">
+          <button type="button" onClick={swap} className="flex min-h-11 items-center gap-2 text-[15px] font-semibold text-[rgb(var(--mg-muted))]">
+            {useKey ? <ArrowLeft aria-hidden="true" className="h-4 w-4" /> : <KeyRound aria-hidden="true" className="h-4 w-4" />}
+            {useKey ? t('auth.login.backToSignIn') : t('auth.login.sharedKey')}
+          </button>
+        </div>
        </div>
       </form>
     </AuthFrame>

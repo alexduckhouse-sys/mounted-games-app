@@ -43,6 +43,64 @@ describe('RunGraph', () => {
     expect(container.querySelector('.overflow-x-auto')).toBeNull();
     expect([...container.querySelectorAll('svg text')].map((node) => node.textContent)).toContain('Heat');
   });
+  it('draws the usual graph by default: average line, axis numbers, places over the bars and a 212-high drawing', () => {
+    const { container } = render(<RunGraph runs={runs} average={3.3} ariaLabel="Each run" averageNote="Average 3.3 pts a run" />);
+    expect(screen.getByTestId('run-average')).toBeInTheDocument();
+    const drawn = [...container.querySelectorAll('svg text')].map((node) => node.textContent);
+    expect(drawn).toContain('0');
+    expect(drawn).toContain('3rd');
+    const box = container.querySelector('svg')!.getAttribute('viewBox')!.split(' ').map(Number);
+    expect(box[0]).toBe(0);
+    expect(box[3]).toBe(22 + 150 + 40);
+    const note = screen.getByText('Average 3.3 pts a run');
+    expect(note.className).toContain('text-[rgb(var(--mg-late-time))]');
+    expect(note.querySelector('svg')).not.toBeNull();
+  });
+  it('compact draws a shorter graph: a 120 plot and a 28 foot', () => {
+    const { container } = render(<RunGraph runs={runs} average={3.3} ariaLabel="Each run" averageNote="Average" compact />);
+    const box = container.querySelector('svg')!.getAttribute('viewBox')!.split(' ').map(Number);
+    expect(box[3]).toBe(22 + 120 + 28);
+    // The tallest bar (6 on a 0 to 6 scale) fills the whole plot.
+    const heights = [...container.querySelectorAll('rect')].map((node) => Number(node.getAttribute('height')));
+    expect(Math.max(...heights)).toBeCloseTo(120);
+  });
+  it('hideAverageLine removes the dashed line and writes the average in muted text with no swatch', () => {
+    render(<RunGraph runs={runs} average={3.3} ariaLabel="Each run" averageNote="Average 3.3 pts a run" hideAverageLine />);
+    expect(screen.queryByTestId('run-average')).not.toBeInTheDocument();
+    const note = screen.getByText('Average 3.3 pts a run');
+    expect(note.tagName).toBe('FIGCAPTION');
+    expect(note.className).toContain('text-[rgb(var(--mg-muted))]');
+    expect(note.querySelector('svg')).toBeNull();
+  });
+  it('hideAxisLabels leaves the scale numbers off but keeps the gridlines, and trims the empty left margin', () => {
+    const { container } = render(<RunGraph runs={runs} average={null} ariaLabel="Each run" averageNote="Average" hideAxisLabels />);
+    const drawn = [...container.querySelectorAll('svg text')].map((node) => node.textContent);
+    expect(drawn).not.toContain('0');
+    expect(drawn).toContain('3rd');
+    expect(container.querySelectorAll('svg line').length).toBeGreaterThan(0);
+    const box = container.querySelector('svg')!.getAttribute('viewBox')!.split(' ').map(Number);
+    expect(box[0]).toBe(30 - 8);
+  });
+  it("showValues prints each bar's points in place of its place, using valueText when given", () => {
+    const withText: GraphRun[] = [{ ...run(1, 4, '3rd', ['Heat 1']), valueText: '4 pts' }, run(2, 6, '1st', ['A Final'])];
+    const { container } = render(<RunGraph runs={withText} average={null} ariaLabel="Each run" averageNote="Average" showValues />);
+    const drawn = [...container.querySelectorAll('svg text')].map((node) => node.textContent);
+    expect(drawn).toContain('4 pts');
+    expect(drawn).toContain('6');
+    expect(drawn).not.toContain('3rd');
+    expect(drawn).not.toContain('1st');
+  });
+  it('fill spreads a few runs across the whole width with bars between 3 and 56 wide', () => {
+    const { container } = render(<RunGraph runs={runs.slice(0, 2)} average={null} ariaLabel="Two" averageNote="Average" fill />);
+    const box = container.querySelector('svg')!.getAttribute('viewBox')!.split(' ').map(Number);
+    expect(box[2]).toBe(360);
+    const widths = [...container.querySelectorAll('rect')].map((node) => Number(node.getAttribute('width')));
+    expect(widths.every((width) => width <= 56 && width >= 3)).toBe(true);
+  });
+  it('fill with no runs draws the plain empty graph', () => {
+    const { container } = render(<RunGraph runs={[]} average={null} ariaLabel="None" averageNote="Average" fill />);
+    expect(container.querySelectorAll('rect')).toHaveLength(0);
+  });
   it('keeps even a bar of nothing visible, and cuts long labels', () => {
     const { container } = render(<RunGraph runs={[run(1, 0, 'E', ['Quarter Final Two'])]} average={null} ariaLabel="One" averageNote="Average" />);
     expect(Number(container.querySelector('rect')!.getAttribute('height'))).toBeGreaterThanOrEqual(2);

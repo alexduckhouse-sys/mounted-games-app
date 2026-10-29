@@ -1,0 +1,47 @@
+/* "Choose your entry" in the flat page language (theme/flat.css): each age group is a heading with its own short list of
+   rows (Team, Guest rider) sitting directly under it on the page. The label and any supporting line sit on the left, the
+   price is the row's number in Barlow Condensed and a small muted chevron closes the row. Long age-group names and labels
+   wrap rather than truncate, so nothing needs sideways room at 320px. */
+.en-groups { margin-top: 20px; }
+.en-group + .en-group { margin-top: 44px; }
+
+/* The heading and its rows read as one unit: a navy rule under the age group (the same 2px rule as the timetable's
+   session headings), its rows straight under that, and the closing hairline under the last row (and the larger gap after
+   it) separating it from the next age group. */
+.en-head {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; column-gap: 12px; row-gap: 2px; margin: 0;
+  padding: 0 0 8px; border-bottom: 2px solid rgb(var(--mg-heading));
+  font: 600 20px/1.2 var(--mg-font); letter-spacing: -.005em; color: rgb(var(--mg-heading));
+}
+.en-name { min-width: 0; overflow-wrap: break-word; text-wrap: balance; }
+.en-head > small { font: 500 13px/1.2 var(--mg-font); letter-spacing: 0; color: rgb(var(--mg-muted)); }
+
+.en-list { display: flex; flex-direction: column; border-bottom: 1px solid var(--fl-line, rgb(var(--mg-heading) / .07)); }
+.en-list > * + * { border-top: 1px solid var(--fl-line, rgb(var(--mg-heading) / .07)); }
+
+.en-row {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 12px 4px 12px 0; box-sizing: border-box;
+  color: rgb(var(--mg-ink)); text-decoration: none; transition: background-color 120ms var(--mg-ease-out);
+  -webkit-tap-highlight-color: transparent;
+}
+a.en-row { cursor: pointer; }
+@media (hover: hover) { a.en-row:hover { background: rgb(var(--mg-subtle)); } }
+a.en-row:active { background: var(--fl-press, rgb(var(--mg-heading) / .06)); }
+a.en-row:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
+
+.en-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.en-label { font: 600 16px/1.3 var(--mg-font); letter-spacing: -.005em; overflow-wrap: break-word; text-wrap: pretty; }
+.en-sub { font: 500 13.5px/1.3 var(--mg-font); color: rgb(var(--mg-muted)); }
+.en-closed .en-label { color: rgb(var(--mg-muted)); }
+
+.en-price { flex: none; font: 700 22px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; white-space: nowrap; color: rgb(var(--mg-heading)); }
+.en-chev { flex: none; width: 14px; height: 14px; color: rgb(var(--mg-faint)); transition: transform 140ms var(--mg-ease-out); }
+a.en-row:active .en-chev { transform: translateX(2px); }
+
+/* Moving between steps is the shell's page transition (PageTransition); nothing here adds a second entrance. Only the
+   press feedback needs switching off for reduced motion and lite mode. */
+@media (prefers-reduced-motion: reduce) {
+  .en-row, .en-chev { transition: none; }
+  a.en-row:active .en-chev { transform: none; }
+}
+html[data-lite="true"] a.en-row:active .en-chev { transform: none; }

@@ -210,6 +210,101 @@ describe('CompetitionPicker: choosing', () => {
   });
 });
 
+describe('CompetitionPicker: several events on today', () => {
+  const second: CompetitionPickerItem = {
+    id: 4, name: 'Ring Two Classic', startDate: '2026-10-17T09:00:00', endDate: '2026-10-17T17:00:00', icon: 'ie',
+    location: 'Elsewhere', live: { sectionName: 'Teams Juniors', heatLabel: 'Heat 4', arenaName: 'Ring 2' },
+  };
+  const quiet: CompetitionPickerItem = { id: 5, name: 'Quiet Meet', startDate: '2026-10-17T09:00:00', endDate: '2026-10-17T17:00:00', icon: 'flag', location: 'Lowfield', live: null };
+  const rowFor = (name: string) => screen.getByRole('button', { name: `Open competition: ${name}` });
+
+  it('keeps one event on today as the big card, with no compact rows', async () => {
+    renderPicker();
+    await loaded('Autumn Open');
+    const onToday = screen.getByRole('region', { name: 'On today' });
+    expect(onToday.querySelector('.cp-now')).not.toBeNull();
+    expect(onToday.querySelector('.cp-live-row')).toBeNull();
+    expect(within(onToday).getByText('LIVE')).toBeInTheDocument();
+  });
+
+  it('gives each live event a compact row: its name and one line, age group then heat, with a red dot and no visible LIVE word', async () => {
+    reply(page([today, second, autumn]));
+    renderPicker();
+    await loaded('Autumn Open');
+    const onToday = screen.getByRole('region', { name: 'On today' });
+    expect(onToday.querySelector('.cp-now')).toBeNull();
+    expect(onToday.querySelectorAll('.cp-live-row')).toHaveLength(2);
+    for (const [name, line] of [['Today Cup', 'Seniors · Heat 2'], ['Ring Two Classic', 'Juniors · Heat 4']] as const) {
+      const row = rowFor(name);
+      expect(within(row).getByText(name)).toBeInTheDocument();
+      // One line only: no venue, no dates, no arena, no "on now".
+      expect(row.querySelector('.cp-live-line')).toHaveTextContent(new RegExp(`^${line}$`));
+      expect(row.querySelectorAll('.cp-live-heat')).toHaveLength(1);
+      expect(row.querySelector('.cp-live-place')).toBeNull();
+      expect(row).not.toHaveTextContent(/Ashdown|Elsewhere|Main arena|Ring 2|Sat 17|Oct|on now/);
+      // The live state is a still red dot plus words for screen readers only.
+      expect(row.querySelector('.cp-live-dot')).toHaveAttribute('aria-hidden', 'true');
+      expect(within(row).getByText(/LIVE/)).toHaveClass('sr-only');
+      expect(row.querySelector('.mg-badge-live')).toBeNull();
+      expect(row).toHaveAccessibleDescription(new RegExp(`LIVE:.*${line}`));
+    }
+  });
+
+  it('shows a quiet event on today with its place and dates and the words On today, not a red dot', async () => {
+    reply(page([today, quiet]));
+    renderPicker();
+    await loaded('Quiet Meet');
+    const row = rowFor('Quiet Meet');
+    expect(row).toHaveTextContent('Lowfield · Sat 17 Oct');
+    expect(row.querySelector('.cp-live-dot')).toBeNull();
+    expect(row.querySelector('.cp-live-mark-quiet')).toHaveTextContent('On today');
+    expect(row.querySelector('.cp-live-line')).toBeNull();
+    expect(rowFor('Today Cup').querySelector('.cp-live-dot')).not.toBeNull();
+  });
+
+  it('falls back to what is known when a live row has no heat or no age group yet, never leaving a stray separator', async () => {
+    reply(page([
+      { ...today, live: { sectionName: 'Teams Seniors', heatLabel: '' } },
+      { ...second, live: { heatLabel: 'Heat 4' } },
+      { ...quiet, id: 6, name: 'Bare Live', live: { heatLabel: '' } },
+    ]));
+    renderPicker();
+    await loaded('Bare Live');
+    expect(rowFor('Today Cup').querySelector('.cp-live-line')).toHaveTextContent(/^Seniors$/);
+    expect(rowFor('Ring Two Classic').querySelector('.cp-live-line')).toHaveTextContent(/^Heat 4$/);
+    const bare = rowFor('Bare Live');
+    expect(bare.querySelector('.cp-live-line')).toHaveTextContent(/^$/);
+    // Still marked live for everyone.
+    expect(bare.querySelector('.cp-live-dot')).not.toBeNull();
+    for (const name of ['Today Cup', 'Ring Two Classic', 'Bare Live']) expect(rowFor(name).textContent).not.toMatch(/·\s*$|^\s*·|·\s*·/);
+  });
+
+  it('opens a live row exactly as the big card does: remembers it and goes to its page, marking it current', async () => {
+    reply(page([today, second]));
+    renderPicker();
+    await loaded('Ring Two Classic');
+    expect(rowFor('Ring Two Classic')).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(rowFor('Ring Two Classic'));
+    expect(screen.getByTestId('probe')).toHaveTextContent('/competitions/4|Ring Two Classic');
+    expect(rowFor('Ring Two Classic')).toHaveAttribute('aria-pressed', 'true');
+    expect(rowFor('Ring Two Classic')).toHaveClass('cp-row-current');
+    expect(rowFor('Today Cup')).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(rowFor('Today Cup'));
+    expect(screen.getByTestId('probe')).toHaveTextContent('/competitions/1|Today Cup');
+  });
+
+  it('starts loading a live row’s competition when it is pointed at or pressed, once', async () => {
+    reply(page([today, second]));
+    renderPicker();
+    await loaded('Ring Two Classic');
+    fireEvent.mouseEnter(rowFor('Ring Two Classic'));
+    fireEvent.pointerDown(rowFor('Ring Two Classic'));
+    fireEvent.pointerDown(rowFor('Today Cup'));
+    const warmed = get.mock.calls.map(([url]) => url).filter((url) => /^\/competitions\/\d+$/.test(String(url)));
+    expect(warmed).toEqual(['/competitions/4', '/competitions/1']);
+  });
+});
+
 describe('CompetitionPicker: no forget button', () => {
   const remember = () => { document.cookie = `mg.competition=${encodeURIComponent(JSON.stringify({ id: 2, name: 'Autumn Open' }))}; Path=/`; };
 

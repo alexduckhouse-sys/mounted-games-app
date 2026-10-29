@@ -55,6 +55,18 @@ describe('DetailsTab matchmaker', () => {
     expect(list.textContent).not.toMatch(/0 team places/);
   });
 
+  it('says the timetable and results open after the draw, while entries are the only thing to do', async () => {
+    mount([section()]);
+    expect(await screen.findByText('The timetable, toplists and live scores open once the teams are drawn.')).toBeInTheDocument();
+  });
+
+  it('leaves that line out for organisers, who already have the timetable', async () => {
+    state.organise = true;
+    mount([section()]);
+    await screen.findByRole('list', { name: 'Age groups and fees' });
+    expect(screen.queryByText(/open once the teams are drawn/)).not.toBeInTheDocument();
+  });
+
   it('offers pair requests only from the signed-in rider’s own seeking entry', async () => {
     vi.mocked(api.get).mockImplementation(async (url: string) => ({ data: url.endsWith('/matchmaking') ? [
       { signupId: 20, competitionSectionId: 5, fullName: 'Synthetic Partner', lookingForPair: true },

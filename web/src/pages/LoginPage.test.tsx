@@ -55,10 +55,18 @@ describe('LoginPage close button', () => {
 });
 
 describe('LoginPage', () => {
-  it('has no blank spacer pushing the shared-key link to the bottom of the screen', () => {
+  it('keeps the shared-key link in a quiet footer at the bottom of the form, in normal flow, with no blank spacer', () => {
     const { container } = mount();
-    expect(container.querySelector('form > .flex-1')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Organiser with a shared key' })).toBeInTheDocument();
+    const link = screen.getByRole('button', { name: 'Organiser with a shared key' });
+    // The footer is pushed down by its own auto margin, so it scrolls with the form rather than floating over it.
+    const footer = link.parentElement!;
+    expect(footer).toHaveClass('mt-auto');
+    // It is the last thing in the form, after the submit button, so it follows the fields rather than sitting between them.
+    const submit = container.querySelector('form button[type="submit"]')!;
+    expect(submit.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(footer.nextElementSibling).toBeNull();
+    expect(footer.parentElement!.lastElementChild).toBe(footer);
+    expect([...container.querySelectorAll('form .flex-1')].every((node) => node.childElementCount > 0)).toBe(true);
   });
 
   it('notes caps lock under the password box, and swaps to the shared-key form', async () => {

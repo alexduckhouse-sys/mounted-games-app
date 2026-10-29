@@ -10,7 +10,7 @@ import { LanguageProvider } from '../../i18n/LanguageContext';
 import type { Lang } from '../../i18n/translate';
 import { dayKey } from '../../lib/timetableDay';
 import { buildToplist } from '../../lib/toplist';
-import { competition, heat, session, standing } from '../../test/factories';
+import { competition, heat, race, session, standing } from '../../test/factories';
 import { TackLeaderboard } from './TackLeaderboard';
 import { TimetableBoard } from './TimetableBoard';
 import { ToplistView } from './ToplistView';
@@ -94,7 +94,7 @@ describe('the tack and turnout table in French', () => {
 describe('the timetable in Welsh and French', () => {
   function setBoard(secondArena = 'Main Arena') {
     const sessions = [
-      session(1, { status: 1, arenaName: 'Main Arena', scheduledStart: `${day}T10:00:00`, startedAt: `${day}T10:06:00`, heats: [heat(11, { sessionId: 1, orderIndex: 0, label: 'Heat 1' })] }),
+      session(1, { status: 1, arenaName: 'Main Arena', scheduledStart: `${day}T10:00:00`, startedAt: `${day}T10:06:00`, heats: [heat(11, { sessionId: 1, orderIndex: 0, label: 'Heat 1', races: [race(1, { isComplete: true }), race(2, { isComplete: false }), race(3, { isComplete: false })] })] }),
       session(2, { status: 0, arenaName: secondArena, scheduledStart: `${day}T11:00:00`, heats: [heat(22, { sessionId: 2, orderIndex: 0 })] }),
     ];
     state.value = { competition: competition({ startDate: day, endDate: day, sessions }), reload: vi.fn(), updatedAt: null };
@@ -105,7 +105,12 @@ describe('the timetable in Welsh and French', () => {
     inLang('fr', <TimetableBoard />);
     expect(screen.getByRole('status')).toHaveTextContent('Main Arena a 6 minutes de retard');
     expect(screen.getAllByText('Main Arena · 1 manche').length).toBeGreaterThan(0);
-    expect(screen.getByText('EN COURS')).toBeInTheDocument();
+    // The running heat shows no "On now" word: the red live dot and a progress ring carry it, spoken in French.
+    const ring = screen.getByRole('img', { name: 'En cours : course 2 sur 3, terminées : 1' });
+    const row = ring.closest('.tt-row') as HTMLElement;
+    expect(row.querySelector('.tt-live-dot')).not.toBeNull();
+    expect(row).toHaveTextContent('Heat 1');
+    expect(row).not.toHaveTextContent(/en cours|pas encore commencé/i);
     expect(screen.getByText('Manche 1')).toBeInTheDocument();
   });
 

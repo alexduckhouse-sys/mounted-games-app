@@ -40,14 +40,14 @@ beforeEach(() => {
 });
 
 describe.each([
-  { lang: 'cy' as const, heading: 'Beth ydych chi’n ei gofrestru?', option: 'Pâr', places: '6 lle pâr ar ôl', steps: 'Camau cofrestru' },
-  { lang: 'fr' as const, heading: 'Que souhaitez-vous inscrire ?', option: 'Paire', places: '6 places de paire restantes', steps: 'Étapes de l’inscription' },
+  { lang: 'cy' as const, heading: 'Dewiswch eich cofrestriad', option: 'Pâr', places: '6 lle pâr ar ôl', steps: 'Camau cofrestru' },
+  { lang: 'fr' as const, heading: 'Choisissez votre inscription', option: 'Paire', places: '6 places de paire restantes', steps: 'Étapes de l’inscription' },
 ])('the entry page in $lang', ({ lang, heading, option, places, steps }) => {
   it('translates the chrome and leaves the age group name and the fee as they are', async () => {
     mount(lang);
     expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument();
     expect(screen.getByRole('list', { name: steps })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Under 12' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^Under 12/ })).toBeInTheDocument();
     expect(screen.getByText(places)).toBeInTheDocument();
     const link = screen.getByRole('link', { name: new RegExp(`^${option}`) });
     expect(link).toHaveTextContent('£15');

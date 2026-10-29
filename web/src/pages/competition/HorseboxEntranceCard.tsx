@@ -15,20 +15,23 @@ export function HorseboxEntranceCard({ competition }: { competition: Pick<Compet
     { label: entrance.what3WordsDisplay ? `what3words ${entrance.what3WordsDisplay}` : 'what3words', href: entrance.what3WordsUrl },
   ].filter((link): link is { label: string; href: string } => link.href !== null);
 
+  // At the end of Show full details on Details: the gate's own heading, the organiser's directions as a sentence, then every map link.
   return (
-    <>
-      <h2 className="sp-sec">{t('competition.horsebox.heading')}</h2>
-      <div className="sp-card" role="group" aria-label={t('competition.horsebox.heading')}>
-        {entrance.directionsNote && (
-          <div className="sp-row"><span className="sp-grow"><span className="sp-t1 !font-medium whitespace-pre-wrap">{entrance.directionsNote}</span></span></div>
-        )}
-        {links.map((link) => (
-          <a key={link.label} className="sp-row" href={link.href} target="_blank" rel="noopener noreferrer">
-            <span className="sp-grow"><span className="sp-t1 !font-medium">{link.label}</span></span>
-            <ExternalLink aria-hidden="true" className="sp-chev h-4 w-4" />
-          </a>
-        ))}
-      </div>
-    </>
+    <section className="dt-gate" aria-labelledby="dt-gate-title">
+      <h3 id="dt-gate-title" className="dt-sub-heading">{t('competition.horsebox.heading')}</h3>
+      {entrance.directionsNote && <p className="dt-note whitespace-pre-wrap">{entrance.directionsNote}</p>}
+      {links.length > 0 && (
+        <ul className="fl-list m-0 list-none p-0">
+          {links.map((link) => (
+            <li key={link.label}>
+              <a className="fl-row" href={link.href} target="_blank" rel="noopener noreferrer">
+                <span className="fl-grow"><span className="fl-title dt-fact-link">{link.label}</span></span>
+                <ExternalLink aria-hidden="true" className="fl-chev h-4 w-4" />
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

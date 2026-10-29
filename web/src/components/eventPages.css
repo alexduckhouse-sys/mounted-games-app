@@ -30,6 +30,12 @@ body:has(.ev-white) { background: rgb(var(--mg-surface)); }
 .ev-sub { font: 500 15px/1.3 var(--mg-font); color: rgb(var(--mg-muted)); }
 .ev-body { margin: 0; font: 500 15.5px/1.5 var(--mg-font); color: rgb(var(--mg-body)); }
 .ev-price { flex: none; font: 800 20px/1 var(--mg-font-display); color: rgb(var(--mg-heading)); }
+/* In the flat pages the step title is the page's headline, set like the events page's event name, and the price is the
+   row's number. */
+.mg-flat .ev-step-title { margin: 6px 0 0; font: 600 28px/1.15 var(--mg-font); letter-spacing: -.015em; text-wrap: balance; }
+.mg-flat .ev-step-title + .sp-sec, .mg-flat .ev-step-title + section > .sp-sec:first-child { margin-top: 20px; }
+.ev-closes { margin: 6px 0 0; font: 500 15px/1.4 var(--mg-font); color: rgb(var(--mg-body)); }
+.mg-flat .ev-price { font-weight: 700; }
 .ev-link { color: rgb(var(--mg-heading)); font-weight: 700; }
 .ev-text-btn { display: inline-flex; align-items: center; min-height: 44px; padding: 0 2px; border: 0; background: transparent; color: rgb(var(--mg-heading)); font: 700 15px/1 var(--mg-font); text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
 

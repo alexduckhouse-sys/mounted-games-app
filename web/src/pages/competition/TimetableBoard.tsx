@@ -2,7 +2,7 @@ import { HeatCalledBadge } from './reliability/CallUpStrip';
 import { useHeatCalls, type HeatCall } from './reliability/heatCalls';
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronRight, Clock, Star, X } from 'lucide-react';
 import { useCompetition } from './context';
 import { useAuth } from '../../auth/AuthContext';
@@ -12,12 +12,14 @@ import { usePageWidth } from '../../components/pageWidthState';
 import { usePageHeader } from '../../components/CompactPageBarContext';
 import { SponsorStrip } from '../../components/SponsorStrip';
 import { useFavourites } from '../../hooks/useFavourites';
-import { computeTimings, formatDelayDuration, formatShiftDelta, formatTime, parsePausedAtMs } from '../../lib/time';
+import { useNow } from '../../hooks/useNow';
+import { computeTimings, formatDelayDuration, formatTime, parsePausedAtMs } from '../../lib/time';
 import { displaySectionName } from '../../lib/section';
 import { dayKey, defaultTimetableDay } from '../../lib/timetableDay';
 import { hatbandColour } from '../../lib/hatbands';
 import { arenaDelays, isPlannedFinal, lastFinishedRow, sessionOrdinals, TIMETABLE_COLOURS, timetableRows, type TimetableRow, type TimetableStatus } from '../../lib/timetableRows';
 import { HeatRing } from '../../components/HeatRing';
+import { useStillMotion } from '../../lite/useStillMotion';
 import { useLanguage, useT } from '../../i18n/LanguageContext';
 import type { Translate } from '../../i18n/translate';
 import './timetable.css';
@@ -145,6 +147,18 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
   // Only the latest finished heat stays on show; the rest wait behind "Show full timetable".
   const latestFinished = lastFinishedRow(visibleRows);
   const hiddenFinished = visibleRows.filter((row) => row.status === 'finished' && row !== latestFinished).length;
+  // A heat whose expected start has gone by without it starting is only a guess now, so it says so rather than looking
+  // on schedule. Only the next heat in each arena gets this; the ones behind it simply follow on.
+  const now = useNow(30_000).getTime();
+  const overdue = new Set<string>();
+  const seenArena = new Set<string>();
+  for (const row of visibleRows) {
+    if (row.status === 'finished' || !isRaceRow(row)) continue;
+    const arenaName = row.session.arenaName?.trim() ?? '';
+    if (seenArena.has(arenaName)) continue;
+    seenArena.add(arenaName);
+    if (row.status !== 'live' && row.heat && row.effective && row.effective.getTime() + 60_000 < now) overdue.add(row.key);
+  }
   const shownRows = showFinished ? visibleRows : visibleRows.filter((row) => row.status !== 'finished' || row === latestFinished);
   const lateArenas = arenaDelays(visibleRows);
 
@@ -195,7 +209,9 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
   usePageHeader({
     title,
     // What is filtered is shown by the chips under the header and the badge on the dock button, not in this line.
-    subtitle: updated ? `${competition.name} · ${updated}` : competition.name,
+    // The time sits apart from the name so a long event name is cut short before it is.
+    subtitle: competition.name,
+    subtitleTail: updated ?? undefined,
     onRefresh: reload,
     refreshLabel: t('competition.timetable.refresh'),
     // The pencil goes to the organiser's Timetable & draw page, where times move, the order changes and a paused timetable continues.
@@ -238,6 +254,8 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
             showArena={arenas.length > 1 && !selectedArena && (!sharedArena || !group.title)}
             hasFollowedTeam={Boolean(row.heat?.entries.some((e) => isTeamFav(e.teamId)))}
             followedLanes={row.heat && row.status !== 'finished' ? row.heat.entries.filter((e) => isTeamFav(e.teamId) && e.laneIndex > 0).map((e) => ({ teamId: e.teamId, teamName: e.teamName, lane: e.laneIndex, hatband: competition.laneHatbands?.[e.laneIndex - 1] ?? null })) : undefined}
+            unfolded={showFinished && row.status === 'finished' && row !== latestFinished}
+            overdue={overdue.has(row.key)}
           />
         ))}
       </div>
@@ -245,14 +263,26 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
   }
 
   return (
-    <div className="timetable-board">
+    <div className="timetable-board mg-flat">
       {bandExtra}
-      {lateArenas.map((late) => (
-        <p key={late.arena} className="tt-late-line" role="status">
-          <Clock aria-hidden="true" size={17} />
-          {late.arena ? t('competition.timetable.lateArena', { arena: late.arena, delay: delayText(late.minutes, t) }) : t('competition.timetable.late', { delay: delayText(late.minutes, t) })}
-        </p>
-      ))}
+      {/* An arena's delay line opens and closes in place rather than jumping the list. */}
+      <AnimatePresence initial={false}>
+        {lateArenas.map((late) => (
+          <motion.div
+            key={late.arena}
+            className="tt-late-wrap"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <p className="tt-late-line" role="status">
+              <Clock aria-hidden="true" size={16} />
+              {late.arena ? t('competition.timetable.lateArena', { arena: late.arena, delay: delayText(late.minutes, t) }) : t('competition.timetable.late', { delay: delayText(late.minutes, t) })}
+            </p>
+          </motion.div>
+        ))}
+      </AnimatePresence>
       {(selectedArena || sectionLabel) && (
         <div className="tt-chips">
           {selectedArena && <button type="button" className="tt-chip" aria-label={t('competition.timetable.removeFilter', { name: selectedArena })} onClick={() => chooseArena('')}>{selectedArena}<X aria-hidden="true" size={15} strokeWidth={2.2} /></button>}
@@ -265,22 +295,17 @@ export function TimetableBoard({ sectionId = null, title: titleProp, bandExtra, 
           <p className="tt-provisional-note" role="note">{t('competition.timetable.provisional')}</p>
         )}
         {groups.map(renderGroup)}
+        {(hiddenFinished > 0 || showFinished) && (
+          <button type="button" className="tt-fold" aria-expanded={showFinished} onClick={() => setShowFinished((open) => !open)}>
+            {showFinished ? t('competition.timetable.hideFinished') : t('competition.timetable.showFull')}
+          </button>
+        )}
         {visibleRows.length > 0 && (
           <ul className="tt-key" aria-label={t('competition.timetable.statusColours')}>
             {STATUS_KEY.map(([status, key]) => <li key={status}><span className="tt-dot" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />{t(key)}</li>)}
           </ul>
         )}
         {visibleRows.length === 0 && <p className="mg-card p-4 text-[rgb(var(--mg-muted))]">{t('competition.timetable.empty')}</p>}
-        {(hiddenFinished > 0 || showFinished) && (
-          <button
-            type="button"
-            className="mg-text-link self-center"
-            aria-expanded={showFinished}
-            onClick={() => setShowFinished((open) => !open)}
-          >
-            {showFinished ? t('competition.timetable.hideFinished') : t('competition.timetable.showFull')}
-          </button>
-        )}
         {footer}
         <SponsorStrip placement="Timetable" />
       </div>
@@ -370,8 +395,31 @@ function finalsByAgeGroup(rows: TimetableRow[]) {
   return [...groups.values()];
 }
 
+const RING_R = 11;
+const RING_LENGTH = 2 * Math.PI * RING_R;
+
+/**
+ * How far through a heat on now is: a navy ring filled by the races finished, with the race being run in the middle.
+ * It eases round as each race finishes (not when it first appears); reduced motion and lite mode just set it.
+ */
+function RaceProgressRing({ current, total, done }: { current: number; total: number; done: number }) {
+  const t = useT();
+  const still = useStillMotion();
+  const offset = RING_LENGTH * (1 - Math.min(Math.max(done / total, 0), 1));
+  return (
+    <span className="mg-heat-ring tt-progress" role="img" aria-label={t('competition.timetable.progressLabel', { current, total, done })}>
+      <svg viewBox="0 0 28 28" aria-hidden="true">
+        <circle className="mg-heat-ring-track" cx="14" cy="14" r={RING_R} />
+        <motion.circle className="mg-heat-ring-fill" cx="14" cy="14" r={RING_R} strokeDasharray={RING_LENGTH} transform="rotate(-90 14 14)"
+          initial={false} animate={{ strokeDashoffset: offset }} transition={still ? { duration: 0 } : { duration: 0.6, ease: [0.22, 1, 0.36, 1] }} />
+      </svg>
+      <span className="mg-heat-ring-text" aria-hidden="true">{current}</span>
+    </span>
+  );
+}
+
 /** One timetable line: time, name with a small sub-line, "+N" or "−N" when moved, status colour dot. */
-function TimetableEvent({ row, calls, competitionId, showArena, hasFollowedTeam = false, followedLanes }: {
+function TimetableEvent({ row, calls, competitionId, showArena, hasFollowedTeam = false, followedLanes, unfolded = false, overdue = false }: {
   row: TimetableRow;
   calls: HeatCall[];
   competitionId: number;
@@ -379,10 +427,14 @@ function TimetableEvent({ row, calls, competitionId, showArena, hasFollowedTeam 
   hasFollowedTeam?: boolean;
   /** Where each followed team stands in an upcoming heat: its drawn lane and that lane's hatband. */
   followedLanes?: { teamId: number; teamName: string; lane: number; hatband: string | null }[];
+  /** A finished heat brought back by "Show full timetable": it fades in. */
+  unfolded?: boolean;
+  /** The next heat, whose expected start has passed without it starting. */
+  overdue?: boolean;
 }) {
   const t = useT();
   const { session, heat, status, delayMinutes } = row;
-  // A heat that goes live while you're looking lights up once; the "On now" label glides over from the heat before.
+  // A heat that goes live while you're looking lights up once.
   const live = status === 'live';
   const [liveSeen, setLiveSeen] = useState({ live, lit: 0 });
   if (liveSeen.live !== live) setLiveSeen({ live, lit: live ? liveSeen.lit + 1 : liveSeen.lit });
@@ -404,15 +456,30 @@ function TimetableEvent({ row, calls, competitionId, showArena, hasFollowedTeam 
     : 0;
   const shiftMinutes = Math.abs(rawDrift) >= 5 ? rawDrift : 0;
   const moved = shiftMinutes !== 0 && !!row.scheduled;
-  const showShift = moved && status !== 'live' && status !== 'finished' && session.status !== 1;
-  // Just "+10" or "−5" next to the heat: no struck-out planned time.
-  const shiftText = Math.abs(shiftMinutes) < 60 ? `${shiftMinutes > 0 ? '+' : '−'}${Math.abs(shiftMinutes)}` : formatShiftDelta(shiftMinutes);
+  // In a running session the later heats' times are estimates that move as it goes, so only a heat that has slipped
+  // late says by how much; an amber time never shows without its delay.
+  const showShift = moved && status !== 'live' && status !== 'finished' && (session.status !== 1 || status === 'late');
+  // "Delayed · +23 min" or "10 min early" under the heat: the big time is the estimate, this line says how far it has moved.
+  const shiftBy = Math.abs(shiftMinutes) < 60 ? t('competition.timetable.shortMinutes', { count: Math.abs(shiftMinutes) }) : formatDelayDuration(Math.abs(shiftMinutes));
+  const shiftText = shiftMinutes > 0 ? t('competition.timetable.delayedBy', { delay: shiftBy }) : t('competition.timetable.earlyBy', { delay: shiftBy });
+  // A heat waiting past its time shows nothing extra on screen (owner, 29 Oct); a screen reader still hears "Not started yet".
+  const showTiming = showShift;
+  // Waiting past its time isn't the same as running late: a heat that hasn't started yet stays neutral, and turns amber
+  // only when the timetable itself says it is late or its start has really moved later.
+  const late = status === 'late' || (showShift && shiftMinutes > 0);
   const orderedRaces = heat ? heat.races.slice().sort((a, b) => a.orderIndex - b.orderIndex) : [];
   const runningRaceIndex = orderedRaces.findIndex((r) => !r.isComplete);
   const currentRaceNum = runningRaceIndex >= 0 ? runningRaceIndex + 1 : orderedRaces.length;
-  const onNowText = orderedRaces.length > 0 ? t('competition.timetable.onNowRace', { n: currentRaceNum, total: orderedRaces.length }) : t('competition.timetable.onNow');
-  const timeColourClass = showShift ? (shiftMinutes > 0 ? ' tt-time-late' : ' tt-time-early') : '';
+  // A heat on now with races shows how far through it is in a navy ring: filled by the races finished, the race number in it.
+  const progress = status === 'live' && orderedRaces.length > 0
+    ? { current: currentRaceNum, total: orderedRaces.length, done: orderedRaces.filter((r) => r.isComplete).length }
+    : null;
+  const timeColourClass = late && (showShift || overdue) ? ' tt-time-late' : showShift ? ' tt-time-early' : '';
   const dot = <span className="tt-dot" style={{ backgroundColor: TIMETABLE_COLOURS[status] }} aria-hidden="true" />;
+  const followRing = hasFollowedTeam && race && heat && status !== 'finished';
+  // One spoken status per row: the ring says "on now" and the race for itself, and an overdue heat says "Not started yet"
+  // (or its delay) on the line, so neither is repeated (an overdue heat isn't called "on time" either).
+  const spokenStatus = progress || (live && followRing) || (overdue && status !== 'late') ? '' : statusText(status, delayMinutes, t);
   const content = <>
     <span className={`tt-time${timeColourClass}`}>{showShift && <span className="sr-only">{t('competition.timetable.plannedNow', { time: formatTime(row.scheduled) })}{' '}</span>}{formatTime(row.effective)}</span>
     <span className="tt-event">
@@ -428,20 +495,22 @@ function TimetableEvent({ row, calls, competitionId, showArena, hasFollowedTeam 
           {t('competition.timetable.laneFor', { team: item.teamName, lane: item.lane })}
         </span>
       ))}
-      {showShift && (
-        <span className={`tt-planned${shiftMinutes < 0 ? ' tt-planned-early' : ''}`} aria-hidden="true">{shiftText}</span>
+      {showTiming && (
+        <span key={shiftText} className={`tt-shift${shiftMinutes < 0 ? ' tt-shift-early' : ''}`}>{shiftText}</span>
       )}
-      {status === 'live' && <motion.span layoutId={`tt-onnow-${session.arenaName?.trim() ?? ''}`} layout="position" className="tt-onnow" aria-hidden="true">{onNowText}</motion.span>}
+      {overdue && !showTiming && <span className="sr-only">{t('competition.timetable.notStarted')}</span>}
     </span>
-    {/* A followed team's heat within the hour counts down in a ring where the status dot would be. */}
-    {hasFollowedTeam && race && heat && status !== 'finished'
-      ? <HeatRing at={row.effective} live={live} fallback={dot} />
-      : dot}
-    <span className="sr-only">{statusText(status, delayMinutes, t)}</span>
+    {/* The heat on now: the small red live dot beside a navy ring filled by the races finished, the race being run in it
+        (the ring alone carries the spoken "on now" and race). A followed team's heat within the hour counts down in a ring
+        instead; otherwise the status dot. */}
+    {progress
+      ? <span className="tt-marks"><span className="tt-dot tt-live-dot" aria-hidden="true" /><RaceProgressRing {...progress} /></span>
+      : followRing ? <HeatRing at={row.effective} live={live} fallback={dot} /> : dot}
+    {spokenStatus && <span className="sr-only">{spokenStatus}</span>}
     {race ? <ChevronRight className="tt-chevron" size={14} aria-hidden="true" /> : <span className="tt-chevron" aria-hidden="true" />}
     {live && lit > 0 && <span key={lit} className="tt-lit" aria-hidden="true" />}
     {shifts > 0 && !live && <span key={`shift-${shifts}`} className="tt-shifted" aria-hidden="true" />}
   </>;
-  const className = `tt-row tt-${status}${hasFollowedTeam ? ' tt-followed' : ''}`;
+  const className = `tt-row tt-${status}${hasFollowedTeam ? ' tt-followed' : ''}${unfolded ? ' tt-unfold' : ''}`;
   return race ? <Link className={className} data-followed={hasFollowedTeam ? 'true' : undefined} to={`/competitions/${competitionId}/session/${session.id}${heat ? `?heat=${heat.id}` : ''}`}>{content}</Link> : <div className={className} data-followed={hasFollowedTeam ? 'true' : undefined}>{content}</div>;
 }

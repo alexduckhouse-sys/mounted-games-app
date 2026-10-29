@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { FollowStar } from '../../components/FollowStar';
-import { Plus, Save, ClipboardList, Ban, Flag, Search, X, ChevronDown } from 'lucide-react';
+import { Plus, Save, Search, X, ChevronDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useFavourites } from '../../hooks/useFavourites';
 import { useCompetition } from './context';
@@ -18,7 +18,9 @@ import { usePageWidth } from '../../components/pageWidthState';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { useT } from '../../i18n/LanguageContext';
 import '../../components/filterKit.css';
-import { clubLabel } from '../../lib/clubName';
+import './teams.css';
+import { clubToShow } from '../../lib/teamNames';
+import { usePageHeader } from '../../components/CompactPageBarContext';
 import { AgeGroupFilterButton, AgeGroupFilterSheet } from '../../components/AgeGroupFilter';
 
 export function TeamsTab() {
@@ -128,6 +130,14 @@ export function TeamsTab() {
 
   const canCreate = hasRole('Trainer') || hasRole('Admin') || hasRole('Manager') || canOrganise(competition);
 
+  // The team count sits apart from the event name, so a long name is cut short before the count is.
+  const inAgeGroup = sectionId === 'all' ? competition.teams.length : competition.teams.filter((team) => team.competitionSectionId === sectionId).length;
+  usePageHeader({
+    title: t('teams.team.teams'),
+    subtitle: competition.name,
+    subtitleTail: t('teams.following.teamCount', { count: inAgeGroup }),
+  });
+
   // Organisers add a team from the + beside the ticker dock; the form opens in a sheet.
   // Spectators get the age-group filter there instead (phones only: wider screens have the rail).
   const dockedFilter = !canCreate && !desktop;
@@ -141,16 +151,15 @@ export function TeamsTab() {
     </button>
   );
   const sectionRail = (
-    <nav aria-label={t('teams.list.sections')} className="flex flex-col gap-3">
-      <div className="mg-card overflow-hidden">
-        <h2 className="mg-display border-b-2 border-[rgb(var(--mg-heading))] px-3 py-2 text-[15px] font-bold uppercase tracking-[0.05em] text-[rgb(var(--mg-heading))]">{t('teams.list.sections')}</h2>
-        <ul className="m-0 list-none p-0">
+    <nav aria-label={t('teams.list.sections')} className="tm-rail">
+      <div>
+        <h2 className="fl-heading">{t('teams.list.sections')}</h2>
+        <ul className="fl-list m-0 list-none p-0">
           {([['all', t('teams.list.allSections'), competition.teams.length], ...competition.sections.map((sec) => [sec.id, sec.displayName, competition.teams.filter((team) => team.competitionSectionId === sec.id).length])] as [number | 'all', string, number][]).map(([id, label, count]) => (
-            <li key={id} className="border-b border-[rgb(var(--mg-rule-soft))] last:border-b-0">
-              <button type="button" aria-pressed={sectionId === id} onClick={() => setSectionId(id)}
-                className={`flex min-h-11 w-full items-center gap-2 px-3 text-left text-[15px] ${sectionId === id ? 'bg-[rgb(var(--mg-tint))] font-bold text-[rgb(var(--mg-heading))]' : 'font-medium text-[rgb(var(--mg-ink))] hover:bg-[rgb(var(--mg-subtle))]'}`}>
-                <span className="min-w-0 flex-1 truncate">{label}</span>
-                <span className="shrink-0 text-xs text-[rgb(var(--mg-muted))]">{count}</span>
+            <li key={id}>
+              <button type="button" aria-pressed={sectionId === id} onClick={() => setSectionId(id)} className="fl-row">
+                <span>{label}</span>
+                <span>{count}</span>
               </button>
             </li>
           ))}
@@ -234,47 +243,33 @@ export function TeamsTab() {
       {showForm && canCreate && !docked && addForm(false)}
 
       {grouped.map(([section, sectionTeams]) => (
-        <section key={section} aria-label={displaySectionName(section)} className="flex flex-col gap-2">
-          <div className="fk-group-title pt-2">
-            <h3>{displaySectionName(section)}</h3>
-            <span>{teamsInGroup(sectionTeams.length, arenaOf(competition.sessions, sectionTeams[0]?.competitionSectionId))}</span>
-          </div>
-          <ul className="mg-card divide-y divide-[rgb(var(--mg-rule-soft))] overflow-hidden">
+        <section key={section} aria-label={displaySectionName(section)} className="tm-group">
+          <h2 className="fl-heading">
+            {displaySectionName(section)}
+            <span>{teamsInGroup(t('teams.following.teamCount', { count: sectionTeams.length }), arenaOf(competition.sessions, sectionTeams[0]?.competitionSectionId))}</span>
+          </h2>
+          <ul className="fl-list m-0 list-none p-0">
             {sectionTeams.map((team) => {
-              const hasDec = decFormTeamIds.has(team.id);
               const parsedBib = parseBibAndFlag(team.bibDescription);
               const on = followed.has(team.id);
+              // The club (only when the team's name doesn't already say it), then anything that changes how the team
+              // rides here, all in the same quiet line. No line at all when there is nothing to add.
+              const notes = [
+                clubToShow(team.displayName, team.clubName) || null,
+                team.isWithdrawn ? <span key="out" title={t('teams.list.withdrawnTitle')}>{t('teams.withdrawn')}</span> : null,
+                team.isHorsConcours ? <span key="hc" title={t('teams.list.hcTitle')}>{t('teams.team.horsConcoursLower')}</span> : null,
+                decFormTeamIds.has(team.id) ? <span key="dec">{t('teams.list.decTitle')}</span> : null,
+                flagged.has(team.id) ? <span key="flag" className="tm-flagged" title={t('teams.list.flaggedTitle')}>{t('teams.list.flagged', { count: flagged.get(team.id) ?? 0 })}</span> : null,
+              ].filter(Boolean);
               return (
-                <li key={team.id} className={`relative flex min-h-14 items-center gap-1 py-1.5 pl-4 pr-1.5 text-[rgb(var(--mg-ink))] ${team.isHorsConcours || team.isWithdrawn ? 'opacity-70' : ''}`}>
-                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-base font-semibold leading-tight">
-                      {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="h-3.5 w-5 shrink-0 rounded-[2px] object-cover" />}
-                      <Link to={`/competitions/${competition.id}/teams/${team.id}`} className="min-w-0 text-[rgb(var(--mg-ink))] after:absolute after:inset-0 after:content-[''] hover:underline">
-                        {team.displayName}
-                      </Link>
-                      {hasDec && (
-                        <span title={t('teams.list.decTitle')} className="mg-tag mg-tag-ok inline-flex items-center gap-0.5 !rounded-full !px-1.5 !py-0.5 !text-[9px]">
-                          <ClipboardList className="h-2.5 w-2.5" /> DEC
-                        </span>
-                      )}
-                      {flagged.has(team.id) && (
-                        <span title={t('teams.list.flaggedTitle')} className="mg-flag inline-flex items-center gap-0.5 !rounded-full !px-1.5 !py-0.5 !text-[9px]">
-                          <Flag className="h-2.5 w-2.5" aria-hidden="true" /> {t('teams.list.flagged', { count: flagged.get(team.id) ?? 0 })}
-                        </span>
-                      )}
-                      {team.isWithdrawn && (
-                        <span title={t('teams.list.withdrawnTitle')} className="mg-tag mg-tag-late inline-flex items-center gap-0.5 !rounded-full !px-1.5 !py-0.5 !text-[9px]">
-                          {t('teams.withdrawn')}
-                        </span>
-                      )}
-                      {team.isHorsConcours && (
-                        <span title={t('teams.list.hcTitle')} className="mg-tag inline-flex items-center gap-0.5 !rounded-full !px-1.5 !py-0.5 !text-[9px]">
-                          <Ban className="h-2.5 w-2.5" /> HC
-                        </span>
-                      )}
-                    </div>
-                    {clubLabel(team.clubName) && <span className="truncate text-[13.5px] leading-tight text-[rgb(var(--mg-muted))]">{team.clubName}</span>}
-                    {mayAssignTrainers && <div className="relative z-10"><TrainerPicker competitionId={competition.id} team={team} onSaved={reload} /></div>}
+                <li key={team.id} className={`fl-row tm-row${on ? ' tm-on' : ''}${team.isHorsConcours || team.isWithdrawn ? ' tm-out' : ''}`}>
+                  <div className="fl-grow">
+                    <Link to={`/competitions/${competition.id}/teams/${team.id}`} className="tm-link fl-title">
+                      {parsedBib.flag && <img src={`/flags/${parsedBib.flag}.png`} alt="" className="tm-flag" />}
+                      {team.displayName}
+                    </Link>
+                    {notes.length > 0 && <span className="fl-sub">{notes.flatMap((note, index) => (index ? [' · ', note] : [note]))}</span>}
+                    {mayAssignTrainers && <div className="tm-over"><TrainerPicker competitionId={competition.id} team={team} onSaved={reload} /></div>}
                   </div>
                   {canEdit() && (
                     <button
@@ -285,7 +280,7 @@ export function TeamsTab() {
                         reload();
                       }}
                       title={team.isHorsConcours ? t('teams.list.markScoring') : t('teams.list.markHc')}
-                      className={`mg-small-btn relative z-10 !min-h-9 !px-2 !text-[10px] ${
+                      className={`mg-small-btn tm-over !min-h-11 !px-2.5 !text-[13px] ${
                         team.isHorsConcours ? '!text-[rgb(var(--mg-ok))]' : '!text-[rgb(var(--mg-muted))]'
                       }`}
                     >
@@ -294,7 +289,7 @@ export function TeamsTab() {
                   )}
                   <button
                     type="button"
-                    className="relative z-10 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[rgb(var(--mg-heading))] hover:bg-[rgb(var(--mg-subtle))]"
+                    className="tm-star tm-over"
                     aria-pressed={on}
                     aria-label={t(on ? 'teams.unfollow' : 'teams.follow', { name: team.displayName })}
                     onClick={() => toggle({ competitionId: competition.id, teamId: team.id })}
@@ -307,7 +302,7 @@ export function TeamsTab() {
           </ul>
         </section>
       ))}
-      {grouped.length === 0 && search.trim() && <p className="px-0.5 text-sm text-[rgb(var(--mg-muted))]">{t('teams.list.noMatch', { query: search.trim() })}</p>}
+      {grouped.length === 0 && search.trim() && <p className="fl-sub m-0">{t('teams.list.noMatch', { query: search.trim() })}</p>}
 
     </>
   );
@@ -335,15 +330,15 @@ export function TeamsTab() {
   );
   const shownCount = (id: number | 'all') => (id === 'all' ? competition.teams : competition.teams.filter((team) => team.competitionSectionId === id)).length;
 
-  // The sheet sits outside the spaced column: space-y's margin would otherwise pull the dialog to the top of the screen.
+  // The sheets sit outside the page column, so its gap never lands on the dialog.
   return (
     <>
-    <div className="space-y-3 pt-2">
+    <div className="mg-flat tm">
       {searchBar}
       {favouriteError && <Notice>{favouriteError}</Notice>}
       {desktop ? (
         <PageGrid variant="left" aside={sectionRail}>
-          <div className="space-y-3">
+          <div className="tm-group">
             {teamBlocks}
           </div>
         </PageGrid>
@@ -377,8 +372,8 @@ export function TeamsTab() {
 }
 
 /** "7 teams · Main Arena": how many teams ride in an age group, and where when every session of it is in one arena. */
-function teamsInGroup(count: number, arena: string): string {
-  return [count === 1 ? '1 team' : `${count} teams`, arena].filter(Boolean).join(' · ');
+function teamsInGroup(counted: string, arena: string): string {
+  return [counted, arena].filter(Boolean).join(' · ');
 }
 
 /** The one arena an age group's sessions use, or '' when it has none named or more than one. */

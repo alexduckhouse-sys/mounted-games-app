@@ -67,27 +67,46 @@
 }
 html[data-lite="true"] :is(.tt-in-right-0, .tt-in-right-1, .tt-in-left-0, .tt-in-left-1) { animation: none; }
 
-.tt-body { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; }
-.tt-group { display: flex; flex-direction: column; gap: 4px; }
-.tt-group-title {
-  display: flex; width: 100%; align-items: baseline; gap: 8px; padding: 0 2px 3px; border-bottom: 1.5px solid rgb(var(--mg-heading)); text-align: left;
-}
-.tt-group-title h2 { flex: 1; margin: 0; color: rgb(var(--mg-heading)); font: 700 15px/1.1 var(--mg-font-display); letter-spacing: .05em; text-transform: uppercase; }
-.tt-group-title > span { color: rgb(var(--mg-muted)); font: 500 12px/1 var(--mg-font); }
+.tt-body { display: flex; flex-direction: column; gap: 18px; padding-top: 12px; }
+.tt-group { display: flex; flex-direction: column; gap: 2px; }
+/* Session headings in sentence case, the arena and count quieter on the right, on a medium blue rule that starts the block. */
+.tt-group-title { display: flex; width: 100%; align-items: baseline; justify-content: space-between; gap: 10px; padding: 0 0 8px; border-bottom: 2px solid rgb(var(--mg-heading)); text-align: left; }
+.tt-group-title h2 { flex: 1; min-width: 0; margin: 0; color: rgb(var(--mg-heading)); font: 600 20px/1.2 var(--mg-font); letter-spacing: -.005em; text-transform: none; overflow-wrap: break-word; }
+.tt-group-title > span { flex: none; color: rgb(var(--mg-muted)); font: 500 13px/1.2 var(--mg-font); text-align: right; }
 a.tt-row:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
 
-/* One amber line when an arena is running late. */
-.tt-late-line { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); font: 600 14px/1.3 var(--mg-font); }
-.tt-late-line > svg { flex: none; }
-
-.tt-card { overflow: hidden; border: 1px solid rgb(var(--mg-line)); border-radius: var(--mg-radius-card); background: rgb(var(--mg-surface)); box-shadow: var(--mg-shadow-sm); }
-.tt-card > * + * { border-top: 1px solid rgb(var(--mg-rule-soft)); }
-.tt-row {
-  display: grid; grid-template-columns: 52px minmax(0, 1fr) minmax(8px, auto) 14px; align-items: center; column-gap: 10px;
-  min-height: 50px; padding: 0 10px 0 12px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-ink)) !important;
-  text-decoration: none !important; transition: background .15s;
+/* One amber line per arena that is running late: a band to the screen edges like the live row, with no bar at the
+   edge. It opens and closes in place (the wrapper's height animates; the gap is inside it so nothing jumps). */
+.tt-late-wrap { overflow: hidden; margin-inline: -16px; }
+.tt-late-wrap + .tt-late-wrap .tt-late-line { border-top: 1px solid rgb(var(--mg-late-ink) / .12); }
+.tt-late-line {
+  display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 16px; background: rgb(var(--mg-late-bg));
+  color: rgb(var(--mg-late-ink)); font: 600 14px/1.3 var(--mg-font);
 }
-.tt-row + .tt-row { border-top: 1px solid rgb(var(--mg-rule-soft)); }
+.tt-late-line > svg { flex: none; }
+@media (min-width: 1024px) { .tt-late-wrap { margin-inline: 0; margin-top: 12px; border-radius: 8px; } }
+
+/* "Show full timetable" sits under the list as a plain text link; the finished heats come back in their places. */
+.tt-fold {
+  align-self: flex-start; min-height: 44px; padding: 0; border: 0; background: transparent; color: rgb(var(--mg-heading)); cursor: pointer;
+  font: 600 15px/1.2 var(--mg-font); text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 4px;
+  transition: background-color 120ms var(--mg-ease-out);
+}
+.tt-fold:active { background: rgb(var(--mg-heading) / .06); }
+.tt-fold:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
+/* Heats brought back by it fade in. */
+.tt-unfold { animation: tt-unfold 220ms var(--mg-ease-out) both; }
+@keyframes tt-unfold { from { opacity: 0; transform: translateY(-4px); } }
+
+/* Rows sit on the page with a hairline between them; the last row of a session has no closing rule (owner). */
+.tt-card { --tt-line: rgb(var(--mg-heading) / .07); display: flex; flex-direction: column; }
+.tt-row {
+  display: grid; grid-template-columns: 56px minmax(0, 1fr) minmax(8px, auto) 14px; align-items: center; column-gap: 10px;
+  min-height: 56px; padding: 6px 4px 6px 0; background: transparent; color: rgb(var(--mg-ink)) !important;
+  text-decoration: none !important; transition: background-color 250ms var(--mg-ease-out);
+}
+.tt-row + .tt-row { border-top: 1px solid var(--tt-line); }
+a.tt-row:active { background: rgb(var(--mg-heading) / .06); transition-duration: 120ms; }
 .tt-row { position: relative; isolation: isolate; }
 /* A heat that has just gone live: a red glow sweeps over the row once and fades. */
 .tt-lit { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, rgb(var(--mg-red) / .22), rgb(var(--mg-red) / .06)); animation: tt-lit 1.8s var(--mg-ease-out, ease-out) both; }
@@ -99,38 +118,53 @@ html[data-lite="true"] .tt-lit { display: none; }
 @keyframes tt-shifted { 0%, 20% { opacity: .9; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .tt-shifted { display: none; } }
 html[data-lite="true"] .tt-shifted { display: none; }
-a.tt-row:hover { background: rgb(var(--mg-subtle)); }
+@media (hover: hover) { a.tt-row:hover { background: rgb(var(--mg-subtle)); } }
 a.tt-row:focus-visible { outline-offset: -2px; }
-.tt-time { font: 700 23px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; color: rgb(var(--mg-heading)); }
+.tt-time { font: 700 23px/1 var(--mg-font-display); font-variant-numeric: tabular-nums; color: rgb(var(--mg-heading)); transition: color 250ms var(--mg-ease-out); }
 .tt-time-late { color: rgb(var(--mg-late-time)); }
 .tt-time-early { color: rgb(var(--mg-ok)); }
 .tt-event { display: flex; min-width: 0; flex-wrap: wrap; align-items: baseline; column-gap: 6px; padding: 3px 0; overflow-wrap: anywhere; }
-.tt-event strong { font-size: 16px; font-weight: 600; line-height: 1.25; }
-.tt-sub { font-size: 13px; line-height: 1.25; color: rgb(var(--mg-muted)); }
-.tt-planned { font-size: 13px; line-height: 1.25; color: rgb(var(--mg-late-time)); }
-.tt-planned-early { color: rgb(var(--mg-ok)); }
-.tt-onnow { color: rgb(var(--mg-red)); font: 700 10px/1 var(--mg-font); letter-spacing: .06em; }
+.tt-event strong { font-size: 16px; font-weight: 600; line-height: 1.3; letter-spacing: -.005em; }
+.tt-sub { font-size: 13.5px; font-weight: 500; line-height: 1.3; color: rgb(var(--mg-muted)); }
+/* "+10 min · planned 10:30" on its own line: the amount in the time's colour, the planned time quieter. */
+.tt-shift { flex-basis: 100%; font: 600 13.5px/1.3 var(--mg-font); color: rgb(var(--mg-late-time)); animation: tt-fade 180ms var(--mg-ease-out); }
+.tt-shift-early { color: rgb(var(--mg-ok)); }
+/* The heat on now: the red live dot, then a navy ring filled by the races finished with the race being run in it. No
+   pulse, no words: the pair sits in the status column, so the row is no taller. */
+.tt-marks { display: inline-flex; align-items: center; gap: 6px; }
+.tt-live-dot { background: rgb(var(--mg-red)); }
+.mg-heat-ring.tt-progress { color: rgb(var(--mg-heading)); }
+@keyframes tt-fade { from { opacity: 0; } }
 .tt-provisional-note { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: rgb(var(--mg-late-bg)); color: rgb(var(--mg-late-ink)); font: 500 14px/1.35 var(--mg-font); }
-.tt-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
-.tt-live .tt-dot { animation: tt-pulse 1.6s ease-in-out infinite; }
-.tt-key { display: flex; flex-wrap: wrap; gap: 4px 12px; list-style: none; padding: 0; margin: 2px 0 0; font-size: 12px; color: rgb(var(--mg-muted)); }
+/* The status dot matches the key under the list. It holds still: the live row's band already says it is running. */
+.tt-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; transition: background-color 250ms var(--mg-ease-out); }
+.tt-key { display: flex; flex-wrap: wrap; gap: 6px 14px; list-style: none; padding: 0; margin: -4px 0 0; font: 500 13px/1.2 var(--mg-font); color: rgb(var(--mg-muted)); }
 .tt-key li { display: flex; align-items: center; gap: 5px; }
 .tt-chevron { color: rgb(var(--mg-faint)); }
-.tt-live { background: rgb(var(--mg-live-row)); box-shadow: inset 3px 0 0 rgb(var(--mg-red)); }
-.tt-followed:not(.tt-live) { background: rgb(var(--mg-tint)); box-shadow: inset 3px 0 0 rgb(var(--mg-warn)); }
+/* The running heat and a followed team's heats are tinted bands that run to the screen edges (the 16px page gutter),
+   with no bar at the edge. Their own lines give way to the band. */
+.tt-live, .tt-followed:not(.tt-live) { margin-inline: -16px; padding-inline: 16px 20px; }
+.tt-live { background: rgb(var(--mg-live-row)); }
+.tt-live + .tt-row, .tt-row + .tt-live, .tt-followed + .tt-row, .tt-row + .tt-followed { border-top-color: transparent; }
+.tt-followed:not(.tt-live) { background: var(--fl-follow); }
 .tt-fav-star { display: inline-block; margin-left: 5px; vertical-align: -1px; fill: rgb(var(--mg-warn)); color: rgb(var(--mg-warn)); }
 a.tt-live:hover { background: rgb(var(--mg-live-row)); filter: brightness(.98); }
 .tt-late .tt-time { color: rgb(var(--mg-late-time)); }
-.tt-finished { min-height: 44px; }
+.tt-finished { min-height: 48px; }
 .tt-finished .tt-time { color: rgb(var(--mg-faint)); }
 .tt-finished .tt-event strong { color: rgb(var(--mg-body)); }
-@keyframes tt-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgb(var(--mg-red) / .5); } 50% { box-shadow: 0 0 0 5px rgb(var(--mg-red) / 0); } }
-@media (prefers-reduced-motion: reduce) { .tt-live .tt-dot { animation: none; } .tt-row { transition: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .tt-row, .tt-time, .tt-dot, .tt-fold { transition: none; }
+  .tt-unfold { animation: none; }
+}
+html[data-lite="true"] .tt-unfold { animation: none; }
+/* Laptop and up the bands stay inside the column. */
+@media (min-width: 1024px) { .tt-live, .tt-followed:not(.tt-live) { margin-inline: 0; padding-inline: 12px 4px; border-radius: 8px; } }
 
 /* Laptop: the board uses the page width, and session blocks sit two across. Everything else spans the row. */
 @media (min-width: 1024px) {
   .timetable-board { max-width: none; }
-  .tt-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 14px 24px; padding-top: 16px; }
+  .tt-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 28px 40px; padding-top: 16px; }
   .tt-body > * { grid-column: 1 / -1; }
   .tt-body > .tt-group, .tt-body > .tt-cell { grid-column: auto; }
 }
