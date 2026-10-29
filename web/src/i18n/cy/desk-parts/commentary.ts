@@ -98,6 +98,7 @@ export const deskCommentary: AreaCatalogue<typeof en> = {
   'desk.commentary.noRaceSessions': 'Does dim sesiynau rasio i’w paratoi eto.',
   'desk.commentary.pickSession': 'Sesiwn',
   'desk.commentary.pickHeat': 'Rhagras',
+  'desk.commentary.pickWhat': 'Sesiwn, rhediad a pharth',
   'desk.commentary.pickZone': 'Parth',
   'desk.commentary.offline': 'Methu cysylltu â’r gweinydd. Mae’r daflen hon wedi’i hadeiladu o’r amserlen ar eich ffôn.',
   'desk.commentary.loadingSheet': 'Yn llwytho’r daflen…',

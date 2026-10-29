@@ -1,15 +1,13 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { useDialogFocus } from './useDialogFocus';
-import { Link } from 'react-router-dom';
-import { BookOpen } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { BookOpen, X } from 'lucide-react';
 import { api } from '../api';
 import { equipmentFromDiagram } from '../lib/raceEquipment';
 import { findRaceTemplate } from '../lib/raceTemplates';
 import type { RaceTemplate, SectionFormat } from '../types';
 import { Notice } from './Notice';
 import { RaceDiagram } from './RaceDiagram';
-import { SwipeSheet } from './SwipeSheet';
+import { Sheet } from './Sheet';
 
 import { useT } from '../i18n/LanguageContext';
 
@@ -129,10 +127,16 @@ export function RaceRulebookSection({
   template,
   showDiagram = false,
   diagramHeight = 180,
+  fitDiagram = false,
+  picker = 'tabs',
 }: {
   template: RaceTemplateDetail | RaceTemplate;
   showDiagram?: boolean;
   diagramHeight?: number;
+  /** Size the diagram to its own shape instead of `diagramHeight`, so it has no empty bars on a phone. */
+  fitDiagram?: boolean;
+  /** `tabs` lets a reader switch rulebook (the rulebook pages); `none` shows the event's rules with no rulebook named (the sheet: the organiser set the rulebook when they made the competition). */
+  picker?: 'tabs' | 'none';
 }) {
   const t = useT();
   const [activeBody, setActiveBody] = useState<GoverningBody>('EGUK');
@@ -141,7 +145,7 @@ export function RaceRulebookSection({
 
   return (
     <div className="mt-3 space-y-3" aria-label={t('competition.rules.rulebooksFor', { name: template.name })}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      {picker === 'tabs' && <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 text-sm font-bold text-[rgb(var(--mg-heading))]">
           <BookOpen className="h-4 w-4" aria-hidden="true" />
           <span>{t('competition.rules.rulebooks', { name: template.name })}</span>
@@ -167,23 +171,23 @@ export function RaceRulebookSection({
             );
           })}
         </div>
-      </div>
+      </div>}
 
       {showDiagram && template.diagramJson && (
         <div className="overflow-hidden rounded-lg border border-[rgb(var(--mg-rule))]">
-          <RaceDiagram drop diagramJson={template.diagramJson} height={diagramHeight} />
+          <RaceDiagram drop fit={fitDiagram} diagramJson={template.diagramJson} height={diagramHeight} />
         </div>
       )}
 
       <div
-        role="tabpanel"
-        aria-label={t('competition.rules.bodyRules', { body: current.body })}
+        role={picker === 'tabs' ? 'tabpanel' : 'group'}
+        aria-label={picker === 'tabs' ? t('competition.rules.bodyRules', { body: current.body }) : t('competition.rules.raceRules')}
         className="rounded-lg border border-[rgb(var(--mg-rule))] bg-[rgb(var(--mg-subtle))] p-3 space-y-2.5 text-sm"
       >
-        <div className="flex flex-wrap items-baseline justify-between gap-1 border-b border-[rgb(var(--mg-rule-soft))] pb-2">
+        {picker === 'tabs' && <div className="flex flex-wrap items-baseline justify-between gap-1 border-b border-[rgb(var(--mg-rule-soft))] pb-2">
           <div className="font-bold text-[rgb(var(--mg-heading))]">{current.title}</div>
           {current.edition !== UNVERIFIED_EDITION && <span className="text-xs text-[rgb(var(--mg-muted))]">{current.edition}</span>}
-        </div>
+        </div>}
 
         <div className="grid gap-2 sm:grid-cols-2">
           <div>
@@ -215,18 +219,14 @@ export function RaceRulesSheet({
   format,
   open,
   onClose,
-  competitionId,
 }: {
   raceName: string | null;
   /** The section's format: Pairs and Individual sections read their own version of the race. */
   format?: SectionFormat | null;
   open: boolean;
   onClose: () => void;
-  /** The competition in context. Without one there is no rulebooks page to link to, so the link is left out. */
-  competitionId?: number;
 }) {
   const t = useT();
-  const titleId = useId();
   const [loaded, setLoaded] = useState<{ key: string; detail: RaceTemplateDetail | null } | null>(null);
   const activeKey = raceName ? `${raceName.trim().toLowerCase()}|${format ?? ''}` : '';
   const template = loaded && loaded.key === activeKey ? loaded.detail : null;
@@ -246,59 +246,25 @@ export function RaceRulesSheet({
   if (!open || !raceName) return null;
 
   return (
-    <RulesFrame titleId={titleId} onClose={onClose}>
-        <span aria-hidden="true" className="kit-sheet-grip" />
-        <h2 id={titleId} className="kit-sheet-title">
-          {template?.name ?? raceName}
-        </h2>
-
-        {loading && !template && <Notice tone="info">{t('competition.rules.loadingRace')}</Notice>}
-        {!loading && !template && <Notice tone="info" role={null}>{t('competition.rules.none')}</Notice>}
-        {template && (
-          <div className="space-y-3">
-            {template.summary && <p className="text-sm text-[rgb(var(--mg-body))]">{template.summary}</p>}
-            <RaceRulebookSection template={template} showDiagram diagramHeight={180} />
-            {competitionId != null && (
-              <div className="flex justify-end pt-1">
-                <Link
-                  to={`/competitions/${competitionId}/rulebooks?race=${encodeURIComponent(template.name)}`}
-                  onClick={onClose}
-                  className="mg-text-link text-xs"
-                >
-                  {t('competition.rules.openPage')}
-                </Link>
+    <Sheet title={template?.name ?? raceName} className="rules-sheet" onClose={onClose}>
+      {({ close }) => (
+        <>
+          {/* Pinned with the title: the rules scroll underneath, the way out never does. */}
+          <button type="button" className="rules-sheet-close" aria-label={t('competition.rules.close')} onClick={() => close()}>
+            <X className="h-5 w-5" aria-hidden="true" strokeWidth={2.4} />
+          </button>
+          <div className="rules-sheet-body">
+            {loading && !template && <Notice tone="info">{t('competition.rules.loadingRace')}</Notice>}
+            {!loading && !template && <Notice tone="info" role={null}>{t('competition.rules.none')}</Notice>}
+            {template && (
+              <div className="space-y-3">
+                {template.summary && <p className="text-sm text-[rgb(var(--mg-body))]">{template.summary}</p>}
+                <RaceRulebookSection template={template} showDiagram fitDiagram picker="none" />
               </div>
             )}
           </div>
-        )}
-        <div className="kit-acts">
-          <button type="button" className="kit-pill kit-pill-fill" aria-label={t('competition.rules.close')} onClick={onClose}>{t('common.close')}</button>
-        </div>
-    </RulesFrame>
-  );
-}
-
-/** The dim and the sheet: focus moves in, Tab stays inside, Escape closes and focus goes back. */
-function RulesFrame({ titleId, onClose, children }: { titleId: string; onClose: () => void; children: ReactNode }) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-  useDialogFocus(dialogRef, onClose, '.kit-acts button');
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-[rgb(var(--mg-overlay)/0.45)] p-0 sm:items-center sm:p-4"
-      onPointerDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <SwipeSheet
-        ref={dialogRef}
-        onClose={onClose}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="flex max-h-[90vh] w-full max-w-2xl flex-col gap-3 overflow-y-auto rounded-t-[26px] bg-[rgb(var(--mg-surface))] px-5 pb-6 pt-2 shadow-xl [corner-shape:squircle] sm:rounded-[20px]"
-      >
-        {children}
-      </SwipeSheet>
-    </div>
+        </>
+      )}
+    </Sheet>
   );
 }
