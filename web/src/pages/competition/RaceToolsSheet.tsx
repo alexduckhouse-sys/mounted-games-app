@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronRight, MoreHorizontal } from 'lucide-react';
 import { formatPoints } from '../../lib/formatPoints';
 import { redLabel, yellowLabel, type CardMark } from '../../lib/refereeCards';
@@ -65,6 +65,41 @@ export function RaceToolsSheet({
   const [editing, setEditing] = useState<number | null>(null);
   const [tieMode, setTieMode] = useState(false);
   const [ticked, setTicked] = useState<number[]>([]);
+  const menuOpen = useRef<number | null>(null);
+  const escapedAt = useRef(-1000);
+  useEffect(() => { menuOpen.current = menuFor; }, [menuFor]);
+
+  // A team's menu closes on a tap anywhere outside it (its own ⋯ button toggles it), and Escape closes just the menu.
+  useEffect(() => {
+    if (menuFor === null) return;
+    const onDown = (event: Event) => {
+      if (event.target instanceof Element && event.target.closest('.rt-more[data-open="true"]')) return;
+      setMenuFor(null);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      escapedAt.current = performance.now();
+      setMenuFor(null);
+    };
+    document.addEventListener('pointerdown', onDown, true);
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true);
+      document.removeEventListener('keydown', onKey, true);
+    };
+  }, [menuFor]);
+  // Some browsers still send the dialog its own "cancel" for that Escape; it must not close the sheet.
+  useEffect(() => {
+    const onCancel = (event: Event) => {
+      if (menuOpen.current === null && performance.now() - escapedAt.current > 150) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    document.addEventListener('cancel', onCancel, true);
+    return () => document.removeEventListener('cancel', onCancel, true);
+  }, []);
 
   function pick(action: () => void) {
     setMenuFor(null);
@@ -104,7 +139,7 @@ export function RaceToolsSheet({
                   </label>
                 )}
                 {!stepping && !tieMode && <span className="rt-pts" aria-label={`${formatPoints(t.points)} ${t.points === 1 ? 'point' : 'points'}`}>{formatPoints(t.points)}</span>}
-                <span className="rt-more">
+                <span className="rt-more" data-open={open}>
                   <button
                     type="button"
                     className="rt-dots"

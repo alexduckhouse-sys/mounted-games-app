@@ -74,9 +74,10 @@ describe('Sheet', () => {
     const clock = vi.spyOn(performance, 'now');
     clock.mockReturnValue(1000);
     fireEvent.pointerDown(dialog, { clientY: 100 });
-    fireEvent.pointerMove(dialog, { clientY: 120 });
+    fireEvent.pointerMove(dialog, { clientY: 120, buttons: 1 });
     expect(dialog).toHaveStyle({ transform: 'translateY(20px)' });
     expect(dialog).toHaveClass('is-dragging');
+    expect(dialog.style.transition).toBe('none');
     clock.mockReturnValue(1400);
     fireEvent.pointerUp(dialog, { clientY: 120 });
     expect(dialog).not.toHaveClass('is-dragging');

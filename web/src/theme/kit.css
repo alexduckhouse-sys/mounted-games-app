@@ -4,13 +4,13 @@
 
 /* Pills: filled for the main action, outlined for the rest, red-filled for deleting. */
 .kit-pill { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 18px; border: 1.5px solid rgb(var(--mg-button)); border-radius: 999px; background: rgb(var(--mg-surface)); color: rgb(var(--mg-heading)) !important; font: 700 15px/1 var(--mg-font); text-decoration: none !important; white-space: nowrap; cursor: pointer; }
-.kit-pill:hover:not(:disabled) { background: rgb(var(--mg-subtle)); }
+@media (hover: hover) { .kit-pill:hover:not(:disabled) { background: rgb(var(--mg-subtle)); } }
 .kit-pill:disabled { opacity: .5; cursor: not-allowed; }
 .kit-pill:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: 2px; }
 .kit-pill-fill { background: rgb(var(--mg-button)); color: rgb(var(--mg-button-ink)) !important; }
-.kit-pill-fill:hover:not(:disabled) { background: rgb(var(--mg-button)); filter: brightness(1.12); }
+@media (hover: hover) { .kit-pill-fill:hover:not(:disabled) { background: rgb(var(--mg-button)); filter: brightness(1.12); } }
 .kit-pill-del { background: rgb(var(--mg-danger)); border-color: rgb(var(--mg-danger)); color: #fff !important; }
-.kit-pill-del:hover:not(:disabled) { background: rgb(var(--mg-danger)); filter: brightness(1.1); }
+@media (hover: hover) { .kit-pill-del:hover:not(:disabled) { background: rgb(var(--mg-danger)); filter: brightness(1.1); } }
 /* A red text button for the odd destructive choice beside a go-ahead ("Delete mine"). */
 .kit-redtext { min-height: 44px; padding: 0 4px; border: 0; background: transparent; color: rgb(var(--mg-elim)); font: 700 15px/1 var(--mg-font); text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 4px; cursor: pointer; }
 .kit-redtext:disabled { opacity: .5; cursor: not-allowed; }
@@ -132,7 +132,7 @@ dialog.rules-sheet { overflow: hidden; }
 .rules-sheet > .kit-sheet-inner { max-height: 92dvh; overflow: hidden; }
 .rules-sheet .kit-sheet-title { padding-right: 48px; flex: none; }
 .rules-sheet-close { position: absolute; top: 6px; right: 10px; z-index: 1; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: rgb(var(--mg-heading)); cursor: pointer; }
-.rules-sheet-close:hover { background: rgb(var(--mg-subtle)); }
+@media (hover: hover) { .rules-sheet-close:hover { background: rgb(var(--mg-subtle)); } }
 .rules-sheet-close:focus-visible { outline: 2px solid rgb(var(--mg-heading)); outline-offset: -2px; }
 /* The scroll bar sits in the sheet's side gutter, so the cards keep a gap on the right like on the left. */
 .rules-sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 12px 4px 0; margin-right: -12px; scrollbar-width: thin; }
