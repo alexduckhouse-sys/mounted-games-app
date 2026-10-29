@@ -60,43 +60,33 @@ export function predictMinutesPerRace(
   sessions: Session[],
   historicalAvgMinutesPerRace?: number | null,
 ): PacePrediction {
-  let actualTotalMinutes = 0;
-  let plannedTotalMinutes = 0;
-  let sampleRaces = 0;
-  let sampleHeats = 0;
-
-  for (const s of sessions) {
-    if (s.kind === 1 || s.kind === 2 || s.kind === 3) continue;
-    for (const h of s.heats ?? []) {
-      const races = h.races ?? [];
-      const completedRaces = races.filter((r) => r.isComplete || !!r.finishedAt);
-      const isFinished = !!h.finishedAt || (races.length > 0 && races.every((r) => r.isComplete || !!r.finishedAt));
-      const raceCount = h.finishedAt ? races.length : completedRaces.length;
-      if (!isFinished || raceCount === 0) continue;
-
-      const firstRaceStart = races
-        .map((r) => r.startedAt)
-        .filter((t): t is string => !!t)
-        .sort()[0];
-      const firstHeat = (s.heats ?? []).every((other) => other.orderIndex >= h.orderIndex);
-      const startStamp = h.startedAt ?? firstRaceStart ?? (firstHeat ? s.startedAt : null);
-      const endStamp = h.finishedAt ?? races
-        .map((r) => r.finishedAt)
-        .filter((t): t is string => !!t)
-        .sort()
-        .at(-1);
-
-      if (!startStamp || !endStamp) continue;
-      const actualMinutes = (new Date(endStamp).getTime() - new Date(startStamp).getTime()) / 60_000;
-      const minutesPerRace = actualMinutes / raceCount;
-      if (!Number.isFinite(minutesPerRace) || minutesPerRace < 0.5 || minutesPerRace > 15) continue;
-
-      actualTotalMinutes += actualMinutes;
-      plannedTotalMinutes += heatDurationMinutes(h, s);
-      sampleRaces += raceCount;
-      sampleHeats += 1;
+  const samples: { heatId: number; minutes: number; planned: number }[] = [];
+  for (const session of sessions) {
+    if (session.kind !== 0 || session.notes?.includes('[paused:')) continue;
+    for (const heat of session.heats ?? []) {
+      const races = [...heat.races].sort((a, b) => a.orderIndex - b.orderIndex);
+      let previousFinish: number | null = null;
+      for (const race of races) {
+        const finish = Date.parse(race.finishedAt ?? '');
+        const anchor = previousFinish ?? (race.startIsExplicit ? Date.parse(race.startedAt ?? '') : NaN);
+        const minutes = (finish - anchor) / 60000;
+        if (Number.isFinite(minutes) && minutes >= 0.6 && minutes <= 9 && !race.underReview)
+          samples.push({ heatId: heat.id, minutes, planned: heatDurationMinutes(heat, session) / Math.max(1, races.length) });
+        previousFinish = Number.isFinite(finish) ? finish : null;
+      }
     }
   }
+  const median = (values: number[]) => {
+    const sorted = [...values].sort((a, b) => a - b), middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+  };
+  const centre = samples.length ? median(samples.map((s) => s.minutes)) : 0;
+  const scale = Math.max(0.45, 1.4826 * (samples.length ? median(samples.map((s) => Math.abs(s.minutes - centre))) : 0));
+  const clean = samples.length < 5 ? samples : samples.filter((s) => s.minutes - centre <= Math.max(1.75, 2.8 * scale));
+  const actualTotalMinutes = clean.reduce((sum, s) => sum + s.minutes, 0);
+  const plannedTotalMinutes = clean.reduce((sum, s) => sum + s.planned, 0);
+  const sampleRaces = clean.length;
+  const sampleHeats = new Set(clean.map((s) => s.heatId)).size;
 
   if ((sampleHeats >= 2 || sampleRaces >= 5) && plannedTotalMinutes > 0) {
     const rawMultiplier = actualTotalMinutes / plannedTotalMinutes;
@@ -189,7 +179,6 @@ export function computeTimings(sessions: Session[], options?: ComputeTimingsOpti
   const ordered = sessions.slice().sort((a, b) => a.orderIndex - b.orderIndex);
   const result = new Map<number, SessionTiming>();
   const nowMs = options?.nowMs ?? Date.now();
-  const pace = predictMinutesPerRace(ordered, options?.historicalAvgMinutesPerRace);
   const hasArenas = ordered.some((s) => arenaKey(s) !== '');
   const lanes = new Map<string, Lane>();
   const lastDayByArena = new Map<string, string>();
@@ -316,10 +305,13 @@ export function computeTimings(sessions: Session[], options?: ComputeTimingsOpti
       const nextStartMs = hEffective
         ? (hScheduled ? Math.max(hEffective.getTime(), hScheduled.getTime() + lane.offsetMs) : hEffective.getTime())
         : null;
-      const effectiveDur = !h.finishedAt && pace.multiplier !== 1 ? Math.round(dur * pace.multiplier) : dur;
+      const effectiveDur = dur; // Pace suggestions never silently alter published durations.
       const heatPauseMs = h.startedAt && !h.finishedAt && !pauseApplied ? lane.pauseOffsetMs : 0;
       if (heatPauseMs) pauseApplied = true;
       heatCursor = nextStartMs != null ? new Date(nextStartMs + effectiveDur * 60_000 + heatPauseMs) : null;
+      const finishedMs = Date.parse(h.finishedAt ?? '');
+      // A finish can extend an anchored timetable, but cannot supply an unknown start.
+      if (heatCursor && Number.isFinite(finishedMs) && finishedMs > heatCursor.getTime()) heatCursor = new Date(finishedMs);
       const advanceFromScheduled = pinned ?? scheduledCursor;
       scheduledCursor = advanceFromScheduled ? new Date(advanceFromScheduled.getTime() + dur * 60_000) : null;
     }

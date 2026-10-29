@@ -26,49 +26,11 @@ public static class TimetableTimes
     /// <summary>Computes the learned minutes-per-race pace and duration multiplier from completed heats.</summary>
     public static PacePrediction PredictPace(IEnumerable<Session> sessions, double? historicalAvgMinutesPerRace = null)
     {
-        double actualTotalMinutes = 0;
-        double plannedTotalMinutes = 0;
-        var sampleRaces = 0;
-        var sampleHeats = 0;
-
-        foreach (var session in sessions)
-        {
-            if (session.Kind is SessionKind.Break or SessionKind.Briefing or SessionKind.Custom) continue;
-            foreach (var heat in session.Heats)
-            {
-                var races = heat.Races ?? [];
-                var completedRaces = races.Where(r => r.IsComplete || r.FinishedAt.HasValue).ToList();
-                var isFinished = heat.FinishedAt.HasValue || (races.Count > 0 && races.All(r => r.IsComplete || r.FinishedAt.HasValue));
-                var raceCount = heat.FinishedAt.HasValue ? races.Count : completedRaces.Count;
-                if (!isFinished || raceCount == 0) continue;
-
-                var firstRaceStart = races
-                    .Where(r => r.StartedAt.HasValue)
-                    .Select(r => Utc(r.StartedAt)!.Value)
-                    .OrderBy(t => t)
-                    .Cast<DateTime?>()
-                    .FirstOrDefault();
-                var lastRaceEnd = races
-                    .Where(r => r.FinishedAt.HasValue)
-                    .Select(r => Utc(r.FinishedAt)!.Value)
-                    .OrderBy(t => t)
-                    .Cast<DateTime?>()
-                    .LastOrDefault();
-
-                var startStamp = Utc(heat.StartedAt) ?? firstRaceStart ?? (session.Heats.All(h => h.OrderIndex >= heat.OrderIndex) ? Utc(session.StartedAt) : null);
-                var endStamp = Utc(heat.FinishedAt) ?? lastRaceEnd;
-                if (!startStamp.HasValue || !endStamp.HasValue) continue;
-
-                var actualMinutes = (endStamp.Value - startStamp.Value).TotalMinutes;
-                var minutesPerRace = actualMinutes / raceCount;
-                if (minutesPerRace is < 0.5 or > 15) continue;
-
-                actualTotalMinutes += actualMinutes;
-                plannedTotalMinutes += HeatMinutes(heat, session);
-                sampleRaces += raceCount;
-                sampleHeats += 1;
-            }
-        }
+        var samples = PaceLearning.Clean(PaceLearning.Samples(sessions));
+        var actualTotalMinutes = samples.Sum(s => s.Minutes);
+        var plannedTotalMinutes = samples.Sum(s => s.PlannedMinutes);
+        var sampleRaces = samples.Count;
+        var sampleHeats = samples.Select(s => s.HeatId).Distinct().Count();
 
         if ((sampleHeats >= 2 || sampleRaces >= 5) && plannedTotalMinutes > 0)
         {
@@ -94,7 +56,6 @@ public static class TimetableTimes
     {
         var result = new Dictionary<int, HeatTime>();
         var ordered = sessions.OrderBy(s => s.OrderIndex).ToList();
-        var pace = PredictPace(ordered);
         var now = Utc(nowUtc) ?? DateTime.UtcNow;
         var hasArenas = ordered.Any(s => !string.IsNullOrWhiteSpace(s.ArenaName));
         var lanes = new Dictionary<string, Lane>();
@@ -221,7 +182,7 @@ public static class TimetableTimes
                     if (taken > TimeSpan.FromMinutes(5) && taken - TimeSpan.FromMinutes(2) > lane.Offset)
                         lane.Offset = taken - TimeSpan.FromMinutes(2);
                 }
-                var effectiveMinutes = !heat.FinishedAt.HasValue ? (int)Math.Round(minutes * pace.Multiplier, MidpointRounding.AwayFromZero) : minutes;
+                var effectiveMinutes = minutes; // Learned pace is advisory until organisers choose a new duration.
                 result[heat.Id] = new HeatTime(start, effectiveMinutes);
                 var nextStart = start;
                 if (start is { } actual && heatScheduled is { } planned && planned + lane.Offset > actual)
@@ -232,6 +193,8 @@ public static class TimetableTimes
                     pauseApplied = true;
                 }
                 cursor = nextStart?.AddMinutes(effectiveMinutes);
+                // A long hold is excluded from learning, but its elapsed time still carries forward.
+                if (Utc(heat.FinishedAt) is { } finished && (cursor is null || finished > cursor)) cursor = finished;
                 scheduledCursor = (pinned ?? scheduledCursor)?.AddMinutes(minutes);
             }
             var isBreakLike = session.Kind is SessionKind.Break or SessionKind.Briefing or SessionKind.Custom;

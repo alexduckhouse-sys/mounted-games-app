@@ -1,3 +1,4 @@
+import { SubstitutionRequests } from '../competition/reliability/SubstitutionRequests';
 import { useT } from '../../i18n/LanguageContext';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
@@ -71,7 +72,7 @@ interface LockTime { declarationsCloseAt: string | null }
 export function EntriesPage() {
   const t = useT();
   const { competition, reload } = useCompetition();
-  const { search } = useLocation();
+  const { search, hash } = useLocation();
   const passSignupId = parsePassSignupIdFromSearch(search);
   const [passNotice, setPassNotice] = useState<string | null>(null);
   const [entries, setEntries] = useState<TeamEntry[] | null>(null);
@@ -80,7 +81,7 @@ export function EntriesPage() {
   const [lock, setLock] = useState<string | null>(null);
   const [config, setConfig] = useState<DecFormConfig | null>(null);
   const [open, setOpen] = useState<number | null>(null);
-  const [setup, setSetup] = useState(false);
+  const [setup, setSetup] = useState(hash === '#dec-form' || hash === '#fm-dec');
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -218,7 +219,7 @@ export function EntriesPage() {
   const days = eventDays(competition.startDate, competition.endDate);
 
   // The tools live in one sheet opened from the dock; with no dock (page on its own) they stay on the page.
-  const [toolsOpen, setToolsOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(hash === '#dec-form' || hash === '#fm-dec');
   const docked = useDockAction({ label: t('ops2.entries.toolsSheet'), icon: 'settings', onClick: () => setToolsOpen(true) });
 
   const controls = (
@@ -243,7 +244,7 @@ export function EntriesPage() {
     </>
   );
   const decForm = (
-    <>
+    <section id="dec-form">
         <RefineSection title={t('ops2.entries.decForm')} />
         <RefineList as="div">
           <div className="rf-row">
@@ -262,7 +263,7 @@ export function EntriesPage() {
           )}
         </RefineList>
         {setup && config && <SetupEditor config={config} busy={busy} onSave={saveConfig} />}
-    </>
+    </section>
   );
 
   const renderTeam = (team: TeamEntry) => {
@@ -334,10 +335,12 @@ export function EntriesPage() {
     <RefinePage>
       <RefineHeader back={`/competitions/${competition.id}/operations`} backLabel={t('ops.hub.back')} context={competition.name} title={t('ops2.entries.title')} />
       <div className="ops-cards ops-entries" aria-busy={busy}>
+        <SubstitutionRequests competitionId={competition.id} canDecide onChanged={reloadAll} />
         {error && <Notice>{error}</Notice>}
         {passNotice && <Notice>{passNotice}</Notice>}
         {toast.node}
 
+        {!docked && decForm}
         {!docked && controls}
 
         {filter !== 'all' && (
@@ -374,7 +377,6 @@ export function EntriesPage() {
           );
         })}
 
-        {!docked && decForm}
       </div>
       {statusSheet && (
         <StatusSheetView
@@ -391,8 +393,8 @@ export function EntriesPage() {
       )}
       {docked && toolsOpen && (
         <Sheet title={t('ops2.entries.toolsSheet')} onClose={() => setToolsOpen(false)}>
-          {controls}
           {decForm}
+          {controls}
         </Sheet>
       )}
     </RefinePage>

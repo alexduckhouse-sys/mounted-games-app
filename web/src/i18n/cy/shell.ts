@@ -2,6 +2,10 @@ import type { AreaCatalogue } from '../messages';
 import type { shell as en } from '../en/shell';
 
 export const shell: AreaCatalogue<typeof en> = {
+  'shell.menu.producerOverlay': 'Troshaen y cynhyrchydd',
+  'shell.menu.decQuestions': 'Cwestiynau’r ffurflen ddatganiad',
+  'shell.menu.timetableHint': 'Gosod yr amserlen a’r tyniad',
+  'shell.menu.laneDraw': 'Tyniad lonydd',
   // Header
   'shell.header.backToTimetable': 'Yn ôl i’r amserlen',
   'shell.header.back': 'Yn ôl',

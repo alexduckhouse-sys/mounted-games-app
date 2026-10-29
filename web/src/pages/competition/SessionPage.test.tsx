@@ -55,10 +55,17 @@ const scoringData = (n = 4) => competition({
 });
 const row = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name}, lane`) }).closest('li') as HTMLElement;
 const placed = () => screen.queryAllByLabelText(/^Place \d+$/).length;
-const opened = (raceName: string) => screen.findByRole('region', { name: `Scoring ${raceName}` });
+const opened = async (raceName: string) => {
+  const region = await screen.findByRole('region', { name: `Scoring ${raceName}` });
+  const skip = within(region).queryByRole('button', { name: 'Score without start time' });
+  if (skip) fireEvent.click(skip);
+  return region;
+};
 // Taps a rider and waits until `count` teams are placed. Framer Motion drops an occasional tap when clicks
 // follow each other very quickly in jsdom, so a tap that has not counted is repeated.
 async function tapRider(name: string, count: number) {
+  const skip = screen.queryByRole('button', { name: 'Score without start time' });
+  if (skip) fireEvent.click(skip);
   for (let attempt = 0; attempt < 4 && placed() < count; attempt++) {
     await userEvent.click(screen.getByRole('button', { name: new RegExp(`^${name}, lane`) }));
     try {
@@ -745,7 +752,7 @@ describe('SessionPage', () => {
       expect(screen.queryByRole('link', { name: /Sessions/ })).not.toBeInTheDocument();
       expect(screen.queryByRole('link', { name: /Rules/ })).not.toBeInTheDocument();
       // Nothing sits under the race any more: no details panel, and the tools wait in the sheet.
-      expect(document.querySelector('details')).toBeNull();
+      expect(screen.getByRole('region', { name: /^Scoring/ }).querySelector('details')).toBeNull();
       expect(screen.queryByRole('button', { name: /Set up heats/ })).not.toBeInTheDocument();
       expect(screen.queryByRole('region', { name: 'Scorer links' })).not.toBeInTheDocument();
       const tools = await openOrganiserTools();
@@ -1253,4 +1260,21 @@ it('clears the in-memory draft and undo action when a race is rerun', async () =
   await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/sessions/races/1/results'));
   expect(screen.queryByLabelText('Place 1')).toBeNull();
   expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+});
+
+// Live call-up delivery is exercised by reliability tests; keep these page checks deterministic.
+vi.mock('./reliability/heatCalls', async (original) => ({ ...(await original<typeof import('./reliability/heatCalls')>()), useHeatCalls: () => ({ calls: [], error: '', reload: vi.fn() }) }));
+
+it('keeps a flag-down tap and arena details with offline scores', async () => {
+  vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+  const data = scoringData(2);
+  mount(data);
+  await userEvent.click(screen.getByRole('button', { name: 'Start race · flag down' }));
+  await tapRider('Rider 1', 1);
+  await tapRider('Rider 2', 2);
+  await completeRace();
+  const queued = JSON.parse(localStorage.getItem('mg.outbox.scores') ?? '[]');
+  expect(queued[0]).toMatchObject({ raceId: 1, sessionName: data.sessions[0].name, lanes: { 1: 1, 2: 2 } });
+  expect(Number.isFinite(Date.parse(queued[0].startedAt))).toBe(true);
+  expect(Number.isFinite(Date.parse(queued[0].finishedAt))).toBe(true);
 });

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { parseLook } from '../lib/overlays';
 import { api } from '../api';
 import { activeTile, changeOptions, chooseCard, readLiveOptions, type LiveOptions, type OverlayTileId } from '../lib/streamOverlayTiles';
 import type { LiveStream, StreamOverlay } from '../types';
@@ -74,6 +75,10 @@ export function useOverlayTiles({ competitionId, overlay, saveOverlay, onAir, se
 
   const setOptions = (patch: Partial<LiveOptions>) => guarded(async () => { await save((o) => changeOptions(o, patch)); });
 
+  const applyLook = (raw: unknown) => guarded(async () => {
+    await save(o => ({ ...o, look: { ...(typeof o.look === 'object' && o.look !== null ? o.look : {}), ...parseLook(raw) } }));
+  });
+
   const revealNext = () => guarded(async () => {
     const shown = readLiveOptions(overlay).podiumShown;
     await save((o) => changeOptions(o, { podiumShown: shown < 3 ? shown + 1 : 0 }));
@@ -87,5 +92,5 @@ export function useOverlayTiles({ competitionId, overlay, saveOverlay, onAir, se
     try { await api.post(`/competitions/${competitionId}/sponsors/skip`); } catch { setError('Couldn’t move to the next sponsor. Try again.'); }
   });
 
-  return { active: activeTile(overlay, paused), options: readLiveOptions(overlay), busy, error, conflict, retryable: error !== null && error !== NO_CAMERA && error !== READ_ONLY, retry, pick, setOptions, revealNext, postBanner, nextSponsor };
+  return { active: activeTile(overlay, paused), options: readLiveOptions(overlay), busy, error, conflict, retryable: error !== null && error !== NO_CAMERA && error !== READ_ONLY, retry, pick, setOptions, applyLook, revealNext, postBanner, nextSponsor };
 }

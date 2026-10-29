@@ -106,6 +106,7 @@ beforeEach(() => {
   savedRiders = saved;
   savedTeams = null;
   state.get.mockImplementation(async (url: string) => {
+    if (url.endsWith('/substitution-requests')) return { data: [] };
     if (url === '/declaration-forms') return { data: forms };
     if (url.startsWith('/declaration-forms/my-saved-teams') && savedTeams) return { data: savedTeams };
     if (url === '/clubs/1/saved-riders') return { data: savedRiders };
@@ -412,7 +413,8 @@ describe('DeclarationsTab: the dec form', () => {
 
   it('says when a sent form can still be changed, and by when to send an unsent one', async () => {
     state.get.mockImplementation(async (url: string) => {
-      if (url === '/declaration-forms') return { data: forms };
+      if (url.endsWith('/substitution-requests')) return { data: [] };
+    if (url === '/declaration-forms') return { data: forms };
       if (url === '/clubs/1/saved-riders') return { data: savedRiders };
       if (url === '/declaration-forms/competition/4/lock-time') return { data: { competitionId: 4, declarationsCloseAt: '2040-10-26T17:00:00Z', isClosed: false } };
       throw new Error(`unexpected ${url}`);
@@ -530,7 +532,8 @@ describe('DeclarationsTab: the dec form', () => {
 
   it('shows the declaration deadline banner and blocks non-organiser edits after the lock time passes', async () => {
     state.get.mockImplementation(async (url: string) => {
-      if (url === '/declaration-forms') return { data: forms };
+      if (url.endsWith('/substitution-requests')) return { data: [] };
+    if (url === '/declaration-forms') return { data: forms };
       if (url === '/clubs/1/saved-riders') return { data: savedRiders };
       if (url === '/declaration-forms/competition/4/lock-time') {
         return { data: { competitionId: 4, declarationsCloseAt: '2020-01-01T10:00:00Z', isClosed: true } };
@@ -546,7 +549,8 @@ describe('DeclarationsTab: the dec form', () => {
   it('lets a self-entered Rider open and submit a dec form for their linked team', async () => {
     state.user = { id: 'u-rider', fullName: 'Sam Rider', email: 'sam@example.com', clubId: null, clubName: '', roles: ['Rider'] };
     state.get.mockImplementation(async (url: string) => {
-      if (url === '/declaration-forms') return { data: forms };
+      if (url.endsWith('/substitution-requests')) return { data: [] };
+    if (url === '/declaration-forms') return { data: forms };
       if (url === '/me/signups') return { data: [{ id: 101, competitionId: 4, competitionSectionId: 6, teamId: 8, fullName: 'Sam Rider', status: 1, declarationAccessGranted: true }] };
       if (url === '/clubs/1/saved-riders') return { data: [] };
       throw new Error(`unexpected ${url}`);
@@ -825,7 +829,8 @@ describe('DeclarationsTab: around the form', () => {
 
   it('copes with the forms not loading', async () => {
     state.get.mockImplementation(async (url: string) => {
-      if (url === '/declaration-forms') throw new Error('offline');
+      if (url.endsWith('/substitution-requests')) return { data: [] };
+    if (url === '/declaration-forms') throw new Error('offline');
       return { data: savedRiders };
     });
     mount();
@@ -835,7 +840,8 @@ describe('DeclarationsTab: around the form', () => {
 
   it('carries on without the saved riders', async () => {
     state.get.mockImplementation(async (url: string) => {
-      if (url === '/declaration-forms') return { data: forms };
+      if (url.endsWith('/substitution-requests')) return { data: [] };
+    if (url === '/declaration-forms') return { data: forms };
       throw new Error('offline');
     });
     const user = userEvent.setup();

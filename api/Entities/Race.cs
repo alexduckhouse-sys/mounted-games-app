@@ -10,6 +10,7 @@ public class Race
     public int OrderIndex { get; set; }
     public bool IsComplete { get; set; }
     public DateTime? StartedAt { get; set; }
+    public bool StartIsExplicit { get; set; }
     public DateTime? FinishedAt { get; set; }
     /// <summary>
     /// An open protest covers this race (on the race itself or its whole heat). Kept in step by

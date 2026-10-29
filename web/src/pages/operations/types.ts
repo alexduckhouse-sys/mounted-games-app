@@ -177,6 +177,7 @@ export interface RedrawPreview {
 }
 
 export interface RiderSnapshot {
+  horseName?: string | null;
   riderEntryId: number;
   fullName: string;
   isReserve: boolean;

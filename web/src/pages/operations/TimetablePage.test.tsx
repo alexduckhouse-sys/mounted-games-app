@@ -492,3 +492,5 @@ describe('TimetablePage after the draw', () => {
     expect(await screen.findByRole('button', { name: 'Add break' })).toBeInTheDocument();
   });
 });
+
+vi.mock('../../components/PaceReview', () => ({ PaceReview: () => null }));

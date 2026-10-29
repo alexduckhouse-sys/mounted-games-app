@@ -7,6 +7,7 @@ import { competitionDateText } from '../../../lib/competitionDates';
 import { copyOfCompetition } from '../../../lib/creatorLoad';
 import { defaultDraft, type CreatorDraft } from '../../../lib/creatorDraft';
 import type { CompetitionDetail, CompetitionSummary } from '../../../types';
+import { SavedStartingPoints } from './SavedStartingPoints';
 import { StepHeading } from './controls';
 
 const TIME_ORDER = (a: CompetitionSummary, b: CompetitionSummary) => b.startDate.localeCompare(a.startDate);
@@ -89,6 +90,7 @@ export function StartStep({ draft, replace }: {
             <p className="cw-note">{t('admin.creator.start.note')}</p>
           </>
         )}
+        <SavedStartingPoints />
       </div>
     </section>
   );

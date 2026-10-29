@@ -1,3 +1,5 @@
+import { HeatCalledBadge } from './reliability/CallUpStrip';
+import { useHeatCalls } from './reliability/heatCalls';
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { FollowStar } from '../../components/FollowStar';
@@ -42,6 +44,7 @@ export function FollowingTab() {
   usePageWidth('wide');
   const { t, lang } = useLanguage();
   const { competition, updatedAt, isStale, reload } = useCompetition();
+  const { calls } = useHeatCalls(competition.id);
   const { favourites, error, toggle, setMany } = useFavourites();
   const now = useNow(30_000);
   const [search, setSearch] = useState('');
@@ -102,11 +105,11 @@ export function FollowingTab() {
       const standing = heatStanding(row.heat!, team.id);
       const title = progress ? t('teams.following.raceOf', { heat: where(row, team), current: progress.current, total: progress.total }) : where(row, team);
       const sofar = standing ? `${t('teams.following.placeSoFar', { place: ordinalText(standing.place, lang) })}, ${t('teams.team.pts', { points: formatPoints(standing.points) })}` : null;
-      return <Link key="heat" to={to} state={PUSH} className="fc-line"><span className="fc-lead is-now">{t('teams.following.onNowCaps')}</span><span className="fc-what"><strong>{title}</strong><span>{[arenaLane(row, lane), sofar].filter(Boolean).join(' · ')}</span></span>{chevron}</Link>;
+      return <Link key="heat" to={to} state={PUSH} className="fc-line"><span className="fc-lead is-now">{t('teams.following.onNowCaps')}</span><span className="fc-what"><strong>{title}</strong><HeatCalledBadge heatId={row.heat!.id} calls={calls} /><span>{[arenaLane(row, lane), sofar].filter(Boolean).join(' · ')}</span></span>{chevron}</Link>;
     }
     const minutes = minutesToGo(row.effective, now);
     const title = minutes != null ? t('teams.following.inMinutes', { heat: where(row, team), minutes }) : where(row, team);
-    return <Link key="heat" to={to} state={PUSH} className="fc-line"><time className={`fc-lead${row.status === 'late' ? ' is-late' : ''}`} dateTime={row.effective?.toISOString()}>{formatTime(row.effective)}</time><span className="fc-what"><strong>{title}</strong><span>{arenaLane(row, lane)}</span></span>{chevron}</Link>;
+    return <Link key="heat" to={to} state={PUSH} className="fc-line"><time className={`fc-lead${row.status === 'late' ? ' is-late' : ''}`} dateTime={row.effective?.toISOString()}>{formatTime(row.effective)}</time><span className="fc-what"><strong>{title}</strong><HeatCalledBadge heatId={row.heat!.id} calls={calls} /><span>{arenaLane(row, lane)}</span></span>{chevron}</Link>;
   };
   /** The team's latest finished heat, in the same words as a heat row. */
   const lastLine = (team: Team) => {

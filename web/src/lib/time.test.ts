@@ -127,6 +127,24 @@ describe('computeTimings', () => {
     expect(timings.heats[0]).toMatchObject({ scheduled: null, effective: null, shifted: false });
   });
 
+  it('does not invent start times from finishes in an entirely unscheduled session', () => {
+    const timings = computeTimings([session(1, { status: 2, heats: [
+      heat(1, { finishedAt: at(30) }),
+      heat(2, { finishedAt: at(60) }),
+      heat(3),
+    ] })]).get(1)!;
+    expect(timings.heats.map((heat) => heat.effective)).toEqual([null, null, null]);
+    expect(timings.effectiveEnd).toBeNull();
+  });
+
+  it('still carries a recorded finish overrun from an unscheduled heat with a real start', () => {
+    const timings = computeTimings([session(1, { heats: [
+      heat(1, { startedAt: at(0), finishedAt: at(45), durationMinutes: 30 }),
+      heat(2),
+    ] })]).get(1)!;
+    expect(timings.heats.map((heat) => timeOf(heat.effective))).toEqual([ms(0), ms(45)]);
+  });
+
   it('uses the real start of a session that has no scheduled time without shifting later ones', () => {
     const timings = computeTimings([
       session(1, { orderIndex: 1, startedAt: at(15), heats: [heat(1)] }),
@@ -441,8 +459,8 @@ describe('computeTimings', () => {
       expect(timeOf(timings.get(3)!.effective)).toBe(ms(60));
     });
 
-    it('learns pace from completed heats and scales remaining heat durations within [0.75, 1.5]', () => {
-      const fastRaces = [1, 2, 3, 4, 5].map((id) => race(id, { isComplete: true }));
+    it('learns recorded slot pace without automatically changing published durations', () => {
+      const fastRaces = [1, 2, 3, 4, 5].map((id) => race(id, { isComplete: true, startIsExplicit: true, startedAt: at((id - 1) * 4), finishedAt: at(id * 4) }));
       const sessions = [
         session(1, {
           orderIndex: 1,
@@ -461,8 +479,8 @@ describe('computeTimings', () => {
       expect(pace.sampleRaces).toBe(5);
 
       const timings = computeTimings(sessions);
-      // Heat 2 starts at 30m (scheduled) and takes round(30 * 0.75) = 23m -> session 1 ends at 53m.
-      expect(timeOf(timings.get(1)!.effectiveEnd)).toBe(ms(53));
+      // Heat 2 keeps its configured 30 minutes.
+      expect(timeOf(timings.get(1)!.effectiveEnd)).toBe(ms(60));
 
       const fallback = predictMinutesPerRace([], 7.2);
       expect(fallback.avgMinutesPerRace).toBe(7.2);
@@ -555,7 +573,7 @@ describe('pause cascade regressions', () => {
     const pace = predictMinutesPerRace([session(1, { startedAt: at(0), heats: [
       heat(1, { orderIndex: 1, durationMinutes: 30, races: races(0) }),
       heat(2, { orderIndex: 2, durationMinutes: 30, races: races(30) }),
-      heat(3, { orderIndex: 3, startedAt: 'invalid', finishedAt: at(60), races: races(30) }),
+      heat(3, { orderIndex: 3, startedAt: 'invalid', finishedAt: at(60), races: [] }),
     ] })]);
     expect(pace.avgMinutesPerRace).toBe(5);
     expect(pace.sampleHeats).toBe(2);

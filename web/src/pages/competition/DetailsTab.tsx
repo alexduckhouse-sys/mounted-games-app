@@ -234,11 +234,11 @@ export function DetailsTab() {
           </div>
           {competition.sections.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              <Link to={`/admin/competitions/${competition.id}/format`} className="sp-pill" title="Form teams and heats from paid entries">
-                <Sparkles className="h-4 w-4" aria-hidden="true" /> Format competition
+              <Link to={`/competitions/${competition.id}/timetable-and-draw`} className="sp-pill" title={t('shell.menu.timetableHint')}>
+                <Sparkles className="h-4 w-4" aria-hidden="true" /> {t('ops.tt.title')}
               </Link>
-              <Link to={`/admin/competitions/${competition.id}/format#fm-dec`} className="sp-pill" title="Choose what the dec form asks for, such as weight or your own questions">
-                <ClipboardList className="h-4 w-4" aria-hidden="true" /> Dec form setup
+              <Link to={`/competitions/${competition.id}/entries#dec-form`} className="sp-pill" title="Choose what the dec form asks for, such as weight or your own questions">
+                <ClipboardList className="h-4 w-4" aria-hidden="true" /> {t('shell.menu.decQuestions')}
               </Link>
               <a href="#scorer-links" className="sp-pill"><QrCodeIcon className="h-4 w-4" aria-hidden="true" /> Scorer QR codes</a>
               <Link to="../broadcast" className="sp-pill">Go live &amp; stream</Link>

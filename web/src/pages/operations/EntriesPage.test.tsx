@@ -292,3 +292,6 @@ describe('EntriesPage', () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/competitions/7/signups-locked', { locked: true }));
   });
 });
+
+// Requests have their own access, race and decision tests.
+vi.mock('../competition/reliability/SubstitutionRequests', () => ({ SubstitutionRequests: () => null }));
