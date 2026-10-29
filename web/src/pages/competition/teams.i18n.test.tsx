@@ -41,7 +41,7 @@ describe('Following tab in Welsh and French', () => {
     mountFollowing('cy');
     const now = screen.getByRole('heading', { name: 'Ar y gweill' }).closest('section')!;
     expect(within(now).getByText('Example Blue')).toBeInTheDocument();
-    expect(within(now).getByText('AR Y GWEILL')).toBeInTheDocument();
+    expect(within(now).getByText('Ar y gweill', { selector: '.fc-lead .sr-only' })).toBeInTheDocument();
     expect(within(now).getByText('Seniors Rhagras 1 · ras 2 o 2')).toBeInTheDocument();
     expect(within(now).getByText('lôn 2 · 1af hyd yma, 4 pwynt')).toBeInTheDocument();
     expect(within(now).getByText('1 tîm')).toBeInTheDocument();
@@ -56,7 +56,7 @@ describe('Following tab in Welsh and French', () => {
     mountFollowing('fr');
     const now = screen.getByRole('heading', { name: 'En cours' }).closest('section')!;
     expect(within(now).getByText('1 équipe')).toBeInTheDocument();
-    expect(within(now).getByText('EN COURS')).toBeInTheDocument();
+    expect(within(now).getByText('En cours', { selector: '.fc-lead .sr-only' })).toBeInTheDocument();
     expect(within(now).getByText('Seniors Manche 1 · course 2 sur 2')).toBeInTheDocument();
     expect(within(now).getByText('couloir 2 · 1er pour l’instant, 4 pts')).toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: 'Trouver une équipe, un club ou une catégorie d’âge' })).toBeInTheDocument();
