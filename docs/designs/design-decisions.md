@@ -187,7 +187,7 @@ The owner reviewed each public page as "live capture beside a tidier version" on
     - race names are all 10.5px, medium weight, at 55°, in the same place in their lane; the running race is navy, not bolder;
     - faint dividers between races (none before the first) that fade out towards the top;
     - the header grows to fit the longest race name in the heat, so names aren't cut short (only the last two lanes stop at the card edge);
-    - team names 13.5px medium; alternate rows are shaded instead of ruled; thin faint lines between race columns;
+    - team names 13.5px medium; alternate rows are shaded, with a faint line between teams; thin faint lines between race columns;
     - three tints only: alternate rows, the running race column (pale blue) and the PTS column (pale navy);
     - an elimination is a muted red 0 (`--mg-zero`); DNS, DNF and R keep their letters; a race not run yet is a short faint bar;
     - PTS is right-aligned at the foot of the header;
