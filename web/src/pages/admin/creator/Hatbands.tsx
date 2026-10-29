@@ -12,20 +12,6 @@ import { AddRow, SmallHead } from './controls';
 
 const dotStyle = (stored: string) => ({ background: hatbandColour(stored), borderColor: hatbandColour(stored).toUpperCase() === '#FFFFFF' ? 'rgb(var(--mg-faint))' : undefined });
 
-/** Which hatband goes with which lane, as a plain list (review step and On the day page). */
-export function HatbandList({ hatbands }: { hatbands: readonly string[] }) {
-  const t = useT();
-  return (
-    <ol aria-label={t('admin.creator.hat.byLane')} className="m-0 flex list-none flex-wrap gap-2 p-0">
-      {hatbands.map((colour, i) => (
-        <li key={i} className="rounded-full border border-[rgb(var(--mg-control))] bg-[rgb(var(--mg-surface))] px-3 py-1 text-sm">
-          <span className="font-semibold">{t('admin.creator.hat.lane', { n: i + 1 })}</span> · <span aria-hidden="true" className="mr-1.5 inline-block h-3 w-3 rounded-full align-middle" style={{ background: hatbandColour(colour), boxShadow: '0 0 0 1px rgb(var(--mg-muted))' }} />{hatbandName(colour)}
-        </li>
-      ))}
-    </ol>
-  );
-}
-
 /** A name and a colour: the two rows used to add a hatband and to change one. */
 function BandFields({ name, hex, onName, onHex }: { name: string; hex: string; onName: (v: string) => void; onHex: (v: string) => void }) {
   const t = useT();

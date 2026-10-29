@@ -55,7 +55,6 @@ export const adminCreator: AreaCatalogue<typeof en> = {
   'admin.creator.break.everyone': 'Tout le monde',
   'admin.creator.break.add': 'Ajouter au programme',
   'admin.creator.break.breakLower': 'pause',
-  'admin.creator.hat.byLane': 'Brassards par couloir',
   'admin.creator.hat.lane': 'Couloir {n}',
   'admin.creator.hat.heading': 'Brassards',
   'admin.creator.hat.bandName': 'Nom du brassard',

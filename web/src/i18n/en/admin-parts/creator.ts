@@ -62,7 +62,6 @@ export const adminCreator = {
   'admin.creator.break.add': 'Add to timetable',
   'admin.creator.break.breakLower': 'break',
   // Hatbands
-  'admin.creator.hat.byLane': 'Hatbands by lane',
   'admin.creator.hat.lane': 'Lane {n}',
   'admin.creator.hat.heading': 'Hatbands',
   'admin.creator.hat.bandName': 'Hatband name',

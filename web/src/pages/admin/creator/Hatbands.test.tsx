@@ -3,16 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { defaultDraft, defaultSection, type CreatorDraft } from '../../../lib/creatorDraft';
-import { HatbandEditor, HatbandList } from './Hatbands';
-
-describe('HatbandList', () => {
-  it('shows each hatband by its name with its colour, never the colour code', () => {
-    render(<HatbandList hatbands={['Red', 'Lilac #B79CED']} />);
-    const list = screen.getByRole('list', { name: 'Hatbands by lane' });
-    expect(within(list).getAllByRole('listitem')[1]).toHaveTextContent('Lane 2 · Lilac');
-    expect(list).not.toHaveTextContent('#B79CED');
-  });
-});
+import { HatbandEditor } from './Hatbands';
 
 /** The editor with a real draft behind it, so changes show up on screen. */
 function Harness({ start, onDraft }: { start: Partial<CreatorDraft>; onDraft: (d: CreatorDraft) => void }) {
