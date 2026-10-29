@@ -9,7 +9,6 @@ import { api } from '../api';
 import type { CompetitionPickerItem, CompetitionPickerPage } from '../types';
 import { useCurrentCompetition } from './CurrentCompetitionContext';
 import { CompetitionIcon } from './CompetitionIcon';
-import { competitionIcon } from './icons';
 import { competitionDateText, isOnToday } from '../lib/competitionDates';
 import { displaySectionName } from '../lib/section';
 import { lastUpdatedText, readSavedCopy, savedCopyKeys, serviceWorkerSavedAt, shouldNoticeSavedCopy, writeSavedCopy } from '../offline/savedCopies';
@@ -24,6 +23,7 @@ import { useLanguage } from '../i18n/LanguageContext';
 import type { Translate } from '../i18n/translate';
 import '../components/sitePages.css';
 import '../components/filterKit.css';
+import './CompetitionPicker.css';
 
 /** The events page: upcoming competitions, with the past ones a link away at the bottom. */
 export function CompetitionPicker({ past = false }: { past?: boolean }) {
@@ -47,7 +47,7 @@ function PlainHeader({ past }: { past: boolean }) {
 }
 
 function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past: boolean; refresh: number }) {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const headingId = useId();
   const { current, setCurrent } = useCurrentCompetition();
   const { user } = useAuth();
@@ -111,22 +111,44 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
   const now = new Date();
   const onToday = past ? [] : matches.filter((item) => isOnToday(item.startDate, item.endDate, now));
   const later = matches.filter((item) => !onToday.includes(item));
-  // The archive is grouped by year, newest first as the server sends it; upcoming events are one "Coming up" list.
-  const groups = past
-    ? later.reduce<{ heading: string; items: CompetitionPickerItem[] }[]>((all, item) => {
-      const year = new Date(item.startDate).getFullYear();
-      const heading = Number.isNaN(year) ? t('shell.events.earlier') : String(year);
-      const last = all[all.length - 1];
-      if (last?.heading === heading) last.items.push(item); else all.push({ heading, items: [item] });
-      return all;
-    }, [])
-    : [{ heading: t('shell.events.comingUp'), items: later }];
   // Pointing at or pressing a competition starts loading it, so it opens straight away on a slow connection.
   const { handlersFor } = useCompetitionPrefetch();
   const choose = (competition: CompetitionPickerItem) => {
     setCurrent({ id: competition.id, name: competition.name });
     navigate(`/competitions/${competition.id}`);
   };
+  // The archive is grouped by year, newest first as the server sends it; upcoming events by month, soonest first,
+  // with the year only when it isn't this one.
+  const headingFor = (startDate: string) => {
+    const start = new Date(startDate);
+    if (Number.isNaN(start.getTime())) return past ? t('shell.events.earlier') : t('shell.events.comingUp');
+    if (past) return String(start.getFullYear());
+    return start.toLocaleDateString(locale, start.getFullYear() === now.getFullYear() ? { month: 'long' } : { month: 'long', year: 'numeric' });
+  };
+  const groups = later.reduce<{ heading: string; items: CompetitionPickerItem[] }[]>((all, item) => {
+    const heading = headingFor(item.startDate);
+    const last = all[all.length - 1];
+    if (last?.heading === heading) last.items.push(item); else all.push({ heading, items: [item] });
+    return all;
+  }, []);
+  const groupList = groups.map((group) => {
+    const rows = (
+      <div className="cp-list">
+        {group.items.map((competition) => <CompetitionRow key={competition.id} competition={competition} past={past} selected={current?.id === competition.id} onChoose={() => choose(competition)} warm={handlersFor(competition.id)} />)}
+      </div>
+    );
+    return past ? (
+      <section key={group.heading} className="cp-enter" aria-label={group.heading}>
+        <h2 className="cp-heading">{group.heading}{!(state.hasMore && group === groups[groups.length - 1]) && <small>{t('shell.events.yearCount', { count: group.items.length })}</small>}</h2>
+        {rows}
+      </section>
+    ) : (
+      <div key={group.heading} className="cp-group">
+        <h3 className="cp-heading">{group.heading}</h3>
+        {rows}
+      </div>
+    );
+  });
   return (
     <section className="mg-font mx-auto flex w-full max-w-xl flex-col gap-3.5 pb-5 lg:max-w-none" aria-labelledby={headingId}>
       <PlainHeader past={past} />
@@ -150,28 +172,24 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
         </div>
       )}
       {!mineOnly && state.savedCopy && !loading && shouldNoticeSavedCopy(state.savedAt, true, now) && <Notice tone="info" icon={Clock}>{t('shell.events.refreshWhenOnline', { updated: lastUpdatedText(state.savedAt, now) })}</Notice>}
-      <div className="flex flex-col gap-3.5" aria-busy={loading}>
+      <div className={`cp-stack ${onToday.length > 0 ? 'cp-split' : ''}`} aria-busy={loading}>
         {onToday.length > 0 && (
-          <section className="mg-settle" aria-label={t('shell.events.onToday')}>
-            <h2 className="sp-sec sp-first">{t('shell.events.onToday')}</h2>
-            <div className="mg-cards-grid flex flex-col gap-1.5">
-              {onToday.map((competition) => <TodayCard key={competition.id} competition={competition} selected={current?.id === competition.id} onChoose={() => choose(competition)} warm={handlersFor(competition.id)} />)}
-            </div>
+          <section className="cp-enter cp-today" aria-label={t('shell.events.onToday')}>
+            <h2 className="sr-only">{t('shell.events.onToday')}</h2>
+            {onToday.map((competition) => <TodayCard key={competition.id} competition={competition} selected={current?.id === competition.id} onChoose={() => choose(competition)} warm={handlersFor(competition.id)} />)}
           </section>
         )}
-        {later.length > 0 && groups.map((group) => (
-          <section key={group.heading} className="mg-settle" aria-label={group.heading}>
-            <h2 className="sp-sec sp-first">{group.heading}{past && !(state.hasMore && group === groups[groups.length - 1]) && <small>{t('shell.events.yearCount', { count: group.items.length })}</small>}</h2>
-            <div className="mg-lines mg-lines-grid">
-              {group.items.map((competition) => <CompetitionRow key={competition.id} competition={competition} past={past} selected={current?.id === competition.id} onChoose={() => choose(competition)} warm={handlersFor(competition.id)} />)}
-            </div>
+        {later.length > 0 && (past ? groupList : (
+          <section className="cp-enter" aria-label={t('shell.events.comingUp')}>
+            <h2 className="sr-only">{t('shell.events.comingUp')}</h2>
+            {groupList}
           </section>
         ))}
         {loading && state.items.length === 0 && <CompetitionListSkeleton />}
         {!loading && state.error && <PageProblem title={t('shell.events.loadFailed')} primaryLabel={t('common.tryAgain')} onPrimary={onRetry}>{t('shell.events.checkSignal')}</PageProblem>}
         {!loading && !state.error && state.items.length === 0 && <p className="mg-card p-4">{!unfiltered ? t('shell.events.noMatchFilters') : past ? t('shell.events.nonePast') : t('shell.events.noneYet')}</p>}
         {!loading && !state.error && state.hasMore && <button className="mg-btn mg-btn-secondary w-full" onClick={() => setPage((value) => value + 1)}>{t('shell.events.loadMore')}</button>}
-        {!past && <p className="m-0 text-center"><Link to="/competitions/past" className="sp-link">{t('shell.events.titlePast')}</Link></p>}
+        {!past && <p className="cp-more"><Link to="/competitions/past" className="sp-link cp-past">{t('shell.events.titlePast')}<ChevronRight aria-hidden="true" className="h-4 w-4 cp-chevron" /></Link></p>}
       </div>
       {past && sheetOpen && (
         <Sheet title={t('shell.events.archiveFilters')} className="fk-sheet" onClose={() => setSheetOpen(false)}>
@@ -210,10 +228,39 @@ function CompetitionList({ onRetry, past, refresh }: { onRetry: () => void; past
   );
 }
 
-/** "Open · Heat 2 on now in Arena 2", or "Heat 1 on now in the arena" when nothing more is known. */
-function liveLine(live: NonNullable<CompetitionPickerItem['live']>, t: Translate) {
-  const section = displaySectionName(live.sectionName);
-  return `${section ? `${section} · ` : ''}${t('shell.events.liveLine', { heat: live.heatLabel, arena: live.arenaName ? live.arenaName : t('shell.events.theArena') })}`;
+/** What is on, then where: "Heat 2 on now" over "Open · Arena 2". The second line is left out when neither is known. */
+function liveParts(live: NonNullable<CompetitionPickerItem['live']>, t: Translate) {
+  const place = [displaySectionName(live.sectionName), live.arenaName?.trim()].filter(Boolean).join(' · ');
+  return { heat: t('shell.events.liveHeat', { heat: live.heatLabel }), place };
+}
+
+function LiveLines({ text }: { text: string }) {
+  const [heat, place] = text.split('\n');
+  return <><span className="cp-live-heat">{heat}</span>{place && <span className="cp-live-place">{place}</span>}</>;
+}
+
+/** The live line: the heat on now, and under it the section and arena. When they change, the old words fade out over
+    the new ones fading in, in the same spot. */
+export function LiveText({ heat, place }: { heat: string; place?: string }) {
+  const text = place ? `${heat}\n${place}` : heat;
+  const [shown, setShown] = useState(text);
+  const [previous, setPrevious] = useState<string | null>(null);
+  if (text !== shown) {
+    setPrevious(shown);
+    setShown(text);
+  }
+  // The fade lasts 200ms; the old words go just after (and at once to the eye with reduced motion, which hides them).
+  useEffect(() => {
+    if (previous === null) return undefined;
+    const timer = window.setTimeout(() => setPrevious(null), 220);
+    return () => window.clearTimeout(timer);
+  }, [previous]);
+  return (
+    <span className="cp-swap">
+      {previous !== null && <span key={`out-${previous}`} aria-hidden="true" className="cp-swap-out"><LiveLines text={previous} /></span>}
+      <span key={shown} className={previous !== null ? 'cp-swap-in' : undefined}><LiveLines text={shown} /></span>
+    </span>
+  );
 }
 
 type WarmHandlers = ReturnType<ReturnType<typeof useCompetitionPrefetch>['handlersFor']>;
@@ -222,14 +269,17 @@ function TodayCard({ competition, selected, onChoose, warm }: { competition: Com
   const { t } = useLanguage();
   const details = [competition.location?.trim(), competitionDateText(competition.startDate, competition.endDate)].filter(Boolean).join(' · ');
   return (
-    <div className={`mg-card flex flex-col gap-1.5 !rounded-[10px] py-3.5 pl-3.5 pr-3 ${competition.live ? 'shadow-[inset_3px_0_0_rgb(var(--mg-red))]' : ''}`}>
-      <span className="flex min-w-0 items-center gap-2">
-        {competition.live && <span className="mg-badge mg-badge-live !h-5 !rounded-[4px] !px-[7px] text-[11px] font-bold tracking-[0.06em]">{t('shell.events.liveBadge')}</span>}
-        <strong className="min-w-0 flex-1 break-words text-lg font-bold leading-tight">{competition.name}</strong>
+    <div className="cp-now">
+      <span className="cp-now-top">
+        {competition.live
+          ? <span className="mg-badge mg-badge-live cp-now-badge !h-5 !rounded-[4px] !px-[7px] text-[11px] font-bold tracking-[0.06em]">{t('shell.events.liveBadge')}</span>
+          : <span className="cp-now-tag">{t('shell.events.onToday')}</span>}
+        <CompetitionIcon id={competition.icon} labelled className="text-[18px]" />
       </span>
-      {details && <span className="mg-meta">{details}</span>}
-      {competition.live && <span className="text-[15px]">{liveLine(competition.live, t)}</span>}
-      <button aria-pressed={selected} onClick={onChoose} {...warm} className="sp-pill sp-pill-fill mt-1.5 self-start">
+      <strong className="cp-now-name">{competition.name}</strong>
+      {details && <span className="cp-now-meta">{details}</span>}
+      {competition.live && <span className="cp-now-line"><LiveText {...liveParts(competition.live, t)} /></span>}
+      <button aria-pressed={selected} onClick={onChoose} {...warm} className="cp-now-open">
         {t('shell.events.open')}<span className="sr-only">: {competition.name}</span>
       </button>
     </div>
@@ -239,27 +289,24 @@ function TodayCard({ competition, selected, onChoose, warm }: { competition: Com
 function CompetitionRow({ competition, past, selected, onChoose, warm }: { competition: CompetitionPickerItem; past: boolean; selected: boolean; onChoose: () => void; warm: WarmHandlers }) {
   const { t, locale } = useLanguage();
   const start = new Date(competition.startDate);
-  const venue = competition.location?.trim();
-  const multiDay = !!competition.endDate && competitionDateText(competition.startDate, competition.endDate) !== competitionDateText(competition.startDate, null);
-  const when = past || multiDay || !venue ? competitionDateText(competition.startDate, competition.endDate, past) : null;
   return (
-    <button aria-pressed={selected} onClick={onChoose} {...warm} className={`mg-line grid-cols-[44px_minmax(0,1fr)_40px_14px] !min-h-[60px] !gap-x-3 !py-2 ${selected ? 'shadow-[inset_4px_0_0_rgb(var(--mg-heading))]' : ''}`}>
-      <span aria-hidden="true" className="flex flex-col items-center gap-0.5 text-[rgb(var(--mg-heading))]">
-        <span className="mg-display text-[22px] font-bold leading-none">{Number.isNaN(start.getTime()) ? '–' : start.getDate()}</span>
-        <span className="text-[11px] font-semibold uppercase leading-none tracking-[0.06em] text-[rgb(var(--mg-muted))]">{Number.isNaN(start.getTime()) ? '' : start.toLocaleDateString(locale, { month: 'short' })}</span>
+    <button aria-pressed={selected} onClick={onChoose} {...warm} className={`cp-row ${selected ? 'cp-row-current' : ''}`}>
+      {/* Upcoming events sit under a month heading, so the date shows the weekday; the archive is by year, so it shows the month. */}
+      <span aria-hidden="true" className="cp-date">
+        <span className="cp-dow">{Number.isNaN(start.getTime()) ? '' : start.toLocaleDateString(locale, past ? { month: 'short' } : { weekday: 'short' })}</span>
+        <span className="cp-day">{Number.isNaN(start.getTime()) ? '–' : start.getDate()}</span>
       </span>
-      <span className="flex min-w-0 flex-col gap-[3px]">
-        <strong className="mg-line-title min-w-0 !font-semibold">{competition.name}</strong>
-        <span className="flex min-w-0 items-center text-xs text-[rgb(var(--mg-muted))]">
-          <span className="min-w-0 truncate">{[when, venue].filter(Boolean).join(' · ')}</span>
-          {competition.entriesOpen && <span className="shrink-0 whitespace-pre font-semibold text-[rgb(var(--mg-ok))]">{(when || venue) ? ' · ' : ''}{t('shell.events.entriesOpen')}</span>}
-        </span>
+      <span className="cp-body">
+        <strong className="cp-title">{competition.name}</strong>
+        {/* The list stays a plain directory: venue, end date and entry status are inside the competition. The date column
+            is hidden from screen readers, so they get the full dates here. */}
+        <span className="sr-only">{competitionDateText(competition.startDate, competition.endDate, past)}</span>
       </span>
       {/* Flags have a column of their own, so they line up down the list whatever the name's length. */}
-      <span className="flex justify-center">
-        {competitionIcon(competition.icon).id !== 'flag' && <CompetitionIcon id={competition.icon} labelled className="text-base" />}
+      <span className="cp-icon">
+        <CompetitionIcon id={competition.icon} labelled className="text-[16px]" />
       </span>
-      <ChevronRight className="h-3.5 w-3.5 text-[rgb(var(--mg-faint))]" aria-hidden="true" />
+      <ChevronRight className="h-3.5 w-3.5 cp-chevron" aria-hidden="true" />
       {selected && <span className="sr-only">{t('shell.events.current')}</span>}
     </button>
   );

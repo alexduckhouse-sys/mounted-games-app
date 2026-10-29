@@ -61,10 +61,20 @@ beforeEach(() => {
 
 describe('AppShell: the ticker on every page', () => {
   it('follows the event last opened on the pages outside it, above the tab bar', () => {
-    mount('/events');
+    mount('/me');
     expect(screen.getByTestId('feed')).toHaveTextContent('4');
     expect(dock()).toHaveAttribute('data-low', 'false');
     expect(main()).toHaveClass('pb-44');
+  });
+
+  it('keeps the events list quiet: no news line and no feed, as the page shows what’s on itself', () => {
+    for (const path of ['/events', '/competitions', '/competitions/past']) {
+      const { unmount } = mount(path);
+      expect(screen.queryByTestId('feed')).toBeNull();
+      expect(dock()).toHaveAttribute('data-quiet', 'true');
+      expect(main()).toHaveClass('pb-28');
+      unmount();
+    }
   });
 
   it('leaves an event’s own pages to feed it themselves', () => {
